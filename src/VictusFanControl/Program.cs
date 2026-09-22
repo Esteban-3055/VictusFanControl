@@ -7,8 +7,9 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        Console.WriteLine("VictusFanControl v0.1.0 - READ-ONLY TELEMETRY");
-        Console.WriteLine("No fan, EC or BIOS writes are performed by this build.");
+        Console.WriteLine("VictusFanControl v0.2.0-dev - READ-ONLY TELEMETRY");
+        Console.WriteLine("Backends: PawnIO DeviceIoControl + NVIDIA NVML. LibreHardwareMonitor is not used.");
+        Console.WriteLine("No fan set-point, BIOS fan-mode or EC register writes are performed by this build.");
         Console.WriteLine();
 
         CliOptions options;
@@ -30,17 +31,32 @@ internal static class Program
             return 0;
         }
 
-        using var reader = new LibreHardwareMonitorReader();
-        reader.Open();
+        using var reader = new HardwareTelemetryReader(options.ModulesDirectory);
 
-        if (options.ListSensors)
+        if (options.ProbeBackends)
         {
-            foreach (var line in reader.GetSensorInventory())
+            foreach (var line in reader.GetDiagnostics())
             {
                 Console.WriteLine(line);
             }
 
-            return 0;
+            Console.WriteLine();
+            Console.WriteLine("One live sample:");
+            ConsoleTelemetryPrinter.Print(reader.ReadSnapshot());
+            return reader.IsReadyForBaseline ? 0 : 3;
+        }
+
+        if (!reader.IsReadyForBaseline)
+        {
+            Console.Error.WriteLine("Required telemetry backends are not ready.");
+            foreach (var line in reader.GetDiagnostics())
+            {
+                Console.Error.WriteLine(line);
+            }
+
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Run .\\scripts\\setup-pawnio-modules.ps1, then .\\scripts\\probe-backends.ps1.");
+            return 3;
         }
 
         var outputPath = options.OutputPath ?? BuildDefaultLogPath();

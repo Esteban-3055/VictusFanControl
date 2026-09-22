@@ -3,10 +3,11 @@ namespace VictusFanControl.Cli;
 public sealed class CliOptions
 {
     public bool ShowHelp { get; private set; }
-    public bool ListSensors { get; private set; }
+    public bool ProbeBackends { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
     public int DurationSeconds { get; private set; }
     public string? OutputPath { get; private set; }
+    public string ModulesDirectory { get; private set; } = Path.Combine(Environment.CurrentDirectory, "modules");
 
     public static CliOptions Parse(string[] args)
     {
@@ -21,8 +22,13 @@ public sealed class CliOptions
                     options.ShowHelp = true;
                     break;
 
+                case "--probe-backends":
                 case "--list-sensors":
-                    options.ListSensors = true;
+                    options.ProbeBackends = true;
+                    break;
+
+                case "--modules-dir":
+                    options.ModulesDirectory = Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
                 case "--interval-ms":
@@ -55,7 +61,9 @@ public sealed class CliOptions
         Console.WriteLine("  VictusFanControl [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  --list-sensors             Print all sensors and exit.");
+        Console.WriteLine("  --probe-backends           Probe PawnIO, Intel MSR/EC and NVIDIA NVML.");
+        Console.WriteLine("  --list-sensors             Compatibility alias for --probe-backends.");
+        Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");
         Console.WriteLine("  --duration-seconds <n>     Stop after N seconds. 0 = until Ctrl+C.");
         Console.WriteLine("  --output <path>            CSV output path.");
