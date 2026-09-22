@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "vendor": "HP",
+  "productId": "88F8",
+  "boardVersionObserved": "88.58",
+  "status": "experimental-read-only",
+  "fanCount": 2,
+  "control": {
+    "enabledByDefault": false,
+    "validatedMinimumLevel": 14,
+    "validatedMaximumLevel": 50,
+    "notes": "Level 50 already produced a reported 100% fan rate on the tested machine."
+  },
+  "observedCalibration": [
+    {
+      "level": 14,
+      "cpuRpmApprox": 1400,
+      "gpuRpmApprox": 1400
+    },
+    {
+      "level": 30,
+      "cpuRpmApprox": 3000,
+      "gpuRpmApprox": 3000
+    },
+    {
+      "level": 50,
+      "cpuRpmApprox": 4330,
+      "gpuRpmApprox": 4670
+    }
+  ],
+  "observedEcRegisters": {
+    "fanSetpointCpu": "0x34",
+    "fanSetpointGpu": "0x35",
+    "fanRateCpu": "0x2E",
+    "fanRateGpu": "0x2F",
+    "fanRpmCpuLe16": "0xB0",
+    "fanRpmGpuLe16": "0xB2",
+    "cpuTemperatureCandidate": "0x57",
+    "gpuTemperatureCandidate": "0xB7",
+    "countdown": "0x63"
+  }
+}

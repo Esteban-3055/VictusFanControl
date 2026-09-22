@@ -1,0 +1,27 @@
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Telemetry captures
+logs/*.csv
+logs/*.jsonl
+logs/*.log
+!logs/README.md
+
+# Local configuration / secrets
+*.local.json
+.env
+.env.*
+
+# OS
+Thumbs.db
+.DS_Store
