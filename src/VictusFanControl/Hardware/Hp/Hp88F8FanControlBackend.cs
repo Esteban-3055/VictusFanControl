@@ -34,6 +34,19 @@ internal sealed class Hp88F8FanHardware : IHp88F8FanHardware
         _bios.RestoreFirmwareAuto();
 }
 
+internal readonly record struct Hp88F8FanBackendTiming(
+    TimeSpan SetpointAckTimeout,
+    TimeSpan RestoreAckTimeout,
+    TimeSpan TachometerAckTimeout,
+    TimeSpan PollInterval)
+{
+    public static Hp88F8FanBackendTiming Production => new(
+        SetpointAckTimeout: TimeSpan.FromMilliseconds(1500),
+        RestoreAckTimeout: TimeSpan.FromSeconds(5),
+        TachometerAckTimeout: TimeSpan.FromSeconds(8),
+        PollInterval: TimeSpan.FromMilliseconds(250));
+}
+
 /// <summary>
 /// Production HP 88F8 fan-control backend.
 ///
@@ -42,30 +55,34 @@ internal sealed class Hp88F8FanHardware : IHp88F8FanHardware
 /// - ordinary commands restricted to the validated 14-50 range;
 /// - no arbitrary EC writes;
 /// - fixed-level ownership is acknowledged through EC 0x34/0x35;
+/// - both physical tachometers must acknowledge every new command;
 /// - firmware restore uses the hardware-validated FF,FF -> LegacyDefault path.
 ///
 /// It does not implement a fan curve. Policy remains outside the backend.
 /// </summary>
 public sealed class Hp88F8FanControlBackend : IFanControlBackend
 {
-    private static readonly TimeSpan SetpointAckTimeout = TimeSpan.FromMilliseconds(1500);
-    private static readonly TimeSpan RestoreAckTimeout = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
+    private const int DirectionLevelDeadband = 2;
+    private const int MinimumDirectionalRpmDelta = 150;
+    private const int RequiredTachConfirmationSamples = 2;
 
     private readonly SemaphoreSlim _ioGate = new(1, 1);
     private readonly IHp88F8FanHardware? _hardware;
     private readonly bool _targetSupported;
     private readonly string _supportDetail;
+    private readonly Hp88F8FanBackendTiming _timing;
 
     private bool _customModeActive;
     private bool _disposed;
     private string _lastDetail;
+    private (byte Cpu, byte Gpu)? _ownedSetpoint;
 
     public Hp88F8FanControlBackend(string modulesDirectory)
     {
         var identity = HardwareIdentityReader.ReadCurrent();
         _targetSupported = Hp88F8TargetProfile.Matches(identity, out var reason);
         _supportDetail = reason;
+        _timing = Hp88F8FanBackendTiming.Production;
 
         if (_targetSupported)
         {
@@ -81,17 +98,19 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
     internal Hp88F8FanControlBackend(
         IHp88F8FanHardware hardware,
         bool targetSupported = true,
-        string supportDetail = "Synthetic validated target.")
+        string supportDetail = "Synthetic validated target.",
+        Hp88F8FanBackendTiming? timing = null)
     {
         _hardware = hardware;
         _targetSupported = targetSupported;
         _supportDetail = supportDetail;
+        _timing = timing ?? Hp88F8FanBackendTiming.Production;
         _lastDetail = targetSupported
             ? "Synthetic backend initialized; firmware authority retained."
             : $"Write backend disabled: {supportDetail}";
     }
 
-    public string Name => "HP 88F8 BIOS/WMI + EC verification";
+    public string Name => "HP 88F8 BIOS/WMI + EC/tach verification";
 
     public bool CanWrite =>
         !_disposed &&
@@ -123,10 +142,18 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             }
 
             var state = _hardware!.ReadEcState();
+            var ownership =
+                _customModeActive && _ownedSetpoint.HasValue
+                    ? state.CpuSetpoint == _ownedSetpoint.Value.Cpu &&
+                      state.GpuSetpoint == _ownedSetpoint.Value.Gpu
+                        ? "owned"
+                        : "OWNERSHIP-MISMATCH"
+                    : "firmware/none";
+
             var detail =
                 $"{_lastDetail} EC setpoint={state.CpuSetpoint}/{state.GpuSetpoint}, " +
-                $"RPM={state.CpuRpm}/{state.GpuRpm}, manual=0x{state.Manual:X2}, " +
-                $"countdown={state.Countdown}.";
+                $"RPM={state.CpuRpm}/{state.GpuRpm}, ownership={ownership}, " +
+                $"manual=0x{state.Manual:X2}, countdown={state.Countdown}.";
 
             return new FanBackendStatus(
                 Name,
@@ -178,6 +205,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                     "Restore firmware auto first.");
             }
 
+            _ownedSetpoint = null;
             _customModeActive = true;
             _lastDetail =
                 $"Custom authority prepared from firmware-auto state; " +
@@ -207,19 +235,39 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
 
             ValidateCommand(command);
 
-            _hardware!.SetFanLevel(
-                checked((byte)command.CpuLevel),
-                checked((byte)command.GpuLevel));
+            var cpuTarget = checked((byte)command.CpuLevel);
+            var gpuTarget = checked((byte)command.GpuLevel);
 
-            var acknowledged = await WaitForSetpointAsync(
-                checked((byte)command.CpuLevel),
-                checked((byte)command.GpuLevel),
-                SetpointAckTimeout,
+            var before = _hardware!.ReadEcState();
+            VerifyExistingOwnership(before);
+
+            var currentLevels = _hardware.GetCurrentFanLevels();
+
+            if (before.CpuSetpoint != cpuTarget ||
+                before.GpuSetpoint != gpuTarget)
+            {
+                _hardware.SetFanLevel(cpuTarget, gpuTarget);
+            }
+
+            var setpointAck = await WaitForSetpointAsync(
+                cpuTarget,
+                gpuTarget,
+                _timing.SetpointAckTimeout,
                 cancellationToken).ConfigureAwait(false);
 
+            var tachAck = await WaitForTachometerResponseAsync(
+                cpuTarget,
+                gpuTarget,
+                currentLevels,
+                before,
+                cancellationToken).ConfigureAwait(false);
+
+            _ownedSetpoint = (cpuTarget, gpuTarget);
             _lastDetail =
-                $"Command {command.CpuLevel}/{command.GpuLevel} acknowledged by EC setpoints; " +
-                $"RPM={acknowledged.CpuRpm}/{acknowledged.GpuRpm}.";
+                $"Command {command.CpuLevel}/{command.GpuLevel} acknowledged by EC setpoints " +
+                $"and both tachometers; RPM={tachAck.CpuRpm}/{tachAck.GpuRpm}, " +
+                $"initial RPM={before.CpuRpm}/{before.GpuRpm}, " +
+                $"setpoint-ack RPM={setpointAck.CpuRpm}/{setpointAck.GpuRpm}.";
         }
         finally
         {
@@ -272,6 +320,154 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         }
     }
 
+    private void VerifyExistingOwnership(Hp88F8EcControlState state)
+    {
+        if (_ownedSetpoint.HasValue)
+        {
+            if (state.CpuSetpoint != _ownedSetpoint.Value.Cpu ||
+                state.GpuSetpoint != _ownedSetpoint.Value.Gpu)
+            {
+                throw new InvalidOperationException(
+                    $"Fan ownership lost before command dispatch. Expected EC setpoint " +
+                    $"{_ownedSetpoint.Value.Cpu}/{_ownedSetpoint.Value.Gpu}, read " +
+                    $"{state.CpuSetpoint}/{state.GpuSetpoint}.");
+            }
+
+            return;
+        }
+
+        if (state.CpuSetpoint != byte.MaxValue ||
+            state.GpuSetpoint != byte.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Fan ownership changed after authority acquisition but before the first command. " +
+                $"Expected FF/FF, read {state.CpuSetpoint}/{state.GpuSetpoint}.");
+        }
+    }
+
+    private async ValueTask<Hp88F8EcControlState> WaitForTachometerResponseAsync(
+        byte cpuTarget,
+        byte gpuTarget,
+        (byte CpuLevel, byte GpuLevel) currentLevels,
+        Hp88F8EcControlState baseline,
+        CancellationToken cancellationToken)
+    {
+        var cpuExpectation = DetermineExpectation(cpuTarget, currentLevels.CpuLevel);
+        var gpuExpectation = DetermineExpectation(gpuTarget, currentLevels.GpuLevel);
+
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var cpuAcknowledged = false;
+        var gpuAcknowledged = false;
+        var confirmationSamples = 0;
+        Hp88F8EcControlState? last = null;
+
+        while (System.Diagnostics.Stopwatch.GetElapsedTime(started) < _timing.TachometerAckTimeout)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            last = _hardware!.ReadEcState();
+
+            if (last.CpuSetpoint != cpuTarget ||
+                last.GpuSetpoint != gpuTarget)
+            {
+                throw new InvalidOperationException(
+                    $"Fan ownership was overwritten during tachometer acknowledgement. " +
+                    $"Expected EC setpoint {cpuTarget}/{gpuTarget}, read " +
+                    $"{last.CpuSetpoint}/{last.GpuSetpoint}.");
+            }
+
+            ValidateTachometer(last.CpuRpm, "CPU");
+            ValidateTachometer(last.GpuRpm, "GPU");
+
+            cpuAcknowledged |= HasTachometerResponded(
+                cpuExpectation,
+                baseline.CpuRpm,
+                last.CpuRpm,
+                Hp88F8TargetProfile.CpuObservedMaximumRpm);
+
+            gpuAcknowledged |= HasTachometerResponded(
+                gpuExpectation,
+                baseline.GpuRpm,
+                last.GpuRpm,
+                Hp88F8TargetProfile.GpuObservedMaximumRpm);
+
+            if (cpuAcknowledged && gpuAcknowledged)
+            {
+                confirmationSamples++;
+                if (confirmationSamples >= RequiredTachConfirmationSamples)
+                {
+                    return last;
+                }
+            }
+            else
+            {
+                confirmationSamples = 0;
+            }
+
+            await Task.Delay(_timing.PollInterval, cancellationToken).ConfigureAwait(false);
+        }
+
+        throw new TimeoutException(
+            $"Both fan tachometers did not acknowledge command {cpuTarget}/{gpuTarget} within " +
+            $"{_timing.TachometerAckTimeout.TotalSeconds:0.0} s. " +
+            $"CPU ack={cpuAcknowledged}, GPU ack={gpuAcknowledged}, " +
+            $"baseline RPM={baseline.CpuRpm}/{baseline.GpuRpm}, " +
+            $"last RPM={last?.CpuRpm.ToString() ?? "n/a"}/{last?.GpuRpm.ToString() ?? "n/a"}, " +
+            $"baseline current-level={currentLevels.CpuLevel}/{currentLevels.GpuLevel}.");
+    }
+
+    private static TachExpectation DetermineExpectation(
+        byte requestedLevel,
+        byte currentLevel)
+    {
+        if (requestedLevel >= currentLevel + DirectionLevelDeadband + 1)
+        {
+            return TachExpectation.Increase;
+        }
+
+        if (requestedLevel + DirectionLevelDeadband + 1 <= currentLevel)
+        {
+            return TachExpectation.Decrease;
+        }
+
+        return TachExpectation.Steady;
+    }
+
+    private static bool HasTachometerResponded(
+        TachExpectation expectation,
+        ushort baselineRpm,
+        ushort currentRpm,
+        int observedMaximumRpm)
+    {
+        if (currentRpm == 0)
+        {
+            return false;
+        }
+
+        return expectation switch
+        {
+            TachExpectation.Increase =>
+                baselineRpm >= observedMaximumRpm * 0.90 ||
+                currentRpm >= baselineRpm + MinimumDirectionalRpmDelta,
+
+            TachExpectation.Decrease =>
+                baselineRpm <= 1500 ||
+                currentRpm + MinimumDirectionalRpmDelta <= baselineRpm,
+
+            TachExpectation.Steady => true,
+            _ => false
+        };
+    }
+
+    private static void ValidateTachometer(ushort rpm, string fanName)
+    {
+        if (rpm == 0 || rpm > 10_000)
+        {
+            throw new InvalidDataException(
+                $"{fanName} tachometer is not acknowledging a running fan command: {rpm} RPM.");
+        }
+    }
+
     private async ValueTask RestoreLockedAsync(CancellationToken cancellationToken)
     {
         // The command is intentionally issued even when _customModeActive is
@@ -281,9 +477,10 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         var restored = await WaitForSetpointAsync(
             byte.MaxValue,
             byte.MaxValue,
-            RestoreAckTimeout,
+            _timing.RestoreAckTimeout,
             cancellationToken).ConfigureAwait(false);
 
+        _ownedSetpoint = null;
         _customModeActive = false;
         _lastDetail =
             $"HP firmware authority restored; EC setpoints FF/FF, " +
@@ -310,7 +507,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                 return last;
             }
 
-            await Task.Delay(PollInterval, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(_timing.PollInterval, cancellationToken).ConfigureAwait(false);
         }
 
         throw new TimeoutException(
@@ -347,5 +544,12 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+
+    private enum TachExpectation
+    {
+        Steady,
+        Increase,
+        Decrease
     }
 }

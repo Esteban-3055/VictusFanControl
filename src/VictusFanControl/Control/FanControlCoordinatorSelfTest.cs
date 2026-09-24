@@ -323,7 +323,13 @@ public static class FanControlCoordinatorSelfTest
         SafetyGateResult safety)
     {
         var hardware = new Hp88F8FanControlBackendSelfTest.FakeHardware();
-        await using var backend = new Hp88F8FanControlBackend(hardware);
+        await using var backend = new Hp88F8FanControlBackend(
+            hardware,
+            timing: new Hp88F8FanBackendTiming(
+                TimeSpan.FromMilliseconds(100),
+                TimeSpan.FromMilliseconds(100),
+                TimeSpan.FromMilliseconds(250),
+                TimeSpan.FromMilliseconds(10)));
         await using var coordinator = new FanControlCoordinator(backend);
 
         var entered = await coordinator.TryEnterCustomAsync(

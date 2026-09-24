@@ -4,6 +4,12 @@ namespace VictusFanControl.Hardware.Hp;
 
 public static class Hp88F8FanControlBackendSelfTest
 {
+    private static readonly Hp88F8FanBackendTiming FastTiming = new(
+        SetpointAckTimeout: TimeSpan.FromMilliseconds(100),
+        RestoreAckTimeout: TimeSpan.FromMilliseconds(100),
+        TachometerAckTimeout: TimeSpan.FromMilliseconds(250),
+        PollInterval: TimeSpan.FromMilliseconds(10));
+
     public static async Task<int> RunAsync(TextWriter output)
     {
         var failures = 0;
@@ -13,6 +19,9 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestUnsupportedTargetRefusedAsync(output);
         failures += await TestRangeRefusedAsync(output);
         failures += await TestRestoreVerificationAsync(output);
+        failures += await TestCpuTachFailureAsync(output);
+        failures += await TestGpuTachFailureAsync(output);
+        failures += await TestOwnershipLossAsync(output);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -25,7 +34,7 @@ public static class Hp88F8FanControlBackendSelfTest
     private static async Task<int> TestHappyPathAsync(TextWriter output)
     {
         var hardware = new FakeHardware();
-        await using var backend = new Hp88F8FanControlBackend(hardware);
+        await using var backend = NewBackend(hardware);
 
         await backend.EnterCustomModeAsync(CancellationToken.None);
         await backend.ApplyAsync(
@@ -39,12 +48,13 @@ public static class Hp88F8FanControlBackendSelfTest
 
         return Report(
             output,
-            "real backend boundary: enter -> apply -> verified restore",
+            "real backend boundary: enter -> EC+tachs ack -> verified restore",
             hardware.SetCalls == 1 &&
             hardware.RestoreCalls == 1 &&
             hardware.State.CpuSetpoint == byte.MaxValue &&
             hardware.State.GpuSetpoint == byte.MaxValue &&
             active.CustomModeActive &&
+            active.Detail.Contains("both tachometers", StringComparison.OrdinalIgnoreCase) &&
             !restored.CustomModeActive);
     }
 
@@ -59,7 +69,7 @@ public static class Hp88F8FanControlBackendSelfTest
             }
         };
 
-        await using var backend = new Hp88F8FanControlBackend(hardware);
+        await using var backend = NewBackend(hardware);
 
         var refused = false;
         try
@@ -83,7 +93,8 @@ public static class Hp88F8FanControlBackendSelfTest
         await using var backend = new Hp88F8FanControlBackend(
             hardware,
             targetSupported: false,
-            supportDetail: "synthetic mismatch");
+            supportDetail: "synthetic mismatch",
+            timing: FastTiming);
 
         var refused = false;
         try
@@ -104,7 +115,7 @@ public static class Hp88F8FanControlBackendSelfTest
     private static async Task<int> TestRangeRefusedAsync(TextWriter output)
     {
         var hardware = new FakeHardware();
-        await using var backend = new Hp88F8FanControlBackend(hardware);
+        await using var backend = NewBackend(hardware);
         await backend.EnterCustomModeAsync(CancellationToken.None);
 
         var refused = false;
@@ -130,7 +141,7 @@ public static class Hp88F8FanControlBackendSelfTest
     private static async Task<int> TestRestoreVerificationAsync(TextWriter output)
     {
         var hardware = new FakeHardware { IgnoreRestore = true };
-        await using var backend = new Hp88F8FanControlBackend(hardware);
+        await using var backend = NewBackend(hardware);
 
         await backend.EnterCustomModeAsync(CancellationToken.None);
         await backend.ApplyAsync(
@@ -156,6 +167,108 @@ public static class Hp88F8FanControlBackendSelfTest
             failed && hardware.State.CpuSetpoint == 30 && hardware.State.GpuSetpoint == 30);
     }
 
+    private static async Task<int> TestCpuTachFailureAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware { FreezeCpuTach = true };
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        var failed = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "cpu-tach-failure"),
+                CancellationToken.None);
+        }
+        catch (TimeoutException)
+        {
+            failed = true;
+        }
+
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "CPU tachometer non-response rejects command",
+            failed);
+    }
+
+    private static async Task<int> TestGpuTachFailureAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware { FreezeGpuTach = true };
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        var failed = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "gpu-tach-failure"),
+                CancellationToken.None);
+        }
+        catch (TimeoutException)
+        {
+            failed = true;
+        }
+
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "GPU tachometer non-response rejects command",
+            failed);
+    }
+
+    private static async Task<int> TestOwnershipLossAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "establish-ownership"),
+            CancellationToken.None);
+
+        hardware.State = hardware.State with
+        {
+            CpuSetpoint = 31,
+            GpuSetpoint = 31
+        };
+
+        var refused = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(32, 32, "external-overwrite"),
+                CancellationToken.None);
+        }
+        catch (InvalidOperationException)
+        {
+            refused = true;
+        }
+
+        // Return synthetic state to the owned value so the explicit restore can
+        // exercise the normal path rather than hiding the assertion in Dispose.
+        hardware.State = hardware.State with
+        {
+            CpuSetpoint = 30,
+            GpuSetpoint = 30
+        };
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "external setpoint overwrite is detected instead of fought",
+            refused && hardware.SetCalls == 1);
+    }
+
+    private static Hp88F8FanControlBackend NewBackend(FakeHardware hardware) =>
+        new(
+            hardware,
+            targetSupported: true,
+            supportDetail: "synthetic validated target",
+            timing: FastTiming);
+
     private static int Report(TextWriter output, string name, bool pass)
     {
         output.WriteLine($"{(pass ? "PASS" : "FAIL")}  {name}");
@@ -179,12 +292,36 @@ public static class Hp88F8FanControlBackendSelfTest
             CpuRpm: 2200,
             GpuRpm: 2400);
 
+        private byte? _targetCpu;
+        private byte? _targetGpu;
+
         public Hp88F8EcControlState State { get; set; } = AutoState;
         public int SetCalls { get; private set; }
         public int RestoreCalls { get; private set; }
         public bool IgnoreRestore { get; set; }
+        public bool FreezeCpuTach { get; set; }
+        public bool FreezeGpuTach { get; set; }
 
-        public Hp88F8EcControlState ReadEcState() => State;
+        public Hp88F8EcControlState ReadEcState()
+        {
+            if (_targetCpu.HasValue && _targetGpu.HasValue)
+            {
+                var cpuDesired = DesiredCpuRpm(_targetCpu.Value);
+                var gpuDesired = DesiredGpuRpm(_targetGpu.Value);
+
+                State = State with
+                {
+                    CpuRpm = FreezeCpuTach
+                        ? State.CpuRpm
+                        : MoveToward(State.CpuRpm, cpuDesired, 200),
+                    GpuRpm = FreezeGpuTach
+                        ? State.GpuRpm
+                        : MoveToward(State.GpuRpm, gpuDesired, 200)
+                };
+            }
+
+            return State;
+        }
 
         public (byte CpuLevel, byte GpuLevel) GetCurrentFanLevels() =>
             ((byte)Math.Clamp(State.CpuRpm / 100, 0, 255),
@@ -193,6 +330,8 @@ public static class Hp88F8FanControlBackendSelfTest
         public void SetFanLevel(byte cpuLevel, byte gpuLevel)
         {
             SetCalls++;
+            _targetCpu = cpuLevel;
+            _targetGpu = gpuLevel;
             State = State with
             {
                 CpuSetpoint = cpuLevel,
@@ -205,12 +344,35 @@ public static class Hp88F8FanControlBackendSelfTest
             RestoreCalls++;
             if (!IgnoreRestore)
             {
+                _targetCpu = null;
+                _targetGpu = null;
                 State = State with
                 {
                     CpuSetpoint = byte.MaxValue,
                     GpuSetpoint = byte.MaxValue
                 };
             }
+        }
+
+        private static ushort DesiredCpuRpm(byte level) =>
+            (ushort)Math.Min(level * 100, Hp88F8TargetProfile.CpuObservedMaximumRpm);
+
+        private static ushort DesiredGpuRpm(byte level) =>
+            (ushort)Math.Min(level * 100, Hp88F8TargetProfile.GpuObservedMaximumRpm);
+
+        private static ushort MoveToward(ushort current, ushort target, int step)
+        {
+            if (current < target)
+            {
+                return (ushort)Math.Min(target, current + step);
+            }
+
+            if (current > target)
+            {
+                return (ushort)Math.Max(target, current - step);
+            }
+
+            return current;
         }
     }
 }

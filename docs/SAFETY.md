@@ -63,3 +63,15 @@ Before integrating the real HP backend into `IFanControlBackend` or enabling a c
 - validate RPM-response thresholds and thermal emergency behavior under load.
 
 See `PRE_CONTROL_CHECKLIST.md`.
+
+
+## Fan-command tachometer acknowledgement model
+
+The production HP 88F8 backend now treats a WMI write as successful only after two independent layers agree:
+
+1. EC 0x34/0x35 must hold the requested fixed setpoints.
+2. Both physical tachometers must acknowledge the requested direction within a bounded timeout.
+
+The expected direction is derived from the requested level versus HP BIOS GetFanLevel's current-speed level. A materially higher request must produce a measurable RPM rise; a materially lower request must produce a measurable RPM fall. Near-current requests require valid non-zero tachometer continuity. The known physical fan ceilings are handled explicitly so a fan already at its measured ceiling is not required to accelerate further.
+
+An external setpoint overwrite is treated as ownership loss and causes the command to fail rather than repeatedly fighting another controller. FanControlCoordinator then restores HP firmware authority.

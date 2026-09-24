@@ -18,6 +18,12 @@ public static class Hp88F8TargetProfile
     public const int MinimumValidatedFanLevel = 14;
     public const int MaximumValidatedFanLevel = 50;
 
+    // Physical observations on the development target. These are not command
+    // targets; they are used only to avoid demanding further RPM increase when
+    // a fan is already at its measured physical ceiling.
+    public const int CpuObservedMaximumRpm = 4330;
+    public const int GpuObservedMaximumRpm = 4670;
+
     public static bool Matches(HardwareIdentity hardware, out string reason)
     {
         if (!EqualsIgnoreCase(hardware.BoardManufacturer, BoardManufacturer))
