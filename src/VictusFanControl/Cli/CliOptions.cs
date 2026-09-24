@@ -10,6 +10,7 @@ public sealed class CliOptions
     public bool BiosContractSelfTest { get; private set; }
     public bool RestoreHpAuto { get; private set; }
     public bool SkipEcSnapshots { get; private set; }
+    public bool FirstFanWriteTest { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
     public int DurationSeconds { get; private set; }
@@ -56,6 +57,10 @@ public sealed class CliOptions
 
                 case "--skip-ec-snapshots":
                     options.SkipEcSnapshots = true;
+                    break;
+
+                case "--first-fan-write-test":
+                    options.FirstFanWriteTest = true;
                     break;
 
                 case "--health-test-minutes":
@@ -106,6 +111,7 @@ public sealed class CliOptions
         Console.WriteLine("  --bios-contract-self-test Validate the 88F8 LegacyDefault WMI request envelope.");
         Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
+        Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");

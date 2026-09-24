@@ -80,6 +80,20 @@ internal static class Program
             }
         }
 
+        if (options.FirstFanWriteTest)
+        {
+            using var writeTestCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                writeTestCts.Cancel();
+            };
+
+            return await Hp88F8FirstFanWriteTest.RunAsync(
+                options.ModulesDirectory,
+                writeTestCts.Token);
+        }
+
         if (options.Probe88F8EcState)
         {
             try
