@@ -29,6 +29,8 @@ internal sealed class MainForm : Form
     private readonly TextBox _eventLog = new();
 
     private ToolStripMenuItem? _trayStateItem;
+    private readonly SortedDictionary<long, string> _pendingSequencedEvents = new();
+    private long _nextEventSequence = 1;
     private bool _allowExit;
     private bool _closeHintShown;
 
@@ -305,7 +307,7 @@ internal sealed class MainForm : Form
         Ui(() => _diagnostics.Text = text);
 
     private void WorkerOnEventLogged(object? sender, string text) =>
-        Ui(() => AppendEvent(text));
+        Ui(() => QueueSequencedEvent(text));
 
     private void StateMachineOnStateChanged(object? sender, SystemStateChangedEventArgs e)
     {
@@ -356,6 +358,41 @@ internal sealed class MainForm : Form
         Show();
         WindowState = FormWindowState.Normal;
         Activate();
+    }
+
+
+    private void QueueSequencedEvent(string text)
+    {
+        if (!TryParseSequence(text, out var sequence))
+        {
+            AppendEvent(text);
+            return;
+        }
+
+        _pendingSequencedEvents[sequence] = text;
+
+        while (_pendingSequencedEvents.Remove(_nextEventSequence, out var next))
+        {
+            AppendEvent(next);
+            _nextEventSequence++;
+        }
+    }
+
+    private static bool TryParseSequence(string text, out long sequence)
+    {
+        sequence = 0;
+        if (string.IsNullOrWhiteSpace(text) || text[0] != '#')
+        {
+            return false;
+        }
+
+        var end = text.IndexOf(' ');
+        if (end <= 1)
+        {
+            return false;
+        }
+
+        return long.TryParse(text.AsSpan(1, end - 1), out sequence);
     }
 
     private void AppendEvent(string text)
