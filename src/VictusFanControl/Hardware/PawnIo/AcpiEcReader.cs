@@ -87,21 +87,33 @@ internal sealed class AcpiEcReader : IDisposable
         }
         catch (AbandonedMutexException)
         {
-            // The current thread owns the abandoned mutex after this exception.
+            // WaitOne grants ownership when reporting an abandoned mutex.
             return true;
         }
     }
 
     private byte ReadRegisterLocked(byte register)
     {
-        WaitForInputBufferEmpty();
+        // Match the standard ACPI RD_EC handshake used by the validated HP tools:
+        // idle -> READ command -> IBF clear -> address -> IBF clear -> OBF set -> data.
+        WaitForIdle();
         WritePort(CommandStatusPort, CommandReadEc);
 
         WaitForInputBufferEmpty();
         WritePort(DataPort, register);
 
+        // Important: the EC must consume the address before we wait for result data.
+        WaitForInputBufferEmpty();
         WaitForOutputBufferFull();
+
         return ReadPort(DataPort);
+    }
+
+    private void WaitForIdle()
+    {
+        WaitUntil(
+            status => (status & (StatusOutputBufferFull | StatusInputBufferFull)) == 0,
+            "EC did not become idle before the read transaction.");
     }
 
     private void WaitForInputBufferEmpty()
@@ -121,17 +133,20 @@ internal sealed class AcpiEcReader : IDisposable
     private void WaitUntil(Func<byte, bool> predicate, string timeoutMessage)
     {
         var start = Stopwatch.GetTimestamp();
+        byte lastStatus = 0;
+
         while (Stopwatch.GetElapsedTime(start) < EcIoTimeout)
         {
-            if (predicate(ReadPort(CommandStatusPort)))
+            lastStatus = ReadPort(CommandStatusPort);
+            if (predicate(lastStatus))
             {
                 return;
             }
 
-            Thread.SpinWait(64);
+            Thread.SpinWait(32);
         }
 
-        throw new TimeoutException(timeoutMessage);
+        throw new TimeoutException($"{timeoutMessage} Last status=0x{lastStatus:X2}.");
     }
 
     private byte ReadPort(byte port)
@@ -140,6 +155,11 @@ internal sealed class AcpiEcReader : IDisposable
         if (values.Length != 1)
         {
             throw new InvalidDataException("LpcACPIEC returned an unexpected result length.");
+        }
+
+        if (values[0] > byte.MaxValue)
+        {
+            throw new InvalidDataException($"LpcACPIEC returned an invalid port value: 0x{values[0]:X}.");
         }
 
         return (byte)values[0];
