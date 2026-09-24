@@ -89,3 +89,16 @@ Actual fan control remains blocked on the safety-supervisor milestone in [docs/S
 MIT. See [LICENSE](LICENSE).
 
 Third-party components and their licenses are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+
+## Read-only desktop GUI
+
+A Windows tray application is being developed on the stacked GUI/power-lifecycle branch. It adds suspend/resume detection, telemetry revalidation, runtime health states and a notification-area interface while keeping HP firmware fully authoritative.
+
+Run it from an elevated PowerShell:
+
+```powershell
+.\scripts\run-gui.ps1
+```
+
+Closing or minimizing the window hides it to the tray; choose **Exit** from the tray menu to stop the application. See [docs/POWER_LIFECYCLE_GUI.md](docs/POWER_LIFECYCLE_GUI.md).

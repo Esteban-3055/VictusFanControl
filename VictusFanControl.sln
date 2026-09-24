@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl", "src\VictusFanControl\VictusFanControl.csproj", "{0D90A473-A3F8-4B55-8A87-4F5411EC2B97}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.App", "src\VictusFanControl.App\VictusFanControl.App.csproj", "{A75B4472-02AA-4931-A495-4453D36AE101}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,5 +16,9 @@ Global
 		{0D90A473-A3F8-4B55-8A87-4F5411EC2B97}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0D90A473-A3F8-4B55-8A87-4F5411EC2B97}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0D90A473-A3F8-4B55-8A87-4F5411EC2B97}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A75B4472-02AA-4931-A495-4453D36AE101}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A75B4472-02AA-4931-A495-4453D36AE101}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A75B4472-02AA-4931-A495-4453D36AE101}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A75B4472-02AA-4931-A495-4453D36AE101}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
