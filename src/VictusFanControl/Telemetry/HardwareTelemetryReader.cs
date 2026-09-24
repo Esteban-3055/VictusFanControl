@@ -1,3 +1,4 @@
+using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Nvidia;
 using VictusFanControl.Hardware.PawnIo;
 using VictusFanControl.Hardware.Windows;
@@ -304,7 +305,7 @@ public sealed class HardwareTelemetryReader : IDisposable
     {
         try
         {
-            _nvml = new NvmlClient();
+            _nvml = new NvmlClient(Hp88F8TargetProfile.ExpectedGpuName);
             _nvmlStatus = $"OK ({_nvml.DeviceName})";
             _nextNvmlInitAttempt = DateTimeOffset.MinValue;
         }
@@ -393,7 +394,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         try
         {
             _nvml?.Dispose();
-            _nvml = new NvmlClient();
+            _nvml = new NvmlClient(Hp88F8TargetProfile.ExpectedGpuName);
             _nvmlStatus = $"OK (recovered, {_nvml.DeviceName})";
             _nextNvmlInitAttempt = DateTimeOffset.MinValue;
             NvmlRecoveries++;

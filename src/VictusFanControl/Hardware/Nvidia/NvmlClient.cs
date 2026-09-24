@@ -20,11 +20,14 @@ internal sealed class NvmlClient : IDisposable
     private readonly NvmlDeviceGetUtilizationRatesDelegate _getUtilizationRates;
     private readonly NvmlDeviceGetTemperatureDelegate _getTemperature;
 
+    private readonly string? _preferredDeviceName;
     private IntPtr _device;
     private bool _initialized;
+    private bool _disposed;
 
-    public NvmlClient()
+    public NvmlClient(string? preferredDeviceName = null)
     {
+        _preferredDeviceName = preferredDeviceName;
         _library = LoadNvmlLibrary();
 
         try
@@ -56,6 +59,8 @@ internal sealed class NvmlClient : IDisposable
 
     public GpuSample ReadSample()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         try
         {
             return ReadSampleWithRetries();
@@ -71,6 +76,11 @@ internal sealed class NvmlClient : IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (_initialized)
         {
             _shutdown?.Invoke();
@@ -81,6 +91,8 @@ internal sealed class NvmlClient : IDisposable
         {
             NativeLibrary.Free(_library);
         }
+
+        _disposed = true;
     }
 
     private GpuSample ReadSampleWithRetries()
@@ -168,10 +180,41 @@ internal sealed class NvmlClient : IDisposable
             throw new InvalidOperationException("NVML initialized but no NVIDIA GPU was found.");
         }
 
-        ThrowIfError(_getHandle(0, out _device), "nvmlDeviceGetHandleByIndex");
+        IntPtr fallbackHandle = IntPtr.Zero;
+        string fallbackName = "NVIDIA GPU";
 
+        for (uint index = 0; index < count; index++)
+        {
+            ThrowIfError(_getHandle(index, out var candidate), "nvmlDeviceGetHandleByIndex");
+            var candidateName = ReadDeviceName(candidate);
+
+            if (index == 0)
+            {
+                fallbackHandle = candidate;
+                fallbackName = candidateName;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_preferredDeviceName) &&
+                string.Equals(
+                    candidateName,
+                    _preferredDeviceName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                _device = candidate;
+                DeviceName = candidateName;
+                return;
+            }
+        }
+
+        _device = fallbackHandle;
+        DeviceName = fallbackName;
+    }
+
+
+    private string ReadDeviceName(IntPtr device)
+    {
         var nameBuffer = new byte[128];
-        DeviceName = _getName(_device, nameBuffer, (uint)nameBuffer.Length) == NvmlSuccess
+        return _getName(device, nameBuffer, (uint)nameBuffer.Length) == NvmlSuccess
             ? DecodeCString(nameBuffer)
             : "NVIDIA GPU";
     }

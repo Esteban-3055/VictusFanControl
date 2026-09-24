@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace VictusFanControl.Hardware.PawnIo;
 
 /// <summary>
@@ -18,7 +16,10 @@ internal sealed class AcpiEcReader : IDisposable
 
     private const int ReadAttempts = 5;
     private const int RetryDelayMs = 2;
-    private static readonly TimeSpan EcIoTimeout = TimeSpan.FromMilliseconds(100);
+    private const int WaitPollLimit = 30;
+    private const int WaitSpinPolls = 5;
+    private const int WaitYieldPolls = 10;
+    private const int MaximumStableWordDeltaRpm = 128;
     private static readonly TimeSpan MutexTimeout = TimeSpan.FromMilliseconds(500);
 
     private readonly PawnIoModuleSession _session;
@@ -184,6 +185,23 @@ internal sealed class AcpiEcReader : IDisposable
 
     private ushort ReadWordLittleEndianLocked(byte lowRegister)
     {
+        // A 16-bit EC value is exposed as two independent byte transactions.
+        // Read it twice and reject a large disagreement so an update between
+        // low/high byte reads cannot silently become a plausible but torn RPM.
+        var first = ReadWordLittleEndianRawLocked(lowRegister);
+        var second = ReadWordLittleEndianRawLocked(lowRegister);
+
+        if (Math.Abs((int)second - first) > MaximumStableWordDeltaRpm)
+        {
+            throw new InvalidDataException(
+                $"EC word 0x{lowRegister:X2} was unstable: {first} -> {second}.");
+        }
+
+        return second;
+    }
+
+    private ushort ReadWordLittleEndianRawLocked(byte lowRegister)
+    {
         var low = ReadRegisterLocked(lowRegister);
         var high = ReadRegisterLocked((byte)(lowRegister + 1));
         return (ushort)(low | (high << 8));
@@ -228,10 +246,9 @@ internal sealed class AcpiEcReader : IDisposable
 
     private void WaitUntil(Func<byte, bool> predicate, string timeoutMessage)
     {
-        var start = Stopwatch.GetTimestamp();
         byte lastStatus = 0;
 
-        while (Stopwatch.GetElapsedTime(start) < EcIoTimeout)
+        for (var poll = 0; poll < WaitPollLimit; poll++)
         {
             lastStatus = ReadPort(CommandStatusPort);
             if (predicate(lastStatus))
@@ -239,10 +256,24 @@ internal sealed class AcpiEcReader : IDisposable
                 return;
             }
 
-            Thread.SpinWait(32);
+            // Keep the common fast path fast, but do not hammer the ACPI EC
+            // continuously when Windows/BIOS is already using it.
+            if (poll < WaitSpinPolls)
+            {
+                Thread.SpinWait(32);
+            }
+            else if (poll < WaitSpinPolls + WaitYieldPolls)
+            {
+                Thread.Sleep(0);
+            }
+            else
+            {
+                Thread.Sleep(1);
+            }
         }
 
-        throw new TimeoutException($"{timeoutMessage} Last status=0x{lastStatus:X2}.");
+        throw new TimeoutException(
+            $"{timeoutMessage} Last status=0x{lastStatus:X2} after {WaitPollLimit} polls.");
     }
 
     private byte ReadPort(byte port)

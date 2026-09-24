@@ -30,6 +30,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private long _lastLoopTick = Environment.TickCount64;
     private long _lastCompletedReadTick = Environment.TickCount64;
     private long _logSequence;
+    private long _powerEpoch;
     private int _degradedCompleteStreak;
     private int _degradedIncompleteStreak;
     private TelemetrySnapshot? _lastLivenessSnapshot;
@@ -64,6 +65,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         lock (_commandGate)
         {
             _suspended = true;
+            _powerEpoch++;
             _recoveryRequested = false;
             _resumeValidationActive = false;
             _degradedCompleteStreak = 0;
@@ -92,6 +94,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             accepted = !_resumeValidationActive;
             if (accepted)
             {
+                _powerEpoch++;
                 _resumeValidationActive = true;
                 _recoveryRequested = true;
                 _recoveryReason = $"Resume detected ({source}).";
@@ -161,12 +164,19 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 continue;
             }
 
-            EnsureReader();
-
             try
             {
+                EnsureReader();
+
+                var readEpoch = CurrentPowerEpoch();
                 var snapshot = _reader!.ReadSnapshot();
                 TouchCompletedRead();
+
+                if (IsSuspended() || CurrentPowerEpoch() != readEpoch)
+                {
+                    continue;
+                }
+
                 SnapshotAvailable?.Invoke(this, snapshot);
                 PublishDiagnostics();
 
@@ -273,10 +283,12 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private async Task RecoverAndValidateAsync(CancellationToken cancellationToken)
     {
         string reason;
+        long recoveryEpoch;
         lock (_commandGate)
         {
             _recoveryRequested = false;
             reason = _recoveryReason;
+            recoveryEpoch = _powerEpoch;
         }
 
         StateMachine.Transition(SystemState.Recovering, reason);
@@ -290,12 +302,22 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
         try
         {
+            if (IsSuspended() || CurrentPowerEpoch() != recoveryEpoch)
+            {
+                return;
+            }
+
             EnsureReader();
 
             // Prime RAPL and GetSystemTimes differential counters. The priming
             // sample is intentionally not considered for health.
             _ = _reader!.ReadSnapshot();
             TouchCompletedRead();
+
+            if (IsSuspended() || CurrentPowerEpoch() != recoveryEpoch)
+            {
+                return;
+            }
             await Task.Delay(NormalIntervalMs, cancellationToken).ConfigureAwait(false);
 
             var requiredComplete = _resumeValidationActive
@@ -305,13 +327,18 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             var consecutiveComplete = 0;
             for (var attempt = 1; attempt <= 16 && !cancellationToken.IsCancellationRequested; attempt++)
             {
-                if (IsSuspended())
+                if (IsSuspended() || CurrentPowerEpoch() != recoveryEpoch)
                 {
                     return;
                 }
 
                 var snapshot = _reader.ReadSnapshot();
                 TouchCompletedRead();
+
+                if (IsSuspended() || CurrentPowerEpoch() != recoveryEpoch)
+                {
+                    return;
+                }
                 SnapshotAvailable?.Invoke(this, snapshot);
                 PublishDiagnostics();
 
@@ -438,6 +465,14 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         lock (_commandGate)
         {
             return _recoveryRequested;
+        }
+    }
+
+    private long CurrentPowerEpoch()
+    {
+        lock (_commandGate)
+        {
+            return _powerEpoch;
         }
     }
 
