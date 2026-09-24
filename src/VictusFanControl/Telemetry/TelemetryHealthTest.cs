@@ -45,6 +45,7 @@ public static class TelemetryHealthTest
         // Prime differential CPU power/load counters. This sample is intentionally
         // excluded from the health statistics.
         _ = reader.ReadSnapshot();
+        reader.ResetHealthWindow();
         await Task.Delay(intervalMs, cancellationToken);
 
         var counters = new[]

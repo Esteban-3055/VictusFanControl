@@ -14,6 +14,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private const int WatchdogIntervalMs = 500;
     private const int HealthySnapshotWatchdogMs = 4000;
     private const int IdenticalSnapshotFreezeThreshold = 60;
+    private const int DuplicateResumeWindowMs = 10_000;
 
     private readonly string _modulesDirectory;
     private readonly CancellationTokenSource _cts = new();
@@ -31,6 +32,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private long _lastCompletedReadTick = Environment.TickCount64;
     private long _logSequence;
     private long _powerEpoch;
+    private long _lastAcceptedResumeTick = long.MinValue;
     private int _degradedCompleteStreak;
     private int _degradedIncompleteStreak;
     private TelemetrySnapshot? _lastLivenessSnapshot;
@@ -85,15 +87,23 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
         lock (_commandGate)
         {
+            var nowTick = Environment.TickCount64;
+            var wasSuspended = _suspended;
             _suspended = false;
-            _lastCompletedReadTick = Environment.TickCount64;
+            _lastCompletedReadTick = nowTick;
 
             // Windows commonly emits PBT_APMRESUMEAUTOMATIC followed by
-            // PBT_APMRESUMESUSPEND for the same wake cycle. Treat both as one
-            // logical resume so the telemetry stack is rebuilt only once.
-            accepted = !_resumeValidationActive;
+            // PBT_APMRESUMESUSPEND for the same wake cycle. Coalesce delayed
+            // duplicates too, while still accepting a genuinely new wake when
+            // a suspend event was observed or the debounce window has elapsed.
+            var sinceAccepted = unchecked(nowTick - _lastAcceptedResumeTick);
+            accepted =
+                wasSuspended ||
+                (!_resumeValidationActive && sinceAccepted > DuplicateResumeWindowMs);
+
             if (accepted)
             {
+                _lastAcceptedResumeTick = nowTick;
                 _powerEpoch++;
                 _resumeValidationActive = true;
                 _recoveryRequested = true;
@@ -166,9 +176,14 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
             try
             {
+                var readEpoch = CurrentPowerEpoch();
                 EnsureReader();
 
-                var readEpoch = CurrentPowerEpoch();
+                if (IsSuspended() || CurrentPowerEpoch() != readEpoch)
+                {
+                    continue;
+                }
+
                 var snapshot = _reader!.ReadSnapshot();
                 TouchCompletedRead();
 
@@ -312,6 +327,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             // Prime RAPL and GetSystemTimes differential counters. The priming
             // sample is intentionally not considered for health.
             _ = _reader!.ReadSnapshot();
+            _reader.ResetHealthWindow();
             TouchCompletedRead();
 
             if (IsSuspended() || CurrentPowerEpoch() != recoveryEpoch)

@@ -189,6 +189,15 @@ public sealed class HardwareTelemetryReader : IDisposable
         return snapshot;
     }
 
+    public void ResetHealthWindow()
+    {
+        TotalSnapshots = 0;
+        CompleteSnapshots = 0;
+        ConsecutiveIncompleteSnapshots = 0;
+        MaxConsecutiveIncompleteSnapshots = 0;
+        _lastSnapshotHealthy = false;
+    }
+
     public IEnumerable<string> GetBackendDiagnostics()
     {
         yield return $"PawnIO Intel MSR : {_intelStatus}";

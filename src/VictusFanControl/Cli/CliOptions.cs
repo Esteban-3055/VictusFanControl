@@ -11,6 +11,7 @@ public sealed class CliOptions
     public bool RestoreHpAuto { get; private set; }
     public bool SkipEcSnapshots { get; private set; }
     public bool FirstFanWriteTest { get; private set; }
+    public string? FirstFanWriteToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
     public int DurationSeconds { get; private set; }
@@ -63,6 +64,10 @@ public sealed class CliOptions
                     options.FirstFanWriteTest = true;
                     break;
 
+                case "--write-token":
+                    options.FirstFanWriteToken = ReadValue(args, ref i);
+                    break;
+
                 case "--health-test-minutes":
                     options.HealthTestMinutes = ParsePositiveInt(
                         ReadValue(args, ref i),
@@ -112,6 +117,7 @@ public sealed class CliOptions
         Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");
+        Console.WriteLine("  --write-token <token>     Required acknowledgement token for the first write test.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");

@@ -131,10 +131,10 @@ public static class SafetyGate
 
     private static bool AreSensorsPlausible(TelemetrySnapshot snapshot)
     {
-        return InRange(snapshot.CpuTemperatureC, 0, 110) &&
+        return InRange(snapshot.CpuTemperatureC, 10, 110) &&
                InRange(snapshot.CpuPackagePowerW, 0, 500) &&
                InRange(snapshot.CpuLoadPercent, 0, 100) &&
-               InRange(snapshot.GpuTemperatureC, 0, 105) &&
+               InRange(snapshot.GpuTemperatureC, 10, 105) &&
                InRange(snapshot.GpuPowerW, 0, 300) &&
                InRange(snapshot.GpuLoadPercent, 0, 100) &&
                InRange(snapshot.CpuFanRpm, 0, 10_000) &&

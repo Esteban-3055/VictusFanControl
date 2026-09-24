@@ -38,7 +38,7 @@ if ($confirm -cne 'FAN30') {
 }
 
 Write-Host ''
-dotnet run --project .\src\VictusFanControl -c Release -- --first-fan-write-test
+dotnet run --project .\src\VictusFanControl -c Release -- --first-fan-write-test --write-token 88F8-FAN30
 $testExit = $LASTEXITCODE
 
 Write-Host ''

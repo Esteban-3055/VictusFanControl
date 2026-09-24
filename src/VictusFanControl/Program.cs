@@ -82,6 +82,16 @@ internal static class Program
 
         if (options.FirstFanWriteTest)
         {
+            if (!string.Equals(
+                    options.FirstFanWriteToken,
+                    "88F8-FAN30",
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    "First fan-write test refused: explicit --write-token 88F8-FAN30 is required.");
+                return 10;
+            }
+
             using var writeTestCts = new CancellationTokenSource();
             Console.CancelKeyPress += (_, eventArgs) =>
             {

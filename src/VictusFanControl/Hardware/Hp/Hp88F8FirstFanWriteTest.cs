@@ -159,6 +159,15 @@ public static class Hp88F8FirstFanWriteTest
 
             var ecApplied = new Hp88F8EcControlStateProbe(modulesDirectory).Read();
             Console.WriteLine($"EC applied: {ecApplied}");
+
+            if (ecApplied.CpuSetpoint != TestLevel ||
+                ecApplied.GpuSetpoint != TestLevel)
+            {
+                throw new InvalidOperationException(
+                    $"EC fan-level acknowledgement mismatch: requested {TestLevel},{TestLevel}, " +
+                    $"read {ecApplied.CpuSetpoint},{ecApplied.GpuSetpoint}.");
+            }
+
             EnsureControlWindow(controlStarted.Value);
 
             for (var second = 1; second <= TestDurationSeconds; second++)
@@ -191,6 +200,15 @@ public static class Hp88F8FirstFanWriteTest
                     throw new InvalidOperationException(
                         "Safety gate dropped during fan-write test: " +
                         string.Join(" | ", safety.Reasons));
+                }
+
+                if (sample.CpuTemperatureC > MaximumBaselineCpuTemperatureC ||
+                    sample.GpuTemperatureC > MaximumBaselineGpuTemperatureC ||
+                    sample.CpuPackagePowerW > MaximumBaselineCpuPowerW ||
+                    sample.GpuPowerW > MaximumBaselineGpuPowerW)
+                {
+                    throw new InvalidOperationException(
+                        "Light-load validation envelope was exceeded during the fan-write test.");
                 }
 
                 var rpmInWindow =

@@ -36,16 +36,26 @@ public sealed class HpOmenBiosWmiClient
     private static readonly byte[] Signature = [0x53, 0x45, 0x43, 0x55];
     private static readonly TimeSpan InvokeTimeout = TimeSpan.FromSeconds(5);
 
-    public int Send(HpBiosRequest request) =>
-        SendWithResponse(request).ReturnCode;
+    private readonly ManagementScope _scope;
 
-    public HpBiosResponse SendWithResponse(HpBiosRequest request)
+    public HpOmenBiosWmiClient()
     {
         if (!OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException("HP BIOS/WMI access requires Windows.");
         }
 
+        // Establish the WMI connection before any fan write is attempted and
+        // reuse it for readback and fail-safe restoration.
+        _scope = new ManagementScope(NamespacePath);
+        _scope.Connect();
+    }
+
+    public int Send(HpBiosRequest request) =>
+        SendWithResponse(request).ReturnCode;
+
+    public HpBiosResponse SendWithResponse(HpBiosRequest request)
+    {
         if (request.OutputSize is not (0 or 4 or 128 or 1024 or 4096))
         {
             throw new ArgumentOutOfRangeException(
@@ -53,11 +63,8 @@ public sealed class HpOmenBiosWmiClient
                 "Unsupported HP BIOS output size.");
         }
 
-        var scope = new ManagementScope(NamespacePath);
-        scope.Connect();
-
         using var dataClass = new ManagementClass(
-            scope,
+            _scope,
             new ManagementPath(DataClassName),
             options: null);
 
@@ -70,7 +77,7 @@ public sealed class HpOmenBiosWmiClient
         data["Size"] = (uint)request.Payload.Length;
         data[DataFieldName] = request.Payload.ToArray();
 
-        using var target = FindMethodInstance(scope);
+        using var target = FindMethodInstance(_scope);
         var methodName = $"hpqBIOSInt{request.OutputSize}";
 
         using var methodInput = target.GetMethodParameters(methodName)
@@ -114,9 +121,15 @@ public sealed class HpOmenBiosWmiClient
 
     private static ManagementObject FindMethodInstance(ManagementScope scope)
     {
+        var enumerationOptions = new EnumerationOptions
+        {
+            Timeout = InvokeTimeout
+        };
+
         using var searcher = new ManagementObjectSearcher(
             scope,
-            new ObjectQuery($"SELECT * FROM {MethodClassName}"));
+            new ObjectQuery($"SELECT * FROM {MethodClassName}"),
+            enumerationOptions);
 
         using var results = searcher.Get();
         foreach (ManagementObject candidate in results)
