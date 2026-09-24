@@ -79,7 +79,7 @@ public sealed class HpOmenBiosWmiClient
 
         methodInput["InData"] = data;
 
-        using var invokeOptions = new InvokeMethodOptions
+        var invokeOptions = new InvokeMethodOptions
         {
             Timeout = InvokeTimeout
         };

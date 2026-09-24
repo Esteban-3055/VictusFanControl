@@ -273,7 +273,7 @@ public static class FanControlCoordinatorSelfTest
             "88F8",
             "88.58",
             "HP",
-            "Victus",
+            "Victus by HP Laptop 16-d0xxx",
             "62C37LA#AKH",
             "test");
 

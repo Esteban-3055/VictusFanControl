@@ -704,7 +704,8 @@ internal sealed class MainForm : Form
         if (_eventLog.TextLength > MaxEventLogChars)
         {
             var remove = Math.Min(30_000, _eventLog.TextLength);
-            var boundary = _eventLog.Text.IndexOf(Environment.NewLine, remove, StringComparison.Ordinal);
+            var currentText = _eventLog.Text ?? string.Empty;
+            var boundary = currentText.IndexOf(Environment.NewLine, remove, StringComparison.Ordinal);
             if (boundary < 0)
             {
                 boundary = remove;
