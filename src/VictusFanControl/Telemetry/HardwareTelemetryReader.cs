@@ -15,6 +15,11 @@ public sealed class HardwareTelemetryReader : IDisposable
     private readonly string _ecStatus;
     private readonly string _nvmlStatus;
 
+    private string? _lastIntelReadError;
+    private string? _lastEcReadError;
+    private string? _lastNvmlReadError;
+    private bool _lastSnapshotHealthy;
+
     public HardwareTelemetryReader(string modulesDirectory)
     {
         var intelModule = Path.Combine(modulesDirectory, "IntelMSR.bin");
@@ -51,7 +56,9 @@ public sealed class HardwareTelemetryReader : IDisposable
         }
     }
 
-    public bool IsReadyForBaseline => _intel is not null && _ec is not null && _nvml is not null;
+    public bool BackendsInitialized => _intel is not null && _ec is not null && _nvml is not null;
+
+    public bool IsReadyForBaseline => BackendsInitialized && _lastSnapshotHealthy;
 
     public TelemetrySnapshot ReadSnapshot()
     {
@@ -65,11 +72,11 @@ public sealed class HardwareTelemetryReader : IDisposable
             {
                 cpuTemperature = _intel.ReadPackageTemperatureC();
                 cpuPower = _intel.ReadPackagePowerW();
+                _lastIntelReadError = null;
             }
-            catch
+            catch (Exception ex)
             {
-                // Telemetry-only development build: surface missing values.
-                // The future safety supervisor will fail back to HP firmware control.
+                _lastIntelReadError = ex.Message;
             }
         }
 
@@ -89,10 +96,11 @@ public sealed class HardwareTelemetryReader : IDisposable
                 gpuTemperature = gpu.TemperatureC;
                 gpuPower = gpu.PowerW;
                 gpuLoad = gpu.LoadPercent;
+                _lastNvmlReadError = null;
             }
-            catch
+            catch (Exception ex)
             {
-                // Same read-only behavior as above: missing values are explicit.
+                _lastNvmlReadError = ex.Message;
             }
         }
 
@@ -104,12 +112,23 @@ public sealed class HardwareTelemetryReader : IDisposable
             {
                 cpuFanRpm = _ec.ReadWordLittleEndian(0xB0);
                 gpuFanRpm = _ec.ReadWordLittleEndian(0xB2);
+                _lastEcReadError = null;
             }
-            catch
+            catch (Exception ex)
             {
-                // Never guess fan RPM if an EC transaction fails.
+                _lastEcReadError = ex.Message;
             }
         }
+
+        _lastSnapshotHealthy =
+            cpuTemperature.HasValue &&
+            cpuPower.HasValue &&
+            cpuLoad.HasValue &&
+            gpuTemperature.HasValue &&
+            gpuPower.HasValue &&
+            gpuLoad.HasValue &&
+            cpuFanRpm.HasValue &&
+            gpuFanRpm.HasValue;
 
         return new TelemetrySnapshot(
             Timestamp: timestamp,
@@ -125,11 +144,31 @@ public sealed class HardwareTelemetryReader : IDisposable
             GpuFanRpm: gpuFanRpm);
     }
 
-    public IEnumerable<string> GetDiagnostics()
+    public IEnumerable<string> GetBackendDiagnostics()
     {
         yield return $"PawnIO Intel MSR : {_intelStatus}";
         yield return $"PawnIO ACPI EC   : {_ecStatus}";
         yield return $"NVIDIA NVML     : {_nvmlStatus}";
+        yield return $"Backends init   : {BackendsInitialized}";
+    }
+
+    public IEnumerable<string> GetReadDiagnostics()
+    {
+        if (_lastIntelReadError is not null)
+        {
+            yield return $"Intel MSR read  : FAILED: {_lastIntelReadError}";
+        }
+
+        if (_lastNvmlReadError is not null)
+        {
+            yield return $"NVML read       : FAILED: {_lastNvmlReadError}";
+        }
+
+        if (_lastEcReadError is not null)
+        {
+            yield return $"ACPI EC read    : FAILED: {_lastEcReadError}";
+        }
+
         yield return $"Baseline ready  : {IsReadyForBaseline}";
     }
 
