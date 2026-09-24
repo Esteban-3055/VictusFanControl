@@ -25,6 +25,11 @@ public sealed class HardwareTelemetryReader : IDisposable
 
     private bool _lastSnapshotHealthy;
 
+    private DateTimeOffset _nextIntelInitAttempt = DateTimeOffset.MinValue;
+    private DateTimeOffset _nextEcInitAttempt = DateTimeOffset.MinValue;
+    private DateTimeOffset _nextNvmlInitAttempt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan ReinitializeBackoff = TimeSpan.FromSeconds(5);
+
     public HardwareTelemetryReader(string modulesDirectory)
     {
         _intelModulePath = Path.Combine(modulesDirectory, "IntelMSR.bin");
@@ -52,6 +57,8 @@ public sealed class HardwareTelemetryReader : IDisposable
     public TelemetrySnapshot ReadSnapshot()
     {
         var timestamp = DateTimeOffset.UtcNow;
+
+        EnsureBackendsAvailable(timestamp);
 
         double? cpuTemperature = null;
         double? cpuPower = null;
@@ -265,12 +272,14 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             _intel = new IntelMsrReader(_intelModulePath);
             _intelStatus = $"OK (PawnIO {_intel.PawnIoVersion}, IntelMSR.bin)";
+            _nextIntelInitAttempt = DateTimeOffset.MinValue;
         }
         catch (Exception ex)
         {
             _intel?.Dispose();
             _intel = null;
             _intelStatus = $"FAILED: {ex.Message}";
+            _nextIntelInitAttempt = DateTimeOffset.UtcNow + ReinitializeBackoff;
         }
     }
 
@@ -280,12 +289,14 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             _ec = new AcpiEcReader(_ecModulePath);
             _ecStatus = $"OK (PawnIO {_ec.PawnIoVersion}, LpcACPIEC.bin)";
+            _nextEcInitAttempt = DateTimeOffset.MinValue;
         }
         catch (Exception ex)
         {
             _ec?.Dispose();
             _ec = null;
             _ecStatus = $"FAILED: {ex.Message}";
+            _nextEcInitAttempt = DateTimeOffset.UtcNow + ReinitializeBackoff;
         }
     }
 
@@ -295,12 +306,45 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             _nvml = new NvmlClient();
             _nvmlStatus = $"OK ({_nvml.DeviceName})";
+            _nextNvmlInitAttempt = DateTimeOffset.MinValue;
         }
         catch (Exception ex)
         {
             _nvml?.Dispose();
             _nvml = null;
             _nvmlStatus = $"FAILED: {ex.Message}";
+            _nextNvmlInitAttempt = DateTimeOffset.UtcNow + ReinitializeBackoff;
+        }
+    }
+
+
+    private void EnsureBackendsAvailable(DateTimeOffset now)
+    {
+        if (_intel is null && now >= _nextIntelInitAttempt)
+        {
+            InitializeIntel();
+            if (_intel is not null && TotalSnapshots > 0)
+            {
+                IntelRecoveries++;
+            }
+        }
+
+        if (_ec is null && now >= _nextEcInitAttempt)
+        {
+            InitializeEc();
+            if (_ec is not null && TotalSnapshots > 0)
+            {
+                EcRecoveries++;
+            }
+        }
+
+        if (_nvml is null && now >= _nextNvmlInitAttempt)
+        {
+            InitializeNvml();
+            if (_nvml is not null && TotalSnapshots > 0)
+            {
+                NvmlRecoveries++;
+            }
         }
     }
 
@@ -311,6 +355,7 @@ public sealed class HardwareTelemetryReader : IDisposable
             _intel?.Dispose();
             _intel = new IntelMsrReader(_intelModulePath);
             _intelStatus = $"OK (recovered, PawnIO {_intel.PawnIoVersion})";
+            _nextIntelInitAttempt = DateTimeOffset.MinValue;
             IntelRecoveries++;
             return true;
         }
@@ -318,6 +363,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             _intel = null;
             _intelStatus = $"FAILED recovery: {ex.Message}";
+            _nextIntelInitAttempt = DateTimeOffset.UtcNow + ReinitializeBackoff;
             return false;
         }
     }
@@ -329,6 +375,7 @@ public sealed class HardwareTelemetryReader : IDisposable
             _ec?.Dispose();
             _ec = new AcpiEcReader(_ecModulePath);
             _ecStatus = $"OK (recovered, PawnIO {_ec.PawnIoVersion})";
+            _nextEcInitAttempt = DateTimeOffset.MinValue;
             EcRecoveries++;
             return true;
         }
@@ -336,6 +383,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             _ec = null;
             _ecStatus = $"FAILED recovery: {ex.Message}";
+            _nextEcInitAttempt = DateTimeOffset.UtcNow + ReinitializeBackoff;
             return false;
         }
     }
@@ -347,6 +395,7 @@ public sealed class HardwareTelemetryReader : IDisposable
             _nvml?.Dispose();
             _nvml = new NvmlClient();
             _nvmlStatus = $"OK (recovered, {_nvml.DeviceName})";
+            _nextNvmlInitAttempt = DateTimeOffset.MinValue;
             NvmlRecoveries++;
             return true;
         }
@@ -354,6 +403,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             _nvml = null;
             _nvmlStatus = $"FAILED recovery: {ex.Message}";
+            _nextNvmlInitAttempt = DateTimeOffset.UtcNow + ReinitializeBackoff;
             return false;
         }
     }
