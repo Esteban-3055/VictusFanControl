@@ -103,6 +103,16 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                     "Fan command refused because the safety gate is no longer ready.");
             }
 
+            var commandError = ValidateCommand(command);
+            if (commandError is not null)
+            {
+                await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                throw new ArgumentOutOfRangeException(
+                    nameof(command),
+                    command,
+                    commandError);
+            }
+
             try
             {
                 await _backend.ApplyAsync(command, cancellationToken).ConfigureAwait(false);
@@ -160,6 +170,34 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         }
 
         await _backend.DisposeAsync().ConfigureAwait(false);
+    }
+
+
+    private string? ValidateCommand(FanCommand command)
+    {
+        var capabilities = _backend.Capabilities;
+
+        if (command.CpuLevel < capabilities.MinimumLevel ||
+            command.CpuLevel > capabilities.MaximumLevel)
+        {
+            return $"CPU fan level {command.CpuLevel} is outside validated range " +
+                   $"{capabilities.MinimumLevel}-{capabilities.MaximumLevel}.";
+        }
+
+        if (command.GpuLevel < capabilities.MinimumLevel ||
+            command.GpuLevel > capabilities.MaximumLevel)
+        {
+            return $"GPU fan level {command.GpuLevel} is outside validated range " +
+                   $"{capabilities.MinimumLevel}-{capabilities.MaximumLevel}.";
+        }
+
+        if (!capabilities.SupportsIndependentLevels &&
+            command.CpuLevel != command.GpuLevel)
+        {
+            return "Backend requires equal CPU/GPU fan levels.";
+        }
+
+        return null;
     }
 
     private async ValueTask RestoreLockedAsync(

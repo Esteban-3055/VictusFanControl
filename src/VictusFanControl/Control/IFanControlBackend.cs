@@ -5,6 +5,12 @@ public readonly record struct FanCommand(
     int GpuLevel,
     string Reason);
 
+public readonly record struct FanBackendCapabilities(
+    string BoardProduct,
+    int MinimumLevel,
+    int MaximumLevel,
+    bool SupportsIndependentLevels);
+
 public readonly record struct FanBackendStatus(
     string Name,
     bool CanWrite,
@@ -19,6 +25,7 @@ public interface IFanControlBackend : IAsyncDisposable
 {
     string Name { get; }
     bool CanWrite { get; }
+    FanBackendCapabilities Capabilities { get; }
 
     ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken);
     ValueTask EnterCustomModeAsync(CancellationToken cancellationToken);
@@ -34,6 +41,8 @@ public sealed class DisabledFanControlBackend : IFanControlBackend
 {
     public string Name => "Disabled / read-only";
     public bool CanWrite => false;
+    public FanBackendCapabilities Capabilities =>
+        new("88F8", 14, 50, SupportsIndependentLevels: true);
 
     public ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult(new FanBackendStatus(

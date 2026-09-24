@@ -16,6 +16,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestDisabledBackendAsync(output, safety);
         failures += await TestNormalRestoreAsync(output, safety);
         failures += await TestSafetyLossRestoresAsync(output, safety, now);
+        failures += await TestInvalidCommandRestoresAsync(output, safety);
         failures += await TestBackendFailureRestoresAsync(output, safety);
 
         output.WriteLine();
@@ -112,6 +113,41 @@ public static class FanControlCoordinatorSelfTest
             coordinator.Authority == FanAuthority.Firmware);
     }
 
+
+    private static async Task<int> TestInvalidCommandRestoresAsync(
+        TextWriter output,
+        SafetyGateResult safety)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None);
+
+        var threw = false;
+        try
+        {
+            await coordinator.ApplyAsync(
+                new FanCommand(13, 30, "out of range"),
+                safety,
+                CancellationToken.None);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            threw = true;
+        }
+
+        return Report(
+            output,
+            "out-of-range command restores firmware authority",
+            entered &&
+            threw &&
+            backend.ApplyCalls == 0 &&
+            backend.RestoreCalls == 1 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
     private static async Task<int> TestBackendFailureRestoresAsync(
         TextWriter output,
         SafetyGateResult safety)
@@ -191,6 +227,8 @@ public static class FanControlCoordinatorSelfTest
     {
         public string Name => "self-test backend";
         public bool CanWrite => true;
+        public FanBackendCapabilities Capabilities =>
+            new("88F8", 14, 50, SupportsIndependentLevels: true);
 
         public int EnterCalls { get; private set; }
         public int ApplyCalls { get; private set; }
