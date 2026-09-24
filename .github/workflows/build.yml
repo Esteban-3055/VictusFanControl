@@ -23,3 +23,6 @@ jobs:
 
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore
+
+      - name: Safety gate self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --safety-self-test
