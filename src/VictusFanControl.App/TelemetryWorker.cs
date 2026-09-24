@@ -8,6 +8,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private const int NormalIntervalMs = 1000;
     private const int ResumeSettleMs = 1500;
     private const int HealthySamplesRequired = 3;
+    private const int ResumeHealthySamplesRequired = 5;
     private const int RecoveryAfterIncompleteSamples = 3;
     private const int GapThresholdMs = 10_000;
 
@@ -201,9 +202,16 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         _degradedCompleteStreak = 0;
         _degradedIncompleteStreak++;
 
+        var missing = DescribeMissing(snapshot);
+
         StateMachine.Transition(
             SystemState.Degraded,
-            $"Incomplete telemetry snapshot ({_degradedIncompleteStreak}/{RecoveryAfterIncompleteSamples}).");
+            $"Incomplete telemetry snapshot ({_degradedIncompleteStreak}/{RecoveryAfterIncompleteSamples}): {missing}.");
+
+        if (_degradedIncompleteStreak == 1)
+        {
+            Log($"Transient telemetry degradation detected; missing={missing}.");
+        }
 
         if (_degradedIncompleteStreak >= RecoveryAfterIncompleteSamples)
         {
@@ -238,8 +246,12 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             _ = _reader!.ReadSnapshot();
             await Task.Delay(NormalIntervalMs, cancellationToken).ConfigureAwait(false);
 
+            var requiredComplete = _resumeValidationActive
+                ? ResumeHealthySamplesRequired
+                : HealthySamplesRequired;
+
             var consecutiveComplete = 0;
-            for (var attempt = 1; attempt <= 12 && !cancellationToken.IsCancellationRequested; attempt++)
+            for (var attempt = 1; attempt <= 16 && !cancellationToken.IsCancellationRequested; attempt++)
             {
                 if (IsSuspended())
                 {
@@ -253,7 +265,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 if (snapshot.IsComplete)
                 {
                     consecutiveComplete++;
-                    if (consecutiveComplete >= HealthySamplesRequired)
+                    if (consecutiveComplete >= requiredComplete)
                     {
                         _degradedCompleteStreak = 0;
                         _degradedIncompleteStreak = 0;
@@ -265,8 +277,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
                         StateMachine.Transition(
                             SystemState.Healthy,
-                            $"{HealthySamplesRequired} consecutive complete telemetry snapshots.");
-                        Log("Recovery completed; telemetry is healthy.");
+                            $"{requiredComplete} consecutive complete telemetry snapshots.");
+                        Log($"Recovery completed; telemetry is healthy after {requiredComplete} complete snapshots.");
                         return;
                     }
                 }
@@ -280,7 +292,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
             StateMachine.Transition(
                 SystemState.Degraded,
-                "Telemetry did not produce three consecutive complete snapshots after recovery.");
+                $"Telemetry did not produce {requiredComplete} consecutive complete snapshots after recovery.");
             Log("Recovery validation did not reach the healthy criterion.");
             RequestRecovery("Retrying degraded telemetry.");
             await Task.Delay(2000, cancellationToken).ConfigureAwait(false);
@@ -292,6 +304,23 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             RequestRecovery("Retrying after recovery failure.");
             await Task.Delay(5000, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+
+    private static string DescribeMissing(TelemetrySnapshot snapshot)
+    {
+        var missing = new List<string>(8);
+
+        if (!snapshot.CpuTemperatureC.HasValue) missing.Add("cpu_temp");
+        if (!snapshot.CpuPackagePowerW.HasValue) missing.Add("cpu_power");
+        if (!snapshot.CpuLoadPercent.HasValue) missing.Add("cpu_load");
+        if (!snapshot.GpuTemperatureC.HasValue) missing.Add("gpu_temp");
+        if (!snapshot.GpuPowerW.HasValue) missing.Add("gpu_power");
+        if (!snapshot.GpuLoadPercent.HasValue) missing.Add("gpu_load");
+        if (!snapshot.CpuFanRpm.HasValue) missing.Add("cpu_fan");
+        if (!snapshot.GpuFanRpm.HasValue) missing.Add("gpu_fan");
+
+        return missing.Count == 0 ? "unknown" : string.Join(",", missing);
     }
 
     private void EnsureReader()
