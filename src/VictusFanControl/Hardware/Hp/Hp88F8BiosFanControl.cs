@@ -126,6 +126,31 @@ public sealed class Hp88F8BiosFanControl
     {
         EnsureSupportedBoard();
 
+        ExecuteRestoreSequence(
+            releaseAction: () =>
+            {
+                var rc = _client.Send(BuildReleaseFanLevelRequest());
+                if (rc != 0)
+                {
+                    throw new HpBiosCallException(
+                        $"HP BIOS rejected FF,FF fan-level release with return code {rc}.");
+                }
+            },
+            legacyDefaultAction: () =>
+            {
+                var rc = _client.Send(BuildLegacyDefaultRequest());
+                if (rc != 0)
+                {
+                    throw new HpBiosCallException(
+                        $"HP BIOS rejected LegacyDefault restore with return code {rc}.");
+                }
+            });
+    }
+
+    internal static void ExecuteRestoreSequence(
+        Action releaseAction,
+        Action legacyDefaultAction)
+    {
         Exception? releaseFailure = null;
         Exception? modeFailure = null;
 
@@ -134,12 +159,7 @@ public sealed class Hp88F8BiosFanControl
         // the LegacyDefault attempt from running.
         try
         {
-            var rc = _client.Send(BuildReleaseFanLevelRequest());
-            if (rc != 0)
-            {
-                throw new HpBiosCallException(
-                    $"HP BIOS rejected FF,FF fan-level release with return code {rc}.");
-            }
+            releaseAction();
         }
         catch (Exception ex)
         {
@@ -148,12 +168,7 @@ public sealed class Hp88F8BiosFanControl
 
         try
         {
-            var rc = _client.Send(BuildLegacyDefaultRequest());
-            if (rc != 0)
-            {
-                throw new HpBiosCallException(
-                    $"HP BIOS rejected LegacyDefault restore with return code {rc}.");
-            }
+            legacyDefaultAction();
         }
         catch (Exception ex)
         {

@@ -8,7 +8,7 @@ Implemented `Hp88F8FanControlBackend` behind `IFanControlBackend`.
 
 Properties:
 
-- exact target fingerprint required;
+- exact target fingerprint required, including the validated BIOS F.32 and exact SKU base 62C37LA;
 - ordinary commands hard-limited to 14-50;
 - no arbitrary EC writes;
 - WMI `SetFanLevel` for commands;
@@ -74,3 +74,13 @@ Still required before automatic control:
 - hardware exercise of a deliberately failed tachometer/ownership acknowledgement where practical and safe;
 - characterization of forced-process-termination recovery / firmware countdown behavior;
 - implementation and tuning of the shared physical-RPM controller and per-fan compensation.
+
+
+## Final integration audit
+
+The final concurrency pass added two fail-closed protections:
+
+- safety-supervisor results are monotonically ordered by evaluation timestamp, so a delayed older async result cannot cancel/restore a newer validated custom session;
+- the target allowlist now includes BIOS F.32 and exact SKU-base matching, preventing an unvalidated BIOS update or a lookalike SKU prefix from enabling writes.
+
+CI builds with compiler warnings treated as errors.

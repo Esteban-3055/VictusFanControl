@@ -17,7 +17,7 @@ public static class SafetyGateSelfTest
             "HP",
             "Victus by HP Laptop 16-d0xxx",
             "62C37LA#AKH",
-            "test");
+            Hp88F8TargetProfile.ValidatedBiosVersion);
 
         var good = Snapshot(now, 50, 15, 10, 45, 25, 5, 2200, 2400);
 
@@ -41,6 +41,24 @@ public static class SafetyGateSelfTest
                 "wrong HP SKU on same 88F8 board",
                 SafetyGate.Evaluate(
                     goodHardware with { SystemSku = "DIFFERENT-SKU" },
+                    SystemState.Healthy,
+                    good,
+                    now),
+                expectedReady: false),
+
+            Case(
+                "lookalike SKU prefix is not accepted",
+                SafetyGate.Evaluate(
+                    goodHardware with { SystemSku = "62C37LABAD#AKH" },
+                    SystemState.Healthy,
+                    good,
+                    now),
+                expectedReady: false),
+
+            Case(
+                "unvalidated BIOS is blocked",
+                SafetyGate.Evaluate(
+                    goodHardware with { BiosVersion = "F.33" },
                     SystemState.Healthy,
                     good,
                     now),

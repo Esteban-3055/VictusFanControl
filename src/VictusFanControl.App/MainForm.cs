@@ -58,7 +58,7 @@ internal sealed class MainForm : Form
     private bool _shutdownStarted;
     private bool _shutdownComplete;
 
-    private TelemetrySnapshot? _lastSnapshot;
+    private volatile TelemetrySnapshot? _lastSnapshot;
 
     public MainForm(string modulesDirectory)
     {

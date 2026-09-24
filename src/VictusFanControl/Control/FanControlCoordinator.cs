@@ -30,6 +30,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     private volatile bool _lifecycleFenceRequested;
     private bool _admissionBlocked;
     private DateTimeOffset _minimumSafetySnapshotTimestamp = DateTimeOffset.MinValue;
+    private long _latestSafetyEvaluationUtcTicks;
     private CancellationTokenSource? _activeCommandCts;
     private bool _disposed;
 
@@ -120,6 +121,11 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         try
         {
             ThrowIfDisposed();
+
+            if (!IsLatestSafetyEvaluation(safety.EvaluatedAt))
+            {
+                return true;
+            }
 
             if (_authority != FanAuthority.Custom)
             {
@@ -255,6 +261,11 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         string reason,
         CancellationToken cancellationToken)
     {
+        if (!TryAcceptSafetyEvaluation(safety.EvaluatedAt))
+        {
+            return true;
+        }
+
         if (!safety.CustomControlPermitted)
         {
             CancelActiveCommand();
@@ -366,10 +377,44 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 
     private bool SafetyAllowsCustomLocked(SafetyGateResult safety) =>
         safety.CustomControlPermitted &&
+        IsLatestSafetyEvaluationOrNewer(safety.EvaluatedAt) &&
         !_lifecycleFenceRequested &&
         !_admissionBlocked &&
         safety.SnapshotTimestamp.HasValue &&
         safety.SnapshotTimestamp.Value >= _minimumSafetySnapshotTimestamp;
+
+    private bool TryAcceptSafetyEvaluation(DateTimeOffset evaluatedAt)
+    {
+        var candidate = evaluatedAt.UtcTicks;
+
+        while (true)
+        {
+            var current = Interlocked.Read(ref _latestSafetyEvaluationUtcTicks);
+            if (candidate < current)
+            {
+                return false;
+            }
+
+            if (candidate == current)
+            {
+                return true;
+            }
+
+            if (Interlocked.CompareExchange(
+                    ref _latestSafetyEvaluationUtcTicks,
+                    candidate,
+                    current) == current)
+            {
+                return true;
+            }
+        }
+    }
+
+    private bool IsLatestSafetyEvaluation(DateTimeOffset evaluatedAt) =>
+        evaluatedAt.UtcTicks == Interlocked.Read(ref _latestSafetyEvaluationUtcTicks);
+
+    private bool IsLatestSafetyEvaluationOrNewer(DateTimeOffset evaluatedAt) =>
+        evaluatedAt.UtcTicks >= Interlocked.Read(ref _latestSafetyEvaluationUtcTicks);
 
     private void SetActiveCommand(CancellationTokenSource source)
     {

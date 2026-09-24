@@ -37,7 +37,7 @@ internal static class Program
         {
             AppLog.Write($"UI THREAD EXCEPTION: {eventArgs.Exception}");
             MessageBox.Show(
-                "VictusFanControl encountered an unexpected UI error. Fan control is not enabled in this build. See the persistent application log for details.",
+                "VictusFanControl encountered an unexpected UI error. The safety supervisor will restore HP firmware authority if custom fan control is active. See the persistent application log for details.",
                 "VictusFanControl",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);

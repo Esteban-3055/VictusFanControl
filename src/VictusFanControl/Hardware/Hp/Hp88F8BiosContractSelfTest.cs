@@ -42,15 +42,17 @@ public static class Hp88F8BiosContractSelfTest
         output.WriteLine(
             $"{(releaseLevelPass ? "PASS" : "FAIL")}  HP 88F8 SetFanLevel(FF,FF) release envelope");
 
-        var secondStepAttempted = false;
+        var restoreOrder = new List<string>();
         var firstFailurePropagated = false;
         try
         {
-            Exception? releaseFailure = new IOException("synthetic release failure");
-            secondStepAttempted = true;
-            Hp88F8BiosFanControl.ThrowIfRestoreSequenceFailed(
-                releaseFailure,
-                modeFailure: null);
+            Hp88F8BiosFanControl.ExecuteRestoreSequence(
+                releaseAction: () =>
+                {
+                    restoreOrder.Add("release");
+                    throw new IOException("synthetic release failure");
+                },
+                legacyDefaultAction: () => restoreOrder.Add("legacy-default"));
         }
         catch (HpBiosCallException ex)
         {
@@ -59,7 +61,9 @@ public static class Hp88F8BiosContractSelfTest
                 ex.Message.Contains("LegacyDefault was still attempted", StringComparison.Ordinal);
         }
 
-        var restoreSequencePass = secondStepAttempted && firstFailurePropagated;
+        var restoreSequencePass =
+            restoreOrder.SequenceEqual(new[] { "release", "legacy-default" }) &&
+            firstFailurePropagated;
         output.WriteLine(
             $"{(restoreSequencePass ? "PASS" : "FAIL")}  restore reports FF,FF failure only after LegacyDefault attempt");
 

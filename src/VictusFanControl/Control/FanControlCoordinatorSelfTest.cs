@@ -28,6 +28,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestUnsafeReentryRestoresAsync(output, safety, now);
         failures += await TestRuntimeOwnershipMismatchRestoresAsync(output, safety);
         failures += await TestLifecycleFenceClosesBeforeCoordinatorGateAsync(output, safety, now);
+        failures += await TestStaleSafetyEvaluationCannotTearDownNewerSessionAsync(output, safety, now);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -68,7 +69,7 @@ public static class FanControlCoordinatorSelfTest
             "HP",
             "Victus by HP Laptop 16-d0xxx",
             "62C37LA#AKH",
-            "test");
+            Hp88F8TargetProfile.ValidatedBiosVersion);
 
         var snapshot = new TelemetrySnapshot(
             now,
@@ -273,6 +274,54 @@ public static class FanControlCoordinatorSelfTest
 
 
 
+
+
+    private static async Task<int> TestStaleSafetyEvaluationCannotTearDownNewerSessionAsync(
+        TextWriter output,
+        SafetyGateResult initialSafety,
+        DateTimeOffset now)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            initialSafety,
+            CancellationToken.None);
+
+        var newerSafety = BuildReadySafety(
+            now + TimeSpan.FromSeconds(2),
+            now + TimeSpan.FromSeconds(2));
+
+        var newerAccepted = await coordinator.EnforceSafetyAsync(
+            newerSafety,
+            "newer healthy sample",
+            CancellationToken.None);
+
+        var staleUnsafe = BuildReadySafety(
+            now - TimeSpan.FromSeconds(10),
+            now);
+
+        var staleIgnored = await coordinator.EnforceSafetyAsync(
+            staleUnsafe,
+            "delayed stale unsafe result",
+            CancellationToken.None);
+
+        var restoreCallsBeforeCleanup = backend.RestoreCalls;
+        var authorityBeforeCleanup = coordinator.Authority;
+
+        await coordinator.RestoreFirmwareAsync(
+            "stale-safety test cleanup",
+            CancellationToken.None);
+
+        return Report(
+            output,
+            "stale async safety result cannot tear down a newer validated custom session",
+            entered &&
+            newerAccepted &&
+            staleIgnored &&
+            restoreCallsBeforeCleanup == 0 &&
+            authorityBeforeCleanup == FanAuthority.Custom);
+    }
 
     private static async Task<int> TestLifecycleFenceClosesBeforeCoordinatorGateAsync(
         TextWriter output,
@@ -570,7 +619,7 @@ public static class FanControlCoordinatorSelfTest
             "HP",
             "Victus by HP Laptop 16-d0xxx",
             "62C37LA#AKH",
-            "test");
+            Hp88F8TargetProfile.ValidatedBiosVersion);
 
         var snapshot = new TelemetrySnapshot(
             timestamp,

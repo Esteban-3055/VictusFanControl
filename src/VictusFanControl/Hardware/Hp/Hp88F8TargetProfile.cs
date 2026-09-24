@@ -14,6 +14,7 @@ public static class Hp88F8TargetProfile
     public const string SystemManufacturer = "HP";
     public const string SystemProductName = "Victus by HP Laptop 16-d0xxx";
     public const string SystemSkuPrefix = "62C37LA";
+    public const string ValidatedBiosVersion = "F.32";
     public const string ExpectedGpuName = "NVIDIA GeForce RTX 3060 Laptop GPU";
     public const int MinimumValidatedFanLevel = 14;
     public const int MaximumValidatedFanLevel = 50;
@@ -56,13 +57,26 @@ public static class Hp88F8TargetProfile
             return false;
         }
 
-        if (!hardware.SystemSku.StartsWith(SystemSkuPrefix, StringComparison.OrdinalIgnoreCase))
+        var skuBase = hardware.SystemSku
+            .Split('#', 2, StringSplitOptions.TrimEntries)[0];
+
+        if (!EqualsIgnoreCase(skuBase, SystemSkuPrefix))
         {
-            reason = $"System SKU '{hardware.SystemSku}' does not start with '{SystemSkuPrefix}'.";
+            reason = $"System SKU base '{skuBase}' != '{SystemSkuPrefix}'.";
             return false;
         }
 
-        reason = "Exact HP 88F8 development target matched.";
+        var biosMatched = hardware.BiosVersion
+            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(value => EqualsIgnoreCase(value, ValidatedBiosVersion));
+
+        if (!biosMatched)
+        {
+            reason = $"BIOS '{hardware.BiosVersion}' is not the validated '{ValidatedBiosVersion}'.";
+            return false;
+        }
+
+        reason = "Exact HP 88F8 development target and validated BIOS matched.";
         return true;
     }
 
