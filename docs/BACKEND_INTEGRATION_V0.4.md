@@ -97,3 +97,14 @@ A second concurrency/feedback pass added further fail-closed behavior:
 - tachometer command acknowledgement now requires two consecutive samples that both still satisfy the requested directional evidence; a one-sample RPM spike cannot latch success.
 - suspend establishes the coordinator admission fence before the telemetry worker transitions to Suspended.
 - lifecycle reopening requires telemetry strictly newer than the lifecycle boundary.
+
+
+## Total-verification follow-up
+
+A subsequent full review found three additional consistency issues and closes them in the current revision:
+
+- presentation-only SafetyGate evaluations no longer consume control-order sequence numbers; UI refreshes therefore cannot cause a real safety-supervisor result to be discarded as stale;
+- every failure of the read-only `EnterCustomModeAsync` admission phase, including cancellation before acquiring the backend I/O gate, is classified as a no-write admission failure and cannot trigger an FF,FF cleanup of another controller's state;
+- the background telemetry liveness watchdog now uses the same 3-second freshness budget as `SafetyGate.MaximumTelemetryAge`, removing the previous 3 s gate / 4 s watchdog mismatch.
+
+Lifecycle snapshot admission is also strict: a recovery snapshot must be newer than, not equal to, the power-boundary timestamp.

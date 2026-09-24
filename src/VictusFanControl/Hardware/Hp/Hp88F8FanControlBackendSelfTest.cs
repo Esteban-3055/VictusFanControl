@@ -16,6 +16,7 @@ public static class Hp88F8FanControlBackendSelfTest
 
         failures += await TestHappyPathAsync(output);
         failures += await TestExistingOverrideRefusedAsync(output);
+        failures += await TestCancelledAdmissionIsNoWriteAsync(output);
         failures += await TestUnsupportedTargetRefusedAsync(output);
         failures += await TestRangeRefusedAsync(output);
         failures += await TestRestoreVerificationAsync(output);
@@ -90,6 +91,34 @@ public static class Hp88F8FanControlBackendSelfTest
             output,
             "existing fixed override blocks authority acquisition",
             refused && hardware.SetCalls == 0);
+    }
+
+
+    private static async Task<int> TestCancelledAdmissionIsNoWriteAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        await using var backend = NewBackend(hardware);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var refusedAsNoWrite = false;
+        try
+        {
+            await backend.EnterCustomModeAsync(cts.Token);
+        }
+        catch (FanControlAdmissionException ex)
+        {
+            refusedAsNoWrite = ex.InnerException is OperationCanceledException;
+        }
+
+        return Report(
+            output,
+            "cancelled authority admission is classified as no-write",
+            refusedAsNoWrite &&
+            hardware.SetCalls == 0 &&
+            hardware.RestoreCalls == 0 &&
+            hardware.State.CpuSetpoint == byte.MaxValue &&
+            hardware.State.GpuSetpoint == byte.MaxValue);
     }
 
     private static async Task<int> TestUnsupportedTargetRefusedAsync(TextWriter output)

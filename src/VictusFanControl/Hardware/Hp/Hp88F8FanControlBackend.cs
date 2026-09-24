@@ -215,9 +215,12 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
     public async ValueTask EnterCustomModeAsync(
         CancellationToken cancellationToken)
     {
-        await _ioGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var gateTaken = false;
         try
         {
+            await _ioGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            gateTaken = true;
+
             ThrowIfDisposed();
             EnsureWritable();
 
@@ -226,17 +229,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                 return;
             }
 
-            Hp88F8EcControlState state;
-            try
-            {
-                state = _hardware!.ReadEcState();
-            }
-            catch (Exception ex)
-            {
-                throw new FanControlAdmissionException(
-                    "Could not validate the HP fan-control state before authority acquisition; no fan write was attempted.",
-                    ex);
-            }
+            var state = _hardware!.ReadEcState();
 
             if (state.MaxFan != 0)
             {
@@ -266,9 +259,26 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                 $"Custom authority prepared from firmware-auto state; " +
                 $"manual=0x{state.Manual:X2}, countdown={state.Countdown}.";
         }
+        catch (FanControlAdmissionException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // EnterCustomMode performs no hardware write. Treat every failure,
+            // including cancellation while waiting for the backend gate, as a
+            // no-write admission failure so the coordinator never clears an
+            // unrelated external override with FF,FF.
+            throw new FanControlAdmissionException(
+                "Custom fan authority admission failed before any fan write was attempted.",
+                ex);
+        }
         finally
         {
-            _ioGate.Release();
+            if (gateTaken)
+            {
+                _ioGate.Release();
+            }
         }
     }
 

@@ -43,9 +43,42 @@ public static class SafetyGate
         SystemState state,
         TelemetrySnapshot? snapshot,
         DateTimeOffset now,
-        bool fanWritePathPresent = false)
+        bool fanWritePathPresent = false) =>
+        EvaluateCore(
+            hardware,
+            state,
+            snapshot,
+            now,
+            fanWritePathPresent,
+            Interlocked.Increment(ref _evaluationSequence));
+
+    /// <summary>
+    /// Presentation-only evaluation. It deliberately does not consume a
+    /// control-order sequence number, so UI refreshes can never supersede a
+    /// SafetyGate result that is actually being enforced by the coordinator.
+    /// </summary>
+    public static SafetyGateResult EvaluateForDisplay(
+        HardwareIdentity hardware,
+        SystemState state,
+        TelemetrySnapshot? snapshot,
+        DateTimeOffset now,
+        bool fanWritePathPresent = false) =>
+        EvaluateCore(
+            hardware,
+            state,
+            snapshot,
+            now,
+            fanWritePathPresent,
+            evaluationSequence: 0);
+
+    private static SafetyGateResult EvaluateCore(
+        HardwareIdentity hardware,
+        SystemState state,
+        TelemetrySnapshot? snapshot,
+        DateTimeOffset now,
+        bool fanWritePathPresent,
+        long evaluationSequence)
     {
-        var evaluationSequence = Interlocked.Increment(ref _evaluationSequence);
         var reasons = new List<string>();
 
         var boardAllowed = Hp88F8TargetProfile.Matches(hardware, out var hardwareReason);

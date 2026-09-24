@@ -1,4 +1,5 @@
 using VictusFanControl.Runtime;
+using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
@@ -12,7 +13,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private const int RecoveryAfterIncompleteSamples = 3;
     private const int GapThresholdMs = 10_000;
     private const int WatchdogIntervalMs = 500;
-    private const int HealthySnapshotWatchdogMs = 4000;
+    private static readonly int HealthySnapshotWatchdogMs =
+        checked((int)SafetyGate.MaximumTelemetryAge.TotalMilliseconds);
     private const int IdenticalSnapshotFreezeThreshold = 60;
     private const int DuplicateResumeWindowMs = 10_000;
 

@@ -404,7 +404,8 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         !_lifecycleFenceRequested &&
         !_admissionBlocked &&
         safety.SnapshotTimestamp.HasValue &&
-        safety.SnapshotTimestamp.Value >= _minimumSafetySnapshotTimestamp;
+        (_minimumSafetySnapshotTimestamp == DateTimeOffset.MinValue ||
+         safety.SnapshotTimestamp.Value > _minimumSafetySnapshotTimestamp);
 
     private bool TryAcceptSafetyEvaluation(SafetyGateResult safety)
     {

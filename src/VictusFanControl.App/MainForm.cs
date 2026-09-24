@@ -682,7 +682,7 @@ internal sealed class MainForm : Form
 
     private void UpdateSafetyStatus()
     {
-        var result = SafetyGate.Evaluate(
+        var result = SafetyGate.EvaluateForDisplay(
             _hardwareIdentity,
             _worker.StateMachine.State,
             _lastSnapshot,

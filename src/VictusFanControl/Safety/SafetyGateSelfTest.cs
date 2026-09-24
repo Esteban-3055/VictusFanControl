@@ -137,6 +137,41 @@ public static class SafetyGateSelfTest
             }
         }
 
+
+        var sequencedBeforeDisplay = SafetyGate.Evaluate(
+            goodHardware,
+            SystemState.Healthy,
+            good,
+            now,
+            fanWritePathPresent: true);
+
+        var displayOnly = SafetyGate.EvaluateForDisplay(
+            goodHardware,
+            SystemState.Healthy,
+            good,
+            now,
+            fanWritePathPresent: true);
+
+        var sequencedAfterDisplay = SafetyGate.Evaluate(
+            goodHardware,
+            SystemState.Healthy,
+            good,
+            now,
+            fanWritePathPresent: true);
+
+        var displaySequencePass =
+            displayOnly.EvaluationSequence == 0 &&
+            sequencedAfterDisplay.EvaluationSequence ==
+                sequencedBeforeDisplay.EvaluationSequence + 1;
+
+        output.WriteLine(
+            $"{(displaySequencePass ? "PASS" : "FAIL")}  display-only safety evaluation does not consume control ordering");
+
+        if (!displaySequencePass)
+        {
+            failed++;
+        }
+
         output.WriteLine();
         output.WriteLine(failed == 0
             ? "SafetyGate self-test: PASS"
