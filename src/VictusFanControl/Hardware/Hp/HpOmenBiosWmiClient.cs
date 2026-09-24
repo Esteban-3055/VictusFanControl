@@ -121,7 +121,7 @@ public sealed class HpOmenBiosWmiClient
 
     private static ManagementObject FindMethodInstance(ManagementScope scope)
     {
-        var enumerationOptions = new EnumerationOptions
+        var enumerationOptions = new System.Management.EnumerationOptions
         {
             Timeout = InvokeTimeout
         };

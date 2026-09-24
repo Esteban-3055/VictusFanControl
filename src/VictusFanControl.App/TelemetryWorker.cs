@@ -32,7 +32,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private long _lastCompletedReadTick = Environment.TickCount64;
     private long _logSequence;
     private long _powerEpoch;
-    private long _lastAcceptedResumeTick = long.MinValue;
+    private long _lastAcceptedResumeTick;
     private int _degradedCompleteStreak;
     private int _degradedIncompleteStreak;
     private TelemetrySnapshot? _lastLivenessSnapshot;
@@ -96,10 +96,15 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             // PBT_APMRESUMESUSPEND for the same wake cycle. Coalesce delayed
             // duplicates too, while still accepting a genuinely new wake when
             // a suspend event was observed or the debounce window has elapsed.
-            var sinceAccepted = unchecked(nowTick - _lastAcceptedResumeTick);
+            var neverAccepted = _lastAcceptedResumeTick == 0;
+            var sinceAccepted = neverAccepted
+                ? long.MaxValue
+                : unchecked(nowTick - _lastAcceptedResumeTick);
+
             accepted =
                 wasSuspended ||
-                (!_resumeValidationActive && sinceAccepted > DuplicateResumeWindowMs);
+                (!_resumeValidationActive &&
+                 (neverAccepted || sinceAccepted > DuplicateResumeWindowMs));
 
             if (accepted)
             {

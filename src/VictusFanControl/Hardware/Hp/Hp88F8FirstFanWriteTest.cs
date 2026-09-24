@@ -102,17 +102,17 @@ public static class Hp88F8FirstFanWriteTest
             return 23;
         }
 
-        var bios = new Hp88F8BiosFanControl();
-
+        Hp88F8BiosFanControl bios;
         try
         {
+            bios = new Hp88F8BiosFanControl();
             var biosBefore = bios.GetFanLevels();
             Console.WriteLine(
                 $"BIOS level before: CPU={biosBefore.CpuLevel} GPU={biosBefore.GpuLevel}");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Could not read BIOS fan levels before test: {ex.Message}");
+            Console.Error.WriteLine($"Could not initialize/read the HP BIOS fan interface before test: {ex.Message}");
             return 30;
         }
 
