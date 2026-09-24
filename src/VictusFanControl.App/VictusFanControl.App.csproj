@@ -6,6 +6,7 @@
     <AssemblyName>VictusFanControl.App</AssemblyName>
     <RootNamespace>VictusFanControl.App</RootNamespace>
     <Version>0.3.0</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
