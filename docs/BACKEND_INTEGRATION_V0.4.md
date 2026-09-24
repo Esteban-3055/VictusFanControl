@@ -14,6 +14,7 @@ Properties:
 - WMI `SetFanLevel` for commands;
 - EC 0x34/0x35 for fixed-setpoint acknowledgement;
 - dedicated `FF,FF -> LegacyDefault` firmware restore;
+- LegacyDefault is attempted even if the FF,FF WMI call reports an error, because HP can apply SetFanLevel despite an error return;
 - persistent PawnIO EC session for command acknowledgement instead of reopening PawnIO for every poll;
 - existing external fixed override is treated as an ownership conflict and is not cleared during failed admission.
 

@@ -124,8 +124,72 @@ public sealed class Hp88F8BiosFanControl
     /// </summary>
     public void RestoreFirmwareAuto()
     {
-        ReleaseFanLevelOverride();
-        RestoreLegacyDefault();
+        EnsureSupportedBoard();
+
+        Exception? releaseFailure = null;
+        Exception? modeFailure = null;
+
+        // SetFanLevel is known on some HP systems to take effect even when the
+        // BIOS call reports an error. Never let an uncertain FF,FF result prevent
+        // the LegacyDefault attempt from running.
+        try
+        {
+            var rc = _client.Send(BuildReleaseFanLevelRequest());
+            if (rc != 0)
+            {
+                throw new HpBiosCallException(
+                    $"HP BIOS rejected FF,FF fan-level release with return code {rc}.");
+            }
+        }
+        catch (Exception ex)
+        {
+            releaseFailure = ex;
+        }
+
+        try
+        {
+            var rc = _client.Send(BuildLegacyDefaultRequest());
+            if (rc != 0)
+            {
+                throw new HpBiosCallException(
+                    $"HP BIOS rejected LegacyDefault restore with return code {rc}.");
+            }
+        }
+        catch (Exception ex)
+        {
+            modeFailure = ex;
+        }
+
+        ThrowIfRestoreSequenceFailed(releaseFailure, modeFailure);
+    }
+
+    internal static void ThrowIfRestoreSequenceFailed(
+        Exception? releaseFailure,
+        Exception? modeFailure)
+    {
+        if (releaseFailure is null && modeFailure is null)
+        {
+            return;
+        }
+
+        if (releaseFailure is not null && modeFailure is not null)
+        {
+            throw new AggregateException(
+                "HP firmware-auto restore had failures in both FF,FF release and LegacyDefault.",
+                releaseFailure,
+                modeFailure);
+        }
+
+        if (releaseFailure is not null)
+        {
+            throw new HpBiosCallException(
+                "HP FF,FF release reported a failure; LegacyDefault was still attempted.",
+                releaseFailure);
+        }
+
+        throw new HpBiosCallException(
+            "HP LegacyDefault restore reported a failure after FF,FF release.",
+            modeFailure!);
     }
 
     private static void EnsureSupportedBoard()

@@ -17,6 +17,11 @@ public sealed class HpBiosCallException : Exception
     public HpBiosCallException(string message) : base(message)
     {
     }
+
+    public HpBiosCallException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
 }
 
 /// <summary>
