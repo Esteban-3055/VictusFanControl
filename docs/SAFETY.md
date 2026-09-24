@@ -2,7 +2,23 @@
 
 ## Current version
 
-v0.1 is telemetry-only. It contains no fan write path.
+The current development branch is telemetry/GUI-only. It contains no fan write path.
+
+## Implemented pre-control protections
+
+The project now has a central read-only safety gate that evaluates:
+
+- HP motherboard allowlist (initial target: `88F8`)
+- runtime state must be `Healthy`
+- every required telemetry field must be present
+- telemetry must be fresh (maximum age currently 3 seconds)
+- sensor values must pass plausibility checks
+- conservative thermal handoff thresholds
+- write/restore backend presence
+
+The final item is intentionally hard-coded absent in the current build, so custom control is impossible even when every read-only prerequisite passes.
+
+A separate telemetry watchdog transitions the runtime out of `Healthy` if no read completes for 4 seconds.
 
 ## Required invariants before any control release
 
@@ -17,17 +33,20 @@ A future control-capable build must satisfy all of the following before fan writ
    - Current measured range candidate: 14 through 50.
    - The limits must remain configurable per board, never globally assumed.
 
-3. **Sensor plausibility**
-   - Invalid, missing or frozen temperatures cause immediate control abort.
+3. **Sensor plausibility / freshness**
+   - Invalid, missing or stale temperatures cause immediate control abort.
    - Missing CPU telemetry is always fatal to custom control.
-   - GPU telemetry loss must have a conservative fallback.
+   - No old sensor value may be silently reused as if it were current.
+   - A blocked telemetry loop must be detected independently of the sampling loop.
 
 4. **Thermal override**
    - High temperature overrides acoustic targets.
-   - Critical temperature must transition to a firmware-safe/high-cooling state, not continue the adaptive policy.
+   - Critical temperature must transition to firmware authority / validated maximum cooling, not continue the adaptive policy.
+   - Current GUI thresholds are conservative pre-control placeholders and must be validated under load before release.
 
 5. **RPM feedback**
    - After a fan command, measured RPM must move toward an expected range within a bounded time.
+   - Both tachometers remain independently authoritative.
    - Repeated non-response causes custom control to abort.
 
 6. **Watchdog / firmware recovery**
@@ -44,28 +63,32 @@ A future control-capable build must satisfy all of the following before fan writ
 
 9. **Single controller ownership**
    - Do not run HP Gaming Hub fan control and a custom write-capable controller simultaneously unless coexistence is explicitly tested.
+   - The current GUI is single-instance; external-controller conflict detection remains a blocker for write mode.
 
 10. **Fail closed**
     - Any unknown state means custom control stops and firmware control wins.
 
-## Proposed safety state machine
+## Proposed write-capable safety state machine
 
 ```text
-OFF
- |
- v
+FIRMWARE_AUTO
+     |
+     v
 VALIDATING ----failure----> FIRMWARE_AUTO
- |
- success
- v
+     |
+   success
+     v
 ACTIVE_CUSTOM
  |       |
- |       +-- telemetry invalid --------+
- |       +-- RPM mismatch -------------+--> FIRMWARE_AUTO
- |       +-- overtemperature ----------+
- |       +-- unexpected exception -----+
+ |       +-- telemetry invalid/stale ---+
+ |       +-- RPM mismatch --------------+--> FIRMWARE_AUTO
+ |       +-- overtemperature -----------+
+ |       +-- unexpected exception ------+
  |
- explicit stop
- v
+ explicit stop / suspend / exit
+     |
+     v
 FIRMWARE_AUTO
 ```
+
+See `PRE_CONTROL_CHECKLIST.md` for the remaining blockers.

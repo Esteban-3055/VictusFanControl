@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using System.Drawing;
+using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
+using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
@@ -11,12 +14,21 @@ internal sealed class MainForm : Form
     private const int PbtApmResumeCritical = 0x0006;
     private const int PbtApmResumeSuspend = 0x0007;
     private const int PbtApmResumeAutomatic = 0x0012;
+    private const int MaxEventLogChars = 120_000;
 
     private readonly TelemetryWorker _worker;
+    private readonly HardwareIdentity _hardwareIdentity;
     private readonly NotifyIcon _trayIcon;
+    private readonly System.Windows.Forms.Timer _uiTimer;
 
     private readonly Label _stateValue = new();
     private readonly Label _stateReason = new();
+    private readonly Label _boardValue = new();
+    private readonly Label _authorityValue = new();
+    private readonly Label _readinessValue = new();
+    private readonly Label _freshnessValue = new();
+    private readonly Label _safetyReasonValue = new();
+
     private readonly Label _cpuTemperature = ValueLabel();
     private readonly Label _cpuPower = ValueLabel();
     private readonly Label _cpuLoad = ValueLabel();
@@ -25,21 +37,30 @@ internal sealed class MainForm : Form
     private readonly Label _gpuPower = ValueLabel();
     private readonly Label _gpuLoad = ValueLabel();
     private readonly Label _gpuFan = ValueLabel();
+
     private readonly TextBox _diagnostics = new();
     private readonly TextBox _eventLog = new();
 
     private ToolStripMenuItem? _trayStateItem;
+    private ToolStripMenuItem? _trayCpuItem;
+    private ToolStripMenuItem? _trayGpuItem;
+    private ToolStripMenuItem? _trayAuthorityItem;
+
     private readonly SortedDictionary<long, string> _pendingSequencedEvents = new();
     private long _nextEventSequence = 1;
     private bool _allowExit;
     private bool _closeHintShown;
 
+    private TelemetrySnapshot? _lastSnapshot;
+
     public MainForm(string modulesDirectory)
     {
         Text = "VictusFanControl v0.3-dev — READ-ONLY";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(760, 520);
-        Size = new Size(850, 620);
+        MinimumSize = new Size(780, 560);
+        Size = new Size(900, 680);
+
+        _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
 
         _worker = new TelemetryWorker(modulesDirectory);
         _worker.SnapshotAvailable += WorkerOnSnapshotAvailable;
@@ -49,17 +70,30 @@ internal sealed class MainForm : Form
 
         _trayIcon = CreateTrayIcon();
 
+        _uiTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _uiTimer.Tick += (_, _) =>
+        {
+            UpdateSafetyStatus();
+            UpdateTray();
+        };
+
         Controls.Add(BuildUi());
 
         Shown += (_, _) =>
         {
             AppendEvent($"Modules: {modulesDirectory}");
+            AppendEvent($"Board: {_hardwareIdentity.BoardDisplay}; System={_hardwareIdentity.SystemProductName}; SKU={_hardwareIdentity.SystemSku}");
+            AppendEvent($"Persistent log: {AppLog.CurrentLogPath}");
+            _uiTimer.Start();
             _worker.Start();
+            UpdateSafetyStatus();
         };
 
         FormClosing += OnFormClosingToTray;
         FormClosed += async (_, _) =>
         {
+            _uiTimer.Stop();
+            _uiTimer.Dispose();
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
             await _worker.DisposeAsync();
@@ -117,7 +151,7 @@ internal sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter,
-            Text = "Fan control is intentionally disabled.\r\nThe continuous curve will be implemented after safety validation.",
+            Text = "Fan control is intentionally disabled.\r\nThe continuous curve will be implemented only after all pre-control safety gates pass.",
             AutoSize = false
         });
 
@@ -134,9 +168,11 @@ internal sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(18),
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             AutoScroll = true
         };
+
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -147,7 +183,7 @@ internal sealed class MainForm : Form
             Dock = DockStyle.Top,
             AutoSize = true,
             ColumnCount = 2,
-            Padding = new Padding(0, 0, 0, 14)
+            Padding = new Padding(0, 0, 0, 10)
         };
         statePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         statePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -155,8 +191,10 @@ internal sealed class MainForm : Form
         _stateValue.Text = "Starting";
         _stateValue.AutoSize = true;
         _stateValue.Font = new Font(Font, FontStyle.Bold);
+
         _stateReason.Text = "Waiting for telemetry validation.";
         _stateReason.AutoSize = true;
+        _stateReason.MaximumSize = new Size(650, 0);
         _stateReason.Margin = new Padding(18, 3, 0, 0);
 
         statePanel.Controls.Add(new Label { Text = "System state:", AutoSize = true }, 0, 0);
@@ -165,6 +203,7 @@ internal sealed class MainForm : Form
         statePanel.Controls.Add(_stateReason, 1, 1);
 
         root.Controls.Add(statePanel);
+        root.Controls.Add(BuildSafetyGroup());
         root.Controls.Add(BuildSensorGroup(
             "CPU",
             ("Temperature", _cpuTemperature),
@@ -178,24 +217,112 @@ internal sealed class MainForm : Form
             ("Load", _gpuLoad),
             ("Fan", _gpuFan)));
 
-        var note = new Label
+        root.Controls.Add(new Label
         {
             AutoSize = true,
-            Margin = new Padding(3, 18, 3, 3),
-            Text = "READ-ONLY build: HP firmware remains in control of both fans."
-        };
-        root.Controls.Add(note);
+            Margin = new Padding(3, 16, 3, 3),
+            Text = "READ-ONLY build: HP firmware remains authoritative. No fan write path is present."
+        });
 
         return root;
     }
 
+    private Control BuildSafetyGroup()
+    {
+        var group = new GroupBox
+        {
+            Text = "Pre-control safety",
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Padding = new Padding(12),
+            Margin = new Padding(3, 8, 3, 8)
+        };
+
+        var table = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            RowCount = 5
+        };
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        foreach (var value in new[] { _boardValue, _authorityValue, _readinessValue, _freshnessValue, _safetyReasonValue })
+        {
+            value.AutoSize = true;
+            value.MaximumSize = new Size(650, 0);
+        }
+
+        _authorityValue.Font = new Font(Font, FontStyle.Bold);
+        _readinessValue.Font = new Font(Font, FontStyle.Bold);
+
+        table.Controls.Add(new Label { Text = "Board:", AutoSize = true }, 0, 0);
+        table.Controls.Add(_boardValue, 1, 0);
+        table.Controls.Add(new Label { Text = "Fan authority:", AutoSize = true }, 0, 1);
+        table.Controls.Add(_authorityValue, 1, 1);
+        table.Controls.Add(new Label { Text = "Preconditions:", AutoSize = true }, 0, 2);
+        table.Controls.Add(_readinessValue, 1, 2);
+        table.Controls.Add(new Label { Text = "Telemetry freshness:", AutoSize = true }, 0, 3);
+        table.Controls.Add(_freshnessValue, 1, 3);
+        table.Controls.Add(new Label { Text = "Gate:", AutoSize = true }, 0, 4);
+        table.Controls.Add(_safetyReasonValue, 1, 4);
+
+        group.Controls.Add(table);
+        return group;
+    }
+
     private Control BuildDiagnostics()
     {
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 2,
+            ColumnCount = 1
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Padding = new Padding(6)
+        };
+
+        var copy = new Button { Text = "Copy diagnostics", AutoSize = true };
+        copy.Click += (_, _) =>
+        {
+            var text = $"DIAGNOSTICS{Environment.NewLine}{_diagnostics.Text}{Environment.NewLine}{Environment.NewLine}EVENTS{Environment.NewLine}{_eventLog.Text}";
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                Clipboard.SetText(text);
+            }
+        };
+
+        var clear = new Button { Text = "Clear visible events", AutoSize = true };
+        clear.Click += (_, _) => _eventLog.Clear();
+
+        var openLogs = new Button { Text = "Open log folder", AutoSize = true };
+        openLogs.Click += (_, _) =>
+        {
+            Directory.CreateDirectory(AppLog.LogDirectory);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = AppLog.LogDirectory,
+                UseShellExecute = true
+            });
+        };
+
+        buttons.Controls.Add(copy);
+        buttons.Controls.Add(clear);
+        buttons.Controls.Add(openLogs);
+
         var split = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 270
+            SplitterDistance = 280
         };
 
         _diagnostics.Dock = DockStyle.Fill;
@@ -212,7 +339,10 @@ internal sealed class MainForm : Form
 
         split.Panel1.Controls.Add(_diagnostics);
         split.Panel2.Controls.Add(_eventLog);
-        return split;
+
+        root.Controls.Add(buttons, 0, 0);
+        root.Controls.Add(split, 0, 1);
+        return root;
     }
 
     private static GroupBox BuildSensorGroup(
@@ -259,6 +389,10 @@ internal sealed class MainForm : Form
         var menu = new ContextMenuStrip();
 
         _trayStateItem = new ToolStripMenuItem("State: Starting") { Enabled = false };
+        _trayCpuItem = new ToolStripMenuItem("CPU: waiting") { Enabled = false };
+        _trayGpuItem = new ToolStripMenuItem("GPU: waiting") { Enabled = false };
+        _trayAuthorityItem = new ToolStripMenuItem("Fan authority: HP firmware") { Enabled = false };
+
         var open = new ToolStripMenuItem("Open VictusFanControl");
         var exit = new ToolStripMenuItem("Exit");
 
@@ -270,6 +404,9 @@ internal sealed class MainForm : Form
         };
 
         menu.Items.Add(_trayStateItem);
+        menu.Items.Add(_trayCpuItem);
+        menu.Items.Add(_trayGpuItem);
+        menu.Items.Add(_trayAuthorityItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(open);
         menu.Items.Add(new ToolStripSeparator());
@@ -278,7 +415,7 @@ internal sealed class MainForm : Form
         var icon = new NotifyIcon
         {
             Icon = SystemIcons.Application,
-            Text = "VictusFanControl — Starting",
+            Text = "VFC Starting",
             ContextMenuStrip = menu,
             Visible = true
         };
@@ -289,6 +426,8 @@ internal sealed class MainForm : Form
 
     private void WorkerOnSnapshotAvailable(object? sender, TelemetrySnapshot snapshot)
     {
+        _lastSnapshot = snapshot;
+
         Ui(() =>
         {
             _cpuTemperature.Text = Format(snapshot.CpuTemperatureC, "°C");
@@ -300,6 +439,9 @@ internal sealed class MainForm : Form
             _gpuPower.Text = Format(snapshot.GpuPowerW, "W");
             _gpuLoad.Text = Format(snapshot.GpuLoadPercent, "%");
             _gpuFan.Text = Format(snapshot.GpuFanRpm, "RPM", 0);
+
+            UpdateSafetyStatus();
+            UpdateTray();
         });
     }
 
@@ -321,8 +463,78 @@ internal sealed class MainForm : Form
                 _trayStateItem.Text = $"State: {e.Current}";
             }
 
-            _trayIcon.Text = $"VictusFanControl — {e.Current}";
+            UpdateSafetyStatus();
+            UpdateTray();
         });
+    }
+
+    private void UpdateSafetyStatus()
+    {
+        var result = SafetyGate.Evaluate(
+            _hardwareIdentity,
+            _worker.StateMachine.State,
+            _lastSnapshot,
+            DateTimeOffset.UtcNow);
+
+        _boardValue.Text = $"{_hardwareIdentity.BoardDisplay} — {(result.BoardAllowed ? "ALLOWLISTED" : "BLOCKED")}";
+        _authorityValue.Text = "HP Firmware";
+        _authorityValue.ForeColor = SystemColors.ControlText;
+
+        _readinessValue.Text = result.PreconditionsReady
+            ? "READY for future controller (write path still disabled)"
+            : "BLOCKED";
+        _readinessValue.ForeColor = result.PreconditionsReady ? Color.DarkGreen : Color.DarkGoldenrod;
+
+        if (_lastSnapshot is null)
+        {
+            _freshnessValue.Text = "waiting for first sample";
+        }
+        else
+        {
+            var age = DateTimeOffset.UtcNow - _lastSnapshot.Timestamp;
+            _freshnessValue.Text = $"{Math.Max(0, age.TotalSeconds):0.0} s — {(result.SnapshotFresh ? "fresh" : "STALE")}";
+        }
+
+        var visibleReasons = result.Reasons
+            .Where(reason => !reason.StartsWith("Fan write/restore backend", StringComparison.Ordinal))
+            .Take(3)
+            .ToArray();
+
+        _safetyReasonValue.Text = visibleReasons.Length == 0
+            ? "All current read-only preconditions pass. Fan writes remain hard-disabled."
+            : string.Join(" | ", visibleReasons);
+    }
+
+    private void UpdateTray()
+    {
+        if (_trayStateItem is null || _trayCpuItem is null || _trayGpuItem is null || _trayAuthorityItem is null)
+        {
+            return;
+        }
+
+        var state = _worker.StateMachine.State;
+        _trayStateItem.Text = $"State: {state}";
+
+        if (_lastSnapshot is null)
+        {
+            _trayCpuItem.Text = "CPU: waiting";
+            _trayGpuItem.Text = "GPU: waiting";
+        }
+        else
+        {
+            _trayCpuItem.Text =
+                $"CPU: {FormatCompact(_lastSnapshot.CpuTemperatureC, "C")} | {FormatCompact(_lastSnapshot.CpuFanRpm, "RPM", 0)}";
+            _trayGpuItem.Text =
+                $"GPU: {FormatCompact(_lastSnapshot.GpuTemperatureC, "C")} | {FormatCompact(_lastSnapshot.GpuFanRpm, "RPM", 0)}";
+        }
+
+        _trayAuthorityItem.Text = "Fan authority: HP firmware";
+
+        var tooltip = _lastSnapshot is null
+            ? $"VFC {state}"
+            : $"VFC {state} | CPU {FormatCompact(_lastSnapshot.CpuTemperatureC, "C")} GPU {FormatCompact(_lastSnapshot.GpuTemperatureC, "C")}";
+
+        _trayIcon.Text = tooltip.Length <= 63 ? tooltip : tooltip[..63];
     }
 
     private void OnFormClosingToTray(object? sender, FormClosingEventArgs e)
@@ -360,7 +572,6 @@ internal sealed class MainForm : Form
         Activate();
     }
 
-
     private void QueueSequencedEvent(string text)
     {
         if (!TryParseSequence(text, out var sequence))
@@ -397,6 +608,21 @@ internal sealed class MainForm : Form
 
     private void AppendEvent(string text)
     {
+        AppLog.Write(text);
+
+        if (_eventLog.TextLength > MaxEventLogChars)
+        {
+            var remove = Math.Min(30_000, _eventLog.TextLength);
+            var boundary = _eventLog.Text.IndexOf(Environment.NewLine, remove, StringComparison.Ordinal);
+            if (boundary < 0)
+            {
+                boundary = remove;
+            }
+
+            _eventLog.Select(0, Math.Min(_eventLog.TextLength, boundary + Environment.NewLine.Length));
+            _eventLog.SelectedText = string.Empty;
+        }
+
         if (_eventLog.TextLength > 0)
         {
             _eventLog.AppendText(Environment.NewLine);
@@ -438,4 +664,7 @@ internal sealed class MainForm : Form
 
     private static string Format(double? value, string suffix, int decimals = 1) =>
         value.HasValue ? $"{value.Value.ToString($"F{decimals}")} {suffix}" : "n/a";
+
+    private static string FormatCompact(double? value, string suffix, int decimals = 1) =>
+        value.HasValue ? $"{value.Value.ToString($"F{decimals}")}{suffix}" : "n/a";
 }

@@ -11,6 +11,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private const int ResumeHealthySamplesRequired = 5;
     private const int RecoveryAfterIncompleteSamples = 3;
     private const int GapThresholdMs = 10_000;
+    private const int WatchdogIntervalMs = 500;
+    private const int HealthySnapshotWatchdogMs = 4000;
 
     private readonly string _modulesDirectory;
     private readonly CancellationTokenSource _cts = new();
@@ -19,11 +21,13 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     private HardwareTelemetryReader? _reader;
     private Task? _loop;
+    private Task? _watchdog;
     private bool _suspended;
     private bool _recoveryRequested = true;
     private bool _resumeValidationActive;
     private string _recoveryReason = "Initial telemetry validation.";
     private long _lastLoopTick = Environment.TickCount64;
+    private long _lastCompletedReadTick = Environment.TickCount64;
     private long _logSequence;
     private int _degradedCompleteStreak;
     private int _degradedIncompleteStreak;
@@ -47,7 +51,9 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             return;
         }
 
+        _lastCompletedReadTick = Environment.TickCount64;
         _loop = Task.Run(() => RunAsync(_cts.Token));
+        _watchdog = Task.Run(() => WatchdogAsync(_cts.Token));
     }
 
     public void NotifySuspend(string source)
@@ -59,6 +65,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             _resumeValidationActive = false;
             _degradedCompleteStreak = 0;
             _degradedIncompleteStreak = 0;
+            _lastCompletedReadTick = Environment.TickCount64;
         }
 
         StateMachine.Transition(SystemState.Suspending, $"Suspend detected ({source}).");
@@ -74,6 +81,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         lock (_commandGate)
         {
             _suspended = false;
+            _lastCompletedReadTick = Environment.TickCount64;
 
             // Windows commonly emits PBT_APMRESUMEAUTOMATIC followed by
             // PBT_APMRESUMESUSPEND for the same wake cycle. Treat both as one
@@ -105,11 +113,12 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         _cts.Cancel();
         Wake();
 
-        if (_loop is not null)
+        var tasks = new[] { _loop, _watchdog }.Where(task => task is not null).Cast<Task>().ToArray();
+        if (tasks.Length > 0)
         {
             try
             {
-                await _loop.ConfigureAwait(false);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -154,6 +163,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             try
             {
                 var snapshot = _reader!.ReadSnapshot();
+                TouchCompletedRead();
                 SnapshotAvailable?.Invoke(this, snapshot);
                 PublishDiagnostics();
 
@@ -170,6 +180,31 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             }
 
             await WaitOrWakeAsync(NormalIntervalMs, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task WatchdogAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(WatchdogIntervalMs, cancellationToken).ConfigureAwait(false);
+
+            if (IsSuspended() || StateMachine.State != SystemState.Healthy)
+            {
+                continue;
+            }
+
+            var ageMs = unchecked(Environment.TickCount64 - Interlocked.Read(ref _lastCompletedReadTick));
+            if (ageMs <= HealthySnapshotWatchdogMs)
+            {
+                continue;
+            }
+
+            StateMachine.Transition(
+                SystemState.Degraded,
+                $"Telemetry watchdog expired after {ageMs} ms without a completed read.");
+            Log($"Telemetry watchdog expired after {ageMs} ms; recovery requested.");
+            RequestRecovery("Telemetry freshness watchdog expired.");
         }
     }
 
@@ -244,6 +279,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             // Prime RAPL and GetSystemTimes differential counters. The priming
             // sample is intentionally not considered for health.
             _ = _reader!.ReadSnapshot();
+            TouchCompletedRead();
             await Task.Delay(NormalIntervalMs, cancellationToken).ConfigureAwait(false);
 
             var requiredComplete = _resumeValidationActive
@@ -259,6 +295,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 }
 
                 var snapshot = _reader.ReadSnapshot();
+                TouchCompletedRead();
                 SnapshotAvailable?.Invoke(this, snapshot);
                 PublishDiagnostics();
 
@@ -305,7 +342,6 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             await Task.Delay(5000, cancellationToken).ConfigureAwait(false);
         }
     }
-
 
     private static string DescribeMissing(TelemetrySnapshot snapshot)
     {
@@ -360,6 +396,9 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
         Wake();
     }
+
+    private void TouchCompletedRead() =>
+        Interlocked.Exchange(ref _lastCompletedReadTick, Environment.TickCount64);
 
     private async Task WaitOrWakeAsync(int milliseconds, CancellationToken cancellationToken)
     {

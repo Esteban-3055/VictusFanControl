@@ -5,6 +5,17 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        AppLog.Initialize();
+
+        AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
+            AppLog.Write($"UNHANDLED PROCESS EXCEPTION: {eventArgs.ExceptionObject}");
+
+        TaskScheduler.UnobservedTaskException += (_, eventArgs) =>
+        {
+            AppLog.Write($"UNOBSERVED TASK EXCEPTION: {eventArgs.Exception}");
+            eventArgs.SetObserved();
+        };
+
         using var singleInstance = new Mutex(
             initiallyOwned: true,
             name: @"Local\VictusFanControl.App",
@@ -22,9 +33,20 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
 
+        Application.ThreadException += (_, eventArgs) =>
+        {
+            AppLog.Write($"UI THREAD EXCEPTION: {eventArgs.Exception}");
+            MessageBox.Show(
+                "VictusFanControl encountered an unexpected UI error. Fan control is not enabled in this build. See the persistent application log for details.",
+                "VictusFanControl",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        };
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
+            AppLog.Write("Startup failed: required PawnIO modules were not found.");
             MessageBox.Show(
                 "PawnIO modules were not found. Run scripts/setup-pawnio-modules.ps1 from the repository first.",
                 "VictusFanControl - modules not found",
@@ -33,8 +55,12 @@ internal static class Program
             return;
         }
 
+        AppLog.Write($"Starting GUI. Modules={modulesDirectory}");
+
         using var form = new MainForm(modulesDirectory);
         Application.Run(form);
+
+        AppLog.Write("GUI exited.");
     }
 
     private static string? ResolveModulesDirectory(string[] args)
