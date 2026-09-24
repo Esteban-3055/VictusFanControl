@@ -81,7 +81,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         Wake();
     }
 
-    public void NotifyResume(string source)
+    public bool NotifyResume(string source)
     {
         bool accepted;
 
@@ -121,12 +121,13 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         if (!accepted)
         {
             Log($"Duplicate resume signal coalesced: {source}.");
-            return;
+            return false;
         }
 
         StateMachine.Transition(SystemState.Resuming, $"Resume detected ({source}).");
         Log($"Resume detected by {source}; telemetry revalidation requested.");
         Wake();
+        return true;
     }
 
     public async ValueTask DisposeAsync()

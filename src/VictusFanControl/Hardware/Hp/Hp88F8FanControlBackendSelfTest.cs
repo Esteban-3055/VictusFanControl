@@ -76,7 +76,7 @@ public static class Hp88F8FanControlBackendSelfTest
         {
             await backend.EnterCustomModeAsync(CancellationToken.None);
         }
-        catch (InvalidOperationException)
+        catch (FanControlOwnershipConflictException)
         {
             refused = true;
         }

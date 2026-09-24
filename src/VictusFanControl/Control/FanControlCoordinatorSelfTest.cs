@@ -23,6 +23,8 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestBackendFailureRestoresAsync(output, safety);
         failures += await TestRealHpBackendIntegrationAsync(output, safety);
         failures += await TestLifecycleBoundaryRestoresAndRejectsStaleSafetyAsync(output, now);
+        failures += await TestOwnershipConflictDoesNotClearExternalOverrideAsync(output, safety);
+        failures += await TestSafetyPreemptsInFlightCommandAsync(output, safety, now);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -265,6 +267,85 @@ public static class FanControlCoordinatorSelfTest
 
 
 
+
+    private static async Task<int> TestOwnershipConflictDoesNotClearExternalOverrideAsync(
+        TextWriter output,
+        SafetyGateResult safety)
+    {
+        var backend = new RecordingBackend { ThrowOwnershipConflictOnEnter = true };
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var threw = false;
+        try
+        {
+            await coordinator.TryEnterCustomAsync(
+                safety,
+                CancellationToken.None);
+        }
+        catch (FanControlOwnershipConflictException)
+        {
+            threw = true;
+        }
+
+        return Report(
+            output,
+            "read-only admission conflict does not clear another controller",
+            threw &&
+            backend.EnterCalls == 1 &&
+            backend.RestoreCalls == 0 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
+    private static async Task<int> TestSafetyPreemptsInFlightCommandAsync(
+        TextWriter output,
+        SafetyGateResult safety,
+        DateTimeOffset now)
+    {
+        var backend = new RecordingBackend { BlockApplyUntilCancelled = true };
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None);
+
+        var applyTask = coordinator.ApplyAsync(
+            new FanCommand(30, 30, "blocking command"),
+            safety,
+            CancellationToken.None).AsTask();
+
+        await backend.ApplyStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        var unsafeSafety = BuildReadySafety(
+            now - TimeSpan.FromSeconds(10),
+            now);
+
+        var enforceTask = coordinator.EnforceSafetyAsync(
+            unsafeSafety,
+            "synthetic telemetry loss",
+            CancellationToken.None).AsTask();
+
+        var applyCancelled = false;
+        try
+        {
+            await applyTask;
+        }
+        catch (OperationCanceledException)
+        {
+            applyCancelled = true;
+        }
+
+        var enforcementCompleted = await enforceTask;
+
+        return Report(
+            output,
+            "safety supervisor preempts in-flight command and restores firmware",
+            entered &&
+            applyCancelled &&
+            enforcementCompleted &&
+            backend.RestoreCalls == 1 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
     private static async Task<int> TestLifecycleBoundaryRestoresAndRejectsStaleSafetyAsync(
         TextWriter output,
         DateTimeOffset now)
@@ -420,6 +501,10 @@ public static class FanControlCoordinatorSelfTest
         public int RestoreCalls { get; private set; }
         public bool ThrowOnApply { get; init; }
         public bool ThrowOnEnterAfterActivate { get; init; }
+        public bool ThrowOwnershipConflictOnEnter { get; init; }
+        public bool BlockApplyUntilCancelled { get; init; }
+        public TaskCompletionSource<bool> ApplyStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Active { get; private set; }
 
         public ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken) =>
@@ -434,6 +519,13 @@ public static class FanControlCoordinatorSelfTest
             EnterCalls++;
             Active = true;
 
+            if (ThrowOwnershipConflictOnEnter)
+            {
+                Active = false;
+                return ValueTask.FromException(
+                    new FanControlOwnershipConflictException("synthetic external owner"));
+            }
+
             if (ThrowOnEnterAfterActivate)
             {
                 return ValueTask.FromException(
@@ -443,19 +535,22 @@ public static class FanControlCoordinatorSelfTest
             return ValueTask.CompletedTask;
         }
 
-        public ValueTask ApplyAsync(
+        public async ValueTask ApplyAsync(
             FanCommand command,
             CancellationToken cancellationToken)
         {
             ApplyCalls++;
+            ApplyStarted.TrySetResult(true);
 
             if (ThrowOnApply)
             {
-                return ValueTask.FromException(
-                    new IOException("synthetic backend failure"));
+                throw new IOException("synthetic backend failure");
             }
 
-            return ValueTask.CompletedTask;
+            if (BlockApplyUntilCancelled)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
         }
 
         public ValueTask RestoreFirmwareAutoAsync(CancellationToken cancellationToken)

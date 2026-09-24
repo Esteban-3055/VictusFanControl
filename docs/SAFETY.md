@@ -75,3 +75,12 @@ The production HP 88F8 backend now treats a WMI write as successful only after t
 The expected direction is derived from the requested level versus HP BIOS GetFanLevel's current-speed level. A materially higher request must produce a measurable RPM rise; a materially lower request must produce a measurable RPM fall. Near-current requests require valid non-zero tachometer continuity. The known physical fan ceilings are handled explicitly so a fan already at its measured ceiling is not required to accelerate further.
 
 An external setpoint overwrite is treated as ownership loss and causes the command to fail rather than repeatedly fighting another controller. FanControlCoordinator then restores HP firmware authority.
+
+
+## Runtime safety preemption
+
+SafetyGate is now enforced continuously by the GUI runtime, not only when a new command is dispatched. If runtime state or telemetry stops permitting custom control while a backend command is still waiting for acknowledgement, FanControlCoordinator cancels that in-flight operation before waiting on its serialization gate. The command failure path then restores HP firmware authority with a non-cancellable fail-safe restore.
+
+Suspend/resume uses the same mechanism. Resume admission remains blocked until post-resume telemetry has been revalidated, and stale SafetyGate results from before the lifecycle boundary cannot reacquire authority.
+
+A read-only authority-acquisition conflict (for example, detecting a fixed setpoint already owned by another controller) is distinguished from an uncertain partial write. The coordinator does not send FF,FF merely because another controller was detected during admission.

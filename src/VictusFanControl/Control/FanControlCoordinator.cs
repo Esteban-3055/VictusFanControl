@@ -25,9 +25,11 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 {
     private readonly IFanControlBackend _backend;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _activeOperationGate = new();
     private FanAuthority _authority = FanAuthority.Firmware;
     private bool _admissionBlocked;
     private DateTimeOffset _minimumSafetySnapshotTimestamp = DateTimeOffset.MinValue;
+    private CancellationTokenSource? _activeCommandCts;
     private bool _disposed;
 
     public FanControlCoordinator(IFanControlBackend backend)
@@ -55,18 +57,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 return true;
             }
 
-            if (!safety.CustomControlPermitted)
-            {
-                return false;
-            }
-
-            if (_admissionBlocked)
-            {
-                return false;
-            }
-
-            if (!safety.SnapshotTimestamp.HasValue ||
-                safety.SnapshotTimestamp.Value < _minimumSafetySnapshotTimestamp)
+            if (!SafetyAllowsCustomLocked(safety))
             {
                 return false;
             }
@@ -90,6 +81,12 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 await _backend.EnterCustomModeAsync(cancellationToken).ConfigureAwait(false);
                 Transition(FanAuthority.Custom, "Custom fan authority acquired.");
                 return true;
+            }
+            catch (FanControlOwnershipConflictException)
+            {
+                // The backend explicitly guarantees no fan write occurred.
+                // Do not clear another controller's pre-existing override.
+                throw;
             }
             catch
             {
@@ -123,11 +120,11 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                     "Fan command refused because custom authority is not active.");
             }
 
-            if (!safety.CustomControlPermitted)
+            if (!SafetyAllowsCustomLocked(safety))
             {
                 await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
                 throw new InvalidOperationException(
-                    "Fan command refused because custom control is no longer permitted by the safety gate.");
+                    "Fan command refused because custom control is no longer permitted by the current safety/lifecycle gate.");
             }
 
             var commandError = ValidateCommand(command);
@@ -140,14 +137,22 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                     commandError);
             }
 
+            using var commandCts =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            SetActiveCommand(commandCts);
             try
             {
-                await _backend.ApplyAsync(command, cancellationToken).ConfigureAwait(false);
+                await _backend.ApplyAsync(command, commandCts.Token).ConfigureAwait(false);
             }
             catch
             {
                 await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
                 throw;
+            }
+            finally
+            {
+                ClearActiveCommand(commandCts);
             }
         }
         finally
@@ -167,6 +172,11 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         DateTimeOffset boundaryTimestamp,
         CancellationToken cancellationToken)
     {
+        // Do this before waiting for the coordinator gate: an in-flight backend
+        // acknowledgement must not delay a suspend/emergency handoff for its
+        // full timeout.
+        CancelActiveCommand();
+
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -223,6 +233,48 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         }
     }
 
+
+    /// <summary>
+    /// Called continuously by the runtime safety supervisor. If custom
+    /// authority is active and the latest safety result no longer permits it,
+    /// any in-flight command is cancelled and HP firmware is restored.
+    /// </summary>
+    public async ValueTask<bool> EnforceSafetyAsync(
+        SafetyGateResult safety,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (!safety.CustomControlPermitted)
+        {
+            CancelActiveCommand();
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+
+            if (_authority != FanAuthority.Custom)
+            {
+                return true;
+            }
+
+            if (SafetyAllowsCustomLocked(safety))
+            {
+                return true;
+            }
+
+            await RestoreLockedAsync(
+                $"Safety supervisor handoff: {reason}",
+                CancellationToken.None).ConfigureAwait(false);
+            return false;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async ValueTask RestoreFirmwareAsync(
         string reason,
         CancellationToken cancellationToken)
@@ -246,6 +298,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
             return;
         }
 
+        CancelActiveCommand();
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -266,6 +319,46 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         await _backend.DisposeAsync().ConfigureAwait(false);
     }
 
+
+
+    private bool SafetyAllowsCustomLocked(SafetyGateResult safety) =>
+        safety.CustomControlPermitted &&
+        !_admissionBlocked &&
+        safety.SnapshotTimestamp.HasValue &&
+        safety.SnapshotTimestamp.Value >= _minimumSafetySnapshotTimestamp;
+
+    private void SetActiveCommand(CancellationTokenSource source)
+    {
+        lock (_activeOperationGate)
+        {
+            _activeCommandCts = source;
+        }
+    }
+
+    private void ClearActiveCommand(CancellationTokenSource source)
+    {
+        lock (_activeOperationGate)
+        {
+            if (ReferenceEquals(_activeCommandCts, source))
+            {
+                _activeCommandCts = null;
+            }
+        }
+    }
+
+    private void CancelActiveCommand()
+    {
+        lock (_activeOperationGate)
+        {
+            try
+            {
+                _activeCommandCts?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+    }
 
     private bool BackendCapabilitiesMatchTarget()
     {

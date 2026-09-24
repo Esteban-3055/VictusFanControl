@@ -18,6 +18,19 @@ public readonly record struct FanBackendStatus(
     string Detail);
 
 /// <summary>
+/// Signals that custom authority could not be acquired because another
+/// hardware/firmware state already owns the fan path. The backend guarantees
+/// this exception is raised before it performs a fan write, so the coordinator
+/// must not clear the competing state as part of failed admission.
+/// </summary>
+public sealed class FanControlOwnershipConflictException : InvalidOperationException
+{
+    public FanControlOwnershipConflictException(string message) : base(message)
+    {
+    }
+}
+
+/// <summary>
 /// Narrow fan-control boundary. Production controller code cannot perform
 /// arbitrary EC writes through this interface.
 /// </summary>

@@ -185,13 +185,13 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
 
             if (state.MaxFan != 0)
             {
-                throw new InvalidOperationException(
+                throw new FanControlOwnershipConflictException(
                     $"Custom fan authority refused because Max Fan is active (EC 0xEC=0x{state.MaxFan:X2}).");
             }
 
             if (state.FanSwitch != 0)
             {
-                throw new InvalidOperationException(
+                throw new FanControlOwnershipConflictException(
                     $"Custom fan authority refused because the fan switch is not in the validated ON state " +
                     $"(EC 0xF4=0x{state.FanSwitch:X2}).");
             }
@@ -199,7 +199,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             if (state.CpuSetpoint != byte.MaxValue ||
                 state.GpuSetpoint != byte.MaxValue)
             {
-                throw new InvalidOperationException(
+                throw new FanControlOwnershipConflictException(
                     $"Custom fan authority refused because an existing fixed override is present " +
                     $"(EC setpoint={state.CpuSetpoint}/{state.GpuSetpoint}). " +
                     "Restore firmware auto first.");
@@ -242,6 +242,8 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             VerifyExistingOwnership(before);
 
             var currentLevels = _hardware.GetCurrentFanLevels();
+            ValidateCurrentSpeedLevel(currentLevels.CpuLevel, "CPU");
+            ValidateCurrentSpeedLevel(currentLevels.GpuLevel, "GPU");
 
             if (before.CpuSetpoint != cpuTarget ||
                 before.GpuSetpoint != gpuTarget)
@@ -315,6 +317,9 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         }
         finally
         {
+            // Once the synchronization primitive is disposed the backend must
+            // always report itself disposed, even if a final restore failed.
+            _disposed = true;
             _ioGate.Release();
             _ioGate.Dispose();
         }
@@ -447,7 +452,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         return expectation switch
         {
             TachExpectation.Increase =>
-                baselineRpm >= observedMaximumRpm * 0.90 ||
+                baselineRpm >= observedMaximumRpm - 100 ||
                 currentRpm >= baselineRpm + MinimumDirectionalRpmDelta,
 
             TachExpectation.Decrease =>
@@ -457,6 +462,19 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             TachExpectation.Steady => true,
             _ => false
         };
+    }
+
+
+    private static void ValidateCurrentSpeedLevel(byte level, string fanName)
+    {
+        // OmenMon's GetFanLevel is current-speed telemetry on this platform.
+        // Values around the normal fan range are expected; FF is a setpoint
+        // sentinel and is not a valid current-speed reading here.
+        if (level > 100)
+        {
+            throw new InvalidDataException(
+                $"{fanName} BIOS current fan level is implausible: {level}.");
+        }
     }
 
     private static void ValidateTachometer(ushort rpm, string fanName)

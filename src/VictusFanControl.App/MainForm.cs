@@ -189,15 +189,22 @@ internal sealed class MainForm : Form
 
     private void HandleResumeLifecycle(string source)
     {
-        // Keep custom admission closed across every resume signal. Duplicate
-        // Windows resume broadcasts may advance the freshness fence, which is
-        // conservative: only telemetry sampled after the latest signal can
-        // authorize a future custom session.
+        var boundary = DateTimeOffset.UtcNow;
+        var accepted = _worker.NotifyResume(source);
+
+        // A coalesced duplicate must NOT close admission again after a completed
+        // recovery, otherwise no second Healthy transition would exist to reopen
+        // the fence.
+        if (!accepted)
+        {
+            return;
+        }
+
         try
         {
             _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
                     $"Resume requires telemetry revalidation ({source}).",
-                    DateTimeOffset.UtcNow,
+                    boundary,
                     CancellationToken.None)
                 .AsTask()
                 .GetAwaiter()
@@ -208,8 +215,6 @@ internal sealed class MainForm : Form
             AppendEvent($"CRITICAL: fan authority fencing during resume failed: {ex.Message}");
             AppLog.Write($"Fan authority fencing during resume failed: {ex}");
         }
-
-        _worker.NotifyResume(source);
     }
 
     private async Task ReopenFanAdmissionAfterHealthyAsync()
@@ -229,8 +234,8 @@ internal sealed class MainForm : Form
 
             if (reopened)
             {
-                AppendEvent(
-                    $"Fan custom-admission fence reopened after validated telemetry sample {timestamp.Value:O}. Automatic policy remains OFF.");
+                Ui(() => AppendEvent(
+                    $"Fan custom-admission fence reopened after validated telemetry sample {timestamp.Value:O}. Automatic policy remains OFF."));
             }
         }
         catch (ObjectDisposedException)
@@ -239,7 +244,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            AppendEvent($"Fan custom-admission reopen failed: {ex.Message}");
+            Ui(() => AppendEvent($"Fan custom-admission reopen failed: {ex.Message}"));
         }
     }
 
@@ -573,6 +578,35 @@ internal sealed class MainForm : Form
     }
 
 
+
+    private async Task EnforceLatestFanSafetyAsync(string reason)
+    {
+        var result = SafetyGate.Evaluate(
+            _hardwareIdentity,
+            _worker.StateMachine.State,
+            _lastSnapshot,
+            DateTimeOffset.UtcNow,
+            fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+        try
+        {
+            await _fanCoordinator.EnforceSafetyAsync(
+                result,
+                reason,
+                CancellationToken.None);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Normal shutdown race.
+        }
+        catch (Exception ex)
+        {
+            Ui(() => AppendEvent(
+                $"CRITICAL: safety-supervisor firmware handoff failed: {ex.Message}"));
+            AppLog.Write($"Safety-supervisor firmware handoff failed: {ex}");
+        }
+    }
+
     private void FanCoordinatorOnAuthorityChanged(
         object? sender,
         FanAuthorityChangedEventArgs e)
@@ -589,6 +623,7 @@ internal sealed class MainForm : Form
     private void WorkerOnSnapshotAvailable(object? sender, TelemetrySnapshot snapshot)
     {
         _lastSnapshot = snapshot;
+        _ = EnforceLatestFanSafetyAsync("latest telemetry snapshot");
 
         Ui(() =>
         {
@@ -618,6 +653,10 @@ internal sealed class MainForm : Form
         if (e.Current == SystemState.Healthy)
         {
             _ = ReopenFanAdmissionAfterHealthyAsync();
+        }
+        else
+        {
+            _ = EnforceLatestFanSafetyAsync($"runtime state changed to {e.Current}");
         }
 
         Ui(() =>
