@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace VictusFanControl.App;
 
 internal static class Program
@@ -28,7 +26,7 @@ internal static class Program
         if (modulesDirectory is null)
         {
             MessageBox.Show(
-                "PawnIO modules were not found. Run scripts\setup-pawnio-modules.ps1 from the repository first.",
+                "PawnIO modules were not found. Run scripts/setup-pawnio-modules.ps1 from the repository first.",
                 "VictusFanControl - modules not found",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
