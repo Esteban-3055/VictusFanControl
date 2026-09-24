@@ -26,3 +26,6 @@ jobs:
 
       - name: Safety gate self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --safety-self-test
+
+      - name: Fan authority self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --control-self-test

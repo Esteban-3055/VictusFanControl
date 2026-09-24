@@ -1,4 +1,5 @@
 using VictusFanControl.Cli;
+using VictusFanControl.Control;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
@@ -36,6 +37,11 @@ internal static class Program
         if (options.SafetySelfTest)
         {
             return SafetyGateSelfTest.Run(Console.Out);
+        }
+
+        if (options.ControlSelfTest)
+        {
+            return await FanControlCoordinatorSelfTest.RunAsync(Console.Out);
         }
 
         if (options.Probe88F8EcState)

@@ -6,6 +6,7 @@ public sealed class CliOptions
     public bool ProbeBackends { get; private set; }
     public bool SafetySelfTest { get; private set; }
     public bool Probe88F8EcState { get; private set; }
+    public bool ControlSelfTest { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
     public int DurationSeconds { get; private set; }
@@ -36,6 +37,10 @@ public sealed class CliOptions
 
                 case "--probe-88f8-ec-state":
                     options.Probe88F8EcState = true;
+                    break;
+
+                case "--control-self-test":
+                    options.ControlSelfTest = true;
                     break;
 
                 case "--health-test-minutes":
@@ -82,6 +87,7 @@ public sealed class CliOptions
         Console.WriteLine("  --list-sensors             Compatibility alias for --probe-backends.");
         Console.WriteLine("  --safety-self-test         Run synthetic SafetyGate fail-closed tests.");
         Console.WriteLine("  --probe-88f8-ec-state     Read known 88F8 fan-control EC state (read-only).");
+        Console.WriteLine("  --control-self-test       Test authority/fallback coordinator with fake backend.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");
