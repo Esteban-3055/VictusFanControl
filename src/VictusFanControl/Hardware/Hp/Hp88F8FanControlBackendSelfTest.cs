@@ -22,6 +22,7 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestCpuTachFailureAsync(output);
         failures += await TestGpuTachFailureAsync(output);
         failures += await TestOwnershipLossAsync(output);
+        failures += await TestStatusDetectsOwnershipLossAsync(output);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -260,6 +261,39 @@ public static class Hp88F8FanControlBackendSelfTest
             output,
             "external setpoint overwrite is detected instead of fought",
             refused && hardware.SetCalls == 1);
+    }
+
+
+    private static async Task<int> TestStatusDetectsOwnershipLossAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "status-ownership"),
+            CancellationToken.None);
+
+        hardware.State = hardware.State with
+        {
+            CpuSetpoint = 31,
+            GpuSetpoint = 31
+        };
+
+        var status = await backend.GetStatusAsync(CancellationToken.None);
+
+        hardware.State = hardware.State with
+        {
+            CpuSetpoint = 30,
+            GpuSetpoint = 30
+        };
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "backend status exposes active ownership mismatch",
+            status.CustomModeActive &&
+            !status.OwnershipValid &&
+            status.Detail.Contains("OWNERSHIP-MISMATCH", StringComparison.Ordinal));
     }
 
     private static Hp88F8FanControlBackend NewBackend(FakeHardware hardware) =>

@@ -15,6 +15,7 @@ public readonly record struct FanBackendStatus(
     string Name,
     bool CanWrite,
     bool CustomModeActive,
+    bool OwnershipValid,
     string Detail);
 
 /// <summary>
@@ -62,6 +63,7 @@ public sealed class DisabledFanControlBackend : IFanControlBackend
             Name,
             CanWrite: false,
             CustomModeActive: false,
+            OwnershipValid: true,
             Detail: "No fan write/restore implementation is present."));
 
     public ValueTask EnterCustomModeAsync(CancellationToken cancellationToken) =>

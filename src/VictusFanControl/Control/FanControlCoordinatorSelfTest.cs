@@ -26,6 +26,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestOwnershipConflictDoesNotClearExternalOverrideAsync(output, safety);
         failures += await TestSafetyPreemptsInFlightCommandAsync(output, safety, now);
         failures += await TestUnsafeReentryRestoresAsync(output, safety, now);
+        failures += await TestRuntimeOwnershipMismatchRestoresAsync(output, safety);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -269,6 +270,35 @@ public static class FanControlCoordinatorSelfTest
 
 
 
+
+
+    private static async Task<int> TestRuntimeOwnershipMismatchRestoresAsync(
+        TextWriter output,
+        SafetyGateResult safety)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None);
+
+        backend.OwnershipValid = false;
+
+        var stillSafe = await coordinator.EnforceSafetyAsync(
+            safety,
+            "synthetic external overwrite",
+            CancellationToken.None);
+
+        return Report(
+            output,
+            "continuous backend ownership mismatch forces firmware restore",
+            entered &&
+            !stillSafe &&
+            backend.StatusCalls == 1 &&
+            backend.RestoreCalls == 1 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
 
     private static async Task<int> TestUnsafeReentryRestoresAsync(
         TextWriter output,
@@ -530,6 +560,8 @@ public static class FanControlCoordinatorSelfTest
         public int EnterCalls { get; private set; }
         public int ApplyCalls { get; private set; }
         public int RestoreCalls { get; private set; }
+        public int StatusCalls { get; private set; }
+        public bool OwnershipValid { get; set; } = true;
         public bool ThrowOnApply { get; init; }
         public bool ThrowOnEnterAfterActivate { get; init; }
         public bool ThrowOwnershipConflictOnEnter { get; init; }
@@ -538,12 +570,16 @@ public static class FanControlCoordinatorSelfTest
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Active { get; private set; }
 
-        public ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken) =>
-            ValueTask.FromResult(new FanBackendStatus(
+        public ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken)
+        {
+            StatusCalls++;
+            return ValueTask.FromResult(new FanBackendStatus(
                 Name,
                 CanWrite,
                 Active,
+                OwnershipValid,
                 "self-test"));
+        }
 
         public ValueTask EnterCustomModeAsync(CancellationToken cancellationToken)
         {

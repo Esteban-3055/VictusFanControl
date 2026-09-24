@@ -32,7 +32,8 @@ All future policy writes must pass through the coordinator. It owns:
 - restore on command failure;
 - restore on invalid command;
 - partial-transition recovery;
-- continuous runtime SafetyGate enforcement.
+- continuous runtime SafetyGate enforcement;
+- continuous machine-readable backend ownership validation while Custom authority is active, so an external setpoint overwrite is detected even between policy commands.
 
 The automatic curve is still OFF, so merely launching the GUI does not acquire custom authority or issue fan-level commands.
 

@@ -265,15 +265,46 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 return true;
             }
 
-            if (SafetyAllowsCustomLocked(safety))
+            if (!SafetyAllowsCustomLocked(safety))
             {
-                return true;
+                await RestoreLockedAsync(
+                    $"Safety supervisor handoff: {reason}",
+                    CancellationToken.None).ConfigureAwait(false);
+                return false;
             }
 
-            await RestoreLockedAsync(
-                $"Safety supervisor handoff: {reason}",
-                CancellationToken.None).ConfigureAwait(false);
-            return false;
+            FanBackendStatus backendStatus;
+            try
+            {
+                backendStatus = await _backend.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception statusFailure)
+            {
+                try
+                {
+                    await RestoreLockedAsync(
+                        $"Backend health/ownership probe failed during custom authority: {statusFailure.Message}",
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // RestoreLockedAsync already transitions authority to Faulted.
+                }
+
+                throw;
+            }
+
+            if (!backendStatus.CanWrite ||
+                !backendStatus.CustomModeActive ||
+                !backendStatus.OwnershipValid)
+            {
+                await RestoreLockedAsync(
+                    $"Backend ownership validation failed: {backendStatus.Detail}",
+                    CancellationToken.None).ConfigureAwait(false);
+                return false;
+            }
+
+            return true;
         }
         finally
         {

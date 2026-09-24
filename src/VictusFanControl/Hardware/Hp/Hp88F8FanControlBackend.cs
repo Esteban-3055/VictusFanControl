@@ -158,17 +158,24 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                     Name,
                     CanWrite: false,
                     CustomModeActive: false,
+                    OwnershipValid: true,
                     Detail: _lastDetail);
             }
 
             var state = _hardware!.ReadEcState();
-            var ownership =
-                _customModeActive && _ownedSetpoint.HasValue
+            var ownershipValid =
+                !_customModeActive ||
+                (_ownedSetpoint.HasValue
                     ? state.CpuSetpoint == _ownedSetpoint.Value.Cpu &&
                       state.GpuSetpoint == _ownedSetpoint.Value.Gpu
-                        ? "owned"
-                        : "OWNERSHIP-MISMATCH"
-                    : "firmware/none";
+                    : state.CpuSetpoint == byte.MaxValue &&
+                      state.GpuSetpoint == byte.MaxValue);
+
+            var ownership = !_customModeActive
+                ? "firmware/none"
+                : ownershipValid
+                    ? _ownedSetpoint.HasValue ? "owned" : "reserved/FF"
+                    : "OWNERSHIP-MISMATCH";
 
             var detail =
                 $"{_lastDetail} EC setpoint={state.CpuSetpoint}/{state.GpuSetpoint}, " +
@@ -179,6 +186,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                 Name,
                 CanWrite: true,
                 CustomModeActive: _customModeActive,
+                OwnershipValid: ownershipValid,
                 Detail: detail);
         }
         finally
