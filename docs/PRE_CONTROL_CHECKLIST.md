@@ -28,7 +28,8 @@ VictusFanControl must complete this checklist before the first fan-control write
 
 - [ ] Validate the latest suspend/resume build on the HP 88F8 hardware.
 - [ ] Repeat telemetry health tests under CPU load, GPU load and gaming.
-- [ ] Validate external-controller ownership/conflict behavior with HP OMEN Gaming Hub.
+- [ ] Validate external-controller ownership/conflict behavior with HP OMEN Gaming Hub while keeping the user's CPU undervolt active.
+- [ ] During the first fan-write test, verify that the OMEN Gaming Hub undervolt remains unchanged before, during and after custom fan control and after restoring HP firmware authority.
 - [ ] Implement the write backend behind an interface that can always restore HP firmware authority.
 - [ ] Validate HP firmware-auto restoration after normal exit, exception and forced process termination.
 - [ ] Validate the 88F8 watchdog/countdown behavior and recovery semantics.
