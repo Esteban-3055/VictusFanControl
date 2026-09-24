@@ -314,9 +314,28 @@ internal sealed class MainForm : Form
             });
         };
 
+        var scanOmen = new Button { Text = "Scan OMEN processes", AutoSize = true };
+        scanOmen.Click += (_, _) =>
+        {
+            var matches = ExternalControllerScanner.ScanPotentialOmenProcesses();
+            if (matches.Count == 0)
+            {
+                AppendEvent("OMEN process scan: no potential OMEN/Gaming Hub process found.");
+                return;
+            }
+
+            AppendEvent($"OMEN process scan: {matches.Count} potential process(es) found.");
+            foreach (var item in matches)
+            {
+                AppendEvent(
+                    $"  PID={item.ProcessId} name={item.ProcessName} product={item.ProductName ?? "n/a"} description={item.FileDescription ?? "n/a"}");
+            }
+        };
+
         buttons.Controls.Add(copy);
         buttons.Controls.Add(clear);
         buttons.Controls.Add(openLogs);
+        buttons.Controls.Add(scanOmen);
 
         var split = new SplitContainer
         {

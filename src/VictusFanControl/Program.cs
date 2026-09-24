@@ -1,4 +1,5 @@
 using VictusFanControl.Cli;
+using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
 
 namespace VictusFanControl;
@@ -29,6 +30,11 @@ internal static class Program
         {
             CliOptions.PrintHelp();
             return 0;
+        }
+
+        if (options.SafetySelfTest)
+        {
+            return SafetyGateSelfTest.Run(Console.Out);
         }
 
         using var reader = new HardwareTelemetryReader(options.ModulesDirectory);
