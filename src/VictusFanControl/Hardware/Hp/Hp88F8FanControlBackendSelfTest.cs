@@ -354,6 +354,10 @@ public static class Hp88F8FanControlBackendSelfTest
             }
         }
 
+        public void Dispose()
+        {
+        }
+
         private static ushort DesiredCpuRpm(byte level) =>
             (ushort)Math.Min(level * 100, Hp88F8TargetProfile.CpuObservedMaximumRpm);
 

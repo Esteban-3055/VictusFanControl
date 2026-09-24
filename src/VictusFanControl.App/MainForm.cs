@@ -62,7 +62,7 @@ internal sealed class MainForm : Form
 
     public MainForm(string modulesDirectory)
     {
-        Text = "VictusFanControl v0.3-dev — backend integrated / automatic policy OFF";
+        Text = "VictusFanControl v0.4-dev — backend integrated / automatic policy OFF";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(780, 560);
         Size = new Size(900, 680);

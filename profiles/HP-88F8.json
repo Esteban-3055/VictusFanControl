@@ -3,7 +3,7 @@
   "vendor": "HP",
   "productId": "88F8",
   "boardVersionObserved": "88.58",
-  "status": "experimental-write-validation",
+  "status": "backend-integrated-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Laptop 16-d0xxx",

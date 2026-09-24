@@ -54,7 +54,13 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 
             if (_authority == FanAuthority.Custom)
             {
-                return true;
+                if (SafetyAllowsCustomLocked(safety))
+                {
+                    return true;
+                }
+
+                await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                return false;
             }
 
             if (!SafetyAllowsCustomLocked(safety))

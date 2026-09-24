@@ -1,9 +1,10 @@
 using VictusFanControl.Control;
+using VictusFanControl.Hardware.PawnIo;
 using VictusFanControl.Hardware.Windows;
 
 namespace VictusFanControl.Hardware.Hp;
 
-internal interface IHp88F8FanHardware
+internal interface IHp88F8FanHardware : IDisposable
 {
     Hp88F8EcControlState ReadEcState();
     (byte CpuLevel, byte GpuLevel) GetCurrentFanLevels();
@@ -14,15 +15,32 @@ internal interface IHp88F8FanHardware
 internal sealed class Hp88F8FanHardware : IHp88F8FanHardware
 {
     private readonly Hp88F8BiosFanControl _bios;
-    private readonly Hp88F8EcControlStateProbe _probe;
+    private readonly AcpiEcReader _ec;
 
     public Hp88F8FanHardware(string modulesDirectory)
     {
         _bios = new Hp88F8BiosFanControl();
-        _probe = new Hp88F8EcControlStateProbe(modulesDirectory);
+        _ec = new AcpiEcReader(Path.Combine(modulesDirectory, "LpcACPIEC.bin"));
     }
 
-    public Hp88F8EcControlState ReadEcState() => _probe.Read();
+    public Hp88F8EcControlState ReadEcState()
+    {
+        var state = _ec.ReadHp88F8ControlState();
+        return new Hp88F8EcControlState(
+            state.CpuRateTarget,
+            state.GpuRateTarget,
+            state.CpuRate,
+            state.GpuRate,
+            state.CpuSetpoint,
+            state.GpuSetpoint,
+            state.Manual,
+            state.Countdown,
+            state.Mode,
+            state.MaxFan,
+            state.FanSwitch,
+            state.CpuRpm,
+            state.GpuRpm);
+    }
 
     public (byte CpuLevel, byte GpuLevel) GetCurrentFanLevels() =>
         _bios.GetCurrentFanLevels();
@@ -32,6 +50,8 @@ internal sealed class Hp88F8FanHardware : IHp88F8FanHardware
 
     public void RestoreFirmwareAuto() =>
         _bios.RestoreFirmwareAuto();
+
+    public void Dispose() => _ec.Dispose();
 }
 
 internal readonly record struct Hp88F8FanBackendTiming(
@@ -245,8 +265,14 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             ValidateCurrentSpeedLevel(currentLevels.CpuLevel, "CPU");
             ValidateCurrentSpeedLevel(currentLevels.GpuLevel, "GPU");
 
-            if (before.CpuSetpoint != cpuTarget ||
-                before.GpuSetpoint != gpuTarget)
+            // Recheck after the WMI read so an external controller changing the
+            // EC setpoint in the admission-to-dispatch window is detected rather
+            // than silently overwritten.
+            var preDispatch = _hardware.ReadEcState();
+            VerifyExistingOwnership(preDispatch);
+
+            if (preDispatch.CpuSetpoint != cpuTarget ||
+                preDispatch.GpuSetpoint != gpuTarget)
             {
                 _hardware.SetFanLevel(cpuTarget, gpuTarget);
             }
@@ -261,14 +287,14 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                 cpuTarget,
                 gpuTarget,
                 currentLevels,
-                before,
+                preDispatch,
                 cancellationToken).ConfigureAwait(false);
 
             _ownedSetpoint = (cpuTarget, gpuTarget);
             _lastDetail =
                 $"Command {command.CpuLevel}/{command.GpuLevel} acknowledged by EC setpoints " +
                 $"and both tachometers; RPM={tachAck.CpuRpm}/{tachAck.GpuRpm}, " +
-                $"initial RPM={before.CpuRpm}/{before.GpuRpm}, " +
+                $"initial RPM={preDispatch.CpuRpm}/{preDispatch.GpuRpm}, " +
                 $"setpoint-ack RPM={setpointAck.CpuRpm}/{setpointAck.GpuRpm}.";
         }
         finally
@@ -319,9 +345,17 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         {
             // Once the synchronization primitive is disposed the backend must
             // always report itself disposed, even if a final restore failed.
-            _disposed = true;
-            _ioGate.Release();
-            _ioGate.Dispose();
+            // The persistent PawnIO EC session is also released here.
+            try
+            {
+                _hardware?.Dispose();
+            }
+            finally
+            {
+                _disposed = true;
+                _ioGate.Release();
+                _ioGate.Dispose();
+            }
         }
     }
 

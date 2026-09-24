@@ -10,9 +10,9 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        Console.WriteLine("VictusFanControl v0.3.0-dev");
+        Console.WriteLine("VictusFanControl v0.4.0-dev");
         Console.WriteLine("Telemetry: PawnIO DeviceIoControl + NVIDIA NVML.");
-        Console.WriteLine("Normal GUI/control path remains read-only. Explicit bounded HP BIOS validation commands are available.");
+        Console.WriteLine("HP 88F8 backend is integrated; automatic fan policy remains OFF. Explicit validation commands are available.");
         Console.WriteLine();
 
         CliOptions options;

@@ -25,6 +25,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestLifecycleBoundaryRestoresAndRejectsStaleSafetyAsync(output, now);
         failures += await TestOwnershipConflictDoesNotClearExternalOverrideAsync(output, safety);
         failures += await TestSafetyPreemptsInFlightCommandAsync(output, safety, now);
+        failures += await TestUnsafeReentryRestoresAsync(output, safety, now);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -267,6 +268,36 @@ public static class FanControlCoordinatorSelfTest
 
 
 
+
+
+    private static async Task<int> TestUnsafeReentryRestoresAsync(
+        TextWriter output,
+        SafetyGateResult safety,
+        DateTimeOffset now)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None);
+
+        var staleSafety = BuildReadySafety(
+            now - TimeSpan.FromSeconds(10),
+            now);
+
+        var reentered = await coordinator.TryEnterCustomAsync(
+            staleSafety,
+            CancellationToken.None);
+
+        return Report(
+            output,
+            "already-custom reentry cannot bypass a newly unsafe SafetyGate",
+            entered &&
+            !reentered &&
+            backend.RestoreCalls == 1 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
 
     private static async Task<int> TestOwnershipConflictDoesNotClearExternalOverrideAsync(
         TextWriter output,
