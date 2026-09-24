@@ -49,6 +49,11 @@ internal static class Program
             return Hp88F8BiosContractSelfTest.Run(Console.Out);
         }
 
+        if (options.HpBackendSelfTest)
+        {
+            return await Hp88F8FanControlBackendSelfTest.RunAsync(Console.Out);
+        }
+
         if (options.RestoreHpAuto)
         {
             try

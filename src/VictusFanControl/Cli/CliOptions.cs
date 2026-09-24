@@ -8,6 +8,7 @@ public sealed class CliOptions
     public bool Probe88F8EcState { get; private set; }
     public bool ControlSelfTest { get; private set; }
     public bool BiosContractSelfTest { get; private set; }
+    public bool HpBackendSelfTest { get; private set; }
     public bool RestoreHpAuto { get; private set; }
     public bool SkipEcSnapshots { get; private set; }
     public bool FirstFanWriteTest { get; private set; }
@@ -50,6 +51,10 @@ public sealed class CliOptions
 
                 case "--bios-contract-self-test":
                     options.BiosContractSelfTest = true;
+                    break;
+
+                case "--hp-backend-self-test":
+                    options.HpBackendSelfTest = true;
                     break;
 
                 case "--restore-hp-auto":
@@ -105,6 +110,7 @@ public sealed class CliOptions
             (options.Probe88F8EcState ? 1 : 0) +
             (options.ControlSelfTest ? 1 : 0) +
             (options.BiosContractSelfTest ? 1 : 0) +
+            (options.HpBackendSelfTest ? 1 : 0) +
             (options.RestoreHpAuto ? 1 : 0) +
             (options.FirstFanWriteTest ? 1 : 0) +
             (options.HealthTestMinutes > 0 ? 1 : 0);
@@ -141,7 +147,8 @@ public sealed class CliOptions
         Console.WriteLine("  --safety-self-test         Run synthetic SafetyGate fail-closed tests.");
         Console.WriteLine("  --probe-88f8-ec-state     Read known 88F8 fan-control EC state (read-only).");
         Console.WriteLine("  --control-self-test       Test authority/fallback coordinator with fake backend.");
-        Console.WriteLine("  --bios-contract-self-test Validate the 88F8 LegacyDefault WMI request envelope.");
+        Console.WriteLine("  --bios-contract-self-test Validate the 88F8 BIOS/WMI request envelopes.");
+        Console.WriteLine("  --hp-backend-self-test    Test the real HP backend boundary with synthetic hardware.");
         Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");
