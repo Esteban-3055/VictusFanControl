@@ -84,3 +84,16 @@ The final concurrency pass added two fail-closed protections:
 - the target allowlist now includes BIOS F.32 and exact SKU-base matching, preventing an unvalidated BIOS update or a lookalike SKU prefix from enabling writes.
 
 CI builds with compiler warnings treated as errors.
+
+
+## Post-integration deep audit
+
+A second concurrency/feedback pass added further fail-closed behavior:
+
+- SafetyGate evaluations now carry a monotonic process sequence; coordinator ordering no longer relies on wall-clock timestamps.
+- TryEnterCustomAsync and ApplyAsync both register their SafetyGate evaluation, so a stale command/result cannot supersede a newer safety decision.
+- a no-write admission failure is distinct from an uncertain partial write; the coordinator does not issue FF,FF after a read failure that occurred before any backend write.
+- while Custom owns a setpoint, continuous backend status now requires the EC ownership to remain intact, Max Fan to stay off, the fan switch to stay on, and both tachometers to remain non-zero/plausible.
+- tachometer command acknowledgement now requires two consecutive samples that both still satisfy the requested directional evidence; a one-sample RPM spike cannot latch success.
+- suspend establishes the coordinator admission fence before the telemetry worker transitions to Suspended.
+- lifecycle reopening requires telemetry strictly newer than the lifecycle boundary.

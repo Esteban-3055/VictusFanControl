@@ -24,11 +24,14 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestRealHpBackendIntegrationAsync(output, safety);
         failures += await TestLifecycleBoundaryRestoresAndRejectsStaleSafetyAsync(output, now);
         failures += await TestOwnershipConflictDoesNotClearExternalOverrideAsync(output, safety);
+        failures += await TestNoWriteAdmissionFailureDoesNotTriggerRestoreAsync(output, safety);
         failures += await TestSafetyPreemptsInFlightCommandAsync(output, safety, now);
         failures += await TestUnsafeReentryRestoresAsync(output, safety, now);
         failures += await TestRuntimeOwnershipMismatchRestoresAsync(output, safety);
+        failures += await TestRuntimeFeedbackFailureRestoresAsync(output, safety);
         failures += await TestLifecycleFenceClosesBeforeCoordinatorGateAsync(output, safety, now);
         failures += await TestStaleSafetyEvaluationCannotTearDownNewerSessionAsync(output, safety, now);
+        failures += await TestStaleCommandSafetyCannotTearDownNewerSessionAsync(output, safety, now);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -288,6 +291,12 @@ public static class FanControlCoordinatorSelfTest
             initialSafety,
             CancellationToken.None);
 
+        // Construct the unsafe result first, but deliberately deliver it
+        // after a newer healthy evaluation to model delayed async completion.
+        var staleUnsafe = BuildReadySafety(
+            now - TimeSpan.FromSeconds(10),
+            now);
+
         var newerSafety = BuildReadySafety(
             now + TimeSpan.FromSeconds(2),
             now + TimeSpan.FromSeconds(2));
@@ -296,10 +305,6 @@ public static class FanControlCoordinatorSelfTest
             newerSafety,
             "newer healthy sample",
             CancellationToken.None);
-
-        var staleUnsafe = BuildReadySafety(
-            now - TimeSpan.FromSeconds(10),
-            now);
 
         var staleIgnored = await coordinator.EnforceSafetyAsync(
             staleUnsafe,
@@ -453,6 +458,120 @@ public static class FanControlCoordinatorSelfTest
             backend.EnterCalls == 1 &&
             backend.RestoreCalls == 0 &&
             coordinator.Authority == FanAuthority.Firmware);
+    }
+
+
+    private static async Task<int> TestNoWriteAdmissionFailureDoesNotTriggerRestoreAsync(
+        TextWriter output,
+        SafetyGateResult safety)
+    {
+        var backend = new RecordingBackend { ThrowNoWriteAdmissionOnEnter = true };
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var threw = false;
+        try
+        {
+            await coordinator.TryEnterCustomAsync(
+                safety,
+                CancellationToken.None);
+        }
+        catch (FanControlAdmissionException)
+        {
+            threw = true;
+        }
+
+        return Report(
+            output,
+            "no-write admission failure does not clear external/unknown state",
+            threw &&
+            backend.EnterCalls == 1 &&
+            backend.RestoreCalls == 0 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
+    private static async Task<int> TestRuntimeFeedbackFailureRestoresAsync(
+        TextWriter output,
+        SafetyGateResult safety)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None);
+
+        backend.FeedbackHealthy = false;
+
+        var stillSafe = await coordinator.EnforceSafetyAsync(
+            safety,
+            "synthetic tach/control-state failure",
+            CancellationToken.None);
+
+        return Report(
+            output,
+            "continuous backend feedback failure forces firmware restore",
+            entered &&
+            !stillSafe &&
+            backend.StatusCalls == 1 &&
+            backend.RestoreCalls == 1 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
+    private static async Task<int> TestStaleCommandSafetyCannotTearDownNewerSessionAsync(
+        TextWriter output,
+        SafetyGateResult initialSafety,
+        DateTimeOffset now)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            initialSafety,
+            CancellationToken.None);
+
+        // Build an older command safety result first, then let a newer healthy
+        // supervisor evaluation become authoritative.
+        var olderCommandSafety = BuildReadySafety(
+            now + TimeSpan.FromSeconds(1),
+            now + TimeSpan.FromSeconds(1));
+
+        var newerSafety = BuildReadySafety(
+            now + TimeSpan.FromSeconds(2),
+            now + TimeSpan.FromSeconds(2));
+
+        var newerAccepted = await coordinator.EnforceSafetyAsync(
+            newerSafety,
+            "newer healthy sample",
+            CancellationToken.None);
+
+        var staleRefused = false;
+        try
+        {
+            await coordinator.ApplyAsync(
+                new FanCommand(30, 30, "stale-command-safety"),
+                olderCommandSafety,
+                CancellationToken.None);
+        }
+        catch (InvalidOperationException)
+        {
+            staleRefused = true;
+        }
+
+        var restoreCallsBeforeCleanup = backend.RestoreCalls;
+        var authorityBeforeCleanup = coordinator.Authority;
+
+        await coordinator.RestoreFirmwareAsync(
+            "stale-command test cleanup",
+            CancellationToken.None);
+
+        return Report(
+            output,
+            "stale command safety is refused without tearing down newer custom authority",
+            entered &&
+            newerAccepted &&
+            staleRefused &&
+            restoreCallsBeforeCleanup == 0 &&
+            authorityBeforeCleanup == FanAuthority.Custom);
     }
 
     private static async Task<int> TestSafetyPreemptsInFlightCommandAsync(
@@ -660,9 +779,11 @@ public static class FanControlCoordinatorSelfTest
         public int RestoreCalls { get; private set; }
         public int StatusCalls { get; private set; }
         public bool OwnershipValid { get; set; } = true;
+        public bool FeedbackHealthy { get; set; } = true;
         public bool ThrowOnApply { get; init; }
         public bool ThrowOnEnterAfterActivate { get; init; }
         public bool ThrowOwnershipConflictOnEnter { get; init; }
+        public bool ThrowNoWriteAdmissionOnEnter { get; init; }
         public bool BlockApplyUntilCancelled { get; init; }
         public bool BlockApplyUntilReleased { get; init; }
         public TaskCompletionSource<bool> ApplyStarted { get; } =
@@ -679,12 +800,21 @@ public static class FanControlCoordinatorSelfTest
                 CanWrite,
                 Active,
                 OwnershipValid,
+                FeedbackHealthy,
                 "self-test"));
         }
 
         public ValueTask EnterCustomModeAsync(CancellationToken cancellationToken)
         {
             EnterCalls++;
+
+            if (ThrowNoWriteAdmissionOnEnter)
+            {
+                return ValueTask.FromException(
+                    new FanControlAdmissionException(
+                        "synthetic read/admission failure before any write"));
+            }
+
             Active = true;
 
             if (ThrowOwnershipConflictOnEnter)

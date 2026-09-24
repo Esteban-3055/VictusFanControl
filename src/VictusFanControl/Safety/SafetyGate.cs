@@ -18,6 +18,7 @@ public sealed record SafetyGateResult(
     bool CustomControlPermitted,
     DateTimeOffset? SnapshotTimestamp,
     DateTimeOffset EvaluatedAt,
+    long EvaluationSequence,
     IReadOnlyList<string> Reasons);
 
 /// <summary>
@@ -27,6 +28,8 @@ public sealed record SafetyGateResult(
 /// </summary>
 public static class SafetyGate
 {
+    private static long _evaluationSequence;
+
     public const string InitialValidatedBoardProduct = Hp88F8TargetProfile.BoardProduct;
     public static readonly TimeSpan MaximumTelemetryAge = TimeSpan.FromSeconds(3);
 
@@ -42,6 +45,7 @@ public static class SafetyGate
         DateTimeOffset now,
         bool fanWritePathPresent = false)
     {
+        var evaluationSequence = Interlocked.Increment(ref _evaluationSequence);
         var reasons = new List<string>();
 
         var boardAllowed = Hp88F8TargetProfile.Matches(hardware, out var hardwareReason);
@@ -130,6 +134,7 @@ public static class SafetyGate
             CustomControlPermitted: customControlPermitted,
             SnapshotTimestamp: snapshot?.Timestamp,
             EvaluatedAt: now,
+            EvaluationSequence: evaluationSequence,
             Reasons: reasons);
     }
 

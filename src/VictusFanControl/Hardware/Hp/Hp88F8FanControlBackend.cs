@@ -159,6 +159,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                     CanWrite: false,
                     CustomModeActive: false,
                     OwnershipValid: true,
+                    FeedbackHealthy: true,
                     Detail: _lastDetail);
             }
 
@@ -171,22 +172,38 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                     : state.CpuSetpoint == byte.MaxValue &&
                       state.GpuSetpoint == byte.MaxValue);
 
+            var feedbackHealthy =
+                !_customModeActive ||
+                (state.MaxFan == 0 &&
+                 state.FanSwitch == 0 &&
+                 (!_ownedSetpoint.HasValue ||
+                  (IsRunningTachometerValid(state.CpuRpm) &&
+                   IsRunningTachometerValid(state.GpuRpm))));
+
             var ownership = !_customModeActive
                 ? "firmware/none"
                 : ownershipValid
                     ? _ownedSetpoint.HasValue ? "owned" : "reserved/FF"
                     : "OWNERSHIP-MISMATCH";
 
+            var feedback = !_customModeActive
+                ? "firmware"
+                : feedbackHealthy
+                    ? "healthy"
+                    : "FEEDBACK/CONTROL-STATE-INVALID";
+
             var detail =
                 $"{_lastDetail} EC setpoint={state.CpuSetpoint}/{state.GpuSetpoint}, " +
-                $"RPM={state.CpuRpm}/{state.GpuRpm}, ownership={ownership}, " +
-                $"manual=0x{state.Manual:X2}, countdown={state.Countdown}.";
+                $"RPM={state.CpuRpm}/{state.GpuRpm}, ownership={ownership}, feedback={feedback}, " +
+                $"manual=0x{state.Manual:X2}, countdown={state.Countdown}, " +
+                $"max=0x{state.MaxFan:X2}, switch=0x{state.FanSwitch:X2}.";
 
             return new FanBackendStatus(
                 Name,
                 CanWrite: true,
                 CustomModeActive: _customModeActive,
                 OwnershipValid: ownershipValid,
+                FeedbackHealthy: feedbackHealthy,
                 Detail: detail);
         }
         finally
@@ -209,7 +226,17 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                 return;
             }
 
-            var state = _hardware!.ReadEcState();
+            Hp88F8EcControlState state;
+            try
+            {
+                state = _hardware!.ReadEcState();
+            }
+            catch (Exception ex)
+            {
+                throw new FanControlAdmissionException(
+                    "Could not validate the HP fan-control state before authority acquisition; no fan write was attempted.",
+                    ex);
+            }
 
             if (state.MaxFan != 0)
             {
@@ -268,6 +295,9 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
 
             var before = _hardware!.ReadEcState();
             VerifyExistingOwnership(before);
+            ValidateActiveControlState(
+                before,
+                requireRunningTachometers: _ownedSetpoint.HasValue);
 
             var currentLevels = _hardware.GetCurrentFanLevels();
             ValidateCurrentSpeedLevel(currentLevels.CpuLevel, "CPU");
@@ -278,6 +308,9 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             // than silently overwritten.
             var preDispatch = _hardware.ReadEcState();
             VerifyExistingOwnership(preDispatch);
+            ValidateActiveControlState(
+                preDispatch,
+                requireRunningTachometers: _ownedSetpoint.HasValue);
 
             if (preDispatch.CpuSetpoint != cpuTarget ||
                 preDispatch.GpuSetpoint != gpuTarget)
@@ -403,8 +436,8 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         var gpuExpectation = DetermineExpectation(gpuTarget, currentLevels.GpuLevel);
 
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        var cpuAcknowledged = false;
-        var gpuAcknowledged = false;
+        var cpuEverAcknowledged = false;
+        var gpuEverAcknowledged = false;
         var confirmationSamples = 0;
         Hp88F8EcControlState? last = null;
 
@@ -429,28 +462,27 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             var cpuCurrentlyRunning = last.CpuRpm > 0;
             var gpuCurrentlyRunning = last.GpuRpm > 0;
 
-            cpuAcknowledged |= cpuCurrentlyRunning &&
+            var cpuSampleAcknowledged = cpuCurrentlyRunning &&
                 HasTachometerResponded(
                     cpuExpectation,
                     baseline.CpuRpm,
                     last.CpuRpm,
                     Hp88F8TargetProfile.CpuObservedMaximumRpm);
 
-            gpuAcknowledged |= gpuCurrentlyRunning &&
+            var gpuSampleAcknowledged = gpuCurrentlyRunning &&
                 HasTachometerResponded(
                     gpuExpectation,
                     baseline.GpuRpm,
                     last.GpuRpm,
                     Hp88F8TargetProfile.GpuObservedMaximumRpm);
 
-            // Zero RPM can be a legitimate transient immediately after commanding
-            // a stopped fan to start. Do not fail instantly; let the bounded ack
-            // window observe spin-up. Once acknowledgement has occurred, however,
-            // both current confirmation samples must still show both fans running.
-            if (cpuAcknowledged &&
-                gpuAcknowledged &&
-                cpuCurrentlyRunning &&
-                gpuCurrentlyRunning)
+            cpuEverAcknowledged |= cpuSampleAcknowledged;
+            gpuEverAcknowledged |= gpuSampleAcknowledged;
+
+            // Require the directional/continuity evidence itself to remain true
+            // for consecutive samples. A one-sample RPM spike must not latch an
+            // acknowledgement that later samples no longer support.
+            if (cpuSampleAcknowledged && gpuSampleAcknowledged)
             {
                 confirmationSamples++;
                 if (confirmationSamples >= RequiredTachConfirmationSamples)
@@ -469,7 +501,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         throw new TimeoutException(
             $"Both fan tachometers did not acknowledge command {cpuTarget}/{gpuTarget} within " +
             $"{_timing.TachometerAckTimeout.TotalSeconds:0.0} s. " +
-            $"CPU ack={cpuAcknowledged}, GPU ack={gpuAcknowledged}, " +
+            $"CPU ever-ack={cpuEverAcknowledged}, GPU ever-ack={gpuEverAcknowledged}, " +
             $"baseline RPM={baseline.CpuRpm}/{baseline.GpuRpm}, " +
             $"last RPM={last?.CpuRpm.ToString() ?? "n/a"}/{last?.GpuRpm.ToString() ?? "n/a"}, " +
             $"baseline current-level={currentLevels.CpuLevel}/{currentLevels.GpuLevel}.");
@@ -518,6 +550,36 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         };
     }
 
+
+
+    private static void ValidateActiveControlState(
+        Hp88F8EcControlState state,
+        bool requireRunningTachometers)
+    {
+        if (state.MaxFan != 0)
+        {
+            throw new InvalidOperationException(
+                $"Fan control state changed: Max Fan is active (EC 0xEC=0x{state.MaxFan:X2}).");
+        }
+
+        if (state.FanSwitch != 0)
+        {
+            throw new InvalidOperationException(
+                $"Fan control state changed: fan switch is not ON (EC 0xF4=0x{state.FanSwitch:X2}).");
+        }
+
+        if (requireRunningTachometers &&
+            (!IsRunningTachometerValid(state.CpuRpm) ||
+             !IsRunningTachometerValid(state.GpuRpm)))
+        {
+            throw new InvalidOperationException(
+                $"Fan feedback became invalid before command dispatch: " +
+                $"RPM={state.CpuRpm}/{state.GpuRpm}.");
+        }
+    }
+
+    private static bool IsRunningTachometerValid(ushort rpm) =>
+        rpm is > 0 and <= 10_000;
 
     private static void ValidateCurrentSpeedLevel(byte level, string fanName)
     {

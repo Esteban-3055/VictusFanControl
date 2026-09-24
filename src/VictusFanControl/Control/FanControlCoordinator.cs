@@ -30,7 +30,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     private volatile bool _lifecycleFenceRequested;
     private bool _admissionBlocked;
     private DateTimeOffset _minimumSafetySnapshotTimestamp = DateTimeOffset.MinValue;
-    private long _latestSafetyEvaluationUtcTicks;
+    private long _latestSafetyEvaluationSequence;
     private CancellationTokenSource? _activeCommandCts;
     private bool _disposed;
 
@@ -49,6 +49,11 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         SafetyGateResult safety,
         CancellationToken cancellationToken)
     {
+        if (!TryAcceptSafetyEvaluation(safety))
+        {
+            return false;
+        }
+
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -90,10 +95,10 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 Transition(FanAuthority.Custom, "Custom fan authority acquired.");
                 return true;
             }
-            catch (FanControlOwnershipConflictException)
+            catch (FanControlAdmissionException)
             {
                 // The backend explicitly guarantees no fan write occurred.
-                // Do not clear another controller's pre-existing override.
+                // Do not clear another controller's pre-existing state.
                 throw;
             }
             catch
@@ -117,6 +122,12 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         SafetyGateResult safety,
         CancellationToken cancellationToken)
     {
+        if (!TryAcceptSafetyEvaluation(safety))
+        {
+            throw new InvalidOperationException(
+                "Fan command refused because its SafetyGate evaluation is older than the latest accepted evaluation.");
+        }
+
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -230,7 +241,8 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 return false;
             }
 
-            if (validatedSnapshotTimestamp < _minimumSafetySnapshotTimestamp)
+            if (validatedSnapshotTimestamp <= _minimumSafetySnapshotTimestamp &&
+                _minimumSafetySnapshotTimestamp != DateTimeOffset.MinValue)
             {
                 return false;
             }
@@ -256,7 +268,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         string reason,
         CancellationToken cancellationToken)
     {
-        if (!TryAcceptSafetyEvaluation(safety.EvaluatedAt))
+        if (!TryAcceptSafetyEvaluation(safety))
         {
             return true;
         }
@@ -273,7 +285,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 
             // A newer safety evaluation may have been accepted while this call
             // was waiting for the coordinator gate. Never act on the older one.
-            if (!IsLatestSafetyEvaluation(safety.EvaluatedAt))
+            if (!IsLatestSafetyEvaluation(safety))
             {
                 return true;
             }
@@ -314,7 +326,8 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 
             if (!backendStatus.CanWrite ||
                 !backendStatus.CustomModeActive ||
-                !backendStatus.OwnershipValid)
+                !backendStatus.OwnershipValid ||
+                !backendStatus.FeedbackHealthy)
             {
                 await RestoreLockedAsync(
                     $"Backend ownership validation failed: {backendStatus.Detail}",
@@ -379,19 +392,19 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 
     private bool SafetyAllowsCustomLocked(SafetyGateResult safety) =>
         safety.CustomControlPermitted &&
-        IsLatestSafetyEvaluationOrNewer(safety.EvaluatedAt) &&
+        IsLatestSafetyEvaluation(safety) &&
         !_lifecycleFenceRequested &&
         !_admissionBlocked &&
         safety.SnapshotTimestamp.HasValue &&
         safety.SnapshotTimestamp.Value >= _minimumSafetySnapshotTimestamp;
 
-    private bool TryAcceptSafetyEvaluation(DateTimeOffset evaluatedAt)
+    private bool TryAcceptSafetyEvaluation(SafetyGateResult safety)
     {
-        var candidate = evaluatedAt.UtcTicks;
+        var candidate = safety.EvaluationSequence;
 
         while (true)
         {
-            var current = Interlocked.Read(ref _latestSafetyEvaluationUtcTicks);
+            var current = Interlocked.Read(ref _latestSafetyEvaluationSequence);
             if (candidate < current)
             {
                 return false;
@@ -403,7 +416,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
             }
 
             if (Interlocked.CompareExchange(
-                    ref _latestSafetyEvaluationUtcTicks,
+                    ref _latestSafetyEvaluationSequence,
                     candidate,
                     current) == current)
             {
@@ -412,11 +425,9 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         }
     }
 
-    private bool IsLatestSafetyEvaluation(DateTimeOffset evaluatedAt) =>
-        evaluatedAt.UtcTicks == Interlocked.Read(ref _latestSafetyEvaluationUtcTicks);
-
-    private bool IsLatestSafetyEvaluationOrNewer(DateTimeOffset evaluatedAt) =>
-        evaluatedAt.UtcTicks >= Interlocked.Read(ref _latestSafetyEvaluationUtcTicks);
+    private bool IsLatestSafetyEvaluation(SafetyGateResult safety) =>
+        safety.EvaluationSequence ==
+        Interlocked.Read(ref _latestSafetyEvaluationSequence);
 
     private void SetActiveCommand(CancellationTokenSource source)
     {

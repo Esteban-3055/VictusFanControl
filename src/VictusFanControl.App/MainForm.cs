@@ -166,15 +166,17 @@ internal sealed class MainForm : Form
 
     private void HandleSuspendLifecycle(string source)
     {
-        // Stop telemetry admission first, then synchronously return fan authority
-        // while Windows is still processing the suspend notification.
-        _worker.NotifySuspend(source);
+        // Fence fan admission first. BlockCustomAdmissionAndRestoreAsync closes
+        // its volatile fence before waiting on any in-flight command, so no
+        // stale healthy result can acquire Custom authority while the telemetry
+        // worker is transitioning into Suspended.
+        var boundary = DateTimeOffset.UtcNow;
 
         try
         {
             _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
                     $"System suspend detected ({source}).",
-                    DateTimeOffset.UtcNow,
+                    boundary,
                     CancellationToken.None)
                 .AsTask()
                 .GetAwaiter()
@@ -184,6 +186,10 @@ internal sealed class MainForm : Form
         {
             AppendEvent($"CRITICAL: fan firmware restore during suspend failed: {ex.Message}");
             AppLog.Write($"Fan firmware restore during suspend failed: {ex}");
+        }
+        finally
+        {
+            _worker.NotifySuspend(source);
         }
     }
 

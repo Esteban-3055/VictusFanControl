@@ -23,7 +23,9 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestGpuTachFailureAsync(output);
         failures += await TestOwnershipLossAsync(output);
         failures += await TestStatusDetectsOwnershipLossAsync(output);
+        failures += await TestStatusDetectsRuntimeTachFailureAsync(output);
         failures += await TestStoppedFansCanSpinUpWithinAckWindowAsync(output);
+        failures += await TestOneSampleDirectionalSpikeIsRejectedAsync(output);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -298,6 +300,65 @@ public static class Hp88F8FanControlBackendSelfTest
     }
 
 
+
+    private static async Task<int> TestStatusDetectsRuntimeTachFailureAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "runtime-tach-health"),
+            CancellationToken.None);
+
+        hardware.FreezeCpuTach = true;
+        hardware.State = hardware.State with { CpuRpm = 0 };
+
+        var status = await backend.GetStatusAsync(CancellationToken.None);
+
+        hardware.FreezeCpuTach = false;
+        hardware.State = hardware.State with { CpuRpm = 3000 };
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "backend status exposes post-ack tachometer failure",
+            status.CustomModeActive &&
+            status.OwnershipValid &&
+            !status.FeedbackHealthy &&
+            status.Detail.Contains("FEEDBACK/CONTROL-STATE-INVALID", StringComparison.Ordinal));
+    }
+
+    private static async Task<int> TestOneSampleDirectionalSpikeIsRejectedAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware
+        {
+            PulseCpuTachOnceThenReturnBaseline = true
+        };
+
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        var rejected = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "single-sample-spike"),
+                CancellationToken.None);
+        }
+        catch (TimeoutException)
+        {
+            rejected = true;
+        }
+
+        hardware.PulseCpuTachOnceThenReturnBaseline = false;
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "one-sample directional RPM spike cannot satisfy dual-tach acknowledgement",
+            rejected);
+    }
+
     private static async Task<int> TestStoppedFansCanSpinUpWithinAckWindowAsync(TextWriter output)
     {
         var hardware = new FakeHardware
@@ -367,6 +428,8 @@ public static class Hp88F8FanControlBackendSelfTest
 
         private byte? _targetCpu;
         private byte? _targetGpu;
+        private ushort _cpuRpmAtCommand;
+        private int _postSetReadCount;
 
         public Hp88F8EcControlState State { get; set; } = AutoState;
         public int SetCalls { get; private set; }
@@ -374,6 +437,7 @@ public static class Hp88F8FanControlBackendSelfTest
         public bool IgnoreRestore { get; set; }
         public bool FreezeCpuTach { get; set; }
         public bool FreezeGpuTach { get; set; }
+        public bool PulseCpuTachOnceThenReturnBaseline { get; set; }
 
         public Hp88F8EcControlState ReadEcState()
         {
@@ -382,15 +446,29 @@ public static class Hp88F8FanControlBackendSelfTest
                 var cpuDesired = DesiredCpuRpm(_targetCpu.Value);
                 var gpuDesired = DesiredGpuRpm(_targetGpu.Value);
 
+                ushort cpuRpm;
+                if (PulseCpuTachOnceThenReturnBaseline)
+                {
+                    cpuRpm = _postSetReadCount == 1
+                        ? (ushort)Math.Min(10_000, _cpuRpmAtCommand + 200)
+                        : _cpuRpmAtCommand;
+                }
+                else
+                {
+                    cpuRpm = FreezeCpuTach
+                        ? State.CpuRpm
+                        : MoveToward(State.CpuRpm, cpuDesired, 200);
+                }
+
                 State = State with
                 {
-                    CpuRpm = FreezeCpuTach
-                        ? State.CpuRpm
-                        : MoveToward(State.CpuRpm, cpuDesired, 200),
+                    CpuRpm = cpuRpm,
                     GpuRpm = FreezeGpuTach
                         ? State.GpuRpm
                         : MoveToward(State.GpuRpm, gpuDesired, 200)
                 };
+
+                _postSetReadCount++;
             }
 
             return State;
@@ -403,6 +481,8 @@ public static class Hp88F8FanControlBackendSelfTest
         public void SetFanLevel(byte cpuLevel, byte gpuLevel)
         {
             SetCalls++;
+            _cpuRpmAtCommand = State.CpuRpm;
+            _postSetReadCount = 0;
             _targetCpu = cpuLevel;
             _targetGpu = gpuLevel;
             State = State with

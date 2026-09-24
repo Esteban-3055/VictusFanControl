@@ -16,15 +16,31 @@ public readonly record struct FanBackendStatus(
     bool CanWrite,
     bool CustomModeActive,
     bool OwnershipValid,
+    bool FeedbackHealthy,
     string Detail);
 
 /// <summary>
-/// Signals that custom authority could not be acquired because another
-/// hardware/firmware state already owns the fan path. The backend guarantees
-/// this exception is raised before it performs a fan write, so the coordinator
-/// must not clear the competing state as part of failed admission.
+/// Signals that custom authority admission failed before the backend performed
+/// any fan write. The coordinator must not issue a compensating FF,FF restore,
+/// because doing so could clear a state owned by another controller.
 /// </summary>
-public sealed class FanControlOwnershipConflictException : InvalidOperationException
+public class FanControlAdmissionException : InvalidOperationException
+{
+    public FanControlAdmissionException(string message) : base(message)
+    {
+    }
+
+    public FanControlAdmissionException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+/// <summary>
+/// A no-write admission failure specifically caused by another hardware or
+/// firmware state already owning the fan path.
+/// </summary>
+public sealed class FanControlOwnershipConflictException : FanControlAdmissionException
 {
     public FanControlOwnershipConflictException(string message) : base(message)
     {
@@ -48,8 +64,8 @@ public interface IFanControlBackend : IAsyncDisposable
 }
 
 /// <summary>
-/// Default production backend until the HP 88F8 write/restore path is
-/// separately implemented and validated. Every write operation fails closed.
+/// Fail-closed fallback used whenever the validated HP backend cannot be
+/// constructed. Every write operation fails closed.
 /// </summary>
 public sealed class DisabledFanControlBackend : IFanControlBackend
 {
@@ -64,6 +80,7 @@ public sealed class DisabledFanControlBackend : IFanControlBackend
             CanWrite: false,
             CustomModeActive: false,
             OwnershipValid: true,
+            FeedbackHealthy: true,
             Detail: "No fan write/restore implementation is present."));
 
     public ValueTask EnterCustomModeAsync(CancellationToken cancellationToken) =>
