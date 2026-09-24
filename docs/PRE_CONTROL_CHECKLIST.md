@@ -12,12 +12,16 @@ VictusFanControl must complete this checklist before the first fan-control write
 - [x] Duplicate Windows resume-event coalescing.
 - [x] Runtime state machine.
 - [x] Telemetry freshness watchdog.
+- [x] Whole-payload freeze guard for repeated identical sensor snapshots.
 - [x] HP 88F8 runtime board identification / allowlist gate.
 - [x] Sensor plausibility gate.
 - [x] Conservative thermal handoff gate.
 - [x] Persistent application/event log.
 - [x] Notification-area status and diagnostics GUI.
 - [x] Single VictusFanControl GUI instance per Windows session.
+- [x] GUI requires elevation so PawnIO access cannot silently run unprivileged.
+- [x] Synthetic fail-closed SafetyGate self-test runs in CI.
+- [x] Read-only OMEN/Gaming Hub process discovery for target-machine conflict mapping.
 - [x] Fan write path remains physically absent / hard-disabled.
 
 ## Still required before custom control can be enabled
