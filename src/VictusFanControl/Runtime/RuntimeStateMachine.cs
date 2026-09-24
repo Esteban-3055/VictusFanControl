@@ -1,8 +1,9 @@
 namespace VictusFanControl.Runtime;
 
 /// <summary>
-/// Thread-safe runtime state machine shared by the GUI and the future safety supervisor.
-/// No fan-control write path exists yet.
+/// Thread-safe runtime state machine shared by telemetry and the fan safety supervisor.
+/// A write-capable backend may be present, but authority is independently gated by
+/// SafetyGate and FanControlCoordinator lifecycle fences.
 /// </summary>
 public sealed class RuntimeStateMachine
 {

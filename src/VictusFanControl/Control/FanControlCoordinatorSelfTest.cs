@@ -22,6 +22,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestInvalidCommandRestoresAsync(output, safety);
         failures += await TestBackendFailureRestoresAsync(output, safety);
         failures += await TestRealHpBackendIntegrationAsync(output, safety);
+        failures += await TestLifecycleBoundaryRestoresAndRejectsStaleSafetyAsync(output, now);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -262,6 +263,60 @@ public static class FanControlCoordinatorSelfTest
             coordinator.Authority == FanAuthority.Firmware);
     }
 
+
+
+    private static async Task<int> TestLifecycleBoundaryRestoresAndRejectsStaleSafetyAsync(
+        TextWriter output,
+        DateTimeOffset now)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var initialSafety = BuildReadySafety(now);
+        var entered = await coordinator.TryEnterCustomAsync(
+            initialSafety,
+            CancellationToken.None);
+
+        var boundary = now + TimeSpan.FromSeconds(1);
+        await coordinator.BlockCustomAdmissionAndRestoreAsync(
+            "synthetic suspend",
+            boundary,
+            CancellationToken.None);
+
+        var reopened = await coordinator.AllowCustomAdmissionAfterRecoveryAsync(
+            boundary + TimeSpan.FromSeconds(1),
+            "synthetic resume validated",
+            CancellationToken.None);
+
+        var staleReentry = await coordinator.TryEnterCustomAsync(
+            initialSafety,
+            CancellationToken.None);
+
+        var freshSafety = BuildReadySafety(
+            boundary + TimeSpan.FromSeconds(2),
+            boundary + TimeSpan.FromSeconds(2));
+
+        var freshReentry = await coordinator.TryEnterCustomAsync(
+            freshSafety,
+            CancellationToken.None);
+
+        if (freshReentry)
+        {
+            await coordinator.RestoreFirmwareAsync(
+                "synthetic lifecycle test complete",
+                CancellationToken.None);
+        }
+
+        return Report(
+            output,
+            "lifecycle boundary restores and rejects stale pre-resume safety",
+            entered &&
+            backend.RestoreCalls == 2 &&
+            reopened &&
+            !staleReentry &&
+            freshReentry &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
 
     private static async Task<int> TestRealHpBackendIntegrationAsync(
         TextWriter output,

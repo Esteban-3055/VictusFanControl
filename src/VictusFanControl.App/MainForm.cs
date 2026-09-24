@@ -143,24 +143,104 @@ internal sealed class MainForm : Form
             switch (code)
             {
                 case PbtApmSuspend:
-                    _worker.NotifySuspend("WM_POWERBROADCAST/PBT_APMSUSPEND");
+                    HandleSuspendLifecycle("WM_POWERBROADCAST/PBT_APMSUSPEND");
                     break;
 
                 case PbtApmResumeAutomatic:
-                    _worker.NotifyResume("WM_POWERBROADCAST/PBT_APMRESUMEAUTOMATIC");
+                    HandleResumeLifecycle("WM_POWERBROADCAST/PBT_APMRESUMEAUTOMATIC");
                     break;
 
                 case PbtApmResumeSuspend:
-                    _worker.NotifyResume("WM_POWERBROADCAST/PBT_APMRESUMESUSPEND");
+                    HandleResumeLifecycle("WM_POWERBROADCAST/PBT_APMRESUMESUSPEND");
                     break;
 
                 case PbtApmResumeCritical:
-                    _worker.NotifyResume("WM_POWERBROADCAST/PBT_APMRESUMECRITICAL");
+                    HandleResumeLifecycle("WM_POWERBROADCAST/PBT_APMRESUMECRITICAL");
                     break;
             }
         }
 
         base.WndProc(ref m);
+    }
+
+
+    private void HandleSuspendLifecycle(string source)
+    {
+        // Stop telemetry admission first, then synchronously return fan authority
+        // while Windows is still processing the suspend notification.
+        _worker.NotifySuspend(source);
+
+        try
+        {
+            _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
+                    $"System suspend detected ({source}).",
+                    DateTimeOffset.UtcNow,
+                    CancellationToken.None)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (Exception ex)
+        {
+            AppendEvent($"CRITICAL: fan firmware restore during suspend failed: {ex.Message}");
+            AppLog.Write($"Fan firmware restore during suspend failed: {ex}");
+        }
+    }
+
+    private void HandleResumeLifecycle(string source)
+    {
+        // Keep custom admission closed across every resume signal. Duplicate
+        // Windows resume broadcasts may advance the freshness fence, which is
+        // conservative: only telemetry sampled after the latest signal can
+        // authorize a future custom session.
+        try
+        {
+            _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
+                    $"Resume requires telemetry revalidation ({source}).",
+                    DateTimeOffset.UtcNow,
+                    CancellationToken.None)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (Exception ex)
+        {
+            AppendEvent($"CRITICAL: fan authority fencing during resume failed: {ex.Message}");
+            AppLog.Write($"Fan authority fencing during resume failed: {ex}");
+        }
+
+        _worker.NotifyResume(source);
+    }
+
+    private async Task ReopenFanAdmissionAfterHealthyAsync()
+    {
+        var timestamp = _lastSnapshot?.Timestamp;
+        if (!timestamp.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            var reopened = await _fanCoordinator.AllowCustomAdmissionAfterRecoveryAsync(
+                timestamp.Value,
+                "Telemetry healthy after lifecycle recovery.",
+                CancellationToken.None);
+
+            if (reopened)
+            {
+                AppendEvent(
+                    $"Fan custom-admission fence reopened after validated telemetry sample {timestamp.Value:O}. Automatic policy remains OFF.");
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Normal shutdown race.
+        }
+        catch (Exception ex)
+        {
+            AppendEvent($"Fan custom-admission reopen failed: {ex.Message}");
+        }
     }
 
     private System.Windows.Forms.Control BuildUi()
@@ -535,6 +615,11 @@ internal sealed class MainForm : Form
 
     private void StateMachineOnStateChanged(object? sender, SystemStateChangedEventArgs e)
     {
+        if (e.Current == SystemState.Healthy)
+        {
+            _ = ReopenFanAdmissionAfterHealthyAsync();
+        }
+
         Ui(() =>
         {
             _stateValue.Text = e.Current.ToString();
@@ -667,6 +752,15 @@ internal sealed class MainForm : Form
         {
             try
             {
+                _fanCoordinator.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write($"Fan coordinator shutdown/restore during Windows shutdown failed: {ex}");
+            }
+
+            try
+            {
                 _worker.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
             catch (Exception ex)
@@ -688,6 +782,15 @@ internal sealed class MainForm : Form
         Enabled = false;
         HideToTray();
         AppLog.Write("Explicit application shutdown started.");
+
+        try
+        {
+            await _fanCoordinator.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"Fan coordinator shutdown/restore failed: {ex}");
+        }
 
         try
         {

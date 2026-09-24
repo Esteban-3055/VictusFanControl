@@ -16,6 +16,8 @@ public sealed record SafetyGateResult(
     bool PreconditionsReady,
     bool FanWritePathPresent,
     bool CustomControlPermitted,
+    DateTimeOffset? SnapshotTimestamp,
+    DateTimeOffset EvaluatedAt,
     IReadOnlyList<string> Reasons);
 
 /// <summary>
@@ -126,6 +128,8 @@ public static class SafetyGate
             PreconditionsReady: preconditionsReady,
             FanWritePathPresent: fanWritePathPresent,
             CustomControlPermitted: customControlPermitted,
+            SnapshotTimestamp: snapshot?.Timestamp,
+            EvaluatedAt: now,
             Reasons: reasons);
     }
 

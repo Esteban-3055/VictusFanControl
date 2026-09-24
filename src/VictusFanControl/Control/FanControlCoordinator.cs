@@ -26,6 +26,8 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     private readonly IFanControlBackend _backend;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private FanAuthority _authority = FanAuthority.Firmware;
+    private bool _admissionBlocked;
+    private DateTimeOffset _minimumSafetySnapshotTimestamp = DateTimeOffset.MinValue;
     private bool _disposed;
 
     public FanControlCoordinator(IFanControlBackend backend)
@@ -54,6 +56,17 @@ public sealed class FanControlCoordinator : IAsyncDisposable
             }
 
             if (!safety.CustomControlPermitted)
+            {
+                return false;
+            }
+
+            if (_admissionBlocked)
+            {
+                return false;
+            }
+
+            if (!safety.SnapshotTimestamp.HasValue ||
+                safety.SnapshotTimestamp.Value < _minimumSafetySnapshotTimestamp)
             {
                 return false;
             }
@@ -136,6 +149,73 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
                 throw;
             }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+
+    /// <summary>
+    /// Closes custom-control admission at a power/lifecycle boundary and restores
+    /// firmware authority before returning. The timestamp becomes a freshness
+    /// fence: pre-boundary SafetyGate results can never reacquire authority.
+    /// </summary>
+    public async ValueTask BlockCustomAdmissionAndRestoreAsync(
+        string reason,
+        DateTimeOffset boundaryTimestamp,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+
+            _admissionBlocked = true;
+            if (boundaryTimestamp > _minimumSafetySnapshotTimestamp)
+            {
+                _minimumSafetySnapshotTimestamp = boundaryTimestamp;
+            }
+
+            if (_authority != FanAuthority.Firmware)
+            {
+                await RestoreLockedAsync(reason, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Reopens admission only after recovery has produced a post-boundary
+    /// telemetry sample. The caller still needs a fresh SafetyGate result for
+    /// TryEnterCustomAsync.
+    /// </summary>
+    public async ValueTask<bool> AllowCustomAdmissionAfterRecoveryAsync(
+        DateTimeOffset validatedSnapshotTimestamp,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+
+            if (_authority != FanAuthority.Firmware)
+            {
+                return false;
+            }
+
+            if (validatedSnapshotTimestamp < _minimumSafetySnapshotTimestamp)
+            {
+                return false;
+            }
+
+            _admissionBlocked = false;
+            return true;
         }
         finally
         {
