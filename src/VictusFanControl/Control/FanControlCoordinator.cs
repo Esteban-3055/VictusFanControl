@@ -122,11 +122,6 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         {
             ThrowIfDisposed();
 
-            if (!IsLatestSafetyEvaluation(safety.EvaluatedAt))
-            {
-                return true;
-            }
-
             if (_authority != FanAuthority.Custom)
             {
                 throw new InvalidOperationException(
@@ -275,6 +270,13 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         try
         {
             ThrowIfDisposed();
+
+            // A newer safety evaluation may have been accepted while this call
+            // was waiting for the coordinator gate. Never act on the older one.
+            if (!IsLatestSafetyEvaluation(safety.EvaluatedAt))
+            {
+                return true;
+            }
 
             if (_authority != FanAuthority.Custom)
             {
