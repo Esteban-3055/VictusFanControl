@@ -41,6 +41,10 @@ internal static class Program
             }
 
             Console.WriteLine();
+            Console.WriteLine("Warming differential counters (CPU power/load)...");
+            _ = reader.ReadSnapshot();
+            await Task.Delay(1000);
+
             Console.WriteLine("One live sample:");
             ConsoleTelemetryPrinter.Print(reader.ReadSnapshot());
             return reader.IsReadyForBaseline ? 0 : 3;
