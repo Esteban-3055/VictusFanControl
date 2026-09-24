@@ -281,6 +281,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         {
             ThrowIfDisposed();
             EnsureWritable();
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (!_customModeActive)
             {
@@ -311,6 +312,11 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             ValidateActiveControlState(
                 preDispatch,
                 requireRunningTachometers: _ownedSetpoint.HasValue);
+
+            // Final cancellation boundary before the WMI write. If suspend or
+            // a safety handoff arrived while the admission checks were running,
+            // do not dispatch a new fixed level.
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (preDispatch.CpuSetpoint != cpuTarget ||
                 preDispatch.GpuSetpoint != gpuTarget)

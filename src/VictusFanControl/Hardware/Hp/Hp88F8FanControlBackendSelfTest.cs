@@ -26,6 +26,7 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestStatusDetectsRuntimeTachFailureAsync(output);
         failures += await TestStoppedFansCanSpinUpWithinAckWindowAsync(output);
         failures += await TestOneSampleDirectionalSpikeIsRejectedAsync(output);
+        failures += await TestCancellationAtPreDispatchPreventsWriteAsync(output);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -396,6 +397,49 @@ public static class Hp88F8FanControlBackendSelfTest
             state.GpuRpm > 0);
     }
 
+
+    private static async Task<int> TestCancellationAtPreDispatchPreventsWriteAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        using var cts = new CancellationTokenSource();
+
+        // EnterCustomMode performs EC read #1. Apply performs its baseline read
+        // (#2), then the final pre-dispatch ownership read (#3). Cancel exactly
+        // on #3 to verify that no WMI fan-level write can escape the boundary.
+        hardware.OnEcRead = count =>
+        {
+            if (count == 3)
+            {
+                cts.Cancel();
+            }
+        };
+
+        var cancelled = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "cancel-before-wmi"),
+                cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
+        }
+
+        hardware.OnEcRead = null;
+
+        return Report(
+            output,
+            "cancellation at pre-dispatch boundary prevents WMI fan write",
+            cancelled &&
+            hardware.SetCalls == 0 &&
+            hardware.State.CpuSetpoint == byte.MaxValue &&
+            hardware.State.GpuSetpoint == byte.MaxValue);
+    }
+
     private static Hp88F8FanControlBackend NewBackend(FakeHardware hardware) =>
         new(
             hardware,
@@ -438,9 +482,13 @@ public static class Hp88F8FanControlBackendSelfTest
         public bool FreezeCpuTach { get; set; }
         public bool FreezeGpuTach { get; set; }
         public bool PulseCpuTachOnceThenReturnBaseline { get; set; }
+        public Action<int>? OnEcRead { get; set; }
+        public int EcReadCalls { get; private set; }
 
         public Hp88F8EcControlState ReadEcState()
         {
+            EcReadCalls++;
+            OnEcRead?.Invoke(EcReadCalls);
             if (_targetCpu.HasValue && _targetGpu.HasValue)
             {
                 var cpuDesired = DesiredCpuRpm(_targetCpu.Value);

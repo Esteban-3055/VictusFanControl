@@ -139,29 +139,37 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                     "Fan command refused because custom authority is not active.");
             }
 
-            if (!SafetyAllowsCustomLocked(safety))
-            {
-                await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
-                throw new InvalidOperationException(
-                    "Fan command refused because custom control is no longer permitted by the current safety/lifecycle gate.");
-            }
-
-            var commandError = ValidateCommand(command);
-            if (commandError is not null)
-            {
-                await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
-                throw new ArgumentOutOfRangeException(
-                    nameof(command),
-                    command,
-                    commandError);
-            }
-
             using var commandCts =
                 CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
+            // Publish the in-flight operation before the final safety/command
+            // checks. A lifecycle or safety handoff that races with this method
+            // can now always either cancel this CTS or make its admission fence
+            // visible before any backend write is dispatched.
             SetActiveCommand(commandCts);
             try
             {
+                if (!SafetyAllowsCustomLocked(safety))
+                {
+                    await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                    throw new InvalidOperationException(
+                        "Fan command refused because custom control is no longer permitted by the current safety/lifecycle gate.");
+                }
+
+                var commandError = ValidateCommand(command);
+                if (commandError is not null)
+                {
+                    await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                    throw new ArgumentOutOfRangeException(
+                        nameof(command),
+                        command,
+                        commandError);
+                }
+
+                // Covers a handoff that occurred after the safety check but
+                // before backend dispatch.
+                commandCts.Token.ThrowIfCancellationRequested();
+
                 await _backend.ApplyAsync(command, commandCts.Token).ConfigureAwait(false);
             }
             catch
