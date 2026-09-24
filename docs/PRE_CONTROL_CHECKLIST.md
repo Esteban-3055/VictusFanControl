@@ -23,6 +23,10 @@ VictusFanControl must complete this checklist before the first fan-control write
 - [x] Synthetic fail-closed SafetyGate self-test runs in CI.
 - [x] Read-only OMEN/Gaming Hub process discovery for target-machine conflict mapping.
 - [x] Fan write path remains physically absent / hard-disabled.
+- [x] Narrow IFanControlBackend boundary prevents arbitrary controller-side EC writes.
+- [x] FanControlCoordinator owns authority transitions and fail-safe restoration.
+- [x] Validated 88F8 command range 14-50 is enforced before a backend receives a command.
+- [x] Synthetic coordinator tests verify disabled backend refusal, safety-loss restore, invalid-command restore, backend-failure restore and normal restore.
 
 ## Still required before custom control can be enabled
 
