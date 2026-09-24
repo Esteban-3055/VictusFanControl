@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
+using VictusFanControl.Control;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
@@ -18,6 +19,8 @@ internal sealed class MainForm : Form
     private const int MaxEventLogChars = 120_000;
 
     private readonly TelemetryWorker _worker;
+    private readonly FanControlCoordinator _fanCoordinator;
+    private readonly string _fanBackendStartupDetail;
     private readonly HardwareIdentity _hardwareIdentity;
     private readonly string _modulesDirectory;
     private readonly NotifyIcon _trayIcon;
@@ -59,13 +62,31 @@ internal sealed class MainForm : Form
 
     public MainForm(string modulesDirectory)
     {
-        Text = "VictusFanControl v0.3-dev — READ-ONLY";
+        Text = "VictusFanControl v0.3-dev — backend integrated / automatic policy OFF";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(780, 560);
         Size = new Size(900, 680);
 
         _modulesDirectory = modulesDirectory;
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
+
+        IFanControlBackend backend;
+        try
+        {
+            backend = new Hp88F8FanControlBackend(modulesDirectory);
+            _fanBackendStartupDetail = backend.CanWrite
+                ? "HP 88F8 write/restore backend initialized."
+                : "HP 88F8 backend present but not write-capable on this hardware.";
+        }
+        catch (Exception ex)
+        {
+            backend = new DisabledFanControlBackend();
+            _fanBackendStartupDetail =
+                $"HP 88F8 backend initialization failed; fail-closed read-only fallback: {ex.Message}";
+        }
+
+        _fanCoordinator = new FanControlCoordinator(backend);
+        _fanCoordinator.AuthorityChanged += FanCoordinatorOnAuthorityChanged;
 
         _worker = new TelemetryWorker(modulesDirectory);
         _worker.SnapshotAvailable += WorkerOnSnapshotAvailable;
@@ -89,6 +110,8 @@ internal sealed class MainForm : Form
             AppendEvent($"Modules: {modulesDirectory}");
             AppendEvent($"Board: {_hardwareIdentity.BoardDisplay}; System={_hardwareIdentity.SystemProductName}; SKU={_hardwareIdentity.SystemSku}; BIOS={_hardwareIdentity.BiosVersion}");
             AppendEvent($"Persistent log: {AppLog.CurrentLogPath}");
+            AppendEvent($"Fan backend: {_fanCoordinator.BackendName}; CanWrite={_fanCoordinator.BackendCanWrite}; {_fanBackendStartupDetail}");
+            AppendEvent("Automatic fan policy is OFF. The integrated backend cannot acquire custom authority unless an explicit future policy requests it through FanControlCoordinator.");
             _uiTimer.Start();
             _worker.Start();
             UpdateSafetyStatus();
@@ -155,7 +178,7 @@ internal sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter,
-            Text = "Fan control is intentionally disabled.\r\nThe continuous curve will be implemented only after all pre-control safety gates pass.",
+            Text = "The validated HP 88F8 backend is integrated behind FanControlCoordinator.\r\nAutomatic fan policy is intentionally OFF; no curve commands are issued by this GUI yet.",
             AutoSize = false
         });
 
@@ -225,7 +248,7 @@ internal sealed class MainForm : Form
         {
             AutoSize = true,
             Margin = new Padding(3, 16, 3, 3),
-            Text = "READ-ONLY build: HP firmware remains authoritative. No fan write path is present."
+            Text = "Backend integrated: HP firmware remains authoritative until a future explicit controller acquires custom authority through FanControlCoordinator."
         });
 
         return root;
@@ -469,6 +492,20 @@ internal sealed class MainForm : Form
         return icon;
     }
 
+
+    private void FanCoordinatorOnAuthorityChanged(
+        object? sender,
+        FanAuthorityChangedEventArgs e)
+    {
+        Ui(() =>
+        {
+            AppendEvent(
+                $"Fan authority: {e.Previous} -> {e.Current}. {e.Reason}");
+            UpdateSafetyStatus();
+            UpdateTray();
+        });
+    }
+
     private void WorkerOnSnapshotAvailable(object? sender, TelemetrySnapshot snapshot)
     {
         _lastSnapshot = snapshot;
@@ -519,16 +556,30 @@ internal sealed class MainForm : Form
             _hardwareIdentity,
             _worker.StateMachine.State,
             _lastSnapshot,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            fanWritePathPresent: _fanCoordinator.BackendCanWrite);
 
         _boardValue.Text = $"{_hardwareIdentity.BoardDisplay} — {(result.BoardAllowed ? "ALLOWLISTED" : "BLOCKED")}";
-        _authorityValue.Text = "HP Firmware";
-        _authorityValue.ForeColor = SystemColors.ControlText;
+        _authorityValue.Text = _fanCoordinator.Authority switch
+        {
+            FanAuthority.Firmware => "HP Firmware",
+            FanAuthority.Custom => "VictusFanControl",
+            FanAuthority.Restoring => "Restoring HP firmware",
+            FanAuthority.Faulted => "FAULTED / uncertain",
+            _ => _fanCoordinator.Authority.ToString()
+        };
+        _authorityValue.ForeColor = _fanCoordinator.Authority == FanAuthority.Faulted
+            ? Color.DarkRed
+            : SystemColors.ControlText;
 
-        _readinessValue.Text = result.PreconditionsReady
-            ? "READY for future controller (write path still disabled)"
-            : "BLOCKED";
-        _readinessValue.ForeColor = result.PreconditionsReady ? Color.DarkGreen : Color.DarkGoldenrod;
+        _readinessValue.Text = result.CustomControlPermitted
+            ? "READY — backend available; automatic policy OFF"
+            : result.PreconditionsReady
+                ? "PRECONDITIONS READY — backend unavailable"
+                : "BLOCKED";
+        _readinessValue.ForeColor = result.CustomControlPermitted
+            ? Color.DarkGreen
+            : Color.DarkGoldenrod;
 
         if (_lastSnapshot is null)
         {
@@ -546,7 +597,9 @@ internal sealed class MainForm : Form
             .ToArray();
 
         _safetyReasonValue.Text = visibleReasons.Length == 0
-            ? "All current read-only preconditions pass. Fan writes remain hard-disabled."
+            ? result.CustomControlPermitted
+                ? "Safety preconditions pass and the backend is available. Automatic policy remains OFF."
+                : "Safety preconditions pass; no write-capable backend is available."
             : string.Join(" | ", visibleReasons);
     }
 
@@ -573,7 +626,7 @@ internal sealed class MainForm : Form
                 $"GPU: {FormatCompact(_lastSnapshot.GpuTemperatureC, "C")} | {FormatCompact(_lastSnapshot.GpuFanRpm, "RPM", 0)}";
         }
 
-        _trayAuthorityItem.Text = "Fan authority: HP firmware";
+        _trayAuthorityItem.Text = $"Fan authority: {_fanCoordinator.Authority}";
 
         var tooltip = _lastSnapshot is null
             ? $"VFC {state}"

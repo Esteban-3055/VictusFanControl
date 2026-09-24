@@ -21,6 +21,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestSafetyLossRestoresAsync(output, safety, now);
         failures += await TestInvalidCommandRestoresAsync(output, safety);
         failures += await TestBackendFailureRestoresAsync(output, safety);
+        failures += await TestRealHpBackendIntegrationAsync(output, safety);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -258,6 +259,48 @@ public static class FanControlCoordinatorSelfTest
             entered &&
             threw &&
             backend.RestoreCalls == 1 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
+
+    private static async Task<int> TestRealHpBackendIntegrationAsync(
+        TextWriter output,
+        SafetyGateResult safety)
+    {
+        var hardware = new Hp88F8FanControlBackendSelfTest.FakeHardware();
+        await using var backend = new Hp88F8FanControlBackend(hardware);
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None);
+
+        if (!entered)
+        {
+            return Report(
+                output,
+                "validated HP backend integrates through coordinator",
+                false);
+        }
+
+        await coordinator.ApplyAsync(
+            new FanCommand(30, 30, "coordinator-real-backend-test"),
+            safety,
+            CancellationToken.None);
+
+        var during = hardware.State;
+
+        await coordinator.RestoreFirmwareAsync(
+            "coordinator-real-backend-test complete",
+            CancellationToken.None);
+
+        return Report(
+            output,
+            "validated HP backend integrates through coordinator",
+            during.CpuSetpoint == 30 &&
+            during.GpuSetpoint == 30 &&
+            hardware.State.CpuSetpoint == byte.MaxValue &&
+            hardware.State.GpuSetpoint == byte.MaxValue &&
             coordinator.Authority == FanAuthority.Firmware);
     }
 
