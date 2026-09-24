@@ -84,13 +84,16 @@ cd VictusFanControl
 
 La GUI muestra disponibilidad del backend y autoridad actual, pero la **política automática sigue desactivada**.
 
-El siguiente gate físico de desarrollo usa la ruta de producción completa, todavía de forma acotada:
+La ruta integrada `SafetyGate -> FanControlCoordinator -> backend HP` ya pasó
+la validación física acotada 30/30. El siguiente gate físico es suspensión real
+mientras Custom está activo:
 
 ```powershell
-.\scripts\test-integrated-coordinator.ps1
+.\scripts\test-suspend-custom.ps1
 ```
 
-No ejecutar esa prueba bajo carga ni terminarla desde Task Manager. Consulta
-`docs/INTEGRATED_COORDINATOR_HARDWARE_TEST.md` antes de usarla.
+Guarda cualquier trabajo antes de ejecutarlo: el test pone Windows en suspensión
+después de una confirmación explícita. No usar bajo carga ni terminar desde Task
+Manager. Consulta `docs/SUSPEND_CUSTOM_HARDWARE_TEST.md`.
 
 Consulta `docs/BACKEND_INTEGRATION_V0.4.md`, `docs/PRE_CONTROL_CHECKLIST.md`, `docs/SAFETY.md` y `docs/OMENMON_COMPAT_AUDIT.md`.

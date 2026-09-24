@@ -18,11 +18,28 @@ internal sealed class MainForm : Form
     private const int PbtApmResumeAutomatic = 0x0012;
     private const int MaxEventLogChars = 120_000;
 
+    private const int SuspendHardwareTestLevel = 30;
+    private const double SuspendHardwareTestMaxCpuTemperatureC = 80;
+    private const double SuspendHardwareTestMaxGpuTemperatureC = 75;
+    private const double SuspendHardwareTestMaxCpuPowerW = 50;
+    private const double SuspendHardwareTestMaxGpuPowerW = 70;
+
+    private static readonly string SuspendHardwareTestRoot = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "VictusFanControl");
+
+    private static readonly string SuspendHardwareTestReadyPath =
+        Path.Combine(SuspendHardwareTestRoot, "suspend-custom.ready");
+
+    private static readonly string SuspendHardwareTestResultPath =
+        Path.Combine(SuspendHardwareTestRoot, "suspend-custom.result");
+
     private readonly TelemetryWorker _worker;
     private readonly FanControlCoordinator _fanCoordinator;
     private readonly string _fanBackendStartupDetail;
     private readonly HardwareIdentity _hardwareIdentity;
     private readonly string _modulesDirectory;
+    private readonly bool _suspendLifecycleHardwareTest;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
 
@@ -58,9 +75,18 @@ internal sealed class MainForm : Form
     private bool _shutdownStarted;
     private bool _shutdownComplete;
 
+    private int _suspendHardwareTestAdvanceGate;
+    private bool _suspendHardwareTestArmed;
+    private bool _suspendHardwareTestSuspendObserved;
+    private bool _suspendHardwareTestResumeObserved;
+    private bool _suspendHardwareTestPreSleepRestoreVerified;
+    private bool _suspendHardwareTestCompleted;
+
     private volatile TelemetrySnapshot? _lastSnapshot;
 
-    public MainForm(string modulesDirectory)
+    public MainForm(
+        string modulesDirectory,
+        bool suspendLifecycleHardwareTest = false)
     {
         Text = "VictusFanControl v0.4-dev — backend integrated / automatic policy OFF";
         StartPosition = FormStartPosition.CenterScreen;
@@ -68,7 +94,15 @@ internal sealed class MainForm : Form
         Size = new Size(900, 680);
 
         _modulesDirectory = modulesDirectory;
+        _suspendLifecycleHardwareTest = suspendLifecycleHardwareTest;
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
+
+        if (_suspendLifecycleHardwareTest)
+        {
+            Directory.CreateDirectory(SuspendHardwareTestRoot);
+            TryDeleteFile(SuspendHardwareTestReadyPath);
+            TryDeleteFile(SuspendHardwareTestResultPath);
+        }
 
         IFanControlBackend backend;
         try
@@ -112,6 +146,13 @@ internal sealed class MainForm : Form
             AppendEvent($"Persistent log: {AppLog.CurrentLogPath}");
             AppendEvent($"Fan backend: {_fanCoordinator.BackendName}; CanWrite={_fanCoordinator.BackendCanWrite}; {_fanBackendStartupDetail}");
             AppendEvent("Automatic fan policy is OFF. The integrated backend cannot acquire custom authority unless an explicit future policy requests it through FanControlCoordinator.");
+
+            if (_suspendLifecycleHardwareTest)
+            {
+                AppendEvent(
+                    "SUSPEND TEST: explicit hardware mode enabled. Waiting for initial Healthy telemetry before one bounded 30/30 command. Automatic policy remains OFF.");
+            }
+
             _uiTimer.Start();
             _worker.Start();
             UpdateSafetyStatus();
@@ -172,6 +213,31 @@ internal sealed class MainForm : Form
         // worker is transitioning into Suspended.
         var boundary = DateTimeOffset.UtcNow;
 
+        var testWasCustom = false;
+        Hp88F8EcControlState? testEcBefore = null;
+
+        if (_suspendLifecycleHardwareTest &&
+            _suspendHardwareTestArmed &&
+            !_suspendHardwareTestCompleted)
+        {
+            _suspendHardwareTestSuspendObserved = true;
+            testWasCustom = _fanCoordinator.Authority == FanAuthority.Custom;
+
+            try
+            {
+                testEcBefore =
+                    new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+
+                AppendEvent(
+                    $"SUSPEND TEST: suspend event entered with authority={_fanCoordinator.Authority}; EC before lifecycle restore: {testEcBefore}");
+            }
+            catch (Exception ex)
+            {
+                AppendEvent(
+                    $"SUSPEND TEST: could not read EC immediately before lifecycle restore: {ex.Message}");
+            }
+        }
+
         try
         {
             _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
@@ -189,6 +255,37 @@ internal sealed class MainForm : Form
         }
         finally
         {
+            if (_suspendLifecycleHardwareTest &&
+                _suspendHardwareTestArmed &&
+                !_suspendHardwareTestCompleted)
+            {
+                try
+                {
+                    var after =
+                        new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+
+                    _suspendHardwareTestPreSleepRestoreVerified =
+                        testWasCustom &&
+                        testEcBefore is not null &&
+                        testEcBefore.CpuSetpoint == SuspendHardwareTestLevel &&
+                        testEcBefore.GpuSetpoint == SuspendHardwareTestLevel &&
+                        _fanCoordinator.Authority == FanAuthority.Firmware &&
+                        after.CpuSetpoint == byte.MaxValue &&
+                        after.GpuSetpoint == byte.MaxValue;
+
+                    AppendEvent(
+                        _suspendHardwareTestPreSleepRestoreVerified
+                            ? $"SUSPEND TEST: PRE-SLEEP RESTORE VERIFIED before returning from {source}; authority=Firmware; EC={after}"
+                            : $"SUSPEND TEST: PRE-SLEEP RESTORE VERIFICATION FAILED; wasCustom={testWasCustom}; before={testEcBefore}; authority={_fanCoordinator.Authority}; after={after}");
+                }
+                catch (Exception ex)
+                {
+                    _suspendHardwareTestPreSleepRestoreVerified = false;
+                    AppendEvent(
+                        $"SUSPEND TEST: PRE-SLEEP RESTORE VERIFICATION FAILED while reading EC: {ex.Message}");
+                }
+            }
+
             _worker.NotifySuspend(source);
         }
     }
@@ -204,6 +301,14 @@ internal sealed class MainForm : Form
         if (!accepted)
         {
             return;
+        }
+
+        if (_suspendLifecycleHardwareTest &&
+            _suspendHardwareTestArmed &&
+            !_suspendHardwareTestCompleted)
+        {
+            _suspendHardwareTestResumeObserved = true;
+            AppendEvent($"SUSPEND TEST: accepted resume event from {source}.");
         }
 
         try
@@ -658,7 +763,7 @@ internal sealed class MainForm : Form
     {
         if (e.Current == SystemState.Healthy)
         {
-            _ = ReopenFanAdmissionAfterHealthyAsync();
+            _ = HandleHealthyStateAsync();
         }
         else
         {
@@ -678,6 +783,248 @@ internal sealed class MainForm : Form
             UpdateSafetyStatus();
             UpdateTray();
         });
+    }
+
+    private async Task HandleHealthyStateAsync()
+    {
+        await ReopenFanAdmissionAfterHealthyAsync();
+
+        if (_suspendLifecycleHardwareTest)
+        {
+            await AdvanceSuspendLifecycleHardwareTestAsync();
+        }
+    }
+
+    private async Task AdvanceSuspendLifecycleHardwareTestAsync()
+    {
+        if (_suspendHardwareTestCompleted ||
+            Interlocked.CompareExchange(
+                ref _suspendHardwareTestAdvanceGate,
+                1,
+                0) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_suspendHardwareTestArmed)
+            {
+                var snapshot = _lastSnapshot ??
+                    throw new InvalidOperationException(
+                        "No telemetry snapshot is available for suspend-test admission.");
+
+                EnsureSuspendHardwareTestLightLoad(snapshot);
+
+                var safety = SafetyGate.Evaluate(
+                    _hardwareIdentity,
+                    _worker.StateMachine.State,
+                    snapshot,
+                    DateTimeOffset.UtcNow,
+                    fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+                if (!safety.CustomControlPermitted)
+                {
+                    throw new InvalidOperationException(
+                        "SafetyGate refused suspend-test custom authority: " +
+                        string.Join(" | ", safety.Reasons));
+                }
+
+                var before =
+                    new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+
+                if (before.CpuSetpoint != byte.MaxValue ||
+                    before.GpuSetpoint != byte.MaxValue)
+                {
+                    throw new InvalidOperationException(
+                        $"Suspend test requires firmware-owned FF/FF before admission; read {before.CpuSetpoint}/{before.GpuSetpoint}.");
+                }
+
+                var entered = await _fanCoordinator.TryEnterCustomAsync(
+                    safety,
+                    CancellationToken.None);
+
+                if (!entered ||
+                    _fanCoordinator.Authority != FanAuthority.Custom)
+                {
+                    throw new InvalidOperationException(
+                        "Coordinator did not grant Custom authority for suspend test.");
+                }
+
+                var latest = _lastSnapshot ?? snapshot;
+                EnsureSuspendHardwareTestLightLoad(latest);
+
+                var commandSafety = SafetyGate.Evaluate(
+                    _hardwareIdentity,
+                    _worker.StateMachine.State,
+                    latest,
+                    DateTimeOffset.UtcNow,
+                    fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+                if (!commandSafety.CustomControlPermitted)
+                {
+                    throw new InvalidOperationException(
+                        "SafetyGate dropped before suspend-test 30/30 command: " +
+                        string.Join(" | ", commandSafety.Reasons));
+                }
+
+                await _fanCoordinator.ApplyAsync(
+                    new FanCommand(
+                        SuspendHardwareTestLevel,
+                        SuspendHardwareTestLevel,
+                        "explicit suspend lifecycle hardware validation"),
+                    commandSafety,
+                    CancellationToken.None);
+
+                var acknowledged =
+                    new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+
+                if (acknowledged.CpuSetpoint != SuspendHardwareTestLevel ||
+                    acknowledged.GpuSetpoint != SuspendHardwareTestLevel)
+                {
+                    throw new InvalidOperationException(
+                        $"Suspend-test command acknowledgement mismatch: {acknowledged.CpuSetpoint}/{acknowledged.GpuSetpoint}.");
+                }
+
+                _suspendHardwareTestArmed = true;
+
+                AppendEvent(
+                    $"SUSPEND TEST: ARMED at 30/30 with authority=Custom; EC={acknowledged}. External harness may now request Windows suspend.");
+
+                File.WriteAllText(
+                    SuspendHardwareTestReadyPath,
+                    $"READY|{DateTimeOffset.Now:O}|authority={_fanCoordinator.Authority}|cpu={acknowledged.CpuSetpoint}|gpu={acknowledged.GpuSetpoint}");
+                return;
+            }
+
+            if (!_suspendHardwareTestResumeObserved)
+            {
+                return;
+            }
+
+            var afterResume =
+                new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+
+            var recovered =
+                _suspendHardwareTestSuspendObserved &&
+                _suspendHardwareTestPreSleepRestoreVerified &&
+                _worker.StateMachine.State == SystemState.Healthy &&
+                _fanCoordinator.Authority == FanAuthority.Firmware &&
+                afterResume.CpuSetpoint == byte.MaxValue &&
+                afterResume.GpuSetpoint == byte.MaxValue;
+
+            if (!recovered)
+            {
+                throw new InvalidOperationException(
+                    "Post-resume verification failed: " +
+                    $"suspendObserved={_suspendHardwareTestSuspendObserved}, " +
+                    $"preSleepRestore={_suspendHardwareTestPreSleepRestoreVerified}, " +
+                    $"state={_worker.StateMachine.State}, authority={_fanCoordinator.Authority}, " +
+                    $"EC={afterResume}.");
+            }
+
+            CompleteSuspendHardwareTest(
+                success: true,
+                exitCode: 0,
+                message:
+                    $"PASS: suspend arrived while Custom 30/30 was owned, FF/FF -> LegacyDefault was verified before the suspend handler returned, and resume recovered to Healthy/Firmware with EC FF/FF. EC={afterResume}");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                await _fanCoordinator.RestoreFirmwareAsync(
+                    "Suspend hardware-test failure cleanup.",
+                    CancellationToken.None);
+            }
+            catch (Exception restoreEx)
+            {
+                AppLog.Write(
+                    $"SUSPEND TEST: cleanup restore also failed: {restoreEx}");
+            }
+
+            CompleteSuspendHardwareTest(
+                success: false,
+                exitCode: 61,
+                message: $"FAIL: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(
+                ref _suspendHardwareTestAdvanceGate,
+                0);
+        }
+    }
+
+    private static void EnsureSuspendHardwareTestLightLoad(
+        TelemetrySnapshot snapshot)
+    {
+        if (snapshot.CpuTemperatureC > SuspendHardwareTestMaxCpuTemperatureC ||
+            snapshot.GpuTemperatureC > SuspendHardwareTestMaxGpuTemperatureC ||
+            snapshot.CpuPackagePowerW > SuspendHardwareTestMaxCpuPowerW ||
+            snapshot.GpuPowerW > SuspendHardwareTestMaxGpuPowerW)
+        {
+            throw new InvalidOperationException(
+                "Suspend hardware test requires light load. " +
+                $"Limits: CPU <= {SuspendHardwareTestMaxCpuTemperatureC:0} C / " +
+                $"{SuspendHardwareTestMaxCpuPowerW:0} W, GPU <= " +
+                $"{SuspendHardwareTestMaxGpuTemperatureC:0} C / " +
+                $"{SuspendHardwareTestMaxGpuPowerW:0} W.");
+        }
+    }
+
+    private void CompleteSuspendHardwareTest(
+        bool success,
+        int exitCode,
+        string message)
+    {
+        if (_suspendHardwareTestCompleted)
+        {
+            return;
+        }
+
+        _suspendHardwareTestCompleted = true;
+        TryDeleteFile(SuspendHardwareTestReadyPath);
+
+        var result =
+            $"{(success ? "PASS" : "FAIL")}|{DateTimeOffset.Now:O}|{message}";
+
+        try
+        {
+            Directory.CreateDirectory(SuspendHardwareTestRoot);
+            File.WriteAllText(
+                SuspendHardwareTestResultPath,
+                result);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(
+                $"SUSPEND TEST: could not write result marker: {ex}");
+        }
+
+        AppendEvent($"SUSPEND TEST RESULT: {message}");
+        Environment.ExitCode = exitCode;
+
+        Ui(() =>
+        {
+            _allowExit = true;
+            Close();
+        });
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Test markers are diagnostic-only and must not destabilize runtime.
+        }
     }
 
     private void UpdateSafetyStatus()

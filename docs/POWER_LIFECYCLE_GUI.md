@@ -58,3 +58,39 @@ Run from an elevated PowerShell:
 ```powershell
 .\scripts\run-gui.ps1
 ```
+
+
+## Real suspend-while-Custom hardware gate
+
+After the integrated coordinator path passed on the physical target, an explicit
+hardware-only GUI mode was added for the next lifecycle gate. It is not a fan
+policy and cannot start without the exact `88F8-SUSPEND30` acknowledgement
+token.
+
+The mode waits for normal `Healthy` telemetry, passes `SafetyGate`, acquires
+Custom authority through `FanControlCoordinator`, and applies one bounded
+30/30 command through `Hp88F8FanControlBackend`. It then writes a local READY
+marker. The PowerShell wrapper requests Windows Suspend from a separate process,
+leaving the GUI message pump free to receive `WM_POWERBROADCAST/PBT_APMSUSPEND`.
+
+Inside the real suspend handler the application records:
+
+1. authority and EC 0x34/0x35 immediately on entry;
+2. synchronous `BlockCustomAdmissionAndRestoreAsync`;
+3. EC 0x34/0x35 after the restore but **before** `NotifySuspend` and before the
+   window procedure returns.
+
+A PASS therefore requires the suspend event to arrive while authority is
+`Custom` and EC is 30/30, followed by authority `Firmware` and EC FF/FF
+inside the same suspend handler. After wake, telemetry must recover to
+`Healthy`, authority must remain `Firmware`, and EC must still be FF/FF.
+
+Run only from the physical target:
+
+```powershell
+.\scripts\test-suspend-custom.ps1
+```
+
+Save unrelated work first: the script intentionally puts Windows to sleep after
+the explicit `SUSPEND30` confirmation. Forced process termination remains a
+separate gate.

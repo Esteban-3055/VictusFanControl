@@ -43,6 +43,36 @@ internal static class Program
                 MessageBoxIcon.Error);
         };
 
+        var suspendHardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--suspend-custom-test",
+                StringComparison.OrdinalIgnoreCase));
+
+        var suspendHardwareTestToken = ReadOptionValue(
+            args,
+            "--suspend-test-token");
+
+        if (suspendHardwareTest &&
+            !string.Equals(
+                suspendHardwareTestToken,
+                "88F8-SUSPEND30",
+                StringComparison.Ordinal))
+        {
+            AppLog.Write(
+                "Suspend/custom hardware test refused: explicit --suspend-test-token 88F8-SUSPEND30 is required.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (!suspendHardwareTest && suspendHardwareTestToken is not null)
+        {
+            AppLog.Write(
+                "Startup refused: --suspend-test-token is valid only with --suspend-custom-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -57,10 +87,25 @@ internal static class Program
 
         AppLog.Write($"Starting GUI. Modules={modulesDirectory}");
 
-        using var form = new MainForm(modulesDirectory);
+        using var form = new MainForm(
+            modulesDirectory,
+            suspendHardwareTest);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");
+    }
+
+    private static string? ReadOptionValue(string[] args, string option)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], option, StringComparison.OrdinalIgnoreCase))
+            {
+                return args[i + 1];
+            }
+        }
+
+        return null;
     }
 
     private static string? ResolveModulesDirectory(string[] args)

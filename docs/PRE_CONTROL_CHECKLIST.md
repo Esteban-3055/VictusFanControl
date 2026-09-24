@@ -55,8 +55,8 @@ This checklist tracks what must be true before VictusFanControl is allowed to ru
 
 ## Remaining gates before automatic control
 
-- [~] Integrated backend + coordinator hardware harness implemented (`scripts/test-integrated-coordinator.ps1`); real-target PASS still required.
-- [ ] Exercise suspend while Custom authority is active and verify `FF,FF -> LegacyDefault` occurs before sleep.
+- [x] Integrated backend + coordinator real-hardware gate passed on 2026-09-24: Custom 30/30 acknowledged, six continuous supervision samples passed, restore returned EC 0x34/0x35 to FF/FF, and OMEN Gaming Hub undervolt remained unchanged.
+- [~] Suspend-while-Custom hardware harness implemented (`scripts/test-suspend-custom.ps1`); real-target PASS still required to prove `FF,FF -> LegacyDefault` completes before the suspend handler returns.
 - [ ] Characterize forced-process-termination / EC countdown/watchdog recovery; managed `finally`/Dispose cannot protect a killed process.
 - [ ] Repeat validation under representative CPU load, GPU load and gaming.
 - [ ] Validate thermal emergency handoff thresholds under load.
