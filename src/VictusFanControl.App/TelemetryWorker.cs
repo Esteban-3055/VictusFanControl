@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using VictusFanControl.Runtime;
 using VictusFanControl.Telemetry;
 
@@ -9,6 +8,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private const int NormalIntervalMs = 1000;
     private const int ResumeSettleMs = 1500;
     private const int HealthySamplesRequired = 3;
+    private const int RecoveryAfterIncompleteSamples = 3;
     private const int GapThresholdMs = 10_000;
 
     private readonly string _modulesDirectory;
@@ -20,8 +20,12 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private Task? _loop;
     private bool _suspended;
     private bool _recoveryRequested = true;
+    private bool _resumeValidationActive;
     private string _recoveryReason = "Initial telemetry validation.";
     private long _lastLoopTick = Environment.TickCount64;
+    private long _logSequence;
+    private int _degradedCompleteStreak;
+    private int _degradedIncompleteStreak;
 
     public TelemetryWorker(string modulesDirectory)
     {
@@ -51,6 +55,9 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         {
             _suspended = true;
             _recoveryRequested = false;
+            _resumeValidationActive = false;
+            _degradedCompleteStreak = 0;
+            _degradedIncompleteStreak = 0;
         }
 
         StateMachine.Transition(SystemState.Suspending, $"Suspend detected ({source}).");
@@ -61,14 +68,33 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     public void NotifyResume(string source)
     {
+        bool accepted;
+
         lock (_commandGate)
         {
             _suspended = false;
-            _recoveryRequested = true;
-            _recoveryReason = $"Resume detected ({source}).";
+
+            // Windows commonly emits PBT_APMRESUMEAUTOMATIC followed by
+            // PBT_APMRESUMESUSPEND for the same wake cycle. Treat both as one
+            // logical resume so the telemetry stack is rebuilt only once.
+            accepted = !_resumeValidationActive;
+            if (accepted)
+            {
+                _resumeValidationActive = true;
+                _recoveryRequested = true;
+                _recoveryReason = $"Resume detected ({source}).";
+                _degradedCompleteStreak = 0;
+                _degradedIncompleteStreak = 0;
+            }
         }
 
-        StateMachine.Transition(SystemState.Resuming, _recoveryReason);
+        if (!accepted)
+        {
+            Log($"Duplicate resume signal coalesced: {source}.");
+            return;
+        }
+
+        StateMachine.Transition(SystemState.Resuming, $"Resume detected ({source}).");
         Log($"Resume detected by {source}; telemetry revalidation requested.");
         Wake();
     }
@@ -130,25 +156,59 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 SnapshotAvailable?.Invoke(this, snapshot);
                 PublishDiagnostics();
 
-                if (!snapshot.IsComplete)
-                {
-                    StateMachine.Transition(
-                        SystemState.Degraded,
-                        "A telemetry snapshot was incomplete; HP firmware must remain authoritative.");
-                }
-                else if (StateMachine.State == SystemState.Degraded)
-                {
-                    RequestRecovery("Complete telemetry returned after a degraded sample; revalidating.");
-                }
+                HandleNormalSnapshotHealth(snapshot);
             }
             catch (Exception ex)
             {
+                _degradedCompleteStreak = 0;
+                _degradedIncompleteStreak = RecoveryAfterIncompleteSamples;
+
                 StateMachine.Transition(SystemState.Degraded, $"Telemetry exception: {ex.Message}");
                 Log($"Telemetry exception: {ex}");
                 RequestRecovery("Telemetry read threw an exception.");
             }
 
             await WaitOrWakeAsync(NormalIntervalMs, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private void HandleNormalSnapshotHealth(TelemetrySnapshot snapshot)
+    {
+        if (snapshot.IsComplete)
+        {
+            _degradedIncompleteStreak = 0;
+
+            if (StateMachine.State == SystemState.Degraded)
+            {
+                _degradedCompleteStreak++;
+                if (_degradedCompleteStreak >= HealthySamplesRequired)
+                {
+                    StateMachine.Transition(
+                        SystemState.Healthy,
+                        $"{HealthySamplesRequired} consecutive complete snapshots after a transient degradation.");
+                    Log("Telemetry recovered from a transient degradation without rebuilding the backends.");
+                    _degradedCompleteStreak = 0;
+                }
+            }
+            else
+            {
+                _degradedCompleteStreak = 0;
+            }
+
+            return;
+        }
+
+        _degradedCompleteStreak = 0;
+        _degradedIncompleteStreak++;
+
+        StateMachine.Transition(
+            SystemState.Degraded,
+            $"Incomplete telemetry snapshot ({_degradedIncompleteStreak}/{RecoveryAfterIncompleteSamples}).");
+
+        if (_degradedIncompleteStreak >= RecoveryAfterIncompleteSamples)
+        {
+            Log($"{_degradedIncompleteStreak} consecutive incomplete snapshots; full telemetry recovery requested.");
+            RequestRecovery("Repeated incomplete telemetry snapshots.");
         }
     }
 
@@ -173,7 +233,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         {
             EnsureReader();
 
-            // Prime RAPL and GetSystemTimes differential counters.
+            // Prime RAPL and GetSystemTimes differential counters. The priming
+            // sample is intentionally not considered for health.
             _ = _reader!.ReadSnapshot();
             await Task.Delay(NormalIntervalMs, cancellationToken).ConfigureAwait(false);
 
@@ -194,6 +255,14 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                     consecutiveComplete++;
                     if (consecutiveComplete >= HealthySamplesRequired)
                     {
+                        _degradedCompleteStreak = 0;
+                        _degradedIncompleteStreak = 0;
+
+                        lock (_commandGate)
+                        {
+                            _resumeValidationActive = false;
+                        }
+
                         StateMachine.Transition(
                             SystemState.Healthy,
                             $"{HealthySamplesRequired} consecutive complete telemetry snapshots.");
@@ -265,14 +334,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     private async Task WaitOrWakeAsync(int milliseconds, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _wake.WaitAsync(milliseconds, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
+        await _wake.WaitAsync(milliseconds, cancellationToken).ConfigureAwait(false);
     }
 
     private void PublishDiagnostics()
@@ -289,8 +351,13 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         DiagnosticsAvailable?.Invoke(this, string.Join(Environment.NewLine, lines));
     }
 
-    private void Log(string text) =>
-        EventLogged?.Invoke(this, $"{DateTime.Now:HH:mm:ss}  {text}");
+    private void Log(string text)
+    {
+        var sequence = Interlocked.Increment(ref _logSequence);
+        EventLogged?.Invoke(
+            this,
+            $"#{sequence:0000}  {DateTime.Now:HH:mm:ss.fff}  {text}");
+    }
 
     private void Wake()
     {
