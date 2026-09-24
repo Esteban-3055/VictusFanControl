@@ -34,6 +34,7 @@ public sealed class HpOmenBiosWmiClient
     private const string ReturnCodeFieldName = "rwReturnCode";
 
     private static readonly byte[] Signature = [0x53, 0x45, 0x43, 0x55];
+    private static readonly TimeSpan InvokeTimeout = TimeSpan.FromSeconds(5);
 
     public int Send(HpBiosRequest request) =>
         SendWithResponse(request).ReturnCode;
@@ -78,7 +79,12 @@ public sealed class HpOmenBiosWmiClient
 
         methodInput["InData"] = data;
 
-        using var methodOutput = target.InvokeMethod(methodName, methodInput, options: null)
+        using var invokeOptions = new InvokeMethodOptions
+        {
+            Timeout = InvokeTimeout
+        };
+
+        using var methodOutput = target.InvokeMethod(methodName, methodInput, invokeOptions)
             ?? throw new HpBiosCallException(
                 $"HP WMI method {methodName} returned no output.");
 

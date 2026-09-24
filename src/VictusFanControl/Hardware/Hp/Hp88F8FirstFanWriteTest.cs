@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
 using VictusFanControl.Safety;
@@ -19,6 +20,8 @@ public static class Hp88F8FirstFanWriteTest
     private const int RequiredConsecutiveRpmSamples = 2;
     private const double MinimumAcknowledgedRpm = 2500;
     private const double MaximumAcknowledgedRpm = 4000;
+    private const double MaximumSamplingGapSeconds = 3.0;
+    private const int OwnershipCheckIntervalSeconds = 3;
 
     // First hardware-write validation should be done under light load.
     private const double MaximumBaselineCpuTemperatureC = 80;
@@ -116,6 +119,9 @@ public static class Hp88F8FirstFanWriteTest
         var writeAttempted = false;
         var acknowledged = false;
         var consecutiveRpmSamples = 0;
+        long? controlStarted = null;
+        long? previousProgressTick = null;
+        var nextOwnershipCheckSecond = OwnershipCheckIntervalSeconds;
         Exception? testFailure = null;
         Exception? restoreFailure = null;
 
@@ -130,9 +136,14 @@ public static class Hp88F8FirstFanWriteTest
             // reports an error. Therefore every attempted write must be followed
             // by a firmware-restore attempt.
             writeAttempted = true;
+            controlStarted = Stopwatch.GetTimestamp();
+            previousProgressTick = controlStarted;
             bios.SetFanLevel(TestLevel, TestLevel);
 
+            EnsureControlWindow(controlStarted.Value);
             await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+            EnsureNoSchedulingGap(ref previousProgressTick, "post-write verification");
+            EnsureControlWindow(controlStarted.Value);
 
             var biosApplied = bios.GetFanLevels();
             Console.WriteLine(
@@ -148,10 +159,23 @@ public static class Hp88F8FirstFanWriteTest
 
             var ecApplied = new Hp88F8EcControlStateProbe(modulesDirectory).Read();
             Console.WriteLine($"EC applied: {ecApplied}");
+            EnsureControlWindow(controlStarted.Value);
 
             for (var second = 1; second <= TestDurationSeconds; second++)
             {
+                if (Stopwatch.GetElapsedTime(controlStarted.Value).TotalSeconds >= TestDurationSeconds)
+                {
+                    break;
+                }
+
                 await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                EnsureNoSchedulingGap(ref previousProgressTick, "fan-control sampling loop");
+
+                var elapsed = Stopwatch.GetElapsedTime(controlStarted.Value);
+                if (elapsed.TotalSeconds >= TestDurationSeconds)
+                {
+                    break;
+                }
 
                 var sample = reader.ReadSnapshot();
                 ConsoleTelemetryPrinter.Print(sample);
@@ -184,12 +208,30 @@ public static class Hp88F8FirstFanWriteTest
                     acknowledged = true;
                 }
 
-                if (second >= AcknowledgementDeadlineSeconds && !acknowledged)
+                if (elapsed.TotalSeconds >= AcknowledgementDeadlineSeconds && !acknowledged)
                 {
                     throw new InvalidOperationException(
                         $"Stable fan RPM acknowledgement not observed by {AcknowledgementDeadlineSeconds} s " +
                         $"(required {RequiredConsecutiveRpmSamples} consecutive samples with both fans " +
                         $"{MinimumAcknowledgedRpm:0}-{MaximumAcknowledgedRpm:0} RPM).");
+                }
+
+                if (elapsed.TotalSeconds >= nextOwnershipCheckSecond)
+                {
+                    var ownership = bios.GetFanLevels();
+                    Console.WriteLine(
+                        $"BIOS ownership check: CPU={ownership.CpuLevel} GPU={ownership.GpuLevel}");
+
+                    if (ownership.CpuLevel != TestLevel ||
+                        ownership.GpuLevel != TestLevel)
+                    {
+                        throw new InvalidOperationException(
+                            $"Fan-level ownership changed during the test: expected {TestLevel},{TestLevel}, " +
+                            $"read {ownership.CpuLevel},{ownership.GpuLevel}.");
+                    }
+
+                    nextOwnershipCheckSecond += OwnershipCheckIntervalSeconds;
+                    EnsureControlWindow(controlStarted.Value);
                 }
             }
         }
@@ -262,4 +304,36 @@ public static class Hp88F8FirstFanWriteTest
         Console.WriteLine("First fan-write test completed and HP firmware authority was restored.");
         return 0;
     }
+
+    private static void EnsureControlWindow(long started)
+    {
+        var elapsed = Stopwatch.GetElapsedTime(started);
+        if (elapsed.TotalSeconds > TestDurationSeconds)
+        {
+            throw new TimeoutException(
+                $"Custom fan-control window exceeded {TestDurationSeconds} seconds.");
+        }
+    }
+
+    private static void EnsureNoSchedulingGap(
+        ref long? previousTick,
+        string phase)
+    {
+        var now = Stopwatch.GetTimestamp();
+
+        if (previousTick.HasValue)
+        {
+            var gap = Stopwatch.GetElapsedTime(previousTick.Value, now);
+            if (gap.TotalSeconds > MaximumSamplingGapSeconds)
+            {
+                previousTick = now;
+                throw new TimeoutException(
+                    $"Unexpected {gap.TotalSeconds:0.0} s scheduling gap during {phase}; " +
+                    "possible suspend/resume or blocked execution.");
+            }
+        }
+
+        previousTick = now;
+    }
+
 }

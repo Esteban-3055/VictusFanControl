@@ -52,6 +52,8 @@ internal sealed class MainForm : Form
     private long _nextEventSequence = 1;
     private bool _allowExit;
     private bool _closeHintShown;
+    private bool _shutdownStarted;
+    private bool _shutdownComplete;
 
     private TelemetrySnapshot? _lastSnapshot;
 
@@ -93,13 +95,12 @@ internal sealed class MainForm : Form
         };
 
         FormClosing += OnFormClosingToTray;
-        FormClosed += async (_, _) =>
+        FormClosed += (_, _) =>
         {
             _uiTimer.Stop();
             _uiTimer.Dispose();
             _trayIcon.Visible = false;
             _trayIcon.Dispose();
-            await _worker.DisposeAsync();
         };
 
         Resize += (_, _) =>
@@ -581,25 +582,71 @@ internal sealed class MainForm : Form
         _trayIcon.Text = tooltip.Length <= 63 ? tooltip : tooltip[..63];
     }
 
-    private void OnFormClosingToTray(object? sender, FormClosingEventArgs e)
+    private async void OnFormClosingToTray(object? sender, FormClosingEventArgs e)
     {
-        if (_allowExit || e.CloseReason == CloseReason.WindowsShutDown)
+        if (!_allowExit && e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true;
+            HideToTray();
+
+            if (!_closeHintShown)
+            {
+                _closeHintShown = true;
+                _trayIcon.ShowBalloonTip(
+                    2500,
+                    "VictusFanControl is still running",
+                    "Use the tray icon to reopen it or choose Exit to stop it.",
+                    ToolTipIcon.Info);
+            }
+
+            return;
+        }
+
+        if (_shutdownComplete)
         {
             return;
         }
 
-        e.Cancel = true;
-        HideToTray();
-
-        if (!_closeHintShown)
+        // Windows shutdown cannot depend on an async-void continuation surviving
+        // after the form closes. Stop the worker synchronously while the window
+        // message is still being handled.
+        if (e.CloseReason == CloseReason.WindowsShutDown)
         {
-            _closeHintShown = true;
-            _trayIcon.ShowBalloonTip(
-                2500,
-                "VictusFanControl is still running",
-                "Use the tray icon to reopen it or choose Exit to stop it.",
-                ToolTipIcon.Info);
+            try
+            {
+                _worker.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write($"Worker shutdown during Windows shutdown failed: {ex}");
+            }
+
+            _shutdownComplete = true;
+            return;
         }
+
+        e.Cancel = true;
+        if (_shutdownStarted)
+        {
+            return;
+        }
+
+        _shutdownStarted = true;
+        Enabled = false;
+        HideToTray();
+        AppLog.Write("Explicit application shutdown started.");
+
+        try
+        {
+            await _worker.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"Worker shutdown failed: {ex}");
+        }
+
+        _shutdownComplete = true;
+        Close();
     }
 
     private void HideToTray()
