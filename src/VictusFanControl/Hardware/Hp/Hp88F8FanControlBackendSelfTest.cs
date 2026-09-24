@@ -23,6 +23,7 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestGpuTachFailureAsync(output);
         failures += await TestOwnershipLossAsync(output);
         failures += await TestStatusDetectsOwnershipLossAsync(output);
+        failures += await TestStoppedFansCanSpinUpWithinAckWindowAsync(output);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -294,6 +295,44 @@ public static class Hp88F8FanControlBackendSelfTest
             status.CustomModeActive &&
             !status.OwnershipValid &&
             status.Detail.Contains("OWNERSHIP-MISMATCH", StringComparison.Ordinal));
+    }
+
+
+    private static async Task<int> TestStoppedFansCanSpinUpWithinAckWindowAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware
+        {
+            State = FakeHardware.AutoState with
+            {
+                CpuRpm = 0,
+                GpuRpm = 0
+            }
+        };
+
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        var passed = true;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "spin-up-from-zero"),
+                CancellationToken.None);
+        }
+        catch
+        {
+            passed = false;
+        }
+
+        var state = hardware.State;
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "zero RPM is treated as bounded spin-up transient, not immediate tach failure",
+            passed &&
+            state.CpuRpm > 0 &&
+            state.GpuRpm > 0);
     }
 
     private static Hp88F8FanControlBackend NewBackend(FakeHardware hardware) =>

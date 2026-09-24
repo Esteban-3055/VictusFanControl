@@ -423,22 +423,34 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                     $"{last.CpuSetpoint}/{last.GpuSetpoint}.");
             }
 
-            ValidateTachometer(last.CpuRpm, "CPU");
-            ValidateTachometer(last.GpuRpm, "GPU");
+            ValidateTachometerRange(last.CpuRpm, "CPU");
+            ValidateTachometerRange(last.GpuRpm, "GPU");
 
-            cpuAcknowledged |= HasTachometerResponded(
-                cpuExpectation,
-                baseline.CpuRpm,
-                last.CpuRpm,
-                Hp88F8TargetProfile.CpuObservedMaximumRpm);
+            var cpuCurrentlyRunning = last.CpuRpm > 0;
+            var gpuCurrentlyRunning = last.GpuRpm > 0;
 
-            gpuAcknowledged |= HasTachometerResponded(
-                gpuExpectation,
-                baseline.GpuRpm,
-                last.GpuRpm,
-                Hp88F8TargetProfile.GpuObservedMaximumRpm);
+            cpuAcknowledged |= cpuCurrentlyRunning &&
+                HasTachometerResponded(
+                    cpuExpectation,
+                    baseline.CpuRpm,
+                    last.CpuRpm,
+                    Hp88F8TargetProfile.CpuObservedMaximumRpm);
 
-            if (cpuAcknowledged && gpuAcknowledged)
+            gpuAcknowledged |= gpuCurrentlyRunning &&
+                HasTachometerResponded(
+                    gpuExpectation,
+                    baseline.GpuRpm,
+                    last.GpuRpm,
+                    Hp88F8TargetProfile.GpuObservedMaximumRpm);
+
+            // Zero RPM can be a legitimate transient immediately after commanding
+            // a stopped fan to start. Do not fail instantly; let the bounded ack
+            // window observe spin-up. Once acknowledgement has occurred, however,
+            // both current confirmation samples must still show both fans running.
+            if (cpuAcknowledged &&
+                gpuAcknowledged &&
+                cpuCurrentlyRunning &&
+                gpuCurrentlyRunning)
             {
                 confirmationSamples++;
                 if (confirmationSamples >= RequiredTachConfirmationSamples)
@@ -519,12 +531,12 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         }
     }
 
-    private static void ValidateTachometer(ushort rpm, string fanName)
+    private static void ValidateTachometerRange(ushort rpm, string fanName)
     {
-        if (rpm == 0 || rpm > 10_000)
+        if (rpm > 10_000)
         {
             throw new InvalidDataException(
-                $"{fanName} tachometer is not acknowledging a running fan command: {rpm} RPM.");
+                $"{fanName} tachometer is implausible during command acknowledgement: {rpm} RPM.");
         }
     }
 

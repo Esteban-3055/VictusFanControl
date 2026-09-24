@@ -60,6 +60,8 @@ A command is accepted only when:
 
 Direction is derived from the requested level versus HP BIOS current fan level. Material increases/decreases require measurable RPM movement. Near-current commands require valid tachometer continuity. A fan already within 100 RPM of its measured physical ceiling is not required to accelerate further.
 
+A transient 0 RPM sample is allowed inside the bounded acknowledgement window so a stopped fan has time to spin up; it is never accepted as acknowledgement. Final acknowledgement still requires two consecutive samples with both tachometers non-zero and plausible.
+
 If another controller overwrites the EC setpoint, the backend reports ownership loss instead of repeatedly fighting it. The coordinator then hands control back to HP firmware.
 
 ## Current gate
