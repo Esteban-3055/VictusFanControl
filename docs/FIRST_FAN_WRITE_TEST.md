@@ -9,14 +9,14 @@ It is deliberately **not** a configurable fan controller.
 - fan level: CPU 30 / GPU 30
 - maximum custom duration: 15 seconds
 - telemetry interval: approximately 1 second
-- strict light-load preflight: CPU <= 80 C / 50 W, GPU <= 75 C / 70 W
-- WMI GetFanLevel must read back exactly 30 / 30 after the write
+- strict light-load preflight **and continuous envelope**: CPU <= 80 C / 50 W, GPU <= 75 C / 70 W
+- WMI GetFanLevel must read back exactly 30 / 30 after the write and again periodically while the test is active\n- EC 0x34/0x35 must acknowledge the requested 30/30 setpoints
 - RPM acknowledgement deadline: 8 seconds
 - acknowledgement criterion: two consecutive samples with both tachometers between 2500 and 4000 RPM
 - CPU thermal handoff: 95 C
 - GPU thermal handoff: 87 C
 - any incomplete/stale/implausible telemetry aborts the test
-- HP `FanMode=LegacyDefault` is requested in a `finally` block after **any attempted** fan-level write
+- a >3 second sampling/scheduling gap is treated as possible suspend/blocking and aborts to restore\n- HP `FanMode=LegacyDefault` is requested in a `finally` block after **any attempted** fan-level write
 
 The distinction between "attempted" and "successful" is important: OmenMon documents that on some HP systems a fan-level command may take effect even when the BIOS reports an error. Therefore VictusFanControl never assumes a thrown write was harmless.
 
@@ -53,3 +53,10 @@ After pulling the latest branch:
 Do not run a game or stress test during this first validation.
 
 Do not terminate the process through Task Manager during this first validation. Ctrl+C is handled and still executes the `finally` restore path. Forced-process termination is a separate failure-mode test to perform only after firmware/watchdog recovery behavior is characterized.
+
+
+## Known competing controllers
+
+The first write test refuses to start while OmenMon or the VictusFanControl GUI is running, to avoid unnecessary concurrent EC/fan-controller activity. OMEN Gaming Hub is intentionally **not** blocked because the target workflow keeps it open for CPU undervolt validation; actual fan ownership is checked by repeated BIOS fan-level readback.
+
+The direct CLI test also requires the explicit acknowledgement token `88F8-FAN30`. The wrapper supplies it only after the user types `FAN30`.

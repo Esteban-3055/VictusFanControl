@@ -6,7 +6,7 @@ Fan control must not be enabled until telemetry failures are observable, bounded
 
 1. A sensor failure is never converted silently into a plausible numeric value.
 2. Low-level transient reads use bounded retries.
-3. CPU/GPU fan tachometers are acquired as one mutex-scoped EC snapshot.
+3. CPU/GPU fan tachometers are acquired as one mutex-scoped EC snapshot. Each 16-bit tachometer is read twice and a large disagreement is rejected to detect torn low/high-byte reads.
 4. Persistent PawnIO/NVML failures trigger backend reinitialization.
 5. All values receive basic plausibility validation.
 6. A complete telemetry snapshot is required before the future controller may consume it.
@@ -17,7 +17,7 @@ Fan control must not be enabled until telemetry failures are observable, bounded
 
 - Intel MSR: 3 bounded I/O attempts.
 - ACPI EC: 5 attempts for the complete fan-tachometer snapshot while holding `Global\Access_EC`.
-- NVIDIA NVML: 3 attempts per metric; if reads remain invalid, NVML is reinitialized once and retried.
+- NVIDIA NVML: 3 attempts per metric; if reads remain invalid, NVML is reinitialized once and retried. Multi-GPU enumeration prefers the validated RTX 3060 device name rather than blindly trusting index 0.
 - HardwareTelemetryReader: if a backend still throws, its client is reconstructed and the read is attempted again.
 - Windows CPU load: native `GetSystemTimes` failures are surfaced as errors.
 

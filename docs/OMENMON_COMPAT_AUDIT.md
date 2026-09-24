@@ -60,7 +60,7 @@ This is intentionally stricter than OmenMon.
 
 The first hardware-write test now requires:
 
-- HP 88F8 board identity
+- exact validated target fingerprint (88F8 / board 88.58 / Victus 16-d0xxx / SKU prefix 62C37LA / expected RTX 3060)
 - complete/fresh/plausible telemetry
 - light-load baseline
 - fixed level 30,30 only
@@ -84,3 +84,15 @@ VictusFanControl does not currently:
 - continuously rewrite the fan mode every program tick.
 
 These omissions are intentional for the HP 88F8 path and reduce interaction with OMEN Gaming Hub and CPU undervolt settings.
+
+
+## EC robustness lessons incorporated
+
+The compatibility review also covered OmenMon-Reborn's later EC reliability fixes. VictusFanControl now independently applies the relevant safety principles:
+
+- avoid prolonged pure-spin polling when the ACPI EC is busy;
+- serialize app-level EC access with `Global\Access_EC`;
+- reject incoherent 16-bit tachometer reads rather than trusting a torn low/high-byte pair;
+- treat EC failures as missing telemetry, never as a plausible stale numeric value.
+
+These changes affect the telemetry implementation, so the earlier 30-minute soak is no longer sufficient evidence for the current HEAD. A new read-only soak is required before the first write test.

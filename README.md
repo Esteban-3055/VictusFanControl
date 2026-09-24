@@ -1,27 +1,29 @@
 # VictusFanControl
 
-Experimental adaptive fan-control project for HP Victus laptops, starting with HP board **88F8**.
+Experimental adaptive fan-control project for HP Victus laptops, starting with the validated HP **88F8** development target.
 
-> **Current development status: v0.2 read-only telemetry.** There is still no fan-control write path.
+> **Current development status: v0.3 pre-control validation.** The normal GUI/controller path is still read-only and HP firmware remains authoritative. The repository now contains explicit, separately invoked BIOS/WMI validation commands for restoring HP Auto and for a tightly bounded first fan-write test.
 
 ## Development target
 
+The write-validation allowlist is intentionally narrower than Product ID alone:
+
 - HP Victus 16-d0515la family
+- system product: `Victus by HP Laptop 16-d0xxx`
+- SKU prefix: `62C37LA`
+- HP motherboard Product ID `88F8`, board version `88.58`
 - Intel Core i7-11800H
 - NVIDIA GeForce RTX 3060 Laptop GPU
-- HP motherboard Product ID `88F8`, board version `88.58`
 - normal reference configuration: external monitor connected, RTX 3060 intentionally active
 
 No unique serial numbers are stored in this repository.
 
 ## Telemetry architecture
 
-LibreHardwareMonitor is being removed as a runtime dependency.
-
 ```text
 PawnIO + official signed modules
 ├─ Intel MSR -> CPU package temperature + RAPL package power
-└─ ACPI EC  -> CPU/GPU fan RPM
+└─ ACPI EC  -> CPU/GPU fan RPM and read-only 88F8 diagnostics
 
 NVIDIA NVML
 └─ GPU temperature + GPU power + GPU utilization
@@ -30,17 +32,19 @@ Windows API
 └─ total CPU utilization
 ```
 
-VictusFanControl talks to the installed PawnIO driver **directly through DeviceIoControl**. It does not link against `PawnIOLib.dll`.
+VictusFanControl talks to the installed PawnIO driver directly through `DeviceIoControl`. It does not link against `PawnIOLib.dll`.
 
-See [docs/TELEMETRY_BACKENDS.md](docs/TELEMETRY_BACKENDS.md).
+The EC reader uses bounded retry/backoff, the shared `Global\Access_EC` mutex and coherent repeated reads for the two-byte tachometers.
 
-## Known 88F8 fan observations
+## Known target fan observations
 
-| Requested level | CPU fan | GPU fan | Notes |
+| Requested WMI fan level | CPU fan | GPU fan | Notes |
 |---:|---:|---:|---|
 | 14 | ~1,400 RPM | ~1,400 RPM | Stable low-speed point |
 | 30 | ~3,000 RPM | ~3,000 RPM | Tracks target closely |
 | 50 | ~4,330 RPM | ~4,670 RPM | Physical fan ceilings differ |
+
+These values are specific to the validated machine. An `88F8` Product ID by itself is not treated as sufficient authorization for writes.
 
 The future normal controller will expose one shared physical RPM target for both fans, while retaining independent tachometer feedback and safety overrides.
 
@@ -52,7 +56,7 @@ The future normal controller will expose one shared physical RPM target for both
 - PawnIO 2.2+ installed
 - NVIDIA display driver with NVML
 
-## Development branch setup
+## Development setup
 
 Install the pinned official signed PawnIO modules:
 
@@ -60,45 +64,36 @@ Install the pinned official signed PawnIO modules:
 .\scripts\setup-pawnio-modules.ps1
 ```
 
-Probe all telemetry backends:
+Probe the telemetry backends:
 
 ```powershell
 .\scripts\probe-backends.ps1
 ```
 
-The previous command `list-sensors.ps1` remains as a compatibility entry point during the transition.
-
-## Baseline capture
-
-Once the backend probe reports all required backends ready:
+Run the tray GUI:
 
 ```powershell
-.\scripts\run-baseline.ps1 -Scenario idle -Minutes 15
+.\scripts\run-gui.ps1
 ```
 
-CSV output includes CPU/GPU temperature, power, utilization and both fan tachometers.
+The GUI remains read-only. Closing or minimizing it hides it to the tray; choose **Exit** to stop it.
 
-## Safety
+## Validation before fan control
 
-This branch remains read-only. ACPI EC register reads use the standard READ transaction, which writes only the read command/register address to the EC command/data ports; no fan set-point register value is written.
+The first write-capable commands are intentionally not integrated into the GUI/controller. They exist only as explicit validation tools.
 
-Actual fan control remains blocked on the safety-supervisor milestone in [docs/SAFETY.md](docs/SAFETY.md).
+Before the bounded `30,30` test is considered eligible, the latest telemetry/EC implementation must pass a new soak and suspend/resume regression on the target hardware.
+
+See:
+
+- `docs/PRE_CONTROL_CHECKLIST.md`
+- `docs/TELEMETRY_ROBUSTNESS.md`
+- `docs/POWER_LIFECYCLE_GUI.md`
+- `docs/OMENMON_COMPAT_AUDIT.md`
+- `docs/FIRST_FAN_WRITE_TEST.md`
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
 Third-party components and their licenses are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-
-## Read-only desktop GUI
-
-A Windows tray application is being developed on the stacked GUI/power-lifecycle branch. It adds suspend/resume detection, telemetry revalidation, runtime health states and a notification-area interface while keeping HP firmware fully authoritative.
-
-Run it from an elevated PowerShell:
-
-```powershell
-.\scripts\run-gui.ps1
-```
-
-Closing or minimizing the window hides it to the tray; choose **Exit** from the tray menu to stop the application. See [docs/POWER_LIFECYCLE_GUI.md](docs/POWER_LIFECYCLE_GUI.md).

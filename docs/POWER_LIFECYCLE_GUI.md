@@ -1,6 +1,6 @@
 # Windows power lifecycle and tray application
 
-This milestone remains **read-only**. It adds runtime lifecycle handling before any fan-control write path exists.
+The GUI/controller milestone remains **read-only**. Explicit CLI-only write-validation tools exist separately and are not invoked by the GUI.
 
 ## Suspend/resume detection
 
@@ -11,7 +11,7 @@ The WinForms application receives Windows `WM_POWERBROADCAST` messages:
 - `PBT_APMRESUMESUSPEND`
 - `PBT_APMRESUMECRITICAL`
 
-A second detector watches the telemetry scheduling interval. A gap greater than 10 seconds is treated as a possible missed resume event and forces telemetry recovery/revalidation.
+A second detector watches the telemetry scheduling interval. A gap greater than 10 seconds is treated as a possible missed resume event and forces telemetry recovery/revalidation. Duplicate Windows resume notifications are coalesced with a 10-second debounce while a real newly observed suspend always starts a new power cycle.
 
 ## Runtime states
 
@@ -31,8 +31,8 @@ After resume, the application does not immediately declare telemetry healthy. It
 1. waits briefly for Windows/drivers to settle;
 2. reconstructs the telemetry reader/backends;
 3. primes differential CPU power/load counters;
-4. requires three consecutive complete snapshots;
-5. only then transitions to `Healthy`.
+4. requires five consecutive complete snapshots after a resume (three for ordinary non-resume recovery);
+5. tags work with a power-cycle epoch so stale reads/recoveries from a previous suspend/resume cycle are discarded;\n6. only then transitions to `Healthy`.
 
 When actual fan control is implemented, only `Healthy` will be eligible for custom control. Every other state will require HP firmware authority.
 

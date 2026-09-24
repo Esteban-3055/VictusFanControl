@@ -2,93 +2,64 @@
 
 ## Current version
 
-The current development branch is telemetry/GUI-only. It contains no fan write path.
+The v0.3 normal GUI/controller path is still read-only and uses `DisabledFanControlBackend`. HP firmware owns both fans during ordinary application use.
+
+The repository also contains two **explicit validation-only** BIOS/WMI operations:
+
+- `FanMode=LegacyDefault` restore test;
+- a fixed `FanLevel=30,30` first-write harness with a short bounded control window.
+
+These commands are not exposed through the normal GUI or adaptive controller.
 
 ## Implemented pre-control protections
 
-The project now has a central read-only safety gate that evaluates:
+The project has a central safety gate that evaluates:
 
-- HP motherboard allowlist (initial target: `88F8`)
-- runtime state must be `Healthy`
-- every required telemetry field must be present
-- telemetry must be fresh (maximum age currently 3 seconds)
-- sensor values must pass plausibility checks
-- conservative thermal handoff thresholds
-- write/restore backend presence
+- exact validated target fingerprint, not Product ID alone;
+- runtime state must be `Healthy`;
+- every required telemetry field must be present;
+- telemetry must be fresh;
+- the NVML device identity must match the validated RTX 3060 target;
+- sensor values must pass plausibility checks;
+- conservative thermal handoff thresholds;
+- explicit presence of a reviewed write/restore path before custom authority can be granted.
 
-The final item is intentionally hard-coded absent in the current build, so custom control is impossible even when every read-only prerequisite passes.
+Additional protections include:
 
-A separate telemetry watchdog transitions the runtime out of `Healthy` if no read completes for 4 seconds.
+- independent telemetry freshness watchdog;
+- suspend/resume epoch invalidation so reads from an old power cycle are discarded;
+- duplicate resume-event coalescing;
+- bounded EC retries with graduated backoff;
+- coherent repeated reads for 16-bit fan tachometers;
+- board/profile hard command range 14-50;
+- central authority coordinator;
+- forced firmware-restore attempt after uncertain/partial custom-entry failures;
+- exact WMI and EC acknowledgement in the bounded first-write harness;
+- continuous light-load envelope and periodic ownership checks during that harness.
 
-## Required invariants before any control release
+## Required invariants before normal custom control
 
-A future control-capable build must satisfy all of the following before fan writes can be enabled by default.
+1. Control is enabled only on a validated profile.
+2. Commands remain inside board-specific hard limits.
+3. Missing, stale, implausible or wrong-device telemetry immediately removes custom-control permission.
+4. High temperature overrides acoustic policy and hands authority to the validated safety path.
+5. Both tachometers must acknowledge commands within bounded time.
+6. Failures, exit and suspend must restore firmware authority when execution is still available.
+7. Crash/forced-termination safety must be provided by independently validated firmware watchdog/countdown behavior; a process `finally` block is not sufficient.
+8. Fan-up is fast; fan-down is slow/hysteretic.
+9. No arbitrary direct EC writes are allowed in the normal controller.
+10. A second active fan controller is not allowed unless coexistence is explicitly validated.
+11. Any unknown state fails closed.
 
-1. **Board allowlist**
-   - Control is disabled unless the detected HP Product ID has a validated profile.
-   - Initial control target: `88F8` only.
+## Current blockers
 
-2. **Hard command limits**
-   - For the tested 88F8 profile, experimental level requests are clamped to a validated range.
-   - Current measured range candidate: 14 through 50.
-   - The limits must remain configurable per board, never globally assumed.
+Before integrating the real HP backend into `IFanControlBackend` or enabling a curve in the GUI:
 
-3. **Sensor plausibility / freshness**
-   - Invalid, missing or stale temperatures cause immediate control abort.
-   - Missing CPU telemetry is always fatal to custom control.
-   - No old sensor value may be silently reused as if it were current.
-   - A blocked telemetry loop must be detected independently of the sampling loop.
+- repeat the telemetry soak because the EC read/backoff/coherence implementation changed;
+- repeat suspend/resume tests because the lifecycle epoch logic changed;
+- validate our independent LegacyDefault call on the target;
+- validate the bounded `30,30` test and OMEN Gaming Hub undervolt coexistence;
+- characterize the 88F8 countdown/watchdog, including forced process termination;
+- validate RPM-response thresholds and thermal emergency behavior under load.
 
-4. **Thermal override**
-   - High temperature overrides acoustic targets.
-   - Critical temperature must transition to firmware authority / validated maximum cooling, not continue the adaptive policy.
-   - Current GUI thresholds are conservative pre-control placeholders and must be validated under load before release.
-
-5. **RPM feedback**
-   - After a fan command, measured RPM must move toward an expected range within a bounded time.
-   - Both tachometers remain independently authoritative.
-   - Repeated non-response causes custom control to abort.
-
-6. **Watchdog / firmware recovery**
-   - The system must not depend on an infinite stream of custom commands to remain safe.
-   - On crash, telemetry failure, unhandled exception or explicit exit, HP firmware control must be restored or allowed to recover automatically.
-
-7. **Fast up, slow down**
-   - Fan-up reacts quickly to rising thermal input.
-   - Fan-down requires hysteresis and a stable low-load interval.
-
-8. **No blind EC writes**
-   - Direct EC writes are forbidden until the exact 88F8 behavior is independently validated.
-   - Prefer a known working HP BIOS/WMI fan-level interface when possible.
-
-9. **Single controller ownership**
-   - Do not run HP Gaming Hub fan control and a custom write-capable controller simultaneously unless coexistence is explicitly tested.
-   - The current GUI is single-instance; external-controller conflict detection remains a blocker for write mode.
-
-10. **Fail closed**
-    - Any unknown state means custom control stops and firmware control wins.
-
-## Proposed write-capable safety state machine
-
-```text
-FIRMWARE_AUTO
-     |
-     v
-VALIDATING ----failure----> FIRMWARE_AUTO
-     |
-   success
-     v
-ACTIVE_CUSTOM
- |       |
- |       +-- telemetry invalid/stale ---+
- |       +-- RPM mismatch --------------+--> FIRMWARE_AUTO
- |       +-- overtemperature -----------+
- |       +-- unexpected exception ------+
- |
- explicit stop / suspend / exit
-     |
-     v
-FIRMWARE_AUTO
-```
-
-See `PRE_CONTROL_CHECKLIST.md` for the remaining blockers.
+See `PRE_CONTROL_CHECKLIST.md`.

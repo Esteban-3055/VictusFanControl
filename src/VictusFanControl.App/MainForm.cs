@@ -751,7 +751,7 @@ internal sealed class MainForm : Form
     {
         Text = "—",
         AutoSize = true,
-        Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 14, FontStyle.Bold)
+        Font = new Font(FontFamily.GenericSansSerif, 14, FontStyle.Bold)
     };
 
     private static string Format(double? value, string suffix, int decimals = 1) =>

@@ -22,7 +22,7 @@ VictusFanControl must complete this checklist before the first fan-control write
 - [x] GUI requires elevation so PawnIO access cannot silently run unprivileged.
 - [x] Synthetic fail-closed SafetyGate self-test runs in CI.
 - [x] Read-only OMEN/Gaming Hub process discovery for target-machine conflict mapping.
-- [x] Fan write path remains physically absent / hard-disabled.
+- [x] Normal GUI/controller fan-write path remains hard-disabled; explicit validation-only WMI commands are isolated from it.
 - [x] Narrow IFanControlBackend boundary prevents arbitrary controller-side EC writes.
 - [x] FanControlCoordinator owns authority transitions and fail-safe restoration.
 - [x] Validated 88F8 command range 14-50 is enforced before a backend receives a command.
@@ -47,10 +47,10 @@ Therefore the project does **not** need to rediscover how to enter/leave fan con
 - [ ] Repeat telemetry health tests under CPU load, GPU load and gaming.
 - [ ] Validate external-controller ownership/conflict behavior with HP OMEN Gaming Hub while keeping the user's CPU undervolt active.
 - [ ] During the first fan-write test, verify that the OMEN Gaming Hub undervolt remains unchanged before, during and after custom fan control and after restoring HP firmware authority.
-- [ ] Independently implement the HP BIOS/WMI fan backend equivalent to the previously validated OmenMon `FanLevel` operation and `FanMode=LegacyDefault` restore path, behind `IFanControlBackend`.
+- [x] Independently implement and contract-test the HP BIOS/WMI `FanLevel`, `GetFanLevel` and `FanMode=LegacyDefault` operations. Production `IFanControlBackend` integration remains intentionally disabled.
 - [ ] Revalidate `LegacyDefault` restoration in our own backend, then validate HP firmware-auto restoration after normal exit, exception and forced process termination.
 - [ ] Validate the 88F8 watchdog/countdown behavior and recovery semantics.
-- [ ] Implement fan-command acknowledgement using both tachometers.
+- [~] Bounded first-write harness now checks exact BIOS readback, EC setpoints and both tachometers; production-controller acknowledgement still remains to be integrated.
 - [ ] Define bounded RPM-response timeout and mismatch thresholds from hardware measurements.
 - [ ] Validate thermal emergency thresholds under load.
 - [ ] Keep all write-capable code disabled unless board, telemetry, freshness and runtime gates pass.
@@ -58,6 +58,20 @@ Therefore the project does **not** need to rediscover how to enter/leave fan con
 
 ## Current authority
 
-The current v0.3 development GUI is still read-only. **HP firmware owns both fans at all times.**
+The current v0.3 development GUI is still read-only. **HP firmware owns both fans during normal application use.** Explicit CLI validation commands exist, but are not wired into the GUI/adaptive controller.
 
 The GUI may display that the current preconditions are ready, but the central safety gate still reports the fan write/restore backend as absent, so custom fan control cannot be enabled.
+
+
+## Latest deep-audit hardening
+
+- [x] Exact target fingerprint added: HP 88F8 / 88.58, Victus 16-d0xxx, SKU prefix 62C37LA and expected RTX 3060 identity.
+- [x] Coordinator now obeys `CustomControlPermitted` rather than only read-only preconditions.
+- [x] Partial custom-entry failure forces a firmware-restore attempt.
+- [x] Central hard 14-50 limits are independent of backend-advertised capabilities.
+- [x] EC wait loop uses bounded spin/yield/sleep backoff rather than prolonged pure spinning.
+- [x] 16-bit tachometers receive coherence validation against torn reads.
+- [x] Power-cycle epochs discard reads/recoveries that belong to an obsolete suspend/resume cycle.
+- [x] First-write WMI provider/session setup occurs before the write and WMI method execution is bounded.
+- [x] First-write harness rejects known concurrent OmenMon/VictusFanControl GUI controllers while allowing OMEN Gaming Hub for undervolt validation.
+- [ ] Re-run read-only hardware soak and suspend/resume regression after these changes.
