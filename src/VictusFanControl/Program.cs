@@ -35,7 +35,7 @@ internal static class Program
 
         if (options.ProbeBackends)
         {
-            foreach (var line in reader.GetDiagnostics())
+            foreach (var line in reader.GetBackendDiagnostics())
             {
                 Console.WriteLine(line);
             }
@@ -46,14 +46,21 @@ internal static class Program
             await Task.Delay(1000);
 
             Console.WriteLine("One live sample:");
-            ConsoleTelemetryPrinter.Print(reader.ReadSnapshot());
+            var sample = reader.ReadSnapshot();
+            ConsoleTelemetryPrinter.Print(sample);
+
+            foreach (var line in reader.GetReadDiagnostics())
+            {
+                Console.WriteLine(line);
+            }
+
             return reader.IsReadyForBaseline ? 0 : 3;
         }
 
-        if (!reader.IsReadyForBaseline)
+        if (!reader.BackendsInitialized)
         {
-            Console.Error.WriteLine("Required telemetry backends are not ready.");
-            foreach (var line in reader.GetDiagnostics())
+            Console.Error.WriteLine("Required telemetry backends are not initialized.");
+            foreach (var line in reader.GetBackendDiagnostics())
             {
                 Console.Error.WriteLine(line);
             }
