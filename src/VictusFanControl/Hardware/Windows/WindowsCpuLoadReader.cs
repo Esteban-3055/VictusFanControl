@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace VictusFanControl.Hardware.Windows;
@@ -12,7 +13,7 @@ internal sealed class WindowsCpuLoadReader
     {
         if (!GetSystemTimes(out var idleTime, out var kernelTime, out var userTime))
         {
-            return null;
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "GetSystemTimes failed.");
         }
 
         var idle = idleTime.ToUInt64();
@@ -27,9 +28,9 @@ internal sealed class WindowsCpuLoadReader
             return null;
         }
 
-        var idleDelta = idle - _lastIdle.Value;
-        var kernelDelta = kernel - _lastKernel.Value;
-        var userDelta = user - _lastUser.Value;
+        var idleDelta = unchecked(idle - _lastIdle.Value);
+        var kernelDelta = unchecked(kernel - _lastKernel.Value);
+        var userDelta = unchecked(user - _lastUser.Value);
         var totalDelta = kernelDelta + userDelta;
 
         _lastIdle = idle;
@@ -42,7 +43,14 @@ internal sealed class WindowsCpuLoadReader
         }
 
         var busyDelta = totalDelta >= idleDelta ? totalDelta - idleDelta : 0;
-        return Math.Clamp((busyDelta * 100.0) / totalDelta, 0.0, 100.0);
+        var load = (busyDelta * 100.0) / totalDelta;
+
+        if (!double.IsFinite(load) || load is < 0 or > 100)
+        {
+            throw new InvalidDataException($"Windows CPU load is implausible: {load:0.###}%.");
+        }
+
+        return load;
     }
 
     [StructLayout(LayoutKind.Sequential)]

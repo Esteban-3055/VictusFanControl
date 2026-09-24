@@ -9,6 +9,9 @@ internal sealed class IntelMsrReader : IDisposable
     private const uint MsrRaplPowerUnit = 0x606;
     private const uint MsrPkgEnergyStatus = 0x611;
 
+    private const int MsrReadAttempts = 3;
+    private const int RetryDelayMs = 1;
+
     private readonly PawnIoModuleSession _session;
     private readonly double _energyUnitJoules;
 
@@ -22,6 +25,11 @@ internal sealed class IntelMsrReader : IDisposable
         var raplUnits = ReadMsr(MsrRaplPowerUnit);
         var energyUnitExponent = (int)((raplUnits >> 8) & 0x1F);
         _energyUnitJoules = Math.Pow(0.5, energyUnitExponent);
+
+        if (!double.IsFinite(_energyUnitJoules) || _energyUnitJoules <= 0)
+        {
+            throw new InvalidDataException("Invalid Intel RAPL energy unit.");
+        }
     }
 
     public Version PawnIoVersion => _session.DriverVersion;
@@ -32,19 +40,32 @@ internal sealed class IntelMsrReader : IDisposable
         var tjMax = (double)((target >> 16) & 0xFF);
         if (tjMax is < 70 or > 125)
         {
-            return null;
+            throw new InvalidDataException($"Intel TjMax is implausible: {tjMax:0} C.");
         }
 
-        var status = ReadMsr(MsrIa32PackageThermStatus);
-        var valid = (status & (1UL << 31)) != 0;
-        if (!valid)
+        for (var attempt = 1; attempt <= MsrReadAttempts; attempt++)
         {
-            return null;
+            var status = ReadMsr(MsrIa32PackageThermStatus);
+            var valid = (status & (1UL << 31)) != 0;
+            if (valid)
+            {
+                var distanceToTjMax = (double)((status >> 16) & 0x7F);
+                var temperature = tjMax - distanceToTjMax;
+                if (temperature is >= 0 and <= 125)
+                {
+                    return temperature;
+                }
+
+                throw new InvalidDataException($"Intel package temperature is implausible: {temperature:0.0} C.");
+            }
+
+            if (attempt < MsrReadAttempts)
+            {
+                Thread.Sleep(RetryDelayMs);
+            }
         }
 
-        var distanceToTjMax = (double)((status >> 16) & 0x7F);
-        var temperature = tjMax - distanceToTjMax;
-        return temperature is >= -20 and <= 125 ? temperature : null;
+        throw new InvalidDataException("Intel package thermal-status valid bit remained clear.");
     }
 
     public double? ReadPackagePowerW()
@@ -67,22 +88,49 @@ internal sealed class IntelMsrReader : IDisposable
 
         if (elapsedSeconds <= 0)
         {
-            return null;
+            throw new InvalidDataException("Intel RAPL sample interval was not positive.");
         }
 
         var watts = (deltaRaw * _energyUnitJoules) / elapsedSeconds;
-        return double.IsFinite(watts) && watts is >= 0 and < 500 ? watts : null;
+        if (!double.IsFinite(watts) || watts is < 0 or >= 500)
+        {
+            throw new InvalidDataException($"Intel package power is implausible: {watts:0.###} W.");
+        }
+
+        return watts;
     }
 
     public ulong ReadMsr(uint msr)
     {
-        var values = _session.Execute("ioctl_read_msr", new ulong[] { msr }, 1);
-        if (values.Length != 1)
+        Exception? lastError = null;
+
+        for (var attempt = 1; attempt <= MsrReadAttempts; attempt++)
         {
-            throw new InvalidDataException($"IntelMSR returned {values.Length} cells for MSR 0x{msr:X}.");
+            try
+            {
+                var values = _session.Execute("ioctl_read_msr", new ulong[] { msr }, 1);
+                if (values.Length == 1)
+                {
+                    return values[0];
+                }
+
+                lastError = new InvalidDataException(
+                    $"IntelMSR returned {values.Length} cells for MSR 0x{msr:X}.");
+            }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or System.ComponentModel.Win32Exception)
+            {
+                lastError = ex;
+            }
+
+            if (attempt < MsrReadAttempts)
+            {
+                Thread.Sleep(RetryDelayMs);
+            }
         }
 
-        return values[0];
+        throw new IOException(
+            $"Intel MSR 0x{msr:X} failed after {MsrReadAttempts} attempts: {lastError?.Message}",
+            lastError);
     }
 
     public void Dispose() => _session.Dispose();

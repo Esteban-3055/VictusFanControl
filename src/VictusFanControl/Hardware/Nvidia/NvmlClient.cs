@@ -7,13 +7,20 @@ internal sealed class NvmlClient : IDisposable
 {
     private const int NvmlSuccess = 0;
     private const uint NvmlTemperatureGpu = 0;
+    private const int ReadAttempts = 3;
+    private const int RetryDelayMs = 2;
 
     private readonly IntPtr _library;
     private readonly NvmlShutdownDelegate? _shutdown;
+    private readonly NvmlInitDelegate _init;
+    private readonly NvmlDeviceGetCountDelegate _getCount;
+    private readonly NvmlDeviceGetHandleByIndexDelegate _getHandle;
+    private readonly NvmlDeviceGetNameDelegate _getName;
     private readonly NvmlDeviceGetPowerUsageDelegate _getPowerUsage;
     private readonly NvmlDeviceGetUtilizationRatesDelegate _getUtilizationRates;
     private readonly NvmlDeviceGetTemperatureDelegate _getTemperature;
-    private readonly IntPtr _device;
+
+    private IntPtr _device;
     private bool _initialized;
 
     public NvmlClient()
@@ -22,30 +29,16 @@ internal sealed class NvmlClient : IDisposable
 
         try
         {
-            var init = GetDelegate<NvmlInitDelegate>("nvmlInit_v2");
+            _init = GetDelegate<NvmlInitDelegate>("nvmlInit_v2");
             _shutdown = GetDelegate<NvmlShutdownDelegate>("nvmlShutdown");
-            var getCount = GetDelegate<NvmlDeviceGetCountDelegate>("nvmlDeviceGetCount_v2", "nvmlDeviceGetCount");
-            var getHandle = GetDelegate<NvmlDeviceGetHandleByIndexDelegate>("nvmlDeviceGetHandleByIndex_v2", "nvmlDeviceGetHandleByIndex");
-            var getName = GetDelegate<NvmlDeviceGetNameDelegate>("nvmlDeviceGetName");
+            _getCount = GetDelegate<NvmlDeviceGetCountDelegate>("nvmlDeviceGetCount_v2", "nvmlDeviceGetCount");
+            _getHandle = GetDelegate<NvmlDeviceGetHandleByIndexDelegate>("nvmlDeviceGetHandleByIndex_v2", "nvmlDeviceGetHandleByIndex");
+            _getName = GetDelegate<NvmlDeviceGetNameDelegate>("nvmlDeviceGetName");
             _getPowerUsage = GetDelegate<NvmlDeviceGetPowerUsageDelegate>("nvmlDeviceGetPowerUsage");
             _getUtilizationRates = GetDelegate<NvmlDeviceGetUtilizationRatesDelegate>("nvmlDeviceGetUtilizationRates");
             _getTemperature = GetDelegate<NvmlDeviceGetTemperatureDelegate>("nvmlDeviceGetTemperature");
 
-            ThrowIfError(init(), "nvmlInit_v2");
-            _initialized = true;
-
-            ThrowIfError(getCount(out var count), "nvmlDeviceGetCount");
-            if (count == 0)
-            {
-                throw new InvalidOperationException("NVML initialized but no NVIDIA GPU was found.");
-            }
-
-            ThrowIfError(getHandle(0, out _device), "nvmlDeviceGetHandleByIndex");
-
-            var nameBuffer = new byte[128];
-            DeviceName = getName(_device, nameBuffer, (uint)nameBuffer.Length) == NvmlSuccess
-                ? DecodeCString(nameBuffer)
-                : "NVIDIA GPU";
+            InitializeDevice();
         }
         catch
         {
@@ -59,30 +52,21 @@ internal sealed class NvmlClient : IDisposable
         }
     }
 
-    public string DeviceName { get; }
+    public string DeviceName { get; private set; } = "NVIDIA GPU";
 
     public GpuSample ReadSample()
     {
-        double? temperature = null;
-        double? power = null;
-        double? load = null;
-
-        if (_getTemperature(_device, NvmlTemperatureGpu, out var tempC) == NvmlSuccess)
+        try
         {
-            temperature = tempC;
+            return ReadSampleWithRetries();
         }
-
-        if (_getPowerUsage(_device, out var powerMilliwatts) == NvmlSuccess)
+        catch
         {
-            power = powerMilliwatts / 1000.0;
+            // NVML handles can become stale across driver resets or sleep/resume.
+            // Reinitialize once, then perform the bounded read sequence again.
+            ReinitializeDevice();
+            return ReadSampleWithRetries();
         }
-
-        if (_getUtilizationRates(_device, out var utilization) == NvmlSuccess)
-        {
-            load = utilization.Gpu;
-        }
-
-        return new GpuSample(temperature, power, load);
     }
 
     public void Dispose()
@@ -97,6 +81,99 @@ internal sealed class NvmlClient : IDisposable
         {
             NativeLibrary.Free(_library);
         }
+    }
+
+    private GpuSample ReadSampleWithRetries()
+    {
+        var temperature = RetryMetric(
+            "GPU temperature",
+            () =>
+            {
+                var result = _getTemperature(_device, NvmlTemperatureGpu, out var value);
+                return (result, (double)value);
+            },
+            value => value is >= 0 and <= 125);
+
+        var power = RetryMetric(
+            "GPU power",
+            () =>
+            {
+                var result = _getPowerUsage(_device, out var milliwatts);
+                return (result, milliwatts / 1000.0);
+            },
+            value => value is >= 0 and < 300);
+
+        var load = RetryMetric(
+            "GPU utilization",
+            () =>
+            {
+                var result = _getUtilizationRates(_device, out var utilization);
+                return (result, (double)utilization.Gpu);
+            },
+            value => value is >= 0 and <= 100);
+
+        return new GpuSample(temperature, power, load);
+    }
+
+    private static double RetryMetric(
+        string name,
+        Func<(int Result, double Value)> read,
+        Func<double, bool> plausible)
+    {
+        var lastResult = int.MinValue;
+        var lastValue = double.NaN;
+
+        for (var attempt = 1; attempt <= ReadAttempts; attempt++)
+        {
+            var sample = read();
+            lastResult = sample.Result;
+            lastValue = sample.Value;
+
+            if (sample.Result == NvmlSuccess &&
+                double.IsFinite(sample.Value) &&
+                plausible(sample.Value))
+            {
+                return sample.Value;
+            }
+
+            if (attempt < ReadAttempts)
+            {
+                Thread.Sleep(RetryDelayMs);
+            }
+        }
+
+        throw new InvalidDataException(
+            $"{name} failed after {ReadAttempts} attempts (NVML={lastResult}, value={lastValue}).");
+    }
+
+    private void ReinitializeDevice()
+    {
+        if (_initialized)
+        {
+            _shutdown?.Invoke();
+            _initialized = false;
+        }
+
+        InitializeDevice();
+    }
+
+    private void InitializeDevice()
+    {
+        ThrowIfError(_init(), "nvmlInit_v2");
+        _initialized = true;
+
+        ThrowIfError(_getCount(out var count), "nvmlDeviceGetCount");
+        if (count == 0)
+        {
+            throw new InvalidOperationException("NVML initialized but no NVIDIA GPU was found.");
+        }
+
+        ThrowIfError(_getHandle(0, out _device), "nvmlDeviceGetHandleByIndex");
+
+        var nameBuffer = new byte[128];
+        DeviceName = _getName(_device, nameBuffer, (uint)nameBuffer.Length) == NvmlSuccess
+            ? DecodeCString(nameBuffer)
+            : "NVIDIA GPU";
     }
 
     private static IntPtr LoadNvmlLibrary()
@@ -192,5 +269,5 @@ internal sealed class NvmlClient : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     private delegate int NvmlDeviceGetTemperatureDelegate(IntPtr device, uint sensorType, out uint temperature);
 
-    internal readonly record struct GpuSample(double? TemperatureC, double? PowerW, double? LoadPercent);
+    internal readonly record struct GpuSample(double TemperatureC, double PowerW, double LoadPercent);
 }

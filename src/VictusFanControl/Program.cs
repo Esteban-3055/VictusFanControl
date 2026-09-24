@@ -70,15 +70,33 @@ internal static class Program
             return 3;
         }
 
-        var outputPath = options.OutputPath ?? BuildDefaultLogPath();
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
-
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, eventArgs) =>
         {
             eventArgs.Cancel = true;
             cts.Cancel();
         };
+
+        if (options.HealthTestMinutes > 0)
+        {
+            try
+            {
+                return await TelemetryHealthTest.RunAsync(
+                    reader,
+                    options.HealthTestMinutes,
+                    options.IntervalMs,
+                    cts.Token);
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Health test cancelled.");
+                return 130;
+            }
+        }
+
+        var outputPath = options.OutputPath ?? BuildDefaultLogPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
 
         await using var logger = new CsvTelemetryLogger(outputPath);
         await logger.WriteHeaderAsync(cts.Token);
@@ -120,6 +138,11 @@ internal static class Program
 
         Console.WriteLine();
         Console.WriteLine("Capture finished.");
+        foreach (var line in reader.GetHealthSummary())
+        {
+            Console.WriteLine(line);
+        }
+
         return 0;
     }
 

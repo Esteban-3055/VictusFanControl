@@ -16,7 +16,8 @@ internal sealed class AcpiEcReader : IDisposable
     private const byte StatusInputBufferFull = 0x02;
     private const byte CommandReadEc = 0x80;
 
-    private const int ReadAttempts = 3;
+    private const int ReadAttempts = 5;
+    private const int RetryDelayMs = 2;
     private static readonly TimeSpan EcIoTimeout = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan MutexTimeout = TimeSpan.FromMilliseconds(500);
 
@@ -35,26 +36,9 @@ internal sealed class AcpiEcReader : IDisposable
         var lockTaken = AcquireMutex();
         try
         {
-            Exception? lastError = null;
-            for (var attempt = 1; attempt <= ReadAttempts; attempt++)
-            {
-                try
-                {
-                    return ReadRegisterLocked(register);
-                }
-                catch (TimeoutException ex)
-                {
-                    lastError = ex;
-                    if (attempt < ReadAttempts)
-                    {
-                        Thread.Sleep(1);
-                    }
-                }
-            }
-
-            throw new TimeoutException(
-                $"EC register 0x{register:X2} failed after {ReadAttempts} attempts: {lastError?.Message}",
-                lastError);
+            return RetryLocked(
+                () => ReadRegisterLocked(register),
+                $"EC register 0x{register:X2}");
         }
         finally
         {
@@ -72,34 +56,37 @@ internal sealed class AcpiEcReader : IDisposable
             throw new ArgumentOutOfRangeException(nameof(lowRegister));
         }
 
-        var highRegister = (byte)(lowRegister + 1);
         var lockTaken = AcquireMutex();
         try
         {
-            Exception? lastError = null;
-            for (var attempt = 1; attempt <= ReadAttempts; attempt++)
+            return RetryLocked(
+                () => ReadWordLittleEndianLocked(lowRegister),
+                $"EC word 0x{lowRegister:X2}/0x{(byte)(lowRegister + 1):X2}");
+        }
+        finally
+        {
+            if (lockTaken)
             {
-                try
-                {
-                    // Retry the complete word so the low/high bytes belong to the
-                    // same successful transaction pair.
-                    var low = ReadRegisterLocked(lowRegister);
-                    var high = ReadRegisterLocked(highRegister);
-                    return (ushort)(low | (high << 8));
-                }
-                catch (TimeoutException ex)
-                {
-                    lastError = ex;
-                    if (attempt < ReadAttempts)
-                    {
-                        Thread.Sleep(1);
-                    }
-                }
+                _ecMutex.ReleaseMutex();
             }
+        }
+    }
 
-            throw new TimeoutException(
-                $"EC word 0x{lowRegister:X2}/0x{highRegister:X2} failed after {ReadAttempts} attempts: {lastError?.Message}",
-                lastError);
+    /// <summary>
+    /// Reads both 88F8 tachometers while holding one EC mutex lease.
+    /// If any of the four register transactions fails, the complete pair is
+    /// retried so CPU/GPU RPM belong to one coherent successful snapshot.
+    /// </summary>
+    public FanTachometerSample ReadFanTachometers()
+    {
+        var lockTaken = AcquireMutex();
+        try
+        {
+            return RetryLocked(
+                () => new FanTachometerSample(
+                    ReadWordLittleEndianLocked(0xB0),
+                    ReadWordLittleEndianLocked(0xB2)),
+                "EC fan tachometer snapshot 0xB0-0xB3");
         }
         finally
         {
@@ -114,6 +101,36 @@ internal sealed class AcpiEcReader : IDisposable
     {
         _session.Dispose();
         _ecMutex.Dispose();
+    }
+
+    private T RetryLocked<T>(Func<T> action, string operation)
+    {
+        Exception? lastError = null;
+
+        for (var attempt = 1; attempt <= ReadAttempts; attempt++)
+        {
+            try
+            {
+                return action();
+            }
+            catch (TimeoutException ex)
+            {
+                lastError = ex;
+            }
+            catch (InvalidDataException ex)
+            {
+                lastError = ex;
+            }
+
+            if (attempt < ReadAttempts)
+            {
+                Thread.Sleep(RetryDelayMs);
+            }
+        }
+
+        throw new IOException(
+            $"{operation} failed after {ReadAttempts} attempts: {lastError?.Message}",
+            lastError);
     }
 
     private bool AcquireMutex()
@@ -134,9 +151,16 @@ internal sealed class AcpiEcReader : IDisposable
         }
     }
 
+    private ushort ReadWordLittleEndianLocked(byte lowRegister)
+    {
+        var low = ReadRegisterLocked(lowRegister);
+        var high = ReadRegisterLocked((byte)(lowRegister + 1));
+        return (ushort)(low | (high << 8));
+    }
+
     private byte ReadRegisterLocked(byte register)
     {
-        // Match the standard ACPI RD_EC handshake used by the validated HP tools:
+        // Standard ACPI RD_EC handshake:
         // idle -> READ command -> IBF clear -> address -> IBF clear -> OBF set -> data.
         WaitForIdle();
         WritePort(CommandStatusPort, CommandReadEc);
@@ -144,7 +168,6 @@ internal sealed class AcpiEcReader : IDisposable
         WaitForInputBufferEmpty();
         WritePort(DataPort, register);
 
-        // Important: the EC must consume the address before we wait for result data.
         WaitForInputBufferEmpty();
         WaitForOutputBufferFull();
 
@@ -211,4 +234,6 @@ internal sealed class AcpiEcReader : IDisposable
     {
         _session.Execute("ioctl_pio_write", new ulong[] { port, value }, 0);
     }
+
+    internal readonly record struct FanTachometerSample(ushort CpuRpm, ushort GpuRpm);
 }

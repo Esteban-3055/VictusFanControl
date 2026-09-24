@@ -4,6 +4,7 @@ public sealed class CliOptions
 {
     public bool ShowHelp { get; private set; }
     public bool ProbeBackends { get; private set; }
+    public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
     public int DurationSeconds { get; private set; }
     public string? OutputPath { get; private set; }
@@ -25,6 +26,12 @@ public sealed class CliOptions
                 case "--probe-backends":
                 case "--list-sensors":
                     options.ProbeBackends = true;
+                    break;
+
+                case "--health-test-minutes":
+                    options.HealthTestMinutes = ParsePositiveInt(
+                        ReadValue(args, ref i),
+                        "--health-test-minutes");
                     break;
 
                 case "--modules-dir":
@@ -63,6 +70,7 @@ public sealed class CliOptions
         Console.WriteLine("Options:");
         Console.WriteLine("  --probe-backends           Probe PawnIO, Intel MSR/EC and NVIDIA NVML.");
         Console.WriteLine("  --list-sensors             Compatibility alias for --probe-backends.");
+        Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");
         Console.WriteLine("  --duration-seconds <n>     Stop after N seconds. 0 = until Ctrl+C.");
