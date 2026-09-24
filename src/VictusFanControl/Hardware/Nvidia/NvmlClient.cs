@@ -9,7 +9,7 @@ internal sealed class NvmlClient : IDisposable
     private const uint NvmlTemperatureGpu = 0;
 
     private readonly IntPtr _library;
-    private readonly NvmlShutdownDelegate _shutdown;
+    private readonly NvmlShutdownDelegate? _shutdown;
     private readonly NvmlDeviceGetPowerUsageDelegate _getPowerUsage;
     private readonly NvmlDeviceGetUtilizationRatesDelegate _getUtilizationRates;
     private readonly NvmlDeviceGetTemperatureDelegate _getTemperature;
@@ -51,7 +51,7 @@ internal sealed class NvmlClient : IDisposable
         {
             if (_initialized)
             {
-                _shutdown();
+                _shutdown?.Invoke();
             }
 
             NativeLibrary.Free(_library);
@@ -89,7 +89,7 @@ internal sealed class NvmlClient : IDisposable
     {
         if (_initialized)
         {
-            _shutdown();
+            _shutdown?.Invoke();
             _initialized = false;
         }
 
