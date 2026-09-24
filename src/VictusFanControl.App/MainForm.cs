@@ -87,7 +87,7 @@ internal sealed class MainForm : Form
         Shown += (_, _) =>
         {
             AppendEvent($"Modules: {modulesDirectory}");
-            AppendEvent($"Board: {_hardwareIdentity.BoardDisplay}; System={_hardwareIdentity.SystemProductName}; SKU={_hardwareIdentity.SystemSku}");
+            AppendEvent($"Board: {_hardwareIdentity.BoardDisplay}; System={_hardwareIdentity.SystemProductName}; SKU={_hardwareIdentity.SystemSku}; BIOS={_hardwareIdentity.BiosVersion}");
             AppendEvent($"Persistent log: {AppLog.CurrentLogPath}");
             _uiTimer.Start();
             _worker.Start();

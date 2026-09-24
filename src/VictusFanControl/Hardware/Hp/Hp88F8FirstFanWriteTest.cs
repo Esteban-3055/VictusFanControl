@@ -41,6 +41,15 @@ public static class Hp88F8FirstFanWriteTest
             return 20;
         }
 
+        var conflictingProcess = FindKnownConflictingControllerProcess();
+        if (conflictingProcess is not null)
+        {
+            Console.Error.WriteLine(
+                $"First fan-write test refused while '{conflictingProcess}' is running. " +
+                "Close OmenMon/VictusFanControl GUI first; OMEN Gaming Hub may remain open for undervolt.");
+            return 31;
+        }
+
         using var reader = new HardwareTelemetryReader(modulesDirectory);
         if (!reader.BackendsInitialized)
         {
@@ -352,6 +361,40 @@ public static class Hp88F8FirstFanWriteTest
         }
 
         previousTick = now;
+    }
+
+
+    private static string? FindKnownConflictingControllerProcess()
+    {
+        foreach (var processName in new[] { "OmenMon", "OmenMon-Reborn", "VictusFanControl.App" })
+        {
+            Process[] processes;
+            try
+            {
+                processes = Process.GetProcessesByName(processName);
+            }
+            catch
+            {
+                continue;
+            }
+
+            try
+            {
+                if (processes.Length > 0)
+                {
+                    return processName;
+                }
+            }
+            finally
+            {
+                foreach (var process in processes)
+                {
+                    process.Dispose();
+                }
+            }
+        }
+
+        return null;
     }
 
 }

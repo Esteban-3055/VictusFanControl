@@ -99,6 +99,34 @@ public sealed class CliOptions
             }
         }
 
+        var exclusiveActions =
+            (options.ProbeBackends ? 1 : 0) +
+            (options.SafetySelfTest ? 1 : 0) +
+            (options.Probe88F8EcState ? 1 : 0) +
+            (options.ControlSelfTest ? 1 : 0) +
+            (options.BiosContractSelfTest ? 1 : 0) +
+            (options.RestoreHpAuto ? 1 : 0) +
+            (options.FirstFanWriteTest ? 1 : 0) +
+            (options.HealthTestMinutes > 0 ? 1 : 0);
+
+        if (exclusiveActions > 1)
+        {
+            throw new ArgumentException(
+                "Choose only one probe/test/write operation per invocation.");
+        }
+
+        if (options.SkipEcSnapshots && !options.RestoreHpAuto)
+        {
+            throw new ArgumentException(
+                "--skip-ec-snapshots is valid only with --restore-hp-auto.");
+        }
+
+        if (options.FirstFanWriteToken is not null && !options.FirstFanWriteTest)
+        {
+            throw new ArgumentException(
+                "--write-token is valid only with --first-fan-write-test.");
+        }
+
         return options;
     }
 

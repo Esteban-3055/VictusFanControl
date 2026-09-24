@@ -12,7 +12,7 @@ internal static class Program
     {
         Console.WriteLine("VictusFanControl v0.3.0-dev");
         Console.WriteLine("Telemetry: PawnIO DeviceIoControl + NVIDIA NVML.");
-        Console.WriteLine("Normal GUI/control path remains read-only. An explicit experimental HP-auto restore command is available.");
+        Console.WriteLine("Normal GUI/control path remains read-only. Explicit bounded HP BIOS validation commands are available.");
         Console.WriteLine();
 
         CliOptions options;
@@ -183,6 +183,11 @@ internal static class Program
                 return 130;
             }
         }
+
+        Console.WriteLine("Warming differential telemetry counters...");
+        _ = reader.ReadSnapshot();
+        reader.ResetHealthWindow();
+        await Task.Delay(options.IntervalMs, cts.Token);
 
         var outputPath = options.OutputPath ?? BuildDefaultLogPath();
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);

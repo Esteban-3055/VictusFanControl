@@ -1,3 +1,4 @@
+using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Safety;
 
 namespace VictusFanControl.Control;
@@ -58,6 +59,11 @@ public sealed class FanControlCoordinator : IAsyncDisposable
             }
 
             if (!_backend.CanWrite)
+            {
+                return false;
+            }
+
+            if (!BackendCapabilitiesMatchTarget())
             {
                 return false;
             }
@@ -181,8 +187,32 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     }
 
 
+    private bool BackendCapabilitiesMatchTarget()
+    {
+        var capabilities = _backend.Capabilities;
+
+        return
+            string.Equals(
+                capabilities.BoardProduct,
+                Hp88F8TargetProfile.BoardProduct,
+                StringComparison.OrdinalIgnoreCase) &&
+            capabilities.MinimumLevel >= Hp88F8TargetProfile.MinimumValidatedFanLevel &&
+            capabilities.MaximumLevel <= Hp88F8TargetProfile.MaximumValidatedFanLevel &&
+            capabilities.MinimumLevel <= capabilities.MaximumLevel;
+    }
+
     private string? ValidateCommand(FanCommand command)
     {
+        if (command.CpuLevel < Hp88F8TargetProfile.MinimumValidatedFanLevel ||
+            command.CpuLevel > Hp88F8TargetProfile.MaximumValidatedFanLevel ||
+            command.GpuLevel < Hp88F8TargetProfile.MinimumValidatedFanLevel ||
+            command.GpuLevel > Hp88F8TargetProfile.MaximumValidatedFanLevel)
+        {
+            return $"Command is outside the central 88F8 validated range " +
+                   $"{Hp88F8TargetProfile.MinimumValidatedFanLevel}-" +
+                   $"{Hp88F8TargetProfile.MaximumValidatedFanLevel}.";
+        }
+
         var capabilities = _backend.Capabilities;
 
         if (command.CpuLevel < capabilities.MinimumLevel ||

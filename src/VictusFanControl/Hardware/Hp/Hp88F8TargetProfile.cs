@@ -15,6 +15,8 @@ public static class Hp88F8TargetProfile
     public const string SystemProductName = "Victus by HP Laptop 16-d0xxx";
     public const string SystemSkuPrefix = "62C37LA";
     public const string ExpectedGpuName = "NVIDIA GeForce RTX 3060 Laptop GPU";
+    public const int MinimumValidatedFanLevel = 14;
+    public const int MaximumValidatedFanLevel = 50;
 
     public static bool Matches(HardwareIdentity hardware, out string reason)
     {

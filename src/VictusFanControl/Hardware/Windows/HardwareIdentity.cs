@@ -35,7 +35,18 @@ public static class HardwareIdentityReader
 
     private static string Read(RegistryKey? key, string name)
     {
-        var value = key?.GetValue(name)?.ToString()?.Trim();
+        var raw = key?.GetValue(name);
+
+        var value = raw switch
+        {
+            string text => text.Trim(),
+            string[] items => string.Join(
+                " | ",
+                items.Where(item => !string.IsNullOrWhiteSpace(item))
+                     .Select(item => item.Trim())),
+            _ => raw?.ToString()?.Trim()
+        };
+
         return string.IsNullOrWhiteSpace(value) ? "unknown" : value;
     }
 }

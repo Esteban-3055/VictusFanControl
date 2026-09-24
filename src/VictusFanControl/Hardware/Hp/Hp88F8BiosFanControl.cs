@@ -12,8 +12,8 @@ public sealed class Hp88F8BiosFanControl
     public const uint SetFanModeCommandType = 0x1A;
     public const uint GetFanLevelCommandType = 0x2D;
     public const uint SetFanLevelCommandType = 0x2E;
-    public const byte MinimumValidatedLevel = 14;
-    public const byte MaximumValidatedLevel = 50;
+    public const byte MinimumValidatedLevel = (byte)Hp88F8TargetProfile.MinimumValidatedFanLevel;
+    public const byte MaximumValidatedLevel = (byte)Hp88F8TargetProfile.MaximumValidatedFanLevel;
 
     private readonly HpOmenBiosWmiClient _client;
 

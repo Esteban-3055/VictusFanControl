@@ -37,6 +37,7 @@ public sealed class HpOmenBiosWmiClient
     private static readonly TimeSpan InvokeTimeout = TimeSpan.FromSeconds(5);
 
     private readonly ManagementScope _scope;
+    private readonly ManagementPath _methodPath;
 
     public HpOmenBiosWmiClient()
     {
@@ -49,6 +50,17 @@ public sealed class HpOmenBiosWmiClient
         // reuse it for readback and fail-safe restoration.
         _scope = new ManagementScope(NamespacePath);
         _scope.Connect();
+
+        // Resolve the method instance before any write. Later readback/restore
+        // calls do not need to rediscover the provider object.
+        using var method = FindMethodInstance(_scope);
+        var relativePath = method.Path?.RelativePath;
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            throw new HpBiosCallException("HP BIOS WMI method instance has no usable path.");
+        }
+
+        _methodPath = new ManagementPath(relativePath);
     }
 
     public int Send(HpBiosRequest request) =>
@@ -77,7 +89,10 @@ public sealed class HpOmenBiosWmiClient
         data["Size"] = (uint)request.Payload.Length;
         data[DataFieldName] = request.Payload.ToArray();
 
-        using var target = FindMethodInstance(_scope);
+        using var target = new ManagementObject(
+            _scope,
+            _methodPath,
+            options: null);
         var methodName = $"hpqBIOSInt{request.OutputSize}";
 
         using var methodInput = target.GetMethodParameters(methodName)
