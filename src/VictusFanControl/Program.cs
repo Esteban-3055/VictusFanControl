@@ -1,4 +1,5 @@
 using VictusFanControl.Cli;
+using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
 
@@ -35,6 +36,22 @@ internal static class Program
         if (options.SafetySelfTest)
         {
             return SafetyGateSelfTest.Run(Console.Out);
+        }
+
+        if (options.Probe88F8EcState)
+        {
+            try
+            {
+                var state = new Hp88F8EcControlStateProbe(options.ModulesDirectory).Read();
+                Console.WriteLine("HP 88F8 EC control-state probe (READ-ONLY)");
+                Console.WriteLine(state);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"88F8 EC-state probe failed: {ex.Message}");
+                return 6;
+            }
         }
 
         using var reader = new HardwareTelemetryReader(options.ModulesDirectory);

@@ -97,6 +97,31 @@ internal sealed class AcpiEcReader : IDisposable
         }
     }
 
+    public Hp88F8ControlStateSample ReadHp88F8ControlState()
+    {
+        var lockTaken = AcquireMutex();
+        try
+        {
+            return RetryLocked(
+                () => new Hp88F8ControlStateSample(
+                    CpuSetpoint: ReadRegisterLocked(0x34),
+                    GpuSetpoint: ReadRegisterLocked(0x35),
+                    CpuRate: ReadRegisterLocked(0x2E),
+                    GpuRate: ReadRegisterLocked(0x2F),
+                    Countdown: ReadRegisterLocked(0x63),
+                    CpuRpm: ReadWordLittleEndianLocked(0xB0),
+                    GpuRpm: ReadWordLittleEndianLocked(0xB2)),
+                "EC 88F8 control-state snapshot");
+        }
+        finally
+        {
+            if (lockTaken)
+            {
+                _ecMutex.ReleaseMutex();
+            }
+        }
+    }
+
     public void Dispose()
     {
         _session.Dispose();
@@ -236,4 +261,13 @@ internal sealed class AcpiEcReader : IDisposable
     }
 
     internal readonly record struct FanTachometerSample(ushort CpuRpm, ushort GpuRpm);
+
+    internal readonly record struct Hp88F8ControlStateSample(
+        byte CpuSetpoint,
+        byte GpuSetpoint,
+        byte CpuRate,
+        byte GpuRate,
+        byte Countdown,
+        ushort CpuRpm,
+        ushort GpuRpm);
 }

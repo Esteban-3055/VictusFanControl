@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
+using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
 using VictusFanControl.Safety;
@@ -18,6 +19,7 @@ internal sealed class MainForm : Form
 
     private readonly TelemetryWorker _worker;
     private readonly HardwareIdentity _hardwareIdentity;
+    private readonly string _modulesDirectory;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
 
@@ -60,6 +62,7 @@ internal sealed class MainForm : Form
         MinimumSize = new Size(780, 560);
         Size = new Size(900, 680);
 
+        _modulesDirectory = modulesDirectory;
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
 
         _worker = new TelemetryWorker(modulesDirectory);
@@ -314,6 +317,27 @@ internal sealed class MainForm : Form
             });
         };
 
+        var readEcState = new Button { Text = "Read 88F8 EC state", AutoSize = true };
+        readEcState.Click += async (_, _) =>
+        {
+            readEcState.Enabled = false;
+            try
+            {
+                var state = await Task.Run(
+                    () => new Hp88F8EcControlStateProbe(_modulesDirectory).Read());
+
+                AppendEvent($"88F8 EC state: {state}");
+            }
+            catch (Exception ex)
+            {
+                AppendEvent($"88F8 EC state probe FAILED: {ex.Message}");
+            }
+            finally
+            {
+                readEcState.Enabled = true;
+            }
+        };
+
         var scanOmen = new Button { Text = "Scan OMEN processes", AutoSize = true };
         scanOmen.Click += (_, _) =>
         {
@@ -335,6 +359,7 @@ internal sealed class MainForm : Form
         buttons.Controls.Add(copy);
         buttons.Controls.Add(clear);
         buttons.Controls.Add(openLogs);
+        buttons.Controls.Add(readEcState);
         buttons.Controls.Add(scanOmen);
 
         var split = new SplitContainer
