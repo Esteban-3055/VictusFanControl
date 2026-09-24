@@ -52,7 +52,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 return true;
             }
 
-            if (!safety.PreconditionsReady)
+            if (!safety.CustomControlPermitted)
             {
                 return false;
             }
@@ -62,15 +62,23 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 return false;
             }
 
+            var entryAttempted = false;
             try
             {
+                // Mark the attempt before entering the backend. A hardware write may
+                // take effect even when the backend subsequently reports an error.
+                entryAttempted = true;
                 await _backend.EnterCustomModeAsync(cancellationToken).ConfigureAwait(false);
                 Transition(FanAuthority.Custom, "Custom fan authority acquired.");
                 return true;
             }
             catch
             {
-                await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                if (entryAttempted)
+                {
+                    await BestEffortForceRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+
                 throw;
             }
         }
@@ -96,11 +104,11 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                     "Fan command refused because custom authority is not active.");
             }
 
-            if (!safety.PreconditionsReady)
+            if (!safety.CustomControlPermitted)
             {
                 await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
                 throw new InvalidOperationException(
-                    "Fan command refused because the safety gate is no longer ready.");
+                    "Fan command refused because custom control is no longer permitted by the safety gate.");
             }
 
             var commandError = ValidateCommand(command);
@@ -220,6 +228,24 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         {
             Transition(FanAuthority.Faulted, "Firmware restore failed.");
             throw;
+        }
+    }
+
+
+    private async ValueTask BestEffortForceRestoreLockedAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            Transition(
+                FanAuthority.Restoring,
+                "Fail-safe restore requested after an uncertain authority transition.");
+
+            await _backend.RestoreFirmwareAutoAsync(cancellationToken).ConfigureAwait(false);
+            Transition(FanAuthority.Firmware, "HP firmware authority restored.");
+        }
+        catch
+        {
+            Transition(FanAuthority.Faulted, "Firmware restore failed after uncertain authority transition.");
         }
     }
 

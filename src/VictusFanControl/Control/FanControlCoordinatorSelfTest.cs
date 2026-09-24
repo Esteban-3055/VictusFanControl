@@ -1,3 +1,4 @@
+using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
 using VictusFanControl.Safety;
@@ -14,6 +15,8 @@ public static class FanControlCoordinatorSelfTest
         var safety = BuildReadySafety(now);
 
         failures += await TestDisabledBackendAsync(output, safety);
+        failures += await TestSafetyPermissionBlockAsync(output);
+        failures += await TestEnterFailureRestoresAsync(output, safety);
         failures += await TestNormalRestoreAsync(output, safety);
         failures += await TestSafetyLossRestoresAsync(output, safety, now);
         failures += await TestInvalidCommandRestoresAsync(output, safety);
@@ -42,6 +45,83 @@ public static class FanControlCoordinatorSelfTest
             output,
             "disabled backend refuses custom authority",
             !entered && coordinator.Authority == FanAuthority.Firmware);
+    }
+
+
+    private static async Task<int> TestSafetyPermissionBlockAsync(TextWriter output)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var now = DateTimeOffset.UtcNow;
+        var hardware = new HardwareIdentity(
+            "HP",
+            "88F8",
+            "88.58",
+            "HP",
+            "Victus by HP Laptop 16-d0xxx",
+            "62C37LA#AKH",
+            "test");
+
+        var snapshot = new TelemetrySnapshot(
+            now,
+            "Intel test CPU",
+            50,
+            15,
+            10,
+            Hp88F8TargetProfile.ExpectedGpuName,
+            45,
+            25,
+            5,
+            2200,
+            2400);
+
+        var blockedSafety = SafetyGate.Evaluate(
+            hardware,
+            SystemState.Healthy,
+            snapshot,
+            now,
+            fanWritePathPresent: false);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            blockedSafety,
+            CancellationToken.None);
+
+        return Report(
+            output,
+            "coordinator obeys SafetyGate custom-control permission",
+            !entered &&
+            backend.EnterCalls == 0 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
+    private static async Task<int> TestEnterFailureRestoresAsync(
+        TextWriter output,
+        SafetyGateResult safety)
+    {
+        var backend = new RecordingBackend { ThrowOnEnterAfterActivate = true };
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var threw = false;
+        try
+        {
+            await coordinator.TryEnterCustomAsync(
+                safety,
+                CancellationToken.None);
+        }
+        catch (IOException)
+        {
+            threw = true;
+        }
+
+        return Report(
+            output,
+            "partial custom-entry failure forces firmware restore",
+            threw &&
+            backend.EnterCalls == 1 &&
+            backend.RestoreCalls == 1 &&
+            !backend.Active &&
+            coordinator.Authority == FanAuthority.Firmware);
     }
 
     private static async Task<int> TestNormalRestoreAsync(
@@ -194,7 +274,7 @@ public static class FanControlCoordinatorSelfTest
             "88.58",
             "HP",
             "Victus",
-            "62C37LA",
+            "62C37LA#AKH",
             "test");
 
         var snapshot = new TelemetrySnapshot(
@@ -203,7 +283,7 @@ public static class FanControlCoordinatorSelfTest
             50,
             15,
             10,
-            "NVIDIA test GPU",
+            Hp88F8TargetProfile.ExpectedGpuName,
             45,
             25,
             5,
@@ -214,7 +294,8 @@ public static class FanControlCoordinatorSelfTest
             hardware,
             SystemState.Healthy,
             snapshot,
-            now);
+            now,
+            fanWritePathPresent: true);
     }
 
     private static int Report(TextWriter output, string name, bool pass)
@@ -234,6 +315,7 @@ public static class FanControlCoordinatorSelfTest
         public int ApplyCalls { get; private set; }
         public int RestoreCalls { get; private set; }
         public bool ThrowOnApply { get; init; }
+        public bool ThrowOnEnterAfterActivate { get; init; }
         public bool Active { get; private set; }
 
         public ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken) =>
@@ -247,6 +329,13 @@ public static class FanControlCoordinatorSelfTest
         {
             EnterCalls++;
             Active = true;
+
+            if (ThrowOnEnterAfterActivate)
+            {
+                return ValueTask.FromException(
+                    new IOException("synthetic partial enter failure"));
+            }
+
             return ValueTask.CompletedTask;
         }
 

@@ -1,3 +1,4 @@
+using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
 using VictusFanControl.Telemetry;
@@ -15,7 +16,7 @@ public static class SafetyGateSelfTest
             "88.58",
             "HP",
             "Victus by HP Laptop 16-d0xxx",
-            "62C37LA",
+            "62C37LA#AKH",
             "test");
 
         var good = Snapshot(now, 50, 15, 10, 45, 25, 5, 2200, 2400);
@@ -33,6 +34,24 @@ public static class SafetyGateSelfTest
                     goodHardware with { BoardProduct = "FFFF" },
                     SystemState.Healthy,
                     good,
+                    now),
+                expectedReady: false),
+
+            Case(
+                "wrong HP SKU on same 88F8 board",
+                SafetyGate.Evaluate(
+                    goodHardware with { SystemSku = "DIFFERENT-SKU" },
+                    SystemState.Healthy,
+                    good,
+                    now),
+                expectedReady: false),
+
+            Case(
+                "unexpected NVIDIA device identity",
+                SafetyGate.Evaluate(
+                    goodHardware,
+                    SystemState.Healthy,
+                    good with { GpuName = "NVIDIA Other GPU" },
                     now),
                 expectedReady: false),
 
@@ -130,7 +149,7 @@ public static class SafetyGateSelfTest
             CpuTemperatureC: cpuTemp,
             CpuPackagePowerW: cpuPower,
             CpuLoadPercent: cpuLoad,
-            GpuName: "NVIDIA test GPU",
+            GpuName: Hp88F8TargetProfile.ExpectedGpuName,
             GpuTemperatureC: gpuTemp,
             GpuPowerW: gpuPower,
             GpuLoadPercent: gpuLoad,

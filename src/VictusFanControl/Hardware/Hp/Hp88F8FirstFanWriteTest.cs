@@ -31,13 +31,10 @@ public static class Hp88F8FirstFanWriteTest
         CancellationToken cancellationToken)
     {
         var hardware = HardwareIdentityReader.ReadCurrent();
-        if (!string.Equals(
-                hardware.BoardProduct,
-                SafetyGate.InitialValidatedBoardProduct,
-                StringComparison.OrdinalIgnoreCase))
+        if (!Hp88F8TargetProfile.Matches(hardware, out var identityReason))
         {
             Console.Error.WriteLine(
-                $"First fan-write test refused on board '{hardware.BoardProduct}'.");
+                $"First fan-write test refused: {identityReason}");
             return 20;
         }
 

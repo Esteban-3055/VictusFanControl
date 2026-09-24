@@ -95,13 +95,10 @@ public sealed class Hp88F8BiosFanControl
     private static void EnsureSupportedBoard()
     {
         var hardware = HardwareIdentityReader.ReadCurrent();
-        if (!string.Equals(
-                hardware.BoardProduct,
-                "88F8",
-                StringComparison.OrdinalIgnoreCase))
+        if (!Hp88F8TargetProfile.Matches(hardware, out var reason))
         {
             throw new InvalidOperationException(
-                $"HP BIOS fan operation refused on unsupported board '{hardware.BoardProduct}'.");
+                $"HP BIOS fan operation refused: {reason}");
         }
     }
 

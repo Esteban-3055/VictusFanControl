@@ -1,3 +1,4 @@
+using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
 using VictusFanControl.Telemetry;
@@ -9,6 +10,7 @@ public sealed record SafetyGateResult(
     bool RuntimeHealthy,
     bool SnapshotComplete,
     bool SnapshotFresh,
+    bool TelemetryDeviceIdentityValid,
     bool SensorsPlausible,
     bool ThermalEmergency,
     bool PreconditionsReady,
@@ -23,7 +25,7 @@ public sealed record SafetyGateResult(
 /// </summary>
 public static class SafetyGate
 {
-    public const string InitialValidatedBoardProduct = "88F8";
+    public const string InitialValidatedBoardProduct = Hp88F8TargetProfile.BoardProduct;
     public static readonly TimeSpan MaximumTelemetryAge = TimeSpan.FromSeconds(3);
 
     // Conservative pre-control handoff thresholds. These are deliberately not
@@ -35,18 +37,16 @@ public static class SafetyGate
         HardwareIdentity hardware,
         SystemState state,
         TelemetrySnapshot? snapshot,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        bool fanWritePathPresent = false)
     {
         var reasons = new List<string>();
 
-        var boardAllowed = string.Equals(
-            hardware.BoardProduct,
-            InitialValidatedBoardProduct,
-            StringComparison.OrdinalIgnoreCase);
+        var boardAllowed = Hp88F8TargetProfile.Matches(hardware, out var hardwareReason);
 
         if (!boardAllowed)
         {
-            reasons.Add($"Board '{hardware.BoardProduct}' is not on the control allowlist.");
+            reasons.Add($"Target hardware fingerprint mismatch: {hardwareReason}");
         }
 
         var runtimeHealthy = state == SystemState.Healthy;
@@ -72,6 +72,17 @@ public static class SafetyGate
                 : $"Telemetry is stale ({Math.Max(0, age.TotalSeconds):0.0} s old).");
         }
 
+        var telemetryDeviceIdentityValid =
+            snapshot is not null &&
+            Hp88F8TargetProfile.MatchesExpectedGpu(snapshot.GpuName);
+
+        if (snapshotComplete && !telemetryDeviceIdentityValid)
+        {
+            reasons.Add(
+                $"GPU identity '{snapshot!.GpuName ?? "unknown"}' does not match validated target " +
+                $"'{Hp88F8TargetProfile.ExpectedGpuName}'.");
+        }
+
         var sensorsPlausible = snapshotComplete && AreSensorsPlausible(snapshot!);
         if (snapshotComplete && !sensorsPlausible)
         {
@@ -93,13 +104,11 @@ public static class SafetyGate
             runtimeHealthy &&
             snapshotComplete &&
             snapshotFresh &&
+            telemetryDeviceIdentityValid &&
             sensorsPlausible &&
             !thermalEmergency;
 
-        // Intentional hard block until the separately reviewed write/restore
-        // backend and watchdog milestone exists.
-        const bool fanWritePathPresent = false;
-        const bool customControlPermitted = false;
+        var customControlPermitted = preconditionsReady && fanWritePathPresent;
 
         if (!fanWritePathPresent)
         {
@@ -111,6 +120,7 @@ public static class SafetyGate
             RuntimeHealthy: runtimeHealthy,
             SnapshotComplete: snapshotComplete,
             SnapshotFresh: snapshotFresh,
+            TelemetryDeviceIdentityValid: telemetryDeviceIdentityValid,
             SensorsPlausible: sensorsPlausible,
             ThermalEmergency: thermalEmergency,
             PreconditionsReady: preconditionsReady,
