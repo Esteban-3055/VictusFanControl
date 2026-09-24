@@ -27,6 +27,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestSafetyPreemptsInFlightCommandAsync(output, safety, now);
         failures += await TestUnsafeReentryRestoresAsync(output, safety, now);
         failures += await TestRuntimeOwnershipMismatchRestoresAsync(output, safety);
+        failures += await TestLifecycleFenceClosesBeforeCoordinatorGateAsync(output, safety, now);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -271,6 +272,54 @@ public static class FanControlCoordinatorSelfTest
 
 
 
+
+
+    private static async Task<int> TestLifecycleFenceClosesBeforeCoordinatorGateAsync(
+        TextWriter output,
+        SafetyGateResult safety,
+        DateTimeOffset now)
+    {
+        var backend = new RecordingBackend { BlockApplyUntilReleased = true };
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None);
+
+        var applyTask = coordinator.ApplyAsync(
+            new FanCommand(30, 30, "hold coordinator gate"),
+            safety,
+            CancellationToken.None).AsTask();
+
+        await backend.ApplyStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        var boundary = now + TimeSpan.FromSeconds(1);
+        var blockTask = coordinator.BlockCustomAdmissionAndRestoreAsync(
+            "synthetic suspend race",
+            boundary,
+            CancellationToken.None).AsTask();
+
+        // Queue a stale re-entry while the original Apply still owns _gate.
+        // It must fail even if SemaphoreSlim later schedules it before the
+        // lifecycle Block waiter.
+        var staleReentryTask = coordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None).AsTask();
+
+        backend.ApplyRelease.TrySetResult(true);
+
+        await applyTask;
+        await blockTask;
+        var staleReentry = await staleReentryTask;
+
+        return Report(
+            output,
+            "lifecycle fence closes admission before waiting for coordinator gate",
+            entered &&
+            !staleReentry &&
+            backend.RestoreCalls == 1 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
 
     private static async Task<int> TestRuntimeOwnershipMismatchRestoresAsync(
         TextWriter output,
@@ -566,7 +615,10 @@ public static class FanControlCoordinatorSelfTest
         public bool ThrowOnEnterAfterActivate { get; init; }
         public bool ThrowOwnershipConflictOnEnter { get; init; }
         public bool BlockApplyUntilCancelled { get; init; }
+        public bool BlockApplyUntilReleased { get; init; }
         public TaskCompletionSource<bool> ApplyStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> ApplyRelease { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Active { get; private set; }
 
@@ -612,6 +664,11 @@ public static class FanControlCoordinatorSelfTest
             if (ThrowOnApply)
             {
                 throw new IOException("synthetic backend failure");
+            }
+
+            if (BlockApplyUntilReleased)
+            {
+                await ApplyRelease.Task.ConfigureAwait(false);
             }
 
             if (BlockApplyUntilCancelled)

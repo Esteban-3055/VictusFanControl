@@ -41,7 +41,7 @@ The automatic curve is still OFF, so merely launching the GUI does not acquire c
 
 Suspend, resume and application exit are connected to the coordinator.
 
-- suspend cancels an in-flight command and restores firmware before the power broadcast handler returns;
+- suspend closes a volatile admission fence **before** waiting for any in-flight coordinator operation, cancels the active command, and restores firmware before the power broadcast handler returns;
 - resume closes admission and requires post-resume validated telemetry;
 - stale pre-resume SafetyGate results cannot reacquire authority;
 - duplicate Windows resume broadcasts do not leave admission permanently blocked;

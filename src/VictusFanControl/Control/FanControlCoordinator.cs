@@ -27,6 +27,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _activeOperationGate = new();
     private FanAuthority _authority = FanAuthority.Firmware;
+    private volatile bool _lifecycleFenceRequested;
     private bool _admissionBlocked;
     private DateTimeOffset _minimumSafetySnapshotTimestamp = DateTimeOffset.MinValue;
     private CancellationTokenSource? _activeCommandCts;
@@ -178,9 +179,12 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         DateTimeOffset boundaryTimestamp,
         CancellationToken cancellationToken)
     {
-        // Do this before waiting for the coordinator gate: an in-flight backend
-        // acknowledgement must not delay a suspend/emergency handoff for its
-        // full timeout.
+        // Close admission BEFORE waiting for the coordinator gate. An in-flight
+        // backend acknowledgement may still own _gate for a short time, and
+        // SemaphoreSlim does not guarantee that this lifecycle waiter will beat
+        // another queued TryEnterCustomAsync call. The volatile fence prevents
+        // stale pre-boundary safety from reacquiring authority in that window.
+        _lifecycleFenceRequested = true;
         CancelActiveCommand();
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -231,6 +235,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
             }
 
             _admissionBlocked = false;
+            _lifecycleFenceRequested = false;
             return true;
         }
         finally
@@ -335,6 +340,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
             return;
         }
 
+        _lifecycleFenceRequested = true;
         CancelActiveCommand();
         await _gate.WaitAsync().ConfigureAwait(false);
         try
@@ -360,6 +366,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 
     private bool SafetyAllowsCustomLocked(SafetyGateResult safety) =>
         safety.CustomControlPermitted &&
+        !_lifecycleFenceRequested &&
         !_admissionBlocked &&
         safety.SnapshotTimestamp.HasValue &&
         safety.SnapshotTimestamp.Value >= _minimumSafetySnapshotTimestamp;
