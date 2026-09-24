@@ -28,14 +28,27 @@ VictusFanControl must complete this checklist before the first fan-control write
 - [x] Validated 88F8 command range 14-50 is enforced before a backend receives a command.
 - [x] Synthetic coordinator tests verify disabled backend refusal, safety-loss restore, invalid-command restore, backend-failure restore and normal restore.
 
+
+## Previously validated 88F8 control behavior with OmenMon
+
+The target HP 88F8 has already been exercised successfully through OmenMon's BIOS fan interface.
+
+- `OmenMon.exe -Bios FanLevel=30,30` produced approximately 3000 RPM on both fans.
+- Fixed levels `14,14`, `20,20`, `40,40` and `50,50` were also exercised during characterization.
+- The fixed-level operation populated the known fan set-points and started the manual countdown/watchdog at EC `0x63`.
+- The previously used restore command was `OmenMon.exe -Bios FanMode=LegacyDefault`, returning fan authority to the HP BIOS/automatic policy.
+- OmenMon's textual `Mode=LegacyDefault` / `Manual=False` fields were not sufficient by themselves to identify active fixed-level control on this board; countdown, set-point and measured RPM behavior were the useful evidence.
+
+Therefore the project does **not** need to rediscover how to enter/leave fan control from scratch. The remaining task is to independently implement and revalidate the equivalent HP BIOS/WMI operations behind `IFanControlBackend`, without copying OmenMon GPL source.
+
 ## Still required before custom control can be enabled
 
 - [ ] Validate the latest suspend/resume build on the HP 88F8 hardware.
 - [ ] Repeat telemetry health tests under CPU load, GPU load and gaming.
 - [ ] Validate external-controller ownership/conflict behavior with HP OMEN Gaming Hub while keeping the user's CPU undervolt active.
 - [ ] During the first fan-write test, verify that the OMEN Gaming Hub undervolt remains unchanged before, during and after custom fan control and after restoring HP firmware authority.
-- [ ] Implement the write backend behind an interface that can always restore HP firmware authority.
-- [ ] Validate HP firmware-auto restoration after normal exit, exception and forced process termination.
+- [ ] Independently implement the HP BIOS/WMI fan backend equivalent to the previously validated OmenMon `FanLevel` operation and `FanMode=LegacyDefault` restore path, behind `IFanControlBackend`.
+- [ ] Revalidate `LegacyDefault` restoration in our own backend, then validate HP firmware-auto restoration after normal exit, exception and forced process termination.
 - [ ] Validate the 88F8 watchdog/countdown behavior and recovery semantics.
 - [ ] Implement fan-command acknowledgement using both tachometers.
 - [ ] Define bounded RPM-response timeout and mismatch thresholds from hardware measurements.
