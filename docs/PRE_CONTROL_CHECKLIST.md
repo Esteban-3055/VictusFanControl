@@ -1,77 +1,69 @@
-# Pre-control checklist
+# Pre-automatic-control checklist
 
-VictusFanControl must complete this checklist before the first fan-control write is enabled.
+This checklist tracks what must be true before VictusFanControl is allowed to run an unattended adaptive fan policy on the validated HP 88F8 target.
 
-## Implemented read-only prerequisites
+## Telemetry and runtime
 
 - [x] Direct CPU/GPU telemetry without LibreHardwareMonitor.
 - [x] Independent CPU and GPU tachometer feedback.
 - [x] Bounded EC/MSR/NVML retries and backend reconstruction.
-- [x] Strict telemetry soak test.
-- [x] Suspend/resume detection and backend revalidation.
-- [x] Duplicate Windows resume-event coalescing.
-- [x] Runtime state machine.
-- [x] Telemetry freshness watchdog.
-- [x] Whole-payload freeze guard for repeated identical sensor snapshots.
-- [x] HP 88F8 runtime board identification / allowlist gate.
-- [x] Sensor plausibility gate.
-- [x] Conservative thermal handoff gate.
-- [x] Persistent application/event log.
-- [x] Notification-area status and diagnostics GUI.
-- [x] Single VictusFanControl GUI instance per Windows session.
-- [x] GUI requires elevation so PawnIO access cannot silently run unprivileged.
-- [x] Synthetic fail-closed SafetyGate self-test runs in CI.
-- [x] Read-only OMEN/Gaming Hub process discovery for target-machine conflict mapping.
-- [x] Normal GUI/controller fan-write path remains hard-disabled; explicit validation-only WMI commands are isolated from it.
-- [x] Narrow IFanControlBackend boundary prevents arbitrary controller-side EC writes.
-- [x] FanControlCoordinator owns authority transitions and fail-safe restoration.
-- [x] Validated 88F8 command range 14-50 is enforced before a backend receives a command.
-- [x] Synthetic coordinator tests verify disabled backend refusal, safety-loss restore, invalid-command restore, backend-failure restore and normal restore.
+- [x] EC mutex/backoff and coherent 16-bit tachometer reads.
+- [x] 30-minute current-reader health soak: 1629/1629 complete, zero missing.
+- [x] Suspend/resume detection, power-cycle epochs and duplicate resume coalescing.
+- [~] Post-fix suspend/resume hardware regression: 2/5 planned cycles passed cleanly; remaining 3 were explicitly waived.
+- [x] Runtime state machine and telemetry freshness watchdog.
+- [x] Whole-payload freeze guard.
+- [x] Exact target fingerprint and NVIDIA device identity checks.
 
+## HP 88F8 write/restore route
 
-## Previously validated 88F8 control behavior with OmenMon
+- [x] Independent HP BIOS/WMI transport.
+- [x] `SetFanLevel` contract validated against public OmenMon behavior and real hardware.
+- [x] `GetFanLevel` semantics corrected: current speed-level telemetry, not command readback.
+- [x] EC 0x34/0x35 fixed-setpoint acknowledgement.
+- [x] Dedicated `FF,FF` fixed-level release sentinel.
+- [x] Real hardware restore validated: `FF,FF -> LegacyDefault` returned EC setpoints to `FF/FF`.
+- [x] Final bounded `30,30` test passed: both fans converged around 3000 RPM.
+- [x] OMEN Gaming Hub remained open and CPU undervolt was unchanged before/after the bounded test.
+- [x] Real `Hp88F8FanControlBackend` implemented behind `IFanControlBackend`.
+- [x] Persistent EC session used by production backend acknowledgement path.
+- [x] Central and backend-local hard command range 14-50.
 
-The target HP 88F8 has already been exercised successfully through OmenMon's BIOS fan interface.
+## Authority and safety supervisor
 
-- `OmenMon.exe -Bios FanLevel=30,30` produced approximately 3000 RPM on both fans.
-- Fixed levels `14,14`, `20,20`, `40,40` and `50,50` were also exercised during characterization.
-- The fixed-level operation populated the known fan set-points and started the manual countdown/watchdog at EC `0x63`.
-- The previously used restore command was `OmenMon.exe -Bios FanMode=LegacyDefault`, returning fan authority to the HP BIOS/automatic policy.
-- OmenMon's textual `Mode=LegacyDefault` / `Manual=False` fields were not sufficient by themselves to identify active fixed-level control on this board; countdown, set-point and measured RPM behavior were the useful evidence.
+- [x] `FanControlCoordinator` is the only normal-policy path to the backend.
+- [x] Firmware / Custom / Restoring / Faulted authority states.
+- [x] SafetyGate permission required before custom authority.
+- [x] Invalid command, backend exception and uncertain partial entry restore HP authority.
+- [x] Read-only ownership conflict does not clear another controller's override.
+- [x] Continuous runtime SafetyGate enforcement.
+- [x] In-flight backend acknowledgement can be cancelled by safety/lifecycle handoff.
+- [x] Suspend closes custom admission and restores firmware authority.
+- [x] Resume requires a post-boundary validated telemetry sample before admission can reopen.
+- [x] Stale pre-resume SafetyGate results cannot reacquire authority.
+- [x] Normal exit / Windows shutdown dispose the coordinator before telemetry teardown.
+- [x] External EC setpoint overwrite is detected rather than fought.
 
-Therefore the project does **not** need to rediscover how to enter/leave fan control from scratch. The remaining task is to independently implement and revalidate the equivalent HP BIOS/WMI operations behind `IFanControlBackend`, without copying OmenMon GPL source.
+## Fan command acknowledgement
 
-## Still required before custom control can be enabled
+- [x] EC setpoint acknowledgement is bounded.
+- [x] Both physical tachometers participate in command acknowledgement.
+- [x] Material increase/decrease requests require measured directional RPM response.
+- [x] Near-current requests require valid non-zero tachometer continuity.
+- [x] Physical fan ceilings are handled independently.
+- [x] Synthetic CPU-tach failure, GPU-tach failure, ownership-loss and restore-failure tests run in CI.
 
-- [ ] Validate the latest suspend/resume build on the HP 88F8 hardware.
-- [ ] Repeat telemetry health tests under CPU load, GPU load and gaming.
-- [ ] Validate external-controller ownership/conflict behavior with HP OMEN Gaming Hub while keeping the user's CPU undervolt active.
-- [ ] During the first fan-write test, verify that the OMEN Gaming Hub undervolt remains unchanged before, during and after custom fan control and after restoring HP firmware authority.
-- [x] Independently implement and contract-test the HP BIOS/WMI `FanLevel`, `GetFanLevel` and `FanMode=LegacyDefault` operations. Production `IFanControlBackend` integration remains intentionally disabled.
-- [ ] Revalidate `LegacyDefault` restoration in our own backend, then validate HP firmware-auto restoration after normal exit, exception and forced process termination.
-- [ ] Validate the 88F8 watchdog/countdown behavior and recovery semantics.
-- [~] Bounded first-write harness now checks exact BIOS readback, EC setpoints and both tachometers; production-controller acknowledgement still remains to be integrated.
-- [ ] Define bounded RPM-response timeout and mismatch thresholds from hardware measurements.
-- [ ] Validate thermal emergency thresholds under load.
-- [ ] Keep all write-capable code disabled unless board, telemetry, freshness and runtime gates pass.
-- [ ] Only after all previous items pass: implement the adaptive/shared-RPM controller.
+## Remaining gates before automatic control
+
+- [ ] Exercise the **integrated backend + coordinator** on real hardware, not only the standalone bounded harness.
+- [ ] Exercise suspend while Custom authority is active and verify `FF,FF -> LegacyDefault` occurs before sleep.
+- [ ] Characterize forced-process-termination / EC countdown/watchdog recovery; managed `finally`/Dispose cannot protect a killed process.
+- [ ] Repeat validation under representative CPU load, GPU load and gaming.
+- [ ] Validate thermal emergency handoff thresholds under load.
+- [ ] Validate level-14 restart from a truly stopped fan before using it as a permanent minimum.
+- [ ] Implement the shared physical-RPM adaptive controller, estimator, slew limits and independent per-fan compensation.
+- [ ] Tune and validate that controller before enabling it by default.
 
 ## Current authority
 
-The current v0.3 development GUI is still read-only. **HP firmware owns both fans during normal application use.** Explicit CLI validation commands exist, but are not wired into the GUI/adaptive controller.
-
-The GUI may display that the current preconditions are ready, but the central safety gate still reports the fan write/restore backend as absent, so custom fan control cannot be enabled.
-
-
-## Latest deep-audit hardening
-
-- [x] Exact target fingerprint added: HP 88F8 / 88.58, Victus 16-d0xxx, SKU prefix 62C37LA and expected RTX 3060 identity.
-- [x] Coordinator now obeys `CustomControlPermitted` rather than only read-only preconditions.
-- [x] Partial custom-entry failure forces a firmware-restore attempt.
-- [x] Central hard 14-50 limits are independent of backend-advertised capabilities.
-- [x] EC wait loop uses bounded spin/yield/sleep backoff rather than prolonged pure spinning.
-- [x] 16-bit tachometers receive coherence validation against torn reads.
-- [x] Power-cycle epochs discard reads/recoveries that belong to an obsolete suspend/resume cycle.
-- [x] First-write WMI provider/session setup occurs before the write and WMI method execution is bounded.
-- [x] First-write harness rejects known concurrent OmenMon/VictusFanControl GUI controllers while allowing OMEN Gaming Hub for undervolt validation.
-- [ ] Re-run read-only hardware soak and suspend/resume regression after these changes.
+Version 0.4 contains a real write-capable HP backend, but **automatic policy is OFF**. Launching the GUI does not acquire Custom authority or write a fan level. HP firmware remains authoritative until a future explicit policy passes SafetyGate and requests authority through `FanControlCoordinator`.

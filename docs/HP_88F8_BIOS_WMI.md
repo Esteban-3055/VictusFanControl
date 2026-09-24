@@ -1,43 +1,52 @@
 # HP 88F8 BIOS/WMI fan control contract
 
-This document records the minimal HP WMI contract used by VictusFanControl.
-The implementation is independent and does not require OmenMon at runtime.
+This document records the minimal HP WMI protocol used independently by VictusFanControl. OmenMon is not required at runtime.
 
-## Restore HP firmware fan policy
-
-The previously validated OmenMon operation:
-
-```powershell
-OmenMon.exe -Bios FanMode=LegacyDefault
-```
-
-maps to the HP OMEN WMI BIOS interface:
+## Common WMI transport
 
 - namespace: `root\wmi`
-- BIOS method class: `hpqBIntM`
+- method class: `hpqBIntM`
 - instance: `ACPI\PNP0C14\0_0`
-- input data class: `hpqBDataIn`
-- method: `hpqBIOSInt0`
+- input class: `hpqBDataIn`
 - signature: ASCII `SECU`
-- Command: `0x00020008`
-- CommandType: `0x1A`
-- payload: `FF 00 00 00`
-- success return code: `0`
+- command family: `0x00020008`
 
-The second payload byte is the fan-mode value; `00` is LegacyDefault.
+## Operations
 
-## Safety
+| Operation | CommandType | Payload | Output |
+| --- | ---: | --- | --- |
+| Get current fan level | `0x2D` | `00 00 00 00` | `hpqBIOSInt128` |
+| Set fixed fan level | `0x2E` | `CPU GPU 00 00` | `hpqBIOSInt0` |
+| Release fixed level | `0x2E` | `FF FF 00 00` | `hpqBIOSInt0` |
+| Set LegacyDefault mode | `0x1A` | `FF 00 00 00` | `hpqBIOSInt0` |
 
-The normal GUI path still uses `DisabledFanControlBackend`; this WMI operation is exposed only through the explicit experimental restore test.
+A successful WMI return code alone is not treated as hardware acknowledgement.
 
-The restore operation is board-gated to HP `88F8`.
+## Hardware semantics established on the target
 
-Run:
+`GetFanLevel` is current speed-level telemetry. It is **not** an echo of the requested fixed target.
 
-```powershell
-.\scripts\test-restore-hp-auto.ps1
+Fixed WMI command ownership is observed at EC:
+
+- CPU setpoint `0x34`
+- GPU setpoint `0x35`
+
+The corrected firmware release sequence is:
+
+```text
+SetFanLevel(FF,FF)
+        ->
+FanMode=LegacyDefault
+        ->
+verify EC 0x34/0x35 == FF/FF
 ```
 
-The script requires typing `RESTORE` before performing the BIOS/WMI call. By default it captures the known 88F8 EC fan-control state before and after the call.
+A LegacyDefault-only call returned WMI success during testing but left EC setpoints at 30/30, so it is not used as the complete release operation.
 
-This operation changes only the HP fan-mode command envelope above. It does not issue CPU-voltage or undervolt commands. Undervolt preservation will still be verified during the first real fan-control test.
+The production backend deliberately does not write EC manual/countdown fields. OMEN Gaming Hub was observed maintaining `manual=0x06` and refreshing the countdown while open, and its CPU undervolt remained unchanged throughout the bounded fan test.
+
+## Safety scope
+
+Ordinary fan commands are restricted to 14-50 on the exact validated target fingerprint. `FF,FF` is a dedicated release sentinel and cannot be requested as a normal policy level.
+
+The normal application uses these operations only through `Hp88F8FanControlBackend` and `FanControlCoordinator`. The automatic policy remains disabled in v0.4.
