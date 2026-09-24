@@ -162,6 +162,10 @@ public static class Hp88F8IntegratedCoordinatorTest
                 throw;
             }
 
+            // ApplyAsync intentionally blocks while the production backend waits
+            // for EC + dual-tach acknowledgement. That elapsed time is not a
+            // scheduler gap, so start the post-ACK gap detector from here.
+            previousProgressTick = Stopwatch.GetTimestamp();
             EnsureCustomWindow(customStarted.Value);
 
             Console.WriteLine(
