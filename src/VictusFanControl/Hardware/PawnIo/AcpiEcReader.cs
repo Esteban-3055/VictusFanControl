@@ -104,11 +104,17 @@ internal sealed class AcpiEcReader : IDisposable
         {
             return RetryLocked(
                 () => new Hp88F8ControlStateSample(
-                    CpuSetpoint: ReadRegisterLocked(0x34),
-                    GpuSetpoint: ReadRegisterLocked(0x35),
+                    CpuRateTarget: ReadRegisterLocked(0x2C),
+                    GpuRateTarget: ReadRegisterLocked(0x2D),
                     CpuRate: ReadRegisterLocked(0x2E),
                     GpuRate: ReadRegisterLocked(0x2F),
+                    CpuSetpoint: ReadRegisterLocked(0x34),
+                    GpuSetpoint: ReadRegisterLocked(0x35),
+                    Manual: ReadRegisterLocked(0x62),
                     Countdown: ReadRegisterLocked(0x63),
+                    Mode: ReadRegisterLocked(0x95),
+                    MaxFan: ReadRegisterLocked(0xEC),
+                    FanSwitch: ReadRegisterLocked(0xF4),
                     CpuRpm: ReadWordLittleEndianLocked(0xB0),
                     GpuRpm: ReadWordLittleEndianLocked(0xB2)),
                 "EC 88F8 control-state snapshot");
@@ -263,11 +269,17 @@ internal sealed class AcpiEcReader : IDisposable
     internal readonly record struct FanTachometerSample(ushort CpuRpm, ushort GpuRpm);
 
     internal readonly record struct Hp88F8ControlStateSample(
-        byte CpuSetpoint,
-        byte GpuSetpoint,
+        byte CpuRateTarget,
+        byte GpuRateTarget,
         byte CpuRate,
         byte GpuRate,
+        byte CpuSetpoint,
+        byte GpuSetpoint,
+        byte Manual,
         byte Countdown,
+        byte Mode,
+        byte MaxFan,
+        byte FanSwitch,
         ushort CpuRpm,
         ushort GpuRpm);
 }

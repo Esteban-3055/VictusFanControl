@@ -8,14 +8,23 @@ namespace VictusFanControl.Hardware.Hp;
 /// <summary>
 /// Deliberately narrow first-write validation for the known HP 88F8.
 /// It is not a general fan controller: level and duration are fixed.
-/// Firmware authority is restored in a finally block.
+/// Firmware authority is restored in a finally block after ANY attempted write.
 /// </summary>
 public static class Hp88F8FirstFanWriteTest
 {
     public const byte TestLevel = 30;
     public const int TestDurationSeconds = 15;
+
     private const int AcknowledgementDeadlineSeconds = 8;
+    private const int RequiredConsecutiveRpmSamples = 2;
     private const double MinimumAcknowledgedRpm = 2500;
+    private const double MaximumAcknowledgedRpm = 4000;
+
+    // First hardware-write validation should be done under light load.
+    private const double MaximumBaselineCpuTemperatureC = 80;
+    private const double MaximumBaselineGpuTemperatureC = 75;
+    private const double MaximumBaselineCpuPowerW = 50;
+    private const double MaximumBaselineGpuPowerW = 70;
 
     public static async Task<int> RunAsync(
         string modulesDirectory,
@@ -69,11 +78,23 @@ public static class Hp88F8FirstFanWriteTest
             return 22;
         }
 
-        Hp88F8EcControlState? ecBefore = null;
+        if (baseline.CpuTemperatureC > MaximumBaselineCpuTemperatureC ||
+            baseline.GpuTemperatureC > MaximumBaselineGpuTemperatureC ||
+            baseline.CpuPackagePowerW > MaximumBaselineCpuPowerW ||
+            baseline.GpuPowerW > MaximumBaselineGpuPowerW)
+        {
+            Console.Error.WriteLine(
+                "First fan-write test requires a light-load baseline. " +
+                $"Limits: CPU <= {MaximumBaselineCpuTemperatureC:0} C / {MaximumBaselineCpuPowerW:0} W, " +
+                $"GPU <= {MaximumBaselineGpuTemperatureC:0} C / {MaximumBaselineGpuPowerW:0} W.");
+            return 29;
+        }
+
+        Hp88F8EcControlState ecBefore;
         try
         {
             ecBefore = new Hp88F8EcControlStateProbe(modulesDirectory).Read();
-            Console.WriteLine($"EC before: {ecBefore}");
+            Console.WriteLine($"EC before : {ecBefore}");
         }
         catch (Exception ex)
         {
@@ -82,8 +103,22 @@ public static class Hp88F8FirstFanWriteTest
         }
 
         var bios = new Hp88F8BiosFanControl();
-        var commandSent = false;
+
+        try
+        {
+            var biosBefore = bios.GetFanLevels();
+            Console.WriteLine(
+                $"BIOS level before: CPU={biosBefore.CpuLevel} GPU={biosBefore.GpuLevel}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Could not read BIOS fan levels before test: {ex.Message}");
+            return 30;
+        }
+
+        var writeAttempted = false;
         var acknowledged = false;
+        var consecutiveRpmSamples = 0;
         Exception? testFailure = null;
         Exception? restoreFailure = null;
 
@@ -92,8 +127,30 @@ public static class Hp88F8FirstFanWriteTest
             Console.WriteLine();
             Console.WriteLine(
                 $"Applying fixed HP BIOS fan level {TestLevel},{TestLevel} for at most {TestDurationSeconds} seconds...");
+
+            // Set this BEFORE the WMI call. OmenMon documents that on some HP
+            // models a fan-level setting may take effect even if the BIOS call
+            // reports an error. Therefore every attempted write must be followed
+            // by a firmware-restore attempt.
+            writeAttempted = true;
             bios.SetFanLevel(TestLevel, TestLevel);
-            commandSent = true;
+
+            await Task.Delay(250, cancellationToken).ConfigureAwait(false);
+
+            var biosApplied = bios.GetFanLevels();
+            Console.WriteLine(
+                $"BIOS level after write: CPU={biosApplied.CpuLevel} GPU={biosApplied.GpuLevel}");
+
+            if (biosApplied.CpuLevel != TestLevel ||
+                biosApplied.GpuLevel != TestLevel)
+            {
+                throw new InvalidOperationException(
+                    $"BIOS fan-level readback mismatch: requested {TestLevel},{TestLevel}, " +
+                    $"read {biosApplied.CpuLevel},{biosApplied.GpuLevel}.");
+            }
+
+            var ecApplied = new Hp88F8EcControlStateProbe(modulesDirectory).Read();
+            Console.WriteLine($"EC applied: {ecApplied}");
 
             for (var second = 1; second <= TestDurationSeconds; second++)
             {
@@ -115,8 +172,17 @@ public static class Hp88F8FirstFanWriteTest
                         string.Join(" | ", safety.Reasons));
                 }
 
-                if (sample.CpuFanRpm >= MinimumAcknowledgedRpm &&
-                    sample.GpuFanRpm >= MinimumAcknowledgedRpm)
+                var rpmInWindow =
+                    sample.CpuFanRpm >= MinimumAcknowledgedRpm &&
+                    sample.CpuFanRpm <= MaximumAcknowledgedRpm &&
+                    sample.GpuFanRpm >= MinimumAcknowledgedRpm &&
+                    sample.GpuFanRpm <= MaximumAcknowledgedRpm;
+
+                consecutiveRpmSamples = rpmInWindow
+                    ? consecutiveRpmSamples + 1
+                    : 0;
+
+                if (consecutiveRpmSamples >= RequiredConsecutiveRpmSamples)
                 {
                     acknowledged = true;
                 }
@@ -124,8 +190,9 @@ public static class Hp88F8FirstFanWriteTest
                 if (second >= AcknowledgementDeadlineSeconds && !acknowledged)
                 {
                     throw new InvalidOperationException(
-                        $"Fan RPM acknowledgement not observed by {AcknowledgementDeadlineSeconds} s " +
-                        $"(required both >= {MinimumAcknowledgedRpm:0} RPM).");
+                        $"Stable fan RPM acknowledgement not observed by {AcknowledgementDeadlineSeconds} s " +
+                        $"(required {RequiredConsecutiveRpmSamples} consecutive samples with both fans " +
+                        $"{MinimumAcknowledgedRpm:0}-{MaximumAcknowledgedRpm:0} RPM).");
                 }
             }
         }
@@ -135,7 +202,7 @@ public static class Hp88F8FirstFanWriteTest
         }
         finally
         {
-            if (commandSent)
+            if (writeAttempted)
             {
                 Console.WriteLine();
                 Console.WriteLine("Restoring HP FanMode=LegacyDefault...");
@@ -152,17 +219,22 @@ public static class Hp88F8FirstFanWriteTest
             }
         }
 
-        if (commandSent)
+        if (writeAttempted)
         {
             try
             {
                 await Task.Delay(2000, CancellationToken.None).ConfigureAwait(false);
+
+                var biosAfter = bios.GetFanLevels();
+                Console.WriteLine(
+                    $"BIOS level after restore: CPU={biosAfter.CpuLevel} GPU={biosAfter.GpuLevel}");
+
                 var ecAfter = new Hp88F8EcControlStateProbe(modulesDirectory).Read();
-                Console.WriteLine($"EC after : {ecAfter}");
+                Console.WriteLine($"EC after  : {ecAfter}");
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Could not capture EC state after restore: {ex.Message}");
+                Console.Error.WriteLine($"Could not capture post-restore state: {ex.Message}");
             }
         }
 
@@ -185,7 +257,7 @@ public static class Hp88F8FirstFanWriteTest
 
         if (!acknowledged)
         {
-            Console.Error.WriteLine("Test completed without RPM acknowledgement.");
+            Console.Error.WriteLine("Test completed without stable RPM acknowledgement.");
             return 26;
         }
 

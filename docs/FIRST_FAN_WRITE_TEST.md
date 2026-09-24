@@ -9,14 +9,32 @@ It is deliberately **not** a configurable fan controller.
 - fan level: CPU 30 / GPU 30
 - maximum custom duration: 15 seconds
 - telemetry interval: approximately 1 second
+- strict light-load preflight: CPU <= 80 C / 50 W, GPU <= 75 C / 70 W
+- WMI GetFanLevel must read back exactly 30 / 30 after the write
 - RPM acknowledgement deadline: 8 seconds
-- acknowledgement criterion: both tachometers at or above 2500 RPM
+- acknowledgement criterion: two consecutive samples with both tachometers between 2500 and 4000 RPM
 - CPU thermal handoff: 95 C
 - GPU thermal handoff: 87 C
 - any incomplete/stale/implausible telemetry aborts the test
-- HP `FanMode=LegacyDefault` is requested in a `finally` block after a successful fan-level write
+- HP `FanMode=LegacyDefault` is requested in a `finally` block after **any attempted** fan-level write
 
-Before the fan-level write, the PowerShell wrapper first tests `LegacyDefault` restoration. If that operation fails, the manual fan test is never started.
+The distinction between "attempted" and "successful" is important: OmenMon documents that on some HP systems a fan-level command may take effect even when the BIOS reports an error. Therefore VictusFanControl never assumes a thrown write was harmless.
+
+Before the fan-level write, the PowerShell wrapper preflights the `LegacyDefault` WMI command. This proves the WMI route is callable while the machine is already under firmware control; the actual transition from fixed fan level back to HP automatic behavior is validated at the end of the bounded write test.
+
+## State capture
+
+The test logs WMI fan levels and expanded 88F8 EC state around the operation, including:
+
+- 0x2C/0x2D rate targets
+- 0x2E/0x2F rate readback
+- 0x34/0x35 level setpoints
+- 0x62 manual flag
+- 0x63 countdown
+- 0x95 mode
+- 0xEC max-fan state
+- 0xF4 fan switch
+- B0/B2 tachometers
 
 ## Undervolt coexistence
 
@@ -31,5 +49,7 @@ After pulling the latest branch:
 ```powershell
 .\scripts\test-first-fan-write.ps1
 ```
+
+Do not run a game or stress test during this first validation.
 
 Do not terminate the process through Task Manager during this first validation. Ctrl+C is handled and still executes the `finally` restore path. Forced-process termination is a separate failure-mode test to perform only after firmware/watchdog recovery behavior is characterized.

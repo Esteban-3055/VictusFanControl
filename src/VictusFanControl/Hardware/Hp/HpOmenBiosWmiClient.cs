@@ -8,6 +8,10 @@ public readonly record struct HpBiosRequest(
     byte[] Payload,
     int OutputSize);
 
+public readonly record struct HpBiosResponse(
+    int ReturnCode,
+    byte[] Data);
+
 public sealed class HpBiosCallException : Exception
 {
     public HpBiosCallException(string message) : base(message)
@@ -31,7 +35,10 @@ public sealed class HpOmenBiosWmiClient
 
     private static readonly byte[] Signature = [0x53, 0x45, 0x43, 0x55];
 
-    public int Send(HpBiosRequest request)
+    public int Send(HpBiosRequest request) =>
+        SendWithResponse(request).ReturnCode;
+
+    public HpBiosResponse SendWithResponse(HpBiosRequest request)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -88,7 +95,14 @@ public sealed class HpOmenBiosWmiClient
                     "HP WMI response did not contain rwReturnCode.");
             }
 
-            return Convert.ToInt32(rawCode);
+            var responseData =
+                request.OutputSize == 0
+                    ? Array.Empty<byte>()
+                    : (resultData["Data"] as byte[] ?? Array.Empty<byte>()).ToArray();
+
+            return new HpBiosResponse(
+                Convert.ToInt32(rawCode),
+                responseData);
         }
     }
 

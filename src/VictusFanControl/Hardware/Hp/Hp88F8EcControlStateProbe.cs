@@ -4,18 +4,27 @@ using VictusFanControl.Hardware.Windows;
 namespace VictusFanControl.Hardware.Hp;
 
 public sealed record Hp88F8EcControlState(
-    byte CpuSetpoint,
-    byte GpuSetpoint,
+    byte CpuRateTarget,
+    byte GpuRateTarget,
     byte CpuRate,
     byte GpuRate,
+    byte CpuSetpoint,
+    byte GpuSetpoint,
+    byte Manual,
     byte Countdown,
+    byte Mode,
+    byte MaxFan,
+    byte FanSwitch,
     ushort CpuRpm,
     ushort GpuRpm)
 {
     public override string ToString() =>
-        $"setpoint CPU={CpuSetpoint} GPU={GpuSetpoint} | " +
-        $"rate CPU={CpuRate}% GPU={GpuRate}% | " +
-        $"countdown={Countdown} | RPM CPU={CpuRpm} GPU={GpuRpm}";
+        $"level CPU={CpuSetpoint} GPU={GpuSetpoint} | " +
+        $"rate-target CPU={CpuRateTarget}% GPU={GpuRateTarget}% | " +
+        $"rate-read CPU={CpuRate}% GPU={GpuRate}% | " +
+        $"manual=0x{Manual:X2} countdown={Countdown} mode=0x{Mode:X2} " +
+        $"max=0x{MaxFan:X2} switch=0x{FanSwitch:X2} | " +
+        $"RPM CPU={CpuRpm} GPU={GpuRpm}";
 }
 
 /// <summary>
@@ -48,11 +57,17 @@ public sealed class Hp88F8EcControlStateProbe
         var state = ec.ReadHp88F8ControlState();
 
         return new Hp88F8EcControlState(
-            state.CpuSetpoint,
-            state.GpuSetpoint,
+            state.CpuRateTarget,
+            state.GpuRateTarget,
             state.CpuRate,
             state.GpuRate,
+            state.CpuSetpoint,
+            state.GpuSetpoint,
+            state.Manual,
             state.Countdown,
+            state.Mode,
+            state.MaxFan,
+            state.FanSwitch,
             state.CpuRpm,
             state.GpuRpm);
     }

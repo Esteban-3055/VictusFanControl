@@ -3,13 +3,16 @@ $ErrorActionPreference = 'Stop'
 Write-Host 'VictusFanControl - FIRST HP 88F8 FAN WRITE TEST' -ForegroundColor Cyan
 Write-Host ''
 Write-Host 'Test sequence:'
-Write-Host '  1. Verify HP LegacyDefault restore works.'
-Write-Host '  2. Apply fixed BIOS fan level 30,30 for at most 15 seconds.'
-Write-Host '  3. Monitor all telemetry and both tachometers every second.'
-Write-Host '  4. Abort on telemetry/safety failure or missing RPM acknowledgement.'
-Write-Host '  5. Restore HP FanMode=LegacyDefault in a finally block.'
+Write-Host '  1. Preflight the HP LegacyDefault WMI command.'
+Write-Host '  2. Require a light-load telemetry baseline.'
+Write-Host '  3. Apply fixed BIOS fan level 30,30 for at most 15 seconds.'
+Write-Host '  4. Verify BIOS GetFanLevel reads back 30,30.'
+Write-Host '  5. Monitor all telemetry and both tachometers every second.'
+Write-Host '  6. Require stable RPM acknowledgement.'
+Write-Host '  7. Restore HP FanMode=LegacyDefault after ANY attempted fan-level write.'
 Write-Host ''
 Write-Host 'Keep OMEN Gaming Hub open with your normal undervolt.'
+Write-Host 'Do not run a game or stress test during this first write validation.'
 Write-Host 'Before continuing, verify the undervolt shown in OMEN Gaming Hub.' -ForegroundColor Yellow
 Write-Host ''
 
@@ -20,15 +23,15 @@ if ($pre -cne 'UNDERVOLT-OK') {
 }
 
 Write-Host ''
-Write-Host 'Step 1: validating HP firmware restore...' -ForegroundColor Cyan
+Write-Host 'Step 1: preflighting HP LegacyDefault WMI command...' -ForegroundColor Cyan
 dotnet run --project .\src\VictusFanControl -c Release -- --restore-hp-auto
 if ($LASTEXITCODE -ne 0) {
-    Write-Error 'LegacyDefault restore validation failed. Fan-write test will NOT run.'
+    Write-Error 'LegacyDefault WMI preflight failed. Fan-write test will NOT run.'
     exit $LASTEXITCODE
 }
 
 Write-Host ''
-$confirm = Read-Host 'Restore succeeded. Type FAN30 to run the 15-second level 30,30 test'
+$confirm = Read-Host 'WMI preflight succeeded. Type FAN30 to run the 15-second level 30,30 test'
 if ($confirm -cne 'FAN30') {
     Write-Host 'Cancelled before fan-level write.'
     exit 1
