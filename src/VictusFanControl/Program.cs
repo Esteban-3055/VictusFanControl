@@ -10,9 +10,9 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        Console.WriteLine("VictusFanControl v0.2.0-dev - READ-ONLY TELEMETRY");
-        Console.WriteLine("Backends: PawnIO DeviceIoControl + NVIDIA NVML. LibreHardwareMonitor is not used.");
-        Console.WriteLine("No fan set-point, BIOS fan-mode or EC register writes are performed by this build.");
+        Console.WriteLine("VictusFanControl v0.3.0-dev");
+        Console.WriteLine("Telemetry: PawnIO DeviceIoControl + NVIDIA NVML.");
+        Console.WriteLine("Normal GUI/control path remains read-only. An explicit experimental HP-auto restore command is available.");
         Console.WriteLine();
 
         CliOptions options;
@@ -42,6 +42,42 @@ internal static class Program
         if (options.ControlSelfTest)
         {
             return await FanControlCoordinatorSelfTest.RunAsync(Console.Out);
+        }
+
+        if (options.BiosContractSelfTest)
+        {
+            return Hp88F8BiosContractSelfTest.Run(Console.Out);
+        }
+
+        if (options.RestoreHpAuto)
+        {
+            try
+            {
+                Hp88F8EcControlState? before = null;
+                if (!options.SkipEcSnapshots)
+                {
+                    before = new Hp88F8EcControlStateProbe(options.ModulesDirectory).Read();
+                    Console.WriteLine($"Before: {before}");
+                }
+
+                Console.WriteLine("Sending HP BIOS/WMI FanMode=LegacyDefault...");
+                new Hp88F8BiosFanControl().RestoreLegacyDefault();
+                Console.WriteLine("BIOS returned success.");
+
+                if (!options.SkipEcSnapshots)
+                {
+                    await Task.Delay(1500);
+                    var after = new Hp88F8EcControlStateProbe(options.ModulesDirectory).Read();
+                    Console.WriteLine($"After : {after}");
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"HP-auto restore failed: {ex.Message}");
+                return 9;
+            }
         }
 
         if (options.Probe88F8EcState)

@@ -29,3 +29,6 @@ jobs:
 
       - name: Fan authority self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --control-self-test
+
+      - name: HP BIOS contract self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --bios-contract-self-test
