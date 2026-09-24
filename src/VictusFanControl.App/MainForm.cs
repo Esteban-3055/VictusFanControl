@@ -139,7 +139,7 @@ internal sealed class MainForm : Form
         base.WndProc(ref m);
     }
 
-    private Control BuildUi()
+    private System.Windows.Forms.Control BuildUi()
     {
         var tabs = new TabControl { Dock = DockStyle.Fill };
 
@@ -164,7 +164,7 @@ internal sealed class MainForm : Form
         return tabs;
     }
 
-    private Control BuildOverview()
+    private System.Windows.Forms.Control BuildOverview()
     {
         var root = new TableLayoutPanel
         {
@@ -230,7 +230,7 @@ internal sealed class MainForm : Form
         return root;
     }
 
-    private Control BuildSafetyGroup()
+    private System.Windows.Forms.Control BuildSafetyGroup()
     {
         var group = new GroupBox
         {
@@ -275,7 +275,7 @@ internal sealed class MainForm : Form
         return group;
     }
 
-    private Control BuildDiagnostics()
+    private System.Windows.Forms.Control BuildDiagnostics()
     {
         var root = new TableLayoutPanel
         {
