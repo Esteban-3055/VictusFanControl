@@ -484,16 +484,16 @@ public static class Hp88F8FanControlBackendSelfTest
             }
         };
 
-        var cancelled = false;
+        var cancelledAsNoWrite = false;
         try
         {
             await backend.ApplyAsync(
                 new FanCommand(30, 30, "cancel-before-wmi"),
                 cts.Token);
         }
-        catch (OperationCanceledException)
+        catch (FanControlAdmissionException ex)
         {
-            cancelled = true;
+            cancelledAsNoWrite = ex.InnerException is OperationCanceledException;
         }
 
         hardware.OnEcRead = null;
@@ -501,8 +501,9 @@ public static class Hp88F8FanControlBackendSelfTest
         return Report(
             output,
             "cancellation at pre-dispatch boundary prevents WMI fan write",
-            cancelled &&
+            cancelledAsNoWrite &&
             hardware.SetCalls == 0 &&
+            hardware.RestoreCalls == 0 &&
             hardware.State.CpuSetpoint == byte.MaxValue &&
             hardware.State.GpuSetpoint == byte.MaxValue);
     }
