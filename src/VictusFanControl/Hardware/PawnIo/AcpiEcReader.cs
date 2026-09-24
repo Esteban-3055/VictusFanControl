@@ -16,6 +16,7 @@ internal sealed class AcpiEcReader : IDisposable
     private const byte StatusInputBufferFull = 0x02;
     private const byte CommandReadEc = 0x80;
 
+    private const int ReadAttempts = 3;
     private static readonly TimeSpan EcIoTimeout = TimeSpan.FromMilliseconds(100);
     private static readonly TimeSpan MutexTimeout = TimeSpan.FromMilliseconds(500);
 
@@ -34,7 +35,26 @@ internal sealed class AcpiEcReader : IDisposable
         var lockTaken = AcquireMutex();
         try
         {
-            return ReadRegisterLocked(register);
+            Exception? lastError = null;
+            for (var attempt = 1; attempt <= ReadAttempts; attempt++)
+            {
+                try
+                {
+                    return ReadRegisterLocked(register);
+                }
+                catch (TimeoutException ex)
+                {
+                    lastError = ex;
+                    if (attempt < ReadAttempts)
+                    {
+                        Thread.Sleep(1);
+                    }
+                }
+            }
+
+            throw new TimeoutException(
+                $"EC register 0x{register:X2} failed after {ReadAttempts} attempts: {lastError?.Message}",
+                lastError);
         }
         finally
         {
@@ -52,12 +72,34 @@ internal sealed class AcpiEcReader : IDisposable
             throw new ArgumentOutOfRangeException(nameof(lowRegister));
         }
 
+        var highRegister = (byte)(lowRegister + 1);
         var lockTaken = AcquireMutex();
         try
         {
-            var low = ReadRegisterLocked(lowRegister);
-            var high = ReadRegisterLocked((byte)(lowRegister + 1));
-            return (ushort)(low | (high << 8));
+            Exception? lastError = null;
+            for (var attempt = 1; attempt <= ReadAttempts; attempt++)
+            {
+                try
+                {
+                    // Retry the complete word so the low/high bytes belong to the
+                    // same successful transaction pair.
+                    var low = ReadRegisterLocked(lowRegister);
+                    var high = ReadRegisterLocked(highRegister);
+                    return (ushort)(low | (high << 8));
+                }
+                catch (TimeoutException ex)
+                {
+                    lastError = ex;
+                    if (attempt < ReadAttempts)
+                    {
+                        Thread.Sleep(1);
+                    }
+                }
+            }
+
+            throw new TimeoutException(
+                $"EC word 0x{lowRegister:X2}/0x{highRegister:X2} failed after {ReadAttempts} attempts: {lastError?.Message}",
+                lastError);
         }
         finally
         {
