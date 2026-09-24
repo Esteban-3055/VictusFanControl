@@ -13,6 +13,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private const int GapThresholdMs = 10_000;
     private const int WatchdogIntervalMs = 500;
     private const int HealthySnapshotWatchdogMs = 4000;
+    private const int IdenticalSnapshotFreezeThreshold = 60;
 
     private readonly string _modulesDirectory;
     private readonly CancellationTokenSource _cts = new();
@@ -31,6 +32,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private long _logSequence;
     private int _degradedCompleteStreak;
     private int _degradedIncompleteStreak;
+    private TelemetrySnapshot? _lastLivenessSnapshot;
+    private int _identicalSnapshotStreak;
 
     public TelemetryWorker(string modulesDirectory)
     {
@@ -167,7 +170,19 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 SnapshotAvailable?.Invoke(this, snapshot);
                 PublishDiagnostics();
 
-                HandleNormalSnapshotHealth(snapshot);
+                if (CheckForFrozenSnapshot(snapshot))
+                {
+                    StateMachine.Transition(
+                        SystemState.Degraded,
+                        $"Telemetry payload repeated unchanged for {_identicalSnapshotStreak} samples.");
+                    Log($"Telemetry freeze guard triggered after {_identicalSnapshotStreak} identical complete snapshots.");
+                    ResetFreezeGuard();
+                    RequestRecovery("Telemetry payload freeze guard triggered.");
+                }
+                else
+                {
+                    HandleNormalSnapshotHealth(snapshot);
+                }
             }
             catch (Exception ex)
             {
@@ -269,6 +284,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
         _reader?.Dispose();
         _reader = null;
+        ResetFreezeGuard();
 
         await Task.Delay(ResumeSettleMs, cancellationToken).ConfigureAwait(false);
 
@@ -342,6 +358,45 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             await Task.Delay(5000, cancellationToken).ConfigureAwait(false);
         }
     }
+
+
+    private bool CheckForFrozenSnapshot(TelemetrySnapshot snapshot)
+    {
+        if (!snapshot.IsComplete)
+        {
+            ResetFreezeGuard();
+            return false;
+        }
+
+        if (_lastLivenessSnapshot is not null &&
+            SameSensorPayload(_lastLivenessSnapshot, snapshot))
+        {
+            _identicalSnapshotStreak++;
+        }
+        else
+        {
+            _lastLivenessSnapshot = snapshot;
+            _identicalSnapshotStreak = 1;
+        }
+
+        return _identicalSnapshotStreak >= IdenticalSnapshotFreezeThreshold;
+    }
+
+    private void ResetFreezeGuard()
+    {
+        _lastLivenessSnapshot = null;
+        _identicalSnapshotStreak = 0;
+    }
+
+    private static bool SameSensorPayload(TelemetrySnapshot left, TelemetrySnapshot right) =>
+        left.CpuTemperatureC == right.CpuTemperatureC &&
+        left.CpuPackagePowerW == right.CpuPackagePowerW &&
+        left.CpuLoadPercent == right.CpuLoadPercent &&
+        left.GpuTemperatureC == right.GpuTemperatureC &&
+        left.GpuPowerW == right.GpuPowerW &&
+        left.GpuLoadPercent == right.GpuLoadPercent &&
+        left.CpuFanRpm == right.CpuFanRpm &&
+        left.GpuFanRpm == right.GpuFanRpm;
 
     private static string DescribeMissing(TelemetrySnapshot snapshot)
     {
