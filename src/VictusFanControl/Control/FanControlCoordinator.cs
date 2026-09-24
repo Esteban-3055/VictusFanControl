@@ -172,6 +172,13 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 
                 await _backend.ApplyAsync(command, commandCts.Token).ConfigureAwait(false);
             }
+            catch (FanControlAdmissionException)
+            {
+                Transition(
+                    FanAuthority.Firmware,
+                    "First custom command refused before any fan write; external/firmware state preserved.");
+                throw;
+            }
             catch
             {
                 await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);

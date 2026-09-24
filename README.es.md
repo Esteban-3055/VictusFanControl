@@ -84,4 +84,13 @@ cd VictusFanControl
 
 La GUI muestra disponibilidad del backend y autoridad actual, pero la **política automática sigue desactivada**.
 
+El siguiente gate físico de desarrollo usa la ruta de producción completa, todavía de forma acotada:
+
+```powershell
+.\scripts\test-integrated-coordinator.ps1
+```
+
+No ejecutar esa prueba bajo carga ni terminarla desde Task Manager. Consulta
+`docs/INTEGRATED_COORDINATOR_HARDWARE_TEST.md` antes de usarla.
+
 Consulta `docs/BACKEND_INTEGRATION_V0.4.md`, `docs/PRE_CONTROL_CHECKLIST.md`, `docs/SAFETY.md` y `docs/OMENMON_COMPAT_AUDIT.md`.

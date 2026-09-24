@@ -13,6 +13,8 @@ public sealed class CliOptions
     public bool SkipEcSnapshots { get; private set; }
     public bool FirstFanWriteTest { get; private set; }
     public string? FirstFanWriteToken { get; private set; }
+    public bool IntegratedCoordinatorTest { get; private set; }
+    public string? IntegratedCoordinatorToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
     public int DurationSeconds { get; private set; }
@@ -73,6 +75,14 @@ public sealed class CliOptions
                     options.FirstFanWriteToken = ReadValue(args, ref i);
                     break;
 
+                case "--integrated-coordinator-test":
+                    options.IntegratedCoordinatorTest = true;
+                    break;
+
+                case "--coordinator-write-token":
+                    options.IntegratedCoordinatorToken = ReadValue(args, ref i);
+                    break;
+
                 case "--health-test-minutes":
                     options.HealthTestMinutes = ParsePositiveInt(
                         ReadValue(args, ref i),
@@ -113,6 +123,7 @@ public sealed class CliOptions
             (options.HpBackendSelfTest ? 1 : 0) +
             (options.RestoreHpAuto ? 1 : 0) +
             (options.FirstFanWriteTest ? 1 : 0) +
+            (options.IntegratedCoordinatorTest ? 1 : 0) +
             (options.HealthTestMinutes > 0 ? 1 : 0);
 
         if (exclusiveActions > 1)
@@ -131,6 +142,13 @@ public sealed class CliOptions
         {
             throw new ArgumentException(
                 "--write-token is valid only with --first-fan-write-test.");
+        }
+
+        if (options.IntegratedCoordinatorToken is not null &&
+            !options.IntegratedCoordinatorTest)
+        {
+            throw new ArgumentException(
+                "--coordinator-write-token is valid only with --integrated-coordinator-test.");
         }
 
         return options;
@@ -153,6 +171,8 @@ public sealed class CliOptions
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");
         Console.WriteLine("  --write-token <token>     Required acknowledgement token for the first write test.");
+        Console.WriteLine("  --integrated-coordinator-test  HARDWARE GATE: SafetyGate -> coordinator -> real HP backend.");
+        Console.WriteLine("  --coordinator-write-token <token>  Required acknowledgement token for integrated hardware gate.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");

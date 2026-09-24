@@ -291,7 +291,6 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         {
             ThrowIfDisposed();
             EnsureWritable();
-            cancellationToken.ThrowIfCancellationRequested();
 
             if (!_customModeActive)
             {
@@ -299,60 +298,85 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                     "Fan command refused because backend custom mode is not active.");
             }
 
+            // Keep caller-input validation precise. The no-write classification
+            // below applies only after a valid first command begins hardware
+            // admission and before SetFanLevel is attempted.
             ValidateCommand(command);
 
-            var cpuTarget = checked((byte)command.CpuLevel);
-            var gpuTarget = checked((byte)command.GpuLevel);
+            var writeAttempted = _ownedSetpoint.HasValue;
 
-            var before = _hardware!.ReadEcState();
-            VerifyExistingOwnership(before);
-            ValidateActiveControlState(
-                before,
-                requireRunningTachometers: _ownedSetpoint.HasValue);
-
-            var currentLevels = _hardware.GetCurrentFanLevels();
-            ValidateCurrentSpeedLevel(currentLevels.CpuLevel, "CPU");
-            ValidateCurrentSpeedLevel(currentLevels.GpuLevel, "GPU");
-
-            // Recheck after the WMI read so an external controller changing the
-            // EC setpoint in the admission-to-dispatch window is detected rather
-            // than silently overwritten.
-            var preDispatch = _hardware.ReadEcState();
-            VerifyExistingOwnership(preDispatch);
-            ValidateActiveControlState(
-                preDispatch,
-                requireRunningTachometers: _ownedSetpoint.HasValue);
-
-            // Final cancellation boundary before the WMI write. If suspend or
-            // a safety handoff arrived while the admission checks were running,
-            // do not dispatch a new fixed level.
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (preDispatch.CpuSetpoint != cpuTarget ||
-                preDispatch.GpuSetpoint != gpuTarget)
+            try
             {
-                _hardware.SetFanLevel(cpuTarget, gpuTarget);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var cpuTarget = checked((byte)command.CpuLevel);
+                var gpuTarget = checked((byte)command.GpuLevel);
+
+                var before = _hardware!.ReadEcState();
+                VerifyExistingOwnership(before);
+                ValidateActiveControlState(
+                    before,
+                    requireRunningTachometers: _ownedSetpoint.HasValue);
+
+                var currentLevels = _hardware.GetCurrentFanLevels();
+                ValidateCurrentSpeedLevel(currentLevels.CpuLevel, "CPU");
+                ValidateCurrentSpeedLevel(currentLevels.GpuLevel, "GPU");
+
+                var preDispatch = _hardware.ReadEcState();
+                VerifyExistingOwnership(preDispatch);
+                ValidateActiveControlState(
+                    preDispatch,
+                    requireRunningTachometers: _ownedSetpoint.HasValue);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (preDispatch.CpuSetpoint != cpuTarget ||
+                    preDispatch.GpuSetpoint != gpuTarget)
+                {
+                    // Set this before WMI dispatch: on HP hardware the command
+                    // may take effect even if WMI subsequently reports failure.
+                    writeAttempted = true;
+                    _hardware.SetFanLevel(cpuTarget, gpuTarget);
+                }
+
+                var setpointAck = await WaitForSetpointAsync(
+                    cpuTarget,
+                    gpuTarget,
+                    _timing.SetpointAckTimeout,
+                    cancellationToken).ConfigureAwait(false);
+
+                var tachAck = await WaitForTachometerResponseAsync(
+                    cpuTarget,
+                    gpuTarget,
+                    currentLevels,
+                    preDispatch,
+                    cancellationToken).ConfigureAwait(false);
+
+                _ownedSetpoint = (cpuTarget, gpuTarget);
+                _lastDetail =
+                    $"Command {command.CpuLevel}/{command.GpuLevel} acknowledged by EC setpoints " +
+                    $"and both tachometers; RPM={tachAck.CpuRpm}/{tachAck.GpuRpm}, " +
+                    $"initial RPM={preDispatch.CpuRpm}/{preDispatch.GpuRpm}, " +
+                    $"setpoint-ack RPM={setpointAck.CpuRpm}/{setpointAck.GpuRpm}.";
             }
+            catch (FanControlAdmissionException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (!writeAttempted)
+            {
+                // Read-only EnterCustomMode can race an external controller before
+                // our first write. Relinquish the logical reservation without
+                // sending FF,FF and potentially clearing that external state.
+                _ownedSetpoint = null;
+                _customModeActive = false;
+                _lastDetail =
+                    "First custom command was refused before any fan write; logical authority was released without FF,FF.";
 
-            var setpointAck = await WaitForSetpointAsync(
-                cpuTarget,
-                gpuTarget,
-                _timing.SetpointAckTimeout,
-                cancellationToken).ConfigureAwait(false);
-
-            var tachAck = await WaitForTachometerResponseAsync(
-                cpuTarget,
-                gpuTarget,
-                currentLevels,
-                preDispatch,
-                cancellationToken).ConfigureAwait(false);
-
-            _ownedSetpoint = (cpuTarget, gpuTarget);
-            _lastDetail =
-                $"Command {command.CpuLevel}/{command.GpuLevel} acknowledged by EC setpoints " +
-                $"and both tachometers; RPM={tachAck.CpuRpm}/{tachAck.GpuRpm}, " +
-                $"initial RPM={preDispatch.CpuRpm}/{preDispatch.GpuRpm}, " +
-                $"setpoint-ack RPM={setpointAck.CpuRpm}/{setpointAck.GpuRpm}.";
+                throw new FanControlAdmissionException(
+                    "First custom fan command failed before any fan write was attempted.",
+                    ex);
+            }
         }
         finally
         {

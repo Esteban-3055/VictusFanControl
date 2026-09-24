@@ -17,6 +17,7 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestHappyPathAsync(output);
         failures += await TestExistingOverrideRefusedAsync(output);
         failures += await TestCancelledAdmissionIsNoWriteAsync(output);
+        failures += await TestFirstCommandExternalOverrideIsNoWriteAsync(output);
         failures += await TestUnsupportedTargetRefusedAsync(output);
         failures += await TestRangeRefusedAsync(output);
         failures += await TestRestoreVerificationAsync(output);
@@ -119,6 +120,43 @@ public static class Hp88F8FanControlBackendSelfTest
             hardware.RestoreCalls == 0 &&
             hardware.State.CpuSetpoint == byte.MaxValue &&
             hardware.State.GpuSetpoint == byte.MaxValue);
+    }
+
+    private static async Task<int> TestFirstCommandExternalOverrideIsNoWriteAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        hardware.State = hardware.State with
+        {
+            CpuSetpoint = 31,
+            GpuSetpoint = 31
+        };
+
+        var refusedAsNoWrite = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "first-command-race"),
+                CancellationToken.None);
+        }
+        catch (FanControlAdmissionException ex)
+        {
+            refusedAsNoWrite = ex.InnerException is InvalidOperationException;
+        }
+
+        var status = await backend.GetStatusAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "external override before first write is preserved as no-write",
+            refusedAsNoWrite &&
+            hardware.SetCalls == 0 &&
+            hardware.RestoreCalls == 0 &&
+            hardware.State.CpuSetpoint == 31 &&
+            hardware.State.GpuSetpoint == 31 &&
+            !status.CustomModeActive);
     }
 
     private static async Task<int> TestUnsupportedTargetRefusedAsync(TextWriter output)

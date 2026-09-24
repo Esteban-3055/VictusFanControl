@@ -108,3 +108,25 @@ A subsequent full review found three additional consistency issues and closes th
 - the background telemetry liveness watchdog now uses the same 3-second freshness budget as `SafetyGate.MaximumTelemetryAge`, removing the previous 3 s gate / 4 s watchdog mismatch.
 
 Lifecycle snapshot admission is also strict: a recovery snapshot must be newer than, not equal to, the power-boundary timestamp.
+
+
+## Integrated real-hardware gate prepared
+
+The next validation is implemented as `Hp88F8IntegratedCoordinatorTest` plus
+`scripts/test-integrated-coordinator.ps1`. It keeps the automatic policy OFF
+and sends one bounded 30/30 command through the complete production path:
+
+`SafetyGate -> FanControlCoordinator -> Hp88F8FanControlBackend -> WMI -> EC/tachs -> restore`.
+
+The wrapper builds with warnings-as-errors, runs the synthetic safety/coordinator/backend
+regressions, performs read-only live preflight, and requires an explicit hardware-write
+confirmation token.
+
+This revision also closes the admission-to-first-command ownership race. If a failure
+occurs after read-only custom admission but before the first `SetFanLevel` attempt, the
+backend relinquishes its logical reservation and reports a no-write
+`FanControlAdmissionException`. The coordinator returns to Firmware without sending
+FF,FF, so an external controller that acquired the path in that window is not cleared.
+
+The gate remains **pending** until the script produces a reviewed PASS on the physical
+development machine.

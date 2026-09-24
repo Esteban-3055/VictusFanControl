@@ -55,7 +55,7 @@ This checklist tracks what must be true before VictusFanControl is allowed to ru
 
 ## Remaining gates before automatic control
 
-- [ ] Exercise the **integrated backend + coordinator** on real hardware, not only the standalone bounded harness.
+- [~] Integrated backend + coordinator hardware harness implemented (`scripts/test-integrated-coordinator.ps1`); real-target PASS still required.
 - [ ] Exercise suspend while Custom authority is active and verify `FF,FF -> LegacyDefault` occurs before sleep.
 - [ ] Characterize forced-process-termination / EC countdown/watchdog recovery; managed `finally`/Dispose cannot protect a killed process.
 - [ ] Repeat validation under representative CPU load, GPU load and gaming.

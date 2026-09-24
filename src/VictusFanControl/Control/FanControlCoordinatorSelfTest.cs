@@ -25,6 +25,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestLifecycleBoundaryRestoresAndRejectsStaleSafetyAsync(output, now);
         failures += await TestOwnershipConflictDoesNotClearExternalOverrideAsync(output, safety);
         failures += await TestNoWriteAdmissionFailureDoesNotTriggerRestoreAsync(output, safety);
+        failures += await TestNoWriteFirstCommandFailureDoesNotTriggerRestoreAsync(output, safety);
         failures += await TestSafetyPreemptsInFlightCommandAsync(output, safety, now);
         failures += await TestUnsafeReentryRestoresAsync(output, safety, now);
         failures += await TestRuntimeOwnershipMismatchRestoresAsync(output, safety);
@@ -489,6 +490,41 @@ public static class FanControlCoordinatorSelfTest
             coordinator.Authority == FanAuthority.Firmware);
     }
 
+    private static async Task<int> TestNoWriteFirstCommandFailureDoesNotTriggerRestoreAsync(
+        TextWriter output,
+        SafetyGateResult safety)
+    {
+        var backend = new RecordingBackend { ThrowNoWriteAdmissionOnApply = true };
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None);
+
+        var threw = false;
+        try
+        {
+            await coordinator.ApplyAsync(
+                new FanCommand(30, 30, "synthetic first-command race"),
+                safety,
+                CancellationToken.None);
+        }
+        catch (FanControlAdmissionException)
+        {
+            threw = true;
+        }
+
+        return Report(
+            output,
+            "no-write first-command failure preserves external/firmware state",
+            entered &&
+            threw &&
+            backend.ApplyCalls == 1 &&
+            backend.RestoreCalls == 0 &&
+            !backend.Active &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
     private static async Task<int> TestRuntimeFeedbackFailureRestoresAsync(
         TextWriter output,
         SafetyGateResult safety)
@@ -784,6 +820,7 @@ public static class FanControlCoordinatorSelfTest
         public bool ThrowOnEnterAfterActivate { get; init; }
         public bool ThrowOwnershipConflictOnEnter { get; init; }
         public bool ThrowNoWriteAdmissionOnEnter { get; init; }
+        public bool ThrowNoWriteAdmissionOnApply { get; init; }
         public bool BlockApplyUntilCancelled { get; init; }
         public bool BlockApplyUntilReleased { get; init; }
         public TaskCompletionSource<bool> ApplyStarted { get; } =
@@ -839,6 +876,13 @@ public static class FanControlCoordinatorSelfTest
         {
             ApplyCalls++;
             ApplyStarted.TrySetResult(true);
+
+            if (ThrowNoWriteAdmissionOnApply)
+            {
+                Active = false;
+                throw new FanControlAdmissionException(
+                    "synthetic first-command failure before any write");
+            }
 
             if (ThrowOnApply)
             {

@@ -133,6 +133,30 @@ internal static class Program
                 writeTestCts.Token);
         }
 
+        if (options.IntegratedCoordinatorTest)
+        {
+            if (!string.Equals(
+                    options.IntegratedCoordinatorToken,
+                    "88F8-COORD30",
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    "Integrated coordinator test refused: explicit --coordinator-write-token 88F8-COORD30 is required.");
+                return 40;
+            }
+
+            using var coordinatorTestCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                coordinatorTestCts.Cancel();
+            };
+
+            return await Hp88F8IntegratedCoordinatorTest.RunAsync(
+                options.ModulesDirectory,
+                coordinatorTestCts.Token);
+        }
+
         if (options.Probe88F8EcState)
         {
             try
