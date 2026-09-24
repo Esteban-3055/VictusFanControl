@@ -176,6 +176,16 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             if (RecoveryRequested())
             {
                 await RecoverAndValidateAsync(cancellationToken).ConfigureAwait(false);
+
+                // Recovery validation ends immediately after its final complete
+                // snapshot. Reading again on the next loop iteration can happen
+                // only milliseconds later; GetSystemTimes is differential and
+                // may legitimately produce totalDelta == 0, which appears as a
+                // missing cpu_load sample. Discard stale wake permits from the
+                // completed power event and guarantee one normal sample period
+                // before the next telemetry read.
+                DrainWakeSignals();
+                await Task.Delay(NormalIntervalMs, cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
@@ -510,6 +520,14 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     private void TouchCompletedRead() =>
         Interlocked.Exchange(ref _lastCompletedReadTick, Environment.TickCount64);
+
+
+    private void DrainWakeSignals()
+    {
+        while (_wake.Wait(0))
+        {
+        }
+    }
 
     private async Task WaitOrWakeAsync(int milliseconds, CancellationToken cancellationToken)
     {

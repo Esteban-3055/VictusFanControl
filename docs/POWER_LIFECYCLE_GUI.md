@@ -51,3 +51,10 @@ From an elevated PowerShell at repository root:
 ```
 
 Only one GUI instance is allowed per Windows session.
+
+
+## Post-recovery sampling guard
+
+A hardware test on the validated 88F8 showed that the first ordinary sample after a successful five-sample resume validation could run immediately after the last validation sample. Because Windows CPU utilization is calculated from differential `GetSystemTimes` counters, an effectively zero sampling interval can legitimately produce no CPU-load value.
+
+The worker now drains stale wake permits from the completed power event and waits one normal sampling period before the first ordinary post-recovery read. This prevents a successful recovery from immediately degrading itself solely because two CPU-load reads occurred too close together.
