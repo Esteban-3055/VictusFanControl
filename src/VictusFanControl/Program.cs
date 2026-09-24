@@ -7,8 +7,9 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        Console.WriteLine("VictusFanControl v0.1.0 - READ-ONLY TELEMETRY");
-        Console.WriteLine("No fan, EC or BIOS writes are performed by this build.");
+        Console.WriteLine("VictusFanControl v0.2.0-dev - READ-ONLY TELEMETRY");
+        Console.WriteLine("Backends: PawnIO DeviceIoControl + NVIDIA NVML. LibreHardwareMonitor is not used.");
+        Console.WriteLine("No fan set-point, BIOS fan-mode or EC register writes are performed by this build.");
         Console.WriteLine();
 
         CliOptions options;
@@ -30,21 +31,44 @@ internal static class Program
             return 0;
         }
 
-        using var reader = new LibreHardwareMonitorReader();
-        reader.Open();
+        using var reader = new HardwareTelemetryReader(options.ModulesDirectory);
 
-        if (options.ListSensors)
+        if (options.ProbeBackends)
         {
-            foreach (var line in reader.GetSensorInventory())
+            foreach (var line in reader.GetBackendDiagnostics())
             {
                 Console.WriteLine(line);
             }
 
-            return 0;
+            Console.WriteLine();
+            Console.WriteLine("Warming differential counters (CPU power/load)...");
+            _ = reader.ReadSnapshot();
+            await Task.Delay(1000);
+
+            Console.WriteLine("One live sample:");
+            var sample = reader.ReadSnapshot();
+            ConsoleTelemetryPrinter.Print(sample);
+
+            foreach (var line in reader.GetReadDiagnostics())
+            {
+                Console.WriteLine(line);
+            }
+
+            return reader.IsReadyForBaseline ? 0 : 3;
         }
 
-        var outputPath = options.OutputPath ?? BuildDefaultLogPath();
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
+        if (!reader.BackendsInitialized)
+        {
+            Console.Error.WriteLine("Required telemetry backends are not initialized.");
+            foreach (var line in reader.GetBackendDiagnostics())
+            {
+                Console.Error.WriteLine(line);
+            }
+
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Run .\\scripts\\setup-pawnio-modules.ps1, then .\\scripts\\probe-backends.ps1.");
+            return 3;
+        }
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, eventArgs) =>
@@ -52,6 +76,27 @@ internal static class Program
             eventArgs.Cancel = true;
             cts.Cancel();
         };
+
+        if (options.HealthTestMinutes > 0)
+        {
+            try
+            {
+                return await TelemetryHealthTest.RunAsync(
+                    reader,
+                    options.HealthTestMinutes,
+                    options.IntervalMs,
+                    cts.Token);
+            }
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Health test cancelled.");
+                return 130;
+            }
+        }
+
+        var outputPath = options.OutputPath ?? BuildDefaultLogPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
 
         await using var logger = new CsvTelemetryLogger(outputPath);
         await logger.WriteHeaderAsync(cts.Token);
@@ -93,6 +138,11 @@ internal static class Program
 
         Console.WriteLine();
         Console.WriteLine("Capture finished.");
+        foreach (var line in reader.GetHealthSummary())
+        {
+            Console.WriteLine(line);
+        }
+
         return 0;
     }
 
