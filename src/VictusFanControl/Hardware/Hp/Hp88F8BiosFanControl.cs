@@ -48,7 +48,19 @@ public sealed class Hp88F8BiosFanControl
             OutputSize: 0);
     }
 
-    public (byte CpuLevel, byte GpuLevel) GetFanLevels()
+    public static HpBiosRequest BuildReleaseFanLevelRequest() =>
+        new(
+            Command: DefaultCommand,
+            CommandType: SetFanLevelCommandType,
+            Payload: [0xFF, 0xFF, 0x00, 0x00],
+            OutputSize: 0);
+
+    /// <summary>
+    /// HP GetFanLevel (0x2D) reports the current fan speed level, not the
+    /// commanded SetFanLevel target. It therefore must not be used as an
+    /// immediate command acknowledgement.
+    /// </summary>
+    public (byte CpuLevel, byte GpuLevel) GetCurrentFanLevels()
     {
         EnsureSupportedBoard();
 
@@ -80,6 +92,18 @@ public sealed class Hp88F8BiosFanControl
         }
     }
 
+    public void ReleaseFanLevelOverride()
+    {
+        EnsureSupportedBoard();
+
+        var rc = _client.Send(BuildReleaseFanLevelRequest());
+        if (rc != 0)
+        {
+            throw new HpBiosCallException(
+                $"HP BIOS rejected FF,FF fan-level release with return code {rc}.");
+        }
+    }
+
     public void RestoreLegacyDefault()
     {
         EnsureSupportedBoard();
@@ -90,6 +114,18 @@ public sealed class Hp88F8BiosFanControl
             throw new HpBiosCallException(
                 $"HP BIOS rejected LegacyDefault restore with return code {rc}.");
         }
+    }
+
+    /// <summary>
+    /// Mirrors the relevant OmenMon fan-program release sequence for the
+    /// target: release the fixed fan-level override with FF,FF, then restore
+    /// LegacyDefault. The EC manual flag/countdown are intentionally left
+    /// untouched because OMEN Gaming Hub may own that state.
+    /// </summary>
+    public void RestoreFirmwareAuto()
+    {
+        ReleaseFanLevelOverride();
+        RestoreLegacyDefault();
     }
 
     private static void EnsureSupportedBoard()

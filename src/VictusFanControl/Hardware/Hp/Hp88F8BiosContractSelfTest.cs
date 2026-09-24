@@ -7,6 +7,7 @@ public static class Hp88F8BiosContractSelfTest
         var restore = Hp88F8BiosFanControl.BuildLegacyDefaultRequest();
         var getLevel = Hp88F8BiosFanControl.BuildGetFanLevelRequest();
         var setLevel = Hp88F8BiosFanControl.BuildSetFanLevelRequest(30, 30);
+        var releaseLevel = Hp88F8BiosFanControl.BuildReleaseFanLevelRequest();
 
         var restorePass =
             restore.Command == 0x00020008 &&
@@ -30,9 +31,17 @@ public static class Hp88F8BiosContractSelfTest
             $"{(restorePass ? "PASS" : "FAIL")}  HP 88F8 LegacyDefault WMI envelope");
         output.WriteLine(
             $"{(getLevelPass ? "PASS" : "FAIL")}  HP 88F8 GetFanLevel WMI envelope");
+        var releaseLevelPass =
+            releaseLevel.Command == 0x00020008 &&
+            releaseLevel.CommandType == 0x2E &&
+            releaseLevel.OutputSize == 0 &&
+            releaseLevel.Payload.SequenceEqual(new byte[] { 0xFF, 0xFF, 0x00, 0x00 });
+
         output.WriteLine(
             $"{(setLevelPass ? "PASS" : "FAIL")}  HP 88F8 SetFanLevel(30,30) WMI envelope");
+        output.WriteLine(
+            $"{(releaseLevelPass ? "PASS" : "FAIL")}  HP 88F8 SetFanLevel(FF,FF) release envelope");
 
-        return restorePass && getLevelPass && setLevelPass ? 0 : 8;
+        return restorePass && getLevelPass && setLevelPass && releaseLevelPass ? 0 : 8;
     }
 }

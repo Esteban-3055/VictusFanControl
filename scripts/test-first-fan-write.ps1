@@ -3,13 +3,13 @@ $ErrorActionPreference = 'Stop'
 Write-Host 'VictusFanControl - FIRST HP 88F8 FAN WRITE TEST' -ForegroundColor Cyan
 Write-Host ''
 Write-Host 'Test sequence:'
-Write-Host '  1. Preflight the HP LegacyDefault WMI command.'
+Write-Host '  1. Preflight the HP fan-level release + LegacyDefault WMI restore path.'
 Write-Host '  2. Require a light-load telemetry baseline.'
 Write-Host '  3. Apply fixed BIOS fan level 30,30 for at most 15 seconds.'
-Write-Host '  4. Verify BIOS GetFanLevel reads back 30,30.'
+Write-Host '  4. Verify EC 0x34/0x35 acknowledge the commanded 30,30 setpoint.'
 Write-Host '  5. Monitor all telemetry and both tachometers every second.'
 Write-Host '  6. Require stable RPM acknowledgement.'
-Write-Host '  7. Restore HP FanMode=LegacyDefault after ANY attempted fan-level write.'
+Write-Host '  7. Release the fixed level with FF,FF and restore HP FanMode=LegacyDefault after ANY attempted write.'
 Write-Host ''
 Write-Host 'Keep OMEN Gaming Hub open with your normal undervolt.'
 Write-Host 'Do not run a game or stress test during this first write validation.'
@@ -23,15 +23,15 @@ if ($pre -cne 'UNDERVOLT-OK') {
 }
 
 Write-Host ''
-Write-Host 'Step 1: preflighting HP LegacyDefault WMI command...' -ForegroundColor Cyan
+Write-Host 'Step 1: preflighting HP fan-level release + LegacyDefault restore path...' -ForegroundColor Cyan
 dotnet run --project .\src\VictusFanControl -c Release -- --restore-hp-auto
 if ($LASTEXITCODE -ne 0) {
-    Write-Error 'LegacyDefault WMI preflight failed. Fan-write test will NOT run.'
+    Write-Error 'HP-auto restore preflight failed. Fan-write test will NOT run.'
     exit $LASTEXITCODE
 }
 
 Write-Host ''
-$confirm = Read-Host 'WMI preflight succeeded. Type FAN30 to run the 15-second level 30,30 test'
+$confirm = Read-Host 'Restore preflight succeeded. Type FAN30 to run the 15-second level 30,30 test'
 if ($confirm -cne 'FAN30') {
     Write-Host 'Cancelled before fan-level write.'
     exit 1

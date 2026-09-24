@@ -60,15 +60,39 @@ internal static class Program
                     Console.WriteLine($"Before: {before}");
                 }
 
-                Console.WriteLine("Sending HP BIOS/WMI FanMode=LegacyDefault...");
-                new Hp88F8BiosFanControl().RestoreLegacyDefault();
-                Console.WriteLine("BIOS returned success.");
+                if (before is not null && before.Manual == 0x06)
+                {
+                    Console.WriteLine(
+                        "Note: EC manual flag is already ON (0x06). An external HP/OMEN component may be " +
+                        "maintaining the manual/countdown state; VictusFanControl will not modify that flag.");
+                }
+
+                Console.WriteLine("Sending HP BIOS/WMI fan-level release FF,FF + FanMode=LegacyDefault...");
+                new Hp88F8BiosFanControl().RestoreFirmwareAuto();
+                Console.WriteLine("BIOS returned success for release + LegacyDefault.");
 
                 if (!options.SkipEcSnapshots)
                 {
-                    await Task.Delay(1500);
-                    var after = new Hp88F8EcControlStateProbe(options.ModulesDirectory).Read();
+                    Hp88F8EcControlState? after = null;
+                    var restoreStarted = DateTimeOffset.UtcNow;
+                    do
+                    {
+                        await Task.Delay(500);
+                        after = new Hp88F8EcControlStateProbe(options.ModulesDirectory).Read();
+                    }
+                    while ((after.CpuSetpoint != byte.MaxValue ||
+                            after.GpuSetpoint != byte.MaxValue) &&
+                           DateTimeOffset.UtcNow - restoreStarted < TimeSpan.FromSeconds(5));
+
                     Console.WriteLine($"After : {after}");
+
+                    if (after.CpuSetpoint != byte.MaxValue ||
+                        after.GpuSetpoint != byte.MaxValue)
+                    {
+                        Console.Error.WriteLine(
+                            "HP-auto restore failed verification: EC fan setpoints did not return to FF,FF.");
+                        return 11;
+                    }
                 }
 
                 return 0;

@@ -12,6 +12,7 @@ The following operations now match the HP WMI request envelopes used by OmenMon:
 | --- | ---: | ---: | --- | --- |
 | GetFanLevel | 0x00020008 | 0x2D | 00 00 00 00 | hpqBIOSInt128 |
 | SetFanLevel | 0x00020008 | 0x2E | CPU GPU 00 00 | hpqBIOSInt0 |
+| Release fixed level | 0x00020008 | 0x2E | FF FF 00 00 | hpqBIOSInt0 |
 | FanMode=LegacyDefault | 0x00020008 | 0x1A | FF 00 00 00 | hpqBIOSInt0 |
 
 The common transport is `root\wmi`, class `hpqBIntM`, instance `ACPI\PNP0C14\0_0`, input class `hpqBDataIn`, with signature `SECU`.
@@ -96,3 +97,13 @@ The compatibility review also covered OmenMon-Reborn's later EC reliability fixe
 - treat EC failures as missing telemetry, never as a plausible stale numeric value.
 
 These changes affect the telemetry implementation, so the earlier 30-minute soak is no longer sufficient evidence for the current HEAD. A new read-only soak is required before the first write test.
+
+
+## GetFanLevel semantics corrected by hardware test
+
+The first hardware write test also disproved an earlier validation assumption. HP BIOS `GetFanLevel` (0x2D) reports the **current fan speed level**, not the commanded SetFanLevel target. On the target, immediately after requesting `30,30`, GetFanLevel returned `21,24` while EC 0x34/0x35 later showed the actual requested setpoint `30,30` and RPM was rising.
+
+Therefore:
+- GetFanLevel is informational/current-state telemetry;
+- EC 0x34/0x35 is used to acknowledge and monitor the fixed WMI setpoint on this target;
+- GetFanLevel is no longer used as an exact command/ownership check.

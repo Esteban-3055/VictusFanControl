@@ -115,9 +115,9 @@ public static class Hp88F8FirstFanWriteTest
         try
         {
             bios = new Hp88F8BiosFanControl();
-            var biosBefore = bios.GetFanLevels();
+            var biosBefore = bios.GetCurrentFanLevels();
             Console.WriteLine(
-                $"BIOS level before: CPU={biosBefore.CpuLevel} GPU={biosBefore.GpuLevel}");
+                $"BIOS current level before: CPU={biosBefore.CpuLevel} GPU={biosBefore.GpuLevel}");
         }
         catch (Exception ex)
         {
@@ -154,17 +154,10 @@ public static class Hp88F8FirstFanWriteTest
             EnsureNoSchedulingGap(ref previousProgressTick, "post-write verification");
             EnsureControlWindow(controlStarted.Value);
 
-            var biosApplied = bios.GetFanLevels();
+            var biosApplied = bios.GetCurrentFanLevels();
             Console.WriteLine(
-                $"BIOS level after write: CPU={biosApplied.CpuLevel} GPU={biosApplied.GpuLevel}");
-
-            if (biosApplied.CpuLevel != TestLevel ||
-                biosApplied.GpuLevel != TestLevel)
-            {
-                throw new InvalidOperationException(
-                    $"BIOS fan-level readback mismatch: requested {TestLevel},{TestLevel}, " +
-                    $"read {biosApplied.CpuLevel},{biosApplied.GpuLevel}.");
-            }
+                $"BIOS current level after write: CPU={biosApplied.CpuLevel} GPU={biosApplied.GpuLevel} " +
+                "(informational; this is current speed level, not commanded target)");
 
             var ecApplied = new Hp88F8EcControlStateProbe(modulesDirectory).Read();
             Console.WriteLine($"EC applied: {ecApplied}");
@@ -245,16 +238,17 @@ public static class Hp88F8FirstFanWriteTest
 
                 if (elapsed.TotalSeconds >= nextOwnershipCheckSecond)
                 {
-                    var ownership = bios.GetFanLevels();
+                    var ownership = new Hp88F8EcControlStateProbe(modulesDirectory).Read();
                     Console.WriteLine(
-                        $"BIOS ownership check: CPU={ownership.CpuLevel} GPU={ownership.GpuLevel}");
+                        $"EC ownership check: setpoint CPU={ownership.CpuSetpoint} GPU={ownership.GpuSetpoint} " +
+                        $"| current-rate CPU={ownership.CpuRate}% GPU={ownership.GpuRate}%");
 
-                    if (ownership.CpuLevel != TestLevel ||
-                        ownership.GpuLevel != TestLevel)
+                    if (ownership.CpuSetpoint != TestLevel ||
+                        ownership.GpuSetpoint != TestLevel)
                     {
                         throw new InvalidOperationException(
-                            $"Fan-level ownership changed during the test: expected {TestLevel},{TestLevel}, " +
-                            $"read {ownership.CpuLevel},{ownership.GpuLevel}.");
+                            $"Fan-level ownership changed during the test: expected EC setpoint " +
+                            $"{TestLevel},{TestLevel}, read {ownership.CpuSetpoint},{ownership.GpuSetpoint}.");
                     }
 
                     nextOwnershipCheckSecond += OwnershipCheckIntervalSeconds;
@@ -271,11 +265,11 @@ public static class Hp88F8FirstFanWriteTest
             if (writeAttempted)
             {
                 Console.WriteLine();
-                Console.WriteLine("Restoring HP FanMode=LegacyDefault...");
+                Console.WriteLine("Releasing fixed fan level with FF,FF and restoring HP FanMode=LegacyDefault...");
                 try
                 {
-                    bios.RestoreLegacyDefault();
-                    Console.WriteLine("HP BIOS reported successful LegacyDefault restore.");
+                    bios.RestoreFirmwareAuto();
+                    Console.WriteLine("HP BIOS reported successful fan-level release + LegacyDefault restore.");
                 }
                 catch (Exception ex)
                 {
@@ -289,13 +283,13 @@ public static class Hp88F8FirstFanWriteTest
         {
             try
             {
-                await Task.Delay(2000, CancellationToken.None).ConfigureAwait(false);
+                var ecAfter = await WaitForFanOverrideReleaseAsync(
+                    modulesDirectory,
+                    TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
-                var biosAfter = bios.GetFanLevels();
+                var biosAfter = bios.GetCurrentFanLevels();
                 Console.WriteLine(
-                    $"BIOS level after restore: CPU={biosAfter.CpuLevel} GPU={biosAfter.GpuLevel}");
-
-                var ecAfter = new Hp88F8EcControlStateProbe(modulesDirectory).Read();
+                    $"BIOS current level after restore: CPU={biosAfter.CpuLevel} GPU={biosAfter.GpuLevel}");
                 Console.WriteLine($"EC after  : {ecAfter}");
             }
             catch (Exception ex)
@@ -396,5 +390,33 @@ public static class Hp88F8FirstFanWriteTest
 
         return null;
     }
+
+
+    private static async Task<Hp88F8EcControlState> WaitForFanOverrideReleaseAsync(
+        string modulesDirectory,
+        TimeSpan timeout)
+    {
+        var started = Stopwatch.GetTimestamp();
+        Hp88F8EcControlState? last = null;
+
+        while (Stopwatch.GetElapsedTime(started) < timeout)
+        {
+            last = new Hp88F8EcControlStateProbe(modulesDirectory).Read();
+
+            if (last.CpuSetpoint == byte.MaxValue &&
+                last.GpuSetpoint == byte.MaxValue)
+            {
+                return last;
+            }
+
+            await Task.Delay(500, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        throw new InvalidOperationException(
+            $"Fan-level release was not acknowledged by EC within {timeout.TotalSeconds:0} s. " +
+            $"Last setpoints: CPU={last?.CpuSetpoint.ToString() ?? "n/a"} " +
+            $"GPU={last?.GpuSetpoint.ToString() ?? "n/a"}.");
+    }
+
 
 }

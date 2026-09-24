@@ -10,13 +10,13 @@ It is deliberately **not** a configurable fan controller.
 - maximum custom duration: 15 seconds
 - telemetry interval: approximately 1 second
 - strict light-load preflight **and continuous envelope**: CPU <= 80 C / 50 W, GPU <= 75 C / 70 W
-- WMI GetFanLevel must read back exactly 30 / 30 after the write and again periodically while the test is active\n- EC 0x34/0x35 must acknowledge the requested 30/30 setpoints
+- WMI GetFanLevel is logged only as the current speed level; it is **not** treated as command acknowledgement\n- EC 0x34/0x35 must acknowledge the requested 30/30 setpoints and continue to hold them during the test
 - RPM acknowledgement deadline: 8 seconds
 - acknowledgement criterion: two consecutive samples with both tachometers between 2500 and 4000 RPM
 - CPU thermal handoff: 95 C
 - GPU thermal handoff: 87 C
 - any incomplete/stale/implausible telemetry aborts the test
-- a >3 second sampling/scheduling gap is treated as possible suspend/blocking and aborts to restore\n- HP `FanMode=LegacyDefault` is requested in a `finally` block after **any attempted** fan-level write
+- a >3 second sampling/scheduling gap is treated as possible suspend/blocking and aborts to restore\n- the restore path sends the dedicated `FF,FF` release sentinel and then `FanMode=LegacyDefault` in a `finally` block after **any attempted** fan-level write\n- restore is considered acknowledged only when EC 0x34/0x35 return to `FF,FF`
 
 The distinction between "attempted" and "successful" is important: OmenMon documents that on some HP systems a fan-level command may take effect even when the BIOS reports an error. Therefore VictusFanControl never assumes a thrown write was harmless.
 
@@ -60,3 +60,14 @@ Do not terminate the process through Task Manager during this first validation. 
 The first write test refuses to start while OmenMon or the VictusFanControl GUI is running, to avoid unnecessary concurrent EC/fan-controller activity. OMEN Gaming Hub is intentionally **not** blocked because the target workflow keeps it open for CPU undervolt validation; actual fan ownership is checked by repeated BIOS fan-level readback.
 
 The direct CLI test also requires the explicit acknowledgement token `88F8-FAN30`. The wrapper supplies it only after the user types `FAN30`.
+
+
+## Findings from the first hardware attempt
+
+The first attempt safely aborted because the test incorrectly expected BIOS GetFanLevel to equal the requested `30,30` immediately. The hardware evidence showed:
+
+- before write: BIOS current levels approximately 21/23 while EC setpoints were FF/FF;
+- after SetFanLevel(30,30): BIOS current levels were 21/24 because the fans had only begun ramping;
+- after LegacyDefault-only restore: EC setpoints still showed 30/30 and RPM was still elevated/rising.
+
+This established that GetFanLevel is current speed level telemetry and that LegacyDefault alone is not a sufficient fixed-level release. The test has been corrected accordingly.
