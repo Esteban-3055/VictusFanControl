@@ -103,6 +103,25 @@ function Get-ServiceProcessId {
     return [int]$svc.ProcessId
 }
 
+function Test-JournalOwnedPhase {
+    param($Phase)
+
+    if ($null -eq $Phase) {
+        return $false
+    }
+
+    if ($Phase -is [string]) {
+        return ($Phase -ceq 'Owned' -or $Phase -ceq '2')
+    }
+
+    try {
+        return ([int]$Phase -eq 2)
+    }
+    catch {
+        return $false
+    }
+}
+
 Assert-Administrator
 
 Write-Host 'VictusFanControl - WATCHDOG GATE D (REAL LEASE + FORCED GUI KILL)' -ForegroundColor Cyan
@@ -259,16 +278,26 @@ try {
     }
 
     $journal = Get-Content $journalPath -Raw | ConvertFrom-Json
-    Write-Host "Journal phase        : $($journal.Phase)"
+    $journalOwned = Test-JournalOwnedPhase -Phase $journal.Phase
+    $procStartTicks = [long]$proc.StartTime.ToUniversalTime().Ticks
+    $journalPhaseDisplay = if ($journalOwned) {
+        "$($journal.Phase) (Owned)"
+    } else {
+        "$($journal.Phase)"
+    }
+
+    Write-Host "Journal phase        : $journalPhaseDisplay"
     Write-Host "Journal generation   : $($journal.Generation)"
     Write-Host "Journal controller   : PID=$($journal.Controller.ProcessId) startTicks=$($journal.Controller.ProcessStartUtcTicks)"
+    Write-Host "GUI identity         : PID=$($proc.Id) startTicks=$procStartTicks"
     Write-Host "Journal owned target : $($journal.Owned.Cpu)/$($journal.Owned.Gpu)"
 
-    if ($journal.Phase -cne 'Owned' -or
+    if (-not $journalOwned -or
         [int]$journal.Controller.ProcessId -ne $proc.Id -or
+        [long]$journal.Controller.ProcessStartUtcTicks -ne $procStartTicks -or
         [int]$journal.Owned.Cpu -ne 30 -or
         [int]$journal.Owned.Gpu -ne 30) {
-        throw 'READY marker is not backed by a durable watchdog OWNED 30/30 journal bound to the exact GUI PID.'
+        throw 'READY marker is not backed by a durable watchdog OWNED 30/30 journal bound to the exact GUI PID + creation time.'
     }
 
     if ((Get-Service -Name $serviceName).Status -ne 'Running') {
@@ -350,6 +379,11 @@ finally {
     }
 
     $firmwareSafe = $false
+
+    if ($readyReached -and (Test-Path $journalPath)) {
+        Write-Host 'Waiting up to 15 s for watchdog recovery after cleanup kill...' -ForegroundColor Cyan
+        [void](Wait-ForJournalGone -Seconds 15)
+    }
 
     if (-not (Test-Path $journalPath)) {
         try {
