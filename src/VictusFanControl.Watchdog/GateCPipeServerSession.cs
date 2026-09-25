@@ -13,7 +13,8 @@ internal static class GateCPipeServerSession
         NamedPipeServerStream pipe,
         WatchdogLeaseManager manager,
         CancellationToken cancellationToken,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        bool monitorControllerProcess = false)
     {
         ControllerIdentity? verifiedController = null;
         Process? ownerProcess = null;
@@ -60,20 +61,23 @@ internal static class GateCPipeServerSession
 
             verifiedController = actual;
 
-            ownerProcess =
-                Process.GetProcessById(actual.ProcessId);
-
-            var reopenedStart =
-                ownerProcess.StartTime.ToUniversalTime().Ticks;
-
-            if (reopenedStart != actual.ProcessStartUtcTicks)
+            if (monitorControllerProcess)
             {
-                throw new InvalidOperationException(
-                    "Named-pipe client process identity changed before the lease monitor could open its process handle.");
+                ownerProcess =
+                    Process.GetProcessById(actual.ProcessId);
+
+                var reopenedStart =
+                    ownerProcess.StartTime.ToUniversalTime().Ticks;
+
+                if (reopenedStart != actual.ProcessStartUtcTicks)
+                {
+                    throw new InvalidOperationException(
+                        "Named-pipe client process identity changed before the lease monitor could open its process handle.");
+                }
             }
 
             log?.Invoke(
-                $"WATCHDOG PIPE: verified local controller PID={actual.ProcessId}, startTicks={actual.ProcessStartUtcTicks}.");
+                $"WATCHDOG PIPE: verified local controller PID={actual.ProcessId}, startTicks={actual.ProcessStartUtcTicks}, processMonitor={monitorControllerProcess}.");
 
             await FanControlWatchdogLeaseCodec.WriteResponseAsync(
                 pipe,
@@ -83,8 +87,8 @@ internal static class GateCPipeServerSession
                     "Named-pipe client identity verified."),
                 cancellationToken).ConfigureAwait(false);
 
-            var ownerExitTask =
-                ownerProcess.WaitForExitAsync(cancellationToken);
+            Task? ownerExitTask =
+                ownerProcess?.WaitForExitAsync(cancellationToken);
 
             while (true)
             {
@@ -99,32 +103,35 @@ internal static class GateCPipeServerSession
                         pipe,
                         readCts.Token).AsTask();
 
-                var completed =
-                    await Task.WhenAny(
-                        readTask,
-                        ownerExitTask).ConfigureAwait(false);
-
-                if (ReferenceEquals(completed, ownerExitTask))
+                if (ownerExitTask is not null)
                 {
-                    ownerLossReason =
-                        ownerProcess.HasExited
-                            ? "controller process exited"
-                            : "watchdog service cancellation";
+                    var completed =
+                        await Task.WhenAny(
+                            readTask,
+                            ownerExitTask).ConfigureAwait(false);
 
-                    readCts.Cancel();
-
-                    try
+                    if (ReferenceEquals(completed, ownerExitTask))
                     {
-                        await readTask.ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        // The read was cancelled solely to stop waiting on a
-                        // dead/terminating owner. Durable lease recovery below
-                        // is authoritative.
-                    }
+                        ownerLossReason =
+                            ownerProcess!.HasExited
+                                ? "controller process exited"
+                                : "watchdog service cancellation";
 
-                    break;
+                        readCts.Cancel();
+
+                        try
+                        {
+                            await readTask.ConfigureAwait(false);
+                        }
+                        catch
+                        {
+                            // The read was cancelled solely to stop waiting on a
+                            // dead/terminating owner. Durable lease recovery below
+                            // is authoritative.
+                        }
+
+                        break;
+                    }
                 }
 
                 try
