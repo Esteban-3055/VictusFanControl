@@ -579,6 +579,70 @@ internal sealed class WatchdogLeaseManager
         }
     }
 
+    public async ValueTask<LeaseRecoveryResult?> RecoverForServiceStopAsync(
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            WatchdogLeaseRecord? current;
+            try
+            {
+                current =
+                    _active ??
+                    await _journal.LoadAsync(cancellationToken)
+                        .ConfigureAwait(false);
+            }
+            catch (InvalidDataException)
+            {
+                // A corrupt ownership journal cannot authorize a blind restore.
+                return null;
+            }
+
+            if (current is null)
+            {
+                return null;
+            }
+
+            _active = current;
+
+            if (current.Phase == WatchdogLeasePhase.Prepared)
+            {
+                var observed =
+                    await _hardware.ReadSetpointAsync(cancellationToken)
+                        .ConfigureAwait(false);
+
+                await _journal.DeleteAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                _active = null;
+                _lastHeartbeatMs = 0;
+                _operationStartedMs = 0;
+
+                return new LeaseRecoveryResult(
+                    observed.IsFirmwareOwned
+                        ? LeaseRecoveryDisposition.ClearedPrepared
+                        : LeaseRecoveryDisposition.ExternalOverrideBlocked,
+                    observed,
+                    RestoreAttempted: false,
+                    JournalRetained: false,
+                    observed.IsFirmwareOwned
+                        ? $"{reason}: PREPARED cleared; no hardware write was authorized."
+                        : $"{reason}: PREPARED cleared without touching external fixed setpoint {observed}.");
+            }
+
+            return await RecoverPotentialWriteLockedAsync(
+                current,
+                reason,
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async ValueTask<LeaseRecoveryResult?> CheckDeadlinesAsync(
         CancellationToken cancellationToken)
     {
