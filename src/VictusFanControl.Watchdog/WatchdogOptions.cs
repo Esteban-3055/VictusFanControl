@@ -68,11 +68,24 @@ internal sealed record WatchdogOptions(
                 case "--gate-b-token":
                     gateBToken = ReadValue(args, ref i);
                     break;
+
+                default:
+                    throw new ArgumentException(
+                        $"Unknown watchdog argument: {args[i]}");
             }
         }
 
         if (mode == WatchdogRunMode.GateBRestoreTest)
         {
+            if (!string.Equals(
+                    serviceName,
+                    GateBServiceName,
+                    StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"Gate B restore requires --service-name {GateBServiceName}.");
+            }
+
             if (!string.Equals(
                     gateBToken,
                     GateBRestoreToken,
