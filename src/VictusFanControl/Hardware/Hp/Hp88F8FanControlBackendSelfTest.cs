@@ -36,6 +36,7 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestWatchdogCommitFailureRestoresAsync(output);
         failures += await TestWatchdogRestoreIpcFailureDoesNotBlockLocalRestoreAsync(output);
         failures += await TestWatchdogCancellationAfterIntentAbortsAsync(output);
+        failures += await FanControlWatchdogLeaseClientSelfTest.RunAsync(output);
 
         output.WriteLine();
         output.WriteLine(failures == 0
