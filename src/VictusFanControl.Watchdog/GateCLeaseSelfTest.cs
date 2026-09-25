@@ -591,7 +591,7 @@ internal static class GateCLeaseSelfTest
                     CancellationToken.None);
 
             Assert(response is not null);
-            Assert(!response.Ok);
+            Assert(!response!.Ok);
             Assert(response.Code == "IDENTITY_MISMATCH");
 
             client.Dispose();
