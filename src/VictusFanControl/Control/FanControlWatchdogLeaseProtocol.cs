@@ -39,6 +39,29 @@ public sealed class FanControlWatchdogProtocolException :
 }
 
 /// <summary>
+/// Stable controller-side classification for local watchdog transport loss.
+/// The prefix is intentionally machine-readable so hardware validation can
+/// distinguish actual watchdog IPC loss from unrelated EC/safety failures.
+/// </summary>
+public sealed class FanControlWatchdogTransportException :
+    IOException
+{
+    public const string Marker = "WATCHDOG_IPC_LOSS";
+
+    public FanControlWatchdogTransportException(
+        string operation,
+        Exception innerException)
+        : base(
+            $"{Marker} during {operation}: {innerException.Message}",
+            innerException)
+    {
+        Operation = operation;
+    }
+
+    public string Operation { get; }
+}
+
+/// <summary>
 /// Exact bounded length-prefixed JSON wire codec shared by the elevated
 /// controller and LocalSystem watchdog. Sharing this implementation prevents
 /// client/server DTO drift at the privileged IPC boundary.
