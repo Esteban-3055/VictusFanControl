@@ -597,7 +597,7 @@ See `WATCHDOG_GATE_E.md`.
 
 ### Gate F - double-failure / durable journal
 
-**IN PROGRESS. F1 passed on real hardware on 2026-09-25. F2 remains pending.**
+**IN PROGRESS. F1 passed on real hardware on 2026-09-25. F2 is implemented and awaiting physical validation.**
 
 Gate F is split so the stable OWNED case and the narrower WRITE_ARMED
 transaction window are independently attributable.
@@ -625,12 +625,15 @@ journal. Final and post-test EC probes remained FF/FF, the fallback did not fire
 the production service returned Ready as PID 27172 with 1 s / 5 s / 10 s
 recovery re-verified, and OGH undervolt remained unchanged.
 
-F2 will hold a test-only wrapper immediately before forwarding
-`CommitAsync`, after the production backend has already completed real WMI,
-EC-setpoint and dual-tach acknowledgement. The resulting durable state is
-WRITE_ARMED with pending=30/30 while hardware may already be 30/30. Killing both
-processes there will validate startup recovery across the most critical
-pre-Commit window without inserting a Gate-F branch into the production backend.
+F2 uses the test-only `GateF2CommitHoldWatchdogLeaseClient`. It delegates the
+real durable WriteIntent to the named-pipe client. When the production backend
+later calls CommitAsync—only after real WMI, EC-setpoint ACK and dual-tach
+ACK—the wrapper writes a flushed READY marker and holds without forwarding
+Commit. The durable state therefore remains first-write WRITE_ARMED with
+pending=30/30 while the physical 30/30 command has already been acknowledged.
+The F2 harness then applies the same watchdog-first bounded double kill and
+requires the SCM replacement service alone to recover that journal with
+`RestoredFirmware`.
 
 The existing fail-closed rule remains mandatory: if startup observes a fixed
 setpoint outside the journal's previous/pending/owned set, it must return
