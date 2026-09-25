@@ -490,7 +490,8 @@ ownership recovery using fake hardware.
 
 Validated boundaries include:
 
-- owner loss before WriteIntent and before WriteIntent ACK delivery;
+- owner loss before WriteIntent;
+- transport loss after durable WriteIntent but before ACK consumption while the owner process remains alive -> retain WRITE_ARMED; if no reconnect/progress follows, WRITE_ARMED deadline restores;
 - restart after WriteIntent before WMI;
 - restart after WMI before Commit;
 - restart after Commit;
@@ -501,7 +502,8 @@ Validated boundaries include:
 - heartbeat timeout, WRITE_ARMED deadline and RESTORING deadline;
 - late Heartbeat/WriteIntent/Commit cannot revive an already expired lease even
   if the background deadline monitor has not run yet;
-- broken pipe while OWNED;
+- proven owner death while OWNED -> immediate restore;
+- live-owner pipe loss while OWNED -> retain lease and permit same-identity reconnect;
 - service restart in every durable phase;
 - corrupt journal / unknown fixed setpoint -> no blind restore;
 - external fixed override -> Prepare refused;
