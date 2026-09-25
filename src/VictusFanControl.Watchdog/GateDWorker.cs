@@ -113,6 +113,16 @@ internal sealed class GateDWorker : BackgroundService
                 $"observed={startupRecovery.Observed}; restoreAttempted={startupRecovery.RestoreAttempted}; " +
                 $"journalRetained={startupRecovery.JournalRetained}; detail={startupRecovery.Detail}");
 
+            using var serviceLoopCts =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    stoppingToken);
+
+            var acceptTask =
+                RunAcceptLoopAsync(
+                    manager,
+                    log,
+                    serviceLoopCts.Token);
+
             var deadlineTask =
                 RunDeadlineLoopAsync(
                     manager,
@@ -121,25 +131,49 @@ internal sealed class GateDWorker : BackgroundService
                     accountName,
                     journalPath,
                     log,
-                    stoppingToken);
+                    serviceLoopCts.Token);
+
+            var completed =
+                await Task.WhenAny(
+                    acceptTask,
+                    deadlineTask).ConfigureAwait(false);
+
+            if (!stoppingToken.IsCancellationRequested)
+            {
+                // Either loop ending unexpectedly is a service failure. Cancel
+                // its sibling before propagating the completed task result so
+                // the Windows Service host can exit non-zero and SCM recovery
+                // can restart it.
+                serviceLoopCts.Cancel();
+
+                try
+                {
+                    await Task.WhenAll(
+                        acceptTask,
+                        deadlineTask).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // The sibling loop is expected to observe our cancellation.
+                    // Await the original completed task below for the real fault.
+                }
+
+                await completed.ConfigureAwait(false);
+
+                throw new InvalidOperationException(
+                    "Gate D service loop ended unexpectedly without a stop request.");
+            }
+
+            serviceLoopCts.Cancel();
 
             try
             {
-                await RunAcceptLoopAsync(
-                    manager,
-                    log,
-                    stoppingToken).ConfigureAwait(false);
+                await Task.WhenAll(
+                    acceptTask,
+                    deadlineTask).ConfigureAwait(false);
             }
-            finally
+            catch (OperationCanceledException)
             {
-                try
-                {
-                    await deadlineTask.ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                    when (stoppingToken.IsCancellationRequested)
-                {
-                }
             }
         }
         catch (OperationCanceledException)
