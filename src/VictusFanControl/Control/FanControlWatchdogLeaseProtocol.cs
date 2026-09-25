@@ -25,7 +25,7 @@ public sealed record FanControlWatchdogLeaseResponse(
     string? Phase = null);
 
 public sealed class FanControlWatchdogProtocolException :
-    InvalidDataException
+    IOException
 {
     public FanControlWatchdogProtocolException(
         string code,
