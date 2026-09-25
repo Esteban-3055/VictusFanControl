@@ -259,81 +259,179 @@ internal sealed class GateDWorker : BackgroundService
         WatchdogFileLog log,
         CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        Process? monitoredProcess = null;
+        ControllerIdentity? monitoredIdentity = null;
+
+        try
         {
-            await Task.Delay(
-                DeadlinePollInterval,
-                stoppingToken).ConfigureAwait(false);
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await Task.Delay(
+                    DeadlinePollInterval,
+                    stoppingToken).ConfigureAwait(false);
 
-            LeaseRecoveryResult? recovery;
+                LeaseRecoveryResult? recovery = null;
 
-            try
-            {
-                recovery =
-                    await manager.CheckDeadlinesAsync(
-                        stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-                when (stoppingToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
+                try
+                {
+                    var activeController =
+                        await manager.GetActiveControllerAsync(
+                            stoppingToken).ConfigureAwait(false);
+
+                    if (activeController is null)
+                    {
+                        monitoredProcess?.Dispose();
+                        monitoredProcess = null;
+                        monitoredIdentity = null;
+                    }
+                    else
+                    {
+                        if (monitoredIdentity != activeController ||
+                            monitoredProcess is null)
+                        {
+                            monitoredProcess?.Dispose();
+                            monitoredProcess = null;
+                            monitoredIdentity = activeController;
+
+                            try
+                            {
+                                var candidate =
+                                    Process.GetProcessById(
+                                        activeController.ProcessId);
+
+                                var startTicks =
+                                    candidate.StartTime
+                                        .ToUniversalTime()
+                                        .Ticks;
+
+                                if (startTicks !=
+                                    activeController.ProcessStartUtcTicks)
+                                {
+                                    candidate.Dispose();
+
+                                    recovery =
+                                        await manager.HandleOwnerLossAsync(
+                                            activeController,
+                                            "controller PID was reused / creation time changed",
+                                            stoppingToken).ConfigureAwait(false);
+                                }
+                                else if (candidate.HasExited)
+                                {
+                                    candidate.Dispose();
+
+                                    recovery =
+                                        await manager.HandleOwnerLossAsync(
+                                            activeController,
+                                            "controller process exited",
+                                            stoppingToken).ConfigureAwait(false);
+                                }
+                                else
+                                {
+                                    monitoredProcess = candidate;
+
+                                    log.Write(
+                                        $"GATE D OWNER MONITOR armed PID={activeController.ProcessId}; " +
+                                        $"startTicks={activeController.ProcessStartUtcTicks}.");
+                                }
+                            }
+                            catch (ArgumentException)
+                            {
+                                recovery =
+                                    await manager.HandleOwnerLossAsync(
+                                        activeController,
+                                        "controller process no longer exists",
+                                        stoppingToken).ConfigureAwait(false);
+                            }
+                            catch (InvalidOperationException)
+                            {
+                                recovery =
+                                    await manager.HandleOwnerLossAsync(
+                                        activeController,
+                                        "controller process became unavailable",
+                                        stoppingToken).ConfigureAwait(false);
+                            }
+                        }
+                        else if (monitoredProcess.HasExited)
+                        {
+                            monitoredProcess.Dispose();
+                            monitoredProcess = null;
+
+                            recovery =
+                                await manager.HandleOwnerLossAsync(
+                                    activeController,
+                                    "controller process exited",
+                                    stoppingToken).ConfigureAwait(false);
+                        }
+                    }
+
+                    recovery ??=
+                        await manager.CheckDeadlinesAsync(
+                            stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                    when (stoppingToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    WriteStatus(
+                        hardwareIdentity,
+                        process,
+                        accountName,
+                        journalPath,
+                        ready: false,
+                        blocked: true,
+                        recoveryDisposition:
+                            "DeadlineOrProcessMonitorFailure",
+                        detail:
+                            $"{ex.GetType().Name}: {ex.Message}");
+
+                    log.Write(
+                        $"GATE D MONITOR FAIL: {ex.GetType().Name}: {ex.Message}");
+
+                    throw;
+                }
+
+                if (recovery is null)
+                {
+                    continue;
+                }
+
+                var ready =
+                    IsReadyDisposition(
+                        recovery.Disposition);
+
                 WriteStatus(
                     hardwareIdentity,
                     process,
                     accountName,
                     journalPath,
-                    ready: false,
-                    blocked: true,
+                    ready,
+                    blocked: !ready,
                     recoveryDisposition:
-                        "DeadlineMonitorFailure",
-                    detail:
-                        $"{ex.GetType().Name}: {ex.Message}");
+                        recovery.Disposition.ToString(),
+                    detail: recovery.Detail);
 
                 log.Write(
-                    $"GATE D DEADLINE MONITOR FAIL: {ex.GetType().Name}: {ex.Message}");
+                    $"GATE D RECOVERY disposition={recovery.Disposition}; " +
+                    $"observed={recovery.Observed}; restoreAttempted={recovery.RestoreAttempted}; " +
+                    $"journalRetained={recovery.JournalRetained}; detail={recovery.Detail}");
 
-                throw;
+                if (recovery.JournalRetained)
+                {
+                    // Retained evidence means the condition is unresolved.
+                    // Avoid tight-loop EC/WMI retries while preserving the
+                    // durable ownership record for the next bounded attempt.
+                    await Task.Delay(
+                        TimeSpan.FromSeconds(1),
+                        stoppingToken).ConfigureAwait(false);
+                }
             }
-
-            if (recovery is null)
-            {
-                continue;
-            }
-
-            var ready =
-                IsReadyDisposition(
-                    recovery.Disposition);
-
-            WriteStatus(
-                hardwareIdentity,
-                process,
-                accountName,
-                journalPath,
-                ready,
-                blocked: !ready,
-                recoveryDisposition:
-                    recovery.Disposition.ToString(),
-                detail: recovery.Detail);
-
-            log.Write(
-                $"GATE D DEADLINE RECOVERY disposition={recovery.Disposition}; " +
-                $"observed={recovery.Observed}; restoreAttempted={recovery.RestoreAttempted}; " +
-                $"journalRetained={recovery.JournalRetained}; detail={recovery.Detail}");
-
-            if (!ready &&
-                recovery.Disposition ==
-                LeaseRecoveryDisposition.RestoreFailed)
-            {
-                // Avoid hammering HP WMI if a restore path is persistently
-                // failing. The manager retains durable ownership evidence and
-                // the next bounded deadline pass may retry.
-                await Task.Delay(
-                    TimeSpan.FromSeconds(1),
-                    stoppingToken).ConfigureAwait(false);
-            }
+        }
+        finally
+        {
+            monitoredProcess?.Dispose();
         }
     }
 
