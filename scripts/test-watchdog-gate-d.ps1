@@ -15,7 +15,7 @@ $resultPath = Join-Path $root 'gate-d.result'
 $failsafeLog = Join-Path $root 'watchdog-gate-d-failsafe.log'
 $failsafeScript = Join-Path $PSScriptRoot 'watchdog-gate-b-failsafe.ps1'
 
-$serviceRoot = Join-Path $env:ProgramData 'VictusFanControl\Watchdog'
+$serviceRoot = Join-Path $env:ProgramData 'VictusFanControl\WatchdogGateD'
 $serviceStatusPath = Join-Path $serviceRoot 'state\gate-d.status.json'
 $journalPath = Join-Path $serviceRoot 'state\lease.json'
 $serviceLog = Join-Path $serviceRoot ("logs\watchdog-gate-d-{0}.log" -f (Get-Date -Format 'yyyy-MM-dd'))
