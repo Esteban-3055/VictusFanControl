@@ -245,7 +245,8 @@ internal sealed class GateDWorker : BackgroundService
                 pipe,
                 manager,
                 stoppingToken,
-                log.Write).ConfigureAwait(false);
+                log.Write,
+                monitorControllerProcess: true).ConfigureAwait(false);
         }
     }
 
