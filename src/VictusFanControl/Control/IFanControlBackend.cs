@@ -58,9 +58,11 @@ public interface IFanControlBackend : IAsyncDisposable
     FanBackendCapabilities Capabilities { get; }
 
     /// <summary>
-    /// Probes non-hardware control dependencies that must remain alive while
-    /// Custom authority is active. This must not read/write EC, must not issue
-    /// ordinary fan commands, and must not renew a watchdog heartbeat.
+    /// Probes control dependencies that must remain alive while Custom
+    /// authority is active. The normal successful path must not access local EC,
+    /// issue ordinary fan commands, or renew watchdog heartbeat. An already
+    /// expired watchdog lease may still invoke the watchdog's existing
+    /// fail-safe recovery before refusing the probe.
     /// </summary>
     ValueTask ProbeControlDependencyAsync(CancellationToken cancellationToken);
 
