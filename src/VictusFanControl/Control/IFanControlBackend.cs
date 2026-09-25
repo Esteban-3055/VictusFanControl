@@ -57,6 +57,13 @@ public interface IFanControlBackend : IAsyncDisposable
     bool CanWrite { get; }
     FanBackendCapabilities Capabilities { get; }
 
+    /// <summary>
+    /// Probes non-hardware control dependencies that must remain alive while
+    /// Custom authority is active. This must not read/write EC, must not issue
+    /// ordinary fan commands, and must not renew a watchdog heartbeat.
+    /// </summary>
+    ValueTask ProbeControlDependencyAsync(CancellationToken cancellationToken);
+
     ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken);
     ValueTask EnterCustomModeAsync(CancellationToken cancellationToken);
     ValueTask ApplyAsync(FanCommand command, CancellationToken cancellationToken);
@@ -73,6 +80,9 @@ public sealed class DisabledFanControlBackend : IFanControlBackend
     public bool CanWrite => false;
     public FanBackendCapabilities Capabilities =>
         new("88F8", 14, 50, SupportsIndependentLevels: true);
+
+    public ValueTask ProbeControlDependencyAsync(CancellationToken cancellationToken) =>
+        ValueTask.CompletedTask;
 
     public ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult(new FanBackendStatus(
