@@ -612,11 +612,11 @@ internal sealed class MainForm : Form
         var readEcState = new Button { Text = "Read 88F8 EC state", AutoSize = true };
         readEcState.Click += async (_, _) =>
         {
-            if (_fanCoordinator.Authority == FanAuthority.Custom)
+            if (_fanCoordinator.Authority != FanAuthority.Firmware)
             {
                 AppendEvent(
-                    "88F8 EC state probe refused while Custom authority is active. " +
-                    "Out-of-band full EC snapshots are allowed only before Custom admission or after firmware handoff.");
+                    $"88F8 EC state probe refused while fan authority is {_fanCoordinator.Authority}. " +
+                    "Out-of-band full EC snapshots are allowed only while HP firmware authority is already established.");
                 return;
             }
 
