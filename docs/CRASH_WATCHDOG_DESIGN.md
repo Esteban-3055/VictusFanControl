@@ -139,10 +139,18 @@ The watchdog must distinguish:
 
 ### 6.1 Process death
 
-Owner process handle becomes signaled / pipe breaks.
+Owner process handle becomes signaled.
 
 If a hardware write may have occurred, restore immediately. Do not wait for the
 heartbeat timeout.
+
+A pipe transport break by itself is **not** equivalent to proven process death
+once WRITE_INTENT has been acknowledged. If the exact kernel-verified
+PID/creation-time owner is still alive, immediate restore+lease deletion could
+race that live controller resuming into SetFanLevel. In Gate D, transport loss
+therefore retains the durable lease, allows only the same verified controller to
+reconnect, and leaves process-death plus state deadlines as the fail-closed
+recovery mechanisms.
 
 ### 6.2 Controller hang
 
@@ -355,8 +363,10 @@ Initial validation values, not final production constants:
 - OWNED missed-heartbeat timeout: 5 s;
 - WRITE_ARMED operation deadline: 12 s;
 - RESTORING takeover deadline: 8 s;
-- process death / pipe loss: immediate takeover when hardware may have been
-  written.
+- proven process death: immediate takeover when hardware may have been written;
+- pipe loss while the exact owner is still alive: retain the durable lease,
+  allow same-identity reconnect, and let state deadlines/process death decide
+  recovery.
 
 Why WRITE_ARMED is longer: the current HP backend can spend up to ~1.5 s on
 setpoint ACK plus up to ~8 s on tachometer ACK, with additional WMI/EC overhead.
@@ -516,7 +526,12 @@ The implementation now includes:
 - restore-only hardware adapter;
 - protected named-pipe DACL for SYSTEM/Administrators with NETWORK denied;
 - kernel-observed client PID + process creation-time verification;
-- an open controller process handle and immediate process-exit detection;
+- an open controller process handle plus independent 250 ms process-lifetime
+  monitoring that survives pipe-session reconnects;
+- every lease mutation bound to the durable kernel-verified PID + process
+  creation time;
+- live-owner pipe loss retains the lease rather than restoring underneath a
+  controller that can still execute;
 - 250 ms service-side lease deadline monitoring;
 - durable ProgramData journal ACL restricted to SYSTEM/Administrators;
 - service-stop/update recovery;
@@ -532,7 +547,7 @@ The physical PASS still requires:
 - validated 30/30;
 - durable lease OWNED;
 - kill exact GUI PID;
-- watchdog detects owner death/pipe loss;
+- watchdog detects exact controller process death;
 - watchdog restores automatically;
 - no parent PowerShell cleanup;
 - journal disappears only after verified firmware handoff;
