@@ -84,6 +84,18 @@ small, using a service SID, strict IPC ACL, no arbitrary EC/WMI API and no
 ordinary 14..50 fan commands. We are not modifying the ACL of the shared
 Global\Access_EC mutex solely to make LocalService work.
 
+A later Gate B arming attempt exposed a second EC-arbitration rule: while Custom
+authority is active, diagnostic/test code must not open extra full EC
+control-state readers outside the production backend path. The backend already
+serializes command/status operations internally and does not return from a fan
+command until EC setpoint plus dual-tach acknowledgement succeeds. An
+out-of-band full EC snapshot bypasses that IO gate and competes on
+Global\Access_EC; the safety supervisor correctly treats a failed ownership
+probe as unsafe and hands control back to firmware. Independent EC verification
+should therefore happen before Custom admission or after the controller process
+has relinquished/terminated, not between a validated backend command and the
+continuous ownership supervisor.
+
 ## 4. IPC choice
 
 Use one persistent local named pipe connection between controller and watchdog.
