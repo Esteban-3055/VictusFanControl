@@ -1231,6 +1231,14 @@ internal static class GateCLeaseSelfTest
                 "VictusFanControl-GateD-AckLoss-" +
                 Guid.NewGuid().ToString("N");
 
+            var writeIntentDispatched =
+                new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var releaseResponse =
+                new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
             await using var server =
                 NewServer(name);
 
@@ -1240,14 +1248,41 @@ internal static class GateCLeaseSelfTest
                     env.Manager,
                     CancellationToken.None,
                     log: null,
-                    monitorControllerProcess: true);
+                    monitorControllerProcess: true,
+                    beforeResponseAsync:
+                        async (request, response, cancellationToken) =>
+                        {
+                            if (!string.Equals(
+                                    request.Type,
+                                    GateCProtocol.WriteIntent,
+                                    StringComparison.Ordinal))
+                            {
+                                return;
+                            }
 
-            await using (var client =
+                            Assert(
+                                response.Ok,
+                                $"Synthetic WriteIntent dispatch failed before response hook: {response.Code}: {response.Message}");
+
+                            // Dispatch has completed here. Therefore the
+                            // manager already performed the durable
+                            // WRITE_ARMED StoreAsync, while the response has
+                            // deliberately not yet been written to the pipe.
+                            writeIntentDispatched.TrySetResult(true);
+
+                            await releaseResponse.Task
+                                .WaitAsync(cancellationToken)
+                                .ConfigureAwait(false);
+                        });
+
+            var client =
                 new NamedPipeClientStream(
                     ".",
                     name,
                     PipeDirection.InOut,
-                    PipeOptions.Asynchronous))
+                    PipeOptions.Asynchronous);
+
+            try
             {
                 await client.ConnectAsync(5000);
 
@@ -1274,10 +1309,6 @@ internal static class GateCLeaseSelfTest
 
                 Assert(prepared.Ok, "Prepare was rejected.");
 
-                // The service durably accepts WRITE_INTENT, but the controller
-                // deliberately never consumes its ACK. This models the
-                // ambiguous transport window that motivated the Gate D
-                // live-owner retention rule.
                 await FanControlWatchdogLeaseCodec.WriteRequestAsync(
                     client,
                     Request(
@@ -1288,31 +1319,31 @@ internal static class GateCLeaseSelfTest
                         30),
                     CancellationToken.None);
 
-                var deadline = DateTime.UtcNow.AddSeconds(5);
-                WatchdogLeaseRecord? armed = null;
+                // Deterministic boundary: the server has completed DispatchAsync
+                // (including durable WRITE_ARMED) but is intentionally blocked
+                // before writing the ACK to the transport.
+                await writeIntentDispatched.Task
+                    .WaitAsync(TimeSpan.FromSeconds(5))
+                    .ConfigureAwait(false);
 
-                while (DateTime.UtcNow < deadline)
-                {
-                    armed =
-                        await env.Journal.LoadAsync(
-                            CancellationToken.None);
-
-                    if (armed?.Phase ==
-                        WatchdogLeasePhase.WriteArmed)
-                    {
-                        break;
-                    }
-
-                    await Task.Delay(10);
-                }
+                var armed =
+                    await env.Journal.LoadAsync(
+                        CancellationToken.None);
 
                 Assert(
                     armed?.Phase == WatchdogLeasePhase.WriteArmed,
-                    $"WRITE_ARMED was not durably observed before disconnect; phase={armed?.Phase.ToString() ?? "none"}.");
+                    $"WRITE_ARMED was not durable at the pre-response boundary; phase={armed?.Phase.ToString() ?? "none"}.");
 
-                // EC remains FF/FF because this synthetic client never dispatches
-                // WMI. Closing only the transport must not be mistaken for
-                // process death because this exact client process is still alive.
+                // Drop only the transport while the exact controller process
+                // remains alive. The server is then allowed to attempt the ACK,
+                // which must fail as a transport loss rather than as owner death.
+                client.Dispose();
+                releaseResponse.TrySetResult(true);
+            }
+            finally
+            {
+                releaseResponse.TrySetResult(true);
+                client.Dispose();
             }
 
             await serverTask.ConfigureAwait(false);
