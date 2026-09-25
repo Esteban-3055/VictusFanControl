@@ -734,7 +734,7 @@ internal sealed class MainForm : Form
         Ui(() =>
         {
             AppendEvent(
-                $"Fan authority @ {e.Timestamp:HH:mm:ss.fff}: {e.Previous} -> {e.Current}. {e.Reason}");
+                $"Fan authority @ {e.Timestamp.ToLocalTime():HH:mm:ss.fff zzz}: {e.Previous} -> {e.Current}. {e.Reason}");
             UpdateSafetyStatus();
             UpdateTray();
         });
@@ -772,7 +772,18 @@ internal sealed class MainForm : Form
     {
         if (e.Current == SystemState.Healthy)
         {
-            _ = HandleHealthyStateAsync();
+            // RuntimeStateMachine raises StateChanged synchronously on the
+            // telemetry worker thread. Never begin WMI/EC fan-control work
+            // inline here: async methods execute synchronously until their
+            // first incomplete await, and the HP admission/first-command path
+            // can spend multiple seconds in synchronous WMI/EC calls before
+            // yielding. That previously prevented TelemetryWorker from
+            // completing its Healthy transition and starting the next sample,
+            // while the independent 3 s watchdog already observed Healthy and
+            // falsely declared telemetry stale. Dispatch the Healthy follow-up
+            // to the thread pool so telemetry can return from Transition()
+            // immediately and keep its liveness heartbeat moving.
+            _ = Task.Run(HandleHealthyStateAsync);
         }
         else
         {
@@ -796,7 +807,20 @@ internal sealed class MainForm : Form
 
     private async Task HandleHealthyStateAsync()
     {
+        if (_worker.StateMachine.State != SystemState.Healthy)
+        {
+            return;
+        }
+
         await ReopenFanAdmissionAfterHealthyAsync();
+
+        // The detached continuation may have been queued just before a newer
+        // degradation/suspend transition. Never advance a hardware test from a
+        // stale Healthy notification.
+        if (_worker.StateMachine.State != SystemState.Healthy)
+        {
+            return;
+        }
 
         if (_suspendLifecycleHardwareTest)
         {
