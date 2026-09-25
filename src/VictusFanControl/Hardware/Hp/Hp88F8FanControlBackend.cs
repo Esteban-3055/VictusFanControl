@@ -169,6 +169,19 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                     Detail: _lastDetail);
             }
 
+            if (_watchdogLease is not null &&
+                _customModeActive &&
+                _ownedSetpoint.HasValue)
+            {
+                // Probe watchdog transport/lease BEFORE touching EC, but do not
+                // renew liveness here. This makes watchdog-process death a
+                // distinct failure domain that cannot be masked by an unrelated
+                // EC read transient. Heartbeat remains coupled below to a fresh
+                // successful ownership + feedback validation.
+                await _watchdogLease.ProbeAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             var state = _hardware!.ReadEcState();
             var ownershipValid =
                 !_customModeActive ||
