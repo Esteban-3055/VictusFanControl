@@ -237,6 +237,14 @@ COMMIT target
 The watchdog's WriteIntent acknowledgement must happen before the line where the
 backend currently marks `writeAttempted = true` and calls SetFanLevel.
 
+Gate D must preserve the backend's existing external-ownership race protection.
+The IPC/durable-journal round trip necessarily widens the interval between an EC
+ownership check and WMI dispatch, so the integration must not simply insert
+WriteIntent and remove the final ownership validation. The exact ordering and
+any post-WriteIntent ownership recheck must be tested explicitly while keeping
+all EC access serialized and avoiding the diagnostic-probe contention discovered
+during Gate B.
+
 This preserves the existing safety rule: a WMI write is considered potentially
 effective from the instant dispatch begins.
 
@@ -481,6 +489,8 @@ Validated boundaries include:
 - stale generation and malformed protocol rejection;
 - duplicate Release;
 - heartbeat timeout, WRITE_ARMED deadline and RESTORING deadline;
+- late Heartbeat/WriteIntent/Commit cannot revive an already expired lease even
+  if the background deadline monitor has not run yet;
 - broken pipe while OWNED;
 - service restart in every durable phase;
 - corrupt journal / unknown fixed setpoint -> no blind restore;
