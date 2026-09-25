@@ -1,3 +1,4 @@
+using VictusFanControl.Control;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
@@ -29,7 +30,7 @@ internal static class GateCPipeServerSession
                 WindowsNamedPipeIdentity.GetClientIdentity(pipe);
 
             var hello =
-                await GateCProtocolCodec.ReadRequestAsync(
+                await FanControlWatchdogLeaseCodec.ReadRequestAsync(
                     pipe,
                     cancellationToken).ConfigureAwait(false);
 
@@ -47,7 +48,7 @@ internal static class GateCPipeServerSession
                 hello.ControllerStartUtcTicks !=
                     actual.ProcessStartUtcTicks)
             {
-                await GateCProtocolCodec.WriteResponseAsync(
+                await FanControlWatchdogLeaseCodec.WriteResponseAsync(
                     pipe,
                     Error(
                         hello,
@@ -74,7 +75,7 @@ internal static class GateCPipeServerSession
             log?.Invoke(
                 $"WATCHDOG PIPE: verified local controller PID={actual.ProcessId}, startTicks={actual.ProcessStartUtcTicks}.");
 
-            await GateCProtocolCodec.WriteResponseAsync(
+            await FanControlWatchdogLeaseCodec.WriteResponseAsync(
                 pipe,
                 Success(
                     hello,
@@ -87,14 +88,14 @@ internal static class GateCPipeServerSession
 
             while (true)
             {
-                GateCRequest? request;
+                FanControlWatchdogLeaseRequest? request;
 
                 using var readCts =
                     CancellationTokenSource.CreateLinkedTokenSource(
                         cancellationToken);
 
                 var readTask =
-                    GateCProtocolCodec.ReadRequestAsync(
+                    FanControlWatchdogLeaseCodec.ReadRequestAsync(
                         pipe,
                         readCts.Token).AsTask();
 
@@ -130,7 +131,7 @@ internal static class GateCPipeServerSession
                 {
                     request = await readTask.ConfigureAwait(false);
                 }
-                catch (LeaseProtocolException)
+                catch (FanControlWatchdogProtocolException)
                 {
                     ownerLossReason = "malformed named-pipe frame";
                     break;
@@ -149,7 +150,7 @@ internal static class GateCPipeServerSession
                         manager,
                         cancellationToken).ConfigureAwait(false);
 
-                await GateCProtocolCodec.WriteResponseAsync(
+                await FanControlWatchdogLeaseCodec.WriteResponseAsync(
                     pipe,
                     response,
                     cancellationToken).ConfigureAwait(false);
@@ -211,8 +212,8 @@ internal static class GateCPipeServerSession
         }
     }
 
-    private static async ValueTask<GateCResponse> DispatchAsync(
-        GateCRequest request,
+    private static async ValueTask<FanControlWatchdogLeaseResponse> DispatchAsync(
+        FanControlWatchdogLeaseRequest request,
         ControllerIdentity controller,
         WatchdogLeaseManager manager,
         CancellationToken cancellationToken)
@@ -358,21 +359,21 @@ internal static class GateCPipeServerSession
     }
 
     private static Guid RequiredSession(
-        GateCRequest request) =>
+        FanControlWatchdogLeaseRequest request) =>
         request.SessionId ??
         throw new LeaseProtocolException(
             "MISSING_FIELD",
             "sessionId is required.");
 
     private static long RequiredGeneration(
-        GateCRequest request) =>
+        FanControlWatchdogLeaseRequest request) =>
         request.Generation ??
         throw new LeaseProtocolException(
             "MISSING_FIELD",
             "generation is required.");
 
     private static FanSetpoint RequiredSetpoint(
-        GateCRequest request)
+        FanControlWatchdogLeaseRequest request)
     {
         if (!request.CpuLevel.HasValue ||
             !request.GpuLevel.HasValue ||
@@ -389,8 +390,8 @@ internal static class GateCPipeServerSession
             (byte)request.GpuLevel.Value);
     }
 
-    private static GateCResponse Success(
-        GateCRequest request,
+    private static FanControlWatchdogLeaseResponse Success(
+        FanControlWatchdogLeaseRequest request,
         string code,
         string message,
         LeaseOperationResult? result = null) =>
@@ -404,8 +405,8 @@ internal static class GateCPipeServerSession
             result?.Generation,
             result?.Phase.ToString());
 
-    private static GateCResponse Error(
-        GateCRequest request,
+    private static FanControlWatchdogLeaseResponse Error(
+        FanControlWatchdogLeaseRequest request,
         string code,
         string message) =>
         new(
