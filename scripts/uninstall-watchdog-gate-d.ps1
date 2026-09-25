@@ -24,4 +24,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "sc.exe delete failed with exit code $LASTEXITCODE."
 }
 
-Write-Host 'Gate D service removed. ProgramData journal/logs under VictusFanControl\WatchdogGateD were intentionally preserved.'
+Write-Host 'Gate D service removed. ProgramData journal/logs under VictusFanControl\WatchdogService were intentionally preserved.'
