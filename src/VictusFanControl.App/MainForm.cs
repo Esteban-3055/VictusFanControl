@@ -58,6 +58,15 @@ internal sealed class MainForm : Form
     private static readonly string GateF1LocalRestoreStartedPath =
         Path.Combine(SuspendHardwareTestRoot, "gate-f1.local-restore-started");
 
+    private static readonly string GateF2HardwareTestReadyPath =
+        Path.Combine(SuspendHardwareTestRoot, "gate-f2-write-armed.ready");
+
+    private static readonly string GateF2HardwareTestResultPath =
+        Path.Combine(SuspendHardwareTestRoot, "gate-f2-write-armed.result");
+
+    private static readonly string GateF2LocalRestoreStartedPath =
+        Path.Combine(SuspendHardwareTestRoot, "gate-f2.local-restore-started");
+
     private readonly TelemetryWorker _worker;
     private readonly FanControlCoordinator _fanCoordinator;
     private readonly string _fanBackendStartupDetail;
@@ -67,6 +76,7 @@ internal sealed class MainForm : Form
     private readonly bool _gateDHardwareTest;
     private readonly bool _gateEHardwareTest;
     private readonly bool _gateF1HardwareTest;
+    private readonly bool _gateF2HardwareTest;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
 
@@ -113,6 +123,9 @@ internal sealed class MainForm : Form
     private int _gateF1HardwareTestAdvanceGate;
     private bool _gateF1HardwareTestArmed;
     private bool _gateF1HardwareTestCompleted;
+    private int _gateF2HardwareTestAdvanceGate;
+    private bool _gateF2HardwareTestArmed;
+    private bool _gateF2HardwareTestCompleted;
     private bool _suspendHardwareTestArmed;
     private bool _suspendHardwareTestSuspendObserved;
     private bool _suspendHardwareTestResumeObserved;
@@ -128,7 +141,8 @@ internal sealed class MainForm : Form
         bool suspendLifecycleHardwareTest = false,
         bool gateDHardwareTest = false,
         bool gateEHardwareTest = false,
-        bool gateF1HardwareTest = false)
+        bool gateF1HardwareTest = false,
+        bool gateF2HardwareTest = false)
     {
         Text = "VictusFanControl v0.4-dev — backend integrated / automatic policy OFF";
         StartPosition = FormStartPosition.CenterScreen;
@@ -140,6 +154,7 @@ internal sealed class MainForm : Form
         _gateDHardwareTest = gateDHardwareTest;
         _gateEHardwareTest = gateEHardwareTest;
         _gateF1HardwareTest = gateF1HardwareTest;
+        _gateF2HardwareTest = gateF2HardwareTest;
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
 
         if (_suspendLifecycleHardwareTest)
@@ -172,21 +187,46 @@ internal sealed class MainForm : Form
             TryDeleteFile(GateF1LocalRestoreStartedPath);
         }
 
+        if (_gateF2HardwareTest)
+        {
+            Directory.CreateDirectory(SuspendHardwareTestRoot);
+            TryDeleteFile(GateF2HardwareTestReadyPath);
+            TryDeleteFile(GateF2HardwareTestResultPath);
+            TryDeleteFile(GateF2LocalRestoreStartedPath);
+        }
+
         IFanControlBackend backend;
         try
         {
-            IFanControlWatchdogLeaseClient? watchdogLease =
-                (_gateDHardwareTest || _gateEHardwareTest || _gateF1HardwareTest)
-                    ? new NamedPipeFanControlWatchdogLeaseClient()
-                    : null;
+            IFanControlWatchdogLeaseClient? watchdogLease = null;
+
+            if (_gateF2HardwareTest)
+            {
+                watchdogLease =
+                    new GateF2CommitHoldWatchdogLeaseClient(
+                        new NamedPipeFanControlWatchdogLeaseClient(),
+                        GateF2HardwareTestReadyPath,
+                        SuspendHardwareTestLevel,
+                        SuspendHardwareTestLevel);
+            }
+            else if (_gateDHardwareTest ||
+                     _gateEHardwareTest ||
+                     _gateF1HardwareTest)
+            {
+                watchdogLease =
+                    new NamedPipeFanControlWatchdogLeaseClient();
+            }
 
             backend = new Hp88F8FanControlBackend(
                 modulesDirectory,
                 watchdogLease);
 
             _fanBackendStartupDetail = backend.CanWrite
-                ? (_gateDHardwareTest || _gateEHardwareTest || _gateF1HardwareTest)
-                    ? $"HP 88F8 backend initialized with mandatory Gate {(_gateF1HardwareTest ? "F1" : _gateEHardwareTest ? "E" : "D")} watchdog lease."
+                ? (_gateDHardwareTest ||
+                   _gateEHardwareTest ||
+                   _gateF1HardwareTest ||
+                   _gateF2HardwareTest)
+                    ? $"HP 88F8 backend initialized with mandatory Gate {(_gateF2HardwareTest ? "F2" : _gateF1HardwareTest ? "F1" : _gateEHardwareTest ? "E" : "D")} watchdog lease."
                     : "HP 88F8 write/restore backend initialized."
                 : "HP 88F8 backend present but not write-capable on this hardware.";
         }
@@ -247,6 +287,12 @@ internal sealed class MainForm : Form
             {
                 AppendEvent(
                     "GATE F1 TEST: OWNED double-death hardware mode enabled. Waiting for Healthy telemetry and a durable service-backed OWNED 30/30 lease. The external harness will force-kill watchdog then GUI; any local GUI restore attempt invalidates causality. Automatic policy remains OFF.");
+            }
+
+            if (_gateF2HardwareTest)
+            {
+                AppendEvent(
+                    "GATE F2 TEST: WRITE_ARMED double-death mode enabled. The real backend will perform WMI 30/30 plus EC+dual-tach ACK, then a test-only lease wrapper will hold immediately before Commit. The external harness will kill watchdog then GUI. Automatic policy remains OFF.");
             }
 
             _uiTimer.Start();
@@ -869,6 +915,25 @@ internal sealed class MainForm : Form
             }
         }
 
+        if (_gateF2HardwareTest &&
+            _gateF2HardwareTestArmed &&
+            !_gateF2HardwareTestCompleted &&
+            e.Previous == FanAuthority.Custom &&
+            e.Current == FanAuthority.Restoring)
+        {
+            try
+            {
+                File.WriteAllText(
+                    GateF2LocalRestoreStartedPath,
+                    $"LOCAL-RESTORE-STARTED|{DateTimeOffset.Now:O}|reason={e.Reason}");
+            }
+            catch (Exception markerEx)
+            {
+                AppLog.Write(
+                    $"GATE F2 TEST: could not write local-restore-started marker: {markerEx}");
+            }
+        }
+
         if (_gateEHardwareTest &&
             _gateEHardwareTestArmed &&
             !_gateEHardwareTestCompleted)
@@ -1052,6 +1117,11 @@ internal sealed class MainForm : Form
         if (_gateF1HardwareTest)
         {
             await AdvanceGateF1HardwareTestAsync();
+        }
+
+        if (_gateF2HardwareTest)
+        {
+            await AdvanceGateF2HardwareTestAsync();
         }
     }
 
@@ -1457,6 +1527,145 @@ internal sealed class MainForm : Form
         {
             Interlocked.Exchange(
                 ref _gateF1HardwareTestAdvanceGate,
+                0);
+        }
+    }
+
+
+    private async Task AdvanceGateF2HardwareTestAsync()
+    {
+        if (_gateF2HardwareTestCompleted ||
+            _gateF2HardwareTestArmed ||
+            Interlocked.CompareExchange(
+                ref _gateF2HardwareTestAdvanceGate,
+                1,
+                0) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var snapshot = _lastSnapshot ??
+                throw new InvalidOperationException(
+                    "No telemetry snapshot is available for Gate F2 admission.");
+
+            EnsureSuspendHardwareTestLightLoad(snapshot);
+
+            var safety = SafetyGate.Evaluate(
+                _hardwareIdentity,
+                _worker.StateMachine.State,
+                snapshot,
+                DateTimeOffset.UtcNow,
+                fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+            if (!safety.CustomControlPermitted)
+            {
+                throw new InvalidOperationException(
+                    "SafetyGate refused Gate F2 custom authority: " +
+                    string.Join(" | ", safety.Reasons));
+            }
+
+            var before =
+                new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+
+            if (before.CpuSetpoint != byte.MaxValue ||
+                before.GpuSetpoint != byte.MaxValue)
+            {
+                throw new InvalidOperationException(
+                    $"Gate F2 requires firmware-owned FF/FF before admission; read {before.CpuSetpoint}/{before.GpuSetpoint}.");
+            }
+
+            var entered = await _fanCoordinator.TryEnterCustomAsync(
+                safety,
+                CancellationToken.None);
+
+            if (!entered ||
+                _fanCoordinator.Authority != FanAuthority.Custom)
+            {
+                throw new InvalidOperationException(
+                    "Coordinator did not grant watchdog-protected Custom authority for Gate F2.");
+            }
+
+            var latest = _lastSnapshot ?? snapshot;
+            EnsureSuspendHardwareTestLightLoad(latest);
+
+            var commandSafety = SafetyGate.Evaluate(
+                _hardwareIdentity,
+                _worker.StateMachine.State,
+                latest,
+                DateTimeOffset.UtcNow,
+                fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+            if (!commandSafety.CustomControlPermitted)
+            {
+                throw new InvalidOperationException(
+                    "SafetyGate dropped before Gate F2 30/30 command: " +
+                    string.Join(" | ", commandSafety.Reasons));
+            }
+
+            // Mark the F2 hardware-test session before entering ApplyAsync.
+            // On the successful path ApplyAsync never returns: the test-only
+            // lease wrapper writes READY inside CommitAsync, after production
+            // WMI + EC + dual-tach ACK, then deliberately holds before Commit.
+            _gateF2HardwareTestArmed = true;
+
+            AppendEvent(
+                $"GATE F2 TEST: dispatching {SuspendHardwareTestLevel}/{SuspendHardwareTestLevel}; waiting for the pre-Commit WRITE_ARMED hold after real EC+dual-tach ACK.");
+
+            await _fanCoordinator.ApplyAsync(
+                new FanCommand(
+                    SuspendHardwareTestLevel,
+                    SuspendHardwareTestLevel,
+                    "explicit Gate F2 WRITE_ARMED post-ACK/pre-Commit hardware validation"),
+                commandSafety,
+                CancellationToken.None);
+
+            throw new InvalidOperationException(
+                "Gate F2 Commit hold unexpectedly returned; Commit must remain unforwarded until process death.");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                await _fanCoordinator.RestoreFirmwareAsync(
+                    "Gate F2 hardware-test failure cleanup.",
+                    CancellationToken.None);
+            }
+            catch (Exception restoreEx)
+            {
+                AppLog.Write(
+                    $"GATE F2 TEST: cleanup restore also failed: {restoreEx}");
+            }
+
+            _gateF2HardwareTestCompleted = true;
+            TryDeleteFile(GateF2HardwareTestReadyPath);
+
+            try
+            {
+                File.WriteAllText(
+                    GateF2HardwareTestResultPath,
+                    $"FAIL|{DateTimeOffset.Now:O}|{ex.Message}");
+            }
+            catch (Exception markerEx)
+            {
+                AppLog.Write(
+                    $"GATE F2 TEST: could not write failure marker: {markerEx}");
+            }
+
+            AppendEvent($"GATE F2 TEST RESULT: FAIL: {ex.Message}");
+            Environment.ExitCode = 92;
+
+            Ui(() =>
+            {
+                _allowExit = true;
+                Close();
+            });
+        }
+        finally
+        {
+            Interlocked.Exchange(
+                ref _gateF2HardwareTestAdvanceGate,
                 0);
         }
     }
