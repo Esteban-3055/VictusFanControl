@@ -385,6 +385,21 @@ internal static class GateCPipeServerSession
                         result);
                 }
 
+                case GateCProtocol.Probe:
+                {
+                    var result =
+                        await manager.ProbeAsync(
+                            RequiredSession(request),
+                            RequiredGeneration(request),
+                            cancellationToken,
+                            controller).ConfigureAwait(false);
+                    return Success(
+                        request,
+                        "OK",
+                        "Lease probe accepted without renewing heartbeat.",
+                        result);
+                }
+
                 case GateCProtocol.Heartbeat:
                 {
                     var result =
