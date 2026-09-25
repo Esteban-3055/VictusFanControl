@@ -108,6 +108,10 @@ internal sealed class WatchdogLeaseManager
                 expectedGeneration,
                 cancellationToken).ConfigureAwait(false);
 
+            await ThrowIfExpiredLockedAsync(
+                current,
+                cancellationToken).ConfigureAwait(false);
+
             if (current.Phase is not
                 (WatchdogLeasePhase.Prepared or WatchdogLeasePhase.Owned))
             {
@@ -159,6 +163,10 @@ internal sealed class WatchdogLeaseManager
                 expectedGeneration,
                 cancellationToken).ConfigureAwait(false);
 
+            await ThrowIfExpiredLockedAsync(
+                current,
+                cancellationToken).ConfigureAwait(false);
+
             if (current.Phase != WatchdogLeasePhase.WriteArmed ||
                 current.Pending != acknowledgedTarget)
             {
@@ -203,6 +211,10 @@ internal sealed class WatchdogLeaseManager
                 expectedGeneration,
                 cancellationToken).ConfigureAwait(false);
 
+            await ThrowIfExpiredLockedAsync(
+                current,
+                cancellationToken).ConfigureAwait(false);
+
             if (current.Phase != WatchdogLeasePhase.Owned)
             {
                 throw InvalidPhase(
@@ -230,6 +242,10 @@ internal sealed class WatchdogLeaseManager
             var current = await RequireActiveAsync(
                 sessionId,
                 expectedGeneration,
+                cancellationToken).ConfigureAwait(false);
+
+            await ThrowIfExpiredLockedAsync(
+                current,
                 cancellationToken).ConfigureAwait(false);
 
             if (current.Phase is not
@@ -458,26 +474,7 @@ internal sealed class WatchdogLeaseManager
                 return null;
             }
 
-            var now = _clock.Milliseconds;
-            string? reason = current.Phase switch
-            {
-                WatchdogLeasePhase.Owned
-                    when Elapsed(now, _lastHeartbeatMs) >
-                         OwnedHeartbeatTimeout =>
-                    "OWNED heartbeat timeout",
-
-                WatchdogLeasePhase.WriteArmed
-                    when Elapsed(now, _operationStartedMs) >
-                         WriteArmedDeadline =>
-                    "WRITE_ARMED operation deadline",
-
-                WatchdogLeasePhase.Restoring
-                    when Elapsed(now, _operationStartedMs) >
-                         RestoringDeadline =>
-                    "RESTORING takeover deadline",
-
-                _ => null
-            };
+            var reason = GetExpiredReasonLocked(current);
 
             if (reason is null)
             {
@@ -493,6 +490,53 @@ internal sealed class WatchdogLeaseManager
         {
             _gate.Release();
         }
+    }
+
+    private async ValueTask ThrowIfExpiredLockedAsync(
+        WatchdogLeaseRecord current,
+        CancellationToken cancellationToken)
+    {
+        var reason = GetExpiredReasonLocked(current);
+        if (reason is null)
+        {
+            return;
+        }
+
+        var recovery =
+            await RecoverPotentialWriteLockedAsync(
+                current,
+                reason,
+                cancellationToken).ConfigureAwait(false);
+
+        throw new LeaseProtocolException(
+            "LEASE_EXPIRED",
+            $"{reason}; controller command refused. {recovery.Detail}");
+    }
+
+    private string? GetExpiredReasonLocked(
+        WatchdogLeaseRecord current)
+    {
+        var now = _clock.Milliseconds;
+
+        return current.Phase switch
+        {
+            WatchdogLeasePhase.Owned
+                when Elapsed(now, _lastHeartbeatMs) >
+                     OwnedHeartbeatTimeout =>
+                "OWNED heartbeat timeout",
+
+            WatchdogLeasePhase.WriteArmed
+                when Elapsed(now, _operationStartedMs) >
+                     WriteArmedDeadline =>
+                "WRITE_ARMED operation deadline",
+
+            WatchdogLeasePhase.Restoring
+                when Elapsed(now, _operationStartedMs) >
+                     RestoringDeadline =>
+                "RESTORING takeover deadline",
+
+            _ => null
+        };
     }
 
     private async ValueTask EnsureNoExistingLeaseAsync(
