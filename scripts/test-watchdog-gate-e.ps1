@@ -390,7 +390,10 @@ try {
     Write-Host ''
     Write-Host 'Step 7: prove live-GUI local restore BEFORE SCM restart...' -ForegroundColor Cyan
 
-    $localDeadline = (Get-Date).AddSeconds($IsolatedRestartDelaySeconds - 3)
+    # Causality is determined by the actual service PID, not by assuming SCM
+    # restarts at an exact wall-clock instant. Allow a small scheduling margin,
+    # but fail immediately if a replacement watchdog PID appears first.
+    $localDeadline = (Get-Date).AddSeconds($IsolatedRestartDelaySeconds + 5)
 
     while (-not (Test-Path $localRestorePath)) {
         if ($proc.HasExited) {
@@ -409,7 +412,7 @@ try {
         }
 
         if ((Get-Date) -gt $localDeadline) {
-            throw "GUI did not publish local restore before the isolated SCM restart window closed."
+            throw "GUI did not publish local restore within the isolated watchdog-death window."
         }
 
         Start-Sleep -Milliseconds 100
