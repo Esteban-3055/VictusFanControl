@@ -204,7 +204,37 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                     .ConfigureAwait(false);
             }
 
-            var state = _hardware!.ReadEcState();
+            Hp88F8EcControlState state;
+            try
+            {
+                state = _hardware!.ReadEcState();
+            }
+            catch (Exception ecFailure)
+                when (ecFailure is not OperationCanceledException)
+            {
+                if (_watchdogLease is not null &&
+                    _customModeActive &&
+                    _ownedSetpoint.HasValue)
+                {
+                    // Close the small race where the watchdog can die after the
+                    // first liveness probe but before/during the EC transaction.
+                    // If IPC is now gone, surface watchdog loss as the causal
+                    // failure. If the watchdog is still reachable, preserve the
+                    // original EC failure and fail closed exactly as before.
+                    try
+                    {
+                        await _watchdogLease.ProbeAsync(CancellationToken.None)
+                            .ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        throw;
+                    }
+                }
+
+                throw;
+            }
+
             var ownershipValid =
                 !_customModeActive ||
                 (_ownedSetpoint.HasValue
