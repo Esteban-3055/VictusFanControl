@@ -94,10 +94,18 @@ The service:
 - keeps the durable lease under ProgramData;
 - hosts one controller pipe session at a time;
 - checks lease deadlines every 250 ms;
-- holds a real process handle for the verified controller and waits for process
-  exit in parallel with pipe input;
-- recovers on process death, pipe loss or lease timeout;
-- performs service-stop/update recovery before exiting;
+- binds every lease mutation to the kernel-verified controller PID + process
+  creation time;
+- holds a real process handle for the verified controller and also maintains an
+  independent service-side process monitor;
+- recovers immediately on proven controller-process death;
+- on pipe transport loss while that exact controller is still alive, retains
+  the durable lease and permits a fresh kernel-verified reconnect instead of
+  clearing ownership underneath a still-running controller;
+- if the live controller does not reconnect/progress, the existing
+  WRITE_ARMED/OWNED/RESTORING deadlines remain fail-closed recovery paths;
+- performs service-stop/update recovery before exiting; Gate E/F still own the
+  stronger watchdog-stop/restart fencing validation;
 - never exposes an ordinary 14..50 fan-write operation.
 
 SCM recovery is configured to restart the service after unexpected failure.
@@ -112,7 +120,10 @@ The production pipe uses an explicit protected DACL:
 
 The GUI already requires elevation. After connection, the service obtains the
 client PID from the kernel named-pipe handle and checks process creation time
-against the Hello identity before accepting lease commands.
+against the Hello identity before accepting lease commands. Every mutating
+lease message is then checked against that same durable controller identity, so
+a second Administrator process cannot take over a session merely by knowing its
+session GUID/generation.
 
 The ProgramData watchdog tree is also hardened to LocalSystem + local
 Administrators only. The installer intentionally never deletes lease.json.
@@ -162,7 +173,8 @@ The test then:
 9. waits for the watchdog service to recover and delete its journal;
 10. independently probes EC and requires FF/FF;
 11. requires the same watchdog service PID throughout this Gate D test;
-12. requires service log evidence of owner-loss RestoredFirmware;
+12. requires service log evidence of RestoredFirmware from either the pipe
+    owner-loss path or the independent controller-process monitor;
 13. cancels the emergency fallback only after journal deletion + independent
     FF/FF verification;
 14. asks the user to confirm OMEN Gaming Hub undervolt is unchanged.
@@ -189,7 +201,7 @@ durable OWNED 30/30
         ->
 exact GUI forced kill
         ->
-watchdog detects owner death/pipe loss
+watchdog detects exact GUI process death
         ->
 FF,FF -> LegacyDefault
         ->
