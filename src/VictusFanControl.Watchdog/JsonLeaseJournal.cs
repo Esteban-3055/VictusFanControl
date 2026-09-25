@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace VictusFanControl.Watchdog;
@@ -115,19 +117,18 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
                 stream.Flush(flushToDisk: true);
             }
 
-            // Same-directory replacement keeps the critical transition on one
-            // volume and avoids exposing a partially written JSON record.
-            if (File.Exists(Path))
-            {
-                File.Replace(
+            // Same-directory MoveFileEx keeps the critical transition on one
+            // volume. WRITE_THROUGH also waits for the rename/replace metadata
+            // to reach disk before StoreAsync can acknowledge WRITE_ARMED.
+            if (!MoveFileEx(
                     temp,
                     Path,
-                    destinationBackupFileName: null,
-                    ignoreMetadataErrors: true);
-            }
-            else
+                    MoveFileFlags.ReplaceExisting |
+                    MoveFileFlags.WriteThrough))
             {
-                File.Move(temp, Path);
+                throw new Win32Exception(
+                    Marshal.GetLastWin32Error(),
+                    "Durable lease journal replace failed.");
             }
         }
         finally
@@ -151,6 +152,23 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
 
         return ValueTask.CompletedTask;
     }
+
+    [Flags]
+    private enum MoveFileFlags : uint
+    {
+        ReplaceExisting = 0x00000001,
+        WriteThrough = 0x00000008
+    }
+
+    [DllImport(
+        "kernel32.dll",
+        CharSet = CharSet.Unicode,
+        SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool MoveFileEx(
+        string existingFileName,
+        string newFileName,
+        MoveFileFlags flags);
 
     internal static void ValidateRecord(
         WatchdogLeaseRecord record)
