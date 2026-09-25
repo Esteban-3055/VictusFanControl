@@ -2,7 +2,6 @@ using VictusFanControl.Control;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
-using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 namespace VictusFanControl.Watchdog;
@@ -24,8 +23,6 @@ internal static class GateCPipeServerSession
         {
             await pipe.WaitForConnectionAsync(cancellationToken)
                 .ConfigureAwait(false);
-
-            WindowsNamedPipeIdentity.EnsureLocalClient(pipe);
 
             var actual =
                 WindowsNamedPipeIdentity.GetClientIdentity(pipe);
@@ -426,32 +423,6 @@ internal static class GateCPipeServerSession
 
 internal static class WindowsNamedPipeIdentity
 {
-    public static void EnsureLocalClient(
-        NamedPipeServerStream pipe)
-    {
-        var capacity = 256;
-        var name = new StringBuilder(capacity);
-
-        if (!GetNamedPipeClientComputerName(
-                pipe.SafePipeHandle,
-                name,
-                capacity))
-        {
-            throw new System.ComponentModel.Win32Exception(
-                Marshal.GetLastWin32Error(),
-                "GetNamedPipeClientComputerName failed.");
-        }
-
-        if (!string.Equals(
-                name.ToString(),
-                Environment.MachineName,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            throw new UnauthorizedAccessException(
-                $"Remote named-pipe client '{name}' is not allowed.");
-        }
-    }
-
     public static ControllerIdentity GetClientIdentity(
         NamedPipeServerStream pipe)
     {
@@ -487,17 +458,6 @@ internal static class WindowsNamedPipeIdentity
             process.Id,
             process.StartTime.ToUniversalTime().Ticks);
     }
-
-    [DllImport(
-        "kernel32.dll",
-        CharSet = CharSet.Unicode,
-        SetLastError = true,
-        EntryPoint = "GetNamedPipeClientComputerNameW")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetNamedPipeClientComputerName(
-        SafePipeHandle pipe,
-        StringBuilder clientComputerName,
-        int clientComputerNameLength);
 
     [DllImport(
         "kernel32.dll",
