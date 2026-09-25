@@ -150,6 +150,28 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             Hp88F8TargetProfile.MaximumValidatedFanLevel,
             SupportsIndependentLevels: true);
 
+    public async ValueTask ProbeControlDependencyAsync(
+        CancellationToken cancellationToken)
+    {
+        await _ioGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+
+            if (_watchdogLease is not null &&
+                _customModeActive &&
+                _ownedSetpoint.HasValue)
+            {
+                await _watchdogLease.ProbeAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _ioGate.Release();
+        }
+    }
+
     public async ValueTask<FanBackendStatus> GetStatusAsync(
         CancellationToken cancellationToken)
     {
