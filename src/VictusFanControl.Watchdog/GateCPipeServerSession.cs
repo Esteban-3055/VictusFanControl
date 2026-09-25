@@ -13,7 +13,8 @@ internal static class GateCPipeServerSession
         WatchdogLeaseManager manager,
         CancellationToken cancellationToken,
         Action<string>? log = null,
-        bool monitorControllerProcess = false)
+        bool monitorControllerProcess = false,
+        Func<FanControlWatchdogLeaseRequest, FanControlWatchdogLeaseResponse, CancellationToken, ValueTask>? beforeResponseAsync = null)
     {
         ControllerIdentity? verifiedController = null;
         Process? ownerProcess = null;
@@ -163,6 +164,14 @@ internal static class GateCPipeServerSession
                         actual,
                         manager,
                         cancellationToken).ConfigureAwait(false);
+
+                if (beforeResponseAsync is not null)
+                {
+                    await beforeResponseAsync(
+                        request,
+                        response,
+                        cancellationToken).ConfigureAwait(false);
+                }
 
                 await FanControlWatchdogLeaseCodec.WriteResponseAsync(
                     pipe,
