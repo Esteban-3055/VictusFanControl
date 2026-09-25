@@ -65,7 +65,8 @@ A nivel 30 ambos ventiladores convergieron casi a las mismas RPM físicas aunque
 - ownership mediante EC 0x34/0x35;
 - respuesta estable cercana a 3000 RPM en ambos ventiladores;
 - liberación `SetFanLevel(FF,FF) -> FanMode=LegacyDefault`;
-- OMEN Gaming Hub abierto y undervolt CPU conservado antes/después.
+- OMEN Gaming Hub abierto y undervolt CPU conservado antes/después;
+- watchdog Gate A validado como servicio Windows en Session 0: LocalService quedó bloqueado por `Global\Access_EC`, mientras LocalSystem pasó 3/3 ciclos read-only con PawnIO EC + HP WMI y EC permaneciendo FF/FF.
 
 ## Seguridad integrada
 

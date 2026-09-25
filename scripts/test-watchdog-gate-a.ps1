@@ -1,6 +1,6 @@
 param(
     [ValidateSet('LocalService', 'LocalSystem')]
-    [string]$Account = 'LocalService',
+    [string]$Account = 'LocalSystem',
 
     [ValidateRange(1, 5)]
     [int]$RestartCycles = 3

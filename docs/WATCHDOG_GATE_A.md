@@ -1,6 +1,6 @@
 # Watchdog Gate A - read-only Windows service environment
 
-Status: implementation complete; physical validation pending.
+Status: **physical validation completed on 2026-09-24**.
 
 This gate is intentionally read-only. It exists only to prove that the future
 independent watchdog can run in Windows Session 0 and access the narrow hardware
@@ -71,15 +71,43 @@ The script leaves the Gate A service installed but stopped.
 %ProgramData%\VictusFanControl\Watchdog\logs\watchdog-gate-a-YYYY-MM-DD.log
 ~~~
 
-## Interpretation
+## Physical result
 
-LocalService PASS: retain LocalService as the preferred security context.
+The LocalService comparison reached Session 0 and matched the exact HP target,
+but failed before the EC/PawnIO probe could begin:
 
-LocalService FAIL / LocalSystem PASS: document the exact denied resource and use
-LocalSystem only with the watchdog's minimal command surface, service SID,
-strict IPC ACL and no arbitrary hardware commands.
+~~~text
+System.UnauthorizedAccessException:
+Access to the path 'Global\Access_EC' is denied.
+~~~
 
-Both fail: do not implement the lease yet. Diagnose Session 0 PawnIO/WMI access
-first.
+The failure occurred while constructing the shared EC mutex. No EC snapshot or
+HP WMI GetFanLevel call had yet completed.
+
+The identical Gate A was then installed as LocalSystem. All three start/stop
+cycles passed:
+
+- Session ID remained 0;
+- account was NT AUTHORITY\SYSTEM;
+- exact HP 88F8 / SKU / BIOS fingerprint matched;
+- PawnIO EC read succeeded;
+- HP WMI GetFanLevel succeeded;
+- EC setpoints remained 255/255 in every cycle;
+- the final independent read-only EC probe still reported 255/255.
+
+Representative observations were approximately 2200 RPM CPU / 2400 RPM GPU and
+HP current fan levels 21-24 while firmware owned FF/FF.
+
+## Account decision
+
+Use LocalSystem for the watchdog hardware service on this validated target.
+
+This result does **not** prove that LocalService could never access PawnIO or HP
+WMI independently; the shared Global\Access_EC mutex blocked it first. We are
+not changing the security descriptor of that shared cross-process mutex merely
+to force LocalService compatibility. The safer current design is a very small
+LocalSystem service with no ordinary fan-level API, no arbitrary EC/WMI
+operations, a service SID, strict IPC ACL, and only the validated emergency
+restore primitive.
 
 See CRASH_WATCHDOG_DESIGN.md.

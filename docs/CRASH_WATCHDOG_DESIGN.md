@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: research/design phase complete. Gate A read-only Windows Service scaffold is implemented; physical Session 0 validation is pending. No lease or watchdog restore logic is integrated yet.
+Status: research/design phase complete. Gate A read-only Windows Service validation passed on real hardware under LocalSystem. No lease or watchdog restore logic is integrated yet.
 
 ## 1. Hardware fact that drives the design
 
@@ -69,11 +69,20 @@ Before any lease integration:
 6. read EC 0x34/0x35 and tachometers;
 7. stop/restart the service several times.
 
-PawnIO's device ACL currently grants access to SYSTEM and Administrators, so a
-normal non-admin service account may not be sufficient. Prefer least privilege,
-but if the read-only gate proves LocalService insufficient, LocalSystem is the
-practical fallback. If LocalSystem is required, the service surface must remain
-small and its IPC ACL must be tightly restricted.
+Physical Gate A result:
+
+- LocalService started correctly in Session 0 and matched the target, but access
+  to the shared Global\Access_EC mutex was denied before the EC/WMI probe could
+  continue.
+- LocalSystem passed three complete Session 0 start/stop cycles, including
+  PawnIO EC reads and HP WMI GetFanLevel.
+- EC remained FF/FF before, during and after the test.
+
+The production watchdog hardware service will therefore use LocalSystem on this
+target. This choice is compensated by keeping the service surface deliberately
+small, using a service SID, strict IPC ACL, no arbitrary EC/WMI API and no
+ordinary 14..50 fan commands. We are not modifying the ACL of the shared
+Global\Access_EC mutex solely to make LocalService work.
 
 ## 4. IPC choice
 

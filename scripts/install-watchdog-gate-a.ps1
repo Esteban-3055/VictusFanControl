@@ -1,6 +1,6 @@
 param(
     [ValidateSet('LocalService', 'LocalSystem')]
-    [string]$Account = 'LocalService'
+    [string]$Account = 'LocalSystem'
 )
 
 $ErrorActionPreference = 'Stop'
