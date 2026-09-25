@@ -1,7 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: research/design phase complete enough to begin staged implementation. No
-watchdog code is integrated yet.
+Status: research/design phase complete. Gate A read-only Windows Service scaffold is implemented; physical Session 0 validation is pending. No lease or watchdog restore logic is integrated yet.
 
 ## 1. Hardware fact that drives the design
 
