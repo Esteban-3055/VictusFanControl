@@ -163,7 +163,7 @@ for ($cycle = 1; $cycle -le $RestartCycles; $cycle++) {
         'Stopped',
         [TimeSpan]::FromSeconds(10))
 
-    Write-Host "Cycle $cycle: PASS (read-only)." -ForegroundColor Green
+    Write-Host "Cycle ${cycle}: PASS (read-only)." -ForegroundColor Green
 }
 
 Write-Host ''
