@@ -154,6 +154,16 @@ internal static class GateCPipeServerSession
                         result);
                 }
 
+                case GateCProtocol.CancelPrepared:
+                    await manager.CancelPreparedAsync(
+                        RequiredSession(request),
+                        RequiredGeneration(request),
+                        cancellationToken).ConfigureAwait(false);
+                    return Success(
+                        request,
+                        "OK",
+                        "Prepared lease cancelled without hardware write.");
+
                 case GateCProtocol.WriteIntent:
                 {
                     var result =
@@ -166,6 +176,20 @@ internal static class GateCPipeServerSession
                         request,
                         "OK",
                         "Write intent durably armed.",
+                        result);
+                }
+
+                case GateCProtocol.AbortWriteIntent:
+                {
+                    var result =
+                        await manager.AbortWriteIntentAsync(
+                            RequiredSession(request),
+                            RequiredGeneration(request),
+                            cancellationToken).ConfigureAwait(false);
+                    return Success(
+                        request,
+                        "OK",
+                        "Write intent safely rolled back before hardware dispatch.",
                         result);
                 }
 
