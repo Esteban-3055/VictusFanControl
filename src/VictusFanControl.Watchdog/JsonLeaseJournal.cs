@@ -47,11 +47,7 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
                 Path,
                 FileMode.Open,
                 FileAccess.Read,
-                // Readers must not block the same-directory atomic
-                // MoveFileEx replacement used by StoreAsync. Sharing DELETE
-                // lets a reader finish against the old file object while the
-                // live path is replaced with the next durable generation.
-                FileShare.Read | FileShare.Delete,
+                FileShare.Read,
                 bufferSize: 4096,
                 options: FileOptions.SequentialScan);
 
