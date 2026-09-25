@@ -6,7 +6,10 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\VictusFanControl.Watchdog.csproj'
 $sourceModule = Join-Path $repoRoot 'modules\LpcACPIEC.bin'
 
-$installRoot = Join-Path $env:ProgramData 'VictusFanControl\Watchdog'
+# Gate D uses an isolated ProgramData tree. Earlier Gate A/B validation files
+# intentionally had different ACL histories; reusing that tree can make an
+# elevated Administrator unable to read newly created service state.
+$installRoot = Join-Path $env:ProgramData 'VictusFanControl\WatchdogGateD'
 $binDir = Join-Path $installRoot 'bin'
 $modulesDir = Join-Path $installRoot 'modules'
 $logsDir = Join-Path $installRoot 'logs'
@@ -78,8 +81,8 @@ try {
         throw "dotnet publish failed with exit code $LASTEXITCODE."
     }
 
-    # Gate A/B/D currently share the watchdog publish tree. Never replace it
-    # while an older service executable is still running.
+    # Stop any earlier watchdog validation/service instances before touching
+    # the Gate D deployment. Gate D itself uses an isolated ProgramData tree.
     foreach ($name in @(
         'VictusFanControlWatchdogGateA',
         'VictusFanControlWatchdogGateB',
@@ -100,26 +103,42 @@ try {
     Copy-Item -Path $sourceModule -Destination (Join-Path $modulesDir 'LpcACPIEC.bin') -Force
 
     # The LocalSystem watchdog journal is a privileged ownership record.
-    # Remove inherited ProgramData permissions and allow only SYSTEM plus local
-    # Administrators to read/modify the service tree.
-    & icacls.exe $installRoot /inheritance:r /T /C | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "icacls inheritance hardening failed with exit code $LASTEXITCODE."
-    }
-
-    & icacls.exe $installRoot /grant:r '*S-1-5-18:(OI)(CI)F' /T /C | Out-Host
+    #
+    # IMPORTANT ORDERING:
+    # First add explicit SYSTEM + Administrators ACEs while the freshly-created
+    # tree is still reachable through inherited ProgramData permissions. Only
+    # then remove inheritance. Removing inheritance first can lock the elevated
+    # installer out of its own files before the explicit grants are applied.
+    & icacls.exe $installRoot /grant:r '*S-1-5-18:(OI)(CI)F' /T /Q | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "icacls SYSTEM grant failed with exit code $LASTEXITCODE."
     }
 
-    & icacls.exe $installRoot /grant '*S-1-5-32-544:(OI)(CI)F' /T /C | Out-Host
+    & icacls.exe $installRoot /grant:r '*S-1-5-32-544:(OI)(CI)F' /T /Q | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "icacls Administrators grant failed with exit code $LASTEXITCODE."
     }
 
-    & icacls.exe $installRoot /setowner '*S-1-5-18' /T /C | Out-Host
+    & icacls.exe $installRoot /inheritance:r /T /Q | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "icacls inheritance hardening failed with exit code $LASTEXITCODE."
+    }
+
+    & icacls.exe $installRoot /setowner '*S-1-5-18' /T /Q | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "icacls owner hardening failed with exit code $LASTEXITCODE."
+    }
+
+    # Prove that the elevated test/maintenance owner still has access after the
+    # final SYSTEM ownership handoff. Do this before creating/installing the
+    # service so an ACL regression cannot become a hardware-test ambiguity.
+    $aclProbe = Join-Path $stateDir '.gate-d-acl-probe'
+    'gate-d-acl-ok' | Set-Content -Path $aclProbe -Encoding Ascii
+    $aclProbeReadback = (Get-Content -Path $aclProbe -Raw).Trim()
+    Remove-Item $aclProbe -Force
+
+    if ($aclProbeReadback -cne 'gate-d-acl-ok') {
+        throw 'Gate D ProgramData ACL read/write probe failed after hardening.'
     }
 
     # Do NOT delete lease.json. Durable armed state must survive service update
