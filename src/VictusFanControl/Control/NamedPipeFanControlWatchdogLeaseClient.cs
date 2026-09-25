@@ -435,22 +435,43 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        await EnsureConnectedLockedAsync(cancellationToken)
-            .ConfigureAwait(false);
-
         try
         {
+            await EnsureConnectedLockedAsync(cancellationToken)
+                .ConfigureAwait(false);
+
             return await SendConnectedLockedAsync(
                 request,
                 timeout,
                 cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException ex)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            // Connect/request timeout is watchdog transport unavailability,
+            // not caller cancellation. Give the controller a stable reason so
+            // Gate E cannot mistake an unrelated EC failure for watchdog loss.
+            DisposePipeLocked();
+            throw new FanControlWatchdogTransportException(
+                request.Type,
+                ex);
+        }
+        catch (IOException ex)
+            when (ex is not FanControlWatchdogProtocolException &&
+                  ex is not FanControlWatchdogTransportException)
+        {
+            // Broken/closed named pipes land here. Preserve session/generation:
+            // the durable service journal remains authoritative and a later
+            // restore retry may reconnect to the restarted watchdog.
+            DisposePipeLocked();
+            throw new FanControlWatchdogTransportException(
+                request.Type,
+                ex);
+        }
         catch
         {
-            // The durable service journal, not this process-local state, is the
-            // authority after a transport break. Preserve session/generation
-            // locally for a possible restore retry, but force the next request
-            // to establish a fresh kernel-validated pipe connection.
+            // Protocol/data/caller-cancellation failures still invalidate the
+            // current stream, but keep their original classification.
             DisposePipeLocked();
             throw;
         }
