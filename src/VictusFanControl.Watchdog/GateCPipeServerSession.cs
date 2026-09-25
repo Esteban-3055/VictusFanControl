@@ -98,6 +98,19 @@ internal static class GateCPipeServerSession
                     cancellationToken).ConfigureAwait(false);
             }
         }
+        catch (IOException)
+        {
+            // A client can disappear after the service has durably accepted a
+            // state transition but before it receives the response. Treat any
+            // broken-pipe transport failure as owner loss; the finally block
+            // performs recovery from the durable lease rather than faulting the
+            // server session.
+        }
+        catch (ObjectDisposedException)
+        {
+            // Equivalent local transport loss. The durable lease remains the
+            // authority for deciding whether a restore is required.
+        }
         finally
         {
             if (verifiedController is not null)
