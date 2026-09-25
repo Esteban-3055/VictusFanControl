@@ -94,6 +94,11 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "lease mutations reject a different verified controller identity",
+            ControllerIdentityMismatchAsync);
+
+        failures += await CaseAsync(
+            output,
             "out-of-range WriteIntent is rejected without journal mutation",
             OutOfRangeWriteIntentAsync);
 
@@ -703,6 +708,44 @@ internal static class GateCLeaseSelfTest
 
             Assert(journal?.Phase ==
                    WatchdogLeasePhase.Restoring);
+        });
+    }
+
+    private static async Task ControllerIdentityMismatchAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var prepared =
+                await env.Manager.PrepareAsync(
+                    Controller,
+                    CancellationToken.None);
+
+            var other =
+                new ControllerIdentity(
+                    Controller.ProcessId + 1,
+                    Controller.ProcessStartUtcTicks + 1);
+
+            var before =
+                await env.Journal.LoadAsync(
+                    CancellationToken.None);
+
+            var ex =
+                await ThrowsAsync<LeaseProtocolException>(
+                    () => env.Manager.WriteIntentAsync(
+                        prepared.SessionId,
+                        prepared.Generation,
+                        new FanSetpoint(30, 30),
+                        CancellationToken.None,
+                        other).AsTask());
+
+            Assert(ex.Code == "CONTROLLER_MISMATCH");
+
+            var after =
+                await env.Journal.LoadAsync(
+                    CancellationToken.None);
+
+            Assert(before == after);
+            Assert(env.Hardware.RestoreCalls == 0);
         });
     }
 
