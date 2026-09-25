@@ -1,6 +1,6 @@
 # Watchdog Gate E - watchdog process death while GUI owns Custom
 
-Status: implementation complete; physical validation pending.
+Status: **PASSED on real hardware, 2026-09-25.**
 
 Gate E validates the opposite failure domain from Gate D.
 
@@ -96,9 +96,14 @@ If watchdog IPC fails, the coordinator transitions:
 ~~~text
 Custom
   -> Restoring
-     reason = Backend health/ownership probe failed during custom authority
+     reason = Backend control-dependency probe failed during custom authority:
+              WATCHDOG_IPC_LOSS during Probe: ...
   -> Firmware
 ~~~
+
+The watchdog transport loss is explicitly classified. An unrelated EC/backend
+failure may still trigger a safe firmware handoff, but it is recorded as an
+unrelated restore and cannot satisfy the Gate E PASS condition.
 
 The backend's RestoreWithWatchdog path deliberately treats watchdog IPC failure
 as degraded lease handoff, not as a reason to skip the local HP restore.
@@ -162,11 +167,14 @@ The test:
 5. starts the watchdog and requires Ready / Session 0 / LocalSystem;
 6. arms the independent delayed emergency fallback;
 7. launches the Gate E GUI mode;
-8. requires durable OWNED 30/30 bound to the exact GUI PID + creation time;
-9. independently confirms EC 30/30;
+8. requires a READY marker proving the production backend already completed
+   real EC + dual-tach acknowledgement and watchdog Commit, plus durable OWNED
+   30/30 bound to the exact GUI PID + creation time;
+9. performs no out-of-band EC probe or artificial dwell between READY and the
+   watchdog kill boundary;
 10. force-kills only the watchdog service PID;
-11. requires the GUI local-restore marker before any replacement service PID
-    appears;
+11. requires the GUI local-restore marker to be classified as
+    WATCHDOG_IPC_LOSS before any replacement service PID appears;
 12. independently confirms EC FF/FF while the service is still absent;
 13. requires the durable OWNED journal to still exist at that point;
 14. waits for SCM to restart the service;
@@ -178,6 +186,44 @@ The test:
 19. reinstalls the production watchdog service so SCM recovery returns to
     1 s / 5 s / 10 s and the service failure history is reset;
 20. asks the user to confirm OMEN Gaming Hub undervolt is unchanged.
+
+## Physical result
+
+**PASSED on real hardware, 2026-09-25**, on
+`c14c6b6fc77b54cebb36ab2a0b3fb90c96163248` after Windows CI #247 passed the
+PowerShell syntax check, Gate E contention/causality invariants, build, Gate B/C,
+SafetyGate, FanControlCoordinator, BIOS-contract and HP-backend self-tests.
+
+Observed sequence:
+
+~~~text
+production postcheck:
+  watchdog PID 28028 Ready / LocalSystem / Session 0
+  no durable journal
+  EC 255/255
+  SCM recovery 1 s / 5 s / 10 s
+  OMEN undervolt SAME
+
+Gate E:
+  watchdog PID 16724 Ready
+  GUI PID 7544
+  durable OWNED generation 3, target 30/30
+  READY ack=backend-ec+tachs+watchdog-owned
+  force-kill watchdog PID 16724
+  live GUI -> LOCAL-RESTORE
+    reason=WATCHDOG_IPC_LOSS during Probe: Pipe is broken
+  EC -> 255/255 before replacement watchdog exists
+  retained journal consumed by restarted watchdog PID 14184
+  startup recovery=RestoredFirmware
+  final EC 255/255
+  post-test EC 255/255
+  emergency fallback cancelled without firing
+  production watchdog reinstalled as PID 492
+  production SCM recovery re-verified 1 s / 5 s / 10 s
+  OMEN undervolt SAME
+~~~
+
+The parent PowerShell issued no HP restore command. This closes Gate E.
 
 ## PASS boundary
 
