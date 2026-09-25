@@ -63,6 +63,11 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "out-of-range WriteIntent is rejected without journal mutation",
+            OutOfRangeWriteIntentAsync);
+
+        failures += await CaseAsync(
+            output,
             "Release normalizes full firmware restore before clearing lease",
             ReleaseNormalizesRestoreAsync);
 
@@ -70,6 +75,16 @@ internal static class GateCLeaseSelfTest
             output,
             "Release restore failure retains durable lease",
             ReleaseFailureRetainsLeaseAsync);
+
+        failures += await CaseAsync(
+            output,
+            "Release takes over when controller left owned setpoint active",
+            ReleaseTakesOverOwnedTargetAsync);
+
+        failures += await CaseAsync(
+            output,
+            "Release never clears an unknown external override",
+            ReleasePreservesUnknownExternalOverrideAsync);
 
         failures += await CaseAsync(
             output,
@@ -486,6 +501,92 @@ internal static class GateCLeaseSelfTest
 
             Assert(ex.Code == "RESTORE_NOT_VERIFIED");
             Assert(env.Hardware.RestoreCalls == 1);
+
+            var journal =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            Assert(journal?.Phase ==
+                   WatchdogLeasePhase.Restoring);
+        });
+    }
+
+    private static async Task OutOfRangeWriteIntentAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var prepared =
+                await env.Manager.PrepareAsync(
+                    Controller,
+                    CancellationToken.None);
+
+            var before =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            var ex =
+                await ThrowsAsync<LeaseProtocolException>(
+                    () => env.Manager.WriteIntentAsync(
+                        prepared.SessionId,
+                        prepared.Generation,
+                        new FanSetpoint(13, 51),
+                        CancellationToken.None).AsTask());
+
+            Assert(ex.Code == "TARGET_OUT_OF_RANGE");
+
+            var after =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            Assert(before == after);
+            Assert(env.Hardware.RestoreCalls == 0);
+        });
+    }
+
+    private static async Task ReleaseTakesOverOwnedTargetAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+            var restoring =
+                await env.Manager.RestoreBeginAsync(
+                    owned.SessionId,
+                    owned.Generation,
+                    CancellationToken.None);
+
+            // Controller declared restore-begin but never changed EC.
+            await env.Manager.ReleaseAsync(
+                restoring.SessionId,
+                restoring.Generation,
+                CancellationToken.None);
+
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task ReleasePreservesUnknownExternalOverrideAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+            var restoring =
+                await env.Manager.RestoreBeginAsync(
+                    owned.SessionId,
+                    owned.Generation,
+                    CancellationToken.None);
+
+            env.Hardware.Set(new FanSetpoint(31, 31));
+
+            var ex =
+                await ThrowsAsync<LeaseProtocolException>(
+                    () => env.Manager.ReleaseAsync(
+                        restoring.SessionId,
+                        restoring.Generation,
+                        CancellationToken.None).AsTask());
+
+            Assert(ex.Code == "RESTORE_NOT_VERIFIED");
+            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(env.Hardware.Current == new FanSetpoint(31, 31));
 
             var journal =
                 await env.Journal.LoadAsync(CancellationToken.None);
