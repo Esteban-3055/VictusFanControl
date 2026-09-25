@@ -31,6 +31,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestRuntimeOwnershipMismatchRestoresAsync(output, safety);
         failures += await TestRuntimeFeedbackFailureRestoresAsync(output, safety);
         failures += await TestBackendStatusFailureRestoresAsync(output, safety);
+        failures += await TestControlDependencyFailurePreemptsUnsafeSafetyAsync(output, safety, now);
         failures += await TestLifecycleFenceClosesBeforeCoordinatorGateAsync(output, safety, now);
         failures += await TestStaleSafetyEvaluationCannotTearDownNewerSessionAsync(output, safety, now);
         failures += await TestStaleCommandSafetyCannotTearDownNewerSessionAsync(output, safety, now);
@@ -595,6 +596,56 @@ public static class FanControlCoordinatorSelfTest
             coordinator.Authority == FanAuthority.Firmware);
     }
 
+    private static async Task<int> TestControlDependencyFailurePreemptsUnsafeSafetyAsync(
+        TextWriter output,
+        SafetyGateResult initialSafety,
+        DateTimeOffset now)
+    {
+        var backend = new RecordingBackend
+        {
+            ThrowOnControlDependencyProbe = true
+        };
+
+        await using var coordinator =
+            new FanControlCoordinator(backend);
+
+        var entered =
+            await coordinator.TryEnterCustomAsync(
+                initialSafety,
+                CancellationToken.None);
+
+        var unsafeSafety = BuildReadySafety(
+            now - TimeSpan.FromSeconds(10),
+            now);
+
+        var threw = false;
+        try
+        {
+            await coordinator.EnforceSafetyAsync(
+                unsafeSafety,
+                "synthetic incomplete/stale telemetry concurrent with watchdog loss",
+                CancellationToken.None);
+        }
+        catch (IOException ex)
+            when (ex.Message.Contains(
+                "synthetic watchdog dependency loss",
+                StringComparison.Ordinal))
+        {
+            threw = true;
+        }
+
+        return Report(
+            output,
+            "watchdog dependency loss is detected before telemetry safety handoff",
+            entered &&
+            threw &&
+            backend.ControlDependencyProbeCalls == 1 &&
+            backend.StatusCalls == 0 &&
+            backend.RestoreCalls == 1 &&
+            !backend.Active &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
     private static async Task<int> TestStaleCommandSafetyCannotTearDownNewerSessionAsync(
         TextWriter output,
         SafetyGateResult initialSafety,
@@ -856,10 +907,12 @@ public static class FanControlCoordinatorSelfTest
         public int ApplyCalls { get; private set; }
         public int RestoreCalls { get; private set; }
         public int StatusCalls { get; private set; }
+        public int ControlDependencyProbeCalls { get; private set; }
         public bool OwnershipValid { get; set; } = true;
         public bool FeedbackHealthy { get; set; } = true;
         public bool ThrowOnApply { get; init; }
         public bool ThrowOnStatus { get; init; }
+        public bool ThrowOnControlDependencyProbe { get; init; }
         public bool ThrowOnEnterAfterActivate { get; init; }
         public bool ThrowOwnershipConflictOnEnter { get; init; }
         public bool ThrowNoWriteAdmissionOnEnter { get; init; }
@@ -871,6 +924,20 @@ public static class FanControlCoordinatorSelfTest
         public TaskCompletionSource<bool> ApplyRelease { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Active { get; private set; }
+
+        public ValueTask ProbeControlDependencyAsync(CancellationToken cancellationToken)
+        {
+            ControlDependencyProbeCalls++;
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (ThrowOnControlDependencyProbe)
+            {
+                return ValueTask.FromException(
+                    new IOException("synthetic watchdog dependency loss"));
+            }
+
+            return ValueTask.CompletedTask;
+        }
 
         public ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken)
         {
