@@ -204,13 +204,13 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
-            "pipe loss before WriteIntent ACK delivery normalizes WRITE_ARMED",
+            "live-controller pipe loss before WriteIntent ACK retains WRITE_ARMED until deadline",
             NamedPipeLossBeforeWriteIntentAckAsync);
 
         failures += await CaseAsync(
             output,
-            "named-pipe loss while OWNED restores immediately",
-            NamedPipeLossRestoresAsync);
+            "proven controller death while OWNED restores immediately",
+            ProvenOwnerDeathWhileOwnedRestoresAsync);
 
         failures += await CaseAsync(
             output,
@@ -1228,7 +1228,7 @@ internal static class GateCLeaseSelfTest
         await WithEnvironmentAsync(async env =>
         {
             var name =
-                "VictusFanControl-GateC-" +
+                "VictusFanControl-GateD-AckLoss-" +
                 Guid.NewGuid().ToString("N");
 
             await using var server =
@@ -1238,7 +1238,9 @@ internal static class GateCLeaseSelfTest
                 GateCPipeServerSession.RunAsync(
                     server,
                     env.Manager,
-                    CancellationToken.None);
+                    CancellationToken.None,
+                    log: null,
+                    monitorControllerProcess: true);
 
             await using (var client =
                 new NamedPipeClientStream(
@@ -1263,18 +1265,19 @@ internal static class GateCLeaseSelfTest
                             ControllerStartUtcTicks:
                                 actual.ProcessStartUtcTicks));
 
-                Assert(hello.Ok);
+                Assert(hello.Ok, "Hello was rejected.");
 
                 var prepared =
                     await RoundTripAsync(
                         client,
                         Request(GateCProtocol.Prepare));
 
-                Assert(prepared.Ok);
+                Assert(prepared.Ok, "Prepare was rejected.");
 
-                // Send WriteIntent, but deliberately never consume the ACK.
-                // Poll the durable journal only to prove the server completed
-                // the safety-critical store before simulating client death.
+                // The service durably accepts WRITE_INTENT, but the controller
+                // deliberately never consumes its ACK. This models the
+                // ambiguous transport window that motivated the Gate D
+                // live-owner retention rule.
                 await FanControlWatchdogLeaseCodec.WriteRequestAsync(
                     client,
                     Request(
@@ -1286,13 +1289,15 @@ internal static class GateCLeaseSelfTest
                     CancellationToken.None);
 
                 var deadline = DateTime.UtcNow.AddSeconds(5);
+                WatchdogLeaseRecord? armed = null;
+
                 while (DateTime.UtcNow < deadline)
                 {
-                    var persisted =
+                    armed =
                         await env.Journal.LoadAsync(
                             CancellationToken.None);
 
-                    if (persisted?.Phase ==
+                    if (armed?.Phase ==
                         WatchdogLeasePhase.WriteArmed)
                     {
                         break;
@@ -1301,108 +1306,94 @@ internal static class GateCLeaseSelfTest
                     await Task.Delay(10);
                 }
 
-                var armed =
-                    await env.Journal.LoadAsync(
-                        CancellationToken.None);
+                Assert(
+                    armed?.Phase == WatchdogLeasePhase.WriteArmed,
+                    $"WRITE_ARMED was not durably observed before disconnect; phase={armed?.Phase.ToString() ?? "none"}.");
 
-                Assert(armed?.Phase ==
-                       WatchdogLeasePhase.WriteArmed);
-
-                // EC is still FF/FF: the client died before it was allowed to
-                // dispatch any real fan write.
+                // EC remains FF/FF because this synthetic client never dispatches
+                // WMI. Closing only the transport must not be mistaken for
+                // process death because this exact client process is still alive.
             }
 
             await serverTask.ConfigureAwait(false);
 
-            Assert(env.Hardware.RestoreCalls == 1);
-            Assert(env.Hardware.Current.IsFirmwareOwned);
+            var retained =
+                await env.Journal.LoadAsync(
+                    CancellationToken.None);
+
             Assert(
-                await env.Journal.LoadAsync(CancellationToken.None) is null);
+                env.Hardware.RestoreCalls == 0,
+                $"Live-owner transport loss unexpectedly restored hardware {env.Hardware.RestoreCalls} time(s).");
+            Assert(
+                env.Hardware.Current.IsFirmwareOwned,
+                $"Synthetic EC changed unexpectedly to {env.Hardware.Current}.");
+            Assert(
+                retained?.Phase == WatchdogLeasePhase.WriteArmed,
+                $"Live-owner transport loss did not retain WRITE_ARMED; phase={retained?.Phase.ToString() ?? "none"}.");
+
+            // If the still-live controller never reconnects/progresses, the
+            // WRITE_ARMED deadline remains the fail-closed recovery boundary.
+            env.Clock.Advance(
+                WatchdogLeaseManager.WriteArmedDeadline +
+                TimeSpan.FromMilliseconds(1));
+
+            var recovery =
+                await env.Manager.CheckDeadlinesAsync(
+                    CancellationToken.None);
+
+            Assert(
+                recovery?.Disposition ==
+                LeaseRecoveryDisposition.RestoredFirmware,
+                $"WRITE_ARMED deadline did not restore firmware; disposition={recovery?.Disposition.ToString() ?? "none"}.");
+            Assert(
+                env.Hardware.RestoreCalls == 1,
+                $"WRITE_ARMED deadline restore count was {env.Hardware.RestoreCalls}, expected 1.");
+            Assert(
+                env.Hardware.Current.IsFirmwareOwned,
+                $"WRITE_ARMED deadline left EC at {env.Hardware.Current}.");
+            Assert(
+                await env.Journal.LoadAsync(
+                    CancellationToken.None) is null,
+                "WRITE_ARMED deadline restored firmware but did not clear the durable journal.");
         });
     }
 
-    private static async Task NamedPipeLossRestoresAsync()
+    private static async Task ProvenOwnerDeathWhileOwnedRestoresAsync()
     {
         await WithEnvironmentAsync(async env =>
         {
-            var name =
-                "VictusFanControl-GateC-" +
-                Guid.NewGuid().ToString("N");
+            var owned =
+                await PrepareArmCommitAsync(
+                    env,
+                    30);
 
-            await using var server =
-                NewServer(name);
+            Assert(
+                owned.Phase == WatchdogLeasePhase.Owned,
+                $"Synthetic lease did not reach OWNED; phase={owned.Phase}.");
+            Assert(
+                env.Hardware.Current == new FanSetpoint(30, 30),
+                $"Synthetic EC did not reach 30/30; observed={env.Hardware.Current}.");
 
-            var serverTask =
-                GateCPipeServerSession.RunAsync(
-                    server,
-                    env.Manager,
+            var recovery =
+                await env.Manager.HandleOwnerLossAsync(
+                    Controller,
+                    "synthetic proven controller process exit",
                     CancellationToken.None);
 
-            await using (var client =
-                new NamedPipeClientStream(
-                    ".",
-                    name,
-                    PipeDirection.InOut,
-                    PipeOptions.Asynchronous))
-            {
-                await client.ConnectAsync(5000);
-
-                var actual =
-                    WindowsNamedPipeIdentity.CurrentProcessIdentity();
-
-                var hello =
-                    await RoundTripAsync(
-                        client,
-                        new FanControlWatchdogLeaseRequest(
-                            GateCProtocol.Version,
-                            Guid.NewGuid(),
-                            GateCProtocol.Hello,
-                            ControllerPid: actual.ProcessId,
-                            ControllerStartUtcTicks:
-                                actual.ProcessStartUtcTicks));
-
-                Assert(hello.Ok);
-
-                var prepared =
-                    await RoundTripAsync(
-                        client,
-                        Request(GateCProtocol.Prepare));
-
-                Assert(prepared.Ok);
-
-                var armed =
-                    await RoundTripAsync(
-                        client,
-                        Request(
-                            GateCProtocol.WriteIntent,
-                            prepared.SessionId,
-                            prepared.Generation,
-                            30,
-                            30));
-
-                Assert(armed.Ok);
-
-                env.Hardware.Set(new FanSetpoint(30, 30));
-
-                var owned =
-                    await RoundTripAsync(
-                        client,
-                        Request(
-                            GateCProtocol.Commit,
-                            armed.SessionId,
-                            armed.Generation,
-                            30,
-                            30));
-
-                Assert(owned.Ok);
-            }
-
-            await serverTask.ConfigureAwait(false);
-
-            Assert(env.Hardware.RestoreCalls == 1);
-            Assert(env.Hardware.Current.IsFirmwareOwned);
             Assert(
-                await env.Journal.LoadAsync(CancellationToken.None) is null);
+                recovery?.Disposition ==
+                LeaseRecoveryDisposition.RestoredFirmware,
+                $"Proven owner death did not restore firmware; disposition={recovery?.Disposition.ToString() ?? "none"}.");
+            Assert(
+                env.Hardware.RestoreCalls == 1,
+                $"Proven owner death restore count was {env.Hardware.RestoreCalls}, expected 1.");
+            Assert(
+                env.Hardware.Current.IsFirmwareOwned,
+                $"Proven owner death left EC at {env.Hardware.Current}.");
+            Assert(
+                await env.Journal.LoadAsync(
+                    CancellationToken.None) is null,
+                "Proven owner death restored firmware but did not clear the durable journal.");
         });
     }
 
