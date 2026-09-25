@@ -284,21 +284,26 @@ internal sealed class WatchdogLeaseManager
                     "Release requires RESTORING.");
             }
 
-            var observed =
-                await _hardware.ReadSetpointAsync(cancellationToken)
-                    .ConfigureAwait(false);
+            // FF/FF alone is not sufficient proof that the complete HP
+            // handoff finished: it can be the midpoint between fixed-level
+            // release and LegacyDefault. Therefore Release never merely drops
+            // the durable lease. It asks the watchdog hardware adapter to
+            // complete/normalize the validated restore primitive, then clears
+            // ownership only after FF/FF is verified.
+            var recovery =
+                await RecoverPotentialWriteLockedAsync(
+                    current,
+                    "controller release",
+                    cancellationToken).ConfigureAwait(false);
 
-            if (!observed.IsFirmwareOwned)
+            if (recovery.Disposition !=
+                LeaseRecoveryDisposition.RestoredFirmware)
             {
                 throw new LeaseProtocolException(
-                    "FIRMWARE_NOT_VERIFIED",
-                    $"Release refused because EC is still {observed}, not FF/FF.");
+                    "RESTORE_NOT_VERIFIED",
+                    $"Release refused: {recovery.Detail}");
             }
 
-            await _journal.DeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            _active = null;
             _lastHeartbeatMs = 0;
             _operationStartedMs = 0;
         }
