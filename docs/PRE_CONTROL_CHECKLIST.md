@@ -56,7 +56,7 @@ This checklist tracks what must be true before VictusFanControl is allowed to ru
 ## Remaining gates before automatic control
 
 - [x] Integrated backend + coordinator real-hardware gate passed on 2026-09-24: Custom 30/30 acknowledged, six continuous supervision samples passed, restore returned EC 0x34/0x35 to FF/FF, and OMEN Gaming Hub undervolt remained unchanged.
-- [~] Suspend-while-Custom hardware gate: first physical attempt restored to Firmware + EC FF/FF before sleep and recovered Healthy/Firmware + FF/FF after resume, but the harness produced a false negative because a redundant pre-restore diagnostic EC read timed out on `Global\Access_EC`. Harness corrected; one clean real-target PASS rerun is still required.
+- [x] Suspend-while-Custom real-hardware gate passed on 2026-09-24: the handler entered with Custom authority and a previously verified 30/30 EC setpoint, synchronously restored to Firmware + EC FF/FF before returning the suspend event, then recovered to Healthy/Firmware + FF/FF after resume; OMEN Gaming Hub undervolt remained unchanged.
 - [ ] Characterize forced-process-termination / EC countdown/watchdog recovery; managed `finally`/Dispose cannot protect a killed process.
 - [ ] Repeat validation under representative CPU load, GPU load and gaming.
 - [ ] Validate thermal emergency handoff thresholds under load.
