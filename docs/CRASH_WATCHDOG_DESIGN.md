@@ -436,11 +436,7 @@ Do not integrate all pieces at once.
 
 ### Gate B - service restore primitive
 
-- controller deliberately applies validated 30/30;
-- service receives an explicit test-only restore request;
-- service alone executes FF/FF -> LegacyDefault;
-- EC verifies FF/FF;
-- OGH undervolt unchanged.
+Implementation is ready; physical validation is pending. The test uses the already-validated GUI coordinator/backend path to reach 30/30, arms an ownership-safe delayed fallback, force-kills the exact GUI PID so managed cleanup cannot participate, then starts a one-shot LocalSystem service. The service refuses any pre-state other than the explicit 30/30 test ownership and its only write-capable operation is `FF,FF -> LegacyDefault`, followed by mandatory EC FF/FF verification. See `WATCHDOG_GATE_B.md`.
 
 ### Gate C - synthetic lease state machine
 
