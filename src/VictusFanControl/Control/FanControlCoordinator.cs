@@ -310,6 +310,32 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 return true;
             }
 
+            // Watchdog/process liveness is a non-hardware dependency and must
+            // be checked before a telemetry-derived safety failure can trigger
+            // restore. Otherwise an unrelated EC/telemetry transient could mask
+            // the intended watchdog-death failure domain. This probe neither
+            // touches EC nor renews watchdog heartbeat.
+            try
+            {
+                await _backend.ProbeControlDependencyAsync(
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception dependencyFailure)
+            {
+                try
+                {
+                    await RestoreLockedAsync(
+                        $"Backend control-dependency probe failed during custom authority: {dependencyFailure.Message}",
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // RestoreLockedAsync already transitions authority to Faulted.
+                }
+
+                throw;
+            }
+
             if (!SafetyAllowsCustomLocked(safety))
             {
                 await RestoreLockedAsync(
