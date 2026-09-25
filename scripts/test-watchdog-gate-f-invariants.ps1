@@ -66,6 +66,7 @@ Assert-NotContains -Text $preKillSegment -Pattern 'Read-EcState|--probe-88f8-ec-
 Assert-NotContains -Text $preKillSegment -Pattern 'Start-Sleep' -Description 'no artificial dwell exists between Gate F1 READY and double kill'
 Assert-Contains -Text $preKillSegment -Pattern '\$servicePidAtKillBoundary\s*=\s*Get-ServiceProcessId' -Description 'watchdog PID is captured explicitly as a scalar at the kill boundary'
 Assert-Contains -Text $preKillSegment -Pattern '\$serviceStartTicksAtBoundary\s*=\s*Get-ProcessStartTicks' -Description 'watchdog creation time is revalidated at the kill boundary'
+Assert-Contains -Text $preKillSegment -Pattern '\$failsafe\.Refresh\(\)[\s\S]*\$failsafe\.HasExited' -Description 'independent emergency fallback is proven alive at the double-kill boundary'
 
 $step6Index = $killIndex
 $step7Index = $harness.IndexOf("Write-Host 'Step 7: require SCM restart", [StringComparison]::Ordinal)
