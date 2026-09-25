@@ -528,8 +528,9 @@ try {
         throw "Gate E GUI exited before the forced-kill boundary. ExitCode=$($proc.ExitCode). $detail"
     }
 
-    if (Get-ServiceProcessId -ne $servicePidBefore) {
-        throw 'Watchdog service PID changed before the forced-kill boundary.'
+    $servicePidAtKillBoundary = Get-ServiceProcessId
+    if ($servicePidAtKillBoundary -ne $servicePidBefore) {
+        throw "Watchdog service PID changed before the forced-kill boundary: expected $servicePidBefore, observed $servicePidAtKillBoundary."
     }
 
     if (-not (Test-Path $journalPath)) {
