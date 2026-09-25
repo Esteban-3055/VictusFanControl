@@ -337,6 +337,44 @@ internal sealed class WatchdogLeaseManager
         }
     }
 
+    public async ValueTask<LeaseOperationResult> ProbeAsync(
+        Guid sessionId,
+        long expectedGeneration,
+        CancellationToken cancellationToken,
+        ControllerIdentity? expectedController = null)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var current = await RequireActiveAsync(
+                sessionId,
+                expectedGeneration,
+                cancellationToken,
+                expectedController).ConfigureAwait(false);
+
+            await ThrowIfExpiredLockedAsync(
+                current,
+                cancellationToken).ConfigureAwait(false);
+
+            if (current.Phase != WatchdogLeasePhase.Owned)
+            {
+                throw InvalidPhase(
+                    current,
+                    "Probe is accepted only while OWNED.");
+            }
+
+            // Intentionally do NOT touch _lastHeartbeatMs. This operation only
+            // proves that the exact watchdog lease/transport is alive. The
+            // controller must still complete fresh EC ownership/feedback
+            // validation before Heartbeat may renew liveness.
+            return Result(current);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async ValueTask<LeaseOperationResult> HeartbeatAsync(
         Guid sessionId,
         long expectedGeneration,
