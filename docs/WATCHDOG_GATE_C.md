@@ -1,6 +1,6 @@
 # Watchdog Gate C - synthetic lease / journal / named-pipe state machine
 
-Status: **Gate C PASSED in Windows CI on 2026-09-24 and passed a second safety audit before Gate D.** This gate is synthetic by design and performs no real fan/EC writes.
+Status: **Gate C PASSED in Windows CI on 2026-09-24 and passed a dedicated pre-Gate-D safety audit.** This gate is synthetic by design and performs no real fan/EC writes.
 
 Gate C deliberately does not touch real fan hardware. It establishes the
 transaction and crash semantics that must exist before the watchdog is wired
@@ -113,7 +113,11 @@ The self-test covers:
 - named-pipe client identity mismatch;
 - broken-pipe response race treated as owner loss rather than a server fault;
 - real named-pipe EOF while OWNED causing immediate synthetic restore;
-- heartbeat renewal without rewriting the durable journal.
+- heartbeat renewal without rewriting the durable journal;
+- late Heartbeat/WriteIntent commands cannot revive an expired OWNED lease;
+- a late Commit cannot revive an expired WRITE_ARMED lease;
+- out-of-range WriteIntent is rejected without journal mutation;
+- Release can take over a still-owned target, and refuses an unknown external override while retaining the RESTORING journal.
 
 The Windows CI run executes the real named-pipe tests, including
 GetNamedPipeClientProcessId identity verification and broken-pipe recovery.
@@ -129,3 +133,27 @@ Run locally:
 A Gate C PASS does not authorize real automatic fan control. Gate D is the first
 real-hardware integration of this lease with the actual GUI/backend write
 boundary.
+
+## Pre-Gate-D audit result
+
+The audit found and corrected two issues before real-service integration:
+
+1. RELEASE previously treated an observed FF/FF as sufficient to delete the
+   durable lease. That was too weak because FF/FF can be the midpoint of the
+   validated FF/FF -> LegacyDefault handoff. RELEASE now always completes one
+   watchdog-side restore normalization and verifies FF/FF before clearing the
+   journal; restore failure retains the RESTORING record.
+2. State deadlines were previously enforced only when the external deadline
+   monitor called CheckDeadlinesAsync. A late Heartbeat or Commit could therefore
+   arrive first after a scheduler stall and revive an already-expired lease.
+   Deadline checks now also run synchronously on the WriteIntent, Commit,
+   Heartbeat and RestoreBegin command paths. Expired commands trigger the same
+   fail-closed recovery and return LEASE_EXPIRED.
+
+The final Windows CI pass includes these regression cases together with the
+existing Gate B, SafetyGate, coordinator, BIOS-contract and HP-backend suites.
+
+Gate C still intentionally does not provide the persistent LocalSystem pipe ACL,
+open controller process handle, real hardware adapter, hosted deadline loop or
+Hp88F8 backend transaction hooks. Those are Gate D integration responsibilities,
+not omissions from this synthetic gate.
