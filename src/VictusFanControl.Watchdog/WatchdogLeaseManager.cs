@@ -104,7 +104,8 @@ internal sealed class WatchdogLeaseManager
     public async ValueTask CancelPreparedAsync(
         Guid sessionId,
         long expectedGeneration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ControllerIdentity? expectedController = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -112,7 +113,8 @@ internal sealed class WatchdogLeaseManager
             var current = await RequireActiveAsync(
                 sessionId,
                 expectedGeneration,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                expectedController).ConfigureAwait(false);
 
             if (current.Phase != WatchdogLeasePhase.Prepared)
             {
@@ -140,7 +142,8 @@ internal sealed class WatchdogLeaseManager
         Guid sessionId,
         long expectedGeneration,
         FanSetpoint target,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ControllerIdentity? expectedController = null)
     {
         if (!target.IsValidatedCustom)
         {
@@ -155,7 +158,8 @@ internal sealed class WatchdogLeaseManager
             var current = await RequireActiveAsync(
                 sessionId,
                 expectedGeneration,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                expectedController).ConfigureAwait(false);
 
             await ThrowIfExpiredLockedAsync(
                 current,
@@ -201,7 +205,8 @@ internal sealed class WatchdogLeaseManager
     public async ValueTask<LeaseOperationResult> AbortWriteIntentAsync(
         Guid sessionId,
         long expectedGeneration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ControllerIdentity? expectedController = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -209,7 +214,8 @@ internal sealed class WatchdogLeaseManager
             var current = await RequireActiveAsync(
                 sessionId,
                 expectedGeneration,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                expectedController).ConfigureAwait(false);
 
             await ThrowIfExpiredLockedAsync(
                 current,
@@ -284,7 +290,8 @@ internal sealed class WatchdogLeaseManager
         Guid sessionId,
         long expectedGeneration,
         FanSetpoint acknowledgedTarget,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ControllerIdentity? expectedController = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -292,7 +299,8 @@ internal sealed class WatchdogLeaseManager
             var current = await RequireActiveAsync(
                 sessionId,
                 expectedGeneration,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                expectedController).ConfigureAwait(false);
 
             await ThrowIfExpiredLockedAsync(
                 current,
@@ -332,7 +340,8 @@ internal sealed class WatchdogLeaseManager
     public async ValueTask<LeaseOperationResult> HeartbeatAsync(
         Guid sessionId,
         long expectedGeneration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ControllerIdentity? expectedController = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -340,7 +349,8 @@ internal sealed class WatchdogLeaseManager
             var current = await RequireActiveAsync(
                 sessionId,
                 expectedGeneration,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                expectedController).ConfigureAwait(false);
 
             await ThrowIfExpiredLockedAsync(
                 current,
@@ -365,7 +375,8 @@ internal sealed class WatchdogLeaseManager
     public async ValueTask<LeaseOperationResult> RestoreBeginAsync(
         Guid sessionId,
         long expectedGeneration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ControllerIdentity? expectedController = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -373,7 +384,8 @@ internal sealed class WatchdogLeaseManager
             var current = await RequireActiveAsync(
                 sessionId,
                 expectedGeneration,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                expectedController).ConfigureAwait(false);
 
             await ThrowIfExpiredLockedAsync(
                 current,
@@ -414,7 +426,8 @@ internal sealed class WatchdogLeaseManager
     public async ValueTask ReleaseAsync(
         Guid sessionId,
         long expectedGeneration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ControllerIdentity? expectedController = null)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -422,7 +435,8 @@ internal sealed class WatchdogLeaseManager
             var current = await RequireActiveAsync(
                 sessionId,
                 expectedGeneration,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                expectedController).ConfigureAwait(false);
 
             if (current.Phase != WatchdogLeasePhase.Restoring)
             {
@@ -760,7 +774,8 @@ internal sealed class WatchdogLeaseManager
     private async ValueTask<WatchdogLeaseRecord> RequireActiveAsync(
         Guid sessionId,
         long expectedGeneration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ControllerIdentity? expectedController = null)
     {
         var current =
             _active ??
@@ -775,6 +790,15 @@ internal sealed class WatchdogLeaseManager
         }
 
         _active = current;
+
+        if (expectedController.HasValue &&
+            current.Controller != expectedController.Value)
+        {
+            throw new LeaseProtocolException(
+                "CONTROLLER_MISMATCH",
+                $"Lease belongs to PID={current.Controller.ProcessId}, startTicks={current.Controller.ProcessStartUtcTicks}; " +
+                $"pipe client is PID={expectedController.Value.ProcessId}, startTicks={expectedController.Value.ProcessStartUtcTicks}.");
+        }
 
         if (current.SessionId != sessionId)
         {
