@@ -33,6 +33,7 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestWatchdogWriteIntentOrderingAsync(output);
         failures += await TestWatchdogPostIntentExternalRaceAsync(output);
         failures += await TestWatchdogHeartbeatCouplingAsync(output);
+        failures += await TestWatchdogProbePreemptsEcReadAsync(output);
         failures += await TestWatchdogCommitFailureRestoresAsync(output);
         failures += await TestWatchdogRestoreIpcFailureDoesNotBlockLocalRestoreAsync(output);
         failures += await TestWatchdogCancellationAfterIntentAbortsAsync(output);
@@ -637,12 +638,14 @@ public static class Hp88F8FanControlBackendSelfTest
             CancellationToken.None);
 
         var healthy = await backend.GetStatusAsync(CancellationToken.None);
+        var probesAfterHealthy = lease.Calls.Count(call => call == "probe");
         var afterHealthy = lease.Calls.Count(call => call == "heartbeat");
 
         hardware.FreezeCpuTach = true;
         hardware.State = hardware.State with { CpuRpm = 0 };
 
         var unhealthy = await backend.GetStatusAsync(CancellationToken.None);
+        var probesAfterUnhealthy = lease.Calls.Count(call => call == "probe");
         var afterUnhealthy = lease.Calls.Count(call => call == "heartbeat");
 
         hardware.FreezeCpuTach = false;
@@ -655,8 +658,57 @@ public static class Hp88F8FanControlBackendSelfTest
             healthy.OwnershipValid &&
             healthy.FeedbackHealthy &&
             !unhealthy.FeedbackHealthy &&
+            probesAfterHealthy == 1 &&
+            probesAfterUnhealthy == 2 &&
             afterHealthy == 1 &&
             afterUnhealthy == 1);
+    }
+
+    private static async Task<int> TestWatchdogProbePreemptsEcReadAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient();
+        await using var backend = NewProtectedBackend(hardware, lease);
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "watchdog-probe-preempts-ec"),
+            CancellationToken.None);
+
+        var ecReadsBeforeStatus = hardware.EcReadCalls;
+        var heartbeatBeforeStatus =
+            lease.Calls.Count(call => call == "heartbeat");
+
+        lease.FailProbe = true;
+
+        var failedAtProbe = false;
+        try
+        {
+            await backend.GetStatusAsync(CancellationToken.None);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains(
+                "synthetic Probe failure",
+                StringComparison.Ordinal))
+        {
+            failedAtProbe = true;
+        }
+
+        var ecReadsAfterStatus = hardware.EcReadCalls;
+        var heartbeatAfterStatus =
+            lease.Calls.Count(call => call == "heartbeat");
+
+        lease.FailProbe = false;
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "watchdog probe failure is detected before any EC health read",
+            failedAtProbe &&
+            ecReadsAfterStatus == ecReadsBeforeStatus &&
+            heartbeatAfterStatus == heartbeatBeforeStatus &&
+            lease.Calls.Contains("probe"));
     }
 
     private static async Task<int> TestWatchdogCommitFailureRestoresAsync(
@@ -801,6 +853,7 @@ public static class Hp88F8FanControlBackendSelfTest
         public bool FailPrepare { get; set; }
         public bool FailAbort { get; set; }
         public bool FailCommit { get; set; }
+        public bool FailProbe { get; set; }
         public bool FailHeartbeat { get; set; }
         public bool FailRestoreBegin { get; set; }
         public bool FailRelease { get; set; }
@@ -850,6 +903,15 @@ public static class Hp88F8FanControlBackendSelfTest
             Record("commit");
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIf(FailCommit, "synthetic Commit failure");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask ProbeAsync(
+            CancellationToken cancellationToken)
+        {
+            Record("probe");
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIf(FailProbe, "synthetic Probe failure");
             return ValueTask.CompletedTask;
         }
 
