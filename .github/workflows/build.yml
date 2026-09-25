@@ -50,6 +50,9 @@ jobs:
       - name: Watchdog Gate B restore self-test
         run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --gate-b-self-test
 
+      - name: Watchdog Gate C lease self-test
+        run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --gate-c-self-test
+
       - name: Safety gate self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --safety-self-test
 
