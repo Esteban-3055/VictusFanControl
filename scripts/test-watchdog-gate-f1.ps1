@@ -431,6 +431,14 @@ $failsafe = Start-Process powershell.exe -ArgumentList @(
 Write-Host "Emergency fallback PID: $($failsafe.Id)"
 Write-Host "Emergency delay       : $FailsafeDelaySeconds s"
 
+Start-Sleep -Milliseconds 250
+$failsafe.Refresh()
+if ($failsafe.HasExited) {
+    throw 'Independent emergency fallback exited before Gate F1 could enter Custom; refusing the hardware test.'
+}
+
+Write-Host 'Emergency fallback    : armed/alive'
+
 try {
     Write-Host ''
     Write-Host 'Step 5: launch Gate F1 GUI and require durable OWNED 30/30...' -ForegroundColor Cyan
@@ -521,7 +529,12 @@ try {
         throw 'Gate F1 lost durable OWNED 30/30 or exact controller identity before double kill.'
     }
 
-    Write-Host 'Pre-kill proof        : READY backend EC+tachs ACK + durable OWNED 30/30 + exact GUI/watchdog identities.' -ForegroundColor Green
+    $failsafe.Refresh()
+    if ($failsafe.HasExited) {
+        throw 'Independent emergency fallback is no longer armed at the Gate F1 double-kill boundary.'
+    }
+
+    Write-Host 'Pre-kill proof        : READY backend EC+tachs ACK + durable OWNED 30/30 + exact GUI/watchdog identities + live emergency fallback.' -ForegroundColor Green
     Write-Host 'No out-of-band EC probe is issued while Custom is active.' -ForegroundColor Green
 
     $watchdogProcess = [System.Diagnostics.Process]::GetProcessById($servicePidBefore)
