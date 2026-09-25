@@ -34,12 +34,19 @@ internal sealed class MainForm : Form
     private static readonly string SuspendHardwareTestResultPath =
         Path.Combine(SuspendHardwareTestRoot, "suspend-custom.result");
 
+    private static readonly string GateDHardwareTestReadyPath =
+        Path.Combine(SuspendHardwareTestRoot, "gate-d.ready");
+
+    private static readonly string GateDHardwareTestResultPath =
+        Path.Combine(SuspendHardwareTestRoot, "gate-d.result");
+
     private readonly TelemetryWorker _worker;
     private readonly FanControlCoordinator _fanCoordinator;
     private readonly string _fanBackendStartupDetail;
     private readonly HardwareIdentity _hardwareIdentity;
     private readonly string _modulesDirectory;
     private readonly bool _suspendLifecycleHardwareTest;
+    private readonly bool _gateDHardwareTest;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
 
@@ -76,6 +83,9 @@ internal sealed class MainForm : Form
     private bool _shutdownComplete;
 
     private int _suspendHardwareTestAdvanceGate;
+    private int _gateDHardwareTestAdvanceGate;
+    private bool _gateDHardwareTestArmed;
+    private bool _gateDHardwareTestCompleted;
     private bool _suspendHardwareTestArmed;
     private bool _suspendHardwareTestSuspendObserved;
     private bool _suspendHardwareTestResumeObserved;
@@ -88,7 +98,8 @@ internal sealed class MainForm : Form
 
     public MainForm(
         string modulesDirectory,
-        bool suspendLifecycleHardwareTest = false)
+        bool suspendLifecycleHardwareTest = false,
+        bool gateDHardwareTest = false)
     {
         Text = "VictusFanControl v0.4-dev — backend integrated / automatic policy OFF";
         StartPosition = FormStartPosition.CenterScreen;
@@ -97,6 +108,7 @@ internal sealed class MainForm : Form
 
         _modulesDirectory = modulesDirectory;
         _suspendLifecycleHardwareTest = suspendLifecycleHardwareTest;
+        _gateDHardwareTest = gateDHardwareTest;
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
 
         if (_suspendLifecycleHardwareTest)
@@ -106,12 +118,29 @@ internal sealed class MainForm : Form
             TryDeleteFile(SuspendHardwareTestResultPath);
         }
 
+        if (_gateDHardwareTest)
+        {
+            Directory.CreateDirectory(SuspendHardwareTestRoot);
+            TryDeleteFile(GateDHardwareTestReadyPath);
+            TryDeleteFile(GateDHardwareTestResultPath);
+        }
+
         IFanControlBackend backend;
         try
         {
-            backend = new Hp88F8FanControlBackend(modulesDirectory);
+            IFanControlWatchdogLeaseClient? watchdogLease =
+                _gateDHardwareTest
+                    ? new NamedPipeFanControlWatchdogLeaseClient()
+                    : null;
+
+            backend = new Hp88F8FanControlBackend(
+                modulesDirectory,
+                watchdogLease);
+
             _fanBackendStartupDetail = backend.CanWrite
-                ? "HP 88F8 write/restore backend initialized."
+                ? _gateDHardwareTest
+                    ? "HP 88F8 backend initialized with mandatory Gate D watchdog lease."
+                    : "HP 88F8 write/restore backend initialized."
                 : "HP 88F8 backend present but not write-capable on this hardware.";
         }
         catch (Exception ex)
@@ -153,6 +182,12 @@ internal sealed class MainForm : Form
             {
                 AppendEvent(
                     "SUSPEND TEST: explicit hardware mode enabled. Waiting for initial Healthy telemetry before one bounded 30/30 command. Automatic policy remains OFF.");
+            }
+
+            if (_gateDHardwareTest)
+            {
+                AppendEvent(
+                    "GATE D TEST: watchdog-protected hardware mode enabled. Waiting for Healthy telemetry and a service-backed lease before one bounded 30/30 command. Automatic policy remains OFF.");
             }
 
             _uiTimer.Start();
@@ -823,6 +858,146 @@ internal sealed class MainForm : Form
         if (_suspendLifecycleHardwareTest)
         {
             await AdvanceSuspendLifecycleHardwareTestAsync();
+        }
+
+        if (_gateDHardwareTest)
+        {
+            await AdvanceGateDHardwareTestAsync();
+        }
+    }
+
+    private async Task AdvanceGateDHardwareTestAsync()
+    {
+        if (_gateDHardwareTestCompleted ||
+            _gateDHardwareTestArmed ||
+            Interlocked.CompareExchange(
+                ref _gateDHardwareTestAdvanceGate,
+                1,
+                0) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var snapshot = _lastSnapshot ??
+                throw new InvalidOperationException(
+                    "No telemetry snapshot is available for Gate D admission.");
+
+            EnsureSuspendHardwareTestLightLoad(snapshot);
+
+            var safety = SafetyGate.Evaluate(
+                _hardwareIdentity,
+                _worker.StateMachine.State,
+                snapshot,
+                DateTimeOffset.UtcNow,
+                fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+            if (!safety.CustomControlPermitted)
+            {
+                throw new InvalidOperationException(
+                    "SafetyGate refused Gate D custom authority: " +
+                    string.Join(" | ", safety.Reasons));
+            }
+
+            var before =
+                new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+
+            if (before.CpuSetpoint != byte.MaxValue ||
+                before.GpuSetpoint != byte.MaxValue)
+            {
+                throw new InvalidOperationException(
+                    $"Gate D requires firmware-owned FF/FF before admission; read {before.CpuSetpoint}/{before.GpuSetpoint}.");
+            }
+
+            var entered = await _fanCoordinator.TryEnterCustomAsync(
+                safety,
+                CancellationToken.None);
+
+            if (!entered ||
+                _fanCoordinator.Authority != FanAuthority.Custom)
+            {
+                throw new InvalidOperationException(
+                    "Coordinator did not grant watchdog-protected Custom authority for Gate D.");
+            }
+
+            var latest = _lastSnapshot ?? snapshot;
+            EnsureSuspendHardwareTestLightLoad(latest);
+
+            var commandSafety = SafetyGate.Evaluate(
+                _hardwareIdentity,
+                _worker.StateMachine.State,
+                latest,
+                DateTimeOffset.UtcNow,
+                fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+            if (!commandSafety.CustomControlPermitted)
+            {
+                throw new InvalidOperationException(
+                    "SafetyGate dropped before Gate D 30/30 command: " +
+                    string.Join(" | ", commandSafety.Reasons));
+            }
+
+            await _fanCoordinator.ApplyAsync(
+                new FanCommand(
+                    SuspendHardwareTestLevel,
+                    SuspendHardwareTestLevel,
+                    "explicit Gate D watchdog/lease hardware validation"),
+                commandSafety,
+                CancellationToken.None);
+
+            _gateDHardwareTestArmed = true;
+
+            AppendEvent(
+                $"GATE D TEST: ARMED at {SuspendHardwareTestLevel}/{SuspendHardwareTestLevel}; production backend completed EC+dual-tach ACK and watchdog Commit before READY.");
+
+            File.WriteAllText(
+                GateDHardwareTestReadyPath,
+                $"READY|{DateTimeOffset.Now:O}|authority={_fanCoordinator.Authority}|cpu={SuspendHardwareTestLevel}|gpu={SuspendHardwareTestLevel}|ack=backend-ec+tachs+watchdog-owned");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                await _fanCoordinator.RestoreFirmwareAsync(
+                    "Gate D hardware-test failure cleanup.",
+                    CancellationToken.None);
+            }
+            catch (Exception restoreEx)
+            {
+                AppLog.Write(
+                    $"GATE D TEST: cleanup restore also failed: {restoreEx}");
+            }
+
+            _gateDHardwareTestCompleted = true;
+            TryDeleteFile(GateDHardwareTestReadyPath);
+
+            try
+            {
+                File.WriteAllText(
+                    GateDHardwareTestResultPath,
+                    $"FAIL|{DateTimeOffset.Now:O}|{ex.Message}");
+            }
+            catch (Exception markerEx)
+            {
+                AppLog.Write(
+                    $"GATE D TEST: could not write failure marker: {markerEx}");
+            }
+
+            AppendEvent($"GATE D TEST RESULT: FAIL: {ex.Message}");
+            Environment.ExitCode = 71;
+
+            Ui(() =>
+            {
+                _allowExit = true;
+                Close();
+            });
+        }
+        finally
+        {
+            Interlocked.Exchange(
+                ref _gateDHardwareTestAdvanceGate,
+                0);
         }
     }
 
