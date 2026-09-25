@@ -512,10 +512,9 @@ try {
     # Do not open a second out-of-band EC session while Custom authority is
     # active. READY is emitted only after the backend has acknowledged the real
     # 30/30 write through EC + dual tachometers and the watchdog has committed
-    # the durable OWNED lease. Gate E is validating watchdog-process death, not
-    # re-validating the already-proven backend write path.
-    Start-Sleep -Milliseconds 750
-
+    # the durable OWNED lease. Re-validate only durable/process evidence and
+    # kill the watchdog immediately; an artificial dwell would merely widen the
+    # window for an unrelated periodic EC-health probe before the intended fault.
     if ($proc.HasExited) {
         $detail = if (Test-Path $resultPath) {
             Get-Content $resultPath -Raw
@@ -523,7 +522,7 @@ try {
             'no Gate E result marker'
         }
 
-        throw "Gate E GUI exited during the pre-kill stability dwell. ExitCode=$($proc.ExitCode). $detail"
+        throw "Gate E GUI exited before the forced-kill boundary. ExitCode=$($proc.ExitCode). $detail"
     }
 
     if (Get-ServiceProcessId -ne $servicePidBefore) {
@@ -545,7 +544,12 @@ try {
         throw 'Gate E lost durable OWNED 30/30 or exact controller identity before watchdog kill.'
     }
 
-    Write-Host 'Pre-kill proof        : READY backend EC+tachs ACK + durable OWNED 30/30 stable; no out-of-band EC probe during Custom.'
+    if (Test-Path $localRestorePath) {
+        $prematureRestore = (Get-Content $localRestorePath -Raw).Trim()
+        throw "GUI restored firmware before the watchdog kill boundary; refusing to misattribute causality. Marker: $prematureRestore"
+    }
+
+    Write-Host 'Pre-kill proof        : READY backend EC+tachs ACK + durable OWNED 30/30 + exact identities; zero out-of-band EC probes/dwell before watchdog kill.'
 
     Write-Host ''
     Write-Host "Step 6: FORCE-KILL watchdog service PID $servicePidBefore. GUI remains alive..." -ForegroundColor Yellow
@@ -598,8 +602,8 @@ try {
     $localRestoreMarker = (Get-Content $localRestorePath -Raw).Trim()
     Write-Host $localRestoreMarker
 
-    if ($localRestoreMarker -notmatch '^LOCAL-RESTORE\|.+\|authority=Firmware\|reason=Backend health/ownership probe failed during custom authority:') {
-        throw "Gate E local-restore marker does not prove watchdog-loss Firmware handoff: $localRestoreMarker"
+    if ($localRestoreMarker -notmatch '^LOCAL-RESTORE\|.+\|authority=Firmware\|reason=Backend health/ownership probe failed during custom authority: WATCHDOG_IPC_LOSS\b') {
+        throw "Gate E local-restore marker does not prove classified watchdog IPC loss caused the Firmware handoff: $localRestoreMarker"
     }
 
     if (Get-Process -Id $servicePidBefore -ErrorAction SilentlyContinue) {
