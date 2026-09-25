@@ -261,12 +261,14 @@ try {
     $journal = Get-Content $journalPath -Raw | ConvertFrom-Json
     Write-Host "Journal phase        : $($journal.Phase)"
     Write-Host "Journal generation   : $($journal.Generation)"
+    Write-Host "Journal controller   : PID=$($journal.Controller.ProcessId) startTicks=$($journal.Controller.ProcessStartUtcTicks)"
     Write-Host "Journal owned target : $($journal.Owned.Cpu)/$($journal.Owned.Gpu)"
 
     if ($journal.Phase -cne 'Owned' -or
+        [int]$journal.Controller.ProcessId -ne $proc.Id -or
         [int]$journal.Owned.Cpu -ne 30 -or
         [int]$journal.Owned.Gpu -ne 30) {
-        throw 'READY marker is not backed by a durable watchdog OWNED 30/30 journal.'
+        throw 'READY marker is not backed by a durable watchdog OWNED 30/30 journal bound to the exact GUI PID.'
     }
 
     if ((Get-Service -Name $serviceName).Status -ne 'Running') {
