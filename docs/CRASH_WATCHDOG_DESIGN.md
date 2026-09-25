@@ -597,7 +597,7 @@ See `WATCHDOG_GATE_E.md`.
 
 ### Gate F - double-failure / durable journal
 
-**IN PROGRESS. F1 implemented; physical validation pending. F2 remains planned.**
+**IN PROGRESS. F1 passed on real hardware on 2026-09-25. F2 remains pending.**
 
 Gate F is split so the stable OWNED case and the narrower WRITE_ARMED
 transaction window are independently attributable.
@@ -615,6 +615,15 @@ F1 intentionally keeps the real production SCM recovery policy
 retained OWNED journal and report `RestoredFirmware`, after which the journal
 must be gone and an independent EC probe must read FF/FF. The parent shell never
 issues HP restore and the independent delayed fallback must remain unused.
+
+Physical F1 result: watchdog PID 10508 and GUI PID 16076 reached durable OWNED
+generation 3 at 30/30. The harness issued the watchdog kill first and the GUI
+kill 1.071 ms later, confirmed both originals dead and observed no GUI
+restore-start marker. SCM replacement watchdog PID 13288 recovered the durable
+OWNED journal with `RestoredFirmware`, restored 30/30 to FF/FF and cleared the
+journal. Final and post-test EC probes remained FF/FF, the fallback did not fire,
+the production service returned Ready as PID 27172 with 1 s / 5 s / 10 s
+recovery re-verified, and OGH undervolt remained unchanged.
 
 F2 will hold a test-only wrapper immediately before forwarding
 `CommitAsync`, after the production backend has already completed real WMI,
