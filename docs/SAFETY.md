@@ -35,7 +35,7 @@ Suspend/resume establishes a freshness boundary.
 - stale SafetyGate results cannot reacquire Custom authority;
 - normal application exit and Windows shutdown dispose/restore the fan coordinator before telemetry is torn down.
 
-Forced process termination is fundamentally different: Windows cannot run managed cleanup after an unconditional kill. Firmware countdown/watchdog behavior therefore remains a required independent safety layer before unattended automatic control.
+Forced process termination is fundamentally different: Windows cannot run managed cleanup after an unconditional kill. Real-hardware characterization showed that EC 0x63 is **not** an independent crash fail-safe in the validated OMEN Gaming Hub coexistence configuration: after the VFC GUI was killed with 30/30 active, the fixed setpoint remained 30/30 while an external HP/OMEN-side component refreshed the countdown twice. Unattended automatic control therefore requires an independent process/service watchdog with its own liveness lease and the validated `FF,FF -> LegacyDefault` restore path.
 
 ## Ownership / coexistence
 
@@ -58,9 +58,7 @@ The physical ceilings are independent: approximately 4330 RPM CPU and 4670 RPM G
 
 ## Remaining blockers before unattended automatic control
 
-- real-hardware validation of the newly integrated coordinator/backend path;
-- suspend while Custom authority is active;
-- forced-kill/countdown/watchdog characterization;
+- independent crash-watchdog/lease implementation and physical validation;
 - load/gaming and thermal-emergency validation;
 - level-14 restart-from-rest validation;
 - implementation and tuning of the shared-RPM adaptive policy.

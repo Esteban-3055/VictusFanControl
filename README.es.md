@@ -71,7 +71,7 @@ A nivel 30 ambos ventiladores convergieron casi a las mismas RPM físicas aunque
 
 La ruta v0.4 falla de forma cerrada ante identidad incorrecta, telemetría inválida, emergencia térmica, comandos fuera de 14-50, ownership externo, falta de ACK del setpoint o de cualquiera de los tacómetros, sobrescritura externa, límites de suspensión/reanudación y excepciones del backend.
 
-Suspensión, pérdida de seguridad y salida devuelven la autoridad a HP mientras el proceso siga ejecutándose. Un cierre forzado del proceso no puede ejecutar cleanup administrado; aún debemos caracterizar el countdown/watchdog del firmware antes de habilitar control automático desatendido.
+Suspensión, pérdida de seguridad y salida devuelven la autoridad a HP mientras el proceso siga ejecutándose. La terminación forzada ya fue caracterizada físicamente: después de matar la GUI con 30/30 activo, el fixed setpoint permaneció 30/30 y un componente externo HP/OMEN refrescó EC 0x63 aproximadamente cada 30 s. Por tanto, el countdown no puede considerarse un crash fail-safe fiable en la configuración validada. Antes de habilitar control automático desatendido se requiere un watchdog/lease independiente que sobreviva a la GUI y ejecute `FF,FF -> LegacyDefault` si desaparece el controlador.
 
 ## Inicio rápido
 
@@ -84,16 +84,6 @@ cd VictusFanControl
 
 La GUI muestra disponibilidad del backend y autoridad actual, pero la **política automática sigue desactivada**.
 
-La ruta integrada `SafetyGate -> FanControlCoordinator -> backend HP` ya pasó
-la validación física acotada 30/30. El siguiente gate físico es suspensión real
-mientras Custom está activo:
-
-```powershell
-.\scripts\test-suspend-custom.ps1
-```
-
-Guarda cualquier trabajo antes de ejecutarlo: el test pone Windows en suspensión
-después de una confirmación explícita. No usar bajo carga ni terminar desde Task
-Manager. Consulta `docs/SUSPEND_CUSTOM_HARDWARE_TEST.md`.
+La ruta integrada, la suspensión real mientras `Custom` estaba activo y la terminación forzada del proceso ya fueron caracterizadas físicamente. El resultado del forced-kill es deliberadamente conservador: EC 0x63 fue refrescado externamente mientras 30/30 seguía activo, por lo que el siguiente bloqueo de seguridad es implementar un watchdog/lease independiente de la GUI. El harness de caracterización queda disponible en `scripts/test-forced-kill-watchdog.ps1`; consulta `docs/FORCED_KILL_WATCHDOG_TEST.md` y `docs/CRASH_WATCHDOG_DESIGN.md`.
 
 Consulta `docs/BACKEND_INTEGRATION_V0.4.md`, `docs/PRE_CONTROL_CHECKLIST.md`, `docs/SAFETY.md` y `docs/OMENMON_COMPAT_AUDIT.md`.
