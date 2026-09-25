@@ -822,9 +822,12 @@ internal sealed class MainForm : Form
         {
             if (e.Previous == FanAuthority.Custom &&
                 e.Current == FanAuthority.Restoring &&
-                e.Reason.StartsWith(
-                    "Backend health/ownership probe failed during custom authority:",
-                    StringComparison.Ordinal))
+                (e.Reason.StartsWith(
+                     "Backend control-dependency probe failed during custom authority:",
+                     StringComparison.Ordinal) ||
+                 e.Reason.StartsWith(
+                     "Backend health/ownership probe failed during custom authority:",
+                     StringComparison.Ordinal)))
             {
                 _gateELocalRestoreReason = e.Reason;
             }
