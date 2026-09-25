@@ -83,6 +83,16 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "Prepare refuses an external fixed override",
+            PrepareRefusesExternalOverrideAsync);
+
+        failures += await CaseAsync(
+            output,
+            "PREPARED restart never clears an external fixed override",
+            PreparedRestartPreservesExternalOverrideAsync);
+
+        failures += await CaseAsync(
+            output,
             "fixed setpoint without journal is treated as external",
             ExternalOverrideWithoutLeaseAsync);
 
@@ -475,6 +485,49 @@ internal static class GateCLeaseSelfTest
             Assert(env.Hardware.RestoreCalls == 0);
             Assert(
                 await env.Journal.LoadAsync(CancellationToken.None) is not null);
+        });
+    }
+
+    private static async Task PrepareRefusesExternalOverrideAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            env.Hardware.Set(new FanSetpoint(31, 31));
+
+            var ex =
+                await ThrowsAsync<LeaseProtocolException>(
+                    () => env.Manager.PrepareAsync(
+                        Controller,
+                        CancellationToken.None).AsTask());
+
+            Assert(ex.Code == "EXTERNAL_OVERRIDE");
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
+            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(env.Hardware.Current == new FanSetpoint(31, 31));
+        });
+    }
+
+    private static async Task PreparedRestartPreservesExternalOverrideAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            await env.Manager.PrepareAsync(
+                Controller,
+                CancellationToken.None);
+
+            env.Hardware.Set(new FanSetpoint(31, 31));
+
+            var recovery =
+                await env.RestartManager()
+                    .RecoverOnStartupAsync(CancellationToken.None);
+
+            Assert(recovery.Disposition ==
+                   LeaseRecoveryDisposition.ExternalOverrideBlocked);
+            Assert(!recovery.RestoreAttempted);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
+            Assert(env.Hardware.Current == new FanSetpoint(31, 31));
         });
     }
 
