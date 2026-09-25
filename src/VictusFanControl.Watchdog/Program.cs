@@ -23,12 +23,17 @@ internal static class Program
         }
 
         var builder = Host.CreateApplicationBuilder(args);
-        builder.Logging.ClearProviders();
 
         builder.Services.AddWindowsService(serviceOptions =>
         {
-            serviceOptions.ServiceName = ServiceDisplayName;
+            // Must match the SCM service name used by the installer.
+            serviceOptions.ServiceName = ServiceName;
         });
+
+        // AddWindowsService enables Event Log integration by default. Gate A
+        // uses only its explicit ProgramData log/result files, so remove all
+        // logging providers after the Windows-service lifetime is registered.
+        builder.Logging.ClearProviders();
 
         builder.Services.AddSingleton(options);
         builder.Services.AddHostedService<GateAWorker>();
