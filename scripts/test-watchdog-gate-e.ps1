@@ -253,36 +253,382 @@ if ($pre -cne 'UNDERVOLT-OK') {
 
 Write-Host ''
 Write-Host 'Step 3: install watchdog and isolate the first SCM restart window...' -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot 'install-watchdog-gate-d.ps1')
-Set-IsolatedGateERecovery
+try {
+    & (Join-Path $PSScriptRoot 'install-watchdog-gate-d.ps1')
+    Set-IsolatedGateERecovery
 
-Start-Service -Name $serviceName
-$service = Get-Service -Name $serviceName
-$service.WaitForStatus('Running', [TimeSpan]::FromSeconds(15))
+    Start-Service -Name $serviceName
+    $service = Get-Service -Name $serviceName
+    $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(15))
 
-$servicePidBefore = Get-ServiceProcessId
-if ($servicePidBefore -le 0) {
-    throw 'Could not resolve the running watchdog service PID.'
+    $servicePidBefore = Get-ServiceProcessId
+    if ($servicePidBefore -le 0) {
+        throw 'Could not resolve the running watchdog service PID.'
+    }
+
+    $status = Wait-ForFreshServiceStatus -ExpectedPid $servicePidBefore -Seconds 15
+    if (-not $status) {
+        throw 'Gate E watchdog did not publish a fresh startup status.'
+    }
+
+    Write-Host "Service Ready       : $($status.Ready)"
+    Write-Host "Service Blocked     : $($status.Blocked)"
+    Write-Host "Service Session     : $($status.SessionId)"
+    Write-Host "Service Account     : $($status.AccountName)"
+    Write-Host "Startup recovery    : $($status.RecoveryDisposition)"
+    Write-Host "Service PID         : $servicePidBefore"
+    Write-Host "Isolated restart    : $IsolatedRestartDelaySeconds s"
+
+    if (-not $status.Ready -or
+        $status.Blocked -or
+        [int]$status.SessionId -ne 0 -or
+        $status.AccountName -notmatch 'SYSTEM
+Write-Host ''
+Write-Host 'Gate E will now acquire OWNED 30/30, kill ONLY the watchdog service process, and require the still-live GUI to restore locally before SCM restarts it.' -ForegroundColor Yellow
+$confirm = Read-Host 'Type GATEE30 to continue'
+if ($confirm -cne 'GATEE30') {
+    Write-Host 'Cancelled before any fan write.'
+    Restore-ProductionWatchdogService
+    exit 1
 }
 
-$status = Wait-ForFreshServiceStatus -ExpectedPid $servicePidBefore -Seconds 15
-if (-not $status) {
-    throw 'Gate E watchdog did not publish a fresh startup status.'
+New-Item -ItemType Directory -Force -Path $root | Out-Null
+Remove-Item $readyPath, $resultPath, $localRestorePath, $failsafeLog -Force -ErrorAction SilentlyContinue
+
+Write-Host ''
+Write-Host 'Step 4: arm independent delayed emergency fallback BEFORE 30/30...' -ForegroundColor Cyan
+$failsafe = Start-Process powershell.exe -ArgumentList @(
+    '-NoProfile',
+    '-ExecutionPolicy', 'Bypass',
+    '-File', $failsafeScript,
+    '-Cli', $cli,
+    '-RepoRoot', $repoRoot,
+    '-LogPath', $failsafeLog,
+    '-DelaySeconds', $FailsafeDelaySeconds
+) -WindowStyle Hidden -PassThru
+
+Write-Host "Emergency fallback PID: $($failsafe.Id)"
+Write-Host "Emergency delay       : $FailsafeDelaySeconds s"
+
+try {
+    Write-Host ''
+    Write-Host 'Step 5: launch Gate E GUI and require durable OWNED 30/30...' -ForegroundColor Cyan
+
+    $proc = Start-Process -FilePath $app -ArgumentList @(
+        '--gate-e-watchdog-death-test',
+        '--gate-e-test-token',
+        '88F8-GATEE30'
+    ) -PassThru
+
+    $deadline = (Get-Date).AddSeconds(75)
+    while (-not (Test-Path $readyPath)) {
+        if ($proc.HasExited) {
+            $detail = if (Test-Path $resultPath) {
+                Get-Content $resultPath -Raw
+            } else {
+                'no Gate E result marker'
+            }
+
+            throw "VictusFanControl.App exited before Gate E READY. ExitCode=$($proc.ExitCode). $detail"
+        }
+
+        if ((Get-Date) -gt $deadline) {
+            throw 'Timed out waiting for watchdog-protected Gate E READY.'
+        }
+
+        Start-Sleep -Milliseconds 250
+    }
+
+    $readyReached = $true
+    Write-Host 'Gate E READY marker:' -ForegroundColor Green
+    Get-Content $readyPath
+
+    if (-not (Test-Path $journalPath)) {
+        throw 'GUI reported Gate E READY but the durable watchdog journal is missing.'
+    }
+
+    $journal = Get-Content $journalPath -Raw | ConvertFrom-Json
+    $journalOwned = Test-JournalOwnedPhase -Phase $journal.Phase
+    $procStartTicks = [long]$proc.StartTime.ToUniversalTime().Ticks
+
+    Write-Host "Journal phase        : $($journal.Phase)$(if ($journalOwned) { ' (Owned)' })"
+    Write-Host "Journal generation   : $($journal.Generation)"
+    Write-Host "Journal controller   : PID=$($journal.Controller.ProcessId) startTicks=$($journal.Controller.ProcessStartUtcTicks)"
+    Write-Host "GUI identity         : PID=$($proc.Id) startTicks=$procStartTicks"
+    Write-Host "Journal owned target : $($journal.Owned.Cpu)/$($journal.Owned.Gpu)"
+
+    if (-not $journalOwned -or
+        [int]$journal.Controller.ProcessId -ne $proc.Id -or
+        [long]$journal.Controller.ProcessStartUtcTicks -ne $procStartTicks -or
+        [int]$journal.Owned.Cpu -ne 30 -or
+        [int]$journal.Owned.Gpu -ne 30) {
+        throw 'Gate E READY is not backed by durable OWNED 30/30 bound to the exact GUI PID + creation time.'
+    }
+
+    $ownedEc = Read-EcState
+    Write-Host "Pre-kill EC          : $($ownedEc.Raw)"
+    if ($ownedEc.Cpu -ne 30 -or $ownedEc.Gpu -ne 30) {
+        throw "Gate E durable OWNED journal exists but EC is not 30/30: $($ownedEc.Cpu)/$($ownedEc.Gpu)."
+    }
+
+    Write-Host ''
+    Write-Host "Step 6: FORCE-KILL watchdog service PID $servicePidBefore. GUI remains alive..." -ForegroundColor Yellow
+    Stop-Process -Id $servicePidBefore -Force
+
+    $killDeadline = (Get-Date).AddSeconds(5)
+    while ((Get-Process -Id $servicePidBefore -ErrorAction SilentlyContinue) -and
+           (Get-Date) -lt $killDeadline) {
+        Start-Sleep -Milliseconds 50
+    }
+
+    if (Get-Process -Id $servicePidBefore -ErrorAction SilentlyContinue) {
+        throw 'Watchdog service process did not terminate after force-kill.'
+    }
+
+    Write-Host 'Watchdog process is dead. Parent shell will NOT send any HP restore command.' -ForegroundColor Yellow
+
+    Write-Host ''
+    Write-Host 'Step 7: prove live-GUI local restore BEFORE SCM restart...' -ForegroundColor Cyan
+
+    $localDeadline = (Get-Date).AddSeconds($IsolatedRestartDelaySeconds - 3)
+
+    while (-not (Test-Path $localRestorePath)) {
+        if ($proc.HasExited) {
+            $detail = if (Test-Path $resultPath) {
+                Get-Content $resultPath -Raw
+            } else {
+                'no Gate E result marker'
+            }
+
+            throw "Gate E GUI exited before local restore proof. ExitCode=$($proc.ExitCode). $detail"
+        }
+
+        $currentServicePid = Get-ServiceProcessId
+        if ($currentServicePid -gt 0 -and $currentServicePid -ne $servicePidBefore) {
+            throw "SCM restarted watchdog PID $currentServicePid before the GUI local-restore marker; Gate E local fallback was not isolated."
+        }
+
+        if ((Get-Date) -gt $localDeadline) {
+            throw "GUI did not publish local restore before the isolated SCM restart window closed."
+        }
+
+        Start-Sleep -Milliseconds 100
+    }
+
+    Write-Host 'GUI local-restore marker:' -ForegroundColor Green
+    Get-Content $localRestorePath
+
+    if (Get-Process -Id $servicePidBefore -ErrorAction SilentlyContinue) {
+        throw 'Old watchdog PID is unexpectedly alive during local-restore proof.'
+    }
+
+    $servicePidDuringLocalProof = Get-ServiceProcessId
+    if ($servicePidDuringLocalProof -gt 0 -and
+        $servicePidDuringLocalProof -ne $servicePidBefore) {
+        throw "A restarted watchdog PID $servicePidDuringLocalProof already exists; cannot attribute FF/FF solely to the live GUI."
+    }
+
+    $localEc = Read-EcState
+    Write-Host "Local-restore EC     : $($localEc.Raw)"
+
+    if ($localEc.Cpu -ne 255 -or $localEc.Gpu -ne 255) {
+        throw "GUI reported local restore but EC is not FF/FF: $($localEc.Cpu)/$($localEc.Gpu)."
+    }
+
+    if (-not (Test-Path $journalPath)) {
+        throw 'Durable journal disappeared while the watchdog service was still dead; Gate E expected the dead service to leave recovery evidence for SCM restart.'
+    }
+
+    $localRestoreProven = $true
+
+    Write-Host ''
+    Write-Host 'Step 8: wait for SCM to restart watchdog and recover the retained journal...' -ForegroundColor Cyan
+
+    $restartDeadline = (Get-Date).AddSeconds($IsolatedRestartDelaySeconds + 20)
+    while ($servicePidAfter -le 0 -and (Get-Date) -lt $restartDeadline) {
+        $candidate = Get-ServiceProcessId
+        if ($candidate -gt 0 -and $candidate -ne $servicePidBefore) {
+            $servicePidAfter = $candidate
+            break
+        }
+
+        Start-Sleep -Milliseconds 200
+    }
+
+    if ($servicePidAfter -le 0) {
+        throw 'SCM did not restart the watchdog service within the bounded Gate E window.'
+    }
+
+    Write-Host "Restarted service PID: $servicePidAfter"
+
+    $restartStatus = Wait-ForFreshServiceStatus -ExpectedPid $servicePidAfter -Seconds 15
+    if (-not $restartStatus) {
+        throw 'Restarted watchdog did not publish a fresh status marker.'
+    }
+
+    Write-Host "Restart Ready        : $($restartStatus.Ready)"
+    Write-Host "Restart Blocked      : $($restartStatus.Blocked)"
+    Write-Host "Restart recovery     : $($restartStatus.RecoveryDisposition)"
+    Write-Host "Restart detail       : $($restartStatus.Detail)"
+
+    if (-not $restartStatus.Ready -or
+        $restartStatus.Blocked -or
+        [int]$restartStatus.SessionId -ne 0 -or
+        $restartStatus.AccountName -notmatch 'SYSTEM$') {
+        throw 'SCM restarted the watchdog but it did not return Ready under LocalSystem/Session 0.'
+    }
+
+    if ($restartStatus.RecoveryDisposition -cne 'RestoredFirmware') {
+        throw "Expected startup recovery RestoredFirmware from the retained OWNED journal; observed '$($restartStatus.RecoveryDisposition)'."
+    }
+
+    if (-not (Wait-ForJournalGone -Seconds 5)) {
+        throw 'Restarted watchdog reported Ready but the retained Gate E journal was not cleared.'
+    }
+
+    $final = Read-EcState
+    Write-Host "Final EC             : $($final.Raw)"
+
+    if ($final.Cpu -ne 255 -or $final.Gpu -ne 255) {
+        throw "Gate E restart recovery completed but EC is not FF/FF: $($final.Cpu)/$($final.Gpu)."
+    }
+
+    $serviceRestartProven = $true
+    $pass = $true
+}
+catch {
+    $failure = $_.Exception.Message
+}
+finally {
+    # Never issue the HP restore CLI from this parent shell.
+    # If Gate E has not yet proven local restore, keep the GUI alive until the
+    # service or emergency fallback can safely recover the retained lease.
+    if (-not $localRestoreProven -and $readyReached) {
+        Write-Warning 'Gate E failed before local-restore proof. Keeping the GUI alive while waiting for watchdog/fallback recovery; do not close PowerShell.'
+
+        $recoveryDeadline = (Get-Date).AddSeconds(
+            [Math]::Min($FailsafeDelaySeconds + 10, 140))
+
+        while ((Get-Date) -lt $recoveryDeadline) {
+            $safe = $false
+
+            if (-not (Test-Path $journalPath)) {
+                try {
+                    $state = Read-EcState
+                    $safe = $state.Cpu -eq 255 -and $state.Gpu -eq 255
+                }
+                catch {
+                }
+            }
+
+            if ($safe) {
+                $localRestoreProven = $true
+                break
+            }
+
+            Start-Sleep -Milliseconds 500
+        }
+    }
+
+    $firmwareSafe = $false
+    try {
+        if (-not (Test-Path $journalPath)) {
+            $cleanupState = Read-EcState
+            Write-Host "Post-test EC check   : $($cleanupState.Raw)"
+            $firmwareSafe =
+                $cleanupState.Cpu -eq 255 -and
+                $cleanupState.Gpu -eq 255
+        }
+    }
+    catch {
+        Write-Warning "Could not perform final read-only EC check: $($_.Exception.Message)"
+    }
+
+    if ($firmwareSafe -and $proc -and -not $proc.HasExited) {
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        try { $proc.WaitForExit(5000) | Out-Null } catch {}
+        Write-Host 'Gate E GUI terminated only after firmware-safe FF/FF was independently proven.' -ForegroundColor Green
+    }
+
+    if ($firmwareSafe -and $failsafe -and -not $failsafe.HasExited) {
+        Stop-Process -Id $failsafe.Id -Force -ErrorAction SilentlyContinue
+        Write-Host 'Emergency fallback cancelled only after FF/FF + cleared journal were independently proven.' -ForegroundColor Green
+    }
+    elseif ($failsafe -and -not $firmwareSafe) {
+        Write-Warning "Firmware safety is not yet independently proven. Emergency fallback PID $($failsafe.Id) remains armed."
+    }
+
+    if ($firmwareSafe -and -not $productionServiceReinstalled) {
+        try {
+            Restore-ProductionWatchdogService
+        }
+        catch {
+            Write-Warning "Could not reinstall the production watchdog policy automatically: $($_.Exception.Message)"
+            if ($pass) {
+                $pass = $false
+                $failure = "Gate E recovery passed, but production watchdog reinstall failed: $($_.Exception.Message)"
+            }
+        }
+    }
 }
 
-Write-Host "Service Ready       : $($status.Ready)"
-Write-Host "Service Blocked     : $($status.Blocked)"
-Write-Host "Service Session     : $($status.SessionId)"
-Write-Host "Service Account     : $($status.AccountName)"
-Write-Host "Startup recovery    : $($status.RecoveryDisposition)"
-Write-Host "Service PID         : $servicePidBefore"
-Write-Host "Isolated restart    : $IsolatedRestartDelaySeconds s"
+if (-not $pass) {
+    Write-Host ''
+    Write-Host 'Gate E did NOT pass.' -ForegroundColor Red
+    Write-Host "Failure: $failure"
 
-if (-not $status.Ready -or
-    $status.Blocked -or
-    [int]$status.SessionId -ne 0 -or
-    $status.AccountName -notmatch 'SYSTEM$') {
-    throw 'Gate E service is not Ready under LocalSystem/Session 0.'
+    if (Test-Path $serviceLog) {
+        Write-Host ''
+        Write-Host 'Recent watchdog log:' -ForegroundColor Cyan
+        Get-Content $serviceLog | Select-Object -Last 80
+    }
+
+    if (Test-Path $resultPath) {
+        Write-Host ''
+        Write-Host 'Gate E GUI result:' -ForegroundColor Cyan
+        Get-Content $resultPath
+    }
+
+    exit 111
+}
+
+Write-Host ''
+Write-Host 'Step 9: verify OMEN Gaming Hub undervolt...' -ForegroundColor Cyan
+$post = Read-Host 'Type SAME if the CPU undervolt is unchanged, or CHANGED if it changed'
+
+if ($post -cne 'SAME') {
+    if ($post -ceq 'CHANGED') {
+        Write-Warning 'Undervolt preservation FAILED/CHANGED.'
+        exit 112
+    }
+
+    Write-Warning 'Undervolt preservation was not confirmed.'
+    exit 113
+}
+
+Write-Host ''
+Write-Host 'PASS: Gate E proved the live GUI/controller restores HP firmware after watchdog-process death, before SCM restarts the service.' -ForegroundColor Green
+Write-Host 'Verified: OWNED 30/30 -> watchdog PID force-kill -> GUI local FF/FF -> retained durable journal -> SCM restart -> startup RestoredFirmware -> journal cleared.' -ForegroundColor Green
+Write-Host 'Parent PowerShell issued no HP restore command; emergency fallback did not fire.' -ForegroundColor Green
+Write-Host 'Production watchdog installation/recovery policy was reinstalled after the test.' -ForegroundColor Green
+Write-Host 'OMEN Gaming Hub undervolt: SAME (user-confirmed).' -ForegroundColor Green
+exit 0
+) {
+        throw 'Gate E service is not Ready under LocalSystem/Session 0.'
+    }
+}
+catch {
+    $setupFailure = $_.Exception.Message
+    Write-Warning "Gate E service setup failed after recovery-policy isolation: $setupFailure"
+
+    try {
+        Restore-ProductionWatchdogService
+    }
+    catch {
+        Write-Warning "Automatic production watchdog reinstall also failed: $($_.Exception.Message)"
+    }
+
+    throw $setupFailure
 }
 
 Write-Host ''
