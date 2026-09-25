@@ -58,7 +58,7 @@ The physical ceilings are independent: approximately 4330 RPM CPU and 4670 RPM G
 
 ## Remaining blockers before unattended automatic control
 
-- Gate F-G crash-watchdog double-failure and lifecycle validation;
+- Gate F1/F2 double-failure durable-journal validation and Gate G lifecycle validation;
 - load/gaming and thermal-emergency validation;
 - level-14 restart-from-rest validation;
 - implementation and tuning of the shared-RPM adaptive policy.
