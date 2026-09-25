@@ -50,6 +50,13 @@ if ($preKillSegment -match 'Start-Sleep') {
 
 Write-Host 'PASS  no artificial dwell exists between Gate E READY and watchdog kill'
 
+if ($preKillSegment -match 'if\s*\(\s*Get-ServiceProcessId\s+-[a-zA-Z]+') {
+    throw 'Gate E invariant violated: Get-ServiceProcessId is used as a bare command inside a comparison. Capture its scalar result before comparing so PowerShell cannot parse the operator as a command argument.'
+}
+
+Assert-Contains -Text $preKillSegment -Pattern '\$servicePidAtKillBoundary\s*=\s*Get-ServiceProcessId' -Description 'watchdog PID is captured explicitly at the forced-kill boundary'
+Assert-Contains -Text $preKillSegment -Pattern '\$servicePidAtKillBoundary\s+-ne\s+\$servicePidBefore' -Description 'captured watchdog PID is compared as a scalar before forced kill'
+
 $getStatusStart = $backend.IndexOf('public async ValueTask<FanBackendStatus> GetStatusAsync', [StringComparison]::Ordinal)
 $getStatusEnd = $backend.IndexOf('public async ValueTask EnterCustomModeAsync', [StringComparison]::Ordinal)
 
