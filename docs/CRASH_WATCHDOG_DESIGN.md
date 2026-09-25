@@ -597,10 +597,37 @@ See `WATCHDOG_GATE_E.md`.
 
 ### Gate F - double-failure / durable journal
 
-- lease reaches WRITE_ARMED or OWNED;
-- kill controller and watchdog near-simultaneously;
-- SCM restarts watchdog;
-- watchdog reads durable journal and restores without the test shell.
+**IN PROGRESS. F1 implemented; physical validation pending. F2 remains planned.**
+
+Gate F is split so the stable OWNED case and the narrower WRITE_ARMED
+transaction window are independently attributable.
+
+F1 starts from production backend EC + dual-tach acknowledgement and durable
+OWNED 30/30. The harness validates the exact GUI and watchdog PID + creation
+times, then issues watchdog `Process.Kill()` followed immediately by GUI
+`Process.Kill()` with no sleep, EC read or SCM query between them. The issue
+interval is measured and must remain <=50 ms. The GUI synchronously records any
+`Custom -> Restoring` transition before the backend restore begins; presence of
+that marker invalidates F1 because the live controller won the recovery race.
+
+F1 intentionally keeps the real production SCM recovery policy
+1 s / 5 s / 10 s. The replacement watchdog must start as a new process, read the
+retained OWNED journal and report `RestoredFirmware`, after which the journal
+must be gone and an independent EC probe must read FF/FF. The parent shell never
+issues HP restore and the independent delayed fallback must remain unused.
+
+F2 will hold a test-only wrapper immediately before forwarding
+`CommitAsync`, after the production backend has already completed real WMI,
+EC-setpoint and dual-tach acknowledgement. The resulting durable state is
+WRITE_ARMED with pending=30/30 while hardware may already be 30/30. Killing both
+processes there will validate startup recovery across the most critical
+pre-Commit window without inserting a Gate-F branch into the production backend.
+
+The existing fail-closed rule remains mandatory: if startup observes a fixed
+setpoint outside the journal's previous/pending/owned set, it must return
+`OwnershipAmbiguous`, retain the journal and perform no blind restore.
+
+See `WATCHDOG_GATE_F.md`.
 
 ### Gate G - lifecycle
 
