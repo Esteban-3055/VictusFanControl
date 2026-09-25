@@ -357,28 +357,46 @@ if ($pre -cne 'UNDERVOLT-OK') {
 
 Write-Host ''
 Write-Host 'Step 3: install/start the watchdog with the REAL production SCM policy...' -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot 'install-watchdog-gate-d.ps1')
-$serviceInstalled = $true
-Start-Service -Name $serviceName
 
-$initialReady = Wait-ForStableWatchdogReady -Seconds 35 -RequiredRecovery 'Ready'
-if (-not $initialReady) {
-    throw 'Gate F1 watchdog did not reach stable Ready under the production recovery policy.'
+try {
+    & (Join-Path $PSScriptRoot 'install-watchdog-gate-d.ps1')
+    $serviceInstalled = $true
+    Start-Service -Name $serviceName
+
+    $initialReady = Wait-ForStableWatchdogReady -Seconds 35 -RequiredRecovery 'Ready'
+    if (-not $initialReady) {
+        throw 'Gate F1 watchdog did not reach stable Ready under the production recovery policy.'
+    }
+
+    $servicePidBefore = [int]$initialReady.Pid
+    $serviceStartTicksBefore = [long]$initialReady.StartTicks
+
+    Assert-ProductionRecoveryPolicy
+
+    Write-Host "Service Ready       : $($initialReady.Status.Ready)"
+    Write-Host "Service Blocked     : $($initialReady.Status.Blocked)"
+    Write-Host "Service Session     : $($initialReady.Status.SessionId)"
+    Write-Host "Service Account     : $($initialReady.Status.AccountName)"
+    Write-Host "Startup recovery    : $($initialReady.Status.RecoveryDisposition)"
+    Write-Host "Service PID         : $servicePidBefore"
+    Write-Host "Service startTicks  : $serviceStartTicksBefore"
+    Write-Host 'SCM policy          : production 1 s / 5 s / 10 s'
 }
+catch {
+    $setupFailure = $_.Exception.Message
+    Write-Warning "Gate F1 production-service setup failed before any fan write: $setupFailure"
 
-$servicePidBefore = [int]$initialReady.Pid
-$serviceStartTicksBefore = [long]$initialReady.StartTicks
+    if ($serviceInstalled) {
+        try {
+            Restore-ProductionWatchdogService
+        }
+        catch {
+            Write-Warning "Automatic production watchdog baseline restore also failed: $($_.Exception.Message)"
+        }
+    }
 
-Assert-ProductionRecoveryPolicy
-
-Write-Host "Service Ready       : $($initialReady.Status.Ready)"
-Write-Host "Service Blocked     : $($initialReady.Status.Blocked)"
-Write-Host "Service Session     : $($initialReady.Status.SessionId)"
-Write-Host "Service Account     : $($initialReady.Status.AccountName)"
-Write-Host "Startup recovery    : $($initialReady.Status.RecoveryDisposition)"
-Write-Host "Service PID         : $servicePidBefore"
-Write-Host "Service startTicks  : $serviceStartTicksBefore"
-Write-Host 'SCM policy          : production 1 s / 5 s / 10 s'
+    throw $setupFailure
+}
 
 Write-Host ''
 Write-Host 'Gate F1 will now acquire durable OWNED 30/30 and destroy BOTH original failure domains.' -ForegroundColor Yellow
