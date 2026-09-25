@@ -12,7 +12,7 @@ internal sealed record GateAOptions(
 
         var root = Path.Combine(commonData, "VictusFanControl", "Watchdog");
         var modulesDirectory = Path.Combine(AppContext.BaseDirectory, "modules");
-        var resultPath = Path.Combine(root, "gate-a.result.json");
+        var resultPath = Path.Combine(root, "state", "gate-a.result.json");
         var logDirectory = Path.Combine(root, "logs");
 
         for (var i = 0; i < args.Length; i++)

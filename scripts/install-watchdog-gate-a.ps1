@@ -15,7 +15,8 @@ $installRoot = Join-Path $env:ProgramData 'VictusFanControl\Watchdog'
 $binDir = Join-Path $installRoot 'bin'
 $modulesDir = Join-Path $installRoot 'modules'
 $logsDir = Join-Path $installRoot 'logs'
-$resultPath = Join-Path $installRoot 'gate-a.result.json'
+$stateDir = Join-Path $installRoot 'state'
+$resultPath = Join-Path $stateDir 'gate-a.result.json'
 
 function Assert-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -79,16 +80,37 @@ try {
         Remove-Item -Recurse -Force $installRoot
     }
 
-    New-Item -ItemType Directory -Force -Path $binDir, $modulesDir, $logsDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $binDir, $modulesDir, $logsDir, $stateDir | Out-Null
 
     Copy-Item -Path (Join-Path $publishTemp '*') -Destination $binDir -Recurse -Force
     Copy-Item -Path $sourceModule -Destination (Join-Path $modulesDir 'LpcACPIEC.bin') -Force
 
     if ($Account -eq 'LocalService') {
-        # S-1-5-19 is LocalService. Using the SID avoids localized account-name issues.
-        & icacls.exe $installRoot /grant:r '*S-1-5-19:(OI)(CI)M' /T /C | Out-Host
+        # S-1-5-19 is LocalService. Keep executable/module trees read-only to
+        # the service and grant write access only to logs/state.
+        & icacls.exe $installRoot /grant:r '*S-1-5-19:(RX)' /C | Out-Host
         if ($LASTEXITCODE -ne 0) {
-            throw "icacls failed with exit code $LASTEXITCODE."
+            throw "icacls root grant failed with exit code $LASTEXITCODE."
+        }
+
+        & icacls.exe $binDir /grant:r '*S-1-5-19:(OI)(CI)RX' /T /C | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "icacls bin grant failed with exit code $LASTEXITCODE."
+        }
+
+        & icacls.exe $modulesDir /grant:r '*S-1-5-19:(OI)(CI)RX' /T /C | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "icacls modules grant failed with exit code $LASTEXITCODE."
+        }
+
+        & icacls.exe $logsDir /grant:r '*S-1-5-19:(OI)(CI)M' /T /C | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "icacls logs grant failed with exit code $LASTEXITCODE."
+        }
+
+        & icacls.exe $stateDir /grant:r '*S-1-5-19:(OI)(CI)M' /T /C | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "icacls state grant failed with exit code $LASTEXITCODE."
         }
 
         $serviceAccount = 'NT AUTHORITY\LocalService'

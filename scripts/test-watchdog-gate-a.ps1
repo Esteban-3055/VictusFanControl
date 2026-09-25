@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 $serviceName = 'VictusFanControlWatchdogGateA'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $cli = Join-Path $repoRoot 'src\VictusFanControl\bin\Release\net8.0-windows\VictusFanControl.dll'
-$resultPath = Join-Path $env:ProgramData 'VictusFanControl\Watchdog\gate-a.result.json'
+$resultPath = Join-Path $env:ProgramData 'VictusFanControl\Watchdog\state\gate-a.result.json'
 $logPath = Join-Path $env:ProgramData ("VictusFanControl\Watchdog\logs\watchdog-gate-a-{0}.log" -f (Get-Date -Format 'yyyy-MM-dd'))
 
 function Assert-Administrator {
@@ -146,6 +146,12 @@ for ($cycle = 1; $cycle -le $RestartCycles; $cycle++) {
         throw "Gate A did not execute in Session 0; observed SessionId=$($result.SessionId)."
     }
 
+    if ([int]$result.CpuSetpoint -ne 255 -or
+        [int]$result.GpuSetpoint -ne 255) {
+        Show-Diagnostics
+        throw "Gate A service observed a non-firmware baseline: $($result.CpuSetpoint)/$($result.GpuSetpoint)."
+    }
+
     $service = Get-Service -Name $serviceName
     if ($service.Status -ne 'Running') {
         Show-Diagnostics
@@ -161,7 +167,23 @@ for ($cycle = 1; $cycle -le $RestartCycles; $cycle++) {
 }
 
 Write-Host ''
-Write-Host 'Step 5: final service/log verification...' -ForegroundColor Cyan
+Write-Host 'Step 5: final read-only EC non-mutation verification...' -ForegroundColor Cyan
+$finalProbe = (& dotnet $cli --probe-88f8-ec-state 2>&1 | Out-String)
+Write-Host $finalProbe.TrimEnd()
+
+$finalLine = ($finalProbe -split "[\r\n]+" |
+    Where-Object { $_ -match '^level CPU=' } |
+    Select-Object -Last 1)
+
+$finalMatch = [regex]::Match($finalLine, '^level CPU=(\d+) GPU=(\d+)')
+if (-not $finalMatch.Success -or
+    [int]$finalMatch.Groups[1].Value -ne 255 -or
+    [int]$finalMatch.Groups[2].Value -ne 255) {
+    throw "Final EC non-mutation verification did not read FF/FF: $finalLine"
+}
+
+Write-Host ''
+Write-Host 'Step 6: final service/log verification...' -ForegroundColor Cyan
 Get-Content $logPath | Select-Object -Last 40
 Write-Host ''
 & sc.exe qc $serviceName | Out-Host

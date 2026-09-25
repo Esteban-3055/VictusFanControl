@@ -58,14 +58,16 @@ A valid PASS requires every cycle to report:
 - exact target matched;
 - EC read succeeded;
 - HP WMI GetFanLevel succeeded;
-- service remained Running after its startup probe.
+- service remained Running after its startup probe;
+- service-observed setpoints stayed FF/FF;
+- a final interactive EC probe still reads FF/FF, proving the Gate A service did not mutate the fixed setpoint.
 
 The script leaves the Gate A service installed but stopped.
 
 ## Result and log locations
 
 ~~~text
-%ProgramData%\VictusFanControl\Watchdog\gate-a.result.json
+%ProgramData%\VictusFanControl\Watchdog\state\gate-a.result.json
 %ProgramData%\VictusFanControl\Watchdog\logs\watchdog-gate-a-YYYY-MM-DD.log
 ~~~
 
