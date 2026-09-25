@@ -49,6 +49,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-watchdog-gate-e-invariants.ps1
 
+      - name: Gate F double-death invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-f-invariants.ps1
+
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
