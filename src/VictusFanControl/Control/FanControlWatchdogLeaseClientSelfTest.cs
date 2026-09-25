@@ -19,6 +19,11 @@ internal static class FanControlWatchdogLeaseClientSelfTest
             "client rejects mismatched response request id",
             RequestIdMismatchAsync);
 
+        failures += await RunCaseAsync(
+            output,
+            "broken watchdog pipe is classified as WATCHDOG_IPC_LOSS",
+            BrokenPipeClassificationAsync);
+
         return failures;
     }
 
@@ -183,6 +188,126 @@ internal static class FanControlWatchdogLeaseClientSelfTest
             CancellationToken.None);
 
         await serverTask.ConfigureAwait(false);
+    }
+
+    private static async Task BrokenPipeClassificationAsync()
+    {
+        var pipeName =
+            "VictusFanControl-LeaseClientBrokenPipe-" +
+            Guid.NewGuid().ToString("N");
+
+        var sessionId = Guid.NewGuid();
+
+        await using var server =
+            new NamedPipeServerStream(
+                pipeName,
+                PipeDirection.InOut,
+                maxNumberOfServerInstances: 1,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous);
+
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync()
+                .ConfigureAwait(false);
+
+            var hello = await RequireRequestAsync(server);
+            AssertType(
+                hello,
+                FanControlWatchdogLeaseContract.Hello);
+
+            await ReplyAsync(
+                server,
+                hello,
+                code: "HELLO_OK",
+                message: "test hello");
+
+            var prepare = await RequireRequestAsync(server);
+            AssertType(
+                prepare,
+                FanControlWatchdogLeaseContract.Prepare);
+
+            await ReplyAsync(
+                server,
+                prepare,
+                sessionId: sessionId,
+                generation: 1,
+                phase: "Prepared");
+
+            var intent = await RequireRequestAsync(server);
+            AssertType(
+                intent,
+                FanControlWatchdogLeaseContract.WriteIntent);
+
+            await ReplyAsync(
+                server,
+                intent,
+                sessionId: sessionId,
+                generation: 2,
+                phase: "WriteArmed");
+
+            var commit = await RequireRequestAsync(server);
+            AssertType(
+                commit,
+                FanControlWatchdogLeaseContract.Commit);
+
+            await ReplyAsync(
+                server,
+                commit,
+                sessionId: sessionId,
+                generation: 3,
+                phase: "Owned");
+
+            var heartbeat = await RequireRequestAsync(server);
+            AssertType(
+                heartbeat,
+                FanControlWatchdogLeaseContract.Heartbeat);
+
+            // Simulate watchdog-process/pipe death after receiving the request
+            // but before returning a response.
+            server.Disconnect();
+        });
+
+        await using var client =
+            new NamedPipeFanControlWatchdogLeaseClient(
+                pipeName);
+
+        await client.PrepareAsync(CancellationToken.None);
+        await client.WriteIntentAsync(
+            30,
+            30,
+            CancellationToken.None);
+        await client.CommitAsync(
+            30,
+            30,
+            CancellationToken.None);
+
+        var classified = false;
+
+        try
+        {
+            await client.HeartbeatAsync(
+                CancellationToken.None);
+        }
+        catch (FanControlWatchdogTransportException ex)
+            when (ex.Message.Contains(
+                FanControlWatchdogTransportException.Marker,
+                StringComparison.Ordinal) &&
+                  string.Equals(
+                      ex.Operation,
+                      FanControlWatchdogLeaseContract.Heartbeat,
+                      StringComparison.Ordinal))
+        {
+            classified = true;
+        }
+
+        await serverTask.ConfigureAwait(false);
+
+        if (!classified)
+        {
+            throw new InvalidOperationException(
+                "Broken watchdog pipe was not surfaced as a stable WATCHDOG_IPC_LOSS transport failure.");
+        }
     }
 
     private static async Task RequestIdMismatchAsync()
