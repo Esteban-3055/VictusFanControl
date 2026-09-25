@@ -177,16 +177,17 @@ internal static class GateCPipeServerSession
                 $"WATCHDOG PIPE: transport loss: {ex.Message}");
 
             // A client can disappear after the service has durably accepted a
-            // state transition but before it receives the response. Treat any
-            // broken-pipe transport failure as owner loss; the finally block
-            // performs recovery from the durable lease rather than faulting the
-            // server session.
+            // state transition but before it receives the response. The finally
+            // block distinguishes proven process death from transport-only loss:
+            // Gate D retains the durable lease while the exact controller
+            // process is still alive, otherwise it performs owner-loss recovery.
         }
         catch (ObjectDisposedException)
         {
             ownerLossReason = "named-pipe disposed";
-            // Equivalent local transport loss. The durable lease remains the
-            // authority for deciding whether a restore is required.
+            // Equivalent local transport loss. The durable lease plus verified
+            // controller liveness decide whether to retain for reconnect or
+            // perform immediate owner-loss recovery.
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
