@@ -125,12 +125,14 @@ lease message is then checked against that same durable controller identity, so
 a second Administrator process cannot take over a session merely by knowing its
 session GUID/generation.
 
-Gate D uses the isolated `%ProgramData%\VictusFanControl\WatchdogGateD`
+Gate D uses the isolated `%ProgramData%\VictusFanControl\WatchdogService`
 tree so legacy Gate A/B ACLs cannot affect the persistent service. The installer
-adds explicit LocalSystem + local Administrators full-control ACEs **before**
-removing inherited ProgramData permissions, then transfers ownership to SYSTEM
-and performs an Administrator read/write probe. It intentionally never deletes
-`lease.json`.
+adds explicit LocalSystem + local Administrators inheritable full-control ACEs
+to the root **before** removing root inheritance. Child objects are then created
+under that protected root and inherit only those ACEs. The installer does not
+recursively rewrite ownership; the protected DACL is the access boundary. It
+performs an Administrator read/write/delete probe before service creation and
+intentionally never deletes `lease.json`.
 
 ## Controller restore
 
