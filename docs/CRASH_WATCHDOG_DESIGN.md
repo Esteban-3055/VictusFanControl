@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: Gates A, B and D have passed on real hardware under LocalSystem, and Gate C passed synthetic Windows CI. Gate D now physically proves the real durable lease -> forced GUI death -> independent service restore path. Gates E-G remain.
+Status: Gates A, B, D and E have passed on real hardware under LocalSystem, and Gate C passed synthetic Windows CI. Gate D physically proves controller death -> independent service restore; Gate E physically proves watchdog death -> live-controller local restore followed by durable-journal recovery. Gates F-G remain.
 
 ## 1. Hardware fact that drives the design
 
@@ -560,31 +560,38 @@ See `WATCHDOG_GATE_D.md`.
 
 ### Gate E - watchdog death
 
-**IMPLEMENTED; physical validation pending.**
+**PASSED on real hardware, 2026-09-25.**
 
-Gate E now has a dedicated GUI mode and hardware harness. The test deliberately
-isolates the controller fallback from watchdog restart recovery:
+Gate E used the dedicated GUI mode and hardware harness to isolate the inverse
+failure domain from Gate D.
 
-- real backend reaches durable OWNED 30/30;
-- the exact watchdog service process is force-killed;
-- SCM first restart is temporarily delayed to 25 s so attribution is unambiguous;
-- the live GUI safety supervisor must detect watchdog heartbeat/IPC loss;
-- the controller performs its validated local FF,FF -> LegacyDefault restore;
-- an app marker is emitted only after coordinator authority reaches Firmware;
-- the parent shell independently requires EC FF/FF while no replacement service
-  PID exists;
-- the durable OWNED journal must still exist at that point because the dead
-  service could not accept Release;
-- SCM then restarts a new watchdog PID;
-- startup recovery must report RestoredFirmware, normalize the retained journal
-  and delete it;
-- the service must return Ready;
-- after the gate, the watchdog service is reinstalled with the production
-  1 s / 5 s / 10 s SCM recovery policy so failure history/configuration return
-  to baseline.
+Physical result:
 
-The parent shell never invokes the HP restore CLI. A delayed emergency fallback
-is armed before 30/30 but does not count as PASS.
+- production postcheck started from watchdog Ready under LocalSystem / Session 0,
+  no durable journal, EC FF/FF and SCM recovery 1 s / 5 s / 10 s;
+- the real backend reached READY after EC + dual-tach acknowledgement and durable
+  watchdog Commit at OWNED generation 3, target 30/30;
+- the journal was bound to GUI PID 7544 + exact process creation time;
+- only watchdog service PID 16724 was force-killed;
+- the parent shell issued no HP restore;
+- the live GUI classified the failure as
+  `WATCHDOG_IPC_LOSS during Probe: Pipe is broken`;
+- the controller completed its local validated firmware restore;
+- an independent EC probe confirmed FF/FF while the old watchdog was dead and
+  before a replacement service PID existed;
+- the durable OWNED journal remained available for restart recovery;
+- SCM started watchdog PID 14184, whose startup recovery reported
+  `RestoredFirmware`, normalized the restore and cleared the journal;
+- final and post-test EC probes remained FF/FF;
+- the delayed emergency fallback did not fire;
+- production watchdog was reinstalled and PID 492 returned Ready;
+- production SCM recovery was re-verified at 1 s / 5 s / 10 s;
+- OMEN Gaming Hub CPU undervolt remained unchanged.
+
+The final harness also encodes contention/causality invariants: there is no
+out-of-band full EC snapshot or artificial dwell between READY and watchdog
+kill, watchdog dependency is probed before EC health validation, and only a
+classified watchdog transport loss can satisfy the Gate E local-restore PASS.
 
 See `WATCHDOG_GATE_E.md`.
 
