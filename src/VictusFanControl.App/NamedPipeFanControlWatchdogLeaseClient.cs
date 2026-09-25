@@ -1,7 +1,5 @@
-using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO.Pipes;
-using System.Text.Json;
 using VictusFanControl.Control;
 
 namespace VictusFanControl.App;
@@ -413,8 +411,8 @@ internal sealed class NamedPipeFanControlWatchdogLeaseClient :
         }
     }
 
-    private async ValueTask<WireResponse> SendLockedAsync(
-        WireRequest request,
+    private async ValueTask<FanControlWatchdogLeaseResponse> SendLockedAsync(
+        FanControlWatchdogLeaseRequest request,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
@@ -439,8 +437,8 @@ internal sealed class NamedPipeFanControlWatchdogLeaseClient :
         }
     }
 
-    private async ValueTask<WireResponse> SendConnectedLockedAsync(
-        WireRequest request,
+    private async ValueTask<FanControlWatchdogLeaseResponse> SendConnectedLockedAsync(
+        FanControlWatchdogLeaseRequest request,
         TimeSpan requestTimeout,
         CancellationToken cancellationToken)
     {
@@ -454,13 +452,13 @@ internal sealed class NamedPipeFanControlWatchdogLeaseClient :
 
         timeout.CancelAfter(requestTimeout);
 
-        await WireCodec.WriteRequestAsync(
+        await FanControlWatchdogLeaseCodec.WriteRequestAsync(
             pipe,
             request,
             timeout.Token).ConfigureAwait(false);
 
         var response =
-            await WireCodec.ReadResponseAsync(
+            await FanControlWatchdogLeaseCodec.ReadResponseAsync(
                 pipe,
                 timeout.Token).ConfigureAwait(false) ??
             throw new EndOfStreamException(
@@ -489,7 +487,7 @@ internal sealed class NamedPipeFanControlWatchdogLeaseClient :
         return response;
     }
 
-    private WireRequest NewLeaseRequest(
+    private FanControlWatchdogLeaseRequest NewLeaseRequest(
         string type,
         int? cpuLevel = null,
         int? gpuLevel = null)
@@ -509,7 +507,7 @@ internal sealed class NamedPipeFanControlWatchdogLeaseClient :
             gpuLevel: gpuLevel);
     }
 
-    private static WireRequest NewRequest(
+    private static FanControlWatchdogLeaseRequest NewRequest(
         string type,
         int? controllerPid = null,
         long? controllerStartUtcTicks = null,
@@ -529,7 +527,7 @@ internal sealed class NamedPipeFanControlWatchdogLeaseClient :
             gpuLevel);
 
     private void ApplyLeaseResponse(
-        WireResponse response,
+        FanControlWatchdogLeaseResponse response,
         ClientPhase phase)
     {
         if (!response.SessionId.HasValue ||
@@ -554,7 +552,7 @@ internal sealed class NamedPipeFanControlWatchdogLeaseClient :
     }
 
     private void ValidateStableLeaseResponse(
-        WireResponse response,
+        FanControlWatchdogLeaseResponse response,
         ClientPhase expectedPhase)
     {
         if (response.SessionId != _sessionId ||
@@ -615,27 +613,6 @@ internal sealed class NamedPipeFanControlWatchdogLeaseClient :
         Restoring
     }
 
-    private sealed record WireRequest(
-        int ProtocolVersion,
-        Guid RequestId,
-        string Type,
-        int? ControllerPid = null,
-        long? ControllerStartUtcTicks = null,
-        Guid? SessionId = null,
-        long? Generation = null,
-        int? CpuLevel = null,
-        int? GpuLevel = null);
-
-    private sealed record WireResponse(
-        int ProtocolVersion,
-        Guid RequestId,
-        bool Ok,
-        string Code,
-        string Message,
-        Guid? SessionId = null,
-        long? Generation = null,
-        string? Phase = null);
-
     private sealed class WatchdogLeaseRejectedException :
         InvalidOperationException
     {
@@ -650,150 +627,4 @@ internal sealed class NamedPipeFanControlWatchdogLeaseClient :
         public string Code { get; }
     }
 
-    private static class WireCodec
-    {
-        private static readonly JsonSerializerOptions JsonOptions = new()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
-
-        public static ValueTask WriteRequestAsync(
-            Stream stream,
-            WireRequest request,
-            CancellationToken cancellationToken) =>
-            WriteFrameAsync(
-                stream,
-                request,
-                cancellationToken);
-
-        public static ValueTask<WireResponse?> ReadResponseAsync(
-            Stream stream,
-            CancellationToken cancellationToken) =>
-            ReadFrameAsync<WireResponse>(
-                stream,
-                cancellationToken);
-
-        private static async ValueTask WriteFrameAsync<T>(
-            Stream stream,
-            T value,
-            CancellationToken cancellationToken)
-        {
-            var payload =
-                JsonSerializer.SerializeToUtf8Bytes(
-                    value,
-                    JsonOptions);
-
-            if (payload.Length is <= 0 or
-                > FanControlWatchdogLeaseContract.MaximumFrameBytes)
-            {
-                throw new InvalidDataException(
-                    $"Watchdog frame size {payload.Length} is invalid.");
-            }
-
-            var header = new byte[4];
-            BinaryPrimitives.WriteInt32LittleEndian(
-                header,
-                payload.Length);
-
-            await stream.WriteAsync(
-                header,
-                cancellationToken).ConfigureAwait(false);
-
-            await stream.WriteAsync(
-                payload,
-                cancellationToken).ConfigureAwait(false);
-
-            await stream.FlushAsync(cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        private static async ValueTask<T?> ReadFrameAsync<T>(
-            Stream stream,
-            CancellationToken cancellationToken)
-        {
-            var header = new byte[4];
-
-            if (!await ReadExactOrEofAsync(
-                    stream,
-                    header,
-                    cancellationToken).ConfigureAwait(false))
-            {
-                return default;
-            }
-
-            var length =
-                BinaryPrimitives.ReadInt32LittleEndian(
-                    header);
-
-            if (length is <= 0 or
-                > FanControlWatchdogLeaseContract.MaximumFrameBytes)
-            {
-                throw new InvalidDataException(
-                    $"Watchdog frame length {length} is invalid.");
-            }
-
-            var payload = new byte[length];
-            await ReadExactAsync(
-                stream,
-                payload,
-                cancellationToken).ConfigureAwait(false);
-
-            return JsonSerializer.Deserialize<T>(
-                payload,
-                JsonOptions);
-        }
-
-        private static async ValueTask<bool> ReadExactOrEofAsync(
-            Stream stream,
-            Memory<byte> buffer,
-            CancellationToken cancellationToken)
-        {
-            var readTotal = 0;
-
-            while (readTotal < buffer.Length)
-            {
-                var read = await stream.ReadAsync(
-                    buffer[readTotal..],
-                    cancellationToken).ConfigureAwait(false);
-
-                if (read == 0)
-                {
-                    if (readTotal == 0)
-                    {
-                        return false;
-                    }
-
-                    throw new EndOfStreamException(
-                        "Watchdog pipe ended during a frame header.");
-                }
-
-                readTotal += read;
-            }
-
-            return true;
-        }
-
-        private static async ValueTask ReadExactAsync(
-            Stream stream,
-            Memory<byte> buffer,
-            CancellationToken cancellationToken)
-        {
-            var readTotal = 0;
-
-            while (readTotal < buffer.Length)
-            {
-                var read = await stream.ReadAsync(
-                    buffer[readTotal..],
-                    cancellationToken).ConfigureAwait(false);
-
-                if (read == 0)
-                {
-                    throw new EndOfStreamException(
-                        "Watchdog pipe ended during a frame payload.");
-                }
-
-                readTotal += read;
-            }
-        }
-    }
 }
