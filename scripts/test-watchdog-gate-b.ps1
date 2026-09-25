@@ -209,12 +209,9 @@ try {
     Write-Host 'Validated READY marker:' -ForegroundColor Green
     Get-Content $ready
 
-    $armedState = Read-EcState
-    Write-Host "Independent EC verification before kill: $($armedState.Raw)"
-
-    if ($armedState.Cpu -ne 30 -or $armedState.Gpu -ne 30) {
-        throw "READY marker exists but EC is not 30/30: $($armedState.Cpu)/$($armedState.Gpu)."
-    }
+    Write-Host ''
+    Write-Host 'The READY marker is backed by the production backend EC + dual-tach ACK.' -ForegroundColor Cyan
+    Write-Host 'No separate EC snapshot is issued while Custom is active; that would bypass the backend IO gate.' -ForegroundColor Cyan
 
     Write-Host ''
     Write-Host "Step 6: FORCE-KILL VictusFanControl.App PID $($proc.Id)..." -ForegroundColor Yellow
