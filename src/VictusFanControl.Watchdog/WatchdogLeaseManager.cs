@@ -559,21 +559,14 @@ internal sealed class WatchdogLeaseManager
             await _hardware.ReadSetpointAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-        if (observed.IsFirmwareOwned)
-        {
-            await _journal.DeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
-            _active = null;
-
-            return new LeaseRecoveryResult(
-                LeaseRecoveryDisposition.ClearedAlreadyFirmware,
-                observed,
-                RestoreAttempted: false,
-                JournalRetained: false,
-                $"{reason}: EC already FF/FF; lease cleared.");
-        }
-
-        if (!AllowedSetpoints(record).Contains(observed))
+        // PREPARED is handled before this method because no hardware
+        // write is possible in that phase. From WRITE_ARMED onward, however,
+        // the watchdog must assume a SetFanLevel dispatch may have occurred.
+        // Even an observed FF/FF can be the midpoint of a partially completed
+        // FF/FF -> LegacyDefault handoff, so complete the validated restore
+        // primitive instead of merely deleting ownership evidence.
+        if (!observed.IsFirmwareOwned &&
+            !AllowedSetpoints(record).Contains(observed))
         {
             return new LeaseRecoveryResult(
                 LeaseRecoveryDisposition.OwnershipAmbiguous,
@@ -612,7 +605,9 @@ internal sealed class WatchdogLeaseManager
                 after,
                 RestoreAttempted: true,
                 JournalRetained: false,
-                $"{reason}: VFC-owned setpoint {observed} restored to FF/FF.");
+                observed.IsFirmwareOwned
+                    ? $"{reason}: EC was already FF/FF, but the active {record.Phase} lease required completion/normalization of the validated firmware restore."
+                    : $"{reason}: VFC-owned setpoint {observed} restored to FF/FF.");
         }
         catch (Exception ex)
         {
