@@ -17,6 +17,7 @@ public static class FanControlWatchdogLeaseContract
     public const string WriteIntent = "WriteIntent";
     public const string AbortWriteIntent = "AbortWriteIntent";
     public const string Commit = "Commit";
+    public const string Probe = "Probe";
     public const string Heartbeat = "Heartbeat";
     public const string RestoreBegin = "RestoreBegin";
     public const string Release = "Release";
@@ -46,6 +47,15 @@ public interface IFanControlWatchdogLeaseClient : IAsyncDisposable
         int cpuLevel,
         int gpuLevel,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Verifies that the exact durable OWNED lease is still reachable through
+    /// watchdog IPC without extending its liveness deadline. Production health
+    /// uses this before touching EC so watchdog-process death cannot be masked
+    /// by an unrelated EC transport transient. Heartbeat remains coupled to a
+    /// subsequent successful EC ownership/feedback check.
+    /// </summary>
+    ValueTask ProbeAsync(CancellationToken cancellationToken);
 
     ValueTask HeartbeatAsync(CancellationToken cancellationToken);
 
