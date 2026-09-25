@@ -321,7 +321,8 @@ internal static class GateCPipeServerSession
                     await manager.CancelPreparedAsync(
                         RequiredSession(request),
                         RequiredGeneration(request),
-                        cancellationToken).ConfigureAwait(false);
+                        cancellationToken,
+                        controller).ConfigureAwait(false);
                     return Success(
                         request,
                         "OK",
@@ -334,7 +335,8 @@ internal static class GateCPipeServerSession
                             RequiredSession(request),
                             RequiredGeneration(request),
                             RequiredSetpoint(request),
-                            cancellationToken).ConfigureAwait(false);
+                            cancellationToken,
+                            controller).ConfigureAwait(false);
                     return Success(
                         request,
                         "OK",
@@ -348,7 +350,8 @@ internal static class GateCPipeServerSession
                         await manager.AbortWriteIntentAsync(
                             RequiredSession(request),
                             RequiredGeneration(request),
-                            cancellationToken).ConfigureAwait(false);
+                            cancellationToken,
+                            controller).ConfigureAwait(false);
                     return Success(
                         request,
                         "OK",
@@ -363,7 +366,8 @@ internal static class GateCPipeServerSession
                             RequiredSession(request),
                             RequiredGeneration(request),
                             RequiredSetpoint(request),
-                            cancellationToken).ConfigureAwait(false);
+                            cancellationToken,
+                            controller).ConfigureAwait(false);
                     return Success(
                         request,
                         "OK",
@@ -377,7 +381,8 @@ internal static class GateCPipeServerSession
                         await manager.HeartbeatAsync(
                             RequiredSession(request),
                             RequiredGeneration(request),
-                            cancellationToken).ConfigureAwait(false);
+                            cancellationToken,
+                            controller).ConfigureAwait(false);
                     return Success(
                         request,
                         "OK",
@@ -391,7 +396,8 @@ internal static class GateCPipeServerSession
                         await manager.RestoreBeginAsync(
                             RequiredSession(request),
                             RequiredGeneration(request),
-                            cancellationToken).ConfigureAwait(false);
+                            cancellationToken,
+                            controller).ConfigureAwait(false);
                     return Success(
                         request,
                         "OK",
@@ -403,7 +409,8 @@ internal static class GateCPipeServerSession
                     await manager.ReleaseAsync(
                         RequiredSession(request),
                         RequiredGeneration(request),
-                        cancellationToken).ConfigureAwait(false);
+                        cancellationToken,
+                        controller).ConfigureAwait(false);
                     return Success(
                         request,
                         "OK",
