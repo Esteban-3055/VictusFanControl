@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: Gate A and Gate B passed on real hardware under LocalSystem; Gate C passed synthetic Windows CI; Gate D implementation is now wired into the real Hp88F8 write boundary and persistent LocalSystem service, with physical Gate D validation still pending.
+Status: Gates A, B and D have passed on real hardware under LocalSystem, and Gate C passed synthetic Windows CI. Gate D now physically proves the real durable lease -> forced GUI death -> independent service restore path. Gates E-G remain.
 
 ## 1. Hardware fact that drives the design
 
@@ -519,7 +519,7 @@ backend transaction hooks are Gate D integration work.
 
 ### Gate D - real GUI forced kill
 
-**IMPLEMENTED; physical validation pending.**
+**PASSED on real hardware, 2026-09-25.**
 
 The implementation now includes:
 
@@ -543,19 +543,18 @@ The implementation now includes:
 - live-controller local restore preserved even if watchdog IPC fails;
 - explicit hardware harness that never invokes parent-shell HP restore.
 
-The physical PASS still requires:
+Physical result:
 
-- watchdog Ready;
-- validated 30/30;
-- durable lease OWNED;
-- kill exact GUI PID;
-- watchdog detects exact controller process death;
-- watchdog restores automatically;
-- no parent PowerShell cleanup;
-- journal disappears only after verified firmware handoff;
-- independent EC FF/FF;
-- same watchdog service PID throughout Gate D;
-- undervolt unchanged.
+- watchdog Ready under LocalSystem / Session 0;
+- validated real 30/30 and durable OWNED generation 3;
+- journal bound to the exact GUI PID + process creation time;
+- exact GUI PID force-killed;
+- no parent PowerShell HP restore;
+- watchdog owner-loss path recorded RestoredFirmware and cleared the journal;
+- independent EC probe confirmed FF/FF;
+- watchdog service PID remained unchanged;
+- emergency fallback did not fire;
+- OMEN Gaming Hub undervolt remained unchanged.
 
 See `WATCHDOG_GATE_D.md`.
 
