@@ -53,6 +53,24 @@ internal static class Program
             args,
             "--suspend-test-token");
 
+        var gateDHardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--gate-d-custom-test",
+                StringComparison.OrdinalIgnoreCase));
+
+        var gateDHardwareTestToken = ReadOptionValue(
+            args,
+            "--gate-d-test-token");
+
+        if (suspendHardwareTest && gateDHardwareTest)
+        {
+            AppLog.Write(
+                "Startup refused: suspend/custom and Gate D hardware-test modes are mutually exclusive.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
         if (suspendHardwareTest &&
             !string.Equals(
                 suspendHardwareTestToken,
@@ -73,6 +91,26 @@ internal static class Program
             return;
         }
 
+        if (gateDHardwareTest &&
+            !string.Equals(
+                gateDHardwareTestToken,
+                "88F8-GATED30",
+                StringComparison.Ordinal))
+        {
+            AppLog.Write(
+                "Gate D hardware test refused: explicit --gate-d-test-token 88F8-GATED30 is required.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (!gateDHardwareTest && gateDHardwareTestToken is not null)
+        {
+            AppLog.Write(
+                "Startup refused: --gate-d-test-token is valid only with --gate-d-custom-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -89,7 +127,8 @@ internal static class Program
 
         using var form = new MainForm(
             modulesDirectory,
-            suspendHardwareTest);
+            suspendHardwareTest,
+            gateDHardwareTest);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");
