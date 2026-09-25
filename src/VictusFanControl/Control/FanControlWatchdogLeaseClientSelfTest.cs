@@ -132,6 +132,18 @@ internal static class FanControlWatchdogLeaseClientSelfTest
                 generation: 3,
                 phase: "Owned");
 
+            var probe = await RequireRequestAsync(server);
+            AssertType(
+                probe,
+                FanControlWatchdogLeaseContract.Probe);
+
+            await ReplyAsync(
+                server,
+                probe,
+                sessionId: sessionId,
+                generation: 3,
+                phase: "Owned");
+
             var heartbeat = await RequireRequestAsync(server);
             AssertType(
                 heartbeat,
@@ -179,6 +191,8 @@ internal static class FanControlWatchdogLeaseClientSelfTest
         await client.CommitAsync(
             30,
             30,
+            CancellationToken.None);
+        await client.ProbeAsync(
             CancellationToken.None);
         await client.HeartbeatAsync(
             CancellationToken.None);
@@ -258,13 +272,13 @@ internal static class FanControlWatchdogLeaseClientSelfTest
                 generation: 3,
                 phase: "Owned");
 
-            var heartbeat = await RequireRequestAsync(server);
+            var probe = await RequireRequestAsync(server);
             AssertType(
-                heartbeat,
-                FanControlWatchdogLeaseContract.Heartbeat);
+                probe,
+                FanControlWatchdogLeaseContract.Probe);
 
-            // Simulate watchdog-process/pipe death after receiving the request
-            // but before returning a response.
+            // Simulate watchdog-process/pipe death after receiving the
+            // non-renewing liveness probe but before returning a response.
             server.Disconnect();
         });
 
@@ -286,7 +300,7 @@ internal static class FanControlWatchdogLeaseClientSelfTest
 
         try
         {
-            await client.HeartbeatAsync(
+            await client.ProbeAsync(
                 CancellationToken.None);
         }
         catch (FanControlWatchdogTransportException ex)
@@ -295,7 +309,7 @@ internal static class FanControlWatchdogLeaseClientSelfTest
                 StringComparison.Ordinal) &&
                   string.Equals(
                       ex.Operation,
-                      FanControlWatchdogLeaseContract.Heartbeat,
+                      FanControlWatchdogLeaseContract.Probe,
                       StringComparison.Ordinal))
         {
             classified = true;
