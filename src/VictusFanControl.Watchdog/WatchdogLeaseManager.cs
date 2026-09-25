@@ -32,6 +32,20 @@ internal sealed class WatchdogLeaseManager
 
     public WatchdogLeaseRecord? Active => _active;
 
+    public async ValueTask<ControllerIdentity?> GetActiveControllerAsync(
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return _active?.Controller;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async ValueTask<LeaseOperationResult> PrepareAsync(
         ControllerIdentity controller,
         CancellationToken cancellationToken)
