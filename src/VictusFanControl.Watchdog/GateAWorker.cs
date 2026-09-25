@@ -1,14 +1,13 @@
-using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 
 namespace VictusFanControl.Watchdog;
 
 internal sealed class GateAWorker : BackgroundService
 {
-    private readonly GateAOptions _options;
+    private readonly WatchdogOptions _options;
     private readonly IHostApplicationLifetime _lifetime;
 
-    public GateAWorker(GateAOptions options, IHostApplicationLifetime lifetime)
+    public GateAWorker(WatchdogOptions options, IHostApplicationLifetime lifetime)
     {
         _options = options;
         _lifetime = lifetime;
@@ -16,13 +15,13 @@ internal sealed class GateAWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var log = new GateAFileLog(_options.LogDirectory);
+        var log = new WatchdogFileLog(_options.LogDirectory, "watchdog-gate-a");
 
         GateAProbeResult result;
         try
         {
             result = GateAProbe.Run(_options, log);
-            WriteResultAtomically(_options.ResultPath, result);
+            AtomicJsonFile.Write(_options.ResultPath, result);
         }
         catch (Exception ex)
         {
@@ -59,32 +58,4 @@ internal sealed class GateAWorker : BackgroundService
         }
     }
 
-    private static void WriteResultAtomically(
-        string resultPath,
-        GateAProbeResult result)
-    {
-        var directory = Path.GetDirectoryName(resultPath) ??
-            throw new InvalidOperationException(
-                "Gate A result path has no parent directory.");
-
-        Directory.CreateDirectory(directory);
-        var tempPath = resultPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-
-        try
-        {
-            var json = JsonSerializer.Serialize(
-                result,
-                new JsonSerializerOptions { WriteIndented = true });
-
-            File.WriteAllText(tempPath, json);
-            File.Move(tempPath, resultPath, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(tempPath))
-            {
-                File.Delete(tempPath);
-            }
-        }
-    }
 }

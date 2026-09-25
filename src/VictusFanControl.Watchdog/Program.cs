@@ -6,15 +6,12 @@ namespace VictusFanControl.Watchdog;
 
 internal static class Program
 {
-    public const string ServiceName = "VictusFanControlWatchdogGateA";
-    public const string ServiceDisplayName = "VictusFanControl Watchdog Gate A";
-
     public static async Task<int> Main(string[] args)
     {
-        GateAOptions options;
+        WatchdogOptions options;
         try
         {
-            options = GateAOptions.Parse(args);
+            options = WatchdogOptions.Parse(args);
         }
         catch (ArgumentException ex)
         {
@@ -22,21 +19,33 @@ internal static class Program
             return 2;
         }
 
+        if (options.Mode == WatchdogRunMode.GateBSelfTest)
+        {
+            return await GateBRestoreSelfTest.RunAsync(Console.Out)
+                .ConfigureAwait(false);
+        }
+
         var builder = Host.CreateApplicationBuilder(args);
 
         builder.Services.AddWindowsService(serviceOptions =>
         {
-            // Must match the SCM service name used by the installer.
-            serviceOptions.ServiceName = ServiceName;
+            serviceOptions.ServiceName = options.ServiceName;
         });
 
-        // AddWindowsService enables Event Log integration by default. Gate A
-        // uses only its explicit ProgramData log/result files, so remove all
-        // logging providers after the Windows-service lifetime is registered.
+        // Gate A/B write their own ProgramData diagnostics. Keep the service
+        // independent of Event Log source creation and related side effects.
         builder.Logging.ClearProviders();
 
         builder.Services.AddSingleton(options);
-        builder.Services.AddHostedService<GateAWorker>();
+
+        if (options.Mode == WatchdogRunMode.GateBRestoreTest)
+        {
+            builder.Services.AddHostedService<GateBRestoreWorker>();
+        }
+        else
+        {
+            builder.Services.AddHostedService<GateAWorker>();
+        }
 
         using var host = builder.Build();
         await host.RunAsync().ConfigureAwait(false);

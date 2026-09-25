@@ -11,7 +11,7 @@ namespace VictusFanControl.Watchdog;
 /// </summary>
 internal static class GateAProbe
 {
-    public static GateAProbeResult Run(GateAOptions options, GateAFileLog log)
+    public static GateAProbeResult Run(WatchdogOptions options, WatchdogFileLog log)
     {
         var timestamp = DateTimeOffset.Now;
         var runId = Guid.NewGuid();
