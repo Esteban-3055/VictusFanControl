@@ -29,6 +29,13 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestStoppedFansCanSpinUpWithinAckWindowAsync(output);
         failures += await TestOneSampleDirectionalSpikeIsRejectedAsync(output);
         failures += await TestCancellationAtPreDispatchPreventsWriteAsync(output);
+        failures += await TestWatchdogPrepareFailureIsNoWriteAsync(output);
+        failures += await TestWatchdogWriteIntentOrderingAsync(output);
+        failures += await TestWatchdogPostIntentExternalRaceAsync(output);
+        failures += await TestWatchdogHeartbeatCouplingAsync(output);
+        failures += await TestWatchdogCommitFailureRestoresAsync(output);
+        failures += await TestWatchdogRestoreIpcFailureDoesNotBlockLocalRestoreAsync(output);
+        failures += await TestWatchdogCancellationAfterIntentAbortsAsync(output);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -508,6 +515,258 @@ public static class Hp88F8FanControlBackendSelfTest
             hardware.State.GpuSetpoint == byte.MaxValue);
     }
 
+    private static async Task<int> TestWatchdogPrepareFailureIsNoWriteAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient { FailPrepare = true };
+        await using var backend = NewProtectedBackend(hardware, lease);
+
+        var refused = false;
+        try
+        {
+            await backend.EnterCustomModeAsync(CancellationToken.None);
+        }
+        catch (FanControlAdmissionException)
+        {
+            refused = true;
+        }
+
+        return Report(
+            output,
+            "watchdog Prepare failure blocks Custom before any hardware write",
+            refused &&
+            hardware.SetCalls == 0 &&
+            hardware.RestoreCalls == 0 &&
+            lease.Calls.SequenceEqual(["prepare"]));
+    }
+
+    private static async Task<int> TestWatchdogWriteIntentOrderingAsync(
+        TextWriter output)
+    {
+        var sequence = new List<string>();
+        var hardware = new FakeHardware
+        {
+            OnSetFanLevel = () => sequence.Add("set")
+        };
+        var lease = new FakeWatchdogLeaseClient
+        {
+            OnCall = call => sequence.Add(call)
+        };
+
+        await using var backend = NewProtectedBackend(hardware, lease);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "watchdog-ordering"),
+            CancellationToken.None);
+
+        var intentIndex = sequence.IndexOf("intent");
+        var setIndex = sequence.IndexOf("set");
+        var commitIndex = sequence.IndexOf("commit");
+
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "watchdog WriteIntent precedes WMI and Commit follows hardware acknowledgement",
+            intentIndex >= 0 &&
+            setIndex > intentIndex &&
+            commitIndex > setIndex &&
+            hardware.SetCalls == 1 &&
+            lease.Calls.Contains("prepare") &&
+            lease.Calls.Contains("intent") &&
+            lease.Calls.Contains("commit"));
+    }
+
+    private static async Task<int> TestWatchdogPostIntentExternalRaceAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient
+        {
+            FailAbort = true
+        };
+
+        lease.OnWriteIntent = (_, _) =>
+        {
+            hardware.State = hardware.State with
+            {
+                CpuSetpoint = 31,
+                GpuSetpoint = 31
+            };
+        };
+
+        await using var backend = NewProtectedBackend(hardware, lease);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        var refused = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "watchdog-post-intent-race"),
+                CancellationToken.None);
+        }
+        catch (FanControlAdmissionException)
+        {
+            refused = true;
+        }
+
+        return Report(
+            output,
+            "post-WriteIntent ownership recheck preserves an external override",
+            refused &&
+            hardware.SetCalls == 0 &&
+            hardware.RestoreCalls == 0 &&
+            hardware.State.CpuSetpoint == 31 &&
+            hardware.State.GpuSetpoint == 31 &&
+            lease.Calls.Contains("intent") &&
+            lease.Calls.Contains("abort"));
+    }
+
+    private static async Task<int> TestWatchdogHeartbeatCouplingAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient();
+        await using var backend = NewProtectedBackend(hardware, lease);
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "watchdog-heartbeat"),
+            CancellationToken.None);
+
+        var healthy = await backend.GetStatusAsync(CancellationToken.None);
+        var afterHealthy = lease.Calls.Count(call => call == "heartbeat");
+
+        hardware.FreezeCpuTach = true;
+        hardware.State = hardware.State with { CpuRpm = 0 };
+
+        var unhealthy = await backend.GetStatusAsync(CancellationToken.None);
+        var afterUnhealthy = lease.Calls.Count(call => call == "heartbeat");
+
+        hardware.FreezeCpuTach = false;
+        hardware.State = hardware.State with { CpuRpm = 3000 };
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "watchdog heartbeat is emitted only after healthy ownership/feedback validation",
+            healthy.OwnershipValid &&
+            healthy.FeedbackHealthy &&
+            !unhealthy.FeedbackHealthy &&
+            afterHealthy == 1 &&
+            afterUnhealthy == 1);
+    }
+
+    private static async Task<int> TestWatchdogCommitFailureRestoresAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient { FailCommit = true };
+        await using var backend = NewProtectedBackend(hardware, lease);
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        var failed = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "watchdog-commit-failure"),
+                CancellationToken.None);
+        }
+        catch (InvalidOperationException)
+        {
+            failed = true;
+        }
+
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "post-write watchdog Commit failure leaves command for fail-safe restore",
+            failed &&
+            hardware.SetCalls == 1 &&
+            hardware.RestoreCalls == 1 &&
+            hardware.State.CpuSetpoint == byte.MaxValue &&
+            hardware.State.GpuSetpoint == byte.MaxValue &&
+            lease.Calls.Contains("restore-begin") &&
+            lease.Calls.Contains("release"));
+    }
+
+    private static async Task<int> TestWatchdogRestoreIpcFailureDoesNotBlockLocalRestoreAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient
+        {
+            FailRestoreBegin = true,
+            FailRelease = true
+        };
+
+        await using var backend = NewProtectedBackend(hardware, lease);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "watchdog-restore-ipc-failure"),
+            CancellationToken.None);
+
+        var localRestoreSucceeded = true;
+        try
+        {
+            await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+        }
+        catch
+        {
+            localRestoreSucceeded = false;
+        }
+
+        return Report(
+            output,
+            "watchdog IPC loss never blocks the live controller's local HP restore",
+            localRestoreSucceeded &&
+            hardware.RestoreCalls == 1 &&
+            hardware.State.CpuSetpoint == byte.MaxValue &&
+            hardware.State.GpuSetpoint == byte.MaxValue &&
+            lease.Calls.Contains("restore-begin") &&
+            lease.Calls.Contains("release"));
+    }
+
+    private static async Task<int> TestWatchdogCancellationAfterIntentAbortsAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient();
+        using var cts = new CancellationTokenSource();
+
+        lease.OnWriteIntent = (_, _) => cts.Cancel();
+
+        await using var backend = NewProtectedBackend(hardware, lease);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        var refusedAsNoWrite = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "cancel-after-intent"),
+                cts.Token);
+        }
+        catch (FanControlAdmissionException ex)
+        {
+            refusedAsNoWrite =
+                ex.InnerException is OperationCanceledException ||
+                ex.InnerException is AggregateException;
+        }
+
+        return Report(
+            output,
+            "cancellation after durable WriteIntent rolls back lease before any WMI write",
+            refusedAsNoWrite &&
+            hardware.SetCalls == 0 &&
+            hardware.RestoreCalls == 0 &&
+            lease.Calls.Contains("intent") &&
+            lease.Calls.Contains("abort") &&
+            lease.Calls.Contains("cancel-prepared"));
+    }
+
     private static Hp88F8FanControlBackend NewBackend(FakeHardware hardware) =>
         new(
             hardware,
@@ -515,10 +774,132 @@ public static class Hp88F8FanControlBackendSelfTest
             supportDetail: "synthetic validated target",
             timing: FastTiming);
 
+    private static Hp88F8FanControlBackend NewProtectedBackend(
+        FakeHardware hardware,
+        FakeWatchdogLeaseClient lease) =>
+        new(
+            hardware,
+            targetSupported: true,
+            supportDetail: "synthetic validated target",
+            timing: FastTiming,
+            watchdogLease: lease);
+
     private static int Report(TextWriter output, string name, bool pass)
     {
         output.WriteLine($"{(pass ? "PASS" : "FAIL")}  {name}");
         return pass ? 0 : 1;
+    }
+
+    private sealed class FakeWatchdogLeaseClient :
+        IFanControlWatchdogLeaseClient
+    {
+        public List<string> Calls { get; } = new();
+        public Action<string>? OnCall { get; set; }
+        public Action<int, int>? OnWriteIntent { get; set; }
+
+        public bool FailPrepare { get; set; }
+        public bool FailAbort { get; set; }
+        public bool FailCommit { get; set; }
+        public bool FailHeartbeat { get; set; }
+        public bool FailRestoreBegin { get; set; }
+        public bool FailRelease { get; set; }
+
+        public ValueTask PrepareAsync(
+            CancellationToken cancellationToken)
+        {
+            Record("prepare");
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIf(FailPrepare, "synthetic Prepare failure");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask CancelPreparedAsync(
+            CancellationToken cancellationToken)
+        {
+            Record("cancel-prepared");
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask WriteIntentAsync(
+            int cpuLevel,
+            int gpuLevel,
+            CancellationToken cancellationToken)
+        {
+            Record("intent");
+            cancellationToken.ThrowIfCancellationRequested();
+            OnWriteIntent?.Invoke(cpuLevel, gpuLevel);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask AbortWriteIntentAsync(
+            CancellationToken cancellationToken)
+        {
+            Record("abort");
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIf(FailAbort, "synthetic AbortWriteIntent failure");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask CommitAsync(
+            int cpuLevel,
+            int gpuLevel,
+            CancellationToken cancellationToken)
+        {
+            Record("commit");
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIf(FailCommit, "synthetic Commit failure");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask HeartbeatAsync(
+            CancellationToken cancellationToken)
+        {
+            Record("heartbeat");
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIf(FailHeartbeat, "synthetic Heartbeat failure");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask RestoreBeginAsync(
+            CancellationToken cancellationToken)
+        {
+            Record("restore-begin");
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIf(FailRestoreBegin, "synthetic RestoreBegin failure");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask ReleaseAsync(
+            CancellationToken cancellationToken)
+        {
+            Record("release");
+            cancellationToken.ThrowIfCancellationRequested();
+            ThrowIf(FailRelease, "synthetic Release failure");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Record("dispose");
+            return ValueTask.CompletedTask;
+        }
+
+        private void Record(string call)
+        {
+            Calls.Add(call);
+            OnCall?.Invoke(call);
+        }
+
+        private static void ThrowIf(
+            bool shouldThrow,
+            string message)
+        {
+            if (shouldThrow)
+            {
+                throw new InvalidOperationException(message);
+            }
+        }
     }
 
     internal sealed class FakeHardware : IHp88F8FanHardware
@@ -551,6 +932,7 @@ public static class Hp88F8FanControlBackendSelfTest
         public bool FreezeGpuTach { get; set; }
         public bool PulseCpuTachOnceThenReturnBaseline { get; set; }
         public Action<int>? OnEcRead { get; set; }
+        public Action? OnSetFanLevel { get; set; }
         public int EcReadCalls { get; private set; }
 
         public Hp88F8EcControlState ReadEcState()
@@ -596,6 +978,7 @@ public static class Hp88F8FanControlBackendSelfTest
 
         public void SetFanLevel(byte cpuLevel, byte gpuLevel)
         {
+            OnSetFanLevel?.Invoke();
             SetCalls++;
             _cpuRpmAtCommand = State.CpuRpm;
             _postSetReadCount = 0;
