@@ -28,6 +28,11 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "service restart in PREPARED clears journal without restore",
+            PreparedRestartAsync);
+
+        failures += await CaseAsync(
+            output,
             "restart after WRITE_ARMED before WMI clears FF/FF without restore",
             RestartWriteArmedBeforeWriteAsync);
 
@@ -60,6 +65,11 @@ internal static class GateCLeaseSelfTest
             output,
             "duplicate Release is rejected without hardware write",
             DuplicateReleaseAsync);
+
+        failures += await CaseAsync(
+            output,
+            "heartbeat renews liveness without rewriting durable journal",
+            HeartbeatDoesNotPersistAsync);
 
         failures += await CaseAsync(
             output,
@@ -98,6 +108,11 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "restore failure retains durable ownership evidence",
+            RestoreFailureRetainsJournalAsync);
+
+        failures += await CaseAsync(
+            output,
             "corrupt journal never triggers restore",
             CorruptJournalAsync);
 
@@ -110,6 +125,11 @@ internal static class GateCLeaseSelfTest
             output,
             "named-pipe identity mismatch is rejected",
             NamedPipeIdentityMismatchAsync);
+
+        failures += await CaseAsync(
+            output,
+            "pipe loss before WriteIntent ACK delivery clears safe WRITE_ARMED",
+            NamedPipeLossBeforeWriteIntentAckAsync);
 
         failures += await CaseAsync(
             output,
@@ -227,6 +247,27 @@ internal static class GateCLeaseSelfTest
                    LeaseRecoveryDisposition.ClearedPrepared);
             Assert(env.Hardware.RestoreCalls == 0);
             Assert(await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task PreparedRestartAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            await env.Manager.PrepareAsync(
+                Controller,
+                CancellationToken.None);
+
+            var recovery =
+                await env.RestartManager()
+                    .RecoverOnStartupAsync(CancellationToken.None);
+
+            Assert(recovery.Disposition ==
+                   LeaseRecoveryDisposition.ClearedPrepared);
+            Assert(!recovery.RestoreAttempted);
+            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
         });
     }
 
@@ -412,6 +453,28 @@ internal static class GateCLeaseSelfTest
         });
     }
 
+    private static async Task HeartbeatDoesNotPersistAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+            var before =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            env.Clock.Advance(TimeSpan.FromSeconds(1));
+
+            await env.Manager.HeartbeatAsync(
+                owned.SessionId,
+                owned.Generation,
+                CancellationToken.None);
+
+            var after =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            Assert(before == after);
+        });
+    }
+
     private static async Task HeartbeatTimeoutAsync()
     {
         await WithEnvironmentAsync(async env =>
@@ -547,6 +610,28 @@ internal static class GateCLeaseSelfTest
         });
     }
 
+    private static async Task RestoreFailureRetainsJournalAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            await PrepareArmCommitAsync(env, 30);
+            env.Hardware.FailRestore = true;
+
+            var recovery =
+                await env.RestartManager()
+                    .RecoverOnStartupAsync(CancellationToken.None);
+
+            Assert(recovery.Disposition ==
+                   LeaseRecoveryDisposition.RestoreFailed);
+            Assert(recovery.RestoreAttempted);
+            Assert(recovery.JournalRetained);
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is not null);
+            Assert(env.Hardware.Current == new FanSetpoint(30, 30));
+        });
+    }
+
     private static async Task CorruptJournalAsync()
     {
         await WithEnvironmentAsync(async env =>
@@ -653,6 +738,104 @@ internal static class GateCLeaseSelfTest
             Assert(
                 await env.Journal.LoadAsync(CancellationToken.None) is null);
             Assert(env.Hardware.RestoreCalls == 0);
+        });
+    }
+
+    private static async Task NamedPipeLossBeforeWriteIntentAckAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var name =
+                "VictusFanControl-GateC-" +
+                Guid.NewGuid().ToString("N");
+
+            await using var server =
+                NewServer(name);
+
+            var serverTask =
+                GateCPipeServerSession.RunAsync(
+                    server,
+                    env.Manager,
+                    CancellationToken.None);
+
+            await using (var client =
+                new NamedPipeClientStream(
+                    ".",
+                    name,
+                    PipeDirection.InOut,
+                    PipeOptions.Asynchronous))
+            {
+                await client.ConnectAsync(5000);
+
+                var actual =
+                    WindowsNamedPipeIdentity.CurrentProcessIdentity();
+
+                var hello =
+                    await RoundTripAsync(
+                        client,
+                        new GateCRequest(
+                            GateCProtocol.Version,
+                            Guid.NewGuid(),
+                            GateCProtocol.Hello,
+                            ControllerPid: actual.ProcessId,
+                            ControllerStartUtcTicks:
+                                actual.ProcessStartUtcTicks));
+
+                Assert(hello.Ok);
+
+                var prepared =
+                    await RoundTripAsync(
+                        client,
+                        Request(GateCProtocol.Prepare));
+
+                Assert(prepared.Ok);
+
+                // Send WriteIntent, but deliberately never consume the ACK.
+                // Poll the durable journal only to prove the server completed
+                // the safety-critical store before simulating client death.
+                await GateCProtocolCodec.WriteRequestAsync(
+                    client,
+                    Request(
+                        GateCProtocol.WriteIntent,
+                        prepared.SessionId,
+                        prepared.Generation,
+                        30,
+                        30),
+                    CancellationToken.None);
+
+                var deadline = DateTime.UtcNow.AddSeconds(5);
+                while (DateTime.UtcNow < deadline)
+                {
+                    var persisted =
+                        await env.Journal.LoadAsync(
+                            CancellationToken.None);
+
+                    if (persisted?.Phase ==
+                        WatchdogLeasePhase.WriteArmed)
+                    {
+                        break;
+                    }
+
+                    await Task.Delay(10);
+                }
+
+                var armed =
+                    await env.Journal.LoadAsync(
+                        CancellationToken.None);
+
+                Assert(armed?.Phase ==
+                       WatchdogLeasePhase.WriteArmed);
+
+                // EC is still FF/FF: the client died before it was allowed to
+                // dispatch any real fan write.
+            }
+
+            await serverTask.ConfigureAwait(false);
+
+            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
         });
     }
 
