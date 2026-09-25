@@ -560,12 +560,33 @@ See `WATCHDOG_GATE_D.md`.
 
 ### Gate E - watchdog death
 
-While GUI owns 30/30:
+**IMPLEMENTED; physical validation pending.**
 
-- kill watchdog service process;
-- GUI detects watchdog loss and locally restores;
-- SCM restarts watchdog;
-- service starts cleanly and reports Ready.
+Gate E now has a dedicated GUI mode and hardware harness. The test deliberately
+isolates the controller fallback from watchdog restart recovery:
+
+- real backend reaches durable OWNED 30/30;
+- the exact watchdog service process is force-killed;
+- SCM first restart is temporarily delayed to 25 s so attribution is unambiguous;
+- the live GUI safety supervisor must detect watchdog heartbeat/IPC loss;
+- the controller performs its validated local FF,FF -> LegacyDefault restore;
+- an app marker is emitted only after coordinator authority reaches Firmware;
+- the parent shell independently requires EC FF/FF while no replacement service
+  PID exists;
+- the durable OWNED journal must still exist at that point because the dead
+  service could not accept Release;
+- SCM then restarts a new watchdog PID;
+- startup recovery must report RestoredFirmware, normalize the retained journal
+  and delete it;
+- the service must return Ready;
+- after the gate, the watchdog service is reinstalled with the production
+  1 s / 5 s / 10 s SCM recovery policy so failure history/configuration return
+  to baseline.
+
+The parent shell never invokes the HP restore CLI. A delayed emergency fallback
+is armed before 30/30 but does not count as PASS.
+
+See `WATCHDOG_GATE_E.md`.
 
 ### Gate F - double-failure / durable journal
 
