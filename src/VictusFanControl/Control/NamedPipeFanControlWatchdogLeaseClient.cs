@@ -207,6 +207,36 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
         }
     }
 
+    public async ValueTask ProbeAsync(
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+
+            if (_phase != ClientPhase.Owned)
+            {
+                throw new InvalidOperationException(
+                    $"Watchdog Probe requires OWNED; phase={_phase}.");
+            }
+
+            var response = await SendLockedAsync(
+                NewLeaseRequest(
+                    FanControlWatchdogLeaseContract.Probe),
+                RequestTimeout,
+                cancellationToken).ConfigureAwait(false);
+
+            ValidateStableLeaseResponse(
+                response,
+                ClientPhase.Owned);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async ValueTask HeartbeatAsync(
         CancellationToken cancellationToken)
     {
