@@ -256,10 +256,15 @@ controller: FF,FF
 controller: LegacyDefault
 controller: verify EC 0x34/0x35 == FF/FF
 controller -> watchdog: RELEASE
+watchdog: independently normalize FF,FF -> LegacyDefault once more
+watchdog: verify EC FF/FF
 watchdog: clear durable armed state
 ```
 
 If the GUI dies anywhere before RELEASE, the watchdog still owns crash cleanup.
+RELEASE itself is not trusted as proof that LegacyDefault completed: FF/FF can
+be the midpoint of the restore sequence, so the watchdog performs one final
+idempotent restore normalization before deleting the durable lease.
 
 Closing the pipe is last.
 
