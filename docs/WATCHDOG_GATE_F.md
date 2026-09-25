@@ -1,9 +1,8 @@
 # Watchdog Gate F - double failure / durable-journal recovery
 
-Status: implementation in progress. **F1 (OWNED double death) PASSED on real
-hardware on 2026-09-25.** F2 (WRITE_ARMED after real write/ACK but before
-Commit) is now implemented and awaiting physical validation. Gate F is not
-closed until F2 also passes.
+Status: **PASSED on real hardware, 2026-09-25.** F1 proved durable OWNED
+double-death recovery and F2 proved the narrower WRITE_ARMED post-WMI/post-ACK
+but pre-Commit recovery window. Gate F is closed.
 
 Automatic fan policy remains OFF.
 
@@ -106,14 +105,57 @@ durable WRITE_ARMED pending=30/30
   -> recover WRITE_ARMED journal
 ~~~
 
-F2 is implemented with a test-only
+F2 used a test-only
 `GateF2CommitHoldWatchdogLeaseClient` wrapper around
 `IFanControlWatchdogLeaseClient`. WriteIntent and every normal lease operation
-are delegated to the real named-pipe client. When the production backend reaches
-`CommitAsync`, the wrapper writes and flushes a dedicated READY marker, then
-holds non-cancellably without forwarding Commit. Because production backend
-ordering is WMI -> EC ACK -> dual-tach ACK -> Commit, this creates the required
+were delegated to the real named-pipe client. When the production backend reached
+`CommitAsync`, the wrapper wrote and flushed a dedicated READY marker, then
+held non-cancellably without forwarding Commit. Because production backend
+ordering is WMI -> EC ACK -> dual-tach ACK -> Commit, this created the required
 real-hardware boundary without inserting a Gate-F branch into the HP backend.
+
+### F2 physical result
+
+**PASSED on real hardware, 2026-09-25**, on
+`ae1781d9299784096dc95379be4d14e6eb2391a6`.
+
+Observed evidence:
+
+~~~text
+production baseline:
+  watchdog PID 4316 Ready / LocalSystem / Session 0
+  no durable journal
+  EC 255/255
+  SCM recovery 1 s / 5 s / 10 s
+  OGH undervolt checked
+
+F2:
+  GUI PID 9164
+  durable WRITE_ARMED generation 2
+  pending=30/30
+  previous=null
+  owned=null
+  READY ack=backend-ec+tachs-before-commit
+  emergency fallback PID 12432 proven alive
+  watchdog kill issued first
+  GUI kill issued 0.244 ms later
+  both original processes confirmed dead
+  no live-GUI restore-start marker
+  SCM replacement watchdog PID 25200
+  startup recovery=RestoredFirmware
+  detail=VFC-owned setpoint 30/30 restored to FF/FF
+  final EC 255/255
+  post-test EC 255/255
+  emergency fallback cancelled without firing
+  production watchdog reinstalled as PID 22836
+  production SCM recovery re-verified 1 s / 5 s / 10 s
+  OGH undervolt SAME
+~~~
+
+The parent PowerShell issued no HP fan restore. The measured 0.244 ms kill-call
+interval is well inside the 50 ms causal bound. The journal was still first-write
+WRITE_ARMED with pending 30/30 and no PreviousOwned/Owned target at READY, so
+Commit had not occurred. F2 is therefore closed.
 
 ## F1 causal requirements
 
@@ -235,5 +277,7 @@ double death passed, post-test EC remained FF/FF, the durable journal was
 cleared by restart recovery, the production watchdog returned Ready with
 1 s / 5 s / 10 s SCM recovery, and OGH undervolt remained unchanged.
 
-F2 implementation is complete. Its CI must be green before the first hardware
-run. Gate F remains open until the F2 physical run also passes.
+F2 has now also satisfied its physical boundary: the WRITE_ARMED journal
+survived the double death and the SCM replacement watchdog restored the real
+30/30 setpoint to FF/FF before clearing the journal. With F1 + F2 both passed,
+Gate F is closed.
