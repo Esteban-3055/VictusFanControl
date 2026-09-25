@@ -1,3 +1,4 @@
+using VictusFanControl.Control;
 using System.Buffers.Binary;
 using System.IO.Pipes;
 using System.Text;
@@ -1104,8 +1105,8 @@ internal static class GateCLeaseSelfTest
             new MemoryStream(bytes, writable: false);
 
         var ex =
-            await ThrowsAsync<LeaseProtocolException>(
-                () => GateCProtocolCodec
+            await ThrowsAsync<FanControlWatchdogProtocolException>(
+                () => FanControlWatchdogLeaseCodec
                     .ReadRequestAsync(
                         stream,
                         CancellationToken.None)
@@ -1143,7 +1144,7 @@ internal static class GateCLeaseSelfTest
             var actual =
                 WindowsNamedPipeIdentity.CurrentProcessIdentity();
 
-            var hello = new GateCRequest(
+            var hello = new FanControlWatchdogLeaseRequest(
                 GateCProtocol.Version,
                 Guid.NewGuid(),
                 GateCProtocol.Hello,
@@ -1151,13 +1152,13 @@ internal static class GateCLeaseSelfTest
                 ControllerStartUtcTicks:
                     actual.ProcessStartUtcTicks);
 
-            await GateCProtocolCodec.WriteRequestAsync(
+            await FanControlWatchdogLeaseCodec.WriteRequestAsync(
                 client,
                 hello,
                 CancellationToken.None);
 
             var response =
-                await GateCProtocolCodec.ReadResponseAsync(
+                await FanControlWatchdogLeaseCodec.ReadResponseAsync(
                     client,
                     CancellationToken.None);
 
@@ -1206,7 +1207,7 @@ internal static class GateCLeaseSelfTest
                 var hello =
                     await RoundTripAsync(
                         client,
-                        new GateCRequest(
+                        new FanControlWatchdogLeaseRequest(
                             GateCProtocol.Version,
                             Guid.NewGuid(),
                             GateCProtocol.Hello,
@@ -1226,7 +1227,7 @@ internal static class GateCLeaseSelfTest
                 // Send WriteIntent, but deliberately never consume the ACK.
                 // Poll the durable journal only to prove the server completed
                 // the safety-critical store before simulating client death.
-                await GateCProtocolCodec.WriteRequestAsync(
+                await FanControlWatchdogLeaseCodec.WriteRequestAsync(
                     client,
                     Request(
                         GateCProtocol.WriteIntent,
@@ -1304,7 +1305,7 @@ internal static class GateCLeaseSelfTest
                 var hello =
                     await RoundTripAsync(
                         client,
-                        new GateCRequest(
+                        new FanControlWatchdogLeaseRequest(
                             GateCProtocol.Version,
                             Guid.NewGuid(),
                             GateCProtocol.Hello,
@@ -1366,7 +1367,7 @@ internal static class GateCLeaseSelfTest
             PipeTransmissionMode.Byte,
             PipeOptions.Asynchronous);
 
-    private static GateCRequest Request(
+    private static FanControlWatchdogLeaseRequest Request(
         string type,
         Guid? sessionId = null,
         long? generation = null,
@@ -1381,17 +1382,17 @@ internal static class GateCLeaseSelfTest
             CpuLevel: cpu,
             GpuLevel: gpu);
 
-    private static async Task<GateCResponse> RoundTripAsync(
+    private static async Task<FanControlWatchdogLeaseResponse> RoundTripAsync(
         Stream stream,
-        GateCRequest request)
+        FanControlWatchdogLeaseRequest request)
     {
-        await GateCProtocolCodec.WriteRequestAsync(
+        await FanControlWatchdogLeaseCodec.WriteRequestAsync(
             stream,
             request,
             CancellationToken.None);
 
         return
-            await GateCProtocolCodec.ReadResponseAsync(
+            await FanControlWatchdogLeaseCodec.ReadResponseAsync(
                 stream,
                 CancellationToken.None) ??
             throw new InvalidOperationException(
