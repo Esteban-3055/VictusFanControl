@@ -44,6 +44,11 @@ jobs:
           if ($failed) {
             exit 1
           }
+
+      - name: Gate E contention and causality invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-e-invariants.ps1
+
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
