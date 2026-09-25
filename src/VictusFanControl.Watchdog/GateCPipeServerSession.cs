@@ -189,23 +189,64 @@ internal static class GateCPipeServerSession
             {
                 if (verifiedController is not null)
                 {
-                    var recovery =
-                        await manager.HandleOwnerLossAsync(
-                            verifiedController,
-                            ownerLossReason,
-                            CancellationToken.None).ConfigureAwait(false);
+                    var retainForLiveController = false;
 
-                    if (recovery is not null)
+                    if (monitorControllerProcess &&
+                        ownerProcess is not null &&
+                        !cancellationToken.IsCancellationRequested &&
+                        !string.Equals(
+                            ownerLossReason,
+                            "controller process exited",
+                            StringComparison.Ordinal))
                     {
+                        try
+                        {
+                            retainForLiveController = !ownerProcess.HasExited;
+                        }
+                        catch
+                        {
+                            // If liveness cannot be proven, fall back to the
+                            // fail-closed owner-loss recovery below.
+                            retainForLiveController = false;
+                        }
+                    }
+
+                    if (retainForLiveController)
+                    {
+                        // Critical Gate D ordering rule: a pipe can disappear
+                        // after WRITE_INTENT was acknowledged but before the
+                        // controller dispatches WMI. Restoring immediately here
+                        // would clear the lease while the still-live controller
+                        // could continue into SetFanLevel. Keep durable
+                        // ownership armed instead. The persistent Gate D
+                        // process monitor and state deadlines remain
+                        // authoritative while the accept loop permits a fresh
+                        // kernel-validated reconnect from the same process.
                         log?.Invoke(
-                            $"WATCHDOG OWNER LOSS: reason={ownerLossReason}; " +
-                            $"disposition={recovery.Disposition}; observed={recovery.Observed}; " +
-                            $"restoreAttempted={recovery.RestoreAttempted}; journalRetained={recovery.JournalRetained}; detail={recovery.Detail}");
+                            $"WATCHDOG TRANSPORT LOSS: reason={ownerLossReason}; " +
+                            $"controller PID={verifiedController.ProcessId} is still alive; " +
+                            "durable lease retained for reconnect/process-death/deadline recovery.");
                     }
                     else
                     {
-                        log?.Invoke(
-                            $"WATCHDOG OWNER LOSS: reason={ownerLossReason}; no active lease required recovery.");
+                        var recovery =
+                            await manager.HandleOwnerLossAsync(
+                                verifiedController,
+                                ownerLossReason,
+                                CancellationToken.None).ConfigureAwait(false);
+
+                        if (recovery is not null)
+                        {
+                            log?.Invoke(
+                                $"WATCHDOG OWNER LOSS: reason={ownerLossReason}; " +
+                                $"disposition={recovery.Disposition}; observed={recovery.Observed}; " +
+                                $"restoreAttempted={recovery.RestoreAttempted}; journalRetained={recovery.JournalRetained}; detail={recovery.Detail}");
+                        }
+                        else
+                        {
+                            log?.Invoke(
+                                $"WATCHDOG OWNER LOSS: reason={ownerLossReason}; no active lease required recovery.");
+                        }
                     }
                 }
             }
