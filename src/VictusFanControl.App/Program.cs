@@ -83,16 +83,27 @@ internal static class Program
             args,
             "--gate-f1-test-token");
 
+        var gateF2HardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--gate-f2-write-armed-double-death-test",
+                StringComparison.OrdinalIgnoreCase));
+
+        var gateF2HardwareTestToken = ReadOptionValue(
+            args,
+            "--gate-f2-test-token");
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
             (gateEHardwareTest ? 1 : 0) +
-            (gateF1HardwareTest ? 1 : 0);
+            (gateF1HardwareTest ? 1 : 0) +
+            (gateF2HardwareTest ? 1 : 0);
 
         if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
-                "Startup refused: suspend, Gate D, Gate E and Gate F1 hardware-test modes are mutually exclusive.");
+                "Startup refused: suspend, Gate D, Gate E, Gate F1 and Gate F2 hardware-test modes are mutually exclusive.");
             Environment.ExitCode = 60;
             return;
         }
@@ -177,6 +188,26 @@ internal static class Program
             return;
         }
 
+        if (gateF2HardwareTest &&
+            !string.Equals(
+                gateF2HardwareTestToken,
+                "88F8-GATEF2-30",
+                StringComparison.Ordinal))
+        {
+            AppLog.Write(
+                "Gate F2 hardware test refused: explicit --gate-f2-test-token 88F8-GATEF2-30 is required.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (!gateF2HardwareTest && gateF2HardwareTestToken is not null)
+        {
+            AppLog.Write(
+                "Startup refused: --gate-f2-test-token is valid only with --gate-f2-write-armed-double-death-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -196,7 +227,8 @@ internal static class Program
             suspendHardwareTest,
             gateDHardwareTest,
             gateEHardwareTest,
-            gateF1HardwareTest);
+            gateF1HardwareTest,
+            gateF2HardwareTest);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");
