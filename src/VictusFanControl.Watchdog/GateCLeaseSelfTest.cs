@@ -28,8 +28,28 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "explicit PREPARED cancel clears lease without hardware write",
+            CancelPreparedAsync);
+
+        failures += await CaseAsync(
+            output,
             "service restart in PREPARED clears journal without restore",
             PreparedRestartAsync);
+
+        failures += await CaseAsync(
+            output,
+            "first WRITE_ARMED abort safely returns to PREPARED",
+            AbortFirstWriteIntentAsync);
+
+        failures += await CaseAsync(
+            output,
+            "target-transition abort safely returns to previous OWNED target",
+            AbortTransitionWriteIntentAsync);
+
+        failures += await CaseAsync(
+            output,
+            "unsafe WRITE_ARMED abort retains durable evidence",
+            UnsafeAbortWriteIntentAsync);
 
         failures += await CaseAsync(
             output,
@@ -287,6 +307,110 @@ internal static class GateCLeaseSelfTest
                    LeaseRecoveryDisposition.ClearedPrepared);
             Assert(env.Hardware.RestoreCalls == 0);
             Assert(await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task CancelPreparedAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var prepared =
+                await env.Manager.PrepareAsync(
+                    Controller,
+                    CancellationToken.None);
+
+            env.Hardware.Set(new FanSetpoint(31, 31));
+
+            await env.Manager.CancelPreparedAsync(
+                prepared.SessionId,
+                prepared.Generation,
+                CancellationToken.None);
+
+            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(env.Hardware.Current == new FanSetpoint(31, 31));
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task AbortFirstWriteIntentAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var armed = await PrepareAndArmAsync(env, 30);
+
+            var rolledBack =
+                await env.Manager.AbortWriteIntentAsync(
+                    armed.SessionId,
+                    armed.Generation,
+                    CancellationToken.None);
+
+            Assert(rolledBack.Phase ==
+                   WatchdogLeasePhase.Prepared);
+            Assert(env.Hardware.RestoreCalls == 0);
+
+            var journal =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            Assert(journal?.Phase ==
+                   WatchdogLeasePhase.Prepared);
+        });
+    }
+
+    private static async Task AbortTransitionWriteIntentAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+
+            var armed =
+                await env.Manager.WriteIntentAsync(
+                    owned.SessionId,
+                    owned.Generation,
+                    new FanSetpoint(40, 40),
+                    CancellationToken.None);
+
+            var rolledBack =
+                await env.Manager.AbortWriteIntentAsync(
+                    armed.SessionId,
+                    armed.Generation,
+                    CancellationToken.None);
+
+            Assert(rolledBack.Phase ==
+                   WatchdogLeasePhase.Owned);
+
+            var journal =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            Assert(journal?.Owned ==
+                   new FanSetpoint(30, 30));
+            Assert(env.Hardware.RestoreCalls == 0);
+        });
+    }
+
+    private static async Task UnsafeAbortWriteIntentAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var armed = await PrepareAndArmAsync(env, 30);
+            env.Hardware.Set(new FanSetpoint(31, 31));
+
+            var ex =
+                await ThrowsAsync<LeaseProtocolException>(
+                    () => env.Manager.AbortWriteIntentAsync(
+                        armed.SessionId,
+                        armed.Generation,
+                        CancellationToken.None).AsTask());
+
+            Assert(ex.Code == "ABORT_UNSAFE");
+
+            var journal =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            Assert(journal?.Phase ==
+                   WatchdogLeasePhase.WriteArmed);
+            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(env.Hardware.Current == new FanSetpoint(31, 31));
         });
     }
 
