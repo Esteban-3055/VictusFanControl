@@ -33,7 +33,7 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
-            "restart after WRITE_ARMED before WMI clears FF/FF without restore",
+            "restart after WRITE_ARMED before WMI normalizes firmware restore",
             RestartWriteArmedBeforeWriteAsync);
 
         failures += await CaseAsync(
@@ -128,7 +128,7 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
-            "pipe loss before WriteIntent ACK delivery clears safe WRITE_ARMED",
+            "pipe loss before WriteIntent ACK delivery normalizes WRITE_ARMED",
             NamedPipeLossBeforeWriteIntentAckAsync);
 
         failures += await CaseAsync(
@@ -283,8 +283,9 @@ internal static class GateCLeaseSelfTest
 
             Assert(armed.Phase == WatchdogLeasePhase.WriteArmed);
             Assert(recovery.Disposition ==
-                   LeaseRecoveryDisposition.ClearedAlreadyFirmware);
-            Assert(env.Hardware.RestoreCalls == 0);
+                   LeaseRecoveryDisposition.RestoredFirmware);
+            Assert(recovery.RestoreAttempted);
+            Assert(env.Hardware.RestoreCalls == 1);
         });
     }
 
@@ -832,7 +833,7 @@ internal static class GateCLeaseSelfTest
 
             await serverTask.ConfigureAwait(false);
 
-            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(env.Hardware.RestoreCalls == 1);
             Assert(env.Hardware.Current.IsFirmwareOwned);
             Assert(
                 await env.Journal.LoadAsync(CancellationToken.None) is null);
