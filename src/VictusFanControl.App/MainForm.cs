@@ -81,6 +81,8 @@ internal sealed class MainForm : Form
     private bool _suspendHardwareTestResumeObserved;
     private bool _suspendHardwareTestPreSleepRestoreVerified;
     private bool _suspendHardwareTestCompleted;
+    private DateTimeOffset? _suspendHardwareTestArmedAt;
+    private Hp88F8EcControlState? _suspendHardwareTestArmedEcState;
 
     private volatile TelemetrySnapshot? _lastSnapshot;
 
@@ -214,7 +216,8 @@ internal sealed class MainForm : Form
         var boundary = DateTimeOffset.UtcNow;
 
         var testWasCustom = false;
-        Hp88F8EcControlState? testEcBefore = null;
+        Hp88F8EcControlState? armedEcState = null;
+        DateTimeOffset? armedAt = null;
 
         if (_suspendLifecycleHardwareTest &&
             _suspendHardwareTestArmed &&
@@ -222,20 +225,24 @@ internal sealed class MainForm : Form
         {
             _suspendHardwareTestSuspendObserved = true;
             testWasCustom = _fanCoordinator.Authority == FanAuthority.Custom;
+            armedEcState = _suspendHardwareTestArmedEcState;
+            armedAt = _suspendHardwareTestArmedAt;
 
-            try
-            {
-                testEcBefore =
-                    new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+            // Do not start a second EC transaction here. The production telemetry
+            // reader and backend share Global\Access_EC, and an extra diagnostic
+            // read in the real WM_POWERBROADCAST critical path can time out even
+            // though the coordinator/restore path itself is healthy. The READY
+            // marker is written only after a real backend ACK plus an explicit
+            // EC 30/30 read, and Custom authority remains continuously supervised.
+            var armedAge = armedAt.HasValue
+                ? Math.Max(0, (boundary - armedAt.Value).TotalSeconds)
+                : double.NaN;
 
-                AppendEvent(
-                    $"SUSPEND TEST: suspend event entered with authority={_fanCoordinator.Authority}; EC before lifecycle restore: {testEcBefore}");
-            }
-            catch (Exception ex)
-            {
-                AppendEvent(
-                    $"SUSPEND TEST: could not read EC immediately before lifecycle restore: {ex.Message}");
-            }
+            AppendEvent(
+                $"SUSPEND TEST: suspend event entered with authority={_fanCoordinator.Authority}; " +
+                $"last verified owned EC state={armedEcState}; " +
+                $"armedAge={(double.IsNaN(armedAge) ? "n/a" : $"{armedAge:0.000}s")}. " +
+                "No extra pre-restore EC probe is issued in the suspend handler.");
         }
 
         try
@@ -266,17 +273,19 @@ internal sealed class MainForm : Form
 
                     _suspendHardwareTestPreSleepRestoreVerified =
                         testWasCustom &&
-                        testEcBefore is not null &&
-                        testEcBefore.CpuSetpoint == SuspendHardwareTestLevel &&
-                        testEcBefore.GpuSetpoint == SuspendHardwareTestLevel &&
+                        armedEcState is not null &&
+                        armedEcState.CpuSetpoint == SuspendHardwareTestLevel &&
+                        armedEcState.GpuSetpoint == SuspendHardwareTestLevel &&
                         _fanCoordinator.Authority == FanAuthority.Firmware &&
                         after.CpuSetpoint == byte.MaxValue &&
                         after.GpuSetpoint == byte.MaxValue;
 
                     AppendEvent(
                         _suspendHardwareTestPreSleepRestoreVerified
-                            ? $"SUSPEND TEST: PRE-SLEEP RESTORE VERIFIED before returning from {source}; authority=Firmware; EC={after}"
-                            : $"SUSPEND TEST: PRE-SLEEP RESTORE VERIFICATION FAILED; wasCustom={testWasCustom}; before={testEcBefore}; authority={_fanCoordinator.Authority}; after={after}");
+                            ? $"SUSPEND TEST: PRE-SLEEP RESTORE VERIFIED before returning from {source}; " +
+                              $"entered Custom with last verified owned EC={armedEcState}; authority=Firmware; EC after restore={after}"
+                            : $"SUSPEND TEST: PRE-SLEEP RESTORE VERIFICATION FAILED; " +
+                              $"wasCustom={testWasCustom}; armedEc={armedEcState}; authority={_fanCoordinator.Authority}; after={after}");
                 }
                 catch (Exception ex)
                 {
@@ -725,7 +734,7 @@ internal sealed class MainForm : Form
         Ui(() =>
         {
             AppendEvent(
-                $"Fan authority: {e.Previous} -> {e.Current}. {e.Reason}");
+                $"Fan authority @ {e.Timestamp:HH:mm:ss.fff}: {e.Previous} -> {e.Current}. {e.Reason}");
             UpdateSafetyStatus();
             UpdateTray();
         });
@@ -886,6 +895,8 @@ internal sealed class MainForm : Form
                         $"Suspend-test command acknowledgement mismatch: {acknowledged.CpuSetpoint}/{acknowledged.GpuSetpoint}.");
                 }
 
+                _suspendHardwareTestArmedEcState = acknowledged;
+                _suspendHardwareTestArmedAt = DateTimeOffset.UtcNow;
                 _suspendHardwareTestArmed = true;
 
                 AppendEvent(

@@ -24,18 +24,27 @@ the real `WM_POWERBROADCAST/PBT_APMSUSPEND` message.
 
 ## What proves the pre-sleep restore
 
-On entry to the real suspend handler, the GUI captures authority and EC state.
-A valid test must enter the handler with:
+The READY marker is published only after the real production backend has
+acknowledged the 30/30 command and a separate EC read has verified 0x34/0x35 =
+30/30. That verified EC state and its timestamp are retained by the test mode.
+
+On entry to the real suspend handler, a valid test must still have:
 
 - authority = Custom;
-- EC CPU setpoint = 30;
-- EC GPU setpoint = 30.
+- the retained, already-verified owned EC state = 30/30.
+
+The handler deliberately does **not** issue another diagnostic EC read before
+restore. A first real run showed that an extra probe can lose the shared
+`Global\Access_EC` mutex race against normal telemetry and time out inside the
+critical Windows suspend path, even though the subsequent coordinator restore
+succeeds. Avoiding that redundant read makes the test less intrusive and gives
+the lifecycle restore first access to the shared EC/WMI path.
 
 The handler then synchronously calls
 `FanControlCoordinator.BlockCustomAdmissionAndRestoreAsync`.
 
 Before `TelemetryWorker.NotifySuspend` is called and before the window procedure
-returns, the GUI reads EC again. PASS requires:
+returns, the GUI reads EC. PASS requires:
 
 - authority = Firmware;
 - EC CPU setpoint = FF;
@@ -87,3 +96,21 @@ log lines. Confirm the OMEN Gaming Hub undervolt with `SAME`.
 Do not kill the GUI from Task Manager during this test. Forced-process
 termination and EC countdown/watchdog recovery is the next independent failure
 mode and has not yet been characterized.
+
+
+## First physical attempt: instrumentation false negative
+
+The first physical run reached Custom authority, verified EC 30/30, and received
+the real suspend event. The diagnostic EC read that had been placed immediately
+at suspend-handler entry timed out waiting for `Global\Access_EC`. The actual
+coordinator restore then completed, and the post-restore read **inside the same
+suspend handler** showed authority Firmware with EC FF/FF. Resume subsequently
+recovered to Healthy/Firmware with EC FF/FF and the OMEN Gaming Hub undervolt
+unchanged.
+
+That run therefore provided positive evidence for the production restore path,
+but the harness marked FAIL because it incorrectly made the redundant
+pre-restore diagnostic read mandatory. The harness was corrected to retain the
+already-verified 30/30 arming state and remove that competing EC transaction
+from the critical suspend path. A clean rerun is still required before closing
+the gate.
