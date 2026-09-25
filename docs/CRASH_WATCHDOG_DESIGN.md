@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: research/design phase complete. Gate A (Session 0 environment) and Gate B (service-only emergency restore) have both passed on real hardware under LocalSystem. Lease/journal/IPC integration begins at Gate C and is not yet wired into the real write boundary.
+Status: Gate A and Gate B passed on real hardware under LocalSystem, and Gate C lease/journal/named-pipe semantics passed synthetic Windows CI. The lease is intentionally not yet wired into the real Hp88F8 write boundary; that starts at Gate D.
 
 ## 1. Hardware fact that drives the design
 
@@ -288,9 +288,10 @@ Fields should include only machine-safety state:
 
 Heartbeat does **not** need to be flushed to disk every second.
 
-Before acknowledging WRITE_INTENT, write the new journal to a temporary file,
-flush it to disk, then atomically replace the previous record. Only after that
-durable step may SetFanLevel be dispatched.
+Before acknowledging WRITE_INTENT, write the new journal to a same-directory
+temporary file using WriteThrough, call Flush(flushToDisk: true), then replace
+the live record with MoveFileEx(REPLACE_EXISTING | WRITE_THROUGH). Only after
+that durable step may SetFanLevel be dispatched.
 
 On clean FF/FF verification, clear the durable armed record only after RELEASE.
 
@@ -458,18 +459,36 @@ undervolt remained unchanged. See `WATCHDOG_GATE_B.md`.
 
 ### Gate C - synthetic lease state machine
 
-Use fake hardware and kill/restart simulations for every boundary:
+**PASSED in Windows CI, 2026-09-24.** The implementation now includes the
+PREPARED / WRITE_ARMED / OWNED / RESTORING state machine, generation checks,
+durable write-through journal, service-side monotonic deadlines, bounded framed
+JSON protocol, real Windows named-pipe PID verification, and fail-closed
+ownership recovery using fake hardware.
 
-- death before WriteIntent ACK;
-- death after WriteIntent ACK but before WMI;
-- death after WMI but before Commit;
-- death after Commit;
-- death during RESTORING;
-- stale generation;
-- malformed message;
+Validated boundaries include:
+
+- owner loss before WriteIntent and before WriteIntent ACK delivery;
+- restart after WriteIntent before WMI;
+- restart after WMI before Commit;
+- restart after Commit;
+- restart/death during RESTORING;
+- old/new target acceptance during an in-flight owned-target transition;
+- stale generation and malformed protocol rejection;
 - duplicate Release;
-- pipe loss;
-- service restart with each journal state.
+- heartbeat timeout, WRITE_ARMED deadline and RESTORING deadline;
+- broken pipe while OWNED;
+- service restart in every durable phase;
+- corrupt journal / unknown fixed setpoint -> no blind restore;
+- external fixed override -> Prepare refused;
+- restore failure -> journal retained.
+
+From WRITE_ARMED onward the watchdog completes/normalizes the firmware restore
+even if EC already reads FF/FF, because FF/FF can be the midpoint of a partial
+FF/FF -> LegacyDefault handoff. PREPARED alone can be cleared without restore.
+
+Gate C does not host a persistent privileged service pipe or touch hardware.
+The explicit service ACL, real hardware adapter, process-lifetime monitor and
+backend transaction hooks are Gate D integration work.
 
 ### Gate D - real GUI forced kill
 
