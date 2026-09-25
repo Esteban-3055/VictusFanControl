@@ -438,7 +438,12 @@ try {
     }
 
     Write-Host 'GUI local-restore marker:' -ForegroundColor Green
-    Get-Content $localRestorePath
+    $localRestoreMarker = (Get-Content $localRestorePath -Raw).Trim()
+    Write-Host $localRestoreMarker
+
+    if ($localRestoreMarker -notmatch '^LOCAL-RESTORE\|.+\|authority=Firmware\|reason=Backend health/ownership probe failed during custom authority:') {
+        throw "Gate E local-restore marker does not prove watchdog-loss Firmware handoff: $localRestoreMarker"
+    }
 
     if (Get-Process -Id $servicePidBefore -ErrorAction SilentlyContinue) {
         throw 'Old watchdog PID is unexpectedly alive during local-restore proof.'
