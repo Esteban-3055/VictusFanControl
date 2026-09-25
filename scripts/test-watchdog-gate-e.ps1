@@ -474,7 +474,10 @@ try {
             throw 'Timed out waiting for watchdog-protected Gate E READY.'
         }
 
-        Start-Sleep -Milliseconds 250
+        # READY begins the narrow Custom-owned fault-injection window.
+        # Poll promptly without touching EC so the harness can reach the
+        # watchdog kill boundary before an unrelated periodic health cycle.
+        Start-Sleep -Milliseconds 50
     }
 
     $readyReached = $true
