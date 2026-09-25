@@ -1,6 +1,6 @@
 # Watchdog Gate D - real lease integration and forced GUI kill
 
-Status: implementation complete; physical validation pending.
+Status: **Gate D PASSED on real hardware on 2026-09-25.**
 
 Gate D is the first gate that connects the durable watchdog lease to the real
 HP 88F8 SetFanLevel dispatch boundary.
@@ -187,6 +187,36 @@ The test then:
 
 The emergency fallback is a last-resort hardware safety net. It does not count
 as a Gate D PASS. A PASS requires recovery by the persistent watchdog itself.
+
+## Physical PASS - 2026-09-25
+
+The final real-hardware run passed the complete Gate D contract.
+
+Observed sequence:
+
+- the persistent LocalSystem watchdog started in Session 0 and reported
+  Ready=True, Blocked=False, with no active journal and EC FF/FF;
+- the controller acquired the durable lease and the real backend reached
+  Custom 30/30 only after EC + dual-tach acknowledgement;
+- the journal was OWNED at generation 3, target 30/30, and was bound to the
+  exact GUI PID plus matching process creation time;
+- the test force-killed that exact GUI process, so managed controller cleanup
+  could not run;
+- the parent PowerShell did not invoke the HP restore CLI path;
+- the watchdog detected owner loss from the dead GUI's named-pipe EOF and
+  independently executed the validated firmware restore;
+- service evidence recorded RestoredFirmware with observed FF/FF,
+  restoreAttempted=True and journalRetained=False;
+- a separate post-recovery EC probe confirmed 255/255;
+- the watchdog service PID stayed unchanged throughout the recovery;
+- the emergency fallback was cancelled only after journal deletion and
+  independent FF/FF verification, and therefore did not fire;
+- OMEN Gaming Hub undervolt was user-confirmed unchanged.
+
+The physical recovery completed quickly enough that the independent post-kill EC
+probe already saw firmware ownership while the same service process remained
+alive. Gate D is complete. Gate E next validates the opposite failure domain:
+the watchdog service process dies while the GUI/controller still owns 30/30.
 
 ## PASS boundary
 
