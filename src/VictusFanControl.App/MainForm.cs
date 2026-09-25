@@ -784,9 +784,23 @@ internal sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            Ui(() => AppendEvent(
-                $"CRITICAL: safety-supervisor firmware handoff failed: {ex.Message}"));
-            AppLog.Write($"Safety-supervisor firmware handoff failed: {ex}");
+            if (_fanCoordinator.Authority == FanAuthority.Firmware)
+            {
+                // EnforceSafetyAsync deliberately rethrows the backend/status
+                // failure that triggered the handoff even when the fail-safe
+                // local restore itself succeeded. Report that distinction
+                // accurately; Gate E depends on this exact failure domain.
+                Ui(() => AppendEvent(
+                    $"Safety supervisor detected backend failure and restored HP firmware authority: {ex.Message}"));
+                AppLog.Write(
+                    $"Safety-supervisor backend failure triggered a successful firmware handoff: {ex}");
+            }
+            else
+            {
+                Ui(() => AppendEvent(
+                    $"CRITICAL: safety-supervisor firmware handoff failed: {ex.Message}"));
+                AppLog.Write($"Safety-supervisor firmware handoff failed: {ex}");
+            }
         }
     }
 
