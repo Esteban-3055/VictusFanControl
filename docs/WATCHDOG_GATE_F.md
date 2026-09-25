@@ -2,7 +2,8 @@
 
 Status: implementation in progress. **F1 (OWNED double death) PASSED on real
 hardware on 2026-09-25.** F2 (WRITE_ARMED after real write/ACK but before
-Commit) remains pending. Gate F is not closed until F2 also passes.
+Commit) is now implemented and awaiting physical validation. Gate F is not
+closed until F2 also passes.
 
 Automatic fan policy remains OFF.
 
@@ -105,11 +106,14 @@ durable WRITE_ARMED pending=30/30
   -> recover WRITE_ARMED journal
 ~~~
 
-The preferred F2 design is a test-only wrapper around
-`IFanControlWatchdogLeaseClient.CommitAsync`. It will pause before forwarding
-Commit only after the production backend has already completed the real WMI,
-EC-setpoint and dual-tach acknowledgement path. This avoids inserting a
-Gate-F-specific branch into the production hardware transaction.
+F2 is implemented with a test-only
+`GateF2CommitHoldWatchdogLeaseClient` wrapper around
+`IFanControlWatchdogLeaseClient`. WriteIntent and every normal lease operation
+are delegated to the real named-pipe client. When the production backend reaches
+`CommitAsync`, the wrapper writes and flushes a dedicated READY marker, then
+holds non-cancellably without forwarding Commit. Because production backend
+ordering is WMI -> EC ACK -> dual-tach ACK -> Commit, this creates the required
+real-hardware boundary without inserting a Gate-F branch into the HP backend.
 
 ## F1 causal requirements
 
@@ -214,7 +218,10 @@ fails formally even if later cleanup leaves the machine in firmware mode.
 - `src/VictusFanControl.App/MainForm.cs` - production 30/30 transaction,
   READY evidence and synchronous local-restore-started marker.
 - `scripts/test-watchdog-gate-f1.ps1` - F1 physical harness.
-- `scripts/test-watchdog-gate-f-invariants.ps1` - static causal/safety
+- `src/VictusFanControl.App/GateF2CommitHoldWatchdogLeaseClient.cs` - test-only
+  pre-Commit hold after the production backend has completed WMI + EC/tach ACK.
+- `scripts/test-watchdog-gate-f2.ps1` - F2 physical harness.
+- `scripts/test-watchdog-gate-f-invariants.ps1` - F1/F2 static causal/safety
   invariants executed in Windows CI.
 - `scripts/watchdog-gate-b-failsafe.ps1` - independent delayed emergency
   fallback reused unchanged.
@@ -228,4 +235,5 @@ double death passed, post-test EC remained FF/FF, the durable journal was
 cleared by restart recovery, the production watchdog returned Ready with
 1 s / 5 s / 10 s SCM recovery, and OGH undervolt remained unchanged.
 
-F2 implementation/CI may now proceed. Gate F remains open until F2 also passes.
+F2 implementation is complete. Its CI must be green before the first hardware
+run. Gate F remains open until the F2 physical run also passes.
