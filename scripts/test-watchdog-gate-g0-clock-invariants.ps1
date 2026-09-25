@@ -73,6 +73,11 @@ Write-Host 'PASS  Gate G0 clock probe dispatches before service/watchdog host co
 
 Assert-Contains -Text $physicalScript -Pattern '&\s+dotnet\s+\$assemblyPath[\s\S]*--gate-g0-clock-probe' -Description 'PowerShell harness launches the compiled .NET 8 watchdog probe'
 Assert-NotContains -Text $physicalScript -Pattern 'Assembly\]::LoadFrom|Activator\]::CreateInstance|GetProperty\(' -Description 'PowerShell harness never reflection-loads the net8.0 watchdog assembly'
+Assert-Contains -Text $physicalScript -Pattern '\[System\.IO\.Path\]::GetTempPath\(\)' -Description 'physical harness builds into an isolated temporary directory'
+Assert-Contains -Text $physicalScript -Pattern '\[Guid\]::NewGuid\(\)\.ToString\(''N''\)' -Description 'each physical probe build gets a unique output directory'
+Assert-Contains -Text $physicalScript -Pattern 'VictusFanControl\.Watchdog\.csproj[\s\S]*-o\s+\$probeBuildRoot' -Description 'physical harness builds the watchdog project directly into isolated output'
+Assert-NotContains -Text $physicalScript -Pattern 'dotnet\s+build\s+\.\\VictusFanControl\.sln' -Description 'physical harness does not rebuild the default solution output that a stale shell may lock'
+Assert-Contains -Text $physicalScript -Pattern 'Remove-Item\s+\$probeBuildRoot\s+-Recurse\s+-Force' -Description 'isolated probe output is cleaned after the child process exits'
 
 Write-Host ''
 Write-Host 'Gate G0 watchdog clock invariant self-test: PASS' -ForegroundColor Green

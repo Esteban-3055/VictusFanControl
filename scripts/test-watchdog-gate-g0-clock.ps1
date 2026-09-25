@@ -26,15 +26,33 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-dotnet build .\VictusFanControl.sln -c Release -warnaserror
-if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
+# Use an isolated output directory. An older PowerShell session may still have a
+# previous watchdog DLL loaded from the original reflection-based probe and
+# Windows keeps that file locked until the shell exits. Gate G0 must not depend
+# on closing the user's shell or overwrite the production/default build output.
+$probeBuildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('VictusFanControl-GateG0-' + [Guid]::NewGuid().ToString('N'))
+$probeExitCode = 1
+
+try {
+    New-Item -ItemType Directory -Path $probeBuildRoot -Force | Out-Null
+
+    dotnet build .\src\VictusFanControl.Watchdog\VictusFanControl.Watchdog.csproj -c Release -warnaserror -o $probeBuildRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw "Gate G0 isolated watchdog build failed with exit code $LASTEXITCODE."
+    }
+
+    $assemblyPath = Join-Path $probeBuildRoot 'VictusFanControl.Watchdog.dll'
+    if (-not (Test-Path $assemblyPath)) {
+        throw "Watchdog assembly was not produced at expected isolated path: $assemblyPath"
+    }
+
+    & dotnet $assemblyPath --gate-g0-clock-probe --minimum-sleep-seconds $MinimumSleepSeconds --timeout-seconds $TimeoutSeconds
+    $probeExitCode = $LASTEXITCODE
+}
+finally {
+    if (Test-Path $probeBuildRoot) {
+        Remove-Item $probeBuildRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
-$assemblyPath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\bin\Release\net8.0-windows\VictusFanControl.Watchdog.dll'
-if (-not (Test-Path $assemblyPath)) {
-    throw "Watchdog assembly was not produced at expected path: $assemblyPath"
-}
-
-& dotnet $assemblyPath --gate-g0-clock-probe --minimum-sleep-seconds $MinimumSleepSeconds --timeout-seconds $TimeoutSeconds
-exit $LASTEXITCODE
+exit $probeExitCode
