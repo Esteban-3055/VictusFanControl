@@ -63,10 +63,25 @@ internal static class Program
             args,
             "--gate-d-test-token");
 
-        if (suspendHardwareTest && gateDHardwareTest)
+        var gateEHardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--gate-e-watchdog-death-test",
+                StringComparison.OrdinalIgnoreCase));
+
+        var gateEHardwareTestToken = ReadOptionValue(
+            args,
+            "--gate-e-test-token");
+
+        var hardwareTestModeCount =
+            (suspendHardwareTest ? 1 : 0) +
+            (gateDHardwareTest ? 1 : 0) +
+            (gateEHardwareTest ? 1 : 0);
+
+        if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
-                "Startup refused: suspend/custom and Gate D hardware-test modes are mutually exclusive.");
+                "Startup refused: suspend, Gate D and Gate E hardware-test modes are mutually exclusive.");
             Environment.ExitCode = 60;
             return;
         }
@@ -111,6 +126,26 @@ internal static class Program
             return;
         }
 
+        if (gateEHardwareTest &&
+            !string.Equals(
+                gateEHardwareTestToken,
+                "88F8-GATEE30",
+                StringComparison.Ordinal))
+        {
+            AppLog.Write(
+                "Gate E hardware test refused: explicit --gate-e-test-token 88F8-GATEE30 is required.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (!gateEHardwareTest && gateEHardwareTestToken is not null)
+        {
+            AppLog.Write(
+                "Startup refused: --gate-e-test-token is valid only with --gate-e-watchdog-death-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -128,7 +163,8 @@ internal static class Program
         using var form = new MainForm(
             modulesDirectory,
             suspendHardwareTest,
-            gateDHardwareTest);
+            gateDHardwareTest,
+            gateEHardwareTest);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");
