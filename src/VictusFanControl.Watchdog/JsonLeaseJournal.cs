@@ -117,7 +117,18 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
 
             // Same-directory replacement keeps the critical transition on one
             // volume and avoids exposing a partially written JSON record.
-            File.Move(temp, Path, overwrite: true);
+            if (File.Exists(Path))
+            {
+                File.Replace(
+                    temp,
+                    Path,
+                    destinationBackupFileName: null,
+                    ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(temp, Path);
+            }
         }
         finally
         {
