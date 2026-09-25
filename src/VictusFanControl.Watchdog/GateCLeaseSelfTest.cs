@@ -38,6 +38,16 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "service stop in PREPARED clears journal without restore",
+            ServiceStopPreparedAsync);
+
+        failures += await CaseAsync(
+            output,
+            "service stop while OWNED restores firmware",
+            ServiceStopOwnedAsync);
+
+        failures += await CaseAsync(
+            output,
             "first WRITE_ARMED abort safely returns to PREPARED",
             AbortFirstWriteIntentAsync);
 
@@ -430,6 +440,47 @@ internal static class GateCLeaseSelfTest
                    LeaseRecoveryDisposition.ClearedPrepared);
             Assert(!recovery.RestoreAttempted);
             Assert(env.Hardware.RestoreCalls == 0);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task ServiceStopPreparedAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            await env.Manager.PrepareAsync(
+                Controller,
+                CancellationToken.None);
+
+            var recovery =
+                await env.Manager.RecoverForServiceStopAsync(
+                    "synthetic service stop",
+                    CancellationToken.None);
+
+            Assert(recovery?.Disposition ==
+                   LeaseRecoveryDisposition.ClearedPrepared);
+            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task ServiceStopOwnedAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            await PrepareArmCommitAsync(env, 30);
+
+            var recovery =
+                await env.Manager.RecoverForServiceStopAsync(
+                    "synthetic service stop",
+                    CancellationToken.None);
+
+            Assert(recovery?.Disposition ==
+                   LeaseRecoveryDisposition.RestoredFirmware);
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
             Assert(
                 await env.Journal.LoadAsync(CancellationToken.None) is null);
         });
