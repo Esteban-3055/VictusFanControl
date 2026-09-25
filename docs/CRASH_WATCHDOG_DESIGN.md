@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: Gate A and Gate B passed on real hardware under LocalSystem, and Gate C lease/journal/named-pipe semantics passed synthetic Windows CI. The lease is intentionally not yet wired into the real Hp88F8 write boundary; that starts at Gate D.
+Status: Gate A and Gate B passed on real hardware under LocalSystem; Gate C passed synthetic Windows CI; Gate D implementation is now wired into the real Hp88F8 write boundary and persistent LocalSystem service, with physical Gate D validation still pending.
 
 ## 1. Hardware fact that drives the design
 
@@ -507,15 +507,40 @@ backend transaction hooks are Gate D integration work.
 
 ### Gate D - real GUI forced kill
 
+**IMPLEMENTED; physical validation pending.**
+
+The implementation now includes:
+
+- persistent LocalSystem / Session 0 service with SCM restart policy;
+- exact-target startup recovery before accepting a controller;
+- restore-only hardware adapter;
+- protected named-pipe DACL for SYSTEM/Administrators with NETWORK denied;
+- kernel-observed client PID + process creation-time verification;
+- an open controller process handle and immediate process-exit detection;
+- 250 ms service-side lease deadline monitoring;
+- durable ProgramData journal ACL restricted to SYSTEM/Administrators;
+- service-stop/update recovery;
+- real backend Prepare / WriteIntent / post-intent EC recheck / WMI / EC+dual-tach ACK / Commit ordering;
+- heartbeat coupled to fresh backend ownership/feedback validation;
+- no-write CancelPrepared / AbortWriteIntent rollback;
+- live-controller local restore preserved even if watchdog IPC fails;
+- explicit hardware harness that never invokes parent-shell HP restore.
+
+The physical PASS still requires:
+
 - watchdog Ready;
 - validated 30/30;
-- lease OWNED;
-- kill GUI;
-- watchdog detects process death;
+- durable lease OWNED;
+- kill exact GUI PID;
+- watchdog detects owner death/pipe loss;
 - watchdog restores automatically;
 - no parent PowerShell cleanup;
-- EC FF/FF;
+- journal disappears only after verified firmware handoff;
+- independent EC FF/FF;
+- same watchdog service PID throughout Gate D;
 - undervolt unchanged.
+
+See `WATCHDOG_GATE_D.md`.
 
 ### Gate E - watchdog death
 
