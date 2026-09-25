@@ -30,6 +30,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestUnsafeReentryRestoresAsync(output, safety, now);
         failures += await TestRuntimeOwnershipMismatchRestoresAsync(output, safety);
         failures += await TestRuntimeFeedbackFailureRestoresAsync(output, safety);
+        failures += await TestBackendStatusFailureRestoresAsync(output, safety);
         failures += await TestLifecycleFenceClosesBeforeCoordinatorGateAsync(output, safety, now);
         failures += await TestStaleSafetyEvaluationCannotTearDownNewerSessionAsync(output, safety, now);
         failures += await TestStaleCommandSafetyCannotTearDownNewerSessionAsync(output, safety, now);
@@ -553,6 +554,47 @@ public static class FanControlCoordinatorSelfTest
             coordinator.Authority == FanAuthority.Firmware);
     }
 
+    private static async Task<int> TestBackendStatusFailureRestoresAsync(
+        TextWriter output,
+        SafetyGateResult safety)
+    {
+        var backend = new RecordingBackend
+        {
+            ThrowOnStatus = true
+        };
+
+        await using var coordinator =
+            new FanControlCoordinator(backend);
+
+        var entered =
+            await coordinator.TryEnterCustomAsync(
+                safety,
+                CancellationToken.None);
+
+        var threw = false;
+        try
+        {
+            await coordinator.EnforceSafetyAsync(
+                safety,
+                "synthetic watchdog/status transport loss",
+                CancellationToken.None);
+        }
+        catch (IOException)
+        {
+            threw = true;
+        }
+
+        return Report(
+            output,
+            "backend status exception restores firmware before propagating failure",
+            entered &&
+            threw &&
+            backend.StatusCalls == 1 &&
+            backend.RestoreCalls == 1 &&
+            !backend.Active &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
     private static async Task<int> TestStaleCommandSafetyCannotTearDownNewerSessionAsync(
         TextWriter output,
         SafetyGateResult initialSafety,
@@ -817,6 +859,7 @@ public static class FanControlCoordinatorSelfTest
         public bool OwnershipValid { get; set; } = true;
         public bool FeedbackHealthy { get; set; } = true;
         public bool ThrowOnApply { get; init; }
+        public bool ThrowOnStatus { get; init; }
         public bool ThrowOnEnterAfterActivate { get; init; }
         public bool ThrowOwnershipConflictOnEnter { get; init; }
         public bool ThrowNoWriteAdmissionOnEnter { get; init; }
@@ -832,6 +875,13 @@ public static class FanControlCoordinatorSelfTest
         public ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken)
         {
             StatusCalls++;
+
+            if (ThrowOnStatus)
+            {
+                return ValueTask.FromException<FanBackendStatus>(
+                    new IOException("synthetic backend status/watchdog transport failure"));
+            }
+
             return ValueTask.FromResult(new FanBackendStatus(
                 Name,
                 CanWrite,
