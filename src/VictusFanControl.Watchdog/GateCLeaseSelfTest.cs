@@ -129,6 +129,11 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "probe validates OWNED without renewing heartbeat",
+            ProbeDoesNotRenewHeartbeatAsync);
+
+        failures += await CaseAsync(
+            output,
             "heartbeat renews liveness without rewriting durable journal",
             HeartbeatDoesNotPersistAsync);
 
@@ -863,6 +868,44 @@ internal static class GateCLeaseSelfTest
 
             Assert(ex.Code == "NO_ACTIVE_LEASE");
             Assert(env.Hardware.RestoreCalls == 1);
+        });
+    }
+
+    private static async Task ProbeDoesNotRenewHeartbeatAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+            var before =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            env.Clock.Advance(TimeSpan.FromSeconds(4));
+
+            var probed = await env.Manager.ProbeAsync(
+                owned.SessionId,
+                owned.Generation,
+                CancellationToken.None);
+
+            var afterProbe =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            Assert(probed.Phase == WatchdogLeasePhase.Owned);
+            Assert(before == afterProbe);
+            Assert(env.Hardware.RestoreCalls == 0);
+
+            // Probe must not renew _lastHeartbeatMs. Two more seconds should
+            // therefore cross the original 5 s OWNED deadline and restore.
+            env.Clock.Advance(TimeSpan.FromSeconds(2));
+
+            var recovery =
+                await env.Manager.CheckDeadlinesAsync(
+                    CancellationToken.None);
+
+            Assert(recovery is not null);
+            Assert(recovery!.Disposition ==
+                   LeaseRecoveryDisposition.RestoredFirmware);
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
         });
     }
 
