@@ -125,8 +125,12 @@ lease message is then checked against that same durable controller identity, so
 a second Administrator process cannot take over a session merely by knowing its
 session GUID/generation.
 
-The ProgramData watchdog tree is also hardened to LocalSystem + local
-Administrators only. The installer intentionally never deletes lease.json.
+Gate D uses the isolated `%ProgramData%\VictusFanControl\WatchdogGateD`
+tree so legacy Gate A/B ACLs cannot affect the persistent service. The installer
+adds explicit LocalSystem + local Administrators full-control ACEs **before**
+removing inherited ProgramData permissions, then transfers ownership to SYSTEM
+and performs an Administrator read/write probe. It intentionally never deletes
+`lease.json`.
 
 ## Controller restore
 
