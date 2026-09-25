@@ -25,6 +25,12 @@ internal static class Program
                 .ConfigureAwait(false);
         }
 
+        if (options.Mode == WatchdogRunMode.GateCSelfTest)
+        {
+            return await GateCLeaseSelfTest.RunAsync(Console.Out)
+                .ConfigureAwait(false);
+        }
+
         // Watchdog command-line switches are parsed above. Do not feed them into
         // the generic configuration command-line provider: boolean test-only flags
         // intentionally have no value and must not be reinterpreted as config keys.
