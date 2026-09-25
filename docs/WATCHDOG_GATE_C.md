@@ -90,7 +90,7 @@ The self-test covers:
 
 - clean PREPARED -> WRITE_ARMED -> OWNED -> RESTORING -> release;
 - owner death and service restart in PREPARED without a hardware write;
-- pipe loss before the WriteIntent ACK is delivered;
+- transport loss before the WriteIntent ACK is consumed while the exact controller process remains alive: WRITE_ARMED is retained, and the WRITE_ARMED deadline restores if the controller never reconnects/progresses;
 - restart after WriteIntent but before WMI, including FF/FF restore normalization;
 - restart after WMI but before Commit;
 - restart after Commit;
@@ -111,8 +111,9 @@ The self-test covers:
 - corrupted journal;
 - malformed protocol frame;
 - named-pipe client identity mismatch;
-- broken-pipe response race treated as owner loss rather than a server fault;
-- real named-pipe EOF while OWNED causing immediate synthetic restore;
+- broken-pipe / EOF transport races remain lease-authoritative rather than server-fatal;
+- proven controller-process death while OWNED causes immediate restore;
+- live-controller pipe loss while OWNED retains the durable lease and permits only same-identity reconnect;
 - heartbeat renewal without rewriting the durable journal;
 - late Heartbeat/WriteIntent commands cannot revive an expired OWNED lease;
 - a late Commit cannot revive an expired WRITE_ARMED lease;
@@ -120,7 +121,9 @@ The self-test covers:
 - Release can take over a still-owned target, and refuses an unknown external override while retaining the RESTORING journal.
 
 The Windows CI run executes the real named-pipe tests, including
-GetNamedPipeClientProcessId identity verification and broken-pipe recovery.
+GetNamedPipeClientProcessId identity verification, live-owner transport-loss
+retention/reconnect, deadline takeover after an unconsumed WriteIntent ACK, and
+proven owner-death recovery.
 All Gate C cases pass together with the existing Gate B, SafetyGate,
 FanControlCoordinator, BIOS-contract and HP-backend regression suites.
 
