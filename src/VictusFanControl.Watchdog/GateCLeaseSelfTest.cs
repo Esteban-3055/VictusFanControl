@@ -98,8 +98,23 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "late heartbeat cannot revive an expired OWNED lease",
+            LateHeartbeatCannotReviveAsync);
+
+        failures += await CaseAsync(
+            output,
+            "late WriteIntent cannot revive an expired OWNED lease",
+            LateWriteIntentCannotReviveAsync);
+
+        failures += await CaseAsync(
+            output,
             "OWNED heartbeat timeout restores",
             HeartbeatTimeoutAsync);
+
+        failures += await CaseAsync(
+            output,
+            "late Commit cannot revive an expired WRITE_ARMED lease",
+            LateCommitCannotReviveAsync);
 
         failures += await CaseAsync(
             output,
@@ -646,6 +661,75 @@ internal static class GateCLeaseSelfTest
                 await env.Journal.LoadAsync(CancellationToken.None);
 
             Assert(before == after);
+        });
+    }
+
+    private static async Task LateHeartbeatCannotReviveAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+            env.Clock.Advance(TimeSpan.FromSeconds(6));
+
+            var ex =
+                await ThrowsAsync<LeaseProtocolException>(
+                    () => env.Manager.HeartbeatAsync(
+                        owned.SessionId,
+                        owned.Generation,
+                        CancellationToken.None).AsTask());
+
+            Assert(ex.Code == "LEASE_EXPIRED");
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task LateWriteIntentCannotReviveAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+            env.Clock.Advance(TimeSpan.FromSeconds(6));
+
+            var ex =
+                await ThrowsAsync<LeaseProtocolException>(
+                    () => env.Manager.WriteIntentAsync(
+                        owned.SessionId,
+                        owned.Generation,
+                        new FanSetpoint(40, 40),
+                        CancellationToken.None).AsTask());
+
+            Assert(ex.Code == "LEASE_EXPIRED");
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task LateCommitCannotReviveAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var armed = await PrepareAndArmAsync(env, 30);
+            env.Hardware.Set(new FanSetpoint(30, 30));
+            env.Clock.Advance(TimeSpan.FromSeconds(13));
+
+            var ex =
+                await ThrowsAsync<LeaseProtocolException>(
+                    () => env.Manager.CommitAsync(
+                        armed.SessionId,
+                        armed.Generation,
+                        new FanSetpoint(30, 30),
+                        CancellationToken.None).AsTask());
+
+            Assert(ex.Code == "LEASE_EXPIRED");
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
         });
     }
 
