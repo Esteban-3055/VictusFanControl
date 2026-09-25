@@ -178,18 +178,20 @@ function Restore-ProductionWatchdogService {
     $svc = Get-Service -Name $serviceName
     $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(15))
 
-    $pid = Get-ServiceProcessId
-    if ($pid -le 0) {
+    # $PID is a built-in read-only PowerShell automatic variable and variable
+    # names are case-insensitive, so never use $pid as a local scratch name.
+    $watchdogPid = Get-ServiceProcessId
+    if ($watchdogPid -le 0) {
         throw 'Production watchdog reinstall completed but the restarted service PID could not be resolved.'
     }
 
-    $status = Wait-ForFreshServiceStatus -ExpectedPid $pid -Seconds 15
+    $status = Wait-ForFreshServiceStatus -ExpectedPid $watchdogPid -Seconds 15
     if (-not $status -or -not $status.Ready -or $status.Blocked) {
         throw 'Production watchdog reinstall did not return to Ready state.'
     }
 
     $script:productionServiceReinstalled = $true
-    Write-Host "Production watchdog Ready. PID=$pid recovery=$($status.RecoveryDisposition)" -ForegroundColor Green
+    Write-Host "Production watchdog Ready. PID=$watchdogPid recovery=$($status.RecoveryDisposition)" -ForegroundColor Green
 }
 
 Assert-Administrator
