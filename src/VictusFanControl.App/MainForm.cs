@@ -82,7 +82,7 @@ internal sealed class MainForm : Form
     private bool _suspendHardwareTestPreSleepRestoreVerified;
     private bool _suspendHardwareTestCompleted;
     private DateTimeOffset? _suspendHardwareTestArmedAt;
-    private Hp88F8EcControlState? _suspendHardwareTestArmedEcState;
+    private bool _suspendHardwareTestBackendAckVerified;
 
     private volatile TelemetrySnapshot? _lastSnapshot;
 
@@ -216,7 +216,7 @@ internal sealed class MainForm : Form
         var boundary = DateTimeOffset.UtcNow;
 
         var testWasCustom = false;
-        Hp88F8EcControlState? armedEcState = null;
+        var backendAckVerified = false;
         DateTimeOffset? armedAt = null;
 
         if (_suspendLifecycleHardwareTest &&
@@ -225,24 +225,24 @@ internal sealed class MainForm : Form
         {
             _suspendHardwareTestSuspendObserved = true;
             testWasCustom = _fanCoordinator.Authority == FanAuthority.Custom;
-            armedEcState = _suspendHardwareTestArmedEcState;
+            backendAckVerified = _suspendHardwareTestBackendAckVerified;
             armedAt = _suspendHardwareTestArmedAt;
 
-            // Do not start a second EC transaction here. The production telemetry
-            // reader and backend share Global\Access_EC, and an extra diagnostic
-            // read in the real WM_POWERBROADCAST critical path can time out even
-            // though the coordinator/restore path itself is healthy. The READY
-            // marker is written only after a real backend ACK plus an explicit
-            // EC 30/30 read, and Custom authority remains continuously supervised.
+            // Do not start a second EC transaction here. The production backend
+            // already returns from ApplyAsync only after EC setpoint acknowledgement
+            // plus dual-tach acknowledgement. Out-of-band full EC snapshots while
+            // Custom is active bypass the backend IO gate and can hold
+            // Global\Access_EC long enough for the continuous ownership supervisor
+            // to time out and perform a false fail-safe handoff.
             var armedAge = armedAt.HasValue
                 ? Math.Max(0, (boundary - armedAt.Value).TotalSeconds)
                 : double.NaN;
 
             AppendEvent(
                 $"SUSPEND TEST: suspend event entered with authority={_fanCoordinator.Authority}; " +
-                $"last verified owned EC state={armedEcState}; " +
+                $"validatedBackendAck={backendAckVerified}; expectedOwnedSetpoint={SuspendHardwareTestLevel}/{SuspendHardwareTestLevel}; " +
                 $"armedAge={(double.IsNaN(armedAge) ? "n/a" : $"{armedAge:0.000}s")}. " +
-                "No extra pre-restore EC probe is issued in the suspend handler.");
+                "No out-of-band pre-restore EC probe is issued in the suspend handler.");
         }
 
         try
@@ -273,9 +273,7 @@ internal sealed class MainForm : Form
 
                     _suspendHardwareTestPreSleepRestoreVerified =
                         testWasCustom &&
-                        armedEcState is not null &&
-                        armedEcState.CpuSetpoint == SuspendHardwareTestLevel &&
-                        armedEcState.GpuSetpoint == SuspendHardwareTestLevel &&
+                        backendAckVerified &&
                         _fanCoordinator.Authority == FanAuthority.Firmware &&
                         after.CpuSetpoint == byte.MaxValue &&
                         after.GpuSetpoint == byte.MaxValue;
@@ -283,9 +281,9 @@ internal sealed class MainForm : Form
                     AppendEvent(
                         _suspendHardwareTestPreSleepRestoreVerified
                             ? $"SUSPEND TEST: PRE-SLEEP RESTORE VERIFIED before returning from {source}; " +
-                              $"entered Custom with last verified owned EC={armedEcState}; authority=Firmware; EC after restore={after}"
+                              $"entered Custom after validated backend ACK at {SuspendHardwareTestLevel}/{SuspendHardwareTestLevel}; authority=Firmware; EC after restore={after}"
                             : $"SUSPEND TEST: PRE-SLEEP RESTORE VERIFICATION FAILED; " +
-                              $"wasCustom={testWasCustom}; armedEc={armedEcState}; authority={_fanCoordinator.Authority}; after={after}");
+                              $"wasCustom={testWasCustom}; backendAckVerified={backendAckVerified}; authority={_fanCoordinator.Authority}; after={after}");
                 }
                 catch (Exception ex)
                 {
@@ -909,26 +907,24 @@ internal sealed class MainForm : Form
                     commandSafety,
                     CancellationToken.None);
 
-                var acknowledged =
-                    new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
-
-                if (acknowledged.CpuSetpoint != SuspendHardwareTestLevel ||
-                    acknowledged.GpuSetpoint != SuspendHardwareTestLevel)
-                {
-                    throw new InvalidOperationException(
-                        $"Suspend-test command acknowledgement mismatch: {acknowledged.CpuSetpoint}/{acknowledged.GpuSetpoint}.");
-                }
-
-                _suspendHardwareTestArmedEcState = acknowledged;
+                // Hp88F8FanControlBackend.ApplyAsync does not return until the EC
+                // setpoint is 30/30 and both tachometers have acknowledged the
+                // command. Do not immediately open a second AcpiEcReader here:
+                // that out-of-band full snapshot bypasses the backend IO gate and
+                // can contend with the continuous safety supervisor on
+                // Global\Access_EC, causing a false ownership-probe failure and
+                // an unnecessary firmware handoff.
+                _suspendHardwareTestBackendAckVerified = true;
                 _suspendHardwareTestArmedAt = DateTimeOffset.UtcNow;
                 _suspendHardwareTestArmed = true;
 
                 AppendEvent(
-                    $"SUSPEND TEST: ARMED at 30/30 with authority=Custom; EC={acknowledged}. External harness may now request Windows suspend.");
+                    $"SUSPEND TEST: ARMED at {SuspendHardwareTestLevel}/{SuspendHardwareTestLevel} with authority=Custom after production backend EC+dual-tach ACK. " +
+                    "No out-of-band EC snapshot is issued while Custom is active.");
 
                 File.WriteAllText(
                     SuspendHardwareTestReadyPath,
-                    $"READY|{DateTimeOffset.Now:O}|authority={_fanCoordinator.Authority}|cpu={acknowledged.CpuSetpoint}|gpu={acknowledged.GpuSetpoint}");
+                    $"READY|{DateTimeOffset.Now:O}|authority={_fanCoordinator.Authority}|cpu={SuspendHardwareTestLevel}|gpu={SuspendHardwareTestLevel}|ack=backend-ec+tachs");
                 return;
             }
 
