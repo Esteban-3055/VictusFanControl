@@ -602,7 +602,7 @@ try {
     $localRestoreMarker = (Get-Content $localRestorePath -Raw).Trim()
     Write-Host $localRestoreMarker
 
-    if ($localRestoreMarker -notmatch '^LOCAL-RESTORE\|.+\|authority=Firmware\|reason=Backend health/ownership probe failed during custom authority: WATCHDOG_IPC_LOSS\b') {
+    if ($localRestoreMarker -notmatch '^LOCAL-RESTORE\|.+\|authority=Firmware\|reason=Backend (?:control-dependency|health/ownership) probe failed during custom authority: WATCHDOG_IPC_LOSS\b') {
         throw "Gate E local-restore marker does not prove classified watchdog IPC loss caused the Firmware handoff: $localRestoreMarker"
     }
 
