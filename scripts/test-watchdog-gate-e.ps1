@@ -47,32 +47,64 @@ function Assert-Administrator {
 }
 
 function Read-EcState {
-    $output = (& dotnet $cli --probe-88f8-ec-state 2>&1 | Out-String)
-    $line = ($output -split "[\r\n]+" |
-        Where-Object { $_ -match '^level CPU=' } |
-        Select-Object -Last 1)
+    param(
+        [ValidateRange(1, 5)]
+        [int]$Attempts = 3,
 
-    if (-not $line) {
-        throw "Could not parse EC state. Raw output: $output"
+        [ValidateRange(100, 5000)]
+        [int]$RetryDelayMs = 750
+    )
+
+    $lastFailure = $null
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            $output = (& dotnet $cli --probe-88f8-ec-state 2>&1 | Out-String)
+            $line = ($output -split "[\r\n]+" |
+                Where-Object { $_ -match '^level CPU=' } |
+                Select-Object -Last 1)
+
+            if (-not $line) {
+                throw "Could not parse EC state. Raw output: $output"
+            }
+
+            $match = [regex]::Match(
+                $line,
+                'level CPU=(\d+) GPU=(\d+).*manual=0x([0-9A-Fa-f]{2}) countdown=(\d+).*RPM CPU=(\d+) GPU=(\d+)')
+
+            if (-not $match.Success) {
+                throw "Could not parse EC state line: $line"
+            }
+
+            return [pscustomobject]@{
+                Cpu = [int]$match.Groups[1].Value
+                Gpu = [int]$match.Groups[2].Value
+                Manual = $match.Groups[3].Value.ToUpperInvariant()
+                Countdown = [int]$match.Groups[4].Value
+                CpuRpm = [int]$match.Groups[5].Value
+                GpuRpm = [int]$match.Groups[6].Value
+                Raw = $line
+            }
+        }
+        catch {
+            $lastFailure = $_.Exception
+
+            if ($attempt -ge $Attempts) {
+                break
+            }
+
+            Write-Warning (
+                "Read-only EC probe attempt {0}/{1} failed: {2} Retrying in {3} ms. No fan-control write was issued." -f
+                $attempt,
+                $Attempts,
+                $lastFailure.Message,
+                $RetryDelayMs)
+
+            Start-Sleep -Milliseconds $RetryDelayMs
+        }
     }
 
-    $match = [regex]::Match(
-        $line,
-        'level CPU=(\d+) GPU=(\d+).*manual=0x([0-9A-Fa-f]{2}) countdown=(\d+).*RPM CPU=(\d+) GPU=(\d+)')
-
-    if (-not $match.Success) {
-        throw "Could not parse EC state line: $line"
-    }
-
-    [pscustomobject]@{
-        Cpu = [int]$match.Groups[1].Value
-        Gpu = [int]$match.Groups[2].Value
-        Manual = $match.Groups[3].Value.ToUpperInvariant()
-        Countdown = [int]$match.Groups[4].Value
-        CpuRpm = [int]$match.Groups[5].Value
-        GpuRpm = [int]$match.Groups[6].Value
-        Raw = $line
-    }
+    throw "Read-only EC probe failed after $Attempts process attempt(s): $($lastFailure.Message)"
 }
 
 function Wait-ForFile {
@@ -236,6 +268,9 @@ Write-Host 'Step 2: read-only live hardware preflight...' -ForegroundColor Cyan
 dotnet run --project .\src\VictusFanControl -c Release --no-build -- --probe-backends
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+# The telemetry probe has just completed its own EC session. Give Windows/ACPI
+# a short quiet handoff before opening the independent full-state verifier.
+Start-Sleep -Milliseconds 750
 $baseline = Read-EcState
 Write-Host $baseline.Raw
 
@@ -385,7 +420,10 @@ try {
         throw 'Gate E READY is not backed by durable OWNED 30/30 bound to the exact GUI PID + creation time.'
     }
 
-    $ownedEc = Read-EcState
+    # Keep the Custom-time out-of-band full-state probe single-shot. Production
+    # ownership/feedback is already continuously verified by the backend, and
+    # repeated external EC snapshots here would add avoidable contention.
+    $ownedEc = Read-EcState -Attempts 1
     Write-Host "Pre-kill EC          : $($ownedEc.Raw)"
 
     if ($ownedEc.Cpu -ne 30 -or $ownedEc.Gpu -ne 30) {
@@ -462,6 +500,14 @@ try {
 
     if ($localEc.Cpu -ne 255 -or $localEc.Gpu -ne 255) {
         throw "GUI reported local restore but EC is not FF/FF: $($localEc.Cpu)/$($localEc.Gpu)."
+    }
+
+    # Re-check after the independent EC read as well. This closes the narrow
+    # attribution race where SCM could restart the service during the probe.
+    $servicePidAfterLocalEc = Get-ServiceProcessId
+    if ($servicePidAfterLocalEc -gt 0 -and
+        $servicePidAfterLocalEc -ne $servicePidBefore) {
+        throw "SCM restarted watchdog PID $servicePidAfterLocalEc during the local EC verification; cannot attribute FF/FF solely to the live GUI."
     }
 
     if (-not (Test-Path $journalPath)) {
