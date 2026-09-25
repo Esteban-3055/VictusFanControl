@@ -1,6 +1,6 @@
 # Watchdog Gate C - synthetic lease / journal / named-pipe state machine
 
-Status: **Gate C PASSED in Windows CI on 2026-09-24.** This gate is synthetic by design and performs no real fan/EC writes.
+Status: **Gate C PASSED in Windows CI on 2026-09-24 and passed a second safety audit before Gate D.** This gate is synthetic by design and performs no real fan/EC writes.
 
 Gate C deliberately does not touch real fan hardware. It establishes the
 transaction and crash semantics that must exist before the watchdog is wired
@@ -30,8 +30,11 @@ that the durable VFC lease permits:
 - pending target during WRITE_ARMED;
 - previous owned target during an in-flight target transition.
 
-FF/FF is cleared as already safe. An unknown fixed pair is ownership-ambiguous
-and is never cleared.
+PREPARED may be cleared without a restore because no VFC write is yet
+permitted. From WRITE_ARMED onward, even an observed FF/FF is normalized through
+the full validated FF/FF -> LegacyDefault restore primitive before the durable
+lease is cleared. An unknown fixed pair is ownership-ambiguous and is never
+blindly cleared.
 
 ## Named-pipe protocol
 
@@ -94,7 +97,9 @@ The self-test covers:
 - restart during RESTORING;
 - previous/pending target ambiguity during a target transition;
 - stale generation rejection;
-- duplicate Release;
+- Release at FF/FF still normalizes the full firmware restore before clearing;
+- Release restore failure retains the RESTORING journal;
+- duplicate Release without a second restore;
 - OWNED heartbeat timeout;
 - WRITE_ARMED deadline;
 - RESTORING deadline;
@@ -108,8 +113,7 @@ The self-test covers:
 - named-pipe client identity mismatch;
 - broken-pipe response race treated as owner loss rather than a server fault;
 - real named-pipe EOF while OWNED causing immediate synthetic restore;
-- heartbeat renewal without rewriting the durable journal;
-- OWNED heartbeat timeout, WRITE_ARMED deadline and RESTORING deadline takeover.
+- heartbeat renewal without rewriting the durable journal.
 
 The Windows CI run executes the real named-pipe tests, including
 GetNamedPipeClientProcessId identity verification and broken-pipe recovery.
