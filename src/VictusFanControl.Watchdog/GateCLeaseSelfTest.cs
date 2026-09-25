@@ -189,6 +189,11 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "journal replacement succeeds while previous generation is open for read",
+            JournalReplaceWhileReaderOpenAsync);
+
+        failures += await CaseAsync(
+            output,
             "corrupt journal never triggers restore",
             CorruptJournalAsync);
 
@@ -1111,6 +1116,45 @@ internal static class GateCLeaseSelfTest
             Assert(
                 await env.Journal.LoadAsync(CancellationToken.None) is not null);
             Assert(env.Hardware.Current == new FanSetpoint(30, 30));
+        });
+    }
+
+    private static async Task JournalReplaceWhileReaderOpenAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var prepared =
+                await env.Manager.PrepareAsync(
+                    Controller,
+                    CancellationToken.None);
+
+            await using var oldGenerationReader =
+                new FileStream(
+                    env.Journal.Path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read | FileShare.Delete,
+                    bufferSize: 4096,
+                    options: FileOptions.SequentialScan);
+
+            var armed =
+                await env.Manager.WriteIntentAsync(
+                    prepared.SessionId,
+                    prepared.Generation,
+                    new FanSetpoint(30, 30),
+                    CancellationToken.None);
+
+            Assert(
+                armed.Phase == WatchdogLeasePhase.WriteArmed,
+                $"WriteIntent did not reach WRITE_ARMED while prior journal generation was open; phase={armed.Phase}.");
+
+            var current =
+                await env.Journal.LoadAsync(
+                    CancellationToken.None);
+
+            Assert(
+                current?.Phase == WatchdogLeasePhase.WriteArmed,
+                $"Atomic replacement did not expose WRITE_ARMED at the live path; phase={current?.Phase.ToString() ?? "none"}.");
         });
     }
 
