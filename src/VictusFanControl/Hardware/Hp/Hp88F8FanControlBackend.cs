@@ -91,18 +91,22 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
     private readonly bool _targetSupported;
     private readonly string _supportDetail;
     private readonly Hp88F8FanBackendTiming _timing;
+    private readonly IFanControlWatchdogLeaseClient? _watchdogLease;
 
     private bool _customModeActive;
     private bool _disposed;
     private string _lastDetail;
     private (byte Cpu, byte Gpu)? _ownedSetpoint;
 
-    public Hp88F8FanControlBackend(string modulesDirectory)
+    public Hp88F8FanControlBackend(
+        string modulesDirectory,
+        IFanControlWatchdogLeaseClient? watchdogLease = null)
     {
         var identity = HardwareIdentityReader.ReadCurrent();
         _targetSupported = Hp88F8TargetProfile.Matches(identity, out var reason);
         _supportDetail = reason;
         _timing = Hp88F8FanBackendTiming.Production;
+        _watchdogLease = watchdogLease;
 
         if (_targetSupported)
         {
@@ -119,12 +123,14 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         IHp88F8FanHardware hardware,
         bool targetSupported = true,
         string supportDetail = "Synthetic validated target.",
-        Hp88F8FanBackendTiming? timing = null)
+        Hp88F8FanBackendTiming? timing = null,
+        IFanControlWatchdogLeaseClient? watchdogLease = null)
     {
         _hardware = hardware;
         _targetSupported = targetSupported;
         _supportDetail = supportDetail;
         _timing = timing ?? Hp88F8FanBackendTiming.Production;
+        _watchdogLease = watchdogLease;
         _lastDetail = targetSupported
             ? "Synthetic backend initialized; firmware authority retained."
             : $"Write backend disabled: {supportDetail}";
@@ -198,6 +204,19 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                 $"manual=0x{state.Manual:X2}, countdown={state.Countdown}, " +
                 $"max=0x{state.MaxFan:X2}, switch=0x{state.FanSwitch:X2}.";
 
+            if (_watchdogLease is not null &&
+                _customModeActive &&
+                _ownedSetpoint.HasValue &&
+                ownershipValid &&
+                feedbackHealthy)
+            {
+                // The heartbeat is coupled to a successful fresh EC ownership
+                // and feedback check. A blind timer must never keep the lease
+                // alive while the controller/safety path is stalled.
+                await _watchdogLease.HeartbeatAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             return new FanBackendStatus(
                 Name,
                 CanWrite: true,
@@ -253,6 +272,12 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                     "Restore firmware auto first.");
             }
 
+            if (_watchdogLease is not null)
+            {
+                await _watchdogLease.PrepareAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             _ownedSetpoint = null;
             _customModeActive = true;
             _lastDetail =
@@ -304,6 +329,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             ValidateCommand(command);
 
             var writeAttempted = _ownedSetpoint.HasValue;
+            var leaseWriteArmed = false;
 
             try
             {
@@ -333,6 +359,29 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                 if (preDispatch.CpuSetpoint != cpuTarget ||
                     preDispatch.GpuSetpoint != gpuTarget)
                 {
+                    if (_watchdogLease is not null)
+                    {
+                        await _watchdogLease.WriteIntentAsync(
+                                cpuTarget,
+                                gpuTarget,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+
+                        leaseWriteArmed = true;
+
+                        // Durable lease IPC intentionally widens the interval
+                        // between the original pre-dispatch check and WMI. Re-read
+                        // EC after WriteIntent ACK so an external controller that
+                        // appeared during that interval is still preserved.
+                        var postIntent = _hardware.ReadEcState();
+                        VerifyExistingOwnership(postIntent);
+                        ValidateActiveControlState(
+                            postIntent,
+                            requireRunningTachometers: _ownedSetpoint.HasValue);
+
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
                     // Set this before WMI dispatch: on HP hardware the command
                     // may take effect even if WMI subsequently reports failure.
                     writeAttempted = true;
@@ -352,6 +401,17 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                     preDispatch,
                     cancellationToken).ConfigureAwait(false);
 
+                if (leaseWriteArmed && _watchdogLease is not null)
+                {
+                    await _watchdogLease.CommitAsync(
+                            cpuTarget,
+                            gpuTarget,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    leaseWriteArmed = false;
+                }
+
                 _ownedSetpoint = (cpuTarget, gpuTarget);
                 _lastDetail =
                     $"Command {command.CpuLevel}/{command.GpuLevel} acknowledged by EC setpoints " +
@@ -365,17 +425,49 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             }
             catch (Exception ex) when (!writeAttempted)
             {
+                Exception? leaseRollbackFailure = null;
+
+                if (_watchdogLease is not null)
+                {
+                    try
+                    {
+                        if (leaseWriteArmed)
+                        {
+                            await _watchdogLease.AbortWriteIntentAsync(
+                                    CancellationToken.None)
+                                .ConfigureAwait(false);
+                        }
+
+                        if (!_ownedSetpoint.HasValue)
+                        {
+                            await _watchdogLease.CancelPreparedAsync(
+                                    CancellationToken.None)
+                                .ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception rollbackFailure)
+                    {
+                        leaseRollbackFailure = rollbackFailure;
+                    }
+                }
+
                 // Read-only EnterCustomMode can race an external controller before
-                // our first write. Relinquish the logical reservation without
-                // sending FF,FF and potentially clearing that external state.
+                // our first write. Relinquish logical authority without issuing a
+                // local FF,FF that might clear that external state. If watchdog
+                // rollback could not be proven, its durable WRITE_ARMED record is
+                // deliberately left for fail-closed service recovery.
                 _ownedSetpoint = null;
                 _customModeActive = false;
                 _lastDetail =
-                    "First custom command was refused before any fan write; logical authority was released without FF,FF.";
+                    leaseRollbackFailure is null
+                        ? "First custom command was refused before any fan write; logical/watchdog authority was released without FF,FF."
+                        : $"First custom command was refused before any fan write; watchdog rollback remained armed: {leaseRollbackFailure.Message}";
 
                 throw new FanControlAdmissionException(
                     "First custom fan command failed before any fan write was attempted.",
-                    ex);
+                    leaseRollbackFailure is null
+                        ? ex
+                        : new AggregateException(ex, leaseRollbackFailure));
             }
         }
         finally
@@ -392,7 +484,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         {
             ThrowIfDisposed();
             EnsureWritable();
-            await RestoreLockedAsync(cancellationToken).ConfigureAwait(false);
+            await RestoreWithWatchdogLockedAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -417,7 +509,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
 
             if (_customModeActive && _targetSupported && _hardware is not null)
             {
-                await RestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                await RestoreWithWatchdogLockedAsync(CancellationToken.None).ConfigureAwait(false);
             }
 
             _disposed = true;
@@ -430,6 +522,11 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             try
             {
                 _hardware?.Dispose();
+
+                if (_watchdogLease is not null)
+                {
+                    await _watchdogLease.DisposeAsync().ConfigureAwait(false);
+                }
             }
             finally
             {
@@ -639,6 +736,58 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         {
             throw new InvalidDataException(
                 $"{fanName} tachometer is implausible during command acknowledgement: {rpm} RPM.");
+        }
+    }
+
+    private async ValueTask RestoreWithWatchdogLockedAsync(
+        CancellationToken cancellationToken)
+    {
+        Exception? watchdogBeginFailure = null;
+        Exception? watchdogReleaseFailure = null;
+
+        if (_watchdogLease is not null)
+        {
+            try
+            {
+                await _watchdogLease.RestoreBeginAsync(
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Watchdog loss must never prevent the still-alive controller
+                // from performing its local validated firmware restore.
+                watchdogBeginFailure = ex;
+            }
+        }
+
+        await RestoreLockedAsync(cancellationToken).ConfigureAwait(false);
+
+        if (_watchdogLease is not null)
+        {
+            try
+            {
+                await _watchdogLease.ReleaseAsync(
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Hardware is already locally verified FF/FF. Retaining the
+                // service journal is safer than reclassifying this handoff as
+                // a hardware restore failure; a fresh watchdog handshake must
+                // recover/clear it before any later Custom admission.
+                watchdogReleaseFailure = ex;
+            }
+        }
+
+        if (watchdogBeginFailure is not null ||
+            watchdogReleaseFailure is not null)
+        {
+            _lastDetail +=
+                $" Watchdog lease handoff degraded but local HP restore succeeded. " +
+                $"begin={watchdogBeginFailure?.Message ?? "ok"}; " +
+                $"release={watchdogReleaseFailure?.Message ?? "ok"}.";
         }
     }
 
