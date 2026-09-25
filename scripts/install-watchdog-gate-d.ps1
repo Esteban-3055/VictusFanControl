@@ -99,6 +99,29 @@ try {
     Copy-Item -Path (Join-Path $publishTemp '*') -Destination $binDir -Recurse -Force
     Copy-Item -Path $sourceModule -Destination (Join-Path $modulesDir 'LpcACPIEC.bin') -Force
 
+    # The LocalSystem watchdog journal is a privileged ownership record.
+    # Remove inherited ProgramData permissions and allow only SYSTEM plus local
+    # Administrators to read/modify the service tree.
+    & icacls.exe $installRoot /inheritance:r /T /C | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "icacls inheritance hardening failed with exit code $LASTEXITCODE."
+    }
+
+    & icacls.exe $installRoot /grant:r '*S-1-5-18:(OI)(CI)F' /T /C | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "icacls SYSTEM grant failed with exit code $LASTEXITCODE."
+    }
+
+    & icacls.exe $installRoot /grant '*S-1-5-32-544:(OI)(CI)F' /T /C | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "icacls Administrators grant failed with exit code $LASTEXITCODE."
+    }
+
+    & icacls.exe $installRoot /setowner '*S-1-5-18' /T /C | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "icacls owner hardening failed with exit code $LASTEXITCODE."
+    }
+
     # Do NOT delete lease.json. Durable armed state must survive service update
     # or process replacement. Only the service lease machine may clear it.
     Remove-Item $statusPath -Force -ErrorAction SilentlyContinue
