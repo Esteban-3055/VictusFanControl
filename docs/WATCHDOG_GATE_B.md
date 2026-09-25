@@ -1,6 +1,6 @@
 # Watchdog Gate B - service-only emergency restore
 
-Status: implementation ready; physical validation pending.
+Status: implementation ready; physical validation pending. First physical attempt on 2026-09-24 stopped safely during 30/30 arming before the service ran.
 
 Gate B validates the only hardware write authority the future watchdog service
 is allowed to have: return an explicitly VFC-owned fixed setpoint to HP firmware
@@ -31,6 +31,16 @@ independent parent probe verifies FF/FF
 This test deliberately kills the GUI after its existing 30/30 hardware path has
 reported READY. That prevents the GUI/coordinator from participating in the
 restore, so a Gate B PASS proves the service itself performed the handoff.
+
+## First physical attempt: EC contention before Gate B
+
+The first physical attempt did not reach the service restore phase. Custom authority was acquired, but the continuous safety supervisor then reported a backend health/ownership probe failure because it timed out waiting for `Global\Access_EC`. The coordinator failed closed and restored HP firmware authority, so the test ended safely at FF/FF before the Gate B service was started.
+
+The arming harness still contained an unnecessary full `Hp88F8EcControlStateProbe` immediately after `FanControlCoordinator.ApplyAsync`. That reader bypassed the backend's own IO gate and competed for the same global EC mutex used by the production ownership supervisor. The log does not identify the exact mutex holder, so this is not treated as proof that the extra probe was the only possible contender. It was nevertheless an avoidable concurrent EC access at exactly the failure boundary.
+
+The correction is narrow: successful production `ApplyAsync(30/30)` is now the READY acknowledgement because the HP backend returns only after EC setpoint acknowledgement plus two-fan tachometer acknowledgement. No extra full EC snapshot is opened while Custom remains active. The Gate B wrapper now waits until the GUI/controller process is gone before performing the independent orphaned-30/30 EC verification.
+
+No SafetyGate rule, thermal threshold, telemetry watchdog, backend ACK criterion, or firmware-restore behavior was weakened. If the same ownership-probe timeout recurs after this correction, the next investigation is general telemetry-vs-backend EC arbitration rather than relaxing safety.
 
 ## Safety boundaries
 
