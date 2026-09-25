@@ -4,7 +4,8 @@ internal enum WatchdogRunMode
 {
     GateAReadOnly,
     GateBRestoreTest,
-    GateBSelfTest
+    GateBSelfTest,
+    GateCSelfTest
 }
 
 internal sealed record WatchdogOptions(
@@ -67,6 +68,11 @@ internal sealed record WatchdogOptions(
 
                 case "--gate-b-token":
                     gateBToken = ReadValue(args, ref i);
+                    break;
+
+                case "--gate-c-self-test":
+                    RequireModeStillGateA(mode, "--gate-c-self-test");
+                    mode = WatchdogRunMode.GateCSelfTest;
                     break;
 
                 default:
