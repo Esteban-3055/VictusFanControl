@@ -1,6 +1,6 @@
 # Watchdog Gate C - synthetic lease / journal / named-pipe state machine
 
-Status: implementation added; CI validation pending.
+Status: **Gate C PASSED in Windows CI on 2026-09-24.** This gate is synthetic by design and performs no real fan/EC writes.
 
 Gate C deliberately does not touch real fan hardware. It establishes the
 transaction and crash semantics that must exist before the watchdog is wired
@@ -64,18 +64,31 @@ The JSON journal records:
 - previous/pending/owned setpoints;
 - diagnostic creation timestamp.
 
-Critical stores use a same-directory temporary file, WriteThrough,
-Flush(flushToDisk: true), then replace the active record.
+Critical stores use a same-directory temporary file, FileOptions.WriteThrough,
+Flush(flushToDisk: true), then Win32 MoveFileEx with REPLACE_EXISTING +
+WRITE_THROUGH. A WriteIntent success therefore cannot be returned before the
+write-armed journal record and its rename/replace have been synchronously
+committed through the Windows storage path.
 
-Heartbeats are not persisted every second.
+Heartbeats are not persisted every second. The service records only its own
+monotonic receive time for liveness; client wall-clock time is not authoritative.
+
+A second important invariant was found during review: once WRITE_ARMED has been
+durably entered, owner loss or service restart completes the validated firmware
+restore even when the observed setpoint is already FF/FF. FF/FF can be the
+midpoint of a partially completed FF/FF -> LegacyDefault handoff, so the durable
+lease is not discarded until restore normalization is complete. PREPARED is the
+only phase that can be abandoned without a restore because no hardware write is
+yet permitted.
 
 ## Synthetic gates
 
 The self-test covers:
 
 - clean PREPARED -> WRITE_ARMED -> OWNED -> RESTORING -> release;
-- owner death before any write;
-- restart after WriteIntent but before WMI;
+- owner death and service restart in PREPARED without a hardware write;
+- pipe loss before the WriteIntent ACK is delivered;
+- restart after WriteIntent but before WMI, including FF/FF restore normalization;
 - restart after WMI but before Commit;
 - restart after Commit;
 - restart during RESTORING;
@@ -85,12 +98,23 @@ The self-test covers:
 - OWNED heartbeat timeout;
 - WRITE_ARMED deadline;
 - RESTORING deadline;
-- unknown external fixed override;
+- Prepare refusal when an external fixed override already exists;
+- PREPARED restart while an external override appears, without clearing it;
+- unknown external fixed override with an active lease;
 - no-journal external override;
+- restore failure retaining the durable ownership record;
 - corrupted journal;
 - malformed protocol frame;
 - named-pipe client identity mismatch;
-- real named-pipe EOF while OWNED causing immediate synthetic restore.
+- broken-pipe response race treated as owner loss rather than a server fault;
+- real named-pipe EOF while OWNED causing immediate synthetic restore;
+- heartbeat renewal without rewriting the durable journal;
+- OWNED heartbeat timeout, WRITE_ARMED deadline and RESTORING deadline takeover.
+
+The Windows CI run executes the real named-pipe tests, including
+GetNamedPipeClientProcessId identity verification and broken-pipe recovery.
+All Gate C cases pass together with the existing Gate B, SafetyGate,
+FanControlCoordinator, BIOS-contract and HP-backend regression suites.
 
 Run locally:
 
