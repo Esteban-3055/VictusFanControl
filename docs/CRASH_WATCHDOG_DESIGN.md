@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: Gates A, B, D and E have passed on real hardware under LocalSystem, and Gate C passed synthetic Windows CI. Gate D physically proves controller death -> independent service restore; Gate E physically proves watchdog death -> live-controller local restore followed by durable-journal recovery. Gates F-G remain.
+Status: Gates A, B, D, E and F have passed on real hardware under LocalSystem, and Gate C passed synthetic Windows CI. Gate D physically proves controller death -> independent service restore; Gate E proves watchdog death -> live-controller local restore followed by durable-journal recovery; Gate F proves simultaneous controller + watchdog loss from both durable OWNED and post-write WRITE_ARMED states. Gate G remains.
 
 ## 1. Hardware fact that drives the design
 
@@ -597,7 +597,7 @@ See `WATCHDOG_GATE_E.md`.
 
 ### Gate F - double-failure / durable journal
 
-**IN PROGRESS. F1 passed on real hardware on 2026-09-25. F2 is implemented and awaiting physical validation.**
+**PASSED on real hardware, 2026-09-25. F1 + F2 complete.**
 
 Gate F is split so the stable OWNED case and the narrower WRITE_ARMED
 transaction window are independently attributable.
@@ -625,15 +625,24 @@ journal. Final and post-test EC probes remained FF/FF, the fallback did not fire
 the production service returned Ready as PID 27172 with 1 s / 5 s / 10 s
 recovery re-verified, and OGH undervolt remained unchanged.
 
-F2 uses the test-only `GateF2CommitHoldWatchdogLeaseClient`. It delegates the
+F2 used the test-only `GateF2CommitHoldWatchdogLeaseClient`. It delegated the
 real durable WriteIntent to the named-pipe client. When the production backend
-later calls CommitAsync—only after real WMI, EC-setpoint ACK and dual-tach
-ACK—the wrapper writes a flushed READY marker and holds without forwarding
-Commit. The durable state therefore remains first-write WRITE_ARMED with
-pending=30/30 while the physical 30/30 command has already been acknowledged.
-The F2 harness then applies the same watchdog-first bounded double kill and
-requires the SCM replacement service alone to recover that journal with
-`RestoredFirmware`.
+later called CommitAsync—only after real WMI, EC-setpoint ACK and dual-tach
+ACK—the wrapper wrote a flushed READY marker and held without forwarding
+Commit. The durable state therefore remained first-write WRITE_ARMED generation
+2 with pending=30/30, PreviousOwned=null and Owned=null while the physical 30/30
+command had already been acknowledged.
+
+Physical F2 result on
+`ae1781d9299784096dc95379be4d14e6eb2391a6`: watchdog PID 4316 and GUI PID
+9164 were validated at that post-ACK/pre-Commit boundary; watchdog Kill() was
+issued first and GUI Kill() followed only 0.244 ms later. Both originals were
+confirmed dead, no live-GUI restore-start marker appeared, and SCM replacement
+watchdog PID 25200 recovered the retained WRITE_ARMED journal with
+`RestoredFirmware`, restoring 30/30 to verified FF/FF and clearing the journal.
+Final and post-test EC probes remained FF/FF, the emergency fallback did not
+fire, production watchdog PID 22836 returned Ready with 1 s / 5 s / 10 s
+recovery re-verified, and OGH undervolt remained unchanged.
 
 The existing fail-closed rule remains mandatory: if startup observes a fixed
 setpoint outside the journal's previous/pending/owned set, it must return
