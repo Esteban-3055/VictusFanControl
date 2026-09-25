@@ -34,6 +34,7 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestWatchdogPostIntentExternalRaceAsync(output);
         failures += await TestWatchdogHeartbeatCouplingAsync(output);
         failures += await TestWatchdogProbePreemptsEcReadAsync(output);
+        failures += await TestWatchdogLossWinsConcurrentEcFailureAsync(output);
         failures += await TestWatchdogCommitFailureRestoresAsync(output);
         failures += await TestWatchdogRestoreIpcFailureDoesNotBlockLocalRestoreAsync(output);
         failures += await TestWatchdogCancellationAfterIntentAbortsAsync(output);
@@ -711,6 +712,58 @@ public static class Hp88F8FanControlBackendSelfTest
             lease.Calls.Contains("probe"));
     }
 
+    private static async Task<int> TestWatchdogLossWinsConcurrentEcFailureAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient
+        {
+            FailProbeAfterSuccessfulCalls = 1
+        };
+
+        await using var backend = NewProtectedBackend(hardware, lease);
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "watchdog-vs-ec-race"),
+            CancellationToken.None);
+
+        var ecReadsBeforeStatus = hardware.EcReadCalls;
+        hardware.ReadEcStateException =
+            new IOException("synthetic EC OBF failure");
+
+        var watchdogFailureWon = false;
+        try
+        {
+            await backend.GetStatusAsync(CancellationToken.None);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains(
+                "synthetic Probe failure",
+                StringComparison.Ordinal))
+        {
+            watchdogFailureWon = true;
+        }
+
+        var ecReadsAfterStatus = hardware.EcReadCalls;
+        var probeCalls =
+            lease.Calls.Count(call => call == "probe");
+        var heartbeatCalls =
+            lease.Calls.Count(call => call == "heartbeat");
+
+        hardware.ReadEcStateException = null;
+        lease.FailProbeAfterSuccessfulCalls = null;
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "watchdog loss wins causality if EC fails after the first liveness probe",
+            watchdogFailureWon &&
+            ecReadsAfterStatus == ecReadsBeforeStatus + 1 &&
+            probeCalls == 2 &&
+            heartbeatCalls == 0);
+    }
+
     private static async Task<int> TestWatchdogCommitFailureRestoresAsync(
         TextWriter output)
     {
@@ -854,6 +907,7 @@ public static class Hp88F8FanControlBackendSelfTest
         public bool FailAbort { get; set; }
         public bool FailCommit { get; set; }
         public bool FailProbe { get; set; }
+        public int? FailProbeAfterSuccessfulCalls { get; set; }
         public bool FailHeartbeat { get; set; }
         public bool FailRestoreBegin { get; set; }
         public bool FailRelease { get; set; }
@@ -911,7 +965,16 @@ public static class Hp88F8FanControlBackendSelfTest
         {
             Record("probe");
             cancellationToken.ThrowIfCancellationRequested();
-            ThrowIf(FailProbe, "synthetic Probe failure");
+
+            var probeCalls =
+                Calls.Count(call => call == "probe");
+
+            ThrowIf(
+                FailProbe ||
+                (FailProbeAfterSuccessfulCalls.HasValue &&
+                 probeCalls > FailProbeAfterSuccessfulCalls.Value),
+                "synthetic Probe failure");
+
             return ValueTask.CompletedTask;
         }
 
@@ -996,12 +1059,18 @@ public static class Hp88F8FanControlBackendSelfTest
         public bool PulseCpuTachOnceThenReturnBaseline { get; set; }
         public Action<int>? OnEcRead { get; set; }
         public Action? OnSetFanLevel { get; set; }
+        public Exception? ReadEcStateException { get; set; }
         public int EcReadCalls { get; private set; }
 
         public Hp88F8EcControlState ReadEcState()
         {
             EcReadCalls++;
             OnEcRead?.Invoke(EcReadCalls);
+
+            if (ReadEcStateException is not null)
+            {
+                throw ReadEcStateException;
+            }
             if (_targetCpu.HasValue && _targetGpu.HasValue)
             {
                 var cpuDesired = DesiredCpuRpm(_targetCpu.Value);
