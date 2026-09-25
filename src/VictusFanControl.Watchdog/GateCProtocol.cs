@@ -25,6 +25,9 @@ internal static class GateCProtocol
     public const string Commit =
         FanControlWatchdogLeaseContract.Commit;
 
+    public const string Probe =
+        FanControlWatchdogLeaseContract.Probe;
+
     public const string Heartbeat =
         FanControlWatchdogLeaseContract.Heartbeat;
 
