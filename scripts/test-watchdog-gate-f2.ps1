@@ -475,8 +475,41 @@ try {
 
     $readyMatch = [regex]::Match(
         $readyMarker,
-        '^READY\|.+\|phase=WriteArmed\|cpu=30\|gpu=30\|pid=(\d+)\|ack=backend-ec\+tachs-before-commit
+        '^READY\|.+\|phase=WriteArmed\|cpu=30\|gpu=30\|pid=(\d+)\|ack=backend-ec\+tachs-before-commit$')
 
+    if (-not $readyMatch.Success) {
+        throw "Gate F2 READY marker does not prove the post-ACK/pre-Commit WRITE_ARMED boundary: $readyMarker"
+    }
+
+    if (-not (Test-Path $journalPath)) {
+        throw 'GUI reported Gate F2 READY but the durable watchdog journal is missing.'
+    }
+
+    $journal = Get-Content $journalPath -Raw | ConvertFrom-Json
+    $journalWriteArmed = Test-JournalWriteArmedPhase -Phase $journal.Phase
+    $procStartTicks = [long]$proc.StartTime.ToUniversalTime().Ticks
+    $readyPid = [int]$readyMatch.Groups[1].Value
+    $phaseDisplay = if ($journalWriteArmed) { "$($journal.Phase) (WriteArmed)" } else { "$($journal.Phase)" }
+
+    Write-Host "Journal phase        : $phaseDisplay"
+    Write-Host "Journal generation   : $($journal.Generation)"
+    Write-Host "Journal controller   : PID=$($journal.Controller.ProcessId) startTicks=$($journal.Controller.ProcessStartUtcTicks)"
+    Write-Host "GUI identity         : PID=$($proc.Id) startTicks=$procStartTicks"
+    Write-Host "READY marker PID     : $readyPid"
+    Write-Host "Journal pending      : $($journal.Pending.Cpu)/$($journal.Pending.Gpu)"
+    Write-Host "Journal previous     : $($journal.PreviousOwned)"
+    Write-Host "Journal owned        : $($journal.Owned)"
+
+    if (-not $journalWriteArmed -or
+        $readyPid -ne $proc.Id -or
+        [int]$journal.Controller.ProcessId -ne $proc.Id -or
+        [long]$journal.Controller.ProcessStartUtcTicks -ne $procStartTicks -or
+        [int]$journal.Pending.Cpu -ne 30 -or
+        [int]$journal.Pending.Gpu -ne 30 -or
+        $null -ne $journal.PreviousOwned -or
+        $null -ne $journal.Owned) {
+        throw 'Gate F2 READY is not backed by first-write durable WRITE_ARMED pending 30/30, no previous/owned target, and the exact GUI PID + creation time.'
+    }
     if ($proc.HasExited) {
         throw 'Gate F2 GUI exited before the double-kill boundary.'
     }
@@ -720,282 +753,4 @@ Write-Host 'Parent shell issued no HP fan restore; no live-GUI restore began; em
 Write-Host 'Production watchdog baseline was reinstalled and SCM recovery re-verified at 1 s / 5 s / 10 s.' -ForegroundColor Green
 Write-Host 'OMEN Gaming Hub undervolt: SAME (user-confirmed).' -ForegroundColor Green
 Write-Host 'F1 + F2 are now physically satisfied if this run is accepted with SAME; Gate F may be formally closed after evidence review/documentation.' -ForegroundColor Green
-exit 0
-)
-
-    if (-not $readyMatch.Success) {
-        throw "Gate F2 READY marker does not prove the post-ACK/pre-Commit WRITE_ARMED boundary: $readyMarker"
-    }
-
-    if (-not (Test-Path $journalPath)) {
-        throw 'GUI reported Gate F2 READY but the durable watchdog journal is missing.'
-    }
-
-    $journal = Get-Content $journalPath -Raw | ConvertFrom-Json
-    $journalWriteArmed = Test-JournalWriteArmedPhase -Phase $journal.Phase
-    $procStartTicks = [long]$proc.StartTime.ToUniversalTime().Ticks
-    $readyPid = [int]$readyMatch.Groups[1].Value
-    $phaseDisplay = if ($journalWriteArmed) { "$($journal.Phase) (WriteArmed)" } else { "$($journal.Phase)" }
-
-    Write-Host "Journal phase        : $phaseDisplay"
-    Write-Host "Journal generation   : $($journal.Generation)"
-    Write-Host "Journal controller   : PID=$($journal.Controller.ProcessId) startTicks=$($journal.Controller.ProcessStartUtcTicks)"
-    Write-Host "GUI identity         : PID=$($proc.Id) startTicks=$procStartTicks"
-    Write-Host "READY marker PID     : $readyPid"
-    Write-Host "Journal pending      : $($journal.Pending.Cpu)/$($journal.Pending.Gpu)"
-    Write-Host "Journal previous     : $($journal.PreviousOwned)"
-    Write-Host "Journal owned        : $($journal.Owned)"
-
-    if (-not $journalWriteArmed -or
-        $readyPid -ne $proc.Id -or
-        [int]$journal.Controller.ProcessId -ne $proc.Id -or
-        [long]$journal.Controller.ProcessStartUtcTicks -ne $procStartTicks -or
-        [int]$journal.Pending.Cpu -ne 30 -or
-        [int]$journal.Pending.Gpu -ne 30 -or
-        $null -ne $journal.PreviousOwned -or
-        $null -ne $journal.Owned) {
-        throw 'Gate F2 READY is not backed by first-write durable WRITE_ARMED pending 30/30, no previous/owned target, and the exact GUI PID + creation time.'
-    }
-
-    if ($proc.HasExited) {
-        throw 'Gate F2 GUI exited before the double-kill boundary.'
-    }
-
-    if (Test-Path $localRestoreStartedPath) {
-        throw "Gate F2 GUI entered Restoring before fault injection: $((Get-Content $localRestoreStartedPath -Raw).Trim())"
-    }
-
-    $servicePidAtKillBoundary = Get-ServiceProcessId
-    if ($servicePidAtKillBoundary -ne $servicePidBefore) {
-        throw "Watchdog service identity changed before Gate F2 double kill: expected PID $servicePidBefore, observed $servicePidAtKillBoundary."
-    }
-
-    $serviceStartTicksAtBoundary = Get-ProcessStartTicks -ProcessId $servicePidAtKillBoundary
-    if ($serviceStartTicksAtBoundary -ne $serviceStartTicksBefore) {
-        throw "Watchdog PID $servicePidBefore was reused/restarted before Gate F2 fault injection."
-    }
-
-    $preKillJournal = Get-Content $journalPath -Raw | ConvertFrom-Json
-    $preKillOwned = Test-JournalOwnedPhase -Phase $preKillJournal.Phase
-
-    if (-not $preKillOwned -or
-        [int]$preKillJournal.Controller.ProcessId -ne $proc.Id -or
-        [long]$preKillJournal.Controller.ProcessStartUtcTicks -ne $procStartTicks -or
-        [int]$preKillJournal.Owned.Cpu -ne 30 -or
-        [int]$preKillJournal.Owned.Gpu -ne 30) {
-        throw 'Gate F2 lost durable OWNED 30/30 or exact controller identity before double kill.'
-    }
-
-    $failsafe.Refresh()
-    if ($failsafe.HasExited) {
-        throw 'Independent emergency fallback is no longer armed at the Gate F2 double-kill boundary.'
-    }
-
-    Write-Host 'Pre-kill proof        : READY backend EC+tachs ACK + durable OWNED 30/30 + exact GUI/watchdog identities + live emergency fallback.' -ForegroundColor Green
-    Write-Host 'No out-of-band EC probe is issued while Custom is active.' -ForegroundColor Green
-
-    $watchdogProcess = [System.Diagnostics.Process]::GetProcessById($servicePidBefore)
-    try {
-        if ($watchdogProcess.HasExited) {
-            throw 'Original watchdog exited before Gate F2 double kill.'
-        }
-
-        $watchdogHandleStartTicks = [long]$watchdogProcess.StartTime.ToUniversalTime().Ticks
-        if ($watchdogHandleStartTicks -ne $serviceStartTicksBefore) {
-            throw 'Opened watchdog process handle does not match the validated original creation time.'
-        }
-
-        Write-Host ''
-        Write-Host 'Step 6: DOUBLE-KILL original watchdog then GUI with no sleep/probe between calls...' -ForegroundColor Yellow
-
-        $watchdogKillTick = [System.Diagnostics.Stopwatch]::GetTimestamp()
-        $watchdogProcess.Kill()
-        $guiKillTick = [System.Diagnostics.Stopwatch]::GetTimestamp()
-        $proc.Kill()
-        $doubleKillIssued = $true
-
-        $killDeltaMs =
-            (($guiKillTick - $watchdogKillTick) * 1000.0) /
-            [System.Diagnostics.Stopwatch]::Frequency
-
-        Write-Host ("Kill issue delta     : {0:N3} ms" -f $killDeltaMs)
-
-        if ($killDeltaMs -gt $MaxKillDeltaMs) {
-            throw "Gate F2 double-kill issue delta $([Math]::Round($killDeltaMs, 3)) ms exceeds the $MaxKillDeltaMs ms causal bound."
-        }
-
-        if (-not $watchdogProcess.WaitForExit(3000)) {
-            throw 'Original watchdog did not terminate within 3 s of force-kill.'
-        }
-
-        if (-not $proc.WaitForExit(3000)) {
-            throw 'Original GUI did not terminate within 3 s of force-kill.'
-        }
-    }
-    finally {
-        $watchdogProcess.Dispose()
-    }
-
-    Write-Host "Original watchdog dead: PID=$servicePidBefore startTicks=$serviceStartTicksBefore"
-    Write-Host "Original GUI dead     : PID=$($proc.Id) startTicks=$procStartTicks"
-
-    if (Test-Path $localRestoreStartedPath) {
-        $localAttempt = (Get-Content $localRestoreStartedPath -Raw).Trim()
-        throw "Gate F2 live GUI began a local restore before its death; double-failure causality is invalid. Marker: $localAttempt"
-    }
-
-    Write-Host ''
-    Write-Host 'Step 7: require SCM restart to recover the durable WRITE_ARMED journal...' -ForegroundColor Cyan
-
-    $restart = Wait-ForStableWatchdogReady -Seconds 35 -RequiredRecovery 'RestoredFirmware' -ExcludedPid $servicePidBefore
-
-    if (-not $restart) {
-        throw 'SCM did not produce a stable replacement watchdog with RestoredFirmware within 35 s.'
-    }
-
-    $servicePidAfter = [int]$restart.Pid
-
-    Write-Host "Restarted service PID: $servicePidAfter"
-    Write-Host "Restart startTicks    : $($restart.StartTicks)"
-    Write-Host "Restart Ready         : $($restart.Status.Ready)"
-    Write-Host "Restart Blocked       : $($restart.Status.Blocked)"
-    Write-Host "Restart recovery      : $($restart.Status.RecoveryDisposition)"
-    Write-Host "Restart detail        : $($restart.Status.Detail)"
-
-    if ($servicePidAfter -eq $servicePidBefore) {
-        throw 'Gate F2 requires a distinct replacement watchdog PID after force-killing the original service process.'
-    }
-
-    if (-not (Wait-ForJournalGone -Seconds 5)) {
-        throw 'Replacement watchdog reported RestoredFirmware but the durable WRITE_ARMED journal was not cleared.'
-    }
-
-    $final = Read-EcState
-    Write-Host "Final EC              : $($final.Raw)"
-
-    if ($final.Cpu -ne 255 -or $final.Gpu -ne 255) {
-        throw "Gate F2 recovery completed but EC is not FF/FF: $($final.Cpu)/$($final.Gpu)."
-    }
-
-    if (Test-Path $localRestoreStartedPath) {
-        throw 'Gate F2 found a GUI local-restore-started marker after SCM recovery; recovery cannot be attributed solely to durable restart.'
-    }
-
-    $failsafe.Refresh()
-    if ($failsafe.HasExited) {
-        throw 'Emergency fallback reached its delay before Gate F2 recovery was independently proven; Gate F2 cannot pass.'
-    }
-
-    Assert-ProductionRecoveryPolicy
-    $pass = $true
-}
-catch {
-    $failure = $_.Exception.Message
-}
-finally {
-    if ($proc -and -not $proc.HasExited) {
-        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-        try {
-            $proc.WaitForExit(5000) | Out-Null
-        }
-        catch {
-        }
-    }
-
-    $firmwareSafeState = $null
-
-    if ($serviceInstalled) {
-        $recoveryWaitSeconds =
-            [Math]::Min($FailsafeDelaySeconds + 10, 140)
-
-        $firmwareSafeState = Wait-ForFirmwareSafe -Seconds $recoveryWaitSeconds
-    }
-
-    $firmwareSafe = $null -ne $firmwareSafeState
-    if ($firmwareSafe) {
-        Write-Host "Post-test EC check    : $($firmwareSafeState.Raw)"
-    }
-
-    if ($firmwareSafe -and $failsafe) {
-        $failsafe.Refresh()
-        if (-not $failsafe.HasExited) {
-            Stop-Process -Id $failsafe.Id -Force -ErrorAction SilentlyContinue
-            Write-Host 'Emergency fallback cancelled only after FF/FF + cleared journal were independently proven.' -ForegroundColor Green
-        }
-        elseif ($pass) {
-            $pass = $false
-            $failure = 'Gate F2 recovery reached firmware safety, but the emergency fallback had already executed/reached its delay.'
-        }
-    }
-    elseif ($failsafe -and -not $firmwareSafe) {
-        Write-Warning "Firmware safety is not yet independently proven. Emergency fallback PID $($failsafe.Id) remains armed."
-    }
-
-    if ($firmwareSafe -and $serviceInstalled -and -not $productionServiceReinstalled) {
-        try {
-            Restore-ProductionWatchdogService
-        }
-        catch {
-            Write-Warning "Could not restore the production watchdog baseline automatically: $($_.Exception.Message)"
-            if ($pass) {
-                $pass = $false
-                $failure = "Gate F2 recovery passed, but production watchdog baseline reinstall failed: $($_.Exception.Message)"
-            }
-        }
-    }
-}
-
-if (-not $pass) {
-    Write-Host ''
-    Write-Host 'Gate F2 did NOT pass.' -ForegroundColor Red
-    Write-Host "Failure: $failure"
-
-    if (Test-Path $serviceLog) {
-        Write-Host ''
-        Write-Host 'Recent watchdog log:' -ForegroundColor Cyan
-        Get-Content $serviceLog | Select-Object -Last 100
-    }
-
-    if (Test-Path $resultPath) {
-        Write-Host ''
-        Write-Host 'Gate F2 GUI result:' -ForegroundColor Cyan
-        Get-Content $resultPath
-    }
-
-    if (Test-Path $localRestoreStartedPath) {
-        Write-Host ''
-        Write-Host 'Gate F2 local-restore-started marker:' -ForegroundColor Cyan
-        Get-Content $localRestoreStartedPath
-    }
-
-    if (Test-Path $failsafeLog) {
-        Write-Host ''
-        Write-Host 'Emergency fallback log:' -ForegroundColor Cyan
-        Get-Content $failsafeLog
-    }
-
-    exit 121
-}
-
-Write-Host ''
-Write-Host 'Step 8: verify OMEN Gaming Hub undervolt...' -ForegroundColor Cyan
-$post = Read-Host 'Type SAME if the CPU undervolt is unchanged, or CHANGED if it changed'
-
-if ($post -cne 'SAME') {
-    if ($post -ceq 'CHANGED') {
-        Write-Warning 'Undervolt preservation FAILED/CHANGED.'
-        exit 122
-    }
-
-    Write-Warning 'Undervolt preservation was not confirmed.'
-    exit 123
-}
-
-Write-Host ''
-Write-Host 'PASS: Gate F2 proved durable WRITE_ARMED recovery after near-simultaneous watchdog + GUI death.' -ForegroundColor Green
-Write-Host 'Verified: WRITE_ARMED pending 30/30 after real WMI+EC+tachs ACK -> watchdog kill -> GUI kill within causal bound -> both originals dead -> SCM replacement RestoredFirmware -> journal cleared -> EC FF/FF.' -ForegroundColor Green
-Write-Host 'Parent shell issued no HP fan restore; no live-GUI restore began; emergency fallback did not fire.' -ForegroundColor Green
-Write-Host 'Production watchdog baseline was reinstalled and SCM recovery re-verified at 1 s / 5 s / 10 s.' -ForegroundColor Green
-Write-Host 'OMEN Gaming Hub undervolt: SAME (user-confirmed).' -ForegroundColor Green
-Write-Host 'Gate F remains OPEN until F2 validates WRITE_ARMED after real WMI + EC/tach ACK but before Commit.' -ForegroundColor Yellow
 exit 0
