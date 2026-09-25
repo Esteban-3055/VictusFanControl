@@ -1,8 +1,8 @@
 # Watchdog Gate F - double failure / durable-journal recovery
 
-Status: implementation in progress. F1 (OWNED double death) is implemented and
-awaiting physical validation. F2 (WRITE_ARMED after real write/ACK but before
-Commit) remains planned. Gate F is not closed until both subgates pass.
+Status: implementation in progress. **F1 (OWNED double death) PASSED on real
+hardware on 2026-09-25.** F2 (WRITE_ARMED after real write/ACK but before
+Commit) remains pending. Gate F is not closed until F2 also passes.
 
 Automatic fan policy remains OFF.
 
@@ -51,6 +51,45 @@ force-kill original watchdog
 ~~~
 
 F1 validates the stable OWNED double-failure path.
+
+### F1 physical result
+
+**PASSED on real hardware, 2026-09-25**, on
+`caf3d90cd3529226ae9612ed661ba44e18496e79`.
+
+Observed evidence:
+
+~~~text
+production precheck:
+  watchdog PID 492 Ready / LocalSystem / Session 0
+  no durable journal
+  EC 255/255
+  SCM recovery 1 s / 5 s / 10 s
+  OGH undervolt SAME
+
+F1:
+  production watchdog PID 10508
+  GUI PID 16076
+  durable OWNED generation 3, target 30/30
+  READY ack=backend-ec+tachs+watchdog-owned
+  emergency fallback PID 25396 proven alive
+  watchdog kill issued first
+  GUI kill issued 1.071 ms later
+  both original processes confirmed dead
+  no live-GUI restore-start marker
+  SCM replacement watchdog PID 13288
+  startup recovery=RestoredFirmware
+  detail=VFC-owned setpoint 30/30 restored to FF/FF
+  final EC 255/255
+  post-test EC 255/255
+  emergency fallback cancelled without firing
+  production watchdog reinstalled as PID 27172
+  production SCM recovery re-verified 1 s / 5 s / 10 s
+  OGH undervolt SAME
+~~~
+
+The parent PowerShell issued no HP fan restore. The measured 1.071 ms kill-call
+interval is well inside the 50 ms causal bound. F1 is therefore closed.
 
 ### F2 - WRITE_ARMED after write, before Commit
 
@@ -184,11 +223,9 @@ fails formally even if later cleanup leaves the machine in firmware mode.
 
 ## Staging rule
 
-Do not begin F2 hardware work until:
+F1 has satisfied its staging boundary: Windows CI was green, the real-hardware
+double death passed, post-test EC remained FF/FF, the durable journal was
+cleared by restart recovery, the production watchdog returned Ready with
+1 s / 5 s / 10 s SCM recovery, and OGH undervolt remained unchanged.
 
-1. Windows CI is green with the F1 invariants;
-2. F1 passes on the validated HP 88F8 hardware;
-3. post-test state is firmware-owned FF/FF, journal absent, production watchdog
-   Ready, SCM recovery 1 s / 5 s / 10 s and OGH undervolt unchanged.
-
-Gate F remains open after an F1 PASS. It closes only after F2 also passes.
+F2 implementation/CI may now proceed. Gate F remains open until F2 also passes.
