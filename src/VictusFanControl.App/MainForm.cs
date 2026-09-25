@@ -612,6 +612,14 @@ internal sealed class MainForm : Form
         var readEcState = new Button { Text = "Read 88F8 EC state", AutoSize = true };
         readEcState.Click += async (_, _) =>
         {
+            if (_fanCoordinator.Authority == FanAuthority.Custom)
+            {
+                AppendEvent(
+                    "88F8 EC state probe refused while Custom authority is active. " +
+                    "Out-of-band full EC snapshots are allowed only before Custom admission or after firmware handoff.");
+                return;
+            }
+
             readEcState.Enabled = false;
             try
             {
@@ -826,14 +834,29 @@ internal sealed class MainForm : Form
             {
                 _gateEHardwareTestCompleted = true;
 
+                var watchdogTransportLoss =
+                    _gateELocalRestoreReason.Contains(
+                        FanControlWatchdogTransportException.Marker,
+                        StringComparison.Ordinal);
+
+                var localMarkerKind =
+                    watchdogTransportLoss
+                        ? "LOCAL-RESTORE"
+                        : "LOCAL-RESTORE-UNRELATED";
+
+                var resultKind =
+                    watchdogTransportLoss
+                        ? "PASS-LOCAL-RESTORE"
+                        : "FAIL-LOCAL-RESTORE-TRIGGER";
+
                 try
                 {
                     File.WriteAllText(
                         GateELocalRestorePath,
-                        $"LOCAL-RESTORE|{DateTimeOffset.Now:O}|authority={e.Current}|reason={_gateELocalRestoreReason}");
+                        $"{localMarkerKind}|{DateTimeOffset.Now:O}|authority={e.Current}|reason={_gateELocalRestoreReason}");
                     File.WriteAllText(
                         GateEHardwareTestResultPath,
-                        $"PASS-LOCAL-RESTORE|{DateTimeOffset.Now:O}|{_gateELocalRestoreReason}");
+                        $"{resultKind}|{DateTimeOffset.Now:O}|{_gateELocalRestoreReason}");
                 }
                 catch (Exception markerEx)
                 {
@@ -842,7 +865,9 @@ internal sealed class MainForm : Form
                 }
 
                 AppLog.Write(
-                    $"GATE E TEST: live controller locally restored HP firmware after watchdog loss. {_gateELocalRestoreReason}");
+                    watchdogTransportLoss
+                        ? $"GATE E TEST: live controller locally restored HP firmware after classified watchdog transport loss. {_gateELocalRestoreReason}"
+                        : $"GATE E TEST: firmware restore was safe but NOT caused by watchdog transport loss; Gate E must not pass. {_gateELocalRestoreReason}");
             }
             else if (e.Current == FanAuthority.Faulted)
             {
