@@ -25,7 +25,7 @@ internal static class Program
                 .ConfigureAwait(false);
         }
 
-        var builder = Host.CreateApplicationBuilder(args);
+        // Watchdog command-line switches are parsed above. Do not feed them into\n        // the generic configuration command-line provider: boolean test-only flags\n        // intentionally have no value and must not be reinterpreted as config keys.\n        var builder = Host.CreateApplicationBuilder();
 
         builder.Services.AddWindowsService(serviceOptions =>
         {
