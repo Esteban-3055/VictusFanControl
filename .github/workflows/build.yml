@@ -21,6 +21,29 @@ jobs:
       - name: Restore
         run: dotnet restore VictusFanControl.sln
 
+      - name: PowerShell syntax check
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem .\scripts -Filter *.ps1 -File | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Host ("PowerShell parse failure in {0}" -f $_.FullName) -ForegroundColor Red
+              $errors | Format-List | Out-String | Write-Host
+            }
+          }
+
+          if ($failed) {
+            exit 1
+          }
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
