@@ -68,7 +68,7 @@ Write-Host 'PASS  watchdog transport/lease probe occurs before EC health validat
 Assert-Contains -Text $gateE -Pattern 'WATCHDOG_IPC_LOSS' -Description 'Gate E harness requires classified watchdog IPC loss'
 Assert-Contains -Text $mainForm -Pattern 'FanControlWatchdogTransportException\.Marker' -Description 'Gate E GUI classifies watchdog transport loss explicitly'
 Assert-Contains -Text $mainForm -Pattern 'LOCAL-RESTORE-UNRELATED' -Description 'unrelated backend failures cannot be recorded as Gate E watchdog PASS'
-Assert-Contains -Text $mainForm -Pattern '_fanCoordinator\.Authority\s*==\s*FanAuthority\.Custom' -Description 'GUI diagnostic EC probe is guarded while Custom authority is active'
+Assert-Contains -Text $mainForm -Pattern '_fanCoordinator\.Authority\s*!=\s*FanAuthority\.Firmware' -Description 'GUI diagnostic EC probe is permitted only under established Firmware authority'
 Assert-Contains -Text $client -Pattern 'new FanControlWatchdogTransportException' -Description 'named-pipe transport failures use the stable watchdog-loss exception'
 Assert-Contains -Text $protocol -Pattern 'public const string Marker = "WATCHDOG_IPC_LOSS"' -Description 'stable WATCHDOG_IPC_LOSS marker is defined in the shared control layer'
 
