@@ -5,7 +5,8 @@ internal enum WatchdogRunMode
     GateAReadOnly,
     GateBRestoreTest,
     GateBSelfTest,
-    GateCSelfTest
+    GateCSelfTest,
+    GateDService
 }
 
 internal sealed record WatchdogOptions(
@@ -17,6 +18,7 @@ internal sealed record WatchdogOptions(
 {
     public const string GateAServiceName = "VictusFanControlWatchdogGateA";
     public const string GateBServiceName = "VictusFanControlWatchdogGateB";
+    public const string GateDServiceName = "VictusFanControlWatchdog";
     public const string GateBRestoreToken = "88F8-GATEB-RESTORE";
 
     public static WatchdogOptions Parse(string[] args)
@@ -75,6 +77,11 @@ internal sealed record WatchdogOptions(
                     mode = WatchdogRunMode.GateCSelfTest;
                     break;
 
+                case "--gate-d-service":
+                    RequireModeStillGateA(mode, "--gate-d-service");
+                    mode = WatchdogRunMode.GateDService;
+                    break;
+
                 default:
                     throw new ArgumentException(
                         $"Unknown watchdog argument: {args[i]}");
@@ -105,6 +112,16 @@ internal sealed record WatchdogOptions(
         {
             throw new ArgumentException(
                 "--gate-b-token is valid only with --gate-b-restore.");
+        }
+
+        if (mode == WatchdogRunMode.GateDService &&
+            !string.Equals(
+                serviceName,
+                GateDServiceName,
+                StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"Gate D requires --service-name {GateDServiceName}.");
         }
 
         return new WatchdogOptions(
