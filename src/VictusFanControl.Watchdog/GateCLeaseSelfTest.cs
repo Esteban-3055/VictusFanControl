@@ -1454,7 +1454,8 @@ internal static class GateCLeaseSelfTest
                 await env.Journal.LoadAsync(
                     CancellationToken.None);
 
-            Assert(retained?.Phase ==
+            Assert(retained is not null);
+            Assert(retained!.Phase ==
                    WatchdogLeasePhase.Owned);
             Assert(retained.SessionId == owned.SessionId);
             Assert(retained.Generation == owned.Generation);
