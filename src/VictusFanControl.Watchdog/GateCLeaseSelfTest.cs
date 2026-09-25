@@ -1608,6 +1608,18 @@ internal static class GateCLeaseSelfTest
 
                 Assert(hello.Ok);
 
+                var probe =
+                    await RoundTripAsync(
+                        secondClient,
+                        Request(
+                            FanControlWatchdogLeaseContract.Probe,
+                            owned.SessionId,
+                            owned.Generation));
+
+                Assert(probe.Ok);
+                Assert(probe.SessionId == owned.SessionId);
+                Assert(probe.Generation == owned.Generation);
+
                 var heartbeat =
                     await RoundTripAsync(
                         secondClient,
