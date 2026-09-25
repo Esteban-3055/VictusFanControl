@@ -321,12 +321,15 @@ try {
 
     $restoreEvidence = $newLog |
         Where-Object {
-            $_ -match 'WATCHDOG OWNER LOSS:' -and
+            (
+                $_ -match 'WATCHDOG OWNER LOSS:' -or
+                $_ -match 'GATE D RECOVERY'
+            ) -and
             $_ -match 'disposition=RestoredFirmware'
         }
 
     if (-not $restoreEvidence) {
-        throw 'FF/FF was recovered but the Gate D service log did not record owner-loss RestoredFirmware evidence.'
+        throw 'FF/FF was recovered but the Gate D service log did not record RestoredFirmware evidence from either the pipe owner-loss path or the independent process monitor.'
     }
 
     $pass = $true
