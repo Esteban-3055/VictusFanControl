@@ -48,7 +48,6 @@ internal enum LeaseRecoveryDisposition
 {
     Ready,
     ClearedPrepared,
-    ClearedAlreadyFirmware,
     RestoredFirmware,
     ExternalOverrideBlocked,
     OwnershipAmbiguous,
