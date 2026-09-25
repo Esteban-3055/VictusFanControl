@@ -50,6 +50,17 @@ internal sealed class WatchdogLeaseManager
             await EnsureNoExistingLeaseAsync(cancellationToken)
                 .ConfigureAwait(false);
 
+            var observed =
+                await _hardware.ReadSetpointAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+            if (!observed.IsFirmwareOwned)
+            {
+                throw new LeaseProtocolException(
+                    "EXTERNAL_OVERRIDE",
+                    $"Prepare refused because EC is already fixed at {observed}; VFC does not own it.");
+            }
+
             var record = new WatchdogLeaseRecord(
                 WatchdogLeaseRecord.CurrentSchemaVersion,
                 Guid.NewGuid(),
@@ -354,11 +365,15 @@ internal sealed class WatchdogLeaseManager
                 _active = null;
 
                 return new LeaseRecoveryResult(
-                    LeaseRecoveryDisposition.ClearedPrepared,
+                    observed.IsFirmwareOwned
+                        ? LeaseRecoveryDisposition.ClearedPrepared
+                        : LeaseRecoveryDisposition.ExternalOverrideBlocked,
                     observed,
                     RestoreAttempted: false,
                     JournalRetained: false,
-                    "PREPARED contains no possible hardware write; journal cleared without restore.");
+                    observed.IsFirmwareOwned
+                        ? "PREPARED contains no possible hardware write; journal cleared without restore."
+                        : $"PREPARED was cleared without restore, but external fixed setpoint {observed} keeps admission blocked.");
             }
 
             return await RecoverPotentialWriteLockedAsync(
@@ -404,11 +419,15 @@ internal sealed class WatchdogLeaseManager
                 _active = null;
 
                 return new LeaseRecoveryResult(
-                    LeaseRecoveryDisposition.ClearedPrepared,
+                    observed.IsFirmwareOwned
+                        ? LeaseRecoveryDisposition.ClearedPrepared
+                        : LeaseRecoveryDisposition.ExternalOverrideBlocked,
                     observed,
                     RestoreAttempted: false,
                     JournalRetained: false,
-                    $"Owner loss ({reason}) before any write; PREPARED cleared.");
+                    observed.IsFirmwareOwned
+                        ? $"Owner loss ({reason}) before any write; PREPARED cleared."
+                        : $"Owner loss ({reason}) before any VFC write; PREPARED cleared but external fixed setpoint {observed} remains blocked.");
             }
 
             return await RecoverPotentialWriteLockedAsync(
