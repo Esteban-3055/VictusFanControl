@@ -87,6 +87,41 @@ internal sealed class WatchdogLeaseManager
         }
     }
 
+    public async ValueTask CancelPreparedAsync(
+        Guid sessionId,
+        long expectedGeneration,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var current = await RequireActiveAsync(
+                sessionId,
+                expectedGeneration,
+                cancellationToken).ConfigureAwait(false);
+
+            if (current.Phase != WatchdogLeasePhase.Prepared)
+            {
+                throw InvalidPhase(
+                    current,
+                    "CancelPrepared requires PREPARED.");
+            }
+
+            // PREPARED guarantees that this lease has not authorized any VFC
+            // fan write. Clear only the ownership record; never touch hardware.
+            await _journal.DeleteAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            _active = null;
+            _lastHeartbeatMs = 0;
+            _operationStartedMs = 0;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async ValueTask<LeaseOperationResult> WriteIntentAsync(
         Guid sessionId,
         long expectedGeneration,
@@ -136,6 +171,88 @@ internal sealed class WatchdogLeaseManager
 
             // This durable store is the safety boundary. The caller may not
             // dispatch SetFanLevel until this method returns successfully.
+            await _journal.StoreAsync(next, cancellationToken)
+                .ConfigureAwait(false);
+
+            _active = next;
+            _operationStartedMs = _clock.Milliseconds;
+            return Result(next);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async ValueTask<LeaseOperationResult> AbortWriteIntentAsync(
+        Guid sessionId,
+        long expectedGeneration,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var current = await RequireActiveAsync(
+                sessionId,
+                expectedGeneration,
+                cancellationToken).ConfigureAwait(false);
+
+            await ThrowIfExpiredLockedAsync(
+                current,
+                cancellationToken).ConfigureAwait(false);
+
+            if (current.Phase != WatchdogLeasePhase.WriteArmed)
+            {
+                throw InvalidPhase(
+                    current,
+                    "AbortWriteIntent requires WRITE_ARMED.");
+            }
+
+            var observed =
+                await _hardware.ReadSetpointAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+            WatchdogLeaseRecord next;
+
+            if (current.PreviousOwned.HasValue)
+            {
+                if (observed != current.PreviousOwned.Value)
+                {
+                    throw new LeaseProtocolException(
+                        "ABORT_UNSAFE",
+                        $"WriteIntent abort refused because EC is {observed}; expected the previously owned {current.PreviousOwned.Value}.");
+                }
+
+                next = current with
+                {
+                    Phase = WatchdogLeasePhase.Owned,
+                    Generation = checked(current.Generation + 1),
+                    PreviousOwned = null,
+                    Pending = null,
+                    Owned = current.PreviousOwned
+                };
+
+                _lastHeartbeatMs = _clock.Milliseconds;
+            }
+            else
+            {
+                if (!observed.IsFirmwareOwned)
+                {
+                    throw new LeaseProtocolException(
+                        "ABORT_UNSAFE",
+                        $"First WriteIntent abort refused because EC is {observed}; expected firmware-owned FF/FF.");
+                }
+
+                next = current with
+                {
+                    Phase = WatchdogLeasePhase.Prepared,
+                    Generation = checked(current.Generation + 1),
+                    PreviousOwned = null,
+                    Pending = null,
+                    Owned = null
+                };
+            }
+
             await _journal.StoreAsync(next, cancellationToken)
                 .ConfigureAwait(false);
 
