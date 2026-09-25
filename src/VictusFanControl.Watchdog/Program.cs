@@ -51,6 +51,10 @@ internal static class Program
         {
             builder.Services.AddHostedService<GateBRestoreWorker>();
         }
+        else if (options.Mode == WatchdogRunMode.GateDService)
+        {
+            builder.Services.AddHostedService<GateDWorker>();
+        }
         else
         {
             builder.Services.AddHostedService<GateAWorker>();
