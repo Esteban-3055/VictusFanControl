@@ -19,11 +19,25 @@ internal static class GateDPipeFactory
                 WellKnownSidType.BuiltinAdministratorsSid,
                 domainSid: null);
 
+        var network =
+            new SecurityIdentifier(
+                WellKnownSidType.NetworkSid,
+                domainSid: null);
+
         var security = new PipeSecurity();
         security.SetAccessRuleProtection(
             isProtected: true,
             preserveInheritance: false);
         security.SetOwner(system);
+
+        // Named pipes are network-capable by design. Deny the well-known
+        // NETWORK SID explicitly so even a remote administrator cannot use
+        // this local privileged control endpoint.
+        security.AddAccessRule(
+            new PipeAccessRule(
+                network,
+                PipeAccessRights.FullControl,
+                AccessControlType.Deny));
 
         security.AddAccessRule(
             new PipeAccessRule(
