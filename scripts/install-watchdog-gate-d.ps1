@@ -9,7 +9,7 @@ $sourceModule = Join-Path $repoRoot 'modules\LpcACPIEC.bin'
 # Gate D uses an isolated ProgramData tree. Earlier Gate A/B validation files
 # intentionally had different ACL histories; reusing that tree can make an
 # elevated Administrator unable to read newly created service state.
-$installRoot = Join-Path $env:ProgramData 'VictusFanControl\WatchdogGateD'
+$installRoot = Join-Path $env:ProgramData 'VictusFanControl\WatchdogService'
 $binDir = Join-Path $installRoot 'bin'
 $modulesDir = Join-Path $installRoot 'modules'
 $logsDir = Join-Path $installRoot 'logs'
@@ -93,6 +93,30 @@ try {
 
     Remove-ServiceIfPresent -Name $serviceName
 
+    # Harden the ROOT before creating/copying any service children.
+    # Child files/directories will then inherit only the two intended ACEs.
+    #
+    # Do not recursively remove inheritance from existing child objects: doing
+    # that can strip the very inherited SYSTEM/Administrators ACEs we need and
+    # lock the installer out mid-pass. Root-level protection is sufficient for
+    # a fresh service tree and remains stable across later updates.
+    New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+
+    & icacls.exe $installRoot /grant:r '*S-1-5-18:(OI)(CI)F' /Q | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "icacls SYSTEM root grant failed with exit code $LASTEXITCODE."
+    }
+
+    & icacls.exe $installRoot /grant:r '*S-1-5-32-544:(OI)(CI)F' /Q | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "icacls Administrators root grant failed with exit code $LASTEXITCODE."
+    }
+
+    & icacls.exe $installRoot /inheritance:r /Q | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "icacls root inheritance hardening failed with exit code $LASTEXITCODE."
+    }
+
     if (Test-Path $binDir) {
         Remove-Item -Recurse -Force $binDir
     }
@@ -102,36 +126,13 @@ try {
     Copy-Item -Path (Join-Path $publishTemp '*') -Destination $binDir -Recurse -Force
     Copy-Item -Path $sourceModule -Destination (Join-Path $modulesDir 'LpcACPIEC.bin') -Force
 
-    # The LocalSystem watchdog journal is a privileged ownership record.
+    # Ownership is intentionally not rewritten recursively. The protected DACL
+    # is the access-control boundary here; local Administrators already have
+    # explicit FullControl and can service/update the tree, while SYSTEM has
+    # the same rights for runtime operation.
     #
-    # IMPORTANT ORDERING:
-    # First add explicit SYSTEM + Administrators ACEs while the freshly-created
-    # tree is still reachable through inherited ProgramData permissions. Only
-    # then remove inheritance. Removing inheritance first can lock the elevated
-    # installer out of its own files before the explicit grants are applied.
-    & icacls.exe $installRoot /grant:r '*S-1-5-18:(OI)(CI)F' /T /Q | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "icacls SYSTEM grant failed with exit code $LASTEXITCODE."
-    }
-
-    & icacls.exe $installRoot /grant:r '*S-1-5-32-544:(OI)(CI)F' /T /Q | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "icacls Administrators grant failed with exit code $LASTEXITCODE."
-    }
-
-    & icacls.exe $installRoot /inheritance:r /T /Q | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "icacls inheritance hardening failed with exit code $LASTEXITCODE."
-    }
-
-    & icacls.exe $installRoot /setowner '*S-1-5-18' /T /Q | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "icacls owner hardening failed with exit code $LASTEXITCODE."
-    }
-
-    # Prove that the elevated test/maintenance owner still has access after the
-    # final SYSTEM ownership handoff. Do this before creating/installing the
-    # service so an ACL regression cannot become a hardware-test ambiguity.
+    # Prove the exact elevated maintenance path still has read/write/delete
+    # access before the service is created.
     $aclProbe = Join-Path $stateDir '.gate-d-acl-probe'
     'gate-d-acl-ok' | Set-Content -Path $aclProbe -Encoding Ascii
     $aclProbeReadback = (Get-Content -Path $aclProbe -Raw).Trim()
