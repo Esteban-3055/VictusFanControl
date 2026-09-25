@@ -1,3 +1,4 @@
+using VictusFanControl.Control;
 using System.Buffers.Binary;
 using System.Text.Json;
 
@@ -5,16 +6,38 @@ namespace VictusFanControl.Watchdog;
 
 internal static class GateCProtocol
 {
-    public const int Version = 1;
-    public const int MaximumFrameBytes = 16 * 1024;
+    public const int Version =
+        FanControlWatchdogLeaseContract.ProtocolVersion;
 
-    public const string Hello = "Hello";
-    public const string Prepare = "Prepare";
-    public const string WriteIntent = "WriteIntent";
-    public const string Commit = "Commit";
-    public const string Heartbeat = "Heartbeat";
-    public const string RestoreBegin = "RestoreBegin";
-    public const string Release = "Release";
+    public const int MaximumFrameBytes =
+        FanControlWatchdogLeaseContract.MaximumFrameBytes;
+
+    public const string Hello =
+        FanControlWatchdogLeaseContract.Hello;
+
+    public const string Prepare =
+        FanControlWatchdogLeaseContract.Prepare;
+
+    public const string CancelPrepared =
+        FanControlWatchdogLeaseContract.CancelPrepared;
+
+    public const string WriteIntent =
+        FanControlWatchdogLeaseContract.WriteIntent;
+
+    public const string AbortWriteIntent =
+        FanControlWatchdogLeaseContract.AbortWriteIntent;
+
+    public const string Commit =
+        FanControlWatchdogLeaseContract.Commit;
+
+    public const string Heartbeat =
+        FanControlWatchdogLeaseContract.Heartbeat;
+
+    public const string RestoreBegin =
+        FanControlWatchdogLeaseContract.RestoreBegin;
+
+    public const string Release =
+        FanControlWatchdogLeaseContract.Release;
 }
 
 internal sealed record GateCRequest(
