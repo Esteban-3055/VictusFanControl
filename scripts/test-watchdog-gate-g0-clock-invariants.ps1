@@ -4,6 +4,9 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $clockPath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\MonotonicClock.cs'
 $managerPath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\WatchdogLeaseManager.cs'
 $gateCPath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\GateCLeaseSelfTest.cs'
+$probePath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\GateG0ClockProbe.cs'
+$programPath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\Program.cs'
+$physicalScriptPath = Join-Path $PSScriptRoot 'test-watchdog-gate-g0-clock.ps1'
 
 function Assert-Contains {
     param(
@@ -36,6 +39,9 @@ function Assert-NotContains {
 $clock = Get-Content $clockPath -Raw
 $manager = Get-Content $managerPath -Raw
 $gateC = Get-Content $gateCPath -Raw
+$probe = Get-Content $probePath -Raw
+$program = Get-Content $programPath -Raw
+$physicalScript = Get-Content $physicalScriptPath -Raw
 
 Write-Host 'VictusFanControl - GATE G0 WATCHDOG CLOCK INVARIANT SELF-TEST'
 
@@ -53,6 +59,20 @@ Assert-Contains -Text $gateC -Pattern 'private sealed class FakeClock\s*:\s*IMon
 Assert-Contains -Text $gateC -Pattern 'HeartbeatTimeoutAsync' -Description 'Gate C still covers OWNED heartbeat timeout'
 Assert-Contains -Text $gateC -Pattern 'WriteArmedTimeoutAsync' -Description 'Gate C still covers WRITE_ARMED deadline'
 Assert-Contains -Text $gateC -Pattern 'RestoringTimeoutAsync' -Description 'Gate C still covers RESTORING deadline'
+
+Assert-Contains -Text $probe -Pattern 'new WindowsMonotonicClock\(\)' -Description 'physical probe executes the production clock implementation in .NET 8'
+Assert-Contains -Text $probe -Pattern 'DateTimeOffset\.UtcNow' -Description 'physical probe compares unbiased time against UTC wall time'
+Assert-NotContains -Text $probe -Pattern 'PawnIo|Hp88F8|SetFanLevel|ILeaseJournal|WatchdogLeaseManager' -Description 'physical probe has no EC/WMI/lease hardware path'
+
+$probeDispatch = $program.IndexOf('GateG0ClockProbe.IsRequested(args)', [StringComparison]::Ordinal)
+$optionsParse = $program.IndexOf('WatchdogOptions.Parse(args)', [StringComparison]::Ordinal)
+if ($probeDispatch -lt 0 -or $optionsParse -lt 0 -or $probeDispatch -ge $optionsParse) {
+    throw 'Gate G0 clock invariant violated: the read-only clock probe must dispatch before WatchdogOptions/service host construction.'
+}
+Write-Host 'PASS  Gate G0 clock probe dispatches before service/watchdog host construction'
+
+Assert-Contains -Text $physicalScript -Pattern '&\s+dotnet\s+\$assemblyPath[\s\S]*--gate-g0-clock-probe' -Description 'PowerShell harness launches the compiled .NET 8 watchdog probe'
+Assert-NotContains -Text $physicalScript -Pattern 'Assembly\]::LoadFrom|Activator\]::CreateInstance|GetProperty\(' -Description 'PowerShell harness never reflection-loads the net8.0 watchdog assembly'
 
 Write-Host ''
 Write-Host 'Gate G0 watchdog clock invariant self-test: PASS' -ForegroundColor Green

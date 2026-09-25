@@ -8,6 +8,19 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        // Gate G0 is an explicit read-only console probe. Handle it before
+        // WatchdogOptions/Host construction so the physical clock test cannot
+        // start any service worker or hardware path.
+        if (GateG0ClockProbe.IsRequested(args))
+        {
+            return await GateG0ClockProbe.RunAsync(
+                    args,
+                    Console.In,
+                    Console.Out,
+                    Console.Error)
+                .ConfigureAwait(false);
+        }
+
         WatchdogOptions options;
         try
         {
