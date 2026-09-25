@@ -1,100 +1,490 @@
-# Independent crash-watchdog design
+# Independent crash-watchdog / lease design
 
-Status: design requirement established; implementation pending.
+Status: research/design phase complete enough to begin staged implementation. No
+watchdog code is integrated yet.
 
-## Failure model
+## 1. Hardware fact that drives the design
 
-The validated backend can always restore HP authority while the process is
-alive. Forced termination is different: the controller cannot run managed
-cleanup after it has died.
+Forced-kill testing on the validated HP 88F8 target established that EC 0x63 is
+not an independent crash failsafe in the OMEN Gaming Hub coexistence
+configuration.
 
-Physical testing established the important target-specific fact: with OMEN
-Gaming Hub open, EC 0x63 can be refreshed externally while the dead
-VictusFanControl process's 30/30 setpoint remains installed. The firmware
-countdown therefore cannot be the sole crash-recovery mechanism.
+After VictusFanControl reached validated Custom 30/30 and the GUI process was
+force-killed:
 
-## Required architecture
+- EC 0x34/0x35 remained 30/30;
+- both physical fans remained near 3000 RPM;
+- EC 0x63 counted down;
+- another HP/OMEN-side component refreshed 0x63 from 211 -> 239 and later
+  210 -> 239;
+- natural FF/FF release was not observed;
+- explicit `FF,FF -> LegacyDefault` returned EC to FF/FF;
+- OMEN Gaming Hub undervolt remained unchanged.
 
-Use two failure domains:
+Therefore the watchdog must be independent of EC 0x63 and independent of the GUI
+process.
+
+## 2. Chosen production architecture
+
+Use a dedicated Windows service as the watchdog failure domain:
 
 ```text
-VictusFanControl GUI / adaptive controller
-          |
-          | renewable lease / heartbeat
-          v
-Independent watchdog process or Windows service
-          |
-          | only on lease loss / owner death
-          v
-validated HP restore:
-SetFanLevel(FF,FF) -> LegacyDefault -> verify EC FF/FF
+VictusFanControl.App / controller
+        |
+        | authenticated local IPC
+        | lease + operation protocol
+        v
+VictusFanControl.Watchdog  (Windows service)
+        |
+        | failure-only authority
+        | never sets normal 14..50 targets
+        v
+Hp88F8 restore primitive
+FF,FF -> LegacyDefault -> EC FF/FF verification
 ```
 
-The watchdog must not depend on the GUI event loop, GUI process lifetime,
-`finally`, or the controller's in-process coordinator.
+The service is deliberately narrower than the GUI/backend:
 
-## Safety requirements
+- it never runs the fan curve;
+- it never requests ordinary fan levels;
+- it never writes EC 0x62 or 0x63;
+- it does not need Intel MSR or NVML;
+- its only hardware write authority is the already validated HP-auto restore.
 
-The first implementation should remain deliberately narrow:
+A one-shot helper process is useful for tests but is not the final design because
+it has no Service Control Manager recovery, no durable restart state and is tied
+more closely to an interactive session.
 
-1. exact HP 88F8 target fingerprint only;
-2. no arbitrary EC writes;
-3. watchdog may read EC state but restores through the validated BIOS/WMI path;
-4. controller must hold a short renewable lease only while it owns a fixed
-   setpoint;
-5. loss of heartbeat, owner PID death, malformed lease state, or watchdog
-   restart with an orphaned VFC-owned fixed setpoint must fail toward HP
-   firmware authority;
-6. restore is `FF,FF -> LegacyDefault`, followed by mandatory EC FF/FF
-   verification;
-7. watchdog must not clear an unknown/external fixed override unless the lease
-   proves the setpoint belongs to the VFC session;
-8. controller startup must refuse Custom authority if watchdog readiness cannot
-   be proven;
-9. watchdog shutdown/update must first force a firmware handoff or prevent new
-   Custom admission;
-10. automatic fan policy remains OFF until crash-watchdog hardware tests pass.
+## 3. Required pre-implementation hardware gate: service context
 
-## Lease concept
+The current GUI runs elevated. The watchdog will run in Session 0, so WMI/PawnIO
+access must not be assumed.
 
-The controller should create a session identifier when entering Custom
-authority and renew a monotonic heartbeat at a short interval. The independent
-watchdog owns the timeout decision.
+Before any lease integration:
 
-The lease should contain only the information necessary to establish ownership,
-for example:
+1. build a read-only service probe;
+2. run the service under the least-privileged practical account;
+3. verify exact target fingerprint;
+4. verify HP WMI read access;
+5. verify PawnIO + LpcACPIEC module loading;
+6. read EC 0x34/0x35 and tachometers;
+7. stop/restart the service several times.
 
-- random session identifier;
-- controller PID plus process start identity;
-- expected owned CPU/GPU setpoint;
-- last heartbeat monotonic timestamp/counter;
-- protocol version.
+PawnIO's device ACL currently grants access to SYSTEM and Administrators, so a
+normal non-admin service account may not be sufficient. Prefer least privilege,
+but if the read-only gate proves LocalService insufficient, LocalSystem is the
+practical fallback. If LocalSystem is required, the service surface must remain
+small and its IPC ACL must be tightly restricted.
 
-A stale file timestamp alone is insufficient because wall-clock changes can
-produce ambiguity. The watchdog should combine process identity with an
-explicit renewable heartbeat and its own monotonic timeout.
+## 4. IPC choice
 
-## Proposed conservative timing
+Use one persistent local named pipe connection between controller and watchdog.
 
-Initial hardware validation should use a short but non-aggressive envelope, for
-example a 1-second heartbeat with a 5-second watchdog lease. These values are
-not final controller constants; they are a starting point for measuring
-scheduler stalls and service recovery without creating nuisance restores.
+Recommended properties:
 
-## Next hardware gate
+- full-duplex;
+- asynchronous;
+- local-machine only;
+- reject remote clients;
+- explicit pipe ACL;
+- service side accepts SYSTEM/Administrators only for the first development
+  version;
+- server obtains the real pipe client PID;
+- service opens a process handle to that PID;
+- claimed PID/process-start identity in protocol must match the kernel-observed
+  process;
+- maximum one active control lease.
 
-A valid crash-watchdog gate should:
+Do not use a file timestamp as the live lease. Files are for crash persistence,
+not heartbeat transport.
 
-1. start watchdog and prove it is armed;
-2. enter Custom and verify 30/30;
-3. prove the lease is actively renewing;
-4. force-kill only the GUI/controller;
-5. verify the watchdog detects lease loss;
-6. verify it sends `FF,FF -> LegacyDefault`;
-7. verify EC returns to FF/FF without help from the parent test script;
-8. repeat with the parent PowerShell also terminated so only the independent
-   watchdog remains;
-9. confirm OMEN Gaming Hub undervolt is unchanged.
+## 5. Controller identity
 
-Only after that gate should representative-load and adaptive-policy work rely on
-Custom authority for unattended operation.
+PID alone is insufficient because PIDs are reused.
+
+At lease acquisition the watchdog should bind to:
+
+- actual pipe client PID;
+- process creation time;
+- an open process handle with SYNCHRONIZE / query rights;
+- service-generated random lease/session identifier.
+
+Keeping the process handle open means process termination can be detected from
+the process object itself rather than by periodically asking whether that PID
+still exists.
+
+## 6. Two different liveness failures
+
+The watchdog must distinguish:
+
+### 6.1 Process death
+
+Owner process handle becomes signaled / pipe breaks.
+
+If a hardware write may have occurred, restore immediately. Do not wait for the
+heartbeat timeout.
+
+### 6.2 Controller hang
+
+The process is alive but the safety/control loop no longer makes progress.
+
+Use an explicit renewable heartbeat. Heartbeat must be coupled to successful
+controller/safety progress; a blind independent timer that keeps running while
+the controller is deadlocked would defeat the watchdog.
+
+The service records its own receive time. Do not trust a client-provided wall
+clock.
+
+## 7. Lease state machine
+
+A simple boolean "armed" flag is not sufficient because HP WMI may apply a
+SetFanLevel write even if the caller subsequently sees an error, and the process
+can die between any two instructions.
+
+Required states:
+
+```text
+IDLE
+  |
+  | Prepare
+  v
+PREPARED
+  |
+  | WriteIntent(target) durably acknowledged
+  v
+WRITE_ARMED
+  |
+  | SetFanLevel may now occur
+  | EC+tachs ACK
+  | Commit(target)
+  v
+OWNED
+  |
+  | new WriteIntent(nextTarget)
+  +-----------------------> WRITE_ARMED
+  |
+  | normal firmware handoff begins
+  v
+RESTORING
+  |
+  | EC FF/FF verified
+  | Release
+  v
+IDLE
+```
+
+### PREPARED
+
+No fan write is permitted yet. If the controller dies here, the service clears
+the lease without touching hardware.
+
+### WRITE_ARMED
+
+This state is critical. It must be entered and durably recorded **before** the
+backend dispatches SetFanLevel.
+
+If the controller dies after the service acknowledges WriteIntent, the service
+must assume the WMI write may have taken effect even if Commit was never seen.
+
+### OWNED
+
+The last command was acknowledged by the existing production backend. Normal
+heartbeat supervision applies.
+
+### RESTORING
+
+The controller is performing its normal validated restore. The watchdog remains
+armed until FF/FF is verified. If the controller dies during restore, the
+watchdog takes over.
+
+## 8. Exact integration point with Hp88F8FanControlBackend
+
+The watchdog cannot be bolted on after ApplyAsync. The first crash-sensitive
+boundary is already known in the backend:
+
+```text
+...
+pre-dispatch EC validation
+cancellation check
+WRITE_INTENT must be durable here
+SetFanLevel(target)
+wait EC target
+wait dual tach ACK
+COMMIT target
+...
+```
+
+The watchdog's WriteIntent acknowledgement must happen before the line where the
+backend currently marks `writeAttempted = true` and calls SetFanLevel.
+
+This preserves the existing safety rule: a WMI write is considered potentially
+effective from the instant dispatch begins.
+
+For later target changes, WriteIntent should record both the previously owned
+pair and the pending pair. If the controller dies mid-transition, either value
+may legitimately be present.
+
+## 9. Exact release ordering
+
+Never disarm the watchdog before hardware restore is proven.
+
+Correct order:
+
+```text
+controller -> watchdog: RESTORE_BEGIN
+controller: FF,FF
+controller: LegacyDefault
+controller: verify EC 0x34/0x35 == FF/FF
+controller -> watchdog: RELEASE
+watchdog: clear durable armed state
+```
+
+If the GUI dies anywhere before RELEASE, the watchdog still owns crash cleanup.
+
+Closing the pipe is last.
+
+## 10. Durable crash journal
+
+The service itself can crash or be restarted. Therefore WRITE_ARMED / OWNED /
+RESTORING must survive watchdog-process death.
+
+Store a small machine-level journal under ProgramData, for example:
+
+```text
+%ProgramData%\VictusFanControl\watchdog\lease.json
+```
+
+Fields should include only machine-safety state:
+
+- schema/protocol version;
+- session/lease GUID;
+- controller PID;
+- controller creation time;
+- lease state;
+- generation number;
+- previous owned CPU/GPU setpoint;
+- pending/owned CPU/GPU setpoint;
+- creation timestamp for diagnostics.
+
+Heartbeat does **not** need to be flushed to disk every second.
+
+Before acknowledging WRITE_INTENT, write the new journal to a temporary file,
+flush it to disk, then atomically replace the previous record. Only after that
+durable step may SetFanLevel be dispatched.
+
+On clean FF/FF verification, clear the durable armed record only after RELEASE.
+
+## 11. Watchdog restart rule
+
+On service startup:
+
+1. exact hardware fingerprint check;
+2. read durable journal;
+3. read EC 0x34/0x35;
+4. if no active durable lease:
+   - FF/FF -> Ready;
+   - fixed external setpoint -> Blocked, do not clear it;
+5. if active durable lease:
+   - EC FF/FF -> complete/normalize restore and clear journal;
+   - EC matches a lease-allowed previous/pending target -> restore;
+   - EC is another fixed pair -> ownership ambiguous; do not blindly clear an
+     unknown external override.
+
+A service restart while a lease is active should prefer a conservative firmware
+handoff instead of trying to reconstruct and continue Custom control.
+
+## 12. Ownership rule
+
+The watchdog must not use 0x62 or 0x63 as ownership evidence.
+
+For this target:
+
+- 0x34/0x35 are the fixed-setpoint ownership evidence;
+- 0x62/0x63 are externally maintained by HP/OMEN in the validated setup.
+
+The service may restore only when its durable lease shows that a VFC write may
+have occurred and the observed fixed setpoint is compatible with that lease.
+
+There is an unavoidable hardware limitation: the EC does not contain a VFC
+owner token. Another controller that independently writes the exact same
+CPU/GPU pair during the same tiny transaction window is indistinguishable. The
+project already requires other fan controllers closed; this residual race must
+be documented rather than hidden.
+
+## 13. Timeouts
+
+Use state-specific deadlines instead of one timeout for every state.
+
+Initial validation values, not final production constants:
+
+- OWNED heartbeat interval: 1 s;
+- OWNED missed-heartbeat timeout: 5 s;
+- WRITE_ARMED operation deadline: 12 s;
+- RESTORING takeover deadline: 8 s;
+- process death / pipe loss: immediate takeover when hardware may have been
+  written.
+
+Why WRITE_ARMED is longer: the current HP backend can spend up to ~1.5 s on
+setpoint ACK plus up to ~8 s on tachometer ACK, with additional WMI/EC overhead.
+
+A timeout during WRITE_ARMED or RESTORING is itself a safety failure and should
+return authority to firmware.
+
+## 14. Suspend / resume
+
+The existing GUI lifecycle remains the primary path:
+
+```text
+suspend
+ -> close admission
+ -> cancel command
+ -> restore FF/FF -> LegacyDefault
+ -> verify Firmware
+ -> watchdog RELEASE
+ -> sleep
+```
+
+The watchdog is a second failure domain, not a replacement for that logic.
+
+The service should also accept Windows power notifications for diagnostics and
+additional fencing. If an armed lease somehow survives into suspend, it should
+be treated as abnormal and restored.
+
+For elapsed timeout accounting, use an explicit Windows monotonic source with
+documented sleep semantics rather than wall-clock timestamps. The implementation
+must keep that choice stable across future .NET upgrades.
+
+## 15. Service failure behavior
+
+A watchdog that silently stops is worse than no watchdog.
+
+Configure SCM recovery to restart the service after unexpected failure. Also
+ensure fatal BackgroundService exceptions terminate the service process with a
+failure exit code; a graceful host stop may not trigger Windows Service recovery
+actions.
+
+On watchdog connection loss while the GUI is still alive:
+
+1. immediately block new Custom writes;
+2. controller performs local validated restore if Custom is active;
+3. do not reacquire Custom until a fresh watchdog Ready handshake succeeds.
+
+On watchdog restart with an active durable journal, the service independently
+restores before accepting a new lease.
+
+## 16. Service stop / update
+
+A requested service stop or software update must not simply remove the safety
+process while Custom is active.
+
+Required sequence:
+
+1. service enters DRAINING and refuses new Prepare/WriteIntent;
+2. ask connected controller to hand off to firmware;
+3. wait a bounded interval for FF/FF;
+4. if still armed, watchdog performs restore itself;
+5. verify FF/FF;
+6. only then stop.
+
+## 17. Security boundary
+
+The watchdog is a privileged hardware-safety component, so the command surface
+must remain minimal.
+
+Do not expose:
+
+- arbitrary WMI command IDs;
+- arbitrary EC write;
+- ordinary 14..50 fan write;
+- shell execution;
+- caller-selected module paths.
+
+Allowed external operations should be narrow protocol messages such as:
+
+- Hello / Status;
+- Prepare;
+- WriteIntent;
+- Commit;
+- Heartbeat;
+- RestoreBegin;
+- Release.
+
+The restore action is internal and always the fixed
+`FF,FF -> LegacyDefault -> verify FF/FF` sequence.
+
+## 18. Staged validation plan
+
+Do not integrate all pieces at once.
+
+### Gate A - service environment, read-only
+
+- service installs/starts;
+- correct account/Session 0;
+- target fingerprint;
+- PawnIO EC read;
+- HP WMI read;
+- restart recovery;
+- no fan writes.
+
+### Gate B - service restore primitive
+
+- controller deliberately applies validated 30/30;
+- service receives an explicit test-only restore request;
+- service alone executes FF/FF -> LegacyDefault;
+- EC verifies FF/FF;
+- OGH undervolt unchanged.
+
+### Gate C - synthetic lease state machine
+
+Use fake hardware and kill/restart simulations for every boundary:
+
+- death before WriteIntent ACK;
+- death after WriteIntent ACK but before WMI;
+- death after WMI but before Commit;
+- death after Commit;
+- death during RESTORING;
+- stale generation;
+- malformed message;
+- duplicate Release;
+- pipe loss;
+- service restart with each journal state.
+
+### Gate D - real GUI forced kill
+
+- watchdog Ready;
+- validated 30/30;
+- lease OWNED;
+- kill GUI;
+- watchdog detects process death;
+- watchdog restores automatically;
+- no parent PowerShell cleanup;
+- EC FF/FF;
+- undervolt unchanged.
+
+### Gate E - watchdog death
+
+While GUI owns 30/30:
+
+- kill watchdog service process;
+- GUI detects watchdog loss and locally restores;
+- SCM restarts watchdog;
+- service starts cleanly and reports Ready.
+
+### Gate F - double-failure / durable journal
+
+- lease reaches WRITE_ARMED or OWNED;
+- kill controller and watchdog near-simultaneously;
+- SCM restarts watchdog;
+- watchdog reads durable journal and restores without the test shell.
+
+### Gate G - lifecycle
+
+Repeat suspend/resume with watchdog installed and prove:
+
+- no false lease timeout;
+- pre-sleep release still completes;
+- watchdog remains/disarms consistently;
+- resume does not allow Custom until telemetry + watchdog are both ready.
+
+Only after these gates should load/gaming validation and the adaptive RPM policy
+be allowed to depend on unattended Custom authority.
