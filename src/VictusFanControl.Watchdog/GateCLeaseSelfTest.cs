@@ -207,6 +207,11 @@ internal static class GateCLeaseSelfTest
             "named-pipe loss while OWNED restores immediately",
             NamedPipeLossRestoresAsync);
 
+        failures += await CaseAsync(
+            output,
+            "Gate D live-controller pipe loss retains lease and permits reconnect",
+            GateDLiveControllerPipeLossRetainsLeaseAsync);
+
         if (failures == 0)
         {
             output.WriteLine(
@@ -1355,6 +1360,185 @@ internal static class GateCLeaseSelfTest
             Assert(env.Hardware.Current.IsFirmwareOwned);
             Assert(
                 await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task GateDLiveControllerPipeLossRetainsLeaseAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var firstPipeName =
+                "VictusFanControl-GateD-Reconnect-" +
+                Guid.NewGuid().ToString("N");
+
+            FanControlWatchdogLeaseResponse owned;
+
+            await using (var firstServer =
+                NewServer(firstPipeName))
+            {
+                var firstServerTask =
+                    GateCPipeServerSession.RunAsync(
+                        firstServer,
+                        env.Manager,
+                        CancellationToken.None,
+                        log: null,
+                        monitorControllerProcess: true);
+
+                await using (var firstClient =
+                    new NamedPipeClientStream(
+                        ".",
+                        firstPipeName,
+                        PipeDirection.InOut,
+                        PipeOptions.Asynchronous))
+                {
+                    await firstClient.ConnectAsync(5000);
+
+                    var actual =
+                        WindowsNamedPipeIdentity.CurrentProcessIdentity();
+
+                    var hello =
+                        await RoundTripAsync(
+                            firstClient,
+                            new FanControlWatchdogLeaseRequest(
+                                FanControlWatchdogLeaseContract.ProtocolVersion,
+                                Guid.NewGuid(),
+                                FanControlWatchdogLeaseContract.Hello,
+                                ControllerPid: actual.ProcessId,
+                                ControllerStartUtcTicks:
+                                    actual.ProcessStartUtcTicks));
+
+                    Assert(hello.Ok);
+
+                    var prepared =
+                        await RoundTripAsync(
+                            firstClient,
+                            Request(
+                                FanControlWatchdogLeaseContract.Prepare));
+
+                    Assert(prepared.Ok);
+
+                    var armed =
+                        await RoundTripAsync(
+                            firstClient,
+                            Request(
+                                FanControlWatchdogLeaseContract.WriteIntent,
+                                prepared.SessionId,
+                                prepared.Generation,
+                                30,
+                                30));
+
+                    Assert(armed.Ok);
+
+                    env.Hardware.Set(new FanSetpoint(30, 30));
+
+                    owned =
+                        await RoundTripAsync(
+                            firstClient,
+                            Request(
+                                FanControlWatchdogLeaseContract.Commit,
+                                armed.SessionId,
+                                armed.Generation,
+                                30,
+                                30));
+
+                    Assert(owned.Ok);
+                }
+
+                await firstServerTask.ConfigureAwait(false);
+            }
+
+            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(env.Hardware.Current == new FanSetpoint(30, 30));
+
+            var retained =
+                await env.Journal.LoadAsync(
+                    CancellationToken.None);
+
+            Assert(retained?.Phase ==
+                   WatchdogLeasePhase.Owned);
+            Assert(retained.SessionId == owned.SessionId);
+            Assert(retained.Generation == owned.Generation);
+
+            var secondPipeName =
+                "VictusFanControl-GateD-Reconnect-" +
+                Guid.NewGuid().ToString("N");
+
+            await using var secondServer =
+                NewServer(secondPipeName);
+
+            var secondServerTask =
+                GateCPipeServerSession.RunAsync(
+                    secondServer,
+                    env.Manager,
+                    CancellationToken.None,
+                    log: null,
+                    monitorControllerProcess: true);
+
+            await using (var secondClient =
+                new NamedPipeClientStream(
+                    ".",
+                    secondPipeName,
+                    PipeDirection.InOut,
+                    PipeOptions.Asynchronous))
+            {
+                await secondClient.ConnectAsync(5000);
+
+                var actual =
+                    WindowsNamedPipeIdentity.CurrentProcessIdentity();
+
+                var hello =
+                    await RoundTripAsync(
+                        secondClient,
+                        new FanControlWatchdogLeaseRequest(
+                            FanControlWatchdogLeaseContract.ProtocolVersion,
+                            Guid.NewGuid(),
+                            FanControlWatchdogLeaseContract.Hello,
+                            ControllerPid: actual.ProcessId,
+                            ControllerStartUtcTicks:
+                                actual.ProcessStartUtcTicks));
+
+                Assert(hello.Ok);
+
+                var heartbeat =
+                    await RoundTripAsync(
+                        secondClient,
+                        Request(
+                            FanControlWatchdogLeaseContract.Heartbeat,
+                            owned.SessionId,
+                            owned.Generation));
+
+                Assert(heartbeat.Ok);
+                Assert(heartbeat.SessionId == owned.SessionId);
+                Assert(heartbeat.Generation == owned.Generation);
+
+                var restoring =
+                    await RoundTripAsync(
+                        secondClient,
+                        Request(
+                            FanControlWatchdogLeaseContract.RestoreBegin,
+                            owned.SessionId,
+                            owned.Generation));
+
+                Assert(restoring.Ok);
+
+                var released =
+                    await RoundTripAsync(
+                        secondClient,
+                        Request(
+                            FanControlWatchdogLeaseContract.Release,
+                            restoring.SessionId,
+                            restoring.Generation));
+
+                Assert(released.Ok);
+            }
+
+            await secondServerTask.ConfigureAwait(false);
+
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
+            Assert(
+                await env.Journal.LoadAsync(
+                    CancellationToken.None) is null);
         });
     }
 
