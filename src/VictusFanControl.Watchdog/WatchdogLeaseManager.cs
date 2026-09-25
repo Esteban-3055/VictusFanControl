@@ -791,13 +791,13 @@ internal sealed class WatchdogLeaseManager
 
         _active = current;
 
-        if (expectedController.HasValue &&
-            current.Controller != expectedController.Value)
+        if (expectedController is not null &&
+            current.Controller != expectedController)
         {
             throw new LeaseProtocolException(
                 "CONTROLLER_MISMATCH",
                 $"Lease belongs to PID={current.Controller.ProcessId}, startTicks={current.Controller.ProcessStartUtcTicks}; " +
-                $"pipe client is PID={expectedController.Value.ProcessId}, startTicks={expectedController.Value.ProcessStartUtcTicks}.");
+                $"pipe client is PID={expectedController.ProcessId}, startTicks={expectedController.ProcessStartUtcTicks}.");
         }
 
         if (current.SessionId != sessionId)
