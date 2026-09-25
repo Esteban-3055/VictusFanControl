@@ -80,7 +80,28 @@ $proc = Start-Process -FilePath $app -ArgumentList @(
 $deadline = (Get-Date).AddSeconds(60)
 while (-not (Test-Path $ready)) {
     if ($proc.HasExited) {
-        Write-Error "VictusFanControl.App exited before 30/30 armed. ExitCode=$($proc.ExitCode)"
+        Write-Host ''
+        Write-Host "VictusFanControl.App exited before 30/30 armed. ExitCode=$($proc.ExitCode)" -ForegroundColor Red
+
+        if (Test-Path $result) {
+            Write-Host 'Hardware-test failure marker:' -ForegroundColor Cyan
+            Get-Content $result
+        }
+
+        $log = Join-Path (Join-Path $root 'logs') ("events-{0}.log" -f (Get-Date -Format 'yyyy-MM-dd'))
+        if (Test-Path $log) {
+            Write-Host ''
+            Write-Host 'Relevant recent application log lines:' -ForegroundColor Cyan
+            Get-Content $log |
+                Select-String -Pattern 'SUSPEND TEST|Fan authority|SafetyGate|CRITICAL|FAILED|FAIL:' |
+                Select-Object -Last 30 |
+                ForEach-Object { Write-Host $_.Line }
+        }
+
+        Write-Host ''
+        Write-Host 'Read-only EC state after failed arming/cleanup:' -ForegroundColor Cyan
+        & dotnet $cli --probe-88f8-ec-state
+
         exit 72
     }
 
