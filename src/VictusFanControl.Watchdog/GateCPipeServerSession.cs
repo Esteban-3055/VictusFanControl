@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 namespace VictusFanControl.Watchdog;
@@ -10,14 +11,19 @@ internal static class GateCPipeServerSession
     public static async Task RunAsync(
         NamedPipeServerStream pipe,
         WatchdogLeaseManager manager,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<string>? log = null)
     {
         ControllerIdentity? verifiedController = null;
+        Process? ownerProcess = null;
+        var ownerLossReason = "named-pipe disconnect";
 
         try
         {
             await pipe.WaitForConnectionAsync(cancellationToken)
                 .ConfigureAwait(false);
+
+            WindowsNamedPipeIdentity.EnsureLocalClient(pipe);
 
             var actual =
                 WindowsNamedPipeIdentity.GetClientIdentity(pipe);
@@ -53,6 +59,21 @@ internal static class GateCPipeServerSession
 
             verifiedController = actual;
 
+            ownerProcess =
+                Process.GetProcessById(actual.ProcessId);
+
+            var reopenedStart =
+                ownerProcess.StartTime.ToUniversalTime().Ticks;
+
+            if (reopenedStart != actual.ProcessStartUtcTicks)
+            {
+                throw new InvalidOperationException(
+                    "Named-pipe client process identity changed before the lease monitor could open its process handle.");
+            }
+
+            log?.Invoke(
+                $"WATCHDOG PIPE: verified local controller PID={actual.ProcessId}, startTicks={actual.ProcessStartUtcTicks}.");
+
             await GateCProtocolCodec.WriteResponseAsync(
                 pipe,
                 Success(
@@ -61,27 +82,63 @@ internal static class GateCPipeServerSession
                     "Named-pipe client identity verified."),
                 cancellationToken).ConfigureAwait(false);
 
+            var ownerExitTask =
+                ownerProcess.WaitForExitAsync(cancellationToken);
+
             while (true)
             {
                 GateCRequest? request;
 
+                using var readCts =
+                    CancellationTokenSource.CreateLinkedTokenSource(
+                        cancellationToken);
+
+                var readTask =
+                    GateCProtocolCodec.ReadRequestAsync(
+                        pipe,
+                        readCts.Token).AsTask();
+
+                var completed =
+                    await Task.WhenAny(
+                        readTask,
+                        ownerExitTask).ConfigureAwait(false);
+
+                if (ReferenceEquals(completed, ownerExitTask))
+                {
+                    ownerLossReason =
+                        ownerProcess.HasExited
+                            ? "controller process exited"
+                            : "watchdog service cancellation";
+
+                    readCts.Cancel();
+
+                    try
+                    {
+                        await readTask.ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // The read was cancelled solely to stop waiting on a
+                        // dead/terminating owner. Durable lease recovery below
+                        // is authoritative.
+                    }
+
+                    break;
+                }
+
                 try
                 {
-                    request =
-                        await GateCProtocolCodec.ReadRequestAsync(
-                            pipe,
-                            cancellationToken).ConfigureAwait(false);
+                    request = await readTask.ConfigureAwait(false);
                 }
                 catch (LeaseProtocolException)
                 {
-                    // Framing/JSON errors have no trustworthy request id.
-                    // Drop the connection; owner-loss handling below remains
-                    // the fail-safe path if a lease already existed.
+                    ownerLossReason = "malformed named-pipe frame";
                     break;
                 }
 
                 if (request is null)
                 {
+                    ownerLossReason = "named-pipe EOF";
                     break;
                 }
 
@@ -98,8 +155,12 @@ internal static class GateCPipeServerSession
                     cancellationToken).ConfigureAwait(false);
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            ownerLossReason = "broken named pipe";
+            log?.Invoke(
+                $"WATCHDOG PIPE: transport loss: {ex.Message}");
+
             // A client can disappear after the service has durably accepted a
             // state transition but before it receives the response. Treat any
             // broken-pipe transport failure as owner loss; the finally block
@@ -108,17 +169,44 @@ internal static class GateCPipeServerSession
         }
         catch (ObjectDisposedException)
         {
+            ownerLossReason = "named-pipe disposed";
             // Equivalent local transport loss. The durable lease remains the
             // authority for deciding whether a restore is required.
         }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            ownerLossReason = "watchdog service cancellation";
+        }
         finally
         {
-            if (verifiedController is not null)
+            try
             {
-                await manager.HandleOwnerLossAsync(
-                    verifiedController,
-                    "named-pipe disconnect",
-                    CancellationToken.None).ConfigureAwait(false);
+                if (verifiedController is not null)
+                {
+                    var recovery =
+                        await manager.HandleOwnerLossAsync(
+                            verifiedController,
+                            ownerLossReason,
+                            CancellationToken.None).ConfigureAwait(false);
+
+                    if (recovery is not null)
+                    {
+                        log?.Invoke(
+                            $"WATCHDOG OWNER LOSS: reason={ownerLossReason}; " +
+                            $"disposition={recovery.Disposition}; observed={recovery.Observed}; " +
+                            $"restoreAttempted={recovery.RestoreAttempted}; journalRetained={recovery.JournalRetained}; detail={recovery.Detail}");
+                    }
+                    else
+                    {
+                        log?.Invoke(
+                            $"WATCHDOG OWNER LOSS: reason={ownerLossReason}; no active lease required recovery.");
+                    }
+                }
+            }
+            finally
+            {
+                ownerProcess?.Dispose();
             }
         }
     }
@@ -330,6 +418,32 @@ internal static class GateCPipeServerSession
 
 internal static class WindowsNamedPipeIdentity
 {
+    public static void EnsureLocalClient(
+        NamedPipeServerStream pipe)
+    {
+        var capacity = 256;
+        var name = new StringBuilder(capacity);
+
+        if (!GetNamedPipeClientComputerName(
+                pipe.SafePipeHandle,
+                name,
+                capacity))
+        {
+            throw new System.ComponentModel.Win32Exception(
+                Marshal.GetLastWin32Error(),
+                "GetNamedPipeClientComputerName failed.");
+        }
+
+        if (!string.Equals(
+                name.ToString(),
+                Environment.MachineName,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException(
+                $"Remote named-pipe client '{name}' is not allowed.");
+        }
+    }
+
     public static ControllerIdentity GetClientIdentity(
         NamedPipeServerStream pipe)
     {
@@ -365,6 +479,17 @@ internal static class WindowsNamedPipeIdentity
             process.Id,
             process.StartTime.ToUniversalTime().Ticks);
     }
+
+    [DllImport(
+        "kernel32.dll",
+        CharSet = CharSet.Unicode,
+        SetLastError = true,
+        EntryPoint = "GetNamedPipeClientComputerNameW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetNamedPipeClientComputerName(
+        SafePipeHandle pipe,
+        StringBuilder clientComputerName,
+        int clientComputerNameLength);
 
     [DllImport(
         "kernel32.dll",
