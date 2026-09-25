@@ -35,7 +35,7 @@ Suspend/resume establishes a freshness boundary.
 - stale SafetyGate results cannot reacquire Custom authority;
 - normal application exit and Windows shutdown dispose/restore the fan coordinator before telemetry is torn down.
 
-Forced process termination is fundamentally different: Windows cannot run managed cleanup after an unconditional kill. Real-hardware characterization showed that EC 0x63 is **not** an independent crash fail-safe in the validated OMEN Gaming Hub coexistence configuration: after the VFC GUI was killed with 30/30 active, the fixed setpoint remained 30/30 while an external HP/OMEN-side component refreshed the countdown twice. Unattended automatic control therefore requires an independent process/service watchdog with its own liveness lease and the validated `FF,FF -> LegacyDefault` restore path.
+Forced process termination is fundamentally different: Windows cannot run managed cleanup after an unconditional kill. Real-hardware characterization showed that EC 0x63 is **not** an independent crash fail-safe in the validated OMEN Gaming Hub coexistence configuration: after the VFC GUI was killed with 30/30 active, the fixed setpoint remained 30/30 while an external HP/OMEN-side component refreshed the countdown twice. Gate B has now physically proven that an independent LocalSystem Session 0 service can restore that orphaned 30/30 state through the validated `FF,FF -> LegacyDefault` path and independently verify FF/FF. Unattended automatic control still requires the lease/journal/IPC layer that tells this service when that restore authority is legitimately VFC-owned.
 
 ## Ownership / coexistence
 
@@ -58,7 +58,7 @@ The physical ceilings are independent: approximately 4330 RPM CPU and 4670 RPM G
 
 ## Remaining blockers before unattended automatic control
 
-- independent crash-watchdog/lease implementation and physical validation;
+- Gate C-G crash-watchdog lease/journal/IPC implementation and physical validation;
 - load/gaming and thermal-emergency validation;
 - level-14 restart-from-rest validation;
 - implementation and tuning of the shared-RPM adaptive policy.

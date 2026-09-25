@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: research/design phase complete. Gate A read-only Windows Service validation passed on real hardware under LocalSystem. No lease or watchdog restore logic is integrated yet.
+Status: research/design phase complete. Gate A (Session 0 environment) and Gate B (service-only emergency restore) have both passed on real hardware under LocalSystem. Lease/journal/IPC integration begins at Gate C and is not yet wired into the real write boundary.
 
 ## 1. Hardware fact that drives the design
 
@@ -448,7 +448,13 @@ Do not integrate all pieces at once.
 
 ### Gate B - service restore primitive
 
-Implementation is ready; physical validation is pending. The test uses the already-validated GUI coordinator/backend path to reach 30/30, arms an ownership-safe delayed fallback, force-kills the exact GUI PID so managed cleanup cannot participate, then starts a one-shot LocalSystem service. The service refuses any pre-state other than the explicit 30/30 test ownership and its only write-capable operation is `FF,FF -> LegacyDefault`, followed by mandatory EC FF/FF verification. See `WATCHDOG_GATE_B.md`.
+**PASSED on real hardware, 2026-09-24.** After the production backend reported
+EC + dual-tach acknowledgement at 30/30, the exact GUI process was force-killed.
+A post-kill independent probe confirmed orphaned 30/30. The LocalSystem Session
+0 service then independently executed `FF,FF -> LegacyDefault`, verified EC
+FF/FF in about 443 ms, and exited. A separate parent probe again confirmed
+FF/FF before the ownership-safe fallback was cancelled. OMEN Gaming Hub
+undervolt remained unchanged. See `WATCHDOG_GATE_B.md`.
 
 ### Gate C - synthetic lease state machine
 

@@ -1,6 +1,6 @@
 # Watchdog Gate B - service-only emergency restore
 
-Status: implementation ready; physical validation pending. First physical attempt on 2026-09-24 stopped safely during 30/30 arming before the service ran.
+Status: **physical validation PASSED on 2026-09-24**. The first attempt stopped safely during 30/30 arming because of avoidable EC contention; after removing the redundant Custom-time probe, the second attempt passed end-to-end.
 
 Gate B validates the only hardware write authority the future watchdog service
 is allowed to have: return an explicitly VFC-owned fixed setpoint to HP firmware
@@ -123,3 +123,36 @@ A physical PASS requires:
 
 Gate B does not implement a lease, heartbeat or named pipe. Those remain Gate C
 and later work.
+
+
+## Physical PASS - 2026-09-24
+
+The corrected second run passed the complete Gate B contract.
+
+Observed sequence:
+
+- initial firmware-owned EC setpoint was FF/FF;
+- production coordinator/backend reported READY at Custom 30/30 with
+  `ack=backend-ec+tachs`;
+- the exact VictusFanControl.App process was force-killed, preventing managed
+  cleanup;
+- the independent post-kill probe confirmed the orphaned EC setpoint was still
+  30/30;
+- the LocalSystem service started in Session 0 and independently observed 30/30;
+- the service's fixed restore primitive returned success for
+  `FF,FF -> LegacyDefault`;
+- the service verified EC 0x34/0x35 == FF/FF;
+- service-side elapsed restore/verification time was approximately 443 ms;
+- a separate parent-process EC probe independently re-confirmed FF/FF;
+- the delayed fallback was cancelled only after that independent verification;
+- OMEN Gaming Hub undervolt was user-confirmed unchanged.
+
+The service log also showed the expected manual/countdown coexistence behavior:
+immediately after restore it observed `manual=0x07 countdown=240`, while the
+separate parent probe moments later saw `manual=0x06 countdown=239` with EC
+setpoints still FF/FF. This reinforces the prior conclusion that 0x62/0x63 are
+externally maintained HP/OMEN-side fields and are not VFC ownership evidence.
+
+Gate B is complete. The next watchdog milestone is Gate C: implement and test
+the lease/journal/IPC state machine entirely with fake hardware before wiring it
+into the real write boundary.

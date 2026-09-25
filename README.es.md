@@ -66,13 +66,14 @@ A nivel 30 ambos ventiladores convergieron casi a las mismas RPM físicas aunque
 - respuesta estable cercana a 3000 RPM en ambos ventiladores;
 - liberación `SetFanLevel(FF,FF) -> FanMode=LegacyDefault`;
 - OMEN Gaming Hub abierto y undervolt CPU conservado antes/después;
-- watchdog Gate A validado como servicio Windows en Session 0: LocalService quedó bloqueado por `Global\Access_EC`, mientras LocalSystem pasó 3/3 ciclos read-only con PawnIO EC + HP WMI y EC permaneciendo FF/FF.
+- watchdog Gate A validado como servicio Windows en Session 0: LocalService quedó bloqueado por `Global\Access_EC`, mientras LocalSystem pasó 3/3 ciclos read-only con PawnIO EC + HP WMI y EC permaneciendo FF/FF;
+- watchdog Gate B validado físicamente: con la GUI terminada a la fuerza y 30/30 huérfano, el servicio LocalSystem en Session 0 ejecutó por sí solo `FF,FF -> LegacyDefault`, verificó FF/FF en ~443 ms, una lectura independiente volvió a confirmar FF/FF y el undervolt de OMEN Gaming Hub permaneció sin cambios.
 
 ## Seguridad integrada
 
 La ruta v0.4 falla de forma cerrada ante identidad incorrecta, telemetría inválida, emergencia térmica, comandos fuera de 14-50, ownership externo, falta de ACK del setpoint o de cualquiera de los tacómetros, sobrescritura externa, límites de suspensión/reanudación y excepciones del backend.
 
-Suspensión, pérdida de seguridad y salida devuelven la autoridad a HP mientras el proceso siga ejecutándose. La terminación forzada ya fue caracterizada físicamente: después de matar la GUI con 30/30 activo, el fixed setpoint permaneció 30/30 y un componente externo HP/OMEN refrescó EC 0x63 aproximadamente cada 30 s. Por tanto, el countdown no puede considerarse un crash fail-safe fiable en la configuración validada. Antes de habilitar control automático desatendido se requiere un watchdog/lease independiente que sobreviva a la GUI y ejecute `FF,FF -> LegacyDefault` si desaparece el controlador.
+Suspensión, pérdida de seguridad y salida devuelven la autoridad a HP mientras el proceso siga ejecutándose. La terminación forzada ya fue caracterizada físicamente: después de matar la GUI con 30/30 activo, el fixed setpoint permaneció 30/30 y un componente externo HP/OMEN refrescó EC 0x63 aproximadamente cada 30 s. Por tanto, el countdown no puede considerarse un crash fail-safe fiable. Gate B ya demostró que el servicio watchdog independiente puede devolver ese estado huérfano a `FF,FF -> LegacyDefault`; lo que falta antes del control desatendido es Gate C-G: lease autenticado, journal durable, detección de muerte/timeout y recuperación del propio servicio.
 
 ## Inicio rápido
 
