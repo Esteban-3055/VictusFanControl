@@ -6,6 +6,7 @@ $mainFormPath = Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs'
 $clientPath = Join-Path $repoRoot 'src\VictusFanControl\Control\NamedPipeFanControlWatchdogLeaseClient.cs'
 $protocolPath = Join-Path $repoRoot 'src\VictusFanControl\Control\FanControlWatchdogLeaseProtocol.cs'
 $backendPath = Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp88F8FanControlBackend.cs'
+$coordinatorPath = Join-Path $repoRoot 'src\VictusFanControl\Control\FanControlCoordinator.cs'
 
 function Assert-Contains {
     param(
@@ -26,6 +27,7 @@ $mainForm = Get-Content $mainFormPath -Raw
 $client = Get-Content $clientPath -Raw
 $protocol = Get-Content $protocolPath -Raw
 $backend = Get-Content $backendPath -Raw
+$coordinator = Get-Content $coordinatorPath -Raw
 
 $readyBoundary = $gateE.IndexOf('$readyReached = $true', [StringComparison]::Ordinal)
 $killBoundary = $gateE.IndexOf('Stop-Process -Id $servicePidBefore -Force', [StringComparison]::Ordinal)
@@ -64,6 +66,23 @@ if ($probeIndex -lt 0 -or $ecIndex -lt 0 -or $probeIndex -ge $ecIndex) {
 }
 
 Write-Host 'PASS  watchdog transport/lease probe occurs before EC health validation'
+
+$enforceStart = $coordinator.IndexOf('public async ValueTask<bool> EnforceSafetyAsync', [StringComparison]::Ordinal)
+$enforceEnd = $coordinator.IndexOf('public async ValueTask RestoreFirmwareAsync', [StringComparison]::Ordinal)
+
+if ($enforceStart -lt 0 -or $enforceEnd -le $enforceStart) {
+    throw 'Could not resolve FanControlCoordinator.EnforceSafetyAsync for Gate E invariant checks.'
+}
+
+$enforceSegment = $coordinator.Substring($enforceStart, $enforceEnd - $enforceStart)
+$dependencyIndex = $enforceSegment.IndexOf('ProbeControlDependencyAsync(', [StringComparison]::Ordinal)
+$safetyHandoffIndex = $enforceSegment.IndexOf('if (!SafetyAllowsCustomLocked(safety))', [StringComparison]::Ordinal)
+
+if ($dependencyIndex -lt 0 -or $safetyHandoffIndex -lt 0 -or $dependencyIndex -ge $safetyHandoffIndex) {
+    throw 'Gate E invariant violated: watchdog/control dependency must be probed before telemetry-derived safety handoff.'
+}
+
+Write-Host 'PASS  watchdog dependency is probed before telemetry-derived safety handoff'
 
 Assert-Contains -Text $gateE -Pattern 'WATCHDOG_IPC_LOSS' -Description 'Gate E harness requires classified watchdog IPC loss'
 Assert-Contains -Text $mainForm -Pattern 'FanControlWatchdogTransportException\.Marker' -Description 'Gate E GUI classifies watchdog transport loss explicitly'
