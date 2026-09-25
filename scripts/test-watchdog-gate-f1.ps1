@@ -347,6 +347,13 @@ if ($baseline.Cpu -ne 255 -or $baseline.Gpu -ne 255) {
     exit 2
 }
 
+if (Test-Path $journalPath) {
+    Write-Error "Gate F1 refuses to reinstall/start the watchdog while a durable lease journal already exists: $journalPath"
+    exit 2
+}
+
+Write-Host 'Durable journal      : absent'
+
 Write-Host ''
 Write-Host 'Verify the CPU undervolt shown in OMEN Gaming Hub.' -ForegroundColor Yellow
 $pre = Read-Host 'Type UNDERVOLT-OK after checking it'
