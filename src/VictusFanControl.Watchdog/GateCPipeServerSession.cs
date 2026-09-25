@@ -17,6 +17,8 @@ internal static class GateCPipeServerSession
     {
         ControllerIdentity? verifiedController = null;
         Process? ownerProcess = null;
+        CancellationTokenSource? ownerWaitCts = null;
+        Task? ownerExitTask = null;
         var ownerLossReason = "named-pipe disconnect";
 
         try
@@ -84,8 +86,16 @@ internal static class GateCPipeServerSession
                     "Named-pipe client identity verified."),
                 cancellationToken).ConfigureAwait(false);
 
-            Task? ownerExitTask =
-                ownerProcess?.WaitForExitAsync(cancellationToken);
+            if (ownerProcess is not null)
+            {
+                ownerWaitCts =
+                    CancellationTokenSource.CreateLinkedTokenSource(
+                        cancellationToken);
+
+                ownerExitTask =
+                    ownerProcess.WaitForExitAsync(
+                        ownerWaitCts.Token);
+            }
 
             while (true)
             {
@@ -252,6 +262,25 @@ internal static class GateCPipeServerSession
             }
             finally
             {
+                if (ownerWaitCts is not null)
+                {
+                    ownerWaitCts.Cancel();
+
+                    if (ownerExitTask is not null &&
+                        !ownerExitTask.IsCompleted)
+                    {
+                        try
+                        {
+                            await ownerExitTask.ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                        }
+                    }
+
+                    ownerWaitCts.Dispose();
+                }
+
                 ownerProcess?.Dispose();
             }
         }
