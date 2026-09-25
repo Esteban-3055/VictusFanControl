@@ -63,7 +63,17 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
-            "duplicate Release is rejected without hardware write",
+            "Release normalizes full firmware restore before clearing lease",
+            ReleaseNormalizesRestoreAsync);
+
+        failures += await CaseAsync(
+            output,
+            "Release restore failure retains durable lease",
+            ReleaseFailureRetainsLeaseAsync);
+
+        failures += await CaseAsync(
+            output,
+            "duplicate Release is rejected without a second hardware restore",
             DuplicateReleaseAsync);
 
         failures += await CaseAsync(
@@ -225,7 +235,7 @@ internal static class GateCLeaseSelfTest
 
             Assert(
                 await env.Journal.LoadAsync(CancellationToken.None) is null);
-            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(env.Hardware.RestoreCalls == 1);
         });
     }
 
@@ -423,6 +433,68 @@ internal static class GateCLeaseSelfTest
         });
     }
 
+    private static async Task ReleaseNormalizesRestoreAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+
+            var restoring =
+                await env.Manager.RestoreBeginAsync(
+                    owned.SessionId,
+                    owned.Generation,
+                    CancellationToken.None);
+
+            // Simulate the controller reaching FF/FF but dying/being wrong
+            // before LegacyDefault can be proven. Release must still execute
+            // the watchdog restore primitive before deleting the journal.
+            env.Hardware.Set(new FanSetpoint(255, 255));
+
+            await env.Manager.ReleaseAsync(
+                restoring.SessionId,
+                restoring.Generation,
+                CancellationToken.None);
+
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task ReleaseFailureRetainsLeaseAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+
+            var restoring =
+                await env.Manager.RestoreBeginAsync(
+                    owned.SessionId,
+                    owned.Generation,
+                    CancellationToken.None);
+
+            env.Hardware.Set(new FanSetpoint(255, 255));
+            env.Hardware.FailRestore = true;
+
+            var ex =
+                await ThrowsAsync<LeaseProtocolException>(
+                    () => env.Manager.ReleaseAsync(
+                        restoring.SessionId,
+                        restoring.Generation,
+                        CancellationToken.None).AsTask());
+
+            Assert(ex.Code == "RESTORE_NOT_VERIFIED");
+            Assert(env.Hardware.RestoreCalls == 1);
+
+            var journal =
+                await env.Journal.LoadAsync(CancellationToken.None);
+
+            Assert(journal?.Phase ==
+                   WatchdogLeasePhase.Restoring);
+        });
+    }
+
     private static async Task DuplicateReleaseAsync()
     {
         await WithEnvironmentAsync(async env =>
@@ -450,7 +522,7 @@ internal static class GateCLeaseSelfTest
                         CancellationToken.None).AsTask());
 
             Assert(ex.Code == "NO_ACTIVE_LEASE");
-            Assert(env.Hardware.RestoreCalls == 0);
+            Assert(env.Hardware.RestoreCalls == 1);
         });
     }
 
