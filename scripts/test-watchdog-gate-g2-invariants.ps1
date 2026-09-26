@@ -6,6 +6,9 @@ $mainFormPath = Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs'
 $telemetryPath = Join-Path $repoRoot 'src\VictusFanControl.App\TelemetryWorker.cs'
 $managerPath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\WatchdogLeaseManager.cs'
 $coordinatorPath = Join-Path $repoRoot 'src\VictusFanControl\Control\FanControlCoordinator.cs'
+$leaseHardwarePath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\GateDLeaseHardware.cs'
+$ecReaderPath = Join-Path $repoRoot 'src\VictusFanControl\Hardware\PawnIo\AcpiEcReader.cs'
+$backendPath = Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp88F8FanControlBackend.cs'
 $harnessPath = Join-Path $PSScriptRoot 'test-watchdog-gate-g2.ps1'
 
 function Assert-Contains {
@@ -61,6 +64,9 @@ $mainForm = Get-Content $mainFormPath -Raw
 $telemetry = Get-Content $telemetryPath -Raw
 $manager = Get-Content $managerPath -Raw
 $coordinator = Get-Content $coordinatorPath -Raw
+$leaseHardware = Get-Content $leaseHardwarePath -Raw
+$ecReader = Get-Content $ecReaderPath -Raw
+$backend = Get-Content $backendPath -Raw
 $harness = Get-Content $harnessPath -Raw
 
 Write-Host 'VictusFanControl - GATE G2 5/5 LIFECYCLE INVARIANT SELF-TEST'
@@ -156,6 +162,10 @@ Assert-Contains -Text $mainForm -Pattern '_worker\.StateMachine\.State == System
 Assert-Contains -Text $mainForm -Pattern 'displaySafety\.CustomControlPermitted' -Description 'Gate G2 stabilization requires SafetyGate permission without consuming control ordering'
 Assert-Contains -Text $mainForm -Pattern '_fanCoordinator\.Authority == FanAuthority\.Firmware' -Description 'Gate G2 stabilization occurs only while firmware still owns the fans'
 Assert-Contains -Text $coordinator -Pattern 'DescribeSafetyDenialLocked' -Description 'safety-supervisor handoffs include explicit denial diagnostics'
+Assert-Contains -Text $leaseHardware -Pattern '\.ReadSetpoint\(\)' -Description 'watchdog lease hardware uses the narrow setpoint probe'
+Assert-NotContains -Text $leaseHardware -Pattern '\.Read\(\)' -Description 'watchdog lease hardware does not open the full 88F8 control-state probe'
+Assert-Contains -Text $ecReader -Pattern 'ReadHp88F8Setpoint\(\)[\s\S]*ReadRegisterLocked\(0x34\)[\s\S]*ReadRegisterLocked\(0x35\)' -Description 'narrow watchdog EC snapshot reads only the validated 0x34/0x35 ownership pair'
+Assert-Contains -Text $backend -Pattern 'Custom fan authority admission failed before any fan write was attempted:[\s\S]*ex\.GetType\(\)\.Name[\s\S]*ex\.Message' -Description 'no-write admission failures preserve their precise root cause for physical Gate G diagnosis'
 
 Assert-Contains -Text $resetMethod -Pattern '_gateG1AcceptedResumeCount\s*=\s*0' -Description 'accepted-resume count resets between Gate G2 cycles'
 Assert-Contains -Text $resetMethod -Pattern '_gateG1HardwareTestSuspendObserved\s*=\s*false' -Description 'suspend evidence resets between Gate G2 cycles'
