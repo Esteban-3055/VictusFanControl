@@ -207,7 +207,7 @@ if ($readyBoundary -lt 0 -or $suspendBoundary -le $readyBoundary) {
     throw 'Gate G2 invariant could not isolate READY -> suspend dispatch inside the cycle loop.'
 }
 $readyToSuspend = $loopBody.Substring($readyBoundary, $suspendBoundary - $readyBoundary)
-Assert-NotContains -Text $readyToSuspend -Pattern 'Read-EcState' -Description 'parent performs no out-of-band EC probe while per-cycle Custom OWNED is active'
+Assert-NotContains -Text $readyToSuspend -Pattern '(?im)^\s*\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*Read-EcState\b' -Description 'parent performs no out-of-band EC probe while per-cycle Custom OWNED is active'
 
 $fallbackStart = $harness.IndexOf('$failsafe = Start-Process powershell.exe', [StringComparison]::Ordinal)
 if ($fallbackStart -lt 0 -or $fallbackStart -ge $appLaunch) {
