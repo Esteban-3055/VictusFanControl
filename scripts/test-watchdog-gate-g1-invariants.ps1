@@ -159,12 +159,9 @@ Assert-Ordered -Text $restoreWithWatchdog -Needles @(
     'CompletedAtUtc: DateTimeOffset.UtcNow'
 ) -Description 'backend restore evidence is published only after local FF/FF and the watchdog Release response'
 
-$recoverStart = $manager.IndexOf('RecoverPotentialWriteLockedAsync(', [StringComparison]::Ordinal)
-$recoverDefinition = $manager.IndexOf('RecoverPotentialWriteLockedAsync(', $recoverStart + 1, [StringComparison]::Ordinal)
-while ($recoverDefinition -ge 0 -and
-       $manager.Substring([Math]::Max(0, $recoverDefinition - 80), [Math]::Min(80, $recoverDefinition)) -notmatch 'ValueTask<LeaseRecoveryResult>') {
-    $recoverDefinition = $manager.IndexOf('RecoverPotentialWriteLockedAsync(', $recoverDefinition + 1, [StringComparison]::Ordinal)
-}
+$recoverDefinition = $manager.IndexOf(
+    'private async ValueTask<LeaseRecoveryResult>',
+    [StringComparison]::Ordinal)
 if ($recoverDefinition -lt 0) {
     throw 'Gate G1 invariant could not locate watchdog recovery implementation.'
 }
