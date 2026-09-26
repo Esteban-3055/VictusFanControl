@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using VictusFanControl.Runtime;
 
 namespace VictusFanControl.Control;
 
@@ -23,6 +24,11 @@ internal static class FanControlWatchdogLeaseClientSelfTest
             output,
             "broken watchdog pipe is classified as WATCHDOG_IPC_LOSS",
             BrokenPipeClassificationAsync);
+
+        failures += await RunCaseAsync(
+            output,
+            "watchdog request timeout excludes suspended wall time",
+            RequestTimeoutExcludesSuspendedWallTimeAsync);
 
         return failures;
     }
@@ -201,6 +207,70 @@ internal static class FanControlWatchdogLeaseClientSelfTest
         await client.ReleaseAsync(
             CancellationToken.None);
 
+        await serverTask.ConfigureAwait(false);
+    }
+
+    private static async Task RequestTimeoutExcludesSuspendedWallTimeAsync()
+    {
+        var pipeName =
+            "VictusFanControl-LeaseClientActiveTime-" +
+            Guid.NewGuid().ToString("N");
+
+        var sessionId = Guid.NewGuid();
+
+        await using var server =
+            new NamedPipeServerStream(
+                pipeName,
+                PipeDirection.InOut,
+                maxNumberOfServerInstances: 1,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous);
+
+        var serverTask = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync()
+                .ConfigureAwait(false);
+
+            var hello = await RequireRequestAsync(server);
+            AssertType(
+                hello,
+                FanControlWatchdogLeaseContract.Hello);
+
+            await ReplyAsync(
+                server,
+                hello,
+                code: "HELLO_OK",
+                message: "test hello");
+
+            var prepare = await RequireRequestAsync(server);
+            AssertType(
+                prepare,
+                FanControlWatchdogLeaseContract.Prepare);
+
+            // Delay beyond the configured request timeout in wall time while
+            // the injected active-time clock remains frozen, representing S3.
+            await Task.Delay(150).ConfigureAwait(false);
+
+            await ReplyAsync(
+                server,
+                prepare,
+                sessionId: sessionId,
+                generation: 1,
+                phase: "Prepared");
+        });
+
+        var timing = new FanControlWatchdogLeaseClientTiming(
+            ConnectTimeout: TimeSpan.FromMilliseconds(500),
+            RequestTimeout: TimeSpan.FromMilliseconds(40),
+            ReleaseTimeout: TimeSpan.FromMilliseconds(100));
+
+        await using var client =
+            new NamedPipeFanControlWatchdogLeaseClient(
+                pipeName,
+                activeTimeClock: new FrozenActiveTimeClock(),
+                timing: timing);
+
+        await client.PrepareAsync(CancellationToken.None);
         await serverTask.ConfigureAwait(false);
     }
 
@@ -393,6 +463,11 @@ internal static class FanControlWatchdogLeaseClientSelfTest
             throw new InvalidOperationException(
                 "Client accepted a response with the wrong request id.");
         }
+    }
+
+    private sealed class FrozenActiveTimeClock : IActiveTimeClock
+    {
+        public ulong Milliseconds => 0;
     }
 
     private static async Task<FanControlWatchdogLeaseRequest>
