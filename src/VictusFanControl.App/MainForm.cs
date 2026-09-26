@@ -2301,62 +2301,23 @@ internal sealed class MainForm : Form
                     $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} telemetry degraded after fence reopen and before controlled re-entry.");
             }
 
-            var reentrySnapshot = _lastSnapshot ??
-                throw new InvalidOperationException(
-                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} has no telemetry snapshot for controlled re-entry.");
-
-            EnsureSuspendHardwareTestLightLoad(reentrySnapshot);
-
-            var reentrySafety = SafetyGate.Evaluate(
-                _hardwareIdentity,
-                _worker.StateMachine.State,
-                reentrySnapshot,
-                DateTimeOffset.UtcNow,
-                fanWritePathPresent: _fanCoordinator.BackendCanWrite);
-
-            if (!reentrySafety.CustomControlPermitted)
-            {
-                throw new InvalidOperationException(
-                    $"SafetyGate refused {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} controlled post-resume re-entry: " +
-                    string.Join(" | ", reentrySafety.Reasons));
-            }
-
             var reentered =
-                await _fanCoordinator.TryEnterCustomAsync(
-                    reentrySafety,
-                    CancellationToken.None);
+                await TryEnterGateGCustomAuthorityAsync(
+                    $"cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} controlled post-resume re-entry");
 
             if (!reentered ||
                 _fanCoordinator.Authority != FanAuthority.Custom)
             {
                 throw new InvalidOperationException(
-                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} could not reacquire watchdog-protected Custom authority after validated recovery.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} could not reacquire watchdog-protected Custom authority after validated recovery; the current SafetyGate evaluation was not merely superseded.");
             }
 
-            var commandSnapshot = _lastSnapshot ?? reentrySnapshot;
-            EnsureSuspendHardwareTestLightLoad(commandSnapshot);
-
-            var reentryCommandSafety = SafetyGate.Evaluate(
-                _hardwareIdentity,
-                _worker.StateMachine.State,
-                commandSnapshot,
-                DateTimeOffset.UtcNow,
-                fanWritePathPresent: _fanCoordinator.BackendCanWrite);
-
-            if (!reentryCommandSafety.CustomControlPermitted)
-            {
-                throw new InvalidOperationException(
-                    $"SafetyGate dropped before {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} controlled re-entry 30/30 command: " +
-                    string.Join(" | ", reentryCommandSafety.Reasons));
-            }
-
-            await _fanCoordinator.ApplyAsync(
+            await ApplyGateGCommandWithFreshSafetyAsync(
                 new FanCommand(
                     SuspendHardwareTestLevel,
                     SuspendHardwareTestLevel,
                     $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} controlled post-resume re-entry validation"),
-                reentryCommandSafety,
-                CancellationToken.None);
+                $"cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} controlled post-resume 30/30 command");
 
             GateG1WatchdogStateReader.WriteDurableMarker(
                 GateGReentryPath,
@@ -2459,6 +2420,125 @@ internal sealed class MainForm : Form
         }
     }
 
+    private async Task<bool> TryEnterGateGCustomAuthorityAsync(
+        string phase)
+    {
+        const int maxAttempts = 5;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            if (_worker.StateMachine.State != SystemState.Healthy)
+            {
+                throw new InvalidOperationException(
+                    $"{GateGLabel} {phase} requires Healthy telemetry before Custom admission; state={_worker.StateMachine.State}.");
+            }
+
+            var snapshot = _lastSnapshot ??
+                throw new InvalidOperationException(
+                    $"{GateGLabel} {phase} has no telemetry snapshot for Custom admission.");
+
+            EnsureSuspendHardwareTestLightLoad(snapshot);
+
+            var safety = SafetyGate.Evaluate(
+                _hardwareIdentity,
+                _worker.StateMachine.State,
+                snapshot,
+                DateTimeOffset.UtcNow,
+                fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+            if (!safety.CustomControlPermitted)
+            {
+                throw new InvalidOperationException(
+                    $"SafetyGate refused {GateGLabel} {phase} custom authority: " +
+                    string.Join(" | ", safety.Reasons));
+            }
+
+            var entered = await _fanCoordinator.TryEnterCustomAsync(
+                safety,
+                CancellationToken.None);
+
+            if (entered &&
+                _fanCoordinator.Authority == FanAuthority.Custom)
+            {
+                return true;
+            }
+
+            // Telemetry publishes a fresh SafetyGate evaluation roughly once per
+            // second. That newer healthy evaluation can legitimately supersede
+            // this caller between Evaluate() and TryEnterCustomAsync(). Such a
+            // refusal is no-write and must be retried from the newest snapshot;
+            // a refusal while this evaluation is still current is a real gate
+            // denial and must remain fail-closed.
+            if (_fanCoordinator.IsSafetyEvaluationCurrent(safety))
+            {
+                return false;
+            }
+
+            AppendEvent(
+                $"{GateGLabel} {phase}: Custom admission safety sequence {safety.EvaluationSequence} was superseded before entry; retry {attempt}/{maxAttempts} from the newest telemetry snapshot.");
+
+            await Task.Yield();
+        }
+
+        return false;
+    }
+
+    private async Task ApplyGateGCommandWithFreshSafetyAsync(
+        FanCommand command,
+        string phase)
+    {
+        const int maxAttempts = 5;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            if (_worker.StateMachine.State != SystemState.Healthy)
+            {
+                throw new InvalidOperationException(
+                    $"{GateGLabel} {phase} requires Healthy telemetry before fan command; state={_worker.StateMachine.State}.");
+            }
+
+            var snapshot = _lastSnapshot ??
+                throw new InvalidOperationException(
+                    $"{GateGLabel} {phase} has no telemetry snapshot for fan command.");
+
+            EnsureSuspendHardwareTestLightLoad(snapshot);
+
+            var safety = SafetyGate.Evaluate(
+                _hardwareIdentity,
+                _worker.StateMachine.State,
+                snapshot,
+                DateTimeOffset.UtcNow,
+                fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+            if (!safety.CustomControlPermitted)
+            {
+                throw new InvalidOperationException(
+                    $"SafetyGate refused {GateGLabel} {phase} fan command: " +
+                    string.Join(" | ", safety.Reasons));
+            }
+
+            try
+            {
+                await _fanCoordinator.ApplyAsync(
+                    command,
+                    safety,
+                    CancellationToken.None);
+                return;
+            }
+            catch (FanControlStaleSafetyException)
+                when (_fanCoordinator.Authority == FanAuthority.Custom)
+            {
+                AppendEvent(
+                    $"{GateGLabel} {phase}: command safety sequence {safety.EvaluationSequence} was superseded before dispatch; retry {attempt}/{maxAttempts} from the newest telemetry snapshot.");
+
+                await Task.Yield();
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"{GateGLabel} {phase} could not obtain a current SafetyGate evaluation after {maxAttempts} bounded retries.");
+    }
+
     private async Task ArmGateGHardwareTestCycleAsync()
     {
         var snapshot = _lastSnapshot ??
@@ -2498,55 +2578,26 @@ internal sealed class MainForm : Form
                 $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} requires firmware-owned FF/FF before admission; read {before.CpuSetpoint}/{before.GpuSetpoint}.");
         }
 
-        var safety = SafetyGate.Evaluate(
-            _hardwareIdentity,
-            _worker.StateMachine.State,
-            snapshot,
-            DateTimeOffset.UtcNow,
-            fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+        var initialPhase =
+            $"cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} initial admission";
 
-        if (!safety.CustomControlPermitted)
-        {
-            throw new InvalidOperationException(
-                $"SafetyGate refused {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} custom authority: " +
-                string.Join(" | ", safety.Reasons));
-        }
-
-        var entered = await _fanCoordinator.TryEnterCustomAsync(
-            safety,
-            CancellationToken.None);
+        var entered =
+            await TryEnterGateGCustomAuthorityAsync(
+                initialPhase);
 
         if (!entered ||
             _fanCoordinator.Authority != FanAuthority.Custom)
         {
             throw new InvalidOperationException(
-                $"Coordinator did not grant watchdog-protected Custom authority for {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}.");
+                $"Coordinator did not grant watchdog-protected Custom authority for {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}; the current SafetyGate evaluation was not merely superseded.");
         }
 
-        var latest = _lastSnapshot ?? snapshot;
-        EnsureSuspendHardwareTestLightLoad(latest);
-
-        var commandSafety = SafetyGate.Evaluate(
-            _hardwareIdentity,
-            _worker.StateMachine.State,
-            latest,
-            DateTimeOffset.UtcNow,
-            fanWritePathPresent: _fanCoordinator.BackendCanWrite);
-
-        if (!commandSafety.CustomControlPermitted)
-        {
-            throw new InvalidOperationException(
-                $"SafetyGate dropped before {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} 30/30 command: " +
-                string.Join(" | ", commandSafety.Reasons));
-        }
-
-        await _fanCoordinator.ApplyAsync(
+        await ApplyGateGCommandWithFreshSafetyAsync(
             new FanCommand(
                 SuspendHardwareTestLevel,
                 SuspendHardwareTestLevel,
                 $"explicit {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} full-watchdog suspend lifecycle validation"),
-            commandSafety,
-            CancellationToken.None);
+            $"cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} initial 30/30 command");
 
         _gateG1HardwareTestBackendAckVerified = true;
         _gateG1HardwareTestArmedAt = DateTimeOffset.UtcNow;
