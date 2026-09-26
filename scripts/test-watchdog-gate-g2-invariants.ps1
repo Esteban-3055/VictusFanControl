@@ -166,6 +166,13 @@ Assert-Contains -Text $leaseHardware -Pattern '\.ReadSetpoint\(\)' -Description 
 Assert-NotContains -Text $leaseHardware -Pattern '\.Read\(\)' -Description 'watchdog lease hardware does not open the full 88F8 control-state probe'
 Assert-Contains -Text $ecReader -Pattern 'ReadHp88F8Setpoint\(\)[\s\S]*ReadRegisterLocked\(0x34\)[\s\S]*ReadRegisterLocked\(0x35\)' -Description 'narrow watchdog EC snapshot reads only the validated 0x34/0x35 ownership pair'
 Assert-Contains -Text $backend -Pattern 'Custom fan authority admission failed before any fan write was attempted:[\s\S]*ex\.GetType\(\)\.Name[\s\S]*ex\.Message' -Description 'no-write admission failures preserve their precise root cause for physical Gate G diagnosis'
+Assert-Contains -Text $manager -Pattern 'FirmwareRestoreVerificationTimeout[\s\S]*TimeSpan\.FromSeconds\(5\)' -Description 'watchdog restore verification has a bounded five-second FF/FF acknowledgement window'
+Assert-Contains -Text $manager -Pattern 'FirmwareRestoreVerificationPollInterval[\s\S]*TimeSpan\.FromMilliseconds\(250\)' -Description 'watchdog restore verification polls at a bounded 250 ms cadence'
+Assert-Contains -Text $manager -Pattern 'RestoreFirmwareAutoAsync\([\s\S]*while \(true\)[\s\S]*ReadSetpointAsync' -Description 'watchdog recovery polls EC after the HP restore command instead of trusting one immediate sample'
+Assert-Contains -Text $manager -Pattern 'if \(after\.IsFirmwareOwned\)[\s\S]*_journal\.DeleteAsync' -Description 'watchdog deletes the durable lease only after verified FF/FF'
+Assert-Contains -Text $manager -Pattern '!AllowedSetpoints\(record\)\.Contains\(after\)[\s\S]*OwnershipAmbiguous' -Description 'post-restore polling stops fail-closed on an unexpected external fixed setpoint'
+Assert-Contains -Text $mainForm -Pattern 'finalReleaseVerified[\s\S]*WatchdogReleaseVerified' -Description 'Gate G final re-entry handoff requires causal watchdog Release evidence'
+Assert-Contains -Text $mainForm -Pattern '!finalReleaseVerified[\s\S]*watchdogFinal\.JournalPresent' -Description 'Gate G final PASS requires both Release acknowledgement and journal absence'
 
 Assert-Contains -Text $resetMethod -Pattern '_gateG1AcceptedResumeCount\s*=\s*0' -Description 'accepted-resume count resets between Gate G2 cycles'
 Assert-Contains -Text $resetMethod -Pattern '_gateG1HardwareTestSuspendObserved\s*=\s*false' -Description 'suspend evidence resets between Gate G2 cycles'
