@@ -2095,6 +2095,12 @@ internal sealed class MainForm : Form
                 return;
             }
 
+            if (!_gateG1HardwareTestSuspendObserved)
+            {
+                throw new InvalidOperationException(
+                    "Gate G1 did not observe PBT_APMSUSPEND while the initial watchdog-owned 30/30 cycle was armed.");
+            }
+
             if (!_gateG1HardwareTestPreSleepVerified)
             {
                 throw new InvalidOperationException(
