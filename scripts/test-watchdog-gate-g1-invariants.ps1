@@ -89,37 +89,57 @@ $suspendHandler = $mainForm.Substring($suspendStart, $resumeStart - $suspendStar
 Assert-Ordered -Text $suspendHandler -Needles @(
     '_fanCoordinator.BlockCustomAdmissionAndRestoreAsync(',
     '_worker.NotifySuspend(source);',
-    'var watchdog =',
-    'GateG1WatchdogStateReader.Read()',
-    'GateG1WatchdogStateReader.RequireReady(',
+    'var restoreEvidence =',
+    '_fanCoordinator.LastRestoreEvidence',
     'var resumeObservedBeforeProof =',
-    '!watchdog.JournalPresent',
+    'restoreEvidence.Value.LocalFirmwareAckVerified',
+    'restoreEvidence.Value.WatchdogReleaseVerified',
     'telemetrySuspended',
     '!resumeObservedBeforeProof',
     'handlerElapsedMs <= GateGSuspendProofBudgetMs',
-    'GateG1WatchdogStateReader.WriteDurableMarker(',
-    'GateGPreSleepPath'
-) -Description 'Gate G1/G2 restore first, mark telemetry Suspended, then prove watchdog/journal state before returning'
+    '_gateGPendingPreSleepMarker = marker'
+) -Description 'Gate G1/G2 restore first, mark telemetry Suspended, then capture only in-memory causal proof before WndProc returns'
 
 $notifySuspend = $suspendHandler.IndexOf('_worker.NotifySuspend(source);', [StringComparison]::Ordinal)
 $gateGVerify = $suspendHandler.IndexOf('if (GateGHardwareTest &&', $notifySuspend, [StringComparison]::Ordinal)
 if ($notifySuspend -lt 0 -or $gateGVerify -le $notifySuspend) {
-    throw 'Gate G1 invariant could not isolate the post-restore Gate G verification block.'
+    throw 'Gate G1 invariant could not isolate the post-restore Gate G proof-capture block.'
 }
 $gateGVerifyBlock = $suspendHandler.Substring($gateGVerify)
 
-Assert-NotContains -Text $gateGVerifyBlock -Pattern 'new Hp88F8EcControlStateProbe\(_modulesDirectory\)\.Read\(\)' -Description 'Gate G pre-sleep proof performs no redundant full EC transaction after the production restore'
-Assert-Contains -Text $gateGVerifyBlock -Pattern 'ecProof=production-backend-restore-ack' -Description 'Gate G marker identifies the production backend restore acknowledgement as FF/FF proof'
-Assert-Contains -Text $gateGVerifyBlock -Pattern 'resumeObservedBeforeProof=\{resumeObservedBeforeProof\}' -Description 'Gate G marker records whether resume raced ahead of pre-sleep proof'
-Assert-Contains -Text $gateGVerifyBlock -Pattern 'handlerMs=\{handlerElapsedMs:0\.0\}.*budgetMs=\{GateGSuspendProofBudgetMs:0\}' -Description 'Gate G marker records suspend-handler latency against the explicit budget'
+Assert-NotContains -Text $gateGVerifyBlock -Pattern 'Hp88F8EcControlStateProbe|GateG1WatchdogStateReader\.Read\(|WriteDurableMarker\(|AppLog\.Write\(' -Description 'Gate G suspend critical path performs no post-restore EC/watchdog/filesystem transaction'
+Assert-Contains -Text $gateGVerifyBlock -Pattern 'ecProof=production-backend-restore-ack' -Description 'Gate G marker identifies production backend FF/FF acknowledgement'
+Assert-Contains -Text $gateGVerifyBlock -Pattern 'watchdogRelease=\{watchdogReleaseVerified\}' -Description 'Gate G marker records causal watchdog Release acknowledgement'
+Assert-Contains -Text $gateGVerifyBlock -Pattern 'journalProof=watchdog-release-response' -Description 'Gate G journal proof is the successful watchdog Release response, not a new file read'
+Assert-Contains -Text $gateGVerifyBlock -Pattern 'resumeObservedBeforeProof=\{resumeObservedBeforeProof\}' -Description 'Gate G marker records whether resume raced ahead of proof capture'
+Assert-Contains -Text $gateGVerifyBlock -Pattern 'handlerElapsedMs\.ToString\("0\.0", CultureInfo\.InvariantCulture\)' -Description 'Gate G timing evidence is culture-invariant'
 Assert-Contains -Text $mainForm -Pattern 'GateGSuspendProofBudgetMs\s*=\s*1800' -Description 'Gate G keeps margin inside the approximately two-second Windows suspend notification budget'
+Assert-Contains -Text $mainForm -Pattern '_gateGPendingPreSleepMarker\s*=\s*marker' -Description 'pre-sleep proof is retained in memory instead of persisted during PBT_APMSUSPEND'
 
-$restoreLockedStart = $backend.IndexOf('private async ValueTask RestoreLockedAsync', [StringComparison]::Ordinal)
-$waitForSetpointStart = $backend.IndexOf('private async ValueTask<Hp88F8EcControlState> WaitForSetpointAsync', $restoreLockedStart, [StringComparison]::Ordinal)
-if ($restoreLockedStart -lt 0 -or $waitForSetpointStart -le $restoreLockedStart) {
-    throw 'Gate G1 invariant could not isolate the production HP restore primitive.'
+$resumeHandlerStart = $mainForm.IndexOf('private void HandleResumeLifecycle', [StringComparison]::Ordinal)
+$reopenHandlerStart = $mainForm.IndexOf('private async Task ReopenFanAdmissionAfterHealthyAsync', $resumeHandlerStart, [StringComparison]::Ordinal)
+if ($resumeHandlerStart -lt 0 -or $reopenHandlerStart -le $resumeHandlerStart) {
+    throw 'Gate G1 invariant could not isolate resume + deferred proof persistence.'
 }
+$resumeHandler = $mainForm.Substring($resumeHandlerStart, $reopenHandlerStart - $resumeHandlerStart)
+Assert-Ordered -Text $resumeHandler -Needles @(
+    'var accepted = _worker.NotifyResume(source);',
+    'PersistPendingGateGPreSleepProof();',
+    'if (!accepted)',
+    '_gateG1HardwareTestResumeObserved = true;',
+    '_gateG1AcceptedResumeCount++;'
+) -Description 'captured pre-sleep proof is persisted only after wake and before Gate G accepted-resume accounting advances'
+Assert-Contains -Text $resumeHandler -Pattern 'GateG1WatchdogStateReader\.WriteDurableMarker\(' -Description 'deferred Gate G proof persistence occurs in the resume-side helper'
+
+$restoreWithWatchdogStart = $backend.IndexOf('private async ValueTask RestoreWithWatchdogLockedAsync', [StringComparison]::Ordinal)
+$restoreLockedStart = $backend.IndexOf('private async ValueTask RestoreLockedAsync', $restoreWithWatchdogStart, [StringComparison]::Ordinal)
+$waitForSetpointStart = $backend.IndexOf('private async ValueTask<Hp88F8EcControlState> WaitForSetpointAsync', $restoreLockedStart, [StringComparison]::Ordinal)
+if ($restoreWithWatchdogStart -lt 0 -or $restoreLockedStart -le $restoreWithWatchdogStart -or $waitForSetpointStart -le $restoreLockedStart) {
+    throw 'Gate G1 invariant could not isolate production HP restore/evidence primitives.'
+}
+$restoreWithWatchdog = $backend.Substring($restoreWithWatchdogStart, $restoreLockedStart - $restoreWithWatchdogStart)
 $restoreLocked = $backend.Substring($restoreLockedStart, $waitForSetpointStart - $restoreLockedStart)
+
 Assert-Ordered -Text $restoreLocked -Needles @(
     '_hardware!.RestoreFirmwareAuto();',
     'WaitForSetpointAsync(',
@@ -127,9 +147,37 @@ Assert-Ordered -Text $restoreLocked -Needles @(
     'byte.MaxValue,',
     '_ownedSetpoint = null;',
     '_customModeActive = false;'
-) -Description 'production backend cannot return a successful restore before local FF/FF acknowledgement'
+) -Description 'production backend cannot return a successful local restore before FF/FF acknowledgement'
 
-Assert-Contains -Text $gateGVerifyBlock -Pattern 'gateG1WasCustom\s*&&[\s\S]*gateG1BackendAckVerified\s*&&[\s\S]*_fanCoordinator\.Authority == FanAuthority\.Firmware[\s\S]*!watchdog\.JournalPresent[\s\S]*telemetrySuspended[\s\S]*!resumeObservedBeforeProof' -Description 'pre-sleep PASS requires prior Custom ACK, backend-verified Firmware authority, journal absence, Suspended telemetry and no accepted resume'
+Assert-Ordered -Text $restoreWithWatchdog -Needles @(
+    'await RestoreLockedAsync(cancellationToken)',
+    'await _watchdogLease.ReleaseAsync(',
+    'watchdogReleaseVerified = true;',
+    '_lastRestoreEvidence = new FanFirmwareRestoreEvidence(',
+    'LocalFirmwareAckVerified: true',
+    'WatchdogReleaseVerified: watchdogReleaseVerified',
+    'CompletedAtUtc: DateTimeOffset.UtcNow'
+) -Description 'backend restore evidence is published only after local FF/FF and the watchdog Release response'
+
+$recoverStart = $manager.IndexOf('RecoverPotentialWriteLockedAsync(', [StringComparison]::Ordinal)
+$recoverDefinition = $manager.IndexOf('RecoverPotentialWriteLockedAsync(', $recoverStart + 1, [StringComparison]::Ordinal)
+while ($recoverDefinition -ge 0 -and
+       $manager.Substring([Math]::Max(0, $recoverDefinition - 80), [Math]::Min(80, $recoverDefinition)) -notmatch 'ValueTask<LeaseRecoveryResult>') {
+    $recoverDefinition = $manager.IndexOf('RecoverPotentialWriteLockedAsync(', $recoverDefinition + 1, [StringComparison]::Ordinal)
+}
+if ($recoverDefinition -lt 0) {
+    throw 'Gate G1 invariant could not locate watchdog recovery implementation.'
+}
+$recoverTail = $manager.Substring($recoverDefinition)
+Assert-Ordered -Text $recoverTail -Needles @(
+    'await _hardware.RestoreFirmwareAutoAsync(',
+    'if (!after.IsFirmwareOwned)',
+    'await _journal.DeleteAsync(cancellationToken)',
+    '_active = null;',
+    'LeaseRecoveryDisposition.RestoredFirmware'
+) -Description 'watchdog successful Release recovery deletes the journal only after verified firmware ownership'
+
+Assert-Contains -Text $gateGVerifyBlock -Pattern 'gateG1WasCustom\s*&&[\s\S]*gateG1BackendAckVerified\s*&&[\s\S]*_fanCoordinator\.Authority == FanAuthority\.Firmware[\s\S]*localFirmwareAckVerified[\s\S]*watchdogReleaseVerified[\s\S]*telemetrySuspended[\s\S]*!resumeObservedBeforeProof' -Description 'pre-sleep PASS requires prior Custom ACK, local FF/FF, successful watchdog release, Suspended telemetry and no accepted resume'
 
 $healthyStart = $mainForm.IndexOf('private async Task HandleHealthyStateAsync', [StringComparison]::Ordinal)
 $gateDStart = $mainForm.IndexOf('private async Task AdvanceGateDHardwareTestAsync', $healthyStart, [StringComparison]::Ordinal)
