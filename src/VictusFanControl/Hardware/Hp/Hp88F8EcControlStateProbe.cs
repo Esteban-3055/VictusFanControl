@@ -41,17 +41,21 @@ public sealed class Hp88F8EcControlStateProbe
         _modulePath = Path.Combine(modulesDirectory, "LpcACPIEC.bin");
     }
 
+    public (byte CpuSetpoint, byte GpuSetpoint) ReadSetpoint()
+    {
+        EnsureTargetBoard();
+
+        using var ec = new AcpiEcReader(_modulePath);
+        var state = ec.ReadHp88F8Setpoint();
+
+        return (
+            state.CpuSetpoint,
+            state.GpuSetpoint);
+    }
+
     public Hp88F8EcControlState Read()
     {
-        var hardware = HardwareIdentityReader.ReadCurrent();
-        if (!string.Equals(
-                hardware.BoardProduct,
-                "88F8",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"88F8 EC-state probe refused on board '{hardware.BoardProduct}'.");
-        }
+        EnsureTargetBoard();
 
         using var ec = new AcpiEcReader(_modulePath);
         var state = ec.ReadHp88F8ControlState();
@@ -70,5 +74,18 @@ public sealed class Hp88F8EcControlStateProbe
             state.FanSwitch,
             state.CpuRpm,
             state.GpuRpm);
+    }
+
+    private static void EnsureTargetBoard()
+    {
+        var hardware = HardwareIdentityReader.ReadCurrent();
+        if (!string.Equals(
+                hardware.BoardProduct,
+                "88F8",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"88F8 EC-state probe refused on board '{hardware.BoardProduct}'.");
+        }
     }
 }
