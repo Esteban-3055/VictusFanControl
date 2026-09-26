@@ -410,13 +410,13 @@ internal sealed class MainForm : Form
             if (_gateG1HardwareTest)
             {
                 AppendEvent(
-                    "GATE G1 TEST: full watchdog suspend/resume lifecycle mode enabled. The test requires durable OWNED 30/30 before suspend, journal-free firmware handoff inside PBT_APMSUSPEND, the same watchdog PID across sleep, five-snapshot telemetry recovery, then one controlled post-resume re-entry and final firmware restore. Automatic policy remains OFF.");
+                    "GATE G1 TEST: full watchdog suspend/resume lifecycle mode enabled. The test requires durable OWNED 30/30 before suspend, prompt admission/telemetry fencing before blocking restore IO, validated Firmware + FF/FF + watchdog-release/journal-absent handoff before resume acceptance, the same watchdog PID across sleep, five-snapshot telemetry recovery, then one controlled post-resume re-entry and final firmware restore. Automatic policy remains OFF.");
             }
 
             if (_gateG2HardwareTest)
             {
                 AppendEvent(
-                    $"GATE G2 TEST: {GateG2TargetCycles} consecutive full watchdog suspend/resume cycles enabled in the same GUI and watchdog processes. Every cycle requires durable OWNED 30/30, pre-sleep Firmware + FF/FF + journal absent, one accepted resume, five-snapshot Healthy recovery, one controlled 30/30 re-entry, and final Firmware restore. Automatic policy remains OFF.");
+                    $"GATE G2 TEST: {GateG2TargetCycles} consecutive full watchdog suspend/resume cycles enabled in the same GUI and watchdog processes. Every cycle requires durable OWNED 30/30, prompt suspend fencing, completed Firmware + FF/FF + watchdog Ready/journal absent before resume acceptance, one accepted resume, five-snapshot Healthy recovery, one controlled 30/30 re-entry, and final Firmware restore. Automatic policy remains OFF.");
             }
 
             _uiTimer.Start();
