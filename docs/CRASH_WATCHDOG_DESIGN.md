@@ -892,6 +892,26 @@ reservation. Any incomplete, unsafe, stale or degraded observation resets the
 streak. Safety-supervisor restore reasons now also include the exact SafetyGate /
 lifecycle denial detail for future causality analysis.
 
+A subsequent e5486d5 physical retry failed even earlier, before cycle 1 READY
+and before any fan write. The watchdog authenticated the GUI process, so the
+local backend's initial EC ownership check and named-pipe Hello had completed,
+but admission then failed before PREPARED/OWNED. The old outer exception hid the
+inner cause. Source audit found that watchdog Prepare's supposedly narrow
+ReadSetpointAsync still called the full Hp88F8EcControlStateProbe.Read(), reading
+the complete rate/manual/mode/tach/control snapshot while GUI telemetry was live.
+That violated the intended narrow watchdog hardware boundary and needlessly held
+Global\Access_EC across many transactions even though lease admission needs only
+the fixed ownership registers.
+
+GateDLeaseHardware now reads only 0x34/0x35 under one EC mutex lease. The full
+88F8 diagnostic probe is no longer used by watchdog lease admission/recovery.
+The backend also preserves the exact inner exception type/message in every
+no-write FanControlAdmissionException. Therefore the next physical run either
+avoids this cross-process contention window or, if another no-write admission
+failure exists, records its actual causal error instead of collapsing it into a
+generic message. No admission retry was added for unknown failures: ownership or
+transport uncertainty remains fail-closed.
+
 Gate G2 remains the only suspend/resume repetition gate: 5/5 consecutive
 same-process cycles under the same contract. Automatic fan policy remains OFF.
 Representative-load testing and the adaptive RPM controller stay blocked until
