@@ -479,6 +479,15 @@ try {
     $preSleep = Get-Content $preSleepPath -Raw
     Write-Host "Pre-sleep marker    : $preSleep"
 
+    $telemetryMatch = [regex]::Match(
+        $preSleep,
+        'telemetryMs=([0-9]+(?:\.[0-9]+)?)')
+    $restoreMatch = [regex]::Match(
+        $preSleep,
+        'restoreMs=([0-9]+(?:\.[0-9]+)?)')
+    $firmwareMatch = [regex]::Match(
+        $preSleep,
+        'firmwareMs=([0-9]+(?:\.[0-9]+)?)')
     $handlerMatch = [regex]::Match(
         $preSleep,
         'handlerMs=([0-9]+(?:\.[0-9]+)?)\|budgetMs=1800')
@@ -491,6 +500,13 @@ try {
         $preSleep -notmatch 'journalProof=watchdog-release-response' -or
         $preSleep -notmatch 'journal=absent' -or
         $preSleep -notmatch 'telemetry=Suspended' -or
+        $preSleep -notmatch 'telemetryProof=pre-restore-state-transition' -or
+        -not $telemetryMatch.Success -or
+        -not $restoreMatch.Success -or
+        -not $firmwareMatch.Success -or
+        [double]$telemetryMatch.Groups[1].Value -gt 1800 -or
+        [double]$restoreMatch.Groups[1].Value -gt 1800 -or
+        [double]$firmwareMatch.Groups[1].Value -gt 1800 -or
         $preSleep -notmatch 'resumeObservedBeforeProof=False' -or
         $preSleep -notmatch 'acceptedResumesBeforeProof=0' -or
         -not $handlerMatch.Success -or
