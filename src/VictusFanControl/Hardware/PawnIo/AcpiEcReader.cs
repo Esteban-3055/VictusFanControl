@@ -125,6 +125,31 @@ internal sealed class AcpiEcReader : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reads only the HP 88F8 MaxFan/FanSwitch control guards consumed by the
+    /// production fan backend. This keeps those fail-closed checks independent
+    /// from the broader diagnostic snapshot.
+    /// </summary>
+    public Hp88F8FanControlGuardSample ReadHp88F8FanControlGuard()
+    {
+        var lockTaken = AcquireMutex();
+        try
+        {
+            return RetryLocked(
+                () => new Hp88F8FanControlGuardSample(
+                    MaxFan: ReadRegisterLocked(0xEC),
+                    FanSwitch: ReadRegisterLocked(0xF4)),
+                "EC 88F8 fan-control guard snapshot 0xEC/0xF4");
+        }
+        finally
+        {
+            if (lockTaken)
+            {
+                _ecMutex.ReleaseMutex();
+            }
+        }
+    }
+
     public Hp88F8ControlStateSample ReadHp88F8ControlState()
     {
         var lockTaken = AcquireMutex();
@@ -329,6 +354,10 @@ internal sealed class AcpiEcReader : IDisposable
     internal readonly record struct Hp88F8SetpointSample(
         byte CpuSetpoint,
         byte GpuSetpoint);
+
+    internal readonly record struct Hp88F8FanControlGuardSample(
+        byte MaxFan,
+        byte FanSwitch);
 
     internal readonly record struct Hp88F8ControlStateSample(
         byte CpuRateTarget,
