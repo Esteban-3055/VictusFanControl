@@ -745,6 +745,30 @@ The correction is:
   explicit 1800 ms budget, leaving margin inside Windows' approximately two
   second notification window.
 
+A second physical G2 attempt on 2026-09-25 failed even earlier, on cycle 1,
+and refined the diagnosis. The critical coordinator restore itself completed in
+about one second: the authority transition carried a pre-sleep timestamp and
+TelemetryWorker entered Suspended before S3. However, the remaining
+GateG1WatchdogStateReader status/journal read that followed NotifySuspend was
+itself frozen by S3 and did not finish until resume. The captured marker therefore
+correctly showed telemetry=Recovering, resumeObservedBeforeProof=True,
+acceptedResumesBeforeProof=1 and handlerMs about 28.5 s. The parent harness
+failed closed, killed only the exact test GUI, then independently proved journal
+absence and EC FF/FF before cancelling the emergency fallback.
+
+The resulting design rule is stronger: after the production restore returns and
+telemetry has been marked Suspended, the PBT_APMSUSPEND path must perform no new
+filesystem, EC, WMI or watchdog IPC at all. The HP backend now captures immutable
+in-memory restore evidence as part of the already-required transaction. Local
+restore evidence is published only after FF/FF acknowledgement; watchdog-release
+evidence becomes true only after a successful Release response. On the service
+side that response is possible only after the validated restore is normalized,
+FF/FF is verified and the durable journal is deleted. Gate G captures this
+evidence in memory within the 1800 ms budget and defers durable marker persistence
+until Windows has resumed. The resume-side validation still independently
+requires the original watchdog PID Ready and journal absent before admission can
+reopen.
+
 Gate G2 remains open until a fresh 5/5 hardware run passes with these corrected
 causal checks. Only after that should load/gaming validation and the adaptive RPM
 policy be allowed to depend on unattended Custom authority.
