@@ -912,6 +912,40 @@ failure exists, records its actual causal error instead of collapsing it into a
 generic message. No admission retry was added for unknown failures: ownership or
 transport uncertainty remains fail-closed.
 
+The next physical Gate G2 retry at 1bd2d79 progressed further. Cycle 1 reached
+durable OWNED 30/30, crossed real S3, completed the revised suspend handoff in
+208.2 ms pre-block / 722.0 ms local restore / 722.4 ms Firmware transition,
+accepted exactly one resume, recovered through five complete snapshots, and
+completed the controlled post-resume 30/30 re-entry. Its final local restore
+again reached Firmware and EC FF/FF, but the durable service journal remained
+RESTORING. The application correctly refused PASS. The pipe then closed while
+the GUI was still alive; after GUI exit the watchdog owner-loss path observed
+FF/FF, completed the same RESTORING recovery and cleared the journal.
+
+The missing invariant was in service-side restore acknowledgement. Gate B and
+the production GUI backend already treat HP WMI restore completion and EC FF/FF
+publication as asynchronous and poll for acknowledgement. WatchdogLeaseManager
+instead issued RestoreFirmwareAuto and performed exactly one immediate setpoint
+read. A normal delayed EC publication or transient read could therefore create a
+false RESTORE_NOT_VERIFIED and retain an otherwise healthy RESTORING lease.
+Because the previous server did not log rejected request detail, the historical
+run cannot prove whether that exact immediate read, restore call, or journal
+delete was the failing sub-operation; the source-level one-sample false-negative
+path is nevertheless real and matches the observed later FF/FF recovery.
+
+Watchdog recovery now uses the same bounded acknowledgement principle as the
+validated controller path: after a successful HP restore command it polls only
+the narrow 0x34/0x35 ownership pair for up to 5 seconds at 250 ms cadence, with
+elapsed time measured by the existing QueryUnbiasedInterruptTime clock. It
+clears the durable journal only after verified FF/FF. Any unexpected fixed
+setpoint outside the lease's allowed values immediately becomes
+OwnershipAmbiguous and stops further restore action; read/transport failures
+never become ownership proof and keep the journal. Gate C now includes a delayed
+FF/FF synthetic regression. Gate G's final post-resume re-entry handoff also
+requires explicit backend WatchdogReleaseVerified evidence as well as Firmware,
+FF/FF and journal absence. The pipe service logs both rejected requests and a
+successful Release ACK so any later physical failure has direct causal evidence.
+
 Gate G2 remains the only suspend/resume repetition gate: 5/5 consecutive
 same-process cycles under the same contract. Automatic fan policy remains OFF.
 Representative-load testing and the adaptive RPM controller stay blocked until
