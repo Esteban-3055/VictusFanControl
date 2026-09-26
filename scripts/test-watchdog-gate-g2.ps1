@@ -539,6 +539,8 @@ try {
             $preSleepText -notmatch 'authority=Firmware' -or
             $preSleepText -notmatch 'ec=255/255' -or
             $preSleepText -notmatch 'ecProof=production-backend-restore-ack' -or
+            $preSleepText -notmatch 'watchdogRelease=True' -or
+            $preSleepText -notmatch 'journalProof=watchdog-release-response' -or
             $preSleepText -notmatch 'journal=absent' -or
             $preSleepText -notmatch 'telemetry=Suspended' -or
             $preSleepText -notmatch 'resumeObservedBeforeProof=False' -or
