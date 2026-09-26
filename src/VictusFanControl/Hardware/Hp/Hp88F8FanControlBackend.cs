@@ -80,7 +80,9 @@ internal readonly record struct Hp88F8FanBackendTiming(
 ///
 /// It does not implement a fan curve. Policy remains outside the backend.
 /// </summary>
-public sealed class Hp88F8FanControlBackend : IFanControlBackend
+public sealed class Hp88F8FanControlBackend :
+    IFanControlBackend,
+    IFanControlRestoreEvidenceSource
 {
     private const int DirectionLevelDeadband = 2;
     private const int MinimumDirectionalRpmDelta = 150;
@@ -97,6 +99,7 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
     private bool _disposed;
     private string _lastDetail;
     private (byte Cpu, byte Gpu)? _ownedSetpoint;
+    private FanFirmwareRestoreEvidence _lastRestoreEvidence;
 
     public Hp88F8FanControlBackend(
         string modulesDirectory,
@@ -107,6 +110,12 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         _supportDetail = reason;
         _timing = Hp88F8FanBackendTiming.Production;
         _watchdogLease = watchdogLease;
+        _lastRestoreEvidence = new FanFirmwareRestoreEvidence(
+            LocalFirmwareAckVerified: false,
+            WatchdogLeaseRequired: _watchdogLease is not null,
+            WatchdogReleaseVerified: false,
+            CompletedAtUtc: DateTimeOffset.MinValue,
+            Detail: "No firmware restore has completed in this backend instance.");
 
         if (_targetSupported)
         {
@@ -131,12 +140,21 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
         _supportDetail = supportDetail;
         _timing = timing ?? Hp88F8FanBackendTiming.Production;
         _watchdogLease = watchdogLease;
+        _lastRestoreEvidence = new FanFirmwareRestoreEvidence(
+            LocalFirmwareAckVerified: false,
+            WatchdogLeaseRequired: _watchdogLease is not null,
+            WatchdogReleaseVerified: false,
+            CompletedAtUtc: DateTimeOffset.MinValue,
+            Detail: "No firmware restore has completed in this backend instance.");
         _lastDetail = targetSupported
             ? "Synthetic backend initialized; firmware authority retained."
             : $"Write backend disabled: {supportDetail}";
     }
 
     public string Name => "HP 88F8 BIOS/WMI + EC/tach verification";
+
+    public FanFirmwareRestoreEvidence LastRestoreEvidence =>
+        _lastRestoreEvidence;
 
     public bool CanWrite =>
         !_disposed &&
@@ -809,6 +827,14 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
     {
         Exception? watchdogBeginFailure = null;
         Exception? watchdogReleaseFailure = null;
+        var watchdogLeaseRequired = _watchdogLease is not null;
+
+        _lastRestoreEvidence = new FanFirmwareRestoreEvidence(
+            LocalFirmwareAckVerified: false,
+            WatchdogLeaseRequired: watchdogLeaseRequired,
+            WatchdogReleaseVerified: false,
+            CompletedAtUtc: DateTimeOffset.MinValue,
+            Detail: "Firmware restore is in progress.");
 
         if (_watchdogLease is not null)
         {
@@ -826,15 +852,26 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
             }
         }
 
+        // RestoreLockedAsync cannot return successfully until the production
+        // hardware path has issued FF/FF -> LegacyDefault and observed EC
+        // setpoints FF/FF through WaitForSetpointAsync.
         await RestoreLockedAsync(cancellationToken).ConfigureAwait(false);
+
+        var watchdogReleaseVerified = !watchdogLeaseRequired;
 
         if (_watchdogLease is not null)
         {
             try
             {
+                // A successful Release response is causal evidence that the
+                // service completed/normalized its own validated HP restore,
+                // verified FF/FF and deleted the durable lease journal before
+                // replying. Gate G consumes this already-paid-for evidence
+                // without opening another reader during PBT_APMSUSPEND.
                 await _watchdogLease.ReleaseAsync(
                         CancellationToken.None)
                     .ConfigureAwait(false);
+                watchdogReleaseVerified = true;
             }
             catch (Exception ex)
             {
@@ -854,6 +891,16 @@ public sealed class Hp88F8FanControlBackend : IFanControlBackend
                 $"begin={watchdogBeginFailure?.Message ?? "ok"}; " +
                 $"release={watchdogReleaseFailure?.Message ?? "ok"}.";
         }
+
+        _lastRestoreEvidence = new FanFirmwareRestoreEvidence(
+            LocalFirmwareAckVerified: true,
+            WatchdogLeaseRequired: watchdogLeaseRequired,
+            WatchdogReleaseVerified: watchdogReleaseVerified,
+            CompletedAtUtc: DateTimeOffset.UtcNow,
+            Detail:
+                watchdogReleaseVerified
+                    ? "Local FF/FF acknowledgement completed and watchdog release was verified before backend return."
+                    : $"Local FF/FF acknowledgement completed but watchdog release was not verified: {watchdogReleaseFailure?.Message ?? "watchdog lease unavailable"}");
     }
 
     private async ValueTask RestoreLockedAsync(CancellationToken cancellationToken)
