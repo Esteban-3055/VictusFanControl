@@ -479,12 +479,22 @@ try {
     $preSleep = Get-Content $preSleepPath -Raw
     Write-Host "Pre-sleep marker    : $preSleep"
 
+    $handlerMatch = [regex]::Match(
+        $preSleep,
+        'handlerMs=([0-9]+(?:\.[0-9]+)?)\|budgetMs=1800')
+
     if ($preSleep -notmatch '^PASS\|' -or
         $preSleep -notmatch 'authority=Firmware' -or
         $preSleep -notmatch 'ec=255/255' -or
+        $preSleep -notmatch 'ecProof=production-backend-restore-ack' -or
         $preSleep -notmatch 'journal=absent' -or
+        $preSleep -notmatch 'telemetry=Suspended' -or
+        $preSleep -notmatch 'resumeObservedBeforeProof=False' -or
+        $preSleep -notmatch 'acceptedResumesBeforeProof=0' -or
+        -not $handlerMatch.Success -or
+        [double]$handlerMatch.Groups[1].Value -gt 1800 -or
         $preSleep -notmatch ("watchdogPid={0}" -f $servicePidBefore)) {
-        throw 'Gate G1 pre-sleep marker does not prove Firmware + FF/FF + journal absent under the original watchdog PID.'
+        throw 'Gate G1 pre-sleep marker does not prove an in-budget Firmware + backend-verified FF/FF + journal-absent handoff before any accepted resume.'
     }
 
     if (-not (Wait-ForFile -Path $resultPath -Seconds 120)) {
