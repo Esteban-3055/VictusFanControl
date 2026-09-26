@@ -119,12 +119,12 @@ Assert-Ordered -Text $armMethod -Needles @(
     '_gateG1WatchdogPid',
     'if (watchdog.JournalPresent)',
     'new Hp88F8EcControlStateProbe(_modulesDirectory).Read()',
-    '_fanCoordinator.TryEnterCustomAsync(',
-    '_fanCoordinator.ApplyAsync(',
+    'TryEnterGateGCustomAuthorityAsync(',
+    'ApplyGateGCommandWithFreshSafetyAsync(',
     '_gateG1HardwareTestBackendAckVerified = true',
     '_gateG1HardwareTestArmed = true',
     'GateGReadyPath'
-) -Description 'every Gate G2 cycle reuses the original watchdog PID and acquires exact watchdog-backed 30/30 only from a clean FF/FF baseline'
+) -Description 'every Gate G2 cycle reuses the original watchdog PID and acquires exact watchdog-backed 30/30 only from a clean FF/FF baseline through fresh-safety helpers'
 
 Assert-Ordered -Text $advanceMethod -Needles @(
     'if (_gateG1AcceptedResumeCount != 1)',
@@ -133,8 +133,8 @@ Assert-Ordered -Text $advanceMethod -Needles @(
     '_gateG1WatchdogPid',
     'if (watchdogAfterResume.JournalPresent)',
     '_fanCoordinator.AllowCustomAdmissionAfterRecoveryAsync(',
-    '_fanCoordinator.TryEnterCustomAsync(',
-    '_fanCoordinator.ApplyAsync(',
+    'TryEnterGateGCustomAuthorityAsync(',
+    'ApplyGateGCommandWithFreshSafetyAsync(',
     'GateGReentryPath',
     '_fanCoordinator.RestoreFirmwareAsync(',
     'watchdogFinal.JournalPresent',
@@ -142,7 +142,7 @@ Assert-Ordered -Text $advanceMethod -Needles @(
     '_gateGCurrentCycle++',
     'ResetGateGHardwareTestCycleState();',
     'await ArmGateGHardwareTestCycleAsync();'
-) -Description 'cycles validate recovery, perform one re-entry, restore, persist PASS, then advance without restarting the GUI'
+) -Description 'cycles validate recovery, perform one fresh-safety re-entry, restore, persist PASS, then advance without restarting the GUI'
 
 Assert-Contains -Text $resetMethod -Pattern '_gateG1AcceptedResumeCount\s*=\s*0' -Description 'accepted-resume count resets between Gate G2 cycles'
 Assert-Contains -Text $resetMethod -Pattern '_gateG1HardwareTestSuspendObserved\s*=\s*false' -Description 'suspend evidence resets between Gate G2 cycles'
