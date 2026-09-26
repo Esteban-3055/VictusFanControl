@@ -48,6 +48,31 @@ function Assert-Administrator {
     }
 }
 
+function Assert-DefaultWatchdogOutputUnlocked {
+    $defaultWatchdogDll = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\bin\Release\net8.0-windows\VictusFanControl.Watchdog.dll'
+
+    if (-not (Test-Path $defaultWatchdogDll)) {
+        return
+    }
+
+    $stream = $null
+    try {
+        $stream = [System.IO.File]::Open(
+            $defaultWatchdogDll,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::ReadWrite,
+            [System.IO.FileShare]::None)
+    }
+    catch {
+        throw "The repository watchdog DLL is locked by another process. This can happen if the old reflection-based G0 probe was run in the current Windows PowerShell process. Close the ENTIRE PowerShell window, open a fresh elevated PowerShell, return to the repository, git pull, and rerun Gate G1. Locked file: $defaultWatchdogDll"
+    }
+    finally {
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+    }
+}
+
 function Read-EcState {
     $output = (& dotnet $cli --probe-88f8-ec-state 2>&1 | Out-String)
     $line = ($output -split "[\r\n]+" |
@@ -242,7 +267,9 @@ foreach ($name in @('OmenMon', 'OmenMon-Reborn', 'VictusFanControl.App')) {
     }
 }
 
-Write-Host 'Step 1: verify S3 and build all code with warnings as errors...' -ForegroundColor Cyan
+Write-Host 'Step 1: verify S3, stale-shell file locks, and build all code with warnings as errors...' -ForegroundColor Cyan
+Assert-DefaultWatchdogOutputUnlocked
+
 $availableSleep = (& powercfg.exe /a 2>&1 | Out-String)
 Write-Host $availableSleep
 if ($availableSleep -notmatch '\(S3\)') {
@@ -279,6 +306,12 @@ Write-Host "EC baseline         : $($baseline.Raw)"
 if ($baseline.Cpu -ne 255 -or $baseline.Gpu -ne 255) {
     throw "Gate G1 requires firmware-owned FF/FF baseline; read $($baseline.Cpu)/$($baseline.Gpu)."
 }
+
+if (Test-Path $journalPath) {
+    throw "Gate G1 requires the durable watchdog journal to be absent BEFORE service reinstall/start; found $journalPath. Preserve and investigate this state instead of clearing it implicitly."
+}
+
+Write-Host 'Durable journal     : absent before service reinstall' -ForegroundColor Green
 
 Write-Host ''
 Write-Host 'Verify the CPU undervolt shown in OMEN Gaming Hub.' -ForegroundColor Yellow
