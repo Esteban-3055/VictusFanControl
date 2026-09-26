@@ -818,6 +818,29 @@ This is fail-closed: if the resumed restore or watchdog handoff fails, telemetry
 remains Suspended, Custom admission remains fenced, and the normal independent
 watchdog/fallback cleanup owns recovery.
 
+A subsequent source-level timeout audit found two additional S3 hazards that had
+to be removed before this resumable contract was internally consistent:
+
+- the production HP backend still measured setpoint/restore/tach acknowledgement
+  deadlines with Stopwatch/QPC. On Windows those counters advance across
+  standby/hibernate, so a restore interrupted by S3 could wake with its nominal
+  5 s acknowledgement budget already exhausted;
+- the named-pipe lease client still used CancellationTokenSource.CancelAfter for
+  its 3 s / 4 s / 10 s connect/request/release timeouts. On the project's .NET 8
+  Windows runtime those timer deadlines can also advance across sleep, producing
+  a false WATCHDOG_IPC_LOSS immediately after wake.
+
+Both domains now use the same QueryUnbiasedInterruptTime-derived active-time
+clock used by the watchdog deadline model. Sleep/hibernate time is excluded from
+HP backend acknowledgement deadlines and from watchdog client IPC deadlines.
+The ordinary poll Task.Delay calls are only wake-efficient scheduling points;
+elapsed timeout time is determined exclusively from the unbiased active-time
+clock. Synthetic regressions freeze the injected active-time clock while allowing
+wall time to exceed the old timeout and require both a delayed HP restore ACK and
+a delayed watchdog response to still succeed. CI also rejects any return to
+Stopwatch/QPC in the HP acknowledgement loops or CancelAfter in the watchdog
+lease client.
+
 Gate G2 remains open until this revised contract first passes a one-cycle G1
 physical regression and then a fresh 5/5 hardware run. Automatic fan policy
 remains OFF. Representative-load testing and the adaptive RPM controller stay
