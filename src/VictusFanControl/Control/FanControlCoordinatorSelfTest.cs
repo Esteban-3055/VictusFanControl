@@ -34,6 +34,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestControlDependencyFailurePreemptsUnsafeSafetyAsync(output, safety, now);
         failures += await TestLifecycleFenceClosesBeforeCoordinatorGateAsync(output, safety, now);
         failures += await TestStaleSafetyEvaluationCannotTearDownNewerSessionAsync(output, safety, now);
+        failures += await TestSupersededAdmissionIsNoWriteAndFreshRetrySucceedsAsync(output, now);
         failures += await TestStaleCommandSafetyCannotTearDownNewerSessionAsync(output, safety, now);
 
         output.WriteLine();
@@ -643,6 +644,64 @@ public static class FanControlCoordinatorSelfTest
             backend.StatusCalls == 0 &&
             backend.RestoreCalls == 1 &&
             !backend.Active &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
+    private static async Task<int> TestSupersededAdmissionIsNoWriteAndFreshRetrySucceedsAsync(
+        TextWriter output,
+        DateTimeOffset now)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        // Model the physical Gate G race: the Gate G caller evaluates a healthy
+        // snapshot, then the 1 Hz telemetry supervisor publishes a newer healthy
+        // evaluation before TryEnterCustomAsync gets to consume the older one.
+        var olderAdmission = BuildReadySafety(
+            now + TimeSpan.FromSeconds(1),
+            now + TimeSpan.FromSeconds(1));
+
+        var newerSupervisor = BuildReadySafety(
+            now + TimeSpan.FromSeconds(2),
+            now + TimeSpan.FromSeconds(2));
+
+        var supervisorAccepted = await coordinator.EnforceSafetyAsync(
+            newerSupervisor,
+            "newer healthy telemetry superseded pending admission",
+            CancellationToken.None);
+
+        var staleEntered = await coordinator.TryEnterCustomAsync(
+            olderAdmission,
+            CancellationToken.None);
+
+        var staleStillCurrent =
+            coordinator.IsSafetyEvaluationCurrent(
+                olderAdmission);
+
+        var freshAdmission = BuildReadySafety(
+            now + TimeSpan.FromSeconds(3),
+            now + TimeSpan.FromSeconds(3));
+
+        var freshEntered = await coordinator.TryEnterCustomAsync(
+            freshAdmission,
+            CancellationToken.None);
+
+        if (freshEntered)
+        {
+            await coordinator.RestoreFirmwareAsync(
+                "superseded-admission retry test cleanup",
+                CancellationToken.None);
+        }
+
+        return Report(
+            output,
+            "superseded healthy admission is no-write and fresh retry succeeds",
+            supervisorAccepted &&
+            !staleEntered &&
+            !staleStillCurrent &&
+            backend.EnterCalls == 1 &&
+            freshEntered &&
+            backend.RestoreCalls == 1 &&
             coordinator.Authority == FanAuthority.Firmware);
     }
 
