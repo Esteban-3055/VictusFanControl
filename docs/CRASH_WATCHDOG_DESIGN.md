@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: Gates A, B, D, E and F have passed on real hardware under LocalSystem, Gate C passed synthetic Windows CI, and Gate G0 has passed physical S3 clock-semantics validation. A historical Gate G1 cycle completed successfully, but later repeated physical runs proved that requiring the entire HP/WMI/watchdog restore to finish before physical S3 is not a stable Windows user-mode contract. Gate G1 is therefore being revalidated against the revised fail-closed contract: admission + telemetry must be fenced promptly before blocking suspend IO, and any restore interrupted by S3 must complete under the durable lease before the first resume is accepted. Gate G2 (5/5 consecutive same-session cycles) remains open. Gate D physically proves controller death -> independent service restore; Gate E proves watchdog death -> live-controller local restore followed by durable-journal recovery; Gate F proves simultaneous controller + watchdog loss from both durable OWNED and post-write WRITE_ARMED states.
+Status: Gates A, B, D, E and F have passed on real hardware under LocalSystem, Gate C passed synthetic Windows CI, Gate G0 has passed physical S3 clock-semantics validation, and the revised Gate G1 contract passed a complete physical S3 cycle on 2026-09-26 at commit 626f695. Gate G1 now proves prompt admission/telemetry fencing before blocking suspend IO, validated Firmware + backend FF/FF + watchdog Release/Ready + journal-absent handoff before resume acceptance, five-snapshot Healthy recovery, controlled 30/30 re-entry, and final Firmware + FF/FF under the same watchdog PID. Gate G2 (5/5 consecutive same-session cycles) remains open. Gate D physically proves controller death -> independent service restore; Gate E proves watchdog death -> live-controller local restore followed by durable-journal recovery; Gate F proves simultaneous controller + watchdog loss from both durable OWNED and post-write WRITE_ARMED states.
 
 ## 1. Hardware fact that drives the design
 
@@ -862,7 +862,16 @@ exact ordering (older healthy admission -> newer healthy supervisor evaluation
 -> stale no-write refusal -> fresh admission success) and requires only the
 fresh attempt to reach the backend.
 
-Gate G2 remains open until this revised contract first passes a one-cycle G1
-physical regression and then a fresh 5/5 hardware run. Automatic fan policy
-remains OFF. Representative-load testing and the adaptive RPM controller stay
-blocked until those gates are complete.
+The revised contract passed its one-cycle physical Gate G1 regression on
+2026-09-26. The cycle reached durable OWNED 30/30, fenced telemetry in 234.6 ms,
+completed backend FF/FF + watchdog Release and Firmware transition at about
+1.01 s, accepted exactly one resume, recovered through five complete telemetry
+snapshots, completed one controlled 30/30 re-entry, and ended Firmware + FF/FF
+with journal absent under the same watchdog PID. Kernel-Power 42 -> 107 confirmed
+real S3; no watchdog timeout/recovery/fatal evidence or emergency fallback
+execution occurred; OGH undervolt remained unchanged.
+
+Gate G2 now remains as the only suspend/resume repetition gate: 5/5 consecutive
+same-process cycles under the same contract. Automatic fan policy remains OFF.
+Representative-load testing and the adaptive RPM controller stay blocked until
+Gate G2 and the later low-target S3/load validations are complete.
