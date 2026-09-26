@@ -841,6 +841,27 @@ a delayed watchdog response to still succeed. CI also rejects any return to
 Stopwatch/QPC in the HP acknowledgement loops or CancelAfter in the watchdog
 lease client.
 
+A later physical G1 run on 2026-09-26 stopped safely before READY, before
+any 30/30 write and before S3. Baseline watchdog state and EC FF/FF were clean,
+but TryEnterCustomAsync returned false while the service log was still only
+waiting for its first controller connection. The path was therefore upstream of
+watchdog Prepare/WMI. Source review isolated the remaining no-write concurrency
+case: the 1 Hz telemetry safety supervisor can publish a newer healthy
+SafetyGate sequence between the Gate G caller's Evaluate() and
+TryEnterCustomAsync(). The coordinator correctly rejects that older sequence,
+but the hardware harness had treated every false admission as a fatal denial.
+
+Gate G now handles that distinction explicitly. Initial admission and
+post-resume re-entry use bounded fresh-snapshot retries. A retry is permitted
+only when the attempted evaluation is no longer the coordinator's current
+sequence; if the rejected evaluation is still current, the denial remains
+fail-closed. Command dispatch uses a typed FanControlStaleSafetyException and may
+retry only when Custom authority is still intact, which proves the stale result
+was rejected before hardware dispatch. A synthetic regression reproduces the
+exact ordering (older healthy admission -> newer healthy supervisor evaluation
+-> stale no-write refusal -> fresh admission success) and requires only the
+fresh attempt to reach the backend.
+
 Gate G2 remains open until this revised contract first passes a one-cycle G1
 physical regression and then a fresh 5/5 hardware run. Automatic fan policy
 remains OFF. Representative-load testing and the adaptive RPM controller stay
