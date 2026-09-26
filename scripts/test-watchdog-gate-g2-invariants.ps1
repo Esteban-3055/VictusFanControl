@@ -141,8 +141,19 @@ Assert-Ordered -Text $advanceMethod -Needles @(
     'WriteGateG2CycleResult(',
     '_gateGCurrentCycle++',
     'ResetGateGHardwareTestCycleState();',
+    'await WaitForGateGInterCycleTelemetryStabilityAsync(',
     'await ArmGateGHardwareTestCycleAsync();'
-) -Description 'cycles validate recovery, perform one fresh-safety re-entry, restore, persist PASS, then advance without restarting the GUI'
+) -Description 'cycles validate recovery, perform one fresh-safety re-entry, restore, persist PASS, require post-restore telemetry stability, then advance without restarting the GUI'
+
+Assert-Contains -Text $mainForm -Pattern 'GateGInterCycleStableSnapshotsRequired\s*=\s*2' -Description 'Gate G2 requires two distinct stable post-restore telemetry snapshots before the next cycle'
+Assert-Contains -Text $mainForm -Pattern 'GateGInterCycleStabilityTimeout[\s\S]*TimeSpan\.FromSeconds\(15\)' -Description 'Gate G2 inter-cycle stabilization wait is bounded'
+Assert-Contains -Text $mainForm -Pattern 'private async Task<TelemetrySnapshot> WaitForGateGInterCycleTelemetryStabilityAsync' -Description 'Gate G2 has a dedicated inter-cycle stabilization barrier'
+Assert-Contains -Text $mainForm -Pattern 'snapshot\.Timestamp > finalFirmwareAt' -Description 'Gate G2 stabilization accepts only telemetry captured after the previous Firmware transition'
+Assert-Contains -Text $mainForm -Pattern 'snapshot\.IsComplete' -Description 'Gate G2 stabilization requires complete telemetry'
+Assert-Contains -Text $mainForm -Pattern '_worker\.StateMachine\.State == SystemState\.Healthy' -Description 'Gate G2 stabilization requires Healthy runtime state'
+Assert-Contains -Text $mainForm -Pattern 'displaySafety\.CustomControlPermitted' -Description 'Gate G2 stabilization requires SafetyGate permission without consuming control ordering'
+Assert-Contains -Text $mainForm -Pattern '_fanCoordinator\.Authority == FanAuthority\.Firmware' -Description 'Gate G2 stabilization occurs only while firmware still owns the fans'
+Assert-Contains -Text $coordinator -Pattern 'DescribeSafetyDenialLocked' -Description 'safety-supervisor handoffs include explicit denial diagnostics'
 
 Assert-Contains -Text $resetMethod -Pattern '_gateG1AcceptedResumeCount\s*=\s*0' -Description 'accepted-resume count resets between Gate G2 cycles'
 Assert-Contains -Text $resetMethod -Pattern '_gateG1HardwareTestSuspendObserved\s*=\s*false' -Description 'suspend evidence resets between Gate G2 cycles'
