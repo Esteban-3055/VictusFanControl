@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using VictusFanControl.Control;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
@@ -642,7 +643,7 @@ internal sealed class MainForm : Form
                         $"telemetry={_worker.StateMachine.State}|" +
                         $"resumeObservedBeforeProof={resumeObservedBeforeProof}|" +
                         $"acceptedResumesBeforeProof={_gateG1AcceptedResumeCount}|" +
-                        $"handlerMs={handlerElapsedMs:0.0}|budgetMs={GateGSuspendProofBudgetMs:0}|" +
+                        $"handlerMs={handlerElapsedMs.ToString("0.0", CultureInfo.InvariantCulture)}|budgetMs={GateGSuspendProofBudgetMs:0}|" +
                         $"watchdogPid={_gateG1WatchdogPid}|guiPid={Environment.ProcessId}";
 
                     // Keep the proof entirely in memory until Windows resumes.
@@ -654,7 +655,7 @@ internal sealed class MainForm : Form
                     _gateGPendingPreSleepMarker = marker;
                     _gateGPendingPreSleepLog =
                         _gateG1HardwareTestPreSleepVerified
-                            ? $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF CAPTURED before WndProc return; production backend acknowledged local FF/FF, watchdog Release response proves durable journal deletion, telemetry=Suspended, no resume was observed, handlerMs={handlerElapsedMs:0.0}. Marker persistence is deferred until resume."
+                            ? $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF CAPTURED before WndProc return; production backend acknowledged local FF/FF, watchdog Release response proves durable journal deletion, telemetry=Suspended, no resume was observed, handlerMs={handlerElapsedMs.ToString("0.0", CultureInfo.InvariantCulture)}. Marker persistence is deferred until resume."
                             : $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF CAPTURE FAILED; {marker}";
                 }
                 catch (Exception ex)
