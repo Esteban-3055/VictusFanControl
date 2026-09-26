@@ -18,6 +18,7 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestHappyPathAsync(output);
         failures += await TestExistingOverrideRefusedAsync(output);
         failures += await TestCancelledAdmissionIsNoWriteAsync(output);
+        failures += await TestAdmissionFailurePreservesCauseAsync(output);
         failures += await TestFirstCommandExternalOverrideIsNoWriteAsync(output);
         failures += await TestUnsupportedTargetRefusedAsync(output);
         failures += await TestRangeRefusedAsync(output);
@@ -132,6 +133,46 @@ public static class Hp88F8FanControlBackendSelfTest
             hardware.RestoreCalls == 0 &&
             hardware.State.CpuSetpoint == byte.MaxValue &&
             hardware.State.GpuSetpoint == byte.MaxValue);
+    }
+
+    private static async Task<int> TestAdmissionFailurePreservesCauseAsync(
+        TextWriter output)
+    {
+        var expected =
+            new IOException(
+                "synthetic EC admission contention");
+
+        var hardware = new FakeHardware
+        {
+            ReadEcStateException = expected
+        };
+
+        await using var backend = NewBackend(hardware);
+
+        FanControlAdmissionException? observed = null;
+        try
+        {
+            await backend.EnterCustomModeAsync(
+                CancellationToken.None);
+        }
+        catch (FanControlAdmissionException ex)
+        {
+            observed = ex;
+        }
+
+        return Report(
+            output,
+            "no-write admission failure preserves the exact inner cause",
+            observed is not null &&
+            ReferenceEquals(observed.InnerException, expected) &&
+            observed.Message.Contains(
+                nameof(IOException),
+                StringComparison.Ordinal) &&
+            observed.Message.Contains(
+                expected.Message,
+                StringComparison.Ordinal) &&
+            hardware.SetCalls == 0 &&
+            hardware.RestoreCalls == 0);
     }
 
     private static async Task<int> TestFirstCommandExternalOverrideIsNoWriteAsync(TextWriter output)
