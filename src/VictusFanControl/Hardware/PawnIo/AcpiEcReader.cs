@@ -98,6 +98,33 @@ internal sealed class AcpiEcReader : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reads only the HP 88F8 fixed-level ownership registers while holding one
+    /// Global\Access_EC mutex lease. Watchdog lease admission/recovery uses this
+    /// narrow snapshot because it needs ownership only, not rate/tach/manual
+    /// diagnostics. Keeping the service-side critical section to 0x34/0x35
+    /// avoids unnecessary contention with the GUI telemetry/control readers.
+    /// </summary>
+    public Hp88F8SetpointSample ReadHp88F8Setpoint()
+    {
+        var lockTaken = AcquireMutex();
+        try
+        {
+            return RetryLocked(
+                () => new Hp88F8SetpointSample(
+                    CpuSetpoint: ReadRegisterLocked(0x34),
+                    GpuSetpoint: ReadRegisterLocked(0x35)),
+                "EC 88F8 setpoint snapshot 0x34/0x35");
+        }
+        finally
+        {
+            if (lockTaken)
+            {
+                _ecMutex.ReleaseMutex();
+            }
+        }
+    }
+
     public Hp88F8ControlStateSample ReadHp88F8ControlState()
     {
         var lockTaken = AcquireMutex();
@@ -298,6 +325,10 @@ internal sealed class AcpiEcReader : IDisposable
     }
 
     internal readonly record struct FanTachometerSample(ushort CpuRpm, ushort GpuRpm);
+
+    internal readonly record struct Hp88F8SetpointSample(
+        byte CpuSetpoint,
+        byte GpuSetpoint);
 
     internal readonly record struct Hp88F8ControlStateSample(
         byte CpuRateTarget,
