@@ -215,11 +215,11 @@ if ($recoverDefinition -lt 0) {
 $recoverTail = $manager.Substring($recoverDefinition)
 Assert-Ordered -Text $recoverTail -Needles @(
     'await _hardware.RestoreFirmwareAutoAsync(',
-    'if (!after.IsFirmwareOwned)',
+    'if (after.IsFirmwareOwned)',
     'await _journal.DeleteAsync(cancellationToken)',
     '_active = null;',
     'LeaseRecoveryDisposition.RestoredFirmware'
-) -Description 'watchdog successful Release recovery deletes the journal only after verified firmware ownership'
+) -Description 'watchdog successful Release recovery polls for verified firmware ownership before deleting the journal'
 
 Assert-Contains -Text $resumeHandler -Pattern '_gateGSuspendWasCustom\s*&&[\s\S]*_gateGSuspendBackendAckVerified\s*&&[\s\S]*_gateGTelemetrySuspendedBeforeRestore[\s\S]*telemetryTransitionFresh[\s\S]*telemetryStillSuspended[\s\S]*telemetryMs <= GateGSuspendProofBudgetMs[\s\S]*localFirmwareAckVerified[\s\S]*watchdogReleaseVerified[\s\S]*firmwareTransitionFresh[\s\S]*firmwareAuthorityCurrent[\s\S]*noAcceptedResumeYet[\s\S]*!watchdog\.JournalPresent' -Description 'Gate G PASS requires prompt pre-block fencing plus completed local/watchdog/Firmware handoff while telemetry remains Suspended and before resume acceptance'
 
