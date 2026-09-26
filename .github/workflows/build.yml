@@ -57,6 +57,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-watchdog-gate-g0-clock-invariants.ps1
 
+      - name: Gate G1 lifecycle invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-g1-invariants.ps1
+
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
