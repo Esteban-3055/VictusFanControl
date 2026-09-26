@@ -8,6 +8,13 @@ namespace VictusFanControl.Hardware.Hp;
 internal interface IHp88F8FanHardware : IDisposable
 {
     Hp88F8EcControlState ReadEcState();
+
+    (byte CpuSetpoint, byte GpuSetpoint) ReadSetpoint()
+    {
+        var state = ReadEcState();
+        return (state.CpuSetpoint, state.GpuSetpoint);
+    }
+
     (byte CpuLevel, byte GpuLevel) GetCurrentFanLevels();
     void SetFanLevel(byte cpuLevel, byte gpuLevel);
     void RestoreFirmwareAuto();
@@ -26,21 +33,33 @@ internal sealed class Hp88F8FanHardware : IHp88F8FanHardware
 
     public Hp88F8EcControlState ReadEcState()
     {
-        var state = _ec.ReadHp88F8ControlState();
+        // The control path consumes only ownership, MaxFan/FanSwitch and the
+        // two physical tachometers. Keep those as three independently retried
+        // narrow EC snapshots instead of reopening the broad diagnostic state.
+        var setpoint = _ec.ReadHp88F8Setpoint();
+        var controlGuard = _ec.ReadHp88F8FanControlGuard();
+        var tachometers = _ec.ReadFanTachometers();
+
         return new Hp88F8EcControlState(
-            state.CpuRateTarget,
-            state.GpuRateTarget,
-            state.CpuRate,
-            state.GpuRate,
-            state.CpuSetpoint,
-            state.GpuSetpoint,
-            state.Manual,
-            state.Countdown,
-            state.Mode,
-            state.MaxFan,
-            state.FanSwitch,
-            state.CpuRpm,
-            state.GpuRpm);
+            CpuRateTarget: byte.MaxValue,
+            GpuRateTarget: byte.MaxValue,
+            CpuRate: byte.MaxValue,
+            GpuRate: byte.MaxValue,
+            CpuSetpoint: setpoint.CpuSetpoint,
+            GpuSetpoint: setpoint.GpuSetpoint,
+            Manual: byte.MaxValue,
+            Countdown: byte.MaxValue,
+            Mode: byte.MaxValue,
+            MaxFan: controlGuard.MaxFan,
+            FanSwitch: controlGuard.FanSwitch,
+            CpuRpm: tachometers.CpuRpm,
+            GpuRpm: tachometers.GpuRpm);
+    }
+
+    public (byte CpuSetpoint, byte GpuSetpoint) ReadSetpoint()
+    {
+        var state = _ec.ReadHp88F8Setpoint();
+        return (state.CpuSetpoint, state.GpuSetpoint);
     }
 
     public (byte CpuLevel, byte GpuLevel) GetCurrentFanLevels() =>
@@ -289,7 +308,6 @@ public sealed class Hp88F8FanControlBackend :
             var detail =
                 $"{_lastDetail} EC setpoint={state.CpuSetpoint}/{state.GpuSetpoint}, " +
                 $"RPM={state.CpuRpm}/{state.GpuRpm}, ownership={ownership}, feedback={feedback}, " +
-                $"manual=0x{state.Manual:X2}, countdown={state.Countdown}, " +
                 $"max=0x{state.MaxFan:X2}, switch=0x{state.FanSwitch:X2}.";
 
             if (_watchdogLease is not null &&
@@ -369,8 +387,8 @@ public sealed class Hp88F8FanControlBackend :
             _ownedSetpoint = null;
             _customModeActive = true;
             _lastDetail =
-                $"Custom authority prepared from firmware-auto state; " +
-                $"manual=0x{state.Manual:X2}, countdown={state.Countdown}.";
+                $"Custom authority prepared from firmware-auto FF/FF state; " +
+                $"max=0x{state.MaxFan:X2}, switch=0x{state.FanSwitch:X2}.";
         }
         catch (FanControlAdmissionException)
         {
@@ -506,7 +524,7 @@ public sealed class Hp88F8FanControlBackend :
                     $"Command {command.CpuLevel}/{command.GpuLevel} acknowledged by EC setpoints " +
                     $"and both tachometers; RPM={tachAck.CpuRpm}/{tachAck.GpuRpm}, " +
                     $"initial RPM={preDispatch.CpuRpm}/{preDispatch.GpuRpm}, " +
-                    $"setpoint-ack RPM={setpointAck.CpuRpm}/{setpointAck.GpuRpm}.";
+                    $"setpoint={setpointAck.CpuSetpoint}/{setpointAck.GpuSetpoint}.";
             }
             catch (FanControlAdmissionException)
             {
@@ -918,7 +936,7 @@ public sealed class Hp88F8FanControlBackend :
         // false. Callers can use this after an uncertain/partial transition.
         _hardware!.RestoreFirmwareAuto();
 
-        var restored = await WaitForSetpointAsync(
+        _ = await WaitForSetpointAsync(
             byte.MaxValue,
             byte.MaxValue,
             _timing.RestoreAckTimeout,
@@ -927,18 +945,17 @@ public sealed class Hp88F8FanControlBackend :
         _ownedSetpoint = null;
         _customModeActive = false;
         _lastDetail =
-            $"HP firmware authority restored; EC setpoints FF/FF, " +
-            $"RPM={restored.CpuRpm}/{restored.GpuRpm}.";
+            "HP firmware authority restored; EC setpoints FF/FF.";
     }
 
-    private async ValueTask<Hp88F8EcControlState> WaitForSetpointAsync(
+    private async ValueTask<(byte CpuSetpoint, byte GpuSetpoint)> WaitForSetpointAsync(
         byte cpuLevel,
         byte gpuLevel,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
         var started = _activeTimeClock.Milliseconds;
-        Hp88F8EcControlState? last = null;
+        (byte CpuSetpoint, byte GpuSetpoint)? last = null;
 
         while (!ActiveTimeClock.HasElapsed(
                    _activeTimeClock,
@@ -947,11 +964,11 @@ public sealed class Hp88F8FanControlBackend :
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            last = _hardware!.ReadEcState();
-            if (last.CpuSetpoint == cpuLevel &&
-                last.GpuSetpoint == gpuLevel)
+            last = _hardware!.ReadSetpoint();
+            if (last.Value.CpuSetpoint == cpuLevel &&
+                last.Value.GpuSetpoint == gpuLevel)
             {
-                return last;
+                return last.Value;
             }
 
             await Task.Delay(_timing.PollInterval, cancellationToken).ConfigureAwait(false);
