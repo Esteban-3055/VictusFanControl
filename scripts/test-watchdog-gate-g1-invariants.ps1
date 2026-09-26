@@ -131,29 +131,32 @@ if ($resumeHandlerStart -lt 0 -or $reopenHandlerStart -le $resumeHandlerStart) {
 $resumeHandler = $mainForm.Substring($resumeHandlerStart, $reopenHandlerStart - $resumeHandlerStart)
 
 Assert-Ordered -Text $resumeHandler -Needles @(
+    'if (GateGHardwareTest &&',
+    'VerifyGateGHandoffBeforeResumeAcceptance(',
     'var accepted = _worker.NotifyResume(source);',
     'if (!accepted)',
-    'var acceptedBeforeThisResume =',
     '_gateG1HardwareTestResumeObserved = true;',
-    '_gateG1AcceptedResumeCount++;',
-    'PersistGateGPreSleepProofAfterResume('
-) -Description 'first accepted resume is counted while preserving the pre-resume accepted-count used by causal proof'
+    '_gateG1AcceptedResumeCount++;'
+) -Description 'Gate G proves completed fan/watchdog handoff while telemetry is still Suspended, then accepts the first resume'
 
-Assert-Contains -Text $resumeHandler -Pattern '_fanCoordinator\.LastRestoreEvidence' -Description 'post-resume proof reads the backend restore evidence that was captured before sleep'
-Assert-Contains -Text $resumeHandler -Pattern '_fanCoordinator\.LastFirmwareAuthorityAtUtc' -Description 'post-resume proof reads the coordinator Firmware-transition timestamp'
-Assert-Contains -Text $resumeHandler -Pattern 'restoreEvidence!\.Value\.CompletedAtUtc < resumeBoundary' -Description 'post-resume proof rejects restore evidence completed after resume began'
-Assert-Contains -Text $resumeHandler -Pattern 'firmwareAt!\.Value < resumeBoundary' -Description 'post-resume proof rejects Firmware transition occurring after resume began'
-Assert-Contains -Text $resumeHandler -Pattern '_gateGTelemetrySuspendedBeforeRestore' -Description 'post-resume proof requires telemetry was synchronously Suspended before restore IO'
-Assert-Contains -Text $resumeHandler -Pattern 'criticalHandoffMs <= GateGSuspendProofBudgetMs' -Description 'post-resume proof requires the complete causal handoff inside the explicit budget'
+Assert-Contains -Text $resumeHandler -Pattern '_fanCoordinator\.LastRestoreEvidence' -Description 'resume-side proof reads backend restore evidence captured by the production transaction'
+Assert-Contains -Text $resumeHandler -Pattern '_fanCoordinator\.LastFirmwareAuthorityAtUtc' -Description 'resume-side proof reads the coordinator Firmware-transition timestamp'
+Assert-Contains -Text $resumeHandler -Pattern 'GateG1WatchdogStateReader\.Read\(\)' -Description 'resume-side proof independently reads watchdog Ready/journal state after wake'
+Assert-Contains -Text $resumeHandler -Pattern 'GateG1WatchdogStateReader\.RequireReady\(' -Description 'resume-side proof requires the original watchdog Ready before telemetry recovery'
+Assert-Contains -Text $resumeHandler -Pattern '_worker\.StateMachine\.State == SystemState\.Suspended' -Description 'resume-side proof requires telemetry to remain Suspended until handoff validation completes'
+Assert-Contains -Text $resumeHandler -Pattern 'telemetryMs <= GateGSuspendProofBudgetMs' -Description 'only the pre-block fence/telemetry work is constrained by the PBT_APMSUSPEND budget'
+Assert-NotContains -Text $resumeHandler -Pattern 'restoreMs <= GateGSuspendProofBudgetMs|firmwareMs <= GateGSuspendProofBudgetMs|criticalHandoffMs <= GateGSuspendProofBudgetMs' -Description 'Gate G does not pretend Windows guarantees completion of blocking restore IO before physical S3'
+Assert-Contains -Text $resumeHandler -Pattern 'handoffProof=completed-before-resume-acceptance' -Description 'Gate G marker states the supported suspend safety boundary explicitly'
 Assert-Contains -Text $resumeHandler -Pattern 'ecProof=production-backend-restore-ack' -Description 'Gate G marker identifies production backend FF/FF acknowledgement'
 Assert-Contains -Text $resumeHandler -Pattern 'watchdogRelease=\{watchdogReleaseVerified\}' -Description 'Gate G marker records causal watchdog Release acknowledgement'
-Assert-Contains -Text $resumeHandler -Pattern 'journalProof=watchdog-release-response' -Description 'Gate G journal absence derives from successful watchdog Release, not a pre-sleep file read'
+Assert-Contains -Text $resumeHandler -Pattern 'watchdogState=Ready' -Description 'Gate G marker records post-wake watchdog Ready proof'
+Assert-Contains -Text $resumeHandler -Pattern 'journalProof=watchdog-release-response\+post-resume-ready-check' -Description 'Gate G journal absence is backed by Release plus an independent post-wake Ready/journal check'
 Assert-Contains -Text $resumeHandler -Pattern 'telemetryProof=pre-restore-state-transition' -Description 'Gate G marker records that telemetry Suspended was established before restore IO'
-Assert-Contains -Text $resumeHandler -Pattern 'acceptedResumesBeforeProof=\{acceptedResumesBeforeThisResume\}' -Description 'Gate G marker records zero prior accepted resumes'
-Assert-Contains -Text $resumeHandler -Pattern 'handlerMs=\{FormatInvariantMs\(criticalHandoffMs\)\}' -Description 'Gate G marker records culture-invariant critical handoff latency'
-Assert-Contains -Text $mainForm -Pattern 'GateGSuspendProofBudgetMs\s*=\s*1800' -Description 'Gate G keeps margin inside the approximately two-second Windows suspend notification budget'
+Assert-Contains -Text $resumeHandler -Pattern 'acceptedResumesBeforeProof=\{_gateG1AcceptedResumeCount\}' -Description 'Gate G marker records zero accepted resumes before handoff proof'
+Assert-Contains -Text $resumeHandler -Pattern 'preBlockMs=\{FormatInvariantMs\(telemetryMs\)\}' -Description 'Gate G marker records culture-invariant pre-block latency'
+Assert-Contains -Text $mainForm -Pattern 'GateGSuspendProofBudgetMs\s*=\s*1800' -Description 'Gate G keeps margin inside the approximately two-second Windows suspend notification budget for non-blocking pre-work'
 Assert-NotContains -Text $suspendHandler -Pattern 'GateG1WatchdogStateReader\.WriteDurableMarker\(' -Description 'Gate G never persists proof from PBT_APMSUSPEND'
-Assert-Contains -Text $resumeHandler -Pattern 'GateG1WatchdogStateReader\.WriteDurableMarker\(' -Description 'Gate G persists causal proof only after Windows resumes'
+Assert-Contains -Text $resumeHandler -Pattern 'GateG1WatchdogStateReader\.WriteDurableMarker\(' -Description 'Gate G persists causal proof only after wake and before resume acceptance'
 
 $restoreWithWatchdogStart = $backend.IndexOf('private async ValueTask RestoreWithWatchdogLockedAsync', [StringComparison]::Ordinal)
 $restoreLockedStart = $backend.IndexOf('private async ValueTask RestoreLockedAsync', $restoreWithWatchdogStart, [StringComparison]::Ordinal)
@@ -198,7 +201,7 @@ Assert-Ordered -Text $recoverTail -Needles @(
     'LeaseRecoveryDisposition.RestoredFirmware'
 ) -Description 'watchdog successful Release recovery deletes the journal only after verified firmware ownership'
 
-Assert-Contains -Text $resumeHandler -Pattern '_gateGSuspendWasCustom\s*&&[\s\S]*_gateGSuspendBackendAckVerified\s*&&[\s\S]*localFirmwareAckVerified[\s\S]*watchdogReleaseVerified[\s\S]*firmwareTransitionFresh[\s\S]*firmwareAuthorityCurrent[\s\S]*_gateGTelemetrySuspendedBeforeRestore[\s\S]*handoffCompletedBeforeResume[\s\S]*acceptedResumesBeforeThisResume == 0' -Description 'pre-sleep PASS requires prior Custom ACK, local FF/FF, successful watchdog release, a fresh/current Firmware transition, pre-restore Suspended telemetry and no earlier resume'
+Assert-Contains -Text $resumeHandler -Pattern '_gateGSuspendWasCustom\s*&&[\s\S]*_gateGSuspendBackendAckVerified\s*&&[\s\S]*_gateGTelemetrySuspendedBeforeRestore[\s\S]*telemetryTransitionFresh[\s\S]*telemetryStillSuspended[\s\S]*telemetryMs <= GateGSuspendProofBudgetMs[\s\S]*localFirmwareAckVerified[\s\S]*watchdogReleaseVerified[\s\S]*firmwareTransitionFresh[\s\S]*firmwareAuthorityCurrent[\s\S]*noAcceptedResumeYet[\s\S]*!watchdog\.JournalPresent' -Description 'Gate G PASS requires prompt pre-block fencing plus completed local/watchdog/Firmware handoff while telemetry remains Suspended and before resume acceptance'
 
 $healthyStart = $mainForm.IndexOf('private async Task HandleHealthyStateAsync', [StringComparison]::Ordinal)
 $gateDStart = $mainForm.IndexOf('private async Task AdvanceGateDHardwareTestAsync', $healthyStart, [StringComparison]::Ordinal)
