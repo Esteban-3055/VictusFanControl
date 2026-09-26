@@ -141,7 +141,7 @@ Assert-Ordered -Text $resumeHandler -Needles @(
 
 Assert-Contains -Text $resumeHandler -Pattern '_fanCoordinator\.LastRestoreEvidence' -Description 'post-resume proof reads the backend restore evidence that was captured before sleep'
 Assert-Contains -Text $resumeHandler -Pattern '_fanCoordinator\.LastFirmwareAuthorityAtUtc' -Description 'post-resume proof reads the coordinator Firmware-transition timestamp'
-Assert-Contains -Text $resumeHandler -Pattern 'restoreEvidence\.Value\.CompletedAtUtc < resumeBoundary' -Description 'post-resume proof rejects restore evidence completed after resume began'
+Assert-Contains -Text $resumeHandler -Pattern 'restoreEvidence!\.Value\.CompletedAtUtc < resumeBoundary' -Description 'post-resume proof rejects restore evidence completed after resume began'
 Assert-Contains -Text $resumeHandler -Pattern 'firmwareAt!\.Value < resumeBoundary' -Description 'post-resume proof rejects Firmware transition occurring after resume began'
 Assert-Contains -Text $resumeHandler -Pattern '_gateGTelemetrySuspendedBeforeRestore' -Description 'post-resume proof requires telemetry was synchronously Suspended before restore IO'
 Assert-Contains -Text $resumeHandler -Pattern 'criticalHandoffMs <= GateGSuspendProofBudgetMs' -Description 'post-resume proof requires the complete causal handoff inside the explicit budget'
