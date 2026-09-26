@@ -31,6 +31,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     private bool _admissionBlocked;
     private DateTimeOffset _minimumSafetySnapshotTimestamp = DateTimeOffset.MinValue;
     private long _latestSafetyEvaluationSequence;
+    private long _lastFirmwareAuthorityUtcTicks;
     private CancellationTokenSource? _activeCommandCts;
     private bool _disposed;
 
@@ -46,6 +47,17 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     public bool BackendCanWrite => _backend.CanWrite;
     public FanFirmwareRestoreEvidence? LastRestoreEvidence =>
         (_backend as IFanControlRestoreEvidenceSource)?.LastRestoreEvidence;
+
+    public DateTimeOffset? LastFirmwareAuthorityAtUtc
+    {
+        get
+        {
+            var ticks = Interlocked.Read(ref _lastFirmwareAuthorityUtcTicks);
+            return ticks <= 0
+                ? null
+                : new DateTimeOffset(ticks, TimeSpan.Zero);
+        }
+    }
 
     public async ValueTask<bool> TryEnterCustomAsync(
         SafetyGateResult safety,
@@ -199,6 +211,18 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 
 
     /// <summary>
+    /// Synchronously closes lifecycle admission and cancels any in-flight fan
+    /// command. Power handlers use this before marking telemetry Suspended so
+    /// stale pre-boundary safety cannot reacquire Custom while restore IO is
+    /// still in progress.
+    /// </summary>
+    public void CloseCustomAdmissionForLifecycleBoundary()
+    {
+        _lifecycleFenceRequested = true;
+        CancelActiveCommand();
+    }
+
+    /// <summary>
     /// Closes custom-control admission at a power/lifecycle boundary and restores
     /// firmware authority before returning. The timestamp becomes a freshness
     /// fence: pre-boundary SafetyGate results can never reacquire authority.
@@ -213,8 +237,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         // SemaphoreSlim does not guarantee that this lifecycle waiter will beat
         // another queued TryEnterCustomAsync call. The volatile fence prevents
         // stale pre-boundary safety from reacquiring authority in that window.
-        _lifecycleFenceRequested = true;
-        CancelActiveCommand();
+        CloseCustomAdmissionForLifecycleBoundary();
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -621,7 +644,15 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     private void Transition(FanAuthority next, string reason)
     {
         var previous = _authority;
+        var changedAt = DateTimeOffset.UtcNow;
         _authority = next;
+
+        if (next == FanAuthority.Firmware)
+        {
+            Interlocked.Exchange(
+                ref _lastFirmwareAuthorityUtcTicks,
+                changedAt.UtcDateTime.Ticks);
+        }
 
         AuthorityChanged?.Invoke(
             this,
@@ -629,7 +660,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 previous,
                 next,
                 reason,
-                DateTimeOffset.UtcNow));
+                changedAt));
     }
 
     private void ThrowIfDisposed()
