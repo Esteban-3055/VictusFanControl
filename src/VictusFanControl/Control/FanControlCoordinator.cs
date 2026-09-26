@@ -17,6 +17,15 @@ public sealed record FanAuthorityChangedEventArgs(
     string Reason,
     DateTimeOffset Timestamp);
 
+
+public sealed class FanControlStaleSafetyException : InvalidOperationException
+{
+    public FanControlStaleSafetyException()
+        : base("Fan command refused because its SafetyGate evaluation is older than the latest accepted evaluation.")
+    {
+    }
+}
+
 /// <summary>
 /// Owns fan-control authority transitions. The adaptive policy never talks
 /// directly to a hardware backend; all commands pass through this coordinator.
@@ -45,6 +54,8 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     public FanAuthority Authority => _authority;
     public string BackendName => _backend.Name;
     public bool BackendCanWrite => _backend.CanWrite;
+    public bool IsSafetyEvaluationCurrent(SafetyGateResult safety) =>
+        IsLatestSafetyEvaluation(safety);
     public FanFirmwareRestoreEvidence? LastRestoreEvidence =>
         (_backend as IFanControlRestoreEvidenceSource)?.LastRestoreEvidence;
 
@@ -138,8 +149,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     {
         if (!TryAcceptSafetyEvaluation(safety))
         {
-            throw new InvalidOperationException(
-                "Fan command refused because its SafetyGate evaluation is older than the latest accepted evaluation.");
+            throw new FanControlStaleSafetyException();
         }
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
