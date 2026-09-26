@@ -1,4 +1,5 @@
 using VictusFanControl.Control;
+using VictusFanControl.Runtime;
 
 namespace VictusFanControl.Hardware.Hp;
 
@@ -21,6 +22,7 @@ public static class Hp88F8FanControlBackendSelfTest
         failures += await TestUnsupportedTargetRefusedAsync(output);
         failures += await TestRangeRefusedAsync(output);
         failures += await TestRestoreVerificationAsync(output);
+        failures += await TestRestoreTimeoutExcludesSuspendedWallTimeAsync(output);
         failures += await TestCpuTachFailureAsync(output);
         failures += await TestGpuTachFailureAsync(output);
         failures += await TestOwnershipLossAsync(output);
@@ -247,6 +249,58 @@ public static class Hp88F8FanControlBackendSelfTest
             output,
             "restore is not accepted until EC returns to FF/FF",
             failed && hardware.State.CpuSetpoint == 30 && hardware.State.GpuSetpoint == 30);
+    }
+
+    private static async Task<int> TestRestoreTimeoutExcludesSuspendedWallTimeAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware
+        {
+            IgnoreRestore = true,
+            State = FakeHardware.AutoState with
+            {
+                CpuSetpoint = 30,
+                GpuSetpoint = 30
+            }
+        };
+        var clock = new FrozenActiveTimeClock();
+
+        hardware.OnEcRead = readCount =>
+        {
+            // FastTiming.RestoreAckTimeout is 100 ms and PollInterval is 10 ms.
+            // Delay the synthetic FF/FF acknowledgement beyond 100 ms of real
+            // wall time while the active-time clock remains frozen, exactly as
+            // it would across S3. A Stopwatch/QPC timeout would fail this case.
+            if (readCount >= 15)
+            {
+                hardware.State = hardware.State with
+                {
+                    CpuSetpoint = byte.MaxValue,
+                    GpuSetpoint = byte.MaxValue
+                };
+            }
+        };
+
+        await using var backend =
+            NewBackend(
+                hardware,
+                activeTimeClock: clock);
+
+        await backend.RestoreFirmwareAutoAsync(
+            CancellationToken.None);
+
+        var status =
+            await backend.GetStatusAsync(
+                CancellationToken.None);
+
+        return Report(
+            output,
+            "restore acknowledgement timeout excludes suspended wall time",
+            hardware.RestoreCalls == 1 &&
+            hardware.EcReadCalls >= 15 &&
+            hardware.State.CpuSetpoint == byte.MaxValue &&
+            hardware.State.GpuSetpoint == byte.MaxValue &&
+            !status.CustomModeActive);
     }
 
     private static async Task<int> TestCpuTachFailureAsync(TextWriter output)
@@ -873,12 +927,15 @@ public static class Hp88F8FanControlBackendSelfTest
             lease.Calls.Contains("cancel-prepared"));
     }
 
-    private static Hp88F8FanControlBackend NewBackend(FakeHardware hardware) =>
+    private static Hp88F8FanControlBackend NewBackend(
+        FakeHardware hardware,
+        IActiveTimeClock? activeTimeClock = null) =>
         new(
             hardware,
             targetSupported: true,
             supportDetail: "synthetic validated target",
-            timing: FastTiming);
+            timing: FastTiming,
+            activeTimeClock: activeTimeClock);
 
     private static Hp88F8FanControlBackend NewProtectedBackend(
         FakeHardware hardware,
@@ -894,6 +951,11 @@ public static class Hp88F8FanControlBackendSelfTest
     {
         output.WriteLine($"{(pass ? "PASS" : "FAIL")}  {name}");
         return pass ? 0 : 1;
+    }
+
+    private sealed class FrozenActiveTimeClock : IActiveTimeClock
+    {
+        public ulong Milliseconds => 0;
     }
 
     private sealed class FakeWatchdogLeaseClient :
