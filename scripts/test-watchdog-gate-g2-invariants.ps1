@@ -174,6 +174,12 @@ Assert-Contains -Text $harness -Pattern 'Wait-ForPowerCycleEvidence' -Descriptio
 Assert-Contains -Text $harness -Pattern 'Gate G0 production clock measurement: PASS' -Description 'every physical cycle crosses the validated S3 clock probe'
 Assert-Contains -Text $harness -Pattern 'exactly one resume was accepted' -Description 'physical harness requires one logical accepted resume per cycle'
 Assert-Contains -Text $harness -Pattern 'telemetry recovered to Healthy' -Description 'physical harness requires Healthy recovery per cycle'
+Assert-Contains -Text $harness -Pattern 'ecProof=production-backend-restore-ack' -Description 'physical harness requires backend-return FF/FF proof without a redundant suspend-time EC reader'
+Assert-Contains -Text $harness -Pattern 'telemetry=Suspended' -Description 'physical harness requires telemetry to be marked Suspended before pre-sleep proof completes'
+Assert-Contains -Text $harness -Pattern 'resumeObservedBeforeProof=False' -Description 'physical harness rejects a resume that races ahead of pre-sleep proof'
+Assert-Contains -Text $harness -Pattern 'acceptedResumesBeforeProof=0' -Description 'physical harness requires zero accepted resumes at pre-sleep proof time'
+Assert-Contains -Text $harness -Pattern 'handlerMs=\(\[0-9\]\+\(\?:\\\.\[0-9\]\+\)\?\).*budgetMs=1800' -Description 'physical harness parses the explicit 1800 ms suspend-handler proof budget'
+
 Assert-Contains -Text $harness -Pattern 'gate-g2\.cycle-\{0\}\.reentry' -Description 'physical harness requires one controlled re-entry marker per cycle'
 Assert-Contains -Text $harness -Pattern 'cycles=5/5' -Description 'physical harness requires final 5/5 result'
 Assert-Contains -Text $harness -Pattern 'SCM recovery' -Description 'physical harness re-verifies SCM recovery configuration'
