@@ -2,6 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $programPath = Join-Path $repoRoot 'src\VictusFanControl.App\Program.cs'
+$cliProgramPath = Join-Path $repoRoot 'src\VictusFanControl\Program.cs'
+$cliOptionsPath = Join-Path $repoRoot 'src\VictusFanControl\Cli\CliOptions.cs'
 $mainFormPath = Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs'
 $gateG1StatePath = Join-Path $repoRoot 'src\VictusFanControl.App\GateG1WatchdogState.cs'
 $telemetryPath = Join-Path $repoRoot 'src\VictusFanControl.App\TelemetryWorker.cs'
@@ -61,6 +63,8 @@ function Assert-Ordered {
 }
 
 $program = Get-Content $programPath -Raw
+$cliProgram = Get-Content $cliProgramPath -Raw
+$cliOptions = Get-Content $cliOptionsPath -Raw
 $mainForm = Get-Content $mainFormPath -Raw
 $gateG1State = Get-Content $gateG1StatePath -Raw
 $telemetry = Get-Content $telemetryPath -Raw
@@ -77,6 +81,9 @@ Assert-Contains -Text $program -Pattern '--gate-g1-suspend-test' -Description 'G
 Assert-Contains -Text $program -Pattern '--gate-g1-test-token' -Description 'Gate G1 requires a dedicated token option'
 Assert-Contains -Text $program -Pattern '88F8-GATEG1-30' -Description 'Gate G1 requires the exact hardware opt-in token'
 Assert-Contains -Text $program -Pattern '\(gateG1HardwareTest \? 1 : 0\)' -Description 'Gate G1 participates in hardware-test mutual exclusion'
+Assert-Contains -Text $cliOptions -Pattern 'Probe88F8Setpoint' -Description 'CLI exposes a dedicated narrow 88F8 ownership probe'
+Assert-Contains -Text $cliOptions -Pattern '--probe-88f8-setpoint' -Description 'CLI parses the dedicated narrow 88F8 ownership option'
+Assert-Contains -Text $cliProgram -Pattern 'Probe88F8Setpoint[\s\S]*ReadSetpoint\(\)[\s\S]*setpoint CPU=' -Description 'CLI narrow ownership probe reads only the validated 0x34/0x35 setpoint pair'
 
 Assert-Contains -Text $mainForm -Pattern 'else if \(_gateDHardwareTest \|\|[\s\S]*_gateG1HardwareTest \|\|[\s\S]*_gateG2HardwareTest\)[\s\S]*new NamedPipeFanControlWatchdogLeaseClient\(\)' -Description 'Gate G1/G2 use the real named-pipe production watchdog lease'
 Assert-Contains -Text $gateG1State -Pattern 'CommonApplicationData' -Description 'Gate G1 reads watchdog state from machine-level ProgramData'
@@ -294,13 +301,16 @@ Assert-Ordered -Text $armMethod -Needles @(
     'GateG1WatchdogStateReader.Read()',
     'GateG1WatchdogStateReader.RequireReady',
     'if (watchdog.JournalPresent)',
-    'new Hp88F8EcControlStateProbe(_modulesDirectory).Read()',
+    'new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint()',
     'TryEnterGateGCustomAuthorityAsync(',
     'ApplyGateGCommandWithFreshSafetyAsync(',
     '_gateG1HardwareTestBackendAckVerified = true',
     '_gateG1HardwareTestArmed = true',
     'GateGReadyPath'
 ) -Description 'initial Gate G1/G2 READY follows clean watchdog/FF baseline and real watchdog-backed 30/30 acknowledgement through bounded fresh-safety helpers'
+Assert-NotContains -Text $armMethod -Pattern 'Hp88F8EcControlStateProbe\(_modulesDirectory\)\.Read\(\)' -Description 'Gate G1/G2 initial ownership proof does not require a full EC diagnostic snapshot'
+Assert-Contains -Text $g1Method -Pattern 'ReadSetpoint\(\)' -Description 'Gate G1 post-resume and final ownership proofs use the narrow setpoint reader'
+Assert-NotContains -Text $g1Method -Pattern 'Hp88F8EcControlStateProbe\(_modulesDirectory\)\.Read\(\)' -Description 'Gate G1 lifecycle continuation does not require full EC diagnostic snapshots'
 
 Assert-Ordered -Text $g1Method -Needles @(
     'if (!_gateG1HardwareTestSuspendObserved)',
@@ -390,7 +400,12 @@ if ($readyBoundary -lt 0 -or $suspendRequest -le $readyBoundary) {
     throw 'Gate G1 invariant could not isolate READY -> suspend-request parent-harness boundary.'
 }
 $readyToSuspend = $harness.Substring($readyBoundary, $suspendRequest - $readyBoundary)
-Assert-NotContains -Text $readyToSuspend -Pattern 'Read-EcState' -Description 'parent harness performs no out-of-band EC probe between durable OWNED READY and suspend dispatch'
+Assert-NotContains -Text $readyToSuspend -Pattern 'Read-EcSetpoint' -Description 'parent harness performs no out-of-band EC probe between durable OWNED READY and suspend dispatch'
+Assert-Contains -Text $harness -Pattern 'function Read-EcSetpoint' -Description 'physical Gate G1 uses the narrow ownership-only EC helper'
+Assert-Contains -Text $harness -Pattern '--probe-88f8-setpoint' -Description 'physical Gate G1 invokes the narrow 0x34/0x35 CLI ownership probe'
+Assert-Contains -Text $harness -Pattern '\[int\]\$Attempts = 3' -Description 'physical Gate G1 bounds transient EC setpoint retries to three attempts'
+Assert-Contains -Text $harness -Pattern '\[int\]\$RetryDelayMs = 250' -Description 'physical Gate G1 spaces transient EC setpoint retries by 250 ms'
+Assert-NotContains -Text $harness -Pattern '--probe-88f8-ec-state' -Description 'physical Gate G1 does not require a full EC snapshot for ownership proof'
 
 $fallbackStart = $harness.IndexOf('$failsafe = Start-Process powershell.exe', [StringComparison]::Ordinal)
 $appStart = $harness.IndexOf('$proc = Start-Process -FilePath $app', [StringComparison]::Ordinal)
@@ -409,7 +424,7 @@ Assert-Ordered -Text $harness -Needles @(
     '$appExited = $proc.WaitForExit(15000)',
     'Assert-ProductionServiceReady -ExpectedPid $servicePidBefore',
     'if (Test-Path $journalPath)',
-    '$finalEc = Read-EcState'
+    '$finalEc = Read-EcSetpoint'
 ) -Description 'parent final EC verification occurs only after causal markers, GUI exit, same watchdog PID and journal absence checks'
 
 Assert-Contains -Text $harness -Pattern 'if \(\$failsafe\.HasExited\)' -Description 'Gate G1 PASS rejects an emergency fallback that reached its execution boundary'

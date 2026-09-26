@@ -157,6 +157,27 @@ internal static class Program
                 coordinatorTestCts.Token);
         }
 
+        if (options.Probe88F8Setpoint)
+        {
+            try
+            {
+                var setpoint =
+                    new Hp88F8EcControlStateProbe(options.ModulesDirectory)
+                        .ReadSetpoint();
+
+                Console.WriteLine("HP 88F8 EC setpoint probe (READ-ONLY)");
+                Console.WriteLine(
+                    $"setpoint CPU={setpoint.CpuSetpoint} GPU={setpoint.GpuSetpoint}");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"88F8 EC-setpoint probe failed: {ex.Message}");
+                return 6;
+            }
+        }
+
         if (options.Probe88F8EcState)
         {
             try

@@ -71,33 +71,65 @@ function Assert-DefaultWatchdogOutputUnlocked {
     }
 }
 
-function Read-EcState {
-    $output = (& dotnet $cli --probe-88f8-ec-state 2>&1 | Out-String)
-    $line = ($output -split "[\r\n]+" |
-        Where-Object { $_ -match '^level CPU=' } |
-        Select-Object -Last 1)
+function Read-EcSetpoint {
+    param(
+        [ValidateRange(1, 10)]
+        [int]$Attempts = 3,
 
-    if (-not $line) {
-        throw "Could not parse EC state. Raw output: $output"
+        [ValidateRange(0, 5000)]
+        [int]$RetryDelayMs = 250
+    )
+
+    $lastOutput = ''
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        $output = ''
+        $exitCode = -1
+        $previousErrorActionPreference = $ErrorActionPreference
+
+        try {
+            # Windows PowerShell may surface native stderr as NativeCommandError
+            # under the script-wide Stop preference. Capture the native result
+            # as text so this bounded read-only retry policy owns the decision.
+            $ErrorActionPreference = 'Continue'
+            $output = (& dotnet $cli --probe-88f8-setpoint 2>&1 | Out-String)
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+
+        $lastOutput = $output
+        $line = ($output -split "[\r\n]+" |
+            Where-Object { $_ -match '^setpoint CPU=' } |
+            Select-Object -Last 1)
+
+        if ($exitCode -eq 0 -and $line) {
+            $match = [regex]::Match(
+                $line,
+                '^setpoint CPU=(\d+) GPU=(\d+)$')
+
+            if ($match.Success) {
+                return [pscustomobject]@{
+                    Cpu = [int]$match.Groups[1].Value
+                    Gpu = [int]$match.Groups[2].Value
+                    Raw = $line
+                }
+            }
+        }
+
+        if ($attempt -lt $Attempts) {
+            Write-Warning (
+                "Read-only EC setpoint probe attempt {0}/{1} failed; retrying in {2} ms. Raw output: {3}" -f
+                    $attempt,
+                    $Attempts,
+                    $RetryDelayMs,
+                    $output.Trim())
+            Start-Sleep -Milliseconds $RetryDelayMs
+        }
     }
 
-    $match = [regex]::Match(
-        $line,
-        'level CPU=(\d+) GPU=(\d+).*manual=0x([0-9A-Fa-f]{2}) countdown=(\d+).*RPM CPU=(\d+) GPU=(\d+)')
-
-    if (-not $match.Success) {
-        throw "Could not parse EC state line: $line"
-    }
-
-    [pscustomobject]@{
-        Cpu = [int]$match.Groups[1].Value
-        Gpu = [int]$match.Groups[2].Value
-        Manual = $match.Groups[3].Value.ToUpperInvariant()
-        Countdown = [int]$match.Groups[4].Value
-        CpuRpm = [int]$match.Groups[5].Value
-        GpuRpm = [int]$match.Groups[6].Value
-        Raw = $line
-    }
+    throw "Could not prove EC 0x34/0x35 setpoints after $Attempts read-only attempts. Last output: $lastOutput"
 }
 
 function Wait-ForFile {
@@ -345,8 +377,8 @@ Write-Host 'Step 2: read-only hardware baseline...' -ForegroundColor Cyan
 dotnet run --project .\src\VictusFanControl -c Release --no-build -- --probe-backends
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$baseline = Read-EcState
-Write-Host "EC baseline         : $($baseline.Raw)"
+$baseline = Read-EcSetpoint
+Write-Host "EC setpoint baseline: $($baseline.Raw)"
 
 if ($baseline.Cpu -ne 255 -or $baseline.Gpu -ne 255) {
     throw "Gate G2 requires firmware-owned FF/FF baseline; read $($baseline.Cpu)/$($baseline.Gpu)."
@@ -392,8 +424,8 @@ if (Test-Path $journalPath) {
     throw "Gate G2 baseline requires journal absent; found $journalPath"
 }
 
-$serviceBaselineEc = Read-EcState
-Write-Host "EC after service    : $($serviceBaselineEc.Raw)"
+$serviceBaselineEc = Read-EcSetpoint
+Write-Host "EC setpoint/service : $($serviceBaselineEc.Raw)"
 
 if ($serviceBaselineEc.Cpu -ne 255 -or
     $serviceBaselineEc.Gpu -ne 255) {
@@ -502,7 +534,7 @@ try {
 
         [void](Assert-ProductionServiceReady -ExpectedPid $servicePidBefore)
 
-        # IMPORTANT: no parent Read-EcState call occurs from READY until the
+        # IMPORTANT: no parent Read-EcSetpoint call occurs from READY until the
         # external S3 dispatch. Custom ownership is verified through the
         # production backend ACK plus exact durable OWNED journal instead.
         $eventWindowStart = Get-Date
@@ -647,8 +679,8 @@ try {
         throw 'Gate G2 final PASS returned with a durable journal still present.'
     }
 
-    $finalEc = Read-EcState
-    Write-Host "Independent final EC: $($finalEc.Raw)"
+    $finalEc = Read-EcSetpoint
+    Write-Host "Independent setpoint: $($finalEc.Raw)"
 
     if ($finalEc.Cpu -ne 255 -or
         $finalEc.Gpu -ne 255) {
@@ -710,8 +742,8 @@ finally {
 
     if (-not (Test-Path $journalPath)) {
         try {
-            $cleanupEc = Read-EcState
-            Write-Host "Post-test EC check  : $($cleanupEc.Raw)"
+            $cleanupEc = Read-EcSetpoint
+            Write-Host "Post-test setpoint  : $($cleanupEc.Raw)"
             $firmwareSafe =
                 $cleanupEc.Cpu -eq 255 -and
                 $cleanupEc.Gpu -eq 255

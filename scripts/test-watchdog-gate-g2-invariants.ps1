@@ -2,6 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $programPath = Join-Path $repoRoot 'src\VictusFanControl.App\Program.cs'
+$cliProgramPath = Join-Path $repoRoot 'src\VictusFanControl\Program.cs'
+$cliOptionsPath = Join-Path $repoRoot 'src\VictusFanControl\Cli\CliOptions.cs'
 $mainFormPath = Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs'
 $telemetryPath = Join-Path $repoRoot 'src\VictusFanControl.App\TelemetryWorker.cs'
 $managerPath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\WatchdogLeaseManager.cs'
@@ -60,6 +62,8 @@ function Assert-Ordered {
 }
 
 $program = Get-Content $programPath -Raw
+$cliProgram = Get-Content $cliProgramPath -Raw
+$cliOptions = Get-Content $cliOptionsPath -Raw
 $mainForm = Get-Content $mainFormPath -Raw
 $telemetry = Get-Content $telemetryPath -Raw
 $manager = Get-Content $managerPath -Raw
@@ -75,6 +79,9 @@ Assert-Contains -Text $program -Pattern '--gate-g2-suspend-repeat-test' -Descrip
 Assert-Contains -Text $program -Pattern '--gate-g2-test-token' -Description 'Gate G2 requires a dedicated token option'
 Assert-Contains -Text $program -Pattern '88F8-GATEG2-30' -Description 'Gate G2 requires the exact hardware opt-in token'
 Assert-Contains -Text $program -Pattern '\(gateG2HardwareTest \? 1 : 0\)' -Description 'Gate G2 participates in hardware-test mutual exclusion'
+Assert-Contains -Text $cliOptions -Pattern 'Probe88F8Setpoint' -Description 'CLI exposes a dedicated narrow 88F8 ownership probe'
+Assert-Contains -Text $cliOptions -Pattern '--probe-88f8-setpoint' -Description 'CLI parses the dedicated narrow 88F8 ownership option'
+Assert-Contains -Text $cliProgram -Pattern 'Probe88F8Setpoint[\s\S]*ReadSetpoint\(\)[\s\S]*setpoint CPU=' -Description 'CLI narrow ownership probe reads only the validated 0x34/0x35 setpoint pair'
 
 Assert-Contains -Text $mainForm -Pattern 'GateG2TargetCycles\s*=\s*5' -Description 'Gate G2 target is exactly five consecutive cycles'
 Assert-Contains -Text $mainForm -Pattern 'GateGHardwareTest\s*=>\s*_gateG1HardwareTest\s*\|\|\s*_gateG2HardwareTest' -Description 'Gate G1 and G2 share the validated lifecycle path'
@@ -164,13 +171,16 @@ Assert-Ordered -Text $armMethod -Needles @(
     'GateG1WatchdogStateReader.RequireReady(',
     '_gateG1WatchdogPid',
     'if (watchdog.JournalPresent)',
-    'new Hp88F8EcControlStateProbe(_modulesDirectory).Read()',
+    'new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint()',
     'TryEnterGateGCustomAuthorityAsync(',
     'ApplyGateGCommandWithFreshSafetyAsync(',
     '_gateG1HardwareTestBackendAckVerified = true',
     '_gateG1HardwareTestArmed = true',
     'GateGReadyPath'
 ) -Description 'every Gate G2 cycle reuses the original watchdog PID and acquires exact watchdog-backed 30/30 only from a clean FF/FF baseline through fresh-safety helpers'
+Assert-NotContains -Text $armMethod -Pattern 'Hp88F8EcControlStateProbe\(_modulesDirectory\)\.Read\(\)' -Description 'Gate G2 initial ownership proof does not require a full EC diagnostic snapshot'
+Assert-Contains -Text $advanceMethod -Pattern 'ReadSetpoint\(\)' -Description 'Gate G2 post-resume and final ownership proofs use the narrow setpoint reader'
+Assert-NotContains -Text $advanceMethod -Pattern 'Hp88F8EcControlStateProbe\(_modulesDirectory\)\.Read\(\)' -Description 'Gate G2 lifecycle continuation does not require full EC diagnostic snapshots'
 
 Assert-Ordered -Text $advanceMethod -Needles @(
     'if (_gateG1AcceptedResumeCount != 1)',
@@ -294,7 +304,12 @@ if ($readyBoundary -lt 0 -or $suspendBoundary -le $readyBoundary) {
     throw 'Gate G2 invariant could not isolate READY -> suspend dispatch inside the cycle loop.'
 }
 $readyToSuspend = $loopBody.Substring($readyBoundary, $suspendBoundary - $readyBoundary)
-Assert-NotContains -Text $readyToSuspend -Pattern '(?im)^\s*\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*Read-EcState\b' -Description 'parent performs no out-of-band EC probe while per-cycle Custom OWNED is active'
+Assert-NotContains -Text $readyToSuspend -Pattern '(?im)^\s*\$[A-Za-z_][A-Za-z0-9_]*\s*=\s*Read-EcSetpoint\b' -Description 'parent performs no out-of-band EC probe while per-cycle Custom OWNED is active'
+Assert-Contains -Text $harness -Pattern 'function Read-EcSetpoint' -Description 'physical Gate G2 uses the narrow ownership-only EC helper'
+Assert-Contains -Text $harness -Pattern '--probe-88f8-setpoint' -Description 'physical Gate G2 invokes the narrow 0x34/0x35 CLI ownership probe'
+Assert-Contains -Text $harness -Pattern '\[int\]\$Attempts = 3' -Description 'physical Gate G2 bounds transient EC setpoint retries to three attempts'
+Assert-Contains -Text $harness -Pattern '\[int\]\$RetryDelayMs = 250' -Description 'physical Gate G2 spaces transient EC setpoint retries by 250 ms'
+Assert-NotContains -Text $harness -Pattern '--probe-88f8-ec-state' -Description 'physical Gate G2 does not require a full EC snapshot for ownership proof'
 
 $fallbackStart = $harness.IndexOf('$failsafe = Start-Process powershell.exe', [StringComparison]::Ordinal)
 if ($fallbackStart -lt 0 -or $fallbackStart -ge $appLaunch) {
@@ -307,7 +322,7 @@ Assert-Ordered -Text $harness -Needles @(
     '$appExited = $proc.WaitForExit(15000)',
     'Assert-ProductionServiceReady -ExpectedPid $servicePidBefore',
     'if (Test-Path $journalPath)',
-    '$finalEc = Read-EcState'
+    '$finalEc = Read-EcSetpoint'
 ) -Description 'final independent EC verification occurs only after final 5/5 result, GUI exit, same watchdog PID and journal absence'
 
 Assert-Contains -Text $harness -Pattern 'Type UNDERVOLT-OK' -Description 'Gate G2 requires pre-test OGH undervolt confirmation'

@@ -582,7 +582,7 @@ internal sealed class MainForm : Form
                 try
                 {
                     var after =
-                        new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+                        new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint();
 
                     _suspendHardwareTestPreSleepRestoreVerified =
                         testWasCustom &&
@@ -1629,7 +1629,7 @@ internal sealed class MainForm : Form
             }
 
             var before =
-                new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+                new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint();
 
             if (before.CpuSetpoint != byte.MaxValue ||
                 before.GpuSetpoint != byte.MaxValue)
@@ -1764,7 +1764,7 @@ internal sealed class MainForm : Form
             }
 
             var before =
-                new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+                new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint();
 
             if (before.CpuSetpoint != byte.MaxValue ||
                 before.GpuSetpoint != byte.MaxValue)
@@ -1900,7 +1900,7 @@ internal sealed class MainForm : Form
             }
 
             var before =
-                new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+                new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint();
 
             if (before.CpuSetpoint != byte.MaxValue ||
                 before.GpuSetpoint != byte.MaxValue)
@@ -2036,7 +2036,7 @@ internal sealed class MainForm : Form
             }
 
             var before =
-                new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+                new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint();
 
             if (before.CpuSetpoint != byte.MaxValue ||
                 before.GpuSetpoint != byte.MaxValue)
@@ -2175,7 +2175,7 @@ internal sealed class MainForm : Form
                 }
 
                 var before =
-                    new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+                    new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint();
 
                 if (before.CpuSetpoint != byte.MaxValue ||
                     before.GpuSetpoint != byte.MaxValue)
@@ -2247,7 +2247,7 @@ internal sealed class MainForm : Form
             }
 
             var afterResume =
-                new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+                new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint();
 
             var recovered =
                 _suspendHardwareTestSuspendObserved &&
@@ -2362,7 +2362,7 @@ internal sealed class MainForm : Form
             }
 
             var afterResume =
-                new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+                new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint();
 
             if (afterResume.CpuSetpoint != byte.MaxValue ||
                 afterResume.GpuSetpoint != byte.MaxValue ||
@@ -2440,7 +2440,7 @@ internal sealed class MainForm : Form
                 _gateG1WatchdogPid);
 
             var finalEc =
-                new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+                new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint();
 
             var finalReleaseVerified =
                 finalRestoreEvidence.HasValue &&
@@ -2762,7 +2762,7 @@ internal sealed class MainForm : Form
         }
 
         var before =
-            new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+            new Hp88F8EcControlStateProbe(_modulesDirectory).ReadSetpoint();
 
         if (before.CpuSetpoint != byte.MaxValue ||
             before.GpuSetpoint != byte.MaxValue)
