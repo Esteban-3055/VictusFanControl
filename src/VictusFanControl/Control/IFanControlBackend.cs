@@ -20,6 +20,27 @@ public readonly record struct FanBackendStatus(
     string Detail);
 
 /// <summary>
+/// Immutable evidence captured by a backend when a firmware restore finishes.
+/// The Gate G suspend path reads this in-memory record instead of opening any
+/// extra EC/WMI/journal reader after the critical restore has already completed.
+/// </summary>
+public readonly record struct FanFirmwareRestoreEvidence(
+    bool LocalFirmwareAckVerified,
+    bool WatchdogLeaseRequired,
+    bool WatchdogReleaseVerified,
+    DateTimeOffset CompletedAtUtc,
+    string Detail);
+
+/// <summary>
+/// Optional capability implemented only by backends that can expose causal
+/// restore evidence without performing another hardware or IPC transaction.
+/// </summary>
+public interface IFanControlRestoreEvidenceSource
+{
+    FanFirmwareRestoreEvidence LastRestoreEvidence { get; }
+}
+
+/// <summary>
 /// Signals that custom authority admission failed before the backend performed
 /// any fan write. The coordinator must not issue a compensating FF,FF restore,
 /// because doing so could clear a state owned by another controller.
