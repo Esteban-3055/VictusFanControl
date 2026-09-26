@@ -17,6 +17,8 @@ internal sealed class WatchdogLeaseManager
     internal static readonly TimeSpan FirmwareRestoreVerificationPollInterval =
         TimeSpan.FromMilliseconds(250);
 
+    internal const int UnexpectedSetpointConfirmationSamples = 2;
+
     private readonly ILeaseJournal _journal;
     private readonly ILeaseRecoveryHardware _hardware;
     private readonly IMonotonicClock _clock;
@@ -919,6 +921,8 @@ internal sealed class WatchdogLeaseManager
         var verificationStartedMs = _clock.Milliseconds;
         var after = observed;
         Exception? lastReadFailure = null;
+        FanSetpoint? unexpectedCandidate = null;
+        var unexpectedCandidateSamples = 0;
 
         while (true)
         {
@@ -964,12 +968,37 @@ internal sealed class WatchdogLeaseManager
 
                 if (!AllowedSetpoints(record).Contains(after))
                 {
-                    return new LeaseRecoveryResult(
-                        LeaseRecoveryDisposition.OwnershipAmbiguous,
-                        after,
-                        RestoreAttempted: true,
-                        JournalRetained: true,
-                        $"{reason}: restore verification observed unexpected fixed setpoint {after}; no further restore action was attempted.");
+                    // A single post-restore 0x34/0x35 sample can be incoherent
+                    // under real EC contention even when the local controller
+                    // has already verified FF/FF. Treat one unexpected pair as
+                    // provisional evidence only. Do not issue another restore
+                    // write; confirm the same unexpected pair on a later poll
+                    // before classifying external ownership.
+                    if (unexpectedCandidate == after)
+                    {
+                        unexpectedCandidateSamples++;
+                    }
+                    else
+                    {
+                        unexpectedCandidate = after;
+                        unexpectedCandidateSamples = 1;
+                    }
+
+                    if (unexpectedCandidateSamples >=
+                        UnexpectedSetpointConfirmationSamples)
+                    {
+                        return new LeaseRecoveryResult(
+                            LeaseRecoveryDisposition.OwnershipAmbiguous,
+                            after,
+                            RestoreAttempted: true,
+                            JournalRetained: true,
+                            $"{reason}: restore verification confirmed unexpected fixed setpoint {after} on {unexpectedCandidateSamples} consecutive samples; no further restore action was attempted.");
+                    }
+                }
+                else
+                {
+                    unexpectedCandidate = null;
+                    unexpectedCandidateSamples = 0;
                 }
             }
             catch (OperationCanceledException)
@@ -982,8 +1011,11 @@ internal sealed class WatchdogLeaseManager
                 // EC transport/contention failures are observational. Retain
                 // the durable RESTORING lease and keep polling within the same
                 // bounded verification window; never convert a failed read
-                // into ownership proof.
+                // into ownership proof. A failed read also breaks consecutive
+                // confirmation of a suspected external setpoint.
                 lastReadFailure = ex;
+                unexpectedCandidate = null;
+                unexpectedCandidateSamples = 0;
             }
 
             if (Elapsed(
