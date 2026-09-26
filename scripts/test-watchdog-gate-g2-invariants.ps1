@@ -5,6 +5,7 @@ $programPath = Join-Path $repoRoot 'src\VictusFanControl.App\Program.cs'
 $mainFormPath = Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs'
 $telemetryPath = Join-Path $repoRoot 'src\VictusFanControl.App\TelemetryWorker.cs'
 $managerPath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\WatchdogLeaseManager.cs'
+$coordinatorPath = Join-Path $repoRoot 'src\VictusFanControl\Control\FanControlCoordinator.cs'
 $harnessPath = Join-Path $PSScriptRoot 'test-watchdog-gate-g2.ps1'
 
 function Assert-Contains {
@@ -59,6 +60,7 @@ $program = Get-Content $programPath -Raw
 $mainForm = Get-Content $mainFormPath -Raw
 $telemetry = Get-Content $telemetryPath -Raw
 $manager = Get-Content $managerPath -Raw
+$coordinator = Get-Content $coordinatorPath -Raw
 $harness = Get-Content $harnessPath -Raw
 
 Write-Host 'VictusFanControl - GATE G2 5/5 LIFECYCLE INVARIANT SELF-TEST'
