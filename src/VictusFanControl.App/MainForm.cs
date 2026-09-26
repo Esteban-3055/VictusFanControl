@@ -676,14 +676,6 @@ internal sealed class MainForm : Form
         var boundary = DateTimeOffset.UtcNow;
         var accepted = _worker.NotifyResume(source);
 
-        if (accepted &&
-            GateGHardwareTest &&
-            _gateG1HardwareTestArmed &&
-            !_gateG1HardwareTestCompleted)
-        {
-            PersistPendingGateGPreSleepProof();
-        }
-
         // A coalesced duplicate must NOT close admission again after a completed
         // recovery, otherwise no second Healthy transition would exist to reopen
         // the fence.
@@ -706,6 +698,7 @@ internal sealed class MainForm : Form
         {
             _gateG1HardwareTestResumeObserved = true;
             _gateG1AcceptedResumeCount++;
+            PersistPendingGateGPreSleepProof();
             AppendEvent(
                 $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: accepted resume event #{_gateG1AcceptedResumeCount} from {source}; custom admission remains fenced until Healthy + watchdog-ready verification.");
         }
