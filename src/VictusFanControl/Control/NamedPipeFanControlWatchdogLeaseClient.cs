@@ -1,23 +1,27 @@
 using System.Diagnostics;
 using System.IO.Pipes;
-using VictusFanControl.Control;
+using VictusFanControl.Runtime;
 
 namespace VictusFanControl.Control;
+
+internal readonly record struct FanControlWatchdogLeaseClientTiming(
+    TimeSpan ConnectTimeout,
+    TimeSpan RequestTimeout,
+    TimeSpan ReleaseTimeout)
+{
+    public static FanControlWatchdogLeaseClientTiming Production => new(
+        ConnectTimeout: TimeSpan.FromSeconds(3),
+        RequestTimeout: TimeSpan.FromSeconds(4),
+        ReleaseTimeout: TimeSpan.FromSeconds(10));
+}
 
 public sealed class NamedPipeFanControlWatchdogLeaseClient :
     IFanControlWatchdogLeaseClient
 {
-    private static readonly TimeSpan ConnectTimeout =
-        TimeSpan.FromSeconds(3);
-
-    private static readonly TimeSpan RequestTimeout =
-        TimeSpan.FromSeconds(4);
-
-    private static readonly TimeSpan ReleaseTimeout =
-        TimeSpan.FromSeconds(10);
-
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly string _pipeName;
+    private readonly IActiveTimeClock _activeTimeClock;
+    private readonly FanControlWatchdogLeaseClientTiming _timing;
 
     private NamedPipeClientStream? _pipe;
     private Guid? _sessionId;
@@ -26,12 +30,17 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
     private bool _disposed;
 
     public NamedPipeFanControlWatchdogLeaseClient()
-        : this(FanControlWatchdogLeaseContract.PipeName)
+        : this(
+            FanControlWatchdogLeaseContract.PipeName,
+            activeTimeClock: null,
+            timing: null)
     {
     }
 
     internal NamedPipeFanControlWatchdogLeaseClient(
-        string pipeName)
+        string pipeName,
+        IActiveTimeClock? activeTimeClock = null,
+        FanControlWatchdogLeaseClientTiming? timing = null)
     {
         if (string.IsNullOrWhiteSpace(pipeName))
         {
@@ -41,6 +50,12 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
         }
 
         _pipeName = pipeName;
+        _activeTimeClock =
+            activeTimeClock ??
+            new WindowsActiveTimeClock();
+        _timing =
+            timing ??
+            FanControlWatchdogLeaseClientTiming.Production;
     }
 
     public async ValueTask PrepareAsync(
@@ -62,7 +77,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
 
             var response = await SendLockedAsync(
                 NewRequest(FanControlWatchdogLeaseContract.Prepare),
-                RequestTimeout,
+                _timing.RequestTimeout,
                 cancellationToken).ConfigureAwait(false);
 
             ApplyLeaseResponse(response, ClientPhase.Prepared);
@@ -95,7 +110,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
             await SendLockedAsync(
                 NewLeaseRequest(
                     FanControlWatchdogLeaseContract.CancelPrepared),
-                RequestTimeout,
+                _timing.RequestTimeout,
                 cancellationToken).ConfigureAwait(false);
 
             ClearLeaseLocked();
@@ -128,7 +143,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
                     FanControlWatchdogLeaseContract.WriteIntent,
                     cpuLevel,
                     gpuLevel),
-                RequestTimeout,
+                _timing.RequestTimeout,
                 cancellationToken).ConfigureAwait(false);
 
             ApplyLeaseResponse(response, ClientPhase.WriteArmed);
@@ -156,7 +171,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
             var response = await SendLockedAsync(
                 NewLeaseRequest(
                     FanControlWatchdogLeaseContract.AbortWriteIntent),
-                RequestTimeout,
+                _timing.RequestTimeout,
                 cancellationToken).ConfigureAwait(false);
 
             var next = response.Phase switch
@@ -196,7 +211,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
                     FanControlWatchdogLeaseContract.Commit,
                     cpuLevel,
                     gpuLevel),
-                RequestTimeout,
+                _timing.RequestTimeout,
                 cancellationToken).ConfigureAwait(false);
 
             ApplyLeaseResponse(response, ClientPhase.Owned);
@@ -224,7 +239,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
             var response = await SendLockedAsync(
                 NewLeaseRequest(
                     FanControlWatchdogLeaseContract.Probe),
-                RequestTimeout,
+                _timing.RequestTimeout,
                 cancellationToken).ConfigureAwait(false);
 
             ValidateStableLeaseResponse(
@@ -254,7 +269,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
             var response = await SendLockedAsync(
                 NewLeaseRequest(
                     FanControlWatchdogLeaseContract.Heartbeat),
-                RequestTimeout,
+                _timing.RequestTimeout,
                 cancellationToken).ConfigureAwait(false);
 
             ValidateStableLeaseResponse(
@@ -285,7 +300,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
                 await SendLockedAsync(
                     NewLeaseRequest(
                         FanControlWatchdogLeaseContract.CancelPrepared),
-                    RequestTimeout,
+                    _timing.RequestTimeout,
                     cancellationToken).ConfigureAwait(false);
 
                 ClearLeaseLocked();
@@ -307,7 +322,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
             var response = await SendLockedAsync(
                 NewLeaseRequest(
                     FanControlWatchdogLeaseContract.RestoreBegin),
-                RequestTimeout,
+                _timing.RequestTimeout,
                 cancellationToken).ConfigureAwait(false);
 
             ApplyLeaseResponse(response, ClientPhase.Restoring);
@@ -336,7 +351,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
                 await SendLockedAsync(
                     NewLeaseRequest(
                         FanControlWatchdogLeaseContract.CancelPrepared),
-                    RequestTimeout,
+                    _timing.RequestTimeout,
                     cancellationToken).ConfigureAwait(false);
 
                 ClearLeaseLocked();
@@ -352,7 +367,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
                 var begin = await SendLockedAsync(
                     NewLeaseRequest(
                         FanControlWatchdogLeaseContract.RestoreBegin),
-                    RequestTimeout,
+                    _timing.RequestTimeout,
                     cancellationToken).ConfigureAwait(false);
 
                 ApplyLeaseResponse(begin, ClientPhase.Restoring);
@@ -367,7 +382,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
             await SendLockedAsync(
                 NewLeaseRequest(
                     FanControlWatchdogLeaseContract.Release),
-                ReleaseTimeout,
+                _timing.ReleaseTimeout,
                 cancellationToken).ConfigureAwait(false);
 
             ClearLeaseLocked();
@@ -416,13 +431,14 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
 
         try
         {
-            using var timeout =
-                CancellationTokenSource.CreateLinkedTokenSource(
-                    cancellationToken);
-
-            timeout.CancelAfter(ConnectTimeout);
-
-            await pipe.ConnectAsync(timeout.Token)
+            await RunWithActiveTimeoutAsync(
+                    async timeoutToken =>
+                    {
+                        await pipe.ConnectAsync(timeoutToken)
+                            .ConfigureAwait(false);
+                    },
+                    _timing.ConnectTimeout,
+                    cancellationToken)
                 .ConfigureAwait(false);
 
             var process = Process.GetCurrentProcess();
@@ -436,7 +452,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
 
             var response = await SendConnectedLockedAsync(
                 hello,
-                RequestTimeout,
+                _timing.RequestTimeout,
                 cancellationToken).ConfigureAwait(false);
 
             if (!string.Equals(
@@ -516,23 +532,27 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
             throw new InvalidOperationException(
                 "Watchdog pipe is not connected.");
 
-        using var timeout =
-            CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken);
-
-        timeout.CancelAfter(requestTimeout);
-
-        await FanControlWatchdogLeaseCodec.WriteRequestAsync(
-            pipe,
-            request,
-            timeout.Token).ConfigureAwait(false);
-
         var response =
-            await FanControlWatchdogLeaseCodec.ReadResponseAsync(
-                pipe,
-                timeout.Token).ConfigureAwait(false) ??
-            throw new EndOfStreamException(
-                "Watchdog closed the pipe before responding.");
+            await RunWithActiveTimeoutAsync(
+                    async timeoutToken =>
+                    {
+                        await FanControlWatchdogLeaseCodec.WriteRequestAsync(
+                                pipe,
+                                request,
+                                timeoutToken)
+                            .ConfigureAwait(false);
+
+                        return
+                            await FanControlWatchdogLeaseCodec.ReadResponseAsync(
+                                    pipe,
+                                    timeoutToken)
+                                .ConfigureAwait(false) ??
+                            throw new EndOfStreamException(
+                                "Watchdog closed the pipe before responding.");
+                    },
+                    requestTimeout,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
         if (response.ProtocolVersion !=
             FanControlWatchdogLeaseContract.ProtocolVersion)
@@ -555,6 +575,58 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
         }
 
         return response;
+    }
+
+    private async Task RunWithActiveTimeoutAsync(
+        Func<CancellationToken, Task> operation,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        await RunWithActiveTimeoutAsync(
+                async token =>
+                {
+                    await operation(token).ConfigureAwait(false);
+                    return true;
+                },
+                timeout,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<T> RunWithActiveTimeoutAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+        using var stopMonitoring = new CancellationTokenSource();
+
+        var timeoutMonitor =
+            ActiveTimeClock.CancelAfterActiveTimeAsync(
+                timeoutCancellation,
+                _activeTimeClock,
+                timeout,
+                stopMonitoring.Token);
+
+        try
+        {
+            return await operation(timeoutCancellation.Token)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            stopMonitoring.Cancel();
+            try
+            {
+                await timeoutMonitor.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+                when (stopMonitoring.IsCancellationRequested)
+            {
+            }
+        }
     }
 
     private FanControlWatchdogLeaseRequest NewLeaseRequest(
