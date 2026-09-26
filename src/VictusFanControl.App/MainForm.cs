@@ -19,6 +19,7 @@ internal sealed class MainForm : Form
     private const int MaxEventLogChars = 120_000;
 
     private const int SuspendHardwareTestLevel = 30;
+    private const int GateG2TargetCycles = 5;
     private const double SuspendHardwareTestMaxCpuTemperatureC = 80;
     private const double SuspendHardwareTestMaxGpuTemperatureC = 75;
     private const double SuspendHardwareTestMaxCpuPowerW = 50;
@@ -79,6 +80,9 @@ internal sealed class MainForm : Form
     private static readonly string GateG1HardwareTestResultPath =
         Path.Combine(SuspendHardwareTestRoot, "gate-g1.result");
 
+    private static readonly string GateG2HardwareTestResultPath =
+        Path.Combine(SuspendHardwareTestRoot, "gate-g2.result");
+
     private readonly TelemetryWorker _worker;
     private readonly FanControlCoordinator _fanCoordinator;
     private readonly string _fanBackendStartupDetail;
@@ -90,6 +94,7 @@ internal sealed class MainForm : Form
     private readonly bool _gateF1HardwareTest;
     private readonly bool _gateF2HardwareTest;
     private readonly bool _gateG1HardwareTest;
+    private readonly bool _gateG2HardwareTest;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
 
@@ -157,6 +162,49 @@ internal sealed class MainForm : Form
     private DateTimeOffset? _gateG1HardwareTestArmedAt;
     private int _gateG1WatchdogPid;
     private int _gateG1AcceptedResumeCount;
+    private int _gateGCurrentCycle = 1;
+
+    private bool GateGHardwareTest =>
+        _gateG1HardwareTest || _gateG2HardwareTest;
+
+    private string GateGLabel =>
+        _gateG2HardwareTest ? "GATE G2" : "GATE G1";
+
+    private int GateGTargetCycleCount =>
+        _gateG2HardwareTest ? GateG2TargetCycles : 1;
+
+    private string GateGReadyPath =>
+        _gateG2HardwareTest
+            ? Path.Combine(
+                SuspendHardwareTestRoot,
+                $"gate-g2.cycle-{_gateGCurrentCycle}.ready")
+            : GateG1HardwareTestReadyPath;
+
+    private string GateGPreSleepPath =>
+        _gateG2HardwareTest
+            ? Path.Combine(
+                SuspendHardwareTestRoot,
+                $"gate-g2.cycle-{_gateGCurrentCycle}.presleep")
+            : GateG1PreSleepPath;
+
+    private string GateGReentryPath =>
+        _gateG2HardwareTest
+            ? Path.Combine(
+                SuspendHardwareTestRoot,
+                $"gate-g2.cycle-{_gateGCurrentCycle}.reentry")
+            : GateG1ReentryPath;
+
+    private string GateGCycleResultPath =>
+        _gateG2HardwareTest
+            ? Path.Combine(
+                SuspendHardwareTestRoot,
+                $"gate-g2.cycle-{_gateGCurrentCycle}.result")
+            : GateG1HardwareTestResultPath;
+
+    private string GateGFinalResultPath =>
+        _gateG2HardwareTest
+            ? GateG2HardwareTestResultPath
+            : GateG1HardwareTestResultPath;
 
     private volatile TelemetrySnapshot? _lastSnapshot;
 
@@ -167,7 +215,8 @@ internal sealed class MainForm : Form
         bool gateEHardwareTest = false,
         bool gateF1HardwareTest = false,
         bool gateF2HardwareTest = false,
-        bool gateG1HardwareTest = false)
+        bool gateG1HardwareTest = false,
+        bool gateG2HardwareTest = false)
     {
         Text = "VictusFanControl v0.4-dev — backend integrated / automatic policy OFF";
         StartPosition = FormStartPosition.CenterScreen;
@@ -181,6 +230,7 @@ internal sealed class MainForm : Form
         _gateF1HardwareTest = gateF1HardwareTest;
         _gateF2HardwareTest = gateF2HardwareTest;
         _gateG1HardwareTest = gateG1HardwareTest;
+        _gateG2HardwareTest = gateG2HardwareTest;
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
 
         if (_suspendLifecycleHardwareTest)
@@ -230,6 +280,18 @@ internal sealed class MainForm : Form
             TryDeleteFile(GateG1HardwareTestResultPath);
         }
 
+        if (_gateG2HardwareTest)
+        {
+            Directory.CreateDirectory(SuspendHardwareTestRoot);
+
+            foreach (var path in Directory.EnumerateFiles(
+                         SuspendHardwareTestRoot,
+                         "gate-g2.*"))
+            {
+                TryDeleteFile(path);
+            }
+        }
+
         IFanControlBackend backend;
         try
         {
@@ -247,7 +309,8 @@ internal sealed class MainForm : Form
             else if (_gateDHardwareTest ||
                      _gateEHardwareTest ||
                      _gateF1HardwareTest ||
-                     _gateG1HardwareTest)
+                     _gateG1HardwareTest ||
+                     _gateG2HardwareTest)
             {
                 watchdogLease =
                     new NamedPipeFanControlWatchdogLeaseClient();
@@ -262,8 +325,9 @@ internal sealed class MainForm : Form
                    _gateEHardwareTest ||
                    _gateF1HardwareTest ||
                    _gateF2HardwareTest ||
-                   _gateG1HardwareTest)
-                    ? $"HP 88F8 backend initialized with mandatory Gate {(_gateG1HardwareTest ? "G1" : _gateF2HardwareTest ? "F2" : _gateF1HardwareTest ? "F1" : _gateEHardwareTest ? "E" : "D")} watchdog lease."
+                   _gateG1HardwareTest ||
+                   _gateG2HardwareTest)
+                    ? $"HP 88F8 backend initialized with mandatory Gate {(_gateG2HardwareTest ? "G2" : _gateG1HardwareTest ? "G1" : _gateF2HardwareTest ? "F2" : _gateF1HardwareTest ? "F1" : _gateEHardwareTest ? "E" : "D")} watchdog lease."
                     : "HP 88F8 write/restore backend initialized."
                 : "HP 88F8 backend present but not write-capable on this hardware.";
         }
@@ -336,6 +400,12 @@ internal sealed class MainForm : Form
             {
                 AppendEvent(
                     "GATE G1 TEST: full watchdog suspend/resume lifecycle mode enabled. The test requires durable OWNED 30/30 before suspend, journal-free firmware handoff inside PBT_APMSUSPEND, the same watchdog PID across sleep, five-snapshot telemetry recovery, then one controlled post-resume re-entry and final firmware restore. Automatic policy remains OFF.");
+            }
+
+            if (_gateG2HardwareTest)
+            {
+                AppendEvent(
+                    $"GATE G2 TEST: {GateG2TargetCycles} consecutive full watchdog suspend/resume cycles enabled in the same GUI and watchdog processes. Every cycle requires durable OWNED 30/30, pre-sleep Firmware + FF/FF + journal absent, one accepted resume, five-snapshot Healthy recovery, one controlled 30/30 re-entry, and final Firmware restore. Automatic policy remains OFF.");
             }
 
             _uiTimer.Start();
