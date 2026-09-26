@@ -487,6 +487,8 @@ try {
         $preSleep -notmatch 'authority=Firmware' -or
         $preSleep -notmatch 'ec=255/255' -or
         $preSleep -notmatch 'ecProof=production-backend-restore-ack' -or
+        $preSleep -notmatch 'watchdogRelease=True' -or
+        $preSleep -notmatch 'journalProof=watchdog-release-response' -or
         $preSleep -notmatch 'journal=absent' -or
         $preSleep -notmatch 'telemetry=Suspended' -or
         $preSleep -notmatch 'resumeObservedBeforeProof=False' -or
