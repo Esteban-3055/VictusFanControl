@@ -19,6 +19,14 @@ internal sealed class MainForm : Form
     private const int PbtApmResumeAutomatic = 0x0012;
     private const int MaxEventLogChars = 120_000;
 
+    private enum GateGResumeProofState
+    {
+        Pending = 0,
+        Verifying = 1,
+        Verified = 2,
+        Failed = 3
+    }
+
     private const int SuspendHardwareTestLevel = 30;
     private const int GateG2TargetCycles = 5;
     private const int GateGInterCycleStableSnapshotsRequired = 2;
@@ -170,6 +178,8 @@ internal sealed class MainForm : Form
     private DateTimeOffset? _gateG1HardwareTestArmedAt;
     private int _gateG1WatchdogPid;
     private int _gateG1AcceptedResumeCount;
+    private int _gateGResumeProofState =
+        (int)GateGResumeProofState.Pending;
     private int _gateGCurrentCycle = 1;
     private DateTimeOffset? _gateGSuspendBoundaryUtc;
     private string? _gateGSuspendSource;
@@ -616,16 +626,26 @@ internal sealed class MainForm : Form
         // telemetry state is still Suspended.
         if (GateGHardwareTest &&
             _gateG1HardwareTestArmed &&
-            !_gateG1HardwareTestCompleted &&
-            !_gateG1HardwareTestResumeObserved)
+            !_gateG1HardwareTestCompleted)
         {
-            if (!VerifyGateGHandoffBeforeResumeAcceptance(
+            if (!EnsureGateGHandoffVerifiedBeforeResumeAcceptance(
                     boundary,
                     source))
             {
-                // Fail closed: keep admission fenced and telemetry Suspended.
-                // The external harness will perform the independently guarded
-                // cleanup path after consuming the FAIL marker.
+                // Fail closed: while the one-shot causal proof is still being
+                // verified, or after it has failed, do not let another Windows
+                // resume notification advance telemetry or mutate the marker.
+                return;
+            }
+
+            if (_gateG1HardwareTestResumeObserved)
+            {
+                // PBT_APMRESUMEAUTOMATIC and PBT_APMRESUMESUSPEND can both
+                // describe one Windows wake. Once this Gate G cycle accepted
+                // exactly one resume, later notifications are observational
+                // duplicates: never route them back through proof/telemetry.
+                AppendEvent(
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: duplicate resume signal ignored after the cycle already accepted one resume: {source}.");
                 return;
             }
         }
@@ -673,6 +693,79 @@ internal sealed class MainForm : Form
         {
             AppendEvent($"CRITICAL: fan authority fencing during resume failed: {ex.Message}");
             AppLog.Write($"Fan authority fencing during resume failed: {ex}");
+        }
+    }
+
+    private bool EnsureGateGHandoffVerifiedBeforeResumeAcceptance(
+        DateTimeOffset resumeBoundary,
+        string resumeSource)
+    {
+        while (true)
+        {
+            var proofState =
+                (GateGResumeProofState)Volatile.Read(
+                    ref _gateGResumeProofState);
+
+            switch (proofState)
+            {
+                case GateGResumeProofState.Verified:
+                    return true;
+
+                case GateGResumeProofState.Failed:
+                    return false;
+
+                case GateGResumeProofState.Verifying:
+                    // Re-entrant/duplicate Windows resume delivery must never
+                    // run a second proof while the first proof still owns the
+                    // causal boundary. Keep telemetry Suspended and let the
+                    // first verifier finish.
+                    AppLog.Write(
+                        $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: resume signal ignored while handoff proof is already Verifying: {resumeSource}.");
+                    return false;
+
+                case GateGResumeProofState.Pending:
+                    if (Interlocked.CompareExchange(
+                            ref _gateGResumeProofState,
+                            (int)GateGResumeProofState.Verifying,
+                            (int)GateGResumeProofState.Pending) !=
+                        (int)GateGResumeProofState.Pending)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        var verified =
+                            VerifyGateGHandoffBeforeResumeAcceptance(
+                                resumeBoundary,
+                                resumeSource);
+
+                        Volatile.Write(
+                            ref _gateGResumeProofState,
+                            (int)(verified
+                                ? GateGResumeProofState.Verified
+                                : GateGResumeProofState.Failed));
+
+                        return verified;
+                    }
+                    catch
+                    {
+                        // The proof method is already fail-closed, but latch an
+                        // unexpected escaping exception too so a later duplicate
+                        // resume can never retry and turn an uncertain cycle into
+                        // a PASS.
+                        Volatile.Write(
+                            ref _gateGResumeProofState,
+                            (int)GateGResumeProofState.Failed);
+                        throw;
+                    }
+
+                default:
+                    Volatile.Write(
+                        ref _gateGResumeProofState,
+                        (int)GateGResumeProofState.Failed);
+                    return false;
+            }
         }
     }
 
@@ -2723,6 +2816,9 @@ internal sealed class MainForm : Form
         _gateG1HardwareTestBackendAckVerified = false;
         _gateG1HardwareTestArmedAt = null;
         _gateG1AcceptedResumeCount = 0;
+        Volatile.Write(
+            ref _gateGResumeProofState,
+            (int)GateGResumeProofState.Pending);
         _gateGSuspendBoundaryUtc = null;
         _gateGSuspendSource = null;
         _gateGSuspendWasCustom = false;
