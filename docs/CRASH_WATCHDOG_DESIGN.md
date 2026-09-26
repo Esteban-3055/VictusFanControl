@@ -715,5 +715,36 @@ Repeat suspend/resume with watchdog installed and prove:
 - watchdog remains/disarms consistently;
 - resume does not allow Custom until telemetry + watchdog are both ready.
 
-Only after these gates should load/gaming validation and the adaptive RPM policy
-be allowed to depend on unattended Custom authority.
+The first physical G2 attempt on 2026-09-25 did **not** pass and exposed an
+important suspend-handler timing bug. Cycle 1 completed normally with the same
+GUI/watchdog identities. Cycle 2 reached exact durable OWNED 30/30 and entered
+PBT_APMSUSPEND, but the durable pre-sleep marker was not written until after the
+machine had resumed. The trace showed an accepted resume before the test-only
+pre-sleep proof completed, and TelemetryWorker later logged the suspend boundary
+after that resume. The parent harness therefore timed out waiting for the cycle-2
+result and correctly rejected the run.
+
+The production restore path itself already verifies local FF/FF before
+RestoreFirmwareAutoAsync returns. The extra Gate-G full EC snapshot performed
+after that restore was redundant and consumed the remaining PBT_APMSUSPEND
+handling budget. Windows documents only an approximately two-second application
+handling window for PBT_APMSUSPEND, so post-restore diagnostics cannot be allowed
+to delay the telemetry suspend boundary.
+
+The correction is:
+
+- perform the coordinator/watchdog-backed restore first;
+- immediately mark TelemetryWorker Suspended after the restore attempt;
+- do not open another full EC reader in the Gate-G pre-sleep proof;
+- use the production backend's successful return as the local FF/FF
+  acknowledgement, with source invariants proving that the backend cannot return
+  before WaitForSetpointAsync(FF/FF);
+- independently require the same watchdog PID Ready and durable journal absent;
+- reject the proof if any resume was already accepted;
+- record suspend-handler elapsed time and require the Gate-G proof within an
+  explicit 1800 ms budget, leaving margin inside Windows' approximately two
+  second notification window.
+
+Gate G2 remains open until a fresh 5/5 hardware run passes with these corrected
+causal checks. Only after that should load/gaming validation and the adaptive RPM
+policy be allowed to depend on unattended Custom authority.
