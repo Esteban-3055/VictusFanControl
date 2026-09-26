@@ -383,7 +383,8 @@ public sealed class Hp88F8FanControlBackend :
             // no-write admission failure so the coordinator never clears an
             // unrelated external override with FF,FF.
             throw new FanControlAdmissionException(
-                "Custom fan authority admission failed before any fan write was attempted.",
+                $"Custom fan authority admission failed before any fan write was attempted: " +
+                $"{ex.GetType().Name}: {ex.Message}",
                 ex);
         }
         finally
