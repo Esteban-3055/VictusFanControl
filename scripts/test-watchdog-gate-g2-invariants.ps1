@@ -213,6 +213,18 @@ Assert-Contains -Text $coordinator -Pattern 'DescribeSafetyDenialLocked' -Descri
 Assert-Contains -Text $leaseHardware -Pattern '\.ReadSetpoint\(\)' -Description 'watchdog lease hardware uses the narrow setpoint probe'
 Assert-NotContains -Text $leaseHardware -Pattern '\.Read\(\)' -Description 'watchdog lease hardware does not open the full 88F8 control-state probe'
 Assert-Contains -Text $ecReader -Pattern 'ReadHp88F8Setpoint\(\)[\s\S]*ReadRegisterLocked\(0x34\)[\s\S]*ReadRegisterLocked\(0x35\)' -Description 'narrow watchdog EC snapshot reads only the validated 0x34/0x35 ownership pair'
+Assert-Contains -Text $ecReader -Pattern 'ReadHp88F8FanControlGuard\(\)[\s\S]*ReadRegisterLocked\(0xEC\)[\s\S]*ReadRegisterLocked\(0xF4\)' -Description 'production control guard reads only MaxFan and FanSwitch'
+$fanHardwareStart = $backend.IndexOf('internal sealed class Hp88F8FanHardware', [StringComparison]::Ordinal)
+$backendClassStart = $backend.IndexOf('public sealed class Hp88F8FanControlBackend', $fanHardwareStart, [StringComparison]::Ordinal)
+if ($fanHardwareStart -lt 0 -or $backendClassStart -le $fanHardwareStart) {
+    throw 'Gate G2 invariant could not isolate the production HP hardware adapter.'
+}
+$fanHardware = $backend.Substring($fanHardwareStart, $backendClassStart - $fanHardwareStart)
+Assert-NotContains -Text $fanHardware -Pattern 'ReadHp88F8ControlState\(\)' -Description 'production fan-control hardware adapter never opens the broad diagnostic EC snapshot'
+Assert-Contains -Text $fanHardware -Pattern 'ReadHp88F8Setpoint\(\)' -Description 'production fan-control hardware adapter reads ownership through 0x34/0x35 only'
+Assert-Contains -Text $fanHardware -Pattern 'ReadHp88F8FanControlGuard\(\)' -Description 'production fan-control hardware adapter preserves MaxFan/FanSwitch safety separately'
+Assert-Contains -Text $fanHardware -Pattern 'ReadFanTachometers\(\)' -Description 'production fan-control hardware adapter preserves dual-tach feedback separately'
+Assert-Contains -Text $backend -Pattern 'WaitForSetpointAsync[\s\S]*_hardware!\.ReadSetpoint\(\)' -Description 'production setpoint acknowledgement polling does not reopen full EC state'
 Assert-Contains -Text $backend -Pattern 'Custom fan authority admission failed before any fan write was attempted:[\s\S]*ex\.GetType\(\)\.Name[\s\S]*ex\.Message' -Description 'no-write admission failures preserve their precise root cause for physical Gate G diagnosis'
 Assert-Contains -Text $manager -Pattern 'FirmwareRestoreVerificationTimeout[\s\S]*TimeSpan\.FromSeconds\(5\)' -Description 'watchdog restore verification has a bounded five-second FF/FF acknowledgement window'
 Assert-Contains -Text $manager -Pattern 'FirmwareRestoreVerificationPollInterval[\s\S]*TimeSpan\.FromMilliseconds\(250\)' -Description 'watchdog restore verification polls at a bounded 250 ms cadence'
