@@ -21,14 +21,14 @@ internal sealed class GateDLeaseHardware : ILeaseRecoveryHardware
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var state =
+        var setpoint =
             new Hp88F8EcControlStateProbe(
-                _modulesDirectory).Read();
+                _modulesDirectory).ReadSetpoint();
 
         return ValueTask.FromResult(
             new FanSetpoint(
-                state.CpuSetpoint,
-                state.GpuSetpoint));
+                setpoint.CpuSetpoint,
+                setpoint.GpuSetpoint));
     }
 
     public ValueTask RestoreFirmwareAutoAsync(
