@@ -784,6 +784,6 @@ if ($post -cne 'SAME') {
 Write-Host ''
 Write-Host 'PASS: Gate G2 completed 5/5 consecutive full watchdog suspend/resume cycles without intentional GUI/service restart.' -ForegroundColor Green
 Write-Host "Stable identities: GUI PID=$guiProcessId startTicks=$guiStartTicks; watchdog PID=$servicePidBefore." -ForegroundColor Green
-Write-Host 'Every cycle proved exact OWNED 30/30, pre-sleep Firmware + FF/FF + journal absent, one accepted resume, Healthy recovery, controlled re-entry and final Firmware handoff.' -ForegroundColor Green
+Write-Host 'Every cycle proved exact OWNED 30/30, prompt suspend fencing, completed Firmware + FF/FF + watchdog Ready/journal absent before resume acceptance, one accepted resume, Healthy recovery, controlled re-entry and final Firmware handoff.' -ForegroundColor Green
 Write-Host 'No watchdog timeout/recovery/fatal evidence occurred, fallback did not run, final journal is absent, final EC is FF/FF, SCM remains 1/5/10 and OGH undervolt is SAME.' -ForegroundColor Green
 exit 0
