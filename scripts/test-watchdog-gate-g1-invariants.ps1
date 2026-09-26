@@ -8,6 +8,8 @@ $telemetryPath = Join-Path $repoRoot 'src\VictusFanControl.App\TelemetryWorker.c
 $managerPath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\WatchdogLeaseManager.cs'
 $backendPath = Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp88F8FanControlBackend.cs'
 $coordinatorPath = Join-Path $repoRoot 'src\VictusFanControl\Control\FanControlCoordinator.cs'
+$leaseClientPath = Join-Path $repoRoot 'src\VictusFanControl\Control\NamedPipeFanControlWatchdogLeaseClient.cs'
+$activeClockPath = Join-Path $repoRoot 'src\VictusFanControl\Runtime\ActiveTimeClock.cs'
 $harnessPath = Join-Path $PSScriptRoot 'test-watchdog-gate-g1.ps1'
 
 function Assert-Contains {
@@ -65,6 +67,8 @@ $telemetry = Get-Content $telemetryPath -Raw
 $manager = Get-Content $managerPath -Raw
 $backend = Get-Content $backendPath -Raw
 $coordinator = Get-Content $coordinatorPath -Raw
+$leaseClient = Get-Content $leaseClientPath -Raw
+$activeClock = Get-Content $activeClockPath -Raw
 $harness = Get-Content $harnessPath -Raw
 
 Write-Host 'VictusFanControl - GATE G1 LIFECYCLE INVARIANT SELF-TEST'
@@ -80,6 +84,13 @@ Assert-Contains -Text $gateG1State -Pattern 'gate-d\.status\.json' -Description 
 Assert-Contains -Text $gateG1State -Pattern 'lease\.json' -Description 'Gate G1 checks the production durable lease journal'
 Assert-Contains -Text $gateG1State -Pattern 'FileOptions\.WriteThrough' -Description 'Gate G1 lifecycle markers use write-through persistence'
 Assert-Contains -Text $gateG1State -Pattern 'Flush\(flushToDisk: true\)' -Description 'Gate G1 lifecycle markers are flushed to disk'
+
+Assert-Contains -Text $activeClock -Pattern 'QueryUnbiasedInterruptTime' -Description 'Gate G resumable operations use the Windows sleep-excluding active-time clock'
+Assert-Contains -Text $activeClock -Pattern 'HundredNanosecondsPerMillisecond\s*=\s*10_000UL' -Description 'Gate G active-time clock converts QueryUnbiasedInterruptTime with the exact 100 ns to ms divisor'
+Assert-NotContains -Text $backend -Pattern 'Stopwatch\.GetTimestamp|Stopwatch\.GetElapsedTime' -Description 'HP backend acknowledgement timeouts never count S3 through Stopwatch/QPC'
+Assert-Contains -Text $backend -Pattern 'ActiveTimeClock\.HasElapsed\(' -Description 'HP setpoint/tach acknowledgement deadlines are driven by sleep-excluding active time'
+Assert-NotContains -Text $leaseClient -Pattern '\.CancelAfter\(' -Description 'watchdog IPC timeouts never use .NET 8 CancelAfter timers that can expire across S3'
+Assert-Contains -Text $leaseClient -Pattern 'ActiveTimeClock\.CancelAfterActiveTimeAsync\(' -Description 'watchdog connect/request/release timeouts are driven by sleep-excluding active time'
 
 $suspendStart = $mainForm.IndexOf('private void HandleSuspendLifecycle', [StringComparison]::Ordinal)
 $resumeStart = $mainForm.IndexOf('private void HandleResumeLifecycle', [StringComparison]::Ordinal)
