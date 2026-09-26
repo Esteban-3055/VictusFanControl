@@ -470,14 +470,14 @@ try {
     }
 
     Write-Host ''
-    Write-Host 'Step 8: prove pre-sleep release marker, recovery, controlled re-entry and final handoff...' -ForegroundColor Cyan
+    Write-Host 'Step 8: prove suspend-handoff marker, recovery, controlled re-entry and final handoff...' -ForegroundColor Cyan
 
     if (-not (Wait-ForFile -Path $preSleepPath -Seconds 15)) {
-        throw 'Gate G1 did not persist its pre-sleep handoff marker.'
+        throw 'Gate G1 did not persist its suspend-handoff marker.'
     }
 
     $preSleep = Get-Content $preSleepPath -Raw
-    Write-Host "Pre-sleep marker    : $preSleep"
+    Write-Host "Suspend handoff     : $preSleep"
 
     $telemetryMatch = [regex]::Match(
         $preSleep,
@@ -488,16 +488,18 @@ try {
     $firmwareMatch = [regex]::Match(
         $preSleep,
         'firmwareMs=([0-9]+(?:\.[0-9]+)?)')
-    $handlerMatch = [regex]::Match(
+    $preBlockMatch = [regex]::Match(
         $preSleep,
-        'handlerMs=([0-9]+(?:\.[0-9]+)?)\|budgetMs=1800')
+        'preBlockMs=([0-9]+(?:\.[0-9]+)?)\|budgetMs=1800')
 
     if ($preSleep -notmatch '^PASS\|' -or
+        $preSleep -notmatch 'handoffProof=completed-before-resume-acceptance' -or
         $preSleep -notmatch 'authority=Firmware' -or
         $preSleep -notmatch 'ec=255/255' -or
         $preSleep -notmatch 'ecProof=production-backend-restore-ack' -or
         $preSleep -notmatch 'watchdogRelease=True' -or
-        $preSleep -notmatch 'journalProof=watchdog-release-response' -or
+        $preSleep -notmatch 'watchdogState=Ready' -or
+        $preSleep -notmatch 'journalProof=watchdog-release-response\+post-resume-ready-check' -or
         $preSleep -notmatch 'journal=absent' -or
         $preSleep -notmatch 'telemetry=Suspended' -or
         $preSleep -notmatch 'telemetryProof=pre-restore-state-transition' -or
@@ -505,14 +507,11 @@ try {
         -not $restoreMatch.Success -or
         -not $firmwareMatch.Success -or
         [double]$telemetryMatch.Groups[1].Value -gt 1800 -or
-        [double]$restoreMatch.Groups[1].Value -gt 1800 -or
-        [double]$firmwareMatch.Groups[1].Value -gt 1800 -or
-        $preSleep -notmatch 'resumeObservedBeforeProof=False' -or
         $preSleep -notmatch 'acceptedResumesBeforeProof=0' -or
-        -not $handlerMatch.Success -or
-        [double]$handlerMatch.Groups[1].Value -gt 1800 -or
+        -not $preBlockMatch.Success -or
+        [double]$preBlockMatch.Groups[1].Value -gt 1800 -or
         $preSleep -notmatch ("watchdogPid={0}" -f $servicePidBefore)) {
-        throw 'Gate G1 pre-sleep marker does not prove an in-budget Firmware + backend-verified FF/FF + journal-absent handoff before any accepted resume.'
+        throw 'Gate G1 suspend-handoff marker does not prove a prompt pre-block fence plus completed Firmware/FF/FF/watchdog-release handoff before resume acceptance.'
     }
 
     if (-not (Wait-ForFile -Path $resultPath -Seconds 120)) {
