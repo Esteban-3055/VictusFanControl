@@ -167,6 +167,9 @@ internal sealed class MainForm : Form
     private int _gateG1WatchdogPid;
     private int _gateG1AcceptedResumeCount;
     private int _gateGCurrentCycle = 1;
+    private string? _gateGPendingPreSleepPath;
+    private string? _gateGPendingPreSleepMarker;
+    private string? _gateGPendingPreSleepLog;
 
     private bool GateGHardwareTest =>
         _gateG1HardwareTest || _gateG2HardwareTest;
