@@ -6,6 +6,7 @@ $mainFormPath = Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs'
 $gateG1StatePath = Join-Path $repoRoot 'src\VictusFanControl.App\GateG1WatchdogState.cs'
 $telemetryPath = Join-Path $repoRoot 'src\VictusFanControl.App\TelemetryWorker.cs'
 $managerPath = Join-Path $repoRoot 'src\VictusFanControl.Watchdog\WatchdogLeaseManager.cs'
+$backendPath = Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp88F8FanControlBackend.cs'
 $harnessPath = Join-Path $PSScriptRoot 'test-watchdog-gate-g1.ps1'
 
 function Assert-Contains {
@@ -61,6 +62,7 @@ $mainForm = Get-Content $mainFormPath -Raw
 $gateG1State = Get-Content $gateG1StatePath -Raw
 $telemetry = Get-Content $telemetryPath -Raw
 $manager = Get-Content $managerPath -Raw
+$backend = Get-Content $backendPath -Raw
 $harness = Get-Content $harnessPath -Raw
 
 Write-Host 'VictusFanControl - GATE G1 LIFECYCLE INVARIANT SELF-TEST'
@@ -85,26 +87,49 @@ if ($suspendStart -lt 0 -or $resumeStart -le $suspendStart) {
 $suspendHandler = $mainForm.Substring($suspendStart, $resumeStart - $suspendStart)
 
 Assert-Ordered -Text $suspendHandler -Needles @(
-    'if (GateGHardwareTest &&',
     '_fanCoordinator.BlockCustomAdmissionAndRestoreAsync(',
-    'new Hp88F8EcControlStateProbe(_modulesDirectory).Read()',
+    '_worker.NotifySuspend(source);',
+    'var watchdog =',
     'GateG1WatchdogStateReader.Read()',
     'GateG1WatchdogStateReader.RequireReady(',
+    'var resumeObservedBeforeProof =',
     '!watchdog.JournalPresent',
+    'telemetrySuspended',
+    '!resumeObservedBeforeProof',
+    'handlerElapsedMs <= GateGSuspendProofBudgetMs',
     'GateG1WatchdogStateReader.WriteDurableMarker(',
-    'GateGPreSleepPath',
-    '_worker.NotifySuspend(source)'
-) -Description 'Gate G1/G2 prove Custom/ACK, perform the coordinator handoff, then verify EC + watchdog/journal before NotifySuspend returns'
+    'GateGPreSleepPath'
+) -Description 'Gate G1/G2 restore first, mark telemetry Suspended, then prove watchdog/journal state before returning'
 
-$g1Capture = $suspendHandler.IndexOf('if (GateGHardwareTest &&', [StringComparison]::Ordinal)
-$handoff = $suspendHandler.IndexOf('_fanCoordinator.BlockCustomAdmissionAndRestoreAsync(', [StringComparison]::Ordinal)
-$g1EcProbe = $suspendHandler.IndexOf('new Hp88F8EcControlStateProbe(_modulesDirectory).Read()', $handoff, [StringComparison]::Ordinal)
-if ($g1Capture -lt 0 -or $handoff -lt 0 -or $g1EcProbe -lt 0 -or $g1EcProbe -le $handoff) {
-    throw 'Gate G1 invariant violated: the Gate G1 EC verification must occur only after the coordinator handoff returns.'
+$notifySuspend = $suspendHandler.IndexOf('_worker.NotifySuspend(source);', [StringComparison]::Ordinal)
+$gateGVerify = $suspendHandler.IndexOf('if (GateGHardwareTest &&', $notifySuspend, [StringComparison]::Ordinal)
+if ($notifySuspend -lt 0 -or $gateGVerify -le $notifySuspend) {
+    throw 'Gate G1 invariant could not isolate the post-restore Gate G verification block.'
 }
-Write-Host 'PASS  Gate G1/G2 issue no Gate-G EC verification while Custom is still active'
+$gateGVerifyBlock = $suspendHandler.Substring($gateGVerify)
 
-Assert-Contains -Text $suspendHandler -Pattern 'gateG1WasCustom\s*&&[\s\S]*gateG1BackendAckVerified\s*&&[\s\S]*_fanCoordinator\.Authority == FanAuthority\.Firmware[\s\S]*after\.CpuSetpoint == byte\.MaxValue[\s\S]*after\.GpuSetpoint == byte\.MaxValue[\s\S]*!watchdog\.JournalPresent' -Description 'pre-sleep PASS requires prior Custom ACK, Firmware authority, EC FF/FF and no journal'
+Assert-NotContains -Text $gateGVerifyBlock -Pattern 'new Hp88F8EcControlStateProbe\(_modulesDirectory\)\.Read\(\)' -Description 'Gate G pre-sleep proof performs no redundant full EC transaction after the production restore'
+Assert-Contains -Text $gateGVerifyBlock -Pattern 'ecProof=production-backend-restore-ack' -Description 'Gate G marker identifies the production backend restore acknowledgement as FF/FF proof'
+Assert-Contains -Text $gateGVerifyBlock -Pattern 'resumeObservedBeforeProof=\{resumeObservedBeforeProof\}' -Description 'Gate G marker records whether resume raced ahead of pre-sleep proof'
+Assert-Contains -Text $gateGVerifyBlock -Pattern 'handlerMs=\{handlerElapsedMs:0\.0\}.*budgetMs=\{GateGSuspendProofBudgetMs:0\}' -Description 'Gate G marker records suspend-handler latency against the explicit budget'
+Assert-Contains -Text $mainForm -Pattern 'GateGSuspendProofBudgetMs\s*=\s*1800' -Description 'Gate G keeps margin inside the approximately two-second Windows suspend notification budget'
+
+$restoreLockedStart = $backend.IndexOf('private async ValueTask RestoreLockedAsync', [StringComparison]::Ordinal)
+$waitForSetpointStart = $backend.IndexOf('private async ValueTask<Hp88F8EcControlState> WaitForSetpointAsync', $restoreLockedStart, [StringComparison]::Ordinal)
+if ($restoreLockedStart -lt 0 -or $waitForSetpointStart -le $restoreLockedStart) {
+    throw 'Gate G1 invariant could not isolate the production HP restore primitive.'
+}
+$restoreLocked = $backend.Substring($restoreLockedStart, $waitForSetpointStart - $restoreLockedStart)
+Assert-Ordered -Text $restoreLocked -Needles @(
+    '_hardware!.RestoreFirmwareAuto();',
+    'WaitForSetpointAsync(',
+    'byte.MaxValue,',
+    'byte.MaxValue,',
+    '_ownedSetpoint = null;',
+    '_customModeActive = false;'
+) -Description 'production backend cannot return a successful restore before local FF/FF acknowledgement'
+
+Assert-Contains -Text $gateGVerifyBlock -Pattern 'gateG1WasCustom\s*&&[\s\S]*gateG1BackendAckVerified\s*&&[\s\S]*_fanCoordinator\.Authority == FanAuthority\.Firmware[\s\S]*!watchdog\.JournalPresent[\s\S]*telemetrySuspended[\s\S]*!resumeObservedBeforeProof' -Description 'pre-sleep PASS requires prior Custom ACK, backend-verified Firmware authority, journal absence, Suspended telemetry and no accepted resume'
 
 $healthyStart = $mainForm.IndexOf('private async Task HandleHealthyStateAsync', [StringComparison]::Ordinal)
 $gateDStart = $mainForm.IndexOf('private async Task AdvanceGateDHardwareTestAsync', $healthyStart, [StringComparison]::Ordinal)
