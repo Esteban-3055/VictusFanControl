@@ -125,6 +125,15 @@ else {
 Assert-Contains -Text $coordinator -Pattern 'public void CloseCustomAdmissionForLifecycleBoundary\(\)[\s\S]*_lifecycleFenceRequested = true;[\s\S]*CancelActiveCommand\(\);' -Description 'coordinator exposes a synchronous lifecycle fence/cancel phase'
 Assert-Contains -Text $coordinator -Pattern 'BlockCustomAdmissionAndRestoreAsync[\s\S]*CloseCustomAdmissionForLifecycleBoundary\(\);' -Description 'full lifecycle restore idempotently reasserts the same fence before waiting'
 Assert-Contains -Text $coordinator -Pattern 'LastFirmwareAuthorityAtUtc' -Description 'coordinator exposes the last Firmware transition timestamp'
+Assert-Contains -Text $coordinator -Pattern 'FanControlStaleSafetyException' -Description 'coordinator classifies stale command safety before any hardware dispatch'
+Assert-Contains -Text $coordinator -Pattern 'IsSafetyEvaluationCurrent\(SafetyGateResult safety\)' -Description 'Gate G can distinguish a superseded admission evaluation from a real admission denial'
+Assert-Contains -Text $mainForm -Pattern 'private async Task<bool> TryEnterGateGCustomAuthorityAsync' -Description 'Gate G has a bounded fresh-safety admission retry helper'
+Assert-Contains -Text $mainForm -Pattern 'const int maxAttempts = 5' -Description 'Gate G stale-safety retry count is bounded'
+Assert-Contains -Text $mainForm -Pattern 'if \(_fanCoordinator\.IsSafetyEvaluationCurrent\(safety\)\)[\s\S]*return false;' -Description 'Gate G retries admission only when the attempted evaluation was actually superseded'
+Assert-Contains -Text $mainForm -Pattern 'catch \(FanControlStaleSafetyException\)[\s\S]*when \(_fanCoordinator\.Authority == FanAuthority\.Custom\)' -Description 'Gate G retries stale command safety only while Custom authority is still intact'
+Assert-Contains -Text $mainForm -Pattern 'TryEnterGateGCustomAuthorityAsync\([\s\S]*initial admission' -Description 'initial Gate G admission uses fresh-safety retry handling'
+Assert-Contains -Text $mainForm -Pattern 'TryEnterGateGCustomAuthorityAsync\([\s\S]*controlled post-resume re-entry' -Description 'post-resume Gate G re-entry uses fresh-safety retry handling'
+Assert-Contains -Text $mainForm -Pattern 'ApplyGateGCommandWithFreshSafetyAsync\(' -Description 'Gate G 30/30 commands retry only typed stale-safety races before dispatch'
 Assert-Ordered -Text $coordinator -Needles @(
     'var changedAt = DateTimeOffset.UtcNow;',
     '_authority = next;',
