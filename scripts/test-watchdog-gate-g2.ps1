@@ -528,16 +528,26 @@ try {
         $preSleepText = Get-Content $preSleepPath -Raw
         Write-Host "Pre-sleep           : $preSleepText"
 
+        $handlerMatch = [regex]::Match(
+            $preSleepText,
+            'handlerMs=([0-9]+(?:\.[0-9]+)?)\|budgetMs=1800')
+
         if ($preSleepText -notmatch '^PASS\|' -or
             $preSleepText -notmatch ("cycle={0}/{1}" -f $cycle, $targetCycles) -or
             $preSleepText -notmatch 'wasCustom=True' -or
             $preSleepText -notmatch 'backendAck=True' -or
             $preSleepText -notmatch 'authority=Firmware' -or
             $preSleepText -notmatch 'ec=255/255' -or
+            $preSleepText -notmatch 'ecProof=production-backend-restore-ack' -or
             $preSleepText -notmatch 'journal=absent' -or
+            $preSleepText -notmatch 'telemetry=Suspended' -or
+            $preSleepText -notmatch 'resumeObservedBeforeProof=False' -or
+            $preSleepText -notmatch 'acceptedResumesBeforeProof=0' -or
+            -not $handlerMatch.Success -or
+            [double]$handlerMatch.Groups[1].Value -gt 1800 -or
             $preSleepText -notmatch ("watchdogPid={0}" -f $servicePidBefore) -or
             $preSleepText -notmatch ("guiPid={0}" -f $guiProcessId)) {
-            throw "Gate G2 cycle $cycle pre-sleep marker does not prove complete lease release and firmware handoff."
+            throw "Gate G2 cycle $cycle pre-sleep marker does not prove a complete in-budget handoff before any accepted resume."
         }
 
         if (-not (Wait-ForFile -Path $cycleResultPath -Seconds 120)) {
