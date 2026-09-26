@@ -769,6 +769,28 @@ until Windows has resumed. The resume-side validation still independently
 requires the original watchdog PID Ready and journal absent before admission can
 reopen.
 
-Gate G2 remains open until a fresh 5/5 hardware run passes with these corrected
-causal checks. Only after that should load/gaming validation and the adaptive RPM
-policy be allowed to depend on unattended Custom authority.
+A follow-up physical Gate G1 regression on 2026-09-25 exposed one final
+scheduler boundary in the same area. The backend and coordinator completed the
+real restore before sleep (the Firmware authority transition timestamp was about
+0.77 s after PBT_APMSUSPEND), but Windows froze the UI thread before the caller's
+finally block could run. Consequently no in-memory pre-sleep marker had been
+created when PBT_APMRESUMEAUTOMATIC arrived. The test failed closed, killed only
+the exact GUI, then independently proved journal absence and EC FF/FF before
+cancelling the fallback.
+
+The lifecycle design therefore no longer depends on *any caller continuation*
+after the blocking restore. PBT_APMSUSPEND now synchronously closes the lifecycle
+admission fence, marks TelemetryWorker Suspended, records that transition in
+memory, and only then begins restore IO. The HP backend publishes immutable local
+FF/FF + watchdog-Release evidence from inside the restore transaction. The
+coordinator records the exact UTC timestamp of its transition back to Firmware.
+After resume, Gate G reconstructs the pre-sleep proof from those causal
+timestamps and rejects it unless telemetry was already Suspended, local FF/FF and
+watchdog Release both succeeded, the coordinator reached Firmware, all critical
+events occurred before the resume boundary, and the latest of them was within
+the 1800 ms budget. Only after that reconstruction is the durable marker written.
+
+Gate G2 remains open until this revised mechanism first passes a one-cycle G1
+physical regression and then a fresh 5/5 hardware run. Only after that should
+load/gaming validation and the adaptive RPM policy be allowed to depend on
+unattended Custom authority.
