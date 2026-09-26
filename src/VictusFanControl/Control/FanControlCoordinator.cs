@@ -373,8 +373,11 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 
             if (!SafetyAllowsCustomLocked(safety))
             {
+                var denialDetail =
+                    DescribeSafetyDenialLocked(safety);
+
                 await RestoreLockedAsync(
-                    $"Safety supervisor handoff: {reason}",
+                    $"Safety supervisor handoff: {reason}. {denialDetail}",
                     CancellationToken.None).ConfigureAwait(false);
                 return false;
             }
@@ -465,6 +468,47 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     }
 
 
+
+    private string DescribeSafetyDenialLocked(
+        SafetyGateResult safety)
+    {
+        var details = new List<string>();
+
+        if (!safety.CustomControlPermitted)
+        {
+            details.Add(
+                safety.Reasons.Count == 0
+                    ? "SafetyGate denied Custom without a reason."
+                    : "SafetyGate: " +
+                      string.Join(" | ", safety.Reasons));
+        }
+
+        if (_lifecycleFenceRequested)
+        {
+            details.Add("lifecycle fence is closed");
+        }
+
+        if (_admissionBlocked)
+        {
+            details.Add("custom admission is blocked");
+        }
+
+        if (!safety.SnapshotTimestamp.HasValue)
+        {
+            details.Add("safety result has no snapshot timestamp");
+        }
+        else if (_minimumSafetySnapshotTimestamp != DateTimeOffset.MinValue &&
+                 safety.SnapshotTimestamp.Value <=
+                 _minimumSafetySnapshotTimestamp)
+        {
+            details.Add(
+                $"snapshot {safety.SnapshotTimestamp.Value:O} is not newer than lifecycle boundary {_minimumSafetySnapshotTimestamp:O}");
+        }
+
+        return details.Count == 0
+            ? "current safety/lifecycle gate no longer permits Custom"
+            : string.Join("; ", details);
+    }
 
     private bool SafetyAllowsCustomLocked(SafetyGateResult safety) =>
         safety.CustomControlPermitted &&
