@@ -165,6 +165,20 @@ internal static class GateCPipeServerSession
                         manager,
                         cancellationToken).ConfigureAwait(false);
 
+                if (!response.Ok)
+                {
+                    log?.Invoke(
+                        $"WATCHDOG REQUEST REJECTED type={request.Type}; code={response.Code}; message={response.Message}");
+                }
+                else if (string.Equals(
+                             request.Type,
+                             GateCProtocol.Release,
+                             StringComparison.Ordinal))
+                {
+                    log?.Invoke(
+                        $"WATCHDOG RELEASE ACK controller PID={actual.ProcessId}; durable lease cleared after verified firmware restore.");
+                }
+
                 if (beforeResponseAsync is not null)
                 {
                     await beforeResponseAsync(
