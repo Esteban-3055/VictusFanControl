@@ -114,6 +114,16 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "Release tolerates one transient unexpected post-restore setpoint sample",
+            ReleaseToleratesTransientUnexpectedSetpointAsync);
+
+        failures += await CaseAsync(
+            output,
+            "Release confirms repeated unexpected post-restore setpoints before ambiguity",
+            ReleaseConfirmsRepeatedUnexpectedSetpointAsync);
+
+        failures += await CaseAsync(
+            output,
             "Release restore failure retains durable lease",
             ReleaseFailureRetainsLeaseAsync);
 
@@ -714,6 +724,72 @@ internal static class GateCLeaseSelfTest
             Assert(env.Hardware.Current.IsFirmwareOwned);
             Assert(
                 await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task ReleaseToleratesTransientUnexpectedSetpointAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+
+            var restoring =
+                await env.Manager.RestoreBeginAsync(
+                    owned.SessionId,
+                    owned.Generation,
+                    CancellationToken.None);
+
+            // Physical Gate G2 captured one impossible-looking 144/209 pair
+            // after the live controller had already verified FF/FF. Model that
+            // as one observational glitch followed by the real firmware state.
+            env.Hardware.SetPostRestoreReadSequence(
+                new FanSetpoint(144, 209));
+
+            await env.Manager.ReleaseAsync(
+                restoring.SessionId,
+                restoring.Generation,
+                CancellationToken.None);
+
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
+            Assert(
+                await env.Journal.LoadAsync(
+                    CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task ReleaseConfirmsRepeatedUnexpectedSetpointAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+
+            var restoring =
+                await env.Manager.RestoreBeginAsync(
+                    owned.SessionId,
+                    owned.Generation,
+                    CancellationToken.None);
+
+            env.Hardware.SetPostRestoreReadSequence(
+                new FanSetpoint(31, 31),
+                new FanSetpoint(31, 31));
+
+            var ex =
+                await ThrowsAsync<LeaseProtocolException>(
+                    () => env.Manager.ReleaseAsync(
+                        restoring.SessionId,
+                        restoring.Generation,
+                        CancellationToken.None).AsTask());
+
+            Assert(ex.Code == "RESTORE_NOT_VERIFIED");
+            Assert(env.Hardware.RestoreCalls == 1);
+
+            var journal =
+                await env.Journal.LoadAsync(
+                    CancellationToken.None);
+
+            Assert(journal?.Phase ==
+                   WatchdogLeasePhase.Restoring);
         });
     }
 
@@ -1877,11 +1953,20 @@ internal static class GateCLeaseSelfTest
         public int RestoreVisibilityDelayReads { get; set; }
 
         private int _remainingRestoreVisibilityReads;
+        private bool _restoreIssued;
+        private readonly Queue<FanSetpoint> _postRestoreReadSequence = new();
 
         public ValueTask<FanSetpoint> ReadSetpointAsync(
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (_restoreIssued &&
+                _postRestoreReadSequence.Count > 0)
+            {
+                return ValueTask.FromResult(
+                    _postRestoreReadSequence.Dequeue());
+            }
 
             if (_remainingRestoreVisibilityReads > 0)
             {
@@ -1900,6 +1985,7 @@ internal static class GateCLeaseSelfTest
         {
             cancellationToken.ThrowIfCancellationRequested();
             RestoreCalls++;
+            _restoreIssued = true;
 
             if (FailRestore)
             {
@@ -1923,6 +2009,16 @@ internal static class GateCLeaseSelfTest
         public void Set(FanSetpoint setpoint) =>
             Current = setpoint;
 
+        public void SetPostRestoreReadSequence(
+            params FanSetpoint[] samples)
+        {
+            _postRestoreReadSequence.Clear();
+            foreach (var sample in samples)
+            {
+                _postRestoreReadSequence.Enqueue(sample);
+            }
+        }
+
         public void Reset()
         {
             Current = new FanSetpoint(255, 255);
@@ -1930,6 +2026,8 @@ internal static class GateCLeaseSelfTest
             FailRestore = false;
             RestoreVisibilityDelayReads = 0;
             _remainingRestoreVisibilityReads = 0;
+            _restoreIssued = false;
+            _postRestoreReadSequence.Clear();
         }
     }
 
