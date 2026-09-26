@@ -2067,96 +2067,7 @@ internal sealed class MainForm : Form
         {
             if (!_gateG1HardwareTestArmed)
             {
-                var snapshot = _lastSnapshot ??
-                    throw new InvalidOperationException(
-                        "No telemetry snapshot is available for Gate G1 admission.");
-
-                EnsureSuspendHardwareTestLightLoad(snapshot);
-
-                var watchdog =
-                    GateG1WatchdogStateReader.Read();
-                GateG1WatchdogStateReader.RequireReady(watchdog);
-
-                if (watchdog.JournalPresent)
-                {
-                    throw new InvalidOperationException(
-                        $"Gate G1 baseline requires no durable lease journal; found '{watchdog.JournalPath}'.");
-                }
-
-                _gateG1WatchdogPid = watchdog.ProcessId;
-
-                var before =
-                    new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
-
-                if (before.CpuSetpoint != byte.MaxValue ||
-                    before.GpuSetpoint != byte.MaxValue)
-                {
-                    throw new InvalidOperationException(
-                        $"Gate G1 requires firmware-owned FF/FF before admission; read {before.CpuSetpoint}/{before.GpuSetpoint}.");
-                }
-
-                var safety = SafetyGate.Evaluate(
-                    _hardwareIdentity,
-                    _worker.StateMachine.State,
-                    snapshot,
-                    DateTimeOffset.UtcNow,
-                    fanWritePathPresent: _fanCoordinator.BackendCanWrite);
-
-                if (!safety.CustomControlPermitted)
-                {
-                    throw new InvalidOperationException(
-                        "SafetyGate refused Gate G1 initial custom authority: " +
-                        string.Join(" | ", safety.Reasons));
-                }
-
-                var entered = await _fanCoordinator.TryEnterCustomAsync(
-                    safety,
-                    CancellationToken.None);
-
-                if (!entered ||
-                    _fanCoordinator.Authority != FanAuthority.Custom)
-                {
-                    throw new InvalidOperationException(
-                        "Coordinator did not grant watchdog-protected Custom authority for Gate G1.");
-                }
-
-                var latest = _lastSnapshot ?? snapshot;
-                EnsureSuspendHardwareTestLightLoad(latest);
-
-                var commandSafety = SafetyGate.Evaluate(
-                    _hardwareIdentity,
-                    _worker.StateMachine.State,
-                    latest,
-                    DateTimeOffset.UtcNow,
-                    fanWritePathPresent: _fanCoordinator.BackendCanWrite);
-
-                if (!commandSafety.CustomControlPermitted)
-                {
-                    throw new InvalidOperationException(
-                        "SafetyGate dropped before Gate G1 initial 30/30 command: " +
-                        string.Join(" | ", commandSafety.Reasons));
-                }
-
-                await _fanCoordinator.ApplyAsync(
-                    new FanCommand(
-                        SuspendHardwareTestLevel,
-                        SuspendHardwareTestLevel,
-                        "explicit Gate G1 full-watchdog suspend lifecycle validation"),
-                    commandSafety,
-                    CancellationToken.None);
-
-                _gateG1HardwareTestBackendAckVerified = true;
-                _gateG1HardwareTestArmedAt = DateTimeOffset.UtcNow;
-                _gateG1HardwareTestArmed = true;
-
-                GateG1WatchdogStateReader.WriteDurableMarker(
-                    GateG1HardwareTestReadyPath,
-                    $"READY|{DateTimeOffset.Now:O}|authority={_fanCoordinator.Authority}|" +
-                    $"cpu={SuspendHardwareTestLevel}|gpu={SuspendHardwareTestLevel}|" +
-                    $"ack=backend-ec+tachs+watchdog-owned|watchdogPid={_gateG1WatchdogPid}");
-
-                AppendEvent(
-                    $"GATE G1: READY at {SuspendHardwareTestLevel}/{SuspendHardwareTestLevel}; production backend completed durable WriteIntent -> WMI -> EC+dual-tach ACK -> Commit/OWNED. Watchdog PID={_gateG1WatchdogPid}. Awaiting external Windows suspend request.");
+                await ArmGateGHardwareTestCycleAsync();
                 return;
             }
 
@@ -2168,25 +2079,25 @@ internal sealed class MainForm : Form
             if (!_gateG1HardwareTestSuspendObserved)
             {
                 throw new InvalidOperationException(
-                    "Gate G1 did not observe PBT_APMSUSPEND while the initial watchdog-owned 30/30 cycle was armed.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} did not observe PBT_APMSUSPEND while the watchdog-owned 30/30 cycle was armed.");
             }
 
             if (!_gateG1HardwareTestPreSleepVerified)
             {
                 throw new InvalidOperationException(
-                    "Gate G1 pre-sleep handoff was not verified inside PBT_APMSUSPEND.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} pre-sleep handoff was not verified inside PBT_APMSUSPEND.");
             }
 
             if (_gateG1AcceptedResumeCount != 1)
             {
                 throw new InvalidOperationException(
-                    $"Gate G1 requires exactly one accepted resume event; observed {_gateG1AcceptedResumeCount}.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} requires exactly one accepted resume event; observed {_gateG1AcceptedResumeCount}.");
             }
 
             if (_worker.StateMachine.State != SystemState.Healthy)
             {
                 throw new InvalidOperationException(
-                    $"Gate G1 post-resume continuation requires Healthy telemetry; state={_worker.StateMachine.State}.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} post-resume continuation requires Healthy telemetry; state={_worker.StateMachine.State}.");
             }
 
             var watchdogAfterResume =
@@ -2199,7 +2110,7 @@ internal sealed class MainForm : Form
             if (watchdogAfterResume.JournalPresent)
             {
                 throw new InvalidOperationException(
-                    $"Gate G1 post-resume watchdog is not clean; journal remains at '{watchdogAfterResume.JournalPath}'.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} post-resume watchdog is not clean; journal remains at '{watchdogAfterResume.JournalPath}'.");
             }
 
             var afterResume =
@@ -2210,37 +2121,37 @@ internal sealed class MainForm : Form
                 _fanCoordinator.Authority != FanAuthority.Firmware)
             {
                 throw new InvalidOperationException(
-                    $"Gate G1 post-resume firmware baseline invalid: authority={_fanCoordinator.Authority}, EC={afterResume}.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} post-resume firmware baseline invalid: authority={_fanCoordinator.Authority}, EC={afterResume}.");
             }
 
             var recoveryTimestamp = _lastSnapshot?.Timestamp ??
                 throw new InvalidOperationException(
-                    "Gate G1 Healthy state has no validated post-resume telemetry snapshot.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} Healthy state has no validated post-resume telemetry snapshot.");
 
             var reopened =
                 await _fanCoordinator.AllowCustomAdmissionAfterRecoveryAsync(
                     recoveryTimestamp,
-                    "Gate G1: Healthy post-boundary telemetry and watchdog Ready/journal-absent verified.",
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: Healthy post-boundary telemetry and watchdog Ready/journal-absent verified.",
                     CancellationToken.None);
 
             if (!reopened)
             {
                 throw new InvalidOperationException(
-                    "Gate G1 lifecycle fence refused to reopen after validated recovery.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} lifecycle fence refused to reopen after validated recovery.");
             }
 
             AppendEvent(
-                $"GATE G1: admission fence reopened only after Healthy recovery snapshot {recoveryTimestamp:O}, watchdog PID {_gateG1WatchdogPid} Ready and journal absent.");
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: admission fence reopened only after Healthy recovery snapshot {recoveryTimestamp:O}, watchdog PID {_gateG1WatchdogPid} Ready and journal absent.");
 
             if (_worker.StateMachine.State != SystemState.Healthy)
             {
                 throw new InvalidOperationException(
-                    "Gate G1 telemetry degraded after fence reopen and before controlled re-entry.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} telemetry degraded after fence reopen and before controlled re-entry.");
             }
 
             var reentrySnapshot = _lastSnapshot ??
                 throw new InvalidOperationException(
-                    "Gate G1 has no telemetry snapshot for controlled re-entry.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} has no telemetry snapshot for controlled re-entry.");
 
             EnsureSuspendHardwareTestLightLoad(reentrySnapshot);
 
@@ -2254,7 +2165,7 @@ internal sealed class MainForm : Form
             if (!reentrySafety.CustomControlPermitted)
             {
                 throw new InvalidOperationException(
-                    "SafetyGate refused Gate G1 controlled post-resume re-entry: " +
+                    $"SafetyGate refused {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} controlled post-resume re-entry: " +
                     string.Join(" | ", reentrySafety.Reasons));
             }
 
@@ -2267,7 +2178,7 @@ internal sealed class MainForm : Form
                 _fanCoordinator.Authority != FanAuthority.Custom)
             {
                 throw new InvalidOperationException(
-                    "Gate G1 could not reacquire watchdog-protected Custom authority after validated recovery.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} could not reacquire watchdog-protected Custom authority after validated recovery.");
             }
 
             var commandSnapshot = _lastSnapshot ?? reentrySnapshot;
@@ -2283,7 +2194,7 @@ internal sealed class MainForm : Form
             if (!reentryCommandSafety.CustomControlPermitted)
             {
                 throw new InvalidOperationException(
-                    "SafetyGate dropped before Gate G1 controlled re-entry 30/30 command: " +
+                    $"SafetyGate dropped before {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} controlled re-entry 30/30 command: " +
                     string.Join(" | ", reentryCommandSafety.Reasons));
             }
 
@@ -2291,21 +2202,22 @@ internal sealed class MainForm : Form
                 new FanCommand(
                     SuspendHardwareTestLevel,
                     SuspendHardwareTestLevel,
-                    "Gate G1 controlled post-resume re-entry validation"),
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} controlled post-resume re-entry validation"),
                 reentryCommandSafety,
                 CancellationToken.None);
 
             GateG1WatchdogStateReader.WriteDurableMarker(
-                GateG1ReentryPath,
-                $"REENTRY|{DateTimeOffset.Now:O}|authority={_fanCoordinator.Authority}|" +
+                GateGReentryPath,
+                $"REENTRY|{DateTimeOffset.Now:O}|cycle={_gateGCurrentCycle}/{GateGTargetCycleCount}|" +
+                $"authority={_fanCoordinator.Authority}|" +
                 $"cpu={SuspendHardwareTestLevel}|gpu={SuspendHardwareTestLevel}|" +
-                $"ack=backend-ec+tachs+watchdog-owned|watchdogPid={_gateG1WatchdogPid}");
+                $"ack=backend-ec+tachs+watchdog-owned|watchdogPid={_gateG1WatchdogPid}|guiPid={Environment.ProcessId}");
 
             AppendEvent(
-                "GATE G1: controlled post-resume Custom 30/30 re-entry completed with backend EC+dual-tach ACK and a new watchdog OWNED lease.");
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: controlled post-resume Custom 30/30 re-entry completed with backend EC+dual-tach ACK and a new watchdog OWNED lease.");
 
             await _fanCoordinator.RestoreFirmwareAsync(
-                "Gate G1 controlled post-resume re-entry complete.",
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} controlled post-resume re-entry complete.",
                 CancellationToken.None);
 
             var watchdogFinal =
@@ -2324,30 +2236,65 @@ internal sealed class MainForm : Form
                 watchdogFinal.JournalPresent)
             {
                 throw new InvalidOperationException(
-                    $"Gate G1 final handoff invalid: authority={_fanCoordinator.Authority}, EC={finalEc}, journal={(watchdogFinal.JournalPresent ? "PRESENT" : "absent")}.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} final handoff invalid: authority={_fanCoordinator.Authority}, EC={finalEc}, journal={(watchdogFinal.JournalPresent ? "PRESENT" : "absent")}.");
             }
 
-            CompleteGateG1HardwareTest(
+            var cycleMessage =
+                $"PASS: cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} initial OWNED 30/30 handed off to Firmware + EC FF/FF + journal absent before sleep; exactly one resume was accepted; telemetry recovered to Healthy; watchdog PID {_gateG1WatchdogPid} remained stable; one controlled post-resume 30/30 re-entry succeeded; final authority=Firmware, EC={finalEc}, journal absent.";
+
+            if (_gateG2HardwareTest)
+            {
+                WriteGateG2CycleResult(
+                    success: true,
+                    cycleMessage);
+            }
+
+            if (_gateG2HardwareTest &&
+                _gateGCurrentCycle < GateGTargetCycleCount)
+            {
+                AppendEvent(
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PASS; preserving the same GUI PID {Environment.ProcessId} and watchdog PID {_gateG1WatchdogPid} for the next cycle.");
+
+                _gateGCurrentCycle++;
+                ResetGateGHardwareTestCycleState();
+
+                // Stay in the same GUI process and immediately acquire the next
+                // cycle only from the still-Healthy, freshly recovered state.
+                // The parent harness performs no EC probe while this new Custom
+                // ownership is active.
+                await ArmGateGHardwareTestCycleAsync();
+                return;
+            }
+
+            CompleteGateGHardwareTest(
                 success: true,
                 exitCode: 0,
-                message:
-                    $"PASS: initial OWNED 30/30 handed off to Firmware + EC FF/FF + journal absent before sleep; exactly one resume was accepted; telemetry recovered to Healthy; watchdog PID {_gateG1WatchdogPid} remained stable; one controlled post-resume 30/30 re-entry succeeded; final authority=Firmware, EC={finalEc}, journal absent.");
+                message: _gateG2HardwareTest
+                    ? $"PASS: {GateGTargetCycleCount}/{GateGTargetCycleCount} consecutive same-process lifecycle cycles completed; watchdog PID {_gateG1WatchdogPid} remained stable; every cycle ended Firmware + FF/FF + journal absent."
+                    : cycleMessage);
         }
         catch (Exception ex)
         {
             try
             {
                 await _fanCoordinator.RestoreFirmwareAsync(
-                    "Gate G1 hardware-test failure cleanup.",
+                    $"{GateGLabel} hardware-test failure cleanup.",
                     CancellationToken.None);
             }
             catch (Exception restoreEx)
             {
                 AppLog.Write(
-                    $"GATE G1: cleanup restore also failed: {restoreEx}");
+                    $"{GateGLabel}: cleanup restore also failed: {restoreEx}");
             }
 
-            CompleteGateG1HardwareTest(
+            if (_gateG2HardwareTest)
+            {
+                WriteGateG2CycleResult(
+                    success: false,
+                    $"FAIL: cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: {ex.Message}");
+            }
+
+            CompleteGateGHardwareTest(
                 success: false,
                 exitCode: 111,
                 message: $"FAIL: {ex.Message}");
@@ -2360,7 +2307,149 @@ internal sealed class MainForm : Form
         }
     }
 
-    private void CompleteGateG1HardwareTest(
+    private async Task ArmGateGHardwareTestCycleAsync()
+    {
+        var snapshot = _lastSnapshot ??
+            throw new InvalidOperationException(
+                $"No telemetry snapshot is available for {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} admission.");
+
+        EnsureSuspendHardwareTestLightLoad(snapshot);
+
+        var watchdog =
+            GateG1WatchdogStateReader.Read();
+
+        if (_gateG1WatchdogPid == 0)
+        {
+            GateG1WatchdogStateReader.RequireReady(watchdog);
+            _gateG1WatchdogPid = watchdog.ProcessId;
+        }
+        else
+        {
+            GateG1WatchdogStateReader.RequireReady(
+                watchdog,
+                _gateG1WatchdogPid);
+        }
+
+        if (watchdog.JournalPresent)
+        {
+            throw new InvalidOperationException(
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} baseline requires no durable lease journal; found '{watchdog.JournalPath}'.");
+        }
+
+        var before =
+            new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
+
+        if (before.CpuSetpoint != byte.MaxValue ||
+            before.GpuSetpoint != byte.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} requires firmware-owned FF/FF before admission; read {before.CpuSetpoint}/{before.GpuSetpoint}.");
+        }
+
+        var safety = SafetyGate.Evaluate(
+            _hardwareIdentity,
+            _worker.StateMachine.State,
+            snapshot,
+            DateTimeOffset.UtcNow,
+            fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+        if (!safety.CustomControlPermitted)
+        {
+            throw new InvalidOperationException(
+                $"SafetyGate refused {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} custom authority: " +
+                string.Join(" | ", safety.Reasons));
+        }
+
+        var entered = await _fanCoordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None);
+
+        if (!entered ||
+            _fanCoordinator.Authority != FanAuthority.Custom)
+        {
+            throw new InvalidOperationException(
+                $"Coordinator did not grant watchdog-protected Custom authority for {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}.");
+        }
+
+        var latest = _lastSnapshot ?? snapshot;
+        EnsureSuspendHardwareTestLightLoad(latest);
+
+        var commandSafety = SafetyGate.Evaluate(
+            _hardwareIdentity,
+            _worker.StateMachine.State,
+            latest,
+            DateTimeOffset.UtcNow,
+            fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+        if (!commandSafety.CustomControlPermitted)
+        {
+            throw new InvalidOperationException(
+                $"SafetyGate dropped before {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} 30/30 command: " +
+                string.Join(" | ", commandSafety.Reasons));
+        }
+
+        await _fanCoordinator.ApplyAsync(
+            new FanCommand(
+                SuspendHardwareTestLevel,
+                SuspendHardwareTestLevel,
+                $"explicit {GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} full-watchdog suspend lifecycle validation"),
+            commandSafety,
+            CancellationToken.None);
+
+        _gateG1HardwareTestBackendAckVerified = true;
+        _gateG1HardwareTestArmedAt = DateTimeOffset.UtcNow;
+        _gateG1HardwareTestArmed = true;
+
+        GateG1WatchdogStateReader.WriteDurableMarker(
+            GateGReadyPath,
+            $"READY|{DateTimeOffset.Now:O}|cycle={_gateGCurrentCycle}/{GateGTargetCycleCount}|" +
+            $"authority={_fanCoordinator.Authority}|" +
+            $"cpu={SuspendHardwareTestLevel}|gpu={SuspendHardwareTestLevel}|" +
+            $"ack=backend-ec+tachs+watchdog-owned|watchdogPid={_gateG1WatchdogPid}|guiPid={Environment.ProcessId}");
+
+        AppendEvent(
+            $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: READY at {SuspendHardwareTestLevel}/{SuspendHardwareTestLevel}; production backend completed durable WriteIntent -> WMI -> EC+dual-tach ACK -> Commit/OWNED. Watchdog PID={_gateG1WatchdogPid}; GUI PID={Environment.ProcessId}. Awaiting external Windows suspend request.");
+    }
+
+    private void ResetGateGHardwareTestCycleState()
+    {
+        _gateG1HardwareTestArmed = false;
+        _gateG1HardwareTestSuspendObserved = false;
+        _gateG1HardwareTestResumeObserved = false;
+        _gateG1HardwareTestPreSleepVerified = false;
+        _gateG1HardwareTestBackendAckVerified = false;
+        _gateG1HardwareTestArmedAt = null;
+        _gateG1AcceptedResumeCount = 0;
+    }
+
+    private void WriteGateG2CycleResult(
+        bool success,
+        string message)
+    {
+        if (!_gateG2HardwareTest)
+        {
+            return;
+        }
+
+        var result =
+            $"{(success ? "PASS" : "FAIL")}|{DateTimeOffset.Now:O}|" +
+            $"cycle={_gateGCurrentCycle}/{GateGTargetCycleCount}|" +
+            $"watchdogPid={_gateG1WatchdogPid}|guiPid={Environment.ProcessId}|{message}";
+
+        try
+        {
+            GateG1WatchdogStateReader.WriteDurableMarker(
+                GateGCycleResultPath,
+                result);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(
+                $"{GateGLabel}: could not write cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} result marker: {ex}");
+        }
+    }
+
+    private void CompleteGateGHardwareTest(
         bool success,
         int exitCode,
         string message)
@@ -2371,24 +2460,30 @@ internal sealed class MainForm : Form
         }
 
         _gateG1HardwareTestCompleted = true;
-        TryDeleteFile(GateG1HardwareTestReadyPath);
+
+        if (_gateG1HardwareTest)
+        {
+            TryDeleteFile(GateG1HardwareTestReadyPath);
+        }
 
         var result =
-            $"{(success ? "PASS" : "FAIL")}|{DateTimeOffset.Now:O}|{message}";
+            $"{(success ? "PASS" : "FAIL")}|{DateTimeOffset.Now:O}|" +
+            $"cycles={_gateGCurrentCycle}/{GateGTargetCycleCount}|" +
+            $"watchdogPid={_gateG1WatchdogPid}|guiPid={Environment.ProcessId}|{message}";
 
         try
         {
             GateG1WatchdogStateReader.WriteDurableMarker(
-                GateG1HardwareTestResultPath,
+                GateGFinalResultPath,
                 result);
         }
         catch (Exception ex)
         {
             AppLog.Write(
-                $"GATE G1: could not write result marker: {ex}");
+                $"{GateGLabel}: could not write final result marker: {ex}");
         }
 
-        AppendEvent($"GATE G1 RESULT: {message}");
+        AppendEvent($"{GateGLabel} RESULT: {message}");
         Environment.ExitCode = exitCode;
 
         Ui(() =>
