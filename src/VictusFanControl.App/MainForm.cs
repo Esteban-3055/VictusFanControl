@@ -675,6 +675,14 @@ internal sealed class MainForm : Form
         var boundary = DateTimeOffset.UtcNow;
         var accepted = _worker.NotifyResume(source);
 
+        if (accepted &&
+            GateGHardwareTest &&
+            _gateG1HardwareTestArmed &&
+            !_gateG1HardwareTestCompleted)
+        {
+            PersistPendingGateGPreSleepProof();
+        }
+
         // A coalesced duplicate must NOT close admission again after a completed
         // recovery, otherwise no second Healthy transition would exist to reopen
         // the fence.
@@ -715,6 +723,46 @@ internal sealed class MainForm : Form
         {
             AppendEvent($"CRITICAL: fan authority fencing during resume failed: {ex.Message}");
             AppLog.Write($"Fan authority fencing during resume failed: {ex}");
+        }
+    }
+
+    private void PersistPendingGateGPreSleepProof()
+    {
+        var path = _gateGPendingPreSleepPath;
+        var marker = _gateGPendingPreSleepMarker;
+        var log = _gateGPendingPreSleepLog;
+
+        if (string.IsNullOrWhiteSpace(path) ||
+            string.IsNullOrWhiteSpace(marker))
+        {
+            _gateG1HardwareTestPreSleepVerified = false;
+            AppendEvent(
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: no in-memory pre-sleep proof was captured before resume.");
+            return;
+        }
+
+        try
+        {
+            GateG1WatchdogStateReader.WriteDurableMarker(
+                path,
+                marker);
+
+            if (!string.IsNullOrWhiteSpace(log))
+            {
+                AppendEvent(log);
+            }
+        }
+        catch (Exception ex)
+        {
+            _gateG1HardwareTestPreSleepVerified = false;
+            AppendEvent(
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: could not persist captured pre-sleep proof after resume: {ex.Message}");
+        }
+        finally
+        {
+            _gateGPendingPreSleepPath = null;
+            _gateGPendingPreSleepMarker = null;
+            _gateGPendingPreSleepLog = null;
         }
     }
 
@@ -2451,6 +2499,9 @@ internal sealed class MainForm : Form
         _gateG1HardwareTestBackendAckVerified = false;
         _gateG1HardwareTestArmedAt = null;
         _gateG1AcceptedResumeCount = 0;
+        _gateGPendingPreSleepPath = null;
+        _gateGPendingPreSleepMarker = null;
+        _gateGPendingPreSleepLog = null;
     }
 
     private void WriteGateG2CycleResult(
