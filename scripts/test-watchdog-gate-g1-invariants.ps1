@@ -338,6 +338,8 @@ Assert-Contains -Text $telemetry -Pattern 'ResumeHealthySamplesRequired\s*=\s*5'
 Assert-Contains -Text $manager -Pattern 'OwnedHeartbeatTimeout[\s\S]*TimeSpan\.FromSeconds\(5\)' -Description 'OWNED timeout remains 5 seconds'
 Assert-Contains -Text $manager -Pattern 'WriteArmedDeadline[\s\S]*TimeSpan\.FromSeconds\(12\)' -Description 'WRITE_ARMED deadline remains 12 seconds'
 Assert-Contains -Text $manager -Pattern 'RestoringDeadline[\s\S]*TimeSpan\.FromSeconds\(8\)' -Description 'RESTORING deadline remains 8 seconds'
+Assert-Contains -Text $manager -Pattern 'UnexpectedSetpointConfirmationSamples\s*=\s*2' -Description 'watchdog does not classify one anomalous post-restore setpoint sample as external ownership'
+Assert-Contains -Text $manager -Pattern 'unexpectedCandidate\s*==\s*after[\s\S]*unexpectedCandidateSamples\+\+[\s\S]*OwnershipAmbiguous' -Description 'watchdog confirms repeated unexpected post-restore ownership before fail-closed ambiguity'
 
 $fanHardwareStart = $backend.IndexOf('internal sealed class Hp88F8FanHardware', [StringComparison]::Ordinal)
 $backendClassStart = $backend.IndexOf('public sealed class Hp88F8FanControlBackend', $fanHardwareStart, [StringComparison]::Ordinal)
