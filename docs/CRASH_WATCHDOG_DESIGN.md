@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: Gates A, B, D, E and F have passed on real hardware under LocalSystem, Gate C passed synthetic Windows CI, and Gate G0 has passed its physical S3 clock-semantics validation. Gate D physically proves controller death -> independent service restore; Gate E proves watchdog death -> live-controller local restore followed by durable-journal recovery; Gate F proves simultaneous controller + watchdog loss from both durable OWNED and post-write WRITE_ARMED states. Gate G1/G2 remain.
+Status: Gates A, B, D, E and F have passed on real hardware under LocalSystem, Gate C passed synthetic Windows CI, Gate G0 has passed physical S3 clock-semantics validation, and Gate G1 has passed one complete physical production-watchdog suspend/resume cycle. Gate D physically proves controller death -> independent service restore; Gate E proves watchdog death -> live-controller local restore followed by durable-journal recovery; Gate F proves simultaneous controller + watchdog loss from both durable OWNED and post-write WRITE_ARMED states. Gate G2 (5/5 consecutive same-session cycles) remains.
 
 ## 1. Hardware fact that drives the design
 
@@ -676,7 +676,37 @@ and the clock comparison crossed that boundary, but G1/G2 diagnostics should
 continue to record the actual Windows wake source rather than attributing wake
 causality to the timer.
 
-#### G1/G2 - full lifecycle with watchdog
+#### G1 - one full lifecycle with watchdog
+
+**PASSED on physical S3 hardware, 2026-09-25.**
+
+The production LocalSystem watchdog stayed on PID 29972 across the normal
+suspend/resume cycle. Before suspend, the test GUI PID 26944 reached durable
+OWNED generation 3 at 30/30 with exact PID + process-start identity, after the
+real backend completed WMI 30/30 plus EC and both tachometer acknowledgements.
+
+Inside WM_POWERBROADCAST/PBT_APMSUSPEND, the GUI proved that the cycle had been
+Custom with backend acknowledgement, then completed the coordinator handoff to
+Firmware. Before returning from the suspend handler it persisted causal evidence
+for EC 255/255, journal absent and watchdog PID 29972.
+
+Windows then recorded Kernel-Power 42 (Application API suspend) followed by
+Kernel-Power 107. After resume, telemetry completed the required recovery to
+Healthy, the same watchdog PID remained Ready with no retained journal, and only
+then was Custom admission reopened. One controlled post-recovery 30/30 re-entry
+completed with a new watchdog-owned lease, followed by a verified final restore
+to Firmware, EC 255/255 and journal absent.
+
+No OWNED / WRITE_ARMED / RESTORING timeout, OwnershipAmbiguous, fatal watchdog
+path, owner-loss recovery or Gate D recovery occurred. The independent delayed
+fallback did not execute and was cancelled only after journal absence plus an
+independent final EC FF/FF read. OMEN Gaming Hub undervolt was confirmed SAME.
+
+A final named-pipe EOF was logged only after the application had already
+completed its final release/restore and was exiting; it did not produce a
+watchdog timeout or recovery and no durable journal remained.
+
+#### G2 - five consecutive same-session lifecycle cycles
 
 Repeat suspend/resume with watchdog installed and prove:
 
