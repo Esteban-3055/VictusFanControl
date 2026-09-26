@@ -166,6 +166,23 @@ Assert-Contains -Text $manager -Pattern 'RestoringDeadline[\s\S]*TimeSpan\.FromS
 
 Assert-NotContains -Text $g1Method -Pattern '--restore-hp-auto' -Description 'Gate G1 application path never invokes the parent/CLI restore command'
 
+Assert-Contains -Text $harness -Pattern 'Assert-DefaultWatchdogOutputUnlocked' -Description 'physical Gate G1 detects the legacy same-shell watchdog DLL lock before build'
+Assert-Contains -Text $harness -Pattern 'journal to be absent BEFORE service reinstall/start' -Description 'physical Gate G1 refuses to hide a pre-existing durable lease by reinstalling the service'
+
+$lockCheck = $harness.IndexOf('Assert-DefaultWatchdogOutputUnlocked', [StringComparison]::Ordinal)
+$physicalBuild = $harness.IndexOf('dotnet build .\VictusFanControl.sln', [StringComparison]::Ordinal)
+if ($lockCheck -lt 0 -or $physicalBuild -lt 0 -or $lockCheck -ge $physicalBuild) {
+    throw 'Gate G1 invariant violated: stale-shell DLL lock detection must occur before the physical build.'
+}
+Write-Host 'PASS  physical Gate G1 checks the known stale-shell DLL lock before build'
+
+$preExistingJournalCheck = $harness.IndexOf('journal to be absent BEFORE service reinstall/start', [StringComparison]::Ordinal)
+$serviceInstall = $harness.IndexOf('install-watchdog-gate-d.ps1', [StringComparison]::Ordinal)
+if ($preExistingJournalCheck -lt 0 -or $serviceInstall -lt 0 -or $preExistingJournalCheck -ge $serviceInstall) {
+    throw 'Gate G1 invariant violated: pre-existing durable journal must be rejected before service reinstall.'
+}
+Write-Host 'PASS  physical Gate G1 rejects a pre-existing journal before service reinstall'
+
 Assert-Contains -Text $harness -Pattern 'install-watchdog-gate-d\.ps1' -Description 'physical Gate G1 installs the validated production watchdog service'
 Assert-Contains -Text $harness -Pattern 'Assert-ScmRecoveryPolicy' -Description 'physical Gate G1 verifies production SCM 1s/5s/10s recovery policy'
 Assert-Contains -Text $harness -Pattern 'Test-JournalOwnedPhase' -Description 'physical Gate G1 validates durable OWNED state before suspend'
