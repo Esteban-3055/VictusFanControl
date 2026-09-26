@@ -103,18 +103,29 @@ internal static class Program
             args,
             "--gate-g1-test-token");
 
+        var gateG2HardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--gate-g2-suspend-repeat-test",
+                StringComparison.OrdinalIgnoreCase));
+
+        var gateG2HardwareTestToken = ReadOptionValue(
+            args,
+            "--gate-g2-test-token");
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
             (gateEHardwareTest ? 1 : 0) +
             (gateF1HardwareTest ? 1 : 0) +
             (gateF2HardwareTest ? 1 : 0) +
-            (gateG1HardwareTest ? 1 : 0);
+            (gateG1HardwareTest ? 1 : 0) +
+            (gateG2HardwareTest ? 1 : 0);
 
         if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
-                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2 and Gate G1 hardware-test modes are mutually exclusive.");
+                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1 and Gate G2 hardware-test modes are mutually exclusive.");
             Environment.ExitCode = 60;
             return;
         }
@@ -239,6 +250,26 @@ internal static class Program
             return;
         }
 
+        if (gateG2HardwareTest &&
+            !string.Equals(
+                gateG2HardwareTestToken,
+                "88F8-GATEG2-30",
+                StringComparison.Ordinal))
+        {
+            AppLog.Write(
+                "Gate G2 hardware test refused: explicit --gate-g2-test-token 88F8-GATEG2-30 is required.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (!gateG2HardwareTest && gateG2HardwareTestToken is not null)
+        {
+            AppLog.Write(
+                "Startup refused: --gate-g2-test-token is valid only with --gate-g2-suspend-repeat-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -260,7 +291,8 @@ internal static class Program
             gateEHardwareTest,
             gateF1HardwareTest,
             gateF2HardwareTest,
-            gateG1HardwareTest);
+            gateG1HardwareTest,
+            gateG2HardwareTest);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");
