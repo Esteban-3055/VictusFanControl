@@ -109,6 +109,11 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "Release waits for delayed FF/FF publication before clearing lease",
+            ReleaseWaitsForDelayedFirmwareAckAsync);
+
+        failures += await CaseAsync(
+            output,
             "Release restore failure retains durable lease",
             ReleaseFailureRetainsLeaseAsync);
 
@@ -670,6 +675,35 @@ internal static class GateCLeaseSelfTest
             // before LegacyDefault can be proven. Release must still execute
             // the watchdog restore primitive before deleting the journal.
             env.Hardware.Set(new FanSetpoint(255, 255));
+
+            await env.Manager.ReleaseAsync(
+                restoring.SessionId,
+                restoring.Generation,
+                CancellationToken.None);
+
+            Assert(env.Hardware.RestoreCalls == 1);
+            Assert(env.Hardware.Current.IsFirmwareOwned);
+            Assert(
+                await env.Journal.LoadAsync(CancellationToken.None) is null);
+        });
+    }
+
+    private static async Task ReleaseWaitsForDelayedFirmwareAckAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var owned = await PrepareArmCommitAsync(env, 30);
+
+            var restoring =
+                await env.Manager.RestoreBeginAsync(
+                    owned.SessionId,
+                    owned.Generation,
+                    CancellationToken.None);
+
+            // Model the physical HP behavior seen in Gate G2: the WMI restore
+            // call has returned, but the EC still publishes the old owned
+            // setpoint briefly before converging to FF/FF.
+            env.Hardware.RestoreVisibilityDelayReads = 2;
 
             await env.Manager.ReleaseAsync(
                 restoring.SessionId,
@@ -1840,10 +1874,24 @@ internal static class GateCLeaseSelfTest
 
         public bool FailRestore { get; set; }
 
+        public int RestoreVisibilityDelayReads { get; set; }
+
+        private int _remainingRestoreVisibilityReads;
+
         public ValueTask<FanSetpoint> ReadSetpointAsync(
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (_remainingRestoreVisibilityReads > 0)
+            {
+                _remainingRestoreVisibilityReads--;
+                if (_remainingRestoreVisibilityReads == 0)
+                {
+                    Current = new FanSetpoint(255, 255);
+                }
+            }
+
             return ValueTask.FromResult(Current);
         }
 
@@ -1859,7 +1907,16 @@ internal static class GateCLeaseSelfTest
                     "synthetic restore failure");
             }
 
-            Current = new FanSetpoint(255, 255);
+            if (RestoreVisibilityDelayReads > 0)
+            {
+                _remainingRestoreVisibilityReads =
+                    RestoreVisibilityDelayReads;
+            }
+            else
+            {
+                Current = new FanSetpoint(255, 255);
+            }
+
             return ValueTask.CompletedTask;
         }
 
@@ -1871,6 +1928,8 @@ internal static class GateCLeaseSelfTest
             Current = new FanSetpoint(255, 255);
             RestoreCalls = 0;
             FailRestore = false;
+            RestoreVisibilityDelayReads = 0;
+            _remainingRestoreVisibilityReads = 0;
         }
     }
 
