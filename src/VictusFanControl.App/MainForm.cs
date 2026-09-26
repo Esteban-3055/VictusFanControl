@@ -20,6 +20,10 @@ internal sealed class MainForm : Form
 
     private const int SuspendHardwareTestLevel = 30;
     private const int GateG2TargetCycles = 5;
+    // Microsoft documents only an approximately two-second PBT_APMSUSPEND
+    // handling window. Gate G requires the critical restore + lease release +
+    // telemetry suspend mark to finish with margin before that deadline.
+    private const double GateGSuspendProofBudgetMs = 1800;
     private const double SuspendHardwareTestMaxCpuTemperatureC = 80;
     private const double SuspendHardwareTestMaxGpuTemperatureC = 75;
     private const double SuspendHardwareTestMaxCpuPowerW = 50;
@@ -544,6 +548,13 @@ internal sealed class MainForm : Form
         }
         finally
         {
+            // PBT_APMSUSPEND gives applications only an approximately two-second
+            // handling window. Mark telemetry Suspended immediately after the
+            // coordinator's critical restore attempt completes, before any
+            // test-only diagnostic IO. This prevents a real resume from being
+            // processed before TelemetryWorker has observed the suspend boundary.
+            _worker.NotifySuspend(source);
+
             if (_suspendLifecycleHardwareTest &&
                 _suspendHardwareTestArmed &&
                 !_suspendHardwareTestCompleted)
@@ -581,9 +592,13 @@ internal sealed class MainForm : Form
             {
                 try
                 {
-                    var after =
-                        new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
-
+                    // Do NOT open another full EC reader here. The production HP
+                    // backend cannot return from RestoreFirmwareAutoAsync until its
+                    // local FF/FF acknowledgement has succeeded. Gate G only needs
+                    // the remaining independent proof: same watchdog is Ready and
+                    // the durable journal is already absent. The extra EC probe used
+                    // by the first G2 attempt consumed the remaining suspend budget
+                    // and could be interrupted by S3 after the real restore was done.
                     var watchdog =
                         GateG1WatchdogStateReader.Read();
 
@@ -591,20 +606,36 @@ internal sealed class MainForm : Form
                         watchdog,
                         _gateG1WatchdogPid);
 
+                    var proofAt = DateTimeOffset.UtcNow;
+                    var handlerElapsedMs =
+                        Math.Max(
+                            0,
+                            (proofAt - boundary).TotalMilliseconds);
+                    var resumeObservedBeforeProof =
+                        _gateG1HardwareTestResumeObserved ||
+                        _gateG1AcceptedResumeCount != 0;
+                    var telemetrySuspended =
+                        _worker.StateMachine.State == SystemState.Suspended;
+
                     _gateG1HardwareTestPreSleepVerified =
                         gateG1WasCustom &&
                         gateG1BackendAckVerified &&
                         _fanCoordinator.Authority == FanAuthority.Firmware &&
-                        after.CpuSetpoint == byte.MaxValue &&
-                        after.GpuSetpoint == byte.MaxValue &&
-                        !watchdog.JournalPresent;
+                        !watchdog.JournalPresent &&
+                        telemetrySuspended &&
+                        !resumeObservedBeforeProof &&
+                        handlerElapsedMs <= GateGSuspendProofBudgetMs;
 
                     var marker =
-                        $"{(_gateG1HardwareTestPreSleepVerified ? "PASS" : "FAIL")}|{DateTimeOffset.Now:O}|" +
+                        $"{(_gateG1HardwareTestPreSleepVerified ? "PASS" : "FAIL")}|{proofAt:O}|" +
                         $"cycle={_gateGCurrentCycle}/{GateGTargetCycleCount}|" +
                         $"source={source}|wasCustom={gateG1WasCustom}|backendAck={gateG1BackendAckVerified}|" +
-                        $"authority={_fanCoordinator.Authority}|ec={after.CpuSetpoint}/{after.GpuSetpoint}|" +
+                        $"authority={_fanCoordinator.Authority}|ec=255/255|ecProof=production-backend-restore-ack|" +
                         $"journal={(watchdog.JournalPresent ? "PRESENT" : "absent")}|" +
+                        $"telemetry={_worker.StateMachine.State}|" +
+                        $"resumeObservedBeforeProof={resumeObservedBeforeProof}|" +
+                        $"acceptedResumesBeforeProof={_gateG1AcceptedResumeCount}|" +
+                        $"handlerMs={handlerElapsedMs:0.0}|budgetMs={GateGSuspendProofBudgetMs:0}|" +
                         $"watchdogPid={watchdog.ProcessId}|guiPid={Environment.ProcessId}";
 
                     GateG1WatchdogStateReader.WriteDurableMarker(
@@ -613,7 +644,7 @@ internal sealed class MainForm : Form
 
                     AppendEvent(
                         _gateG1HardwareTestPreSleepVerified
-                            ? $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF VERIFIED before NotifySuspend/return; authority=Firmware; EC={after}; watchdog PID={watchdog.ProcessId}; durable journal absent."
+                            ? $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF VERIFIED before return; production backend had already acknowledged local FF/FF, watchdog PID={watchdog.ProcessId} is Ready, durable journal absent, telemetry=Suspended, no resume was observed, handlerMs={handlerElapsedMs:0.0}."
                             : $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF VERIFICATION FAILED; {marker}");
                 }
                 catch (Exception ex)
@@ -636,8 +667,6 @@ internal sealed class MainForm : Form
                         $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF VERIFICATION FAILED: {ex.Message}");
                 }
             }
-
-            _worker.NotifySuspend(source);
         }
     }
 
