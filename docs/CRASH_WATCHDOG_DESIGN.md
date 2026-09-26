@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: Gates A, B, D, E and F have passed on real hardware under LocalSystem, and Gate C passed synthetic Windows CI. Gate D physically proves controller death -> independent service restore; Gate E proves watchdog death -> live-controller local restore followed by durable-journal recovery; Gate F proves simultaneous controller + watchdog loss from both durable OWNED and post-write WRITE_ARMED states. Gate G remains.
+Status: Gates A, B, D, E and F have passed on real hardware under LocalSystem, Gate C passed synthetic Windows CI, and Gate G0 has passed its physical S3 clock-semantics validation. Gate D physically proves controller death -> independent service restore; Gate E proves watchdog death -> live-controller local restore followed by durable-journal recovery; Gate F proves simultaneous controller + watchdog loss from both durable OWNED and post-write WRITE_ARMED states. Gate G1/G2 remain.
 
 ## 1. Hardware fact that drives the design
 
@@ -651,6 +651,32 @@ setpoint outside the journal's previous/pending/owned set, it must return
 See `WATCHDOG_GATE_F.md`.
 
 ### Gate G - lifecycle
+
+#### G0 - watchdog clock semantics
+
+**PASSED on physical S3 hardware, 2026-09-25.**
+
+The production watchdog clock now uses `QueryUnbiasedInterruptTime` with the
+100 ns -> ms conversion, while the existing OWNED / WRITE_ARMED / RESTORING
+deadlines remain 5 s / 12 s / 8 s. Gate C still uses the deterministic fake
+clock for deadline tests, and CI run #285 completed successfully after the G0
+invariants were hardened.
+
+The automatic physical probe dispatched Windows sleep through the application
+API and observed Kernel-Power 42 followed by Kernel-Power 107. Across the same
+probe call, UTC wall time advanced about 18.330 s while the production unbiased
+clock advanced about 7.784 s, leaving about 10.546 s excluded from the watchdog
+clock. This satisfies the G0 requirement that sleep time not consume watchdog
+state deadlines.
+
+The machine resumed before the probe's requested +20 s wake-timer deadline, so
+that timer was not the actual wake source in this run. This does not invalidate
+the clock-semantics result because a real suspend/resume boundary was observed
+and the clock comparison crossed that boundary, but G1/G2 diagnostics should
+continue to record the actual Windows wake source rather than attributing wake
+causality to the timer.
+
+#### G1/G2 - full lifecycle with watchdog
 
 Repeat suspend/resume with watchdog installed and prove:
 
