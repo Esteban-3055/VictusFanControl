@@ -92,7 +92,7 @@ Assert-Ordered -Text $suspendHandler -Needles @(
     'var restoreEvidence =',
     '_fanCoordinator.LastRestoreEvidence',
     'var resumeObservedBeforeProof =',
-    'restoreEvidence.Value.LocalFirmwareAckVerified',
+    'restoreEvidence!.Value.LocalFirmwareAckVerified',
     'restoreEvidence.Value.WatchdogReleaseVerified',
     'telemetrySuspended',
     '!resumeObservedBeforeProof',
