@@ -478,10 +478,16 @@ try {
         throw 'Gate G1 controlled re-entry marker is incomplete or inconsistent.'
     }
 
+    $appExited = $false
     try {
-        [void]$proc.WaitForExit(15000)
+        $appExited = $proc.WaitForExit(15000)
     }
     catch {
+        $appExited = $proc.HasExited
+    }
+
+    if (-not $appExited) {
+        throw 'Gate G1 application published PASS but did not exit within 15 s; refusing an out-of-band final EC probe while the GUI/telemetry process is still alive.'
     }
 
     [void](Assert-ProductionServiceReady -ExpectedPid $servicePidBefore)
