@@ -198,7 +198,7 @@ Assert-Ordered -Text $recoverTail -Needles @(
     'LeaseRecoveryDisposition.RestoredFirmware'
 ) -Description 'watchdog successful Release recovery deletes the journal only after verified firmware ownership'
 
-Assert-Contains -Text $resumeHandler -Pattern '_gateGSuspendWasCustom\s*&&[\s\S]*_gateGSuspendBackendAckVerified\s*&&[\s\S]*localFirmwareAckVerified[\s\S]*watchdogReleaseVerified[\s\S]*_gateGTelemetrySuspendedBeforeRestore[\s\S]*handoffCompletedBeforeResume[\s\S]*acceptedResumesBeforeThisResume == 0' -Description 'pre-sleep PASS requires prior Custom ACK, local FF/FF, successful watchdog release, pre-restore Suspended telemetry and no earlier resume'
+Assert-Contains -Text $resumeHandler -Pattern '_gateGSuspendWasCustom\s*&&[\s\S]*_gateGSuspendBackendAckVerified\s*&&[\s\S]*localFirmwareAckVerified[\s\S]*watchdogReleaseVerified[\s\S]*firmwareTransitionFresh[\s\S]*firmwareAuthorityCurrent[\s\S]*_gateGTelemetrySuspendedBeforeRestore[\s\S]*handoffCompletedBeforeResume[\s\S]*acceptedResumesBeforeThisResume == 0' -Description 'pre-sleep PASS requires prior Custom ACK, local FF/FF, successful watchdog release, a fresh/current Firmware transition, pre-restore Suspended telemetry and no earlier resume'
 
 $healthyStart = $mainForm.IndexOf('private async Task HandleHealthyStateAsync', [StringComparison]::Ordinal)
 $gateDStart = $mainForm.IndexOf('private async Task AdvanceGateDHardwareTestAsync', $healthyStart, [StringComparison]::Ordinal)
