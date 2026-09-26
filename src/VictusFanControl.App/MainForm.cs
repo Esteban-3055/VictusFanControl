@@ -21,6 +21,9 @@ internal sealed class MainForm : Form
 
     private const int SuspendHardwareTestLevel = 30;
     private const int GateG2TargetCycles = 5;
+    private const int GateGInterCycleStableSnapshotsRequired = 2;
+    private static readonly TimeSpan GateGInterCycleStabilityTimeout =
+        TimeSpan.FromSeconds(15);
     // Microsoft documents only an approximately two-second PBT_APMSUSPEND
     // handling window. Gate G requires the critical restore + lease release +
     // telemetry suspend mark to finish with margin before that deadline.
@@ -2355,6 +2358,10 @@ internal sealed class MainForm : Form
             var cycleMessage =
                 $"PASS: cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} initial OWNED 30/30 fenced telemetry before blocking suspend IO and completed the validated Firmware + EC FF/FF + watchdog-release/journal-absent handoff before resume acceptance; exactly one resume was accepted; telemetry recovered to Healthy; watchdog PID {_gateG1WatchdogPid} remained stable; one controlled post-resume 30/30 re-entry succeeded; final authority=Firmware, EC={finalEc}, journal absent.";
 
+            var finalFirmwareAt =
+                _fanCoordinator.LastFirmwareAuthorityAtUtc ??
+                DateTimeOffset.UtcNow;
+
             if (_gateG2HardwareTest)
             {
                 WriteGateG2CycleResult(
@@ -2371,10 +2378,22 @@ internal sealed class MainForm : Form
                 _gateGCurrentCycle++;
                 ResetGateGHardwareTestCycleState();
 
-                // Stay in the same GUI process and immediately acquire the next
-                // cycle only from the still-Healthy, freshly recovered state.
-                // The parent harness performs no EC probe while this new Custom
-                // ownership is active.
+                // The previous cycle's re-entry/restore performs real EC/WMI
+                // traffic while the telemetry worker continues independently.
+                // Do not immediately reacquire Custom from a snapshot captured
+                // before that restore. Require two distinct complete, safe,
+                // light-load telemetry snapshots produced after the final
+                // Firmware transition. This keeps a normal transient/incomplete
+                // post-control snapshot from winning the race immediately after
+                // the next Custom reservation. Safety is not relaxed: any
+                // genuinely unsafe snapshot still prevents the next cycle.
+                await WaitForGateGInterCycleTelemetryStabilityAsync(
+                    finalFirmwareAt);
+
+                // Stay in the same GUI process and acquire the next cycle only
+                // after the post-restore telemetry stream has independently
+                // demonstrated stability. The parent harness performs no EC
+                // probe while this new Custom ownership is active.
                 await ArmGateGHardwareTestCycleAsync();
                 return;
             }
@@ -2418,6 +2437,69 @@ internal sealed class MainForm : Form
                 ref _gateG1HardwareTestAdvanceGate,
                 0);
         }
+    }
+
+    private async Task<TelemetrySnapshot> WaitForGateGInterCycleTelemetryStabilityAsync(
+        DateTimeOffset finalFirmwareAt)
+    {
+        var deadline =
+            DateTimeOffset.UtcNow +
+            GateGInterCycleStabilityTimeout;
+        DateTimeOffset? lastObservedTimestamp = null;
+        var consecutiveSafeSnapshots = 0;
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            var snapshot = _lastSnapshot;
+
+            if (snapshot is not null &&
+                (!lastObservedTimestamp.HasValue ||
+                 snapshot.Timestamp > lastObservedTimestamp.Value))
+            {
+                lastObservedTimestamp = snapshot.Timestamp;
+
+                var displaySafety =
+                    SafetyGate.EvaluateForDisplay(
+                        _hardwareIdentity,
+                        _worker.StateMachine.State,
+                        snapshot,
+                        DateTimeOffset.UtcNow,
+                        fanWritePathPresent:
+                            _fanCoordinator.BackendCanWrite);
+
+                var lightLoad =
+                    snapshot.CpuTemperatureC <= SuspendHardwareTestMaxCpuTemperatureC &&
+                    snapshot.GpuTemperatureC <= SuspendHardwareTestMaxGpuTemperatureC &&
+                    snapshot.CpuPackagePowerW <= SuspendHardwareTestMaxCpuPowerW &&
+                    snapshot.GpuPowerW <= SuspendHardwareTestMaxGpuPowerW;
+
+                var qualifies =
+                    snapshot.Timestamp > finalFirmwareAt &&
+                    snapshot.IsComplete &&
+                    _worker.StateMachine.State == SystemState.Healthy &&
+                    displaySafety.CustomControlPermitted &&
+                    lightLoad &&
+                    _fanCoordinator.Authority == FanAuthority.Firmware;
+
+                consecutiveSafeSnapshots =
+                    qualifies
+                        ? consecutiveSafeSnapshots + 1
+                        : 0;
+
+                if (consecutiveSafeSnapshots >=
+                    GateGInterCycleStableSnapshotsRequired)
+                {
+                    AppendEvent(
+                        $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: inter-cycle telemetry stabilized after {GateGInterCycleStableSnapshotsRequired} distinct complete post-restore snapshots; latest={snapshot.Timestamp:O}; authority=Firmware.");
+                    return snapshot;
+                }
+            }
+
+            await Task.Delay(100).ConfigureAwait(false);
+        }
+
+        throw new InvalidOperationException(
+            $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} did not produce {GateGInterCycleStableSnapshotsRequired} consecutive complete/safe/light-load telemetry snapshots after the previous Firmware restore within {GateGInterCycleStabilityTimeout.TotalSeconds:0} s.");
     }
 
     private async Task<bool> TryEnterGateGCustomAuthorityAsync(
