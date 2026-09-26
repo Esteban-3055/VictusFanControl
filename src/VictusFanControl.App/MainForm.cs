@@ -601,9 +601,11 @@ internal sealed class MainForm : Form
 
                     var marker =
                         $"{(_gateG1HardwareTestPreSleepVerified ? "PASS" : "FAIL")}|{DateTimeOffset.Now:O}|" +
+                        $"cycle={_gateGCurrentCycle}/{GateGTargetCycleCount}|" +
                         $"source={source}|wasCustom={gateG1WasCustom}|backendAck={gateG1BackendAckVerified}|" +
                         $"authority={_fanCoordinator.Authority}|ec={after.CpuSetpoint}/{after.GpuSetpoint}|" +
-                        $"journal={(watchdog.JournalPresent ? "PRESENT" : "absent")}|watchdogPid={watchdog.ProcessId}";
+                        $"journal={(watchdog.JournalPresent ? "PRESENT" : "absent")}|" +
+                        $"watchdogPid={watchdog.ProcessId}|guiPid={Environment.ProcessId}";
 
                     GateG1WatchdogStateReader.WriteDurableMarker(
                         GateGPreSleepPath,
