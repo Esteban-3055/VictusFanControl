@@ -175,6 +175,8 @@ Assert-Contains -Text $harness -Pattern 'Gate G0 production clock measurement: P
 Assert-Contains -Text $harness -Pattern 'exactly one resume was accepted' -Description 'physical harness requires one logical accepted resume per cycle'
 Assert-Contains -Text $harness -Pattern 'telemetry recovered to Healthy' -Description 'physical harness requires Healthy recovery per cycle'
 Assert-Contains -Text $harness -Pattern 'ecProof=production-backend-restore-ack' -Description 'physical harness requires backend-return FF/FF proof without a redundant suspend-time EC reader'
+Assert-Contains -Text $harness -Pattern 'watchdogRelease=True' -Description 'physical Gate G2 requires successful watchdog Release acknowledgement per cycle'
+Assert-Contains -Text $harness -Pattern 'journalProof=watchdog-release-response' -Description 'physical Gate G2 derives pre-sleep journal absence from the watchdog Release response'
 Assert-Contains -Text $harness -Pattern 'telemetry=Suspended' -Description 'physical harness requires telemetry to be marked Suspended before pre-sleep proof completes'
 Assert-Contains -Text $harness -Pattern 'resumeObservedBeforeProof=False' -Description 'physical harness rejects a resume that races ahead of pre-sleep proof'
 Assert-Contains -Text $harness -Pattern 'acceptedResumesBeforeProof=0' -Description 'physical harness requires zero accepted resumes at pre-sleep proof time'
