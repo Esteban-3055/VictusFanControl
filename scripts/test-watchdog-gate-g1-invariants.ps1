@@ -150,14 +150,54 @@ if ($resumeHandlerStart -lt 0 -or $reopenHandlerStart -le $resumeHandlerStart) {
 }
 $resumeHandler = $mainForm.Substring($resumeHandlerStart, $reopenHandlerStart - $resumeHandlerStart)
 
+Assert-Contains -Text $mainForm -Pattern 'private enum GateGResumeProofState[\s\S]*Pending = 0[\s\S]*Verifying = 1[\s\S]*Verified = 2[\s\S]*Failed = 3' -Description 'Gate G models resume handoff proof as a monotonic per-cycle latch'
+
+$proofHelperStart = $resumeHandler.IndexOf('private bool EnsureGateGHandoffVerifiedBeforeResumeAcceptance', [StringComparison]::Ordinal)
+$verifyHelperStart = $resumeHandler.IndexOf('private bool VerifyGateGHandoffBeforeResumeAcceptance', $proofHelperStart, [StringComparison]::Ordinal)
+if ($proofHelperStart -lt 0 -or $verifyHelperStart -le $proofHelperStart) {
+    throw 'Gate G1 invariant could not isolate the one-shot Gate G resume proof helper.'
+}
+$proofHelper = $resumeHandler.Substring($proofHelperStart, $verifyHelperStart - $proofHelperStart)
+
+Assert-Ordered -Text $proofHelper -Needles @(
+    'Volatile.Read(',
+    'case GateGResumeProofState.Verified:',
+    'return true;',
+    'case GateGResumeProofState.Failed:',
+    'return false;',
+    'case GateGResumeProofState.Verifying:',
+    'return false;',
+    'case GateGResumeProofState.Pending:',
+    'Interlocked.CompareExchange(',
+    '(int)GateGResumeProofState.Verifying',
+    '(int)GateGResumeProofState.Pending',
+    'VerifyGateGHandoffBeforeResumeAcceptance(',
+    '? GateGResumeProofState.Verified',
+    ': GateGResumeProofState.Failed',
+    'return verified;'
+) -Description 'Gate G claims one causal proof atomically and latches its first terminal result'
+
+Assert-Contains -Text $proofHelper -Pattern 'catch[\s\S]*GateGResumeProofState\.Failed[\s\S]*throw;' -Description 'an unexpected proof exception is latched fail-closed and cannot be retried by a duplicate resume'
+
+$verifyCallCount = [regex]::Matches(
+    $mainForm,
+    'VerifyGateGHandoffBeforeResumeAcceptance\(').Count
+if ($verifyCallCount -ne 2) {
+    throw "Gate G1 invariant violated: expected exactly one production call plus one definition for VerifyGateGHandoffBeforeResumeAcceptance; found $verifyCallCount."
+}
+Write-Host 'PASS  Gate G handoff proof has exactly one production call site'
+
 Assert-Ordered -Text $resumeHandler -Needles @(
     'if (GateGHardwareTest &&',
-    'VerifyGateGHandoffBeforeResumeAcceptance(',
+    'EnsureGateGHandoffVerifiedBeforeResumeAcceptance(',
+    'if (_gateG1HardwareTestResumeObserved)',
+    'duplicate resume signal ignored after the cycle already accepted one resume',
+    'return;',
     'var accepted = _worker.NotifyResume(source);',
     'if (!accepted)',
     '_gateG1HardwareTestResumeObserved = true;',
     '_gateG1AcceptedResumeCount++;'
-) -Description 'Gate G proves completed fan/watchdog handoff while telemetry is still Suspended, then accepts the first resume'
+) -Description 'Gate G latches the handoff before telemetry resume and blocks later Windows resume notifications from mutating the cycle'
 
 Assert-Contains -Text $resumeHandler -Pattern '_fanCoordinator\.LastRestoreEvidence' -Description 'resume-side proof reads backend restore evidence captured by the production transaction'
 Assert-Contains -Text $resumeHandler -Pattern '_fanCoordinator\.LastFirmwareAuthorityAtUtc' -Description 'resume-side proof reads the coordinator Firmware-transition timestamp'
