@@ -871,7 +871,28 @@ with journal absent under the same watchdog PID. Kernel-Power 42 -> 107 confirme
 real S3; no watchdog timeout/recovery/fatal evidence or emergency fallback
 execution occurred; OGH undervolt remained unchanged.
 
-Gate G2 now remains as the only suspend/resume repetition gate: 5/5 consecutive
+The first revised-contract Gate G2 repetition attempt on 2026-09-26 passed
+cycle 1 completely, including real S3, same watchdog/GUI identity, 199.9 ms
+pre-block fencing, ~1.17 s validated restore, one accepted resume, Healthy
+recovery, controlled 30/30 re-entry, and final Firmware + FF/FF + journal
+absence. Cycle 2 then failed safely before READY. The next admission reached
+Custom, but the normal telemetry safety supervisor immediately performed
+Custom -> Restoring -> Firmware before the 30/30 command; Apply correctly
+refused because Custom was no longer active. The final independent checks again
+proved FF/FF + journal absent and the fallback was cancelled only afterward.
+
+This is not treated as a reason to suppress or weaken the safety supervisor.
+A repeated-cycle harness had been immediately reacquiring Custom after the prior
+cycle's real re-entry/restore, while telemetry runs independently and can publish
+a transient post-control sample in that exact window. Gate G2 now inserts a
+bounded Firmware-only stabilization barrier between cycles: two distinct,
+complete, Healthy, SafetyGate-permitted, light-load telemetry snapshots must be
+captured after the previous Firmware transition before the next Custom
+reservation. Any incomplete, unsafe, stale or degraded observation resets the
+streak. Safety-supervisor restore reasons now also include the exact SafetyGate /
+lifecycle denial detail for future causality analysis.
+
+Gate G2 remains the only suspend/resume repetition gate: 5/5 consecutive
 same-process cycles under the same contract. Automatic fan policy remains OFF.
 Representative-load testing and the adaptive RPM controller stay blocked until
 Gate G2 and the later low-target S3/load validations are complete.
