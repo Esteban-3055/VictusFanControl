@@ -250,9 +250,9 @@ Write-Host ''
 Write-Host 'Expected causal path:'
 Write-Host '  baseline Ready + journal absent + EC FF/FF + Healthy'
 Write-Host '  -> Prepare -> WRITE_ARMED -> WMI 30/30 -> EC+tachs ACK -> Commit -> OWNED'
-Write-Host '  -> PBT_APMSUSPEND -> fence/cancel -> RestoreBegin -> local FF/FF -> LegacyDefault'
-Write-Host '  -> watchdog Release/normalize -> journal absent -> Firmware -> NotifySuspend'
-Write-Host '  -> sleep/resume -> same watchdog PID -> five complete telemetry samples -> Healthy'
+Write-Host '  -> PBT_APMSUSPEND -> fence/cancel -> NotifySuspend -> begin validated restore'
+Write-Host '  -> restore may finish before S3 or continue immediately after wake under the durable lease'
+Write-Host '  -> BEFORE resume acceptance: local FF/FF -> watchdog Release -> journal absent -> Firmware -> same watchdog PID'`nWrite-Host '  -> accept one resume -> five complete telemetry samples -> Healthy'
 Write-Host '  -> watchdog Ready/journal absent -> reopen fence -> one controlled 30/30 re-entry'
 Write-Host '  -> final Firmware + FF/FF + journal absent'
 Write-Host ''
@@ -713,7 +713,7 @@ if ($post -cne 'SAME') {
 }
 
 Write-Host ''
-Write-Host 'PASS: Gate G1 full watchdog suspend/resume lifecycle completed with causal pre-sleep and post-resume evidence.' -ForegroundColor Green
-Write-Host 'Verified: durable OWNED 30/30 -> PBT_APMSUSPEND -> RestoreBegin/local restore/Release -> pre-sleep FF/FF + journal absent -> real sleep/resume -> same watchdog PID -> Healthy -> controlled re-entry -> final Firmware FF/FF + journal absent.' -ForegroundColor Green
+Write-Host 'PASS: Gate G1 full watchdog suspend/resume lifecycle completed with causal suspend-handoff and post-resume evidence.' -ForegroundColor Green
+Write-Host 'Verified: durable OWNED 30/30 -> PBT_APMSUSPEND fence + telemetry Suspended -> validated restore survives any S3 interruption -> Firmware FF/FF + watchdog Ready/journal absent before resume acceptance -> Healthy -> controlled re-entry -> final Firmware FF/FF + journal absent.' -ForegroundColor Green
 Write-Host 'No watchdog timeout/recovery/fatal evidence occurred, the emergency fallback did not run, and OMEN Gaming Hub undervolt is SAME.' -ForegroundColor Green
 exit 0
