@@ -11,6 +11,12 @@ internal sealed class WatchdogLeaseManager
     internal static readonly TimeSpan RestoringDeadline =
         TimeSpan.FromSeconds(8);
 
+    internal static readonly TimeSpan FirmwareRestoreVerificationTimeout =
+        TimeSpan.FromSeconds(5);
+
+    internal static readonly TimeSpan FirmwareRestoreVerificationPollInterval =
+        TimeSpan.FromMilliseconds(250);
+
     private readonly ILeaseJournal _journal;
     private readonly ILeaseRecoveryHardware _hardware;
     private readonly IMonotonicClock _clock;
@@ -887,33 +893,11 @@ internal sealed class WatchdogLeaseManager
             await _hardware.RestoreFirmwareAutoAsync(
                     cancellationToken)
                 .ConfigureAwait(false);
-
-            var after =
-                await _hardware.ReadSetpointAsync(cancellationToken)
-                    .ConfigureAwait(false);
-
-            if (!after.IsFirmwareOwned)
-            {
-                return new LeaseRecoveryResult(
-                    LeaseRecoveryDisposition.RestoreFailed,
-                    after,
-                    RestoreAttempted: true,
-                    JournalRetained: true,
-                    $"{reason}: restore returned but EC is {after}, not FF/FF.");
-            }
-
-            await _journal.DeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
-            _active = null;
-
-            return new LeaseRecoveryResult(
-                LeaseRecoveryDisposition.RestoredFirmware,
-                after,
-                RestoreAttempted: true,
-                JournalRetained: false,
-                observed.IsFirmwareOwned
-                    ? $"{reason}: EC was already FF/FF, but the active {record.Phase} lease required completion/normalization of the validated firmware restore."
-                    : $"{reason}: VFC-owned setpoint {observed} restored to FF/FF.");
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -922,8 +906,111 @@ internal sealed class WatchdogLeaseManager
                 observed,
                 RestoreAttempted: true,
                 JournalRetained: true,
-                $"{reason}: restore failed: {ex.Message}");
+                $"{reason}: restore command failed before verified FF/FF: {ex.GetType().Name}: {ex.Message}");
         }
+
+        // The HP WMI restore call returning is not a guarantee that the EC has
+        // already published FF/FF. Gate B and the production GUI backend both
+        // proved this path needs bounded acknowledgement polling. A single
+        // immediate service-side read can therefore retain a healthy RESTORING
+        // journal merely because firmware has not caught up yet. Poll with the
+        // watchdog's sleep-excluding monotonic clock, but never fight an
+        // unexpected external fixed setpoint.
+        var verificationStartedMs = _clock.Milliseconds;
+        var after = observed;
+        Exception? lastReadFailure = null;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                after =
+                    await _hardware.ReadSetpointAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                lastReadFailure = null;
+
+                if (after.IsFirmwareOwned)
+                {
+                    try
+                    {
+                        await _journal.DeleteAsync(cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                        when (ex is not OperationCanceledException ||
+                              !cancellationToken.IsCancellationRequested)
+                    {
+                        return new LeaseRecoveryResult(
+                            LeaseRecoveryDisposition.RestoreFailed,
+                            after,
+                            RestoreAttempted: true,
+                            JournalRetained: true,
+                            $"{reason}: FF/FF was verified but durable journal deletion failed: {ex.GetType().Name}: {ex.Message}");
+                    }
+
+                    _active = null;
+
+                    return new LeaseRecoveryResult(
+                        LeaseRecoveryDisposition.RestoredFirmware,
+                        after,
+                        RestoreAttempted: true,
+                        JournalRetained: false,
+                        observed.IsFirmwareOwned
+                            ? $"{reason}: EC was already FF/FF, the active {record.Phase} lease was normalized, and FF/FF was re-verified before journal deletion."
+                            : $"{reason}: VFC-owned setpoint {observed} restored to FF/FF and verified before journal deletion.");
+                }
+
+                if (!AllowedSetpoints(record).Contains(after))
+                {
+                    return new LeaseRecoveryResult(
+                        LeaseRecoveryDisposition.OwnershipAmbiguous,
+                        after,
+                        RestoreAttempted: true,
+                        JournalRetained: true,
+                        $"{reason}: restore verification observed unexpected fixed setpoint {after}; no further restore action was attempted.");
+                }
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // EC transport/contention failures are observational. Retain
+                // the durable RESTORING lease and keep polling within the same
+                // bounded verification window; never convert a failed read
+                // into ownership proof.
+                lastReadFailure = ex;
+            }
+
+            if (Elapsed(
+                    _clock.Milliseconds,
+                    verificationStartedMs) >=
+                FirmwareRestoreVerificationTimeout)
+            {
+                break;
+            }
+
+            await Task.Delay(
+                    FirmwareRestoreVerificationPollInterval,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var verificationDetail =
+            lastReadFailure is not null
+                ? $"last EC read failed: {lastReadFailure.GetType().Name}: {lastReadFailure.Message}"
+                : $"last EC setpoint={after}";
+
+        return new LeaseRecoveryResult(
+            LeaseRecoveryDisposition.RestoreFailed,
+            after,
+            RestoreAttempted: true,
+            JournalRetained: true,
+            $"{reason}: restore command returned but FF/FF was not verified within {FirmwareRestoreVerificationTimeout.TotalSeconds:0.0} s ({verificationDetail}).");
     }
 
     private static HashSet<FanSetpoint> AllowedSetpoints(
