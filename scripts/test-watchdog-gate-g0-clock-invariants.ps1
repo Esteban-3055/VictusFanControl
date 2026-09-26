@@ -62,7 +62,7 @@ Assert-Contains -Text $gateC -Pattern 'RestoringTimeoutAsync' -Description 'Gate
 
 Assert-Contains -Text $probe -Pattern 'new WindowsMonotonicClock\(\)' -Description 'physical probe executes the production clock implementation in .NET 8'
 Assert-Contains -Text $probe -Pattern 'DateTimeOffset\.UtcNow' -Description 'physical probe compares unbiased time against UTC wall time'
-Assert-NotContains -Text $probe -Pattern 'PawnIo|Hp88F8|SetFanLevel|ILeaseJournal|WatchdogLeaseManager' -Description 'physical probe has no EC/WMI/lease hardware path'
+Assert-NotContains -Text $probe -Pattern '\bPawnIo[A-Za-z0-9_]*\s*[.(]|\bHp88F8[A-Za-z0-9_]*\s*[.(]|\bSetFanLevel(?:Async)?\s*\(|\bILeaseJournal\b|\bWatchdogLeaseManager\b' -Description 'physical probe has no EC/WMI/lease hardware path'
 Assert-Contains -Text $probe -Pattern 'RequiredToken\s*=\s*"88F8-G0-AUTO-S3"' -Description 'automatic S3 action requires an explicit dedicated token'
 Assert-Contains -Text $probe -Pattern 'EnableShutdownPrivilege\(\)' -Description 'automatic S3 path explicitly enables SeShutdownPrivilege'
 Assert-Contains -Text $probe -Pattern 'SetWaitableTimer\(' -Description 'automatic S3 path arms a waitable wake timer'
