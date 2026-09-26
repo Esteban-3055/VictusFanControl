@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>VictusFanControl.App</AssemblyName>
+    <RootNamespace>VictusFanControl.App</RootNamespace>
+    <Version>0.4.0</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VictusFanControl\VictusFanControl.csproj" />
+  </ItemGroup>
+</Project>

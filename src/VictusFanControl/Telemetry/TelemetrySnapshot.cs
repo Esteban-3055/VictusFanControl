@@ -11,4 +11,15 @@ public sealed record TelemetrySnapshot(
     double? GpuPowerW,
     double? GpuLoadPercent,
     double? CpuFanRpm,
-    double? GpuFanRpm);
+    double? GpuFanRpm)
+{
+    public bool IsComplete =>
+        CpuTemperatureC.HasValue &&
+        CpuPackagePowerW.HasValue &&
+        CpuLoadPercent.HasValue &&
+        GpuTemperatureC.HasValue &&
+        GpuPowerW.HasValue &&
+        GpuLoadPercent.HasValue &&
+        CpuFanRpm.HasValue &&
+        GpuFanRpm.HasValue;
+}

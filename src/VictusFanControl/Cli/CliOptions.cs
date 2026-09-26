@@ -3,10 +3,24 @@ namespace VictusFanControl.Cli;
 public sealed class CliOptions
 {
     public bool ShowHelp { get; private set; }
-    public bool ListSensors { get; private set; }
+    public bool ProbeBackends { get; private set; }
+    public bool SafetySelfTest { get; private set; }
+    public bool Probe88F8EcState { get; private set; }
+    public bool Probe88F8Setpoint { get; private set; }
+    public bool ControlSelfTest { get; private set; }
+    public bool BiosContractSelfTest { get; private set; }
+    public bool HpBackendSelfTest { get; private set; }
+    public bool RestoreHpAuto { get; private set; }
+    public bool SkipEcSnapshots { get; private set; }
+    public bool FirstFanWriteTest { get; private set; }
+    public string? FirstFanWriteToken { get; private set; }
+    public bool IntegratedCoordinatorTest { get; private set; }
+    public string? IntegratedCoordinatorToken { get; private set; }
+    public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
     public int DurationSeconds { get; private set; }
     public string? OutputPath { get; private set; }
+    public string ModulesDirectory { get; private set; } = Path.Combine(Environment.CurrentDirectory, "modules");
 
     public static CliOptions Parse(string[] args)
     {
@@ -21,8 +35,67 @@ public sealed class CliOptions
                     options.ShowHelp = true;
                     break;
 
+                case "--probe-backends":
                 case "--list-sensors":
-                    options.ListSensors = true;
+                    options.ProbeBackends = true;
+                    break;
+
+                case "--safety-self-test":
+                    options.SafetySelfTest = true;
+                    break;
+
+                case "--probe-88f8-ec-state":
+                    options.Probe88F8EcState = true;
+                    break;
+
+                case "--probe-88f8-setpoint":
+                    options.Probe88F8Setpoint = true;
+                    break;
+
+                case "--control-self-test":
+                    options.ControlSelfTest = true;
+                    break;
+
+                case "--bios-contract-self-test":
+                    options.BiosContractSelfTest = true;
+                    break;
+
+                case "--hp-backend-self-test":
+                    options.HpBackendSelfTest = true;
+                    break;
+
+                case "--restore-hp-auto":
+                    options.RestoreHpAuto = true;
+                    break;
+
+                case "--skip-ec-snapshots":
+                    options.SkipEcSnapshots = true;
+                    break;
+
+                case "--first-fan-write-test":
+                    options.FirstFanWriteTest = true;
+                    break;
+
+                case "--write-token":
+                    options.FirstFanWriteToken = ReadValue(args, ref i);
+                    break;
+
+                case "--integrated-coordinator-test":
+                    options.IntegratedCoordinatorTest = true;
+                    break;
+
+                case "--coordinator-write-token":
+                    options.IntegratedCoordinatorToken = ReadValue(args, ref i);
+                    break;
+
+                case "--health-test-minutes":
+                    options.HealthTestMinutes = ParsePositiveInt(
+                        ReadValue(args, ref i),
+                        "--health-test-minutes");
+                    break;
+
+                case "--modules-dir":
+                    options.ModulesDirectory = Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
                 case "--interval-ms":
@@ -46,6 +119,44 @@ public sealed class CliOptions
             }
         }
 
+        var exclusiveActions =
+            (options.ProbeBackends ? 1 : 0) +
+            (options.SafetySelfTest ? 1 : 0) +
+            (options.Probe88F8EcState ? 1 : 0) +
+            (options.Probe88F8Setpoint ? 1 : 0) +
+            (options.ControlSelfTest ? 1 : 0) +
+            (options.BiosContractSelfTest ? 1 : 0) +
+            (options.HpBackendSelfTest ? 1 : 0) +
+            (options.RestoreHpAuto ? 1 : 0) +
+            (options.FirstFanWriteTest ? 1 : 0) +
+            (options.IntegratedCoordinatorTest ? 1 : 0) +
+            (options.HealthTestMinutes > 0 ? 1 : 0);
+
+        if (exclusiveActions > 1)
+        {
+            throw new ArgumentException(
+                "Choose only one probe/test/write operation per invocation.");
+        }
+
+        if (options.SkipEcSnapshots && !options.RestoreHpAuto)
+        {
+            throw new ArgumentException(
+                "--skip-ec-snapshots is valid only with --restore-hp-auto.");
+        }
+
+        if (options.FirstFanWriteToken is not null && !options.FirstFanWriteTest)
+        {
+            throw new ArgumentException(
+                "--write-token is valid only with --first-fan-write-test.");
+        }
+
+        if (options.IntegratedCoordinatorToken is not null &&
+            !options.IntegratedCoordinatorTest)
+        {
+            throw new ArgumentException(
+                "--coordinator-write-token is valid only with --integrated-coordinator-test.");
+        }
+
         return options;
     }
 
@@ -55,7 +166,22 @@ public sealed class CliOptions
         Console.WriteLine("  VictusFanControl [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  --list-sensors             Print all sensors and exit.");
+        Console.WriteLine("  --probe-backends           Probe PawnIO, Intel MSR/EC and NVIDIA NVML.");
+        Console.WriteLine("  --list-sensors             Compatibility alias for --probe-backends.");
+        Console.WriteLine("  --safety-self-test         Run synthetic SafetyGate fail-closed tests.");
+        Console.WriteLine("  --probe-88f8-ec-state     Read known 88F8 fan-control EC state (read-only).");
+        Console.WriteLine("  --probe-88f8-setpoint     Read only 88F8 ownership setpoints 0x34/0x35 (read-only).");
+        Console.WriteLine("  --control-self-test       Test authority/fallback coordinator with fake backend.");
+        Console.WriteLine("  --bios-contract-self-test Validate the 88F8 BIOS/WMI request envelopes.");
+        Console.WriteLine("  --hp-backend-self-test    Test the real HP backend boundary with synthetic hardware.");
+        Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
+        Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
+        Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");
+        Console.WriteLine("  --write-token <token>     Required acknowledgement token for the first write test.");
+        Console.WriteLine("  --integrated-coordinator-test  HARDWARE GATE: SafetyGate -> coordinator -> real HP backend.");
+        Console.WriteLine("  --coordinator-write-token <token>  Required acknowledgement token for integrated hardware gate.");
+        Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
+        Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");
         Console.WriteLine("  --duration-seconds <n>     Stop after N seconds. 0 = until Ctrl+C.");
         Console.WriteLine("  --output <path>            CSV output path.");

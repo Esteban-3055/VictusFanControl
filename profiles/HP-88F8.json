@@ -3,8 +3,13 @@
   "vendor": "HP",
   "productId": "88F8",
   "boardVersionObserved": "88.58",
-  "status": "experimental-read-only",
+  "status": "backend-integrated-policy-off",
   "fanCount": 2,
+  "validatedTarget": {
+    "systemProductName": "Victus by HP Laptop 16-d0xxx",
+    "systemSkuPrefix": "62C37LA",
+    "gpuName": "NVIDIA GeForce RTX 3060 Laptop GPU"
+  },
   "control": {
     "enabledByDefault": false,
     "validatedMinimumLevel": 14,

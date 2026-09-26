@@ -21,5 +21,67 @@ jobs:
       - name: Restore
         run: dotnet restore VictusFanControl.sln
 
+      - name: PowerShell syntax check
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem .\scripts -Filter *.ps1 -File | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Host ("PowerShell parse failure in {0}" -f $_.FullName) -ForegroundColor Red
+              $errors | Format-List | Out-String | Write-Host
+            }
+          }
+
+          if ($failed) {
+            exit 1
+          }
+
+      - name: Gate E contention and causality invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-e-invariants.ps1
+
+      - name: Gate F double-death invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-f-invariants.ps1
+
+      - name: Gate G0 watchdog clock invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-g0-clock-invariants.ps1
+
+      - name: Gate G1 lifecycle invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-g1-invariants.ps1
+
+      - name: Gate G2 5/5 lifecycle invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-g2-invariants.ps1
+
       - name: Build
-        run: dotnet build VictusFanControl.sln -c Release --no-restore
+        run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
+
+      - name: Watchdog Gate B restore self-test
+        run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --gate-b-self-test
+
+      - name: Watchdog Gate C lease self-test
+        run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --gate-c-self-test
+
+      - name: Safety gate self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --safety-self-test
+
+      - name: Fan authority self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --control-self-test
+
+      - name: HP BIOS contract self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --bios-contract-self-test
+
+      - name: HP fan backend self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --hp-backend-self-test

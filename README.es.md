@@ -1,51 +1,94 @@
 # VictusFanControl
 
-Proyecto experimental de control adaptativo de ventiladores para notebooks HP Victus, comenzando por la placa HP **88F8**.
+Proyecto experimental de control adaptativo de ventiladores para notebooks HP Victus, comenzando por el equipo de desarrollo HP **88F8** ya caracterizado.
 
-> **Estado actual: v0.1 solo telemetría.** Esta versión **no** escribe velocidades de ventilador, registros EC, ajustes BIOS de ventiladores ni límites de potencia.
+> **Estado actual: v0.4, integración del backend.** La ruta HP 88F8 validada en hardware ya está integrada detrás del coordinador central de seguridad/autoridad. La política automática de ventiladores sigue **DESACTIVADA**, por lo que abrir la GUI no toma autoridad ni envía niveles de ventilador.
 
-La meta es desarrollar un controlador que no dependa únicamente de la temperatura. La estrategia futura combinará temperatura, potencia del CPU/GPU, uso, tendencia térmica, RPM reales, histéresis y protecciones de seguridad.
+## Equipo validado
 
-## Equipo inicial
+La autorización de escritura es más estricta que comprobar solamente `88F8`:
 
 - HP Victus 16-d0515la
+- producto del sistema: `Victus by HP Laptop 16-d0xxx`
+- prefijo de SKU: `62C37LA`
+- placa HP `88F8`, versión `88.58`
 - Intel Core i7-11800H
 - NVIDIA GeForce RTX 3060 Laptop GPU
-- Placa HP `88F8`, versión `88.58`
+- configuración de referencia: monitor externo conectado y RTX 3060 activa
 
 No se guardan números de serie únicos en el repositorio.
 
-## Datos ya medidos
+## Arquitectura actual
 
-| Nivel solicitado | Ventilador CPU | Ventilador GPU | Observación |
+```text
+Telemetría
+  PawnIO Intel MSR / ACPI EC
+  NVIDIA NVML
+  carga CPU de Windows
+        |
+        v
+Runtime state + SafetyGate
+        |
+        v
+FanControlCoordinator
+  Firmware / Custom / Restoring / Faulted
+        |
+        v
+Hp88F8FanControlBackend
+  WMI SetFanLevel
+  confirmación EC
+  confirmación de ambos tacómetros
+  restore FF,FF -> LegacyDefault
+        |
+        v
+Firmware HP / ventiladores
+```
+
+La GUI construye esta ruta, pero todavía no existe una política adaptativa que llame automáticamente a `TryEnterCustomAsync` o `ApplyAsync`. En uso normal de la GUI, HP conserva la autoridad.
+
+## Datos validados en este equipo
+
+| Nivel WMI solicitado | Ventilador CPU | Ventilador GPU | Observación |
 |---:|---:|---:|---|
-| 14 | ~1.400 RPM | ~1.400 RPM | Punto bajo estable |
-| 30 | ~3.000 RPM | ~3.000 RPM | Sigue el objetivo correctamente |
-| 50 | ~4.330 RPM | ~4.670 RPM | Ambos reportan 100%; techo físico alcanzado |
+| 14 | ~1.400 RPM | ~1.400 RPM | Punto bajo estable; falta validar arranque desde reposo |
+| 30 | ~3.000 RPM | ~3.000 RPM | Prueba real de escritura/ack/restore aprobada |
+| 50 | ~4.330 RPM | ~4.670 RPM | Techos físicos diferentes |
 
-Estos datos corresponden al equipo de desarrollo y no deben asumirse idénticos en todos los Victus.
+A nivel 30 ambos ventiladores convergieron casi a las mismas RPM físicas aunque el EC mostró aproximadamente 75% CPU / 68% GPU. El controlador final utilizará por eso un objetivo físico de RPM compartido con realimentación/compensación independiente por ventilador.
+
+## Validaciones de hardware completadas
+
+- telemetría directa PawnIO/NVML y ambos tacómetros;
+- soak de 30 minutos con 1629/1629 muestras completas;
+- suspensión/reanudación post-fix probada correctamente en 2 ciclos (los 3 ciclos adicionales planificados fueron omitidos explícitamente, por lo que la validación de lifecycle sigue siendo parcial);
+- WMI `SetFanLevel(30,30)`;
+- ownership mediante EC 0x34/0x35;
+- respuesta estable cercana a 3000 RPM en ambos ventiladores;
+- liberación `SetFanLevel(FF,FF) -> FanMode=LegacyDefault`;
+- OMEN Gaming Hub abierto y undervolt CPU conservado antes/después;
+- watchdog Gate A validado como servicio Windows en Session 0: LocalService quedó bloqueado por `Global\Access_EC`, mientras LocalSystem pasó 3/3 ciclos read-only con PawnIO EC + HP WMI y EC permaneciendo FF/FF;
+- watchdog Gate B validado físicamente: con la GUI terminada a la fuerza y 30/30 huérfano, el servicio LocalSystem en Session 0 ejecutó por sí solo `FF,FF -> LegacyDefault`, verificó FF/FF en ~443 ms, una lectura independiente volvió a confirmar FF/FF y el undervolt de OMEN Gaming Hub permaneció sin cambios;
+- watchdog Gate C validado sintéticamente en Windows CI: lease PREPARED/WRITE_ARMED/OWNED/RESTORING, journal durable write-through, generación anti-stale, identidad real del cliente named-pipe, heartbeat/deadlines, pérdida de pipe, reinicios y ownership ambiguo;
+- watchdog Gate D validado físicamente: el servicio LocalSystem persistente alcanzó Ready, el backend real dejó un lease durable OWNED 30/30 ligado al PID + creation time exactos de la GUI, la GUI fue terminada a la fuerza y el mismo servicio restauró `FF,FF -> LegacyDefault`, eliminó el journal y una lectura independiente confirmó FF/FF; el PowerShell padre no ejecutó restore, el fallback no se disparó y el undervolt de OMEN Gaming Hub permaneció igual;
+- watchdog Gate E implementado y listo para validación física: mata únicamente el proceso del servicio mientras la GUI mantiene OWNED 30/30, exige restore local de la GUI a FF/FF antes del reinicio SCM y luego verifica recuperación del journal + Ready del nuevo servicio.
+
+## Seguridad integrada
+
+La ruta v0.4 falla de forma cerrada ante identidad incorrecta, telemetría inválida, emergencia térmica, comandos fuera de 14-50, ownership externo, falta de ACK del setpoint o de cualquiera de los tacómetros, sobrescritura externa, límites de suspensión/reanudación y excepciones del backend.
+
+Suspensión, pérdida de seguridad y salida devuelven la autoridad a HP mientras el proceso siga ejecutándose. La terminación forzada ya fue caracterizada físicamente: después de matar la GUI con 30/30 activo, el fixed setpoint permaneció 30/30 y un componente externo HP/OMEN refrescó EC 0x63 aproximadamente cada 30 s. Por tanto, el countdown no puede considerarse un crash fail-safe fiable. Gate B demostró el restore independiente, Gate C validó el protocolo lease/journal/IPC y Gate D ya probó físicamente la ruta completa con lease real: OWNED 30/30, forced-kill de la GUI y recuperación automática por el mismo servicio LocalSystem sin restore del PowerShell padre. Gate E ya está implementado para probar el fallo inverso —muerte del watchdog con GUI viva— pero aún requiere la prueba física. Después quedan Gate F-G, carga/térmica y la política adaptativa.
 
 ## Inicio rápido
 
 ```powershell
 cd VictusFanControl
-.\scripts\bootstrap.ps1
+.\scripts\setup-pawnio-modules.ps1
+.\scripts\probe-backends.ps1
+.\scripts\run-gui.ps1
 ```
 
-Para listar sensores:
+La GUI muestra disponibilidad del backend y autoridad actual, pero la **política automática sigue desactivada**.
 
-```powershell
-.\scripts\list-sensors.ps1
-```
+La ruta integrada, la suspensión real mientras `Custom` estaba activo y la terminación forzada del proceso ya fueron caracterizadas físicamente. El resultado del forced-kill es deliberadamente conservador: EC 0x63 fue refrescado externamente mientras 30/30 seguía activo, por lo que el siguiente bloqueo de seguridad es implementar un watchdog/lease independiente de la GUI. El harness de caracterización queda disponible en `scripts/test-forced-kill-watchdog.ps1`; consulta `docs/FORCED_KILL_WATCHDOG_TEST.md` y `docs/CRASH_WATCHDOG_DESIGN.md`.
 
-Para registrar 15 minutos en reposo:
-
-```powershell
-.\scripts\run-baseline.ps1 -Scenario idle -Minutes 15
-```
-
-## Etapas
-
-La v0.1 registra telemetría sin controlar hardware. Luego añadiremos RPM de ventiladores en modo lectura, después el supervisor de seguridad y recién entonces un backend de control experimental.
-
-Consulta [docs/ROADMAP.md](docs/ROADMAP.md) y [docs/SAFETY.md](docs/SAFETY.md).
+Consulta `docs/BACKEND_INTEGRATION_V0.4.md`, `docs/PRE_CONTROL_CHECKLIST.md`, `docs/SAFETY.md` y `docs/OMENMON_COMPAT_AUDIT.md`.

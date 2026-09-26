@@ -1,0 +1,724 @@
+using VictusFanControl.Hardware.Hp;
+using VictusFanControl.Safety;
+
+namespace VictusFanControl.Control;
+
+public enum FanAuthority
+{
+    Firmware,
+    Custom,
+    Restoring,
+    Faulted
+}
+
+public sealed record FanAuthorityChangedEventArgs(
+    FanAuthority Previous,
+    FanAuthority Current,
+    string Reason,
+    DateTimeOffset Timestamp);
+
+
+public sealed class FanControlStaleSafetyException : InvalidOperationException
+{
+    public FanControlStaleSafetyException()
+        : base("Fan command refused because its SafetyGate evaluation is older than the latest accepted evaluation.")
+    {
+    }
+}
+
+/// <summary>
+/// Owns fan-control authority transitions. The adaptive policy never talks
+/// directly to a hardware backend; all commands pass through this coordinator.
+/// </summary>
+public sealed class FanControlCoordinator : IAsyncDisposable
+{
+    private readonly IFanControlBackend _backend;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _activeOperationGate = new();
+    private FanAuthority _authority = FanAuthority.Firmware;
+    private volatile bool _lifecycleFenceRequested;
+    private bool _admissionBlocked;
+    private DateTimeOffset _minimumSafetySnapshotTimestamp = DateTimeOffset.MinValue;
+    private long _latestSafetyEvaluationSequence;
+    private long _lastFirmwareAuthorityUtcTicks;
+    private CancellationTokenSource? _activeCommandCts;
+    private bool _disposed;
+
+    public FanControlCoordinator(IFanControlBackend backend)
+    {
+        _backend = backend;
+    }
+
+    public event EventHandler<FanAuthorityChangedEventArgs>? AuthorityChanged;
+
+    public FanAuthority Authority => _authority;
+    public string BackendName => _backend.Name;
+    public bool BackendCanWrite => _backend.CanWrite;
+    public bool IsSafetyEvaluationCurrent(SafetyGateResult safety) =>
+        IsLatestSafetyEvaluation(safety);
+    public FanFirmwareRestoreEvidence? LastRestoreEvidence =>
+        (_backend as IFanControlRestoreEvidenceSource)?.LastRestoreEvidence;
+
+    public DateTimeOffset? LastFirmwareAuthorityAtUtc
+    {
+        get
+        {
+            var ticks = Interlocked.Read(ref _lastFirmwareAuthorityUtcTicks);
+            return ticks <= 0
+                ? null
+                : new DateTimeOffset(ticks, TimeSpan.Zero);
+        }
+    }
+
+    public async ValueTask<bool> TryEnterCustomAsync(
+        SafetyGateResult safety,
+        CancellationToken cancellationToken)
+    {
+        if (!TryAcceptSafetyEvaluation(safety))
+        {
+            return false;
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+
+            if (_authority == FanAuthority.Custom)
+            {
+                if (SafetyAllowsCustomLocked(safety))
+                {
+                    return true;
+                }
+
+                await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                return false;
+            }
+
+            if (!SafetyAllowsCustomLocked(safety))
+            {
+                return false;
+            }
+
+            if (!_backend.CanWrite)
+            {
+                return false;
+            }
+
+            if (!BackendCapabilitiesMatchTarget())
+            {
+                return false;
+            }
+
+            var entryAttempted = false;
+            try
+            {
+                // Mark the attempt before entering the backend. A hardware write may
+                // take effect even when the backend subsequently reports an error.
+                entryAttempted = true;
+                await _backend.EnterCustomModeAsync(cancellationToken).ConfigureAwait(false);
+                Transition(FanAuthority.Custom, "Custom fan authority acquired.");
+                return true;
+            }
+            catch (FanControlAdmissionException)
+            {
+                // The backend explicitly guarantees no fan write occurred.
+                // Do not clear another controller's pre-existing state.
+                throw;
+            }
+            catch
+            {
+                if (entryAttempted)
+                {
+                    await BestEffortForceRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+
+                throw;
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async ValueTask ApplyAsync(
+        FanCommand command,
+        SafetyGateResult safety,
+        CancellationToken cancellationToken)
+    {
+        if (!TryAcceptSafetyEvaluation(safety))
+        {
+            throw new FanControlStaleSafetyException();
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+
+            if (_authority != FanAuthority.Custom)
+            {
+                throw new InvalidOperationException(
+                    "Fan command refused because custom authority is not active.");
+            }
+
+            using var commandCts =
+                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            // Publish the in-flight operation before the final safety/command
+            // checks. A lifecycle or safety handoff that races with this method
+            // can now always either cancel this CTS or make its admission fence
+            // visible before any backend write is dispatched.
+            SetActiveCommand(commandCts);
+            try
+            {
+                if (!SafetyAllowsCustomLocked(safety))
+                {
+                    await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                    throw new InvalidOperationException(
+                        "Fan command refused because custom control is no longer permitted by the current safety/lifecycle gate.");
+                }
+
+                var commandError = ValidateCommand(command);
+                if (commandError is not null)
+                {
+                    await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                    throw new ArgumentOutOfRangeException(
+                        nameof(command),
+                        command,
+                        commandError);
+                }
+
+                // Covers a handoff that occurred after the safety check but
+                // before backend dispatch.
+                commandCts.Token.ThrowIfCancellationRequested();
+
+                await _backend.ApplyAsync(command, commandCts.Token).ConfigureAwait(false);
+            }
+            catch (FanControlAdmissionException)
+            {
+                Transition(
+                    FanAuthority.Firmware,
+                    "First custom command refused before any fan write; external/firmware state preserved.");
+                throw;
+            }
+            catch
+            {
+                await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+                throw;
+            }
+            finally
+            {
+                ClearActiveCommand(commandCts);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+
+    /// <summary>
+    /// Synchronously closes lifecycle admission and cancels any in-flight fan
+    /// command. Power handlers use this before marking telemetry Suspended so
+    /// stale pre-boundary safety cannot reacquire Custom while restore IO is
+    /// still in progress.
+    /// </summary>
+    public void CloseCustomAdmissionForLifecycleBoundary()
+    {
+        _lifecycleFenceRequested = true;
+        CancelActiveCommand();
+    }
+
+    /// <summary>
+    /// Closes custom-control admission at a power/lifecycle boundary and restores
+    /// firmware authority before returning. The timestamp becomes a freshness
+    /// fence: pre-boundary SafetyGate results can never reacquire authority.
+    /// </summary>
+    public async ValueTask BlockCustomAdmissionAndRestoreAsync(
+        string reason,
+        DateTimeOffset boundaryTimestamp,
+        CancellationToken cancellationToken)
+    {
+        // Close admission BEFORE waiting for the coordinator gate. An in-flight
+        // backend acknowledgement may still own _gate for a short time, and
+        // SemaphoreSlim does not guarantee that this lifecycle waiter will beat
+        // another queued TryEnterCustomAsync call. The volatile fence prevents
+        // stale pre-boundary safety from reacquiring authority in that window.
+        CloseCustomAdmissionForLifecycleBoundary();
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+
+            _admissionBlocked = true;
+            if (boundaryTimestamp > _minimumSafetySnapshotTimestamp)
+            {
+                _minimumSafetySnapshotTimestamp = boundaryTimestamp;
+            }
+
+            if (_authority != FanAuthority.Firmware)
+            {
+                await RestoreLockedAsync(reason, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Reopens admission only after recovery has produced a post-boundary
+    /// telemetry sample. The caller still needs a fresh SafetyGate result for
+    /// TryEnterCustomAsync.
+    /// </summary>
+    public async ValueTask<bool> AllowCustomAdmissionAfterRecoveryAsync(
+        DateTimeOffset validatedSnapshotTimestamp,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+
+            if (_authority != FanAuthority.Firmware)
+            {
+                return false;
+            }
+
+            if (validatedSnapshotTimestamp <= _minimumSafetySnapshotTimestamp &&
+                _minimumSafetySnapshotTimestamp != DateTimeOffset.MinValue)
+            {
+                return false;
+            }
+
+            _admissionBlocked = false;
+            _lifecycleFenceRequested = false;
+            return true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+
+    /// <summary>
+    /// Called continuously by the runtime safety supervisor. If custom
+    /// authority is active and the latest safety result no longer permits it,
+    /// any in-flight command is cancelled and HP firmware is restored.
+    /// </summary>
+    public async ValueTask<bool> EnforceSafetyAsync(
+        SafetyGateResult safety,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (!TryAcceptSafetyEvaluation(safety))
+        {
+            return true;
+        }
+
+        if (!safety.CustomControlPermitted)
+        {
+            CancelActiveCommand();
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+
+            // A newer safety evaluation may have been accepted while this call
+            // was waiting for the coordinator gate. Never act on the older one.
+            if (!IsLatestSafetyEvaluation(safety))
+            {
+                return true;
+            }
+
+            if (_authority != FanAuthority.Custom)
+            {
+                return true;
+            }
+
+            // Watchdog/process liveness is a non-hardware dependency and must
+            // be checked before a telemetry-derived safety failure can trigger
+            // restore. Otherwise an unrelated EC/telemetry transient could mask
+            // the intended watchdog-death failure domain. This probe neither
+            // touches EC nor renews watchdog heartbeat.
+            try
+            {
+                await _backend.ProbeControlDependencyAsync(
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception dependencyFailure)
+            {
+                try
+                {
+                    await RestoreLockedAsync(
+                        $"Backend control-dependency probe failed during custom authority: {dependencyFailure.Message}",
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // RestoreLockedAsync already transitions authority to Faulted.
+                }
+
+                throw;
+            }
+
+            if (!SafetyAllowsCustomLocked(safety))
+            {
+                var denialDetail =
+                    DescribeSafetyDenialLocked(safety);
+
+                await RestoreLockedAsync(
+                    $"Safety supervisor handoff: {reason}. {denialDetail}",
+                    CancellationToken.None).ConfigureAwait(false);
+                return false;
+            }
+
+            FanBackendStatus backendStatus;
+            try
+            {
+                backendStatus = await _backend.GetStatusAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception statusFailure)
+            {
+                try
+                {
+                    await RestoreLockedAsync(
+                        $"Backend health/ownership probe failed during custom authority: {statusFailure.Message}",
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // RestoreLockedAsync already transitions authority to Faulted.
+                }
+
+                throw;
+            }
+
+            if (!backendStatus.CanWrite ||
+                !backendStatus.CustomModeActive ||
+                !backendStatus.OwnershipValid ||
+                !backendStatus.FeedbackHealthy)
+            {
+                await RestoreLockedAsync(
+                    $"Backend ownership validation failed: {backendStatus.Detail}",
+                    CancellationToken.None).ConfigureAwait(false);
+                return false;
+            }
+
+            return true;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async ValueTask RestoreFirmwareAsync(
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            await RestoreLockedAsync(reason, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _lifecycleFenceRequested = true;
+        CancelActiveCommand();
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
+            _disposed = true;
+        }
+        finally
+        {
+            _gate.Release();
+            _gate.Dispose();
+        }
+
+        await _backend.DisposeAsync().ConfigureAwait(false);
+    }
+
+
+
+    private string DescribeSafetyDenialLocked(
+        SafetyGateResult safety)
+    {
+        var details = new List<string>();
+
+        if (!safety.CustomControlPermitted)
+        {
+            details.Add(
+                safety.Reasons.Count == 0
+                    ? "SafetyGate denied Custom without a reason."
+                    : "SafetyGate: " +
+                      string.Join(" | ", safety.Reasons));
+        }
+
+        if (_lifecycleFenceRequested)
+        {
+            details.Add("lifecycle fence is closed");
+        }
+
+        if (_admissionBlocked)
+        {
+            details.Add("custom admission is blocked");
+        }
+
+        if (!safety.SnapshotTimestamp.HasValue)
+        {
+            details.Add("safety result has no snapshot timestamp");
+        }
+        else if (_minimumSafetySnapshotTimestamp != DateTimeOffset.MinValue &&
+                 safety.SnapshotTimestamp.Value <=
+                 _minimumSafetySnapshotTimestamp)
+        {
+            details.Add(
+                $"snapshot {safety.SnapshotTimestamp.Value:O} is not newer than lifecycle boundary {_minimumSafetySnapshotTimestamp:O}");
+        }
+
+        return details.Count == 0
+            ? "current safety/lifecycle gate no longer permits Custom"
+            : string.Join("; ", details);
+    }
+
+    private bool SafetyAllowsCustomLocked(SafetyGateResult safety) =>
+        safety.CustomControlPermitted &&
+        IsLatestSafetyEvaluation(safety) &&
+        !_lifecycleFenceRequested &&
+        !_admissionBlocked &&
+        safety.SnapshotTimestamp.HasValue &&
+        (_minimumSafetySnapshotTimestamp == DateTimeOffset.MinValue ||
+         safety.SnapshotTimestamp.Value > _minimumSafetySnapshotTimestamp);
+
+    private bool TryAcceptSafetyEvaluation(SafetyGateResult safety)
+    {
+        var candidate = safety.EvaluationSequence;
+
+        while (true)
+        {
+            var current = Interlocked.Read(ref _latestSafetyEvaluationSequence);
+            if (candidate < current)
+            {
+                return false;
+            }
+
+            if (candidate == current)
+            {
+                return true;
+            }
+
+            if (Interlocked.CompareExchange(
+                    ref _latestSafetyEvaluationSequence,
+                    candidate,
+                    current) == current)
+            {
+                return true;
+            }
+        }
+    }
+
+    private bool IsLatestSafetyEvaluation(SafetyGateResult safety) =>
+        safety.EvaluationSequence ==
+        Interlocked.Read(ref _latestSafetyEvaluationSequence);
+
+    private void SetActiveCommand(CancellationTokenSource source)
+    {
+        lock (_activeOperationGate)
+        {
+            _activeCommandCts = source;
+        }
+    }
+
+    private void ClearActiveCommand(CancellationTokenSource source)
+    {
+        lock (_activeOperationGate)
+        {
+            if (ReferenceEquals(_activeCommandCts, source))
+            {
+                _activeCommandCts = null;
+            }
+        }
+    }
+
+    private void CancelActiveCommand()
+    {
+        lock (_activeOperationGate)
+        {
+            try
+            {
+                _activeCommandCts?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+    }
+
+    private bool BackendCapabilitiesMatchTarget()
+    {
+        var capabilities = _backend.Capabilities;
+
+        return
+            string.Equals(
+                capabilities.BoardProduct,
+                Hp88F8TargetProfile.BoardProduct,
+                StringComparison.OrdinalIgnoreCase) &&
+            capabilities.MinimumLevel >= Hp88F8TargetProfile.MinimumValidatedFanLevel &&
+            capabilities.MaximumLevel <= Hp88F8TargetProfile.MaximumValidatedFanLevel &&
+            capabilities.MinimumLevel <= capabilities.MaximumLevel;
+    }
+
+    private string? ValidateCommand(FanCommand command)
+    {
+        if (command.CpuLevel < Hp88F8TargetProfile.MinimumValidatedFanLevel ||
+            command.CpuLevel > Hp88F8TargetProfile.MaximumValidatedFanLevel ||
+            command.GpuLevel < Hp88F8TargetProfile.MinimumValidatedFanLevel ||
+            command.GpuLevel > Hp88F8TargetProfile.MaximumValidatedFanLevel)
+        {
+            return $"Command is outside the central 88F8 validated range " +
+                   $"{Hp88F8TargetProfile.MinimumValidatedFanLevel}-" +
+                   $"{Hp88F8TargetProfile.MaximumValidatedFanLevel}.";
+        }
+
+        var capabilities = _backend.Capabilities;
+
+        if (command.CpuLevel < capabilities.MinimumLevel ||
+            command.CpuLevel > capabilities.MaximumLevel)
+        {
+            return $"CPU fan level {command.CpuLevel} is outside validated range " +
+                   $"{capabilities.MinimumLevel}-{capabilities.MaximumLevel}.";
+        }
+
+        if (command.GpuLevel < capabilities.MinimumLevel ||
+            command.GpuLevel > capabilities.MaximumLevel)
+        {
+            return $"GPU fan level {command.GpuLevel} is outside validated range " +
+                   $"{capabilities.MinimumLevel}-{capabilities.MaximumLevel}.";
+        }
+
+        if (!capabilities.SupportsIndependentLevels &&
+            command.CpuLevel != command.GpuLevel)
+        {
+            return "Backend requires equal CPU/GPU fan levels.";
+        }
+
+        return null;
+    }
+
+    private async ValueTask RestoreLockedAsync(
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (_authority == FanAuthority.Firmware)
+        {
+            return;
+        }
+
+        Transition(FanAuthority.Restoring, reason);
+
+        try
+        {
+            await _backend.RestoreFirmwareAutoAsync(cancellationToken).ConfigureAwait(false);
+            Transition(FanAuthority.Firmware, "HP firmware authority restored.");
+        }
+        catch
+        {
+            Transition(FanAuthority.Faulted, "Firmware restore failed.");
+            throw;
+        }
+    }
+
+
+    private async ValueTask BestEffortForceRestoreLockedAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            Transition(
+                FanAuthority.Restoring,
+                "Fail-safe restore requested after an uncertain authority transition.");
+
+            await _backend.RestoreFirmwareAutoAsync(cancellationToken).ConfigureAwait(false);
+            Transition(FanAuthority.Firmware, "HP firmware authority restored.");
+        }
+        catch
+        {
+            Transition(FanAuthority.Faulted, "Firmware restore failed after uncertain authority transition.");
+        }
+    }
+
+    private async ValueTask BestEffortRestoreLockedAsync(CancellationToken cancellationToken)
+    {
+        if (_authority == FanAuthority.Firmware)
+        {
+            return;
+        }
+
+        try
+        {
+            await RestoreLockedAsync(
+                "Fail-safe restore requested.",
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Authority is left Faulted. The caller's original failure remains
+            // authoritative, while production logging records restore failure.
+        }
+    }
+
+    private void Transition(FanAuthority next, string reason)
+    {
+        var previous = _authority;
+        var changedAt = DateTimeOffset.UtcNow;
+        _authority = next;
+
+        if (next == FanAuthority.Firmware)
+        {
+            Interlocked.Exchange(
+                ref _lastFirmwareAuthorityUtcTicks,
+                changedAt.UtcDateTime.Ticks);
+        }
+
+        AuthorityChanged?.Invoke(
+            this,
+            new FanAuthorityChangedEventArgs(
+                previous,
+                next,
+                reason,
+                changedAt));
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+}
