@@ -339,6 +339,18 @@ Assert-Contains -Text $manager -Pattern 'OwnedHeartbeatTimeout[\s\S]*TimeSpan\.F
 Assert-Contains -Text $manager -Pattern 'WriteArmedDeadline[\s\S]*TimeSpan\.FromSeconds\(12\)' -Description 'WRITE_ARMED deadline remains 12 seconds'
 Assert-Contains -Text $manager -Pattern 'RestoringDeadline[\s\S]*TimeSpan\.FromSeconds\(8\)' -Description 'RESTORING deadline remains 8 seconds'
 
+$fanHardwareStart = $backend.IndexOf('internal sealed class Hp88F8FanHardware', [StringComparison]::Ordinal)
+$backendClassStart = $backend.IndexOf('public sealed class Hp88F8FanControlBackend', $fanHardwareStart, [StringComparison]::Ordinal)
+if ($fanHardwareStart -lt 0 -or $backendClassStart -le $fanHardwareStart) {
+    throw 'Gate G1 invariant could not isolate the production HP hardware adapter.'
+}
+$fanHardware = $backend.Substring($fanHardwareStart, $backendClassStart - $fanHardwareStart)
+Assert-NotContains -Text $fanHardware -Pattern 'ReadHp88F8ControlState\(\)' -Description 'production fan-control hardware adapter never opens the broad diagnostic EC snapshot'
+Assert-Contains -Text $fanHardware -Pattern 'ReadHp88F8Setpoint\(\)' -Description 'production fan-control hardware adapter reads ownership through the narrow setpoint path'
+Assert-Contains -Text $fanHardware -Pattern 'ReadHp88F8FanControlGuard\(\)' -Description 'production fan-control hardware adapter preserves MaxFan/FanSwitch safety separately'
+Assert-Contains -Text $fanHardware -Pattern 'ReadFanTachometers\(\)' -Description 'production fan-control hardware adapter preserves dual-tach feedback separately'
+Assert-Contains -Text $backend -Pattern 'WaitForSetpointAsync[\s\S]*_hardware!\.ReadSetpoint\(\)' -Description 'firmware and command setpoint acknowledgement polling stays ownership-only'
+
 Assert-NotContains -Text $g1Method -Pattern '--restore-hp-auto' -Description 'Gate G1 application path never invokes the parent/CLI restore command'
 
 Assert-NotContains -Text $harness -Pattern '(?im)^\s*\$pid\s*=' -Description 'physical Gate G1 never assigns to PowerShell automatic read-only $PID'
