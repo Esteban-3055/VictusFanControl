@@ -227,7 +227,7 @@ Assert-Contains -Text $resumeHandler -Pattern 'GateG1WatchdogStateReader\.WriteD
 
 $restoreWithWatchdogStart = $backend.IndexOf('private async ValueTask RestoreWithWatchdogLockedAsync', [StringComparison]::Ordinal)
 $restoreLockedStart = $backend.IndexOf('private async ValueTask RestoreLockedAsync', $restoreWithWatchdogStart, [StringComparison]::Ordinal)
-$waitForSetpointStart = $backend.IndexOf('private async ValueTask<Hp88F8EcControlState> WaitForSetpointAsync', $restoreLockedStart, [StringComparison]::Ordinal)
+$waitForSetpointStart = $backend.IndexOf('private async ValueTask<(byte CpuSetpoint, byte GpuSetpoint)> WaitForSetpointAsync', $restoreLockedStart, [StringComparison]::Ordinal)
 if ($restoreWithWatchdogStart -lt 0 -or $restoreLockedStart -le $restoreWithWatchdogStart -or $waitForSetpointStart -le $restoreLockedStart) {
     throw 'Gate G1 invariant could not isolate production HP restore/evidence primitives.'
 }
