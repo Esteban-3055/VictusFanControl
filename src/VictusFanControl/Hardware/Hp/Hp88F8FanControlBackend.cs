@@ -1,6 +1,7 @@
 using VictusFanControl.Control;
 using VictusFanControl.Hardware.PawnIo;
 using VictusFanControl.Hardware.Windows;
+using VictusFanControl.Runtime;
 
 namespace VictusFanControl.Hardware.Hp;
 
@@ -94,6 +95,7 @@ public sealed class Hp88F8FanControlBackend :
     private readonly string _supportDetail;
     private readonly Hp88F8FanBackendTiming _timing;
     private readonly IFanControlWatchdogLeaseClient? _watchdogLease;
+    private readonly IActiveTimeClock _activeTimeClock;
 
     private bool _customModeActive;
     private bool _disposed;
@@ -110,6 +112,7 @@ public sealed class Hp88F8FanControlBackend :
         _supportDetail = reason;
         _timing = Hp88F8FanBackendTiming.Production;
         _watchdogLease = watchdogLease;
+        _activeTimeClock = new WindowsActiveTimeClock();
         _lastRestoreEvidence = new FanFirmwareRestoreEvidence(
             LocalFirmwareAckVerified: false,
             WatchdogLeaseRequired: _watchdogLease is not null,
@@ -133,13 +136,15 @@ public sealed class Hp88F8FanControlBackend :
         bool targetSupported = true,
         string supportDetail = "Synthetic validated target.",
         Hp88F8FanBackendTiming? timing = null,
-        IFanControlWatchdogLeaseClient? watchdogLease = null)
+        IFanControlWatchdogLeaseClient? watchdogLease = null,
+        IActiveTimeClock? activeTimeClock = null)
     {
         _hardware = hardware;
         _targetSupported = targetSupported;
         _supportDetail = supportDetail;
         _timing = timing ?? Hp88F8FanBackendTiming.Production;
         _watchdogLease = watchdogLease;
+        _activeTimeClock = activeTimeClock ?? new WindowsActiveTimeClock();
         _lastRestoreEvidence = new FanFirmwareRestoreEvidence(
             LocalFirmwareAckVerified: false,
             WatchdogLeaseRequired: _watchdogLease is not null,
@@ -655,13 +660,16 @@ public sealed class Hp88F8FanControlBackend :
         var cpuExpectation = DetermineExpectation(cpuTarget, currentLevels.CpuLevel);
         var gpuExpectation = DetermineExpectation(gpuTarget, currentLevels.GpuLevel);
 
-        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var started = _activeTimeClock.Milliseconds;
         var cpuEverAcknowledged = false;
         var gpuEverAcknowledged = false;
         var confirmationSamples = 0;
         Hp88F8EcControlState? last = null;
 
-        while (System.Diagnostics.Stopwatch.GetElapsedTime(started) < _timing.TachometerAckTimeout)
+        while (!ActiveTimeClock.HasElapsed(
+                   _activeTimeClock,
+                   started,
+                   _timing.TachometerAckTimeout))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -928,10 +936,13 @@ public sealed class Hp88F8FanControlBackend :
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var started = _activeTimeClock.Milliseconds;
         Hp88F8EcControlState? last = null;
 
-        while (System.Diagnostics.Stopwatch.GetElapsedTime(started) < timeout)
+        while (!ActiveTimeClock.HasElapsed(
+                   _activeTimeClock,
+                   started,
+                   timeout))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
