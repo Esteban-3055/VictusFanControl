@@ -70,7 +70,7 @@ Assert-Contains -Text $program -Pattern '--gate-g1-test-token' -Description 'Gat
 Assert-Contains -Text $program -Pattern '88F8-GATEG1-30' -Description 'Gate G1 requires the exact hardware opt-in token'
 Assert-Contains -Text $program -Pattern '\(gateG1HardwareTest \? 1 : 0\)' -Description 'Gate G1 participates in hardware-test mutual exclusion'
 
-Assert-Contains -Text $mainForm -Pattern 'else if \(_gateDHardwareTest \|\|[\s\S]*_gateG1HardwareTest\)[\s\S]*new NamedPipeFanControlWatchdogLeaseClient\(\)' -Description 'Gate G1 uses the real named-pipe production watchdog lease'
+Assert-Contains -Text $mainForm -Pattern 'else if \(_gateDHardwareTest \|\|[\s\S]*_gateG1HardwareTest \|\|[\s\S]*_gateG2HardwareTest\)[\s\S]*new NamedPipeFanControlWatchdogLeaseClient\(\)' -Description 'Gate G1/G2 use the real named-pipe production watchdog lease'
 Assert-Contains -Text $gateG1State -Pattern 'CommonApplicationData' -Description 'Gate G1 reads watchdog state from machine-level ProgramData'
 Assert-Contains -Text $gateG1State -Pattern 'gate-d\.status\.json' -Description 'Gate G1 consumes the production watchdog status marker'
 Assert-Contains -Text $gateG1State -Pattern 'lease\.json' -Description 'Gate G1 checks the production durable lease journal'
@@ -85,24 +85,24 @@ if ($suspendStart -lt 0 -or $resumeStart -le $suspendStart) {
 $suspendHandler = $mainForm.Substring($suspendStart, $resumeStart - $suspendStart)
 
 Assert-Ordered -Text $suspendHandler -Needles @(
-    'GATE G1: PBT_APMSUSPEND entered',
+    'if (GateGHardwareTest &&',
     '_fanCoordinator.BlockCustomAdmissionAndRestoreAsync(',
     'new Hp88F8EcControlStateProbe(_modulesDirectory).Read()',
     'GateG1WatchdogStateReader.Read()',
     'GateG1WatchdogStateReader.RequireReady(',
     '!watchdog.JournalPresent',
     'GateG1WatchdogStateReader.WriteDurableMarker(',
-    'GateG1PreSleepPath',
+    'GateGPreSleepPath',
     '_worker.NotifySuspend(source)'
-) -Description 'Gate G1 proves Custom/ACK, performs the coordinator handoff, then verifies EC + watchdog/journal before NotifySuspend returns'
+) -Description 'Gate G1/G2 prove Custom/ACK, perform the coordinator handoff, then verify EC + watchdog/journal before NotifySuspend returns'
 
-$g1Capture = $suspendHandler.IndexOf('GATE G1: PBT_APMSUSPEND entered', [StringComparison]::Ordinal)
+$g1Capture = $suspendHandler.IndexOf('if (GateGHardwareTest &&', [StringComparison]::Ordinal)
 $handoff = $suspendHandler.IndexOf('_fanCoordinator.BlockCustomAdmissionAndRestoreAsync(', [StringComparison]::Ordinal)
 $g1EcProbe = $suspendHandler.IndexOf('new Hp88F8EcControlStateProbe(_modulesDirectory).Read()', $handoff, [StringComparison]::Ordinal)
 if ($g1Capture -lt 0 -or $handoff -lt 0 -or $g1EcProbe -lt 0 -or $g1EcProbe -le $handoff) {
     throw 'Gate G1 invariant violated: the Gate G1 EC verification must occur only after the coordinator handoff returns.'
 }
-Write-Host 'PASS  Gate G1 issues no Gate-G1 EC verification while Custom is still active'
+Write-Host 'PASS  Gate G1/G2 issue no Gate-G EC verification while Custom is still active'
 
 Assert-Contains -Text $suspendHandler -Pattern 'gateG1WasCustom\s*&&[\s\S]*gateG1BackendAckVerified\s*&&[\s\S]*_fanCoordinator\.Authority == FanAuthority\.Firmware[\s\S]*after\.CpuSetpoint == byte\.MaxValue[\s\S]*after\.GpuSetpoint == byte\.MaxValue[\s\S]*!watchdog\.JournalPresent' -Description 'pre-sleep PASS requires prior Custom ACK, Firmware authority, EC FF/FF and no journal'
 
@@ -126,16 +126,24 @@ if ($g1Start -lt 0 -or $lightLoadStart -le $g1Start) {
 }
 $g1Method = $mainForm.Substring($g1Start, $lightLoadStart - $g1Start)
 
-Assert-Ordered -Text $g1Method -Needles @(
-    'GateG1WatchdogStateReader.RequireReady(watchdog)',
+$armStart = $mainForm.IndexOf('private async Task ArmGateGHardwareTestCycleAsync', [StringComparison]::Ordinal)
+$resetStart = $mainForm.IndexOf('private void ResetGateGHardwareTestCycleState', $armStart, [StringComparison]::Ordinal)
+if ($armStart -lt 0 -or $resetStart -le $armStart) {
+    throw 'Gate G1 invariant could not isolate ArmGateGHardwareTestCycleAsync.'
+}
+$armMethod = $mainForm.Substring($armStart, $resetStart - $armStart)
+
+Assert-Ordered -Text $armMethod -Needles @(
+    'GateG1WatchdogStateReader.Read()',
+    'GateG1WatchdogStateReader.RequireReady',
     'if (watchdog.JournalPresent)',
     'new Hp88F8EcControlStateProbe(_modulesDirectory).Read()',
     '_fanCoordinator.TryEnterCustomAsync(',
     '_fanCoordinator.ApplyAsync(',
     '_gateG1HardwareTestBackendAckVerified = true',
     '_gateG1HardwareTestArmed = true',
-    'GateG1HardwareTestReadyPath'
-) -Description 'initial Gate G1 READY follows clean watchdog/FF baseline and real watchdog-backed 30/30 acknowledgement'
+    'GateGReadyPath'
+) -Description 'initial Gate G1/G2 READY follows clean watchdog/FF baseline and real watchdog-backed 30/30 acknowledgement'
 
 Assert-Ordered -Text $g1Method -Needles @(
     'if (!_gateG1HardwareTestSuspendObserved)',
@@ -152,12 +160,12 @@ Assert-Ordered -Text $g1Method -Needles @(
     '_fanCoordinator.AllowCustomAdmissionAfterRecoveryAsync(',
     '_fanCoordinator.TryEnterCustomAsync(',
     '_fanCoordinator.ApplyAsync(',
-    'GateG1ReentryPath',
+    'GateGReentryPath',
     '_fanCoordinator.RestoreFirmwareAsync(',
     'GateG1WatchdogStateReader.RequireReady(',
     'watchdogFinal.JournalPresent',
-    'CompleteGateG1HardwareTest('
-) -Description 'Gate G1 performs one controlled post-recovery re-entry then restores and verifies final watchdog/firmware state'
+    'CompleteGateGHardwareTest('
+) -Description 'Gate G1/G2 perform one controlled post-recovery re-entry per cycle, then restore and verify final watchdog/firmware state'
 
 Assert-Contains -Text $telemetry -Pattern 'ResumeHealthySamplesRequired\s*=\s*5' -Description 'resume recovery still requires five complete post-boundary telemetry snapshots'
 Assert-Contains -Text $manager -Pattern 'OwnedHeartbeatTimeout[\s\S]*TimeSpan\.FromSeconds\(5\)' -Description 'OWNED timeout remains 5 seconds'
