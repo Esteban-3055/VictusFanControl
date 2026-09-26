@@ -166,6 +166,9 @@ Assert-Contains -Text $manager -Pattern 'RestoringDeadline[\s\S]*TimeSpan\.FromS
 
 Assert-NotContains -Text $g1Method -Pattern '--restore-hp-auto' -Description 'Gate G1 application path never invokes the parent/CLI restore command'
 
+Assert-NotContains -Text $harness -Pattern '(?im)^\s*\$pid\s*=' -Description 'physical Gate G1 never assigns to PowerShell automatic read-only $PID'
+Assert-Contains -Text $harness -Pattern '\$serviceProcessId\s*=\s*\[int\]\$svc\.ProcessId' -Description 'physical Gate G1 uses a non-reserved local service PID variable'
+
 Assert-Contains -Text $harness -Pattern 'Assert-DefaultWatchdogOutputUnlocked' -Description 'physical Gate G1 detects the legacy same-shell watchdog DLL lock before build'
 Assert-Contains -Text $harness -Pattern 'journal to be absent BEFORE service reinstall/start' -Description 'physical Gate G1 refuses to hide a pre-existing durable lease by reinstalling the service'
 
