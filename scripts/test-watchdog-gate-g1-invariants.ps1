@@ -255,12 +255,12 @@ Assert-Ordered -Text $armMethod -Needles @(
     'GateG1WatchdogStateReader.RequireReady',
     'if (watchdog.JournalPresent)',
     'new Hp88F8EcControlStateProbe(_modulesDirectory).Read()',
-    '_fanCoordinator.TryEnterCustomAsync(',
-    '_fanCoordinator.ApplyAsync(',
+    'TryEnterGateGCustomAuthorityAsync(',
+    'ApplyGateGCommandWithFreshSafetyAsync(',
     '_gateG1HardwareTestBackendAckVerified = true',
     '_gateG1HardwareTestArmed = true',
     'GateGReadyPath'
-) -Description 'initial Gate G1/G2 READY follows clean watchdog/FF baseline and real watchdog-backed 30/30 acknowledgement'
+) -Description 'initial Gate G1/G2 READY follows clean watchdog/FF baseline and real watchdog-backed 30/30 acknowledgement through bounded fresh-safety helpers'
 
 Assert-Ordered -Text $g1Method -Needles @(
     'if (!_gateG1HardwareTestSuspendObserved)',
@@ -275,14 +275,14 @@ Assert-Ordered -Text $g1Method -Needles @(
 
 Assert-Ordered -Text $g1Method -Needles @(
     '_fanCoordinator.AllowCustomAdmissionAfterRecoveryAsync(',
-    '_fanCoordinator.TryEnterCustomAsync(',
-    '_fanCoordinator.ApplyAsync(',
+    'TryEnterGateGCustomAuthorityAsync(',
+    'ApplyGateGCommandWithFreshSafetyAsync(',
     'GateGReentryPath',
     '_fanCoordinator.RestoreFirmwareAsync(',
     'GateG1WatchdogStateReader.RequireReady(',
     'watchdogFinal.JournalPresent',
     'CompleteGateGHardwareTest('
-) -Description 'Gate G1/G2 perform one controlled post-recovery re-entry per cycle, then restore and verify final watchdog/firmware state'
+) -Description 'Gate G1/G2 perform one controlled post-recovery re-entry per cycle through bounded fresh-safety helpers, then restore and verify final watchdog/firmware state'
 
 Assert-Contains -Text $telemetry -Pattern 'ResumeHealthySamplesRequired\s*=\s*5' -Description 'resume recovery still requires five complete post-boundary telemetry snapshots'
 Assert-Contains -Text $manager -Pattern 'OwnedHeartbeatTimeout[\s\S]*TimeSpan\.FromSeconds\(5\)' -Description 'OWNED timeout remains 5 seconds'
