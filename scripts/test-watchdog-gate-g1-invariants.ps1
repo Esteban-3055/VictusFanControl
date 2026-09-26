@@ -276,6 +276,8 @@ Assert-Contains -Text $harness -Pattern '--gate-g1-test-token[\s\S]*88F8-GATEG1-
 Assert-Contains -Text $harness -Pattern '--gate-g0-clock-probe[\s\S]*--gate-g0-auto-s3-token[\s\S]*88F8-G0-AUTO-S3' -Description 'physical harness reuses the validated read-only G0 helper as external S3 requester'
 Assert-Contains -Text $harness -Pattern 'gate-g1\.presleep' -Description 'physical harness requires the durable pre-sleep handoff marker'
 Assert-Contains -Text $harness -Pattern 'ecProof=production-backend-restore-ack' -Description 'physical Gate G1 requires backend-return FF/FF proof without a redundant suspend-time EC reader'
+Assert-Contains -Text $harness -Pattern 'watchdogRelease=True' -Description 'physical Gate G1 requires successful watchdog Release acknowledgement'
+Assert-Contains -Text $harness -Pattern 'journalProof=watchdog-release-response' -Description 'physical Gate G1 derives pre-sleep journal absence from the watchdog Release response'
 Assert-Contains -Text $harness -Pattern 'telemetry=Suspended' -Description 'physical Gate G1 requires telemetry Suspended before pre-sleep proof completes'
 Assert-Contains -Text $harness -Pattern 'resumeObservedBeforeProof=False' -Description 'physical Gate G1 rejects a resume racing ahead of pre-sleep proof'
 Assert-Contains -Text $harness -Pattern 'acceptedResumesBeforeProof=0' -Description 'physical Gate G1 requires zero accepted resumes before pre-sleep proof'
