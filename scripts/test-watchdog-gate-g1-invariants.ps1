@@ -227,6 +227,12 @@ Assert-Contains -Text $harness -Pattern '--gate-g1-suspend-test' -Description 'p
 Assert-Contains -Text $harness -Pattern '--gate-g1-test-token[\s\S]*88F8-GATEG1-30' -Description 'physical harness supplies the exact Gate G1 hardware token'
 Assert-Contains -Text $harness -Pattern '--gate-g0-clock-probe[\s\S]*--gate-g0-auto-s3-token[\s\S]*88F8-G0-AUTO-S3' -Description 'physical harness reuses the validated read-only G0 helper as external S3 requester'
 Assert-Contains -Text $harness -Pattern 'gate-g1\.presleep' -Description 'physical harness requires the durable pre-sleep handoff marker'
+Assert-Contains -Text $harness -Pattern 'ecProof=production-backend-restore-ack' -Description 'physical Gate G1 requires backend-return FF/FF proof without a redundant suspend-time EC reader'
+Assert-Contains -Text $harness -Pattern 'telemetry=Suspended' -Description 'physical Gate G1 requires telemetry Suspended before pre-sleep proof completes'
+Assert-Contains -Text $harness -Pattern 'resumeObservedBeforeProof=False' -Description 'physical Gate G1 rejects a resume racing ahead of pre-sleep proof'
+Assert-Contains -Text $harness -Pattern 'acceptedResumesBeforeProof=0' -Description 'physical Gate G1 requires zero accepted resumes before pre-sleep proof'
+Assert-Contains -Text $harness -Pattern 'budgetMs=1800' -Description 'physical Gate G1 enforces the explicit suspend-handler proof budget'
+
 Assert-Contains -Text $harness -Pattern 'gate-g1\.reentry' -Description 'physical harness requires the controlled re-entry marker'
 Assert-Contains -Text $harness -Pattern 'Kernel-Power' -Description 'physical harness requires Windows suspend/resume event evidence'
 Assert-Contains -Text $harness -Pattern 'Id\s*=\s*42,\s*107' -Description 'physical harness checks ordered Kernel-Power 42/107'
