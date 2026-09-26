@@ -2336,6 +2336,9 @@ internal sealed class MainForm : Form
                 $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} controlled post-resume re-entry complete.",
                 CancellationToken.None);
 
+            var finalRestoreEvidence =
+                _fanCoordinator.LastRestoreEvidence;
+
             var watchdogFinal =
                 GateG1WatchdogStateReader.Read();
 
@@ -2346,13 +2349,28 @@ internal sealed class MainForm : Form
             var finalEc =
                 new Hp88F8EcControlStateProbe(_modulesDirectory).Read();
 
+            var finalReleaseVerified =
+                finalRestoreEvidence.HasValue &&
+                finalRestoreEvidence.Value.LocalFirmwareAckVerified &&
+                finalRestoreEvidence.Value.WatchdogLeaseRequired &&
+                finalRestoreEvidence.Value.WatchdogReleaseVerified;
+
             if (_fanCoordinator.Authority != FanAuthority.Firmware ||
                 finalEc.CpuSetpoint != byte.MaxValue ||
                 finalEc.GpuSetpoint != byte.MaxValue ||
+                !finalReleaseVerified ||
                 watchdogFinal.JournalPresent)
             {
+                var restoreDetail =
+                    finalRestoreEvidence?.Detail ??
+                    "no backend restore evidence";
+
                 throw new InvalidOperationException(
-                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} final handoff invalid: authority={_fanCoordinator.Authority}, EC={finalEc}, journal={(watchdogFinal.JournalPresent ? "PRESENT" : "absent")}.");
+                    $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} final handoff invalid: " +
+                    $"authority={_fanCoordinator.Authority}, EC={finalEc}, " +
+                    $"watchdogReleaseVerified={finalReleaseVerified}, " +
+                    $"journal={(watchdogFinal.JournalPresent ? "PRESENT" : "absent")}, " +
+                    $"restoreDetail={restoreDetail}.");
             }
 
             var cycleMessage =
