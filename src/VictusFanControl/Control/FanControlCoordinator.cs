@@ -44,6 +44,8 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     public FanAuthority Authority => _authority;
     public string BackendName => _backend.Name;
     public bool BackendCanWrite => _backend.CanWrite;
+    public FanFirmwareRestoreEvidence? LastRestoreEvidence =>
+        (_backend as IFanControlRestoreEvidenceSource)?.LastRestoreEvidence;
 
     public async ValueTask<bool> TryEnterCustomAsync(
         SafetyGateResult safety,
