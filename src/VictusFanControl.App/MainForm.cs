@@ -502,7 +502,7 @@ internal sealed class MainForm : Form
                 "No out-of-band pre-restore EC probe is issued in the suspend handler.");
         }
 
-        if (_gateG1HardwareTest &&
+        if (GateGHardwareTest &&
             _gateG1HardwareTestArmed &&
             !_gateG1HardwareTestCompleted)
         {
@@ -521,7 +521,7 @@ internal sealed class MainForm : Form
                 : double.NaN;
 
             AppendEvent(
-                $"GATE G1: PBT_APMSUSPEND entered with authority={_fanCoordinator.Authority}; " +
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PBT_APMSUSPEND entered with authority={_fanCoordinator.Authority}; " +
                 $"validatedBackendAck={gateG1BackendAckVerified}; expectedOwnedSetpoint={SuspendHardwareTestLevel}/{SuspendHardwareTestLevel}; " +
                 $"watchdogPid={_gateG1WatchdogPid}; armedAge={(double.IsNaN(armedAge) ? "n/a" : $"{armedAge:0.000}s")}. " +
                 "No out-of-band EC probe is issued until the coordinator has completed the watchdog-backed firmware handoff.");
@@ -575,7 +575,7 @@ internal sealed class MainForm : Form
                 }
             }
 
-            if (_gateG1HardwareTest &&
+            if (GateGHardwareTest &&
                 _gateG1HardwareTestArmed &&
                 !_gateG1HardwareTestCompleted)
             {
@@ -606,13 +606,13 @@ internal sealed class MainForm : Form
                         $"journal={(watchdog.JournalPresent ? "PRESENT" : "absent")}|watchdogPid={watchdog.ProcessId}";
 
                     GateG1WatchdogStateReader.WriteDurableMarker(
-                        GateG1PreSleepPath,
+                        GateGPreSleepPath,
                         marker);
 
                     AppendEvent(
                         _gateG1HardwareTestPreSleepVerified
-                            ? $"GATE G1: PRE-SLEEP HANDOFF VERIFIED before NotifySuspend/return; authority=Firmware; EC={after}; watchdog PID={watchdog.ProcessId}; durable journal absent."
-                            : $"GATE G1: PRE-SLEEP HANDOFF VERIFICATION FAILED; {marker}");
+                            ? $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF VERIFIED before NotifySuspend/return; authority=Firmware; EC={after}; watchdog PID={watchdog.ProcessId}; durable journal absent."
+                            : $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF VERIFICATION FAILED; {marker}");
                 }
                 catch (Exception ex)
                 {
@@ -621,17 +621,17 @@ internal sealed class MainForm : Form
                     try
                     {
                         GateG1WatchdogStateReader.WriteDurableMarker(
-                            GateG1PreSleepPath,
-                            $"FAIL|{DateTimeOffset.Now:O}|source={source}|verificationException={ex.Message}");
+                            GateGPreSleepPath,
+                            $"FAIL|{DateTimeOffset.Now:O}|cycle={_gateGCurrentCycle}/{GateGTargetCycleCount}|source={source}|verificationException={ex.Message}");
                     }
                     catch (Exception markerEx)
                     {
                         AppLog.Write(
-                            $"GATE G1: could not write failed pre-sleep marker: {markerEx}");
+                            $"{GateGLabel}: could not write failed pre-sleep marker for cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: {markerEx}");
                     }
 
                     AppendEvent(
-                        $"GATE G1: PRE-SLEEP HANDOFF VERIFICATION FAILED: {ex.Message}");
+                        $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF VERIFICATION FAILED: {ex.Message}");
                 }
             }
 
@@ -660,14 +660,14 @@ internal sealed class MainForm : Form
             AppendEvent($"SUSPEND TEST: accepted resume event from {source}.");
         }
 
-        if (_gateG1HardwareTest &&
+        if (GateGHardwareTest &&
             _gateG1HardwareTestArmed &&
             !_gateG1HardwareTestCompleted)
         {
             _gateG1HardwareTestResumeObserved = true;
             _gateG1AcceptedResumeCount++;
             AppendEvent(
-                $"GATE G1: accepted resume event #{_gateG1AcceptedResumeCount} from {source}; custom admission remains fenced until Healthy + watchdog-ready verification.");
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: accepted resume event #{_gateG1AcceptedResumeCount} from {source}; custom admission remains fenced until Healthy + watchdog-ready verification.");
         }
 
         try
@@ -1301,9 +1301,9 @@ internal sealed class MainForm : Form
             return;
         }
 
-        if (_gateG1HardwareTest)
+        if (GateGHardwareTest)
         {
-            // Gate G1 owns the admission-reopen ordering: watchdog Ready +
+            // Gate G1/G2 own the admission-reopen ordering: watchdog Ready +
             // journal absent must be proved after the five-snapshot resume
             // recovery and before the lifecycle fence is reopened.
             await AdvanceGateG1HardwareTestAsync();
