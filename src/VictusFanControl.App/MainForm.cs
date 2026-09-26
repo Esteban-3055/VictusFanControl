@@ -741,6 +741,8 @@ internal sealed class MainForm : Form
                 restoreEvidenceFresh &&
                 restoreEvidence!.Value.WatchdogLeaseRequired &&
                 restoreEvidence.Value.WatchdogReleaseVerified;
+            var firmwareAuthorityCurrent =
+                _fanCoordinator.Authority == FanAuthority.Firmware;
             var resumeObservedBeforeProof =
                 !handoffCompletedBeforeResume;
 
@@ -750,6 +752,7 @@ internal sealed class MainForm : Form
                 localFirmwareAckVerified &&
                 watchdogReleaseVerified &&
                 firmwareTransitionFresh &&
+                firmwareAuthorityCurrent &&
                 _gateGTelemetrySuspendedBeforeRestore &&
                 telemetryTransitionFresh &&
                 handoffCompletedBeforeResume &&
@@ -761,7 +764,7 @@ internal sealed class MainForm : Form
                 $"cycle={_gateGCurrentCycle}/{GateGTargetCycleCount}|" +
                 $"source={suspendSource}|resumeSource={resumeSource}|" +
                 $"wasCustom={_gateGSuspendWasCustom}|backendAck={_gateGSuspendBackendAckVerified}|" +
-                $"authority=Firmware|ec=255/255|ecProof=production-backend-restore-ack|" +
+                $"authority={_fanCoordinator.Authority}|ec=255/255|ecProof=production-backend-restore-ack|" +
                 $"watchdogRelease={watchdogReleaseVerified}|journal=absent|journalProof=watchdog-release-response|" +
                 $"telemetry=Suspended|telemetryProof=pre-restore-state-transition|" +
                 $"resumeObservedBeforeProof={resumeObservedBeforeProof}|" +
