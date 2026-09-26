@@ -681,7 +681,7 @@ public static class FanControlCoordinatorSelfTest
                 olderCommandSafety,
                 CancellationToken.None);
         }
-        catch (InvalidOperationException)
+        catch (FanControlStaleSafetyException)
         {
             staleRefused = true;
         }
