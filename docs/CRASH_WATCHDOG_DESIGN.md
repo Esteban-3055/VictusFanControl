@@ -1,6 +1,6 @@
 # Independent crash-watchdog / lease design
 
-Status: Gates A, B, D, E and F have passed on real hardware under LocalSystem, Gate C passed synthetic Windows CI, Gate G0 has passed physical S3 clock-semantics validation, and Gate G1 has passed one complete physical production-watchdog suspend/resume cycle. Gate D physically proves controller death -> independent service restore; Gate E proves watchdog death -> live-controller local restore followed by durable-journal recovery; Gate F proves simultaneous controller + watchdog loss from both durable OWNED and post-write WRITE_ARMED states. Gate G2 (5/5 consecutive same-session cycles) remains.
+Status: Gates A, B, D, E and F have passed on real hardware under LocalSystem, Gate C passed synthetic Windows CI, and Gate G0 has passed physical S3 clock-semantics validation. A historical Gate G1 cycle completed successfully, but later repeated physical runs proved that requiring the entire HP/WMI/watchdog restore to finish before physical S3 is not a stable Windows user-mode contract. Gate G1 is therefore being revalidated against the revised fail-closed contract: admission + telemetry must be fenced promptly before blocking suspend IO, and any restore interrupted by S3 must complete under the durable lease before the first resume is accepted. Gate G2 (5/5 consecutive same-session cycles) remains open. Gate D physically proves controller death -> independent service restore; Gate E proves watchdog death -> live-controller local restore followed by durable-journal recovery; Gate F proves simultaneous controller + watchdog loss from both durable OWNED and post-write WRITE_ARMED states.
 
 ## 1. Hardware fact that drives the design
 
@@ -778,19 +778,47 @@ created when PBT_APMRESUMEAUTOMATIC arrived. The test failed closed, killed only
 the exact GUI, then independently proved journal absence and EC FF/FF before
 cancelling the fallback.
 
-The lifecycle design therefore no longer depends on *any caller continuation*
-after the blocking restore. PBT_APMSUSPEND now synchronously closes the lifecycle
-admission fence, marks TelemetryWorker Suspended, records that transition in
-memory, and only then begins restore IO. The HP backend publishes immutable local
-FF/FF + watchdog-Release evidence from inside the restore transaction. The
-coordinator records the exact UTC timestamp of its transition back to Firmware.
-After resume, Gate G reconstructs the pre-sleep proof from those causal
-timestamps and rejects it unless telemetry was already Suspended, local FF/FF and
-watchdog Release both succeeded, the coordinator reached Firmware, all critical
-events occurred before the resume boundary, and the latest of them was within
-the 1800 ms budget. Only after that reconstruction is the durable marker written.
+A second Gate G1 regression with the caller-continuation dependency removed then
+proved the deeper Windows contract. Telemetry reached Suspended promptly
+(266.7 ms after PBT_APMSUSPEND), but the validated restore did not complete until
+after the machine woke: backend restore evidence was published at 31016.5 ms and
+the coordinator reached Firmware at 31016.9 ms. The marker correctly rejected
+the run, while the post-failure cleanup again independently proved journal
+absence and EC FF/FF. This is not evidence of a watchdog timeout: Gate G0's
+QueryUnbiasedInterruptTime deliberately excludes S3, so the durable OWNED /
+RESTORING lease remains meaningful while the machine is asleep.
 
-Gate G2 remains open until this revised mechanism first passes a one-cycle G1
-physical regression and then a fresh 5/5 hardware run. Only after that should
-load/gaming validation and the adaptive RPM policy be allowed to depend on
-unattended Custom authority.
+This behavior matches the supported Windows API contract. Microsoft documents
+that PBT_APMSUSPEND gives an application only approximately two seconds and the
+system may interrupt work that exceeds that allotment. PBT_APMQUERYSUSPEND, the
+old pre-suspend veto/preparation notification, is not supported starting with
+Windows Vista. SetThreadExecutionState / ordinary SystemRequired power requests
+also cannot guarantee blocking an explicit user-initiated sleep. Therefore a
+modern user-mode controller cannot make "full HP/WMI restore must always finish
+before physical S3" a correctness invariant.
+
+The production lifecycle contract is now:
+
+- synchronously close Custom admission and cancel active fan commands;
+- mark TelemetryWorker Suspended before any potentially blocking restore IO;
+- start the normal durable RestoreBegin -> local FF/FF -> LegacyDefault ->
+  verified FF/FF -> watchdog Release transaction;
+- if Windows enters S3 before that transaction finishes, allow the same durable
+  transaction to continue immediately after wake; watchdog deadlines use the
+  sleep-excluding G0 clock, so S3 itself cannot manufacture an expiry;
+- before accepting the first resume into telemetry recovery, require current
+  Firmware authority, backend local-FF/FF evidence, successful watchdog Release,
+  the original watchdog PID Ready, and durable journal absent;
+- only the non-blocking pre-restore fence/telemetry phase remains subject to the
+  1800 ms budget;
+- only after that proof may NotifyResume start the five-snapshot recovery and
+  eventually reopen Custom admission.
+
+This is fail-closed: if the resumed restore or watchdog handoff fails, telemetry
+remains Suspended, Custom admission remains fenced, and the normal independent
+watchdog/fallback cleanup owns recovery.
+
+Gate G2 remains open until this revised contract first passes a one-cycle G1
+physical regression and then a fresh 5/5 hardware run. Automatic fan policy
+remains OFF. Representative-load testing and the adaptive RPM controller stay
+blocked until those gates are complete.
