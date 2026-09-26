@@ -124,11 +124,11 @@ if ($resumeHandlerStart -lt 0 -or $reopenHandlerStart -le $resumeHandlerStart) {
 $resumeHandler = $mainForm.Substring($resumeHandlerStart, $reopenHandlerStart - $resumeHandlerStart)
 Assert-Ordered -Text $resumeHandler -Needles @(
     'var accepted = _worker.NotifyResume(source);',
-    'PersistPendingGateGPreSleepProof();',
     'if (!accepted)',
     '_gateG1HardwareTestResumeObserved = true;',
-    '_gateG1AcceptedResumeCount++;'
-) -Description 'captured pre-sleep proof is persisted only after wake and before Gate G accepted-resume accounting advances'
+    '_gateG1AcceptedResumeCount++;',
+    'PersistPendingGateGPreSleepProof();'
+) -Description 'accepted resume is accounted immediately; only then is the already-captured pre-sleep proof persisted outside the suspend critical path'
 Assert-Contains -Text $resumeHandler -Pattern 'GateG1WatchdogStateReader\.WriteDurableMarker\(' -Description 'deferred Gate G proof persistence occurs in the resume-side helper'
 
 $restoreWithWatchdogStart = $backend.IndexOf('private async ValueTask RestoreWithWatchdogLockedAsync', [StringComparison]::Ordinal)
