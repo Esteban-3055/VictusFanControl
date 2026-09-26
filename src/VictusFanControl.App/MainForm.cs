@@ -598,6 +598,35 @@ internal sealed class MainForm : Form
     private void HandleResumeLifecycle(string source)
     {
         var boundary = DateTimeOffset.UtcNow;
+
+        // Gate G no longer requires the entire HP/WMI/watchdog restore to finish
+        // before physical S3. Windows documents only an approximately two-second
+        // PBT_APMSUSPEND handling window and may freeze the caller while restore
+        // IO is still in progress. The hard safety boundary is therefore:
+        //   1. admission fenced + telemetry Suspended before blocking restore IO;
+        //   2. the durable restore transaction must finish before this process
+        //      accepts the first resume into telemetry recovery.
+        //
+        // Because WM_POWERBROADCAST is delivered on this same UI thread, this
+        // method cannot run until the synchronous suspend handler has returned.
+        // Verify the completed restore and watchdog/journal state now, while the
+        // telemetry state is still Suspended.
+        if (GateGHardwareTest &&
+            _gateG1HardwareTestArmed &&
+            !_gateG1HardwareTestCompleted &&
+            !_gateG1HardwareTestResumeObserved)
+        {
+            if (!VerifyGateGHandoffBeforeResumeAcceptance(
+                    boundary,
+                    source))
+            {
+                // Fail closed: keep admission fenced and telemetry Suspended.
+                // The external harness will perform the independently guarded
+                // cleanup path after consuming the FAIL marker.
+                return;
+            }
+        }
+
         var accepted = _worker.NotifyResume(source);
 
         // A coalesced duplicate must NOT close admission again after a completed
@@ -620,16 +649,8 @@ internal sealed class MainForm : Form
             _gateG1HardwareTestArmed &&
             !_gateG1HardwareTestCompleted)
         {
-            var acceptedBeforeThisResume =
-                _gateG1AcceptedResumeCount;
-
             _gateG1HardwareTestResumeObserved = true;
             _gateG1AcceptedResumeCount++;
-
-            PersistGateGPreSleepProofAfterResume(
-                boundary,
-                source,
-                acceptedBeforeThisResume);
 
             AppendEvent(
                 $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: accepted resume event #{_gateG1AcceptedResumeCount} from {source}; custom admission remains fenced until Healthy + watchdog-ready verification.");
@@ -652,10 +673,9 @@ internal sealed class MainForm : Form
         }
     }
 
-    private void PersistGateGPreSleepProofAfterResume(
+    private bool VerifyGateGHandoffBeforeResumeAcceptance(
         DateTimeOffset resumeBoundary,
-        string resumeSource,
-        int acceptedResumesBeforeThisResume)
+        string resumeSource)
     {
         var suspendBoundary = _gateGSuspendBoundaryUtc;
         var suspendSource = _gateGSuspendSource;
@@ -674,12 +694,12 @@ internal sealed class MainForm : Form
             catch (Exception markerEx)
             {
                 AppLog.Write(
-                    $"{GateGLabel}: could not persist missing-context pre-sleep marker: {markerEx}");
+                    $"{GateGLabel}: could not persist missing-context suspend-handoff marker: {markerEx}");
             }
 
             AppendEvent(
-                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: pre-sleep proof failed because suspend context was not captured.");
-            return;
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: suspend handoff proof failed because suspend context was not captured.");
+            return false;
         }
 
         try
@@ -690,6 +710,12 @@ internal sealed class MainForm : Form
                 _fanCoordinator.LastFirmwareAuthorityAtUtc;
             var telemetryMarkedAt =
                 _gateGTelemetrySuspendMarkedAtUtc;
+            var watchdog =
+                GateG1WatchdogStateReader.Read();
+
+            GateG1WatchdogStateReader.RequireReady(
+                watchdog,
+                _gateG1WatchdogPid);
 
             var restoreEvidenceFresh =
                 restoreEvidence.HasValue &&
@@ -723,17 +749,6 @@ internal sealed class MainForm : Form
                          suspendBoundary.Value).TotalMilliseconds)
                     : double.PositiveInfinity;
 
-            var criticalHandoffMs =
-                Math.Max(
-                    telemetryMs,
-                    Math.Max(restoreMs, firmwareMs));
-
-            var handoffCompletedBeforeResume =
-                restoreEvidenceFresh &&
-                firmwareTransitionFresh &&
-                restoreEvidence!.Value.CompletedAtUtc < resumeBoundary &&
-                firmwareAt!.Value < resumeBoundary;
-
             var localFirmwareAckVerified =
                 restoreEvidenceFresh &&
                 restoreEvidence!.Value.LocalFirmwareAckVerified;
@@ -743,37 +758,48 @@ internal sealed class MainForm : Form
                 restoreEvidence.Value.WatchdogReleaseVerified;
             var firmwareAuthorityCurrent =
                 _fanCoordinator.Authority == FanAuthority.Firmware;
-            var resumeObservedBeforeProof =
-                !handoffCompletedBeforeResume;
+            var telemetryStillSuspended =
+                _worker.StateMachine.State == SystemState.Suspended;
+            var noAcceptedResumeYet =
+                _gateG1AcceptedResumeCount == 0 &&
+                !_gateG1HardwareTestResumeObserved;
 
+            // Only the non-blocking pre-restore boundary work is held to the
+            // PBT_APMSUSPEND budget. Restore itself may legitimately span S3;
+            // the durable lease plus sleep-excluding watchdog clock make that
+            // interruption safe. It still must be fully completed and journal-
+            // free before the first resume is accepted into telemetry recovery.
             _gateG1HardwareTestPreSleepVerified =
                 _gateGSuspendWasCustom &&
                 _gateGSuspendBackendAckVerified &&
+                _gateGTelemetrySuspendedBeforeRestore &&
+                telemetryTransitionFresh &&
+                telemetryStillSuspended &&
+                telemetryMs <= GateGSuspendProofBudgetMs &&
                 localFirmwareAckVerified &&
                 watchdogReleaseVerified &&
                 firmwareTransitionFresh &&
                 firmwareAuthorityCurrent &&
-                _gateGTelemetrySuspendedBeforeRestore &&
-                telemetryTransitionFresh &&
-                handoffCompletedBeforeResume &&
-                acceptedResumesBeforeThisResume == 0 &&
-                criticalHandoffMs <= GateGSuspendProofBudgetMs;
+                noAcceptedResumeYet &&
+                !watchdog.JournalPresent;
 
             var marker =
                 $"{(_gateG1HardwareTestPreSleepVerified ? "PASS" : "FAIL")}|{DateTimeOffset.UtcNow:O}|" +
                 $"cycle={_gateGCurrentCycle}/{GateGTargetCycleCount}|" +
                 $"source={suspendSource}|resumeSource={resumeSource}|" +
+                $"handoffProof=completed-before-resume-acceptance|" +
                 $"wasCustom={_gateGSuspendWasCustom}|backendAck={_gateGSuspendBackendAckVerified}|" +
                 $"authority={_fanCoordinator.Authority}|ec=255/255|ecProof=production-backend-restore-ack|" +
-                $"watchdogRelease={watchdogReleaseVerified}|journal=absent|journalProof=watchdog-release-response|" +
-                $"telemetry=Suspended|telemetryProof=pre-restore-state-transition|" +
-                $"resumeObservedBeforeProof={resumeObservedBeforeProof}|" +
-                $"acceptedResumesBeforeProof={acceptedResumesBeforeThisResume}|" +
+                $"watchdogRelease={watchdogReleaseVerified}|watchdogState=Ready|" +
+                $"journal={(watchdog.JournalPresent ? "PRESENT" : "absent")}|" +
+                $"journalProof=watchdog-release-response+post-resume-ready-check|" +
+                $"telemetry={_worker.StateMachine.State}|telemetryProof=pre-restore-state-transition|" +
+                $"acceptedResumesBeforeProof={_gateG1AcceptedResumeCount}|" +
                 $"telemetryMs={FormatInvariantMs(telemetryMs)}|" +
                 $"restoreMs={FormatInvariantMs(restoreMs)}|" +
                 $"firmwareMs={FormatInvariantMs(firmwareMs)}|" +
-                $"handlerMs={FormatInvariantMs(criticalHandoffMs)}|budgetMs={GateGSuspendProofBudgetMs:0}|" +
-                $"watchdogPid={_gateG1WatchdogPid}|guiPid={Environment.ProcessId}";
+                $"preBlockMs={FormatInvariantMs(telemetryMs)}|budgetMs={GateGSuspendProofBudgetMs:0}|" +
+                $"watchdogPid={watchdog.ProcessId}|guiPid={Environment.ProcessId}";
 
             GateG1WatchdogStateReader.WriteDurableMarker(
                 GateGPreSleepPath,
@@ -781,8 +807,10 @@ internal sealed class MainForm : Form
 
             AppendEvent(
                 _gateG1HardwareTestPreSleepVerified
-                    ? $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF VERIFIED from causal timestamps after resume; telemetry was Suspended before restore IO, local FF/FF + watchdog Release + Firmware transition completed in {FormatInvariantMs(criticalHandoffMs)} ms, before the resume boundary."
-                    : $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF VERIFICATION FAILED; {marker}");
+                    ? $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: SUSPEND HANDOFF VERIFIED before resume acceptance; telemetry was fenced/Suspended in {FormatInvariantMs(telemetryMs)} ms, restore completed with local FF/FF + watchdog Release, watchdog PID {watchdog.ProcessId} is Ready and journal absent. restoreMs={FormatInvariantMs(restoreMs)}, firmwareMs={FormatInvariantMs(firmwareMs)}."
+                    : $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: SUSPEND HANDOFF VERIFICATION FAILED; {marker}");
+
+            return _gateG1HardwareTestPreSleepVerified;
         }
         catch (Exception ex)
         {
@@ -797,11 +825,12 @@ internal sealed class MainForm : Form
             catch (Exception markerEx)
             {
                 AppLog.Write(
-                    $"{GateGLabel}: could not write failed post-resume pre-sleep marker: {markerEx}");
+                    $"{GateGLabel}: could not write failed suspend-handoff marker: {markerEx}");
             }
 
             AppendEvent(
-                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: PRE-SLEEP HANDOFF VERIFICATION FAILED after resume: {ex.Message}");
+                $"{GateGLabel} cycle {_gateGCurrentCycle}/{GateGTargetCycleCount}: SUSPEND HANDOFF VERIFICATION FAILED before resume acceptance: {ex.Message}");
+            return false;
         }
     }
 
@@ -2363,7 +2392,7 @@ internal sealed class MainForm : Form
             }
 
             var cycleMessage =
-                $"PASS: cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} initial OWNED 30/30 handed off to Firmware + EC FF/FF + journal absent before sleep; exactly one resume was accepted; telemetry recovered to Healthy; watchdog PID {_gateG1WatchdogPid} remained stable; one controlled post-resume 30/30 re-entry succeeded; final authority=Firmware, EC={finalEc}, journal absent.";
+                $"PASS: cycle {_gateGCurrentCycle}/{GateGTargetCycleCount} initial OWNED 30/30 fenced telemetry before blocking suspend IO and completed the validated Firmware + EC FF/FF + watchdog-release/journal-absent handoff before resume acceptance; exactly one resume was accepted; telemetry recovered to Healthy; watchdog PID {_gateG1WatchdogPid} remained stable; one controlled post-resume 30/30 re-entry succeeded; final authority=Firmware, EC={finalEc}, journal absent.";
 
             if (_gateG2HardwareTest)
             {
