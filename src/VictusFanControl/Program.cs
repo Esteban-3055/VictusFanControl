@@ -138,6 +138,30 @@ internal static class Program
                 writeTestCts.Token);
         }
 
+        if (options.Hp8C40HigherFanLevelQualification)
+        {
+            if (!string.Equals(
+                    options.Hp8C40HigherFanLevelQualificationToken,
+                    "8C40-QUAL40",
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    "8C40 higher fan-level qualification refused: explicit token 8C40-QUAL40 is required.");
+                return 90;
+            }
+
+            using var higherQualificationCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                higherQualificationCts.Cancel();
+            };
+
+            return await Hp8C40HigherFanLevelQualificationTest.RunAsync(
+                options.ModulesDirectory,
+                higherQualificationCts.Token);
+        }
+
         if (options.Hp8C40UpperFanLevelQualification)
         {
             if (!string.Equals(
