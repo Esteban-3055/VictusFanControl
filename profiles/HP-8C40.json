@@ -90,6 +90,45 @@
       "maximum": 8
     },
     "interpretation": "P-core readings respond strongly to targeted load. E-core target deltas are smaller and other-core deltas can exceed the targeted E-core delta, so E-core readouts must not yet be treated as independent sensors. Hottest-core plus package remains the safety/control aggregate.",
-    "detailedECoreClusterMatrixPending": true
+    "detailedECoreClusterMatrixPending": false,
+    "secondRun": {
+      "completed": true,
+      "maximumObservedEffectiveCpuC": 64,
+      "transientTelemetryMiss": {
+        "component": "cpu_load",
+        "consecutiveMisses": 1,
+        "recoveredWithinRetryBudget": true
+      },
+      "eCoreSimilarityFrames": 123,
+      "strictCandidateGroups": [
+        [
+          "C06",
+          "C07",
+          "C08"
+        ],
+        [
+          "C10",
+          "C11",
+          "C12",
+          "C13"
+        ]
+      ],
+      "broaderBehavioralInterpretation": {
+        "clusterA": [
+          "C06",
+          "C07",
+          "C08",
+          "C09"
+        ],
+        "clusterB": [
+          "C10",
+          "C11",
+          "C12",
+          "C13"
+        ],
+        "evidence": "Within C06-C09 pairwise mean absolute differences were 0.04-0.19 C with 86-97% exact matches. Within C10-C13 they were 0.03-0.15 C with 92-98% exact matches. Cross-cluster differences were about 2.53-2.61 C with only 23-24% exact matches."
+      },
+      "policyDecision": "Keep all raw core-context readings for diagnostics, but do not assume independent E-core sensors. Safety/control continues to use max(package,hottest reported core-context temperature)."
+    }
   }
 }
