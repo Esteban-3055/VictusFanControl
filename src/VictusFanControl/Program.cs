@@ -139,13 +139,32 @@ internal static class Program
 
         if (options.IntegratedCoordinatorTest)
         {
-            if (!string.Equals(
+            var hardware = HardwareIdentityReader.ReadCurrent();
+            var target = HpHardwareTargetResolver.Resolve(hardware, out var targetReason);
+
+            if (target is null)
+            {
+                Console.Error.WriteLine(
+                    $"Integrated coordinator test refused: {targetReason}");
+                return 40;
+            }
+
+            var expectedToken =
+                target.Id == Hp8C40TargetProfile.Instance.Id
+                    ? "8C40-COORD30"
+                    : target.Id == Hp88F8TargetProfile.Instance.Id
+                        ? "88F8-COORD30"
+                        : null;
+
+            if (expectedToken is null ||
+                !string.Equals(
                     options.IntegratedCoordinatorToken,
-                    "88F8-COORD30",
+                    expectedToken,
                     StringComparison.Ordinal))
             {
                 Console.Error.WriteLine(
-                    "Integrated coordinator test refused: explicit --coordinator-write-token 88F8-COORD30 is required.");
+                    $"Integrated coordinator test refused for {target.Id}: explicit " +
+                    $"--coordinator-write-token {expectedToken ?? "<unsupported>"} is required.");
                 return 40;
             }
 
@@ -156,9 +175,13 @@ internal static class Program
                 coordinatorTestCts.Cancel();
             };
 
-            return await Hp88F8IntegratedCoordinatorTest.RunAsync(
-                options.ModulesDirectory,
-                coordinatorTestCts.Token);
+            return target.Id == Hp8C40TargetProfile.Instance.Id
+                ? await Hp8C40IntegratedCoordinatorTest.RunAsync(
+                    options.ModulesDirectory,
+                    coordinatorTestCts.Token)
+                : await Hp88F8IntegratedCoordinatorTest.RunAsync(
+                    options.ModulesDirectory,
+                    coordinatorTestCts.Token);
         }
 
         if (options.Probe88F8Setpoint)
