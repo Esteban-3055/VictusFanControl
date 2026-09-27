@@ -261,7 +261,8 @@ public static class Hp8C40IntegratedCoordinatorTest
                 var ecAfter = await WaitForFanOverrideReleaseAsync(
                     modulesDirectory,
                     TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-                Console.WriteLine($"EC after restore: {ecAfter}");
+                Console.WriteLine(
+                    $"EC after restore: {FormatControlEvidence(ecAfter)}");
             }
             catch (Exception ex)
             {
