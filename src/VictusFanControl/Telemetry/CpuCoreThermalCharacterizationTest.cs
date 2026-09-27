@@ -92,6 +92,8 @@ public static class CpuCoreThermalCharacterizationTest
         Console.WriteLine();
 
         var results = new List<CoreThermalResult>(cores.Length);
+        var eCoreFrames = new List<Dictionary<int, double>>();
+        CaptureECoreFrame(baseline, eCoreFrames);
 
         foreach (var core in cores)
         {
@@ -104,6 +106,8 @@ public static class CpuCoreThermalCharacterizationTest
                     $"C{core.CoreIndex} pre-load telemetry failed: {beforeError}");
                 return 65;
             }
+
+            CaptureECoreFrame(before, eCoreFrames);
 
             if (before.CpuControlTemperatureC >= AbortCpuTemperatureC)
             {
@@ -153,6 +157,7 @@ public static class CpuCoreThermalCharacterizationTest
                     }
 
                     UpdatePeaks(sample, peakMap, ref packagePeak, ref effectivePeak);
+                    CaptureECoreFrame(sample, eCoreFrames);
 
                     if (sample.CpuControlTemperatureC >= AbortCpuTemperatureC)
                     {
@@ -182,6 +187,7 @@ public static class CpuCoreThermalCharacterizationTest
                 }
 
                 UpdatePeaks(post, peakMap, ref packagePeak, ref effectivePeak);
+                CaptureECoreFrame(post, eCoreFrames);
             }
             finally
             {
@@ -234,11 +240,169 @@ public static class CpuCoreThermalCharacterizationTest
         }
 
         Console.WriteLine();
+        PrintECoreSimilarity(eCoreFrames, cores);
+
+        Console.WriteLine();
         Console.WriteLine(
-            "RESULT: PASS (characterization completed; sensor independence/shared-cluster " +
-            "interpretation requires reviewing the deltas above).");
+            "RESULT: PASS (characterization completed; E-core grouping below is " +
+            "readout-behavior evidence, not proof of a unique physical sensor per core).");
 
         return 0;
+    }
+
+
+    private static void CaptureECoreFrame(
+        TelemetrySnapshot snapshot,
+        ICollection<Dictionary<int, double>> frames)
+    {
+        var frame = snapshot.CpuCoreTemperatures
+            .Where(core => core.CoreType == "Efficiency")
+            .ToDictionary(core => core.CoreIndex, core => core.TemperatureC);
+
+        if (frame.Count > 0)
+        {
+            frames.Add(frame);
+        }
+    }
+
+    private static void PrintECoreSimilarity(
+        IReadOnlyList<Dictionary<int, double>> frames,
+        IReadOnlyList<CpuCoreTemperatureSample> cores)
+    {
+        var eCoreIds = cores
+            .Where(core => core.CoreType == "Efficiency")
+            .Select(core => core.CoreIndex)
+            .OrderBy(index => index)
+            .ToArray();
+
+        Console.WriteLine("E-core same-snapshot readout similarity:");
+        Console.WriteLine(
+            $"Frames analysed: {frames.Count}. Cell = mean absolute difference C / exact-match %.");
+
+        Console.Write("      ");
+        foreach (var id in eCoreIds)
+        {
+            Console.Write($" C{id:00}      ");
+        }
+
+        Console.WriteLine();
+
+        var candidateEdges = new Dictionary<int, HashSet<int>>();
+        foreach (var id in eCoreIds)
+        {
+            candidateEdges[id] = new HashSet<int>();
+        }
+
+        foreach (var left in eCoreIds)
+        {
+            Console.Write($"C{left:00}  ");
+
+            foreach (var right in eCoreIds)
+            {
+                if (left == right)
+                {
+                    Console.Write(" 0.00/100 ");
+                    continue;
+                }
+
+                var comparable = frames
+                    .Where(frame => frame.ContainsKey(left) && frame.ContainsKey(right))
+                    .ToArray();
+
+                if (comparable.Length == 0)
+                {
+                    Console.Write("   n/a    ");
+                    continue;
+                }
+
+                var meanAbsoluteDifference = comparable
+                    .Average(frame => Math.Abs(frame[left] - frame[right]));
+                var exactMatches = comparable.Count(
+                    frame => frame[left] == frame[right]);
+                var exactMatchPercent =
+                    100.0 * exactMatches / comparable.Length;
+
+                Console.Write(
+                    $"{meanAbsoluteDifference,5:0.00}/{exactMatchPercent,3:0} ");
+
+                // Deliberately conservative: only call a pair a candidate
+                // shared/clustered readout if it stays effectively identical
+                // across nearly the entire multi-load run.
+                if (meanAbsoluteDifference <= 0.25 &&
+                    exactMatchPercent >= 95.0)
+                {
+                    candidateEdges[left].Add(right);
+                }
+            }
+
+            Console.WriteLine();
+        }
+
+        var groups = BuildConnectedGroups(eCoreIds, candidateEdges)
+            .Where(group => group.Count > 1)
+            .ToArray();
+
+        Console.WriteLine();
+        if (groups.Length == 0)
+        {
+            Console.WriteLine(
+                "Candidate shared/clustered E-core readout groups: none at the strict threshold.");
+        }
+        else
+        {
+            Console.WriteLine(
+                "Candidate shared/clustered E-core readout groups (strict similarity threshold):");
+
+            foreach (var group in groups)
+            {
+                Console.WriteLine(
+                    "  " + string.Join(
+                        ", ",
+                        group.OrderBy(index => index).Select(index => $"C{index:00}")));
+            }
+        }
+
+        Console.WriteLine(
+            "These groups describe observed temperature-readout behavior only; " +
+            "they do not prove Intel exposes one physical DTS sensor for the entire group.");
+    }
+
+    private static IReadOnlyList<IReadOnlyList<int>> BuildConnectedGroups(
+        IReadOnlyList<int> nodes,
+        IReadOnlyDictionary<int, HashSet<int>> edges)
+    {
+        var visited = new HashSet<int>();
+        var groups = new List<IReadOnlyList<int>>();
+
+        foreach (var start in nodes)
+        {
+            if (!visited.Add(start))
+            {
+                continue;
+            }
+
+            var group = new List<int>();
+            var queue = new Queue<int>();
+            queue.Enqueue(start);
+
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                group.Add(current);
+
+                foreach (var next in edges[current])
+                {
+                    if (visited.Add(next))
+                    {
+                        queue.Enqueue(next);
+                    }
+                }
+            }
+
+            groups.Add(group);
+        }
+
+        return groups;
     }
 
     private static bool ValidateCompleteSnapshot(
