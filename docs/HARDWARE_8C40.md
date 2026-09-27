@@ -31,8 +31,8 @@ must not replace EC ownership + physical tachometer acknowledgement.
 
 ## Current control envelope
 
-Equal levels `30/30`, `31/31` and `32/32` are now physically qualified.
-The production 8C40 envelope is therefore equal-only `30..32`.
+Equal levels `30/30` through `36/36` are now physically qualified.
+The production 8C40 envelope is therefore equal-only `30..36`.
 
 Independent CPU/GPU commands remain unqualified and are explicitly rejected by
 both the production BIOS/WMI layer and the production backend. The old 88F8
@@ -42,7 +42,7 @@ The following remain intentionally unqualified:
 
 - asymmetric CPU/GPU level commands;
 - levels below 30, including minimum stable level and restart from 0 RPM;
-- levels above 32, including maximum/saturation level;
+- levels above 36, including maximum/saturation level;
 - watchdog/service recovery;
 - process double-death recovery;
 - Modern Standby custom-control lifecycle;
@@ -313,3 +313,28 @@ Observed six-sample result at level 33:
 Before any `34/34` write occurred, the broad diagnostic EC snapshot failed because the EC output buffer did not become full. Therefore level 34 was **not written** in that run. The system had already verified firmware restore after level 33.
 
 The qualification harness has been corrected to use only the narrow production-relevant EC evidence (setpoint, MaxFan/FanSwitch guards and both tachometers), with bounded high-level retries. It resumes at 34 rather than rewriting 33. Production remains capped at equal-only `30..32` until 34-36 are reviewed.
+
+
+## Upper fan-level qualification: 33-36
+
+Equal levels `33/33`, `34/34`, `35/35` and `36/36` have now completed bounded physical qualification. Every level was accepted by HP WMI, acknowledged at EC `0x34/0x35`, produced sustained feedback from both physical tachometers, retained sane MaxFan/FanSwitch guards, and was followed by a verified `FF/FF + LegacyDefault` restore.
+
+Observed six-sample medians:
+
+| Equal level | CPU median RPM | GPU median RPM | CPU sample range | GPU sample range |
+|---:|---:|---:|---:|---:|
+| 33 | 3300 | 3297 | 3267-3332 | 3019-3312 |
+| 34 | 3406 | 3385 | 3363-3417 | 3180-3395 |
+| 35 | 3486 | 3494 | 3461-3529 | 3262-3534 |
+| 36 | 3605 | 3605 | 3575-3623 | 3252-3611 |
+
+The progression is monotonic in the medians. Approximate step deltas are:
+
+- 32 -> 33: CPU +101 RPM, GPU +117 RPM
+- 33 -> 34: CPU +106 RPM, GPU +88 RPM
+- 34 -> 35: CPU +80 RPM, GPU +110 RPM
+- 35 -> 36: CPU +119 RPM, GPU +111 RPM
+
+The first GPU sample remained below steady state at each upper level even after the added settling delay; later samples converged. Median calibration is therefore preferred over the first post-command tach sample.
+
+The production code range is promoted to equal-only `30..36`, but the new upper bound `36/36` must still pass the full `SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend` hardware gate before this expanded envelope is considered fully integrated.
