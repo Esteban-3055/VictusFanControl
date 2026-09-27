@@ -21,13 +21,17 @@ internal sealed class NvmlClient : IDisposable
     private readonly NvmlDeviceGetTemperatureDelegate _getTemperature;
 
     private readonly string? _preferredDeviceName;
+    private readonly bool _requirePreferredDevice;
     private IntPtr _device;
     private bool _initialized;
     private bool _disposed;
 
-    public NvmlClient(string? preferredDeviceName = null)
+    public NvmlClient(
+        string? preferredDeviceName = null,
+        bool requirePreferredDevice = false)
     {
         _preferredDeviceName = preferredDeviceName;
+        _requirePreferredDevice = requirePreferredDevice;
         _library = LoadNvmlLibrary();
 
         try
@@ -204,6 +208,13 @@ internal sealed class NvmlClient : IDisposable
                 DeviceName = candidateName;
                 return;
             }
+        }
+
+        if (_requirePreferredDevice &&
+            !string.IsNullOrWhiteSpace(_preferredDeviceName))
+        {
+            throw new InvalidOperationException(
+                $"NVML did not find the exact validated GPU '{_preferredDeviceName}'.");
         }
 
         _device = fallbackHandle;
