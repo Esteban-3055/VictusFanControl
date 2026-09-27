@@ -172,14 +172,14 @@ public sealed class CliOptions
         Console.WriteLine("  --probe-88f8-ec-state     Read known 88F8 fan-control EC state (read-only).");
         Console.WriteLine("  --probe-88f8-setpoint     Read only 88F8 ownership setpoints 0x34/0x35 (read-only).");
         Console.WriteLine("  --control-self-test       Test authority/fallback coordinator with fake backend.");
-        Console.WriteLine("  --bios-contract-self-test Validate the 88F8 BIOS/WMI request envelopes.");
-        Console.WriteLine("  --hp-backend-self-test    Test the real HP backend boundary with synthetic hardware.");
+        Console.WriteLine("  --bios-contract-self-test Validate 88F8 + 8C40 BIOS/WMI request envelopes.");
+        Console.WriteLine("  --hp-backend-self-test    Test the 88F8 + 8C40 backend boundaries with synthetic hardware.");
         Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");
         Console.WriteLine("  --write-token <token>     Required acknowledgement token for the first write test.");
-        Console.WriteLine("  --integrated-coordinator-test  HARDWARE GATE: SafetyGate -> coordinator -> real HP backend.");
-        Console.WriteLine("  --coordinator-write-token <token>  Required acknowledgement token for integrated hardware gate.");
+        Console.WriteLine("  --integrated-coordinator-test  HARDWARE GATE: SafetyGate -> coordinator -> exact-target HP backend.");
+        Console.WriteLine("  --coordinator-write-token <token>  Required exact token: 88F8-COORD30 or 8C40-COORD30.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");
