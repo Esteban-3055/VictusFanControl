@@ -115,7 +115,7 @@ public sealed class HardwareTelemetryReader : IDisposable
 
         IReadOnlyList<CpuCoreTemperatureSample> coreTemperatures =
             Array.Empty<CpuCoreTemperatureSample>();
-        var expectedCoreCount = _intel?.PhysicalCoreCount;
+        var expectedCoreCount = _targetProfile?.ExpectedPhysicalCoreCount;
 
         if (_intel is not null)
         {
@@ -256,7 +256,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         _lastSnapshotHealthy = false;
         _lastCoreTelemetryHealthy = false;
         _lastCoreTemperatureCount = 0;
-        _lastExpectedCoreCount = _intel?.PhysicalCoreCount ?? 0;
+        _lastExpectedCoreCount = _targetProfile?.ExpectedPhysicalCoreCount ?? 0;
     }
 
     public IEnumerable<string> GetBackendDiagnostics()
@@ -380,7 +380,8 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             _intel = new IntelMsrReader(_intelModulePath);
             _intelStatus =
-                $"OK (PawnIO {_intel.PawnIoVersion}, IntelMSR.bin, physical cores={_intel.PhysicalCoreCount})";
+                $"OK (PawnIO {_intel.PawnIoVersion}, IntelMSR.bin, discovered physical cores={_intel.PhysicalCoreCount}, " +
+                $"expected={_targetProfile?.ExpectedPhysicalCoreCount.ToString() ?? "n/a"})";
             _nextIntelInitAttempt = DateTimeOffset.MinValue;
         }
         catch (Exception ex)
@@ -465,7 +466,8 @@ public sealed class HardwareTelemetryReader : IDisposable
             _intel?.Dispose();
             _intel = new IntelMsrReader(_intelModulePath);
             _intelStatus =
-                $"OK (recovered, PawnIO {_intel.PawnIoVersion}, physical cores={_intel.PhysicalCoreCount})";
+                $"OK (recovered, PawnIO {_intel.PawnIoVersion}, discovered physical cores={_intel.PhysicalCoreCount}, " +
+                $"expected={_targetProfile?.ExpectedPhysicalCoreCount.ToString() ?? "n/a"})";
             _nextIntelInitAttempt = DateTimeOffset.MinValue;
             IntelRecoveries++;
             return true;
