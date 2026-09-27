@@ -5,8 +5,9 @@ namespace VictusFanControl.Hardware.Hp;
 
 /// <summary>
 /// Exact qualification fingerprint for the HP Victus 15-fa1013la / 9D0R1LA
-/// target. Only fan level 30/30 has been physically qualified so far; the
-/// validated range intentionally remains 30..30 until further characterization.
+/// target. Equal fan levels 30/30, 31/31 and 32/32 have been physically
+/// qualified with EC acknowledgement, dual-tach feedback and verified
+/// FF/FF -> LegacyDefault restore after each step.
 /// </summary>
 public static class Hp8C40TargetProfile
 {
@@ -19,10 +20,10 @@ public static class Hp8C40TargetProfile
     public const string ValidatedBiosVersion = "F.18";
     public const string ExpectedGpuName = "NVIDIA GeForce RTX 4060 Laptop GPU";
 
-    // The bounded hardware qualification has proven only the equal 30/30
-    // transaction and its FF/FF -> LegacyDefault restore path.
+    // Physical qualification has proven equal 30/30 through 32/32.
+    // Independent CPU/GPU levels remain unqualified and are rejected.
     public const int MinimumValidatedFanLevel = 30;
-    public const int MaximumValidatedFanLevel = 30;
+    public const int MaximumValidatedFanLevel = 32;
 
     public static HardwareTargetProfile Instance { get; } = new(
         Id: "HP-8C40-9D0R1LA-F18",
