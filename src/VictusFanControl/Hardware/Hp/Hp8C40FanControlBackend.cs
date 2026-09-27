@@ -94,7 +94,7 @@ internal readonly record struct Hp8C40FanBackendTiming(
 ///
 /// This class is deliberately narrow:
 /// - exact target fingerprint only;
-/// - ordinary commands restricted to the validated 14-50 range;
+/// - ordinary commands restricted to the validated equal 30-32 range;
 /// - no arbitrary EC writes;
 /// - fixed-level ownership is acknowledged through EC 0x34/0x35;
 /// - both physical tachometers must acknowledge every new command;
@@ -994,6 +994,14 @@ public sealed class Hp8C40FanControlBackend :
 
     private static void ValidateCommand(FanCommand command)
     {
+        if (command.CpuLevel != command.GpuLevel)
+        {
+            throw new ArgumentException(
+                "HP 8C40 independent CPU/GPU fan levels are not physically qualified. " +
+                "Only equal levels are permitted.",
+                nameof(command));
+        }
+
         if (command.CpuLevel < Hp8C40TargetProfile.MinimumValidatedFanLevel ||
             command.CpuLevel > Hp8C40TargetProfile.MaximumValidatedFanLevel ||
             command.GpuLevel < Hp8C40TargetProfile.MinimumValidatedFanLevel ||
