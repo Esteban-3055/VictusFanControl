@@ -25,6 +25,7 @@ public sealed record HardwareTargetProfile(
     string SystemSkuBase,
     string ValidatedBiosVersion,
     string ExpectedGpuName,
+    int ExpectedPhysicalCoreCount,
     int MinimumValidatedFanLevel,
     int MaximumValidatedFanLevel,
     bool SupportsIndependentFanLevels,
