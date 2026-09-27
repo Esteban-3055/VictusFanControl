@@ -451,6 +451,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     private static bool SameSensorPayload(TelemetrySnapshot left, TelemetrySnapshot right) =>
         left.CpuTemperatureC == right.CpuTemperatureC &&
+        left.CpuCoreMaxTemperatureC == right.CpuCoreMaxTemperatureC &&
+        left.CpuCoreAverageTemperatureC == right.CpuCoreAverageTemperatureC &&
         left.CpuPackagePowerW == right.CpuPackagePowerW &&
         left.CpuLoadPercent == right.CpuLoadPercent &&
         left.GpuTemperatureC == right.GpuTemperatureC &&
@@ -461,9 +463,10 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     private static string DescribeMissing(TelemetrySnapshot snapshot)
     {
-        var missing = new List<string>(8);
+        var missing = new List<string>(9);
 
         if (!snapshot.CpuTemperatureC.HasValue) missing.Add("cpu_temp");
+        if (!snapshot.CpuCoreTelemetryComplete) missing.Add("cpu_core_temps");
         if (!snapshot.CpuPackagePowerW.HasValue) missing.Add("cpu_power");
         if (!snapshot.CpuLoadPercent.HasValue) missing.Add("cpu_load");
         if (!snapshot.GpuTemperatureC.HasValue) missing.Add("gpu_temp");
