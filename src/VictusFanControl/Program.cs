@@ -224,6 +224,29 @@ internal static class Program
 
         using var reader = new HardwareTelemetryReader(options.ModulesDirectory);
 
+        if (options.CoreThermalCharacterization)
+        {
+            using var coreThermalCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                coreThermalCts.Cancel();
+            };
+
+            try
+            {
+                return await CpuCoreThermalCharacterizationTest.RunAsync(
+                    reader,
+                    coreThermalCts.Token);
+            }
+            catch (OperationCanceledException) when (coreThermalCts.IsCancellationRequested)
+            {
+                Console.WriteLine();
+                Console.WriteLine("CPU core thermal characterization cancelled.");
+                return 130;
+            }
+        }
+
         if (options.ProbeBackends)
         {
             foreach (var line in reader.GetBackendDiagnostics())
