@@ -217,5 +217,28 @@
       }
     },
     "productionPromotion": "equal-only 30..32"
+  },
+  "upperFanQualificationPartial": {
+    "level33": {
+      "wmiAccepted": true,
+      "ecAcknowledged": "33/33",
+      "cpuRpmMedian": 3300,
+      "gpuRpmMedian": 3297,
+      "cpuRpmRange": [
+        3267,
+        3332
+      ],
+      "gpuRpmRange": [
+        3019,
+        3312
+      ],
+      "restoreVerified": true
+    },
+    "level34": {
+      "writeAttempted": false,
+      "reason": "Pre-write broad EC diagnostic snapshot timed out after level-33 restore."
+    },
+    "productionRangeUnchanged": "equal-only 30..32",
+    "harnessFix": "Resume at 34 using narrow setpoint/guard/tach evidence with bounded high-level EC retries."
   }
 }
