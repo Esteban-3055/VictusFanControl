@@ -20,16 +20,52 @@
   "control": {
     "enabledByDefault": false,
     "validatedMinimumLevel": 30,
-    "validatedMaximumLevel": 30,
+    "validatedMaximumLevel": 32,
     "supportsIndependentLevels": false,
-    "notes": "Only equal 30/30 has been physically qualified. Do not infer the old 88F8 14-50 range."
+    "notes": "Equal 30/30, 31/31 and 32/32 are physically qualified. Independent CPU/GPU levels remain unqualified and are rejected. Do not infer the old 88F8 14-50 range."
   },
   "observedCalibration": [
     {
       "level": 30,
-      "cpuRpmApprox": 3003,
-      "gpuRpmApprox": 2994,
-      "evidence": "EC 0x34/0x35 = 0x1E/0x1E during the bounded qualification"
+      "cpuRpmMedian": 3003,
+      "gpuRpmMedian": 3009,
+      "cpuRpmRange": [
+        2978,
+        3041
+      ],
+      "gpuRpmRange": [
+        2998,
+        3024
+      ],
+      "evidence": "6-sample qualification after EC 30/30 acknowledgement"
+    },
+    {
+      "level": 31,
+      "cpuRpmMedian": 3091,
+      "gpuRpmMedian": 3096,
+      "cpuRpmRange": [
+        3084,
+        3111
+      ],
+      "gpuRpmRange": [
+        2965,
+        3125
+      ],
+      "evidence": "6-sample qualification after EC 31/31 acknowledgement; first GPU sample showed transition lag"
+    },
+    {
+      "level": 32,
+      "cpuRpmMedian": 3199,
+      "gpuRpmMedian": 3180,
+      "cpuRpmRange": [
+        3194,
+        3227
+      ],
+      "gpuRpmRange": [
+        2818,
+        3203
+      ],
+      "evidence": "6-sample qualification after EC 32/32 acknowledgement; first GPU sample showed transition lag"
     }
   ],
   "restore": {
@@ -130,5 +166,31 @@
       },
       "policyDecision": "Keep all raw core-context readings for diagnostics, but do not assume independent E-core sensors. Safety/control continues to use max(package,hottest reported core-context temperature)."
     }
+  },
+  "fanLevelQualification": {
+    "sequence": [
+      "30/30",
+      "restore FF/FF",
+      "31/31",
+      "restore FF/FF",
+      "32/32",
+      "restore FF/FF"
+    ],
+    "wmiAcceptedAll": true,
+    "ecAcknowledgedAll": true,
+    "dualFanFeedbackAll": true,
+    "restoreVerifiedAfterEveryStep": true,
+    "guardState": "MaxFan=0x00, FanSwitch=0x00",
+    "medianDeltaRpm": {
+      "30_to_31": {
+        "cpu": 89,
+        "gpu": 87
+      },
+      "31_to_32": {
+        "cpu": 108,
+        "gpu": 85
+      }
+    },
+    "productionPromotion": "equal-only 30..32"
   }
 }
