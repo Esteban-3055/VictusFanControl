@@ -1,4 +1,3 @@
-using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Safety;
 
 namespace VictusFanControl.Control;
@@ -587,28 +586,18 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     {
         var capabilities = _backend.Capabilities;
 
+        // Hardware identity and qualification belong to the backend/profile.
+        // The coordinator remains target-agnostic and only verifies that the
+        // advertised command envelope is internally sane.
         return
-            string.Equals(
-                capabilities.BoardProduct,
-                Hp88F8TargetProfile.BoardProduct,
-                StringComparison.OrdinalIgnoreCase) &&
-            capabilities.MinimumLevel >= Hp88F8TargetProfile.MinimumValidatedFanLevel &&
-            capabilities.MaximumLevel <= Hp88F8TargetProfile.MaximumValidatedFanLevel &&
+            !string.IsNullOrWhiteSpace(capabilities.BoardProduct) &&
+            capabilities.MinimumLevel >= 0 &&
+            capabilities.MaximumLevel <= byte.MaxValue &&
             capabilities.MinimumLevel <= capabilities.MaximumLevel;
     }
 
     private string? ValidateCommand(FanCommand command)
     {
-        if (command.CpuLevel < Hp88F8TargetProfile.MinimumValidatedFanLevel ||
-            command.CpuLevel > Hp88F8TargetProfile.MaximumValidatedFanLevel ||
-            command.GpuLevel < Hp88F8TargetProfile.MinimumValidatedFanLevel ||
-            command.GpuLevel > Hp88F8TargetProfile.MaximumValidatedFanLevel)
-        {
-            return $"Command is outside the central 88F8 validated range " +
-                   $"{Hp88F8TargetProfile.MinimumValidatedFanLevel}-" +
-                   $"{Hp88F8TargetProfile.MaximumValidatedFanLevel}.";
-        }
-
         var capabilities = _backend.Capabilities;
 
         if (command.CpuLevel < capabilities.MinimumLevel ||
