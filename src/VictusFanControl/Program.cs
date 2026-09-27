@@ -138,6 +138,30 @@ internal static class Program
                 writeTestCts.Token);
         }
 
+        if (options.Hp8C40FullFanRangeVerification)
+        {
+            if (!string.Equals(
+                    options.Hp8C40FullFanRangeVerificationToken,
+                    "8C40-VERIFY40",
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    "8C40 full-range verification refused: explicit token 8C40-VERIFY40 is required.");
+                return 100;
+            }
+
+            using var fullRangeCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                fullRangeCts.Cancel();
+            };
+
+            return await Hp8C40FullFanRangeVerificationTest.RunAsync(
+                options.ModulesDirectory,
+                fullRangeCts.Token);
+        }
+
         if (options.Hp8C40HigherFanLevelQualification)
         {
             if (!string.Equals(
