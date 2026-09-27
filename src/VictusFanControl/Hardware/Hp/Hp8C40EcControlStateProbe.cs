@@ -79,13 +79,10 @@ public sealed class Hp8C40EcControlStateProbe
     private static void EnsureTargetBoard()
     {
         var hardware = HardwareIdentityReader.ReadCurrent();
-        if (!string.Equals(
-                hardware.BoardProduct,
-                "8C40",
-                StringComparison.OrdinalIgnoreCase))
+        if (!Hp8C40TargetProfile.Matches(hardware, out var reason))
         {
             throw new InvalidOperationException(
-                $"8C40 EC-state probe refused on board '{hardware.BoardProduct}'.");
+                $"8C40 EC-state probe refused: {reason}");
         }
     }
 }
