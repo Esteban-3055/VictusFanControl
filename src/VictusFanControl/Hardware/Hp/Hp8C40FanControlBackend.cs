@@ -94,7 +94,7 @@ internal readonly record struct Hp8C40FanBackendTiming(
 ///
 /// This class is deliberately narrow:
 /// - exact target fingerprint only;
-/// - ordinary commands restricted to the validated equal 30-32 range;
+/// - ordinary commands restricted to the validated equal 30-36 range;
 /// - no arbitrary EC writes;
 /// - fixed-level ownership is acknowledged through EC 0x34/0x35;
 /// - both physical tachometers must acknowledge every new command;
