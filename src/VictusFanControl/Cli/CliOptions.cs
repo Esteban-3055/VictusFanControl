@@ -207,7 +207,7 @@ public sealed class CliOptions
         Console.WriteLine("  --core-thermal-characterization  READ-ONLY fan path: sequential per-physical-core CPU thermal characterization.");
         Console.WriteLine("  --8c40-fan-level-qualification  ACTIVE GATE: qualify equal HP 8C40 levels 30,31,32 with restore after every step.");
         Console.WriteLine("  --8c40-qualification-token <token>  Required exact token: 8C40-QUAL32.");
-        Console.WriteLine("  --coordinator-write-token <token>  Required exact token: 88F8-COORD30 or 8C40-COORD30.");
+        Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30, 8C40-COORD30 or 8C40-COORD32.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");
