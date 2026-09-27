@@ -51,6 +51,7 @@ public static class TelemetryHealthTest
         var counters = new[]
         {
             new Counter("CPU temperature"),
+            new Counter("CPU core temps"),
             new Counter("CPU package power"),
             new Counter("CPU load"),
             new Counter("GPU temperature"),
@@ -70,13 +71,14 @@ public static class TelemetryHealthTest
             samples++;
 
             counters[0].Observe(snapshot.CpuTemperatureC.HasValue);
-            counters[1].Observe(snapshot.CpuPackagePowerW.HasValue);
-            counters[2].Observe(snapshot.CpuLoadPercent.HasValue);
-            counters[3].Observe(snapshot.GpuTemperatureC.HasValue);
-            counters[4].Observe(snapshot.GpuPowerW.HasValue);
-            counters[5].Observe(snapshot.GpuLoadPercent.HasValue);
-            counters[6].Observe(snapshot.CpuFanRpm.HasValue);
-            counters[7].Observe(snapshot.GpuFanRpm.HasValue);
+            counters[1].Observe(snapshot.CpuCoreTelemetryComplete);
+            counters[2].Observe(snapshot.CpuPackagePowerW.HasValue);
+            counters[3].Observe(snapshot.CpuLoadPercent.HasValue);
+            counters[4].Observe(snapshot.GpuTemperatureC.HasValue);
+            counters[5].Observe(snapshot.GpuPowerW.HasValue);
+            counters[6].Observe(snapshot.GpuLoadPercent.HasValue);
+            counters[7].Observe(snapshot.CpuFanRpm.HasValue);
+            counters[8].Observe(snapshot.GpuFanRpm.HasValue);
 
             if (!snapshot.IsComplete)
             {
@@ -118,6 +120,7 @@ public static class TelemetryHealthTest
     private static IEnumerable<string> MissingNames(TelemetrySnapshot s)
     {
         if (!s.CpuTemperatureC.HasValue) yield return "cpu_temp";
+        if (!s.CpuCoreTelemetryComplete) yield return "cpu_core_temps";
         if (!s.CpuPackagePowerW.HasValue) yield return "cpu_power";
         if (!s.CpuLoadPercent.HasValue) yield return "cpu_load";
         if (!s.GpuTemperatureC.HasValue) yield return "gpu_temp";
