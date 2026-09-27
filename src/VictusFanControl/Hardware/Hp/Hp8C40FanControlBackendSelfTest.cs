@@ -57,7 +57,7 @@ public static class Hp8C40FanControlBackendSelfTest
 
         await backend.EnterCustomModeAsync(CancellationToken.None);
         await backend.ApplyAsync(
-            new FanCommand(30, 30, "backend-self-test"),
+            new FanCommand(32, 32, "backend-self-test-upper-bound"),
             CancellationToken.None);
 
         var active = await backend.GetStatusAsync(CancellationToken.None);
@@ -242,24 +242,51 @@ public static class Hp8C40FanControlBackendSelfTest
         await using var backend = NewBackend(hardware);
         await backend.EnterCustomModeAsync(CancellationToken.None);
 
-        var refused = false;
+        var belowRefused = false;
         try
         {
             await backend.ApplyAsync(
-                new FanCommand(29, 30, "out-of-range"),
+                new FanCommand(29, 29, "below-qualified-range"),
                 CancellationToken.None);
         }
         catch (ArgumentOutOfRangeException)
         {
-            refused = true;
+            belowRefused = true;
+        }
+
+        var aboveRefused = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(33, 33, "above-qualified-range"),
+                CancellationToken.None);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            aboveRefused = true;
+        }
+
+        var asymmetricRefused = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 31, "unqualified-asymmetric-command"),
+                CancellationToken.None);
+        }
+        catch (ArgumentException)
+        {
+            asymmetricRefused = true;
         }
 
         await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
 
         return Report(
             output,
-            "backend independently enforces the currently qualified 30/30 point",
-            refused && hardware.SetCalls == 0);
+            "backend independently enforces equal-only validated 30-32 range",
+            belowRefused &&
+            aboveRefused &&
+            asymmetricRefused &&
+            hardware.SetCalls == 0);
     }
 
     private static async Task<int> TestRestoreVerificationAsync(TextWriter output)
