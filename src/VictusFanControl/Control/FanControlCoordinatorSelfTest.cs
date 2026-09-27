@@ -939,7 +939,15 @@ public static class FanControlCoordinatorSelfTest
             25,
             5,
             2200,
-            2400);
+            2400)
+        {
+            CpuExpectedPhysicalCoreCount = 2,
+            CpuCoreTemperatures =
+            [
+                new CpuCoreTemperatureSample(0, 0, "Performance", 50),
+                new CpuCoreTemperatureSample(1, 2, "Performance", 48)
+            ]
+        };
 
         return SafetyGate.Evaluate(
             hardware,
