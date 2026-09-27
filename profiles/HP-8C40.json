@@ -92,7 +92,32 @@
     "activeGpuRpmObserved": 2974,
     "finalAuthority": "Firmware",
     "finalSetpoint": "FF/FF",
-    "passed": true
+    "passed": true,
+    "upperBound": {
+      "level": 32,
+      "route": "SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend -> HP WMI -> EC/tach ACK -> restore",
+      "ecAcknowledged": "32/32",
+      "postAckSupervisionSamples": 6,
+      "observedCpuRpm": [
+        3232,
+        3203,
+        3175,
+        3189,
+        3223,
+        3213
+      ],
+      "observedGpuRpm": [
+        3208,
+        3194,
+        3199,
+        3208,
+        3189,
+        3185
+      ],
+      "finalAuthority": "Firmware",
+      "finalSetpoint": "FF/FF",
+      "passed": true
+    }
   },
   "observedEcRegisters": {
     "fanRateTargetCpu": "0x2C",
