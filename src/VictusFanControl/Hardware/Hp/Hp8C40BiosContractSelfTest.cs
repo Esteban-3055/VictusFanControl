@@ -7,6 +7,7 @@ public static class Hp8C40BiosContractSelfTest
         var restore = Hp8C40BiosFanControl.BuildLegacyDefaultRequest();
         var getLevel = Hp8C40BiosFanControl.BuildGetFanLevelRequest();
         var setLevel = Hp8C40BiosFanControl.BuildSetFanLevelRequest(30, 30);
+        var setUpperLevel = Hp8C40BiosFanControl.BuildSetFanLevelRequest(32, 32);
         var releaseLevel = Hp8C40BiosFanControl.BuildReleaseFanLevelRequest();
 
         var restorePass =
@@ -27,6 +28,32 @@ public static class Hp8C40BiosContractSelfTest
             setLevel.OutputSize == 0 &&
             setLevel.Payload.SequenceEqual(new byte[] { 30, 30, 0x00, 0x00 });
 
+        var setUpperLevelPass =
+            setUpperLevel.Command == 0x00020008 &&
+            setUpperLevel.CommandType == 0x2E &&
+            setUpperLevel.OutputSize == 0 &&
+            setUpperLevel.Payload.SequenceEqual(new byte[] { 32, 32, 0x00, 0x00 });
+
+        var asymmetricRejected = false;
+        try
+        {
+            _ = Hp8C40BiosFanControl.BuildSetFanLevelRequest(30, 31);
+        }
+        catch (ArgumentException)
+        {
+            asymmetricRejected = true;
+        }
+
+        var aboveRangeRejected = false;
+        try
+        {
+            _ = Hp8C40BiosFanControl.BuildSetFanLevelRequest(33, 33);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            aboveRangeRejected = true;
+        }
+
         output.WriteLine(
             $"{(restorePass ? "PASS" : "FAIL")}  HP 8C40 LegacyDefault WMI envelope");
         output.WriteLine(
@@ -39,6 +66,12 @@ public static class Hp8C40BiosContractSelfTest
 
         output.WriteLine(
             $"{(setLevelPass ? "PASS" : "FAIL")}  HP 8C40 SetFanLevel(30,30) WMI envelope");
+        output.WriteLine(
+            $"{(setUpperLevelPass ? "PASS" : "FAIL")}  HP 8C40 SetFanLevel(32,32) WMI envelope");
+        output.WriteLine(
+            $"{(asymmetricRejected ? "PASS" : "FAIL")}  HP 8C40 asymmetric production command rejected");
+        output.WriteLine(
+            $"{(aboveRangeRejected ? "PASS" : "FAIL")}  HP 8C40 level above 32 rejected");
         output.WriteLine(
             $"{(releaseLevelPass ? "PASS" : "FAIL")}  HP 8C40 SetFanLevel(FF,FF) release envelope");
 
@@ -70,6 +103,9 @@ public static class Hp8C40BiosContractSelfTest
         return restorePass &&
                getLevelPass &&
                setLevelPass &&
+               setUpperLevelPass &&
+               asymmetricRejected &&
+               aboveRangeRejected &&
                releaseLevelPass &&
                restoreSequencePass
             ? 0
