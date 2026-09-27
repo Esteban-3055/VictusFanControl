@@ -64,6 +64,7 @@ public sealed record TelemetrySnapshot(
 
     public bool IsComplete =>
         CpuTemperatureC.HasValue &&
+        CpuCoreTelemetryComplete &&
         CpuPackagePowerW.HasValue &&
         CpuLoadPercent.HasValue &&
         GpuTemperatureC.HasValue &&
