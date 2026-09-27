@@ -22,7 +22,7 @@
     "validatedMinimumLevel": 30,
     "validatedMaximumLevel": 36,
     "supportsIndependentLevels": false,
-    "notes": "Equal 30/30 through 36/36 are physically qualified. Independent CPU/GPU levels remain unqualified and are rejected. Do not infer the old 88F8 14-50 range."
+    "notes": "Equal 30/30 through 36/36 are physically qualified and the upper bound 36/36 has passed the full production path. Independent CPU/GPU levels remain unqualified and are rejected. Do not infer the old 88F8 14-50 range."
   },
   "observedCalibration": [
     {
@@ -173,6 +173,32 @@
       "finalAuthority": "Firmware",
       "finalSetpoint": "FF/FF",
       "passed": true
+    },
+    "upperBound36": {
+      "level": 36,
+      "route": "SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend -> HP WMI -> EC/tach ACK -> continuous supervision -> restore",
+      "ecAcknowledged": "36/36",
+      "postAckSupervisionSamples": 6,
+      "observedCpuRpm": [
+        3587,
+        3617,
+        3617,
+        3630,
+        3599,
+        3623
+      ],
+      "observedGpuRpm": [
+        3517,
+        3593,
+        3605,
+        3630,
+        3630,
+        3552
+      ],
+      "finalAuthority": "Firmware",
+      "finalSetpoint": "FF/FF",
+      "guardState": "MaxFan=0x00, FanSwitch=0x00",
+      "passed": true
     }
   },
   "observedEcRegisters": {
@@ -309,6 +335,7 @@
       }
     },
     "productionPromotion": "equal-only 30..36",
-    "integratedUpperBound36Pending": true
+    "integratedUpperBound36Pending": false,
+    "integratedUpperBound36Passed": true
   }
 }
