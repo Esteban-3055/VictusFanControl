@@ -102,7 +102,7 @@ public sealed class DisabledFanControlBackend : IFanControlBackend
     public string Name => "Disabled / read-only";
     public bool CanWrite => false;
     public FanBackendCapabilities Capabilities =>
-        new("88F8", 14, 50, SupportsIndependentLevels: true);
+        new("UNSUPPORTED", 0, 0, SupportsIndependentLevels: false);
 
     public ValueTask ProbeControlDependencyAsync(CancellationToken cancellationToken) =>
         ValueTask.CompletedTask;
