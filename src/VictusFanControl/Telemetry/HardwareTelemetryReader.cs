@@ -31,6 +31,8 @@ public sealed class HardwareTelemetryReader : IDisposable
     private bool _lastCoreTelemetryHealthy;
     private int _lastCoreTemperatureCount;
     private int _lastExpectedCoreCount;
+    private IReadOnlyList<CpuCoreTemperatureSample> _lastCoreTemperatures =
+        Array.Empty<CpuCoreTemperatureSample>();
 
     private DateTimeOffset _nextIntelInitAttempt = DateTimeOffset.MinValue;
     private DateTimeOffset _nextEcInitAttempt = DateTimeOffset.MinValue;
@@ -283,6 +285,16 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             yield return
                 $"CPU core temps  : {_lastCoreTemperatureCount}/{_lastExpectedCoreCount} physical cores";
+
+            if (_lastCoreTemperatures.Count > 0)
+            {
+                yield return
+                    "CPU core detail : " +
+                    string.Join(
+                        " | ",
+                        _lastCoreTemperatures.Select(core =>
+                            $"C{core.CoreIndex}({ShortCoreType(core.CoreType)})={core.TemperatureC:0}C"));
+            }
         }
 
         if (_lastNvmlReadError is not null)
@@ -339,6 +351,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         _lastSnapshotHealthy = snapshot.IsComplete;
         _lastCoreTemperatureCount = snapshot.CpuCoreTemperatures.Count;
         _lastExpectedCoreCount = snapshot.CpuExpectedPhysicalCoreCount ?? 0;
+        _lastCoreTemperatures = snapshot.CpuCoreTemperatures;
         _lastCoreTelemetryHealthy = snapshot.CpuCoreTelemetryComplete;
 
         if (snapshot.IsComplete)
@@ -352,6 +365,14 @@ public sealed class HardwareTelemetryReader : IDisposable
         MaxConsecutiveIncompleteSnapshots =
             Math.Max(MaxConsecutiveIncompleteSnapshots, ConsecutiveIncompleteSnapshots);
     }
+
+    private static string ShortCoreType(string coreType) =>
+        coreType switch
+        {
+            "Performance" => "P",
+            "Efficiency" => "E",
+            _ => "?"
+        };
 
     private void InitializeIntel()
     {
