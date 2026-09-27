@@ -41,6 +41,13 @@ public sealed class Hp8C40BiosFanControl
         ValidateLevel(cpuLevel, nameof(cpuLevel));
         ValidateLevel(gpuLevel, nameof(gpuLevel));
 
+        if (cpuLevel != gpuLevel)
+        {
+            throw new ArgumentException(
+                "HP 8C40 independent CPU/GPU fan levels are not physically qualified. " +
+                "Only equal levels are permitted.");
+        }
+
         return new HpBiosRequest(
             Command: DefaultCommand,
             CommandType: SetFanLevelCommandType,
