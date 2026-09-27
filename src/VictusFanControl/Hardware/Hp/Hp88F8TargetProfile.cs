@@ -37,6 +37,7 @@ public static class Hp88F8TargetProfile
         SystemSkuBase: SystemSkuPrefix,
         ValidatedBiosVersion: ValidatedBiosVersion,
         ExpectedGpuName: ExpectedGpuName,
+        ExpectedPhysicalCoreCount: 8,
         MinimumValidatedFanLevel: MinimumValidatedFanLevel,
         MaximumValidatedFanLevel: MaximumValidatedFanLevel,
         SupportsIndependentFanLevels: true,
