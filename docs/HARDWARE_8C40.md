@@ -299,3 +299,17 @@ The promoted upper bound was exercised through the production control route and 
 - MaxFan/FanSwitch guards remained `0x00/0x00`
 
 This closes production-path qualification of the equal-only `30..32` envelope. No level above 32 is production-qualified yet.
+
+
+## Partial upper-range qualification and EC-read harness correction
+
+Level `33/33` completed successfully in the first upper-range run. HP WMI accepted the command, EC `0x34/0x35` acknowledged `33/33`, both tachometers converged near 3300 RPM, and the subsequent `FF/FF + LegacyDefault` restore was verified.
+
+Observed six-sample result at level 33:
+
+- CPU median: approximately 3300 RPM (3267-3332)
+- GPU median: approximately 3297 RPM (3019-3312; the first sample was still settling)
+
+Before any `34/34` write occurred, the broad diagnostic EC snapshot failed because the EC output buffer did not become full. Therefore level 34 was **not written** in that run. The system had already verified firmware restore after level 33.
+
+The qualification harness has been corrected to use only the narrow production-relevant EC evidence (setpoint, MaxFan/FanSwitch guards and both tachometers), with bounded high-level retries. It resumes at 34 rather than rewriting 33. Production remains capped at equal-only `30..32` until 34-36 are reviewed.
