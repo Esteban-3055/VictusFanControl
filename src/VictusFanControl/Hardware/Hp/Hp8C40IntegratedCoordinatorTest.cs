@@ -14,8 +14,6 @@ namespace VictusFanControl.Hardware.Hp;
 /// </summary>
 public static class Hp8C40IntegratedCoordinatorTest
 {
-    public const int TestLevel = 30;
-
     private const int PostAcknowledgementSamples = 6;
     private const double MaximumCustomWindowSeconds = 20.0;
     private const double MaximumSamplingGapSeconds = 3.0;
@@ -25,10 +23,26 @@ public static class Hp8C40IntegratedCoordinatorTest
     private const double MaximumBaselineCpuPowerW = 50;
     private const double MaximumBaselineGpuPowerW = 70;
 
+    public static Task<int> RunAsync(
+        string modulesDirectory,
+        CancellationToken cancellationToken) =>
+        RunAsync(modulesDirectory, 30, cancellationToken);
+
     public static async Task<int> RunAsync(
         string modulesDirectory,
+        int testLevel,
         CancellationToken cancellationToken)
     {
+        if (testLevel < Hp8C40TargetProfile.MinimumValidatedFanLevel ||
+            testLevel > Hp8C40TargetProfile.MaximumValidatedFanLevel)
+        {
+            Console.Error.WriteLine(
+                $"Integrated test refused: level {testLevel} is outside the validated " +
+                $"{Hp8C40TargetProfile.MinimumValidatedFanLevel}-" +
+                $"{Hp8C40TargetProfile.MaximumValidatedFanLevel} range.");
+            return 40;
+        }
+
         Console.WriteLine("HP 8C40 integrated coordinator hardware gate");
         Console.WriteLine("Route: SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend");
         Console.WriteLine("Automatic policy remains OFF.");
@@ -140,7 +154,7 @@ public static class Hp8C40IntegratedCoordinatorTest
 
             Console.WriteLine();
             Console.WriteLine(
-                $"Applying production-path fan command {TestLevel}/{TestLevel}...");
+                $"Applying production-path fan command {testLevel}/{testLevel}...");
 
             // The backend's no-write admission exception is the only case that
             // proves SetFanLevel was not attempted after this point.
@@ -150,8 +164,8 @@ public static class Hp8C40IntegratedCoordinatorTest
             {
                 await coordinator.ApplyAsync(
                     new FanCommand(
-                        TestLevel,
-                        TestLevel,
+                        testLevel,
+                        testLevel,
                         "bounded integrated coordinator hardware validation"),
                     commandSafety,
                     cancellationToken).ConfigureAwait(false);
