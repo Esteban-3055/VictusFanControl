@@ -16,7 +16,7 @@ public sealed class CsvTelemetryLogger : IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         await _writer.WriteLineAsync(
-            "timestamp_utc,cpu_name,cpu_temp_c,cpu_package_power_w,cpu_load_pct,gpu_name,gpu_temp_c,gpu_power_w,gpu_load_pct,cpu_fan_rpm,gpu_fan_rpm");
+            "timestamp_utc,cpu_name,cpu_package_temp_c,cpu_core_max_temp_c,cpu_core_avg_temp_c,cpu_core_temps_c,cpu_package_power_w,cpu_load_pct,gpu_name,gpu_temp_c,gpu_power_w,gpu_load_pct,cpu_fan_rpm,gpu_fan_rpm");
     }
 
     public Task WriteAsync(TelemetrySnapshot s, CancellationToken cancellationToken)
@@ -26,6 +26,9 @@ public sealed class CsvTelemetryLogger : IAsyncDisposable
             Escape(s.Timestamp.ToString("O")),
             Escape(s.CpuName),
             Number(s.CpuTemperatureC),
+            Number(s.CpuCoreMaxTemperatureC),
+            Number(s.CpuCoreAverageTemperatureC),
+            Escape(CoreTemperatures(s)),
             Number(s.CpuPackagePowerW),
             Number(s.CpuLoadPercent),
             Escape(s.GpuName),
@@ -52,13 +55,19 @@ public sealed class CsvTelemetryLogger : IAsyncDisposable
         _writer.Dispose();
     }
 
+    private static string CoreTemperatures(TelemetrySnapshot snapshot) =>
+        string.Join(
+            "|",
+            snapshot.CpuCoreTemperatures.Select(sample =>
+                $"C{sample.CoreIndex}:{sample.CoreType}:{sample.TemperatureC.ToString("0.0", CultureInfo.InvariantCulture)}"));
+
     private static string Number(double? value) =>
         value?.ToString("0.###", CultureInfo.InvariantCulture) ?? string.Empty;
 
     private static string Escape(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
-        var escaped = value.Replace("\"", "\"\"");
-        return escaped.IndexOfAny(new[] { ',', '\"', '\r', '\n' }) >= 0 ? $"\"{escaped}\"" : escaped;
+        var escaped = value.Replace(""", """");
+        return escaped.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0 ? $""{escaped}"" : escaped;
     }
 }
