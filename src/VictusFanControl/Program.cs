@@ -175,22 +175,44 @@ internal static class Program
                 return 40;
             }
 
-            var expectedToken =
-                target.Id == Hp8C40TargetProfile.Instance.Id
-                    ? "8C40-COORD30"
-                    : target.Id == Hp88F8TargetProfile.Instance.Id
-                        ? "88F8-COORD30"
-                        : null;
+            int? hp8C40TestLevel = null;
+            string? expectedToken = null;
 
-            if (expectedToken is null ||
-                !string.Equals(
-                    options.IntegratedCoordinatorToken,
-                    expectedToken,
-                    StringComparison.Ordinal))
+            if (target.Id == Hp8C40TargetProfile.Instance.Id)
+            {
+                hp8C40TestLevel = options.IntegratedCoordinatorToken switch
+                {
+                    "8C40-COORD30" => 30,
+                    "8C40-COORD32" => 32,
+                    _ => null
+                };
+
+                if (!hp8C40TestLevel.HasValue)
+                {
+                    Console.Error.WriteLine(
+                        "Integrated coordinator test refused for HP 8C40: explicit " +
+                        "--coordinator-write-token 8C40-COORD30 or 8C40-COORD32 is required.");
+                    return 40;
+                }
+            }
+            else if (target.Id == Hp88F8TargetProfile.Instance.Id)
+            {
+                expectedToken = "88F8-COORD30";
+                if (!string.Equals(
+                        options.IntegratedCoordinatorToken,
+                        expectedToken,
+                        StringComparison.Ordinal))
+                {
+                    Console.Error.WriteLine(
+                        $"Integrated coordinator test refused for {target.Id}: explicit " +
+                        $"--coordinator-write-token {expectedToken} is required.");
+                    return 40;
+                }
+            }
+            else
             {
                 Console.Error.WriteLine(
-                    $"Integrated coordinator test refused for {target.Id}: explicit " +
-                    $"--coordinator-write-token {expectedToken ?? "<unsupported>"} is required.");
+                    $"Integrated coordinator test refused for unsupported target {target.Id}.");
                 return 40;
             }
 
@@ -204,6 +226,7 @@ internal static class Program
             return target.Id == Hp8C40TargetProfile.Instance.Id
                 ? await Hp8C40IntegratedCoordinatorTest.RunAsync(
                     options.ModulesDirectory,
+                    hp8C40TestLevel!.Value,
                     coordinatorTestCts.Token)
                 : await Hp88F8IntegratedCoordinatorTest.RunAsync(
                     options.ModulesDirectory,
