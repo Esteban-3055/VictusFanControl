@@ -138,6 +138,30 @@ internal static class Program
                 writeTestCts.Token);
         }
 
+        if (options.Hp8C40ExtendedFanRangeQualification)
+        {
+            if (!string.Equals(
+                    options.Hp8C40ExtendedFanRangeQualificationToken,
+                    "8C40-QUAL10-50",
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    "8C40 extended fan-range qualification refused: explicit token 8C40-QUAL10-50 is required.");
+                return 109;
+            }
+
+            using var extendedRangeCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                extendedRangeCts.Cancel();
+            };
+
+            return await Hp8C40ExtendedFanRangeQualificationTest.RunAsync(
+                options.ModulesDirectory,
+                extendedRangeCts.Token);
+        }
+
         if (options.Hp8C40FullFanRangeVerification)
         {
             if (!string.Equals(
