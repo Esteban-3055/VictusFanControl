@@ -20,9 +20,9 @@
   "control": {
     "enabledByDefault": false,
     "validatedMinimumLevel": 30,
-    "validatedMaximumLevel": 32,
+    "validatedMaximumLevel": 36,
     "supportsIndependentLevels": false,
-    "notes": "Equal 30/30, 31/31 and 32/32 are physically qualified. Independent CPU/GPU levels remain unqualified and are rejected. Do not infer the old 88F8 14-50 range."
+    "notes": "Equal 30/30 through 36/36 are physically qualified. Independent CPU/GPU levels remain unqualified and are rejected. Do not infer the old 88F8 14-50 range."
   },
   "observedCalibration": [
     {
@@ -66,6 +66,62 @@
         3203
       ],
       "evidence": "6-sample qualification after EC 32/32 acknowledgement; first GPU sample showed transition lag"
+    },
+    {
+      "level": 33,
+      "cpuRpmMedian": 3300,
+      "gpuRpmMedian": 3297,
+      "cpuRpmRange": [
+        3267,
+        3332
+      ],
+      "gpuRpmRange": [
+        3019,
+        3312
+      ],
+      "evidence": "6-sample upper-range qualification after EC 33/33 acknowledgement; first GPU sample was still settling"
+    },
+    {
+      "level": 34,
+      "cpuRpmMedian": 3406,
+      "gpuRpmMedian": 3385,
+      "cpuRpmRange": [
+        3363,
+        3417
+      ],
+      "gpuRpmRange": [
+        3180,
+        3395
+      ],
+      "evidence": "6-sample upper-range qualification after EC 34/34 acknowledgement; first GPU sample was still settling"
+    },
+    {
+      "level": 35,
+      "cpuRpmMedian": 3486,
+      "gpuRpmMedian": 3494,
+      "cpuRpmRange": [
+        3461,
+        3529
+      ],
+      "gpuRpmRange": [
+        3262,
+        3534
+      ],
+      "evidence": "6-sample upper-range qualification after EC 35/35 acknowledgement; first GPU sample was still settling"
+    },
+    {
+      "level": 36,
+      "cpuRpmMedian": 3605,
+      "gpuRpmMedian": 3605,
+      "cpuRpmRange": [
+        3575,
+        3623
+      ],
+      "gpuRpmRange": [
+        3252,
+        3611
+      ],
+      "evidence": "6-sample upper-range qualification after EC 36/36 acknowledgement; first GPU sample was still settling"
     }
   ],
   "restore": {
@@ -216,29 +272,43 @@
         "gpu": 85
       }
     },
-    "productionPromotion": "equal-only 30..32"
+    "productionPromotion": "equal-only 30..36"
   },
-  "upperFanQualificationPartial": {
-    "level33": {
-      "wmiAccepted": true,
-      "ecAcknowledged": "33/33",
-      "cpuRpmMedian": 3300,
-      "gpuRpmMedian": 3297,
-      "cpuRpmRange": [
-        3267,
-        3332
-      ],
-      "gpuRpmRange": [
-        3019,
-        3312
-      ],
-      "restoreVerified": true
+  "upperFanQualification": {
+    "sequence": [
+      "33/33",
+      "restore FF/FF",
+      "34/34",
+      "restore FF/FF",
+      "35/35",
+      "restore FF/FF",
+      "36/36",
+      "restore FF/FF"
+    ],
+    "wmiAcceptedAll": true,
+    "ecAcknowledgedAll": true,
+    "dualFanFeedbackAll": true,
+    "restoreVerifiedAfterEveryStep": true,
+    "narrowEvidenceUsedFor34To36": true,
+    "medianDeltaRpm": {
+      "32_to_33": {
+        "cpu": 101,
+        "gpu": 117
+      },
+      "33_to_34": {
+        "cpu": 106,
+        "gpu": 88
+      },
+      "34_to_35": {
+        "cpu": 80,
+        "gpu": 110
+      },
+      "35_to_36": {
+        "cpu": 119,
+        "gpu": 111
+      }
     },
-    "level34": {
-      "writeAttempted": false,
-      "reason": "Pre-write broad EC diagnostic snapshot timed out after level-33 restore."
-    },
-    "productionRangeUnchanged": "equal-only 30..32",
-    "harnessFix": "Resume at 34 using narrow setpoint/guard/tach evidence with bounded high-level EC retries."
+    "productionPromotion": "equal-only 30..36",
+    "integratedUpperBound36Pending": true
   }
 }
