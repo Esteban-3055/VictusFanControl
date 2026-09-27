@@ -207,3 +207,38 @@ identical across at least 95% of frames.
 That next read-only pass is intended to distinguish "independent E-core sensor"
 from "shared/clustered temperature readout" behavior without changing the fan
 control envelope.
+
+
+## E-core readout clustering characterization
+
+A second full 14-core run completed and collected 123 E-core same-snapshot
+frames. One transient Windows CPU-load sample was unavailable during C6
+loading; it recovered on the first bounded retry. No Intel MSR, EC, NVML or
+core-temperature dropout was observed in that event.
+
+The E-core similarity matrix shows two very strong readout families:
+
+- C06-C09: pairwise mean absolute differences approximately 0.04-0.19 C,
+  with approximately 86-97% exact same-degree matches.
+- C10-C13: pairwise mean absolute differences approximately 0.03-0.15 C,
+  with approximately 92-98% exact matches.
+- Between the two families: approximately 2.53-2.61 C mean absolute
+  difference and only approximately 23-24% exact matches.
+
+The intentionally strict 95%-exact-match graph reported C06/C07/C08 and
+C10/C11/C12/C13. C09 narrowly missed that graph threshold, but its 0.09-0.19 C
+mean difference from C06-C08 is still much closer to the first family than to
+C10-C13.
+
+The practical interpretation is therefore two four-context E-core thermal
+readout clusters, C06-C09 and C10-C13. This is consistent with shared or
+clustered E-core temperature reporting behavior, but it is **not** proof of the
+physical DTS sensor topology inside the processor.
+
+VictusFanControl will keep the eight raw E-core-context values for diagnostics,
+but the future control policy must not count them as eight independent thermal
+sensors. The conservative CPU safety/control aggregate remains:
+
+`max(package temperature, hottest reported physical-core-context temperature)`
+
+No weighting or averaging change is required before fan-curve development.
