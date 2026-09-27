@@ -24,6 +24,8 @@ public sealed class CliOptions
     public string? Hp8C40HigherFanLevelQualificationToken { get; private set; }
     public bool Hp8C40FullFanRangeVerification { get; private set; }
     public string? Hp8C40FullFanRangeVerificationToken { get; private set; }
+    public bool Hp8C40ExtendedFanRangeQualification { get; private set; }
+    public string? Hp8C40ExtendedFanRangeQualificationToken { get; private set; }
     public string? IntegratedCoordinatorToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
@@ -133,6 +135,15 @@ public sealed class CliOptions
                         ReadValue(args, ref i);
                     break;
 
+                case "--8c40-extended-range-qualification":
+                    options.Hp8C40ExtendedFanRangeQualification = true;
+                    break;
+
+                case "--8c40-extended-range-token":
+                    options.Hp8C40ExtendedFanRangeQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
                 case "--coordinator-write-token":
                     options.IntegratedCoordinatorToken = ReadValue(args, ref i);
                     break;
@@ -184,6 +195,7 @@ public sealed class CliOptions
             (options.Hp8C40UpperFanLevelQualification ? 1 : 0) +
             (options.Hp8C40HigherFanLevelQualification ? 1 : 0) +
             (options.Hp8C40FullFanRangeVerification ? 1 : 0) +
+            (options.Hp8C40ExtendedFanRangeQualification ? 1 : 0) +
             (options.HealthTestMinutes > 0 ? 1 : 0);
 
         if (exclusiveActions > 1)
@@ -239,6 +251,13 @@ public sealed class CliOptions
                 "--8c40-full-range-token is valid only with --8c40-full-range-verification.");
         }
 
+        if (options.Hp8C40ExtendedFanRangeQualificationToken is not null &&
+            !options.Hp8C40ExtendedFanRangeQualification)
+        {
+            throw new ArgumentException(
+                "--8c40-extended-range-token is valid only with --8c40-extended-range-qualification.");
+        }
+
         return options;
     }
 
@@ -270,6 +289,8 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-higher-qualification-token <token>  Required exact token: 8C40-QUAL40.");
         Console.WriteLine("  --8c40-full-range-verification  ACTIVE GATE: verify every equal HP 8C40 level 30..40 with restore after every step.");
         Console.WriteLine("  --8c40-full-range-token <token>  Required exact token: 8C40-VERIFY40.");
+        Console.WriteLine("  --8c40-extended-range-qualification  ACTIVE GATE: guarded characterization of equal HP 8C40 levels 10..50.");
+        Console.WriteLine("  --8c40-extended-range-token <token>  Required exact token: 8C40-QUAL10-50.");
         Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30, 8C40-COORD30, 8C40-COORD32 or 8C40-COORD36.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
