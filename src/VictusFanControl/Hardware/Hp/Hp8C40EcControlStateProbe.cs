@@ -10,8 +10,8 @@ public sealed record Hp8C40EcControlState(
     byte GpuRate,
     byte CpuSetpoint,
     byte GpuSetpoint,
-    byte Manual,
-    byte Countdown,
+    byte Diagnostic62,
+    byte Diagnostic63,
     byte Mode,
     byte MaxFan,
     byte FanSwitch,
@@ -22,7 +22,7 @@ public sealed record Hp8C40EcControlState(
         $"level CPU={CpuSetpoint} GPU={GpuSetpoint} | " +
         $"rate-target CPU={CpuRateTarget}% GPU={GpuRateTarget}% | " +
         $"rate-read CPU={CpuRate}% GPU={GpuRate}% | " +
-        $"manual=0x{Manual:X2} countdown={Countdown} mode=0x{Mode:X2} " +
+        $"reg62=0x{Diagnostic62:X2} reg63=0x{Diagnostic63:X2} mode=0x{Mode:X2} " +
         $"max=0x{MaxFan:X2} switch=0x{FanSwitch:X2} | " +
         $"RPM CPU={CpuRpm} GPU={GpuRpm}";
 }
@@ -67,8 +67,8 @@ public sealed class Hp8C40EcControlStateProbe
             state.GpuRate,
             state.CpuSetpoint,
             state.GpuSetpoint,
-            state.Manual,
-            state.Countdown,
+            state.Diagnostic62,
+            state.Diagnostic63,
             state.Mode,
             state.MaxFan,
             state.FanSwitch,
