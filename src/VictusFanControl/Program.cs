@@ -209,6 +209,7 @@ internal static class Program
                 {
                     "8C40-COORD30" => 30,
                     "8C40-COORD32" => 32,
+                    "8C40-COORD36" => 36,
                     _ => null
                 };
 
@@ -216,7 +217,7 @@ internal static class Program
                 {
                     Console.Error.WriteLine(
                         "Integrated coordinator test refused for HP 8C40: explicit " +
-                        "--coordinator-write-token 8C40-COORD30 or 8C40-COORD32 is required.");
+                        "--coordinator-write-token 8C40-COORD30, 8C40-COORD32 or 8C40-COORD36 is required.");
                     return 40;
                 }
             }
