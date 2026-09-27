@@ -19,13 +19,49 @@ public static class SafetyGateSelfTest
             "62C37LA#AKH",
             Hp88F8TargetProfile.ValidatedBiosVersion);
 
-        var good = Snapshot(now, 50, 15, 10, 45, 25, 5, 2200, 2400);
+        var good8C40Hardware = new HardwareIdentity(
+            "HP",
+            "8C40",
+            "63.43",
+            "HP",
+            "Victus by HP Gaming Laptop 15-fa1xxx",
+            "9D0R1LA#AKH",
+            Hp8C40TargetProfile.ValidatedBiosVersion);
+
+        var good = Snapshot(
+            now,
+            cpuTemp: 50,
+            cpuPower: 15,
+            cpuLoad: 10,
+            gpuTemp: 45,
+            gpuPower: 25,
+            gpuLoad: 5,
+            cpuFan: 2200,
+            gpuFan: 2400,
+            gpuName: Hp88F8TargetProfile.ExpectedGpuName);
+
+        var good8C40 = Snapshot(
+            now,
+            cpuTemp: 50,
+            cpuPower: 18,
+            cpuLoad: 12,
+            gpuTemp: 45,
+            gpuPower: 28,
+            gpuLoad: 6,
+            cpuFan: 2700,
+            gpuFan: 2400,
+            gpuName: Hp8C40TargetProfile.ExpectedGpuName);
 
         var cases = new[]
         {
             Case(
-                "healthy/fresh/allowed board",
+                "healthy/fresh/allowed 88F8 target",
                 SafetyGate.Evaluate(goodHardware, SystemState.Healthy, good, now),
+                expectedReady: true),
+
+            Case(
+                "healthy/fresh/allowed 8C40 target",
+                SafetyGate.Evaluate(good8C40Hardware, SystemState.Healthy, good8C40, now),
                 expectedReady: true),
 
             Case(
@@ -88,11 +124,20 @@ public static class SafetyGateSelfTest
                 expectedReady: false),
 
             Case(
-                "missing telemetry",
+                "missing base telemetry",
                 SafetyGate.Evaluate(
                     goodHardware,
                     SystemState.Healthy,
                     good with { GpuFanRpm = null },
+                    now),
+                expectedReady: false),
+
+            Case(
+                "missing per-core telemetry",
+                SafetyGate.Evaluate(
+                    goodHardware,
+                    SystemState.Healthy,
+                    good with { CpuCoreTemperatures = Array.Empty<CpuCoreTemperatureSample>() },
                     now),
                 expectedReady: false),
 
@@ -106,11 +151,28 @@ public static class SafetyGateSelfTest
                 expectedReady: false),
 
             Case(
-                "thermal handoff",
+                "package thermal handoff",
                 SafetyGate.Evaluate(
                     goodHardware,
                     SystemState.Healthy,
                     good with { CpuTemperatureC = SafetyGate.CpuEmergencyC },
+                    now),
+                expectedReady: false),
+
+            Case(
+                "hottest-core thermal handoff",
+                SafetyGate.Evaluate(
+                    goodHardware,
+                    SystemState.Healthy,
+                    good with
+                    {
+                        CpuTemperatureC = 70,
+                        CpuCoreTemperatures =
+                        [
+                            new CpuCoreTemperatureSample(0, 0, "Performance", 72),
+                            new CpuCoreTemperatureSample(1, 2, "Performance", SafetyGate.CpuEmergencyC)
+                        ]
+                    },
                     now),
                 expectedReady: false)
         };
@@ -136,7 +198,6 @@ public static class SafetyGateSelfTest
                 }
             }
         }
-
 
         var sequencedBeforeDisplay = SafetyGate.Evaluate(
             goodHardware,
@@ -195,19 +256,28 @@ public static class SafetyGateSelfTest
         double gpuPower,
         double gpuLoad,
         double cpuFan,
-        double gpuFan) =>
-        new(
+        double gpuFan,
+        string gpuName) =>
+        new TelemetrySnapshot(
             Timestamp: timestamp,
             CpuName: "Intel test CPU",
             CpuTemperatureC: cpuTemp,
             CpuPackagePowerW: cpuPower,
             CpuLoadPercent: cpuLoad,
-            GpuName: Hp88F8TargetProfile.ExpectedGpuName,
+            GpuName: gpuName,
             GpuTemperatureC: gpuTemp,
             GpuPowerW: gpuPower,
             GpuLoadPercent: gpuLoad,
             CpuFanRpm: cpuFan,
-            GpuFanRpm: gpuFan);
+            GpuFanRpm: gpuFan)
+        {
+            CpuExpectedPhysicalCoreCount = 2,
+            CpuCoreTemperatures =
+            [
+                new CpuCoreTemperatureSample(0, 0, "Performance", cpuTemp),
+                new CpuCoreTemperatureSample(1, 2, "Performance", cpuTemp - 2)
+            ]
+        };
 
     private sealed record TestCase(
         string Name,
