@@ -337,4 +337,21 @@ The progression is monotonic in the medians. Approximate step deltas are:
 
 The first GPU sample remained below steady state at each upper level even after the added settling delay; later samples converged. Median calibration is therefore preferred over the first post-command tach sample.
 
-The production code range is promoted to equal-only `30..36`, but the new upper bound `36/36` must still pass the full `SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend` hardware gate before this expanded envelope is considered fully integrated.
+The production code range is promoted to equal-only `30..36`. The new upper bound `36/36` has also passed the full `SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend` hardware gate, so this expanded envelope is fully integrated.
+
+
+## Production-path validation at upper bound 36/36
+
+The equal-only upper bound `36/36` passed the full production route.
+
+- Production backend accepted `36/36`.
+- EC acknowledged `36/36` with MaxFan/FanSwitch remaining `0x00/0x00`.
+- Immediate physical feedback after backend ACK was approximately CPU 3575 / GPU 3098 RPM; the GPU was still accelerating.
+- Six subsequent supervision samples retained valid SafetyGate, ownership and tachometer feedback.
+- Supervision RPM stayed approximately CPU 3587-3630 and GPU 3517-3630.
+- Coordinator handed authority back to `Firmware`.
+- Final EC setpoint returned to `FF/FF`.
+
+This closes full production-path validation of the equal-only `30..36` range. Levels above 36 remain unqualified.
+
+The integrated gate uses the narrow production-relevant EC evidence. Diagnostic fields not read by that path must not be printed as if they were real register values; the final restore display has been corrected accordingly.
