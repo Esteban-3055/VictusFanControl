@@ -340,26 +340,34 @@ internal sealed class MainForm : Form
                     new NamedPipeFanControlWatchdogLeaseClient();
             }
 
-            backend = new Hp88F8FanControlBackend(
+            var selection = HpFanControlBackendFactory.Create(
                 modulesDirectory,
+                _hardwareIdentity,
                 watchdogLease);
 
-            _fanBackendStartupDetail = backend.CanWrite
-                ? (_gateDHardwareTest ||
-                   _gateEHardwareTest ||
-                   _gateF1HardwareTest ||
-                   _gateF2HardwareTest ||
-                   _gateG1HardwareTest ||
-                   _gateG2HardwareTest)
-                    ? $"HP 88F8 backend initialized with mandatory Gate {(_gateG2HardwareTest ? "G2" : _gateG1HardwareTest ? "G1" : _gateF2HardwareTest ? "F2" : _gateF1HardwareTest ? "F1" : _gateEHardwareTest ? "E" : "D")} watchdog lease."
-                    : "HP 88F8 write/restore backend initialized."
-                : "HP 88F8 backend present but not write-capable on this hardware.";
+            backend = selection.Backend;
+            _fanBackendStartupDetail = selection.Detail;
+
+            if ((_gateDHardwareTest ||
+                 _gateEHardwareTest ||
+                 _gateF1HardwareTest ||
+                 _gateF2HardwareTest ||
+                 _gateG1HardwareTest ||
+                 _gateG2HardwareTest) &&
+                selection.TargetProfile?.SleepModel ==
+                    WindowsSleepModel.ModernStandbyS0LowPowerIdle)
+            {
+                throw new NotSupportedException(
+                    "The legacy Gate D-G hardware harnesses are not qualified for " +
+                    "the HP 8C40 Modern Standby target. Use the future M-series " +
+                    "Modern Standby qualification gates instead.");
+            }
         }
         catch (Exception ex)
         {
             backend = new DisabledFanControlBackend();
             _fanBackendStartupDetail =
-                $"HP 88F8 backend initialization failed; fail-closed read-only fallback: {ex.Message}";
+                $"HP fan backend initialization failed; fail-closed read-only fallback: {ex.Message}";
         }
 
         _fanCoordinator = new FanControlCoordinator(backend);
@@ -1036,7 +1044,7 @@ internal sealed class MainForm : Form
         root.Controls.Add(BuildSafetyGroup());
         root.Controls.Add(BuildSensorGroup(
             "CPU",
-            ("Temperature", _cpuTemperature),
+            ("Package / hottest core", _cpuTemperature),
             ("Package power", _cpuPower),
             ("Load", _cpuLoad),
             ("Fan", _cpuFan)));
@@ -1484,7 +1492,8 @@ internal sealed class MainForm : Form
 
         Ui(() =>
         {
-            _cpuTemperature.Text = Format(snapshot.CpuTemperatureC, "°C");
+            _cpuTemperature.Text =
+                $"{Format(snapshot.CpuTemperatureC, "°C")} / {Format(snapshot.CpuCoreMaxTemperatureC, "°C")}";
             _cpuPower.Text = Format(snapshot.CpuPackagePowerW, "W");
             _cpuLoad.Text = Format(snapshot.CpuLoadPercent, "%");
             _cpuFan.Text = Format(snapshot.CpuFanRpm, "RPM", 0);
@@ -3040,7 +3049,7 @@ internal sealed class MainForm : Form
         else
         {
             _trayCpuItem.Text =
-                $"CPU: {FormatCompact(_lastSnapshot.CpuTemperatureC, "C")} | {FormatCompact(_lastSnapshot.CpuFanRpm, "RPM", 0)}";
+                $"CPU: {FormatCompact(_lastSnapshot.CpuControlTemperatureC, "C")} | {FormatCompact(_lastSnapshot.CpuFanRpm, "RPM", 0)}";
             _trayGpuItem.Text =
                 $"GPU: {FormatCompact(_lastSnapshot.GpuTemperatureC, "C")} | {FormatCompact(_lastSnapshot.GpuFanRpm, "RPM", 0)}";
         }
@@ -3049,7 +3058,7 @@ internal sealed class MainForm : Form
 
         var tooltip = _lastSnapshot is null
             ? $"VFC {state}"
-            : $"VFC {state} | CPU {FormatCompact(_lastSnapshot.CpuTemperatureC, "C")} GPU {FormatCompact(_lastSnapshot.GpuTemperatureC, "C")}";
+            : $"VFC {state} | CPU {FormatCompact(_lastSnapshot.CpuControlTemperatureC, "C")} GPU {FormatCompact(_lastSnapshot.GpuTemperatureC, "C")}";
 
         _trayIcon.Text = tooltip.Length <= 63 ? tooltip : tooltip[..63];
     }
