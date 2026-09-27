@@ -15,6 +15,7 @@ public sealed class CliOptions
     public bool FirstFanWriteTest { get; private set; }
     public string? FirstFanWriteToken { get; private set; }
     public bool IntegratedCoordinatorTest { get; private set; }
+    public bool CoreThermalCharacterization { get; private set; }
     public string? IntegratedCoordinatorToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
@@ -84,6 +85,10 @@ public sealed class CliOptions
                     options.IntegratedCoordinatorTest = true;
                     break;
 
+                case "--core-thermal-characterization":
+                    options.CoreThermalCharacterization = true;
+                    break;
+
                 case "--coordinator-write-token":
                     options.IntegratedCoordinatorToken = ReadValue(args, ref i);
                     break;
@@ -130,6 +135,7 @@ public sealed class CliOptions
             (options.RestoreHpAuto ? 1 : 0) +
             (options.FirstFanWriteTest ? 1 : 0) +
             (options.IntegratedCoordinatorTest ? 1 : 0) +
+            (options.CoreThermalCharacterization ? 1 : 0) +
             (options.HealthTestMinutes > 0 ? 1 : 0);
 
         if (exclusiveActions > 1)
@@ -179,6 +185,7 @@ public sealed class CliOptions
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");
         Console.WriteLine("  --write-token <token>     Required acknowledgement token for the first write test.");
         Console.WriteLine("  --integrated-coordinator-test  HARDWARE GATE: SafetyGate -> coordinator -> exact-target HP backend.");
+        Console.WriteLine("  --core-thermal-characterization  READ-ONLY fan path: sequential per-physical-core CPU thermal characterization.");
         Console.WriteLine("  --coordinator-write-token <token>  Required exact token: 88F8-COORD30 or 8C40-COORD30.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
