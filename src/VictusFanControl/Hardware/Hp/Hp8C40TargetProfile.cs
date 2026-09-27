@@ -35,6 +35,7 @@ public static class Hp8C40TargetProfile
         SystemSkuBase: SystemSkuPrefix,
         ValidatedBiosVersion: ValidatedBiosVersion,
         ExpectedGpuName: ExpectedGpuName,
+        ExpectedPhysicalCoreCount: 14,
         MinimumValidatedFanLevel: MinimumValidatedFanLevel,
         MaximumValidatedFanLevel: MaximumValidatedFanLevel,
         SupportsIndependentFanLevels: false,
