@@ -18,6 +18,8 @@ public sealed class CliOptions
     public bool CoreThermalCharacterization { get; private set; }
     public bool Hp8C40FanLevelQualification { get; private set; }
     public string? Hp8C40FanLevelQualificationToken { get; private set; }
+    public bool Hp8C40UpperFanLevelQualification { get; private set; }
+    public string? Hp8C40UpperFanLevelQualificationToken { get; private set; }
     public string? IntegratedCoordinatorToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
@@ -100,6 +102,15 @@ public sealed class CliOptions
                         ReadValue(args, ref i);
                     break;
 
+                case "--8c40-upper-fan-level-qualification":
+                    options.Hp8C40UpperFanLevelQualification = true;
+                    break;
+
+                case "--8c40-upper-qualification-token":
+                    options.Hp8C40UpperFanLevelQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
                 case "--coordinator-write-token":
                     options.IntegratedCoordinatorToken = ReadValue(args, ref i);
                     break;
@@ -148,6 +159,7 @@ public sealed class CliOptions
             (options.IntegratedCoordinatorTest ? 1 : 0) +
             (options.CoreThermalCharacterization ? 1 : 0) +
             (options.Hp8C40FanLevelQualification ? 1 : 0) +
+            (options.Hp8C40UpperFanLevelQualification ? 1 : 0) +
             (options.HealthTestMinutes > 0 ? 1 : 0);
 
         if (exclusiveActions > 1)
@@ -182,6 +194,13 @@ public sealed class CliOptions
                 "--8c40-qualification-token is valid only with --8c40-fan-level-qualification.");
         }
 
+        if (options.Hp8C40UpperFanLevelQualificationToken is not null &&
+            !options.Hp8C40UpperFanLevelQualification)
+        {
+            throw new ArgumentException(
+                "--8c40-upper-qualification-token is valid only with --8c40-upper-fan-level-qualification.");
+        }
+
         return options;
     }
 
@@ -207,6 +226,8 @@ public sealed class CliOptions
         Console.WriteLine("  --core-thermal-characterization  READ-ONLY fan path: sequential per-physical-core CPU thermal characterization.");
         Console.WriteLine("  --8c40-fan-level-qualification  ACTIVE GATE: qualify equal HP 8C40 levels 30,31,32 with restore after every step.");
         Console.WriteLine("  --8c40-qualification-token <token>  Required exact token: 8C40-QUAL32.");
+        Console.WriteLine("  --8c40-upper-fan-level-qualification  ACTIVE GATE: qualify equal HP 8C40 levels 33..36 with restore after every step.");
+        Console.WriteLine("  --8c40-upper-qualification-token <token>  Required exact token: 8C40-QUAL36.");
         Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30, 8C40-COORD30 or 8C40-COORD32.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
