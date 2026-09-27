@@ -212,8 +212,10 @@ Assert-Contains -Text $mainForm -Pattern '_fanCoordinator\.Authority == FanAutho
 Assert-Contains -Text $coordinator -Pattern 'DescribeSafetyDenialLocked' -Description 'safety-supervisor handoffs include explicit denial diagnostics'
 Assert-Contains -Text $leaseHardware -Pattern '\.ReadSetpoint\(\)' -Description 'watchdog lease hardware uses the narrow setpoint probe'
 Assert-NotContains -Text $leaseHardware -Pattern '\.Read\(\)' -Description 'watchdog lease hardware does not open the full 88F8 control-state probe'
-Assert-Contains -Text $ecReader -Pattern 'ReadHp88F8Setpoint\(\)[\s\S]*ReadRegisterLocked\(0x34\)[\s\S]*ReadRegisterLocked\(0x35\)' -Description 'narrow watchdog EC snapshot reads only the validated 0x34/0x35 ownership pair'
-Assert-Contains -Text $ecReader -Pattern 'ReadHp88F8FanControlGuard\(\)[\s\S]*ReadRegisterLocked\(0xEC\)[\s\S]*ReadRegisterLocked\(0xF4\)' -Description 'production control guard reads only MaxFan and FanSwitch'
+Assert-Contains -Text $ecReader -Pattern 'ReadHp88F8Setpoint\(\)[\s\S]*ReadFanSetpoint\(FanEcRegisterLayout\.HpLegacyDualFan\)' -Description '88F8 watchdog ownership wrapper delegates to the explicitly qualified legacy dual-fan layout'
+Assert-Contains -Text $ecReader -Pattern 'ReadFanSetpoint\(FanEcRegisterLayout layout\)[\s\S]*ReadRegisterLocked\(layout\.CpuSetpoint\)[\s\S]*ReadRegisterLocked\(layout\.GpuSetpoint\)' -Description 'profile-driven narrow ownership snapshot reads only the configured CPU/GPU setpoint pair'
+Assert-Contains -Text $ecReader -Pattern 'ReadHp88F8FanControlGuard\(\)[\s\S]*ReadFanControlGuard\(FanEcRegisterLayout\.HpLegacyDualFan\)' -Description '88F8 production control guard wrapper delegates to the explicitly qualified legacy dual-fan layout'
+Assert-Contains -Text $ecReader -Pattern 'ReadFanControlGuard\(FanEcRegisterLayout layout\)[\s\S]*ReadRegisterLocked\(layout\.MaxFan\)[\s\S]*ReadRegisterLocked\(layout\.FanSwitch\)' -Description 'profile-driven production guard remains a narrow MaxFan/FanSwitch snapshot'
 $fanHardwareStart = $backend.IndexOf('internal sealed class Hp88F8FanHardware', [StringComparison]::Ordinal)
 $backendClassStart = $backend.IndexOf('public sealed class Hp88F8FanControlBackend', $fanHardwareStart, [StringComparison]::Ordinal)
 if ($fanHardwareStart -lt 0 -or $backendClassStart -le $fanHardwareStart) {
