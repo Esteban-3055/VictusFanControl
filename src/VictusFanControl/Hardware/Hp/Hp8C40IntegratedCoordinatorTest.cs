@@ -108,8 +108,8 @@ public static class Hp8C40IntegratedCoordinatorTest
 
         EnsureLightLoadEnvelope(baseline);
 
-        var ecBefore = new Hp8C40EcControlStateProbe(modulesDirectory).Read();
-        Console.WriteLine($"EC before : {ecBefore}");
+        var ecBefore = new Hp8C40EcControlStateProbe(modulesDirectory).ReadControlEvidence();
+        Console.WriteLine($"EC before : {FormatControlEvidence(ecBefore)}");
 
         Exception? testFailure = null;
         Exception? restoreFailure = null;
@@ -184,8 +184,10 @@ public static class Hp8C40IntegratedCoordinatorTest
 
             Console.WriteLine(
                 $"Command acknowledged through production backend. Authority={coordinator.Authority}");
+            var ecAfterAck =
+                new Hp8C40EcControlStateProbe(modulesDirectory).ReadControlEvidence();
             Console.WriteLine(
-                $"EC after ACK: {new Hp8C40EcControlStateProbe(modulesDirectory).Read()}");
+                $"EC after ACK: {FormatControlEvidence(ecAfterAck)}");
 
             for (var sampleIndex = 1;
                  sampleIndex <= PostAcknowledgementSamples;
@@ -402,6 +404,12 @@ public static class Hp8C40IntegratedCoordinatorTest
         return null;
     }
 
+    private static string FormatControlEvidence(
+        Hp8C40EcControlState state) =>
+        $"level CPU={state.CpuSetpoint} GPU={state.GpuSetpoint} | " +
+        $"max=0x{state.MaxFan:X2} switch=0x{state.FanSwitch:X2} | " +
+        $"RPM CPU={state.CpuRpm} GPU={state.GpuRpm}";
+
     private static async Task<Hp8C40EcControlState> WaitForFanOverrideReleaseAsync(
         string modulesDirectory,
         TimeSpan timeout)
@@ -411,7 +419,16 @@ public static class Hp8C40IntegratedCoordinatorTest
 
         while (Stopwatch.GetElapsedTime(started) < timeout)
         {
-            last = new Hp8C40EcControlStateProbe(modulesDirectory).Read();
+            try
+            {
+                last = new Hp8C40EcControlStateProbe(modulesDirectory)
+                    .ReadControlEvidence();
+            }
+            catch (IOException)
+            {
+                await Task.Delay(250, CancellationToken.None).ConfigureAwait(false);
+                continue;
+            }
 
             if (last.CpuSetpoint == byte.MaxValue &&
                 last.GpuSetpoint == byte.MaxValue)
