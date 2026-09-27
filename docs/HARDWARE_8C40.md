@@ -283,3 +283,19 @@ It does not qualify asymmetric commands or any level outside that interval.
 The next production-path hardware gate should exercise level 32 through the
 actual `SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend` route
 before using the expanded range for later curve development.
+
+
+## Production-path validation at upper bound 32/32
+
+The promoted upper bound was exercised through the production control route and passed.
+
+- Commanded equal level: `32/32`
+- EC acknowledged: `32/32`
+- Six post-ACK samples retained valid safety, ownership and fan feedback
+- CPU fan during supervision: approximately 3175-3232 RPM
+- GPU fan during supervision: approximately 3185-3208 RPM after settling
+- Final coordinator authority: `Firmware`
+- Final EC setpoint after restore: `FF/FF`
+- MaxFan/FanSwitch guards remained `0x00/0x00`
+
+This closes production-path qualification of the equal-only `30..32` envelope. No level above 32 is production-qualified yet.
