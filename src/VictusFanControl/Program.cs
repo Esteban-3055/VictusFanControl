@@ -1,6 +1,7 @@
 using VictusFanControl.Cli;
 using VictusFanControl.Control;
 using VictusFanControl.Hardware.Hp;
+using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
 
