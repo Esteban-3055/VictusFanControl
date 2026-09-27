@@ -75,3 +75,85 @@ The old 88F8 Gate G2 S3 result remains historical validation for that target.
 It must not be interpreted as validation for 8C40. The 8C40 requires a separate
 Modern Standby qualification sequence before watchdog-backed unattended custom
 control can be enabled.
+
+
+## Integrated production-path qualification
+
+The exact-target production route has now been exercised successfully on the
+8C40 target:
+
+`SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend -> HP WMI ->
+EC setpoint acknowledgement -> dual tachometer acknowledgement -> restore`.
+
+Observed baseline before Custom authority:
+
+- EC setpoint `FF/FF`
+- CPU fan approximately 3189 RPM
+- GPU fan approximately 2715 RPM
+
+After the production backend requested equal `30/30`:
+
+- EC setpoint became `30/30`
+- CPU fan was approximately 3007 RPM at acknowledgement
+- GPU fan was approximately 2974 RPM at acknowledgement
+- six consecutive post-ACK supervision samples retained valid ownership,
+  telemetry and physical fan feedback
+
+The coordinator then restored firmware authority. The final EC setpoint was
+`FF/FF` and the coordinator authority was `Firmware`.
+
+This validates the integrated backend only for equal `30/30`. It does not
+expand the validated command range.
+
+## Telemetry qualification
+
+A three-minute health soak completed with:
+
+- 154/154 complete snapshots
+- zero incomplete snapshots
+- zero missing-value streak
+- 14/14 physical-core temperatures
+- Intel recoveries: 0
+- EC recoveries: 0
+- NVML recoveries: 0
+
+The exact 8C40 target therefore has a physically exercised continuous
+telemetry baseline for package temperature/power, physical-core temperatures,
+GPU telemetry and both fan tachometers.
+
+## EC 0x62 / 0x63 terminology correction
+
+The integrated restore produced a useful new observation. Before Custom,
+registers 0x62/0x63 were observed as 0x00/0. After the verified FF/FF restore,
+they were observed as 0x03/240 while ownership had already returned to
+firmware and MaxFan/FanSwitch remained sane.
+
+Therefore the historical labels "manual" and "countdown" are too strong for
+the 8C40 target. The generic and 8C40 diagnostic paths now call them
+`Diagnostic62` and `Diagnostic63`.
+
+They remain read-only diagnostics and are not part of the production ownership
+decision. Production ownership continues to depend on:
+
+- EC 0x34/0x35 setpoint
+- both physical tachometers
+- MaxFan 0xEC
+- FanSwitch 0xF4
+
+No EC register-value write to 0x62 or 0x63 is permitted.
+
+## Next qualification: per-core thermal behavior
+
+The next read-only hardware gate sequentially loads one representative logical
+processor of each physical core for four seconds while recording package and
+all 14 physical-core temperatures. It performs no fan command.
+
+Purpose:
+
+- verify that each discovered physical core reacts coherently to targeted load;
+- characterize whether E-core DTS values are independent or shared/clustered;
+- validate the hottest-core signal before it is used by a future adaptive fan
+  policy.
+
+The harness aborts before the SafetyGate emergency point if effective CPU
+temperature reaches 90 C.
