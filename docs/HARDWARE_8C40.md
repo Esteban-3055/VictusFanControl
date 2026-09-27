@@ -157,3 +157,53 @@ Purpose:
 
 The harness aborts before the SafetyGate emergency point if effective CPU
 temperature reaches 90 C.
+
+
+## First per-core thermal characterization result
+
+The first sequential single-core characterization completed successfully with
+all 14 physical cores detected (6 P + 8 E) and no thermal abort.
+
+Observed effective CPU temperature stayed at or below approximately 69 C,
+well below the 90 C characterization abort threshold.
+
+Targeted P-core loading produced a clear response in the selected core:
+
+- minimum target delta: approximately +13 C
+- maximum target delta: approximately +22 C
+- examples include C0 +16 C, C3 +21 C and C5 +22 C
+
+This is consistent with the P-core temperature path being useful as a
+per-core hotspot signal.
+
+Targeted E-core loading behaved differently:
+
+- target E-core deltas were only approximately +5 to +8 C
+- in several runs another core's reported delta exceeded the target E-core
+  delta by a large margin
+- earlier idle/read-only snapshots also showed repeated equal temperatures
+  across subsets of E cores
+
+Therefore VictusFanControl must not yet interpret the eight E-core values as
+eight proven independent physical thermal sensors.
+
+This does **not** weaken the current SafetyGate decision. The production safety
+aggregate remains:
+
+`effective CPU temperature = max(package temperature, hottest reported physical-core-context temperature)`
+
+The first characterization provided direct examples where hottest-core exceeded
+package temperature (for example, a P-core peak around 69 C while package was
+around 68 C), and E-core-targeted runs where the effective peak exceeded package
+because another reported core context was hotter. Keeping the maximum is
+therefore the conservative behavior.
+
+The characterization harness has now been extended with an E-core
+same-snapshot similarity matrix. It computes pairwise mean absolute temperature
+difference and exact-match percentage across the full multi-load run. Candidate
+shared/clustered readout groups are reported only when a pair remains nearly
+identical across at least 95% of frames.
+
+That next read-only pass is intended to distinguish "independent E-core sensor"
+from "shared/clustered temperature readout" behavior without changing the fan
+control envelope.
