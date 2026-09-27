@@ -53,6 +53,38 @@ public sealed class Hp8C40EcControlStateProbe
             state.GpuSetpoint);
     }
 
+    /// <summary>
+    /// Reads only the EC evidence used by production ownership/safety:
+    /// setpoints, MaxFan/FanSwitch and both physical tachometers.
+    /// This deliberately avoids the broader diagnostic registers because
+    /// qualification/control must not depend on 0x2C-0x2F/0x62/0x63/0x95.
+    /// </summary>
+    public Hp8C40EcControlState ReadControlEvidence()
+    {
+        EnsureTargetBoard();
+
+        using var ec = new AcpiEcReader(_modulePath);
+        var layout = Hp8C40TargetProfile.Instance.FanEcLayout;
+        var setpoint = ec.ReadFanSetpoint(layout);
+        var guard = ec.ReadFanControlGuard(layout);
+        var tachometers = ec.ReadFanTachometers(layout);
+
+        return new Hp8C40EcControlState(
+            CpuRateTarget: byte.MaxValue,
+            GpuRateTarget: byte.MaxValue,
+            CpuRate: byte.MaxValue,
+            GpuRate: byte.MaxValue,
+            CpuSetpoint: setpoint.CpuSetpoint,
+            GpuSetpoint: setpoint.GpuSetpoint,
+            Diagnostic62: byte.MaxValue,
+            Diagnostic63: byte.MaxValue,
+            Mode: byte.MaxValue,
+            MaxFan: guard.MaxFan,
+            FanSwitch: guard.FanSwitch,
+            CpuRpm: tachometers.CpuRpm,
+            GpuRpm: tachometers.GpuRpm);
+    }
+
     public Hp8C40EcControlState Read()
     {
         EnsureTargetBoard();
