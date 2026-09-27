@@ -19,6 +19,8 @@ public static class CpuCoreThermalCharacterizationTest
     private static readonly TimeSpan PerCoreLoadDuration = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan CooldownDuration = TimeSpan.FromMilliseconds(1250);
     private static readonly TimeSpan SampleDelay = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan IncompleteRetryDelay = TimeSpan.FromMilliseconds(100);
+    private const int MaximumConsecutiveIncompleteSnapshots = 3;
 
     // Stay below the SafetyGate emergency handoff point. This is a sensor
     // characterization, not a thermal stress test.
@@ -59,10 +61,13 @@ public static class CpuCoreThermalCharacterizationTest
         _ = reader.ReadSnapshot();
         await Task.Delay(750, cancellationToken).ConfigureAwait(false);
 
-        var baseline = reader.ReadSnapshot();
-        if (!ValidateCompleteSnapshot(baseline, out var baselineError))
+        var baseline = await ReadCompleteSnapshotWithRetryAsync(
+            reader,
+            "initial baseline",
+            cancellationToken).ConfigureAwait(false);
+
+        if (baseline is null)
         {
-            Console.Error.WriteLine($"Baseline refused: {baselineError}");
             return 63;
         }
 
@@ -99,11 +104,13 @@ public static class CpuCoreThermalCharacterizationTest
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var before = reader.ReadSnapshot();
-            if (!ValidateCompleteSnapshot(before, out var beforeError))
+            var before = await ReadCompleteSnapshotWithRetryAsync(
+                reader,
+                $"C{core.CoreIndex} pre-load",
+                cancellationToken).ConfigureAwait(false);
+
+            if (before is null)
             {
-                Console.Error.WriteLine(
-                    $"C{core.CoreIndex} pre-load telemetry failed: {beforeError}");
                 return 65;
             }
 
@@ -143,19 +150,24 @@ public static class CpuCoreThermalCharacterizationTest
             {
                 while (!loadTask.IsCompleted)
                 {
-                    var sample = reader.ReadSnapshot();
-                    sampleCount++;
+                    var sample = await ReadCompleteSnapshotWithRetryAsync(
+                        reader,
+                        $"C{core.CoreIndex} active load",
+                        cancellationToken,
+                        compact: true).ConfigureAwait(false);
 
-                    if (!ValidateCompleteSnapshot(sample, out var sampleError))
+                    if (sample is null)
                     {
                         loadCts.Cancel();
                         await IgnoreCancellationAsync(loadTask).ConfigureAwait(false);
                         Console.WriteLine();
                         Console.Error.WriteLine(
-                            $"C{core.CoreIndex} telemetry became incomplete: {sampleError}");
+                            $"C{core.CoreIndex} telemetry had " +
+                            $"{MaximumConsecutiveIncompleteSnapshots} consecutive incomplete snapshots.");
                         return 67;
                     }
 
+                    sampleCount++;
                     UpdatePeaks(sample, peakMap, ref packagePeak, ref effectivePeak);
                     CaptureECoreFrame(sample, eCoreFrames);
 
@@ -177,12 +189,14 @@ public static class CpuCoreThermalCharacterizationTest
 
                 // One immediate post-load sample catches a delayed DTS/package
                 // peak without materially extending the load interval.
-                var post = reader.ReadSnapshot();
-                if (!ValidateCompleteSnapshot(post, out var postError))
+                var post = await ReadCompleteSnapshotWithRetryAsync(
+                    reader,
+                    $"C{core.CoreIndex} post-load",
+                    cancellationToken).ConfigureAwait(false);
+
+                if (post is null)
                 {
                     Console.WriteLine();
-                    Console.Error.WriteLine(
-                        $"C{core.CoreIndex} post-load telemetry failed: {postError}");
                     return 69;
                 }
 
@@ -250,6 +264,85 @@ public static class CpuCoreThermalCharacterizationTest
         return 0;
     }
 
+
+    private static async Task<TelemetrySnapshot?> ReadCompleteSnapshotWithRetryAsync(
+        HardwareTelemetryReader reader,
+        string context,
+        CancellationToken cancellationToken,
+        bool compact = false)
+    {
+        for (var attempt = 1;
+             attempt <= MaximumConsecutiveIncompleteSnapshots;
+             attempt++)
+        {
+            var snapshot = reader.ReadSnapshot();
+
+            if (ValidateCompleteSnapshot(snapshot, out _))
+            {
+                return snapshot;
+            }
+
+            var missing = DescribeMissingTelemetry(snapshot);
+            var diagnostics = reader.GetReadDiagnostics()
+                .Where(line => line.Contains("FAILED:", StringComparison.Ordinal))
+                .ToArray();
+
+            if (compact)
+            {
+                Console.Write(
+                    $"[telemetry retry {attempt}/{MaximumConsecutiveIncompleteSnapshots}: " +
+                    $"{missing}] ");
+            }
+            else
+            {
+                Console.WriteLine(
+                    $"{context}: transient incomplete telemetry " +
+                    $"({attempt}/{MaximumConsecutiveIncompleteSnapshots}); missing={missing}");
+
+                foreach (var diagnostic in diagnostics)
+                {
+                    Console.WriteLine($"  {diagnostic}");
+                }
+            }
+
+            if (attempt < MaximumConsecutiveIncompleteSnapshots)
+            {
+                await Task.Delay(
+                    IncompleteRetryDelay,
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        Console.Error.WriteLine(
+            $"{context}: telemetry did not recover after " +
+            $"{MaximumConsecutiveIncompleteSnapshots} consecutive incomplete snapshots.");
+        return null;
+    }
+
+    private static string DescribeMissingTelemetry(TelemetrySnapshot snapshot)
+    {
+        var missing = new List<string>();
+
+        if (!snapshot.CpuTemperatureC.HasValue) missing.Add("cpu_package_temp");
+        if (!snapshot.CpuCoreTelemetryComplete)
+        {
+            missing.Add(
+                $"cpu_core_temps({snapshot.CpuCoreTemperatures.Count}/" +
+                $"{snapshot.CpuExpectedPhysicalCoreCount?.ToString() ?? "?"})");
+        }
+
+        if (!snapshot.CpuPackagePowerW.HasValue) missing.Add("cpu_package_power");
+        if (!snapshot.CpuLoadPercent.HasValue) missing.Add("cpu_load");
+        if (!snapshot.GpuTemperatureC.HasValue) missing.Add("gpu_temp");
+        if (!snapshot.GpuPowerW.HasValue) missing.Add("gpu_power");
+        if (!snapshot.GpuLoadPercent.HasValue) missing.Add("gpu_load");
+        if (!snapshot.CpuFanRpm.HasValue) missing.Add("cpu_fan_rpm");
+        if (!snapshot.GpuFanRpm.HasValue) missing.Add("gpu_fan_rpm");
+
+        return missing.Count == 0
+            ? "unknown_component"
+            : string.Join(",", missing);
+    }
 
     private static void CaptureECoreFrame(
         TelemetrySnapshot snapshot,
