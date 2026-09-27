@@ -231,7 +231,8 @@ public static class Hp8C40UpperFanLevelQualificationTest
                             probe,
                             RestoreAckTimeout).ConfigureAwait(false);
 
-                        Console.WriteLine($"Restore verified: {restored}");
+                        Console.WriteLine(
+                            $"Restore verified: {FormatControlEvidence(restored)}");
                     }
                     catch (Exception ex)
                     {
