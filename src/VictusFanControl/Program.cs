@@ -10,9 +10,9 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
-        Console.WriteLine("VictusFanControl v0.4.0-dev");
-        Console.WriteLine("Telemetry: PawnIO DeviceIoControl + NVIDIA NVML.");
-        Console.WriteLine("HP 88F8 backend is integrated; automatic fan policy remains OFF. Explicit validation commands are available.");
+        Console.WriteLine("VictusFanControl v0.4.0-dev / 8C40 port");
+        Console.WriteLine("Telemetry: PawnIO Intel MSR (package + physical cores) + ACPI EC + NVIDIA NVML.");
+        Console.WriteLine("Exact HP 88F8/8C40 targets are resolved fail-closed; automatic fan policy remains OFF.");
         Console.WriteLine();
 
         CliOptions options;
@@ -46,12 +46,16 @@ internal static class Program
 
         if (options.BiosContractSelfTest)
         {
-            return Hp88F8BiosContractSelfTest.Run(Console.Out);
+            var oldTarget = Hp88F8BiosContractSelfTest.Run(Console.Out);
+            var newTarget = Hp8C40BiosContractSelfTest.Run(Console.Out);
+            return oldTarget == 0 && newTarget == 0 ? 0 : 8;
         }
 
         if (options.HpBackendSelfTest)
         {
-            return await Hp88F8FanControlBackendSelfTest.RunAsync(Console.Out);
+            var oldTarget = await Hp88F8FanControlBackendSelfTest.RunAsync(Console.Out);
+            var newTarget = await Hp8C40FanControlBackendSelfTest.RunAsync(Console.Out);
+            return oldTarget == 0 && newTarget == 0 ? 0 : 12;
         }
 
         if (options.RestoreHpAuto)
