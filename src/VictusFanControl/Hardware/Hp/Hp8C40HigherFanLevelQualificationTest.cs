@@ -13,9 +13,8 @@ namespace VictusFanControl.Hardware.Hp;
 /// </summary>
 public static class Hp8C40HigherFanLevelQualificationTest
 {
-    // 33/33 already passed with EC acknowledgement, sustained dual-tach
-    // feedback and verified FF/FF restore. Resume from the first untested
-    // level instead of rewriting 33 unnecessarily.
+    // Levels 30..36 are already physically qualified. Keep this harness
+    // isolated to the next unvalidated equal-level block.
     private static readonly byte[] Levels = [37, 38, 39, 40];
 
     private const int SamplesPerLevel = 6;
@@ -37,7 +36,7 @@ public static class Hp8C40HigherFanLevelQualificationTest
         string modulesDirectory,
         CancellationToken cancellationToken)
     {
-        Console.WriteLine("HP 8C40 upper fan-level qualification");
+        Console.WriteLine("HP 8C40 higher fan-level qualification");
         Console.WriteLine("ACTIVE hardware test: equal levels 37 -> 38 -> 39 -> 40.");
         Console.WriteLine("Levels 30 through 36 are already physically qualified and production-integrated.");
         Console.WriteLine("Each remaining level is followed by FF/FF + LegacyDefault restore and verification.");
@@ -290,9 +289,8 @@ public static class Hp8C40HigherFanLevelQualificationTest
 
         Console.WriteLine();
         Console.WriteLine(
-            "RESULT: PASS (34/35/36 were accepted by HP WMI, acknowledged by EC, " +
-            "returned sustained dual-fan feedback, and restored to FF/FF after every step; " +
-            "33 passed in the immediately preceding run).");
+            "RESULT: PASS (37/38/39/40 were accepted by HP WMI, acknowledged by EC, " +
+            "returned sustained dual-fan feedback, and restored to FF/FF after every step).");
         Console.WriteLine(
             "NOTE: production remains capped at 36 until this result is reviewed.");
 
