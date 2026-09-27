@@ -9,6 +9,8 @@ public sealed class HardwareTelemetryReader : IDisposable
 {
     private readonly string _intelModulePath;
     private readonly string _ecModulePath;
+    private readonly HardwareTargetProfile? _targetProfile;
+    private readonly string _targetResolutionDetail;
 
     private IntelMsrReader? _intel;
     private AcpiEcReader? _ec;
@@ -20,11 +22,15 @@ public sealed class HardwareTelemetryReader : IDisposable
     private string _nvmlStatus = "NOT INITIALIZED";
 
     private string? _lastIntelReadError;
+    private string? _lastCoreTemperatureReadError;
     private string? _lastEcReadError;
     private string? _lastNvmlReadError;
     private string? _lastWindowsReadError;
 
     private bool _lastSnapshotHealthy;
+    private bool _lastCoreTelemetryHealthy;
+    private int _lastCoreTemperatureCount;
+    private int _lastExpectedCoreCount;
 
     private DateTimeOffset _nextIntelInitAttempt = DateTimeOffset.MinValue;
     private DateTimeOffset _nextEcInitAttempt = DateTimeOffset.MinValue;
@@ -36,14 +42,28 @@ public sealed class HardwareTelemetryReader : IDisposable
         _intelModulePath = Path.Combine(modulesDirectory, "IntelMSR.bin");
         _ecModulePath = Path.Combine(modulesDirectory, "LpcACPIEC.bin");
 
+        var hardware = HardwareIdentityReader.ReadCurrent();
+        _targetProfile = HpHardwareTargetResolver.Resolve(
+            hardware,
+            out _targetResolutionDetail);
+
         InitializeIntel();
         InitializeEc();
         InitializeNvml();
     }
 
-    public bool BackendsInitialized => _intel is not null && _ec is not null && _nvml is not null;
+    public HardwareTargetProfile? TargetProfile => _targetProfile;
 
-    public bool IsReadyForBaseline => BackendsInitialized && _lastSnapshotHealthy;
+    public bool BackendsInitialized =>
+        _targetProfile is not null &&
+        _intel is not null &&
+        _ec is not null &&
+        _nvml is not null;
+
+    public bool IsReadyForBaseline =>
+        BackendsInitialized &&
+        _lastSnapshotHealthy &&
+        _lastCoreTelemetryHealthy;
 
     public int IntelRecoveries { get; private set; }
     public int EcRecoveries { get; private set; }
@@ -88,6 +108,33 @@ public sealed class HardwareTelemetryReader : IDisposable
                         _lastIntelReadError = $"After recovery: {retryEx.Message}";
                     }
                 }
+            }
+        }
+
+        IReadOnlyList<CpuCoreTemperatureSample> coreTemperatures =
+            Array.Empty<CpuCoreTemperatureSample>();
+        var expectedCoreCount = _intel?.PhysicalCoreCount;
+
+        if (_intel is not null)
+        {
+            try
+            {
+                coreTemperatures = _intel.ReadCoreTemperaturesC()
+                    .Select(sample => new CpuCoreTemperatureSample(
+                        CoreIndex: sample.CoreIndex,
+                        LogicalProcessorIndex: sample.LogicalProcessorIndex,
+                        CoreType: sample.CoreType.ToString(),
+                        TemperatureC: sample.TemperatureC))
+                    .ToArray();
+
+                _lastCoreTemperatureReadError = null;
+            }
+            catch (Exception ex)
+            {
+                // Per-core telemetry has its own failure domain. Do not rebuild
+                // an otherwise healthy Intel/RAPL session merely because core
+                // topology/affinity sampling failed.
+                _lastCoreTemperatureReadError = ex.Message;
             }
         }
 
@@ -143,11 +190,11 @@ public sealed class HardwareTelemetryReader : IDisposable
         double? cpuFanRpm = null;
         double? gpuFanRpm = null;
 
-        if (_ec is not null)
+        if (_ec is not null && _targetProfile is not null)
         {
             try
             {
-                var fans = _ec.ReadFanTachometers();
+                var fans = _ec.ReadFanTachometers(_targetProfile.FanEcLayout);
                 cpuFanRpm = ValidateFanRpm(fans.CpuRpm, "CPU");
                 gpuFanRpm = ValidateFanRpm(fans.GpuRpm, "GPU");
                 _lastEcReadError = null;
@@ -159,7 +206,7 @@ public sealed class HardwareTelemetryReader : IDisposable
                 {
                     try
                     {
-                        var fans = _ec!.ReadFanTachometers();
+                        var fans = _ec!.ReadFanTachometers(_targetProfile.FanEcLayout);
                         cpuFanRpm = ValidateFanRpm(fans.CpuRpm, "CPU");
                         gpuFanRpm = ValidateFanRpm(fans.GpuRpm, "GPU");
                         _lastEcReadError = null;
@@ -170,6 +217,11 @@ public sealed class HardwareTelemetryReader : IDisposable
                     }
                 }
             }
+        }
+        else if (_ec is not null)
+        {
+            _lastEcReadError =
+                "No exact validated hardware target resolved; fan EC telemetry is disabled.";
         }
 
         var snapshot = new TelemetrySnapshot(
@@ -183,7 +235,11 @@ public sealed class HardwareTelemetryReader : IDisposable
             GpuPowerW: gpuPower,
             GpuLoadPercent: gpuLoad,
             CpuFanRpm: cpuFanRpm,
-            GpuFanRpm: gpuFanRpm);
+            GpuFanRpm: gpuFanRpm)
+        {
+            CpuCoreTemperatures = coreTemperatures,
+            CpuExpectedPhysicalCoreCount = expectedCoreCount
+        };
 
         RecordHealth(snapshot);
         return snapshot;
@@ -196,10 +252,16 @@ public sealed class HardwareTelemetryReader : IDisposable
         ConsecutiveIncompleteSnapshots = 0;
         MaxConsecutiveIncompleteSnapshots = 0;
         _lastSnapshotHealthy = false;
+        _lastCoreTelemetryHealthy = false;
+        _lastCoreTemperatureCount = 0;
+        _lastExpectedCoreCount = _intel?.PhysicalCoreCount ?? 0;
     }
 
     public IEnumerable<string> GetBackendDiagnostics()
     {
+        yield return _targetProfile is null
+            ? $"Hardware target   : UNSUPPORTED ({_targetResolutionDetail})"
+            : $"Hardware target   : {_targetProfile.Id} ({_targetProfile.DisplayName})";
         yield return $"PawnIO Intel MSR : {_intelStatus}";
         yield return $"PawnIO ACPI EC   : {_ecStatus}";
         yield return $"NVIDIA NVML     : {_nvmlStatus}";
@@ -211,6 +273,16 @@ public sealed class HardwareTelemetryReader : IDisposable
         if (_lastIntelReadError is not null)
         {
             yield return $"Intel MSR read  : FAILED: {_lastIntelReadError}";
+        }
+
+        if (_lastCoreTemperatureReadError is not null)
+        {
+            yield return $"CPU core temps  : FAILED: {_lastCoreTemperatureReadError}";
+        }
+        else if (_lastExpectedCoreCount > 0)
+        {
+            yield return
+                $"CPU core temps  : {_lastCoreTemperatureCount}/{_lastExpectedCoreCount} physical cores";
         }
 
         if (_lastNvmlReadError is not null)
@@ -237,6 +309,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         yield return $"Complete        : {CompleteSnapshots}";
         yield return $"Incomplete      : {IncompleteSnapshots}";
         yield return $"Max miss streak : {MaxConsecutiveIncompleteSnapshots}";
+        yield return $"Core temps last : {_lastCoreTemperatureCount}/{_lastExpectedCoreCount}";
         yield return $"Recoveries      : Intel={IntelRecoveries}, EC={EcRecoveries}, NVML={NvmlRecoveries}";
     }
 
@@ -264,6 +337,10 @@ public sealed class HardwareTelemetryReader : IDisposable
         TotalSnapshots++;
 
         _lastSnapshotHealthy = snapshot.IsComplete;
+        _lastCoreTemperatureCount = snapshot.CpuCoreTemperatures.Count;
+        _lastExpectedCoreCount = snapshot.CpuExpectedPhysicalCoreCount ?? 0;
+        _lastCoreTelemetryHealthy = snapshot.CpuCoreTelemetryComplete;
+
         if (snapshot.IsComplete)
         {
             CompleteSnapshots++;
@@ -281,7 +358,8 @@ public sealed class HardwareTelemetryReader : IDisposable
         try
         {
             _intel = new IntelMsrReader(_intelModulePath);
-            _intelStatus = $"OK (PawnIO {_intel.PawnIoVersion}, IntelMSR.bin)";
+            _intelStatus =
+                $"OK (PawnIO {_intel.PawnIoVersion}, IntelMSR.bin, physical cores={_intel.PhysicalCoreCount})";
             _nextIntelInitAttempt = DateTimeOffset.MinValue;
         }
         catch (Exception ex)
@@ -314,7 +392,9 @@ public sealed class HardwareTelemetryReader : IDisposable
     {
         try
         {
-            _nvml = new NvmlClient(Hp88F8TargetProfile.ExpectedGpuName);
+            _nvml = new NvmlClient(
+                _targetProfile?.ExpectedGpuName,
+                requirePreferredDevice: _targetProfile is not null);
             _nvmlStatus = $"OK ({_nvml.DeviceName})";
             _nextNvmlInitAttempt = DateTimeOffset.MinValue;
         }
@@ -326,7 +406,6 @@ public sealed class HardwareTelemetryReader : IDisposable
             _nextNvmlInitAttempt = DateTimeOffset.UtcNow + ReinitializeBackoff;
         }
     }
-
 
     private void EnsureBackendsAvailable(DateTimeOffset now)
     {
@@ -364,7 +443,8 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             _intel?.Dispose();
             _intel = new IntelMsrReader(_intelModulePath);
-            _intelStatus = $"OK (recovered, PawnIO {_intel.PawnIoVersion})";
+            _intelStatus =
+                $"OK (recovered, PawnIO {_intel.PawnIoVersion}, physical cores={_intel.PhysicalCoreCount})";
             _nextIntelInitAttempt = DateTimeOffset.MinValue;
             IntelRecoveries++;
             return true;
@@ -403,7 +483,9 @@ public sealed class HardwareTelemetryReader : IDisposable
         try
         {
             _nvml?.Dispose();
-            _nvml = new NvmlClient(Hp88F8TargetProfile.ExpectedGpuName);
+            _nvml = new NvmlClient(
+                _targetProfile?.ExpectedGpuName,
+                requirePreferredDevice: _targetProfile is not null);
             _nvmlStatus = $"OK (recovered, {_nvml.DeviceName})";
             _nextNvmlInitAttempt = DateTimeOffset.MinValue;
             NvmlRecoveries++;
