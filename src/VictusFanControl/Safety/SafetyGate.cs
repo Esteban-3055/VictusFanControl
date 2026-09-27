@@ -23,18 +23,22 @@ public sealed record SafetyGateResult(
 
 /// <summary>
 /// Read-only pre-control safety gate. This class does not write fan state.
-/// It centralizes the conditions that a future write-capable controller must
-/// satisfy before it can request custom authority.
+/// It centralizes the conditions a write-capable controller must satisfy before
+/// it can request custom authority.
 /// </summary>
 public static class SafetyGate
 {
     private static long _evaluationSequence;
 
+    // Kept for compatibility with old diagnostics/tests that reference the
+    // first physically validated board explicitly.
     public const string InitialValidatedBoardProduct = Hp88F8TargetProfile.BoardProduct;
+
     public static readonly TimeSpan MaximumTelemetryAge = TimeSpan.FromSeconds(3);
 
-    // Conservative pre-control handoff thresholds. These are deliberately not
-    // the final fan-curve targets. Crossing them must keep/return HP authority.
+    // Conservative pre-control handoff thresholds. These are not the final fan
+    // curve targets. CPU safety uses the hotter of package and hottest-core
+    // telemetry.
     public const double CpuEmergencyC = 95.0;
     public const double GpuEmergencyC = 87.0;
 
@@ -81,7 +85,9 @@ public static class SafetyGate
     {
         var reasons = new List<string>();
 
-        var boardAllowed = Hp88F8TargetProfile.Matches(hardware, out var hardwareReason);
+        var targetProfile =
+            HpHardwareTargetResolver.Resolve(hardware, out var hardwareReason);
+        var boardAllowed = targetProfile is not null;
 
         if (!boardAllowed)
         {
@@ -113,29 +119,55 @@ public static class SafetyGate
 
         var telemetryDeviceIdentityValid =
             snapshot is not null &&
-            Hp88F8TargetProfile.MatchesExpectedGpu(snapshot.GpuName);
+            targetProfile is not null &&
+            targetProfile.MatchesExpectedGpu(snapshot.GpuName);
 
-        if (snapshotComplete && !telemetryDeviceIdentityValid)
+        if (snapshotComplete &&
+            targetProfile is not null &&
+            !telemetryDeviceIdentityValid)
         {
             reasons.Add(
                 $"GPU identity '{snapshot!.GpuName ?? "unknown"}' does not match validated target " +
-                $"'{Hp88F8TargetProfile.ExpectedGpuName}'.");
+                $"'{targetProfile.ExpectedGpuName}'.");
         }
 
-        var sensorsPlausible = snapshotComplete && AreSensorsPlausible(snapshot!);
-        if (snapshotComplete && !sensorsPlausible)
+        var coreTelemetryComplete =
+            snapshot is not null &&
+            snapshot.CpuCoreTelemetryComplete;
+
+        if (snapshotComplete && !coreTelemetryComplete)
         {
-            reasons.Add("One or more telemetry values are outside the pre-control plausibility envelope.");
+            var expected = snapshot?.CpuExpectedPhysicalCoreCount?.ToString() ?? "unknown";
+            var actual = snapshot?.CpuCoreTemperatures.Count ?? 0;
+            reasons.Add(
+                $"Per-core CPU temperature telemetry is incomplete ({actual}/{expected} physical cores).");
         }
 
+        var sensorsPlausible =
+            snapshotComplete &&
+            coreTelemetryComplete &&
+            AreSensorsPlausible(snapshot!);
+
+        if (snapshotComplete &&
+            coreTelemetryComplete &&
+            !sensorsPlausible)
+        {
+            reasons.Add(
+                "One or more telemetry values are outside the pre-control plausibility envelope.");
+        }
+
+        var effectiveCpuTemperature = snapshot?.CpuControlTemperatureC;
         var thermalEmergency = snapshotComplete &&
-            (snapshot!.CpuTemperatureC!.Value >= CpuEmergencyC ||
-             snapshot.GpuTemperatureC!.Value >= GpuEmergencyC);
+            effectiveCpuTemperature.HasValue &&
+            (effectiveCpuTemperature.Value >= CpuEmergencyC ||
+             snapshot!.GpuTemperatureC!.Value >= GpuEmergencyC);
 
         if (thermalEmergency)
         {
             reasons.Add(
-                $"Thermal handoff threshold reached (CPU >= {CpuEmergencyC:0} C or GPU >= {GpuEmergencyC:0} C).");
+                $"Thermal handoff threshold reached (effective CPU >= {CpuEmergencyC:0} C or GPU >= {GpuEmergencyC:0} C). " +
+                $"Effective CPU={effectiveCpuTemperature:0.0} C, package={snapshot!.CpuTemperatureC:0.0} C, " +
+                $"hottest-core={snapshot.CpuCoreMaxTemperatureC:0.0} C.");
         }
 
         var preconditionsReady =
@@ -144,6 +176,7 @@ public static class SafetyGate
             snapshotComplete &&
             snapshotFresh &&
             telemetryDeviceIdentityValid &&
+            coreTelemetryComplete &&
             sensorsPlausible &&
             !thermalEmergency;
 
@@ -173,14 +206,37 @@ public static class SafetyGate
 
     private static bool AreSensorsPlausible(TelemetrySnapshot snapshot)
     {
-        return InRange(snapshot.CpuTemperatureC, 10, 110) &&
-               InRange(snapshot.CpuPackagePowerW, 0, 500) &&
-               InRange(snapshot.CpuLoadPercent, 0, 100) &&
-               InRange(snapshot.GpuTemperatureC, 10, 105) &&
-               InRange(snapshot.GpuPowerW, 0, 300) &&
-               InRange(snapshot.GpuLoadPercent, 0, 100) &&
-               InRange(snapshot.CpuFanRpm, 0, 10_000) &&
-               InRange(snapshot.GpuFanRpm, 0, 10_000);
+        if (!InRange(snapshot.CpuTemperatureC, 10, 110) ||
+            !InRange(snapshot.CpuPackagePowerW, 0, 500) ||
+            !InRange(snapshot.CpuLoadPercent, 0, 100) ||
+            !InRange(snapshot.GpuTemperatureC, 10, 105) ||
+            !InRange(snapshot.GpuPowerW, 0, 300) ||
+            !InRange(snapshot.GpuLoadPercent, 0, 100) ||
+            !InRange(snapshot.CpuFanRpm, 0, 10_000) ||
+            !InRange(snapshot.GpuFanRpm, 0, 10_000))
+        {
+            return false;
+        }
+
+        if (!snapshot.CpuCoreTelemetryComplete)
+        {
+            return false;
+        }
+
+        var coreIndices = new HashSet<int>();
+        foreach (var core in snapshot.CpuCoreTemperatures)
+        {
+            if (core.CoreIndex < 0 ||
+                core.LogicalProcessorIndex < 0 ||
+                !double.IsFinite(core.TemperatureC) ||
+                core.TemperatureC is < 0 or > 125 ||
+                !coreIndices.Add(core.CoreIndex))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool InRange(double? value, double minimum, double maximum) =>
