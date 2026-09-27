@@ -57,7 +57,7 @@ public static class Hp8C40FanControlBackendSelfTest
 
         await backend.EnterCustomModeAsync(CancellationToken.None);
         await backend.ApplyAsync(
-            new FanCommand(32, 32, "backend-self-test-upper-bound"),
+            new FanCommand(36, 36, "backend-self-test-upper-bound"),
             CancellationToken.None);
 
         var active = await backend.GetStatusAsync(CancellationToken.None);
@@ -258,7 +258,7 @@ public static class Hp8C40FanControlBackendSelfTest
         try
         {
             await backend.ApplyAsync(
-                new FanCommand(33, 33, "above-qualified-range"),
+                new FanCommand(37, 37, "above-qualified-range"),
                 CancellationToken.None);
         }
         catch (ArgumentOutOfRangeException)
@@ -282,7 +282,7 @@ public static class Hp8C40FanControlBackendSelfTest
 
         return Report(
             output,
-            "backend independently enforces equal-only validated 30-32 range",
+            "backend independently enforces equal-only validated 30-36 range",
             belowRefused &&
             aboveRefused &&
             asymmetricRefused &&
