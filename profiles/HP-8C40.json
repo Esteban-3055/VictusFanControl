@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "bounded-backend-port-policy-off",
+  "status": "integrated-backend-validated-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -37,6 +37,27 @@
     "verified": true,
     "finalSetpoint": "FF/FF"
   },
+  "telemetryQualification": {
+    "healthSoakSamples": 154,
+    "completeSamples": 154,
+    "incompleteSamples": 0,
+    "physicalCoreTemperatures": "14/14",
+    "recoveries": {
+      "intel": 0,
+      "ec": 0,
+      "nvml": 0
+    }
+  },
+  "integratedControlQualification": {
+    "route": "SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend -> HP WMI -> EC/tach ACK -> restore",
+    "level": 30,
+    "postAckSupervisionSamples": 6,
+    "activeCpuRpmObserved": 3007,
+    "activeGpuRpmObserved": 2974,
+    "finalAuthority": "Firmware",
+    "finalSetpoint": "FF/FF",
+    "passed": true
+  },
   "observedEcRegisters": {
     "fanRateTargetCpu": "0x2C",
     "fanRateTargetGpu": "0x2D",
@@ -45,8 +66,8 @@
     "fanSetpointCpu": "0x34",
     "fanSetpointGpu": "0x35",
     "cpuTemperatureCandidate": "0x57",
-    "manualReadOnly": "0x62",
-    "countdownReadOnly": "0x63",
+    "diagnosticState62ReadOnly": "0x62",
+    "diagnosticState63ReadOnly": "0x63",
     "mode": "0x95",
     "fanRpmCpuLe16": "0xB0",
     "fanRpmGpuLe16": "0xB2",
