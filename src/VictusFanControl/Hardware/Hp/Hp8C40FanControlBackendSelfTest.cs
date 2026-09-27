@@ -415,7 +415,7 @@ public static class Hp8C40FanControlBackendSelfTest
         try
         {
             await backend.ApplyAsync(
-                new FanCommand(32, 32, "external-overwrite"),
+                new FanCommand(30, 30, "external-overwrite"),
                 CancellationToken.None);
         }
         catch (InvalidOperationException)
