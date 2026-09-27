@@ -74,5 +74,22 @@
     "gpuTemperatureCandidate": "0xB7",
     "maxFanGuard": "0xEC",
     "fanSwitchGuard": "0xF4"
+  },
+  "cpuThermalCharacterization": {
+    "mode": "sequential-single-physical-core",
+    "perCoreLoadSeconds": 4,
+    "abortEffectiveCpuC": 90,
+    "topology": "14/14 physical cores (6 P + 8 E)",
+    "maximumObservedEffectiveCpuC": 69,
+    "pCoreTargetDeltaC": {
+      "minimum": 13,
+      "maximum": 22
+    },
+    "eCoreTargetDeltaC": {
+      "minimum": 5,
+      "maximum": 8
+    },
+    "interpretation": "P-core readings respond strongly to targeted load. E-core target deltas are smaller and other-core deltas can exceed the targeted E-core delta, so E-core readouts must not yet be treated as independent sensors. Hottest-core plus package remains the safety/control aggregate.",
+    "detailedECoreClusterMatrixPending": true
   }
 }
