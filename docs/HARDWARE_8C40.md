@@ -31,15 +31,18 @@ must not replace EC ownership + physical tachometer acknowledgement.
 
 ## Current control envelope
 
-Only equal `30/30` is qualified. The old 88F8 `14..50` range is not
-portable evidence and must not be exposed by the 8C40 backend until new physical
-characterization is completed.
+Equal levels `30/30`, `31/31` and `32/32` are now physically qualified.
+The production 8C40 envelope is therefore equal-only `30..32`.
+
+Independent CPU/GPU commands remain unqualified and are explicitly rejected by
+both the production BIOS/WMI layer and the production backend. The old 88F8
+`14..50` range is still not portable evidence.
 
 The following remain intentionally unqualified:
 
 - asymmetric CPU/GPU level commands;
-- minimum stable level and restart from 0 RPM;
-- maximum/saturation level;
+- levels below 30, including minimum stable level and restart from 0 RPM;
+- levels above 32, including maximum/saturation level;
 - watchdog/service recovery;
 - process double-death recovery;
 - Modern Standby custom-control lifecycle;
@@ -50,9 +53,10 @@ The following remain intentionally unqualified:
 The normal controller performs no arbitrary EC writes. EC is observation and
 acknowledgement only.
 
-Do not write `0x62` or `0x63`. On the target, `0x62` was observed as
-`0x06` and `0x63` behaves as a live countdown maintained by HP/OMEN
-components.
+Do not write `0x62` or `0x63`. Their values have changed across otherwise
+valid firmware/control transitions (including observations such as 0x00,
+0x03 and 0x07 for 0x62, and 0x00/0xF0 for 0x63). Their semantics are therefore
+treated as unknown read-only diagnostics, not ownership or safety inputs.
 
 ## CPU core-temperature extension
 
@@ -242,3 +246,40 @@ sensors. The conservative CPU safety/control aggregate remains:
 `max(package temperature, hottest reported physical-core-context temperature)`
 
 No weighting or averaging change is required before fan-curve development.
+
+
+## Adjacent fan-level qualification: 30-32
+
+A bounded active qualification was run with a full HP firmware restore after
+every individual level:
+
+`30/30 -> FF/FF + LegacyDefault -> 31/31 -> FF/FF + LegacyDefault ->
+32/32 -> FF/FF + LegacyDefault`.
+
+All three commands were accepted by HP WMI, acknowledged by EC 0x34/0x35,
+retained sane MaxFan/FanSwitch guards, produced physical feedback from both
+tachometers and returned to `FF/FF` after each restore.
+
+Observed six-sample medians:
+
+| Equal level | CPU median RPM | GPU median RPM | CPU sample range | GPU sample range |
+|---:|---:|---:|---:|---:|
+| 30 | 3003 | 3009 | 2978-3041 | 2998-3024 |
+| 31 | 3091 | 3096 | 3084-3111 | 2965-3125 |
+| 32 | 3199 | 3180 | 3194-3227 | 2818-3203 |
+
+Median step response was approximately:
+
+- 30 -> 31: CPU +89 RPM, GPU +87 RPM
+- 31 -> 32: CPU +108 RPM, GPU +85 RPM
+
+The low first GPU samples at 31 and 32 occurred immediately after command
+transition and then converged toward the sustained level. They are treated as
+settling/transient samples rather than steady-state calibration points.
+
+This evidence promotes the **production** range to equal-only `30..32`.
+It does not qualify asymmetric commands or any level outside that interval.
+
+The next production-path hardware gate should exercise level 32 through the
+actual `SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend` route
+before using the expanded range for later curve development.
