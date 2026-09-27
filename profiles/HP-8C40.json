@@ -9,7 +9,8 @@
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
     "systemSkuPrefix": "9D0R1LA",
-    "gpuName": "NVIDIA GeForce RTX 4060 Laptop GPU"
+    "gpuName": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "physicalCoreCount": 14
   },
   "lifecycle": {
     "sleepModel": "ModernStandbyS0LowPowerIdle",
