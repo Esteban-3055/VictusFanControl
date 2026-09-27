@@ -13,10 +13,15 @@ namespace VictusFanControl.Hardware.Hp;
 /// </summary>
 public static class Hp8C40UpperFanLevelQualificationTest
 {
-    private static readonly byte[] Levels = [33, 34, 35, 36];
+    // 33/33 already passed with EC acknowledgement, sustained dual-tach
+    // feedback and verified FF/FF restore. Resume from the first untested
+    // level instead of rewriting 33 unnecessarily.
+    private static readonly byte[] Levels = [34, 35, 36];
 
     private const int SamplesPerLevel = 6;
-    private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(1250);
+    private static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan EcRetryDelay = TimeSpan.FromMilliseconds(150);
+    private const int EcEvidenceReadAttempts = 3;
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan SetpointAckTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RestoreAckTimeout = TimeSpan.FromSeconds(5);
@@ -33,8 +38,9 @@ public static class Hp8C40UpperFanLevelQualificationTest
         CancellationToken cancellationToken)
     {
         Console.WriteLine("HP 8C40 upper fan-level qualification");
-        Console.WriteLine("ACTIVE hardware test: equal levels 33 -> 34 -> 35 -> 36.");
-        Console.WriteLine("Each level is followed by FF/FF + LegacyDefault restore and verification.");
+        Console.WriteLine("ACTIVE hardware test: resume at equal levels 34 -> 35 -> 36.");
+        Console.WriteLine("Level 33 already passed and restored in the previous run.");
+        Console.WriteLine("Each remaining level is followed by FF/FF + LegacyDefault restore and verification.");
         Console.WriteLine("Production backend remains capped at 32 until results are reviewed.");
         Console.WriteLine();
 
@@ -79,8 +85,22 @@ public static class Hp8C40UpperFanLevelQualificationTest
         ConsoleTelemetryPrinter.Print(baseline);
         EnsureSafeTelemetry(hardware, baseline);
 
-        var baselineEc = probe.Read();
-        Console.WriteLine($"EC baseline: {baselineEc}");
+        Hp8C40EcControlState baselineEc;
+        try
+        {
+            baselineEc = await ReadControlEvidenceWithRetryAsync(
+                probe,
+                "firmware baseline",
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"Qualification refused: EC baseline could not be read reliably: {ex.Message}");
+            return 86;
+        }
+
+        Console.WriteLine($"EC baseline (narrow): {FormatControlEvidence(baselineEc)}");
         EnsureFirmwareReleasedAndGuardsSane(baselineEc);
 
         var results = new List<LevelResult>();
@@ -94,8 +114,22 @@ public static class Hp8C40UpperFanLevelQualificationTest
             var pre = reader.ReadSnapshot();
             EnsureSafeTelemetry(hardware, pre);
 
-            var preEc = probe.Read();
-            EnsureFirmwareReleasedAndGuardsSane(preEc);
+            Hp8C40EcControlState preEc;
+            try
+            {
+                preEc = await ReadControlEvidenceWithRetryAsync(
+                    probe,
+                    $"level {level} pre-write",
+                    cancellationToken).ConfigureAwait(false);
+                EnsureFirmwareReleasedAndGuardsSane(preEc);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"Qualification stopped before any {level}/{level} write: " +
+                    $"EC pre-write evidence unavailable: {ex.Message}");
+                return 86;
+            }
 
             Exception? stepFailure = null;
             Exception? restoreFailure = null;
@@ -131,7 +165,10 @@ public static class Hp8C40UpperFanLevelQualificationTest
                     var sample = reader.ReadSnapshot();
                     EnsureSafeTelemetry(hardware, sample);
 
-                    var ec = probe.Read();
+                    var ec = await ReadControlEvidenceWithRetryAsync(
+                        probe,
+                        $"level {level} active sample {index}",
+                        cancellationToken).ConfigureAwait(false);
                     EnsureActiveOwnershipAndGuards(ec, level);
 
                     if (sample.CpuFanRpm < MinimumExpectedRunningRpm ||
@@ -252,13 +289,57 @@ public static class Hp8C40UpperFanLevelQualificationTest
 
         Console.WriteLine();
         Console.WriteLine(
-            "RESULT: PASS (33/34/35/36 were accepted by HP WMI, acknowledged by EC, " +
-            "returned sustained dual-fan feedback, and restored to FF/FF after every step).");
+            "RESULT: PASS (34/35/36 were accepted by HP WMI, acknowledged by EC, " +
+            "returned sustained dual-fan feedback, and restored to FF/FF after every step; " +
+            "33 passed in the immediately preceding run).");
         Console.WriteLine(
             "NOTE: production remains capped at 32 until this result is reviewed.");
 
         return 0;
     }
+
+    private static async Task<Hp8C40EcControlState> ReadControlEvidenceWithRetryAsync(
+        Hp8C40EcControlStateProbe probe,
+        string context,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastError = null;
+
+        for (var attempt = 1; attempt <= EcEvidenceReadAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                return probe.ReadControlEvidence();
+            }
+            catch (Exception ex)
+                when (ex is IOException or TimeoutException or InvalidDataException)
+            {
+                lastError = ex;
+                Console.WriteLine(
+                    $"EC transient during {context}: retry {attempt}/{EcEvidenceReadAttempts}: " +
+                    $"{ex.Message}");
+
+                if (attempt < EcEvidenceReadAttempts)
+                {
+                    await Task.Delay(
+                        EcRetryDelay,
+                        cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        throw new IOException(
+            $"EC control evidence remained unavailable during {context} after " +
+            $"{EcEvidenceReadAttempts} high-level attempts.",
+            lastError);
+    }
+
+    private static string FormatControlEvidence(Hp8C40EcControlState state) =>
+        $"level CPU={state.CpuSetpoint} GPU={state.GpuSetpoint} | " +
+        $"max=0x{state.MaxFan:X2} switch=0x{state.FanSwitch:X2} | " +
+        $"RPM CPU={state.CpuRpm} GPU={state.GpuRpm}";
 
     private static void EnsureSafeTelemetry(
         HardwareIdentity hardware,
@@ -340,7 +421,19 @@ public static class Hp8C40UpperFanLevelQualificationTest
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            last = probe.Read();
+            try
+            {
+                last = await ReadControlEvidenceWithRetryAsync(
+                    probe,
+                    $"setpoint ACK {expectedLevel}/{expectedLevel}",
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException)
+            {
+                await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
             if (last.CpuSetpoint == expectedLevel &&
                 last.GpuSetpoint == expectedLevel)
             {
@@ -365,7 +458,18 @@ public static class Hp8C40UpperFanLevelQualificationTest
 
         while (Stopwatch.GetElapsedTime(started) < timeout)
         {
-            last = probe.Read();
+            try
+            {
+                last = await ReadControlEvidenceWithRetryAsync(
+                    probe,
+                    "firmware restore verification",
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (IOException)
+            {
+                await Task.Delay(250, CancellationToken.None).ConfigureAwait(false);
+                continue;
+            }
 
             if (last.CpuSetpoint == byte.MaxValue &&
                 last.GpuSetpoint == byte.MaxValue)
