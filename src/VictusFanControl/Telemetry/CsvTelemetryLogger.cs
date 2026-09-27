@@ -67,7 +67,7 @@ public sealed class CsvTelemetryLogger : IAsyncDisposable
     private static string Escape(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
-        var escaped = value.Replace(""", """");
-        return escaped.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0 ? $""{escaped}"" : escaped;
+        var escaped = value.Replace("\"", "\"\"");
+        return escaped.IndexOfAny(new[] { ',', '\"', '\r', '\n' }) >= 0 ? $"\"{escaped}\"" : escaped;
     }
 }
