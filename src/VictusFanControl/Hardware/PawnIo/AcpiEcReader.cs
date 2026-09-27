@@ -74,20 +74,27 @@ internal sealed class AcpiEcReader : IDisposable
     }
 
     /// <summary>
-    /// Reads both 88F8 tachometers while holding one EC mutex lease.
-    /// If any of the four register transactions fails, the complete pair is
-    /// retried so CPU/GPU RPM belong to one coherent successful snapshot.
+    /// Backward-compatible tachometer read for the original HP layout.
     /// </summary>
-    public FanTachometerSample ReadFanTachometers()
+    public FanTachometerSample ReadFanTachometers() =>
+        ReadFanTachometers(FanEcRegisterLayout.HpLegacyDualFan);
+
+    /// <summary>
+    /// Reads both profile-selected tachometers while holding one EC mutex lease.
+    /// If any register transaction fails, the complete pair is retried so
+    /// CPU/GPU RPM belong to one coherent successful snapshot.
+    /// </summary>
+    public FanTachometerSample ReadFanTachometers(FanEcRegisterLayout layout)
     {
         var lockTaken = AcquireMutex();
         try
         {
             return RetryLocked(
                 () => new FanTachometerSample(
-                    ReadWordLittleEndianLocked(0xB0),
-                    ReadWordLittleEndianLocked(0xB2)),
-                "EC fan tachometer snapshot 0xB0-0xB3");
+                    ReadWordLittleEndianLocked(layout.CpuTachLow),
+                    ReadWordLittleEndianLocked(layout.GpuTachLow)),
+                $"EC fan tachometer snapshot 0x{layout.CpuTachLow:X2}/0x{(byte)(layout.CpuTachLow + 1):X2} " +
+                $"and 0x{layout.GpuTachLow:X2}/0x{(byte)(layout.GpuTachLow + 1):X2}");
         }
         finally
         {
@@ -107,14 +114,23 @@ internal sealed class AcpiEcReader : IDisposable
     /// </summary>
     public Hp88F8SetpointSample ReadHp88F8Setpoint()
     {
+        var sample = ReadFanSetpoint(FanEcRegisterLayout.HpLegacyDualFan);
+        return new Hp88F8SetpointSample(sample.CpuSetpoint, sample.GpuSetpoint);
+    }
+
+    /// <summary>
+    /// Reads only the profile-selected fixed-level ownership registers.
+    /// </summary>
+    public FanSetpointSample ReadFanSetpoint(FanEcRegisterLayout layout)
+    {
         var lockTaken = AcquireMutex();
         try
         {
             return RetryLocked(
-                () => new Hp88F8SetpointSample(
-                    CpuSetpoint: ReadRegisterLocked(0x34),
-                    GpuSetpoint: ReadRegisterLocked(0x35)),
-                "EC 88F8 setpoint snapshot 0x34/0x35");
+                () => new FanSetpointSample(
+                    CpuSetpoint: ReadRegisterLocked(layout.CpuSetpoint),
+                    GpuSetpoint: ReadRegisterLocked(layout.GpuSetpoint)),
+                $"EC fan setpoint snapshot 0x{layout.CpuSetpoint:X2}/0x{layout.GpuSetpoint:X2}");
         }
         finally
         {
@@ -132,14 +148,23 @@ internal sealed class AcpiEcReader : IDisposable
     /// </summary>
     public Hp88F8FanControlGuardSample ReadHp88F8FanControlGuard()
     {
+        var sample = ReadFanControlGuard(FanEcRegisterLayout.HpLegacyDualFan);
+        return new Hp88F8FanControlGuardSample(sample.MaxFan, sample.FanSwitch);
+    }
+
+    /// <summary>
+    /// Reads only the profile-selected MaxFan/FanSwitch guards.
+    /// </summary>
+    public FanControlGuardSample ReadFanControlGuard(FanEcRegisterLayout layout)
+    {
         var lockTaken = AcquireMutex();
         try
         {
             return RetryLocked(
-                () => new Hp88F8FanControlGuardSample(
-                    MaxFan: ReadRegisterLocked(0xEC),
-                    FanSwitch: ReadRegisterLocked(0xF4)),
-                "EC 88F8 fan-control guard snapshot 0xEC/0xF4");
+                () => new FanControlGuardSample(
+                    MaxFan: ReadRegisterLocked(layout.MaxFan),
+                    FanSwitch: ReadRegisterLocked(layout.FanSwitch)),
+                $"EC fan-control guard snapshot 0x{layout.MaxFan:X2}/0x{layout.FanSwitch:X2}");
         }
         finally
         {
@@ -152,25 +177,48 @@ internal sealed class AcpiEcReader : IDisposable
 
     public Hp88F8ControlStateSample ReadHp88F8ControlState()
     {
+        var sample = ReadFanControlState(FanEcRegisterLayout.HpLegacyDualFan);
+        return new Hp88F8ControlStateSample(
+            sample.CpuRateTarget,
+            sample.GpuRateTarget,
+            sample.CpuRate,
+            sample.GpuRate,
+            sample.CpuSetpoint,
+            sample.GpuSetpoint,
+            sample.Manual,
+            sample.Countdown,
+            sample.Mode,
+            sample.MaxFan,
+            sample.FanSwitch,
+            sample.CpuRpm,
+            sample.GpuRpm);
+    }
+
+    /// <summary>
+    /// Broad profile-selected diagnostic snapshot. Production ownership paths
+    /// should continue to prefer the narrow setpoint/guard/tachometer methods.
+    /// </summary>
+    public FanControlStateSample ReadFanControlState(FanEcRegisterLayout layout)
+    {
         var lockTaken = AcquireMutex();
         try
         {
             return RetryLocked(
-                () => new Hp88F8ControlStateSample(
-                    CpuRateTarget: ReadRegisterLocked(0x2C),
-                    GpuRateTarget: ReadRegisterLocked(0x2D),
-                    CpuRate: ReadRegisterLocked(0x2E),
-                    GpuRate: ReadRegisterLocked(0x2F),
-                    CpuSetpoint: ReadRegisterLocked(0x34),
-                    GpuSetpoint: ReadRegisterLocked(0x35),
-                    Manual: ReadRegisterLocked(0x62),
-                    Countdown: ReadRegisterLocked(0x63),
-                    Mode: ReadRegisterLocked(0x95),
-                    MaxFan: ReadRegisterLocked(0xEC),
-                    FanSwitch: ReadRegisterLocked(0xF4),
-                    CpuRpm: ReadWordLittleEndianLocked(0xB0),
-                    GpuRpm: ReadWordLittleEndianLocked(0xB2)),
-                "EC 88F8 control-state snapshot");
+                () => new FanControlStateSample(
+                    CpuRateTarget: ReadRegisterLocked(layout.CpuRateTarget),
+                    GpuRateTarget: ReadRegisterLocked(layout.GpuRateTarget),
+                    CpuRate: ReadRegisterLocked(layout.CpuRate),
+                    GpuRate: ReadRegisterLocked(layout.GpuRate),
+                    CpuSetpoint: ReadRegisterLocked(layout.CpuSetpoint),
+                    GpuSetpoint: ReadRegisterLocked(layout.GpuSetpoint),
+                    Manual: ReadRegisterLocked(layout.Manual),
+                    Countdown: ReadRegisterLocked(layout.Countdown),
+                    Mode: ReadRegisterLocked(layout.Mode),
+                    MaxFan: ReadRegisterLocked(layout.MaxFan),
+                    FanSwitch: ReadRegisterLocked(layout.FanSwitch),
+                    CpuRpm: ReadWordLittleEndianLocked(layout.CpuTachLow),
+                    GpuRpm: ReadWordLittleEndianLocked(layout.GpuTachLow)),
+                "EC profile fan control-state snapshot");
         }
         finally
         {
@@ -350,6 +398,29 @@ internal sealed class AcpiEcReader : IDisposable
     }
 
     internal readonly record struct FanTachometerSample(ushort CpuRpm, ushort GpuRpm);
+
+    internal readonly record struct FanSetpointSample(
+        byte CpuSetpoint,
+        byte GpuSetpoint);
+
+    internal readonly record struct FanControlGuardSample(
+        byte MaxFan,
+        byte FanSwitch);
+
+    internal readonly record struct FanControlStateSample(
+        byte CpuRateTarget,
+        byte GpuRateTarget,
+        byte CpuRate,
+        byte GpuRate,
+        byte CpuSetpoint,
+        byte GpuSetpoint,
+        byte Manual,
+        byte Countdown,
+        byte Mode,
+        byte MaxFan,
+        byte FanSwitch,
+        ushort CpuRpm,
+        ushort GpuRpm);
 
     internal readonly record struct Hp88F8SetpointSample(
         byte CpuSetpoint,
