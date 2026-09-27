@@ -1,3 +1,4 @@
+using VictusFanControl.Hardware.PawnIo;
 using VictusFanControl.Hardware.Windows;
 
 namespace VictusFanControl.Hardware.Hp;
@@ -25,67 +26,29 @@ public static class Hp88F8TargetProfile
     public const int CpuObservedMaximumRpm = 4330;
     public const int GpuObservedMaximumRpm = 4670;
 
-    public static bool Matches(HardwareIdentity hardware, out string reason)
-    {
-        if (!EqualsIgnoreCase(hardware.BoardManufacturer, BoardManufacturer))
-        {
-            reason = $"Board manufacturer '{hardware.BoardManufacturer}' != '{BoardManufacturer}'.";
-            return false;
-        }
+    public static HardwareTargetProfile Instance { get; } = new(
+        Id: "HP-88F8-62C37LA-F32",
+        DisplayName: "HP Victus 16-d0515la / HP 88F8",
+        BoardManufacturer: BoardManufacturer,
+        BoardProduct: BoardProduct,
+        BoardVersion: BoardVersion,
+        SystemManufacturer: SystemManufacturer,
+        SystemProductName: SystemProductName,
+        SystemSkuBase: SystemSkuPrefix,
+        ValidatedBiosVersion: ValidatedBiosVersion,
+        ExpectedGpuName: ExpectedGpuName,
+        MinimumValidatedFanLevel: MinimumValidatedFanLevel,
+        MaximumValidatedFanLevel: MaximumValidatedFanLevel,
+        SupportsIndependentFanLevels: true,
+        FanEcLayout: FanEcRegisterLayout.HpLegacyDualFan,
+        SleepModel: WindowsSleepModel.LegacyS3,
+        WatchdogRecoveryValidated: true,
+        CpuObservedMaximumRpm: CpuObservedMaximumRpm,
+        GpuObservedMaximumRpm: GpuObservedMaximumRpm);
 
-        if (!EqualsIgnoreCase(hardware.BoardProduct, BoardProduct))
-        {
-            reason = $"Board product '{hardware.BoardProduct}' != '{BoardProduct}'.";
-            return false;
-        }
-
-        if (!EqualsIgnoreCase(hardware.BoardVersion, BoardVersion))
-        {
-            reason = $"Board version '{hardware.BoardVersion}' != '{BoardVersion}'.";
-            return false;
-        }
-
-        if (!EqualsIgnoreCase(hardware.SystemManufacturer, SystemManufacturer))
-        {
-            reason = $"System manufacturer '{hardware.SystemManufacturer}' != '{SystemManufacturer}'.";
-            return false;
-        }
-
-        if (!EqualsIgnoreCase(hardware.SystemProductName, SystemProductName))
-        {
-            reason = $"System product '{hardware.SystemProductName}' != '{SystemProductName}'.";
-            return false;
-        }
-
-        var skuBase = hardware.SystemSku
-            .Split('#', 2, StringSplitOptions.TrimEntries)[0];
-
-        if (!EqualsIgnoreCase(skuBase, SystemSkuPrefix))
-        {
-            reason = $"System SKU base '{skuBase}' != '{SystemSkuPrefix}'.";
-            return false;
-        }
-
-        var biosMatched = hardware.BiosVersion
-            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Any(value => EqualsIgnoreCase(value, ValidatedBiosVersion));
-
-        if (!biosMatched)
-        {
-            reason = $"BIOS '{hardware.BiosVersion}' is not the validated '{ValidatedBiosVersion}'.";
-            return false;
-        }
-
-        reason = "Exact HP 88F8 development target and validated BIOS matched.";
-        return true;
-    }
+    public static bool Matches(HardwareIdentity hardware, out string reason) =>
+        Instance.Matches(hardware, out reason);
 
     public static bool MatchesExpectedGpu(string? gpuName) =>
-        string.Equals(
-            gpuName?.Trim(),
-            ExpectedGpuName,
-            StringComparison.OrdinalIgnoreCase);
-
-    private static bool EqualsIgnoreCase(string left, string right) =>
-        string.Equals(left?.Trim(), right, StringComparison.OrdinalIgnoreCase);
+        Instance.MatchesExpectedGpu(gpuName);
 }
