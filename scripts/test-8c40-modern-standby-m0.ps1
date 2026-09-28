@@ -5,11 +5,15 @@ param(
     [ValidateRange(3, 30)]
     [int]$TimeoutMinutes = 15,
 
-    [ValidateRange(30, 600)]
+    [ValidateRange(30, 1800)]
     [int]$RecommendedSleepSeconds = 60
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($RecommendedSleepSeconds -ge (($TimeoutMinutes * 60) - 30)) {
+    throw 'RecommendedSleepSeconds must leave at least 30 seconds of margin before TimeoutMinutes expires.'
+}
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
