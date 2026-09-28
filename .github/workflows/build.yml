@@ -85,6 +85,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-watchdog-m5c-double-death-invariants.ps1
 
+      - name: HP 8C40 M5D WRITE_ARMED post-WMI pre-Commit invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-m5d-write-armed-invariants.ps1
+
       - name: HP 8C40 M5 invariants Windows PowerShell 5.1 compatibility
         shell: powershell
         run: |
@@ -96,6 +100,7 @@ jobs:
           .\scripts\test-watchdog-m5b-8c40-invariants.ps1
           .\scripts\test-watchdog-m5c-preflight-invariants.ps1
           .\scripts\test-watchdog-m5c-double-death-invariants.ps1
+          .\scripts\test-watchdog-m5d-write-armed-invariants.ps1
 
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
