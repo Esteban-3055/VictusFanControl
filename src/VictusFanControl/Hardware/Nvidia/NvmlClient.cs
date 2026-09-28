@@ -108,7 +108,12 @@ internal sealed class NvmlClient : IDisposable
                 var result = _getTemperature(_device, NvmlTemperatureGpu, out var value);
                 return (result, (double)value);
             },
-            value => value is >= 0 and <= 125);
+            // On the 8C40 hybrid-GPU target we have physically observed NVML
+            // return SUCCESS with 0 C while the dGPU is in a low-power/RTD3-like
+            // state. 0 C is not a usable thermal reading and must never make a
+            // telemetry snapshot look healthy. Keep this aligned with the
+            // SafetyGate validated GPU plausibility floor.
+            value => value is >= 10 and <= 125);
 
         var power = RetryMetric(
             "GPU power",
