@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M4 - target-bound live lease qualification
 
-Status: **M4A CODE/CI/PHYSICAL PASS. Post-physical logging/journal hardening is pending CI on the current commit.**
+Status: **M4A CODE/CI/PHYSICAL PASS. Post-physical logging/journal hardening CI PASS. M4B/M4C code prepared; endpoint-preparation CI pending.**
 
 M3 physically qualified the LocalSystem restore-only primitive. M4 is the next
 separate authorization boundary: durable watchdog lease ownership around a real
@@ -23,8 +23,11 @@ The exact HP 8C40 target remains:
 - no asymmetric commands;
 - automatic/adaptive policy OFF.
 
-M4A uses only equal `30/30`. Endpoint lease qualification for `10/10` and
-`50/50` remains M4B/M4C.
+M4A uses equal `30/30` and is physically complete. M4B uses equal `10/10`
+and M4C uses equal `50/50`. All three use the same bounded
+qualification-only route, exact target binding, restore-only service authority
+and fail-closed journal semantics; each endpoint retains its own explicit
+acknowledgement token.
 
 ## Protocol v2 target binding
 
@@ -164,8 +167,8 @@ A physical M4A PASS still does not by itself set
 
 Still pending after M4A:
 
-- M4B live lease at `10/10`;
-- M4C live lease at `50/50`;
+- M4B physical live lease at `10/10` after endpoint-preparation CI is green;
+- M4C physical live lease at `50/50` after M4B is reviewed and endpoint-preparation CI is green;
 - M5 GUI/controller death, watchdog death and double-death failure domains;
 - M6/M7 Modern Standby proactive release/reacquisition lifecycle;
 - explicit hibernation/race gates;
@@ -184,3 +187,35 @@ The green run includes PowerShell syntax validation, historical Gate E/F/G0/G1/G
 The protocol-v2 migration pins TargetProfileId in both request and response. Historical 88F8 Gate G remains explicitly bound to the 88F8 target id, while M4A uses the isolated 8C40 pipe and exact 8C40 target id.
 
 CI does not execute physical fan writes. M4A physical evidence now exists from the bounded awake 30/30 run on 2026-09-28. The next physical gates remain M4B at 10/10 and M4C at 50/50 after their code preparation and CI review are complete.
+
+
+## M4B/M4C endpoint preparation
+
+The bounded M4 qualification runner accepts only the three explicit gates:
+`10`, `30` and `50`. Arbitrary qualification levels are rejected.
+
+The public qualification CLI maps exactly:
+
+~~~text
+--8c40-m4-lease10  + 8C40-M4-LEASE10  -> M4B
+--8c40-m4-lease30  + 8C40-M4-LEASE30  -> M4A
+--8c40-m4-lease50  + 8C40-M4-LEASE50  -> M4C
+~~~
+
+User-facing wrappers are:
+
+~~~powershell
+.\scripts\test-watchdog-m4a-8c40.ps1
+.\scripts\test-watchdog-m4b-8c40.ps1
+.\scripts\test-watchdog-m4c-8c40.ps1
+~~~
+
+All wrappers share `test-watchdog-m4-8c40.ps1`. The shared runner preserves
+the existing build/self-test preflight, clean FF/FF baseline, refusal to delete
+or overwrite a retained durable journal, exact LocalSystem/Session-0 target
+service checks, PREPARE/WRITE_INTENT/COMMIT ordering, four awake
+Probe/Heartbeat supervision samples, RESTORE_BEGIN/Release, independent final
+FF/FF verification and mandatory absence of the journal on normal completion.
+
+This endpoint preparation does not enable the public production watchdog and
+does not enable automatic/adaptive policy.

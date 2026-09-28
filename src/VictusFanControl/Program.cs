@@ -140,14 +140,27 @@ internal static class Program
 
         if (options.Hp8C40M4LeaseQualification)
         {
+            var qualificationLevel =
+                options.Hp8C40M4LeaseQualificationLevel ??
+                throw new InvalidOperationException(
+                    "M4 lease qualification level was not resolved.");
+
+            var requiredToken =
+                Hp8C40M4LeaseQualificationTest.GetRequiredToken(
+                    qualificationLevel);
+
+            var gate =
+                Hp8C40M4LeaseQualificationTest.GetGateName(
+                    qualificationLevel);
+
             if (!string.Equals(
                     options.Hp8C40M4LeaseQualificationToken,
-                    Hp8C40M4LeaseQualificationTest.RequiredToken,
+                    requiredToken,
                     StringComparison.Ordinal))
             {
                 Console.Error.WriteLine(
-                    $"HP 8C40 M4A refused: explicit --8c40-m4-lease-token " +
-                    $"{Hp8C40M4LeaseQualificationTest.RequiredToken} is required.");
+                    $"HP 8C40 {gate} refused: explicit --8c40-m4-lease-token " +
+                    $"{requiredToken} is required.");
                 return 169;
             }
 
@@ -162,6 +175,7 @@ internal static class Program
 
             return await Hp8C40M4LeaseQualificationTest.RunAsync(
                 options.ModulesDirectory,
+                qualificationLevel,
                 m4Cts.Token);
         }
 

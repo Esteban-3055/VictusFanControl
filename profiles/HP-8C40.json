@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4a-physical-pass-post-physical-hardening-ci-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4a-physical-pass-m4bc-code-prepared-ci-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -27,7 +27,11 @@
     "watchdogM4TargetBoundProtocolPrepared": true,
     "watchdogM4A30LeasePrepared": true,
     "watchdogM4A30LeasePassed": true,
-    "watchdogM4A30LeaseCodePassed": true
+    "watchdogM4A30LeaseCodePassed": true,
+    "watchdogM4B10LeasePrepared": true,
+    "watchdogM4B10LeasePassed": false,
+    "watchdogM4C50LeasePrepared": true,
+    "watchdogM4C50LeasePassed": false
   },
   "control": {
     "enabledByDefault": false,
@@ -720,7 +724,7 @@
     }
   },
   "watchdogM4LeaseQualification": {
-    "status": "M4A_CODE_CI_PHYSICAL_PASS_POST_PHYSICAL_HARDENING_CI_PENDING",
+    "status": "M4A_PHYSICAL_PASS_M4BC_CODE_PREPARED_CI_PENDING",
     "protocolVersion": 2,
     "targetProfileIdRequired": true,
     "qualificationPipe": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -734,7 +738,7 @@
     "watchdogRecoveryValidated": false,
     "automaticPolicyEnabled": false,
     "syntheticSelfTest": "PASS",
-    "fullRepositoryCi": "PENDING_POST_PHYSICAL_HARDENING",
+    "fullRepositoryCi": "PENDING_M4BC_ENDPOINT_PREPARATION",
     "m4aPhysicalResult": {
       "result": "PASS",
       "completedAt": "2026-09-28",
@@ -764,6 +768,35 @@
       "finalIndependentProbe": "FF/FF",
       "retainedJournal": false,
       "diagnosticFinding": "Normal post-Release pipe EOF was mislabelled as retained durable ownership even though Release had already cleared the lease; post-physical hardening adds an active-lease check before retention logging."
+    },
+    "endpointQualification": {
+      "allowedLevels": [
+        10,
+        30,
+        50
+      ],
+      "gates": {
+        "m4a": {
+          "level": 30,
+          "token": "8C40-M4-LEASE30",
+          "physicalStatus": "PASS"
+        },
+        "m4b": {
+          "level": 10,
+          "token": "8C40-M4-LEASE10",
+          "physicalStatus": "PENDING"
+        },
+        "m4c": {
+          "level": 50,
+          "token": "8C40-M4-LEASE50",
+          "physicalStatus": "PENDING"
+        }
+      },
+      "arbitraryLevelSelectionAllowed": false,
+      "sharedRunner": "scripts/test-watchdog-m4-8c40.ps1",
+      "journalSetupPolicy": "refuse-existing-durable-journal",
+      "productionWatchdogEnabled": false,
+      "automaticPolicyEnabled": false
     }
   }
 }

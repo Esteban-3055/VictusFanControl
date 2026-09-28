@@ -9,25 +9,57 @@ using VictusFanControl.Telemetry;
 namespace VictusFanControl.Hardware.Hp;
 
 /// <summary>
-/// M4A qualification-only real lease path for the exact HP 8C40 target.
+/// M4A/M4B/M4C qualification-only real lease path for the exact HP 8C40 target.
 ///
 /// It uses the real coordinator + real 8C40 backend logic + target-bound
 /// named-pipe watchdog lease, but bypasses the production factory prohibition
-/// deliberately inside this bounded hardware gate. Production remains blocked.
+/// deliberately inside these bounded 30/10/50 hardware gates. Production remains blocked.
 /// </summary>
 public static class Hp8C40M4LeaseQualificationTest
 {
-    public const string RequiredToken = "8C40-M4-LEASE30";
+    public const string RequiredToken10 = "8C40-M4-LEASE10";
+    public const string RequiredToken30 = "8C40-M4-LEASE30";
+    public const string RequiredToken50 = "8C40-M4-LEASE50";
+    public const string RequiredToken = RequiredToken30;
 
-    private const int QualificationLevel = 30;
     private const byte MinimumBatteryPercent = 20;
+
+    public static string GetRequiredToken(
+        int qualificationLevel) =>
+        qualificationLevel switch
+        {
+            10 => RequiredToken10,
+            30 => RequiredToken30,
+            50 => RequiredToken50,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(qualificationLevel),
+                qualificationLevel,
+                "M4 qualification level must be exactly 10, 30 or 50.")
+        };
+
+    public static string GetGateName(
+        int qualificationLevel) =>
+        qualificationLevel switch
+        {
+            10 => "M4B",
+            30 => "M4A",
+            50 => "M4C",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(qualificationLevel),
+                qualificationLevel,
+                "M4 qualification level must be exactly 10, 30 or 50.")
+        };
 
     public static async Task<int> RunAsync(
         string modulesDirectory,
+        int qualificationLevel,
         CancellationToken cancellationToken)
     {
+        var gate =
+            GetGateName(qualificationLevel);
+
         Console.WriteLine(
-            "HP 8C40 M4A - target-bound real watchdog lease at 30/30");
+            $"HP 8C40 {gate} - target-bound real watchdog lease at {qualificationLevel}/{qualificationLevel}");
         Console.WriteLine(
             "Production watchdog construction and automatic policy remain OFF.");
         Console.WriteLine();
@@ -35,7 +67,7 @@ public static class Hp8C40M4LeaseQualificationTest
         if (!IsAdministrator())
         {
             Console.Error.WriteLine(
-                "M4A requires an elevated Administrator process.");
+                "M4 requires an elevated Administrator process.");
             return 170;
         }
 
@@ -47,7 +79,7 @@ public static class Hp8C40M4LeaseQualificationTest
                 out var targetReason))
         {
             Console.Error.WriteLine(
-                $"M4A exact-target refusal: {targetReason}");
+                $"M4 exact-target refusal: {targetReason}");
             return 171;
         }
 
@@ -57,7 +89,7 @@ public static class Hp8C40M4LeaseQualificationTest
         if (conflict is not null)
         {
             Console.Error.WriteLine(
-                $"M4A refused while '{conflict}' is running.");
+                $"M4 refused while '{conflict}' is running.");
             return 172;
         }
 
@@ -78,7 +110,7 @@ public static class Hp8C40M4LeaseQualificationTest
             initial.GpuSetpoint != byte.MaxValue)
         {
             Console.Error.WriteLine(
-                "M4A requires a clean firmware-owned FF/FF baseline.");
+                "M4 requires a clean firmware-owned FF/FF baseline.");
             return 173;
         }
 
@@ -86,7 +118,7 @@ public static class Hp8C40M4LeaseQualificationTest
             initial.FanSwitch != 0)
         {
             Console.Error.WriteLine(
-                $"M4A guard refusal: MaxFan=0x{initial.MaxFan:X2}, " +
+                $"M4 guard refusal: MaxFan=0x{initial.MaxFan:X2}, " +
                 $"FanSwitch=0x{initial.FanSwitch:X2}.");
             return 174;
         }
@@ -98,7 +130,7 @@ public static class Hp8C40M4LeaseQualificationTest
         if (!telemetry.BackendsInitialized)
         {
             Console.Error.WriteLine(
-                "M4A telemetry backends are not fully initialized.");
+                "M4 telemetry backends are not fully initialized.");
             return 175;
         }
 
@@ -120,7 +152,7 @@ public static class Hp8C40M4LeaseQualificationTest
         if (!safety.CustomControlPermitted)
         {
             Console.Error.WriteLine(
-                "M4A SafetyGate refused Custom:");
+                "M4 SafetyGate refused Custom:");
             foreach (var reason in safety.Reasons)
             {
                 Console.Error.WriteLine(
@@ -146,7 +178,7 @@ public static class Hp8C40M4LeaseQualificationTest
                 realHardware,
                 targetSupported: true,
                 supportDetail:
-                    "M4A exact-target qualification-only real hardware path.",
+                    $"HP 8C40 {gate} exact-target qualification-only real hardware path.",
                 watchdogLease:
                     lease);
 
@@ -169,7 +201,7 @@ public static class Hp8C40M4LeaseQualificationTest
                     FanAuthority.Custom)
             {
                 throw new InvalidOperationException(
-                    "M4A coordinator did not acquire Custom authority.");
+                    "M4 coordinator did not acquire Custom authority.");
             }
 
             Console.WriteLine(
@@ -177,9 +209,9 @@ public static class Hp8C40M4LeaseQualificationTest
 
             await coordinator.ApplyAsync(
                     new FanCommand(
-                        QualificationLevel,
-                        QualificationLevel,
-                        "HP 8C40 M4A target-bound lease qualification"),
+                        qualificationLevel,
+                        qualificationLevel,
+                        $"HP 8C40 {gate} target-bound lease qualification"),
                     safety,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -192,11 +224,11 @@ public static class Hp8C40M4LeaseQualificationTest
             Console.WriteLine(
                 $"Owned EC after Commit: {Format(owned)}");
 
-            if (owned.CpuSetpoint != QualificationLevel ||
-                owned.GpuSetpoint != QualificationLevel)
+            if (owned.CpuSetpoint != qualificationLevel ||
+                owned.GpuSetpoint != qualificationLevel)
             {
                 throw new InvalidOperationException(
-                    $"M4A expected EC {QualificationLevel}/{QualificationLevel}, " +
+                    $"M4 expected EC {qualificationLevel}/{qualificationLevel}, " +
                     $"observed {owned.CpuSetpoint}/{owned.GpuSetpoint}.");
             }
 
@@ -222,7 +254,7 @@ public static class Hp8C40M4LeaseQualificationTest
                 var healthy =
                     await coordinator.EnforceSafetyAsync(
                             freshSafety,
-                            $"M4A awake lease supervision sample {sample}/4",
+                            $"M4 awake lease supervision sample {sample}/4",
                             cancellationToken)
                         .ConfigureAwait(false);
 
@@ -231,21 +263,21 @@ public static class Hp8C40M4LeaseQualificationTest
                         FanAuthority.Custom)
                 {
                     throw new InvalidOperationException(
-                        $"M4A lease supervision sample {sample} did not retain Custom authority.");
+                        $"M4 lease supervision sample {sample} did not retain Custom authority.");
                 }
 
                 var evidence =
                     ecProbe.ReadControlEvidence();
 
                 if (evidence.CpuSetpoint !=
-                        QualificationLevel ||
+                        qualificationLevel ||
                     evidence.GpuSetpoint !=
-                        QualificationLevel ||
+                        qualificationLevel ||
                     evidence.MaxFan != 0 ||
                     evidence.FanSwitch != 0)
                 {
                     throw new InvalidOperationException(
-                        $"M4A ownership/guard mismatch during sample {sample}: {Format(evidence)}");
+                        $"M4 ownership/guard mismatch during sample {sample}: {Format(evidence)}");
                 }
 
                 Console.WriteLine(
@@ -258,7 +290,7 @@ public static class Hp8C40M4LeaseQualificationTest
             }
 
             await coordinator.RestoreFirmwareAsync(
-                    "M4A normal target-bound lease release",
+                    "M4 normal target-bound lease release",
                     CancellationToken.None)
                 .ConfigureAwait(false);
 
@@ -279,7 +311,7 @@ public static class Hp8C40M4LeaseQualificationTest
             if (restoreEvidence is null)
             {
                 throw new InvalidOperationException(
-                    "M4A coordinator/backend did not expose restore evidence.");
+                    "M4 coordinator/backend did not expose restore evidence.");
             }
 
             var verifiedRestore =
@@ -292,12 +324,12 @@ public static class Hp8C40M4LeaseQualificationTest
                 !verifiedRestore.WatchdogReleaseVerified)
             {
                 throw new InvalidOperationException(
-                    "M4A coordinator/backend restore evidence did not prove both local firmware ACK and watchdog Release.");
+                    "M4 coordinator/backend restore evidence did not prove both local firmware ACK and watchdog Release.");
             }
 
             Console.WriteLine(
-                "PASS: target-bound M4A lease completed PREPARE -> WRITE_INTENT -> " +
-                "30/30 ACK -> COMMIT -> Probe/Heartbeat supervision -> " +
+                $"PASS: target-bound {gate} lease completed PREPARE -> WRITE_INTENT -> " +
+                $"{qualificationLevel}/{qualificationLevel} ACK -> COMMIT -> Probe/Heartbeat supervision -> " +
                 "RESTORE_BEGIN -> local FF/FF -> watchdog Release.");
 
             return 0;
@@ -306,13 +338,13 @@ public static class Hp8C40M4LeaseQualificationTest
             when (cancellationToken.IsCancellationRequested)
         {
             Console.Error.WriteLine(
-                "M4A cancelled.");
+                "M4 qualification cancelled.");
             return 130;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine(
-                $"M4A failed: {ex.GetType().Name}: {ex.Message}");
+                $"M4 qualification failed: {ex.GetType().Name}: {ex.Message}");
             return 177;
         }
         finally
@@ -322,17 +354,18 @@ public static class Hp8C40M4LeaseQualificationTest
                 try
                 {
                     await coordinator.RestoreFirmwareAsync(
-                            "M4A finally fallback",
+                            "M4 qualification finally fallback",
                             CancellationToken.None)
                         .ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine(
-                        $"M4A coordinator fallback restore failed: {ex.GetType().Name}: {ex.Message}");
+                        $"M4 coordinator fallback restore failed: {ex.GetType().Name}: {ex.Message}");
 
                     await EmergencyFallbackIfStillOwnedAsync(
-                            ecProbe)
+                            ecProbe,
+                            qualificationLevel)
                         .ConfigureAwait(false);
                 }
             }
@@ -377,11 +410,12 @@ public static class Hp8C40M4LeaseQualificationTest
         }
 
         throw new TimeoutException(
-            $"M4A did not independently observe FF/FF; last={Format(last)}");
+            $"M4 did not independently observe FF/FF; last={Format(last)}");
     }
 
     private static async Task EmergencyFallbackIfStillOwnedAsync(
-        Hp8C40EcControlStateProbe probe)
+        Hp8C40EcControlStateProbe probe,
+        int qualificationLevel)
     {
         try
         {
@@ -394,18 +428,18 @@ public static class Hp8C40M4LeaseQualificationTest
                 return;
             }
 
-            if (current.CpuSetpoint != QualificationLevel ||
-                current.GpuSetpoint != QualificationLevel)
+            if (current.CpuSetpoint != qualificationLevel ||
+                current.GpuSetpoint != qualificationLevel)
             {
                 Console.Error.WriteLine(
-                    $"M4A emergency local restore REFUSED because EC is " +
+                    $"M4 emergency local restore REFUSED because EC is " +
                     $"{current.CpuSetpoint}/{current.GpuSetpoint}, not the exact VFC-owned " +
-                    $"{QualificationLevel}/{QualificationLevel}.");
+                    $"{qualificationLevel}/{qualificationLevel}.");
                 return;
             }
 
             Console.Error.WriteLine(
-                "M4A emergency local restore: exact VFC-owned 30/30 remains.");
+                $"M4 emergency local restore: exact VFC-owned {qualificationLevel}/{qualificationLevel} remains.");
 
             new Hp8C40BiosFanControl()
                 .RestoreFirmwareAuto();
@@ -417,12 +451,12 @@ public static class Hp8C40M4LeaseQualificationTest
                     .ConfigureAwait(false);
 
             Console.Error.WriteLine(
-                "M4A emergency local restore verified FF/FF.");
+                "M4 emergency local restore verified FF/FF.");
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine(
-                $"CRITICAL: M4A emergency local restore failed: {ex.GetType().Name}: {ex.Message}");
+                $"CRITICAL: M4 emergency local restore failed: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -436,7 +470,7 @@ public static class Hp8C40M4LeaseQualificationTest
                 MinimumBatteryPercent)
         {
             throw new InvalidOperationException(
-                $"M4A AC/battery sanity gate refused: {status}");
+                $"M4 AC/battery sanity gate refused: {status}");
         }
     }
 
@@ -449,7 +483,7 @@ public static class Hp8C40M4LeaseQualificationTest
             snapshot.GpuPowerW > 70)
         {
             throw new InvalidOperationException(
-                "M4A light-load envelope exceeded.");
+                "M4 light-load envelope exceeded.");
         }
     }
 

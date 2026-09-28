@@ -36,6 +36,7 @@ public sealed class CliOptions
     public string? Hp8C40M3HandoffPath { get; private set; }
     public string? Hp8C40M3ResultPath { get; private set; }
     public bool Hp8C40M4LeaseQualification { get; private set; }
+    public int? Hp8C40M4LeaseQualificationLevel { get; private set; }
     public string? Hp8C40M4LeaseQualificationToken { get; private set; }
     public string? IntegratedCoordinatorToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
@@ -196,8 +197,16 @@ public sealed class CliOptions
                         Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
+                case "--8c40-m4-lease10":
+                    SetM4LeaseQualificationLevel(options, 10);
+                    break;
+
                 case "--8c40-m4-lease30":
-                    options.Hp8C40M4LeaseQualification = true;
+                    SetM4LeaseQualificationLevel(options, 30);
+                    break;
+
+                case "--8c40-m4-lease50":
+                    SetM4LeaseQualificationLevel(options, 50);
                     break;
 
                 case "--8c40-m4-lease-token":
@@ -351,7 +360,14 @@ public sealed class CliOptions
             !options.Hp8C40M4LeaseQualification)
         {
             throw new ArgumentException(
-                "--8c40-m4-lease-token is valid only with --8c40-m4-lease30.");
+                "--8c40-m4-lease-token is valid only with --8c40-m4-lease10/30/50.");
+        }
+
+        if (options.Hp8C40M4LeaseQualification &&
+            options.Hp8C40M4LeaseQualificationLevel is not (10 or 30 or 50))
+        {
+            throw new ArgumentException(
+                "HP 8C40 M4 lease qualification requires exactly one endpoint switch: --8c40-m4-lease10, --8c40-m4-lease30 or --8c40-m4-lease50.");
         }
 
         return options;
@@ -396,8 +412,10 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-m3-arm-token <token>  Required exact token: 8C40-M3-RESTORE30.");
         Console.WriteLine("  --8c40-m3-handoff-path <path>  Durable one-shot M3 handoff path.");
         Console.WriteLine("  --8c40-m3-result-path <path>   M3 LocalSystem service result path.");
+        Console.WriteLine("  --8c40-m4-lease10          ACTIVE M4B GATE: real target-bound watchdog lease at equal 10/10.");
         Console.WriteLine("  --8c40-m4-lease30          ACTIVE M4A GATE: real target-bound watchdog lease at equal 30/30.");
-        Console.WriteLine("  --8c40-m4-lease-token <token>  Required exact token: 8C40-M4-LEASE30.");
+        Console.WriteLine("  --8c40-m4-lease50          ACTIVE M4C GATE: real target-bound watchdog lease at equal 50/50.");
+        Console.WriteLine("  --8c40-m4-lease-token <token>  Exact token matching the selected level: 8C40-M4-LEASE10/30/50.");
         Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30 or HP 8C40 production tokens 8C40-COORD10/30/32/36/50.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
@@ -405,6 +423,20 @@ public sealed class CliOptions
         Console.WriteLine("  --duration-seconds <n>     Stop after N seconds. 0 = until Ctrl+C.");
         Console.WriteLine("  --output <path>            CSV output path.");
         Console.WriteLine("  -h, --help                 Show help.");
+    }
+
+    private static void SetM4LeaseQualificationLevel(
+        CliOptions options,
+        int level)
+    {
+        if (options.Hp8C40M4LeaseQualification)
+        {
+            throw new ArgumentException(
+                "Choose only one HP 8C40 M4 lease endpoint per invocation.");
+        }
+
+        options.Hp8C40M4LeaseQualification = true;
+        options.Hp8C40M4LeaseQualificationLevel = level;
     }
 
     private static string ReadValue(string[] args, ref int index)

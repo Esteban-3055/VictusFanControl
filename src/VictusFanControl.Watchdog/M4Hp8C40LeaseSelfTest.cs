@@ -25,6 +25,11 @@ internal static class M4Hp8C40LeaseSelfTest
             "M4 protocol uses target-bound v2 contract and isolated pipe",
             ProtocolContractAsync);
 
+        failures += await CaseAsync(
+            output,
+            "M4 A/B/C gate mapping pins only 30/10/50 and exact tokens",
+            EndpointGateMappingAsync);
+
         if (failures == 0)
         {
             output.WriteLine(
@@ -118,6 +123,41 @@ internal static class M4Hp8C40LeaseSelfTest
             !policy.IsValidatedCustom(
                 new FanSetpoint(51, 51)));
 
+        return Task.CompletedTask;
+    }
+
+    private static Task EndpointGateMappingAsync()
+    {
+        Assert(
+            Hp8C40M4LeaseQualificationTest.GetGateName(30) == "M4A");
+        Assert(
+            Hp8C40M4LeaseQualificationTest.GetRequiredToken(30) ==
+            Hp8C40M4LeaseQualificationTest.RequiredToken30);
+
+        Assert(
+            Hp8C40M4LeaseQualificationTest.GetGateName(10) == "M4B");
+        Assert(
+            Hp8C40M4LeaseQualificationTest.GetRequiredToken(10) ==
+            Hp8C40M4LeaseQualificationTest.RequiredToken10);
+
+        Assert(
+            Hp8C40M4LeaseQualificationTest.GetGateName(50) == "M4C");
+        Assert(
+            Hp8C40M4LeaseQualificationTest.GetRequiredToken(50) ==
+            Hp8C40M4LeaseQualificationTest.RequiredToken50);
+
+        var refused = false;
+        try
+        {
+            _ =
+                Hp8C40M4LeaseQualificationTest.GetRequiredToken(20);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            refused = true;
+        }
+
+        Assert(refused);
         return Task.CompletedTask;
     }
 
