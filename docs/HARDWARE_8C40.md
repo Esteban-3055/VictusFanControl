@@ -355,3 +355,12 @@ The equal-only upper bound `36/36` passed the full production route.
 This closes full production-path validation of the equal-only `30..36` range. Levels above 36 remain unqualified.
 
 The integrated gate uses the narrow production-relevant EC evidence. Diagnostic fields not read by that path must not be printed as if they were real register values; the final restore display has been corrected accordingly.
+
+
+## First guarded 10..50 sweep attempt
+
+The first broad-range characterization intentionally started at the known-good `30/30` anchor. WMI accepted `30/30`, EC acknowledged the setpoint, and two physical samples were normal. A later narrow EC control-evidence read reported `MaxFan=0x90` with `FanSwitch=0x00`, so the fail-closed harness immediately restored firmware authority and aborted before any level below or above 30 was attempted.
+
+The restore was verified at `FF/FF` with `MaxFan=0x00` and `FanSwitch=0x00`. Because all previous physical qualifications had reported `MaxFan=0x00`, this single `0x90` sample is treated as an unconfirmed anomalous EC read rather than proof that the guard genuinely changed.
+
+The EC reader now reads the guard pair twice under one mutex lease and rejects disagreement. The broad qualification harness also requires repeated confirmation of any nonzero guard before treating it as persistent. A persistent abnormal guard still causes immediate fail-closed restore; only an isolated unstable sample is retried.
