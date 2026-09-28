@@ -588,3 +588,56 @@ self-tests also passed.
 
 The local stage-0 preflight may therefore be retried. The previous attempt
 remains recorded as **NO_WRITE_FAIL_CLOSED**.
+
+
+## M5C stage-0 physical no-write preflight result
+
+**PASSED on real hardware, 2026-09-28**, after the Windows PowerShell 5.1
+compatibility hardening.
+
+Observed evidence:
+
+~~~text
+warnings-as-errors build: PASS
+M5A invariant: PASS
+M5B invariant: PASS
+M4 lease preparation: PASS
+Gate C lease/journal/pipe: PASS
+SafetyGate: PASS
+FanControlCoordinator: PASS
+HP backend: PASS
+
+initial EC: FF/FF
+initial durable journal: ABSENT
+
+M4 qualification service:
+  Ready=True
+  Session=0
+  Account=NT AUTHORITY\SYSTEM
+  Target=HP-8C40-9D0R1LA-F18
+  Pipe=VictusFanControl.Watchdog.M4.8C40.v2
+  PID=15820
+  StartupRecovery=Ready
+  ordinary SetFanLevel authority=NONE
+
+temporary SCM recovery policy:
+  restart 5000 ms
+  restart 5000 ms
+  restart 10000 ms
+  failure actions enabled
+
+fan-level writes during preflight: NONE
+fault injection during preflight: NONE
+
+cleanup:
+  service reinstalled to ordinary demand/manual M4 baseline
+  final EC FF/FF
+  durable journal ABSENT
+~~~
+
+The script reached its terminal
+`PASS: HP 8C40 M5C no-write preflight completed`, which also proves its
+fail-closed cleanup assertions for Manual/stopped service baseline completed.
+
+Stage 0 is physically closed. This does not qualify the destructive M5C
+double-death gate; it only authorizes preparing that next isolated test.
