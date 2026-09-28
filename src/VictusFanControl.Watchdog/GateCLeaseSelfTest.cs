@@ -1784,6 +1784,7 @@ internal static class GateCLeaseSelfTest
                         new FanControlWatchdogLeaseRequest(
                             GateCProtocol.Version,
                             Guid.NewGuid(),
+                            env.Manager.TargetProfileId,
                             GateCProtocol.Hello,
                             ControllerPid: actual.ProcessId,
                             ControllerStartUtcTicks:
@@ -2048,6 +2049,7 @@ internal static class GateCLeaseSelfTest
                         new FanControlWatchdogLeaseRequest(
                             FanControlWatchdogLeaseContract.ProtocolVersion,
                             Guid.NewGuid(),
+                            env.Manager.TargetProfileId,
                             FanControlWatchdogLeaseContract.Hello,
                             ControllerPid: actual.ProcessId,
                             ControllerStartUtcTicks:

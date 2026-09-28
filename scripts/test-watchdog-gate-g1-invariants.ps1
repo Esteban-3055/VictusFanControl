@@ -85,7 +85,7 @@ Assert-Contains -Text $cliOptions -Pattern 'Probe88F8Setpoint' -Description 'CLI
 Assert-Contains -Text $cliOptions -Pattern '--probe-88f8-setpoint' -Description 'CLI parses the dedicated narrow 88F8 ownership option'
 Assert-Contains -Text $cliProgram -Pattern 'Probe88F8Setpoint[\s\S]*ReadSetpoint\(\)[\s\S]*setpoint CPU=' -Description 'CLI narrow ownership probe reads only the validated 0x34/0x35 setpoint pair'
 
-Assert-Contains -Text $mainForm -Pattern 'else if \(_gateDHardwareTest \|\|[\s\S]*_gateG1HardwareTest \|\|[\s\S]*_gateG2HardwareTest\)[\s\S]*new NamedPipeFanControlWatchdogLeaseClient\(\)' -Description 'Gate G1/G2 use the real named-pipe production watchdog lease'
+Assert-Contains -Text $mainForm -Pattern 'else if \(_gateDHardwareTest \|\|[\s\S]*_gateG1HardwareTest \|\|[\s\S]*_gateG2HardwareTest\)[\s\S]*new NamedPipeFanControlWatchdogLeaseClient\([\s\S]*Hp88F8TargetProfile\.Instance\.Id[\s\S]*\)' -Description 'Gate G1/G2 use the real named-pipe production watchdog lease bound to the exact 88F8 target'
 Assert-Contains -Text $gateG1State -Pattern 'CommonApplicationData' -Description 'Gate G1 reads watchdog state from machine-level ProgramData'
 Assert-Contains -Text $gateG1State -Pattern 'gate-d\.status\.json' -Description 'Gate G1 consumes the production watchdog status marker'
 Assert-Contains -Text $gateG1State -Pattern 'lease\.json' -Description 'Gate G1 checks the production durable lease journal'
