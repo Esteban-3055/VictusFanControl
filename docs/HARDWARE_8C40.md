@@ -364,3 +364,12 @@ The first broad-range characterization intentionally started at the known-good `
 The restore was verified at `FF/FF` with `MaxFan=0x00` and `FanSwitch=0x00`. Because all previous physical qualifications had reported `MaxFan=0x00`, this single `0x90` sample is treated as an unconfirmed anomalous EC read rather than proof that the guard genuinely changed.
 
 The EC reader now reads the guard pair twice under one mutex lease and rejects disagreement. The broad qualification harness also requires repeated confirmation of any nonzero guard before treating it as persistent. A persistent abnormal guard still causes immediate fail-closed restore; only an isolated unstable sample is retried.
+
+
+## Second guarded 10..50 attempt: mixed baseline setpoint read
+
+With Windows automatic idle sleep inhibition active, the next broad-range attempt reached the read-only baseline and then stopped before any fan-level write. The narrow EC evidence returned CPU setpoint `144` and GPU setpoint `255` while MaxFan/FanSwitch remained `0x00/0x00`.
+
+Because the qualification harness only permits equal CPU/GPU commands and firmware release is represented by `FF/FF`, the mixed `144/255` pair is not accepted as a valid baseline ownership state. No `SetFanLevel` command was issued in that run.
+
+Ownership setpoint reads are now duplicated under the same EC mutex lease, mirroring the guard-read hardening. The broad qualification harness also re-reads any asymmetric setpoint observation before treating it as persistent. A persistent asymmetric state still fails closed and prevents any hardware write.
