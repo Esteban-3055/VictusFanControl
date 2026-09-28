@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M4 - target-bound live lease qualification
 
-Status: **M4A CODE/CI/PHYSICAL PASS. Post-physical logging/journal hardening CI PASS. M4B/M4C code prepared; endpoint-preparation CI pending.**
+Status: **M4A CODE/CI/PHYSICAL PASS. Post-physical hardening CI PASS. M4B/M4C CODE/CI PASS / PHYSICAL PENDING.**
 
 M3 physically qualified the LocalSystem restore-only primitive. M4 is the next
 separate authorization boundary: durable watchdog lease ownership around a real
@@ -167,8 +167,8 @@ A physical M4A PASS still does not by itself set
 
 Still pending after M4A:
 
-- M4B physical live lease at `10/10` after endpoint-preparation CI is green;
-- M4C physical live lease at `50/50` after M4B is reviewed and endpoint-preparation CI is green;
+- M4B physical live lease at `10/10`;
+- M4C physical live lease at `50/50` after M4B is reviewed;
 - M5 GUI/controller death, watchdog death and double-death failure domains;
 - M6/M7 Modern Standby proactive release/reacquisition lifecycle;
 - explicit hibernation/race gates;
@@ -219,3 +219,17 @@ FF/FF verification and mandatory absence of the journal on normal completion.
 
 This endpoint preparation does not enable the public production watchdog and
 does not enable automatic/adaptive policy.
+
+
+## M4B/M4C endpoint preparation CI result
+
+The endpoint-preparation commit `5f723b74ba4c9740d78937deed8a38f0969228ff`
+passed the complete repository GitHub Actions run **#579** on 2026-09-28.
+
+The green run includes PowerShell syntax validation, Gate E/F/G0/G1/G2
+invariants, legacy 88F8 isolation, warnings-as-errors build, M0, Gate B/C,
+M2/M3/M4 self-tests, SafetyGate, FanControlCoordinator, HP BIOS contracts and
+both HP backend self-tests.
+
+Therefore M4B and M4C are code/CI prepared. Their physical endpoint evidence
+remains intentionally separate and pending.
