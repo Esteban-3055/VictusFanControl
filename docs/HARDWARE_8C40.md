@@ -373,3 +373,12 @@ With Windows automatic idle sleep inhibition active, the next broad-range attemp
 Because the qualification harness only permits equal CPU/GPU commands and firmware release is represented by `FF/FF`, the mixed `144/255` pair is not accepted as a valid baseline ownership state. No `SetFanLevel` command was issued in that run.
 
 Ownership setpoint reads are now duplicated under the same EC mutex lease, mirroring the guard-read hardening. The broad qualification harness also re-reads any asymmetric setpoint observation before treating it as persistent. A persistent asymmetric state still fails closed and prevents any hardware write.
+
+
+## Third guarded 10..50 attempt: hibernation during level 21
+
+With the Windows `ES_SYSTEM_REQUIRED` inhibitor active, the broad sweep successfully characterized equal levels `30` down through `22`. The medians remained monotonic and approximately linear, reaching about 2200 RPM at level 22.
+
+Level `21/21` was accepted by HP WMI and acknowledged by EC `0x34/0x35`, but before the first steady physical sample the machine entered hibernation. After resume, firmware restore was verified at `FF/FF`, while the telemetry snapshot was approximately 33.6 seconds stale. No level below 21 was written, and the later upper sweep was not meaningfully executed because telemetry remained incomplete/stale.
+
+This confirms that `SetThreadExecutionState(ES_SYSTEM_REQUIRED | ES_CONTINUOUS)` is not sufficient to guarantee that this machine will not hibernate during the active hardware test. The extended-range harness now classifies a large telemetry-age discontinuity as a power-transition event, restores firmware, and terminates the entire run instead of attempting another sweep segment. A separate power-transition diagnostics collector was added to capture Windows sleep policy, active power requests, recent Kernel-Power/Power-Troubleshooter events, System Sleep Diagnostics and SleepStudy evidence before continuing lower-range characterization.
