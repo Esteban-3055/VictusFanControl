@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M5 - failure-domain qualification
 
-Status: **M5A CODE PREPARED / CI PENDING / PHYSICAL PENDING.**
+Status: **M5A CODE/CI PASS / PHYSICAL PENDING.**
 M4 normal awake lease qualification is complete at equal 10/30/50.
 
 Production watchdog construction and automatic/adaptive policy remain OFF.
@@ -170,3 +170,20 @@ Even after a future M5A physical PASS:
 - hibernation and in-flight race gates remain pending;
 - `WatchdogRecoveryValidated` remains false;
 - automatic/adaptive policy remains OFF.
+
+
+## M5A preparation CI result
+
+The initial M5A implementation commit
+`2c34b97697b16b7551fe5312a53efff4c3b97761` passed complete GitHub
+Actions run **#586**. The follow-up owner-loss evidence matcher hardening commit
+`21d0d67d7b8d0217ff137798b0185ed24e8a5d8e` passed complete GitHub
+Actions run **#587** on 2026-09-28.
+
+The green run includes the dedicated M5A static causal invariant, warnings-as-
+errors build, historical Gate E/F/G0/G1/G2 invariants, legacy 88F8 isolation,
+M0, Gate B/C, M2/M3/M4 self-tests, SafetyGate, FanControlCoordinator, HP BIOS
+contracts and both HP backend self-tests.
+
+M5A is therefore code/CI prepared. The physical controller-death evidence is
+still pending and remains a separate gate.

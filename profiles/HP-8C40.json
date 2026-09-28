@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-physical-pass-m5a-code-prepared-ci-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-physical-pass-m5a-code-ci-pass-physical-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -922,7 +922,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_CODE_PREPARED_CI_PENDING_PHYSICAL_PENDING",
+    "status": "M5A_CODE_CI_PASS_PHYSICAL_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -942,6 +942,16 @@
     "automaticPolicyEnabled": false,
     "m5aPhysicalStatus": "PENDING",
     "m5bPhysicalStatus": "PENDING",
-    "m5cPhysicalStatus": "PENDING"
+    "m5cPhysicalStatus": "PENDING",
+    "preparationCi": {
+      "result": "PASS",
+      "implementationCommit": "2c34b97697b16b7551fe5312a53efff4c3b97761",
+      "implementationRunNumber": 586,
+      "implementationRunId": 36473454866,
+      "hardeningCommit": "21d0d67d7b8d0217ff137798b0185ed24e8a5d8e",
+      "hardeningRunNumber": 587,
+      "hardeningRunId": 36473628384,
+      "completedAt": "2026-09-28"
+    }
   }
 }
