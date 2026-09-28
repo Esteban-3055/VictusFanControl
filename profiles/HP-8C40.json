@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4a-ci-pass-physical-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4a-physical-pass-post-physical-hardening-ci-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -26,7 +26,7 @@
     "watchdogRestoreOnlyM3CodePassed": true,
     "watchdogM4TargetBoundProtocolPrepared": true,
     "watchdogM4A30LeasePrepared": true,
-    "watchdogM4A30LeasePassed": false,
+    "watchdogM4A30LeasePassed": true,
     "watchdogM4A30LeaseCodePassed": true
   },
   "control": {
@@ -720,7 +720,7 @@
     }
   },
   "watchdogM4LeaseQualification": {
-    "status": "M4A_CODE_CI_PASS_PHYSICAL_PENDING",
+    "status": "M4A_CODE_CI_PHYSICAL_PASS_POST_PHYSICAL_HARDENING_CI_PENDING",
     "protocolVersion": 2,
     "targetProfileIdRequired": true,
     "qualificationPipe": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -734,6 +734,36 @@
     "watchdogRecoveryValidated": false,
     "automaticPolicyEnabled": false,
     "syntheticSelfTest": "PASS",
-    "fullRepositoryCi": "PASS"
+    "fullRepositoryCi": "PENDING_POST_PHYSICAL_HARDENING",
+    "m4aPhysicalResult": {
+      "result": "PASS",
+      "completedAt": "2026-09-28",
+      "targetProfileId": "HP-8C40-9D0R1LA-F18",
+      "serviceSessionId": 0,
+      "serviceAccount": "NT AUTHORITY\\SYSTEM",
+      "initialSetpoint": "FF/FF",
+      "ownedSetpoint": "30/30",
+      "ownedAckCpuRpm": 2994,
+      "ownedAckGpuRpm": 2793,
+      "supervisionSamples": 4,
+      "supervisionCpuRpm": [
+        3032,
+        3011,
+        3003,
+        3007
+      ],
+      "supervisionGpuRpm": [
+        2844,
+        3019,
+        3003,
+        3024
+      ],
+      "guardState": "MaxFan=0x00, FanSwitch=0x00",
+      "finalSetpoint": "FF/FF",
+      "watchdogReleaseAcknowledged": true,
+      "finalIndependentProbe": "FF/FF",
+      "retainedJournal": false,
+      "diagnosticFinding": "Normal post-Release pipe EOF was mislabelled as retained durable ownership even though Release had already cleared the lease; post-physical hardening adds an active-lease check before retention logging."
+    }
   }
 }

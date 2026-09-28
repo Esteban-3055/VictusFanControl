@@ -253,19 +253,37 @@ internal static class GateCPipeServerSession
 
                     if (retainForLiveController)
                     {
-                        // Critical Gate D ordering rule: a pipe can disappear
-                        // after WRITE_INTENT was acknowledged but before the
-                        // controller dispatches WMI. Restoring immediately here
-                        // would clear the lease while the still-live controller
-                        // could continue into SetFanLevel. Keep durable
-                        // ownership armed instead. The persistent Gate D
-                        // process monitor and state deadlines remain
-                        // authoritative while the accept loop permits a fresh
-                        // kernel-validated reconnect from the same process.
-                        log?.Invoke(
-                            $"WATCHDOG TRANSPORT LOSS: reason={ownerLossReason}; " +
-                            $"controller PID={verifiedController.ProcessId} is still alive; " +
-                            "durable lease retained for reconnect/process-death/deadline recovery.");
+                        var activeController =
+                            await manager.GetActiveControllerAsync(
+                                CancellationToken.None).ConfigureAwait(false);
+
+                        if (activeController == verifiedController)
+                        {
+                            // Critical Gate D ordering rule: a pipe can disappear
+                            // after WRITE_INTENT was acknowledged but before the
+                            // controller dispatches WMI. Restoring immediately here
+                            // would clear the lease while the still-live controller
+                            // could continue into SetFanLevel. Keep durable
+                            // ownership armed instead. The persistent Gate D
+                            // process monitor and state deadlines remain
+                            // authoritative while the accept loop permits a fresh
+                            // kernel-validated reconnect from the same process.
+                            log?.Invoke(
+                                $"WATCHDOG TRANSPORT LOSS: reason={ownerLossReason}; " +
+                                $"controller PID={verifiedController.ProcessId} is still alive; " +
+                                "durable lease retained for reconnect/process-death/deadline recovery.");
+                        }
+                        else
+                        {
+                            // A normal Release clears the durable lease before the
+                            // client closes the pipe. Do not misreport that normal
+                            // EOF as retained ownership merely because the process
+                            // is still alive for a few more milliseconds.
+                            log?.Invoke(
+                                $"WATCHDOG PIPE CLOSED: reason={ownerLossReason}; " +
+                                $"controller PID={verifiedController.ProcessId} is still alive; " +
+                                "no active durable lease remains for this controller; no recovery required.");
+                        }
                     }
                     else
                     {

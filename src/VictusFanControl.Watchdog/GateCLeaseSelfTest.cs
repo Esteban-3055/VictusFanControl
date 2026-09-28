@@ -261,7 +261,7 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
-            "Gate D live-controller pipe loss retains lease and permits reconnect",
+            "Gate D retains an active lease across pipe loss but does not report retention after Release",
             GateDLiveControllerPipeLossRetainsLeaseAsync);
 
         if (failures == 0)
@@ -782,6 +782,24 @@ internal static class GateCLeaseSelfTest
             Assert(
                 await env.Journal.LoadAsync(
                     CancellationToken.None) is null);
+            Assert(
+                secondLogs.Any(
+                    line => line.Contains(
+                        "WATCHDOG RELEASE ACK",
+                        StringComparison.Ordinal)),
+                "Successful Release did not emit its acknowledgement log.");
+            Assert(
+                secondLogs.Any(
+                    line => line.Contains(
+                        "no active durable lease remains for this controller",
+                        StringComparison.Ordinal)),
+                "Post-Release pipe close did not report that no durable lease remains.");
+            Assert(
+                !secondLogs.Any(
+                    line => line.Contains(
+                        "durable lease retained for reconnect/process-death/deadline recovery.",
+                        StringComparison.Ordinal)),
+                "Post-Release pipe close falsely reported a retained durable lease.");
         });
     }
 
@@ -1927,6 +1945,7 @@ internal static class GateCLeaseSelfTest
                 Guid.NewGuid().ToString("N");
 
             FanControlWatchdogLeaseResponse owned;
+            var firstLogs = new List<string>();
 
             await using (var firstServer =
                 NewServer(firstPipeName))
@@ -1936,7 +1955,7 @@ internal static class GateCLeaseSelfTest
                         firstServer,
                         env.Manager,
                         CancellationToken.None,
-                        log: null,
+                        log: firstLogs.Add,
                         monitorControllerProcess: true);
 
                 await using (var firstClient =
@@ -2005,6 +2024,12 @@ internal static class GateCLeaseSelfTest
 
             Assert(env.Hardware.RestoreCalls == 0);
             Assert(env.Hardware.Current == new FanSetpoint(30, 30));
+            Assert(
+                firstLogs.Any(
+                    line => line.Contains(
+                        "durable lease retained for reconnect/process-death/deadline recovery.",
+                        StringComparison.Ordinal)),
+                "Live-controller pipe loss did not log durable lease retention while OWNED.");
 
             var retained =
                 await env.Journal.LoadAsync(
@@ -2023,12 +2048,14 @@ internal static class GateCLeaseSelfTest
             await using var secondServer =
                 NewServer(secondPipeName);
 
+            var secondLogs = new List<string>();
+
             var secondServerTask =
                 GateCPipeServerSession.RunAsync(
                     secondServer,
                     env.Manager,
                     CancellationToken.None,
-                    log: null,
+                    log: secondLogs.Add,
                     monitorControllerProcess: true);
 
             await using (var secondClient =

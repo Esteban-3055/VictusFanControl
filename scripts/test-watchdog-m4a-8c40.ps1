@@ -118,10 +118,15 @@ if ($baseline.Cpu -ne 255 -or $baseline.Gpu -ne 255) {
 
 Write-Host ''
 Write-Host 'Step 3: install/start isolated M4 service...' -ForegroundColor Cyan
+if (Test-Path $journalPath) {
+    Write-Host 'M4 durable journal is present. Refusing to delete or overwrite ownership evidence.' -ForegroundColor Red
+    Get-Content $journalPath
+    throw "M4A requires an absent durable journal before service installation: $journalPath"
+}
+
 & (Join-Path $PSScriptRoot 'install-watchdog-m4-8c40.ps1')
 
 Remove-Item $statusPath -Force -ErrorAction SilentlyContinue
-Remove-Item $journalPath -Force -ErrorAction SilentlyContinue
 
 Start-Service -Name $serviceName
 $status = Wait-M4Ready

@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M4 - target-bound live lease qualification
 
-Status: **M4A CODE/CI PASS / PHYSICAL PENDING.**
+Status: **M4A CODE/CI/PHYSICAL PASS. Post-physical logging/journal hardening is pending CI on the current commit.**
 
 M3 physically qualified the LocalSystem restore-only primitive. M4 is the next
 separate authorization boundary: durable watchdog lease ownership around a real
@@ -129,25 +129,35 @@ The M4 gate pins:
 
 Gate C additionally tests wrong-target Hello rejection before journal mutation.
 
-## Physical gate after CI
+## M4A physical result
 
-After repository CI is green:
+M4A was physically executed on 2026-09-28 on the exact target and passed the
+bounded awake `30/30` lease cycle.
 
-~~~powershell
-git pull
-.\scripts\test-watchdog-m4a-8c40.ps1
-~~~
+Observed evidence:
 
-The active token is:
+- clean firmware baseline `FF/FF`;
+- LocalSystem / Session 0 M4 service, exact target id and isolated v2 pipe;
+- PREPARE before authority acquisition;
+- real `30/30` command with EC acknowledgement and both physical tachometers;
+- four consecutive awake Probe/Heartbeat supervision samples at `30/30`;
+- RESTORE_BEGIN followed by local firmware handoff;
+- watchdog Release acknowledgement after its independent restore normalization;
+- final independent EC probe `FF/FF`;
+- no retained durable journal.
 
-~~~text
-8C40-M4-LEASE30
-~~~
+The physical run exposed one diagnostic-only defect: after a successful Release,
+the subsequent normal pipe EOF could be logged as if a durable lease were still
+retained merely because the controller process remained alive briefly. The
+lease was in fact already cleared. The server is now hardened to query active
+lease ownership before emitting the retention message, and the synthetic Gate D
+test pins both sides: an active OWNED lease must still be retained across live
+transport loss, while post-Release EOF must report that no lease remains.
 
-This is one short awake `30/30` lease cycle, not a crash test and not a
-Modern Standby test.
+The installer and M4A harness are also hardened to refuse an existing
+`lease.json` instead of deleting durable ownership evidence during setup.
 
-## What M4A PASS will not authorize
+## What M4A PASS does not authorize
 
 A physical M4A PASS still does not by itself set
 `WatchdogRecoveryValidated=true`.
@@ -173,4 +183,4 @@ The green run includes PowerShell syntax validation, historical Gate E/F/G0/G1/G
 
 The protocol-v2 migration pins TargetProfileId in both request and response. Historical 88F8 Gate G remains explicitly bound to the 88F8 target id, while M4A uses the isolated 8C40 pipe and exact 8C40 target id.
 
-No physical M4A fan write has been executed by CI. The next gate is the single bounded awake 30/30 lease cycle in scripts/test-watchdog-m4a-8c40.ps1.
+CI does not execute physical fan writes. M4A physical evidence now exists from the bounded awake 30/30 run on 2026-09-28. The next physical gates remain M4B at 10/10 and M4C at 50/50 after their code preparation and CI review are complete.

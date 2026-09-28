@@ -12,6 +12,7 @@ $modulesDir = Join-Path $installRoot 'modules'
 $logsDir = Join-Path $installRoot 'logs'
 $stateDir = Join-Path $installRoot 'state'
 $resultPath = Join-Path $stateDir 'm4-8c40.status.json'
+$journalPath = Join-Path $stateDir 'lease.json'
 
 function Assert-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -33,12 +34,20 @@ function Stop-ServiceIfRunning {
 }
 
 function Remove-ServiceIfPresent {
-    param([string]$Name)
+    param(
+        [string]$Name,
+        [string]$JournalPath
+    )
 
     $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
     if (-not $service) { return }
 
     Stop-ServiceIfRunning -Name $Name
+
+    if (Test-Path $JournalPath) {
+        throw "Refusing to replace service '$Name' because durable lease evidence remains at '$JournalPath'. Do not delete the journal; inspect/recover the retained ownership state first."
+    }
+
     & sc.exe delete $Name | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "sc.exe delete failed for $Name with exit code $LASTEXITCODE."
@@ -53,6 +62,10 @@ function Remove-ServiceIfPresent {
 }
 
 Assert-Administrator
+
+if (Test-Path $journalPath) {
+    throw "M4 install/update refused because durable lease evidence exists at '$journalPath'. Do not delete it; inspect the retained lease and recover ownership before reinstalling."
+}
 
 foreach ($legacyName in @(
     'VictusFanControlWatchdogGateA',
@@ -89,7 +102,11 @@ try {
         throw "dotnet publish failed with exit code $LASTEXITCODE."
     }
 
-    Remove-ServiceIfPresent -Name $serviceName
+    Remove-ServiceIfPresent -Name $serviceName -JournalPath $journalPath
+
+    if (Test-Path $journalPath) {
+        throw "M4 install/update refused because durable lease evidence appeared at '$journalPath' during service shutdown. Evidence is preserved."
+    }
 
     if (Test-Path $installRoot) {
         Remove-Item -Recurse -Force $installRoot
@@ -111,7 +128,6 @@ try {
     Copy-Item -Path (Join-Path $publishTemp '*') -Destination $binDir -Recurse -Force
     Copy-Item -Path $sourceModule -Destination (Join-Path $modulesDir 'LpcACPIEC.bin') -Force
 
-    Remove-Item (Join-Path $stateDir 'lease.json') -Force -ErrorAction SilentlyContinue
     Remove-Item $resultPath -Force -ErrorAction SilentlyContinue
 
     $exe = Join-Path $binDir 'VictusFanControl.Watchdog.exe'
