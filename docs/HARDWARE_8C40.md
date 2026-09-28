@@ -454,3 +454,22 @@ Each command must receive exact EC setpoint acknowledgement. Telemetry is sample
 The gate retains the AC/battery sanity checks, SafetyGate, light-load envelope, Windows idle-sleep inhibition, exact-target fingerprint, conflicting-controller exclusion, control guard checks and a mandatory final FF/FF + LegacyDefault restore. Any failure after a possible write enters the final restore path with CancellationToken.None.
 
 This gate does not alter the production 30..36 range. Its purpose is to qualify large rise/fall dynamics and collect convergence time data before production endpoint promotion or adaptive slew tuning.
+
+
+## Large transition qualification PASS
+
+The prepared transition gate completed successfully with the fixed override retained between intermediate commands:
+
+`firmware -> 10 -> 30 -> 50 -> 30 -> 10 -> firmware`
+
+The firmware baseline had both tachometers at 0 RPM. A direct `10/10` command therefore also qualified low-end restart from a fully stopped state: both fans spun up, briefly overshot to roughly 1.6-1.7k RPM, and converged to about 1.0k RPM in 6.0 seconds.
+
+Measured terminal-convergence times were approximately 8.6 s for 10->30, 9.3 s for 30->50, 10.2 s for 50->30 and 7.7 s for 30->10. All steps retained exact EC ownership, sane guards and safe telemetry. The final FF/FF + LegacyDefault restore was verified. No battery/power transition anomaly recurred.
+
+This closes the previously pending low-end restart-from-zero and large direct transition questions for the qualification path. Production remains 30..36 until the coordinator/backend endpoint integration gate passes.
+
+## Prepared endpoint coordinator qualification
+
+A new qualification-only integration gate is prepared for endpoints 10 and 50. It uses the real SafetyGate, FanControlCoordinator and Hp8C40FanControlBackend logic, while injecting the already-characterized 10..50 equal command envelope and qualification-only WMI writer. This avoids changing production defaults before the endpoint route is physically exercised.
+
+The sequence is independent endpoint admission and restore: `firmware -> 10 -> firmware`, then `firmware -> 50 -> firmware`. Each endpoint must pass backend EC/tach acknowledgement, continuous coordinator supervision, two-sample terminal RPM convergence and verified FF/FF restore. Production remains equal-only 30..36 until this gate and a later explicit promotion regression pass.
