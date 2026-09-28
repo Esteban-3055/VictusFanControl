@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m2.5-pass-m3-ci-pass-physical-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -22,7 +22,7 @@
     "legacy88F8IsolationM2_5CodePassed": true,
     "legacy88F8InstalledServiceCleanupVerified": true,
     "watchdogRestoreOnlyM3Prepared": true,
-    "watchdogRestoreOnlyM3Passed": false,
+    "watchdogRestoreOnlyM3Passed": true,
     "watchdogRestoreOnlyM3CodePassed": true
   },
   "control": {
@@ -683,7 +683,7 @@
     "cleanupRequired": false
   },
   "watchdogM3RestoreOnlyQualification": {
-    "status": "CODE_CI_PASS_PHYSICAL_PENDING",
+    "status": "PASS",
     "requiredSourceState": "known VFC-owned equal 30/30",
     "targetState": "firmware FF/FF",
     "service": "VictusFanControlWatchdogM3",
@@ -696,6 +696,23 @@
     "watchdogLeaseEnabled": false,
     "watchdogRecoveryValidated": false,
     "automaticPolicyEnabled": false,
-    "syntheticSelfTest": "PASS"
+    "syntheticSelfTest": "PASS",
+    "completedAt": "2026-09-28",
+    "physicalResult": {
+      "baselineEc": "FF/FF",
+      "armedEc": "30/30",
+      "serviceSessionId": 0,
+      "serviceAccount": "NT AUTHORITY\\SYSTEM",
+      "serviceSid": "S-1-5-18",
+      "targetProfileId": "HP-8C40-9D0R1LA-F18",
+      "handoffClaimed": true,
+      "handoffValidated": true,
+      "armerIdentityValidated": true,
+      "restoreCallSucceeded": true,
+      "verifiedFfFf": true,
+      "finalIndependentEc": "FF/FF",
+      "informationalGetFanLevelAfter": "29/30",
+      "watchdogLeaseCreated": false
+    }
   }
 }

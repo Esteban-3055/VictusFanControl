@@ -724,9 +724,9 @@ WMI `SetFanLevel` command.
 M2.5 repository CI passed after this hardening. The physical 8C40 Windows service-registration audit also passed: no historical 88F8 watchdog services were installed, so no cleanup action was required. M2.5 is closed and M3 may now be prepared.
 
 
-## Watchdog M3 prepared - restore-only service gate — CODE/CI PASS
+## Watchdog M3 restore-only service gate — PHYSICAL PASS
 
-M3 is now prepared in code and awaits one physical qualification run.
+M3 passed its physical qualification on the exact HP 8C40 target on 2026-09-28.
 
 The dedicated `VictusFanControlWatchdogM3` service runs as LocalSystem in
 Session 0 and has no ordinary `SetFanLevel` method. It can consume only a
@@ -753,3 +753,11 @@ See `docs/WATCHDOG_M3_8C40.md`.
 M3 preparation passed the complete repository CI. No physical M3 write has
 been performed yet; the status remains restore-only harness prepared with
 physical qualification pending.
+
+
+The physical M3 run started from EC `FF/FF`, armed one exact VFC-owned
+`30/30` state, validated the fresh one-shot handoff from LocalSystem/Session 0,
+issued exactly one restore transaction, verified service-side EC `FF/FF` and
+then verified `FF/FF` again with the independent interactive probe. No watchdog
+lease was created. `WatchdogRecoveryValidated` remains false and M4 remains a
+separate authorization boundary.

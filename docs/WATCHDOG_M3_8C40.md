@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M3 - LocalSystem restore-only qualification
 
-Status: **CODE/CI PASS / PHYSICAL RESULT PENDING.**
+Status: **PHYSICAL PASS on the exact HP 8C40 target (2026-09-28).**
 
 M3 is the first HP 8C40 M-series gate that grants the LocalSystem service a
 real hardware write. That authority is deliberately narrower than the future
@@ -202,3 +202,50 @@ mandatory EC FF/FF acknowledgement.
 
 Physical M3 remains pending and is still required before the service-side
 restore boundary can be considered qualified.
+
+
+## Physical M3 result - PASS
+
+The exact HP 8C40 target completed the bounded M3 restore-only hardware gate
+successfully on 2026-09-28.
+
+Observed sequence:
+
+```text
+initial EC ownership      FF/FF
+VFC armer command         30/30
+armed EC ownership        30/30
+LocalSystem Session       0
+service SID               S-1-5-18
+target                    HP-8C40-9D0R1LA-F18
+handoff claimed           true
+handoff validated         true
+armer identity valid      true
+service restore call      success
+service EC verification   FF/FF
+independent final probe   FF/FF
+```
+
+The service captured two consecutive pre-restore EC samples at exact 30/30
+with MaxFan/FanSwitch both zero and both physical fans running. It then issued
+exactly one `FF/FF -> LegacyDefault` restore transaction and immediately
+verified EC `FF/FF`.
+
+The post-restore `GetFanLevel` observation was `29/30`. This remains
+informational effective-speed telemetry and is not ownership acknowledgement.
+
+The independent interactive probe after service completion also read
+`FF/FF`, closing the physical restore-only qualification.
+
+M3 proves only the bounded LocalSystem restore primitive from a fresh,
+known VFC-owned equal 30/30 state. It does not authorize ordinary service-side
+fan writes or watchdog-backed unattended ownership.
+
+The following remain blocked:
+
+- `WatchdogRecoveryValidated=false`;
+- production 8C40 watchdog lease;
+- controller/service lease handshake for 8C40;
+- GUI-death/watchdog-death/double-death recovery;
+- Modern Standby watchdog Custom lifecycle;
+- automatic/adaptive fan policy.
