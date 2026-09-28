@@ -41,6 +41,11 @@ public sealed class CliOptions
     public bool Hp8C40M5AControllerDeathArm { get; private set; }
     public string? Hp8C40M5AControllerDeathToken { get; private set; }
     public string? Hp8C40M5AReadyPath { get; private set; }
+    public bool Hp8C40M5BWatchdogDeathController { get; private set; }
+    public string? Hp8C40M5BWatchdogDeathToken { get; private set; }
+    public string? Hp8C40M5BReadyPath { get; private set; }
+    public string? Hp8C40M5BLocalRestorePath { get; private set; }
+    public string? Hp8C40M5BCompletionPath { get; private set; }
     public string? IntegratedCoordinatorToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
@@ -232,6 +237,33 @@ public sealed class CliOptions
                             ReadValue(args, ref i));
                     break;
 
+                case "--8c40-m5b-watchdog-death-controller":
+                    options.Hp8C40M5BWatchdogDeathController = true;
+                    break;
+
+                case "--8c40-m5b-token":
+                    options.Hp8C40M5BWatchdogDeathToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m5b-ready-path":
+                    options.Hp8C40M5BReadyPath =
+                        Path.GetFullPath(
+                            ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m5b-local-restore-path":
+                    options.Hp8C40M5BLocalRestorePath =
+                        Path.GetFullPath(
+                            ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m5b-completion-path":
+                    options.Hp8C40M5BCompletionPath =
+                        Path.GetFullPath(
+                            ReadValue(args, ref i));
+                    break;
+
                 case "--coordinator-write-token":
                     options.IntegratedCoordinatorToken = ReadValue(args, ref i);
                     break;
@@ -290,6 +322,7 @@ public sealed class CliOptions
             (options.Hp8C40M3Arm ? 1 : 0) +
             (options.Hp8C40M4LeaseQualification ? 1 : 0) +
             (options.Hp8C40M5AControllerDeathArm ? 1 : 0) +
+            (options.Hp8C40M5BWatchdogDeathController ? 1 : 0) +
             (options.HealthTestMinutes > 0 ? 1 : 0);
 
         if (exclusiveActions > 1)
@@ -405,6 +438,25 @@ public sealed class CliOptions
                 "--8c40-m5a-controller-death-arm requires --8c40-m5a-ready-path.");
         }
 
+        if ((options.Hp8C40M5BWatchdogDeathToken is not null ||
+             options.Hp8C40M5BReadyPath is not null ||
+             options.Hp8C40M5BLocalRestorePath is not null ||
+             options.Hp8C40M5BCompletionPath is not null) &&
+            !options.Hp8C40M5BWatchdogDeathController)
+        {
+            throw new ArgumentException(
+                "--8c40-m5b-token/ready/local-restore/completion paths are valid only with --8c40-m5b-watchdog-death-controller.");
+        }
+
+        if (options.Hp8C40M5BWatchdogDeathController &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40M5BReadyPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M5BLocalRestorePath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M5BCompletionPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-m5b-watchdog-death-controller requires ready, local-restore and completion paths.");
+        }
+
         return options;
     }
 
@@ -454,6 +506,11 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-m5a-controller-death-arm  ACTIVE M5A CHILD: hold watchdog-owned 30/30 until parent force-kills this process.");
         Console.WriteLine("  --8c40-m5a-token <token>   Required exact token: 8C40-M5A-CONTROLLER-DEATH30.");
         Console.WriteLine("  --8c40-m5a-ready-path <path>  Durable READY marker written only after EC+tachs+watchdog OWNED acknowledgement.");
+        Console.WriteLine("  --8c40-m5b-watchdog-death-controller  ACTIVE M5B CHILD: hold OWNED 30/30 and locally restore on watchdog IPC loss.");
+        Console.WriteLine("  --8c40-m5b-token <token>   Required exact token: 8C40-M5B-WATCHDOG-DEATH30.");
+        Console.WriteLine("  --8c40-m5b-ready-path <path>  READY marker after EC+tachs+watchdog OWNED acknowledgement.");
+        Console.WriteLine("  --8c40-m5b-local-restore-path <path>  Marker written only after WATCHDOG_IPC_LOSS local FF/FF restore.");
+        Console.WriteLine("  --8c40-m5b-completion-path <path>  Parent signal allowing the live controller to exit after restart recovery proof.");
         Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30 or HP 8C40 production tokens 8C40-COORD10/30/32/36/50.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");

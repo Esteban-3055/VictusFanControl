@@ -138,6 +138,36 @@ internal static class Program
                 writeTestCts.Token);
         }
 
+        if (options.Hp8C40M5BWatchdogDeathController)
+        {
+            if (!string.Equals(
+                    options.Hp8C40M5BWatchdogDeathToken,
+                    Hp8C40M5BWatchdogDeathControllerTest.RequiredToken,
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    $"HP 8C40 M5B refused: explicit --8c40-m5b-token " +
+                    $"{Hp8C40M5BWatchdogDeathControllerTest.RequiredToken} is required.");
+                return 189;
+            }
+
+            using var m5bCts =
+                new CancellationTokenSource();
+
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                m5bCts.Cancel();
+            };
+
+            return await Hp8C40M5BWatchdogDeathControllerTest.RunAsync(
+                options.ModulesDirectory,
+                options.Hp8C40M5BReadyPath!,
+                options.Hp8C40M5BLocalRestorePath!,
+                options.Hp8C40M5BCompletionPath!,
+                m5bCts.Token);
+        }
+
         if (options.Hp8C40M5AControllerDeathArm)
         {
             if (!string.Equals(

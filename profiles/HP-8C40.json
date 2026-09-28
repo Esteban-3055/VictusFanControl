@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5a-physical-pass-m5bc-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5a-physical-pass-m5b-code-prepared-ci-pending-m5c-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -36,7 +36,7 @@
     "watchdogM4C50LeaseCodePassed": true,
     "watchdogM5AControllerDeathPrepared": true,
     "watchdogM5AControllerDeathPassed": true,
-    "watchdogM5BWatchdogDeathPrepared": false,
+    "watchdogM5BWatchdogDeathPrepared": true,
     "watchdogM5BWatchdogDeathPassed": false,
     "watchdogM5CDoubleDeathPrepared": false,
     "watchdogM5CDoubleDeathPassed": false
@@ -922,7 +922,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_CODE_CI_PHYSICAL_PASS_M5B_M5C_PENDING",
+    "status": "M5A_PHYSICAL_PASS_M5B_CODE_PREPARED_CI_PENDING_PHYSICAL_PENDING_M5C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -981,6 +981,26 @@
       "retainedJournal": false,
       "postTestProbe": "FF/FF",
       "qualificationPass": true
+    },
+    "m5b": {
+      "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_PENDING",
+      "qualificationLevel": 30,
+      "token": "8C40-M5B-WATCHDOG-DEATH30",
+      "service": "VictusFanControlWatchdogM4",
+      "serviceStartupModeForQualification": "Demand/manual",
+      "exactWatchdogPidKillRequired": true,
+      "controllerMustRemainAlive": true,
+      "causalFailureRequired": "WATCHDOG_IPC_LOSS",
+      "localFirmwareAckRequired": true,
+      "watchdogReleaseMustRemainUnverifiedWhileDead": true,
+      "independentFfFfRequiredBeforeServiceRestart": true,
+      "durableOwnedJournalMustRemainBeforeRestart": true,
+      "replacementServiceStartedOnlyAfterLocalRestoreProof": true,
+      "replacementStartupDispositionRequired": "RestoredFirmware",
+      "finalJournalAbsentRequired": true,
+      "finalIndependentEcRequired": "FF/FF",
+      "parentDirectRestoreAuthority": false,
+      "physicalStatus": "PENDING"
     }
   }
 }

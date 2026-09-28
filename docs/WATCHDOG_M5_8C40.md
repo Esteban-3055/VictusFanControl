@@ -238,3 +238,57 @@ controller death from watchdog restart/recovery.
 M5A is closed. This does not yet promote
 `WatchdogRecoveryValidated=true`; M5B watchdog death and M5C double death remain
 separate physical gates.
+
+
+## M5B - watchdog death while controller remains alive
+
+M5B is prepared as the complementary failure domain to M5A. It deliberately
+kills only the LocalSystem watchdog process after the real controller has
+reached durable `OWNED 30/30`.
+
+The isolated M4 service remains demand/manual for this qualification. This is
+intentional: the parent harness requires the watchdog process to remain absent
+until the still-live controller has independently detected
+`WATCHDOG_IPC_LOSS` and completed the local HP
+`FF/FF -> LegacyDefault` restore. Only after that proof does the parent
+manually start a replacement service process.
+
+Required causal sequence:
+
+~~~text
+clean FF/FF
+  -> LocalSystem M4 service Ready
+  -> live controller PREPARE
+  -> WRITE_INTENT 30/30
+  -> WMI + EC + dual-tach ACK
+  -> COMMIT / durable OWNED 30/30
+  -> READY exact controller identity
+  -> parent force-kills exact watchdog PID only
+  -> watchdog service absent
+  -> controller remains alive
+  -> ordinary dependency Probe reports WATCHDOG_IPC_LOSS
+  -> coordinator executes live-controller local restore
+  -> backend verifies local FF/FF
+  -> watchdog Release remains unverified because service is absent
+  -> parent independently verifies FF/FF while watchdog is still absent
+  -> durable OWNED journal must still exist
+  -> parent manually starts replacement M4 service
+  -> startup recovery sees retained journal + FF/FF
+  -> service normalizes full firmware restore
+  -> startup disposition RestoredFirmware
+  -> journal deleted
+  -> independent final FF/FF
+  -> controller receives parent-complete marker and exits
+~~~
+
+The M5B parent contains no direct HP/WMI restore authority. On an abnormal test
+failure, it may start the already-qualified LocalSystem recovery service if a
+durable journal remains; that cleanup path cannot satisfy M5B PASS.
+
+M5B explicit token:
+
+~~~text
+8C40-M5B-WATCHDOG-DEATH30
+~~~
+
+Physical execution remains blocked until its new code/CI gate is green.

@@ -73,6 +73,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-watchdog-m5a-8c40-invariants.ps1
 
+      - name: HP 8C40 M5B watchdog-death invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-m5b-8c40-invariants.ps1
+
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
