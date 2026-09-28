@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M3 - LocalSystem restore-only qualification
 
-Status: **HARNESS PREPARED / PHYSICAL RESULT PENDING.**
+Status: **CODE/CI PASS / PHYSICAL RESULT PENDING.**
 
 M3 is the first HP 8C40 M-series gate that grants the LocalSystem service a
 real hardware write. That authority is deliberately narrower than the future
@@ -186,3 +186,19 @@ Even after a physical M3 PASS:
 M4 is a separate boundary. Before real watchdog-backed ownership is allowed,
 M4 must add exact target identity to the controller/service handshake and then
 qualify bounded live lease ownership.
+
+
+## CI preparation result
+
+The complete M3 preparation passed repository CI before any physical M3 write
+was requested. The M3 synthetic gate passed together with M0, M1/Gate C, M2,
+legacy-88F8 isolation, SafetyGate, coordinator, BIOS contracts and both HP fan
+backends.
+
+The M3-specific CI cases passed for restore-only interface isolation, exact
+fresh 30/30 handoff, stale/wrong-target/dead-armer no-write behavior, external
+override preservation, guard refusal, reported WMI failure semantics and
+mandatory EC FF/FF acknowledgement.
+
+Physical M3 remains pending and is still required before the service-side
+restore boundary can be considered qualified.

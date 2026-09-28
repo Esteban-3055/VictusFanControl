@@ -724,7 +724,7 @@ WMI `SetFanLevel` command.
 M2.5 repository CI passed after this hardening. The physical 8C40 Windows service-registration audit also passed: no historical 88F8 watchdog services were installed, so no cleanup action was required. M2.5 is closed and M3 may now be prepared.
 
 
-## Watchdog M3 prepared - restore-only service gate
+## Watchdog M3 prepared - restore-only service gate — CODE/CI PASS
 
 M3 is now prepared in code and awaits one physical qualification run.
 
@@ -748,3 +748,8 @@ M3 remains a qualification harness, not watchdog enablement:
 blocked, and automatic/adaptive policy stays OFF.
 
 See `docs/WATCHDOG_M3_8C40.md`.
+
+
+M3 preparation passed the complete repository CI. No physical M3 write has
+been performed yet; the status remains restore-only harness prepared with
+physical qualification pending.
