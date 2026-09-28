@@ -30,7 +30,7 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
 
     private const int SamplesPerLevel = 5;
     private static readonly TimeSpan SettleDuration = TimeSpan.FromSeconds(4);
-    private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan MaximumTelemetryAge = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan EcRetryDelay = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan SetpointAckTimeout = TimeSpan.FromSeconds(2);
@@ -38,6 +38,7 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
     private static readonly TimeSpan MaximumStepWindow = TimeSpan.FromSeconds(15);
 
     private const int EcEvidenceReadAttempts = 3;
+    private const byte MinimumBatteryPercentForQualification = 20;
 
     // Conservative characterization boundary. Falling below this while we own
     // a fixed low-level command stops the downward sweep immediately.
@@ -105,6 +106,22 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
                 "Explicit lid/user/critical power transitions are still not blocked.");
             Console.WriteLine();
 
+            SystemPowerStatusSample initialPower;
+            try
+            {
+                initialPower = SystemPowerStatusReader.Read();
+                EnsureQualificationPowerStatus(initialPower);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"Qualification refused by AC/battery sanity gate: {ex.Message}");
+                return 119;
+            }
+
+            Console.WriteLine($"AC/battery sanity baseline: {initialPower}");
+            Console.WriteLine();
+
         using var reader = new HardwareTelemetryReader(modulesDirectory);
         if (!reader.BackendsInitialized)
         {
@@ -124,6 +141,8 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
         Console.WriteLine("Priming differential telemetry counters...");
         _ = reader.ReadSnapshot();
         await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+
+        EnsureQualificationPowerStatus(SystemPowerStatusReader.Read());
 
         var baseline = reader.ReadSnapshot();
         Console.WriteLine("Firmware baseline:");
@@ -357,6 +376,8 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
 
         try
         {
+            EnsureQualificationPowerStatus(SystemPowerStatusReader.Read());
+
             var pre = reader.ReadSnapshot();
             EnsureSafeTelemetry(hardware, pre);
 
@@ -379,6 +400,8 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             Console.WriteLine(
                 $"EC setpoint ACK: {acknowledged.CpuSetpoint}/{acknowledged.GpuSetpoint}");
 
+            EnsureQualificationPowerStatus(SystemPowerStatusReader.Read());
+
             var settleStarted = Stopwatch.GetTimestamp();
             while (Stopwatch.GetElapsedTime(settleStarted) < SettleDuration)
             {
@@ -387,14 +410,10 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
                     SampleInterval,
                     cancellationToken).ConfigureAwait(false);
 
+                EnsureQualificationPowerStatus(SystemPowerStatusReader.Read());
+
                 var settleSample = reader.ReadSnapshot();
                 EnsureSafeTelemetry(hardware, settleSample);
-
-                var ec = await ReadControlEvidenceWithRetryAsync(
-                    probe,
-                    $"level {level} settling",
-                    cancellationToken).ConfigureAwait(false);
-                EnsureActiveOwnershipAndGuards(ec, level);
 
                 if (allowRunningFloorStop &&
                     Stopwatch.GetElapsedTime(settleStarted) >= TimeSpan.FromSeconds(2) &&
@@ -409,6 +428,12 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
                 }
             }
 
+            var settledOwnership = await ReadControlEvidenceWithRetryAsync(
+                probe,
+                $"level {level} post-settle ownership",
+                cancellationToken).ConfigureAwait(false);
+            EnsureActiveOwnershipAndGuards(settledOwnership, level);
+
             var cpuSamples = new List<double>(SamplesPerLevel);
             var gpuSamples = new List<double>(SamplesPerLevel);
 
@@ -416,14 +441,10 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             {
                 EnsureStepWindow(stepStarted);
 
+                EnsureQualificationPowerStatus(SystemPowerStatusReader.Read());
+
                 var sample = reader.ReadSnapshot();
                 EnsureSafeTelemetry(hardware, sample);
-
-                var ec = await ReadControlEvidenceWithRetryAsync(
-                    probe,
-                    $"level {level} sample {index}",
-                    cancellationToken).ConfigureAwait(false);
-                EnsureActiveOwnershipAndGuards(ec, level);
 
                 if (sample.CpuFanRpm < MinimumSafeCustomRpm ||
                     sample.GpuFanRpm < MinimumSafeCustomRpm)
@@ -457,6 +478,14 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
                         cancellationToken).ConfigureAwait(false);
                 }
             }
+
+            EnsureQualificationPowerStatus(SystemPowerStatusReader.Read());
+
+            var finalOwnership = await ReadControlEvidenceWithRetryAsync(
+                probe,
+                $"level {level} final ownership",
+                cancellationToken).ConfigureAwait(false);
+            EnsureActiveOwnershipAndGuards(finalOwnership, level);
 
             result = new LevelResult(
                 level,
@@ -617,6 +646,38 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             Console.WriteLine(
                 $"Upper characterization boundary: {upperFailureLevel}/{upperFailureLevel}");
             Console.WriteLine($"  {upperFailureReason}");
+        }
+    }
+
+    private static void EnsureQualificationPowerStatus(
+        SystemPowerStatusSample status)
+    {
+        if (!status.AcOnline)
+        {
+            throw new PowerTransitionDetectedException(
+                $"AC power unexpectedly went offline during qualification " +
+                $"({status}). This is the same class of precursor seen before " +
+                "the false critical-battery hibernation.");
+        }
+
+        if (!status.BatteryPresent)
+        {
+            throw new PowerTransitionDetectedException(
+                $"Windows reported no usable battery during qualification ({status}).");
+        }
+
+        if (status.BatteryPercent > 100)
+        {
+            throw new PowerTransitionDetectedException(
+                $"Windows reported an unknown battery percentage during qualification ({status}).");
+        }
+
+        if (status.BatteryPercent < MinimumBatteryPercentForQualification)
+        {
+            throw new PowerTransitionDetectedException(
+                $"Windows reported battery={status.BatteryPercent}% while AC is online. " +
+                $"Qualification requires at least {MinimumBatteryPercentForQualification}% " +
+                "because previous false 0% reports triggered automatic hibernation.");
         }
     }
 
