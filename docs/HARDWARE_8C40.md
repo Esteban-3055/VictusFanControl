@@ -441,3 +441,16 @@ The final guarded broad sweep completed every equal level from 10 through 50 wit
 The RPM mapping is close to 100 RPM per command level across the full range. All adjacent median deltas remained positive for both CPU and GPU, with ordinary sample scatter around the trend. Level 31 showed a first-sample transition lag after the large jump from the low-end sweep, but its median and subsequent samples converged normally.
 
 The broad sweep proves the steady equal-command primitive, not every production transition. Production remains 30..36 until endpoint integration and low-end restart behavior are separately qualified.
+
+
+## Prepared next gate: large transition qualification
+
+The next physical gate is prepared but not yet counted as a hardware PASS. It intentionally keeps the fixed override active between commands and executes:
+
+`firmware -> 10 -> 30 -> 50 -> 30 -> 10 -> firmware`
+
+Each command must receive exact EC setpoint acknowledgement. Telemetry is sampled at 1 Hz to keep direct EC traffic conservative after the earlier false critical-battery incidents. A transition converges only after two consecutive CPU/GPU tachometer samples are inside a terminal band of max(150 RPM, 5% of the nominal level*100 RPM). Each step has a 12-second convergence timeout.
+
+The gate retains the AC/battery sanity checks, SafetyGate, light-load envelope, Windows idle-sleep inhibition, exact-target fingerprint, conflicting-controller exclusion, control guard checks and a mandatory final FF/FF + LegacyDefault restore. Any failure after a possible write enters the final restore path with CancellationToken.None.
+
+This gate does not alter the production 30..36 range. Its purpose is to qualify large rise/fall dynamics and collect convergence time data before production endpoint promotion or adaptive slew tuning.
