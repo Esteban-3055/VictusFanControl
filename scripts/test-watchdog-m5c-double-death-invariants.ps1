@@ -29,7 +29,7 @@ Assert-Contains $harness 'Test-JournalOwnedPhase' 'M5C must require durable OWNE
 Assert-Contains $harness '[int]$Journal.Owned.Cpu -ne 30' 'M5C must require durable CPU OWNED 30.'
 Assert-Contains $harness '[int]$Journal.Owned.Gpu -ne 30' 'M5C must require durable GPU OWNED 30.'
 Assert-Contains $harness '[long]$Journal.Controller.ProcessStartUtcTicks -ne $ControllerStartTicks' 'M5C must bind the journal to exact controller creation time.'
-Assert-Contains $harness 'watchdog-m5c-service-failsafe-8c40.ps1' 'M5C must arm the independent delayed service-start safety fallback.'
+Assert-Contains $harness 'watchdog-m5c-service-failsafe-8c40.ps1' 'M5C must arm the independent delayed safety fallback.'
 Assert-Contains $harness 'restart/$RestartDelayMs/restart/5000/restart/10000' 'M5C must configure ordered SCM replacement recovery.'
 Assert-Contains $harness 'Test-FailsafeTakeover' 'M5C must reject a run in which the delayed safety fallback fires.'
 Assert-Contains $harness '$postDeath.Cpu -ne 30 -or $postDeath.Gpu -ne 30' 'M5C must prove EC remains 30/30 after both original recovery domains are dead.'
@@ -39,6 +39,17 @@ Assert-Contains $harness 'Wait-ForJournalGone' 'M5C must require journal deletio
 Assert-Contains $harness '$final.Cpu -ne 255 -or $final.Gpu -ne 255' 'M5C must independently verify final FF/FF.'
 Assert-Contains $harness 'StartType=$($svc.StartType)' 'M5C must restore the Manual/stopped qualification-service baseline.'
 Assert-Contains $harness 'Do not reinstall the service or run another fan-write gate until this state is inspected/recovered.' 'M5C must retain unresolved durable evidence fail-closed.'
+
+$failsafeArmIndex = $harness.IndexOf('$failsafe = Start-DelayedFailsafe', [StringComparison]::Ordinal)
+$controllerLaunchIndex = $harness.IndexOf("$controller = Start-Process -FilePath 'dotnet'", [StringComparison]::Ordinal)
+
+if ($failsafeArmIndex -lt 0 -or $controllerLaunchIndex -lt 0 -or $failsafeArmIndex -ge $controllerLaunchIndex) {
+    throw 'M5C must arm its independent delayed safety fallback before launching the write-capable qualification controller.'
+}
+
+Assert-Contains $harness '$failsafe.Refresh()' 'M5C must refresh the delayed safety process at the physical fault boundary.'
+Assert-Contains $harness 'if ($failsafe.HasExited)' 'M5C must prove the delayed safety process is alive at the physical fault boundary.'
+Assert-Contains $harness '$watchdogHandleStartTicks' 'M5C must revalidate the watchdog process handle creation time immediately before the double-death boundary.'
 
 if ($harness -match '(?m)^\s*(?:&\s*)?dotnet\s+\$cli\s+--restore-hp-auto\b' -or
     $harness -match 'Hp8C40BiosFanControl' -or
@@ -75,7 +86,14 @@ Assert-Contains $harness 'if ((Get-ServiceProcessId) -ne 0)' 'M5C must explicitl
 Assert-Contains $failsafe 'HP-8C40-9D0R1LA-F18' 'M5C delayed failsafe must pin the exact target.'
 Assert-Contains $failsafe '[int]$journal.Owned.Cpu -ne 30' 'M5C delayed failsafe must require OWNED CPU 30.'
 Assert-Contains $failsafe '[int]$journal.Owned.Gpu -ne 30' 'M5C delayed failsafe must require OWNED GPU 30.'
-Assert-Contains $failsafe 'Start-Service -Name $serviceName' 'M5C delayed failsafe may recover only by starting the already-qualified service.'
+Assert-Contains $failsafe '$journal.Controller.ProcessId' 'M5C delayed failsafe must bind takeover to the journal controller PID.'
+Assert-Contains $failsafe '$journal.Controller.ProcessStartUtcTicks' 'M5C delayed failsafe must bind takeover to the journal controller creation time.'
+Assert-Contains $failsafe '[System.Diagnostics.Process]::GetProcessById($ProcessId)' 'M5C delayed failsafe must reopen the exact journal-bound controller process.'
+Assert-Contains $failsafe '$process.StartTime.ToUniversalTime().Ticks' 'M5C delayed failsafe must revalidate controller process creation time before takeover.'
+Assert-Contains $failsafe '$process.Kill()' 'M5C delayed failsafe may neutralize only the exact journal-bound controller so the qualified watchdog can restore.'
+Assert-Contains $failsafe 'Start-Service -Name $serviceName' 'M5C delayed failsafe may start the already-qualified service when it is absent.'
+Assert-Contains $failsafe 'Restart-Service -Name $serviceName -Force' 'M5C delayed failsafe may restart the already-qualified service only after the exact owner is gone and its journal persists.'
+Assert-Contains $failsafe 'Wait-JournalGone' 'M5C delayed failsafe must leave durable-journal deletion to the watchdog recovery path.'
 Assert-NotContains $failsafe 'SetFanLevel(' 'M5C delayed failsafe must not issue ordinary fan targets.'
 Assert-NotContains $failsafe '--restore-hp-auto' 'M5C delayed failsafe must not invoke direct HP restore CLI.'
 Assert-NotContains $failsafe 'Remove-Item $journalPath' 'M5C delayed failsafe must never delete durable ownership evidence.'

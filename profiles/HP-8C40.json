@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5ab-physical-pass-m5c-stage0-physical-pass-double-death-code-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5ab-physical-pass-m5c-stage0-pass-double-death-ci-pass-safety-hardening-ci-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -924,7 +924,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_M5B_CODE_CI_PHYSICAL_PASS_M5C_STAGE0_CODE_CI_PHYSICAL_PASS_DOUBLE_DEATH_PENDING",
+    "status": "M5A_M5B_PHYSICAL_PASS_M5C_STAGE0_PHYSICAL_PASS_DOUBLE_DEATH_CODE_CI_PASS_SAFETY_HARDENING_CI_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -1054,7 +1054,7 @@
       }
     },
     "m5c": {
-      "status": "STAGE0_NO_WRITE_CODE_CI_PHYSICAL_PASS_DOUBLE_DEATH_PENDING",
+      "status": "DOUBLE_DEATH_CODE_CI_PASS_SAFETY_HARDENING_CI_PENDING_PHYSICAL_PENDING",
       "targetProfileId": "HP-8C40-9D0R1LA-F18",
       "service": "VictusFanControlWatchdogM4",
       "pipe": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -1075,17 +1075,22 @@
       "requiredFinalEc": "FF/FF",
       "requiredFinalJournal": "ABSENT",
       "physicalPreflightStatus": "PASS",
-      "destructiveDoubleDeathHarnessPrepared": false,
+      "destructiveDoubleDeathHarnessPrepared": true,
       "physicalDoubleDeathStatus": "PENDING",
       "delayedServiceFailsafe": {
         "prepared": true,
-        "defaultDelaySeconds": 45,
+        "defaultDelaySeconds": 120,
+        "armedBeforeControllerLaunch": true,
         "exactTargetRequired": "HP-8C40-9D0R1LA-F18",
         "requiredJournalPhase": "Owned",
         "requiredOwnedSetpoint": "30/30",
+        "exactControllerPidAndCreationTimeRequired": true,
+        "mayTerminateExactJournalBoundController": true,
+        "mayStartQualifiedRecoveryServiceIfAbsent": true,
+        "mayRestartQualifiedRecoveryServiceOnlyAfterExactOwnerGoneAndJournalPersists": true,
         "directHpRestoreAuthority": false,
+        "ordinaryFanTargetAuthority": false,
         "journalDeletionAuthority": false,
-        "onlyRecoveryAction": "Start already-qualified VictusFanControlWatchdogM4 service if absent",
         "passIfFailsafeFires": false
       },
       "plannedPhysicalBoundary": {
@@ -1173,6 +1178,25 @@
         "finalEc": "FF/FF",
         "finalJournal": "ABSENT",
         "qualificationPass": true
+      },
+      "destructiveHarnessCi": {
+        "result": "PASS",
+        "commit": "e31879e237dbf948d9712df165817ca6568f006c",
+        "runNumber": 602,
+        "runId": 36483968360,
+        "completedAt": "2026-09-28"
+      },
+      "safetyHardening": {
+        "reason": "Post-CI review found that the prior delayed fallback no-op'd while watchdog was still running, leaving a parent-shell-loss window in which the live qualification controller could continue OWNED 30/30 indefinitely.",
+        "changes": [
+          "Arm delayed fallback before launching the write-capable controller.",
+          "Increase default delayed fallback from 45 s to 120 s.",
+          "Revalidate exact controller PID plus process creation time before fallback takeover.",
+          "Allow fallback to terminate only the exact journal-bound controller and rely on qualified watchdog recovery.",
+          "Allow fallback to start/restart only the already-qualified M4 recovery service; no direct HP/WMI restore."
+        ],
+        "ciPending": true,
+        "physicalExecutionBlockedUntilPass": true
       }
     }
   }

@@ -641,3 +641,40 @@ fail-closed cleanup assertions for Manual/stopped service baseline completed.
 
 Stage 0 is physically closed. This does not qualify the destructive M5C
 double-death gate; it only authorizes preparing that next isolated test.
+
+
+## M5C destructive-gate safety hardening after CI #602 review
+
+Commit `e31879e237dbf948d9712df165817ca6568f006c` passed complete
+GitHub Actions run **#602** and its destructive invariant was green under both
+PowerShell Core and Windows PowerShell 5.1.
+
+A post-CI causal/safety review found one remaining harness-level gap before
+physical execution: the delayed fallback was armed only after durable OWNED
+30/30 and treated a still-running watchdog as a no-op. If the parent PowerShell
+were to disappear while the controller and watchdog both remained alive, the
+qualification controller could therefore continue holding 30/30 without the
+independent fallback forcing the test back toward firmware ownership.
+
+The destructive gate is hardened before physical use:
+
+- delayed fallback default is increased from 45 s to 120 s;
+- the fallback is armed **before** launching the write-capable qualification
+  controller;
+- at the physical fault boundary the parent proves the fallback process is
+  still alive;
+- if the fallback timer expires with an exact schema-v2 OWNED 30/30 journal, it
+  validates the journal controller PID **and process creation time**;
+- if that exact controller is still alive, the fallback terminates only that
+  controller so the already-qualified watchdog owner-loss path can restore;
+- if the service is absent, the fallback starts the already-qualified M4
+  service; if the exact owner is already gone and a running service leaves the
+  journal unresolved, the fallback may restart that same recovery service;
+- the fallback still has **no HP/WMI restore authority**, no ordinary fan-target
+  authority and no journal-deletion authority;
+- any fallback takeover still invalidates M5C PASS. It exists only as an
+  independent safety recovery path.
+
+This hardening does not change the M5C PASS boundary: autonomous SCM replacement
+recovery after the intentional double death must still occur before the delayed
+fallback fires.

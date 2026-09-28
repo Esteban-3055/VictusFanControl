@@ -5,8 +5,8 @@ param(
     [ValidateRange(3000, 10000)]
     [int]$RestartDelayMs = 5000,
 
-    [ValidateRange(30, 300)]
-    [int]$FailsafeDelaySeconds = 45,
+    [ValidateRange(90, 300)]
+    [int]$FailsafeDelaySeconds = 120,
 
     [ValidateRange(10, 40)]
     [int]$RecoveryTimeoutSeconds = 25
@@ -264,7 +264,12 @@ function Start-DelayedFailsafe {
 function Test-FailsafeTakeover {
     if (-not (Test-Path $failsafeLog)) { return $false }
     $text = Get-Content $failsafeLog -Raw
-    return ($text -match 'M5C FAILSAFE TAKEOVER:' -or $text -match 'M5C FAILSAFE STARTED:')
+    return ($text -match 'M5C FAILSAFE TAKEOVER:' -or
+            $text -match 'M5C FAILSAFE CONTROLLER-KILL:' -or
+            $text -match 'M5C FAILSAFE SERVICE-START:' -or
+            $text -match 'M5C FAILSAFE SERVICE-RESTART:' -or
+            $text -match 'M5C FAILSAFE STARTED:' -or
+            $text -match 'M5C FAILSAFE RECOVERED:')
 }
 
 function Restore-M4Baseline {
@@ -418,7 +423,14 @@ if ($confirm -cne $userToken) {
 
 try {
     Write-Host ''
-    Write-Host 'Step 4: acquire durable OWNED 30/30 through the proven M5A arm controller...' -ForegroundColor Cyan
+    Write-Host 'Step 4: arm delayed independent safety fallback, then acquire durable OWNED 30/30...' -ForegroundColor Cyan
+
+    # Arm the independent safety process before launching the controller. If the
+    # parent shell disappears after the write, the fallback can neutralize the
+    # exact journal-bound controller and/or start the already-qualified watchdog.
+    $failsafe = Start-DelayedFailsafe
+    Write-Host "Emergency fallback PID: $($failsafe.Id)"
+    Write-Host "Emergency delay       : $FailsafeDelaySeconds s"
 
     $controller = Start-Process -FilePath 'dotnet' -ArgumentList @(
         $cli,
@@ -480,9 +492,15 @@ try {
     $watchdogProcess = [System.Diagnostics.Process]::GetProcessById($servicePidBefore)
     if ($watchdogProcess.HasExited) { throw 'Original watchdog exited before M5C fault injection.' }
 
-    $failsafe = Start-DelayedFailsafe
-    Write-Host "Emergency fallback PID: $($failsafe.Id)"
-    Write-Host "Emergency delay       : $FailsafeDelaySeconds s"
+    $watchdogHandleStartTicks = [long]$watchdogProcess.StartTime.ToUniversalTime().Ticks
+    if ($watchdogHandleStartTicks -ne $serviceStartTicksBefore) {
+        throw 'M5C watchdog process handle does not match the validated original creation time.'
+    }
+
+    $failsafe.Refresh()
+    if ($failsafe.HasExited) {
+        throw 'M5C delayed safety fallback exited before the fault boundary.'
+    }
 
     if (Test-FailsafeTakeover) { throw 'M5C failsafe fired before the fault boundary.' }
 
