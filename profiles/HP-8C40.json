@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-code-promoted-post-regression-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -22,7 +22,7 @@
     "validatedMinimumLevel": 10,
     "validatedMaximumLevel": 50,
     "supportsIndependentLevels": false,
-    "notes": "Production is explicitly promoted to equal-only 10..50 after complete physical characterization, restart-from-zero, large-transition and endpoint coordinator qualification. Independent CPU/GPU levels remain unqualified and rejected. Automatic policy remains OFF. Final post-promotion regression through the real production backend is still required before declaring the expanded envelope fully integrated."
+    "notes": "Equal-only 10..50 is fully integrated for bounded production control after complete physical characterization, restart-from-zero, large-transition qualification, qualification endpoint coordinator PASS, and final post-promotion regression through the unmodified production backend at both endpoints. Independent CPU/GPU levels remain unqualified and rejected. Automatic policy and 8C40 watchdog/Modern Standby recovery remain OFF."
   },
   "observedCalibration": [
     {
@@ -593,7 +593,7 @@
       "large transitions 10->30->50->30->10 PASS",
       "qualification endpoint coordinator gate 10/50 PASS"
     ],
-    "postPromotionHardwareRegression": "pending",
+    "postPromotionHardwareRegression": "PASS",
     "requiredSequence": [
       "firmware -> 10 -> firmware",
       "firmware -> 50 -> firmware"
@@ -602,6 +602,38 @@
     "qualificationEnvelopeInjectionPermitted": false,
     "automaticPolicyEnabled": false,
     "terminalConvergenceRequired": true,
-    "terminalConvergenceRule": "2 consecutive dual-fan samples inside max(150 RPM, 5% of level*100 RPM)"
+    "terminalConvergenceRule": "2 consecutive dual-fan samples inside max(150 RPM, 5% of level*100 RPM)",
+    "fullyIntegrated": true,
+    "completedAt": "2026-09-28",
+    "acBatteryBaseline": "AC online, battery 100%, flags 0x01",
+    "endpoints": {
+      "level10": {
+        "route": "SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend production -> HP WMI -> EC/tach ACK -> terminal convergence -> restore",
+        "ecAcknowledged": "10/10",
+        "guardState": "MaxFan=0x00, FanSwitch=0x00",
+        "backendAckCpuRpm": 2311,
+        "backendAckGpuRpm": 2089,
+        "terminalCpuRpm": 1022,
+        "terminalGpuRpm": 970,
+        "convergenceSecondsAfterBackendAck": 5.4,
+        "finalAuthority": "Firmware",
+        "finalSetpoint": "FF/FF",
+        "passed": true
+      },
+      "level50": {
+        "route": "SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend production -> HP WMI -> EC/tach ACK -> terminal convergence -> restore",
+        "ecAcknowledged": "50/50",
+        "guardState": "MaxFan=0x00, FanSwitch=0x00",
+        "backendAckCpuRpm": 2250,
+        "backendAckGpuRpm": 2175,
+        "terminalCpuRpm": 4968,
+        "terminalGpuRpm": 4968,
+        "convergenceSecondsAfterBackendAck": 11.4,
+        "finalAuthority": "Firmware",
+        "finalSetpoint": "FF/FF",
+        "passed": true
+      }
+    },
+    "interpretation": "The equal-only 10..50 production envelope is physically closed on the exact HP 8C40 target through the real production backend. This does not qualify independent CPU/GPU commands, watchdog-backed unattended control, Modern Standby lifecycle recovery, or automatic/adaptive policy."
   }
 }

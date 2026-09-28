@@ -51,9 +51,10 @@ The production 8C40 code envelope is now explicitly promoted to equal-only
 direct level-10 restart from 0 RPM, the large-transition qualification and the
 qualification endpoint coordinator PASS at both 10 and 50.
 
-The expanded production configuration is **not yet declared fully integrated**:
-it still requires the final post-promotion regression through the unmodified
-production backend at both endpoints. Automatic/adaptive policy remains OFF.
+The expanded production configuration is now **fully integrated for bounded
+manual equal-only control across 10..50**. The final post-promotion regression
+passed both endpoints through the unmodified production backend. Automatic/
+adaptive policy remains OFF.
 
 Independent CPU/GPU commands remain unqualified and are explicitly rejected by
 both the production BIOS/WMI layer and the production backend.
@@ -61,7 +62,6 @@ both the production BIOS/WMI layer and the production backend.
 The following remain intentionally unqualified or pending:
 
 - asymmetric CPU/GPU level commands;
-- post-promotion production-path regression at endpoints 10 and 50;
 - watchdog/service recovery;
 - process double-death recovery;
 - Modern Standby custom-control lifecycle;
@@ -539,6 +539,61 @@ max(150 RPM, 5% of level*100 RPM), and a verified return to Firmware/FF/FF. The 
 gate also performs AC/battery sanity checks because the earlier broad-range
 hibernations were traced to transient critical-battery telemetry.
 
-Until both endpoint runs pass physically on the promoted code, `10..50` is a
-**promoted production configuration pending final hardware regression**, not a
-fully integrated production range.
+Both endpoint runs have now passed physically on the promoted code. The exact
+HP 8C40 target therefore has a **fully integrated bounded production envelope
+of equal-only 10..50** for manual/coordinator-driven control. This statement
+does not qualify watchdog-backed unattended control, Modern Standby recovery,
+asymmetric fan commands or automatic/adaptive policy.
+
+
+## Final post-promotion production regression PASS
+
+The final promoted-code regression completed successfully through the real
+production route with no qualification envelope injection:
+
+`SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend -> HP WMI ->
+EC 0x34/0x35 acknowledgement -> dual tachometers -> terminal convergence ->
+FF/FF + LegacyDefault restore`.
+
+Preflight completed with all telemetry backends ready, 14/14 physical-core
+temperature contexts present, valid NVIDIA NVML telemetry and automatic policy
+still disabled. The hardware-test AC/battery sanity gate reported AC online and
+battery 100% for both endpoint runs.
+
+### Production endpoint 10/10
+
+The production backend accepted equal `10/10`. EC ownership became `10/10`
+with MaxFan/FanSwitch remaining `0x00/0x00`. Both tachometers decelerated from
+the firmware baseline and reached two consecutive terminal-band samples around
+the nominal 1000 RPM endpoint.
+
+- backend acknowledgement observed at approximately CPU 2311 / GPU 2089 RPM
+  while the fans were still decelerating;
+- terminal convergence: CPU 1022 RPM / GPU 970 RPM;
+- convergence after backend ACK: approximately 5.4 s;
+- coordinator restore returned authority to `Firmware`;
+- final EC ownership: `FF/FF`.
+
+### Production endpoint 50/50
+
+The second independent production run began again from firmware ownership.
+The production backend accepted equal `50/50`, EC ownership became `50/50`
+with MaxFan/FanSwitch `0x00/0x00`, and both tachometers accelerated
+monotonically toward the terminal band.
+
+- backend acknowledgement observed at approximately CPU 2250 / GPU 2175 RPM
+  while the fans were still accelerating;
+- terminal convergence: CPU 4968 RPM / GPU 4968 RPM;
+- convergence after backend ACK: approximately 11.4 s;
+- coordinator restore returned authority to `Firmware`;
+- final EC ownership: `FF/FF`.
+
+The post-restore tachometers were still near the just-commanded fan speed at
+the instant of the final EC read. This is expected inertia/firmware transition
+behavior and is not an ownership failure: the authoritative restore evidence
+is the verified `FF/FF` setpoint plus coordinator `Firmware` authority.
+
+This closes the 10..50 production-range promotion for the exact
+HP 8C40 / 9D0R1LA / BIOS F.18 target. The next development boundary is the
+8C40-specific Modern Standby/watchdog lifecycle and fail-closed safety loss
+behavior under Custom. Automatic/adaptive policy remains disabled.
