@@ -4,11 +4,21 @@ public static class Hp8C40BiosContractSelfTest
 {
     public static int Run(TextWriter output)
     {
+        var minimumLevel = (byte)Hp8C40TargetProfile.MinimumValidatedFanLevel;
+        var maximumLevel = (byte)Hp8C40TargetProfile.MaximumValidatedFanLevel;
+
         var restore = Hp8C40BiosFanControl.BuildLegacyDefaultRequest();
         var getLevel = Hp8C40BiosFanControl.BuildGetFanLevelRequest();
-        var setLevel = Hp8C40BiosFanControl.BuildSetFanLevelRequest(30, 30);
-        var setUpperLevel = Hp8C40BiosFanControl.BuildSetFanLevelRequest(36, 36);
+        var setMinimum = Hp8C40BiosFanControl.BuildSetFanLevelRequest(minimumLevel, minimumLevel);
+        var setInterior = Hp8C40BiosFanControl.BuildSetFanLevelRequest(30, 30);
+        var setMaximum = Hp8C40BiosFanControl.BuildSetFanLevelRequest(maximumLevel, maximumLevel);
         var releaseLevel = Hp8C40BiosFanControl.BuildReleaseFanLevelRequest();
+
+        var productionBoundsPass =
+            minimumLevel == 10 &&
+            maximumLevel == 50 &&
+            Hp8C40BiosFanControl.MinimumValidatedLevel == 10 &&
+            Hp8C40BiosFanControl.MaximumValidatedLevel == 50;
 
         var restorePass =
             restore.Command == 0x00020008 &&
@@ -22,58 +32,53 @@ public static class Hp8C40BiosContractSelfTest
             getLevel.OutputSize == 128 &&
             getLevel.Payload.SequenceEqual(new byte[] { 0x00, 0x00, 0x00, 0x00 });
 
-        var setLevelPass =
-            setLevel.Command == 0x00020008 &&
-            setLevel.CommandType == 0x2E &&
-            setLevel.OutputSize == 0 &&
-            setLevel.Payload.SequenceEqual(new byte[] { 30, 30, 0x00, 0x00 });
+        var setMinimumPass =
+            setMinimum.Command == 0x00020008 &&
+            setMinimum.CommandType == 0x2E &&
+            setMinimum.OutputSize == 0 &&
+            setMinimum.Payload.SequenceEqual(new byte[] { 10, 10, 0x00, 0x00 });
 
-        var setUpperLevelPass =
-            setUpperLevel.Command == 0x00020008 &&
-            setUpperLevel.CommandType == 0x2E &&
-            setUpperLevel.OutputSize == 0 &&
-            setUpperLevel.Payload.SequenceEqual(new byte[] { 36, 36, 0x00, 0x00 });
+        var setInteriorPass =
+            setInterior.Command == 0x00020008 &&
+            setInterior.CommandType == 0x2E &&
+            setInterior.OutputSize == 0 &&
+            setInterior.Payload.SequenceEqual(new byte[] { 30, 30, 0x00, 0x00 });
+
+        var setMaximumPass =
+            setMaximum.Command == 0x00020008 &&
+            setMaximum.CommandType == 0x2E &&
+            setMaximum.OutputSize == 0 &&
+            setMaximum.Payload.SequenceEqual(new byte[] { 50, 50, 0x00, 0x00 });
 
         var asymmetricRejected = false;
-        try
-        {
-            _ = Hp8C40BiosFanControl.BuildSetFanLevelRequest(30, 31);
-        }
-        catch (ArgumentException)
-        {
-            asymmetricRejected = true;
-        }
+        try { _ = Hp8C40BiosFanControl.BuildSetFanLevelRequest(10, 11); }
+        catch (ArgumentException) { asymmetricRejected = true; }
+
+        var belowRangeRejected = false;
+        try { _ = Hp8C40BiosFanControl.BuildSetFanLevelRequest(9, 9); }
+        catch (ArgumentOutOfRangeException) { belowRangeRejected = true; }
 
         var aboveRangeRejected = false;
-        try
-        {
-            _ = Hp8C40BiosFanControl.BuildSetFanLevelRequest(37, 37);
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-            aboveRangeRejected = true;
-        }
+        try { _ = Hp8C40BiosFanControl.BuildSetFanLevelRequest(51, 51); }
+        catch (ArgumentOutOfRangeException) { aboveRangeRejected = true; }
 
-        output.WriteLine(
-            $"{(restorePass ? "PASS" : "FAIL")}  HP 8C40 LegacyDefault WMI envelope");
-        output.WriteLine(
-            $"{(getLevelPass ? "PASS" : "FAIL")}  HP 8C40 GetFanLevel WMI envelope");
+        output.WriteLine($"{(productionBoundsPass ? "PASS" : "FAIL")}  HP 8C40 production BIOS range pinned to equal-only 10..50");
+        output.WriteLine($"{(restorePass ? "PASS" : "FAIL")}  HP 8C40 LegacyDefault WMI envelope");
+        output.WriteLine($"{(getLevelPass ? "PASS" : "FAIL")}  HP 8C40 GetFanLevel WMI envelope");
+        output.WriteLine($"{(setMinimumPass ? "PASS" : "FAIL")}  HP 8C40 SetFanLevel(10,10) production envelope");
+        output.WriteLine($"{(setInteriorPass ? "PASS" : "FAIL")}  HP 8C40 SetFanLevel(30,30) production envelope");
+        output.WriteLine($"{(setMaximumPass ? "PASS" : "FAIL")}  HP 8C40 SetFanLevel(50,50) production envelope");
+        output.WriteLine($"{(asymmetricRejected ? "PASS" : "FAIL")}  HP 8C40 asymmetric production command rejected");
+        output.WriteLine($"{(belowRangeRejected ? "PASS" : "FAIL")}  HP 8C40 level below 10 rejected");
+        output.WriteLine($"{(aboveRangeRejected ? "PASS" : "FAIL")}  HP 8C40 level above 50 rejected");
+
         var releaseLevelPass =
             releaseLevel.Command == 0x00020008 &&
             releaseLevel.CommandType == 0x2E &&
             releaseLevel.OutputSize == 0 &&
             releaseLevel.Payload.SequenceEqual(new byte[] { 0xFF, 0xFF, 0x00, 0x00 });
 
-        output.WriteLine(
-            $"{(setLevelPass ? "PASS" : "FAIL")}  HP 8C40 SetFanLevel(30,30) WMI envelope");
-        output.WriteLine(
-            $"{(setUpperLevelPass ? "PASS" : "FAIL")}  HP 8C40 SetFanLevel(36,36) WMI envelope");
-        output.WriteLine(
-            $"{(asymmetricRejected ? "PASS" : "FAIL")}  HP 8C40 asymmetric production command rejected");
-        output.WriteLine(
-            $"{(aboveRangeRejected ? "PASS" : "FAIL")}  HP 8C40 level above 36 rejected");
-        output.WriteLine(
-            $"{(releaseLevelPass ? "PASS" : "FAIL")}  HP 8C40 SetFanLevel(FF,FF) release envelope");
+        output.WriteLine($"{(releaseLevelPass ? "PASS" : "FAIL")}  HP 8C40 SetFanLevel(FF,FF) release envelope");
 
         var restoreOrder = new List<string>();
         var firstFailurePropagated = false;
@@ -97,14 +102,16 @@ public static class Hp8C40BiosContractSelfTest
         var restoreSequencePass =
             restoreOrder.SequenceEqual(new[] { "release", "legacy-default" }) &&
             firstFailurePropagated;
-        output.WriteLine(
-            $"{(restoreSequencePass ? "PASS" : "FAIL")}  restore reports FF,FF failure only after LegacyDefault attempt");
+        output.WriteLine($"{(restoreSequencePass ? "PASS" : "FAIL")}  restore reports FF,FF failure only after LegacyDefault attempt");
 
-        return restorePass &&
+        return productionBoundsPass &&
+               restorePass &&
                getLevelPass &&
-               setLevelPass &&
-               setUpperLevelPass &&
+               setMinimumPass &&
+               setInteriorPass &&
+               setMaximumPass &&
                asymmetricRejected &&
+               belowRangeRejected &&
                aboveRangeRejected &&
                releaseLevelPass &&
                restoreSequencePass

@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "integrated-backend-validated-policy-off",
+  "status": "production-range-10-50-code-promoted-post-regression-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -19,10 +19,10 @@
   },
   "control": {
     "enabledByDefault": false,
-    "validatedMinimumLevel": 30,
-    "validatedMaximumLevel": 36,
+    "validatedMinimumLevel": 10,
+    "validatedMaximumLevel": 50,
     "supportsIndependentLevels": false,
-    "notes": "Equal levels 10/10 through 50/50 are physically characterized in the guarded qualification harness. The production backend intentionally remains equal-only 30..36 until low-end restart-from-stop and production endpoint/transition gates are completed. Independent CPU/GPU levels remain unqualified and rejected."
+    "notes": "Production is explicitly promoted to equal-only 10..50 after complete physical characterization, restart-from-zero, large-transition and endpoint coordinator qualification. Independent CPU/GPU levels remain unqualified and rejected. Automatic policy remains OFF. Final post-promotion regression through the real production backend is still required before declaring the expanded envelope fully integrated."
   },
   "observedCalibration": [
     {
@@ -583,5 +583,23 @@
       }
     },
     "interpretation": "Both physically characterized endpoints passed the coordinator/backend qualification route from stopped firmware baseline through EC/tach acknowledgement, continuous supervision, terminal convergence and verified firmware restore. Production still remains 30..36 pending explicit promotion and post-promotion regression."
+  },
+  "productionPromotion10To50": {
+    "codeState": "promoted",
+    "productionEnvelope": "equal-only 10..50",
+    "qualificationEvidence": [
+      "complete physical sweep 10..50 PASS",
+      "restart from 0 RPM at level 10 PASS",
+      "large transitions 10->30->50->30->10 PASS",
+      "qualification endpoint coordinator gate 10/50 PASS"
+    ],
+    "postPromotionHardwareRegression": "pending",
+    "requiredSequence": [
+      "firmware -> 10 -> firmware",
+      "firmware -> 50 -> firmware"
+    ],
+    "requiredRoute": "SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend production -> HP WMI -> EC/tach ACK -> restore",
+    "qualificationEnvelopeInjectionPermitted": false,
+    "automaticPolicyEnabled": false
   }
 }

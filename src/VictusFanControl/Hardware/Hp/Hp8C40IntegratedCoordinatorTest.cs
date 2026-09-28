@@ -22,6 +22,7 @@ public static class Hp8C40IntegratedCoordinatorTest
     private const double MaximumBaselineGpuTemperatureC = 75;
     private const double MaximumBaselineCpuPowerW = 50;
     private const double MaximumBaselineGpuPowerW = 70;
+    private const byte MinimumBatteryPercentForHardwareGate = 20;
 
     public static Task<int> RunAsync(
         string modulesDirectory,
@@ -63,6 +64,21 @@ public static class Hp8C40IntegratedCoordinatorTest
                 "Close OmenMon/VictusFanControl GUI first; OMEN Gaming Hub may remain open.");
             return 42;
         }
+
+        SystemPowerStatusSample initialPower;
+        try
+        {
+            initialPower = SystemPowerStatusReader.Read();
+            EnsureHardwareGatePowerStatus(initialPower);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"Integrated test refused by AC/battery sanity gate: {ex.Message}");
+            return 49;
+        }
+
+        Console.WriteLine($"AC/battery sanity baseline: {initialPower}");
 
         using var reader = new HardwareTelemetryReader(modulesDirectory);
         if (!reader.BackendsInitialized)
@@ -152,6 +168,8 @@ public static class Hp8C40IntegratedCoordinatorTest
                     string.Join(" | ", commandSafety.Reasons));
             }
 
+            EnsureHardwareGatePowerStatus(SystemPowerStatusReader.Read());
+
             Console.WriteLine();
             Console.WriteLine(
                 $"Applying production-path fan command {testLevel}/{testLevel}...");
@@ -196,6 +214,8 @@ public static class Hp8C40IntegratedCoordinatorTest
                 await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
                 EnsureNoSchedulingGap(ref previousProgressTick, "post-ACK supervision");
                 EnsureCustomWindow(customStarted.Value);
+
+                EnsureHardwareGatePowerStatus(SystemPowerStatusReader.Read());
 
                 var sample = reader.ReadSnapshot();
                 ConsoleTelemetryPrinter.Print(sample);
@@ -319,6 +339,35 @@ public static class Hp8C40IntegratedCoordinatorTest
             snapshot,
             DateTimeOffset.UtcNow,
             fanWritePathPresent);
+
+    private static void EnsureHardwareGatePowerStatus(
+        SystemPowerStatusSample status)
+    {
+        if (!status.AcOnline)
+        {
+            throw new InvalidOperationException(
+                $"AC power unexpectedly went offline ({status}).");
+        }
+
+        if (!status.BatteryPresent)
+        {
+            throw new InvalidOperationException(
+                $"Windows reported no usable battery ({status}).");
+        }
+
+        if (status.BatteryPercent > 100)
+        {
+            throw new InvalidOperationException(
+                $"Windows reported an unknown battery percentage ({status}).");
+        }
+
+        if (status.BatteryPercent < MinimumBatteryPercentForHardwareGate)
+        {
+            throw new InvalidOperationException(
+                $"Windows reported battery={status.BatteryPercent}% while AC is online; " +
+                $"hardware gate requires at least {MinimumBatteryPercentForHardwareGate}%.");
+        }
+    }
 
     private static void EnsureLightLoadEnvelope(TelemetrySnapshot snapshot)
     {

@@ -67,7 +67,8 @@ public static class HpFanControlBackendFactory
                 backend,
                 target,
                 "HP 8C40 bounded write/restore backend selected. " +
-                "Only equal 30/30 is qualified; automatic policy and watchdog remain OFF.");
+                $"Production envelope is equal-only {Hp8C40TargetProfile.MinimumValidatedFanLevel}.." +
+                $"{Hp8C40TargetProfile.MaximumValidatedFanLevel}; automatic policy and watchdog remain OFF.");
         }
 
         return new HpFanBackendSelection(

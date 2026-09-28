@@ -7,9 +7,10 @@ namespace VictusFanControl.Hardware.Hp;
 /// Exact qualification fingerprint for the HP Victus 15-fa1013la / 9D0R1LA
 /// target. Equal fan levels 10/10 through 50/50 have been physically
 /// characterized with EC acknowledgement, dual-tach feedback and verified
-/// FF/FF -> LegacyDefault restore after every step. The production backend
-/// remains intentionally narrower until endpoint/transition integration gates
-/// are completed.
+/// FF/FF -> LegacyDefault restore after every step. Restart from 0 RPM, large
+/// transitions and both endpoints have also passed bounded qualification gates.
+/// Production is therefore explicitly promoted to the same equal-only 10..50
+/// envelope; asymmetric CPU/GPU commands remain unqualified.
 /// </summary>
 public static class Hp8C40TargetProfile
 {
@@ -23,16 +24,15 @@ public static class Hp8C40TargetProfile
     public const string ExpectedGpuName = "NVIDIA GeForce RTX 4060 Laptop GPU";
 
     // Broad physical characterization has proven steady equal 10/10 through
-    // 50/50. Keep these distinct from the narrower production envelope:
-    // low-end restart-from-stop and production endpoint/transition gates are
-    // still pending.
+    // 50/50. Keep the physical-evidence boundary explicit for auditability.
     public const int MinimumPhysicallyQualifiedFanLevel = 10;
     public const int MaximumPhysicallyQualifiedFanLevel = 50;
 
-    // Production backend range remains deliberately conservative.
+    // Explicit production promotion after full 10..50 characterization,
+    // restart-from-zero, large-transition and endpoint coordinator qualification.
     // Independent CPU/GPU levels remain unqualified and are rejected.
-    public const int MinimumValidatedFanLevel = 30;
-    public const int MaximumValidatedFanLevel = 36;
+    public const int MinimumValidatedFanLevel = MinimumPhysicallyQualifiedFanLevel;
+    public const int MaximumValidatedFanLevel = MaximumPhysicallyQualifiedFanLevel;
 
     public static HardwareTargetProfile Instance { get; } = new(
         Id: "HP-8C40-9D0R1LA-F18",

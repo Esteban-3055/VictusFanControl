@@ -319,7 +319,7 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-transition-token <token>  Required exact token: 8C40-TRANSITION10-50.");
         Console.WriteLine("  --8c40-endpoint-coordinator-qualification  ACTIVE GATE: coordinator/backend qualification at equal endpoints 10 and 50.");
         Console.WriteLine("  --8c40-endpoint-coordinator-token <token>  Required exact token: 8C40-ENDPOINT10-50.");
-        Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30, 8C40-COORD30, 8C40-COORD32 or 8C40-COORD36.");
+        Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30 or HP 8C40 production tokens 8C40-COORD10/30/32/36/50.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");

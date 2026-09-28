@@ -46,22 +46,22 @@ This establishes the **physically characterized equal-level primitive** as
 `10..50` for this exact machine. It does **not** automatically expand the
 production backend.
 
-The production 8C40 envelope remains intentionally equal-only `30..36` until
-the remaining production-specific gates are completed. In particular, the
-10..50 sweep tested steady/ramping operation from an already-running state; it
-did not prove that a stopped fan can reliably start directly at the lowest
-levels. Large direct endpoint transitions also still need a bounded integration
-gate through the normal coordinator/backend path.
+The production 8C40 code envelope is now explicitly promoted to equal-only
+`10..50`. This promotion is justified by the complete physical sweep, the
+direct level-10 restart from 0 RPM, the large-transition qualification and the
+qualification endpoint coordinator PASS at both 10 and 50.
+
+The expanded production configuration is **not yet declared fully integrated**:
+it still requires the final post-promotion regression through the unmodified
+production backend at both endpoints. Automatic/adaptive policy remains OFF.
 
 Independent CPU/GPU commands remain unqualified and are explicitly rejected by
 both the production BIOS/WMI layer and the production backend.
 
-The following remain intentionally unqualified:
+The following remain intentionally unqualified or pending:
 
 - asymmetric CPU/GPU level commands;
-- restart-from-stopped-fan behavior at the low end;
-- large direct endpoint transitions through the production path;
-- production-path endpoints outside the current 30..36 envelope;
+- post-promotion production-path regression at endpoints 10 and 50;
 - watchdog/service recovery;
 - process double-death recovery;
 - Modern Standby custom-control lifecycle;
@@ -488,3 +488,56 @@ Endpoint `50/50` also started from a 0/0 RPM firmware baseline. Custom authority
 AC/battery sanity remained normal (AC online, battery 93%). No ownership loss, guard anomaly, telemetry safety drop or power-transition event occurred.
 
 This closes endpoint qualification through the coordinator/backend logic. Production remains equal-only 30..36 until an explicit 10..50 promotion commit is made and the resulting production configuration passes a final post-promotion regression at both endpoints.
+
+
+## Production promotion to equal-only 10..50
+
+The code-level production envelope has now been promoted from `30..36` to
+`10..50` for the exact HP 8C40 target only. No HP 88F8 production constants or
+behavior were changed.
+
+The promotion is deliberately narrow:
+
+- `Hp8C40TargetProfile.MinimumValidatedFanLevel/MaximumValidatedFanLevel`
+  now resolve to the physically qualified 10/50 bounds;
+- `Hp8C40BiosFanControl` inherits those bounds and still rejects asymmetric
+  CPU/GPU commands;
+- `Hp8C40FanControlBackend` production capabilities and command validation
+  inherit the same equal-only 10..50 envelope;
+- GetFanLevel remains current/effective-speed telemetry and is **not** command
+  acknowledgement;
+- command acknowledgement remains HP WMI success + exact EC 0x34/0x35 setpoint
+  + physical response from both tachometers;
+- restore remains `FF/FF -> LegacyDefault -> verified FF/FF`;
+- unknown/external fixed overrides are never blindly cleared;
+- EC 0x62/0x63 remain read-only diagnostics and are never written;
+- watchdog recovery and automatic/adaptive policy remain OFF for HP 8C40.
+
+CI self-tests pin the production BIOS and backend boundaries to 10 and 50 and
+continue to assert asymmetric and out-of-range rejection.
+
+### Required final post-promotion hardware regression
+
+A dedicated script, `scripts/test-8c40-post-promotion-endpoints.ps1`, executes
+two independent production-path gates:
+
+`firmware -> 10 -> firmware`
+
+then
+
+`firmware -> 50 -> firmware`.
+
+It invokes the existing real `Hp8C40IntegratedCoordinatorTest` with the public
+`Hp8C40FanControlBackend(modulesDirectory)`. It does **not** inject a
+qualification command envelope and does **not** use the qualification-only WMI
+writer.
+
+Each endpoint must retain SafetyGate permission, exact EC ownership, sane
+MaxFan/FanSwitch guards, physical feedback from both tachometers, continuous
+coordinator supervision and a verified return to Firmware/FF/FF. The production
+gate also performs AC/battery sanity checks because the earlier broad-range
+hibernations were traced to transient critical-battery telemetry.
+
+Until both endpoint runs pass physically on the promoted code, `10..50` is a
+**promoted production configuration pending final hardware regression**, not a
+fully integrated production range.

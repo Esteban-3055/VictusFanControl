@@ -15,6 +15,7 @@ public static class Hp8C40FanControlBackendSelfTest
     {
         var failures = 0;
 
+        failures += await TestProductionCapabilitiesAsync(output);
         failures += await TestHappyPathAsync(output);
         failures += await TestExistingOverrideRefusedAsync(output);
         failures += await TestCancelledAdmissionIsNoWriteAsync(output);
@@ -50,6 +51,21 @@ public static class Hp8C40FanControlBackendSelfTest
         return failures == 0 ? 0 : 12;
     }
 
+    private static async Task<int> TestProductionCapabilitiesAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        await using var backend = NewBackend(hardware);
+        var capabilities = backend.Capabilities;
+
+        return Report(
+            output,
+            "production capabilities advertise equal-only 10..50",
+            capabilities.BoardProduct == Hp8C40TargetProfile.BoardProduct &&
+            capabilities.MinimumLevel == 10 &&
+            capabilities.MaximumLevel == 50 &&
+            !capabilities.SupportsIndependentLevels);
+    }
+
     private static async Task<int> TestHappyPathAsync(TextWriter output)
     {
         var hardware = new FakeHardware();
@@ -57,7 +73,7 @@ public static class Hp8C40FanControlBackendSelfTest
 
         await backend.EnterCustomModeAsync(CancellationToken.None);
         await backend.ApplyAsync(
-            new FanCommand(36, 36, "backend-self-test-upper-bound"),
+            new FanCommand(50, 50, "backend-self-test-upper-bound"),
             CancellationToken.None);
 
         var active = await backend.GetStatusAsync(CancellationToken.None);
@@ -246,7 +262,7 @@ public static class Hp8C40FanControlBackendSelfTest
         try
         {
             await backend.ApplyAsync(
-                new FanCommand(29, 29, "below-qualified-range"),
+                new FanCommand(9, 9, "below-qualified-range"),
                 CancellationToken.None);
         }
         catch (ArgumentOutOfRangeException)
@@ -258,7 +274,7 @@ public static class Hp8C40FanControlBackendSelfTest
         try
         {
             await backend.ApplyAsync(
-                new FanCommand(37, 37, "above-qualified-range"),
+                new FanCommand(51, 51, "above-qualified-range"),
                 CancellationToken.None);
         }
         catch (ArgumentOutOfRangeException)
@@ -270,7 +286,7 @@ public static class Hp8C40FanControlBackendSelfTest
         try
         {
             await backend.ApplyAsync(
-                new FanCommand(30, 31, "unqualified-asymmetric-command"),
+                new FanCommand(10, 11, "unqualified-asymmetric-command"),
                 CancellationToken.None);
         }
         catch (ArgumentException)
@@ -282,7 +298,7 @@ public static class Hp8C40FanControlBackendSelfTest
 
         return Report(
             output,
-            "backend independently enforces equal-only validated 30-36 range",
+            "backend independently enforces equal-only validated 10-50 range",
             belowRefused &&
             aboveRefused &&
             asymmetricRefused &&
