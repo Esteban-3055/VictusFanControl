@@ -68,6 +68,9 @@ jobs:
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
+      - name: Modern Standby M0 observer self-test
+        run: dotnet run --project .\src\VictusFanControl.ModernStandbyProbe -c Release --no-build -- --self-test
+
       - name: Watchdog Gate B restore self-test
         run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --gate-b-self-test
 

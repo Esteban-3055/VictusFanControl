@@ -597,3 +597,32 @@ This closes the 10..50 production-range promotion for the exact
 HP 8C40 / 9D0R1LA / BIOS F.18 target. The next development boundary is the
 8C40-specific Modern Standby/watchdog lifecycle and fail-closed safety loss
 behavior under Custom. Automatic/adaptive policy remains disabled.
+
+
+## Modern Standby M0 observer prepared
+
+The next 8C40 lifecycle step is now instrumented as a dedicated read-only M0
+characterization gate. The new observer is intentionally separate from the
+production GUI/backend and from the historical 88F8 S3 Gate G harness.
+
+`scripts/test-8c40-modern-standby-m0.ps1` exact-matches the HP 8C40 target,
+builds the solution, runs the synthetic M0 observer self-test, records
+`powercfg /a` plus active power requests, then launches an invisible
+read-only window observer. The observer explicitly registers for Windows
+suspend/resume notifications and session-display, console-display, AC/DC and
+lid power-setting notifications.
+
+The observer records UTC, QueryUnbiasedInterruptTime, GetTickCount64 and QPC
+for each event, keeps transition events in memory, writes only one READY marker
+before the test and one JSON report after the display returns, and performs no
+PawnIO/EC/HP fan WMI/NVML/watchdog/fan-control/sleep-inhibition operation.
+
+The shared power-transition collector now emits distinct System Power Report,
+System Sleep Diagnostics and SleepStudy files. A display Off -> On capture is
+not itself considered a Modern Standby PASS; the JSON timeline and Windows
+reports must be reviewed together.
+
+This preparation does not change the production state: 8C40 watchdog recovery
+remains unvalidated/disabled and automatic/adaptive policy remains OFF. The
+legacy 88F8 Gate D-G hardware harnesses remain blocked on this Modern Standby
+target.

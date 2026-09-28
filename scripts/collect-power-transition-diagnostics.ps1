@@ -1,10 +1,22 @@
+param(
+    [string]$OutputDirectory
+)
+
 $ErrorActionPreference = 'Continue'
 
 $stamp = Get-Date -Format 'yyyy-MM-dd_HHmmss'
-$outDir = Join-Path $PSScriptRoot '..\logs'
+
+if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    $outDir = Join-Path $PSScriptRoot '..\logs'
+} else {
+    $outDir = [IO.Path]::GetFullPath($OutputDirectory)
+}
+
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+
 $txt = Join-Path $outDir ("power-transition-diagnostics_$stamp.txt")
-$sleepHtml = Join-Path $outDir ("system-sleep-diagnostics_$stamp.html")
+$systemPowerHtml = Join-Path $outDir ("system-power-report_$stamp.html")
+$systemSleepHtml = Join-Path $outDir ("system-sleep-diagnostics_$stamp.html")
 $sleepStudyHtml = Join-Path $outDir ("sleepstudy_$stamp.html")
 
 function Write-Section([string]$title) {
@@ -77,22 +89,43 @@ try {
 
 Write-Section 'system power report'
 try {
-    powercfg /systempowerreport /output $sleepHtml 2>&1 | Tee-Object -FilePath $txt -Append
-    ("Report: " + (Resolve-Path $sleepHtml -ErrorAction SilentlyContinue)) | Tee-Object -FilePath $txt -Append
+    powercfg /systempowerreport /output $systemPowerHtml 2>&1 |
+        Tee-Object -FilePath $txt -Append
+
+    ("Report: " + (Resolve-Path $systemPowerHtml -ErrorAction SilentlyContinue)) |
+        Tee-Object -FilePath $txt -Append
 } catch {
-    ("systempowerreport failed: " + $_.Exception.Message) | Tee-Object -FilePath $txt -Append
+    ("systempowerreport failed: " + $_.Exception.Message) |
+        Tee-Object -FilePath $txt -Append
+}
+
+Write-Section 'system sleep diagnostics'
+try {
+    powercfg /systemsleepdiagnostics /output $systemSleepHtml 2>&1 |
+        Tee-Object -FilePath $txt -Append
+
+    ("Report: " + (Resolve-Path $systemSleepHtml -ErrorAction SilentlyContinue)) |
+        Tee-Object -FilePath $txt -Append
+} catch {
+    ("systemsleepdiagnostics failed: " + $_.Exception.Message) |
+        Tee-Object -FilePath $txt -Append
 }
 
 Write-Section 'sleepstudy report'
 try {
-    powercfg /sleepstudy /output $sleepStudyHtml 2>&1 | Tee-Object -FilePath $txt -Append
-    ("Report: " + (Resolve-Path $sleepStudyHtml -ErrorAction SilentlyContinue)) | Tee-Object -FilePath $txt -Append
+    powercfg /sleepstudy /output $sleepStudyHtml 2>&1 |
+        Tee-Object -FilePath $txt -Append
+
+    ("Report: " + (Resolve-Path $sleepStudyHtml -ErrorAction SilentlyContinue)) |
+        Tee-Object -FilePath $txt -Append
 } catch {
-    ("sleepstudy failed: " + $_.Exception.Message) | Tee-Object -FilePath $txt -Append
+    ("sleepstudy failed: " + $_.Exception.Message) |
+        Tee-Object -FilePath $txt -Append
 }
 
 Write-Host ''
 Write-Host 'Diagnostics saved to:' -ForegroundColor Cyan
 Write-Host (Resolve-Path $txt)
-if (Test-Path $sleepHtml) { Write-Host (Resolve-Path $sleepHtml) }
+if (Test-Path $systemPowerHtml) { Write-Host (Resolve-Path $systemPowerHtml) }
+if (Test-Path $systemSleepHtml) { Write-Host (Resolve-Path $systemSleepHtml) }
 if (Test-Path $sleepStudyHtml) { Write-Host (Resolve-Path $sleepStudyHtml) }
