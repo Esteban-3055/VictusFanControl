@@ -39,6 +39,9 @@ Assert-Contains $harness 'Wait-ForJournalGone' 'M5C must require journal deletio
 Assert-Contains $harness '$final.Cpu -ne 255 -or $final.Gpu -ne 255' 'M5C must independently verify final FF/FF.'
 Assert-Contains $harness 'StartType=$($svc.StartType)' 'M5C must restore the Manual/stopped qualification-service baseline.'
 Assert-Contains $harness 'Do not reinstall the service or run another fan-write gate until this state is inspected/recovered.' 'M5C must retain unresolved durable evidence fail-closed.'
+Assert-Contains $harness '$serviceSetupTouched = $false' 'M5C must track whether service/SCM setup was touched.'
+Assert-Contains $harness '$serviceSetupTouched = $true' 'M5C must mark service/SCM setup before installer or recovery-policy mutation.'
+Assert-Contains $harness 'if ($firmwareSafe -and $serviceSetupTouched)' 'M5C must restore the ordinary service baseline after any safe post-setup exit.'
 
 $failsafeArmIndex = $harness.IndexOf('$failsafe = Start-DelayedFailsafe', [StringComparison]::Ordinal)
 $controllerLaunchIndex = $harness.IndexOf("$controller = Start-Process -FilePath 'dotnet'", [StringComparison]::Ordinal)

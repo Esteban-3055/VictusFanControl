@@ -44,6 +44,7 @@ $servicePidBefore = 0
 $serviceStartTicksBefore = 0L
 $servicePidAfter = 0
 $logLineBoundary = 0
+$serviceSetupTouched = $false
 
 function Assert-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -381,10 +382,12 @@ if (Test-Path $journalPath) {
     throw 'M5C refuses an existing durable journal. Do not delete retained ownership evidence.'
 }
 
-Write-Host ''
-Write-Host 'Step 3: install exact-target LocalSystem service + temporary SCM recovery...' -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot 'install-watchdog-m4-8c40.ps1')
-Configure-M5CRecoveryPolicy
+try {
+    Write-Host ''
+    Write-Host 'Step 3: install exact-target LocalSystem service + temporary SCM recovery...' -ForegroundColor Cyan
+    $serviceSetupTouched = $true
+    & (Join-Path $PSScriptRoot 'install-watchdog-m4-8c40.ps1')
+    Configure-M5CRecoveryPolicy
 
 Remove-Item $statusPath -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $localRoot | Out-Null
@@ -417,11 +420,9 @@ Write-Host 'Do not suspend/hibernate, close the lid, start a workload, close thi
 $confirm = Read-Host "Type exactly $userToken to continue"
 
 if ($confirm -cne $userToken) {
-    Restore-M4Baseline
     throw 'M5C cancelled before any fan write.'
 }
 
-try {
     Write-Host ''
     Write-Host 'Step 4: arm delayed independent safety fallback, then acquire durable OWNED 30/30...' -ForegroundColor Cyan
 
@@ -652,7 +653,7 @@ finally {
         }
     }
 
-    if ($firmwareSafe) {
+    if ($firmwareSafe -and $serviceSetupTouched) {
         try {
             Restore-M4Baseline
             Write-Host 'M4 qualification service baseline restored: Manual/stopped; temporary M5C SCM actions removed.' -ForegroundColor Green
