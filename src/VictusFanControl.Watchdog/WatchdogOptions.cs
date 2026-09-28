@@ -8,7 +8,9 @@ internal enum WatchdogRunMode
     GateCSelfTest,
     GateDService,
     M2Hp8C40ReadOnly,
-    M2Hp8C40SelfTest
+    M2Hp8C40SelfTest,
+    M3Hp8C40RestoreOnly,
+    M3Hp8C40SelfTest
 }
 
 internal sealed record WatchdogOptions(
@@ -16,12 +18,14 @@ internal sealed record WatchdogOptions(
     string ResultPath,
     string LogDirectory,
     string ServiceName,
-    WatchdogRunMode Mode)
+    WatchdogRunMode Mode,
+    string? M3HandoffPath)
 {
     public const string GateAServiceName = "VictusFanControlWatchdogGateA";
     public const string GateBServiceName = "VictusFanControlWatchdogGateB";
     public const string GateDServiceName = "VictusFanControlWatchdog";
     public const string M2Hp8C40ServiceName = "VictusFanControlWatchdogM2";
+    public const string M3Hp8C40ServiceName = "VictusFanControlWatchdogM3";
     public const string GateBRestoreToken = "88F8-GATEB-RESTORE";
 
     public static WatchdogOptions Parse(string[] args)
@@ -36,6 +40,7 @@ internal sealed record WatchdogOptions(
         var serviceName = GateAServiceName;
         var mode = WatchdogRunMode.GateAReadOnly;
         string? gateBToken = null;
+        string? m3HandoffPath = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -95,6 +100,22 @@ internal sealed record WatchdogOptions(
                     mode = WatchdogRunMode.M2Hp8C40SelfTest;
                     break;
 
+                case "--m3-8c40-restore-only":
+                    RequireModeStillGateA(mode, "--m3-8c40-restore-only");
+                    mode = WatchdogRunMode.M3Hp8C40RestoreOnly;
+                    break;
+
+                case "--m3-8c40-self-test":
+                    RequireModeStillGateA(mode, "--m3-8c40-self-test");
+                    mode = WatchdogRunMode.M3Hp8C40SelfTest;
+                    break;
+
+                case "--m3-handoff-path":
+                    m3HandoffPath =
+                        Path.GetFullPath(
+                            ReadValue(args, ref i));
+                    break;
+
                 default:
                     throw new ArgumentException(
                         $"Unknown watchdog argument: {args[i]}");
@@ -147,12 +168,37 @@ internal sealed record WatchdogOptions(
                 $"M2 HP 8C40 read-only service requires --service-name {M2Hp8C40ServiceName}.");
         }
 
+        if (mode == WatchdogRunMode.M3Hp8C40RestoreOnly)
+        {
+            if (!string.Equals(
+                    serviceName,
+                    M3Hp8C40ServiceName,
+                    StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"M3 HP 8C40 restore-only service requires --service-name {M3Hp8C40ServiceName}.");
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    m3HandoffPath))
+            {
+                throw new ArgumentException(
+                    "M3 HP 8C40 restore-only service requires --m3-handoff-path.");
+            }
+        }
+        else if (m3HandoffPath is not null)
+        {
+            throw new ArgumentException(
+                "--m3-handoff-path is valid only with --m3-8c40-restore-only.");
+        }
+
         return new WatchdogOptions(
             Path.GetFullPath(modulesDirectory),
             Path.GetFullPath(resultPath),
             Path.GetFullPath(logDirectory),
             serviceName,
-            mode);
+            mode,
+            m3HandoffPath);
     }
 
     private static void RequireModeStillGateA(

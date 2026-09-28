@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m2-pass-m2.5-pass-policy-off",
+  "status": "production-range-10-50-fully-integrated-m2.5-pass-m3-prepared-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -20,7 +20,9 @@
     "watchdogTargetAwareM1Passed": true,
     "watchdogSession0ReadOnlyM2Passed": true,
     "legacy88F8IsolationM2_5CodePassed": true,
-    "legacy88F8InstalledServiceCleanupVerified": true
+    "legacy88F8InstalledServiceCleanupVerified": true,
+    "watchdogRestoreOnlyM3Prepared": true,
+    "watchdogRestoreOnlyM3Passed": false
   },
   "control": {
     "enabledByDefault": false,
@@ -678,5 +680,20 @@
     "physicalAuditObservedAt": "2026-09-28",
     "physicalAuditCommand": "scripts/cleanup-watchdog-88f8-services.ps1 -AuditOnly",
     "cleanupRequired": false
+  },
+  "watchdogM3RestoreOnlyQualification": {
+    "status": "HARNESS_PREPARED_PHYSICAL_PENDING",
+    "requiredSourceState": "known VFC-owned equal 30/30",
+    "targetState": "firmware FF/FF",
+    "service": "VictusFanControlWatchdogM3",
+    "serviceAccount": "LocalSystem",
+    "sessionId": 0,
+    "handoffFreshnessSeconds": 15,
+    "handoffRequiresLiveArmerIdentity": true,
+    "preRestoreStableSamples": 2,
+    "serviceOrdinaryFanWriteAvailable": false,
+    "watchdogLeaseEnabled": false,
+    "watchdogRecoveryValidated": false,
+    "automaticPolicyEnabled": false
   }
 }

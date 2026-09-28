@@ -31,6 +31,10 @@ public sealed class CliOptions
     public string? Hp8C40TransitionQualificationToken { get; private set; }
     public bool Hp8C40EndpointCoordinatorQualification { get; private set; }
     public string? Hp8C40EndpointCoordinatorQualificationToken { get; private set; }
+    public bool Hp8C40M3Arm { get; private set; }
+    public string? Hp8C40M3ArmToken { get; private set; }
+    public string? Hp8C40M3HandoffPath { get; private set; }
+    public string? Hp8C40M3ResultPath { get; private set; }
     public string? IntegratedCoordinatorToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
@@ -171,6 +175,25 @@ public sealed class CliOptions
                         ReadValue(args, ref i);
                     break;
 
+                case "--8c40-m3-arm":
+                    options.Hp8C40M3Arm = true;
+                    break;
+
+                case "--8c40-m3-arm-token":
+                    options.Hp8C40M3ArmToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m3-handoff-path":
+                    options.Hp8C40M3HandoffPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m3-result-path":
+                    options.Hp8C40M3ResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
                 case "--coordinator-write-token":
                     options.IntegratedCoordinatorToken = ReadValue(args, ref i);
                     break;
@@ -226,6 +249,7 @@ public sealed class CliOptions
             (options.Hp8C40ExtendedFanRangeQualification ? 1 : 0) +
             (options.Hp8C40TransitionQualification ? 1 : 0) +
             (options.Hp8C40EndpointCoordinatorQualification ? 1 : 0) +
+            (options.Hp8C40M3Arm ? 1 : 0) +
             (options.HealthTestMinutes > 0 ? 1 : 0);
 
         if (exclusiveActions > 1)
@@ -288,6 +312,29 @@ public sealed class CliOptions
                 "--8c40-extended-range-token is valid only with --8c40-extended-range-qualification.");
         }
 
+        if (options.Hp8C40M3ArmToken is not null &&
+            !options.Hp8C40M3Arm)
+        {
+            throw new ArgumentException(
+                "--8c40-m3-arm-token is valid only with --8c40-m3-arm.");
+        }
+
+        if ((options.Hp8C40M3HandoffPath is not null ||
+             options.Hp8C40M3ResultPath is not null) &&
+            !options.Hp8C40M3Arm)
+        {
+            throw new ArgumentException(
+                "--8c40-m3-handoff-path/--8c40-m3-result-path are valid only with --8c40-m3-arm.");
+        }
+
+        if (options.Hp8C40M3Arm &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40M3HandoffPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M3ResultPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-m3-arm requires both --8c40-m3-handoff-path and --8c40-m3-result-path.");
+        }
+
         return options;
     }
 
@@ -326,6 +373,10 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-transition-token <token>  Required exact token: 8C40-TRANSITION10-50.");
         Console.WriteLine("  --8c40-endpoint-coordinator-qualification  ACTIVE GATE: coordinator/backend qualification at equal endpoints 10 and 50.");
         Console.WriteLine("  --8c40-endpoint-coordinator-token <token>  Required exact token: 8C40-ENDPOINT10-50.");
+        Console.WriteLine("  --8c40-m3-arm             ACTIVE M3 GATE: arm one VFC-owned 30/30 and wait for LocalSystem restore.");
+        Console.WriteLine("  --8c40-m3-arm-token <token>  Required exact token: 8C40-M3-RESTORE30.");
+        Console.WriteLine("  --8c40-m3-handoff-path <path>  Durable one-shot M3 handoff path.");
+        Console.WriteLine("  --8c40-m3-result-path <path>   M3 LocalSystem service result path.");
         Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30 or HP 8C40 production tokens 8C40-COORD10/30/32/36/50.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");

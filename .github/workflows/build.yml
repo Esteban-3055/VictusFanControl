@@ -84,6 +84,9 @@ jobs:
       - name: HP 8C40 watchdog M2 read-only self-test
         run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --m2-8c40-self-test
 
+      - name: HP 8C40 watchdog M3 restore-only self-test
+        run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --m3-8c40-self-test
+
       - name: Safety gate self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --safety-self-test
 

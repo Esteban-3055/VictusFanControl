@@ -138,6 +138,33 @@ internal static class Program
                 writeTestCts.Token);
         }
 
+        if (options.Hp8C40M3Arm)
+        {
+            if (!string.Equals(
+                    options.Hp8C40M3ArmToken,
+                    Hp8C40M3ArmTest.RequiredToken,
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    $"HP 8C40 M3 armer refused: explicit --8c40-m3-arm-token " +
+                    $"{Hp8C40M3ArmTest.RequiredToken} is required.");
+                return 140;
+            }
+
+            using var m3Cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                m3Cts.Cancel();
+            };
+
+            return await Hp8C40M3ArmTest.RunAsync(
+                options.ModulesDirectory,
+                options.Hp8C40M3HandoffPath!,
+                options.Hp8C40M3ResultPath!,
+                m3Cts.Token);
+        }
+
         if (options.Hp8C40EndpointCoordinatorQualification)
         {
             if (!string.Equals(

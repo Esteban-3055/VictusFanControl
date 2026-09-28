@@ -722,3 +722,29 @@ WMI `SetFanLevel` command.
 
 
 M2.5 repository CI passed after this hardening. The physical 8C40 Windows service-registration audit also passed: no historical 88F8 watchdog services were installed, so no cleanup action was required. M2.5 is closed and M3 may now be prepared.
+
+
+## Watchdog M3 prepared - restore-only service gate
+
+M3 is now prepared in code and awaits one physical qualification run.
+
+The dedicated `VictusFanControlWatchdogM3` service runs as LocalSystem in
+Session 0 and has no ordinary `SetFanLevel` method. It can consume only a
+fresh one-shot handoff created by the bounded VFC armer after a clean
+`FF/FF -> 30/30` transition.
+
+The service independently requires the exact 8C40 target, a live matching armer
+process, fresh handoff identity, stable equal `30/30`, valid MaxFan/FanSwitch
+guards and dual-tach feedback before issuing one existing
+`FF/FF -> LegacyDefault` restore transaction. It then requires EC `FF/FF`.
+
+Unknown/asymmetric fixed ownership is preserved with no restore write.
+
+The armer retains an emergency local fallback only while its own exact
+`30/30` remains present. It does not clear an unexpected external setpoint.
+
+M3 remains a qualification harness, not watchdog enablement:
+`WatchdogRecoveryValidated=false`, the production 8C40 watchdog lease stays
+blocked, and automatic/adaptive policy stays OFF.
+
+See `docs/WATCHDOG_M3_8C40.md`.
