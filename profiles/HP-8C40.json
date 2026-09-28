@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-physical-pass-m5-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-physical-pass-m5a-code-prepared-ci-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -33,7 +33,13 @@
     "watchdogM4C50LeasePrepared": true,
     "watchdogM4C50LeasePassed": true,
     "watchdogM4B10LeaseCodePassed": true,
-    "watchdogM4C50LeaseCodePassed": true
+    "watchdogM4C50LeaseCodePassed": true,
+    "watchdogM5AControllerDeathPrepared": true,
+    "watchdogM5AControllerDeathPassed": false,
+    "watchdogM5BWatchdogDeathPrepared": false,
+    "watchdogM5BWatchdogDeathPassed": false,
+    "watchdogM5CDoubleDeathPrepared": false,
+    "watchdogM5CDoubleDeathPassed": false
   },
   "control": {
     "enabledByDefault": false,
@@ -914,5 +920,28 @@
       "completedAt": "2026-09-28"
     },
     "normalAwakeLeaseQualificationComplete": true
+  },
+  "watchdogM5Qualification": {
+    "status": "M5A_CODE_PREPARED_CI_PENDING_PHYSICAL_PENDING",
+    "targetProfileId": "HP-8C40-9D0R1LA-F18",
+    "qualificationLevel": 30,
+    "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
+    "service": "VictusFanControlWatchdogM4",
+    "pipe": "VictusFanControl.Watchdog.M4.8C40.v2",
+    "serviceAccount": "LocalSystem",
+    "serviceSessionId": 0,
+    "serviceOrdinaryFanWriteAvailable": false,
+    "parentDirectRestoreAuthority": false,
+    "exactControllerIdentityRequired": true,
+    "durableOwnedJournalRequired": true,
+    "sameWatchdogPidRequired": true,
+    "ownerLossDispositionRequired": "RestoredFirmware",
+    "finalIndependentEcRequired": "FF/FF",
+    "retainedJournalOnUnresolvedFailure": true,
+    "watchdogRecoveryValidated": false,
+    "automaticPolicyEnabled": false,
+    "m5aPhysicalStatus": "PENDING",
+    "m5bPhysicalStatus": "PENDING",
+    "m5cPhysicalStatus": "PENDING"
   }
 }

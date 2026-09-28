@@ -138,6 +138,34 @@ internal static class Program
                 writeTestCts.Token);
         }
 
+        if (options.Hp8C40M5AControllerDeathArm)
+        {
+            if (!string.Equals(
+                    options.Hp8C40M5AControllerDeathToken,
+                    Hp8C40M5AControllerDeathArmTest.RequiredToken,
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    $"HP 8C40 M5A refused: explicit --8c40-m5a-token " +
+                    $"{Hp8C40M5AControllerDeathArmTest.RequiredToken} is required.");
+                return 179;
+            }
+
+            using var m5aCts =
+                new CancellationTokenSource();
+
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                m5aCts.Cancel();
+            };
+
+            return await Hp8C40M5AControllerDeathArmTest.RunAsync(
+                options.ModulesDirectory,
+                options.Hp8C40M5AReadyPath!,
+                m5aCts.Token);
+        }
+
         if (options.Hp8C40M4LeaseQualification)
         {
             var qualificationLevel =

@@ -38,6 +38,9 @@ public sealed class CliOptions
     public bool Hp8C40M4LeaseQualification { get; private set; }
     public int? Hp8C40M4LeaseQualificationLevel { get; private set; }
     public string? Hp8C40M4LeaseQualificationToken { get; private set; }
+    public bool Hp8C40M5AControllerDeathArm { get; private set; }
+    public string? Hp8C40M5AControllerDeathToken { get; private set; }
+    public string? Hp8C40M5AReadyPath { get; private set; }
     public string? IntegratedCoordinatorToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
@@ -214,6 +217,21 @@ public sealed class CliOptions
                         ReadValue(args, ref i);
                     break;
 
+                case "--8c40-m5a-controller-death-arm":
+                    options.Hp8C40M5AControllerDeathArm = true;
+                    break;
+
+                case "--8c40-m5a-token":
+                    options.Hp8C40M5AControllerDeathToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m5a-ready-path":
+                    options.Hp8C40M5AReadyPath =
+                        Path.GetFullPath(
+                            ReadValue(args, ref i));
+                    break;
+
                 case "--coordinator-write-token":
                     options.IntegratedCoordinatorToken = ReadValue(args, ref i);
                     break;
@@ -271,6 +289,7 @@ public sealed class CliOptions
             (options.Hp8C40EndpointCoordinatorQualification ? 1 : 0) +
             (options.Hp8C40M3Arm ? 1 : 0) +
             (options.Hp8C40M4LeaseQualification ? 1 : 0) +
+            (options.Hp8C40M5AControllerDeathArm ? 1 : 0) +
             (options.HealthTestMinutes > 0 ? 1 : 0);
 
         if (exclusiveActions > 1)
@@ -370,6 +389,22 @@ public sealed class CliOptions
                 "HP 8C40 M4 lease qualification requires exactly one endpoint switch: --8c40-m4-lease10, --8c40-m4-lease30 or --8c40-m4-lease50.");
         }
 
+        if ((options.Hp8C40M5AControllerDeathToken is not null ||
+             options.Hp8C40M5AReadyPath is not null) &&
+            !options.Hp8C40M5AControllerDeathArm)
+        {
+            throw new ArgumentException(
+                "--8c40-m5a-token/--8c40-m5a-ready-path are valid only with --8c40-m5a-controller-death-arm.");
+        }
+
+        if (options.Hp8C40M5AControllerDeathArm &&
+            string.IsNullOrWhiteSpace(
+                options.Hp8C40M5AReadyPath))
+        {
+            throw new ArgumentException(
+                "--8c40-m5a-controller-death-arm requires --8c40-m5a-ready-path.");
+        }
+
         return options;
     }
 
@@ -416,6 +451,9 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-m4-lease30          ACTIVE M4A GATE: real target-bound watchdog lease at equal 30/30.");
         Console.WriteLine("  --8c40-m4-lease50          ACTIVE M4C GATE: real target-bound watchdog lease at equal 50/50.");
         Console.WriteLine("  --8c40-m4-lease-token <token>  Exact token matching the selected level: 8C40-M4-LEASE10/30/50.");
+        Console.WriteLine("  --8c40-m5a-controller-death-arm  ACTIVE M5A CHILD: hold watchdog-owned 30/30 until parent force-kills this process.");
+        Console.WriteLine("  --8c40-m5a-token <token>   Required exact token: 8C40-M5A-CONTROLLER-DEATH30.");
+        Console.WriteLine("  --8c40-m5a-ready-path <path>  Durable READY marker written only after EC+tachs+watchdog OWNED acknowledgement.");
         Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30 or HP 8C40 production tokens 8C40-COORD10/30/32/36/50.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
