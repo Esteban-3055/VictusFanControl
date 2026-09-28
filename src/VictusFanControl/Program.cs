@@ -138,6 +138,30 @@ internal static class Program
                 writeTestCts.Token);
         }
 
+        if (options.Hp8C40EndpointCoordinatorQualification)
+        {
+            if (!string.Equals(
+                    options.Hp8C40EndpointCoordinatorQualificationToken,
+                    "8C40-ENDPOINT10-50",
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    "8C40 endpoint coordinator qualification refused: explicit token 8C40-ENDPOINT10-50 is required.");
+                return 121;
+            }
+
+            using var endpointCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                endpointCts.Cancel();
+            };
+
+            return await Hp8C40EndpointCoordinatorQualificationTest.RunAsync(
+                options.ModulesDirectory,
+                endpointCts.Token);
+        }
+
         if (options.Hp8C40TransitionQualification)
         {
             if (!string.Equals(
