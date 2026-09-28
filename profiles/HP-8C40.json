@@ -548,6 +548,40 @@
     "qualificationEnvelopeInjected": "10..50 equal-only",
     "productionDefaultsChanged": false,
     "productionDefaults": "30..36 equal-only",
-    "physicalStatus": "PENDING"
+    "physicalStatus": "PASS"
+  },
+  "endpointCoordinatorQualificationResult": {
+    "result": "PASS",
+    "route": "SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend logic -> qualification WMI writer -> EC/tach ACK -> terminal convergence -> restore",
+    "productionDefaultsChanged": false,
+    "productionDefaults": "30..36 equal-only",
+    "acBatteryBaseline": "AC online, battery 93%, flags 0x09",
+    "endpoints": {
+      "level10": {
+        "baselineCpuRpm": 0,
+        "baselineGpuRpm": 0,
+        "coordinatorAuthorityAcquired": true,
+        "backendAcknowledged": true,
+        "convergenceSeconds": 4.5,
+        "terminalCpuRpm": 981,
+        "terminalGpuRpm": 1012,
+        "finalAuthority": "Firmware",
+        "finalSetpoint": "FF/FF",
+        "passed": true
+      },
+      "level50": {
+        "baselineCpuRpm": 0,
+        "baselineGpuRpm": 0,
+        "coordinatorAuthorityAcquired": true,
+        "backendAcknowledged": true,
+        "convergenceSeconds": 14.9,
+        "terminalCpuRpm": 4991,
+        "terminalGpuRpm": 4968,
+        "finalAuthority": "Firmware",
+        "finalSetpoint": "FF/FF",
+        "passed": true
+      }
+    },
+    "interpretation": "Both physically characterized endpoints passed the coordinator/backend qualification route from stopped firmware baseline through EC/tach acknowledgement, continuous supervision, terminal convergence and verified firmware restore. Production still remains 30..36 pending explicit promotion and post-promotion regression."
   }
 }
