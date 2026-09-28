@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M4 - target-bound live lease qualification
 
-Status: **M4A CODE/CI/PHYSICAL PASS. Post-physical hardening CI PASS. M4B/M4C CODE/CI PASS / PHYSICAL PENDING.**
+Status: **M4A CODE/CI/PHYSICAL PASS. M4B attempt 1 failed closed before any write; diagnostic hardening CI PASS. M4B/M4C PHYSICAL PENDING.**
 
 M3 physically qualified the LocalSystem restore-only primitive. M4 is the next
 separate authorization boundary: durable watchdog lease ownership around a real
@@ -260,3 +260,11 @@ The diagnostic path is hardened before retrying M4B:
   setpoint probe on the failure path.
 
 No control authority or fan range is expanded by this diagnostic hardening.
+
+
+### M4B attempt-1 diagnostic hardening CI
+
+Commit `753d74875b056029af1bfb5d6d96819cf0d7690b` passed complete
+repository GitHub Actions run **#581** on 2026-09-28. The retry may therefore
+use the hardened diagnostics without changing fan authority, setpoint policy or
+watchdog recovery qualification.
