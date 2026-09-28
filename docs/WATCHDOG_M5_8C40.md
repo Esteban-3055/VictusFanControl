@@ -291,4 +291,26 @@ M5B explicit token:
 8C40-M5B-WATCHDOG-DEATH30
 ~~~
 
-Physical execution remains blocked until its new code/CI gate is green.
+Code/CI preparation is green. Physical execution remains the next boundary.
+
+
+## M5B preparation CI result
+
+M5B code preparation commit
+`d232c8edb27177c1d1122762b97c00d5838cca87` passed complete GitHub
+Actions run **#590** on 2026-09-28.
+
+The green run included:
+
+- PowerShell syntax validation;
+- historical Gate E/F/G0/G1/G2 causal invariants;
+- HP 8C40 legacy isolation;
+- M5A controller-death invariant;
+- the new M5B watchdog-death invariant;
+- warnings-as-errors solution build;
+- M0, Gate B/C and HP 8C40 M2/M3/M4 self-tests;
+- SafetyGate and FanControlCoordinator self-tests;
+- HP BIOS-contract and backend self-tests.
+
+M5B is therefore **CODE/CI PASS / PHYSICAL PENDING**. No production watchdog
+promotion or automatic policy change is made by this preparation.
