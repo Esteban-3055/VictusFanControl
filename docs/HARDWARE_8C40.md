@@ -382,3 +382,25 @@ With the Windows `ES_SYSTEM_REQUIRED` inhibitor active, the broad sweep successf
 Level `21/21` was accepted by HP WMI and acknowledged by EC `0x34/0x35`, but before the first steady physical sample the machine entered hibernation. After resume, firmware restore was verified at `FF/FF`, while the telemetry snapshot was approximately 33.6 seconds stale. No level below 21 was written, and the later upper sweep was not meaningfully executed because telemetry remained incomplete/stale.
 
 This confirms that `SetThreadExecutionState(ES_SYSTEM_REQUIRED | ES_CONTINUOUS)` is not sufficient to guarantee that this machine will not hibernate during the active hardware test. The extended-range harness now classifies a large telemetry-age discontinuity as a power-transition event, restores firmware, and terminates the entire run instead of attempting another sweep segment. A separate power-transition diagnostics collector was added to capture Windows sleep policy, active power requests, recent Kernel-Power/Power-Troubleshooter events, System Sleep Diagnostics and SleepStudy evidence before continuing lower-range characterization.
+
+
+## Confirmed cause of the broad-sweep hibernations
+
+Windows event evidence now identifies both broad-sweep power transitions as battery-triggered hibernations rather than idle sleep. In both incidents, Kernel-Power logged the critical-battery trigger, then a sleep transition with reason `Battery`, followed by resume from hibernate.
+
+The active power plan has AC idle hibernation disabled and allows system-required requests, so the test's `ES_SYSTEM_REQUIRED` request was not being ignored by the normal idle-sleep policy. The transition instead followed the critical-battery path, which can supersede ordinary idle inhibition.
+
+SleepStudy shows physically implausible battery telemetry around the incidents: the pack was reported near/full, then capacity or percentage collapsed to zero over a very short interval, and returned to full after resume. One incident also contained a brief AC-source drop before the false critical-battery event. This rules out real battery discharge as the explanation.
+
+Because the fan characterization performs repeated direct EC transactions and laptop battery telemetry is also firmware/ACPI-managed, EC/ACPI contention is now the primary working hypothesis. This remains a causal hypothesis rather than proof of the precise kernel/firmware race.
+
+Mitigations now applied to the extended qualification harness:
+
+- normal setpoint and guard reads are no longer duplicated unconditionally, reducing EC transaction volume;
+- abnormal/asymmetric evidence is still confirmed at the higher 8C40 qualification layer before failing;
+- characterization sampling is reduced to 1 Hz;
+- ownership/guard evidence is checked at bounded phase boundaries rather than on every tach sample;
+- Windows AC/battery status is checked throughout the active step; AC loss, unknown battery state or battery below the qualification floor causes immediate restore/abort;
+- a hibernate-like telemetry-age discontinuity terminates the complete sweep after restore.
+
+Do not disable Windows critical-battery protection as a workaround. The test must coexist with that protection rather than masking a potentially real battery emergency.
