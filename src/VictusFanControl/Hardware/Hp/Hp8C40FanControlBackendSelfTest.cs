@@ -838,6 +838,8 @@ public static class Hp8C40FanControlBackendSelfTest
         await backend.RestoreFirmwareAutoAsync(
             CancellationToken.None);
 
+        var lastTachAck = hook.LastTachAck;
+
         return Report(
             output,
             "qualification hook runs after real hardware acknowledgement and before watchdog Commit",
@@ -850,10 +852,11 @@ public static class Hp8C40FanControlBackendSelfTest
             hook.LastGpuTarget == 30 &&
             hook.LastSetpointAck.CpuSetpoint == 30 &&
             hook.LastSetpointAck.GpuSetpoint == 30 &&
-            hook.LastTachAck.CpuSetpoint == 30 &&
-            hook.LastTachAck.GpuSetpoint == 30 &&
-            hook.LastTachAck.CpuRpm > 0 &&
-            hook.LastTachAck.GpuRpm > 0);
+            lastTachAck is not null &&
+            lastTachAck.CpuSetpoint == 30 &&
+            lastTachAck.GpuSetpoint == 30 &&
+            lastTachAck.CpuRpm > 0 &&
+            lastTachAck.GpuRpm > 0);
     }
 
     private static async Task<int> TestWatchdogPostIntentExternalRaceAsync(
@@ -1195,13 +1198,13 @@ public static class Hp8C40FanControlBackendSelfTest
         public int Calls { get; private set; }
         public byte LastCpuTarget { get; private set; }
         public byte LastGpuTarget { get; private set; }
-        public Hp8C40EcControlState LastSetpointAck { get; private set; }
-        public Hp8C40EcControlState LastTachAck { get; private set; }
+        public (byte CpuSetpoint, byte GpuSetpoint) LastSetpointAck { get; private set; }
+        public Hp8C40EcControlState? LastTachAck { get; private set; }
 
         public ValueTask AfterHardwareAcknowledgedBeforeWatchdogCommitAsync(
             byte cpuTarget,
             byte gpuTarget,
-            Hp8C40EcControlState setpointAck,
+            (byte CpuSetpoint, byte GpuSetpoint) setpointAck,
             Hp8C40EcControlState tachAck,
             CancellationToken cancellationToken)
         {
