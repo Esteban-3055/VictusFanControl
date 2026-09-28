@@ -685,7 +685,7 @@ See `docs/WATCHDOG_M2_8C40.md` and
 `scripts/test-watchdog-m2-8c40.ps1`.
 
 
-## M2.5 legacy-88F8 isolation hardening
+## M2.5 legacy-88F8 isolation hardening — CODE/CI PASS
 
 After the physical M2 PASS, the repository was audited specifically for
 historical HP 88F8/S3 paths that could accidentally reach the HP 8C40 target.
@@ -719,3 +719,8 @@ ownership is allowed.
 The 8C40 backend also has an explicit regression proving that reapplying the
 same already-owned setpoint verifies EC/tach feedback without issuing another
 WMI `SetFanLevel` command.
+
+
+M2.5 repository CI passed after this hardening. The local Windows
+service-registration audit remains pending on the physical 8C40 target; until
+that audit/cleanup is completed, M3 should not be executed.

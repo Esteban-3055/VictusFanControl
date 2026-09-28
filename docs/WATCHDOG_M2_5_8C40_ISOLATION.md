@@ -1,6 +1,6 @@
 # HP 8C40 M2.5 - legacy 88F8 isolation hardening
 
-Status: **code gate prepared; CI required before closing.**
+Status: **CODE/CI PASS; local installed-service audit/cleanup pending on the physical 8C40 target.**
 
 M2 proved that the exact HP 8C40 target can read the future watchdog
 dependencies from LocalSystem/Session 0 without changing ownership. Before M3
@@ -122,3 +122,16 @@ M2.5 still leaves these intentionally blocked:
 After M2.5 CI and local legacy-service cleanup/audit, M3 may qualify one
 restore-only LocalSystem transition from a known VFC-owned equal `30/30`
 state back to verified firmware `FF/FF`.
+
+
+## CI result
+
+M2.5 passed the full repository CI after the isolation changes. The dedicated
+isolation invariant gate passed, the solution built with warnings as errors,
+all historical Gate E/F/G invariants remained green, M0/M1/M2 self-tests
+remained green, and the HP 8C40 backend regression confirmed that a repeated
+same-owned setpoint does not issue a redundant WMI `SetFanLevel` command.
+
+The only remaining local M2.5 action is to audit/remove any historical 88F8
+Windows service registrations on the physical 8C40 machine. This action is
+service-registration cleanup only and does not write fan state.

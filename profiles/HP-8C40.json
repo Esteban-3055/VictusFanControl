@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m2-read-only-pass-policy-off",
+  "status": "production-range-10-50-fully-integrated-m2-pass-m2.5-ci-pass-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -18,7 +18,9 @@
     "watchdogRecoveryValidated": false,
     "modernStandbyM0Characterized": true,
     "watchdogTargetAwareM1Passed": true,
-    "watchdogSession0ReadOnlyM2Passed": true
+    "watchdogSession0ReadOnlyM2Passed": true,
+    "legacy88F8IsolationM2_5CodePassed": true,
+    "legacy88F8InstalledServiceCleanupVerified": false
   },
   "control": {
     "enabledByDefault": false,
@@ -661,5 +663,17 @@
     "restoreIssued": false,
     "watchdogRecoveryValidated": false,
     "interpretation": "Exact-target LocalSystem/Session-0 access to the narrow EC 0x34/0x35 ownership read and HP GetFanLevel was physically proven without changing fan ownership. This qualifies dependency access only; service-side restore, crash recovery and Modern Standby watchdog lifecycle remain unqualified."
+  },
+  "legacy88F8IsolationM2_5": {
+    "result": "CODE_CI_PASS",
+    "completedAt": "2026-09-28",
+    "legacyGuiHarnessExactTargetGuard": true,
+    "modernStandbyGenericReopenBlocked": true,
+    "legacyGateGRequiresTargetProfileId": true,
+    "legacy88F8EcProbeExactFingerprint": true,
+    "mSeriesRejectsInstalledLegacyServices": true,
+    "cleanupScriptPreservesProgramDataEvidence": true,
+    "sameSetpointRedundantWmiWriteTest": "PASS",
+    "physicalInstalledServiceAudit": "PENDING"
   }
 }
