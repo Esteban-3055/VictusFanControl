@@ -10,28 +10,28 @@ $backend8Path = Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanC
 $m2InstallerPath = Join-Path $PSScriptRoot 'install-watchdog-m2-8c40.ps1'
 $cleanupPath = Join-Path $PSScriptRoot 'cleanup-watchdog-88f8-services.ps1'
 
-function Assert-Contains {
+function Assert-ContainsLiteral {
     param(
         [string]$Text,
-        [string]$Pattern,
+        [string]$Needle,
         [string]$Description
     )
 
-    if ($Text -notmatch $Pattern) {
+    if (-not $Text.Contains($Needle, [StringComparison]::Ordinal)) {
         throw "8C40 isolation invariant missing: $Description"
     }
 
     Write-Host "PASS  $Description"
 }
 
-function Assert-NotContains {
+function Assert-NotContainsLiteral {
     param(
         [string]$Text,
-        [string]$Pattern,
+        [string]$Needle,
         [string]$Description
     )
 
-    if ($Text -match $Pattern) {
+    if ($Text.Contains($Needle, [StringComparison]::Ordinal)) {
         throw "8C40 isolation invariant violated: $Description"
     }
 
@@ -49,29 +49,107 @@ $cleanup = Get-Content $cleanupPath -Raw
 
 Write-Host 'VictusFanControl - HP 8C40 / legacy 88F8 isolation invariant self-test'
 
-Assert-Contains -Text $appProgram -Pattern 'legacy88F8HardwareHarnessRequested[sS]*suspendHardwareTest[sS]*gateDHardwareTest[sS]*gateG2HardwareTest' -Description 'all historical suspend/Gate D-G app modes are grouped behind one legacy 88F8 guard'
-Assert-Contains -Text $appProgram -Pattern 'legacy88F8HardwareHarnessRequested[sS]*Hp88F8TargetProfile.Matches(' -Description 'legacy hardware modes require the exact HP 88F8 fingerprint before MainForm/backend creation'
-Assert-Contains -Text $appProgram -Pattern 'Use the dedicated 8C40 M-series qualification gates instead' -Description 'legacy mode refusal directs 8C40 hardware to M-series gates'
+$legacyGroupStart = $appProgram.IndexOf(
+    'var legacy88F8HardwareHarnessRequested =',
+    [StringComparison]::Ordinal)
+$legacyGuardStart = $appProgram.IndexOf(
+    'if (legacy88F8HardwareHarnessRequested)',
+    [Math]::Max(0, $legacyGroupStart),
+    [StringComparison]::Ordinal)
 
-Assert-Contains -Text $mainForm -Pattern '_suspendLifecycleHardwareTest ||[sS]*_gateG2HardwareTest)[sS]*Hp88F8TargetProfile.Instance.Id' -Description 'MainForm keeps a second exact-target defense for all historical hardware harnesses'
-Assert-Contains -Text $mainForm -Pattern 'WindowsSleepModel.ModernStandbyS0LowPowerIdle[sS]*generic S3-era lifecycle recovery will not reopen Custom admission' -Description '8C40 Modern Standby cannot reopen Custom from the generic S3-era Healthy path'
-Assert-Contains -Text $mainForm -Pattern 'Validated target: {_targetProfile.DisplayName} ({_targetProfile.Id})' -Description 'normal GUI fan page identifies the resolved target instead of claiming 88F8 unconditionally'
-Assert-NotContains -Text $mainForm -Pattern 'Text = "The validated HP 88F8 backend is integrated behind FanControlCoordinator' -Description 'stale 88F8-only normal GUI label is removed'
+if ($legacyGroupStart -lt 0 -or $legacyGuardStart -le $legacyGroupStart) {
+    throw '8C40 isolation invariant missing: legacy 88F8 hardware-mode grouping/guard.'
+}
 
-Assert-Contains -Text $gateGState -Pattern 'TargetProfileId' -Description 'legacy Gate G consumes watchdog target identity'
-Assert-Contains -Text $gateGState -Pattern 'Hp88F8TargetProfile.Instance.Id' -Description 'legacy Gate G requires exact 88F8 watchdog target identity'
+$legacyGroup = $appProgram.Substring(
+    $legacyGroupStart,
+    $legacyGuardStart - $legacyGroupStart)
 
-Assert-Contains -Text $probe88 -Pattern 'Hp88F8TargetProfile.Matches(' -Description 'legacy 88F8 EC diagnostics require the full exact target fingerprint'
-Assert-NotContains -Text $probe88 -Pattern 'hardware.BoardProduct,[sS]*"88F8"' -Description 'legacy EC diagnostics no longer accept board product alone'
+foreach ($flag in @(
+    'suspendHardwareTest',
+    'gateDHardwareTest',
+    'gateEHardwareTest',
+    'gateF1HardwareTest',
+    'gateF2HardwareTest',
+    'gateG1HardwareTest',
+    'gateG2HardwareTest'
+)) {
+    Assert-ContainsLiteral -Text $legacyGroup -Needle $flag -Description "legacy grouping includes $flag"
+}
 
-Assert-Contains -Text $m2Installer -Pattern 'VictusFanControlWatchdogGateA[sS]*VictusFanControlWatchdogGateB[sS]*VictusFanControlWatchdog' -Description 'M2 installer enumerates historical watchdog service registrations'
-Assert-Contains -Text $m2Installer -Pattern 'historical 88F8 watchdog[sS]*cleanup-watchdog-88f8-services.ps1' -Description 'M2 installer refuses silent coexistence with historical services'
-Assert-Contains -Text $cleanup -Pattern 'sc.exe config $name start= disabled' -Description 'cleanup disables legacy service startup before deletion'
-Assert-Contains -Text $cleanup -Pattern 'sc.exe delete $name' -Description 'cleanup removes legacy service registrations'
-Assert-Contains -Text $cleanup -Pattern 'Historical ProgramData logs/journals are NOT deleted' -Description 'cleanup preserves historical forensic evidence'
+$legacyGuardTail = $appProgram.Substring($legacyGuardStart)
+Assert-ContainsLiteral -Text $legacyGuardTail -Needle 'Hp88F8TargetProfile.Matches(' -Description 'legacy hardware modes require the exact HP 88F8 fingerprint before MainForm/backend creation'
+Assert-ContainsLiteral -Text $legacyGuardTail -Needle 'Use the dedicated 8C40 M-series qualification gates instead' -Description 'legacy mode refusal directs 8C40 hardware to M-series gates'
 
-Assert-Contains -Text $factory -Pattern 'HP 8C40 matched, but watchdog/service recovery has not yet[sS]*throw new NotSupportedException' -Description 'production factory still rejects a watchdog lease on 8C40'
-Assert-Contains -Text $backend8 -Pattern 'HP 8C40 watchdog recovery is not yet physically validated[sS]*throw new NotSupportedException' -Description '8C40 backend independently rejects watchdog lease construction'
+$backendBlockStart = $mainForm.IndexOf('IFanControlBackend backend;', [StringComparison]::Ordinal)
+$backendBlockEnd = $mainForm.IndexOf('_fanCoordinator = new FanControlCoordinator(backend);', [Math]::Max(0, $backendBlockStart), [StringComparison]::Ordinal)
+if ($backendBlockStart -lt 0 -or $backendBlockEnd -le $backendBlockStart) {
+    throw '8C40 isolation invariant could not isolate MainForm backend initialization.'
+}
+$backendBlock = $mainForm.Substring($backendBlockStart, $backendBlockEnd - $backendBlockStart)
+
+foreach ($flag in @(
+    '_suspendLifecycleHardwareTest',
+    '_gateDHardwareTest',
+    '_gateEHardwareTest',
+    '_gateF1HardwareTest',
+    '_gateF2HardwareTest',
+    '_gateG1HardwareTest',
+    '_gateG2HardwareTest'
+)) {
+    Assert-ContainsLiteral -Text $backendBlock -Needle $flag -Description "MainForm secondary legacy guard includes $flag"
+}
+
+Assert-ContainsLiteral -Text $backendBlock -Needle 'Hp88F8TargetProfile.Instance.Id' -Description 'MainForm secondary legacy guard requires the exact 88F8 target id'
+
+$reopenStart = $mainForm.IndexOf('private async Task ReopenFanAdmissionAfterHealthyAsync()', [StringComparison]::Ordinal)
+$buildUiStart = $mainForm.IndexOf('private System.Windows.Forms.Control BuildUi()', [Math]::Max(0, $reopenStart), [StringComparison]::Ordinal)
+if ($reopenStart -lt 0 -or $buildUiStart -le $reopenStart) {
+    throw '8C40 isolation invariant could not isolate generic admission reopen path.'
+}
+$reopenMethod = $mainForm.Substring($reopenStart, $buildUiStart - $reopenStart)
+
+Assert-ContainsLiteral -Text $reopenMethod -Needle 'WindowsSleepModel.ModernStandbyS0LowPowerIdle' -Description 'generic admission reopen identifies Modern Standby targets'
+Assert-ContainsLiteral -Text $reopenMethod -Needle 'generic S3-era lifecycle recovery will not reopen Custom admission' -Description '8C40 Modern Standby cannot reopen Custom from the generic S3-era Healthy path'
+Assert-ContainsLiteral -Text $mainForm -Needle 'Validated target: {_targetProfile.DisplayName} ({_targetProfile.Id})' -Description 'normal GUI fan page identifies the resolved target instead of claiming 88F8 unconditionally'
+Assert-NotContainsLiteral -Text $mainForm -Needle 'Text = "The validated HP 88F8 backend is integrated behind FanControlCoordinator.' -Description 'stale 88F8-only normal GUI label is removed'
+
+Assert-ContainsLiteral -Text $gateGState -Needle 'TargetProfileId' -Description 'legacy Gate G consumes watchdog target identity'
+Assert-ContainsLiteral -Text $gateGState -Needle 'Hp88F8TargetProfile.Instance.Id' -Description 'legacy Gate G requires exact 88F8 watchdog target identity'
+
+Assert-ContainsLiteral -Text $probe88 -Needle 'Hp88F8TargetProfile.Matches(' -Description 'legacy 88F8 EC diagnostics require the full exact target fingerprint'
+Assert-NotContainsLiteral -Text $probe88 -Needle 'hardware.BoardProduct,' -Description 'legacy EC diagnostics no longer accept board product alone'
+
+foreach ($serviceName in @(
+    'VictusFanControlWatchdogGateA',
+    'VictusFanControlWatchdogGateB',
+    'VictusFanControlWatchdog'
+)) {
+    Assert-ContainsLiteral -Text $m2Installer -Needle $serviceName -Description "M2 installer recognizes legacy service $serviceName"
+    Assert-ContainsLiteral -Text $cleanup -Needle $serviceName -Description "cleanup recognizes legacy service $serviceName"
+}
+
+Assert-ContainsLiteral -Text $m2Installer -Needle 'cleanup-watchdog-88f8-services.ps1' -Description 'M2 installer refuses silent coexistence and points to explicit cleanup'
+Assert-ContainsLiteral -Text $cleanup -Needle 'sc.exe config $name start= disabled' -Description 'cleanup disables legacy service startup before deletion'
+Assert-ContainsLiteral -Text $cleanup -Needle 'sc.exe delete $name' -Description 'cleanup removes legacy service registrations'
+Assert-ContainsLiteral -Text $cleanup -Needle 'Historical ProgramData logs/journals are NOT deleted' -Description 'cleanup preserves historical forensic evidence'
+
+Assert-ContainsLiteral -Text $factory -Needle 'HP 8C40 matched, but watchdog/service recovery has not yet' -Description 'production factory still documents the 8C40 watchdog prohibition'
+Assert-ContainsLiteral -Text $factory -Needle 'throw new NotSupportedException(' -Description 'production factory still fail-closes unsupported watchdog construction'
+Assert-ContainsLiteral -Text $backend8 -Needle 'HP 8C40 watchdog recovery is not yet physically validated.' -Description '8C40 backend independently documents the watchdog prohibition'
+
+$watchdogGuardStart = $backend8.IndexOf(
+    'if (_targetSupported && watchdogLease is not null)',
+    [StringComparison]::Ordinal)
+$watchdogGuardEnd = $backend8.IndexOf(
+    '_watchdogLease = watchdogLease;',
+    [Math]::Max(0, $watchdogGuardStart),
+    [StringComparison]::Ordinal)
+if ($watchdogGuardStart -lt 0 -or $watchdogGuardEnd -le $watchdogGuardStart) {
+    throw '8C40 isolation invariant missing: backend watchdog-construction guard.'
+}
+$watchdogGuard = $backend8.Substring($watchdogGuardStart, $watchdogGuardEnd - $watchdogGuardStart)
+Assert-ContainsLiteral -Text $watchdogGuard -Needle 'throw new NotSupportedException(' -Description '8C40 backend rejects watchdog lease before storing it'
 
 Write-Host ''
 Write-Host 'HP 8C40 / legacy 88F8 isolation invariant self-test: PASS' -ForegroundColor Green
