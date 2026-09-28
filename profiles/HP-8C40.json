@@ -460,5 +460,26 @@
       "note": "Previously inconclusive due to false critical-battery hibernation; passed cleanly after EC traffic reduction and AC/battery guard hardening."
     },
     "interpretation": "The HP 8C40 equal-level command primitive is physically characterized across 10..50 under the bounded light-load harness. This does not yet expand the production backend: low-end restart-from-stopped-fan behavior and production endpoint/transition integration remain pending."
+  },
+  "transitionQualificationPrepared": {
+    "sequence": [
+      "firmware",
+      "10/10",
+      "30/30",
+      "50/50",
+      "30/30",
+      "10/10",
+      "firmware"
+    ],
+    "productionRangeChanged": false,
+    "productionRange": "30..36 equal-only",
+    "sampleIntervalSeconds": 1,
+    "convergenceRule": "2 consecutive dual-fan samples inside max(150 RPM, 5% of level*100 RPM) terminal band",
+    "transitionTimeoutSeconds": 12,
+    "acBatterySanityGuard": true,
+    "sleepInhibition": true,
+    "restore": "mandatory FF/FF + LegacyDefault in finally path",
+    "purpose": "Measure bounded large up/down transition behavior and convergence without firmware restore between intermediate commands.",
+    "physicalStatus": "PENDING"
   }
 }
