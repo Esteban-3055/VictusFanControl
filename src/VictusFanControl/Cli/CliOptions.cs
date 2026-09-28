@@ -7,6 +7,7 @@ public sealed class CliOptions
     public bool SafetySelfTest { get; private set; }
     public bool Probe88F8EcState { get; private set; }
     public bool Probe88F8Setpoint { get; private set; }
+    public bool Probe8C40Setpoint { get; private set; }
     public bool ControlSelfTest { get; private set; }
     public bool BiosContractSelfTest { get; private set; }
     public bool HpBackendSelfTest { get; private set; }
@@ -65,6 +66,10 @@ public sealed class CliOptions
 
                 case "--probe-88f8-setpoint":
                     options.Probe88F8Setpoint = true;
+                    break;
+
+                case "--probe-8c40-setpoint":
+                    options.Probe8C40Setpoint = true;
                     break;
 
                 case "--control-self-test":
@@ -206,6 +211,7 @@ public sealed class CliOptions
             (options.SafetySelfTest ? 1 : 0) +
             (options.Probe88F8EcState ? 1 : 0) +
             (options.Probe88F8Setpoint ? 1 : 0) +
+            (options.Probe8C40Setpoint ? 1 : 0) +
             (options.ControlSelfTest ? 1 : 0) +
             (options.BiosContractSelfTest ? 1 : 0) +
             (options.HpBackendSelfTest ? 1 : 0) +
@@ -296,6 +302,7 @@ public sealed class CliOptions
         Console.WriteLine("  --safety-self-test         Run synthetic SafetyGate fail-closed tests.");
         Console.WriteLine("  --probe-88f8-ec-state     Read known 88F8 fan-control EC state (read-only).");
         Console.WriteLine("  --probe-88f8-setpoint     Read only 88F8 ownership setpoints 0x34/0x35 (read-only).");
+        Console.WriteLine("  --probe-8c40-setpoint     Read only 8C40 ownership setpoints 0x34/0x35 (read-only).");
         Console.WriteLine("  --control-self-test       Test authority/fallback coordinator with fake backend.");
         Console.WriteLine("  --bios-contract-self-test Validate 88F8 + 8C40 BIOS/WMI request envelopes.");
         Console.WriteLine("  --hp-backend-self-test    Test the 88F8 + 8C40 backend boundaries with synthetic hardware.");

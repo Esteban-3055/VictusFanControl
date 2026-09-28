@@ -6,7 +6,9 @@ internal enum WatchdogRunMode
     GateBRestoreTest,
     GateBSelfTest,
     GateCSelfTest,
-    GateDService
+    GateDService,
+    M2Hp8C40ReadOnly,
+    M2Hp8C40SelfTest
 }
 
 internal sealed record WatchdogOptions(
@@ -19,6 +21,7 @@ internal sealed record WatchdogOptions(
     public const string GateAServiceName = "VictusFanControlWatchdogGateA";
     public const string GateBServiceName = "VictusFanControlWatchdogGateB";
     public const string GateDServiceName = "VictusFanControlWatchdog";
+    public const string M2Hp8C40ServiceName = "VictusFanControlWatchdogM2";
     public const string GateBRestoreToken = "88F8-GATEB-RESTORE";
 
     public static WatchdogOptions Parse(string[] args)
@@ -82,6 +85,16 @@ internal sealed record WatchdogOptions(
                     mode = WatchdogRunMode.GateDService;
                     break;
 
+                case "--m2-8c40-read-only":
+                    RequireModeStillGateA(mode, "--m2-8c40-read-only");
+                    mode = WatchdogRunMode.M2Hp8C40ReadOnly;
+                    break;
+
+                case "--m2-8c40-self-test":
+                    RequireModeStillGateA(mode, "--m2-8c40-self-test");
+                    mode = WatchdogRunMode.M2Hp8C40SelfTest;
+                    break;
+
                 default:
                     throw new ArgumentException(
                         $"Unknown watchdog argument: {args[i]}");
@@ -122,6 +135,16 @@ internal sealed record WatchdogOptions(
         {
             throw new ArgumentException(
                 $"Gate D requires --service-name {GateDServiceName}.");
+        }
+
+        if (mode == WatchdogRunMode.M2Hp8C40ReadOnly &&
+            !string.Equals(
+                serviceName,
+                M2Hp8C40ServiceName,
+                StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"M2 HP 8C40 read-only service requires --service-name {M2Hp8C40ServiceName}.");
         }
 
         return new WatchdogOptions(

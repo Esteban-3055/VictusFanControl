@@ -44,6 +44,12 @@ internal static class Program
                 .ConfigureAwait(false);
         }
 
+        if (options.Mode == WatchdogRunMode.M2Hp8C40SelfTest)
+        {
+            return await M2Hp8C40ReadOnlySelfTest.RunAsync(Console.Out)
+                .ConfigureAwait(false);
+        }
+
         // Watchdog command-line switches are parsed above. Do not feed them into
         // the generic configuration command-line provider: boolean test-only flags
         // intentionally have no value and must not be reinterpreted as config keys.
@@ -67,6 +73,10 @@ internal static class Program
         else if (options.Mode == WatchdogRunMode.GateDService)
         {
             builder.Services.AddHostedService<GateDWorker>();
+        }
+        else if (options.Mode == WatchdogRunMode.M2Hp8C40ReadOnly)
+        {
+            builder.Services.AddHostedService<M2Hp8C40ReadOnlyWorker>();
         }
         else
         {

@@ -420,6 +420,27 @@ internal static class Program
             }
         }
 
+        if (options.Probe8C40Setpoint)
+        {
+            try
+            {
+                var setpoint =
+                    new Hp8C40EcControlStateProbe(options.ModulesDirectory)
+                        .ReadSetpoint();
+
+                Console.WriteLine("HP 8C40 EC setpoint probe (READ-ONLY)");
+                Console.WriteLine(
+                    $"setpoint CPU={setpoint.CpuSetpoint} GPU={setpoint.GpuSetpoint}");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"8C40 EC-setpoint probe failed: {ex.Message}");
+                return 16;
+            }
+        }
+
         using var reader = new HardwareTelemetryReader(options.ModulesDirectory);
 
         if (options.CoreThermalCharacterization)

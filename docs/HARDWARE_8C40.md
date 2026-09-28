@@ -655,3 +655,27 @@ adaptive policy remains OFF.
 M1 therefore prepares the durable state machine for 8C40 without enabling any
 8C40 service-side EC/WMI write. The next gate is M2: exact-target Session-0 /
 LocalSystem read-only dependency access on HP 8C40.
+
+
+## Watchdog M2 prepared - Session-0 read-only dependency access
+
+M2 is now implemented as an isolated **read-only** HP 8C40 service gate and is
+awaiting physical execution on the exact target.
+
+The service exact-matches `HP-8C40-9D0R1LA-F18`, requires LocalSystem and
+Session 0, then performs only a narrow EC `0x34/0x35` ownership read and HP
+BIOS/WMI `GetFanLevel`. Its hardware interface exposes read methods only; it
+does not instantiate the watchdog lease manager and has no fan-level or restore
+operation.
+
+The physical wrapper requires an `FF/FF` baseline before the service, verifies
+the same `FF/FF` ownership from the service, checks that no `lease.json`
+appears, and independently re-reads `FF/FF` after the short restart cycles.
+
+Until that physical gate passes, the status remains unchanged:
+`WatchdogRecoveryValidated=false`, the real 8C40 watchdog lease remains
+blocked, service-side restore remains blocked, and automatic/adaptive policy
+remains OFF.
+
+See `docs/WATCHDOG_M2_8C40.md` and
+`scripts/test-watchdog-m2-8c40.ps1`.
