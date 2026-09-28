@@ -37,6 +37,9 @@ Assert-Contains $harness 'AllowedRecoveryDispositions @(''RestoredFirmware'')' '
 Assert-Contains $harness 'Wait-ForJournalGone' 'M5B must require durable journal removal after replacement startup recovery.'
 Assert-Contains $harness 'Read-8C40Setpoint' 'M5B must independently verify local and final FF/FF.'
 Assert-Contains $harness 'M5B-PARENT-COMPLETE' 'M5B controller may exit only after parent restart-recovery proof.'
+Assert-Contains $harness '$controller.WaitForExit()' 'M5B parent must synchronize native process exit before reading ExitCode.'
+Assert-Contains $harness '$controller.Refresh()' 'M5B parent must refresh the Process object before reading ExitCode.'
+Assert-Contains $harness '$controllerExitCode = $controller.ExitCode' 'M5B parent must snapshot the synchronized controller ExitCode.'
 
 if ($harness -match '--restore-hp-auto' -or
     $harness -match 'Hp8C40BiosFanControl' -or

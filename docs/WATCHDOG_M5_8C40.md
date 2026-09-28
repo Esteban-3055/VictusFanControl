@@ -314,3 +314,52 @@ The green run included:
 
 M5B is therefore **CODE/CI PASS / PHYSICAL PENDING**. No production watchdog
 promotion or automatic policy change is made by this preparation.
+
+
+## M5B physical attempt 1 - recovery evidence complete, harness post-check false negative
+
+The first physical M5B run on 2026-09-28 completed the entire hardware and
+service-recovery sequence successfully, but the PowerShell parent emitted a
+false FAIL after recovery because its `Start-Process -PassThru` process object
+exposed a blank `ExitCode` immediately after `HasExited` became true.
+
+The completed causal evidence before that bookkeeping failure was:
+
+~~~text
+baseline EC FF/FF
+original watchdog PID 5096 / LocalSystem / Session 0 / exact target
+controller PID 2840 / exact creation time
+PREPARE generation 1
+WRITE_INTENT generation 2 target 30/30
+COMMIT generation 3 target 30/30
+READY Custom / EC 30/30 / dual tach 1935/1942 / guards 0/0
+force-kill watchdog PID 5096 only
+controller remained alive
+WATCHDOG_IPC_LOSS during Probe
+live controller local restore -> EC FF/FF
+LocalFirmwareAckVerified=true
+WatchdogLeaseRequired=true
+WatchdogReleaseVerified=false
+independent local EC FF/FF while watchdog absent
+durable OWNED journal retained while watchdog absent
+replacement watchdog PID 16684
+startup RecoveryDisposition=RestoredFirmware
+retained Owned journal normalized and deleted
+independent final EC FF/FF
+controller observed parent completion marker and exited
+post-test EC FF/FF
+~~~
+
+The service log independently recorded the original PREPARE / WRITE_INTENT /
+COMMIT chain and the replacement startup
+`M4 STARTUP RECOVERY disposition=RestoredFirmware` with
+`journalRetained=False`.
+
+Therefore the physical M5B recovery mechanism itself is complete. The only
+failure occurred after the controller had already observed the parent's
+completion marker and after all hardware/recovery assertions had passed.
+
+The harness is hardened by synchronizing the native child-process termination
+with `WaitForExit()` plus `Refresh()` before reading `ExitCode`. This change
+does not alter fan authority, watchdog authority, fault injection, restore
+ordering or any physical PASS criterion.

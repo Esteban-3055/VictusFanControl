@@ -539,8 +539,20 @@ try {
         throw 'M5B controller did not exit after parent completion proof.'
     }
 
-    if ($controller.ExitCode -ne 0) {
-        throw "M5B controller exited with code $($controller.ExitCode) after recovery."
+    # PowerShell can expose a blank ExitCode on a Start-Process -PassThru object
+    # when HasExited is observed before the native exit information has been
+    # synchronized into the Process instance. Refresh the handle-backed state
+    # explicitly before treating ExitCode as a PASS/FAIL signal.
+    $controller.WaitForExit()
+    $controller.Refresh()
+    $controllerExitCode = $controller.ExitCode
+
+    if ($null -eq $controllerExitCode) {
+        throw 'M5B controller exited after parent completion proof, but PowerShell did not expose a synchronized ExitCode.'
+    }
+
+    if ([int]$controllerExitCode -ne 0) {
+        throw "M5B controller exited with code $controllerExitCode after recovery."
     }
 
     $newLog = @()
