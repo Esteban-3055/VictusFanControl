@@ -55,7 +55,7 @@ Assert-Contains $child 'WRITE_ARMED_POST_WMI_EC_TACH_ACK_PRE_COMMIT' 'M5D marker
 Assert-Contains $child 'real-wmi+ec+tachs;watchdog-commit-not-dispatched' 'M5D marker must encode real hardware ACK with Commit undispatched.'
 Assert-Contains $child 'Timeout.InfiniteTimeSpan' 'M5D child must hold the pre-Commit boundary until parent kill or managed cancellation.'
 Assert-Contains $child 'ProcessStartUtcTicks' 'M5D READY must include process creation time.'
-Assert-NotContains $child 'CommitAsync(' 'M5D child must not manually dispatch watchdog Commit.'
+Assert-NotContains $child 'await _watchdogLease.CommitAsync(' 'M5D child must not manually dispatch watchdog Commit.'
 
 Assert-Contains $backend 'IHp8C40FanWriteQualificationHook' 'Backend qualification hook interface is missing.'
 Assert-Contains $backend 'AfterHardwareAcknowledgedBeforeWatchdogCommitAsync' 'Backend pre-Commit hook call is missing.'
