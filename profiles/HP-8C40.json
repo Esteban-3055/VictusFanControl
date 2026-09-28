@@ -22,7 +22,7 @@
     "validatedMinimumLevel": 30,
     "validatedMaximumLevel": 36,
     "supportsIndependentLevels": false,
-    "notes": "Equal 30/30 through 36/36 are physically qualified and the upper bound 36/36 has passed the full production path. Independent CPU/GPU levels remain unqualified and are rejected. Do not infer the old 88F8 14-50 range."
+    "notes": "Equal levels 10/10 through 50/50 are physically characterized in the guarded qualification harness. The production backend intentionally remains equal-only 30..36 until low-end restart-from-stop and production endpoint/transition gates are completed. Independent CPU/GPU levels remain unqualified and rejected."
   },
   "observedCalibration": [
     {
@@ -412,5 +412,53 @@
     "fanWritesAttempted": false,
     "status": "refused before EC baseline/write by SafetyGate plausibility",
     "interpretation": "NVML returned success with an unusable 0 C GPU temperature while the dGPU was at very low power. This is now treated as unavailable telemetry rather than a valid complete snapshot; the active harness waits boundedly for SafetyGate-ready telemetry before any fan write."
+  },
+  "extendedRangeQualificationFinal": {
+    "range": "equal-only 10..50",
+    "result": "PASS",
+    "automaticPolicyEnabled": false,
+    "acBatteryBaseline": "AC online, battery 100%, flags 0x01",
+    "allLevelsAcceptedByWmi": true,
+    "allLevelsEcAcknowledged": true,
+    "allLevelsDualFanFeedback": true,
+    "restoreVerifiedAfterEveryLevel": true,
+    "guards": "MaxFan=0x00, FanSwitch=0x00",
+    "medianProgressionStrictlyIncreasing": {
+      "cpu": true,
+      "gpu": true
+    },
+    "endpoints": {
+      "level10": {
+        "cpuRpmMedian": 1028,
+        "gpuRpmMedian": 1013,
+        "cpuRpmRange": [
+          960,
+          1034
+        ],
+        "gpuRpmRange": [
+          979,
+          1038
+        ]
+      },
+      "level50": {
+        "cpuRpmMedian": 4991,
+        "gpuRpmMedian": 4991,
+        "cpuRpmRange": [
+          4979,
+          4991
+        ],
+        "gpuRpmRange": [
+          4979,
+          5002
+        ]
+      }
+    },
+    "level21Retest": {
+      "status": "PASS",
+      "cpuRpmMedian": 2087,
+      "gpuRpmMedian": 2105,
+      "note": "Previously inconclusive due to false critical-battery hibernation; passed cleanly after EC traffic reduction and AC/battery guard hardening."
+    },
+    "interpretation": "The HP 8C40 equal-level command primitive is physically characterized across 10..50 under the bounded light-load harness. This does not yet expand the production backend: low-end restart-from-stopped-fan behavior and production endpoint/transition integration remain pending."
   }
 }
