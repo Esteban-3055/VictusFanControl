@@ -5,6 +5,9 @@ namespace VictusFanControl.Control;
 
 internal static class FanControlWatchdogLeaseClientSelfTest
 {
+    private const string TestTargetProfileId =
+        "TEST-WATCHDOG-TARGET";
+
     public static async Task<int> RunAsync(
         TextWriter output)
     {
@@ -187,6 +190,7 @@ internal static class FanControlWatchdogLeaseClientSelfTest
 
         await using var client =
             new NamedPipeFanControlWatchdogLeaseClient(
+                TestTargetProfileId,
                 pipeName);
 
         await client.PrepareAsync(CancellationToken.None);
@@ -266,6 +270,7 @@ internal static class FanControlWatchdogLeaseClientSelfTest
 
         await using var client =
             new NamedPipeFanControlWatchdogLeaseClient(
+                TestTargetProfileId,
                 pipeName,
                 activeTimeClock: new FrozenActiveTimeClock(),
                 timing: timing);
@@ -354,6 +359,7 @@ internal static class FanControlWatchdogLeaseClientSelfTest
 
         await using var client =
             new NamedPipeFanControlWatchdogLeaseClient(
+                TestTargetProfileId,
                 pipeName);
 
         await client.PrepareAsync(CancellationToken.None);
@@ -428,6 +434,7 @@ internal static class FanControlWatchdogLeaseClientSelfTest
                 new FanControlWatchdogLeaseResponse(
                     FanControlWatchdogLeaseContract.ProtocolVersion,
                     Guid.NewGuid(),
+                    prepare.TargetProfileId,
                     Ok: true,
                     Code: "OK",
                     Message: "deliberately wrong request id",
@@ -439,6 +446,7 @@ internal static class FanControlWatchdogLeaseClientSelfTest
 
         await using var client =
             new NamedPipeFanControlWatchdogLeaseClient(
+                TestTargetProfileId,
                 pipeName);
 
         var rejected = false;
@@ -495,6 +503,7 @@ internal static class FanControlWatchdogLeaseClientSelfTest
             new FanControlWatchdogLeaseResponse(
                 FanControlWatchdogLeaseContract.ProtocolVersion,
                 request.RequestId,
+                request.TargetProfileId,
                 Ok: true,
                 Code: code,
                 Message: message,
@@ -509,6 +518,10 @@ internal static class FanControlWatchdogLeaseClientSelfTest
     {
         if (request.ProtocolVersion !=
                 FanControlWatchdogLeaseContract.ProtocolVersion ||
+            !string.Equals(
+                request.TargetProfileId,
+                TestTargetProfileId,
+                StringComparison.Ordinal) ||
             !string.Equals(
                 request.Type,
                 expected,

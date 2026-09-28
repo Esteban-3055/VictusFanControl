@@ -276,12 +276,20 @@ public static class Hp8C40M4LeaseQualificationTest
             var restoreEvidence =
                 coordinator.LastRestoreEvidence;
 
+            if (restoreEvidence is null)
+            {
+                throw new InvalidOperationException(
+                    "M4A coordinator/backend did not expose restore evidence.");
+            }
+
+            var verifiedRestore =
+                restoreEvidence.Value;
+
             if (coordinator.Authority !=
                     FanAuthority.Firmware ||
-                restoreEvidence is null ||
-                !restoreEvidence.LocalFirmwareAckVerified ||
-                !restoreEvidence.WatchdogLeaseRequired ||
-                !restoreEvidence.WatchdogReleaseVerified)
+                !verifiedRestore.LocalFirmwareAckVerified ||
+                !verifiedRestore.WatchdogLeaseRequired ||
+                !verifiedRestore.WatchdogReleaseVerified)
             {
                 throw new InvalidOperationException(
                     "M4A coordinator/backend restore evidence did not prove both local firmware ACK and watchdog Release.");
