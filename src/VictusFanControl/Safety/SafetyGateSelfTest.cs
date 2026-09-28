@@ -151,6 +151,15 @@ public static class SafetyGateSelfTest
                 expectedReady: false),
 
             Case(
+                "zero-degree GPU telemetry is rejected",
+                SafetyGate.Evaluate(
+                    good8C40Hardware,
+                    SystemState.Healthy,
+                    good8C40 with { GpuTemperatureC = 0 },
+                    now),
+                expectedReady: false),
+
+            Case(
                 "package thermal handoff",
                 SafetyGate.Evaluate(
                     goodHardware,
