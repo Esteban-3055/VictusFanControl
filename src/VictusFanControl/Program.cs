@@ -138,6 +138,31 @@ internal static class Program
                 writeTestCts.Token);
         }
 
+        if (options.Hp8C40TransitionQualification)
+        {
+            if (!string.Equals(
+                    options.Hp8C40TransitionQualificationToken,
+                    "8C40-TRANSITION10-50",
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    "8C40 transition qualification refused: explicit token " +
+                    "8C40-TRANSITION10-50 is required.");
+                return 120;
+            }
+
+            using var transitionCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                transitionCts.Cancel();
+            };
+
+            return await Hp8C40TransitionQualificationTest.RunAsync(
+                options.ModulesDirectory,
+                transitionCts.Token);
+        }
+
         if (options.Hp8C40ExtendedFanRangeQualification)
         {
             if (!string.Equals(
