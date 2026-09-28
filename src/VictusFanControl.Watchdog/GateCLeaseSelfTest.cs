@@ -1,4 +1,5 @@
 using VictusFanControl.Control;
+using VictusFanControl.Hardware.Hp;
 using System.Buffers.Binary;
 using System.IO.Pipes;
 using System.Text;

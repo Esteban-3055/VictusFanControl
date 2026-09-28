@@ -416,6 +416,7 @@ internal sealed class GateDWorker : BackgroundService
 
                 WriteStatus(
                     hardwareIdentity,
+                    targetProfileId,
                     process,
                     accountName,
                     journalPath,
