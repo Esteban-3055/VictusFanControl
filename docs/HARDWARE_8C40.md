@@ -473,3 +473,18 @@ This closes the previously pending low-end restart-from-zero and large direct tr
 A new qualification-only integration gate is prepared for endpoints 10 and 50. It uses the real SafetyGate, FanControlCoordinator and Hp8C40FanControlBackend logic, while injecting the already-characterized 10..50 equal command envelope and qualification-only WMI writer. This avoids changing production defaults before the endpoint route is physically exercised.
 
 The sequence is independent endpoint admission and restore: `firmware -> 10 -> firmware`, then `firmware -> 50 -> firmware`. Each endpoint must pass backend EC/tach acknowledgement, continuous coordinator supervision, two-sample terminal RPM convergence and verified FF/FF restore. Production remains equal-only 30..36 until this gate and a later explicit promotion regression pass.
+
+
+## Endpoint coordinator qualification PASS
+
+The qualification-only endpoint integration gate passed both physically characterized endpoints through the real control architecture while leaving production defaults unchanged:
+
+`SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend logic -> qualification WMI writer -> EC/tach ACK -> terminal convergence -> restore`.
+
+Endpoint `10/10` started from a firmware baseline of 0/0 RPM. Custom authority was granted, the backend acknowledged the command, both fans converged to approximately 981/1012 RPM in 4.5 seconds, and the coordinator restored Firmware authority with EC setpoints `FF/FF`.
+
+Endpoint `50/50` also started from a 0/0 RPM firmware baseline. Custom authority was granted, the backend acknowledged the command, both fans converged to approximately 4991/4968 RPM in 14.9 seconds, and the coordinator again restored Firmware authority with EC setpoints `FF/FF`.
+
+AC/battery sanity remained normal (AC online, battery 93%). No ownership loss, guard anomaly, telemetry safety drop or power-transition event occurred.
+
+This closes endpoint qualification through the coordinator/backend logic. Production remains equal-only 30..36 until an explicit 10..50 promotion commit is made and the resulting production configuration passes a final post-promotion regression at both endpoints.
