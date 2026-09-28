@@ -67,6 +67,12 @@ internal sealed class GateDWorker : BackgroundService
                     $"Exact HP 88F8 target fingerprint refused: {reason}");
             }
 
+            // Gate D remains historical HP 88F8-only. M1 makes the lease core
+            // target-aware without granting any new 8C40 service authority.
+            var targetPolicy =
+                WatchdogTargetPolicies.ForProfile(
+                    Hp88F8TargetProfile.Instance);
+
             var modulePath =
                 Path.Combine(
                     _options.ModulesDirectory,
@@ -85,7 +91,9 @@ internal sealed class GateDWorker : BackgroundService
 
             manager =
                 new WatchdogLeaseManager(
-                    new JsonLeaseJournal(journalPath),
+                    new JsonLeaseJournal(
+                        journalPath,
+                        targetPolicy),
                     leaseHardware,
                     new WindowsMonotonicClock());
 
@@ -99,6 +107,7 @@ internal sealed class GateDWorker : BackgroundService
 
             WriteStatus(
                 hardwareIdentity,
+                targetPolicy.TargetProfileId,
                 process,
                 accountName,
                 journalPath,
@@ -127,6 +136,7 @@ internal sealed class GateDWorker : BackgroundService
                 RunDeadlineLoopAsync(
                     manager,
                     hardwareIdentity,
+                    targetPolicy.TargetProfileId,
                     process,
                     accountName,
                     journalPath,
@@ -253,6 +263,7 @@ internal sealed class GateDWorker : BackgroundService
     private async Task RunDeadlineLoopAsync(
         WatchdogLeaseManager manager,
         HardwareIdentity hardwareIdentity,
+        string targetProfileId,
         Process process,
         string accountName,
         string journalPath,
@@ -377,6 +388,7 @@ internal sealed class GateDWorker : BackgroundService
                 {
                     WriteStatus(
                         hardwareIdentity,
+                        targetProfileId,
                         process,
                         accountName,
                         journalPath,
@@ -437,6 +449,7 @@ internal sealed class GateDWorker : BackgroundService
 
     private void WriteStatus(
         HardwareIdentity hardware,
+        string targetProfileId,
         Process process,
         string accountName,
         string journalPath,
@@ -455,6 +468,7 @@ internal sealed class GateDWorker : BackgroundService
                 SessionId: process.SessionId,
                 AccountName: accountName,
                 Hardware: hardware,
+                TargetProfileId: targetProfileId,
                 RecoveryDisposition: recoveryDisposition,
                 Detail: detail,
                 JournalPath: journalPath,

@@ -57,9 +57,10 @@ service hosting step; Gate C does not expose a persistent privileged pipe.
 
 ## Durable journal
 
-The JSON journal records:
+The JSON journal now uses schema v2 and records:
 
 - schema version;
+- exact hardware target profile id;
 - random lease/session GUID;
 - controller PID and process creation time;
 - phase;
@@ -75,6 +76,18 @@ committed through the Windows storage path.
 
 Heartbeats are not persisted every second. The service records only its own
 monotonic receive time for liveness; client wall-clock time is not authoritative.
+
+M1 removes the old global 14..50 journal assumption. Durable custom setpoints
+are validated through an explicit target policy:
+
+- HP 88F8: independent CPU/GPU levels 14..50;
+- HP 8C40: equal-only levels 10..50.
+
+Schema v1 did not contain target identity. It is interpreted only after an exact
+HP 88F8 match because that schema's semantics were created and physically
+qualified for the historical 88F8 Gate C/D path. A schema-v1 journal is never
+inferred or migrated as HP 8C40. Any schema-v2 target mismatch is retained as
+invalid evidence and must not trigger a blind restore.
 
 A second important invariant was found during review: once WRITE_ARMED has been
 durably entered, owner loss or service restart completes the validated firmware
@@ -118,6 +131,12 @@ The self-test covers:
 - late Heartbeat/WriteIntent commands cannot revive an expired OWNED lease;
 - a late Commit cannot revive an expired WRITE_ARMED lease;
 - out-of-range WriteIntent is rejected without journal mutation;
+- target-policy boundaries preserve 88F8 independent 14..50 and model 8C40
+  equal-only 10..50 without enabling the 8C40 service;
+- schema-v2 journals carry exact target identity and a mismatched target blocks
+  recovery without touching hardware;
+- schema-v1 target-less evidence migrates only for the exact historical 88F8
+  policy and is rejected for 8C40;
 - Release can take over a still-owned target, and refuses an unknown external override while retaining the RESTORING journal.
 
 The Windows CI run executes the real named-pipe tests, including

@@ -90,6 +90,9 @@ The service:
 
 - requires LocalSystem and Session 0;
 - revalidates the exact HP 88F8 target on startup;
+- selects the explicit HP 88F8 watchdog target policy before opening the
+  journal;
+- publishes that exact target profile id in service status;
 - runs startup journal recovery before accepting a controller;
 - keeps the durable lease under ProgramData;
 - hosts one controller pipe session at a time;
@@ -251,3 +254,20 @@ with no parent-shell HP restore and with OMEN Gaming Hub undervolt unchanged.
 Gate E/F remain responsible for watchdog-process death and service-restart /
 double-failure recovery. Gate G remains suspend/resume validation with the full
 watchdog stack.
+
+
+## M1 target-aware journal compatibility
+
+The persistent Gate D service remains physically qualified and enabled only for
+the historical HP 88F8 target. M1 does not expand that hardware permission.
+
+The lease core and durable journal are now target-aware. New records use schema
+v2 and carry the exact target profile id. The 88F8 policy preserves the
+historical independent 14..50 semantics. Existing schema-v1 journals can still
+be recovered on an exact 88F8 service start; they are normalized in memory to
+the v2 identity only because v1 was defined by the 88F8 Gate C/D contract.
+
+The same target-less schema-v1 evidence is explicitly refused for HP 8C40, and
+a schema-v2 journal whose target id differs from the currently selected policy
+is retained without issuing a restore. This prevents a future 8C40 service from
+mistaking 88F8 ownership evidence for permission to write hardware.

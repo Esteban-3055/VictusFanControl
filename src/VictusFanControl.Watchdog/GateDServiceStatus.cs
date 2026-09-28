@@ -10,6 +10,7 @@ internal sealed record GateDServiceStatus(
     int SessionId,
     string AccountName,
     HardwareIdentity? Hardware,
+    string TargetProfileId,
     string? RecoveryDisposition,
     string Detail,
     string JournalPath,

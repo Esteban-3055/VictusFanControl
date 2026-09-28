@@ -22,6 +22,7 @@ internal sealed class WatchdogLeaseManager
     private readonly ILeaseJournal _journal;
     private readonly ILeaseRecoveryHardware _hardware;
     private readonly IMonotonicClock _clock;
+    private readonly WatchdogTargetPolicy _targetPolicy;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private WatchdogLeaseRecord? _active;
@@ -36,9 +37,13 @@ internal sealed class WatchdogLeaseManager
         _journal = journal;
         _hardware = hardware;
         _clock = clock;
+        _targetPolicy = journal.TargetPolicy;
     }
 
     public WatchdogLeaseRecord? Active => _active;
+
+    public string TargetProfileId =>
+        _targetPolicy.TargetProfileId;
 
     public async ValueTask<ControllerIdentity?> GetActiveControllerAsync(
         CancellationToken cancellationToken)
@@ -85,6 +90,7 @@ internal sealed class WatchdogLeaseManager
 
             var record = new WatchdogLeaseRecord(
                 WatchdogLeaseRecord.CurrentSchemaVersion,
+                _targetPolicy.TargetProfileId,
                 Guid.NewGuid(),
                 controller,
                 WatchdogLeasePhase.Prepared,
@@ -153,11 +159,11 @@ internal sealed class WatchdogLeaseManager
         CancellationToken cancellationToken,
         ControllerIdentity? expectedController = null)
     {
-        if (!target.IsValidatedCustom)
+        if (!_targetPolicy.IsValidatedCustom(target))
         {
             throw new LeaseProtocolException(
                 "TARGET_OUT_OF_RANGE",
-                $"Setpoint {target} is outside the validated 14-50 range.");
+                $"Setpoint {target} is outside watchdog target '{_targetPolicy.TargetProfileId}' policy ({_targetPolicy.DescribeCustomEnvelope()}).");
         }
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);

@@ -2,6 +2,7 @@ using VictusFanControl.Control;
 using System.Buffers.Binary;
 using System.IO.Pipes;
 using System.Text;
+using System.Text.Json;
 
 namespace VictusFanControl.Watchdog;
 
@@ -101,6 +102,26 @@ internal static class GateCLeaseSelfTest
             output,
             "out-of-range WriteIntent is rejected without journal mutation",
             OutOfRangeWriteIntentAsync);
+
+        failures += await CaseAsync(
+            output,
+            "M1 target policies pin 88F8 and 8C40 envelopes",
+            TargetPolicyEnvelopeAsync);
+
+        failures += await CaseAsync(
+            output,
+            "M1 8C40 journal accepts equal 10-50 and rejects asymmetric/out-of-range",
+            Hp8C40TargetAwareJournalAsync);
+
+        failures += await CaseAsync(
+            output,
+            "M1 schema-v2 target mismatch blocks recovery without touching hardware",
+            TargetMismatchBlocksRecoveryAsync);
+
+        failures += await CaseAsync(
+            output,
+            "M1 legacy schema-v1 journal migrates only for exact HP 88F8",
+            LegacyV1JournalMigrationAsync);
 
         failures += await CaseAsync(
             output,
@@ -892,6 +913,247 @@ internal static class GateCLeaseSelfTest
             Assert(before == after);
             Assert(env.Hardware.RestoreCalls == 0);
         });
+    }
+
+    private static Task TargetPolicyEnvelopeAsync()
+    {
+        Assert(
+            WatchdogTargetPolicies.Hp88F8.IsValidatedCustom(
+                new FanSetpoint(14, 50)));
+        Assert(
+            WatchdogTargetPolicies.Hp88F8.IsValidatedCustom(
+                new FanSetpoint(50, 14)));
+        Assert(
+            !WatchdogTargetPolicies.Hp88F8.IsValidatedCustom(
+                new FanSetpoint(13, 30)));
+        Assert(
+            !WatchdogTargetPolicies.Hp88F8.IsValidatedCustom(
+                new FanSetpoint(30, 51)));
+
+        Assert(
+            WatchdogTargetPolicies.Hp8C40.IsValidatedCustom(
+                new FanSetpoint(10, 10)));
+        Assert(
+            WatchdogTargetPolicies.Hp8C40.IsValidatedCustom(
+                new FanSetpoint(50, 50)));
+        Assert(
+            !WatchdogTargetPolicies.Hp8C40.IsValidatedCustom(
+                new FanSetpoint(10, 11)));
+        Assert(
+            !WatchdogTargetPolicies.Hp8C40.IsValidatedCustom(
+                new FanSetpoint(9, 9)));
+        Assert(
+            !WatchdogTargetPolicies.Hp8C40.IsValidatedCustom(
+                new FanSetpoint(51, 51)));
+
+        return Task.CompletedTask;
+    }
+
+    private static async Task Hp8C40TargetAwareJournalAsync()
+    {
+        await WithEnvironmentAsync(
+            async env =>
+            {
+                var prepared =
+                    await env.Manager.PrepareAsync(
+                        Controller,
+                        CancellationToken.None);
+
+                var armed =
+                    await env.Manager.WriteIntentAsync(
+                        prepared.SessionId,
+                        prepared.Generation,
+                        new FanSetpoint(10, 10),
+                        CancellationToken.None);
+
+                var journal =
+                    await env.Journal.LoadAsync(
+                        CancellationToken.None);
+
+                Assert(
+                    journal?.SchemaVersion ==
+                    WatchdogLeaseRecord.CurrentSchemaVersion);
+                Assert(
+                    string.Equals(
+                        journal?.TargetProfileId,
+                        Hp8C40TargetProfile.Instance.Id,
+                        StringComparison.Ordinal));
+                Assert(
+                    journal?.Pending ==
+                    new FanSetpoint(10, 10));
+
+                env.Hardware.Set(new FanSetpoint(10, 10));
+
+                var owned =
+                    await env.Manager.CommitAsync(
+                        armed.SessionId,
+                        armed.Generation,
+                        new FanSetpoint(10, 10),
+                        CancellationToken.None);
+
+                Assert(owned.Phase == WatchdogLeasePhase.Owned);
+
+                var recovery =
+                    await env.Manager.RecoverForServiceStopAsync(
+                        "synthetic M1 8C40 policy cleanup",
+                        CancellationToken.None);
+
+                Assert(
+                    recovery?.Disposition ==
+                    LeaseRecoveryDisposition.RestoredFirmware);
+
+                var preparedAgain =
+                    await env.Manager.PrepareAsync(
+                        Controller,
+                        CancellationToken.None);
+
+                foreach (var invalid in new[]
+                         {
+                             new FanSetpoint(10, 11),
+                             new FanSetpoint(9, 9),
+                             new FanSetpoint(51, 51)
+                         })
+                {
+                    var ex =
+                        await ThrowsAsync<LeaseProtocolException>(
+                            () => env.Manager.WriteIntentAsync(
+                                preparedAgain.SessionId,
+                                preparedAgain.Generation,
+                                invalid,
+                                CancellationToken.None).AsTask());
+
+                    Assert(ex.Code == "TARGET_OUT_OF_RANGE");
+                }
+
+                var unchanged =
+                    await env.Journal.LoadAsync(
+                        CancellationToken.None);
+
+                Assert(
+                    unchanged?.Phase ==
+                    WatchdogLeasePhase.Prepared);
+            },
+            WatchdogTargetPolicies.Hp8C40);
+    }
+
+    private static async Task TargetMismatchBlocksRecoveryAsync()
+    {
+        await WithEnvironmentAsync(
+            async env =>
+            {
+                var armed =
+                    await PrepareAndArmAsync(
+                        env,
+                        30);
+
+                Assert(
+                    armed.Phase ==
+                    WatchdogLeasePhase.WriteArmed);
+
+                env.Hardware.Set(
+                    new FanSetpoint(30, 30));
+
+                var mismatchedJournal =
+                    new JsonLeaseJournal(
+                        env.Journal.Path,
+                        WatchdogTargetPolicies.Hp8C40);
+
+                var mismatchedManager =
+                    new WatchdogLeaseManager(
+                        mismatchedJournal,
+                        env.Hardware,
+                        env.Clock);
+
+                var recovery =
+                    await mismatchedManager.RecoverOnStartupAsync(
+                        CancellationToken.None);
+
+                Assert(
+                    recovery.Disposition ==
+                    LeaseRecoveryDisposition.JournalInvalid);
+                Assert(recovery.JournalRetained);
+                Assert(!recovery.RestoreAttempted);
+                Assert(env.Hardware.RestoreCalls == 0);
+                Assert(
+                    env.Hardware.Current ==
+                    new FanSetpoint(30, 30));
+                Assert(File.Exists(env.Journal.Path));
+            },
+            WatchdogTargetPolicies.Hp88F8);
+    }
+
+    private static async Task LegacyV1JournalMigrationAsync()
+    {
+        await WithEnvironmentAsync(
+            async env =>
+            {
+                var legacyPayload = new
+                {
+                    SchemaVersion =
+                        WatchdogLeaseRecord.LegacySchemaVersion,
+                    SessionId = Guid.NewGuid(),
+                    Controller,
+                    Phase = WatchdogLeasePhase.Owned,
+                    Generation = 3L,
+                    PreviousOwned = (FanSetpoint?)null,
+                    Pending = (FanSetpoint?)null,
+                    Owned =
+                        (FanSetpoint?)new FanSetpoint(30, 40),
+                    CreatedAtUtc = DateTimeOffset.UtcNow
+                };
+
+                var json =
+                    JsonSerializer.Serialize(
+                        legacyPayload,
+                        new JsonSerializerOptions
+                        {
+                            WriteIndented = true
+                        });
+
+                Directory.CreateDirectory(
+                    Path.GetDirectoryName(env.Journal.Path)!);
+
+                await File.WriteAllTextAsync(
+                    env.Journal.Path,
+                    json);
+
+                var migrated =
+                    await env.Journal.LoadAsync(
+                        CancellationToken.None);
+
+                Assert(
+                    migrated?.SchemaVersion ==
+                    WatchdogLeaseRecord.CurrentSchemaVersion);
+                Assert(
+                    string.Equals(
+                        migrated?.TargetProfileId,
+                        Hp88F8TargetProfile.Instance.Id,
+                        StringComparison.Ordinal));
+                Assert(
+                    migrated?.Owned ==
+                    new FanSetpoint(30, 40));
+
+                await File.WriteAllTextAsync(
+                    env.Journal.Path,
+                    json);
+
+                var eightC40Journal =
+                    new JsonLeaseJournal(
+                        env.Journal.Path,
+                        WatchdogTargetPolicies.Hp8C40);
+
+                var ex =
+                    await ThrowsAsync<InvalidDataException>(
+                        () => eightC40Journal.LoadAsync(
+                            CancellationToken.None).AsTask());
+
+                Assert(
+                    ex.Message.Contains(
+                        "no target identity",
+                        StringComparison.OrdinalIgnoreCase));
+                Assert(File.Exists(env.Journal.Path));
+            },
+            WatchdogTargetPolicies.Hp88F8);
     }
 
     private static async Task ReleaseTakesOverOwnedTargetAsync()
@@ -1847,7 +2109,8 @@ internal static class GateCLeaseSelfTest
     }
 
     private static async Task WithEnvironmentAsync(
-        Func<TestEnvironment, Task> action)
+        Func<TestEnvironment, Task> action,
+        WatchdogTargetPolicy? targetPolicy = null)
     {
         var root =
             Path.Combine(
@@ -1859,7 +2122,11 @@ internal static class GateCLeaseSelfTest
 
         try
         {
-            var env = new TestEnvironment(root);
+            var env =
+                new TestEnvironment(
+                    root,
+                    targetPolicy ??
+                    WatchdogTargetPolicies.Hp88F8);
             await action(env).ConfigureAwait(false);
         }
         finally
@@ -1904,17 +2171,23 @@ internal static class GateCLeaseSelfTest
 
     private sealed class TestEnvironment
     {
-        public TestEnvironment(string root)
+        public TestEnvironment(
+            string root,
+            WatchdogTargetPolicy targetPolicy)
         {
+            TargetPolicy = targetPolicy;
+
             Journal =
                 new JsonLeaseJournal(
-                    Path.Combine(root, "lease.json"));
+                    Path.Combine(root, "lease.json"),
+                    TargetPolicy);
 
             Hardware = new FakeHardware();
             Clock = new FakeClock();
             Manager = NewManager();
         }
 
+        public WatchdogTargetPolicy TargetPolicy { get; }
         public JsonLeaseJournal Journal { get; }
         public FakeHardware Hardware { get; }
         public FakeClock Clock { get; }

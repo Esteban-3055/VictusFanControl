@@ -8,6 +8,8 @@ internal interface ILeaseJournal
 {
     string Path { get; }
 
+    WatchdogTargetPolicy TargetPolicy { get; }
+
     ValueTask<WatchdogLeaseRecord?> LoadAsync(
         CancellationToken cancellationToken);
 
@@ -26,12 +28,19 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
         WriteIndented = true
     };
 
-    public JsonLeaseJournal(string path)
+    public JsonLeaseJournal(
+        string path,
+        WatchdogTargetPolicy targetPolicy)
     {
         Path = System.IO.Path.GetFullPath(path);
+        TargetPolicy =
+            targetPolicy ??
+            throw new ArgumentNullException(nameof(targetPolicy));
     }
 
     public string Path { get; }
+
+    public WatchdogTargetPolicy TargetPolicy { get; }
 
     public async ValueTask<WatchdogLeaseRecord?> LoadAsync(
         CancellationToken cancellationToken)
@@ -63,8 +72,7 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
                     "Lease journal deserialized to null.");
             }
 
-            ValidateRecord(record);
-            return record;
+            return NormalizeLoadedRecord(record);
         }
         catch (JsonException ex)
         {
@@ -78,7 +86,7 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
         WatchdogLeaseRecord record,
         CancellationToken cancellationToken)
     {
-        ValidateRecord(record);
+        ValidateCurrentRecord(record);
 
         var directory =
             System.IO.Path.GetDirectoryName(Path) ??
@@ -112,14 +120,9 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
                 await stream.FlushAsync(cancellationToken)
                     .ConfigureAwait(false);
 
-                // WRITE_ARMED may be acknowledged only after the durable state
-                // is flushed through the OS storage stack.
                 stream.Flush(flushToDisk: true);
             }
 
-            // Same-directory MoveFileEx keeps the critical transition on one
-            // volume. WRITE_THROUGH also waits for the rename/replace metadata
-            // to reach disk before StoreAsync can acknowledge WRITE_ARMED.
             if (!MoveFileEx(
                     temp,
                     Path,
@@ -153,40 +156,97 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
         return ValueTask.CompletedTask;
     }
 
-    [Flags]
-    private enum MoveFileFlags : uint
+    private WatchdogLeaseRecord NormalizeLoadedRecord(
+        WatchdogLeaseRecord record)
     {
-        ReplaceExisting = 0x00000001,
-        WriteThrough = 0x00000008
+        if (record.SchemaVersion ==
+            WatchdogLeaseRecord.LegacySchemaVersion)
+        {
+            return NormalizeLegacyV1(record);
+        }
+
+        ValidateCurrentRecord(record);
+        return record;
     }
 
-    [DllImport(
-        "kernel32.dll",
-        CharSet = CharSet.Unicode,
-        SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool MoveFileEx(
-        string existingFileName,
-        string newFileName,
-        MoveFileFlags flags);
+    private WatchdogLeaseRecord NormalizeLegacyV1(
+        WatchdogLeaseRecord record)
+    {
+        if (!TargetPolicy.LegacySchemaV1Compatible)
+        {
+            throw new InvalidDataException(
+                $"Legacy lease journal schema 1 has no target identity and cannot be interpreted for '{TargetPolicy.TargetProfileId}'.");
+        }
 
-    internal static void ValidateRecord(
+        if (!string.IsNullOrWhiteSpace(record.TargetProfileId))
+        {
+            throw new InvalidDataException(
+                "Legacy lease journal schema 1 unexpectedly contains target identity; refusing ambiguous migration.");
+        }
+
+        ValidateCommonRecord(
+            record,
+            static setpoint =>
+                setpoint.Cpu is >= 14 and <= 50 &&
+                setpoint.Gpu is >= 14 and <= 50,
+            "legacy HP 88F8 independent 14-50");
+
+        var normalized = record with
+        {
+            SchemaVersion =
+                WatchdogLeaseRecord.CurrentSchemaVersion,
+            TargetProfileId =
+                TargetPolicy.TargetProfileId
+        };
+
+        ValidateCurrentRecord(normalized);
+        return normalized;
+    }
+
+    private void ValidateCurrentRecord(
         WatchdogLeaseRecord record)
     {
         if (record.SchemaVersion !=
             WatchdogLeaseRecord.CurrentSchemaVersion)
         {
             throw new InvalidDataException(
-                $"Unsupported lease journal schema {record.SchemaVersion}.");
+                $"Unsupported lease journal schema {record.SchemaVersion}; expected {WatchdogLeaseRecord.CurrentSchemaVersion}.");
         }
 
+        if (string.IsNullOrWhiteSpace(record.TargetProfileId))
+        {
+            throw new InvalidDataException(
+                "Lease journal schema 2 is missing target profile identity.");
+        }
+
+        if (!string.Equals(
+                record.TargetProfileId,
+                TargetPolicy.TargetProfileId,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"Lease journal target '{record.TargetProfileId}' does not match active watchdog target '{TargetPolicy.TargetProfileId}'. No ownership inference or restore is permitted.");
+        }
+
+        ValidateCommonRecord(
+            record,
+            TargetPolicy.IsValidatedCustom,
+            TargetPolicy.DescribeCustomEnvelope());
+    }
+
+    private static void ValidateCommonRecord(
+        WatchdogLeaseRecord record,
+        Func<FanSetpoint, bool> setpointValidator,
+        string envelopeDescription)
+    {
         if (record.SessionId == Guid.Empty)
         {
             throw new InvalidDataException(
                 "Lease journal has an empty session id.");
         }
 
-        if (record.Controller.ProcessId <= 0 ||
+        if (record.Controller is null ||
+            record.Controller.ProcessId <= 0 ||
             record.Controller.ProcessStartUtcTicks <= 0)
         {
             throw new InvalidDataException(
@@ -207,10 +267,10 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
                  })
         {
             if (setpoint.HasValue &&
-                !setpoint.Value.IsValidatedCustom)
+                !setpointValidator(setpoint.Value))
             {
                 throw new InvalidDataException(
-                    $"Lease journal contains an out-of-range custom setpoint {setpoint.Value}.");
+                    $"Lease journal contains custom setpoint {setpoint.Value} outside the target policy ({envelopeDescription}).");
             }
         }
 
@@ -244,4 +304,21 @@ internal sealed class JsonLeaseJournal : ILeaseJournal
                 $"Lease journal invariant failed for phase {record.Phase}.");
         }
     }
+
+    [Flags]
+    private enum MoveFileFlags : uint
+    {
+        ReplaceExisting = 0x00000001,
+        WriteThrough = 0x00000008
+    }
+
+    [DllImport(
+        "kernel32.dll",
+        CharSet = CharSet.Unicode,
+        SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool MoveFileEx(
+        string existingFileName,
+        string newFileName,
+        MoveFileFlags flags);
 }

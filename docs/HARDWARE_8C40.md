@@ -626,3 +626,32 @@ This preparation does not change the production state: 8C40 watchdog recovery
 remains unvalidated/disabled and automatic/adaptive policy remains OFF. The
 legacy 88F8 Gate D-G hardware harnesses remain blocked on this Modern Standby
 target.
+
+
+## Watchdog M1 target-aware core
+
+M1 is a code-architecture gate only; it grants no new real-hardware watchdog
+authority to HP 8C40.
+
+The durable watchdog core no longer assumes one global 14..50 setpoint range.
+It now consumes an explicit target policy. The policies pinned by CI are:
+
+- HP 88F8: independent CPU/GPU 14..50, preserving the already qualified
+  historical Gate D-G behavior;
+- HP 8C40: equal-only 10..50, matching the physically qualified production
+  control envelope.
+
+The durable lease journal is promoted from schema v1 to schema v2 and carries
+the exact target profile id. Target mismatches fail closed: the journal is
+retained, no ownership inference is made and no restore is issued. Legacy v1
+journals have no target identity, so they can be interpreted only after an
+exact HP 88F8 match; they are never migrated or assumed to belong to 8C40.
+
+The historical Gate D service remains exact-match HP 88F8-only and now exposes
+its target profile id in its status. The HP 8C40 backend/factory watchdog guards
+remain unchanged, `WatchdogRecoveryValidated` remains false, and automatic/
+adaptive policy remains OFF.
+
+M1 therefore prepares the durable state machine for 8C40 without enabling any
+8C40 service-side EC/WMI write. The next gate is M2: exact-target Session-0 /
+LocalSystem read-only dependency access on HP 8C40.

@@ -14,10 +14,6 @@ internal readonly record struct FanSetpoint(byte Cpu, byte Gpu)
         Cpu == byte.MaxValue &&
         Gpu == byte.MaxValue;
 
-    public bool IsValidatedCustom =>
-        Cpu is >= 14 and <= 50 &&
-        Gpu is >= 14 and <= 50;
-
     public override string ToString() => $"{Cpu}/{Gpu}";
 }
 
@@ -27,6 +23,7 @@ internal sealed record ControllerIdentity(
 
 internal sealed record WatchdogLeaseRecord(
     int SchemaVersion,
+    string? TargetProfileId,
     Guid SessionId,
     ControllerIdentity Controller,
     WatchdogLeasePhase Phase,
@@ -36,7 +33,8 @@ internal sealed record WatchdogLeaseRecord(
     FanSetpoint? Owned,
     DateTimeOffset CreatedAtUtc)
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int LegacySchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 }
 
 internal sealed record LeaseOperationResult(

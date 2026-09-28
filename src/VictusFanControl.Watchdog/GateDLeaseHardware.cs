@@ -3,8 +3,10 @@ using VictusFanControl.Hardware.Hp;
 namespace VictusFanControl.Watchdog;
 
 /// <summary>
-/// Gate D hardware adapter. It intentionally exposes only read setpoint and
-/// the fixed HP-auto restore primitive required by the lease manager.
+/// Historical HP 88F8 Gate D recovery adapter. The lease manager itself is
+/// target-neutral; this concrete adapter intentionally exposes only read
+/// setpoint and the fixed HP-auto restore primitive physically qualified on
+/// 88F8. HP 8C40 receives no service-side restore authority in M1.
 /// </summary>
 internal sealed class GateDLeaseHardware : ILeaseRecoveryHardware
 {
