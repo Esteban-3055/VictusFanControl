@@ -825,5 +825,34 @@ This gate is intentionally narrower than a later possible WRITE_ARMED
 double-death/startup test. M5D first isolates controller death while the watchdog
 remains alive.
 
-M5D physical execution remains blocked until its new code/CI preparation is
-green.
+M5D code/CI preparation is green. Physical execution remains the next
+explicit qualification boundary.
+
+
+### M5D preparation CI result
+
+The complete M5D preparation head
+`877aa9eb49d905e00511540eb78f2798260aee32` passed GitHub Actions
+**#622** (run `36487711565`) on 2026-09-28.
+
+The green run includes:
+
+- PowerShell syntax validation;
+- historical Gate E/F/G0/G1/G2 invariants;
+- HP 8C40 M5A/M5B/M5C invariants;
+- the new M5D causal invariant under both PowerShell Core and Windows
+  PowerShell 5.1;
+- warnings-as-errors solution build;
+- M0, Gate B/C, HP 8C40 M2/M3/M4 self-tests;
+- SafetyGate and FanControlCoordinator self-tests;
+- HP BIOS-contract and both HP backend self-tests;
+- the synthetic backend assertion that the qualification hook executes only
+  after real-command acknowledgement ordering and before watchdog Commit.
+
+Intermediate preparation runs failed fail-closed while the new hook types and
+static invariant were being corrected; no physical M5D execution occurred in
+those runs.
+
+M5D is therefore **CODE/CI PASS / PHYSICAL PENDING**. This does not alter the
+public production backend watchdog prohibition, `WatchdogRecoveryValidated`
+remains false, and automatic/adaptive policy remains OFF.
