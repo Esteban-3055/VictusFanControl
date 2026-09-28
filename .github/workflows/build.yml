@@ -81,6 +81,17 @@ jobs:
         shell: pwsh
         run: .\scripts\test-watchdog-m5c-preflight-invariants.ps1
 
+      - name: HP 8C40 M5 invariants Windows PowerShell 5.1 compatibility
+        shell: powershell
+        run: |
+          Write-Host ("Windows PowerShell version: {0}" -f $PSVersionTable.PSVersion)
+          if ($PSVersionTable.PSVersion.Major -ne 5) {
+            throw "Expected Windows PowerShell 5.x compatibility shell."
+          }
+          .\scripts\test-watchdog-m5a-8c40-invariants.ps1
+          .\scripts\test-watchdog-m5b-8c40-invariants.ps1
+          .\scripts\test-watchdog-m5c-preflight-invariants.ps1
+
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 

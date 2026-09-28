@@ -18,7 +18,7 @@ function Assert-Contains {
         [string]$Message
     )
 
-    if (-not $Text.Contains($Needle, [StringComparison]::Ordinal)) {
+    if ($Text.IndexOf($Needle, [StringComparison]::Ordinal) -lt 0) {
         throw $Message
     }
 }

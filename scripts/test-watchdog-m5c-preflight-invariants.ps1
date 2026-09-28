@@ -13,7 +13,7 @@ function Assert-Contains {
         [string]$Message
     )
 
-    if (-not $Text.Contains($Needle, [StringComparison]::Ordinal)) {
+    if ($Text.IndexOf($Needle, [StringComparison]::Ordinal) -lt 0) {
         throw $Message
     }
 }
@@ -47,7 +47,7 @@ foreach ($forbidden in @(
     '.Kill(',
     'Remove-Item $journalPath'
 )) {
-    if ($preflight.Contains($forbidden, [StringComparison]::Ordinal)) {
+    if ($preflight.IndexOf($forbidden, [StringComparison]::Ordinal) -ge 0) {
         throw "M5C no-write preflight contains forbidden active/fault-injection token: $forbidden"
     }
 }
@@ -65,7 +65,7 @@ foreach ($forbidden in @(
     'Hp8C40BiosFanControl',
     'Remove-Item $journalPath'
 )) {
-    if ($failsafe.Contains($forbidden, [StringComparison]::Ordinal)) {
+    if ($failsafe.IndexOf($forbidden, [StringComparison]::Ordinal) -ge 0) {
         throw "M5C delayed service failsafe contains forbidden direct recovery authority: $forbidden"
     }
 }

@@ -545,3 +545,31 @@ both HP backend self-tests.
 
 M5C stage 0 is therefore **CODE/CI PASS / PHYSICAL NO-WRITE PREFLIGHT
 PENDING**. The destructive double-death gate remains intentionally unqualified.
+
+
+## M5C stage-0 physical preflight attempt 1 - no-write compatibility failure
+
+The first local M5C stage-0 preflight attempt on 2026-09-28 stopped during
+**Step 1**, after a clean warnings-as-errors build and before Step 2, service
+installation, SCM recovery-policy changes, any fan write, any durable lease, or
+any fault injection.
+
+The failure was a Windows PowerShell 5.1 compatibility bug in the M5 invariant
+helpers:
+
+~~~text
+No overload for "Contains" and argument count "2"
+Text.Contains(Needle, StringComparison.Ordinal)
+~~~
+
+The overload is available to the PowerShell Core/.NET runtime used by the
+existing CI but not to the local Windows PowerShell 5.1/.NET Framework runtime.
+
+The invariant helpers are hardened to use
+`String.IndexOf(..., StringComparison.Ordinal)`, which preserves exact ordinal
+matching and is available on Windows PowerShell 5.1. CI now also executes the
+M5A, M5B and M5C invariant scripts explicitly under the
+`powershell` (Windows PowerShell 5.x) shell in addition to `pwsh`.
+
+This attempt is classified **NO_WRITE_FAIL_CLOSED** and does not count as the
+physical no-write preflight PASS.
