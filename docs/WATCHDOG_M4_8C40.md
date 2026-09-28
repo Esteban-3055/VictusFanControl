@@ -233,3 +233,30 @@ both HP backend self-tests.
 
 Therefore M4B and M4C are code/CI prepared. Their physical endpoint evidence
 remains intentionally separate and pending.
+
+
+## M4B physical attempt 1 - fail-closed before write
+
+The first physical M4B attempt on 2026-09-28 did not dispatch a fan write.
+The exact target, LocalSystem/Session-0 service, clean FF/FF baseline and PREPARE
+all succeeded. The first custom command then failed inside the backend's
+pre-write admission path and was classified as a no-write
+`FanControlAdmissionException`.
+
+The watchdog rollback completed: no durable lease remained, the service stayed
+Ready, and the corrected post-close diagnostic reported that no active durable
+lease remained for the still-live controller process. Therefore this attempt is
+not an M4B endpoint qualification PASS and does not qualify 10/10.
+
+The diagnostic path is hardened before retrying M4B:
+
+- first-command failures now report the exact pre-write admission stage and
+  original exception type/message;
+- the watchdog log emits successful PREPARE, WRITE_INTENT, COMMIT and
+  RESTORE_BEGIN transition acknowledgements;
+- qualification failures print the nested exception chain and a read-only EC
+  control-state snapshot;
+- the PowerShell harness performs an additional independent read-only EC
+  setpoint probe on the failure path.
+
+No control authority or fan range is expanded by this diagnostic hardening.

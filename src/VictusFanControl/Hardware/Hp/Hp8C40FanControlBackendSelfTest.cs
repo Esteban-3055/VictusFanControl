@@ -22,6 +22,7 @@ public static class Hp8C40FanControlBackendSelfTest
         failures += await TestCancelledAdmissionIsNoWriteAsync(output);
         failures += await TestAdmissionFailurePreservesCauseAsync(output);
         failures += await TestFirstCommandExternalOverrideIsNoWriteAsync(output);
+        failures += await TestFirstCommandSpeedReadFailurePreservesCauseAsync(output);
         failures += await TestUnsupportedTargetRefusedAsync(output);
         failures += await TestRangeRefusedAsync(output);
         failures += await TestRestoreVerificationAsync(output);
@@ -256,6 +257,53 @@ public static class Hp8C40FanControlBackendSelfTest
             hardware.State.CpuSetpoint == 31 &&
             hardware.State.GpuSetpoint == 31 &&
             !status.CustomModeActive);
+    }
+
+    private static async Task<int> TestFirstCommandSpeedReadFailurePreservesCauseAsync(
+        TextWriter output)
+    {
+        var expected =
+            new HpBiosCallException(
+                "synthetic GetFanLevel telemetry failure");
+
+        var hardware = new FakeHardware
+        {
+            GetCurrentFanLevelsException = expected
+        };
+
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        FanControlAdmissionException? observed = null;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(10, 10, "first-command-speed-read-failure"),
+                CancellationToken.None);
+        }
+        catch (FanControlAdmissionException ex)
+        {
+            observed = ex;
+        }
+
+        return Report(
+            output,
+            "first-command no-write failure reports exact read-only admission stage and cause",
+            observed is not null &&
+            ReferenceEquals(observed.InnerException, expected) &&
+            observed.Message.Contains(
+                "read BIOS current-speed telemetry",
+                StringComparison.Ordinal) &&
+            observed.Message.Contains(
+                nameof(HpBiosCallException),
+                StringComparison.Ordinal) &&
+            observed.Message.Contains(
+                expected.Message,
+                StringComparison.Ordinal) &&
+            hardware.SetCalls == 0 &&
+            hardware.RestoreCalls == 0 &&
+            hardware.State.CpuSetpoint == byte.MaxValue &&
+            hardware.State.GpuSetpoint == byte.MaxValue);
     }
 
     private static async Task<int> TestUnsupportedTargetRefusedAsync(TextWriter output)
@@ -1236,6 +1284,7 @@ public static class Hp8C40FanControlBackendSelfTest
         public Action<int>? OnEcRead { get; set; }
         public Action? OnSetFanLevel { get; set; }
         public Exception? ReadEcStateException { get; set; }
+        public Exception? GetCurrentFanLevelsException { get; set; }
         public int EcReadCalls { get; private set; }
 
         public Hp8C40EcControlState ReadEcState()
@@ -1280,9 +1329,17 @@ public static class Hp8C40FanControlBackendSelfTest
             return State;
         }
 
-        public (byte CpuLevel, byte GpuLevel) GetCurrentFanLevels() =>
-            ((byte)Math.Clamp(State.CpuRpm / 100, 0, 255),
-             (byte)Math.Clamp(State.GpuRpm / 100, 0, 255));
+        public (byte CpuLevel, byte GpuLevel) GetCurrentFanLevels()
+        {
+            if (GetCurrentFanLevelsException is not null)
+            {
+                throw GetCurrentFanLevelsException;
+            }
+
+            return (
+                (byte)Math.Clamp(State.CpuRpm / 100, 0, 255),
+                (byte)Math.Clamp(State.GpuRpm / 100, 0, 255));
+        }
 
         public void SetFanLevel(byte cpuLevel, byte gpuLevel)
         {

@@ -345,6 +345,23 @@ public static class Hp8C40M4LeaseQualificationTest
         {
             Console.Error.WriteLine(
                 $"M4 qualification failed: {ex.GetType().Name}: {ex.Message}");
+
+            WriteExceptionChain(ex);
+
+            try
+            {
+                var failureEvidence =
+                    ecProbe.ReadControlEvidence();
+
+                Console.Error.WriteLine(
+                    $"M4 failure-path EC (READ-ONLY): {Format(failureEvidence)}");
+            }
+            catch (Exception probeFailure)
+            {
+                Console.Error.WriteLine(
+                    $"M4 failure-path EC probe also failed: {probeFailure.GetType().Name}: {probeFailure.Message}");
+            }
+
             return 177;
         }
         finally
@@ -368,6 +385,37 @@ public static class Hp8C40M4LeaseQualificationTest
                             qualificationLevel)
                         .ConfigureAwait(false);
                 }
+            }
+        }
+    }
+
+    private static void WriteExceptionChain(
+        Exception exception)
+    {
+        var current =
+            exception.InnerException;
+
+        var depth = 1;
+        while (current is not null)
+        {
+            Console.Error.WriteLine(
+                $"  inner[{depth}]: {current.GetType().Name}: {current.Message}");
+
+            current = current.InnerException;
+            depth++;
+        }
+
+        if (exception is AggregateException aggregate)
+        {
+            for (var index = 0;
+                 index < aggregate.InnerExceptions.Count;
+                 index++)
+            {
+                var inner =
+                    aggregate.InnerExceptions[index];
+
+                Console.Error.WriteLine(
+                    $"  aggregate[{index}]: {inner.GetType().Name}: {inner.Message}");
             }
         }
     }

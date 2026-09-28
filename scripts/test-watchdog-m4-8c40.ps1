@@ -170,6 +170,16 @@ try {
     if ($qualificationExit -ne 0) {
         Start-Sleep -Seconds 1
         Show-Diagnostics
+
+        Write-Host ''
+        Write-Host 'Failure-path independent EC setpoint probe (READ-ONLY):' -ForegroundColor Cyan
+        try {
+            $failureFinal = Read-8C40Setpoint
+            Write-Host "Failure-path EC setpoint: $($failureFinal.Cpu)/$($failureFinal.Gpu)"
+        } catch {
+            Write-Warning "Failure-path EC probe could not be completed: $($_.Exception.Message)"
+        }
+
         throw "M4 endpoint qualification process failed with exit code $qualificationExit."
     }
 

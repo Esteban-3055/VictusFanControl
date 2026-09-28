@@ -184,6 +184,33 @@ internal static class GateCPipeServerSession
                     log?.Invoke(
                         $"WATCHDOG RELEASE ACK controller PID={actual.ProcessId}; durable lease cleared after verified firmware restore.");
                 }
+                else
+                {
+                    var transitionName =
+                        request.Type switch
+                        {
+                            GateCProtocol.Prepare => "PREPARE",
+                            GateCProtocol.CancelPrepared => "CANCEL_PREPARED",
+                            GateCProtocol.WriteIntent => "WRITE_INTENT",
+                            GateCProtocol.AbortWriteIntent => "ABORT_WRITE_INTENT",
+                            GateCProtocol.Commit => "COMMIT",
+                            GateCProtocol.RestoreBegin => "RESTORE_BEGIN",
+                            _ => null
+                        };
+
+                    if (transitionName is not null)
+                    {
+                        var target =
+                            request.CpuLevel.HasValue &&
+                            request.GpuLevel.HasValue
+                                ? $"; target={request.CpuLevel.Value}/{request.GpuLevel.Value}"
+                                : string.Empty;
+
+                        log?.Invoke(
+                            $"WATCHDOG {transitionName} ACK controller PID={actual.ProcessId}; " +
+                            $"phase={response.Phase ?? "none"}; generation={response.Generation?.ToString() ?? "none"}{target}.");
+                    }
+                }
 
                 if (beforeResponseAsync is not null)
                 {

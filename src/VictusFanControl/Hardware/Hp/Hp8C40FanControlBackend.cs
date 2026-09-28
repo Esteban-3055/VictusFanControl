@@ -470,6 +470,7 @@ public sealed class Hp8C40FanControlBackend :
 
             var writeAttempted = _ownedSetpoint.HasValue;
             var leaseWriteArmed = false;
+            var admissionStage = "validate caller cancellation";
 
             try
             {
@@ -478,22 +479,36 @@ public sealed class Hp8C40FanControlBackend :
                 var cpuTarget = checked((byte)command.CpuLevel);
                 var gpuTarget = checked((byte)command.GpuLevel);
 
+                admissionStage = "read initial EC control state";
                 var before = _hardware!.ReadEcState();
+
+                admissionStage = "validate initial EC ownership";
                 VerifyExistingOwnership(before);
+
+                admissionStage = "validate initial EC guards";
                 ValidateActiveControlState(
                     before,
                     requireRunningTachometers: _ownedSetpoint.HasValue);
 
+                admissionStage = "read BIOS current-speed telemetry";
                 var currentLevels = _hardware.GetCurrentFanLevels();
+
+                admissionStage = "validate BIOS current-speed telemetry";
                 ValidateCurrentSpeedLevel(currentLevels.CpuLevel, "CPU");
                 ValidateCurrentSpeedLevel(currentLevels.GpuLevel, "GPU");
 
+                admissionStage = "read pre-dispatch EC control state";
                 var preDispatch = _hardware.ReadEcState();
+
+                admissionStage = "validate pre-dispatch EC ownership";
                 VerifyExistingOwnership(preDispatch);
+
+                admissionStage = "validate pre-dispatch EC guards";
                 ValidateActiveControlState(
                     preDispatch,
                     requireRunningTachometers: _ownedSetpoint.HasValue);
 
+                admissionStage = "validate caller cancellation before watchdog/write";
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (preDispatch.CpuSetpoint != cpuTarget ||
@@ -501,6 +516,7 @@ public sealed class Hp8C40FanControlBackend :
                 {
                     if (_watchdogLease is not null)
                     {
+                        admissionStage = "durably arm watchdog WRITE_INTENT";
                         await _watchdogLease.WriteIntentAsync(
                                 cpuTarget,
                                 gpuTarget,
@@ -513,17 +529,24 @@ public sealed class Hp8C40FanControlBackend :
                         // between the original pre-dispatch check and WMI. Re-read
                         // EC after WriteIntent ACK so an external controller that
                         // appeared during that interval is still preserved.
+                        admissionStage = "read EC after watchdog WRITE_INTENT";
                         var postIntent = _hardware.ReadEcState();
+
+                        admissionStage = "validate EC ownership after watchdog WRITE_INTENT";
                         VerifyExistingOwnership(postIntent);
+
+                        admissionStage = "validate EC guards after watchdog WRITE_INTENT";
                         ValidateActiveControlState(
                             postIntent,
                             requireRunningTachometers: _ownedSetpoint.HasValue);
 
+                        admissionStage = "validate caller cancellation before WMI fan write";
                         cancellationToken.ThrowIfCancellationRequested();
                     }
 
                     // Set this before WMI dispatch: on HP hardware the command
                     // may take effect even if WMI subsequently reports failure.
+                    admissionStage = "dispatch WMI SetFanLevel";
                     writeAttempted = true;
                     _hardware.SetFanLevel(cpuTarget, gpuTarget);
                 }
@@ -598,13 +621,17 @@ public sealed class Hp8C40FanControlBackend :
                 // deliberately left for fail-closed service recovery.
                 _ownedSetpoint = null;
                 _customModeActive = false;
+
+                var primaryCause =
+                    $"{ex.GetType().Name}: {ex.Message}";
+
                 _lastDetail =
                     leaseRollbackFailure is null
-                        ? "First custom command was refused before any fan write; logical/watchdog authority was released without FF,FF."
-                        : $"First custom command was refused before any fan write; watchdog rollback remained armed: {leaseRollbackFailure.Message}";
+                        ? $"First custom command was refused before any fan write at stage '{admissionStage}': {primaryCause}. Logical/watchdog authority was released without FF,FF."
+                        : $"First custom command was refused before any fan write at stage '{admissionStage}': {primaryCause}. Watchdog rollback remained armed: {leaseRollbackFailure.GetType().Name}: {leaseRollbackFailure.Message}";
 
                 throw new FanControlAdmissionException(
-                    "First custom fan command failed before any fan write was attempted.",
+                    $"First custom fan command failed before any fan write was attempted at stage '{admissionStage}': {primaryCause}",
                     leaseRollbackFailure is null
                         ? ex
                         : new AggregateException(ex, leaseRollbackFailure));

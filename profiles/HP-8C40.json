@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4a-physical-pass-m4bc-ci-pass-physical-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4a-physical-pass-m4b-attempt1-no-write-diagnostics-hardening-ci-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -726,7 +726,7 @@
     }
   },
   "watchdogM4LeaseQualification": {
-    "status": "M4A_CODE_CI_PHYSICAL_PASS_M4BC_CODE_CI_PASS_PHYSICAL_PENDING",
+    "status": "M4A_PHYSICAL_PASS_M4B_ATTEMPT1_NO_WRITE_DIAGNOSTICS_HARDENING_CI_PENDING_M4C_PHYSICAL_PENDING",
     "protocolVersion": 2,
     "targetProfileIdRequired": true,
     "qualificationPipe": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -740,7 +740,7 @@
     "watchdogRecoveryValidated": false,
     "automaticPolicyEnabled": false,
     "syntheticSelfTest": "PASS",
-    "fullRepositoryCi": "PASS",
+    "fullRepositoryCi": "PENDING_M4B_ATTEMPT_DIAGNOSTIC_HARDENING",
     "m4aPhysicalResult": {
       "result": "PASS",
       "completedAt": "2026-09-28",
@@ -786,7 +786,22 @@
         "m4b": {
           "level": 10,
           "token": "8C40-M4-LEASE10",
-          "physicalStatus": "PENDING"
+          "physicalStatus": "ATTEMPT1_NO_WRITE_FAIL_CLOSED",
+          "attempt1": {
+            "completedAt": "2026-09-28",
+            "result": "NO_WRITE_FAIL_CLOSED",
+            "initialSetpoint": "FF/FF",
+            "initialGuardState": "MaxFan=0x00, FanSwitch=0x00",
+            "initialCpuRpm": 2607,
+            "initialGpuRpm": 2393,
+            "prepareSucceeded": true,
+            "wmiFanWriteAttempted": false,
+            "durableJournalRetained": false,
+            "serviceRemainedReady": true,
+            "correctedPostCloseLogObserved": true,
+            "qualificationPass": false,
+            "diagnosticLimitation": "The first-command admission wrapper hid the original pre-write exception in this run; code hardening now reports the exact stage and nested cause before the retry."
+          }
         },
         "m4c": {
           "level": 50,

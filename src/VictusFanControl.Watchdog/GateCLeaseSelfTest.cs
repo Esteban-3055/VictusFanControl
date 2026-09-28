@@ -2009,6 +2009,30 @@ internal static class GateCLeaseSelfTest
             Assert(
                 firstLogs.Any(
                     line => line.Contains(
+                        "WATCHDOG PREPARE ACK",
+                        StringComparison.Ordinal)),
+                "Successful Prepare did not emit its transition acknowledgement log.");
+            Assert(
+                firstLogs.Any(
+                    line => line.Contains(
+                        "WATCHDOG WRITE_INTENT ACK",
+                        StringComparison.Ordinal) &&
+                            line.Contains(
+                                "target=30/30",
+                                StringComparison.Ordinal)),
+                "Successful WriteIntent did not emit its target-bound acknowledgement log.");
+            Assert(
+                firstLogs.Any(
+                    line => line.Contains(
+                        "WATCHDOG COMMIT ACK",
+                        StringComparison.Ordinal) &&
+                            line.Contains(
+                                "target=30/30",
+                                StringComparison.Ordinal)),
+                "Successful Commit did not emit its target-bound acknowledgement log.");
+            Assert(
+                firstLogs.Any(
+                    line => line.Contains(
                         "durable lease retained for reconnect/process-death/deadline recovery.",
                         StringComparison.Ordinal)),
                 "Live-controller pipe loss did not log durable lease retention while OWNED.");
@@ -2118,6 +2142,12 @@ internal static class GateCLeaseSelfTest
             Assert(
                 await env.Journal.LoadAsync(
                     CancellationToken.None) is null);
+            Assert(
+                secondLogs.Any(
+                    line => line.Contains(
+                        "WATCHDOG RESTORE_BEGIN ACK",
+                        StringComparison.Ordinal)),
+                "Successful RestoreBegin did not emit its transition acknowledgement log.");
             Assert(
                 secondLogs.Any(
                     line => line.Contains(
