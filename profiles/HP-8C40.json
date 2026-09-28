@@ -337,5 +337,17 @@
     "productionPromotion": "equal-only 30..36",
     "integratedUpperBound36Pending": false,
     "integratedUpperBound36Passed": true
+  },
+  "extendedRangeQualificationAttempt1": {
+    "range": "10..50 guarded characterization",
+    "anchorLevel": 30,
+    "anchorCommandAccepted": true,
+    "anchorEcAcknowledged": "30/30",
+    "samplesCompletedBeforeAbort": 2,
+    "anomaly": "single control-evidence read reported MaxFan=0x90 with FanSwitch=0x00",
+    "restoreVerified": true,
+    "levelsBelow30Attempted": false,
+    "levelsAbove30Attempted": false,
+    "interpretation": "Unconfirmed transient EC guard read. Harness now requires duplicate stable guard reads and bounded confirmation before treating a nonzero guard as persistent."
   }
 }
