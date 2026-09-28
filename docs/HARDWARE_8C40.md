@@ -404,3 +404,12 @@ Mitigations now applied to the extended qualification harness:
 - a hibernate-like telemetry-age discontinuity terminates the complete sweep after restore.
 
 Do not disable Windows critical-battery protection as a workaround. The test must coexist with that protection rather than masking a potentially real battery emergency.
+
+
+## Extended sweep attempt: zero-degree NVML GPU telemetry
+
+A later guarded 10..50 attempt did not reach EC baseline or any fan write. The Windows AC/battery sanity gate passed with AC online and battery at 100%, but both the read-only preflight and the active baseline reported NVIDIA GPU temperature as `0.0 C`, with approximately 1.2 W and 0% GPU utilization.
+
+SafetyGate correctly refused that snapshot because the validated GPU plausibility floor is 10 C. The old NVML wrapper nevertheless considered 0 C syntactically valid, so diagnostics could misleadingly print `Baseline ready: True` even though SafetyGate would never permit control.
+
+The NVML wrapper now rejects 0 C as unavailable/invalid thermal telemetry. The extended hardware gate also waits up to 20 seconds for a SafetyGate-ready baseline before refusing cleanly, and it will not issue any fan write while the GPU thermal sensor remains unavailable. A self-test pins zero-degree GPU telemetry as a fail-closed condition.
