@@ -349,5 +349,13 @@
     "levelsBelow30Attempted": false,
     "levelsAbove30Attempted": false,
     "interpretation": "Unconfirmed transient EC guard read. Harness now requires duplicate stable guard reads and bounded confirmation before treating a nonzero guard as persistent."
+  },
+  "extendedRangeQualificationAttempt2": {
+    "range": "10..50 guarded characterization",
+    "sleepInhibitionActive": true,
+    "baselineTelemetryReady": true,
+    "anomaly": "baseline narrow EC evidence reported CPU setpoint 144 and GPU setpoint 255",
+    "fanWritesAttempted": false,
+    "interpretation": "No level was written. The mixed setpoint is not a valid state for this equal-only harness. Ownership reads are now duplicated under one EC mutex lease, and asymmetric samples are re-read at the high-level qualification boundary before being treated as persistent."
   }
 }
