@@ -573,3 +573,18 @@ M5A, M5B and M5C invariant scripts explicitly under the
 
 This attempt is classified **NO_WRITE_FAIL_CLOSED** and does not count as the
 physical no-write preflight PASS.
+
+
+### Windows PowerShell 5.1 compatibility hardening result
+
+Commit `8f510bee22b652bd605f5b0d8e714a9177503163` passed complete GitHub
+Actions run **#599** on 2026-09-28.
+
+The run includes a dedicated `shell: powershell` step and successfully executes
+the M5A, M5B and M5C invariant scripts under Windows PowerShell 5.x, in addition
+to the existing PowerShell Core path. The full warnings-as-errors build and all
+historical watchdog, lifecycle, safety, coordinator, BIOS-contract and HP backend
+self-tests also passed.
+
+The local stage-0 preflight may therefore be retried. The previous attempt
+remains recorded as **NO_WRITE_FAIL_CLOSED**.

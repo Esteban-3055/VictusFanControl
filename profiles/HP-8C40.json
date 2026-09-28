@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5ab-physical-pass-m5c-stage0-ps51-compat-hardening-ci-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5ab-physical-pass-m5c-stage0-code-ci-pass-physical-preflight-retry-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -924,7 +924,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_M5B_CODE_CI_PHYSICAL_PASS_M5C_STAGE0_PS51_COMPAT_HARDENING_CI_PENDING",
+    "status": "M5A_M5B_CODE_CI_PHYSICAL_PASS_M5C_STAGE0_CODE_CI_PASS_PHYSICAL_PREFLIGHT_RETRY_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -1054,7 +1054,7 @@
       }
     },
     "m5c": {
-      "status": "STAGE0_PS51_COMPAT_HARDENING_CI_PENDING_PHYSICAL_PREFLIGHT_PENDING",
+      "status": "STAGE0_CODE_CI_PASS_PHYSICAL_PREFLIGHT_RETRY_PENDING",
       "targetProfileId": "HP-8C40-9D0R1LA-F18",
       "service": "VictusFanControlWatchdogM4",
       "pipe": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -1140,7 +1140,12 @@
       "windowsPowerShell51CompatibilityHardening": {
         "change": "Replace String.Contains(string, StringComparison.Ordinal) with String.IndexOf(string, StringComparison.Ordinal) in M5 invariant scripts and run M5 invariants under Windows PowerShell 5.x in CI.",
         "preservesOrdinalMatching": true,
-        "ciPending": true
+        "ciPending": false,
+        "result": "PASS",
+        "commit": "8f510bee22b652bd605f5b0d8e714a9177503163",
+        "runNumber": 599,
+        "runId": 36480499208,
+        "completedAt": "2026-09-28"
       }
     }
   }
