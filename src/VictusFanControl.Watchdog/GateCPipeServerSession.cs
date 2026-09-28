@@ -42,6 +42,10 @@ internal static class GateCPipeServerSession
 
             if (hello.ProtocolVersion != GateCProtocol.Version ||
                 !string.Equals(
+                    hello.TargetProfileId,
+                    manager.TargetProfileId,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
                     hello.Type,
                     GateCProtocol.Hello,
                     StringComparison.Ordinal) ||
@@ -53,8 +57,9 @@ internal static class GateCPipeServerSession
                     pipe,
                     Error(
                         hello,
+                        manager.TargetProfileId,
                         "IDENTITY_MISMATCH",
-                        "Hello identity/version does not match the kernel-observed named-pipe client."),
+                        "Hello target/identity/version does not match the active watchdog target and kernel-observed named-pipe client."),
                     cancellationToken).ConfigureAwait(false);
                 return;
             }
@@ -83,8 +88,9 @@ internal static class GateCPipeServerSession
                 pipe,
                 Success(
                     hello,
+                    manager.TargetProfileId,
                     "HELLO_OK",
-                    "Named-pipe client identity verified."),
+                    "Named-pipe client target and process identity verified."),
                 cancellationToken).ConfigureAwait(false);
 
             if (ownerProcess is not null)
@@ -320,8 +326,21 @@ internal static class GateCPipeServerSession
         {
             return Error(
                 request,
+                manager.TargetProfileId,
                 "PROTOCOL_VERSION",
                 $"Expected protocol version {GateCProtocol.Version}.");
+        }
+
+        if (!string.Equals(
+                request.TargetProfileId,
+                manager.TargetProfileId,
+                StringComparison.Ordinal))
+        {
+            return Error(
+                request,
+                manager.TargetProfileId,
+                "TARGET_MISMATCH",
+                $"Request target '{request.TargetProfileId}' does not match watchdog target '{manager.TargetProfileId}'.");
         }
 
         try
@@ -336,6 +355,7 @@ internal static class GateCPipeServerSession
                             cancellationToken).ConfigureAwait(false);
                     return Success(
                         request,
+                        manager.TargetProfileId,
                         "OK",
                         "Lease prepared.",
                         result);
@@ -349,6 +369,7 @@ internal static class GateCPipeServerSession
                         controller).ConfigureAwait(false);
                     return Success(
                         request,
+                        manager.TargetProfileId,
                         "OK",
                         "Prepared lease cancelled without hardware write.");
 
@@ -363,6 +384,7 @@ internal static class GateCPipeServerSession
                             controller).ConfigureAwait(false);
                     return Success(
                         request,
+                        manager.TargetProfileId,
                         "OK",
                         "Write intent durably armed.",
                         result);
@@ -378,6 +400,7 @@ internal static class GateCPipeServerSession
                             controller).ConfigureAwait(false);
                     return Success(
                         request,
+                        manager.TargetProfileId,
                         "OK",
                         "Write intent safely rolled back before hardware dispatch.",
                         result);
@@ -394,6 +417,7 @@ internal static class GateCPipeServerSession
                             controller).ConfigureAwait(false);
                     return Success(
                         request,
+                        manager.TargetProfileId,
                         "OK",
                         "Owned target committed.",
                         result);
@@ -409,6 +433,7 @@ internal static class GateCPipeServerSession
                             controller).ConfigureAwait(false);
                     return Success(
                         request,
+                        manager.TargetProfileId,
                         "OK",
                         "Lease probe accepted without renewing heartbeat.",
                         result);
@@ -424,6 +449,7 @@ internal static class GateCPipeServerSession
                             controller).ConfigureAwait(false);
                     return Success(
                         request,
+                        manager.TargetProfileId,
                         "OK",
                         "Heartbeat accepted.",
                         result);
@@ -439,6 +465,7 @@ internal static class GateCPipeServerSession
                             controller).ConfigureAwait(false);
                     return Success(
                         request,
+                        manager.TargetProfileId,
                         "OK",
                         "Restore takeover remains armed.",
                         result);
@@ -452,12 +479,14 @@ internal static class GateCPipeServerSession
                         controller).ConfigureAwait(false);
                     return Success(
                         request,
+                        manager.TargetProfileId,
                         "OK",
                         "Lease released after FF/FF verification.");
 
                 default:
                     return Error(
                         request,
+                        manager.TargetProfileId,
                         "UNKNOWN_MESSAGE",
                         $"Unknown protocol message '{request.Type}'.");
             }
@@ -466,6 +495,7 @@ internal static class GateCPipeServerSession
         {
             return Error(
                 request,
+                manager.TargetProfileId,
                 ex.Code,
                 ex.Message);
         }
@@ -473,6 +503,7 @@ internal static class GateCPipeServerSession
         {
             return Error(
                 request,
+                manager.TargetProfileId,
                 "INTERNAL_ERROR",
                 ex.Message);
         }
@@ -512,12 +543,14 @@ internal static class GateCPipeServerSession
 
     private static FanControlWatchdogLeaseResponse Success(
         FanControlWatchdogLeaseRequest request,
+        string targetProfileId,
         string code,
         string message,
         LeaseOperationResult? result = null) =>
         new(
             GateCProtocol.Version,
             request.RequestId,
+            targetProfileId,
             Ok: true,
             code,
             message,
@@ -527,11 +560,13 @@ internal static class GateCPipeServerSession
 
     private static FanControlWatchdogLeaseResponse Error(
         FanControlWatchdogLeaseRequest request,
+        string targetProfileId,
         string code,
         string message) =>
         new(
             GateCProtocol.Version,
             request.RequestId,
+            targetProfileId,
             Ok: false,
             code,
             message);

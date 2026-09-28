@@ -761,3 +761,27 @@ issued exactly one restore transaction, verified service-side EC `FF/FF` and
 then verified `FF/FF` again with the independent interactive probe. No watchdog
 lease was created. `WatchdogRecoveryValidated` remains false and M4 remains a
 separate authorization boundary.
+
+
+## Watchdog M4 target-bound lease preparation
+
+After the physical M3 restore-only PASS, M4 is prepared as the first live
+durable lease qualification for HP 8C40.
+
+The shared privileged pipe protocol is now target-aware protocol v2: every
+request/response carries the exact target profile id and a mismatched target is
+rejected before lease mutation. The 8C40 M4 qualification service uses the
+isolated `VictusFanControl.Watchdog.M4.8C40.v2` pipe.
+
+The M4 service itself retains restore-only hardware authority. It cannot issue
+ordinary fan targets. M4A will exercise one awake equal `30/30` command through
+the real SafetyGate -> coordinator -> 8C40 backend -> durable lease ordering,
+then normal verified restore/release.
+
+The production range remains exactly equal-only 10..50. No fan-stop/level-0
+work is included.
+
+Production `WatchdogRecoveryValidated` remains false and public 8C40 watchdog
+construction remains blocked while M4 physical gates are pending.
+
+See `docs/WATCHDOG_M4_8C40.md`.

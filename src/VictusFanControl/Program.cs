@@ -138,6 +138,33 @@ internal static class Program
                 writeTestCts.Token);
         }
 
+        if (options.Hp8C40M4LeaseQualification)
+        {
+            if (!string.Equals(
+                    options.Hp8C40M4LeaseQualificationToken,
+                    Hp8C40M4LeaseQualificationTest.RequiredToken,
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    $"HP 8C40 M4A refused: explicit --8c40-m4-lease-token " +
+                    $"{Hp8C40M4LeaseQualificationTest.RequiredToken} is required.");
+                return 169;
+            }
+
+            using var m4Cts =
+                new CancellationTokenSource();
+
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                m4Cts.Cancel();
+            };
+
+            return await Hp8C40M4LeaseQualificationTest.RunAsync(
+                options.ModulesDirectory,
+                m4Cts.Token);
+        }
+
         if (options.Hp8C40M3Arm)
         {
             if (!string.Equals(

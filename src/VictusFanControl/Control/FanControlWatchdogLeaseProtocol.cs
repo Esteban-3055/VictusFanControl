@@ -6,6 +6,7 @@ namespace VictusFanControl.Control;
 public sealed record FanControlWatchdogLeaseRequest(
     int ProtocolVersion,
     Guid RequestId,
+    string TargetProfileId,
     string Type,
     int? ControllerPid = null,
     long? ControllerStartUtcTicks = null,
@@ -17,6 +18,7 @@ public sealed record FanControlWatchdogLeaseRequest(
 public sealed record FanControlWatchdogLeaseResponse(
     int ProtocolVersion,
     Guid RequestId,
+    string TargetProfileId,
     bool Ok,
     string Code,
     string Message,

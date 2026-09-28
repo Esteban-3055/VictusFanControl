@@ -7,8 +7,13 @@ namespace VictusFanControl.Watchdog;
 
 internal static class GateDPipeFactory
 {
-    public static NamedPipeServerStream Create()
+    public static NamedPipeServerStream Create(
+        string? pipeName = null)
     {
+        var resolvedPipeName =
+            string.IsNullOrWhiteSpace(pipeName)
+                ? FanControlWatchdogLeaseContract.PipeName
+                : pipeName;
         var system =
             new SecurityIdentifier(
                 WellKnownSidType.LocalSystemSid,
@@ -52,7 +57,7 @@ internal static class GateDPipeFactory
                 AccessControlType.Allow));
 
         return NamedPipeServerStreamAcl.Create(
-            FanControlWatchdogLeaseContract.PipeName,
+            resolvedPipeName,
             PipeDirection.InOut,
             maxNumberOfServerInstances: 1,
             PipeTransmissionMode.Byte,

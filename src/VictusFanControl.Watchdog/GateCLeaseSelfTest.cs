@@ -246,6 +246,11 @@ internal static class GateCLeaseSelfTest
 
         failures += await CaseAsync(
             output,
+            "named-pipe target mismatch is rejected before lease mutation",
+            NamedPipeTargetMismatchAsync);
+
+        failures += await CaseAsync(
+            output,
             "live-controller pipe loss before WriteIntent ACK retains WRITE_ARMED until deadline",
             NamedPipeLossBeforeWriteIntentAckAsync);
 
@@ -1611,6 +1616,7 @@ internal static class GateCLeaseSelfTest
             var hello = new FanControlWatchdogLeaseRequest(
                 GateCProtocol.Version,
                 Guid.NewGuid(),
+                env.Manager.TargetProfileId,
                 GateCProtocol.Hello,
                 ControllerPid: actual.ProcessId + 1,
                 ControllerStartUtcTicks:
@@ -1635,6 +1641,73 @@ internal static class GateCLeaseSelfTest
 
             Assert(
                 await env.Journal.LoadAsync(CancellationToken.None) is null);
+            Assert(env.Hardware.RestoreCalls == 0);
+        });
+    }
+
+    private static async Task NamedPipeTargetMismatchAsync()
+    {
+        await WithEnvironmentAsync(async env =>
+        {
+            var name =
+                "VictusFanControl-GateC-Target-" +
+                Guid.NewGuid().ToString("N");
+
+            await using var server =
+                NewServer(name);
+
+            var serverTask =
+                GateCPipeServerSession.RunAsync(
+                    server,
+                    env.Manager,
+                    CancellationToken.None);
+
+            await using var client =
+                new NamedPipeClientStream(
+                    ".",
+                    name,
+                    PipeDirection.InOut,
+                    PipeOptions.Asynchronous);
+
+            await client.ConnectAsync(5000);
+
+            var actual =
+                WindowsNamedPipeIdentity.CurrentProcessIdentity();
+
+            var hello =
+                new FanControlWatchdogLeaseRequest(
+                    GateCProtocol.Version,
+                    Guid.NewGuid(),
+                    Hp8C40TargetProfile.Instance.Id,
+                    GateCProtocol.Hello,
+                    ControllerPid:
+                        actual.ProcessId,
+                    ControllerStartUtcTicks:
+                        actual.ProcessStartUtcTicks);
+
+            await FanControlWatchdogLeaseCodec.WriteRequestAsync(
+                client,
+                hello,
+                CancellationToken.None);
+
+            var response =
+                await FanControlWatchdogLeaseCodec.ReadResponseAsync(
+                    client,
+                    CancellationToken.None);
+
+            Assert(response is not null);
+            Assert(!response!.Ok);
+            Assert(response.Code == "IDENTITY_MISMATCH");
+            Assert(
+                response.TargetProfileId ==
+                env.Manager.TargetProfileId);
+
+            client.Dispose();
+            await serverTask.ConfigureAwait(false);
+
+            Assert(
+                await env.Journal.LoadAsync(
+                    CancellationToken.None) is null);
             Assert(env.Hardware.RestoreCalls == 0);
         });
     }
@@ -1883,6 +1956,7 @@ internal static class GateCLeaseSelfTest
                             new FanControlWatchdogLeaseRequest(
                                 FanControlWatchdogLeaseContract.ProtocolVersion,
                                 Guid.NewGuid(),
+                                env.Manager.TargetProfileId,
                                 FanControlWatchdogLeaseContract.Hello,
                                 ControllerPid: actual.ProcessId,
                                 ControllerStartUtcTicks:
@@ -2054,6 +2128,7 @@ internal static class GateCLeaseSelfTest
         new(
             GateCProtocol.Version,
             Guid.NewGuid(),
+            Hp88F8TargetProfile.Instance.Id,
             type,
             SessionId: sessionId,
             Generation: generation,

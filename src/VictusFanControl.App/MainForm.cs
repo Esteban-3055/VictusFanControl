@@ -330,7 +330,8 @@ internal sealed class MainForm : Form
             {
                 watchdogLease =
                     new GateF2CommitHoldWatchdogLeaseClient(
-                        new NamedPipeFanControlWatchdogLeaseClient(),
+                        new NamedPipeFanControlWatchdogLeaseClient(
+                            Hp88F8TargetProfile.Instance.Id),
                         GateF2HardwareTestReadyPath,
                         SuspendHardwareTestLevel,
                         SuspendHardwareTestLevel);
@@ -342,7 +343,8 @@ internal sealed class MainForm : Form
                      _gateG2HardwareTest)
             {
                 watchdogLease =
-                    new NamedPipeFanControlWatchdogLeaseClient();
+                    new NamedPipeFanControlWatchdogLeaseClient(
+                            Hp88F8TargetProfile.Instance.Id);
             }
 
             var selection = HpFanControlBackendFactory.Create(

@@ -35,6 +35,8 @@ public sealed class CliOptions
     public string? Hp8C40M3ArmToken { get; private set; }
     public string? Hp8C40M3HandoffPath { get; private set; }
     public string? Hp8C40M3ResultPath { get; private set; }
+    public bool Hp8C40M4LeaseQualification { get; private set; }
+    public string? Hp8C40M4LeaseQualificationToken { get; private set; }
     public string? IntegratedCoordinatorToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
@@ -194,6 +196,15 @@ public sealed class CliOptions
                         Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
+                case "--8c40-m4-lease30":
+                    options.Hp8C40M4LeaseQualification = true;
+                    break;
+
+                case "--8c40-m4-lease-token":
+                    options.Hp8C40M4LeaseQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
                 case "--coordinator-write-token":
                     options.IntegratedCoordinatorToken = ReadValue(args, ref i);
                     break;
@@ -250,6 +261,7 @@ public sealed class CliOptions
             (options.Hp8C40TransitionQualification ? 1 : 0) +
             (options.Hp8C40EndpointCoordinatorQualification ? 1 : 0) +
             (options.Hp8C40M3Arm ? 1 : 0) +
+            (options.Hp8C40M4LeaseQualification ? 1 : 0) +
             (options.HealthTestMinutes > 0 ? 1 : 0);
 
         if (exclusiveActions > 1)
@@ -335,6 +347,13 @@ public sealed class CliOptions
                 "--8c40-m3-arm requires both --8c40-m3-handoff-path and --8c40-m3-result-path.");
         }
 
+        if (options.Hp8C40M4LeaseQualificationToken is not null &&
+            !options.Hp8C40M4LeaseQualification)
+        {
+            throw new ArgumentException(
+                "--8c40-m4-lease-token is valid only with --8c40-m4-lease30.");
+        }
+
         return options;
     }
 
@@ -377,6 +396,8 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-m3-arm-token <token>  Required exact token: 8C40-M3-RESTORE30.");
         Console.WriteLine("  --8c40-m3-handoff-path <path>  Durable one-shot M3 handoff path.");
         Console.WriteLine("  --8c40-m3-result-path <path>   M3 LocalSystem service result path.");
+        Console.WriteLine("  --8c40-m4-lease30          ACTIVE M4A GATE: real target-bound watchdog lease at equal 30/30.");
+        Console.WriteLine("  --8c40-m4-lease-token <token>  Required exact token: 8C40-M4-LEASE30.");
         Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30 or HP 8C40 production tokens 8C40-COORD10/30/32/36/50.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");

@@ -10,7 +10,9 @@ internal enum WatchdogRunMode
     M2Hp8C40ReadOnly,
     M2Hp8C40SelfTest,
     M3Hp8C40RestoreOnly,
-    M3Hp8C40SelfTest
+    M3Hp8C40SelfTest,
+    M4Hp8C40LeaseService,
+    M4Hp8C40SelfTest
 }
 
 internal sealed record WatchdogOptions(
@@ -26,6 +28,7 @@ internal sealed record WatchdogOptions(
     public const string GateDServiceName = "VictusFanControlWatchdog";
     public const string M2Hp8C40ServiceName = "VictusFanControlWatchdogM2";
     public const string M3Hp8C40ServiceName = "VictusFanControlWatchdogM3";
+    public const string M4Hp8C40ServiceName = "VictusFanControlWatchdogM4";
     public const string GateBRestoreToken = "88F8-GATEB-RESTORE";
 
     public static WatchdogOptions Parse(string[] args)
@@ -110,6 +113,16 @@ internal sealed record WatchdogOptions(
                     mode = WatchdogRunMode.M3Hp8C40SelfTest;
                     break;
 
+                case "--m4-8c40-lease-service":
+                    RequireModeStillGateA(mode, "--m4-8c40-lease-service");
+                    mode = WatchdogRunMode.M4Hp8C40LeaseService;
+                    break;
+
+                case "--m4-8c40-self-test":
+                    RequireModeStillGateA(mode, "--m4-8c40-self-test");
+                    mode = WatchdogRunMode.M4Hp8C40SelfTest;
+                    break;
+
                 case "--m3-handoff-path":
                     m3HandoffPath =
                         Path.GetFullPath(
@@ -166,6 +179,16 @@ internal sealed record WatchdogOptions(
         {
             throw new ArgumentException(
                 $"M2 HP 8C40 read-only service requires --service-name {M2Hp8C40ServiceName}.");
+        }
+
+        if (mode == WatchdogRunMode.M4Hp8C40LeaseService &&
+            !string.Equals(
+                serviceName,
+                M4Hp8C40ServiceName,
+                StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"M4 HP 8C40 lease service requires --service-name {M4Hp8C40ServiceName}.");
         }
 
         if (mode == WatchdogRunMode.M3Hp8C40RestoreOnly)

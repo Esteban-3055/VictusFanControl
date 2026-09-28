@@ -7,9 +7,10 @@ namespace VictusFanControl.Control;
 /// </summary>
 public static class FanControlWatchdogLeaseContract
 {
-    public const int ProtocolVersion = 1;
+    public const int ProtocolVersion = 2;
     public const int MaximumFrameBytes = 16 * 1024;
-    public const string PipeName = "VictusFanControl.Watchdog.Control.v1";
+    public const string PipeName = "VictusFanControl.Watchdog.Control.v2";
+    public const string Hp8C40M4PipeName = "VictusFanControl.Watchdog.M4.8C40.v2";
 
     public const string Hello = "Hello";
     public const string Prepare = "Prepare";

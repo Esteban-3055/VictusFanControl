@@ -20,6 +20,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly string _pipeName;
+    private readonly string _targetProfileId;
     private readonly IActiveTimeClock _activeTimeClock;
     private readonly FanControlWatchdogLeaseClientTiming _timing;
 
@@ -29,19 +30,30 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
     private ClientPhase _phase;
     private bool _disposed;
 
-    public NamedPipeFanControlWatchdogLeaseClient()
+    public NamedPipeFanControlWatchdogLeaseClient(
+        string targetProfileId,
+        string? pipeName = null)
         : this(
-            FanControlWatchdogLeaseContract.PipeName,
+            targetProfileId,
+            pipeName ?? FanControlWatchdogLeaseContract.PipeName,
             activeTimeClock: null,
             timing: null)
     {
     }
 
     internal NamedPipeFanControlWatchdogLeaseClient(
+        string targetProfileId,
         string pipeName,
         IActiveTimeClock? activeTimeClock = null,
         FanControlWatchdogLeaseClientTiming? timing = null)
     {
+        if (string.IsNullOrWhiteSpace(targetProfileId))
+        {
+            throw new ArgumentException(
+                "Watchdog target profile id cannot be empty.",
+                nameof(targetProfileId));
+        }
+
         if (string.IsNullOrWhiteSpace(pipeName))
         {
             throw new ArgumentException(
@@ -49,6 +61,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
                 nameof(pipeName));
         }
 
+        _targetProfileId = targetProfileId;
         _pipeName = pipeName;
         _activeTimeClock =
             activeTimeClock ??
@@ -567,6 +580,16 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
                 "Watchdog response request-id mismatch.");
         }
 
+        if (!string.Equals(
+                response.TargetProfileId,
+                _targetProfileId,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"Watchdog response target mismatch: expected '{_targetProfileId}', " +
+                $"received '{response.TargetProfileId}'.");
+        }
+
         if (!response.Ok)
         {
             throw new WatchdogLeaseRejectedException(
@@ -649,7 +672,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
             gpuLevel: gpuLevel);
     }
 
-    private static FanControlWatchdogLeaseRequest NewRequest(
+    private FanControlWatchdogLeaseRequest NewRequest(
         string type,
         int? controllerPid = null,
         long? controllerStartUtcTicks = null,
@@ -660,6 +683,7 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
         new(
             FanControlWatchdogLeaseContract.ProtocolVersion,
             Guid.NewGuid(),
+            _targetProfileId,
             type,
             controllerPid,
             controllerStartUtcTicks,
