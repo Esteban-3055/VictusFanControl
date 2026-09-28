@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M4 - target-bound live lease qualification
 
-Status: **M4A CODE/CI/PHYSICAL PASS. M4B attempt 1 failed closed before any write; diagnostic hardening CI PASS. M4B/M4C PHYSICAL PENDING.**
+Status: **M4A CODE/CI/PHYSICAL PASS. M4B CODE/CI/PHYSICAL PASS after one fail-closed no-write diagnostic attempt. M4C PHYSICAL PENDING.**
 
 M3 physically qualified the LocalSystem restore-only primitive. M4 is the next
 separate authorization boundary: durable watchdog lease ownership around a real
@@ -165,10 +165,9 @@ The installer and M4A harness are also hardened to refuse an existing
 A physical M4A PASS still does not by itself set
 `WatchdogRecoveryValidated=true`.
 
-Still pending after M4A:
+Still pending after M4A/M4B:
 
-- M4B physical live lease at `10/10`;
-- M4C physical live lease at `50/50` after M4B is reviewed;
+- M4C physical live lease at `50/50`;
 - M5 GUI/controller death, watchdog death and double-death failure domains;
 - M6/M7 Modern Standby proactive release/reacquisition lifecycle;
 - explicit hibernation/race gates;
@@ -268,3 +267,38 @@ Commit `753d74875b056029af1bfb5d6d96819cf0d7690b` passed complete
 repository GitHub Actions run **#581** on 2026-09-28. The retry may therefore
 use the hardened diagnostics without changing fan authority, setpoint policy or
 watchdog recovery qualification.
+
+
+## M4B physical result
+
+M4B was physically completed on 2026-09-28 on the exact HP 8C40 target after
+the earlier no-write fail-closed attempt and its diagnostic hardening.
+
+The successful retry proved the complete bounded awake `10/10` lease cycle:
+
+- firmware-owned baseline `FF/FF`, guards `MaxFan=0x00` and
+  `FanSwitch=0x00`;
+- LocalSystem / Session 0 M4 service on exact target
+  `HP-8C40-9D0R1LA-F18`;
+- PREPARE acknowledgement before the write boundary;
+- durable WRITE_INTENT acknowledgement for exact target `10/10`;
+- real controller write followed by EC `10/10` and dual physical tachometer
+  acknowledgement;
+- COMMIT acknowledgement for exact target `10/10`;
+- four consecutive supervised awake samples retaining `10/10`, healthy
+  guards and both fan tachometers;
+- RESTORE_BEGIN acknowledgement;
+- local and service-side verified firmware handoff;
+- watchdog RELEASE acknowledgement and durable journal removal;
+- corrected post-Release EOF diagnostic reporting no active durable lease;
+- independent final EC probe `FF/FF`.
+
+Observed fan response during the successful run was a controlled downward
+transition from the firmware baseline `2607/2439 RPM` to approximately
+`1095/986 RPM` by the fourth supervised sample. The post-Release EC was
+already `FF/FF`; the independent final probe also confirmed `FF/FF`.
+
+M4B therefore qualifies the lower endpoint lease at `10/10`. It does not
+qualify M4C, controller/watchdog crash recovery, double-death recovery, Modern
+Standby lifecycle recovery, hibernation/race handling or automatic/adaptive
+policy.

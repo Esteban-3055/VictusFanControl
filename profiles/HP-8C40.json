@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4a-physical-pass-m4b-attempt1-no-write-diagnostics-hardening-ci-pass-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4ab-physical-pass-m4c-physical-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -29,7 +29,7 @@
     "watchdogM4A30LeasePassed": true,
     "watchdogM4A30LeaseCodePassed": true,
     "watchdogM4B10LeasePrepared": true,
-    "watchdogM4B10LeasePassed": false,
+    "watchdogM4B10LeasePassed": true,
     "watchdogM4C50LeasePrepared": true,
     "watchdogM4C50LeasePassed": false,
     "watchdogM4B10LeaseCodePassed": true,
@@ -726,7 +726,7 @@
     }
   },
   "watchdogM4LeaseQualification": {
-    "status": "M4A_PHYSICAL_PASS_M4B_ATTEMPT1_NO_WRITE_DIAGNOSTICS_HARDENING_CI_PASS_M4BC_PHYSICAL_PENDING",
+    "status": "M4A_CODE_CI_PHYSICAL_PASS_M4B_CODE_CI_PHYSICAL_PASS_M4C_CODE_CI_PASS_PHYSICAL_PENDING",
     "protocolVersion": 2,
     "targetProfileIdRequired": true,
     "qualificationPipe": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -786,7 +786,7 @@
         "m4b": {
           "level": 10,
           "token": "8C40-M4-LEASE10",
-          "physicalStatus": "ATTEMPT1_NO_WRITE_FAIL_CLOSED",
+          "physicalStatus": "PASS",
           "attempt1": {
             "completedAt": "2026-09-28",
             "result": "NO_WRITE_FAIL_CLOSED",
@@ -801,6 +801,47 @@
             "correctedPostCloseLogObserved": true,
             "qualificationPass": false,
             "diagnosticLimitation": "The first-command admission wrapper hid the original pre-write exception in this run; code hardening now reports the exact stage and nested cause before the retry."
+          },
+          "physicalResult": {
+            "result": "PASS",
+            "completedAt": "2026-09-28",
+            "targetProfileId": "HP-8C40-9D0R1LA-F18",
+            "serviceSessionId": 0,
+            "serviceAccount": "NT AUTHORITY\\SYSTEM",
+            "initialSetpoint": "FF/FF",
+            "initialGuardState": "MaxFan=0x00, FanSwitch=0x00",
+            "initialCpuRpm": 2607,
+            "initialGpuRpm": 2439,
+            "prepareAcknowledged": true,
+            "writeIntentAcknowledged": true,
+            "writeIntentTarget": "10/10",
+            "ownedSetpoint": "10/10",
+            "ownedAckCpuRpm": 2151,
+            "ownedAckGpuRpm": 2071,
+            "commitAcknowledged": true,
+            "supervisionSamples": 4,
+            "supervisionCpuRpm": [
+              2151,
+              1849,
+              1445,
+              1095
+            ],
+            "supervisionGpuRpm": [
+              2071,
+              1738,
+              1303,
+              986
+            ],
+            "guardState": "MaxFan=0x00, FanSwitch=0x00",
+            "restoreBeginAcknowledged": true,
+            "finalSetpointAfterRelease": "FF/FF",
+            "finalReleaseCpuRpm": 1043,
+            "finalReleaseGpuRpm": 1022,
+            "watchdogReleaseAcknowledged": true,
+            "correctedPostReleasePipeCloseObserved": true,
+            "finalIndependentProbe": "FF/FF",
+            "retainedJournal": false,
+            "qualificationPass": true
           }
         },
         "m4c": {
@@ -821,7 +862,7 @@
       "runNumber": 579,
       "runId": 36469689484,
       "completedAt": "2026-09-28",
-      "m4bPhysicalStatus": "PENDING",
+      "m4bPhysicalStatus": "PASS",
       "m4cPhysicalStatus": "PENDING"
     },
     "m4bAttempt1DiagnosticHardeningCi": {
