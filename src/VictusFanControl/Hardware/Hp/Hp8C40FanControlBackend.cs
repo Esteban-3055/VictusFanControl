@@ -25,7 +25,7 @@ internal interface IHp8C40FanWriteQualificationHook
     ValueTask AfterHardwareAcknowledgedBeforeWatchdogCommitAsync(
         byte cpuTarget,
         byte gpuTarget,
-        Hp8C40EcControlState setpointAck,
+        (byte CpuSetpoint, byte GpuSetpoint) setpointAck,
         Hp8C40EcControlState tachAck,
         CancellationToken cancellationToken);
 }
