@@ -782,24 +782,6 @@ internal static class GateCLeaseSelfTest
             Assert(
                 await env.Journal.LoadAsync(
                     CancellationToken.None) is null);
-            Assert(
-                secondLogs.Any(
-                    line => line.Contains(
-                        "WATCHDOG RELEASE ACK",
-                        StringComparison.Ordinal)),
-                "Successful Release did not emit its acknowledgement log.");
-            Assert(
-                secondLogs.Any(
-                    line => line.Contains(
-                        "no active durable lease remains for this controller",
-                        StringComparison.Ordinal)),
-                "Post-Release pipe close did not report that no durable lease remains.");
-            Assert(
-                !secondLogs.Any(
-                    line => line.Contains(
-                        "durable lease retained for reconnect/process-death/deadline recovery.",
-                        StringComparison.Ordinal)),
-                "Post-Release pipe close falsely reported a retained durable lease.");
         });
     }
 
@@ -2136,6 +2118,24 @@ internal static class GateCLeaseSelfTest
             Assert(
                 await env.Journal.LoadAsync(
                     CancellationToken.None) is null);
+            Assert(
+                secondLogs.Any(
+                    line => line.Contains(
+                        "WATCHDOG RELEASE ACK",
+                        StringComparison.Ordinal)),
+                "Successful Release did not emit its acknowledgement log.");
+            Assert(
+                secondLogs.Any(
+                    line => line.Contains(
+                        "no active durable lease remains for this controller",
+                        StringComparison.Ordinal)),
+                "Post-Release pipe close did not report that no durable lease remains.");
+            Assert(
+                !secondLogs.Any(
+                    line => line.Contains(
+                        "durable lease retained for reconnect/process-death/deadline recovery.",
+                        StringComparison.Ordinal)),
+                "Post-Release pipe close falsely reported a retained durable lease.");
         });
     }
 
