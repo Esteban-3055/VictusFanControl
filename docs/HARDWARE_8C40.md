@@ -721,6 +721,4 @@ same already-owned setpoint verifies EC/tach feedback without issuing another
 WMI `SetFanLevel` command.
 
 
-M2.5 repository CI passed after this hardening. The local Windows
-service-registration audit remains pending on the physical 8C40 target; until
-that audit/cleanup is completed, M3 should not be executed.
+M2.5 repository CI passed after this hardening. The physical 8C40 Windows service-registration audit also passed: no historical 88F8 watchdog services were installed, so no cleanup action was required. M2.5 is closed and M3 may now be prepared.

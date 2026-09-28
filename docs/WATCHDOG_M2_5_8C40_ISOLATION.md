@@ -1,6 +1,6 @@
 # HP 8C40 M2.5 - legacy 88F8 isolation hardening
 
-Status: **CODE/CI PASS; local installed-service audit/cleanup pending on the physical 8C40 target.**
+Status: **PASS. Code/CI green and physical installed-service audit clean on the exact HP 8C40 target (2026-09-28).**
 
 M2 proved that the exact HP 8C40 target can read the future watchdog
 dependencies from LocalSystem/Session 0 without changing ownership. Before M3
@@ -132,6 +132,29 @@ all historical Gate E/F/G invariants remained green, M0/M1/M2 self-tests
 remained green, and the HP 8C40 backend regression confirmed that a repeated
 same-owned setpoint does not issue a redundant WMI `SetFanLevel` command.
 
-The only remaining local M2.5 action is to audit/remove any historical 88F8
-Windows service registrations on the physical 8C40 machine. This action is
-service-registration cleanup only and does not write fan state.
+The physical 8C40 audit was completed with `cleanup-watchdog-88f8-services.ps1 -AuditOnly` and reported `PASS: no historical 88F8 watchdog services are installed.` No cleanup action was required. Historical ProgramData evidence therefore remained untouched.
+
+
+## Physical installed-service audit
+
+The exact HP 8C40 machine completed the M2.5 local service-registration audit
+on 2026-09-28 using:
+
+~~~powershell
+.\scripts\cleanup-watchdog-88f8-services.ps1 -AuditOnly
+~~~
+
+Result:
+
+~~~text
+PASS: no historical 88F8 watchdog services are installed.
+~~~
+
+Therefore none of the historical service registrations
+`VictusFanControlWatchdogGateA`, `VictusFanControlWatchdogGateB` or
+`VictusFanControlWatchdog` is present on the current 8C40 Windows install.
+No stop/disable/delete operation was necessary and no ProgramData evidence was
+modified.
+
+This closes M2.5. M3 may now be prepared as a separate restore-only
+qualification gate.
