@@ -439,3 +439,31 @@ checks those invariants.
 
 Passing this preflight does **not** close M5C. The destructive OWNED double-death
 harness remains a later explicit boundary.
+
+
+### M5C delayed service-start safety fallback
+
+A separate delayed fallback is also prepared:
+
+~~~powershell
+.\scripts\watchdog-m5c-service-failsafe-8c40.ps1 -LogPath <path>
+~~~
+
+It has no HP/WMI restore authority. After its delay it acts only when all of
+these are true:
+
+- the schema-v2 journal still exists;
+- the target is exactly `HP-8C40-9D0R1LA-F18`;
+- the journal is still durable `OWNED 30/30`;
+- the recovery service is installed;
+- no recovery-service process is currently running.
+
+In that case it starts the already-qualified
+`VictusFanControlWatchdogM4` service and leaves journal ownership/recovery to
+that service. It never deletes the journal and never calls `SetFanLevel` or a
+direct HP-auto restore.
+
+For a future M5C **PASS**, this delayed fallback must remain pending and be
+cancelled only after replacement-watchdog recovery is independently proven. If
+the delayed fallback actually has to start the service, that run is safety
+recovered but cannot satisfy the intended autonomous SCM-restart M5C criterion.

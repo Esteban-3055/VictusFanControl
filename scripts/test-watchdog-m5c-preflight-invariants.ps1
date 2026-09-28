@@ -2,7 +2,9 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $preflightPath = Join-Path $PSScriptRoot 'test-watchdog-m5c-preflight-8c40.ps1'
+$failsafePath = Join-Path $PSScriptRoot 'watchdog-m5c-service-failsafe-8c40.ps1'
 $preflight = Get-Content $preflightPath -Raw
+$failsafe = Get-Content $failsafePath -Raw
 
 function Assert-Contains {
     param(
@@ -46,4 +48,22 @@ foreach ($forbidden in @(
     }
 }
 
-Write-Host 'HP 8C40 M5C no-write preflight invariant self-test: PASS' -ForegroundColor Green
+Assert-Contains $failsafe 'HP-8C40-9D0R1LA-F18' 'M5C delayed failsafe must pin the exact target id.'
+Assert-Contains $failsafe 'Test-OwnedPhase' 'M5C delayed failsafe must require durable OWNED phase.'
+Assert-Contains $failsafe '[int]$journal.Owned.Cpu -ne 30' 'M5C delayed failsafe must require OWNED CPU 30.'
+Assert-Contains $failsafe '[int]$journal.Owned.Gpu -ne 30' 'M5C delayed failsafe must require OWNED GPU 30.'
+Assert-Contains $failsafe 'Start-Service -Name $serviceName' 'M5C delayed failsafe may only recover by starting the already-qualified service.'
+Assert-Contains $failsafe 'failsafe will not delete it' 'M5C delayed failsafe must leave journal authority to the service.'
+
+foreach ($forbidden in @(
+    'SetFanLevel(',
+    '--restore-hp-auto',
+    'Hp8C40BiosFanControl',
+    'Remove-Item $journalPath'
+)) {
+    if ($failsafe.Contains($forbidden, [StringComparison]::Ordinal)) {
+        throw "M5C delayed service failsafe contains forbidden direct recovery authority: $forbidden"
+    }
+}
+
+Write-Host 'HP 8C40 M5C no-write preflight/service-failsafe invariant self-test: PASS' -ForegroundColor Green

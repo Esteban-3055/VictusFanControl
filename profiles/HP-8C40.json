@@ -1076,7 +1076,18 @@
       "requiredFinalJournal": "ABSENT",
       "physicalPreflightStatus": "PENDING",
       "destructiveDoubleDeathHarnessPrepared": false,
-      "physicalDoubleDeathStatus": "PENDING"
+      "physicalDoubleDeathStatus": "PENDING",
+      "delayedServiceFailsafe": {
+        "prepared": true,
+        "defaultDelaySeconds": 45,
+        "exactTargetRequired": "HP-8C40-9D0R1LA-F18",
+        "requiredJournalPhase": "Owned",
+        "requiredOwnedSetpoint": "30/30",
+        "directHpRestoreAuthority": false,
+        "journalDeletionAuthority": false,
+        "onlyRecoveryAction": "Start already-qualified VictusFanControlWatchdogM4 service if absent",
+        "passIfFailsafeFires": false
+      }
     }
   }
 }
