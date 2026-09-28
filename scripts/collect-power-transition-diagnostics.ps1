@@ -30,6 +30,20 @@ powercfg /requestsoverride 2>&1 | Tee-Object -FilePath $txt -Append
 Write-Section 'sleep subgroup'
 powercfg /query SCHEME_CURRENT SUB_SLEEP 2>&1 | Tee-Object -FilePath $txt -Append
 
+Write-Section 'battery subgroup'
+powercfg /query SCHEME_CURRENT SUB_BATTERY 2>&1 | Tee-Object -FilePath $txt -Append
+
+Write-Section 'Win32_Battery'
+try {
+    Get-CimInstance Win32_Battery -ErrorAction Stop |
+        Select-Object Name, Status, BatteryStatus, EstimatedChargeRemaining,
+            EstimatedRunTime, DesignVoltage |
+        Format-List | Out-String -Width 240 |
+        Tee-Object -FilePath $txt -Append
+} catch {
+    ("Win32_Battery query failed: " + $_.Exception.Message) | Tee-Object -FilePath $txt -Append
+}
+
 Write-Section 'last wake'
 powercfg /lastwake 2>&1 | Tee-Object -FilePath $txt -Append
 
@@ -61,12 +75,12 @@ try {
     ("Power-Troubleshooter query failed: " + $_.Exception.Message) | Tee-Object -FilePath $txt -Append
 }
 
-Write-Section 'system sleep diagnostics report'
+Write-Section 'system power report'
 try {
-    powercfg /systemsleepdiagnostics /output $sleepHtml 2>&1 | Tee-Object -FilePath $txt -Append
+    powercfg /systempowerreport /output $sleepHtml 2>&1 | Tee-Object -FilePath $txt -Append
     ("Report: " + (Resolve-Path $sleepHtml -ErrorAction SilentlyContinue)) | Tee-Object -FilePath $txt -Append
 } catch {
-    ("systemsleepdiagnostics failed: " + $_.Exception.Message) | Tee-Object -FilePath $txt -Append
+    ("systempowerreport failed: " + $_.Exception.Message) | Tee-Object -FilePath $txt -Append
 }
 
 Write-Section 'sleepstudy report'
