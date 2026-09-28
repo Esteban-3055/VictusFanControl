@@ -32,6 +32,10 @@ Assert-Contains $preflight 'Restore-M4Baseline' 'M5C preflight must restore the 
 Assert-Contains $preflight '$svc.StartType -ne ''Manual''' 'M5C preflight must verify Manual service startup after cleanup.'
 Assert-Contains $preflight '$svc.Status -ne ''Stopped''' 'M5C preflight must verify the service is stopped after cleanup.'
 Assert-Contains $preflight 'No fan-level write has been issued.' 'M5C preflight must explicitly remain no-write.'
+Assert-Contains $preflight 'finally {' 'M5C preflight must restore service baseline from a finally block.'
+Assert-Contains $preflight 'a durable journal appeared during a no-write preflight. It will NOT be deleted or overwritten.' 'M5C cleanup must preserve unexpected durable evidence.'
+Assert-Contains $preflight '$baselineRestored = $true' 'M5C preflight must prove the ordinary M4 service baseline was restored.'
+Assert-Contains $preflight 'M5C preflight could not restore the ordinary M4 service baseline without risking retained durable evidence.' 'M5C preflight must fail closed if safe cleanup is not possible.'
 
 foreach ($forbidden in @(
     'SetFanLevel(',

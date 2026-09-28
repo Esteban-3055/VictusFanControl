@@ -157,65 +157,88 @@ if (Test-Path $journalPath) {
 
 Write-Host 'Durable journal      : ABSENT' -ForegroundColor Green
 
-Write-Host ''
-Write-Host 'Step 3: install isolated M4 service and validate exact-target identity...' -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot 'install-watchdog-m4-8c40.ps1')
+$preflightSucceeded = $false
+$baselineRestored = $false
 
-Remove-Item $statusPath -Force -ErrorAction SilentlyContinue
-Start-Service -Name $serviceName
+try {
+    Write-Host ''
+    Write-Host 'Step 3: install isolated M4 service and validate exact-target identity...' -ForegroundColor Cyan
+    & (Join-Path $PSScriptRoot 'install-watchdog-m4-8c40.ps1')
 
-$pidDeadline = (Get-Date).AddSeconds(10)
-$servicePid = 0
+    Remove-Item $statusPath -Force -ErrorAction SilentlyContinue
+    Start-Service -Name $serviceName
 
-while ($servicePid -le 0 -and (Get-Date) -lt $pidDeadline) {
-    $servicePid = Get-ServicePid
+    $pidDeadline = (Get-Date).AddSeconds(10)
+    $servicePid = 0
+
+    while ($servicePid -le 0 -and (Get-Date) -lt $pidDeadline) {
+        $servicePid = Get-ServicePid
+        if ($servicePid -le 0) {
+            Start-Sleep -Milliseconds 100
+        }
+    }
+
     if ($servicePid -le 0) {
-        Start-Sleep -Milliseconds 100
+        throw 'M5C preflight could not resolve the LocalSystem service PID.'
+    }
+
+    $status = Wait-Ready -ExpectedPid $servicePid
+
+    Write-Host "Ready              : $($status.Ready)"
+    Write-Host "Session            : $($status.SessionId)"
+    Write-Host "Account            : $($status.AccountName)"
+    Write-Host "Target             : $($status.TargetProfileId)"
+    Write-Host "Pipe               : $($status.PipeName)"
+    Write-Host "Service PID        : $servicePid"
+    Write-Host "Startup recovery   : $($status.RecoveryDisposition)"
+
+    Write-Host ''
+    Write-Host 'Step 4: validate temporary M5C SCM recovery configuration...' -ForegroundColor Cyan
+
+    & sc.exe failure $serviceName reset= 86400 actions= "restart/$RestartDelayMs/restart/5000/restart/10000" | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not configure temporary M5C recovery policy; sc.exe exit=$LASTEXITCODE."
+    }
+
+    & sc.exe failureflag $serviceName 1 | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not enable failure actions; sc.exe exit=$LASTEXITCODE."
+    }
+
+    $qfailure = (& sc.exe qfailure $serviceName 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not query temporary M5C recovery policy; sc.exe exit=$LASTEXITCODE."
+    }
+
+    if ($qfailure -notmatch ("(?s){0}\s*ms.*5000\s*ms.*10000\s*ms" -f $RestartDelayMs)) {
+        throw "Temporary M5C recovery policy does not contain ordered $RestartDelayMs/5000/10000 ms restarts. Raw output: $qfailure"
+    }
+
+    Write-Host "Temporary SCM policy: $RestartDelayMs ms / 5000 ms / 10000 ms" -ForegroundColor Green
+    Write-Host 'No fan-level write has been issued.' -ForegroundColor Green
+    $preflightSucceeded = $true
+}
+finally {
+    Write-Host ''
+    Write-Host 'Step 5: restore ordinary M4 qualification baseline...' -ForegroundColor Cyan
+
+    if (Test-Path $journalPath) {
+        Write-Host 'CRITICAL: a durable journal appeared during a no-write preflight. It will NOT be deleted or overwritten.' -ForegroundColor Red
+        Get-Content $journalPath
+    }
+    else {
+        Restore-M4Baseline
+        $baselineRestored = $true
     }
 }
 
-if ($servicePid -le 0) {
-    throw 'M5C preflight could not resolve the LocalSystem service PID.'
+if (-not $preflightSucceeded) {
+    throw 'M5C preflight did not complete its no-write validation sequence.'
 }
 
-$status = Wait-Ready -ExpectedPid $servicePid
-
-Write-Host "Ready              : $($status.Ready)"
-Write-Host "Session            : $($status.SessionId)"
-Write-Host "Account            : $($status.AccountName)"
-Write-Host "Target             : $($status.TargetProfileId)"
-Write-Host "Pipe               : $($status.PipeName)"
-Write-Host "Service PID        : $servicePid"
-Write-Host "Startup recovery   : $($status.RecoveryDisposition)"
-
-Write-Host ''
-Write-Host 'Step 4: validate temporary M5C SCM recovery configuration...' -ForegroundColor Cyan
-
-& sc.exe failure $serviceName reset= 86400 actions= "restart/$RestartDelayMs/restart/5000/restart/10000" | Out-Host
-if ($LASTEXITCODE -ne 0) {
-    throw "Could not configure temporary M5C recovery policy; sc.exe exit=$LASTEXITCODE."
+if (-not $baselineRestored) {
+    throw 'M5C preflight could not restore the ordinary M4 service baseline without risking retained durable evidence.'
 }
-
-& sc.exe failureflag $serviceName 1 | Out-Host
-if ($LASTEXITCODE -ne 0) {
-    throw "Could not enable failure actions; sc.exe exit=$LASTEXITCODE."
-}
-
-$qfailure = (& sc.exe qfailure $serviceName 2>&1 | Out-String)
-if ($LASTEXITCODE -ne 0) {
-    throw "Could not query temporary M5C recovery policy; sc.exe exit=$LASTEXITCODE."
-}
-
-if ($qfailure -notmatch ("(?s){0}\s*ms.*5000\s*ms.*10000\s*ms" -f $RestartDelayMs)) {
-    throw "Temporary M5C recovery policy does not contain ordered $RestartDelayMs/5000/10000 ms restarts. Raw output: $qfailure"
-}
-
-Write-Host "Temporary SCM policy: $RestartDelayMs ms / 5000 ms / 10000 ms" -ForegroundColor Green
-Write-Host 'No fan-level write has been issued.' -ForegroundColor Green
-
-Write-Host ''
-Write-Host 'Step 5: restore ordinary M4 qualification baseline...' -ForegroundColor Cyan
-Restore-M4Baseline
 
 $final = Read-8C40Setpoint
 Write-Host "Final EC            : $($final.Raw)"
