@@ -621,6 +621,17 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             {
                 var state = probe.ReadControlEvidence();
 
+                // This harness writes only equal CPU/GPU setpoints and accepts
+                // firmware release only as FF/FF. A mixed or asymmetric pair
+                // is therefore either an external ownership conflict or a
+                // transient/torn EC observation. Re-read it before deciding.
+                if (state.CpuSetpoint != state.GpuSetpoint)
+                {
+                    throw new InvalidDataException(
+                        $"unexpected asymmetric setpoint sample " +
+                        $"CPU={state.CpuSetpoint} GPU={state.GpuSetpoint}");
+                }
+
                 if (state.MaxFan != 0x00 || state.FanSwitch != 0x00)
                 {
                     throw new InvalidDataException(
