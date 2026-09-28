@@ -127,9 +127,29 @@ internal sealed class AcpiEcReader : IDisposable
         try
         {
             return RetryLocked(
-                () => new FanSetpointSample(
-                    CpuSetpoint: ReadRegisterLocked(layout.CpuSetpoint),
-                    GpuSetpoint: ReadRegisterLocked(layout.GpuSetpoint)),
+                () =>
+                {
+                    // Ownership bytes are safety-critical. Read the pair twice
+                    // under one EC mutex lease so a stale/torn byte cannot
+                    // masquerade as a real ownership transition.
+                    var first = new FanSetpointSample(
+                        CpuSetpoint: ReadRegisterLocked(layout.CpuSetpoint),
+                        GpuSetpoint: ReadRegisterLocked(layout.GpuSetpoint));
+
+                    var second = new FanSetpointSample(
+                        CpuSetpoint: ReadRegisterLocked(layout.CpuSetpoint),
+                        GpuSetpoint: ReadRegisterLocked(layout.GpuSetpoint));
+
+                    if (first != second)
+                    {
+                        throw new InvalidDataException(
+                            $"EC fan setpoint snapshot was unstable: " +
+                            $"first={first.CpuSetpoint}/{first.GpuSetpoint}, " +
+                            $"second={second.CpuSetpoint}/{second.GpuSetpoint}.");
+                    }
+
+                    return second;
+                },
                 $"EC fan setpoint snapshot 0x{layout.CpuSetpoint:X2}/0x{layout.GpuSetpoint:X2}");
         }
         finally
