@@ -357,5 +357,31 @@
     "anomaly": "baseline narrow EC evidence reported CPU setpoint 144 and GPU setpoint 255",
     "fanWritesAttempted": false,
     "interpretation": "No level was written. The mixed setpoint is not a valid state for this equal-only harness. Ownership reads are now duplicated under one EC mutex lease, and asymmetric samples are re-read at the high-level qualification boundary before being treated as persistent."
+  },
+  "extendedRangeQualificationAttempt3": {
+    "sleepInhibitionActive": true,
+    "confirmedUserObservation": "system entered hibernation during the run",
+    "physicallyQualifiedLevelsThisRun": [
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30
+    ],
+    "level21": {
+      "wmiAccepted": true,
+      "ecAcknowledged": "21/21",
+      "physicalSamplesCompleted": 0,
+      "restoreVerifiedAfterResume": true,
+      "telemetryAgeAfterTransitionSeconds": 33.6,
+      "status": "inconclusive due to hibernation/power transition"
+    },
+    "levelsBelow21Attempted": false,
+    "upperSweepStarted": false,
+    "interpretation": "SetThreadExecutionState/ES_SYSTEM_REQUIRED did not prevent this hibernation transition. Broad sweep must treat any hibernate-like telemetry gap as a terminal run condition and diagnose the Windows/firmware transition source before continuing."
   }
 }
