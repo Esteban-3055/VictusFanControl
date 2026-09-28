@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M5 - failure-domain qualification
 
-Status: **M5A/M5B CODE/CI/PHYSICAL PASS. M5C PENDING.**
+Status: **M5A/M5B/M5C CODE/CI/PHYSICAL PASS for awake durable-OWNED failure domains. Lifecycle/Modern Standby promotion remains pending.**
 M4 normal awake lease qualification is complete at equal 10/30/50.
 
 Production watchdog construction and automatic/adaptive policy remain OFF.
@@ -678,3 +678,86 @@ The destructive gate is hardened before physical use:
 This hardening does not change the M5C PASS boundary: autonomous SCM replacement
 recovery after the intentional double death must still occur before the delayed
 fallback fires.
+
+
+## M5C destructive double-death physical result
+
+**PASSED on real hardware, 2026-09-28**, on exact target
+`HP-8C40-9D0R1LA-F18`.
+
+The final destructive harness commit
+`f67bfed6f959a974adc32a8be541ab11049589d4` passed complete GitHub
+Actions run **#606** before the physical result was recorded.
+
+Observed causal evidence:
+
+~~~text
+baseline:
+  EC FF/FF
+  exact LocalSystem / Session 0 watchdog
+  original watchdog PID 2392
+  watchdog startTicks 639262273456907747
+  temporary SCM first restart delay 5000 ms
+
+independent delayed safety fallback:
+  PID 19112
+  armed before write-capable controller
+  delay 120 s
+  did not take over during the qualifying recovery
+
+controller / durable ownership:
+  controller PID 22984
+  controller startTicks 639262273921976648
+  PREPARE generation 1
+  WRITE_INTENT generation 2 target 30/30
+  COMMIT generation 3 target 30/30
+  READY authority=Custom
+  EC 30/30
+  dual physical tach acknowledgement 2863/2639 RPM
+  guards MaxFan=0x00 / FanSwitch=0x00
+  durable journal phase OWNED / generation 3 / exact controller identity
+
+double-death boundary:
+  original watchdog kill issued first
+  exact controller kill issued immediately second
+  measured kill-issue delta 1.445 ms
+  both original processes confirmed dead
+
+pre-restart causal window:
+  replacement service still absent
+  EC remained 30/30
+  exact durable OWNED journal remained
+  evidence collected 2652 ms after fault boundary
+  configured SCM first restart remained 5000 ms
+
+replacement recovery:
+  distinct replacement watchdog PID 3788
+  replacement startTicks 639262274014840305
+  startup RecoveryDisposition=RestoredFirmware
+  detail=service startup: VFC-owned setpoint 30/30 restored to FF/FF and verified before journal deletion
+  journalRetained=False
+  independent final EC FF/FF
+
+cleanup:
+  post-test EC FF/FF
+  ordinary M4 qualification service reinstalled
+  service baseline Manual/stopped
+  temporary M5C SCM recovery actions removed
+~~~
+
+The service log independently recorded the original
+PREPARE -> WRITE_INTENT -> COMMIT chain and the distinct replacement-process
+startup recovery with `journalRetained=False`.
+
+The result satisfies the planned durable-OWNED M5C causal boundary. A final
+FF/FF state alone was not used as proof: the harness first proved both original
+recovery domains dead while the real owned 30/30 state and exact durable journal
+were still present.
+
+M5A, M5B and the planned durable-OWNED M5C failure-domain gates are now closed
+for the awake exact-target path.
+
+This does **not** set `WatchdogRecoveryValidated=true` and does not enable
+automatic/adaptive policy. Modern Standby proactive release/reacquisition,
+hibernation/lifecycle behavior and any separately required in-flight
+WRITE_ARMED crash qualification remain outside this physical M5C result.

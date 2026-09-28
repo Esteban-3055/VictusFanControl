@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5ab-physical-pass-m5c-stage0-pass-double-death-ci-pass-safety-hardening-ci-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5abc-awake-physical-pass-lifecycle-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -39,7 +39,7 @@
     "watchdogM5BWatchdogDeathPrepared": true,
     "watchdogM5BWatchdogDeathPassed": true,
     "watchdogM5CDoubleDeathPrepared": false,
-    "watchdogM5CDoubleDeathPassed": false,
+    "watchdogM5CDoubleDeathPassed": true,
     "watchdogM5CPreflightPrepared": true,
     "watchdogM5CPreflightPassed": true
   },
@@ -924,7 +924,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_M5B_PHYSICAL_PASS_M5C_STAGE0_PHYSICAL_PASS_DOUBLE_DEATH_CODE_CI_PASS_SAFETY_HARDENING_CI_PENDING",
+    "status": "M5A_M5B_M5C_AWAKE_DURABLE_OWNED_CODE_CI_PHYSICAL_PASS_LIFECYCLE_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -1054,7 +1054,7 @@
       }
     },
     "m5c": {
-      "status": "DOUBLE_DEATH_CODE_CI_PASS_SAFETY_HARDENING_CI_PENDING_PHYSICAL_PENDING",
+      "status": "DOUBLE_DEATH_CODE_CI_PHYSICAL_PASS",
       "targetProfileId": "HP-8C40-9D0R1LA-F18",
       "service": "VictusFanControlWatchdogM4",
       "pipe": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -1076,7 +1076,7 @@
       "requiredFinalJournal": "ABSENT",
       "physicalPreflightStatus": "PASS",
       "destructiveDoubleDeathHarnessPrepared": true,
-      "physicalDoubleDeathStatus": "PENDING",
+      "physicalDoubleDeathStatus": "PASS",
       "delayedServiceFailsafe": {
         "prepared": true,
         "defaultDelaySeconds": 120,
@@ -1195,9 +1195,61 @@
           "Allow fallback to terminate only the exact journal-bound controller and rely on qualified watchdog recovery.",
           "Allow fallback to start/restart only the already-qualified M4 recovery service; no direct HP/WMI restore."
         ],
-        "ciPending": true,
-        "physicalExecutionBlockedUntilPass": true
+        "ciPending": false,
+        "physicalExecutionBlockedUntilPass": false,
+        "result": "PASS",
+        "commit": "f67bfed6f959a974adc32a8be541ab11049589d4",
+        "runNumber": 606,
+        "runId": 36485572045,
+        "completedAt": "2026-09-28"
+      },
+      "physicalDoubleDeathResult": {
+        "result": "PASS",
+        "completedAt": "2026-09-28",
+        "targetProfileId": "HP-8C40-9D0R1LA-F18",
+        "initialEc": "FF/FF",
+        "originalServicePid": 2392,
+        "originalServiceStartUtcTicks": 639262273456907800,
+        "originalServiceSessionId": 0,
+        "originalServiceAccount": "NT AUTHORITY\\SYSTEM",
+        "scmFirstRestartDelayMs": 5000,
+        "delayedFailsafePid": 19112,
+        "delayedFailsafeDelaySeconds": 120,
+        "delayedFailsafeTakeover": false,
+        "controllerPid": 22984,
+        "controllerStartUtcTicks": 639262273921976700,
+        "initialCpuRpm": 2616,
+        "initialGpuRpm": 2417,
+        "ownedSetpoint": "30/30",
+        "ownedCpuRpm": 2863,
+        "ownedGpuRpm": 2639,
+        "guardState": "MaxFan=0x00, FanSwitch=0x00",
+        "prepareGeneration": 1,
+        "writeIntentGeneration": 2,
+        "commitGeneration": 3,
+        "journalPhase": "Owned",
+        "journalGeneration": 3,
+        "killOrder": "watchdog-then-controller",
+        "measuredKillIssueDeltaMs": 1.445,
+        "bothOriginalProcessesConfirmedDead": true,
+        "preRestartElapsedMs": 2652,
+        "preRestartServiceAbsent": true,
+        "preRestartEc": "30/30",
+        "preRestartOwnedJournalRetained": true,
+        "replacementServicePid": 3788,
+        "replacementServiceStartUtcTicks": 639262274014840300,
+        "replacementPidDistinct": true,
+        "replacementRecoveryDisposition": "RestoredFirmware",
+        "replacementRecoveryDetail": "service startup: VFC-owned setpoint 30/30 restored to FF/FF and verified before journal deletion.",
+        "journalRetainedAfterRecovery": false,
+        "finalIndependentEc": "FF/FF",
+        "postTestEc": "FF/FF",
+        "finalServiceStartupMode": "Manual",
+        "finalServiceState": "Stopped",
+        "temporaryScmRecoveryPolicyRemoved": true,
+        "qualificationPass": true
       }
-    }
+    },
+    "awakeFailureDomainQualificationComplete": true
   }
 }
