@@ -467,3 +467,59 @@ For a future M5C **PASS**, this delayed fallback must remain pending and be
 cancelled only after replacement-watchdog recovery is independently proven. If
 the delayed fallback actually has to start the service, that run is safety
 recovered but cannot satisfy the intended autonomous SCM-restart M5C criterion.
+
+
+### Planned M5C destructive boundary
+
+The later destructive M5C gate is intentionally specified before implementation
+so that no test code can silently weaken its causal requirements.
+
+The required physical proof is:
+
+~~~text
+clean firmware baseline FF/FF
+  -> exact LocalSystem / Session 0 watchdog
+  -> controller acquires PREPARED
+  -> durable WRITE_INTENT 30/30
+  -> real HP WMI write
+  -> EC 30/30 + both physical tachometers acknowledge
+  -> COMMIT / durable OWNED 30/30
+  -> exact controller PID + creation time verified
+  -> exact watchdog PID + creation time verified
+
+FAULT BOUNDARY:
+  issue watchdog termination first
+  -> issue exact controller termination immediately after
+  -> no sleep / EC read / SCM query between the two fault requests
+  -> bounded fault-request interval
+  -> both original processes confirmed gone
+
+PRE-RESTART CAUSAL WINDOW:
+  replacement watchdog must still be absent
+  -> EC must still be the durable owned 30/30
+  -> exact schema-v2 OWNED journal must still exist
+  -> no original controller local restore can have completed
+  -> no original watchdog owner-loss restore can have completed
+
+RECOVERY:
+  SCM starts a distinct replacement watchdog
+  -> startup reads exact target-bound durable OWNED journal
+  -> observed 30/30 is lease-compatible
+  -> service executes FF/FF + LegacyDefault
+  -> service verifies EC FF/FF
+  -> service deletes journal only after verified normalization
+  -> status Ready / RecoveryDisposition=RestoredFirmware
+  -> independent final EC FF/FF
+~~~
+
+A final FF/FF state alone is not sufficient. M5C must fail formally if the
+pre-restart window cannot prove that both original recovery domains were gone
+while the real owned setpoint and journal were still present.
+
+The temporary SCM restart delay is therefore part of the qualification harness,
+not a production-policy decision. After a successful or safely recovered test,
+the ordinary M4 qualification service must be reinstalled as Manual/stopped so
+the temporary recovery policy does not leak into later gates.
+
+The delayed service-start failsafe is a safety layer only. If it actually fires,
+that run cannot be counted as the autonomous SCM-restart M5C PASS.

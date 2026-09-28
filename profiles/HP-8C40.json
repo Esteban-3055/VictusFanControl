@@ -1087,6 +1087,26 @@
         "journalDeletionAuthority": false,
         "onlyRecoveryAction": "Start already-qualified VictusFanControlWatchdogM4 service if absent",
         "passIfFailsafeFires": false
+      },
+      "plannedPhysicalBoundary": {
+        "qualificationLevel": 30,
+        "requiredOwnedState": "30/30",
+        "requiredJournal": "schema-v2 exact-target Owned 30/30",
+        "exactControllerIdentityRequired": true,
+        "exactWatchdogIdentityRequired": true,
+        "faultOrder": "watchdog first, controller immediately second",
+        "noInterveningProbeOrDelay": true,
+        "boundedFaultRequestIntervalMs": 50,
+        "replacementMustBeAbsentDuringPreRestartEvidence": true,
+        "preRestartEcRequired": "30/30",
+        "preRestartJournalRequired": "Owned 30/30 retained",
+        "replacementPidMustDiffer": true,
+        "replacementRecoveryDisposition": "RestoredFirmware",
+        "journalDeletionOnlyAfterVerifiedRestore": true,
+        "finalIndependentEc": "FF/FF",
+        "finalSafeStateAloneIsNotPass": true,
+        "temporaryRecoveryPolicyMustBeRemovedAfterTest": true,
+        "delayedFailsafeMayNotFireForPass": true
       }
     }
   }
