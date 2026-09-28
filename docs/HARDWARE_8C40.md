@@ -31,18 +31,37 @@ must not replace EC ownership + physical tachometer acknowledgement.
 
 ## Current control envelope
 
-Equal levels `30/30` through `36/36` are now physically qualified.
-The production 8C40 envelope is therefore equal-only `30..36`.
+A complete guarded hardware sweep has now physically characterized every equal
+level from `10/10` through `50/50`. Every level was accepted by HP WMI,
+acknowledged by EC `0x34/0x35`, produced sustained feedback from both physical
+tachometers, and was followed by a verified `FF/FF -> LegacyDefault` restore.
+
+The measured medians are strictly increasing for both fans across the complete
+10..50 sequence. The endpoints were approximately:
+
+- `10/10`: CPU 1028 RPM, GPU 1013 RPM;
+- `50/50`: CPU 4991 RPM, GPU 4991 RPM.
+
+This establishes the **physically characterized equal-level primitive** as
+`10..50` for this exact machine. It does **not** automatically expand the
+production backend.
+
+The production 8C40 envelope remains intentionally equal-only `30..36` until
+the remaining production-specific gates are completed. In particular, the
+10..50 sweep tested steady/ramping operation from an already-running state; it
+did not prove that a stopped fan can reliably start directly at the lowest
+levels. Large direct endpoint transitions also still need a bounded integration
+gate through the normal coordinator/backend path.
 
 Independent CPU/GPU commands remain unqualified and are explicitly rejected by
-both the production BIOS/WMI layer and the production backend. The old 88F8
-`14..50` range is still not portable evidence.
+both the production BIOS/WMI layer and the production backend.
 
 The following remain intentionally unqualified:
 
 - asymmetric CPU/GPU level commands;
-- levels below 30, including minimum stable level and restart from 0 RPM;
-- levels above 36, including maximum/saturation level;
+- restart-from-stopped-fan behavior at the low end;
+- large direct endpoint transitions through the production path;
+- production-path endpoints outside the current 30..36 envelope;
 - watchdog/service recovery;
 - process double-death recovery;
 - Modern Standby custom-control lifecycle;
@@ -413,3 +432,12 @@ A later guarded 10..50 attempt did not reach EC baseline or any fan write. The W
 SafetyGate correctly refused that snapshot because the validated GPU plausibility floor is 10 C. The old NVML wrapper nevertheless considered 0 C syntactically valid, so diagnostics could misleadingly print `Baseline ready: True` even though SafetyGate would never permit control.
 
 The NVML wrapper now rejects 0 C as unavailable/invalid thermal telemetry. The extended hardware gate also waits up to 20 seconds for a SafetyGate-ready baseline before refusing cleanly, and it will not issue any fan write while the GPU thermal sensor remains unavailable. A self-test pins zero-degree GPU telemetry as a fail-closed condition.
+
+
+## Complete equal-level 10..50 characterization PASS
+
+The final guarded broad sweep completed every equal level from 10 through 50 without a power transition, battery sanity failure, ownership loss, guard-state anomaly or restore failure. The earlier level-21 interruption was therefore not reproduced after reducing EC traffic and adding AC/battery sanity checks.
+
+The RPM mapping is close to 100 RPM per command level across the full range. All adjacent median deltas remained positive for both CPU and GPU, with ordinary sample scatter around the trend. Level 31 showed a first-sample transition lag after the large jump from the low-end sweep, but its median and subsequent samples converged normally.
+
+The broad sweep proves the steady equal-command primitive, not every production transition. Production remains 30..36 until endpoint integration and low-end restart behavior are separately qualified.
