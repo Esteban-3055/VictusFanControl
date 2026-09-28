@@ -408,11 +408,13 @@ try {
         $newLog |
         Where-Object {
             (
-                $_ -match 'WATCHDOG OWNER LOSS:' -or
-                $_ -match 'M4 RECOVERY disposition='
-            ) -and
-            $_ -match 'RestoredFirmware' -and
-            $_ -match 'controller'
+                $_ -match 'WATCHDOG OWNER LOSS:' -and
+                $_ -match 'RestoredFirmware'
+            ) -or
+            (
+                $_ -match 'M4 RECOVERY disposition=RestoredFirmware' -and
+                $_ -match 'controller'
+            )
         }
 
     if (-not $restoreEvidence) {
