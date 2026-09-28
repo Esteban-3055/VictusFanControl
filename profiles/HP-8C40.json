@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5ab-physical-pass-m5c-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5ab-physical-pass-m5c-stage0-code-prepared-ci-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -39,7 +39,9 @@
     "watchdogM5BWatchdogDeathPrepared": true,
     "watchdogM5BWatchdogDeathPassed": true,
     "watchdogM5CDoubleDeathPrepared": false,
-    "watchdogM5CDoubleDeathPassed": false
+    "watchdogM5CDoubleDeathPassed": false,
+    "watchdogM5CPreflightPrepared": true,
+    "watchdogM5CPreflightPassed": false
   },
   "control": {
     "enabledByDefault": false,
@@ -922,7 +924,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_M5B_CODE_CI_PHYSICAL_PASS_M5C_PENDING",
+    "status": "M5A_M5B_CODE_CI_PHYSICAL_PASS_M5C_STAGE0_CODE_PREPARED_CI_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -941,7 +943,7 @@
     "watchdogRecoveryValidated": false,
     "automaticPolicyEnabled": false,
     "m5aPhysicalStatus": "PASS",
-    "m5bPhysicalStatus": "PENDING",
+    "m5bPhysicalStatus": "PASS",
     "m5cPhysicalStatus": "PENDING",
     "preparationCi": {
       "result": "PASS",
@@ -1050,6 +1052,31 @@
         "change": "Synchronize Start-Process child termination with WaitForExit()+Refresh() before reading ExitCode.",
         "physicalRerunRequired": false
       }
+    },
+    "m5c": {
+      "status": "STAGE0_NO_WRITE_CODE_PREPARED_CI_PENDING",
+      "targetProfileId": "HP-8C40-9D0R1LA-F18",
+      "service": "VictusFanControlWatchdogM4",
+      "pipe": "VictusFanControl.Watchdog.M4.8C40.v2",
+      "serviceAccount": "LocalSystem",
+      "serviceSessionId": 0,
+      "preflightFanWriteAuthority": false,
+      "preflightFaultInjection": false,
+      "retainedJournalDeletionAllowed": false,
+      "requiredBaseline": "FF/FF",
+      "requiredInitialJournal": "ABSENT",
+      "temporaryScmRestartDelaysMs": [
+        5000,
+        5000,
+        10000
+      ],
+      "finalServiceStartupMode": "Manual",
+      "finalServiceState": "Stopped",
+      "requiredFinalEc": "FF/FF",
+      "requiredFinalJournal": "ABSENT",
+      "physicalPreflightStatus": "PENDING",
+      "destructiveDoubleDeathHarnessPrepared": false,
+      "physicalDoubleDeathStatus": "PENDING"
     }
   }
 }

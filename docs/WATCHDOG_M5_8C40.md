@@ -394,3 +394,48 @@ OWNED 30/30
 
 The PowerShell ExitCode synchronization fix is a post-evidence harness
 correction, not a second hardware qualification requirement.
+
+
+## M5C stage 0 - no-write double-death preflight
+
+M5C is the final M5 failure-domain gate. Before implementing or executing the
+destructive double-death boundary, a separate no-write preflight now validates
+the service/recovery substrate without changing fan ownership.
+
+The stage-0 script is:
+
+~~~powershell
+.\scripts\test-watchdog-m5c-preflight-8c40.ps1
+~~~
+
+It is intentionally incapable of entering Custom or injecting either process
+failure. Its required sequence is:
+
+~~~text
+build + existing M5/M4/SafetyGate/backend regressions
+  -> independent EC baseline FF/FF
+  -> refuse any existing durable lease journal
+  -> install isolated M4 service
+  -> start exact-target LocalSystem / Session 0 service
+  -> require target HP-8C40-9D0R1LA-F18
+  -> require pipe VictusFanControl.Watchdog.M4.8C40.v2
+  -> configure temporary SCM restart policy
+  -> verify ordered restart delays
+  -> stop/reinstall ordinary M4 qualification service
+  -> require Manual + Stopped baseline again
+  -> independent final EC FF/FF
+  -> require journal still absent
+~~~
+
+The temporary first restart delay defaults to 5000 ms. That deliberate window is
+for the later M5C causal proof: after the original watchdog and controller are
+both gone, the physical harness must be able to observe that neither original
+recovery domain restored the still-owned setpoint before the replacement service
+starts.
+
+Stage 0 contains no `SetFanLevel`, no HP-auto restore command, no M4 lease
+write token, no process fault injection and no durable-journal deletion. CI also
+checks those invariants.
+
+Passing this preflight does **not** close M5C. The destructive OWNED double-death
+harness remains a later explicit boundary.
