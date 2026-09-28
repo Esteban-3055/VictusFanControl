@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-physical-pass-m5a-code-ci-pass-physical-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5a-physical-pass-m5bc-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -35,7 +35,7 @@
     "watchdogM4B10LeaseCodePassed": true,
     "watchdogM4C50LeaseCodePassed": true,
     "watchdogM5AControllerDeathPrepared": true,
-    "watchdogM5AControllerDeathPassed": false,
+    "watchdogM5AControllerDeathPassed": true,
     "watchdogM5BWatchdogDeathPrepared": false,
     "watchdogM5BWatchdogDeathPassed": false,
     "watchdogM5CDoubleDeathPrepared": false,
@@ -922,7 +922,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_CODE_CI_PASS_PHYSICAL_PENDING",
+    "status": "M5A_CODE_CI_PHYSICAL_PASS_M5B_M5C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -940,7 +940,7 @@
     "retainedJournalOnUnresolvedFailure": true,
     "watchdogRecoveryValidated": false,
     "automaticPolicyEnabled": false,
-    "m5aPhysicalStatus": "PENDING",
+    "m5aPhysicalStatus": "PASS",
     "m5bPhysicalStatus": "PENDING",
     "m5cPhysicalStatus": "PENDING",
     "preparationCi": {
@@ -952,6 +952,35 @@
       "hardeningRunNumber": 587,
       "hardeningRunId": 36473628384,
       "completedAt": "2026-09-28"
+    },
+    "m5aPhysicalResult": {
+      "result": "PASS",
+      "completedAt": "2026-09-28",
+      "targetProfileId": "HP-8C40-9D0R1LA-F18",
+      "servicePid": 2856,
+      "serviceSessionId": 0,
+      "serviceAccount": "NT AUTHORITY\\SYSTEM",
+      "controllerPid": 23200,
+      "controllerStartUtcTicks": 639262217241653800,
+      "initialSetpoint": "FF/FF",
+      "initialCpuRpm": 2607,
+      "initialGpuRpm": 2379,
+      "ownedSetpoint": "30/30",
+      "ownedCpuRpm": 2998,
+      "ownedGpuRpm": 2994,
+      "guardState": "MaxFan=0x00, FanSwitch=0x00",
+      "prepareGeneration": 1,
+      "writeIntentGeneration": 2,
+      "commitGeneration": 3,
+      "ownerLossReason": "named-pipe EOF",
+      "recoveryDisposition": "RestoredFirmware",
+      "recoveryDetail": "VFC-owned setpoint 30/30 restored to FF/FF and verified before journal deletion",
+      "measuredRecoverySeconds": 0.573,
+      "sameWatchdogProcessRequired": true,
+      "finalIndependentProbe": "FF/FF",
+      "retainedJournal": false,
+      "postTestProbe": "FF/FF",
+      "qualificationPass": true
     }
   }
 }

@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M5 - failure-domain qualification
 
-Status: **M5A CODE/CI PASS / PHYSICAL PENDING.**
+Status: **M5A CODE/CI/PHYSICAL PASS. M5B/M5C PENDING.**
 M4 normal awake lease qualification is complete at equal 10/30/50.
 
 Production watchdog construction and automatic/adaptive policy remain OFF.
@@ -162,7 +162,7 @@ A final FF/FF state by itself is not sufficient.
 
 ## Still blocked after M5A
 
-Even after a future M5A physical PASS:
+After M5A physical PASS:
 
 - M5B watchdog-death recovery remains pending;
 - M5C double-death recovery remains pending;
@@ -187,3 +187,54 @@ contracts and both HP backend self-tests.
 
 M5A is therefore code/CI prepared. The physical controller-death evidence is
 still pending and remains a separate gate.
+
+
+## M5A physical result
+
+**PASSED on real hardware, 2026-09-28**, on exact target
+`HP-8C40-9D0R1LA-F18`.
+
+Observed causal evidence:
+
+~~~text
+baseline:
+  EC FF/FF
+  service PID 2856
+  LocalSystem / Session 0
+  target HP-8C40-9D0R1LA-F18
+
+controller:
+  PID 23200
+  startTicks 639262217241653750
+  PREPARE generation 1
+  WRITE_INTENT generation 2 target 30/30
+  COMMIT generation 3 target 30/30
+  READY authority=Custom
+  EC 30/30
+  RPM 2998/2994
+  guards MaxFan=0x00 / FanSwitch=0x00
+
+fault:
+  exact controller PID 23200 force-killed
+  parent issued no HP restore command
+
+recovery:
+  original LocalSystem watchdog remained authoritative
+  WATCHDOG OWNER LOSS reason=named-pipe EOF
+  disposition=RestoredFirmware
+  detail=VFC-owned setpoint 30/30 restored to FF/FF
+  durable journal cleared after verified restore
+  independent EC FF/FF
+  measured parent-observed recovery interval 0.573 s
+  post-test EC FF/FF
+~~~
+
+The durable journal was bound to the exact controller PID plus process creation
+time before the kill. The service log recorded the complete
+PREPARE -> WRITE_INTENT -> COMMIT -> owner-loss recovery chain. The harness
+requires the watchdog service PID to remain unchanged, so this result isolates
+controller death from watchdog restart/recovery.
+
+M5A is closed. This does not yet promote
+`WatchdogRecoveryValidated=true`; M5B watchdog death and M5C double death remain
+separate physical gates.
