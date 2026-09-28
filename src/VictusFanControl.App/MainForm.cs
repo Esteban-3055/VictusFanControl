@@ -353,19 +353,22 @@ internal sealed class MainForm : Form
             backend = selection.Backend;
             _fanBackendStartupDetail = selection.Detail;
 
-            if ((_gateDHardwareTest ||
+            if ((_suspendLifecycleHardwareTest ||
+                 _gateDHardwareTest ||
                  _gateEHardwareTest ||
                  _gateF1HardwareTest ||
                  _gateF2HardwareTest ||
                  _gateG1HardwareTest ||
                  _gateG2HardwareTest) &&
-                selection.TargetProfile?.SleepModel ==
-                    WindowsSleepModel.ModernStandbyS0LowPowerIdle)
+                !string.Equals(
+                    selection.TargetProfile?.Id,
+                    Hp88F8TargetProfile.Instance.Id,
+                    StringComparison.Ordinal))
             {
                 throw new NotSupportedException(
-                    "The legacy Gate D-G hardware harnesses are not qualified for " +
-                    "the HP 8C40 Modern Standby target. Use the future M-series " +
-                    "Modern Standby qualification gates instead.");
+                    "The legacy suspend/Gate D-G hardware harnesses are exact-target " +
+                    "HP 88F8 / Legacy S3 validation only. They must never be reused " +
+                    "on HP 8C40 Modern Standby; use the M-series gates instead.");
             }
         }
         catch (Exception ex)
