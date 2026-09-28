@@ -480,6 +480,74 @@
     "sleepInhibition": true,
     "restore": "mandatory FF/FF + LegacyDefault in finally path",
     "purpose": "Measure bounded large up/down transition behavior and convergence without firmware restore between intermediate commands.",
+    "physicalStatus": "PASS"
+  },
+  "transitionQualificationResult": {
+    "result": "PASS",
+    "sequence": [
+      "firmware -> 10",
+      "10 -> 30",
+      "30 -> 50",
+      "50 -> 30",
+      "30 -> 10",
+      "restore firmware"
+    ],
+    "baselineFansStopped": true,
+    "baselineCpuRpm": 0,
+    "baselineGpuRpm": 0,
+    "restartFromZeroAtLevel10": {
+      "passed": true,
+      "convergenceSeconds": 6,
+      "terminalCpuRpm": 1015,
+      "terminalGpuRpm": 1041,
+      "initialOvershootCpuRpm": 1644,
+      "initialOvershootGpuRpm": 1688
+    },
+    "transitions": [
+      {
+        "from": 10,
+        "to": 30,
+        "convergenceSeconds": 8.6,
+        "terminalCpuRpm": 3049,
+        "terminalGpuRpm": 3032
+      },
+      {
+        "from": 30,
+        "to": 50,
+        "convergenceSeconds": 9.3,
+        "terminalCpuRpm": 4979,
+        "terminalGpuRpm": 4979
+      },
+      {
+        "from": 50,
+        "to": 30,
+        "convergenceSeconds": 10.2,
+        "terminalCpuRpm": 3003,
+        "terminalGpuRpm": 2978
+      },
+      {
+        "from": 30,
+        "to": 10,
+        "convergenceSeconds": 7.7,
+        "terminalCpuRpm": 1002,
+        "terminalGpuRpm": 1041
+      }
+    ],
+    "finalRestore": "FF/FF + LegacyDefault verified",
+    "acBatteryBaseline": "AC online, battery 89%, flags 0x09",
+    "powerTransitionObserved": false,
+    "productionPromotion": false,
+    "interpretation": "Large equal-level transitions and direct restart from 0 RPM at level 10 are physically qualified under the qualification writer. Production defaults remain 30..36 pending coordinator/backend endpoint integration."
+  },
+  "endpointCoordinatorQualificationPrepared": {
+    "endpoints": [
+      10,
+      50
+    ],
+    "route": "SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend logic -> qualification WMI writer -> EC/tach ACK -> terminal convergence -> restore",
+    "qualificationEnvelopeInjected": "10..50 equal-only",
+    "productionDefaultsChanged": false,
+    "productionDefaults": "30..36 equal-only",
     "physicalStatus": "PENDING"
   }
 }
