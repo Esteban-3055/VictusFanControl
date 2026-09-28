@@ -587,7 +587,16 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
 
             try
             {
-                return probe.ReadControlEvidence();
+                var state = probe.ReadControlEvidence();
+
+                if (state.MaxFan != 0x00 || state.FanSwitch != 0x00)
+                {
+                    throw new InvalidDataException(
+                        $"unexpected control-guard sample " +
+                        $"MaxFan=0x{state.MaxFan:X2} FanSwitch=0x{state.FanSwitch:X2}");
+                }
+
+                return state;
             }
             catch (Exception ex)
                 when (ex is IOException or TimeoutException or InvalidDataException)
