@@ -26,6 +26,8 @@ public sealed class CliOptions
     public string? Hp8C40FullFanRangeVerificationToken { get; private set; }
     public bool Hp8C40ExtendedFanRangeQualification { get; private set; }
     public string? Hp8C40ExtendedFanRangeQualificationToken { get; private set; }
+    public bool Hp8C40TransitionQualification { get; private set; }
+    public string? Hp8C40TransitionQualificationToken { get; private set; }
     public string? IntegratedCoordinatorToken { get; private set; }
     public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
@@ -144,6 +146,15 @@ public sealed class CliOptions
                         ReadValue(args, ref i);
                     break;
 
+                case "--8c40-transition-qualification":
+                    options.Hp8C40TransitionQualification = true;
+                    break;
+
+                case "--8c40-transition-token":
+                    options.Hp8C40TransitionQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
                 case "--coordinator-write-token":
                     options.IntegratedCoordinatorToken = ReadValue(args, ref i);
                     break;
@@ -196,6 +207,7 @@ public sealed class CliOptions
             (options.Hp8C40HigherFanLevelQualification ? 1 : 0) +
             (options.Hp8C40FullFanRangeVerification ? 1 : 0) +
             (options.Hp8C40ExtendedFanRangeQualification ? 1 : 0) +
+            (options.Hp8C40TransitionQualification ? 1 : 0) +
             (options.HealthTestMinutes > 0 ? 1 : 0);
 
         if (exclusiveActions > 1)
@@ -291,6 +303,8 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-full-range-token <token>  Required exact token: 8C40-VERIFY40.");
         Console.WriteLine("  --8c40-extended-range-qualification  ACTIVE GATE: guarded characterization of equal HP 8C40 levels 10..50.");
         Console.WriteLine("  --8c40-extended-range-token <token>  Required exact token: 8C40-QUAL10-50.");
+        Console.WriteLine("  --8c40-transition-qualification  ACTIVE GATE: firmware -> 10 -> 30 -> 50 -> 30 -> 10 -> firmware.");
+        Console.WriteLine("  --8c40-transition-token <token>  Required exact token: 8C40-TRANSITION10-50.");
         Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30, 8C40-COORD30, 8C40-COORD32 or 8C40-COORD36.");
         Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
         Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
