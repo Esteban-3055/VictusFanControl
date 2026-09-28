@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4ab-physical-pass-m4c-physical-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-physical-pass-m5-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -31,7 +31,7 @@
     "watchdogM4B10LeasePrepared": true,
     "watchdogM4B10LeasePassed": true,
     "watchdogM4C50LeasePrepared": true,
-    "watchdogM4C50LeasePassed": false,
+    "watchdogM4C50LeasePassed": true,
     "watchdogM4B10LeaseCodePassed": true,
     "watchdogM4C50LeaseCodePassed": true
   },
@@ -726,7 +726,7 @@
     }
   },
   "watchdogM4LeaseQualification": {
-    "status": "M4A_CODE_CI_PHYSICAL_PASS_M4B_CODE_CI_PHYSICAL_PASS_M4C_CODE_CI_PASS_PHYSICAL_PENDING",
+    "status": "M4A_M4B_M4C_CODE_CI_PHYSICAL_PASS_M5_PENDING",
     "protocolVersion": 2,
     "targetProfileIdRequired": true,
     "qualificationPipe": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -847,7 +847,48 @@
         "m4c": {
           "level": 50,
           "token": "8C40-M4-LEASE50",
-          "physicalStatus": "PENDING"
+          "physicalStatus": "PASS",
+          "physicalResult": {
+            "result": "PASS",
+            "completedAt": "2026-09-28",
+            "targetProfileId": "HP-8C40-9D0R1LA-F18",
+            "serviceSessionId": 0,
+            "serviceAccount": "NT AUTHORITY\\SYSTEM",
+            "initialSetpoint": "FF/FF",
+            "initialGuardState": "MaxFan=0x00, FanSwitch=0x00",
+            "initialCpuRpm": 2573,
+            "initialGpuRpm": 2395,
+            "prepareAcknowledged": true,
+            "writeIntentAcknowledged": true,
+            "writeIntentTarget": "50/50",
+            "ownedSetpoint": "50/50",
+            "ownedAckCpuRpm": 2909,
+            "ownedAckGpuRpm": 2629,
+            "commitAcknowledged": true,
+            "supervisionSamples": 4,
+            "supervisionCpuRpm": [
+              2909,
+              3208,
+              3483,
+              3843
+            ],
+            "supervisionGpuRpm": [
+              2629,
+              2953,
+              3237,
+              3599
+            ],
+            "guardState": "MaxFan=0x00, FanSwitch=0x00",
+            "restoreBeginAcknowledged": true,
+            "finalSetpointAfterRelease": "FF/FF",
+            "finalReleaseCpuRpm": 4195,
+            "finalReleaseGpuRpm": 3985,
+            "watchdogReleaseAcknowledged": true,
+            "correctedPostReleasePipeCloseObserved": true,
+            "finalIndependentProbe": "FF/FF",
+            "retainedJournal": false,
+            "qualificationPass": true
+          }
         }
       },
       "arbitraryLevelSelectionAllowed": false,
@@ -863,7 +904,7 @@
       "runId": 36469689484,
       "completedAt": "2026-09-28",
       "m4bPhysicalStatus": "PASS",
-      "m4cPhysicalStatus": "PENDING"
+      "m4cPhysicalStatus": "PASS"
     },
     "m4bAttempt1DiagnosticHardeningCi": {
       "result": "PASS",
@@ -871,6 +912,7 @@
       "runNumber": 581,
       "runId": 36471097860,
       "completedAt": "2026-09-28"
-    }
+    },
+    "normalAwakeLeaseQualificationComplete": true
   }
 }

@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M4 - target-bound live lease qualification
 
-Status: **M4A CODE/CI/PHYSICAL PASS. M4B CODE/CI/PHYSICAL PASS after one fail-closed no-write diagnostic attempt. M4C PHYSICAL PENDING.**
+Status: **M4A/M4B/M4C CODE/CI/PHYSICAL PASS. Normal awake target-bound lease qualification is complete at 30/10/50. M5 failure-domain qualification remains pending.**
 
 M3 physically qualified the LocalSystem restore-only primitive. M4 is the next
 separate authorization boundary: durable watchdog lease ownership around a real
@@ -165,9 +165,7 @@ The installer and M4A harness are also hardened to refuse an existing
 A physical M4A PASS still does not by itself set
 `WatchdogRecoveryValidated=true`.
 
-Still pending after M4A/M4B:
-
-- M4C physical live lease at `50/50`;
+Still pending after M4:
 - M5 GUI/controller death, watchdog death and double-death failure domains;
 - M6/M7 Modern Standby proactive release/reacquisition lifecycle;
 - explicit hibernation/race gates;
@@ -302,3 +300,43 @@ M4B therefore qualifies the lower endpoint lease at `10/10`. It does not
 qualify M4C, controller/watchdog crash recovery, double-death recovery, Modern
 Standby lifecycle recovery, hibernation/race handling or automatic/adaptive
 policy.
+
+
+## M4C physical result
+
+M4C was physically completed on 2026-09-28 on the exact HP 8C40 target and
+passed the bounded awake `50/50` lease cycle.
+
+The successful run proved:
+
+- clean firmware-owned baseline `FF/FF`;
+- LocalSystem / Session 0 M4 service on exact target
+  `HP-8C40-9D0R1LA-F18`;
+- PREPARE acknowledgement before the write boundary;
+- durable WRITE_INTENT acknowledgement for exact target `50/50`;
+- real controller write followed by EC `50/50` and dual physical tachometer
+  acknowledgement;
+- COMMIT acknowledgement for exact target `50/50`;
+- four supervised awake samples retaining `50/50`, healthy guards and both
+  physical tachometers;
+- RESTORE_BEGIN acknowledgement;
+- verified local firmware handoff and service-side Release normalization;
+- durable journal removal;
+- corrected post-Release pipe-close diagnostic with no active lease;
+- independent final EC probe `FF/FF`.
+
+Observed fan response rose from the firmware baseline `2573/2395 RPM` to
+`2909/2629` at the backend acknowledgement and continued to
+`3843/3599 RPM` by supervision sample 4. After Release the EC had already
+returned to `FF/FF` while fan inertia/control settling still showed
+`4195/3985 RPM`, which is not ownership evidence. The independent setpoint
+probe again confirmed `FF/FF`.
+
+M4 is therefore physically closed for the normal awake lease lifecycle at its
+three explicit qualification points: M4B `10/10`, M4A `30/30` and M4C
+`50/50`.
+
+This still does not set `WatchdogRecoveryValidated=true`. M5 must separately
+qualify controller death, watchdog death and double-death recovery on this exact
+8C40 target before any production watchdog promotion. Modern Standby and
+hibernation/race gates remain later boundaries.
