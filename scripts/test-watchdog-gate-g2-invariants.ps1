@@ -91,7 +91,7 @@ Assert-Contains -Text $mainForm -Pattern 'gate-g2\.cycle-\{_gateGCurrentCycle\}\
 Assert-Contains -Text $mainForm -Pattern 'gate-g2\.cycle-\{_gateGCurrentCycle\}\.result' -Description 'Gate G2 result evidence is cycle-scoped'
 Assert-Contains -Text $mainForm -Pattern 'gate-g2\.result' -Description 'Gate G2 publishes a final 5/5 result marker'
 
-Assert-Contains -Text $mainForm -Pattern '_gateG1HardwareTest \|\|[\s\S]*_gateG2HardwareTest\)[\s\S]*new NamedPipeFanControlWatchdogLeaseClient\(\)' -Description 'Gate G2 uses the real production watchdog named-pipe lease'
+Assert-Contains -Text $mainForm -Pattern '_gateG1HardwareTest \|\|[\s\S]*_gateG2HardwareTest\)[\s\S]*new NamedPipeFanControlWatchdogLeaseClient\([\s\S]*Hp88F8TargetProfile\.Instance\.Id[\s\S]*\)' -Description 'Gate G2 uses the real production watchdog named-pipe lease bound to the exact 88F8 target'
 
 $resumeStart = $mainForm.IndexOf('private void HandleResumeLifecycle', [StringComparison]::Ordinal)
 $reopenStart = $mainForm.IndexOf('private async Task ReopenFanAdmissionAfterHealthyAsync', $resumeStart, [StringComparison]::Ordinal)
