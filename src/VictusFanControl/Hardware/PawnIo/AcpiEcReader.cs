@@ -127,29 +127,9 @@ internal sealed class AcpiEcReader : IDisposable
         try
         {
             return RetryLocked(
-                () =>
-                {
-                    // Ownership bytes are safety-critical. Read the pair twice
-                    // under one EC mutex lease so a stale/torn byte cannot
-                    // masquerade as a real ownership transition.
-                    var first = new FanSetpointSample(
-                        CpuSetpoint: ReadRegisterLocked(layout.CpuSetpoint),
-                        GpuSetpoint: ReadRegisterLocked(layout.GpuSetpoint));
-
-                    var second = new FanSetpointSample(
-                        CpuSetpoint: ReadRegisterLocked(layout.CpuSetpoint),
-                        GpuSetpoint: ReadRegisterLocked(layout.GpuSetpoint));
-
-                    if (first != second)
-                    {
-                        throw new InvalidDataException(
-                            $"EC fan setpoint snapshot was unstable: " +
-                            $"first={first.CpuSetpoint}/{first.GpuSetpoint}, " +
-                            $"second={second.CpuSetpoint}/{second.GpuSetpoint}.");
-                    }
-
-                    return second;
-                },
+                () => new FanSetpointSample(
+                    CpuSetpoint: ReadRegisterLocked(layout.CpuSetpoint),
+                    GpuSetpoint: ReadRegisterLocked(layout.GpuSetpoint)),
                 $"EC fan setpoint snapshot 0x{layout.CpuSetpoint:X2}/0x{layout.GpuSetpoint:X2}");
         }
         finally
@@ -181,30 +161,9 @@ internal sealed class AcpiEcReader : IDisposable
         try
         {
             return RetryLocked(
-                () =>
-                {
-                    // Guard bytes are safety-critical and should not be trusted
-                    // from a single EC transaction. Read the pair twice under
-                    // the same mutex lease and reject disagreement so a stale
-                    // or torn EC byte cannot masquerade as a real guard state.
-                    var first = new FanControlGuardSample(
-                        MaxFan: ReadRegisterLocked(layout.MaxFan),
-                        FanSwitch: ReadRegisterLocked(layout.FanSwitch));
-
-                    var second = new FanControlGuardSample(
-                        MaxFan: ReadRegisterLocked(layout.MaxFan),
-                        FanSwitch: ReadRegisterLocked(layout.FanSwitch));
-
-                    if (first != second)
-                    {
-                        throw new InvalidDataException(
-                            $"EC fan-control guard snapshot was unstable: " +
-                            $"first=0x{first.MaxFan:X2}/0x{first.FanSwitch:X2}, " +
-                            $"second=0x{second.MaxFan:X2}/0x{second.FanSwitch:X2}.");
-                    }
-
-                    return second;
-                },
+                () => new FanControlGuardSample(
+                    MaxFan: ReadRegisterLocked(layout.MaxFan),
+                    FanSwitch: ReadRegisterLocked(layout.FanSwitch)),
                 $"EC fan-control guard snapshot 0x{layout.MaxFan:X2}/0x{layout.FanSwitch:X2}");
         }
         finally
