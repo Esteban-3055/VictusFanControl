@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M2 - LocalSystem / Session-0 read-only dependency gate
 
-Status: **prepared in code; physical HP 8C40 execution still required.**
+Status: **PHYSICAL PASS on the exact HP 8C40 target (2026-09-28).**
 
 M2 is deliberately read-only. Its purpose is to prove that the exact
 HP 8C40 target can expose the two hardware dependencies required by a future
@@ -148,3 +148,56 @@ FF/FF release -> LegacyDefault -> EC FF/FF verification
 
 M3 must preserve the external-override rules and remains distinct from crash
 recovery, double-death and Modern Standby lifecycle qualification.
+
+
+## Physical M2 result - PASS
+
+The exact HP 8C40 target completed the physical M2 wrapper successfully on
+2026-09-28.
+
+Two independent service start/stop cycles were executed. Both runs proved:
+
+- Windows Session 0;
+- LocalSystem SID `S-1-5-18`;
+- exact target profile `HP-8C40-9D0R1LA-F18`;
+- successful narrow PawnIO/EC ownership read;
+- EC ownership remained `FF/FF`;
+- successful HP BIOS/WMI `GetFanLevel` read;
+- no watchdog lease journal;
+- no fan-level write;
+- no FF/FF release or LegacyDefault restore;
+- clean service stop with no hardware cleanup required.
+
+Observed read-only values were:
+
+~~~text
+cycle 1:
+  EC setpoint   FF/FF
+  GetFanLevel   26/24
+
+cycle 2:
+  EC setpoint   FF/FF
+  GetFanLevel   26/23
+
+final interactive EC verification:
+  FF/FF
+~~~
+
+The differing GetFanLevel values are expected current/effective fan-speed
+telemetry and are not interpreted as ownership or command acknowledgement.
+
+This closes M2. The proof is specifically that the future watchdog service can
+reach the exact 8C40 read dependencies from LocalSystem/Session 0 without
+changing authority.
+
+The following remain intentionally blocked after M2:
+
+- `WatchdogRecoveryValidated=false`;
+- production 8C40 watchdog lease;
+- service-side firmware restore;
+- crash/double-death recovery;
+- Modern Standby watchdog lifecycle;
+- automatic/adaptive fan policy.
+
+The next boundary is M3: a separately guarded restore-only service test from a
+known VFC-owned equal `30/30` state.

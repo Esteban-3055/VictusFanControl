@@ -657,25 +657,29 @@ M1 therefore prepares the durable state machine for 8C40 without enabling any
 LocalSystem read-only dependency access on HP 8C40.
 
 
-## Watchdog M2 prepared - Session-0 read-only dependency access
+## Watchdog M2 PASS - Session-0 read-only dependency access
 
-M2 is now implemented as an isolated **read-only** HP 8C40 service gate and is
-awaiting physical execution on the exact target.
+M2 passed physically on the exact HP 8C40 target on 2026-09-28.
 
-The service exact-matches `HP-8C40-9D0R1LA-F18`, requires LocalSystem and
-Session 0, then performs only a narrow EC `0x34/0x35` ownership read and HP
-BIOS/WMI `GetFanLevel`. Its hardware interface exposes read methods only; it
-does not instantiate the watchdog lease manager and has no fan-level or restore
-operation.
+The isolated `VictusFanControlWatchdogM2` service exact-matched
+`HP-8C40-9D0R1LA-F18`, ran as LocalSystem in Session 0 and completed two
+independent start/stop cycles. Each cycle successfully read the narrow EC
+`0x34/0x35` ownership pair and HP BIOS/WMI `GetFanLevel`.
 
-The physical wrapper requires an `FF/FF` baseline before the service, verifies
-the same `FF/FF` ownership from the service, checks that no `lease.json`
-appears, and independently re-reads `FF/FF` after the short restart cycles.
+EC ownership remained `FF/FF` in both service cycles and in the final
+independent interactive verification. Read-only GetFanLevel observations were
+`26/24` and `26/23`; these are current/effective fan-speed levels and are
+not command acknowledgements. No `lease.json` was created and no fan-level
+write, FF/FF release or LegacyDefault restore was issued.
 
-Until that physical gate passes, the status remains unchanged:
-`WatchdogRecoveryValidated=false`, the real 8C40 watchdog lease remains
-blocked, service-side restore remains blocked, and automatic/adaptive policy
-remains OFF.
+M2 therefore proves exact-target LocalSystem/Session-0 dependency access only.
+It does not authorize recovery writes. `WatchdogRecoveryValidated` remains
+false, the real 8C40 watchdog lease and service-side restore remain blocked,
+and automatic/adaptive policy remains OFF.
+
+The next boundary is M3: one bounded service-side restore-only qualification
+from a known VFC-owned equal `30/30` state, with external-override
+preservation and verified return to firmware ownership.
 
 See `docs/WATCHDOG_M2_8C40.md` and
 `scripts/test-watchdog-m2-8c40.ps1`.

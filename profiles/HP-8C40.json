@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-policy-off",
+  "status": "production-range-10-50-fully-integrated-m2-read-only-pass-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -15,7 +15,10 @@
   "lifecycle": {
     "sleepModel": "ModernStandbyS0LowPowerIdle",
     "legacyS3Available": false,
-    "watchdogRecoveryValidated": false
+    "watchdogRecoveryValidated": false,
+    "modernStandbyM0Characterized": true,
+    "watchdogTargetAwareM1Passed": true,
+    "watchdogSession0ReadOnlyM2Passed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -635,5 +638,28 @@
       }
     },
     "interpretation": "The equal-only 10..50 production envelope is physically closed on the exact HP 8C40 target through the real production backend. This does not qualify independent CPU/GPU commands, watchdog-backed unattended control, Modern Standby lifecycle recovery, or automatic/adaptive policy."
+  },
+  "watchdogM2ReadOnlyQualification": {
+    "result": "PASS",
+    "completedAt": "2026-09-28",
+    "targetProfileId": "HP-8C40-9D0R1LA-F18",
+    "service": "VictusFanControlWatchdogM2",
+    "serviceAccount": "LocalSystem",
+    "sessionId": 0,
+    "restartCycles": 2,
+    "ecOwnershipReads": [
+      "FF/FF",
+      "FF/FF"
+    ],
+    "getFanLevelReads": [
+      "26/24",
+      "26/23"
+    ],
+    "finalInteractiveEcOwnership": "FF/FF",
+    "leaseJournalCreated": false,
+    "fanWritesIssued": false,
+    "restoreIssued": false,
+    "watchdogRecoveryValidated": false,
+    "interpretation": "Exact-target LocalSystem/Session-0 access to the narrow EC 0x34/0x35 ownership read and HP GetFanLevel was physically proven without changing fan ownership. This qualifies dependency access only; service-side restore, crash recovery and Modern Standby watchdog lifecycle remain unqualified."
   }
 }
