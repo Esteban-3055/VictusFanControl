@@ -336,7 +336,7 @@ public static class Hp8C40M5DWriteArmedCrashTest
         public async ValueTask AfterHardwareAcknowledgedBeforeWatchdogCommitAsync(
             byte cpuTarget,
             byte gpuTarget,
-            Hp8C40EcControlState setpointAck,
+            (byte CpuSetpoint, byte GpuSetpoint) setpointAck,
             Hp8C40EcControlState tachAck,
             CancellationToken cancellationToken)
         {
