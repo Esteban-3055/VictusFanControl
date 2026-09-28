@@ -534,7 +534,8 @@ writer.
 
 Each endpoint must retain SafetyGate permission, exact EC ownership, sane
 MaxFan/FanSwitch guards, physical feedback from both tachometers, continuous
-coordinator supervision and a verified return to Firmware/FF/FF. The production
+coordinator supervision, two consecutive terminal-band RPM samples using
+max(150 RPM, 5% of level*100 RPM), and a verified return to Firmware/FF/FF. The production
 gate also performs AC/battery sanity checks because the earlier broad-range
 hibernations were traced to transient critical-battery telemetry.
 

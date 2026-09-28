@@ -15,8 +15,12 @@ namespace VictusFanControl.Hardware.Hp;
 public static class Hp8C40IntegratedCoordinatorTest
 {
     private const int PostAcknowledgementSamples = 6;
+    private const int RequiredEndpointTerminalSamples = 2;
+    private const int MinimumSafeEndpointRpm = 750;
     private const double MaximumCustomWindowSeconds = 20.0;
     private const double MaximumSamplingGapSeconds = 3.0;
+    private static readonly TimeSpan EndpointConvergenceTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan EndpointSampleInterval = TimeSpan.FromSeconds(1);
 
     private const double MaximumBaselineCpuTemperatureC = 80;
     private const double MaximumBaselineGpuTemperatureC = 75;
@@ -207,47 +211,70 @@ public static class Hp8C40IntegratedCoordinatorTest
             Console.WriteLine(
                 $"EC after ACK: {FormatControlEvidence(ecAfterAck)}");
 
-            for (var sampleIndex = 1;
-                 sampleIndex <= PostAcknowledgementSamples;
-                 sampleIndex++)
+            var promotedEndpoint =
+                testLevel == Hp8C40TargetProfile.MinimumValidatedFanLevel ||
+                testLevel == Hp8C40TargetProfile.MaximumValidatedFanLevel;
+
+            if (promotedEndpoint)
             {
-                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-                EnsureNoSchedulingGap(ref previousProgressTick, "post-ACK supervision");
-                EnsureCustomWindow(customStarted.Value);
-
-                EnsureHardwareGatePowerStatus(SystemPowerStatusReader.Read());
-
-                var sample = reader.ReadSnapshot();
-                ConsoleTelemetryPrinter.Print(sample);
-                EnsureLightLoadEnvelope(sample);
-
-                var safety = BuildSafety(
+                var terminal = await WaitForEndpointTerminalConvergenceAsync(
                     hardware,
-                    sample,
-                    coordinator.BackendCanWrite);
-
-                if (!safety.CustomControlPermitted)
-                {
-                    throw new InvalidOperationException(
-                        "SafetyGate dropped during integrated supervision: " +
-                        string.Join(" | ", safety.Reasons));
-                }
-
-                var stillSafe = await coordinator.EnforceSafetyAsync(
-                    safety,
-                    $"integrated hardware supervision sample {sampleIndex}",
+                    reader,
+                    coordinator,
+                    testLevel,
+                    customStarted.Value,
+                    ref previousProgressTick,
                     cancellationToken).ConfigureAwait(false);
 
-                if (!stillSafe || coordinator.Authority != FanAuthority.Custom)
-                {
-                    throw new InvalidOperationException(
-                        $"Coordinator did not retain validated Custom authority at sample {sampleIndex}. " +
-                        $"Authority={coordinator.Authority}.");
-                }
+                Console.WriteLine(
+                    $"Production endpoint {testLevel}/{testLevel} terminal convergence: " +
+                    $"CPU {terminal.CpuRpm:0} RPM | GPU {terminal.GpuRpm:0} RPM | " +
+                    $"{terminal.Seconds:0.0} s after backend ACK.");
             }
+            else
+            {
+                for (var sampleIndex = 1;
+                     sampleIndex <= PostAcknowledgementSamples;
+                     sampleIndex++)
+                {
+                    await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                    EnsureNoSchedulingGap(ref previousProgressTick, "post-ACK supervision");
+                    EnsureCustomWindow(customStarted.Value);
 
-            Console.WriteLine(
-                $"{PostAcknowledgementSamples} post-ACK samples passed continuous safety/ownership supervision.");
+                    EnsureHardwareGatePowerStatus(SystemPowerStatusReader.Read());
+
+                    var sample = reader.ReadSnapshot();
+                    ConsoleTelemetryPrinter.Print(sample);
+                    EnsureLightLoadEnvelope(sample);
+
+                    var safety = BuildSafety(
+                        hardware,
+                        sample,
+                        coordinator.BackendCanWrite);
+
+                    if (!safety.CustomControlPermitted)
+                    {
+                        throw new InvalidOperationException(
+                            "SafetyGate dropped during integrated supervision: " +
+                            string.Join(" | ", safety.Reasons));
+                    }
+
+                    var stillSafe = await coordinator.EnforceSafetyAsync(
+                        safety,
+                        $"integrated hardware supervision sample {sampleIndex}",
+                        cancellationToken).ConfigureAwait(false);
+
+                    if (!stillSafe || coordinator.Authority != FanAuthority.Custom)
+                    {
+                        throw new InvalidOperationException(
+                            $"Coordinator did not retain validated Custom authority at sample {sampleIndex}. " +
+                            $"Authority={coordinator.Authority}.");
+                    }
+                }
+
+                Console.WriteLine(
+                    $"{PostAcknowledgementSamples} post-ACK samples passed continuous safety/ownership supervision.");
+            }
         }
         catch (Exception ex)
         {
@@ -339,6 +366,98 @@ public static class Hp8C40IntegratedCoordinatorTest
             snapshot,
             DateTimeOffset.UtcNow,
             fanWritePathPresent);
+
+    private static async Task<(double CpuRpm, double GpuRpm, double Seconds)>
+        WaitForEndpointTerminalConvergenceAsync(
+            HardwareIdentity hardware,
+            HardwareTelemetryReader reader,
+            FanControlCoordinator coordinator,
+            int level,
+            long customStarted,
+            ref long? previousProgressTick,
+            CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var expectedRpm = level * 100.0;
+        var toleranceRpm = Math.Max(150.0, expectedRpm * 0.05);
+        var consecutive = 0;
+        double lastCpu = double.NaN;
+        double lastGpu = double.NaN;
+
+        while (Stopwatch.GetElapsedTime(started) < EndpointConvergenceTimeout)
+        {
+            await Task.Delay(EndpointSampleInterval, cancellationToken).ConfigureAwait(false);
+            EnsureNoSchedulingGap(ref previousProgressTick, "endpoint terminal convergence");
+            EnsureCustomWindow(customStarted);
+            EnsureHardwareGatePowerStatus(SystemPowerStatusReader.Read());
+
+            var sample = reader.ReadSnapshot();
+            ConsoleTelemetryPrinter.Print(sample);
+            EnsureLightLoadEnvelope(sample);
+
+            lastCpu = sample.CpuFanRpm!.Value;
+            lastGpu = sample.GpuFanRpm!.Value;
+
+            if (lastCpu < MinimumSafeEndpointRpm ||
+                lastGpu < MinimumSafeEndpointRpm)
+            {
+                throw new InvalidOperationException(
+                    $"Endpoint {level}/{level} fan feedback crossed the conservative floor: " +
+                    $"CPU={lastCpu:0} GPU={lastGpu:0} RPM.");
+            }
+
+            var safety = BuildSafety(
+                hardware,
+                sample,
+                coordinator.BackendCanWrite);
+
+            if (!safety.CustomControlPermitted)
+            {
+                throw new InvalidOperationException(
+                    "SafetyGate dropped during endpoint terminal convergence: " +
+                    string.Join(" | ", safety.Reasons));
+            }
+
+            var stillSafe = await coordinator.EnforceSafetyAsync(
+                safety,
+                $"production endpoint {level}/{level} terminal convergence",
+                cancellationToken).ConfigureAwait(false);
+
+            if (!stillSafe || coordinator.Authority != FanAuthority.Custom)
+            {
+                throw new InvalidOperationException(
+                    $"Coordinator did not retain Custom authority during endpoint " +
+                    $"{level}/{level}. Authority={coordinator.Authority}.");
+            }
+
+            var cpuInBand = Math.Abs(lastCpu - expectedRpm) <= toleranceRpm;
+            var gpuInBand = Math.Abs(lastGpu - expectedRpm) <= toleranceRpm;
+            var elapsed = Stopwatch.GetElapsedTime(started);
+
+            Console.WriteLine(
+                $"  endpoint t={elapsed.TotalSeconds,4:0.0}s | " +
+                $"CPU {lastCpu,4:0} RPM | GPU {lastGpu,4:0} RPM | " +
+                $"target≈{expectedRpm:0}±{toleranceRpm:0}");
+
+            if (cpuInBand && gpuInBand)
+            {
+                consecutive++;
+                if (consecutive >= RequiredEndpointTerminalSamples)
+                {
+                    return (lastCpu, lastGpu, elapsed.TotalSeconds);
+                }
+            }
+            else
+            {
+                consecutive = 0;
+            }
+        }
+
+        throw new TimeoutException(
+            $"Production endpoint {level}/{level} did not reach two consecutive " +
+            $"terminal-band samples within {EndpointConvergenceTimeout.TotalSeconds:0} s. " +
+            $"Last RPM={lastCpu:0}/{lastGpu:0}.");
+    }
 
     private static void EnsureHardwareGatePowerStatus(
         SystemPowerStatusSample status)

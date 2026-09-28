@@ -4,7 +4,7 @@ Write-Host 'VictusFanControl - HP 8C40 POST-PROMOTION PRODUCTION ENDPOINT GATE' 
 Write-Host ''
 Write-Host 'ACTIVE hardware validation through the REAL production backend.' -ForegroundColor Yellow
 Write-Host 'Sequence: firmware -> 10 -> firmware, then firmware -> 50 -> firmware.'
-Write-Host 'Route: SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend -> WMI -> EC/tachs -> restore.'
+Write-Host 'Route: SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend -> WMI -> EC/tachs -> terminal convergence -> restore.'
 Write-Host 'No qualification envelope injection is used. Automatic policy remains OFF.'
 Write-Host ''
 Write-Host 'Close OmenMon, OmenMon-Reborn and the VictusFanControl GUI.'

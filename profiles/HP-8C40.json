@@ -598,8 +598,10 @@
       "firmware -> 10 -> firmware",
       "firmware -> 50 -> firmware"
     ],
-    "requiredRoute": "SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend production -> HP WMI -> EC/tach ACK -> restore",
+    "requiredRoute": "SafetyGate -> FanControlCoordinator -> Hp8C40FanControlBackend production -> HP WMI -> EC/tach ACK -> terminal convergence -> restore",
     "qualificationEnvelopeInjectionPermitted": false,
-    "automaticPolicyEnabled": false
+    "automaticPolicyEnabled": false,
+    "terminalConvergenceRequired": true,
+    "terminalConvergenceRule": "2 consecutive dual-fan samples inside max(150 RPM, 5% of level*100 RPM)"
   }
 }
