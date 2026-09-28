@@ -223,7 +223,6 @@ public static class Hp8C40IntegratedCoordinatorTest
                     coordinator,
                     testLevel,
                     customStarted.Value,
-                    ref previousProgressTick,
                     cancellationToken).ConfigureAwait(false);
 
                 Console.WriteLine(
@@ -374,10 +373,10 @@ public static class Hp8C40IntegratedCoordinatorTest
             FanControlCoordinator coordinator,
             int level,
             long customStarted,
-            ref long? previousProgressTick,
             CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
+        long? previousProgressTick = started;
         var expectedRpm = level * 100.0;
         var toleranceRpm = Math.Max(150.0, expectedRpm * 0.05);
         var consecutive = 0;
