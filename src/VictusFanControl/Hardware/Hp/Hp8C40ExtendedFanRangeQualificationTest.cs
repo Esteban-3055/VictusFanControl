@@ -83,6 +83,27 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             return 111;
         }
 
+        SystemSleepInhibitor sleepInhibitor;
+        try
+        {
+            sleepInhibitor = SystemSleepInhibitor.Acquire(
+                "HP 8C40 extended fan-range qualification 10..50");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"Qualification refused: Windows sleep inhibition could not be acquired: {ex.Message}");
+            return 117;
+        }
+
+        using (sleepInhibitor)
+        {
+            Console.WriteLine(
+                "Automatic idle sleep/Modern Standby inhibition: ACTIVE for this test.");
+            Console.WriteLine(
+                "Explicit lid/user/critical power transitions are still not blocked.");
+            Console.WriteLine();
+
         using var reader = new HardwareTelemetryReader(modulesDirectory);
         if (!reader.BackendsInitialized)
         {
@@ -275,6 +296,7 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             "10..50 into the production backend.");
 
         return 0;
+        }
     }
 
     private static async Task<LevelOutcome> QualifyLevelAsync(
@@ -570,7 +592,17 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             snapshot.GpuPowerW > MaximumGpuPowerW)
         {
             throw new InvalidOperationException(
-                "Light-load qualification envelope exceeded.");
+                "Light-load qualification envelope exceeded: " +
+                $"effective CPU={snapshot.CpuControlTemperatureC:0.0} C " +
+                $"(limit {MaximumCpuTemperatureC:0} C), " +
+                $"CPU package={snapshot.CpuPackagePowerW:0.0} W " +
+                $"(limit {MaximumCpuPowerW:0} W), " +
+                $"GPU={snapshot.GpuTemperatureC:0.0} C " +
+                $"(limit {MaximumGpuTemperatureC:0} C), " +
+                $"GPU power={snapshot.GpuPowerW:0.0} W " +
+                $"(limit {MaximumGpuPowerW:0} W), " +
+                $"CPU load={snapshot.CpuLoadPercent:0.0}%, " +
+                $"GPU load={snapshot.GpuLoadPercent:0.0}%.");
         }
     }
 
