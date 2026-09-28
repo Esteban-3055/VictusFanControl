@@ -761,3 +761,69 @@ This does **not** set `WatchdogRecoveryValidated=true` and does not enable
 automatic/adaptive policy. Modern Standby proactive release/reacquisition,
 hibernation/lifecycle behavior and any separately required in-flight
 WRITE_ARMED crash qualification remain outside this physical M5C result.
+
+
+## M5D - WRITE_ARMED post-WMI / pre-Commit controller crash
+
+M5C closed the durable OWNED double-death case. M5D targets a narrower
+transactional ambiguity window that is different from OWNED:
+
+~~~text
+PREPARE
+  -> durable WRITE_INTENT 30/30
+  -> real HP WMI SetFanLevel(30/30)
+  -> EC 30/30 acknowledgement
+  -> both physical tachometers acknowledge
+  -> controller process dies
+  -> watchdog Commit was never dispatched
+~~~
+
+The production backend now contains an **internal qualification-only hook** that
+can pause exactly after real hardware acknowledgement and before the watchdog
+Commit call. The public production constructor always sets this hook to null, so
+ordinary runtime behavior is unchanged.
+
+The M5D child:
+
+~~~text
+Hp8C40M5DWriteArmedCrashTest
+token = 8C40-M5D-WRITE-ARMED-CRASH30
+target = equal 30/30 only
+~~~
+
+uses the real SafetyGate, FanControlCoordinator, named-pipe M4 lease,
+Hp8C40FanHardware, WMI command path, EC setpoints and both tachometers.
+
+Its READY marker is written only from the pre-Commit qualification hook and
+contains the exact process PID/creation-time plus real 30/30 EC/tach evidence.
+The hook then waits indefinitely; only a parent force-kill bypasses managed
+coordinator cleanup.
+
+The physical parent must independently require:
+
+~~~text
+schema-v2 exact target
+phase = WRITE_ARMED
+generation = 2
+PreviousOwned = null
+Pending = 30/30
+Owned = null
+exact child PID + creation time
+independent EC = 30/30
+same original watchdog PID
+~~~
+
+immediately before killing the controller.
+
+PASS then requires the original LocalSystem watchdog to recover that WRITE_ARMED
+journal to verified FF/FF, delete the journal, and remain the same process.
+Fresh service logs must contain PREPARE and WRITE_INTENT for that exact child,
+must contain **no COMMIT** for it, and must causally record
+`RestoredFirmware` after owner loss.
+
+This gate is intentionally narrower than a later possible WRITE_ARMED
+double-death/startup test. M5D first isolates controller death while the watchdog
+remains alive.
+
+M5D physical execution remains blocked until its new code/CI preparation is
+green.
