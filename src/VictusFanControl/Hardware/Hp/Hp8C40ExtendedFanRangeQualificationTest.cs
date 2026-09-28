@@ -32,6 +32,8 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
     private static readonly TimeSpan SettleDuration = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan MaximumTelemetryAge = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan BaselineRetryInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan BaselineReadyTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan EcRetryDelay = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan SetpointAckTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RestoreAckTimeout = TimeSpan.FromSeconds(5);
@@ -144,12 +146,13 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
 
         EnsureQualificationPowerStatus(SystemPowerStatusReader.Read());
 
-        var baseline = reader.ReadSnapshot();
-        Console.WriteLine("Firmware baseline:");
-        ConsoleTelemetryPrinter.Print(baseline);
+        TelemetrySnapshot baseline;
         try
         {
-            EnsureSafeTelemetry(hardware, baseline);
+            baseline = await WaitForSafeBaselineAsync(
+                hardware,
+                reader,
+                cancellationToken).ConfigureAwait(false);
         }
         catch (PowerTransitionDetectedException ex)
         {
@@ -157,6 +160,19 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
                 $"Qualification aborted before any fan write: {ex.Message}");
             return 118;
         }
+        catch (TimeoutException ex)
+        {
+            Console.Error.WriteLine(
+                $"Qualification refused before any fan write: {ex.Message}");
+            foreach (var line in reader.GetReadDiagnostics())
+            {
+                Console.Error.WriteLine(line);
+            }
+            return 120;
+        }
+
+        Console.WriteLine("Firmware baseline:");
+        ConsoleTelemetryPrinter.Print(baseline);
 
         Hp8C40EcControlState baselineEc;
         try
@@ -647,6 +663,46 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
                 $"Upper characterization boundary: {upperFailureLevel}/{upperFailureLevel}");
             Console.WriteLine($"  {upperFailureReason}");
         }
+    }
+
+    private static async Task<TelemetrySnapshot> WaitForSafeBaselineAsync(
+        HardwareIdentity hardware,
+        HardwareTelemetryReader reader,
+        CancellationToken cancellationToken)
+    {
+        var started = Stopwatch.GetTimestamp();
+        string lastReason = "no telemetry sample was evaluated";
+
+        while (Stopwatch.GetElapsedTime(started) < BaselineReadyTimeout)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            EnsureQualificationPowerStatus(SystemPowerStatusReader.Read());
+
+            var sample = reader.ReadSnapshot();
+            try
+            {
+                EnsureSafeTelemetry(hardware, sample);
+                return sample;
+            }
+            catch (PowerTransitionDetectedException)
+            {
+                throw;
+            }
+            catch (InvalidOperationException ex)
+            {
+                lastReason = ex.Message;
+                Console.WriteLine(
+                    $"Telemetry baseline not ready yet: {lastReason}");
+            }
+
+            await Task.Delay(
+                BaselineRetryInterval,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        throw new TimeoutException(
+            $"telemetry did not become SafetyGate-ready within " +
+            $"{BaselineReadyTimeout.TotalSeconds:0} s. Last reason: {lastReason}");
     }
 
     private static void EnsureQualificationPowerStatus(
