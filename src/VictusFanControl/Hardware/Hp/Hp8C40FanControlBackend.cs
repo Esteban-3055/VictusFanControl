@@ -117,6 +117,8 @@ public sealed class Hp8C40FanControlBackend :
     private readonly bool _targetSupported;
     private readonly string _supportDetail;
     private readonly Hp8C40FanBackendTiming _timing;
+    private readonly int _minimumCommandLevel;
+    private readonly int _maximumCommandLevel;
     private readonly IFanControlWatchdogLeaseClient? _watchdogLease;
     private readonly IActiveTimeClock _activeTimeClock;
 
@@ -134,6 +136,8 @@ public sealed class Hp8C40FanControlBackend :
         _targetSupported = Hp8C40TargetProfile.Matches(identity, out var reason);
         _supportDetail = reason;
         _timing = Hp8C40FanBackendTiming.Production;
+        _minimumCommandLevel = Hp8C40TargetProfile.MinimumValidatedFanLevel;
+        _maximumCommandLevel = Hp8C40TargetProfile.MaximumValidatedFanLevel;
 
         if (_targetSupported && watchdogLease is not null)
         {
@@ -168,12 +172,29 @@ public sealed class Hp8C40FanControlBackend :
         string supportDetail = "Synthetic validated target.",
         Hp8C40FanBackendTiming? timing = null,
         IFanControlWatchdogLeaseClient? watchdogLease = null,
-        IActiveTimeClock? activeTimeClock = null)
+        IActiveTimeClock? activeTimeClock = null,
+        int? minimumCommandLevel = null,
+        int? maximumCommandLevel = null)
     {
         _hardware = hardware;
         _targetSupported = targetSupported;
         _supportDetail = supportDetail;
         _timing = timing ?? Hp8C40FanBackendTiming.Production;
+        _minimumCommandLevel =
+            minimumCommandLevel ?? Hp8C40TargetProfile.MinimumValidatedFanLevel;
+        _maximumCommandLevel =
+            maximumCommandLevel ?? Hp8C40TargetProfile.MaximumValidatedFanLevel;
+
+        if (_minimumCommandLevel < 0 ||
+            _maximumCommandLevel > byte.MaxValue ||
+            _minimumCommandLevel > _maximumCommandLevel)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(minimumCommandLevel),
+                $"Invalid HP 8C40 backend command envelope " +
+                $"{_minimumCommandLevel}-{_maximumCommandLevel}.");
+        }
+
         _watchdogLease = watchdogLease;
         _activeTimeClock = activeTimeClock ?? new WindowsActiveTimeClock();
         _lastRestoreEvidence = new FanFirmwareRestoreEvidence(
@@ -200,8 +221,8 @@ public sealed class Hp8C40FanControlBackend :
     public FanBackendCapabilities Capabilities =>
         new(
             Hp8C40TargetProfile.BoardProduct,
-            Hp8C40TargetProfile.MinimumValidatedFanLevel,
-            Hp8C40TargetProfile.MaximumValidatedFanLevel,
+            _minimumCommandLevel,
+            _maximumCommandLevel,
             SupportsIndependentLevels: false);
 
     public async ValueTask ProbeControlDependencyAsync(
@@ -992,7 +1013,7 @@ public sealed class Hp8C40FanControlBackend :
             $"{last?.CpuSetpoint.ToString() ?? "n/a"}/{last?.GpuSetpoint.ToString() ?? "n/a"}.");
     }
 
-    private static void ValidateCommand(FanCommand command)
+    private void ValidateCommand(FanCommand command)
     {
         if (command.CpuLevel != command.GpuLevel)
         {
@@ -1002,17 +1023,16 @@ public sealed class Hp8C40FanControlBackend :
                 nameof(command));
         }
 
-        if (command.CpuLevel < Hp8C40TargetProfile.MinimumValidatedFanLevel ||
-            command.CpuLevel > Hp8C40TargetProfile.MaximumValidatedFanLevel ||
-            command.GpuLevel < Hp8C40TargetProfile.MinimumValidatedFanLevel ||
-            command.GpuLevel > Hp8C40TargetProfile.MaximumValidatedFanLevel)
+        if (command.CpuLevel < _minimumCommandLevel ||
+            command.CpuLevel > _maximumCommandLevel ||
+            command.GpuLevel < _minimumCommandLevel ||
+            command.GpuLevel > _maximumCommandLevel)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(command),
                 command,
-                $"HP 8C40 validated fan-level range is " +
-                $"{Hp8C40TargetProfile.MinimumValidatedFanLevel}-" +
-                $"{Hp8C40TargetProfile.MaximumValidatedFanLevel}.");
+                $"HP 8C40 backend fan-level range is " +
+                $"{_minimumCommandLevel}-{_maximumCommandLevel}.");
         }
     }
 
