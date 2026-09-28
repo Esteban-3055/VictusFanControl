@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M4 - target-bound live lease qualification
 
-Status: **M4A HARNESS PREPARED / CI PENDING / PHYSICAL PENDING.**
+Status: **M4A CODE/CI PASS / PHYSICAL PENDING.**
 
 M3 physically qualified the LocalSystem restore-only primitive. M4 is the next
 separate authorization boundary: durable watchdog lease ownership around a real
@@ -163,3 +163,14 @@ Still pending after M4A:
 
 Production watchdog construction stays blocked until the intended qualification
 boundary is explicitly promoted.
+
+
+## M4A CI preparation result
+
+M4A preparation passed the complete repository CI after the target-bound protocol migration was reconciled with the historical 88F8 Gate G invariants and client self-tests.
+
+The green run includes PowerShell syntax validation, historical Gate E/F/G0/G1/G2 invariants, HP 8C40 legacy-88F8 isolation, warnings-as-errors solution build, M0, M1/Gate C, M2, M3, M4 self-tests, SafetyGate, FanControlCoordinator, HP BIOS contracts and both HP backend self-tests.
+
+The protocol-v2 migration pins TargetProfileId in both request and response. Historical 88F8 Gate G remains explicitly bound to the 88F8 target id, while M4A uses the isolated 8C40 pipe and exact 8C40 target id.
+
+No physical M4A fan write has been executed by CI. The next gate is the single bounded awake 30/30 lease cycle in scripts/test-watchdog-m4a-8c40.ps1.

@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4a-prepared-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4a-ci-pass-physical-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -26,7 +26,8 @@
     "watchdogRestoreOnlyM3CodePassed": true,
     "watchdogM4TargetBoundProtocolPrepared": true,
     "watchdogM4A30LeasePrepared": true,
-    "watchdogM4A30LeasePassed": false
+    "watchdogM4A30LeasePassed": false,
+    "watchdogM4A30LeaseCodePassed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -719,7 +720,7 @@
     }
   },
   "watchdogM4LeaseQualification": {
-    "status": "M4A_HARNESS_PREPARED_CI_PENDING_PHYSICAL_PENDING",
+    "status": "M4A_CODE_CI_PASS_PHYSICAL_PENDING",
     "protocolVersion": 2,
     "targetProfileIdRequired": true,
     "qualificationPipe": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -731,6 +732,8 @@
     "m4bLevel": 10,
     "m4cLevel": 50,
     "watchdogRecoveryValidated": false,
-    "automaticPolicyEnabled": false
+    "automaticPolicyEnabled": false,
+    "syntheticSelfTest": "PASS",
+    "fullRepositoryCi": "PASS"
   }
 }
