@@ -396,5 +396,21 @@
     "idleHibernateExcluded": true,
     "systemRequiredPolicyEnabled": true,
     "interpretation": "This was not an idle-sleep timeout and is not evidence that fan level 21 or 28 itself requests hibernation. The strongest current hypothesis is transient/corrupted ACPI battery telemetry during intensive direct EC access. Extended qualification is being throttled and guarded by Windows AC/battery status."
+  },
+  "extendedRangeQualificationAttempt4": {
+    "acBatteryBaseline": "AC online, battery 100%, flags 0x01",
+    "preflightGpuTelemetry": {
+      "temperatureC": 0,
+      "powerW": 1.2,
+      "loadPercent": 0
+    },
+    "activeBaselineGpuTelemetry": {
+      "temperatureC": 0,
+      "powerW": 1.2,
+      "loadPercent": 0
+    },
+    "fanWritesAttempted": false,
+    "status": "refused before EC baseline/write by SafetyGate plausibility",
+    "interpretation": "NVML returned success with an unusable 0 C GPU temperature while the dGPU was at very low power. This is now treated as unavailable telemetry rather than a valid complete snapshot; the active harness waits boundedly for SafetyGate-ready telemetry before any fan write."
   }
 }
