@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5ab-physical-pass-m5c-stage0-code-prepared-ci-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5ab-physical-pass-m5c-stage0-code-ci-pass-physical-preflight-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -924,7 +924,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_M5B_CODE_CI_PHYSICAL_PASS_M5C_STAGE0_CODE_PREPARED_CI_PENDING",
+    "status": "M5A_M5B_CODE_CI_PHYSICAL_PASS_M5C_STAGE0_CODE_CI_PASS_PHYSICAL_PREFLIGHT_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -1054,7 +1054,7 @@
       }
     },
     "m5c": {
-      "status": "STAGE0_NO_WRITE_CODE_PREPARED_CI_PENDING",
+      "status": "STAGE0_NO_WRITE_CODE_CI_PASS_PHYSICAL_PREFLIGHT_PENDING",
       "targetProfileId": "HP-8C40-9D0R1LA-F18",
       "service": "VictusFanControlWatchdogM4",
       "pipe": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -1107,6 +1107,22 @@
         "finalSafeStateAloneIsNotPass": true,
         "temporaryRecoveryPolicyMustBeRemovedAfterTest": true,
         "delayedFailsafeMayNotFireForPass": true
+      },
+      "preparationCi": {
+        "result": "PASS",
+        "preflightCommit": "e5f1599e66edbd8f0dd2dacdd6c79d1238bf1d3f",
+        "preflightRunNumber": 594,
+        "preflightRunId": 36478810716,
+        "failsafeCommit": "0d466aa3a31666147368dce2f8585042a2a786fb",
+        "failsafeRunNumber": 595,
+        "failsafeRunId": 36479045800,
+        "causalSpecCommit": "5604e0d9470593bcc39145608658fb9af8d25565",
+        "causalSpecRunNumber": 596,
+        "causalSpecRunId": 36479154413,
+        "hardeningCommit": "e1dd2510160bac04f7b0c3a92a850798a39f7483",
+        "hardeningRunNumber": 597,
+        "hardeningRunId": 36479409383,
+        "completedAt": "2026-09-28"
       }
     }
   }

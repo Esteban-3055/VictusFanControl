@@ -523,3 +523,25 @@ the temporary recovery policy does not leak into later gates.
 
 The delayed service-start failsafe is a safety layer only. If it actually fires,
 that run cannot be counted as the autonomous SCM-restart M5C PASS.
+
+
+## M5C stage-0 preparation CI result
+
+The staged M5C preparation is green:
+
+- `e5f1599e66edbd8f0dd2dacdd6c79d1238bf1d3f` / GitHub Actions **#594**:
+  initial no-write exact-target preflight;
+- `0d466aa3a31666147368dce2f8585042a2a786fb` / **#595**:
+  delayed service-start safety fallback plus invariants;
+- `5604e0d9470593bcc39145608658fb9af8d25565` / **#596**:
+  formal M5C causal PASS boundary;
+- `e1dd2510160bac04f7b0c3a92a850798a39f7483` / **#597**:
+  fail-closed preflight cleanup hardening.
+
+Run #597 passed PowerShell syntax, M5A/M5B/M5C invariants, warnings-as-errors
+build, historical Gate E/F/G0/G1/G2 invariants, M0, Gate B/C, HP 8C40
+M2/M3/M4 self-tests, SafetyGate, FanControlCoordinator, HP BIOS contracts and
+both HP backend self-tests.
+
+M5C stage 0 is therefore **CODE/CI PASS / PHYSICAL NO-WRITE PREFLIGHT
+PENDING**. The destructive double-death gate remains intentionally unqualified.
