@@ -383,5 +383,18 @@
     "levelsBelow21Attempted": false,
     "upperSweepStarted": false,
     "interpretation": "SetThreadExecutionState/ES_SYSTEM_REQUIRED did not prevent this hibernation transition. Broad sweep must treat any hibernate-like telemetry gap as a terminal run condition and diagnose the Windows/firmware transition source before continuing."
+  },
+  "powerTransitionDiagnosis": {
+    "confirmedMechanism": "Windows critical-battery trigger caused hibernation",
+    "evidence": [
+      "Kernel-Power event 524: critical battery trigger met",
+      "Kernel-Power event 42: sleep reason Battery",
+      "Kernel-Power event 507: Resume from Hibernate",
+      "The same event sequence occurred twice",
+      "SleepStudy showed battery capacity collapsing from full to 0 and then returning to full, including while AC was reported online"
+    ],
+    "idleHibernateExcluded": true,
+    "systemRequiredPolicyEnabled": true,
+    "interpretation": "This was not an idle-sleep timeout and is not evidence that fan level 21 or 28 itself requests hibernation. The strongest current hypothesis is transient/corrupted ACPI battery telemetry during intensive direct EC access. Extended qualification is being throttled and guarded by Windows AC/battery status."
   }
 }
