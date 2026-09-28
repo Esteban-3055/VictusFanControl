@@ -56,8 +56,11 @@ Assert-Contains $failsafe 'HP-8C40-9D0R1LA-F18' 'M5C delayed failsafe must pin t
 Assert-Contains $failsafe 'Test-OwnedPhase' 'M5C delayed failsafe must require durable OWNED phase.'
 Assert-Contains $failsafe '[int]$journal.Owned.Cpu -ne 30' 'M5C delayed failsafe must require OWNED CPU 30.'
 Assert-Contains $failsafe '[int]$journal.Owned.Gpu -ne 30' 'M5C delayed failsafe must require OWNED GPU 30.'
-Assert-Contains $failsafe 'Start-Service -Name $serviceName' 'M5C delayed failsafe may only recover by starting the already-qualified service.'
-Assert-Contains $failsafe 'failsafe will not delete it' 'M5C delayed failsafe must leave journal authority to the service.'
+Assert-Contains $failsafe '$journal.Controller.ProcessId' 'M5C delayed failsafe must bind takeover to the durable journal controller PID.'
+Assert-Contains $failsafe '$journal.Controller.ProcessStartUtcTicks' 'M5C delayed failsafe must bind takeover to the durable journal controller creation time.'
+Assert-Contains $failsafe '$process.Kill()' 'M5C delayed failsafe may neutralize only the exact journal-bound controller.'
+Assert-Contains $failsafe 'Start-Service -Name $serviceName' 'M5C delayed failsafe may start the already-qualified recovery service when absent.'
+Assert-Contains $failsafe 'Wait-JournalGone' 'M5C delayed failsafe must leave journal deletion to the watchdog recovery path.'
 
 foreach ($forbidden in @(
     'SetFanLevel(',
