@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M5 - failure-domain qualification
 
-Status: **M5A CODE/CI/PHYSICAL PASS. M5B/M5C PENDING.**
+Status: **M5A/M5B CODE/CI/PHYSICAL PASS. M5C PENDING.**
 M4 normal awake lease qualification is complete at equal 10/30/50.
 
 Production watchdog construction and automatic/adaptive policy remain OFF.
@@ -359,7 +359,38 @@ Therefore the physical M5B recovery mechanism itself is complete. The only
 failure occurred after the controller had already observed the parent's
 completion marker and after all hardware/recovery assertions had passed.
 
-The harness is hardened by synchronizing the native child-process termination
-with `WaitForExit()` plus `Refresh()` before reading `ExitCode`. This change
-does not alter fan authority, watchdog authority, fault injection, restore
-ordering or any physical PASS criterion.
+The harness was hardened by synchronizing the native child-process termination
+with `WaitForExit()` plus `Refresh()` before reading `ExitCode`. Commit
+`9efbcd17908b32778a60a557066180ce39b623e6` passed complete GitHub
+Actions run **#592**. The hardening does not alter fan authority, watchdog
+authority, fault injection, restore ordering or any physical PASS criterion.
+
+Because the complete physical/recovery PASS boundary was already established
+before the stale/blank PowerShell ExitCode read, no second destructive watchdog
+kill is required merely to reproduce a parent-shell bookkeeping check. M5B is
+formally accepted as **PHYSICAL PASS** from this evidence.
+
+
+### M5B accepted physical result
+
+M5B is closed on the 2026-09-28 run:
+
+~~~text
+OWNED 30/30
+  -> exact watchdog PID 5096 killed
+  -> controller PID 2840 remained alive
+  -> WATCHDOG_IPC_LOSS during Probe
+  -> live-controller local FF/FF verified
+  -> watchdog Release unavailable as expected
+  -> independent FF/FF while watchdog absent
+  -> durable OWNED journal retained
+  -> replacement watchdog PID 16684
+  -> startup RestoredFirmware
+  -> journal deleted after verified normalization
+  -> independent final FF/FF
+  -> controller observed parent completion
+  -> post-test FF/FF
+~~~
+
+The PowerShell ExitCode synchronization fix is a post-evidence harness
+correction, not a second hardware qualification requirement.

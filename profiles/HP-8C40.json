@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5a-pass-m5b-physical-evidence-complete-exitcode-hardening-ci-pending-m5c-pending-policy-off",
+  "status": "production-range-10-50-fully-integrated-m3-pass-m4abc-pass-m5ab-physical-pass-m5c-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -37,7 +37,7 @@
     "watchdogM5AControllerDeathPrepared": true,
     "watchdogM5AControllerDeathPassed": true,
     "watchdogM5BWatchdogDeathPrepared": true,
-    "watchdogM5BWatchdogDeathPassed": false,
+    "watchdogM5BWatchdogDeathPassed": true,
     "watchdogM5CDoubleDeathPrepared": false,
     "watchdogM5CDoubleDeathPassed": false
   },
@@ -922,7 +922,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_PHYSICAL_PASS_M5B_PHYSICAL_EVIDENCE_COMPLETE_EXITCODE_HARDENING_CI_PENDING_M5C_PENDING",
+    "status": "M5A_M5B_CODE_CI_PHYSICAL_PASS_M5C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -983,7 +983,7 @@
       "qualificationPass": true
     },
     "m5b": {
-      "status": "PHYSICAL_EVIDENCE_COMPLETE_EXITCODE_HARDENING_CI_PENDING",
+      "status": "CODE_CI_PHYSICAL_PASS",
       "qualificationLevel": 30,
       "token": "8C40-M5B-WATCHDOG-DEATH30",
       "service": "VictusFanControlWatchdogM4",
@@ -1000,7 +1000,7 @@
       "finalJournalAbsentRequired": true,
       "finalIndependentEcRequired": "FF/FF",
       "parentDirectRestoreAuthority": false,
-      "physicalStatus": "EVIDENCE_COMPLETE_POSTCHECK_FALSE_NEGATIVE",
+      "physicalStatus": "PASS",
       "preparationCi": {
         "result": "PASS",
         "commit": "d232c8edb27177c1d1122762b97c00d5838cca87",
@@ -1010,7 +1010,7 @@
       },
       "physicalAttempt1": {
         "completedAt": "2026-09-28",
-        "result": "PHYSICAL_EVIDENCE_COMPLETE_POSTCHECK_FALSE_NEGATIVE",
+        "result": "PASS_WITH_POST_EVIDENCE_HARNESS_FALSE_NEGATIVE",
         "targetProfileId": "HP-8C40-9D0R1LA-F18",
         "originalServicePid": 5096,
         "replacementServicePid": 16684,
@@ -1038,7 +1038,17 @@
         "controllerObservedParentCompletion": true,
         "postTestProbe": "FF/FF",
         "diagnosticBug": "PowerShell parent read blank ExitCode from Start-Process -PassThru object after HasExited; all physical/recovery criteria had already completed.",
-        "qualificationPassPendingHarnessHardeningCi": true
+        "qualificationPassPendingHarnessHardeningCi": false,
+        "qualificationPass": true
+      },
+      "exitCodeHardening": {
+        "result": "PASS",
+        "commit": "9efbcd17908b32778a60a557066180ce39b623e6",
+        "runNumber": 592,
+        "runId": 36477575971,
+        "completedAt": "2026-09-28",
+        "change": "Synchronize Start-Process child termination with WaitForExit()+Refresh() before reading ExitCode.",
+        "physicalRerunRequired": false
       }
     }
   }
