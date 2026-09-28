@@ -37,6 +37,7 @@ public static class Hp8C40FanControlBackendSelfTest
         failures += await TestCancellationAtPreDispatchPreventsWriteAsync(output);
         failures += await TestWatchdogPrepareFailureIsNoWriteAsync(output);
         failures += await TestWatchdogWriteIntentOrderingAsync(output);
+        failures += await TestQualificationHookRunsAfterHardwareAckBeforeCommitAsync(output);
         failures += await TestWatchdogPostIntentExternalRaceAsync(output);
         failures += await TestWatchdogHeartbeatCouplingAsync(output);
         failures += await TestWatchdogProbePreemptsEcReadAsync(output);
@@ -797,6 +798,64 @@ public static class Hp8C40FanControlBackendSelfTest
             lease.Calls.Contains("commit"));
     }
 
+    private static async Task<int> TestQualificationHookRunsAfterHardwareAckBeforeCommitAsync(
+        TextWriter output)
+    {
+        var sequence = new List<string>();
+        var hardware = new FakeHardware
+        {
+            OnSetFanLevel = () => sequence.Add("set")
+        };
+        var lease = new FakeWatchdogLeaseClient
+        {
+            OnCall = call => sequence.Add(call)
+        };
+        var hook =
+            new RecordingQualificationHook(
+                () => sequence.Add("hook"));
+
+        await using var backend =
+            NewProtectedBackend(
+                hardware,
+                lease,
+                hook);
+
+        await backend.EnterCustomModeAsync(
+            CancellationToken.None);
+
+        await backend.ApplyAsync(
+            new FanCommand(
+                30,
+                30,
+                "qualification-hook-ordering"),
+            CancellationToken.None);
+
+        var intentIndex = sequence.IndexOf("intent");
+        var setIndex = sequence.IndexOf("set");
+        var hookIndex = sequence.IndexOf("hook");
+        var commitIndex = sequence.IndexOf("commit");
+
+        await backend.RestoreFirmwareAutoAsync(
+            CancellationToken.None);
+
+        return Report(
+            output,
+            "qualification hook runs after real hardware acknowledgement and before watchdog Commit",
+            intentIndex >= 0 &&
+            setIndex > intentIndex &&
+            hookIndex > setIndex &&
+            commitIndex > hookIndex &&
+            hook.Calls == 1 &&
+            hook.LastCpuTarget == 30 &&
+            hook.LastGpuTarget == 30 &&
+            hook.LastSetpointAck.CpuSetpoint == 30 &&
+            hook.LastSetpointAck.GpuSetpoint == 30 &&
+            hook.LastTachAck.CpuSetpoint == 30 &&
+            hook.LastTachAck.GpuSetpoint == 30 &&
+            hook.LastTachAck.CpuRpm > 0 &&
+            hook.LastTachAck.GpuRpm > 0);
+    }
+
     private static async Task<int> TestWatchdogPostIntentExternalRaceAsync(
         TextWriter output)
     {
@@ -1101,13 +1160,15 @@ public static class Hp8C40FanControlBackendSelfTest
 
     private static Hp8C40FanControlBackend NewProtectedBackend(
         FakeHardware hardware,
-        FakeWatchdogLeaseClient lease) =>
+        FakeWatchdogLeaseClient lease,
+        IHp8C40FanWriteQualificationHook? qualificationHook = null) =>
         new(
             hardware,
             targetSupported: true,
             supportDetail: "synthetic validated target",
             timing: FastTiming,
-            watchdogLease: lease);
+            watchdogLease: lease,
+            qualificationHook: qualificationHook);
 
     private static int Report(TextWriter output, string name, bool pass)
     {
@@ -1118,6 +1179,43 @@ public static class Hp8C40FanControlBackendSelfTest
     private sealed class FrozenActiveTimeClock : IActiveTimeClock
     {
         public ulong Milliseconds => 0;
+    }
+
+    private sealed class RecordingQualificationHook :
+        IHp8C40FanWriteQualificationHook
+    {
+        private readonly Action _onCall;
+
+        public RecordingQualificationHook(
+            Action onCall)
+        {
+            _onCall = onCall;
+        }
+
+        public int Calls { get; private set; }
+        public byte LastCpuTarget { get; private set; }
+        public byte LastGpuTarget { get; private set; }
+        public Hp8C40EcControlState LastSetpointAck { get; private set; }
+        public Hp8C40EcControlState LastTachAck { get; private set; }
+
+        public ValueTask AfterHardwareAcknowledgedBeforeWatchdogCommitAsync(
+            byte cpuTarget,
+            byte gpuTarget,
+            Hp8C40EcControlState setpointAck,
+            Hp8C40EcControlState tachAck,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            Calls++;
+            LastCpuTarget = cpuTarget;
+            LastGpuTarget = gpuTarget;
+            LastSetpointAck = setpointAck;
+            LastTachAck = tachAck;
+            _onCall();
+
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class FakeWatchdogLeaseClient :
