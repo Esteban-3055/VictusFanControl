@@ -31,6 +31,7 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
     private const int SamplesPerLevel = 5;
     private static readonly TimeSpan SettleDuration = TimeSpan.FromSeconds(4);
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan MaximumTelemetryAge = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan EcRetryDelay = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan SetpointAckTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RestoreAckTimeout = TimeSpan.FromSeconds(5);
@@ -127,7 +128,16 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
         var baseline = reader.ReadSnapshot();
         Console.WriteLine("Firmware baseline:");
         ConsoleTelemetryPrinter.Print(baseline);
-        EnsureSafeTelemetry(hardware, baseline);
+        try
+        {
+            EnsureSafeTelemetry(hardware, baseline);
+        }
+        catch (PowerTransitionDetectedException ex)
+        {
+            Console.Error.WriteLine(
+                $"Qualification aborted before any fan write: {ex.Message}");
+            return 118;
+        }
 
         Hp8C40EcControlState baselineEc;
         try
@@ -171,6 +181,15 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
                 return 114;
             }
 
+            if (outcome.PowerTransitionDetected)
+            {
+                Console.Error.WriteLine(
+                    $"POWER TRANSITION DETECTED at {level}/{level}: {outcome.Message}");
+                Console.Error.WriteLine(
+                    "Extended sweep aborted after firmware-restore attempt; no further levels will be written.");
+                return 118;
+            }
+
             if (!outcome.Passed)
             {
                 Console.Error.WriteLine(
@@ -200,6 +219,15 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             if (outcome.RestoreFailed)
             {
                 return 114;
+            }
+
+            if (outcome.PowerTransitionDetected)
+            {
+                Console.Error.WriteLine(
+                    $"POWER TRANSITION DETECTED at {level}/{level}: {outcome.Message}");
+                Console.Error.WriteLine(
+                    "Extended sweep aborted after firmware-restore attempt; no upper sweep will be started.");
+                return 118;
             }
 
             if (outcome.RunningFloorReached)
@@ -248,6 +276,15 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             if (outcome.RestoreFailed)
             {
                 return 114;
+            }
+
+            if (outcome.PowerTransitionDetected)
+            {
+                Console.Error.WriteLine(
+                    $"POWER TRANSITION DETECTED at {level}/{level}: {outcome.Message}");
+                Console.Error.WriteLine(
+                    "Extended sweep aborted after firmware-restore attempt; no larger level will be written.");
+                return 118;
             }
 
             if (!outcome.Passed)
@@ -465,6 +502,7 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
                 Passed: false,
                 RunningFloorReached: false,
                 RestoreFailed: true,
+                PowerTransitionDetected: false,
                 Message: restoreFailure.Message,
                 Result: null);
         }
@@ -474,12 +512,24 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             throw stepFailure;
         }
 
+        if (stepFailure is PowerTransitionDetectedException)
+        {
+            return new LevelOutcome(
+                Passed: false,
+                RunningFloorReached: false,
+                RestoreFailed: false,
+                PowerTransitionDetected: true,
+                Message: stepFailure.Message,
+                Result: null);
+        }
+
         if (stepFailure is RunningFloorException)
         {
             return new LevelOutcome(
                 Passed: false,
                 RunningFloorReached: true,
                 RestoreFailed: false,
+                PowerTransitionDetected: false,
                 Message: stepFailure.Message,
                 Result: null);
         }
@@ -490,6 +540,7 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
                 Passed: false,
                 RunningFloorReached: runningFloorReached,
                 RestoreFailed: false,
+                PowerTransitionDetected: false,
                 Message: stepFailure.Message,
                 Result: null);
         }
@@ -504,6 +555,7 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
             Passed: true,
             RunningFloorReached: false,
             RestoreFailed: false,
+            PowerTransitionDetected: false,
             Message: "passed",
             Result: result);
     }
@@ -572,6 +624,20 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
         HardwareIdentity hardware,
         TelemetrySnapshot snapshot)
     {
+        var telemetryAge = DateTimeOffset.UtcNow - snapshot.Timestamp;
+        if (telemetryAge < TimeSpan.Zero)
+        {
+            telemetryAge = TimeSpan.Zero;
+        }
+
+        if (telemetryAge > MaximumTelemetryAge)
+        {
+            throw new PowerTransitionDetectedException(
+                $"telemetry age jumped to {telemetryAge.TotalSeconds:0.0} s " +
+                $"(maximum expected {MaximumTelemetryAge.TotalSeconds:0.0} s). " +
+                "This is consistent with a sleep/hibernate/power-transition gap.");
+        }
+
         var safety = SafetyGate.Evaluate(
             hardware,
             SystemState.Healthy,
@@ -864,12 +930,21 @@ public static class Hp8C40ExtendedFanRangeQualificationTest
         bool Passed,
         bool RunningFloorReached,
         bool RestoreFailed,
+        bool PowerTransitionDetected,
         string Message,
         LevelResult? Result);
 
     private sealed class RunningFloorException : Exception
     {
         public RunningFloorException(string message)
+            : base(message)
+        {
+        }
+    }
+
+    private sealed class PowerTransitionDetectedException : Exception
+    {
+        public PowerTransitionDetectedException(string message)
             : base(message)
         {
         }
