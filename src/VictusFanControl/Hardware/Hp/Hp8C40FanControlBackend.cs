@@ -20,6 +20,16 @@ internal interface IHp8C40FanHardware : IDisposable
     void RestoreFirmwareAuto();
 }
 
+internal interface IHp8C40FanWriteQualificationHook
+{
+    ValueTask AfterHardwareAcknowledgedBeforeWatchdogCommitAsync(
+        byte cpuTarget,
+        byte gpuTarget,
+        Hp8C40EcControlState setpointAck,
+        Hp8C40EcControlState tachAck,
+        CancellationToken cancellationToken);
+}
+
 internal sealed class Hp8C40FanHardware : IHp8C40FanHardware
 {
     private readonly Hp8C40BiosFanControl _bios;
@@ -121,6 +131,7 @@ public sealed class Hp8C40FanControlBackend :
     private readonly int _maximumCommandLevel;
     private readonly IFanControlWatchdogLeaseClient? _watchdogLease;
     private readonly IActiveTimeClock _activeTimeClock;
+    private readonly IHp8C40FanWriteQualificationHook? _qualificationHook;
 
     private bool _customModeActive;
     private bool _disposed;
@@ -148,6 +159,7 @@ public sealed class Hp8C40FanControlBackend :
 
         _watchdogLease = watchdogLease;
         _activeTimeClock = new WindowsActiveTimeClock();
+        _qualificationHook = null;
         _lastRestoreEvidence = new FanFirmwareRestoreEvidence(
             LocalFirmwareAckVerified: false,
             WatchdogLeaseRequired: _watchdogLease is not null,
@@ -174,7 +186,8 @@ public sealed class Hp8C40FanControlBackend :
         IFanControlWatchdogLeaseClient? watchdogLease = null,
         IActiveTimeClock? activeTimeClock = null,
         int? minimumCommandLevel = null,
-        int? maximumCommandLevel = null)
+        int? maximumCommandLevel = null,
+        IHp8C40FanWriteQualificationHook? qualificationHook = null)
     {
         _hardware = hardware;
         _targetSupported = targetSupported;
@@ -197,6 +210,7 @@ public sealed class Hp8C40FanControlBackend :
 
         _watchdogLease = watchdogLease;
         _activeTimeClock = activeTimeClock ?? new WindowsActiveTimeClock();
+        _qualificationHook = qualificationHook;
         _lastRestoreEvidence = new FanFirmwareRestoreEvidence(
             LocalFirmwareAckVerified: false,
             WatchdogLeaseRequired: _watchdogLease is not null,
@@ -563,6 +577,25 @@ public sealed class Hp8C40FanControlBackend :
                     currentLevels,
                     preDispatch,
                     cancellationToken).ConfigureAwait(false);
+
+                if (leaseWriteArmed &&
+                    _watchdogLease is not null &&
+                    _qualificationHook is not null)
+                {
+                    // Qualification-only pause point. Production construction
+                    // cannot provide this internal hook. It runs only after the
+                    // real WMI write has been acknowledged by EC setpoints and
+                    // both tachometers, while the watchdog journal is still
+                    // durably WRITE_ARMED and before Commit can be dispatched.
+                    await _qualificationHook
+                        .AfterHardwareAcknowledgedBeforeWatchdogCommitAsync(
+                            cpuTarget,
+                            gpuTarget,
+                            setpointAck,
+                            tachAck,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
 
                 if (leaseWriteArmed && _watchdogLease is not null)
                 {
