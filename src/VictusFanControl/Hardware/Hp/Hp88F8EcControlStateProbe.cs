@@ -79,13 +79,13 @@ public sealed class Hp88F8EcControlStateProbe
     private static void EnsureTargetBoard()
     {
         var hardware = HardwareIdentityReader.ReadCurrent();
-        if (!string.Equals(
-                hardware.BoardProduct,
-                "88F8",
-                StringComparison.OrdinalIgnoreCase))
+
+        if (!Hp88F8TargetProfile.Matches(
+                hardware,
+                out var reason))
         {
             throw new InvalidOperationException(
-                $"88F8 EC-state probe refused on board '{hardware.BoardProduct}'.");
+                $"88F8 EC-state probe refused: {reason}");
         }
     }
 }

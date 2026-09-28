@@ -17,6 +17,7 @@ public static class Hp8C40FanControlBackendSelfTest
 
         failures += await TestProductionCapabilitiesAsync(output);
         failures += await TestHappyPathAsync(output);
+        failures += await TestSameSetpointSkipsRedundantWmiWriteAsync(output);
         failures += await TestExistingOverrideRefusedAsync(output);
         failures += await TestCancelledAdmissionIsNoWriteAsync(output);
         failures += await TestAdmissionFailurePreservesCauseAsync(output);
@@ -91,6 +92,36 @@ public static class Hp8C40FanControlBackendSelfTest
             active.CustomModeActive &&
             active.Detail.Contains("both tachometers", StringComparison.OrdinalIgnoreCase) &&
             !restored.CustomModeActive);
+    }
+
+    private static async Task<int> TestSameSetpointSkipsRedundantWmiWriteAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        await using var backend = NewBackend(hardware);
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "initial-30"),
+            CancellationToken.None);
+
+        var writesAfterFirstCommand = hardware.SetCalls;
+
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "repeat-same-30"),
+            CancellationToken.None);
+
+        var writesAfterRepeatedCommand = hardware.SetCalls;
+
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "same owned setpoint is verified without redundant WMI SetFanLevel write",
+            writesAfterFirstCommand == 1 &&
+            writesAfterRepeatedCommand == 1 &&
+            hardware.RestoreCalls == 1);
     }
 
     private static async Task<int> TestExistingOverrideRefusedAsync(TextWriter output)

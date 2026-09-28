@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using VictusFanControl.Hardware.Hp;
 
 namespace VictusFanControl.App;
 
@@ -10,6 +11,7 @@ internal sealed record GateG1WatchdogSnapshot(
     int ProcessId,
     int SessionId,
     string AccountName,
+    string TargetProfileId,
     string? RecoveryDisposition,
     string Detail,
     string JournalPath,
@@ -98,6 +100,7 @@ internal static class GateG1WatchdogStateReader
             status.ProcessId,
             status.SessionId,
             status.AccountName ?? string.Empty,
+            status.TargetProfileId ?? string.Empty,
             status.RecoveryDisposition,
             status.Detail ?? string.Empty,
             journalPath,
@@ -114,6 +117,16 @@ internal static class GateG1WatchdogStateReader
         {
             throw new InvalidOperationException(
                 $"Gate G1 requires watchdog Ready/unblocked; Ready={snapshot.Ready}, Blocked={snapshot.Blocked}, detail={snapshot.Detail}");
+        }
+
+        if (!string.Equals(
+                snapshot.TargetProfileId,
+                Hp88F8TargetProfile.Instance.Id,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Gate G1 requires watchdog target '{Hp88F8TargetProfile.Instance.Id}'; " +
+                $"observed '{snapshot.TargetProfileId}'.");
         }
 
         if (snapshot.SessionId != 0)
@@ -180,6 +193,7 @@ internal static class GateG1WatchdogStateReader
         int ProcessId,
         int SessionId,
         string? AccountName,
+        string? TargetProfileId,
         string? RecoveryDisposition,
         string? Detail,
         string? JournalPath);

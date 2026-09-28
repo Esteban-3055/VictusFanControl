@@ -103,6 +103,7 @@ internal sealed class MainForm : Form
     private readonly FanControlCoordinator _fanCoordinator;
     private readonly string _fanBackendStartupDetail;
     private readonly HardwareIdentity _hardwareIdentity;
+    private readonly HardwareTargetProfile? _targetProfile;
     private readonly string _modulesDirectory;
     private readonly bool _suspendLifecycleHardwareTest;
     private readonly bool _gateDHardwareTest;
@@ -256,6 +257,10 @@ internal sealed class MainForm : Form
         _gateG1HardwareTest = gateG1HardwareTest;
         _gateG2HardwareTest = gateG2HardwareTest;
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
+        _targetProfile =
+            HpHardwareTargetResolver.Resolve(
+                _hardwareIdentity,
+                out _);
 
         if (_suspendLifecycleHardwareTest)
         {
@@ -945,6 +950,21 @@ internal sealed class MainForm : Form
 
     private async Task ReopenFanAdmissionAfterHealthyAsync()
     {
+        // Interim 8C40 fail-closed rule after M0: PBT_APMRESUMEAUTOMATIC can
+        // occur during a maintenance wake while SESSION_DISPLAY_STATUS remains
+        // Off. Until the M-series display-aware lifecycle gate is integrated,
+        // generic S3-era Healthy recovery must never reopen Custom admission on
+        // a Modern Standby target. Restarting the app is preferable to silently
+        // granting authority during a screen-off maintenance wake.
+        if (_targetProfile?.SleepModel ==
+            WindowsSleepModel.ModernStandbyS0LowPowerIdle)
+        {
+            Ui(() => AppendEvent(
+                "Modern Standby target: generic S3-era lifecycle recovery will not reopen Custom admission. " +
+                "M-series display-aware lifecycle qualification is still required."));
+            return;
+        }
+
         var timestamp = _lastSnapshot?.Timestamp;
         if (!timestamp.HasValue)
         {
@@ -985,11 +1005,19 @@ internal sealed class MainForm : Form
         diagnostics.Controls.Add(BuildDiagnostics());
 
         var fanCurve = new TabPage("Fan Curve");
+        var targetDescription =
+            _targetProfile is null
+                ? "No validated HP hardware target is active."
+                : $"Validated target: {_targetProfile.DisplayName} ({_targetProfile.Id}).";
+
         fanCurve.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter,
-            Text = "The validated HP 88F8 backend is integrated behind FanControlCoordinator.\r\nAutomatic fan policy is intentionally OFF; no curve commands are issued by this GUI yet.",
+            Text =
+                targetDescription +
+                "\r\nBackend is integrated behind FanControlCoordinator." +
+                "\r\nAutomatic fan policy is intentionally OFF; no curve commands are issued by this GUI yet.",
             AutoSize = false
         });
 

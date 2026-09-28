@@ -683,3 +683,39 @@ preservation and verified return to firmware ownership.
 
 See `docs/WATCHDOG_M2_8C40.md` and
 `scripts/test-watchdog-m2-8c40.ps1`.
+
+
+## M2.5 legacy-88F8 isolation hardening
+
+After the physical M2 PASS, the repository was audited specifically for
+historical HP 88F8/S3 paths that could accidentally reach the HP 8C40 target.
+
+The following hardening is now part of the M2.5 code gate:
+
+- all historical GUI hardware modes (`--suspend-custom-test` and Gate D-G)
+  require the exact `HP-88F8-62C37LA-F32` fingerprint before MainForm/backend
+  creation;
+- MainForm keeps a second exact-target guard so those harnesses cannot be
+  reused on HP 8C40 even if invoked outside the normal startup path;
+- the generic S3-era Healthy/recovery path does not reopen Custom admission on
+  a Modern Standby target. Until the display-aware M-series lifecycle is
+  qualified, an 8C40 maintenance wake remains fail-closed;
+- the legacy Gate G watchdog state reader now requires the explicit 88F8
+  `TargetProfileId` written by the M1 target-aware service status;
+- the historical 88F8 EC diagnostic probe now requires the full exact hardware
+  fingerprint rather than board product alone;
+- M-series installation refuses coexistence with registered historical
+  `VictusFanControlWatchdogGateA`, `VictusFanControlWatchdogGateB` or
+  `VictusFanControlWatchdog` services;
+- `scripts/cleanup-watchdog-88f8-services.ps1` can stop/disable/delete those
+  old service registrations while preserving their ProgramData logs and
+  journals for forensic history.
+
+This gate deliberately does **not** enable the 8C40 watchdog lease and does not
+change `WatchdogRecoveryValidated=false`. Target identity in the named-pipe
+lease handshake remains a required M4 boundary before real 8C40 watchdog
+ownership is allowed.
+
+The 8C40 backend also has an explicit regression proving that reapplying the
+same already-owned setpoint verifies EC/tach feedback without issuing another
+WMI `SetFanLevel` command.

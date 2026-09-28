@@ -60,6 +60,31 @@ function Remove-ServiceIfPresent {
 
 Assert-Administrator
 
+$legacyServiceNames = @(
+    'VictusFanControlWatchdogGateA',
+    'VictusFanControlWatchdogGateB',
+    'VictusFanControlWatchdog'
+)
+
+$installedLegacyServices = @(
+    $legacyServiceNames |
+        ForEach-Object { Get-Service -Name $_ -ErrorAction SilentlyContinue } |
+        Where-Object { $_ }
+)
+
+if ($installedLegacyServices.Count -gt 0) {
+    $legacySummary =
+        ($installedLegacyServices |
+            ForEach-Object { "$($_.Name)[$($_.Status)]" }) -join ', '
+
+    throw (
+        "HP 8C40 M-series isolation refused because historical 88F8 watchdog " +
+        "services are still installed: $legacySummary. Run " +
+        ".\scripts\cleanup-watchdog-88f8-services.ps1 from an elevated " +
+        "PowerShell, then retry. Historical ProgramData evidence is preserved."
+    )
+}
+
 if (-not (Test-Path $sourceModule)) {
     throw "Required signed module not found: $sourceModule"
 }
@@ -78,15 +103,10 @@ try {
         throw "dotnet publish failed with exit code $LASTEXITCODE."
     }
 
-    foreach ($name in @(
-        'VictusFanControlWatchdogGateA',
-        'VictusFanControlWatchdogGateB',
-        'VictusFanControlWatchdog',
-        $serviceName
-    )) {
-        Stop-ServiceIfRunning -Name $name
-    }
-
+    # M-series isolation was checked before publishing. Only the dedicated M2
+    # service is touched here; legacy 88F8 services must be explicitly removed
+    # rather than silently stopped and left eligible for a later reboot start.
+    Stop-ServiceIfRunning -Name $serviceName
     Remove-ServiceIfPresent -Name $serviceName
 
     if (Test-Path $installRoot) {

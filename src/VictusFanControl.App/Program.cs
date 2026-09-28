@@ -1,3 +1,6 @@
+using VictusFanControl.Hardware.Hp;
+using VictusFanControl.Hardware.Windows;
+
 namespace VictusFanControl.App;
 
 internal static class Program
@@ -280,6 +283,39 @@ internal static class Program
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
             return;
+        }
+
+        var legacy88F8HardwareHarnessRequested =
+            suspendHardwareTest ||
+            gateDHardwareTest ||
+            gateEHardwareTest ||
+            gateF1HardwareTest ||
+            gateF2HardwareTest ||
+            gateG1HardwareTest ||
+            gateG2HardwareTest;
+
+        if (legacy88F8HardwareHarnessRequested)
+        {
+            var hardware = HardwareIdentityReader.ReadCurrent();
+
+            if (!Hp88F8TargetProfile.Matches(
+                    hardware,
+                    out var legacyTargetReason))
+            {
+                AppLog.Write(
+                    "Legacy 88F8 hardware harness startup refused before MainForm/backend creation: " +
+                    legacyTargetReason);
+
+                MessageBox.Show(
+                    "This hardware-test mode belongs to the historical HP 88F8 / Legacy S3 target and is blocked on this computer. " +
+                    "Use the dedicated 8C40 M-series qualification gates instead.",
+                    "VictusFanControl - legacy harness blocked",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                Environment.ExitCode = 60;
+                return;
+            }
         }
 
         AppLog.Write($"Starting GUI. Modules={modulesDirectory}");

@@ -65,6 +65,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-watchdog-gate-g2-invariants.ps1
 
+      - name: HP 8C40 legacy 88F8 isolation invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-legacy-isolation-invariants.ps1
+
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
