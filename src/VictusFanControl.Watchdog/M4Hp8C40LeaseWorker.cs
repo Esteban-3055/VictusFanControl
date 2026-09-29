@@ -281,6 +281,7 @@ internal sealed class M4Hp8C40LeaseWorker :
     {
         Process? monitoredProcess = null;
         ControllerIdentity? monitoredIdentity = null;
+        var retryableMonitorFailureActive = false;
 
         try
         {
@@ -303,6 +304,25 @@ internal sealed class M4Hp8C40LeaseWorker :
                         monitoredProcess?.Dispose();
                         monitoredProcess = null;
                         monitoredIdentity = null;
+
+                        if (retryableMonitorFailureActive)
+                        {
+                            WriteStatus(
+                                hardwareIdentity,
+                                process,
+                                accountName,
+                                journalPath,
+                                ready: true,
+                                blocked: false,
+                                recoveryDisposition: "Ready",
+                                detail:
+                                    "No active lease remains after retryable EC monitor contention; watchdog is Ready.");
+
+                            log.Write(
+                                "M4 MONITOR RECOVERED: active lease is gone; status returned to Ready.");
+
+                            retryableMonitorFailureActive = false;
+                        }
                     }
                     else
                     {
@@ -394,6 +414,34 @@ internal sealed class M4Hp8C40LeaseWorker :
                     return;
                 }
                 catch (Exception ex)
+                    when (IsRetryableEcMonitorFailure(ex))
+                {
+                    // A Modern Standby/DAM boundary can temporarily make the
+                    // process-global EC mutex or a narrow EC observation
+                    // unavailable while the live controller is completing its
+                    // own restore. Failed observation is never ownership proof:
+                    // retain the journal, keep the exact watchdog alive and
+                    // retry on the next monitor iteration.
+                    retryableMonitorFailureActive = true;
+
+                    WriteStatus(
+                        hardwareIdentity,
+                        process,
+                        accountName,
+                        journalPath,
+                        ready: false,
+                        blocked: true,
+                        recoveryDisposition:
+                            "RetryableEcMonitorFailure",
+                        detail:
+                            $"{ex.GetType().Name}: {ex.Message}");
+
+                    log.Write(
+                        $"M4 MONITOR RETRYABLE EC FAILURE: {ex.GetType().Name}: {ex.Message}; durable journal retained and monitor will retry.");
+
+                    continue;
+                }
+                catch (Exception ex)
                 {
                     WriteStatus(
                         hardwareIdentity,
@@ -421,6 +469,11 @@ internal sealed class M4Hp8C40LeaseWorker :
                 var ready =
                     IsReadyDisposition(
                         recovery.Disposition);
+
+                if (ready)
+                {
+                    retryableMonitorFailureActive = false;
+                }
 
                 WriteStatus(
                     hardwareIdentity,
@@ -452,6 +505,28 @@ internal sealed class M4Hp8C40LeaseWorker :
         }
     }
 
+    internal static bool IsRetryableEcMonitorFailure(Exception exception)
+    {
+        for (Exception? current = exception;
+             current is not null;
+             current = current.InnerException)
+        {
+            if (current.Message.Contains(
+                    @"Global\Access_EC",
+                    StringComparison.Ordinal) ||
+                current.Message.Contains(
+                    "EC fan setpoint snapshot",
+                    StringComparison.Ordinal) ||
+                current.Message.Contains(
+                    "EC register",
+                    StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
     private void WriteStatus(
         HardwareIdentity hardware,
         Process process,
