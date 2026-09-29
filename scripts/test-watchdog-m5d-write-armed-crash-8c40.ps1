@@ -70,13 +70,13 @@ function Is-WriteArmed($phase) {
     try{return ([int]$phase -eq 1)}catch{return $false}
 }
 
-function Assert-WriteArmedJournal($j,[int]$pid,[long]$ticks) {
+function Assert-WriteArmedJournal($j,[int]$ControllerProcessId,[long]$ControllerStartTicks) {
     if([int]$j.SchemaVersion -ne 2 -or
        $j.TargetProfileId -cne 'HP-8C40-9D0R1LA-F18' -or
        -not (Is-WriteArmed $j.Phase) -or
        [long]$j.Generation -ne 2 -or
-       [int]$j.Controller.ProcessId -ne $pid -or
-       [long]$j.Controller.ProcessStartUtcTicks -ne $ticks -or
+       [int]$j.Controller.ProcessId -ne $ControllerProcessId -or
+       [long]$j.Controller.ProcessStartUtcTicks -ne $ControllerStartTicks -or
        $null -ne $j.PreviousOwned -or
        [int]$j.Pending.Cpu -ne 30 -or [int]$j.Pending.Gpu -ne 30 -or
        $null -ne $j.Owned){
