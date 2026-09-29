@@ -3,7 +3,7 @@ $preflight=Get-Content (Join-Path $PSScriptRoot 'test-8c40-hibernation-m7-prefli
 $physical=Get-Content (Join-Path $PSScriptRoot 'test-8c40-hibernation-m7.ps1') -Raw
 
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
-    if(-not $Text.IndexOf($Needle,[StringComparison]::Ordinal) -ge 0){throw $Message}
+    if($Text.IndexOf($Needle,[StringComparison]::Ordinal) -lt 0){throw $Message}
 }
 function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
     if($Text.IndexOf($Needle,[StringComparison]::Ordinal) -ge 0){throw $Message}
