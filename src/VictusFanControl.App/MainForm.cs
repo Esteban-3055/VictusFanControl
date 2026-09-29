@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using VictusFanControl.Control;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
@@ -17,7 +18,12 @@ internal sealed class MainForm : Form
     private const int PbtApmResumeCritical = 0x0006;
     private const int PbtApmResumeSuspend = 0x0007;
     private const int PbtApmResumeAutomatic = 0x0012;
+    private const int PbtPowerSettingChange = 0x8013;
+    private const int DeviceNotifyWindowHandle = 0;
     private const int MaxEventLogChars = 120_000;
+
+    private static readonly Guid GuidSessionDisplayStatus =
+        new("2B84C20E-AD23-4DDF-93DB-05FFBD7EFCA5");
 
     private enum GateGResumeProofState
     {
@@ -99,6 +105,21 @@ internal sealed class MainForm : Form
     private static readonly string GateG2HardwareTestResultPath =
         Path.Combine(SuspendHardwareTestRoot, "gate-g2.result");
 
+    private static readonly string M6HardwareTestReadyPath =
+        Path.Combine(SuspendHardwareTestRoot, "m6-modern-standby.ready");
+
+    private static readonly string M6PreSleepPath =
+        Path.Combine(SuspendHardwareTestRoot, "m6-modern-standby.presleep");
+
+    private static readonly string M6ResumeGatePath =
+        Path.Combine(SuspendHardwareTestRoot, "m6-modern-standby.resume-gate");
+
+    private static readonly string M6ReentryPath =
+        Path.Combine(SuspendHardwareTestRoot, "m6-modern-standby.reentry");
+
+    private static readonly string M6HardwareTestResultPath =
+        Path.Combine(SuspendHardwareTestRoot, "m6-modern-standby.result");
+
     private readonly TelemetryWorker _worker;
     private readonly FanControlCoordinator _fanCoordinator;
     private readonly string _fanBackendStartupDetail;
@@ -112,6 +133,7 @@ internal sealed class MainForm : Form
     private readonly bool _gateF2HardwareTest;
     private readonly bool _gateG1HardwareTest;
     private readonly bool _gateG2HardwareTest;
+    private readonly bool _m6ModernStandbyHardwareTest;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
 
@@ -189,6 +211,24 @@ internal sealed class MainForm : Form
     private bool _gateGTelemetrySuspendedBeforeRestore;
     private DateTimeOffset? _gateGTelemetrySuspendMarkedAtUtc;
 
+    private IntPtr _m6SessionDisplayRegistration;
+    private int _m6AdvanceGate;
+    private bool _m6Armed;
+    private bool _m6Completed;
+    private bool _m6BackendAckVerified;
+    private bool _m6SessionDisplayOff;
+    private bool _m6DisplayOffObserved;
+    private bool _m6DisplayOnObserved;
+    private bool _m6PbtSuspendObserved;
+    private bool _m6ResumeAutomaticObservedWhileDisplayOff;
+    private bool _m6ResumeSuspendObservedWhileDisplayOff;
+    private bool _m6PreSleepRestoreVerified;
+    private int _m6AcceptedUserResumeCount;
+    private int _m6WatchdogPid;
+    private long _m6WatchdogStartUtcTicks;
+    private DateTimeOffset? _m6DisplayOffBoundaryUtc;
+    private DateTimeOffset? _m6DisplayOnBoundaryUtc;
+
     private bool GateGHardwareTest =>
         _gateG1HardwareTest || _gateG2HardwareTest;
 
@@ -241,7 +281,8 @@ internal sealed class MainForm : Form
         bool gateF1HardwareTest = false,
         bool gateF2HardwareTest = false,
         bool gateG1HardwareTest = false,
-        bool gateG2HardwareTest = false)
+        bool gateG2HardwareTest = false,
+        bool m6ModernStandbyHardwareTest = false)
     {
         Text = "VictusFanControl v0.4-dev — backend integrated / automatic policy OFF";
         StartPosition = FormStartPosition.CenterScreen;
@@ -256,6 +297,7 @@ internal sealed class MainForm : Form
         _gateF2HardwareTest = gateF2HardwareTest;
         _gateG1HardwareTest = gateG1HardwareTest;
         _gateG2HardwareTest = gateG2HardwareTest;
+        _m6ModernStandbyHardwareTest = m6ModernStandbyHardwareTest;
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
         _targetProfile =
             HpHardwareTargetResolver.Resolve(
@@ -321,6 +363,16 @@ internal sealed class MainForm : Form
             }
         }
 
+        if (_m6ModernStandbyHardwareTest)
+        {
+            Directory.CreateDirectory(SuspendHardwareTestRoot);
+            TryDeleteFile(M6HardwareTestReadyPath);
+            TryDeleteFile(M6PreSleepPath);
+            TryDeleteFile(M6ResumeGatePath);
+            TryDeleteFile(M6ReentryPath);
+            TryDeleteFile(M6HardwareTestResultPath);
+        }
+
         IFanControlBackend backend;
         try
         {
@@ -347,30 +399,49 @@ internal sealed class MainForm : Form
                             Hp88F8TargetProfile.Instance.Id);
             }
 
-            var selection = HpFanControlBackendFactory.Create(
-                modulesDirectory,
-                _hardwareIdentity,
-                watchdogLease);
-
-            backend = selection.Backend;
-            _fanBackendStartupDetail = selection.Detail;
-
-            if ((_suspendLifecycleHardwareTest ||
-                 _gateDHardwareTest ||
-                 _gateEHardwareTest ||
-                 _gateF1HardwareTest ||
-                 _gateF2HardwareTest ||
-                 _gateG1HardwareTest ||
-                 _gateG2HardwareTest) &&
-                !string.Equals(
-                    selection.TargetProfile?.Id,
-                    Hp88F8TargetProfile.Instance.Id,
-                    StringComparison.Ordinal))
+            if (_m6ModernStandbyHardwareTest)
             {
-                throw new NotSupportedException(
-                    "The legacy suspend/Gate D-G hardware harnesses are exact-target " +
-                    "HP 88F8 / Legacy S3 validation only. They must never be reused " +
-                    "on HP 8C40 Modern Standby; use the M-series gates instead.");
+                watchdogLease =
+                    new NamedPipeFanControlWatchdogLeaseClient(
+                        Hp8C40TargetProfile.Instance.Id,
+                        FanControlWatchdogLeaseContract.Hp8C40M4PipeName);
+
+                backend =
+                    Hp8C40FanControlBackend.CreateLifecycleQualificationBackend(
+                        modulesDirectory,
+                        watchdogLease,
+                        Hp8C40FanControlBackend.LifecycleQualificationToken);
+
+                _fanBackendStartupDetail =
+                    "Exact HP 8C40 M6 Modern Standby qualification backend selected with M4 watchdog lease; production factory remains blocked.";
+            }
+            else
+            {
+                var selection = HpFanControlBackendFactory.Create(
+                    modulesDirectory,
+                    _hardwareIdentity,
+                    watchdogLease);
+
+                backend = selection.Backend;
+                _fanBackendStartupDetail = selection.Detail;
+
+                if ((_suspendLifecycleHardwareTest ||
+                     _gateDHardwareTest ||
+                     _gateEHardwareTest ||
+                     _gateF1HardwareTest ||
+                     _gateF2HardwareTest ||
+                     _gateG1HardwareTest ||
+                     _gateG2HardwareTest) &&
+                    !string.Equals(
+                        selection.TargetProfile?.Id,
+                        Hp88F8TargetProfile.Instance.Id,
+                        StringComparison.Ordinal))
+                {
+                    throw new NotSupportedException(
+                        "The legacy suspend/Gate D-G hardware harnesses are exact-target " +
+                        "HP 88F8 / Legacy S3 validation only. They must never be reused " +
+                        "on HP 8C40 Modern Standby; use the M-series gates instead.");
+                }
             }
         }
         catch (Exception ex)
@@ -450,6 +521,14 @@ internal sealed class MainForm : Form
                     $"GATE G2 TEST: {GateG2TargetCycles} consecutive full watchdog suspend/resume cycles enabled in the same GUI and watchdog processes. Every cycle requires durable OWNED 30/30, prompt suspend fencing, completed Firmware + FF/FF + watchdog Ready/journal absent before resume acceptance, one accepted resume, five-snapshot Healthy recovery, one controlled 30/30 re-entry, and final Firmware restore. Automatic policy remains OFF.");
             }
 
+            if (_m6ModernStandbyHardwareTest)
+            {
+                RegisterM6SessionDisplayNotification();
+
+                AppendEvent(
+                    "M6 MODERN STANDBY TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; PBT resume notifications while display remains Off are observational only; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF.");
+            }
+
             _uiTimer.Start();
             _worker.Start();
             UpdateSafetyStatus();
@@ -458,6 +537,7 @@ internal sealed class MainForm : Form
         FormClosing += OnFormClosingToTray;
         FormClosed += (_, _) =>
         {
+            UnregisterM6SessionDisplayNotification();
             _uiTimer.Stop();
             _uiTimer.Dispose();
             _trayIcon.Visible = false;
@@ -1588,6 +1668,15 @@ internal sealed class MainForm : Form
     {
         if (_worker.StateMachine.State != SystemState.Healthy)
         {
+            return;
+        }
+
+        if (_m6ModernStandbyHardwareTest)
+        {
+            // M6 owns the display-aware admission-reopen ordering. Maintenance
+            // PBT resume signals never reach NotifyResume while the session
+            // display remains Off.
+            await AdvanceM6ModernStandbyHardwareTestAsync();
             return;
         }
 
