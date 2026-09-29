@@ -51,6 +51,8 @@ Assert-Contains $physical 'Wait-StableFirmwareAuto' 'M6 parent final EC proof mu
 Assert-Contains $physical 'Restore-M4Baseline' 'M6 must restore M4 Manual/stopped after firmware safety.'
 Assert-Contains $physical 'M6 emergency fallback cancelled only after journal absence + stable independent FF/FF proof.' 'M6 must keep the delayed fallback until independent safety proof.'
 Assert-Contains $physical 'collect-power-transition-diagnostics.ps1' 'M6 must capture post-transition Windows power diagnostics.'
+Assert-Contains $physical '[ValidateRange(180, 300)]' 'M6 failsafe delay must remain within the exact OWNED failsafe supported range.'
+Assert-Contains $physical 'if ($firmwareSafe) {' 'M6 power diagnostics and baseline cleanup must be gated by independent firmware safety proof.'
 Assert-NotContains $physical 'SetSuspendState(' 'M6 parent must not programmatically request sleep.'
 Assert-NotContains $physical '--restore-hp-auto' 'M6 parent must not invoke direct HP restore.'
 Assert-NotContains $physical 'SetFanLevel(' 'M6 parent must not directly issue a fan command.'
@@ -59,6 +61,13 @@ $armIndex=$physical.IndexOf('$failsafe = Start-DelayedFailsafe',[StringCompariso
 $appIndex=$physical.IndexOf('$app = Start-Process',[StringComparison]::Ordinal)
 if($armIndex-lt 0 -or $appIndex-lt 0 -or $armIndex-ge $appIndex){
     throw 'M6 delayed failsafe must be armed before launching the write-capable app.'
+}
+
+$finallyIndex=$physical.LastIndexOf('finally {',[StringComparison]::Ordinal)
+$safetyIndex=$physical.LastIndexOf('$firmwareSafe = $false',[StringComparison]::Ordinal)
+$diagnosticsIndex=$physical.LastIndexOf("collect-power-transition-diagnostics.ps1",[StringComparison]::Ordinal)
+if($finallyIndex-lt 0 -or $safetyIndex-lt $finallyIndex -or $diagnosticsIndex-lt $safetyIndex){
+    throw 'M6 abnormal cleanup must recover/prove firmware safety before collecting potentially slow power diagnostics.'
 }
 
 # App-specific lifecycle ordering and anti-maintenance-wake invariants.
