@@ -2,11 +2,12 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **CODE/CI PASS / NO-WRITE PREFLIGHT PASS / PHYSICAL PENDING**.
+Status: **CODE/CI PASS / NO-WRITE PREFLIGHT PASS / PHYSICAL PASS**.
 
-M5A through M5E have closed the awake watchdog/crash matrix. M6 is the
-lifecycle gate that must be completed before
-`WatchdogRecoveryValidated=true` can be considered.
+M5A through M5E have closed the awake watchdog/crash matrix. M6 now closes the
+display-aware Modern Standby lifecycle gate on the exact 8C40 target.
+`WatchdogRecoveryValidated` nevertheless remains false until the separate
+hibernation and remaining race/production gates are physically closed.
 
 Automatic/adaptive fan policy remains OFF.
 
@@ -347,3 +348,50 @@ could hide Kernel-Power evidence during retrospective analysis.
 
 M6 physical qualification remains pending. The failed attempt does not set
 `WatchdogRecoveryValidated` and does not enable automatic policy.
+
+
+## Physical attempt 3 - PASS
+
+The third physical M6 attempt on 2026-09-29 **passed** on the exact
+`HP-8C40-9D0R1LA-F18` target.
+
+The run first reached real watchdog-backed Custom `30/30` with watchdog PID
+`22424` and GUI PID `23832`. The primary
+`GUID_SESSION_DISPLAY_STATUS/Off` boundary captured active Custom ownership
+and backend acknowledgement. Telemetry admission was fenced, hardware reads
+were quiesced, and the registered `PBT_APMSUSPEND` completion barrier waited
+for the already-started restore. The handoff completed in 1051.6 ms with
+Firmware authority, local FF/FF acknowledgement, watchdog Release, journal
+absence and stable independent FF/FF.
+
+Windows then provided a clean real Modern Standby pair:
+
+~~~text
+Kernel-Power 506  20:26:51.501  Screen Off Request
+Kernel-Power 507  20:29:01.919  Input Keyboard
+window                         130.4 s
+~~~
+
+The EventRecordID boundary excluded the old 18:55 critical-battery /
+hibernate evidence from this run. The generated system power report also
+corroborated the matching Modern Sleep session on AC with unchanged battery
+capacity.
+
+During wake, both `PBT_APMRESUMEAUTOMATIC` and
+`PBT_APMRESUMESUSPEND` were observed while the session display was still
+Off and were deliberately deferred. `SESSION_DISPLAY_STATUS/On` was accepted
+exactly once, after which telemetry completed the required five-snapshot
+Healthy recovery.
+
+The controlled post-resume re-entry then reacquired real watchdog-backed
+`30/30`, and the same watchdog process survived. Final Release restored
+Firmware, cleared the journal and ended with two independent FF/FF samples.
+The delayed emergency fallback never took over and was cancelled only after
+journal absence plus stable FF/FF. The M4 service was returned to
+Manual/stopped with temporary M6 SCM recovery actions removed.
+
+Therefore M6 is physically closed. This PASS does **not** by itself enable the
+automatic/adaptive fan policy or production watchdog construction.
+`WatchdogRecoveryValidated` remains false because hibernation and the
+remaining race/load/thermal production gates are still separate authorization
+boundaries.

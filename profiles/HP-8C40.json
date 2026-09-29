@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-code-ci-pass-preflight-pass-physical-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-hibernation-race-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -45,8 +45,8 @@
     "modernStandbyM6Prepared": true,
     "modernStandbyM6CodeCiPassed": true,
     "modernStandbyM6NoWritePreflightPassed": true,
-    "modernStandbyM6PhysicalPassed": false,
-    "displayAwareResumeQualificationPending": true,
+    "modernStandbyM6PhysicalPassed": true,
+    "displayAwareResumeQualificationPending": false,
     "hibernationQualificationPending": true
   },
   "control": {
@@ -1522,7 +1522,7 @@
     }
   },
   "modernStandbyM6Qualification": {
-    "status": "CODE_CI_PASS_NO_WRITE_PREFLIGHT_PASS_PHYSICAL_PENDING",
+    "status": "CODE_CI_PASS_NO_WRITE_PREFLIGHT_PASS_PHYSICAL_PASS",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "sleepModel": "ModernStandbyS0LowPowerIdle",
     "legacyS3Available": false,
@@ -1633,7 +1633,7 @@
         "interpretation": "The existing runtime path treated one unexpected guard sample as terminal. Backend hardening now requires bounded read-only confirmation before accepting a guard conflict; repeated identical unexpected guards remain fail-closed."
       }
     },
-    "physicalStatus": "PENDING",
+    "physicalStatus": "PASS",
     "watchdogRecoveryValidated": false,
     "physicalAttempt2": {
       "completedAt": "2026-09-29",
@@ -1659,6 +1659,74 @@
       "harnessOldEventFalseMatch": true,
       "qualificationPass": false,
       "interpretation": "Display Off occurred with valid Custom ownership, but the blocking restore overlapped entry to real Modern Standby. During screen-off maintenance activity M4 hit transient EC mutex contention and exited under the old policy. The revised M6 path explicitly registers suspend notifications, starts restore off the UI thread after a telemetry-I/O quiescence barrier, completes proof in registered PBT_APMSUSPEND, keeps M4 alive across retryable EC contention, and isolates Windows events by EventRecordID."
+    },
+    "physicalAttempt3": {
+      "completedAt": "2026-09-29",
+      "result": "PASS",
+      "targetProfileId": "HP-8C40-9D0R1LA-F18",
+      "initialReadyOwned30": true,
+      "watchdogPid": 22424,
+      "watchdogStartUtcTicks": 639263211796515500,
+      "guiPid": 23832,
+      "guiStartUtcTicks": 639263211935613300,
+      "preSleep": {
+        "primaryDisplaySignal": true,
+        "wasCustom": true,
+        "backendAck": true,
+        "authorityAfterRestore": "Firmware",
+        "restoreTrigger": "registered-WM_POWERBROADCAST/PBT_APMSUSPEND",
+        "restoreMs": 1051.6,
+        "localFirmwareAckVerified": true,
+        "watchdogReleaseVerified": true,
+        "journalAbsent": true,
+        "stableIndependentFfFf": true
+      },
+      "resume": {
+        "acceptedUserResumes": 1,
+        "resumeAutomaticDeferredWhileDisplayOff": true,
+        "resumeSuspendDeferredWhileDisplayOff": true,
+        "displayOnWasSoleAcceptedResumeBoundary": true,
+        "authorityAtGate": "Firmware",
+        "ecAtGate": "255/255",
+        "journalAbsent": true
+      },
+      "controlledReentry": {
+        "level": "30/30",
+        "authority": "Custom",
+        "backendAck": "EC+tachs+watchdog-owned",
+        "sameWatchdogProcess": true,
+        "finalWatchdogReleaseVerified": true,
+        "finalJournalAbsent": true,
+        "finalStableFfFf": true
+      },
+      "windowsEvidence": {
+        "kernelPowerRecordBoundary": 3546,
+        "first506": "2026-09-29T20:26:51.5018917-03:00",
+        "first506Reason": "Screen Off Request",
+        "final507": "2026-09-29T20:29:01.9197760-03:00",
+        "final507Reason": "Input Keyboard",
+        "modernStandbyEvidenceWindowSeconds": 130.4,
+        "disqualifyingPowerTransitionAfterBoundary": false
+      },
+      "sleepStudyCorroboration": {
+        "sessionId": 68,
+        "type": "Modern Sleep",
+        "entryLocal": "2026-09-29T20:26:52",
+        "exitLocal": "2026-09-29T20:29:01",
+        "durationSecondsApprox": 129.23,
+        "onAc": true,
+        "batteryCountChanged": false,
+        "entryRemainingCapacityMWh": 69546,
+        "exitRemainingCapacityMWh": 69546
+      },
+      "cleanup": {
+        "delayedFailsafeTakeover": false,
+        "delayedFailsafeCancelledOnlyAfterJournalAbsentAndStableFfFf": true,
+        "m4BaselineRestoredManualStopped": true,
+        "postTestStableFfFf": true
+      },
+      "qualificationPass": true,
+      "interpretation": "M6 display-aware Modern Standby lifecycle is physically qualified on the exact 8C40 target. Custom 30/30 was released to Firmware at SESSION_DISPLAY_STATUS Off, registered PBT_APMSUSPEND completed the verified handoff, maintenance PBT resume notifications were deferred while display remained Off, SESSION_DISPLAY_STATUS On was accepted exactly once, five-snapshot Healthy recovery preceded one controlled watchdog-backed 30/30 re-entry, and final Release ended with journal absent plus stable FF/FF under the same watchdog process. This closes M6 only; hibernation and remaining race/load/thermal production gates stay pending and WatchdogRecoveryValidated remains false."
     }
   }
 }

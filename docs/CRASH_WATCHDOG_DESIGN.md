@@ -950,3 +950,23 @@ Gate G2 remains the only suspend/resume repetition gate: 5/5 consecutive
 same-process cycles under the same contract. Automatic fan policy remains OFF.
 Representative-load testing and the adaptive RPM controller stay blocked until
 Gate G2 and the later low-target S3/load validations are complete.
+
+
+### HP 8C40 M6 - display-aware Modern Standby
+
+**PASSED on real HP 8C40 hardware, 2026-09-29.**
+
+The exact target completed a full watchdog-backed Modern Standby lifecycle:
+Custom 30/30 -> session-display Off proactive firmware handoff -> registered
+PBT_APMSUSPEND completion barrier -> real Kernel-Power 506/507 S0 low-power
+cycle -> deferred maintenance PBT resumes while display Off -> one accepted
+session-display On resume -> five-snapshot Healthy telemetry recovery ->
+controlled watchdog-backed 30/30 re-entry -> final verified firmware restore.
+
+The same LocalSystem watchdog PID survived the normal cycle, both releases
+cleared the durable journal only after verified firmware restore, final EC was
+stable FF/FF, and the independent delayed fallback never took over.
+
+This closes M6 only. Hibernation and remaining race/load/thermal qualification
+remain separate gates; production watchdog promotion and automatic policy stay
+blocked.
