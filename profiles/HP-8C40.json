@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-code-ci-pass-preflight-physical-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-code-ci-pass-preflight-pass-physical-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -44,7 +44,7 @@
     "watchdogM5CPreflightPassed": true,
     "modernStandbyM6Prepared": true,
     "modernStandbyM6CodeCiPassed": true,
-    "modernStandbyM6NoWritePreflightPassed": false,
+    "modernStandbyM6NoWritePreflightPassed": true,
     "modernStandbyM6PhysicalPassed": false,
     "displayAwareResumeQualificationPending": true,
     "hibernationQualificationPending": true
@@ -1522,7 +1522,7 @@
     }
   },
   "modernStandbyM6Qualification": {
-    "status": "CODE_CI_PASS_NO_WRITE_PREFLIGHT_PENDING_PHYSICAL_PENDING",
+    "status": "CODE_CI_PASS_NO_WRITE_PREFLIGHT_PASS_PHYSICAL_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "sleepModel": "ModernStandbyS0LowPowerIdle",
     "legacyS3Available": false,
@@ -1598,7 +1598,29 @@
       "hpBackendSelfTest": true,
       "cleanupOrderingLocked": true
     },
-    "noWritePreflightStatus": "PENDING",
+    "noWritePreflightStatus": "PASS",
+    "physicalAttempt1": {
+      "completedAt": "2026-09-29",
+      "result": "FAIL_CLOSED",
+      "initialReadyOwned30": true,
+      "preSleepPrimaryDisplayOffObserved": true,
+      "preSleepWasCustom": false,
+      "preSleepBackendAck": true,
+      "preSleepAuthorityAfterRestore": "Firmware",
+      "localFirmwareAckVerified": true,
+      "watchdogReleaseVerified": true,
+      "journalAbsentAfterRestore": true,
+      "stableIndependentFfFf": true,
+      "acceptedUserResumes": 0,
+      "criticalBatteryEvent524Observed": true,
+      "batterySleepEvent42Observed": true,
+      "hibernateResumeEvent507Observed": true,
+      "delayedFailsafeTakeover": false,
+      "cleanupStableFfFfVerified": true,
+      "m4BaselineRestoredManualStopped": true,
+      "qualificationPass": false,
+      "interpretation": "Safe fail-closed attempt. Display-Off did not capture active Custom ownership (wasCustom=false), and the armed window was contaminated by critical-battery / hibernate evidence. M6 remains physically pending."
+    },
     "physicalStatus": "PENDING",
     "watchdogRecoveryValidated": false
   }

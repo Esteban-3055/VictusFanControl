@@ -21,6 +21,7 @@ $journalPath = Join-Path $serviceRoot 'state\lease.json'
 $serviceLog = Join-Path $serviceRoot ("logs\watchdog-m4-8c40-{0}.log" -f (Get-Date -Format 'yyyy-MM-dd'))
 
 $appRoot = Join-Path $env:LOCALAPPDATA 'VictusFanControl'
+$appLogPath = Join-Path $appRoot ("logs\events-{0}.log" -f (Get-Date -Format 'yyyy-MM-dd'))
 $readyPath = Join-Path $appRoot 'm6-modern-standby.ready'
 $preSleepPath = Join-Path $appRoot 'm6-modern-standby.presleep'
 $resumeGatePath = Join-Path $appRoot 'm6-modern-standby.resume-gate'
@@ -354,6 +355,59 @@ function Assert-Owned30Journal {
     }
 }
 
+function Get-M6PowerTransitionDisqualifier {
+    param([datetime]$StartTime)
+
+    $events = @(
+        Get-WinEvent -FilterHashtable @{
+            LogName='System'
+            ProviderName='Microsoft-Windows-Kernel-Power'
+            StartTime=$StartTime
+        } -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Id -eq 42 -or
+            $_.Id -eq 507 -or
+            $_.Id -eq 524
+        } |
+        Sort-Object TimeCreated
+    )
+
+    $criticalBattery = $events |
+        Where-Object { $_.Id -eq 524 } |
+        Select-Object -First 1
+
+    if ($criticalBattery) {
+        return ("Kernel-Power 524 critical-battery trigger at {0:O}" -f $criticalBattery.TimeCreated)
+    }
+
+    $batterySleep = $events |
+        Where-Object {
+            $_.Id -eq 42 -and
+            $_.Message -match '(?i)(battery|bater[ií]a)'
+        } |
+        Select-Object -First 1
+
+    if ($batterySleep) {
+        return ("Kernel-Power 42 battery-triggered sleep at {0:O}: {1}" -f
+            $batterySleep.TimeCreated,
+            (($batterySleep.Message -replace '\s+', ' ').Trim()))
+    }
+
+    $hibernateResume = $events |
+        Where-Object {
+            $_.Id -eq 507 -and
+            $_.Message -match '(?i)hibern'
+        } |
+        Select-Object -First 1
+
+    if ($hibernateResume) {
+        return ("Kernel-Power 507 reports hibernate resume at {0:O}: {1}" -f
+            $hibernateResume.TimeCreated,
+            (($hibernateResume.Message -replace '\s+', ' ').Trim()))
+    }
+
+    return $null
+}
 function Wait-ModernStandbyKernelEvidence {
     param(
         [datetime]$StartTime,
@@ -432,6 +486,12 @@ function Show-Diagnostics {
             Get-Content $item.Path
             Write-Host ''
         }
+    }
+
+    if (Test-Path $appLogPath) {
+        Write-Host 'Recent VFC application log:' -ForegroundColor Cyan
+        Get-Content $appLogPath | Select-Object -Last 220
+        Write-Host ''
     }
 
     if (Test-Path $statusPath) {
@@ -647,6 +707,11 @@ try {
 
     Write-Host ''
     Write-Host 'Step 6: validate display-aware handoff/resume/re-entry markers...' -ForegroundColor Cyan
+
+    $powerDisqualifier = Get-M6PowerTransitionDisqualifier -StartTime $eventWindowStart
+    if ($powerDisqualifier) {
+        throw "M6 requested Modern Standby cycle was contaminated by a disqualifying power transition: $powerDisqualifier"
+    }
 
     foreach ($requiredPath in @($preSleepPath,$resumeGatePath,$reentryPath)) {
         if (-not (Test-Path $requiredPath)) {

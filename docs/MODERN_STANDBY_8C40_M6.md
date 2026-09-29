@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **CODE/CI PASS / NO-WRITE PREFLIGHT PENDING / PHYSICAL PENDING**.
+Status: **CODE/CI PASS / NO-WRITE PREFLIGHT PASS / PHYSICAL PENDING**.
 
 M5A through M5E have closed the awake watchdog/crash matrix. M6 is the
 lifecycle gate that must be completed before
@@ -254,3 +254,42 @@ Gate B/C, M2/M3/M4, SafetyGate, FanControlCoordinator and HP backend tests.
 
 This is the exact code baseline for the M6 no-write preflight. Physical M6
 remains blocked until that local preflight passes.
+
+
+## Physical attempt 1 - fail-closed before valid M6 resume qualification
+
+The first M6 physical lifecycle attempt on 2026-09-29 did **not** qualify M6.
+
+The initial write boundary was valid: the exact LocalSystem / Session 0
+watchdog was pinned, the GUI reached real watchdog-backed Custom 30/30, the
+backend reported WMI + EC + dual-tach acknowledgement, and the durable journal
+was exact schema-v2 generation-3 OWNED 30/30.
+
+At the session-display Off boundary the hardware was restored safely, but the
+pre-sleep marker was deliberately rejected because `wasCustom=False`. The
+marker still showed verified local firmware acknowledgement, watchdog Release,
+journal absence and stable independent FF/FF. Service timestamps show the
+RESTORE_BEGIN / RELEASE sequence had already started before the marker was
+published, so the required causal proof that SESSION_DISPLAY_STATUS Off itself
+captured an actively Custom-owned boundary was not established.
+
+The same armed test window also contained Windows power-transition evidence
+that is not acceptable for a Modern Standby M6 PASS:
+
+- Kernel-Power 524 critical-battery trigger;
+- Kernel-Power 42 with sleep reason Battery;
+- Kernel-Power 507 reporting Resume from Hibernate.
+
+The GUI correctly refused the display-On resume gate because the proactive
+display-Off handoff had not been verified. Cleanup independently proved stable
+FF/FF, cancelled the 300-second delayed fallback only after journal absence +
+FF/FF, and restored the M4 service to Manual/stopped.
+
+This attempt is recorded as **FAIL_CLOSED / PHYSICAL PENDING**. A final FF/FF
+state is not treated as lifecycle qualification.
+
+Before any second physical M6 attempt, the harness is hardened to reject
+critical-battery or hibernate evidence in the armed window and to surface the
+persistent VFC application log so the exact pre-Off authority transition can
+be diagnosed. No production watchdog promotion or automatic policy change is
+authorized by this attempt.
