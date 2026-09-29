@@ -50,6 +50,89 @@ function Read-8C40Setpoint {
     [pscustomobject]@{ Cpu=[int]$match.Groups[1].Value; Gpu=[int]$match.Groups[2].Value; Raw=$line }
 }
 
+function Wait-StableFirmwareAuto {
+    param(
+        [string]$Label,
+        [ValidateRange(2, 20)]
+        [int]$MaxSamples = 8,
+        [ValidateRange(25, 500)]
+        [int]$DelayMilliseconds = 75
+    )
+
+    $requiredConsecutive = 2
+    $consecutiveFirmwareAuto = 0
+    $unexpectedCpu = -1
+    $unexpectedGpu = -1
+    $unexpectedSamples = 0
+    $last = $null
+
+    for ($sample = 1; $sample -le $MaxSamples; $sample++) {
+        try {
+            $last = Read-8C40Setpoint
+            Write-Host ("{0} sample {1}/{2}: {3}" -f $Label, $sample, $MaxSamples, $last.Raw)
+
+            if ($last.Cpu -eq 255 -and $last.Gpu -eq 255) {
+                $consecutiveFirmwareAuto++
+                $unexpectedCpu = -1
+                $unexpectedGpu = -1
+                $unexpectedSamples = 0
+
+                if ($consecutiveFirmwareAuto -ge $requiredConsecutive) {
+                    return [pscustomobject]@{
+                        Verified = $true
+                        State = $last
+                        Samples = $sample
+                        Detail = "two consecutive independent FF/FF samples"
+                    }
+                }
+            }
+            else {
+                $consecutiveFirmwareAuto = 0
+
+                if ($last.Cpu -eq $unexpectedCpu -and
+                    $last.Gpu -eq $unexpectedGpu) {
+                    $unexpectedSamples++
+                }
+                else {
+                    $unexpectedCpu = $last.Cpu
+                    $unexpectedGpu = $last.Gpu
+                    $unexpectedSamples = 1
+                }
+
+                # One post-restore 0x34/0x35 sample may be incoherent on this
+                # platform. Never turn one asymmetric read into a false FAIL,
+                # but also never accept it as firmware ownership.
+                if ($unexpectedSamples -ge 2) {
+                    return [pscustomobject]@{
+                        Verified = $false
+                        State = $last
+                        Samples = $sample
+                        Detail = "confirmed repeated unexpected setpoint $($last.Cpu)/$($last.Gpu)"
+                    }
+                }
+            }
+        }
+        catch {
+            $consecutiveFirmwareAuto = 0
+            $unexpectedCpu = -1
+            $unexpectedGpu = -1
+            $unexpectedSamples = 0
+            Write-Warning ("{0} sample {1}/{2} failed: {3}" -f $Label, $sample, $MaxSamples, $_.Exception.Message)
+        }
+
+        if ($sample -lt $MaxSamples) {
+            Start-Sleep -Milliseconds $DelayMilliseconds
+        }
+    }
+
+    return [pscustomobject]@{
+        Verified = $false
+        State = $last
+        Samples = $MaxSamples
+        Detail = "stable FF/FF was not observed twice consecutively within the bounded read-only window"
+    }
+}
+
 function Get-ServiceProcessId {
     $svc = Get-CimInstance Win32_Service -Filter "Name='$serviceName'" -ErrorAction SilentlyContinue
     if (-not $svc -or $svc.State -ne 'Running') { return 0 }
@@ -370,9 +453,14 @@ try {
     if ([int]$replacement.Pid -eq $servicePidBefore) { throw 'M5E replacement reused original PID.' }
     if (-not (Wait-ForJournalGone -Seconds 3)) { throw 'Replacement reports RestoredFirmware but journal remains.' }
 
-    $final = Read-8C40Setpoint
-    Write-Host "Independent final EC: $($final.Raw)"
-    if ($final.Cpu -ne 255 -or $final.Gpu -ne 255) { throw 'M5E final EC is not FF/FF.' }
+    $finalProof = Wait-StableFirmwareAuto -Label 'Independent final EC'
+    if (-not $finalProof.Verified) {
+        $lastFinal = if ($null -ne $finalProof.State) { $finalProof.State.Raw } else { 'no readable sample' }
+        throw "M5E final EC did not produce stable FF/FF proof: $($finalProof.Detail); last=$lastFinal."
+    }
+
+    $final = $finalProof.State
+    Write-Host "Independent final EC proof: $($final.Raw); $($finalProof.Detail)."
     if (Test-FailsafeTakeover) { throw 'Emergency fallback fired; run cannot PASS.' }
 
     $newLog = @()
@@ -415,9 +503,16 @@ finally {
     $firmwareSafe = $false
     if (-not (Test-Path $journalPath)) {
         try {
-            $cleanup = Read-8C40Setpoint
-            Write-Host "Post-test EC check: $($cleanup.Raw)"
-            $firmwareSafe = $cleanup.Cpu -eq 255 -and $cleanup.Gpu -eq 255
+            $cleanupProof = Wait-StableFirmwareAuto -Label 'Post-test EC check' -MaxSamples 8
+            $firmwareSafe = [bool]$cleanupProof.Verified
+
+            if ($firmwareSafe) {
+                Write-Host "Post-test EC proof: $($cleanupProof.State.Raw); $($cleanupProof.Detail)."
+            }
+            else {
+                $lastCleanup = if ($null -ne $cleanupProof.State) { $cleanupProof.State.Raw } else { 'no readable sample' }
+                Write-Warning "Post-test EC proof failed: $($cleanupProof.Detail); last=$lastCleanup."
+            }
         } catch {
             Write-Warning "Final EC check failed: $($_.Exception.Message)"
         }
