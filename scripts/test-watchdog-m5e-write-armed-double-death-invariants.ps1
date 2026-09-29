@@ -105,5 +105,9 @@ Assert-NotContains $failsafe 'Hp8C40BiosFanControl' 'M5E failsafe must have no d
 
 Assert-Contains $m5dChild 'WRITE_ARMED_POST_WMI_EC_TACH_ACK_PRE_COMMIT' 'M5E depends on the M5D exact pre-Commit hook.'
 Assert-Contains $m5dChild 'Timeout.InfiniteTimeSpan' 'M5D child must still hold the boundary until parent force-kill.'
+Assert-Contains $m5dChild 'ConfirmFirmwareAutoAfterAdmissionAnomalyAsync' 'M5E reused child must harden transient asymmetric admission reads without adding a write path.'
+Assert-Contains $m5dChild 'RequiredConsecutiveFirmwareAutoSamples = 2' 'M5E reused child must require consecutive FF/FF before retrying admission.'
+Assert-Contains $m5dChild 'ecProbe.ReadSetpoint()' 'M5E reused-child admission retry must remain read-only.'
+Assert-NotContains $m5dChild 'RestoreFirmwareAuto()' 'M5E reused child must not directly restore firmware during admission retry.'
 
 Write-Host 'HP 8C40 M5E WRITE_ARMED double-death invariant self-test: PASS' -ForegroundColor Green

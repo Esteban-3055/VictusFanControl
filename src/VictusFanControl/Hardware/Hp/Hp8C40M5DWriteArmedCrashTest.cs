@@ -24,6 +24,11 @@ public static class Hp8C40M5DWriteArmedCrashTest
     public const int QualificationLevel = 30;
 
     private const byte MinimumBatteryPercent = 20;
+    private const int AdmissionRetryAttempts = 3;
+    private const int AdmissionConfirmationAttempts = 4;
+    private const int RequiredConsecutiveFirmwareAutoSamples = 2;
+    private static readonly TimeSpan AdmissionRetryDelay =
+        TimeSpan.FromMilliseconds(50);
 
     public static async Task<int> RunAsync(
         string modulesDirectory,
@@ -178,8 +183,10 @@ public static class Hp8C40M5DWriteArmedCrashTest
         try
         {
             var admitted =
-                await coordinator.TryEnterCustomAsync(
+                await TryEnterCustomWithTransientAdmissionRetryAsync(
+                        coordinator,
                         safety,
+                        ecProbe,
                         cancellationToken)
                     .ConfigureAwait(false);
 
@@ -216,6 +223,109 @@ public static class Hp8C40M5DWriteArmedCrashTest
                 $"M5D controller failed: {ex.GetType().Name}: {ex.Message}");
             return 198;
         }
+    }
+
+    private static async ValueTask<bool> TryEnterCustomWithTransientAdmissionRetryAsync(
+        FanControlCoordinator coordinator,
+        SafetyGateResult safety,
+        Hp8C40EcControlStateProbe ecProbe,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1;
+             attempt <= AdmissionRetryAttempts;
+             attempt++)
+        {
+            try
+            {
+                return await coordinator.TryEnterCustomAsync(
+                        safety,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (FanControlOwnershipConflictException ex)
+            {
+                if (attempt >= AdmissionRetryAttempts ||
+                    !ex.Message.Contains(
+                        "EC setpoint=",
+                        StringComparison.Ordinal) ||
+                    !await ConfirmFirmwareAutoAfterAdmissionAnomalyAsync(
+                            ecProbe,
+                            cancellationToken)
+                        .ConfigureAwait(false))
+                {
+                    throw;
+                }
+
+                Console.WriteLine(
+                    $"M5D no-write admission anomaly recovered: {ex.Message}");
+                Console.WriteLine(
+                    "Firmware-auto FF/FF was reconfirmed on consecutive read-only samples; retrying Custom admission without issuing restore/write.");
+
+                await Task.Delay(
+                        AdmissionRetryDelay,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        return false;
+    }
+
+    private static async ValueTask<bool> ConfirmFirmwareAutoAfterAdmissionAnomalyAsync(
+        Hp8C40EcControlStateProbe ecProbe,
+        CancellationToken cancellationToken)
+    {
+        var consecutiveFirmwareAuto = 0;
+
+        for (var sample = 1;
+             sample <= AdmissionConfirmationAttempts;
+             sample++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var setpoint =
+                ecProbe.ReadSetpoint();
+
+            Console.WriteLine(
+                $"M5D admission recheck {sample}/{AdmissionConfirmationAttempts}: " +
+                $"setpoint={setpoint.CpuSetpoint}/{setpoint.GpuSetpoint}");
+
+            if (setpoint.CpuSetpoint == byte.MaxValue &&
+                setpoint.GpuSetpoint == byte.MaxValue)
+            {
+                consecutiveFirmwareAuto++;
+
+                if (consecutiveFirmwareAuto >=
+                    RequiredConsecutiveFirmwareAutoSamples)
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                // A stable equal non-FF pair is a plausible real external
+                // owner and must never be retried through. An asymmetric pair
+                // remains ambiguous, so reset the FF/FF streak and keep the
+                // bounded read-only confirmation window open.
+                if (setpoint.CpuSetpoint ==
+                    setpoint.GpuSetpoint)
+                {
+                    return false;
+                }
+
+                consecutiveFirmwareAuto = 0;
+            }
+
+            if (sample < AdmissionConfirmationAttempts)
+            {
+                await Task.Delay(
+                        AdmissionRetryDelay,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        return false;
     }
 
     private static SafetyGateResult EvaluateSafety(

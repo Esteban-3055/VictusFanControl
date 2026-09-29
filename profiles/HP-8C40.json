@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcd-awake-pass-m5e-code-ci-pass-physical-pending-lifecycle-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcd-awake-pass-m5e-admission-read-hardening-ci-pending-physical-pending-lifecycle-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -924,7 +924,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_M5B_M5C_M5D_AWAKE_PHYSICAL_PASS_M5E_WRITE_ARMED_DOUBLE_DEATH_CODE_CI_PASS_PHYSICAL_PENDING",
+    "status": "M5A_M5B_M5C_M5D_AWAKE_PHYSICAL_PASS_M5E_ADMISSION_READ_HARDENING_CI_PENDING_PHYSICAL_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -1355,7 +1355,7 @@
     "awakeWriteArmedControllerDeathQualificationComplete": true,
     "awakeTransactionalCrashMatrixComplete": false,
     "m5e": {
-      "status": "CODE_CI_PASS_PHYSICAL_PENDING",
+      "status": "ADMISSION_READ_HARDENING_CI_PENDING_PHYSICAL_PENDING",
       "purpose": "WRITE_ARMED post-WMI/pre-Commit watchdog+controller double-death with distinct replacement-service startup recovery",
       "targetProfileId": "HP-8C40-9D0R1LA-F18",
       "qualificationLevel": 30,
@@ -1413,7 +1413,44 @@
         "windowsPowerShell51Invariant": true,
         "warningsAsErrorsBuild": true
       },
-      "physicalStatus": "PENDING"
+      "physicalStatus": "PENDING",
+      "physicalAttempt1": {
+        "result": "SAFE_NO_WRITE_ADMISSION_ANOMALY",
+        "completedAt": "2026-09-29",
+        "targetProfileId": "HP-8C40-9D0R1LA-F18",
+        "initialJournal": "ABSENT",
+        "parentBaselineEc": "FF/FF",
+        "originalServicePid": 8664,
+        "originalServiceAccount": "NT AUTHORITY\\SYSTEM",
+        "delayedFailsafePid": 20500,
+        "delayedFailsafeDelaySeconds": 120,
+        "childInitialSetpoint": "FF/FF",
+        "childInitialCpuRpm": 2582,
+        "childInitialGpuRpm": 2403,
+        "anomalousAdmissionSetpoint": "255/11",
+        "prepareObserved": false,
+        "writeIntentObserved": false,
+        "wmiFanWriteAttempted": false,
+        "durableJournalCreated": false,
+        "faultInjectionAttempted": false,
+        "finalEc": "FF/FF",
+        "delayedFailsafeCancelledAfterSafetyProof": true,
+        "finalServiceStartupMode": "Manual",
+        "finalServiceState": "Stopped",
+        "qualificationPass": false
+      },
+      "admissionReadHardening": {
+        "scope": "qualification-only M5D child reused by M5E; production backend policy unchanged",
+        "maxAdmissionAttempts": 3,
+        "maxConfirmationSamplesPerAnomaly": 4,
+        "requiredConsecutiveFirmwareAutoSamples": 2,
+        "confirmationReadOnly": true,
+        "stableEqualNonFfRefused": true,
+        "unresolvedAsymmetryFailClosed": true,
+        "compensatingRestoreAllowed": false,
+        "fanWriteAllowedDuringRetry": false,
+        "ciStatus": "PENDING"
+      }
     }
   }
 }

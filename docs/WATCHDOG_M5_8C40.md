@@ -1043,3 +1043,59 @@ No M5E physical fault injection has yet been executed.
 
 `WatchdogRecoveryValidated` remains false and automatic/adaptive policy remains
 OFF until the remaining physical/lifecycle qualification gates are complete.
+
+
+### M5E physical attempt 1 - safe no-write admission anomaly
+
+The first physical M5E attempt on 2026-09-29 was **not** a destructive-gate
+attempt and does not count as PASS or FAIL of the double-death recovery.
+
+Observed sequence:
+
+~~~text
+local M5E invariant PASS
+initial durable journal ABSENT
+warnings-as-errors build PASS
+M5A/M5B/M5C/M5D/M5E invariants PASS
+M4 / Gate C / SafetyGate / coordinator / backend regressions PASS
+parent baseline EC FF/FF
+M4 service Ready as LocalSystem / Session 0
+original watchdog PID 8664
+delayed M5E fallback PID 20500, 120 s
+
+M5D child initial control evidence:
+  setpoint FF/FF
+  MaxFan 0x00
+  FanSwitch 0x00
+  RPM 2582/2403
+
+subsequent backend admission read:
+  setpoint 255/11
+
+result:
+  FanControlOwnershipConflictException
+  no PREPARE
+  no WRITE_INTENT
+  no WMI fan command
+  no durable journal
+  no fault injection
+  final EC FF/FF
+  delayed fallback cancelled only after safety proof
+  M4 baseline restored Manual/stopped
+~~~
+
+The isolated `255/11` sample is an asymmetric admission anomaly between
+surrounding FF/FF evidence. It is not accepted as firmware-auto state and is not
+silently converted into Custom authority.
+
+The qualification-only M5D child is hardened without changing the production
+backend admission policy: when an explicit no-write setpoint ownership conflict
+occurs, the child may retry admission at most three times **only after** a
+bounded read-only confirmation observes two consecutive FF/FF samples. A stable
+equal non-FF pair remains an immediate external-owner refusal; unresolved
+asymmetry remains fail-closed. The retry performs no compensating HP restore and
+no fan write.
+
+This hardening is intended only to prevent a transient/torn ownership sample
+from making the M5D/M5E qualification harness flaky. M5E physical execution
+remains pending until the hardening passes CI.
