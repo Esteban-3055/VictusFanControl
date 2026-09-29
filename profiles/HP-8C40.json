@@ -1666,9 +1666,9 @@
       "targetProfileId": "HP-8C40-9D0R1LA-F18",
       "initialReadyOwned30": true,
       "watchdogPid": 22424,
-      "watchdogStartUtcTicks": 639263211796515500,
+      "watchdogStartUtcTicks": "639263211796515513",
       "guiPid": 23832,
-      "guiStartUtcTicks": 639263211935613300,
+      "guiStartUtcTicks": "639263211935613262",
       "preSleep": {
         "primaryDisplaySignal": true,
         "wasCustom": true,
