@@ -222,6 +222,48 @@ public sealed class Hp8C40FanControlBackend :
             : $"Write backend disabled: {supportDetail}";
     }
 
+    public const string LifecycleQualificationToken =
+        "8C40-M6-MODERN-STANDBY30";
+
+    /// <summary>
+    /// Explicit physical-qualification constructor for the HP 8C40
+    /// Modern Standby lifecycle gate. The ordinary public constructor and
+    /// production backend factory remain blocked from watchdog-backed 8C40
+    /// control until lifecycle qualification is complete.
+    /// </summary>
+    public static Hp8C40FanControlBackend CreateLifecycleQualificationBackend(
+        string modulesDirectory,
+        IFanControlWatchdogLeaseClient watchdogLease,
+        string qualificationToken)
+    {
+        if (!string.Equals(
+                qualificationToken,
+                LifecycleQualificationToken,
+                StringComparison.Ordinal))
+        {
+            throw new UnauthorizedAccessException(
+                $"HP 8C40 lifecycle qualification requires exact token '{LifecycleQualificationToken}'.");
+        }
+
+        ArgumentNullException.ThrowIfNull(watchdogLease);
+
+        var identity = HardwareIdentityReader.ReadCurrent();
+        if (!Hp8C40TargetProfile.Matches(
+                identity,
+                out var reason))
+        {
+            throw new NotSupportedException(
+                $"HP 8C40 lifecycle qualification refused: {reason}");
+        }
+
+        return new Hp8C40FanControlBackend(
+            new Hp8C40FanHardware(modulesDirectory),
+            targetSupported: true,
+            supportDetail:
+                "Exact HP 8C40 M6 Modern Standby lifecycle qualification backend.",
+            watchdogLease: watchdogLease);
+    }
+
     public string Name => "HP 8C40 BIOS/WMI + EC/tach verification";
 
     public FanFirmwareRestoreEvidence LastRestoreEvidence =>
