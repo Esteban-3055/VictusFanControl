@@ -21,6 +21,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private readonly string _modulesDirectory;
     private readonly CancellationTokenSource _cts = new();
     private readonly SemaphoreSlim _wake = new(0, 1);
+    private readonly SemaphoreSlim _hardwareReadGate = new(1, 1);
     private readonly object _commandGate = new();
 
     private HardwareTelemetryReader? _reader;
@@ -81,6 +82,37 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         Log($"Suspend detected by {source}.");
         StateMachine.Transition(SystemState.Suspended, "Telemetry paused while Windows is suspended.");
         Wake();
+    }
+
+    public async ValueTask<bool> WaitForHardwareReadQuiescenceAsync(
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        if (timeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        }
+
+        using var timeoutCts =
+            CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+
+        timeoutCts.CancelAfter(timeout);
+
+        try
+        {
+            await _hardwareReadGate.WaitAsync(
+                    timeoutCts.Token)
+                .ConfigureAwait(false);
+
+            _hardwareReadGate.Release();
+            return true;
+        }
+        catch (OperationCanceledException)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     public bool NotifyResume(string source)
@@ -150,6 +182,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         }
 
         _reader?.Dispose();
+        _hardwareReadGate.Dispose();
         _wake.Dispose();
         _cts.Dispose();
     }
@@ -195,17 +228,16 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             try
             {
                 var readEpoch = CurrentPowerEpoch();
-                EnsureReader();
 
-                if (IsSuspended() || CurrentPowerEpoch() != readEpoch)
-                {
-                    continue;
-                }
+                var snapshot =
+                    await ReadSnapshotIfCurrentAsync(
+                            readEpoch,
+                            cancellationToken)
+                        .ConfigureAwait(false);
 
-                var snapshot = _reader!.ReadSnapshot();
-                TouchCompletedRead();
-
-                if (IsSuspended() || CurrentPowerEpoch() != readEpoch)
+                if (snapshot is null ||
+                    IsSuspended() ||
+                    CurrentPowerEpoch() != readEpoch)
                 {
                     continue;
                 }
@@ -340,18 +372,22 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 return;
             }
 
-            EnsureReader();
-
             // Prime RAPL and GetSystemTimes differential counters. The priming
             // sample is intentionally not considered for health.
-            _ = _reader!.ReadSnapshot();
-            _reader.ResetHealthWindow();
-            TouchCompletedRead();
+            var prime =
+                await ReadSnapshotIfCurrentAsync(
+                        recoveryEpoch,
+                        cancellationToken)
+                    .ConfigureAwait(false);
 
-            if (IsSuspended() || CurrentPowerEpoch() != recoveryEpoch)
+            if (prime is null ||
+                IsSuspended() ||
+                CurrentPowerEpoch() != recoveryEpoch)
             {
                 return;
             }
+
+            _reader!.ResetHealthWindow();
             await Task.Delay(NormalIntervalMs, cancellationToken).ConfigureAwait(false);
 
             var requiredComplete = _resumeValidationActive
@@ -366,13 +402,19 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                     return;
                 }
 
-                var snapshot = _reader.ReadSnapshot();
-                TouchCompletedRead();
+                var snapshot =
+                    await ReadSnapshotIfCurrentAsync(
+                            recoveryEpoch,
+                            cancellationToken)
+                        .ConfigureAwait(false);
 
-                if (IsSuspended() || CurrentPowerEpoch() != recoveryEpoch)
+                if (snapshot is null ||
+                    IsSuspended() ||
+                    CurrentPowerEpoch() != recoveryEpoch)
                 {
                     return;
                 }
+
                 SnapshotAvailable?.Invoke(this, snapshot);
                 PublishDiagnostics();
 
@@ -421,6 +463,35 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     }
 
 
+    private async ValueTask<TelemetrySnapshot?> ReadSnapshotIfCurrentAsync(
+        long expectedPowerEpoch,
+        CancellationToken cancellationToken)
+    {
+        await _hardwareReadGate.WaitAsync(
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        try
+        {
+            if (IsSuspended() ||
+                CurrentPowerEpoch() != expectedPowerEpoch)
+            {
+                return null;
+            }
+
+            EnsureReader();
+
+            var snapshot =
+                _reader!.ReadSnapshot();
+
+            TouchCompletedRead();
+            return snapshot;
+        }
+        finally
+        {
+            _hardwareReadGate.Release();
+        }
+    }
     private bool CheckForFrozenSnapshot(TelemetrySnapshot snapshot)
     {
         if (!snapshot.IsComplete)
