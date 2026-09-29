@@ -54,7 +54,24 @@ function Assert-HibernationAvailable {
     $powerA = (powercfg /a 2>&1 | Out-String)
     Write-Host $powerA
 
-    if ($powerA -notmatch '(?im)^\s*(Hibernate|Hibernar)\s*
+    if ($powerA -notmatch '(?im)^\s*(Hibernate|Hibernar)\s*$') {
+        throw 'M7 preflight requires Windows hibernation to be available according to powercfg /a.'
+    }
+
+    $battery = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+
+    if ($battery) {
+        Write-Host ("Battery: status={0}, charge={1}%" -f $battery.BatteryStatus, $battery.EstimatedChargeRemaining)
+
+        if ($null -ne $battery.EstimatedChargeRemaining -and
+            [int]$battery.EstimatedChargeRemaining -lt 20) {
+            throw "M7 preflight requires at least 20% reported battery charge; observed $($battery.EstimatedChargeRemaining)%."
+        }
+    }
+}
+
+function Read-8C40Setpoint {
     $output = (& dotnet $cli --probe-8c40-setpoint --modules-dir $modulesDir 2>&1 | Out-String)
     $line = ($output -split "[\r\n]+" |
         Where-Object { $_ -match '^setpoint CPU=' } |
