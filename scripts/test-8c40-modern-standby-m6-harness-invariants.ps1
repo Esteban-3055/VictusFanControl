@@ -22,7 +22,7 @@ Assert-Contains $preflight 'Assert-Exact8C40Target' 'M6 preflight must exact-mat
 Assert-Contains $preflight 'test-8c40-modern-standby-m6-invariants.ps1' 'M6 preflight must run lifecycle invariants.'
 Assert-Contains $preflight 'ModernStandbyProbe' 'M6 preflight must retain the M0 observer regression.'
 Assert-Contains $preflight 'Assert-StableFirmwareBaseline' 'M6 preflight must prove stable firmware-owned baseline read-only.'
-Assert-Contains $preflight "if (Test-Path $journalPath)" 'M6 preflight must explicitly refuse retained journal evidence.'
+Assert-Contains $preflight 'if (Test-Path $journalPath)' 'M6 preflight must explicitly refuse retained journal evidence.'
 Assert-NotContains $preflight 'SetFanLevel(' 'M6 no-write preflight must contain no direct fan write.'
 Assert-NotContains $preflight '--coordinator-write-token' 'M6 no-write preflight must not invoke a coordinator fan-write mode.'
 Assert-NotContains $preflight 'Start-Service' 'M6 no-write preflight must not start the watchdog service.'
