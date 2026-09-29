@@ -212,6 +212,7 @@ internal sealed class MainForm : Form
     private DateTimeOffset? _gateGTelemetrySuspendMarkedAtUtc;
 
     private IntPtr _m6SessionDisplayRegistration;
+    private IntPtr _m6SuspendResumeRegistration;
     private int _m6AdvanceGate;
     private bool _m6Armed;
     private bool _m6Completed;
@@ -229,6 +230,11 @@ internal sealed class MainForm : Form
     private long _m6WatchdogStartUtcTicks;
     private DateTimeOffset? _m6DisplayOffBoundaryUtc;
     private DateTimeOffset? _m6DisplayOnBoundaryUtc;
+    private Task<double>? _m6PreSleepRestoreTask;
+    private string? _m6DisplayOffSource;
+    private bool _m6DisplayOffWasCustom;
+    private bool _m6DisplayOffBackendAckVerified;
+    private bool _m6PreSleepRestoreCompletionAttempted;
 
     private bool GateGHardwareTest =>
         _gateG1HardwareTest || _gateG2HardwareTest;
@@ -524,7 +530,7 @@ internal sealed class MainForm : Form
 
             if (_m6ModernStandbyHardwareTest)
             {
-                RegisterM6SessionDisplayNotification();
+                RegisterM6PowerNotifications();
 
                 AppendEvent(
                     "M6 MODERN STANDBY TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; PBT resume notifications while display remains Off are observational only; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF.");
@@ -538,7 +544,7 @@ internal sealed class MainForm : Form
         FormClosing += OnFormClosingToTray;
         FormClosed += (_, _) =>
         {
-            UnregisterM6SessionDisplayNotification();
+            UnregisterM6PowerNotifications();
             _uiTimer.Stop();
             _uiTimer.Dispose();
             _trayIcon.Visible = false;
@@ -597,43 +603,84 @@ internal sealed class MainForm : Form
         base.WndProc(ref m);
     }
 
-    private void RegisterM6SessionDisplayNotification()
+    private void RegisterM6PowerNotifications()
     {
-        if (!_m6ModernStandbyHardwareTest ||
-            _m6SessionDisplayRegistration != IntPtr.Zero)
+        if (!_m6ModernStandbyHardwareTest)
         {
             return;
         }
 
-        var setting = GuidSessionDisplayStatus;
+        if (_m6SessionDisplayRegistration != IntPtr.Zero ||
+            _m6SuspendResumeRegistration != IntPtr.Zero)
+        {
+            if (_m6SessionDisplayRegistration != IntPtr.Zero &&
+                _m6SuspendResumeRegistration != IntPtr.Zero)
+            {
+                return;
+            }
 
-        _m6SessionDisplayRegistration =
-            RegisterPowerSettingNotification(
+            throw new InvalidOperationException(
+                "M6 power-notification registration is partially initialized.");
+        }
+
+        _m6SuspendResumeRegistration =
+            RegisterSuspendResumeNotification(
                 Handle,
-                ref setting,
                 DeviceNotifyWindowHandle);
 
-        if (_m6SessionDisplayRegistration == IntPtr.Zero)
+        if (_m6SuspendResumeRegistration == IntPtr.Zero)
         {
             throw new InvalidOperationException(
-                $"M6 RegisterPowerSettingNotification(GUID_SESSION_DISPLAY_STATUS) failed with Win32 error {Marshal.GetLastWin32Error()}.");
+                $"M6 RegisterSuspendResumeNotification failed with Win32 error {Marshal.GetLastWin32Error()}.");
         }
-    }
 
-    private void UnregisterM6SessionDisplayNotification()
-    {
-        if (_m6SessionDisplayRegistration == IntPtr.Zero)
+        try
         {
-            return;
+            var setting = GuidSessionDisplayStatus;
+
+            _m6SessionDisplayRegistration =
+                RegisterPowerSettingNotification(
+                    Handle,
+                    ref setting,
+                    DeviceNotifyWindowHandle);
+
+            if (_m6SessionDisplayRegistration == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    $"M6 RegisterPowerSettingNotification(GUID_SESSION_DISPLAY_STATUS) failed with Win32 error {Marshal.GetLastWin32Error()}.");
+            }
         }
+        catch
+        {
+            _ =
+                UnregisterSuspendResumeNotification(
+                    _m6SuspendResumeRegistration);
 
-        _ =
-            UnregisterPowerSettingNotification(
-                _m6SessionDisplayRegistration);
-
-        _m6SessionDisplayRegistration = IntPtr.Zero;
+            _m6SuspendResumeRegistration = IntPtr.Zero;
+            throw;
+        }
     }
 
+    private void UnregisterM6PowerNotifications()
+    {
+        if (_m6SessionDisplayRegistration != IntPtr.Zero)
+        {
+            _ =
+                UnregisterPowerSettingNotification(
+                    _m6SessionDisplayRegistration);
+
+            _m6SessionDisplayRegistration = IntPtr.Zero;
+        }
+
+        if (_m6SuspendResumeRegistration != IntPtr.Zero)
+        {
+            _ =
+                UnregisterSuspendResumeNotification(
+                    _m6SuspendResumeRegistration);
+
+            _m6SuspendResumeRegistration = IntPtr.Zero;
+        }
+    }
     private void HandleM6PowerSettingChange(IntPtr data)
     {
         if (data == IntPtr.Zero)
@@ -703,17 +750,22 @@ internal sealed class MainForm : Form
                 _m6PbtSuspendObserved = true;
 
                 AppendEvent(
-                    $"M6: PBT_APMSUSPEND observed; displayOff={_m6SessionDisplayOff}, primaryDisplayBoundary={_m6PrimaryDisplayOffObserved}, authority={_fanCoordinator.Authority}.");
+                    $"M6: registered PBT_APMSUSPEND observed; displayOff={_m6SessionDisplayOff}, primaryDisplayBoundary={_m6PrimaryDisplayOffObserved}, authority={_fanCoordinator.Authority}. Completing the already-started pre-sleep restore before returning from the suspend notification.");
 
                 if (_m6Armed &&
                     !_m6DisplayOffObserved)
                 {
                     // Safety fallback only. A physical M6 PASS still requires
-                    // the earlier SESSION_DISPLAY_STATUS Off boundary proven by
-                    // M0; PBT_APMSUSPEND may arrive too late on Modern Standby.
+                    // the earlier interactive-session Display Off boundary.
                     HandleM6DisplayOffBoundary(
                         "WM_POWERBROADCAST/PBT_APMSUSPEND fallback",
                         primaryDisplaySignal: false);
+                }
+
+                if (_m6Armed)
+                {
+                    CompleteM6PreSleepRestore(
+                        "registered-WM_POWERBROADCAST/PBT_APMSUSPEND");
                 }
 
                 break;
@@ -769,34 +821,75 @@ internal sealed class MainForm : Form
         _m6SessionDisplayOff = true;
         _m6DisplayOffBoundaryUtc =
             DateTimeOffset.UtcNow;
-
-        var wasCustom =
+        _m6DisplayOffSource = source;
+        _m6DisplayOffWasCustom =
             _fanCoordinator.Authority ==
             FanAuthority.Custom;
-
-        var backendAck =
+        _m6DisplayOffBackendAckVerified =
             _m6BackendAckVerified;
 
-        var watch =
-            Stopwatch.StartNew();
-
         AppendEvent(
-            $"M6: lifecycle boundary from {source}; primaryDisplaySignal={primaryDisplaySignal}; authority={_fanCoordinator.Authority}; backendAck={backendAck}. Closing admission and pausing telemetry before restore IO.");
+            $"M6: lifecycle boundary from {source}; primaryDisplaySignal={primaryDisplaySignal}; authority={_fanCoordinator.Authority}; backendAck={_m6DisplayOffBackendAckVerified}. Closing admission and pausing telemetry immediately; verified restore starts off the UI thread and registered PBT_APMSUSPEND is the synchronous pre-suspend completion barrier.");
 
+        // Close admission and publish Suspended synchronously before any
+        // potentially blocking hardware operation.
         _fanCoordinator.CloseCustomAdmissionForLifecycleBoundary();
         _worker.NotifySuspend(source);
 
+        var boundary =
+            _m6DisplayOffBoundaryUtc.Value;
+
+        _m6PreSleepRestoreTask =
+            Task.Run(
+                async () =>
+                {
+                    var watch = Stopwatch.StartNew();
+
+                    var quiesced =
+                        await _worker.WaitForHardwareReadQuiescenceAsync(
+                                TimeSpan.FromMilliseconds(750),
+                                CancellationToken.None)
+                            .ConfigureAwait(false);
+
+                    if (!quiesced)
+                    {
+                        throw new TimeoutException(
+                            "M6 telemetry hardware activity did not quiesce within 750 ms after SESSION_DISPLAY_STATUS Off.");
+                    }
+
+                    await _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
+                            $"M6 Modern Standby pre-suspend handoff ({source}).",
+                            boundary,
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
+
+                    watch.Stop();
+                    return watch.Elapsed.TotalMilliseconds;
+                });
+    }
+
+    private void CompleteM6PreSleepRestore(string restoreTrigger)
+    {
+        if (_m6PreSleepRestoreCompletionAttempted)
+        {
+            return;
+        }
+
+        _m6PreSleepRestoreCompletionAttempted = true;
+
+        var source =
+            _m6DisplayOffSource ??
+            "missing-display-off-boundary";
+
         try
         {
-            _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
-                    $"M6 Modern Standby display-off handoff ({source}).",
-                    _m6DisplayOffBoundaryUtc.Value,
-                    CancellationToken.None)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
+            var restoreTask =
+                _m6PreSleepRestoreTask ??
+                throw new InvalidOperationException(
+                    "M6 suspend notification arrived without a pre-sleep restore task.");
 
-            watch.Stop();
+            var restoreMs =
+                restoreTask.GetAwaiter().GetResult();
 
             var restoreEvidence =
                 _fanCoordinator.LastRestoreEvidence;
@@ -817,11 +910,11 @@ internal sealed class MainForm : Form
                 ReadStableM6FirmwareAutoProof();
 
             _m6PreSleepRestoreVerified =
-                primaryDisplaySignal &&
                 _m6PrimaryDisplayOffObserved &&
                 _m6Armed &&
-                wasCustom &&
-                backendAck &&
+                _m6DisplayOffWasCustom &&
+                _m6DisplayOffBackendAckVerified &&
+                _m6PbtSuspendObserved &&
                 _fanCoordinator.Authority ==
                     FanAuthority.Firmware &&
                 restoreEvidence is
@@ -837,11 +930,13 @@ internal sealed class MainForm : Form
                 $"{(_m6PreSleepRestoreVerified ? "PASS" : "FAIL")}|" +
                 $"{DateTimeOffset.Now:O}|" +
                 $"source={source}|" +
-                $"primaryDisplaySignal={primaryDisplaySignal}|" +
-                $"wasCustom={wasCustom}|" +
-                $"backendAck={backendAck}|" +
+                $"displayOffAt={_m6DisplayOffBoundaryUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "n/a"}|" +
+                $"restoreTrigger={restoreTrigger}|" +
+                $"primaryDisplaySignal={_m6PrimaryDisplayOffObserved}|" +
+                $"wasCustom={_m6DisplayOffWasCustom}|" +
+                $"backendAck={_m6DisplayOffBackendAckVerified}|" +
                 $"authority={_fanCoordinator.Authority}|" +
-                $"restoreMs={watch.Elapsed.TotalMilliseconds.ToString("0.0", CultureInfo.InvariantCulture)}|" +
+                $"restoreMs={restoreMs.ToString("0.0", CultureInfo.InvariantCulture)}|" +
                 $"localFirmwareAck={restoreEvidence?.LocalFirmwareAckVerified ?? false}|" +
                 $"watchdogRelease={restoreEvidence?.WatchdogReleaseVerified ?? false}|" +
                 $"watchdogPid={watchdog.ProcessId}|" +
@@ -858,19 +953,18 @@ internal sealed class MainForm : Form
 
             AppendEvent(
                 _m6PreSleepRestoreVerified
-                    ? $"M6: PRE-SLEEP RELEASE VERIFIED from session-display Off in {watch.Elapsed.TotalMilliseconds:0.0} ms; Firmware + stable FF/FF + watchdog Release + journal absent; watchdog PID {watchdog.ProcessId} unchanged."
+                    ? $"M6: PRE-SLEEP RELEASE VERIFIED across session-display Off -> registered PBT_APMSUSPEND; restore work {restoreMs:0.0} ms; Firmware + stable FF/FF + watchdog Release + journal absent; watchdog PID {watchdog.ProcessId} unchanged."
                     : $"M6: PRE-SLEEP RELEASE FAILED validation; {marker}");
         }
         catch (Exception ex)
         {
-            watch.Stop();
             _m6PreSleepRestoreVerified = false;
 
             try
             {
                 M6WatchdogStateReader.WriteDurableMarker(
                     M6PreSleepPath,
-                    $"FAIL|{DateTimeOffset.Now:O}|source={source}|exception={ex.Message}|guiPid={Environment.ProcessId}");
+                    $"FAIL|{DateTimeOffset.Now:O}|source={source}|displayOffAt={_m6DisplayOffBoundaryUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "n/a"}|restoreTrigger={restoreTrigger}|exception={ex.Message}|guiPid={Environment.ProcessId}");
             }
             catch
             {
@@ -882,7 +976,6 @@ internal sealed class MainForm : Form
                 $"M6 pre-sleep release failure: {ex}");
         }
     }
-
     private void HandleM6SessionDisplayOn(string source)
     {
         if (_m6Completed)
@@ -4428,6 +4521,20 @@ internal sealed class MainForm : Form
         public Guid PowerSetting;
         public uint DataLength;
     }
+
+    [DllImport(
+        "user32.dll",
+        SetLastError = true)]
+    private static extern IntPtr RegisterSuspendResumeNotification(
+        IntPtr hRecipient,
+        int flags);
+
+    [DllImport(
+        "user32.dll",
+        SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnregisterSuspendResumeNotification(
+        IntPtr handle);
 
     [DllImport(
         "user32.dll",
