@@ -126,6 +126,16 @@ internal static class Program
             args,
             "--8c40-m6-test-token");
 
+        var m7HibernationHardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--8c40-m7-hibernation-test",
+                StringComparison.OrdinalIgnoreCase));
+
+        var m7HibernationHardwareTestToken = ReadOptionValue(
+            args,
+            "--8c40-m7-test-token");
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
@@ -134,12 +144,13 @@ internal static class Program
             (gateF2HardwareTest ? 1 : 0) +
             (gateG1HardwareTest ? 1 : 0) +
             (gateG2HardwareTest ? 1 : 0) +
-            (m6ModernStandbyHardwareTest ? 1 : 0);
+            (m6ModernStandbyHardwareTest ? 1 : 0) +
+            (m7HibernationHardwareTest ? 1 : 0);
 
         if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
-                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2 and HP 8C40 M6 hardware-test modes are mutually exclusive.");
+                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2, HP 8C40 M6 and HP 8C40 M7 hardware-test modes are mutually exclusive.");
             Environment.ExitCode = 60;
             return;
         }
@@ -305,6 +316,27 @@ internal static class Program
             return;
         }
 
+        if (m7HibernationHardwareTest &&
+            !string.Equals(
+                m7HibernationHardwareTestToken,
+                "8C40-M7-HIBERNATION30",
+                StringComparison.Ordinal))
+        {
+            AppLog.Write(
+                "HP 8C40 M7 hibernation test refused: explicit --8c40-m7-test-token 8C40-M7-HIBERNATION30 is required.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (!m7HibernationHardwareTest &&
+            m7HibernationHardwareTestToken is not null)
+        {
+            AppLog.Write(
+                "Startup refused: --8c40-m7-test-token is valid only with --8c40-m7-hibernation-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -350,21 +382,27 @@ internal static class Program
             }
         }
 
-        if (m6ModernStandbyHardwareTest)
+        if (m6ModernStandbyHardwareTest ||
+            m7HibernationHardwareTest)
         {
             var hardware = HardwareIdentityReader.ReadCurrent();
 
             if (!Hp8C40TargetProfile.Matches(
                     hardware,
-                    out var m6TargetReason))
+                    out var lifecycleTargetReason))
             {
+                var gateLabel =
+                    m7HibernationHardwareTest
+                        ? "M7 hibernation"
+                        : "M6 Modern Standby";
+
                 AppLog.Write(
-                    "HP 8C40 M6 Modern Standby startup refused before MainForm/backend creation: " +
-                    m6TargetReason);
+                    $"HP 8C40 {gateLabel} startup refused before MainForm/backend creation: " +
+                    lifecycleTargetReason);
 
                 MessageBox.Show(
-                    "This M6 lifecycle qualification mode is restricted to the exact HP 8C40 / 9D0R1LA / BIOS F.18 target.",
-                    "VictusFanControl - M6 target blocked",
+                    $"This {gateLabel} lifecycle qualification mode is restricted to the exact HP 8C40 / 9D0R1LA / BIOS F.18 target.",
+                    $"VictusFanControl - {gateLabel} target blocked",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
 
@@ -384,7 +422,8 @@ internal static class Program
             gateF2HardwareTest,
             gateG1HardwareTest,
             gateG2HardwareTest,
-            m6ModernStandbyHardwareTest);
+            m6ModernStandbyHardwareTest,
+            m7HibernationHardwareTest);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");

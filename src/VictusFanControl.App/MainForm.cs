@@ -134,6 +134,7 @@ internal sealed class MainForm : Form
     private readonly bool _gateG1HardwareTest;
     private readonly bool _gateG2HardwareTest;
     private readonly bool _m6ModernStandbyHardwareTest;
+    private readonly bool _m7HibernationHardwareTest;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
 
@@ -236,6 +237,15 @@ internal sealed class MainForm : Form
     private bool _m6DisplayOffBackendAckVerified;
     private bool _m6PreSleepRestoreCompletionAttempted;
 
+    private bool DisplayAware8C40LifecycleHardwareTest =>
+        _m6ModernStandbyHardwareTest ||
+        _m7HibernationHardwareTest;
+
+    private string DisplayAwareLifecycleTransitionMode =>
+        _m7HibernationHardwareTest
+            ? "hibernation"
+            : "modern-standby";
+
     private bool GateGHardwareTest =>
         _gateG1HardwareTest || _gateG2HardwareTest;
 
@@ -289,7 +299,8 @@ internal sealed class MainForm : Form
         bool gateF2HardwareTest = false,
         bool gateG1HardwareTest = false,
         bool gateG2HardwareTest = false,
-        bool m6ModernStandbyHardwareTest = false)
+        bool m6ModernStandbyHardwareTest = false,
+        bool m7HibernationHardwareTest = false)
     {
         Text = "VictusFanControl v0.4-dev — backend integrated / automatic policy OFF";
         StartPosition = FormStartPosition.CenterScreen;
@@ -305,6 +316,7 @@ internal sealed class MainForm : Form
         _gateG1HardwareTest = gateG1HardwareTest;
         _gateG2HardwareTest = gateG2HardwareTest;
         _m6ModernStandbyHardwareTest = m6ModernStandbyHardwareTest;
+        _m7HibernationHardwareTest = m7HibernationHardwareTest;
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
         _targetProfile =
             HpHardwareTargetResolver.Resolve(
@@ -370,9 +382,11 @@ internal sealed class MainForm : Form
             }
         }
 
-        if (_m6ModernStandbyHardwareTest)
+        if (DisplayAware8C40LifecycleHardwareTest)
         {
             Directory.CreateDirectory(SuspendHardwareTestRoot);
+            // M7 deliberately reuses the already-hardened M6 marker transport;
+            // transitionMode distinguishes hibernation from Modern Standby.
             TryDeleteFile(M6HardwareTestReadyPath);
             TryDeleteFile(M6PreSleepPath);
             TryDeleteFile(M6ResumeGatePath);
@@ -406,7 +420,7 @@ internal sealed class MainForm : Form
                             Hp88F8TargetProfile.Instance.Id);
             }
 
-            if (_m6ModernStandbyHardwareTest)
+            if (DisplayAware8C40LifecycleHardwareTest)
             {
                 watchdogLease =
                     new NamedPipeFanControlWatchdogLeaseClient(
@@ -420,7 +434,9 @@ internal sealed class MainForm : Form
                         Hp8C40FanControlBackend.LifecycleQualificationToken);
 
                 _fanBackendStartupDetail =
-                    "Exact HP 8C40 M6 Modern Standby qualification backend selected with M4 watchdog lease; production factory remains blocked.";
+                    _m7HibernationHardwareTest
+                        ? "Exact HP 8C40 M7 hibernation qualification backend selected with M4 watchdog lease; production factory remains blocked."
+                        : "Exact HP 8C40 M6 Modern Standby qualification backend selected with M4 watchdog lease; production factory remains blocked.";
             }
             else
             {
@@ -528,12 +544,14 @@ internal sealed class MainForm : Form
                     $"GATE G2 TEST: {GateG2TargetCycles} consecutive full watchdog suspend/resume cycles enabled in the same GUI and watchdog processes. Every cycle requires durable OWNED 30/30, prompt suspend fencing, completed Firmware + FF/FF + watchdog Ready/journal absent before resume acceptance, one accepted resume, five-snapshot Healthy recovery, one controlled 30/30 re-entry, and final Firmware restore. Automatic policy remains OFF.");
             }
 
-            if (_m6ModernStandbyHardwareTest)
+            if (DisplayAware8C40LifecycleHardwareTest)
             {
                 RegisterM6PowerNotifications();
 
                 AppendEvent(
-                    "M6 MODERN STANDBY TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; PBT resume notifications while display remains Off are observational only; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF.");
+                    _m7HibernationHardwareTest
+                        ? "M7 HIBERNATION TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; registered PBT_APMSUSPEND is the synchronous completion barrier; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF."
+                        : "M6 MODERN STANDBY TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; PBT resume notifications while display remains Off are observational only; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF.");
             }
 
             _uiTimer.Start();
@@ -566,7 +584,7 @@ internal sealed class MainForm : Form
         {
             var code = m.WParam.ToInt32();
 
-            if (_m6ModernStandbyHardwareTest)
+            if (DisplayAware8C40LifecycleHardwareTest)
             {
                 if (code == PbtPowerSettingChange)
                 {
@@ -605,7 +623,7 @@ internal sealed class MainForm : Form
 
     private void RegisterM6PowerNotifications()
     {
-        if (!_m6ModernStandbyHardwareTest)
+        if (!DisplayAware8C40LifecycleHardwareTest)
         {
             return;
         }
@@ -2261,11 +2279,11 @@ internal sealed class MainForm : Form
             return;
         }
 
-        if (_m6ModernStandbyHardwareTest)
+        if (DisplayAware8C40LifecycleHardwareTest)
         {
-            // M6 owns the display-aware admission-reopen ordering. Maintenance
-            // PBT resume signals never reach NotifyResume while the session
-            // display remains Off.
+            // M6/M7 own the display-aware admission-reopen ordering. M6
+            // additionally proves maintenance-resume deferral while display is
+            // Off; M7 proves actual hibernation in its parent harness.
             await AdvanceM6ModernStandbyHardwareTestAsync();
             return;
         }
@@ -2358,7 +2376,8 @@ internal sealed class MainForm : Form
                     "M6 did not observe PBT_APMSUSPEND for the armed Modern Standby cycle.");
             }
 
-            if (!_m6ResumeAutomaticObservedWhileDisplayOff &&
+            if (_m6ModernStandbyHardwareTest &&
+                !_m6ResumeAutomaticObservedWhileDisplayOff &&
                 !_m6ResumeSuspendObservedWhileDisplayOff)
             {
                 throw new InvalidOperationException(
@@ -2514,7 +2533,9 @@ internal sealed class MainForm : Form
                 success: true,
                 exitCode: 0,
                 message:
-                    $"SESSION_DISPLAY_STATUS Off proactively restored Firmware + stable FF/FF before Modern Standby; PBT resume while display Off was deferred; SESSION_DISPLAY_STATUS On was the only accepted resume; five-snapshot telemetry recovered Healthy; watchdog PID {_m6WatchdogPid} stayed stable; controlled post-resume 30/30 re-entry and final watchdog Release succeeded; journal absent; final EC FF/FF.");
+                    _m7HibernationHardwareTest
+                        ? $"SESSION_DISPLAY_STATUS Off proactively restored Firmware + stable FF/FF before Hibernation; SESSION_DISPLAY_STATUS On was the only accepted telemetry resume boundary; five-snapshot telemetry recovered Healthy; watchdog PID {_m6WatchdogPid} stayed stable; controlled post-resume 30/30 re-entry and final watchdog Release succeeded; journal absent; final EC FF/FF."
+                        : $"SESSION_DISPLAY_STATUS Off proactively restored Firmware + stable FF/FF before Modern Standby; PBT resume while display Off was deferred; SESSION_DISPLAY_STATUS On was the only accepted resume; five-snapshot telemetry recovered Healthy; watchdog PID {_m6WatchdogPid} stayed stable; controlled post-resume 30/30 re-entry and final watchdog Release succeeded; journal absent; final EC FF/FF.");
         }
         catch (Exception ex)
         {
@@ -2635,10 +2656,13 @@ internal sealed class MainForm : Form
             $"watchdogStartTicks={_m6WatchdogStartUtcTicks}|" +
             $"guiPid={Environment.ProcessId}|" +
             $"guiStartTicks={processStartTicks}|" +
+            $"transitionMode={DisplayAwareLifecycleTransitionMode}|" +
             $"resumePolicy=session-display-on-only");
 
         AppendEvent(
-            $"M6: READY at 30/30 with durable OWNED lease. Watchdog PID={_m6WatchdogPid}; GUI PID={Environment.ProcessId}. Use Windows Start -> Power -> Sleep. SESSION_DISPLAY_STATUS Off must release firmware authority before the Modern Standby transition.");
+            _m7HibernationHardwareTest
+                ? $"M7: READY at 30/30 with durable OWNED lease. Watchdog PID={_m6WatchdogPid}; GUI PID={Environment.ProcessId}. Parent harness will request Windows hibernation after explicit operator confirmation; SESSION_DISPLAY_STATUS Off must release firmware authority first."
+                : $"M6: READY at 30/30 with durable OWNED lease. Watchdog PID={_m6WatchdogPid}; GUI PID={Environment.ProcessId}. Use Windows Start -> Power -> Sleep. SESSION_DISPLAY_STATUS Off must release firmware authority before the Modern Standby transition.");
     }
 
     private async Task<bool> TryEnterM6CustomAuthorityAsync(
@@ -2826,6 +2850,7 @@ internal sealed class MainForm : Form
             $"watchdogPid={_m6WatchdogPid}|" +
             $"watchdogStartTicks={_m6WatchdogStartUtcTicks}|" +
             $"guiPid={Environment.ProcessId}|" +
+            $"transitionMode={DisplayAwareLifecycleTransitionMode}|" +
             $"primaryDisplayOff={_m6PrimaryDisplayOffObserved}|" +
             $"pbtSuspend={_m6PbtSuspendObserved}|" +
             $"resumeAutomaticWhileOff={_m6ResumeAutomaticObservedWhileDisplayOff}|" +
