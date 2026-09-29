@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-code-prepared-hibernation-physical-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-code-ci-pass-hibernation-preflight-pending-physical-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -49,7 +49,7 @@
     "displayAwareResumeQualificationPending": false,
     "hibernationQualificationPending": true,
     "hibernationM7Prepared": true,
-    "hibernationM7CodeCiPassed": false,
+    "hibernationM7CodeCiPassed": true,
     "hibernationM7NoWritePreflightPassed": false,
     "hibernationM7PhysicalPassed": false
   },
@@ -1734,7 +1734,7 @@
     }
   },
   "hibernationM7Qualification": {
-    "status": "CODE_CI_PREPARED_NO_WRITE_PREFLIGHT_PENDING_PHYSICAL_PENDING",
+    "status": "CODE_CI_PASS_NO_WRITE_PREFLIGHT_PENDING_PHYSICAL_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "token": "8C40-M7-HIBERNATION30",
@@ -1772,6 +1772,23 @@
     "physicalHarnessScript": "scripts/test-8c40-hibernation-m7.ps1",
     "delayedFailsafeTakeoverAllowedForPass": false,
     "physicalStatus": "PENDING",
-    "watchdogRecoveryValidated": false
+    "watchdogRecoveryValidated": false,
+    "preparationCi": {
+      "result": "PASS",
+      "finalCommit": "f9960cbcf59911077c4ead8bc4e2986d1d18d374",
+      "runNumber": 679,
+      "runId": 36647577868,
+      "completedAt": "2026-09-29",
+      "powerShellSyntax": true,
+      "m7LifecycleInvariantPowerShellCore": true,
+      "m7HarnessInvariantPowerShellCore": true,
+      "windowsPowerShell51Compatibility": true,
+      "warningsAsErrorsBuild": true,
+      "modernStandbyM0SelfTest": true,
+      "m4SelfTest": true,
+      "safetyGateSelfTest": true,
+      "coordinatorSelfTest": true,
+      "hpBackendSelfTest": true
+    }
   }
 }
