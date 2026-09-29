@@ -64,7 +64,9 @@ Assert-Contains $child 'ConfirmFirmwareAutoAfterAdmissionAnomalyAsync' 'M5D must
 Assert-Contains $child 'ecProbe.ReadSetpoint()' 'M5D admission anomaly confirmation must remain read-only.'
 Assert-Contains $child 'setpoint.CpuSetpoint == byte.MaxValue' 'M5D admission retry must require CPU FF.'
 Assert-Contains $child 'setpoint.GpuSetpoint == byte.MaxValue' 'M5D admission retry must require GPU FF.'
-Assert-Contains $child 'setpoint.CpuSetpoint == setpoint.GpuSetpoint' 'M5D must refuse a stable equal non-FF external owner during retry confirmation.'
+if ($child -notmatch 'setpoint\.CpuSetpoint\s*==\s*setpoint\.GpuSetpoint') {
+    throw 'M5D must refuse a stable equal non-FF external owner during retry confirmation.'
+}
 Assert-Contains $child 'retrying Custom admission without issuing restore/write' 'M5D admission retry must document that no compensating write/restore is issued.'
 Assert-NotContains $child 'await _watchdogLease.CommitAsync(' 'M5D child must not manually dispatch watchdog Commit.'
 Assert-NotContains $child 'RestoreFirmwareAuto()' 'M5D child admission retry must not issue a direct firmware restore.'
