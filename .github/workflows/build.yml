@@ -101,7 +101,15 @@ jobs:
         shell: pwsh
         run: .\scripts\test-8c40-modern-standby-m6-harness-invariants.ps1
 
-      - name: HP 8C40 M5/M6 invariants Windows PowerShell 5.1 compatibility
+      - name: HP 8C40 M7 hibernation lifecycle invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-hibernation-m7-invariants.ps1
+
+      - name: HP 8C40 M7 preflight/physical harness invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-hibernation-m7-harness-invariants.ps1
+
+      - name: HP 8C40 M5-M7 invariants Windows PowerShell 5.1 compatibility
         shell: powershell
         run: |
           Write-Host ("Windows PowerShell version: {0}" -f $PSVersionTable.PSVersion)
@@ -116,6 +124,8 @@ jobs:
           .\scripts\test-watchdog-m5e-write-armed-double-death-invariants.ps1
           .\scripts\test-8c40-modern-standby-m6-invariants.ps1
           .\scripts\test-8c40-modern-standby-m6-harness-invariants.ps1
+          .\scripts\test-8c40-hibernation-m7-invariants.ps1
+          .\scripts\test-8c40-hibernation-m7-harness-invariants.ps1
 
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror

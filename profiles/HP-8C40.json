@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-hibernation-race-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-code-prepared-hibernation-physical-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -47,7 +47,11 @@
     "modernStandbyM6NoWritePreflightPassed": true,
     "modernStandbyM6PhysicalPassed": true,
     "displayAwareResumeQualificationPending": false,
-    "hibernationQualificationPending": true
+    "hibernationQualificationPending": true,
+    "hibernationM7Prepared": true,
+    "hibernationM7CodeCiPassed": false,
+    "hibernationM7NoWritePreflightPassed": false,
+    "hibernationM7PhysicalPassed": false
   },
   "control": {
     "enabledByDefault": false,
@@ -1728,5 +1732,46 @@
       "qualificationPass": true,
       "interpretation": "M6 display-aware Modern Standby lifecycle is physically qualified on the exact 8C40 target. Custom 30/30 was released to Firmware at SESSION_DISPLAY_STATUS Off, registered PBT_APMSUSPEND completed the verified handoff, maintenance PBT resume notifications were deferred while display remained Off, SESSION_DISPLAY_STATUS On was accepted exactly once, five-snapshot Healthy recovery preceded one controlled watchdog-backed 30/30 re-entry, and final Release ended with journal absent plus stable FF/FF under the same watchdog process. This closes M6 only; hibernation and remaining race/load/thermal production gates stay pending and WatchdogRecoveryValidated remains false."
     }
+  },
+  "hibernationM7Qualification": {
+    "status": "CODE_CI_PREPARED_NO_WRITE_PREFLIGHT_PENDING_PHYSICAL_PENDING",
+    "targetProfileId": "HP-8C40-9D0R1LA-F18",
+    "qualificationLevel": 30,
+    "token": "8C40-M7-HIBERNATION30",
+    "lifecycleEngine": "dedicated M7 app mode reuses hardened M6 display-aware lifecycle machinery",
+    "transitionInitiation": "versioned physical harness invokes shutdown.exe /h only after explicit operator confirmation",
+    "productionFactoryStillBlocked": true,
+    "automaticPolicyEnabled": false,
+    "preTransitionRequirements": [
+      "real watchdog-backed Custom 30/30 with WMI+EC+dual-tach acknowledgement",
+      "durable schema-v2 generation-3 OWNED 30/30 bound to exact GUI PID+creation time",
+      "SESSION_DISPLAY_STATUS Off observed while Custom",
+      "telemetry admission fenced and hardware reads quiesced",
+      "registered PBT_APMSUSPEND completes Firmware restore",
+      "local FF/FF acknowledgement and watchdog Release verified",
+      "journal absent and stable two-sample FF/FF",
+      "same watchdog PID+creation time"
+    ],
+    "windowsEvidenceRequirements": [
+      "Kernel-Power EventRecordID boundary captured immediately before requested transition",
+      "post-boundary non-battery Kernel-Power 42 entry evidence",
+      "post-boundary Kernel-Power 507 message reports hibernate resume",
+      "no Kernel-Power 524 critical-battery trigger",
+      "no battery-triggered Kernel-Power 42",
+      "hibernation evidence window at least 15 seconds"
+    ],
+    "resumeRequirements": [
+      "SESSION_DISPLAY_STATUS On accepted exactly once",
+      "same GUI PID+creation time and watchdog PID+creation time survive hibernation",
+      "Firmware authority, stable FF/FF and journal absent before admission reopen",
+      "five fresh Healthy telemetry snapshots",
+      "one controlled watchdog-backed 30/30 re-entry",
+      "final Firmware restore, watchdog Release, journal absent and stable FF/FF"
+    ],
+    "noWritePreflightScript": "scripts/test-8c40-hibernation-m7-preflight.ps1",
+    "physicalHarnessScript": "scripts/test-8c40-hibernation-m7.ps1",
+    "delayedFailsafeTakeoverAllowedForPass": false,
+    "physicalStatus": "PENDING",
+    "watchdogRecoveryValidated": false
   }
 }
