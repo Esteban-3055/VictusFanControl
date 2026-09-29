@@ -970,3 +970,21 @@ stable FF/FF, and the independent delayed fallback never took over.
 This closes M6 only. Hibernation and remaining race/load/thermal qualification
 remain separate gates; production watchdog promotion and automatic policy stay
 blocked.
+
+### HP 8C40 M7 - hibernation qualification
+
+**CODE/CI PASS; no-write preflight and physical qualification pending.**
+
+M7 is the next distinct lifecycle gate after the physical M6 Modern Standby
+PASS. Its dedicated app mode reuses the hardened display-aware lifecycle
+engine and qualification-only 8C40 backend. The parent harness requests
+hibernation only after exact watchdog-backed OWNED 30/30 and explicit operator
+confirmation, then requires post-boundary Windows hibernation evidence rather
+than accepting a generic suspend/resume.
+
+Critical-battery event 524 and battery-triggered event 42 invalidate the run.
+A valid physical M7 result must preserve exact GUI/watchdog process identities,
+accept SESSION_DISPLAY_STATUS On exactly once, recover through five fresh
+Healthy snapshots, perform one controlled watchdog-backed 30/30 re-entry and
+finish with verified Release, journal absence and stable FF/FF. Production
+watchdog promotion and automatic/adaptive policy remain blocked.
