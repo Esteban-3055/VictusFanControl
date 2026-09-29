@@ -2,7 +2,7 @@ param(
     [ValidateRange(30, 300)]
     [int]$RecommendedSleepSeconds = 60,
 
-    [ValidateRange(180, 600)]
+    [ValidateRange(180, 300)]
     [int]$FailsafeDelaySeconds = 300,
 
     [ValidateRange(60, 300)]
@@ -357,10 +357,12 @@ function Assert-Owned30Journal {
 function Wait-ModernStandbyKernelEvidence {
     param(
         [datetime]$StartTime,
+        [datetime]$DisplayOnTime,
         [int]$Seconds = 30
     )
 
     $deadline = (Get-Date).AddSeconds($Seconds)
+    $latestAllowedResume = $DisplayOnTime.AddSeconds(3)
 
     while ((Get-Date) -lt $deadline) {
         $events = @(
@@ -369,17 +371,30 @@ function Wait-ModernStandbyKernelEvidence {
                 ProviderName='Microsoft-Windows-Kernel-Power'
                 StartTime=$StartTime
             } -ErrorAction SilentlyContinue |
-            Where-Object { $_.Id -eq 506 -or $_.Id -eq 507 } |
+            Where-Object {
+                ($_.Id -eq 506 -or $_.Id -eq 507) -and
+                $_.TimeCreated -le $latestAllowedResume
+            } |
             Sort-Object TimeCreated
         )
 
-        $sleep = $events | Where-Object { $_.Id -eq 506 } | Select-Object -First 1
-        $resume = $events | Where-Object { $_.Id -eq 507 -and $sleep -and $_.TimeCreated -ge $sleep.TimeCreated } | Select-Object -First 1
+        $sleep = $events |
+            Where-Object { $_.Id -eq 506 } |
+            Select-Object -First 1
+
+        $resume = $events |
+            Where-Object {
+                $_.Id -eq 507 -and
+                $sleep -and
+                $_.TimeCreated -ge $sleep.TimeCreated
+            } |
+            Select-Object -Last 1
 
         if ($sleep -and $resume) {
             return [pscustomobject]@{
                 Sleep = $sleep
                 Resume = $resume
+                Events = $events
             }
         }
 
@@ -706,21 +721,37 @@ try {
     Write-Host ''
     Write-Host 'Step 7: require Windows Kernel-Power Modern Standby evidence...' -ForegroundColor Cyan
 
-    $power = Wait-ModernStandbyKernelEvidence -StartTime $eventWindowStart
+    $preSleepTimestamp = Parse-MarkerTimestamp -Text $preSleepText
+    $displayOnTimestamp = Parse-MarkerTimestamp -Text $resumeText
+
+    $power = Wait-ModernStandbyKernelEvidence -StartTime $eventWindowStart -DisplayOnTime $displayOnTimestamp.LocalDateTime
 
     if ($null -eq $power) {
-        throw 'M6 app lifecycle passed, but no Kernel-Power 506 -> 507 Modern Standby pair was found after the armed test boundary.'
+        throw 'M6 app lifecycle passed, but no Kernel-Power 506 -> 507 Modern Standby evidence was found between the armed boundary and user-visible display-On resume.'
     }
 
-    Write-Host ("Kernel-Power 506: {0:O}" -f $power.Sleep.TimeCreated)
-    Write-Host ("Kernel-Power 507: {0:O}" -f $power.Resume.TimeCreated)
+    Write-Host ("Kernel-Power first 506 : {0:O}" -f $power.Sleep.TimeCreated)
+    Write-Host ("Kernel-Power final 507 : {0:O}" -f $power.Resume.TimeCreated)
+    Write-Host ("Pre-sleep handoff       : {0:O}" -f $preSleepTimestamp)
+    Write-Host ("Display-On resume gate  : {0:O}" -f $displayOnTimestamp)
 
-    $preSleepTimestamp = Parse-MarkerTimestamp -Text $preSleepText
-
-    Write-Host ("Pre-sleep handoff timestamp: {0:O}" -f $preSleepTimestamp)
+    if ($preSleepTimestamp.LocalDateTime -lt $eventWindowStart.AddSeconds(-1)) {
+        throw 'M6 session-display Off handoff occurred before the explicitly armed user sleep window; the requested sleep cycle is not causally isolated.'
+    }
 
     if ($preSleepTimestamp.UtcDateTime -gt $power.Sleep.TimeCreated.ToUniversalTime().AddSeconds(1)) {
-        throw 'M6 proactive release marker was written after the Kernel-Power sleep boundary; release-before-Modern-Standby is not proven.'
+        throw 'M6 proactive release marker was written after the first Kernel-Power 506 sleep boundary; release-before-Modern-Standby is not proven.'
+    }
+
+    if ($power.Resume.TimeCreated.ToUniversalTime() -gt $displayOnTimestamp.UtcDateTime.AddSeconds(3)) {
+        throw 'M6 final Kernel-Power 507 occurs too late to correspond to the accepted display-On wake boundary.'
+    }
+
+    $standbyWindowSeconds = ($power.Resume.TimeCreated - $power.Sleep.TimeCreated).TotalSeconds
+    Write-Host ("Modern Standby evidence window: {0:N1} s" -f $standbyWindowSeconds)
+
+    if ($standbyWindowSeconds -lt 15) {
+        throw "M6 Modern Standby evidence window was only $([Math]::Round($standbyWindowSeconds,1)) s; require >= 15 s to exclude an accidental immediate wake."
     }
 
     Write-Host ''
@@ -784,15 +815,6 @@ catch {
     Show-Diagnostics
 }
 finally {
-    New-Item -ItemType Directory -Force -Path $diagnosticRoot | Out-Null
-
-    try {
-        & (Join-Path $PSScriptRoot 'collect-power-transition-diagnostics.ps1') -OutputDirectory $diagnosticRoot
-    }
-    catch {
-        Write-Warning "M6 post-transition diagnostics collection failed: $($_.Exception.Message)"
-    }
-
     if (-not $pass -and
         $app -and
         -not $app.HasExited) {
@@ -863,7 +885,21 @@ finally {
         Get-Content $journalPath
     }
 
-    Write-Host "M6 diagnostics directory: $diagnosticRoot"
+    if ($firmwareSafe) {
+        New-Item -ItemType Directory -Force -Path $diagnosticRoot | Out-Null
+
+        try {
+            & (Join-Path $PSScriptRoot 'collect-power-transition-diagnostics.ps1') -OutputDirectory $diagnosticRoot
+        }
+        catch {
+            Write-Warning "M6 post-transition diagnostics collection failed: $($_.Exception.Message)"
+        }
+
+        Write-Host "M6 diagnostics directory: $diagnosticRoot"
+    }
+    else {
+        Write-Warning 'M6 power diagnostics were deferred because firmware safety has not yet been independently proven.'
+    }
 }
 
 if (-not $pass) {
