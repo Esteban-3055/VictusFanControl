@@ -310,3 +310,40 @@ It also prints the current branch, HEAD and working-tree status. The helper does
 not issue a fan command, firmware restore, service mutation or sleep request.
 It is intended for post-run diagnosis only and cannot satisfy an M6 PASS gate
 by itself.
+
+
+## Physical attempt 1 causal diagnosis
+
+The versioned read-only last-run diagnostic isolated the pre-Off authority loss.
+The controller entered Custom at 18:55:10.160 and reached durable READY 30/30.
+At 18:55:21.365, roughly 2.8 seconds before the primary
+SESSION_DISPLAY_STATUS Off boundary, continuous backend supervision observed:
+
+~~~text
+EC setpoint=30/30
+RPM=2986/3003
+ownership=owned
+MaxFan=0x00
+FanSwitch=0x90
+~~~
+
+That single unexpected FanSwitch sample caused
+`Custom -> Restoring -> Firmware`, so the later display-Off marker correctly
+recorded `wasCustom=False` and M6 failed closed.
+
+Persistence of `FanSwitch=0x90` was **not** established: the pre-existing
+runtime status path treated one unexpected guard sample as terminal. Earlier
+8C40 characterization had already demonstrated isolated implausible guard
+samples, so the production backend is now hardened without weakening the
+guard: one unexpected MaxFan/FanSwitch sample receives bounded read-only
+confirmation; a recovery to 00/00 is tolerated as a transient, while two
+consecutive identical unexpected guard samples remain fail-closed. If the
+confirmation reads themselves fail, the existing EC/watchdog failure handling
+still restores safely.
+
+The post-run diagnostic helper also now correlates Windows events using the
+marker's local wall-clock value directly, avoiding a timezone conversion that
+could hide Kernel-Power evidence during retrospective analysis.
+
+M6 physical qualification remains pending. The failed attempt does not set
+`WatchdogRecoveryValidated` and does not enable automatic policy.

@@ -151,8 +151,8 @@ $windowEnd = $ordered[$ordered.Count - 1].AddSeconds(45)
 Write-Host ''
 Write-Host ("Correlation window: {0:O} -> {1:O}" -f $windowStart, $windowEnd)
 
-$appLogPath = Join-Path $appRoot ("logs\events-{0}.log" -f $windowStart.LocalDateTime.ToString('yyyy-MM-dd'))
-$serviceLogPath = Join-Path $serviceRoot ("logs\watchdog-m4-8c40-{0}.log" -f $windowStart.LocalDateTime.ToString('yyyy-MM-dd'))
+$appLogPath = Join-Path $appRoot ("logs\events-{0}.log" -f $windowStart.DateTime.ToString('yyyy-MM-dd'))
+$serviceLogPath = Join-Path $serviceRoot ("logs\watchdog-m4-8c40-{0}.log" -f $windowStart.DateTime.ToString('yyyy-MM-dd'))
 
 Write-Section 'VFC application log in M6 window'
 
@@ -182,8 +182,8 @@ $kernelEvents = @(
     Get-WinEvent -FilterHashtable @{
         LogName='System'
         ProviderName='Microsoft-Windows-Kernel-Power'
-        StartTime=$windowStart.LocalDateTime
-        EndTime=$windowEnd.LocalDateTime
+        StartTime=$windowStart.DateTime
+        EndTime=$windowEnd.DateTime
     } -ErrorAction SilentlyContinue |
     Where-Object {
         $_.Id -eq 42 -or
@@ -213,8 +213,8 @@ $troubleshooterEvents = @(
     Get-WinEvent -FilterHashtable @{
         LogName='System'
         ProviderName='Microsoft-Windows-Power-Troubleshooter'
-        StartTime=$windowStart.LocalDateTime
-        EndTime=$windowEnd.LocalDateTime
+        StartTime=$windowStart.DateTime
+        EndTime=$windowEnd.DateTime
     } -ErrorAction SilentlyContinue |
     Where-Object { $_.Id -eq 1 } |
     Sort-Object TimeCreated

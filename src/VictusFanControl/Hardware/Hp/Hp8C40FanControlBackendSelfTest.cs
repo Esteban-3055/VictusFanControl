@@ -32,6 +32,8 @@ public static class Hp8C40FanControlBackendSelfTest
         failures += await TestOwnershipLossAsync(output);
         failures += await TestStatusDetectsOwnershipLossAsync(output);
         failures += await TestStatusDetectsRuntimeTachFailureAsync(output);
+        failures += await TestStatusToleratesSingleGuardTransientAsync(output);
+        failures += await TestStatusRejectsRepeatedGuardConflictAsync(output);
         failures += await TestStoppedFansCanSpinUpWithinAckWindowAsync(output);
         failures += await TestOneSampleDirectionalSpikeIsRejectedAsync(output);
         failures += await TestCancellationAtPreDispatchPreventsWriteAsync(output);
@@ -623,6 +625,77 @@ public static class Hp8C40FanControlBackendSelfTest
             status.Detail.Contains("FEEDBACK/CONTROL-STATE-INVALID", StringComparison.Ordinal));
     }
 
+    private static async Task<int> TestStatusToleratesSingleGuardTransientAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient();
+        await using var backend = NewProtectedBackend(hardware, lease);
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "single-guard-transient"),
+            CancellationToken.None);
+
+        var readsBefore = hardware.EcReadCalls;
+        hardware.GuardReadOverrides.Enqueue((0x00, 0x90));
+        hardware.GuardReadOverrides.Enqueue((0x00, 0x00));
+
+        var status = await backend.GetStatusAsync(CancellationToken.None);
+        var readsAfter = hardware.EcReadCalls;
+        var heartbeatCount =
+            lease.Calls.Count(call => call == "heartbeat");
+
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "single unexpected guard sample is read-only confirmed before runtime handoff",
+            status.CustomModeActive &&
+            status.OwnershipValid &&
+            status.FeedbackHealthy &&
+            status.Detail.Contains(
+                "recovered to 00/00 on bounded read-only confirmation",
+                StringComparison.Ordinal) &&
+            readsAfter == readsBefore + 2 &&
+            heartbeatCount == 1);
+    }
+
+    private static async Task<int> TestStatusRejectsRepeatedGuardConflictAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient();
+        await using var backend = NewProtectedBackend(hardware, lease);
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "persistent-guard-conflict"),
+            CancellationToken.None);
+
+        var readsBefore = hardware.EcReadCalls;
+        hardware.GuardReadOverrides.Enqueue((0x00, 0x90));
+        hardware.GuardReadOverrides.Enqueue((0x00, 0x90));
+
+        var status = await backend.GetStatusAsync(CancellationToken.None);
+        var readsAfter = hardware.EcReadCalls;
+        var heartbeatCount =
+            lease.Calls.Count(call => call == "heartbeat");
+
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "repeated unexpected guard state remains fail-closed",
+            status.CustomModeActive &&
+            status.OwnershipValid &&
+            !status.FeedbackHealthy &&
+            status.Detail.Contains(
+                "switch=0x90",
+                StringComparison.Ordinal) &&
+            readsAfter == readsBefore + 2 &&
+            heartbeatCount == 0);
+    }
     private static async Task<int> TestOneSampleDirectionalSpikeIsRejectedAsync(TextWriter output)
     {
         var hardware = new FakeHardware
@@ -1384,6 +1457,7 @@ public static class Hp8C40FanControlBackendSelfTest
         public bool PulseCpuTachOnceThenReturnBaseline { get; set; }
         public Action<int>? OnEcRead { get; set; }
         public Action? OnSetFanLevel { get; set; }
+        public Queue<(byte MaxFan, byte FanSwitch)> GuardReadOverrides { get; } = new();
         public Exception? ReadEcStateException { get; set; }
         public Exception? GetCurrentFanLevelsException { get; set; }
         public int EcReadCalls { get; private set; }
@@ -1425,6 +1499,16 @@ public static class Hp8C40FanControlBackendSelfTest
                 };
 
                 _postSetReadCount++;
+            }
+
+            if (GuardReadOverrides.Count > 0)
+            {
+                var guard = GuardReadOverrides.Dequeue();
+                return State with
+                {
+                    MaxFan = guard.MaxFan,
+                    FanSwitch = guard.FanSwitch
+                };
             }
 
             return State;

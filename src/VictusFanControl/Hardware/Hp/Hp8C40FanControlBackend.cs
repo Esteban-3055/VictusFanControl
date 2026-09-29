@@ -121,6 +121,9 @@ public sealed class Hp8C40FanControlBackend :
     private const int DirectionLevelDeadband = 2;
     private const int MinimumDirectionalRpmDelta = 150;
     private const int RequiredTachConfirmationSamples = 2;
+    private const int RequiredConsecutiveUnexpectedGuardSamples = 2;
+    private const int MaximumUnexpectedGuardConfirmationReads = 3;
+    private static readonly TimeSpan UnexpectedGuardConfirmationDelay = TimeSpan.FromMilliseconds(25);
 
     private readonly SemaphoreSlim _ioGate = new(1, 1);
     private readonly IHp8C40FanHardware? _hardware;
@@ -336,9 +339,24 @@ public sealed class Hp8C40FanControlBackend :
             }
 
             Hp8C40EcControlState state;
+            var initialUnexpectedGuard = string.Empty;
+
             try
             {
                 state = _hardware!.ReadEcState();
+
+                if (_customModeActive &&
+                    !ControlGuardsAreSane(state))
+                {
+                    initialUnexpectedGuard =
+                        $"max=0x{state.MaxFan:X2}, switch=0x{state.FanSwitch:X2}";
+
+                    state =
+                        await ConfirmUnexpectedControlGuardAsync(
+                                state,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                }
             }
             catch (Exception ecFailure)
                 when (ecFailure is not OperationCanceledException)
@@ -394,10 +412,17 @@ public sealed class Hp8C40FanControlBackend :
                     ? "healthy"
                     : "FEEDBACK/CONTROL-STATE-INVALID";
 
+            var guardConfirmationDetail =
+                !string.IsNullOrEmpty(initialUnexpectedGuard) &&
+                ControlGuardsAreSane(state)
+                    ? $" Initial unexpected guard sample ({initialUnexpectedGuard}) recovered to 00/00 on bounded read-only confirmation."
+                    : string.Empty;
+
             var detail =
                 $"{_lastDetail} EC setpoint={state.CpuSetpoint}/{state.GpuSetpoint}, " +
                 $"RPM={state.CpuRpm}/{state.GpuRpm}, ownership={ownership}, feedback={feedback}, " +
-                $"max=0x{state.MaxFan:X2}, switch=0x{state.FanSwitch:X2}.";
+                $"max=0x{state.MaxFan:X2}, switch=0x{state.FanSwitch:X2}." +
+                guardConfirmationDetail;
 
             if (_watchdogLease is not null &&
                 _customModeActive &&
@@ -933,6 +958,62 @@ public sealed class Hp8C40FanControlBackend :
     }
 
 
+
+    private async ValueTask<Hp8C40EcControlState> ConfirmUnexpectedControlGuardAsync(
+        Hp8C40EcControlState initial,
+        CancellationToken cancellationToken)
+    {
+        var last = initial;
+        var previousMaxFan = initial.MaxFan;
+        var previousFanSwitch = initial.FanSwitch;
+        var consecutiveUnexpected = 1;
+
+        for (var read = 1;
+             read < MaximumUnexpectedGuardConfirmationReads;
+             read++)
+        {
+            await Task.Delay(
+                    UnexpectedGuardConfirmationDelay,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            var next = _hardware!.ReadEcState();
+
+            if (ControlGuardsAreSane(next))
+            {
+                return next;
+            }
+
+            if (next.MaxFan == previousMaxFan &&
+                next.FanSwitch == previousFanSwitch)
+            {
+                consecutiveUnexpected++;
+                if (consecutiveUnexpected >=
+                    RequiredConsecutiveUnexpectedGuardSamples)
+                {
+                    return next;
+                }
+            }
+            else
+            {
+                consecutiveUnexpected = 1;
+            }
+
+            previousMaxFan = next.MaxFan;
+            previousFanSwitch = next.FanSwitch;
+            last = next;
+        }
+
+        // No sane sample and no stable repeated conflict was obtained within
+        // the bounded confirmation budget. Preserve fail-closed behavior by
+        // returning the last unexpected state as unhealthy.
+        return last;
+    }
+
+    private static bool ControlGuardsAreSane(
+        Hp8C40EcControlState state) =>
+        state.MaxFan == 0 &&
+        state.FanSwitch == 0;
 
     private static void ValidateActiveControlState(
         Hp8C40EcControlState state,

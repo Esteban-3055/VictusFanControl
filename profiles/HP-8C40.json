@@ -1619,7 +1619,16 @@
       "cleanupStableFfFfVerified": true,
       "m4BaselineRestoredManualStopped": true,
       "qualificationPass": false,
-      "interpretation": "Safe fail-closed attempt. Display-Off did not capture active Custom ownership (wasCustom=false), and the armed window was contaminated by critical-battery / hibernate evidence. M6 remains physically pending."
+      "interpretation": "Safe fail-closed attempt. Display-Off did not capture active Custom ownership (wasCustom=false), and the armed window was contaminated by critical-battery / hibernate evidence. M6 remains physically pending.",
+      "preOffAuthorityLoss": {
+        "observed": true,
+        "customEnteredAt": "2026-09-29T18:55:10.160-03:00",
+        "restoringStartedAt": "2026-09-29T18:55:21.365-03:00",
+        "primaryDisplayOffAt": "2026-09-29T18:55:24.181-03:00",
+        "cause": "Backend ownership validation failed with owned 30/30 and healthy tachometers but one unexpected control-guard sample MaxFan=0x00/FanSwitch=0x90.",
+        "guardPersistenceProven": false,
+        "interpretation": "The existing runtime path treated one unexpected guard sample as terminal. Backend hardening now requires bounded read-only confirmation before accepting a guard conflict; repeated identical unexpected guards remain fail-closed."
+      }
     },
     "physicalStatus": "PENDING",
     "watchdogRecoveryValidated": false
