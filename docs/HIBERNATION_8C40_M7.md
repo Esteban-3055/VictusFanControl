@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **CODE/CI PREPARED / NO-WRITE PREFLIGHT PENDING / PHYSICAL PENDING**.
+Status: **CODE/CI PASS / NO-WRITE PREFLIGHT PENDING / PHYSICAL PENDING**.
 
 M6 has physically closed the display-aware Modern Standby path. M7 is a
 separate gate for Windows hibernation. It does not enable automatic/adaptive
@@ -90,3 +90,18 @@ as M6. After READY and a final explicit prompt, the script itself executes
 M7 remains physically pending until a clean hibernation run produces all of the
 proof above. A code/CI PASS alone does not authorize production watchdog
 promotion or automatic/adaptive fan control.
+
+## Code/CI preparation result
+
+The M7 preparation baseline `f9960cbcf59911077c4ead8bc4e2986d1d18d374`
+passed GitHub Actions **#679** (run `36647577868`) on 2026-09-29.
+
+The green run includes PowerShell syntax validation, the existing M5/M6
+regressions, both M7 source/harness invariant suites under PowerShell 7 and
+Windows PowerShell 5.1, warnings-as-errors solution build, Modern Standby M0,
+watchdog Gate B/C and 8C40 M2/M3/M4 self-tests, SafetyGate,
+FanControlCoordinator, BIOS-contract and HP backend self-tests.
+
+This closes only M7 code/CI preparation. The no-write local preflight and
+physical hibernation transition remain pending. `WatchdogRecoveryValidated`
+remains false and automatic/adaptive policy remains OFF.
