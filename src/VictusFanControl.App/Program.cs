@@ -116,6 +116,16 @@ internal static class Program
             args,
             "--gate-g2-test-token");
 
+        var m6ModernStandbyHardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--8c40-m6-modern-standby-test",
+                StringComparison.OrdinalIgnoreCase));
+
+        var m6ModernStandbyHardwareTestToken = ReadOptionValue(
+            args,
+            "--8c40-m6-test-token");
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
@@ -123,12 +133,13 @@ internal static class Program
             (gateF1HardwareTest ? 1 : 0) +
             (gateF2HardwareTest ? 1 : 0) +
             (gateG1HardwareTest ? 1 : 0) +
-            (gateG2HardwareTest ? 1 : 0);
+            (gateG2HardwareTest ? 1 : 0) +
+            (m6ModernStandbyHardwareTest ? 1 : 0);
 
         if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
-                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1 and Gate G2 hardware-test modes are mutually exclusive.");
+                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2 and HP 8C40 M6 hardware-test modes are mutually exclusive.");
             Environment.ExitCode = 60;
             return;
         }
@@ -273,6 +284,27 @@ internal static class Program
             return;
         }
 
+        if (m6ModernStandbyHardwareTest &&
+            !string.Equals(
+                m6ModernStandbyHardwareTestToken,
+                Hp8C40FanControlBackend.LifecycleQualificationToken,
+                StringComparison.Ordinal))
+        {
+            AppLog.Write(
+                $"HP 8C40 M6 Modern Standby test refused: explicit --8c40-m6-test-token {Hp8C40FanControlBackend.LifecycleQualificationToken} is required.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (!m6ModernStandbyHardwareTest &&
+            m6ModernStandbyHardwareTestToken is not null)
+        {
+            AppLog.Write(
+                "Startup refused: --8c40-m6-test-token is valid only with --8c40-m6-modern-standby-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -318,6 +350,29 @@ internal static class Program
             }
         }
 
+        if (m6ModernStandbyHardwareTest)
+        {
+            var hardware = HardwareIdentityReader.ReadCurrent();
+
+            if (!Hp8C40TargetProfile.Matches(
+                    hardware,
+                    out var m6TargetReason))
+            {
+                AppLog.Write(
+                    "HP 8C40 M6 Modern Standby startup refused before MainForm/backend creation: " +
+                    m6TargetReason);
+
+                MessageBox.Show(
+                    "This M6 lifecycle qualification mode is restricted to the exact HP 8C40 / 9D0R1LA / BIOS F.18 target.",
+                    "VictusFanControl - M6 target blocked",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                Environment.ExitCode = 60;
+                return;
+            }
+        }
+
         AppLog.Write($"Starting GUI. Modules={modulesDirectory}");
 
         using var form = new MainForm(
@@ -328,7 +383,8 @@ internal static class Program
             gateF1HardwareTest,
             gateF2HardwareTest,
             gateG1HardwareTest,
-            gateG2HardwareTest);
+            gateG2HardwareTest,
+            m6ModernStandbyHardwareTest);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");
