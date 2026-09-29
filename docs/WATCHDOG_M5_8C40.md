@@ -1099,3 +1099,113 @@ no fan write.
 This hardening is intended only to prevent a transient/torn ownership sample
 from making the M5D/M5E qualification harness flaky. M5E physical execution
 remains pending until the hardening passes CI.
+
+
+## M5E physical result - WRITE_ARMED double death
+
+**Accepted physical PASS on real hardware, 2026-09-29**, on exact target
+`HP-8C40-9D0R1LA-F18`.
+
+The destructive run reached the intended real post-WMI/pre-Commit boundary:
+
+~~~text
+original watchdog:
+  PID 17852
+  LocalSystem / Session 0
+  exact target HP-8C40-9D0R1LA-F18
+
+controller:
+  PID 16568
+  startTicks 639263083112036599
+  READY stage WRITE_ARMED_POST_WMI_EC_TACH_ACK_PRE_COMMIT
+  EC 30/30
+  RPM 1998/2041
+  guards MaxFan=0x00 / FanSwitch=0x00
+
+durable journal before fault:
+  schema 2
+  phase WriteArmed
+  generation 2
+  PreviousOwned null
+  Pending 30/30
+  Owned null
+
+independent pre-kill EC:
+  30/30
+~~~
+
+Fault injection was issued in the required order with no probe/sleep between
+requests:
+
+~~~text
+watchdog Kill()
+controller Kill()
+measured issue delta = 0.815 ms
+~~~
+
+The parent then established the causal pre-restart window before the configured
+5 s SCM restart:
+
+~~~text
+both original processes dead
+service absent
+elapsed = 2811 ms
+EC still 30/30
+exact WRITE_ARMED generation-2 journal still retained
+~~~
+
+A distinct LocalSystem replacement watchdog then started:
+
+~~~text
+replacement PID 7100
+RecoveryDisposition = RestoredFirmware
+detail = VFC-owned setpoint 30/30 restored to FF/FF and verified before journal deletion
+journalRetained = False
+~~~
+
+The fresh service log contains PREPARE generation 1 and WRITE_INTENT generation
+2 for controller PID 16568, followed by replacement startup recovery. It
+contains no COMMIT for that controller, so the crash remained inside the
+required WRITE_ARMED pre-Commit window.
+
+The parent harness emitted a false FAIL after recovery because its first
+independent post-recovery 0x34/0x35 read returned the asymmetric pair
+`255/1`. This is the same class of transient/torn EC observation already seen
+during qualification admission. The watchdog had already published
+`RestoredFirmware` after verifying FF/FF and deleting the journal, and the
+later independent post-test probe returned `255/255`. The delayed emergency
+fallback was cancelled only after journal absence plus that independent FF/FF
+proof, and the ordinary M4 Manual/stopped baseline was restored.
+
+Therefore the hardware/recovery boundary itself is complete; the terminal
+failure was a parent-shell single-sample verification false negative, not a
+recovery failure.
+
+The harness was subsequently hardened so final and cleanup ownership proof are
+read-only, bounded and require two consecutive independent FF/FF samples. A
+single unexpected pair is provisional; the same unexpected pair must repeat
+before terminal failure. No additional restore or fan-write authority was
+added. Commit
+`b9d0a0e4b103856e392e3416b091de097202fe3d` passed complete GitHub
+Actions **#635** (run `36622635895`).
+
+As with the earlier M5B post-evidence harness correction, a second destructive
+double-death run is not required merely to reproduce a parent verification
+check after the full causal physical boundary has already been captured.
+
+M5E is therefore **CODE/CI/PHYSICAL PASS**.
+
+The awake transactional crash matrix is now complete:
+
+~~~text
+M5A controller death in OWNED             PASS
+M5B watchdog death in OWNED               PASS
+M5C watchdog + controller death in OWNED  PASS
+M5D controller death in WRITE_ARMED       PASS
+M5E watchdog + controller death in WRITE_ARMED PASS
+~~~
+
+`WatchdogRecoveryValidated` deliberately remains false. The remaining
+promotion boundary is lifecycle qualification on the real HP 8C40 Modern
+Standby path, followed by the separately required hibernation/power-transition
+checks. Automatic/adaptive policy remains OFF.
