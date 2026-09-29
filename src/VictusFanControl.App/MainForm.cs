@@ -2222,6 +2222,550 @@ internal sealed class MainForm : Form
         }
     }
 
+    private async Task AdvanceM6ModernStandbyHardwareTestAsync()
+    {
+        if (_m6Completed ||
+            Interlocked.CompareExchange(
+                ref _m6AdvanceGate,
+                1,
+                0) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!_m6Armed)
+            {
+                if (_m6DisplayOffObserved)
+                {
+                    throw new InvalidOperationException(
+                        "M6 observed a lifecycle display-off boundary before the watchdog-owned 30/30 READY state was armed.");
+                }
+
+                await ArmM6ModernStandbyHardwareTestAsync();
+                return;
+            }
+
+            if (!_m6DisplayOnObserved)
+            {
+                return;
+            }
+
+            if (!_m6PrimaryDisplayOffObserved ||
+                !_m6PreSleepRestoreVerified)
+            {
+                throw new InvalidOperationException(
+                    "M6 post-resume continuation requires a verified proactive SESSION_DISPLAY_STATUS Off handoff.");
+            }
+
+            if (!_m6PbtSuspendObserved)
+            {
+                throw new InvalidOperationException(
+                    "M6 did not observe PBT_APMSUSPEND for the armed Modern Standby cycle.");
+            }
+
+            if (!_m6ResumeAutomaticObservedWhileDisplayOff &&
+                !_m6ResumeSuspendObservedWhileDisplayOff)
+            {
+                throw new InvalidOperationException(
+                    "M6 did not exercise a PBT resume notification while SESSION_DISPLAY_STATUS remained Off; maintenance/user-wake deferral was not physically proven.");
+            }
+
+            if (_m6AcceptedUserResumeCount != 1)
+            {
+                throw new InvalidOperationException(
+                    $"M6 requires exactly one user-facing display-On telemetry resume; observed {_m6AcceptedUserResumeCount}.");
+            }
+
+            if (_worker.StateMachine.State != SystemState.Healthy)
+            {
+                throw new InvalidOperationException(
+                    $"M6 post-resume continuation requires Healthy telemetry; state={_worker.StateMachine.State}.");
+            }
+
+            var watchdog =
+                M6WatchdogStateReader.Read();
+
+            M6WatchdogStateReader.RequireReady(
+                watchdog,
+                _m6WatchdogPid,
+                _m6WatchdogStartUtcTicks);
+
+            if (watchdog.JournalPresent)
+            {
+                throw new InvalidOperationException(
+                    $"M6 post-resume watchdog is not clean; journal remains at '{watchdog.JournalPath}'.");
+            }
+
+            var firmwareProof =
+                ReadStableM6FirmwareAutoProof();
+
+            if (!firmwareProof.Verified ||
+                _fanCoordinator.Authority !=
+                    FanAuthority.Firmware)
+            {
+                throw new InvalidOperationException(
+                    $"M6 post-resume firmware baseline invalid: authority={_fanCoordinator.Authority}, EC={firmwareProof.Cpu}/{firmwareProof.Gpu}, detail={firmwareProof.Detail}.");
+            }
+
+            var recoveryTimestamp =
+                _lastSnapshot?.Timestamp ??
+                throw new InvalidOperationException(
+                    "M6 Healthy state has no validated post-resume telemetry snapshot.");
+
+            if (!_m6DisplayOnBoundaryUtc.HasValue ||
+                recoveryTimestamp <=
+                    _m6DisplayOnBoundaryUtc.Value)
+            {
+                throw new InvalidOperationException(
+                    $"M6 Healthy snapshot {recoveryTimestamp:O} is not newer than display-On boundary {_m6DisplayOnBoundaryUtc:O}.");
+            }
+
+            var reopened =
+                await _fanCoordinator
+                    .AllowCustomAdmissionAfterRecoveryAsync(
+                        recoveryTimestamp,
+                        "M6: user-visible display On + fresh five-snapshot Healthy recovery + watchdog Ready/journal absent.",
+                        CancellationToken.None);
+
+            if (!reopened)
+            {
+                throw new InvalidOperationException(
+                    "M6 lifecycle fence refused to reopen after validated display-aware recovery.");
+            }
+
+            AppendEvent(
+                $"M6: admission reopened only after display-On boundary and Healthy snapshot {recoveryTimestamp:O}; watchdog PID {_m6WatchdogPid} remained unchanged.");
+
+            var reentered =
+                await TryEnterM6CustomAuthorityAsync(
+                    "controlled post-resume re-entry");
+
+            if (!reentered ||
+                _fanCoordinator.Authority !=
+                    FanAuthority.Custom)
+            {
+                throw new InvalidOperationException(
+                    "M6 could not reacquire watchdog-protected Custom authority after validated user-visible recovery.");
+            }
+
+            await ApplyM6CommandWithFreshSafetyAsync(
+                new FanCommand(
+                    SuspendHardwareTestLevel,
+                    SuspendHardwareTestLevel,
+                    "M6 controlled post-resume 30/30 re-entry"),
+                "controlled post-resume 30/30 re-entry");
+
+            var processStartTicks =
+                GetCurrentProcessStartUtcTicks();
+
+            var watchdogOwned =
+                M6WatchdogStateReader.Read();
+
+            M6WatchdogStateReader.RequireReady(
+                watchdogOwned,
+                _m6WatchdogPid,
+                _m6WatchdogStartUtcTicks);
+
+            M6WatchdogStateReader.RequireOwned30(
+                watchdogOwned,
+                Environment.ProcessId,
+                processStartTicks);
+
+            M6WatchdogStateReader.WriteDurableMarker(
+                M6ReentryPath,
+                $"REENTRY|{DateTimeOffset.Now:O}|" +
+                $"authority={_fanCoordinator.Authority}|" +
+                $"cpu={SuspendHardwareTestLevel}|gpu={SuspendHardwareTestLevel}|" +
+                $"ack=backend-ec+tachs+watchdog-owned|" +
+                $"watchdogPid={_m6WatchdogPid}|" +
+                $"watchdogStartTicks={_m6WatchdogStartUtcTicks}|" +
+                $"guiPid={Environment.ProcessId}|" +
+                $"guiStartTicks={processStartTicks}");
+
+            await _fanCoordinator.RestoreFirmwareAsync(
+                "M6 controlled post-resume re-entry complete; return authority to HP firmware.",
+                CancellationToken.None);
+
+            var finalRestore =
+                _fanCoordinator.LastRestoreEvidence;
+
+            var watchdogFinal =
+                M6WatchdogStateReader.Read();
+
+            M6WatchdogStateReader.RequireReady(
+                watchdogFinal,
+                _m6WatchdogPid,
+                _m6WatchdogStartUtcTicks);
+
+            var finalEc =
+                ReadStableM6FirmwareAutoProof();
+
+            if (_fanCoordinator.Authority !=
+                    FanAuthority.Firmware ||
+                finalRestore is not
+                {
+                    LocalFirmwareAckVerified: true,
+                    WatchdogLeaseRequired: true,
+                    WatchdogReleaseVerified: true
+                } ||
+                watchdogFinal.JournalPresent ||
+                !finalEc.Verified)
+            {
+                throw new InvalidOperationException(
+                    $"M6 final handoff invalid: authority={_fanCoordinator.Authority}, localAck={finalRestore?.LocalFirmwareAckVerified ?? false}, watchdogRelease={finalRestore?.WatchdogReleaseVerified ?? false}, journal={(watchdogFinal.JournalPresent ? "PRESENT" : "absent")}, EC={finalEc.Cpu}/{finalEc.Gpu}, detail={finalEc.Detail}.");
+            }
+
+            CompleteM6ModernStandbyHardwareTest(
+                success: true,
+                exitCode: 0,
+                message:
+                    $"SESSION_DISPLAY_STATUS Off proactively restored Firmware + stable FF/FF before Modern Standby; PBT resume while display Off was deferred; SESSION_DISPLAY_STATUS On was the only accepted resume; five-snapshot telemetry recovered Healthy; watchdog PID {_m6WatchdogPid} stayed stable; controlled post-resume 30/30 re-entry and final watchdog Release succeeded; journal absent; final EC FF/FF.");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                await _fanCoordinator.RestoreFirmwareAsync(
+                    "M6 hardware-test failure cleanup.",
+                    CancellationToken.None);
+            }
+            catch (Exception restoreEx)
+            {
+                AppLog.Write(
+                    $"M6: cleanup restore also failed: {restoreEx}");
+            }
+
+            CompleteM6ModernStandbyHardwareTest(
+                success: false,
+                exitCode: 132,
+                message:
+                    $"FAIL: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(
+                ref _m6AdvanceGate,
+                0);
+        }
+    }
+
+    private async Task ArmM6ModernStandbyHardwareTestAsync()
+    {
+        if (_m6SessionDisplayOff)
+        {
+            throw new InvalidOperationException(
+                "M6 refuses to arm Custom authority while SESSION_DISPLAY_STATUS is Off.");
+        }
+
+        var snapshot =
+            _lastSnapshot ??
+            throw new InvalidOperationException(
+                "M6 has no telemetry snapshot for initial admission.");
+
+        EnsureSuspendHardwareTestLightLoad(
+            snapshot);
+
+        var watchdog =
+            M6WatchdogStateReader.Read();
+
+        M6WatchdogStateReader.RequireReady(
+            watchdog);
+
+        if (watchdog.JournalPresent)
+        {
+            throw new InvalidOperationException(
+                $"M6 initial baseline requires no durable journal; found '{watchdog.JournalPath}'.");
+        }
+
+        _m6WatchdogPid =
+            watchdog.ProcessId;
+        _m6WatchdogStartUtcTicks =
+            watchdog.ProcessStartUtcTicks;
+
+        var firmwareProof =
+            ReadStableM6FirmwareAutoProof();
+
+        if (!firmwareProof.Verified)
+        {
+            throw new InvalidOperationException(
+                $"M6 initial firmware baseline is not stable FF/FF: {firmwareProof.Detail}; last={firmwareProof.Cpu}/{firmwareProof.Gpu}.");
+        }
+
+        var entered =
+            await TryEnterM6CustomAuthorityAsync(
+                "initial admission");
+
+        if (!entered ||
+            _fanCoordinator.Authority !=
+                FanAuthority.Custom)
+        {
+            throw new InvalidOperationException(
+                "M6 coordinator did not grant watchdog-protected Custom authority.");
+        }
+
+        await ApplyM6CommandWithFreshSafetyAsync(
+            new FanCommand(
+                SuspendHardwareTestLevel,
+                SuspendHardwareTestLevel,
+                "M6 initial watchdog-protected Modern Standby lifecycle qualification"),
+            "initial 30/30 command");
+
+        var processStartTicks =
+            GetCurrentProcessStartUtcTicks();
+
+        var ownedWatchdog =
+            M6WatchdogStateReader.Read();
+
+        M6WatchdogStateReader.RequireReady(
+            ownedWatchdog,
+            _m6WatchdogPid,
+            _m6WatchdogStartUtcTicks);
+
+        M6WatchdogStateReader.RequireOwned30(
+            ownedWatchdog,
+            Environment.ProcessId,
+            processStartTicks);
+
+        _m6BackendAckVerified = true;
+        _m6Armed = true;
+
+        M6WatchdogStateReader.WriteDurableMarker(
+            M6HardwareTestReadyPath,
+            $"READY|{DateTimeOffset.Now:O}|" +
+            $"authority={_fanCoordinator.Authority}|" +
+            $"cpu={SuspendHardwareTestLevel}|gpu={SuspendHardwareTestLevel}|" +
+            $"ack=backend-ec+tachs+watchdog-owned|" +
+            $"journal=Owned30|" +
+            $"watchdogPid={_m6WatchdogPid}|" +
+            $"watchdogStartTicks={_m6WatchdogStartUtcTicks}|" +
+            $"guiPid={Environment.ProcessId}|" +
+            $"guiStartTicks={processStartTicks}|" +
+            $"resumePolicy=session-display-on-only");
+
+        AppendEvent(
+            $"M6: READY at 30/30 with durable OWNED lease. Watchdog PID={_m6WatchdogPid}; GUI PID={Environment.ProcessId}. Use Windows Start -> Power -> Sleep. SESSION_DISPLAY_STATUS Off must release firmware authority before the Modern Standby transition.");
+    }
+
+    private async Task<bool> TryEnterM6CustomAuthorityAsync(
+        string phase)
+    {
+        const int maxAttempts = 5;
+
+        for (var attempt = 1;
+             attempt <= maxAttempts;
+             attempt++)
+        {
+            if (_worker.StateMachine.State !=
+                SystemState.Healthy)
+            {
+                throw new InvalidOperationException(
+                    $"M6 {phase} requires Healthy telemetry; state={_worker.StateMachine.State}.");
+            }
+
+            var snapshot =
+                _lastSnapshot ??
+                throw new InvalidOperationException(
+                    $"M6 {phase} has no telemetry snapshot.");
+
+            EnsureSuspendHardwareTestLightLoad(
+                snapshot);
+
+            var safety =
+                SafetyGate.Evaluate(
+                    _hardwareIdentity,
+                    _worker.StateMachine.State,
+                    snapshot,
+                    DateTimeOffset.UtcNow,
+                    fanWritePathPresent:
+                        _fanCoordinator.BackendCanWrite);
+
+            if (!safety.CustomControlPermitted)
+            {
+                throw new InvalidOperationException(
+                    $"SafetyGate refused M6 {phase}: " +
+                    string.Join(" | ", safety.Reasons));
+            }
+
+            try
+            {
+                var entered =
+                    await _fanCoordinator.TryEnterCustomAsync(
+                        safety,
+                        CancellationToken.None);
+
+                if (entered &&
+                    _fanCoordinator.Authority ==
+                        FanAuthority.Custom)
+                {
+                    return true;
+                }
+
+                if (_fanCoordinator
+                    .IsSafetyEvaluationCurrent(safety))
+                {
+                    return false;
+                }
+
+                AppendEvent(
+                    $"M6 {phase}: SafetyGate sequence {safety.EvaluationSequence} was superseded; retry {attempt}/{maxAttempts}.");
+
+                await Task.Yield();
+            }
+            catch (FanControlOwnershipConflictException ex)
+                when (ex.Message.Contains(
+                    "EC setpoint=",
+                    StringComparison.Ordinal))
+            {
+                var firmwareProof =
+                    ReadStableM6FirmwareAutoProof(
+                        maxSamples: 4);
+
+                if (!firmwareProof.Verified)
+                {
+                    throw;
+                }
+
+                AppendEvent(
+                    $"M6 {phase}: transient no-write ownership sample recovered after stable read-only FF/FF confirmation; retry {attempt}/{maxAttempts}. No compensating restore/write issued.");
+
+                await Task.Delay(
+                    50);
+            }
+        }
+
+        return false;
+    }
+
+    private async Task ApplyM6CommandWithFreshSafetyAsync(
+        FanCommand command,
+        string phase)
+    {
+        const int maxAttempts = 5;
+
+        for (var attempt = 1;
+             attempt <= maxAttempts;
+             attempt++)
+        {
+            if (_worker.StateMachine.State !=
+                SystemState.Healthy)
+            {
+                throw new InvalidOperationException(
+                    $"M6 {phase} requires Healthy telemetry before fan command; state={_worker.StateMachine.State}.");
+            }
+
+            var snapshot =
+                _lastSnapshot ??
+                throw new InvalidOperationException(
+                    $"M6 {phase} has no telemetry snapshot.");
+
+            EnsureSuspendHardwareTestLightLoad(
+                snapshot);
+
+            var safety =
+                SafetyGate.Evaluate(
+                    _hardwareIdentity,
+                    _worker.StateMachine.State,
+                    snapshot,
+                    DateTimeOffset.UtcNow,
+                    fanWritePathPresent:
+                        _fanCoordinator.BackendCanWrite);
+
+            if (!safety.CustomControlPermitted)
+            {
+                throw new InvalidOperationException(
+                    $"SafetyGate refused M6 {phase}: " +
+                    string.Join(" | ", safety.Reasons));
+            }
+
+            try
+            {
+                await _fanCoordinator.ApplyAsync(
+                    command,
+                    safety,
+                    CancellationToken.None);
+
+                return;
+            }
+            catch (FanControlStaleSafetyException)
+                when (_fanCoordinator.Authority ==
+                      FanAuthority.Custom)
+            {
+                AppendEvent(
+                    $"M6 {phase}: command SafetyGate sequence {safety.EvaluationSequence} was superseded; retry {attempt}/{maxAttempts}.");
+
+                await Task.Yield();
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"M6 {phase} could not obtain a current SafetyGate evaluation after {maxAttempts} bounded retries.");
+    }
+
+    private static long GetCurrentProcessStartUtcTicks()
+    {
+        using var process =
+            Process.GetCurrentProcess();
+
+        return process.StartTime
+            .ToUniversalTime()
+            .Ticks;
+    }
+
+    private void CompleteM6ModernStandbyHardwareTest(
+        bool success,
+        int exitCode,
+        string message)
+    {
+        if (_m6Completed)
+        {
+            return;
+        }
+
+        _m6Completed = true;
+        TryDeleteFile(
+            M6HardwareTestReadyPath);
+
+        var result =
+            $"{(success ? "PASS" : "FAIL")}|" +
+            $"{DateTimeOffset.Now:O}|" +
+            $"watchdogPid={_m6WatchdogPid}|" +
+            $"watchdogStartTicks={_m6WatchdogStartUtcTicks}|" +
+            $"guiPid={Environment.ProcessId}|" +
+            $"primaryDisplayOff={_m6PrimaryDisplayOffObserved}|" +
+            $"pbtSuspend={_m6PbtSuspendObserved}|" +
+            $"resumeAutomaticWhileOff={_m6ResumeAutomaticObservedWhileDisplayOff}|" +
+            $"resumeSuspendWhileOff={_m6ResumeSuspendObservedWhileDisplayOff}|" +
+            $"displayOn={_m6DisplayOnObserved}|" +
+            $"acceptedUserResumes={_m6AcceptedUserResumeCount}|" +
+            message;
+
+        try
+        {
+            M6WatchdogStateReader.WriteDurableMarker(
+                M6HardwareTestResultPath,
+                result);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(
+                $"M6: could not write result marker: {ex}");
+        }
+
+        AppendEvent(
+            $"M6 RESULT: {message}");
+
+        Environment.ExitCode =
+            exitCode;
+
+        Ui(() =>
+        {
+            _allowExit = true;
+            Close();
+        });
+    }
+
     private async Task AdvanceGateDHardwareTestAsync()
     {
         if (_gateDHardwareTestCompleted ||
@@ -3877,4 +4421,26 @@ internal sealed class MainForm : Form
 
     private static string FormatCompact(double? value, string suffix, int decimals = 1) =>
         value.HasValue ? $"{value.Value.ToString($"F{decimals}")}{suffix}" : "n/a";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PowerBroadcastSetting
+    {
+        public Guid PowerSetting;
+        public uint DataLength;
+    }
+
+    [DllImport(
+        "user32.dll",
+        SetLastError = true)]
+    private static extern IntPtr RegisterPowerSettingNotification(
+        IntPtr hRecipient,
+        ref Guid powerSettingGuid,
+        int flags);
+
+    [DllImport(
+        "user32.dll",
+        SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnregisterPowerSettingNotification(
+        IntPtr handle);
 }
