@@ -356,7 +356,10 @@ function Assert-Owned30Journal {
 }
 
 function Get-M6PowerTransitionDisqualifier {
-    param([datetime]$StartTime)
+    param(
+        [datetime]$StartTime,
+        [long]$AfterRecordId
+    )
 
     $events = @(
         Get-WinEvent -FilterHashtable @{
@@ -365,9 +368,10 @@ function Get-M6PowerTransitionDisqualifier {
             StartTime=$StartTime
         } -ErrorAction SilentlyContinue |
         Where-Object {
-            $_.Id -eq 42 -or
-            $_.Id -eq 507 -or
-            $_.Id -eq 524
+            $_.RecordId -gt $AfterRecordId -and
+            ($_.Id -eq 42 -or
+             $_.Id -eq 507 -or
+             $_.Id -eq 524)
         } |
         Sort-Object TimeCreated
     )
@@ -412,6 +416,7 @@ function Wait-ModernStandbyKernelEvidence {
     param(
         [datetime]$StartTime,
         [datetime]$DisplayOnTime,
+        [long]$AfterRecordId,
         [int]$Seconds = 30
     )
 
@@ -426,6 +431,7 @@ function Wait-ModernStandbyKernelEvidence {
                 StartTime=$StartTime
             } -ErrorAction SilentlyContinue |
             Where-Object {
+                $_.RecordId -gt $AfterRecordId -and
                 ($_.Id -eq 506 -or $_.Id -eq 507) -and
                 $_.TimeCreated -le $latestAllowedResume
             } |
@@ -458,6 +464,44 @@ function Wait-ModernStandbyKernelEvidence {
     return $null
 }
 
+function Get-KernelPowerRecordBoundary {
+    $event =
+        Get-WinEvent -FilterHashtable @{
+            LogName='System'
+            ProviderName='Microsoft-Windows-Kernel-Power'
+        } -MaxEvents 1 -ErrorAction SilentlyContinue
+
+    if ($null -eq $event) {
+        return 0L
+    }
+
+    return [long]$event.RecordId
+}
+
+function Parse-MarkerDateTimeOffsetField {
+    param(
+        [string]$Text,
+        [string]$Name
+    )
+
+    $prefix = $Name + '='
+    $field =
+        $Text -split '\|' |
+        Where-Object {
+            $_.StartsWith(
+                $prefix,
+                [StringComparison]::Ordinal)
+        } |
+        Select-Object -First 1
+
+    if (-not $field) {
+        throw "Marker has no '$Name' field: $Text"
+    }
+
+    return [DateTimeOffset]::Parse(
+        $field.Substring($prefix.Length),
+        [Globalization.CultureInfo]::InvariantCulture)
+}
 function Parse-MarkerTimestamp {
     param([string]$Text)
 
@@ -682,6 +726,10 @@ try {
     }
 
     $eventWindowStart = (Get-Date).AddSeconds(-2)
+    $kernelPowerRecordBoundary =
+        Get-KernelPowerRecordBoundary
+
+    Write-Host "Kernel-Power record boundary: $kernelPowerRecordBoundary"
 
     Write-Host ''
     Write-Host 'Step 5: PERFORM THE REAL MODERN STANDBY TRANSITION NOW.' -ForegroundColor Yellow
@@ -708,7 +756,7 @@ try {
     Write-Host ''
     Write-Host 'Step 6: validate display-aware handoff/resume/re-entry markers...' -ForegroundColor Cyan
 
-    $powerDisqualifier = Get-M6PowerTransitionDisqualifier -StartTime $eventWindowStart
+    $powerDisqualifier = Get-M6PowerTransitionDisqualifier -StartTime $eventWindowStart -AfterRecordId $kernelPowerRecordBoundary
     if ($powerDisqualifier) {
         throw "M6 requested Modern Standby cycle was contaminated by a disqualifying power transition: $powerDisqualifier"
     }
@@ -731,6 +779,8 @@ try {
 
     if ($preSleepText -notmatch '^PASS\|' -or
         $preSleepText -notmatch 'source=GUID_SESSION_DISPLAY_STATUS/Off' -or
+        $preSleepText -notmatch 'restoreTrigger=registered-WM_POWERBROADCAST/PBT_APMSUSPEND' -or
+        $preSleepText -notmatch 'displayOffAt=' -or
         $preSleepText -notmatch 'primaryDisplaySignal=True' -or
         $preSleepText -notmatch 'wasCustom=True' -or
         $preSleepText -notmatch 'backendAck=True' -or
@@ -787,9 +837,11 @@ try {
     Write-Host 'Step 7: require Windows Kernel-Power Modern Standby evidence...' -ForegroundColor Cyan
 
     $preSleepTimestamp = Parse-MarkerTimestamp -Text $preSleepText
+    $displayOffTimestamp =
+        Parse-MarkerDateTimeOffsetField -Text $preSleepText -Name 'displayOffAt'
     $displayOnTimestamp = Parse-MarkerTimestamp -Text $resumeText
 
-    $power = Wait-ModernStandbyKernelEvidence -StartTime $eventWindowStart -DisplayOnTime $displayOnTimestamp.LocalDateTime
+    $power = Wait-ModernStandbyKernelEvidence -StartTime $eventWindowStart -DisplayOnTime $displayOnTimestamp.LocalDateTime -AfterRecordId $kernelPowerRecordBoundary
 
     if ($null -eq $power) {
         throw 'M6 app lifecycle passed, but no Kernel-Power 506 -> 507 Modern Standby evidence was found between the armed boundary and user-visible display-On resume.'
@@ -797,15 +849,20 @@ try {
 
     Write-Host ("Kernel-Power first 506 : {0:O}" -f $power.Sleep.TimeCreated)
     Write-Host ("Kernel-Power final 507 : {0:O}" -f $power.Resume.TimeCreated)
-    Write-Host ("Pre-sleep handoff       : {0:O}" -f $preSleepTimestamp)
+    Write-Host ("Display-Off boundary    : {0:O}" -f $displayOffTimestamp)
+    Write-Host ("Pre-sleep completion    : {0:O}" -f $preSleepTimestamp)
     Write-Host ("Display-On resume gate  : {0:O}" -f $displayOnTimestamp)
 
-    if ($preSleepTimestamp.LocalDateTime -lt $eventWindowStart.AddSeconds(-1)) {
-        throw 'M6 session-display Off handoff occurred before the explicitly armed user sleep window; the requested sleep cycle is not causally isolated.'
+    if ($displayOffTimestamp.LocalDateTime -lt $eventWindowStart.AddSeconds(-1)) {
+        throw 'M6 primary session-display Off boundary occurred before the explicitly armed user sleep window; the requested sleep cycle is not causally isolated.'
     }
 
-    if ($preSleepTimestamp.UtcDateTime -gt $power.Sleep.TimeCreated.ToUniversalTime().AddSeconds(1)) {
-        throw 'M6 proactive release marker was written after the first Kernel-Power 506 sleep boundary; release-before-Modern-Standby is not proven.'
+    if ($displayOffTimestamp.UtcDateTime -gt $power.Sleep.TimeCreated.ToUniversalTime().AddSeconds(1)) {
+        throw 'M6 primary session-display Off boundary occurred too late to correspond to the first Kernel-Power 506 entry boundary.'
+    }
+
+    if ($preSleepTimestamp.UtcDateTime -gt $displayOnTimestamp.UtcDateTime) {
+        throw 'M6 registered pre-suspend completion marker was not durable before the accepted display-On resume boundary.'
     }
 
     if ($power.Resume.TimeCreated.ToUniversalTime() -gt $displayOnTimestamp.UtcDateTime.AddSeconds(3)) {
