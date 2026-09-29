@@ -4,12 +4,14 @@ $repoRoot=Split-Path -Parent $PSScriptRoot
 $appPath=Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs'
 $programPath=Join-Path $repoRoot 'src\VictusFanControl.App\Program.cs'
 $readerPath=Join-Path $repoRoot 'src\VictusFanControl.App\M6WatchdogState.cs'
+$workerPath=Join-Path $repoRoot 'src\VictusFanControl.App\TelemetryWorker.cs'
 $backendPath=Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs'
 $factoryPath=Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\HpFanControlBackendFactory.cs'
 
 $app=Get-Content $appPath -Raw
 $program=Get-Content $programPath -Raw
 $reader=Get-Content $readerPath -Raw
+$worker=Get-Content $workerPath -Raw
 $backend=Get-Content $backendPath -Raw
 $factory=Get-Content $factoryPath -Raw
 
@@ -35,6 +37,7 @@ Assert-NotContains $factory 'CreateLifecycleQualificationBackend' 'Production ba
 Assert-Contains $app 'FanControlWatchdogLeaseContract.Hp8C40M4PipeName' 'M6 must use the isolated HP 8C40 M4 pipe.'
 Assert-Contains $app 'Hp8C40FanControlBackend.CreateLifecycleQualificationBackend' 'M6 app mode must use the explicit qualification backend.'
 Assert-Contains $app 'RegisterPowerSettingNotification' 'M6 must register for SESSION_DISPLAY_STATUS.'
+Assert-Contains $app 'RegisterSuspendResumeNotification' 'M6 must explicitly register for suspend/resume notifications on Modern Standby.'
 Assert-Contains $app 'GuidSessionDisplayStatus' 'M6 session-display GUID is missing.'
 Assert-Contains $app 'GUID_SESSION_DISPLAY_STATUS/Off' 'M6 primary proactive release boundary must be session-display Off.'
 Assert-Contains $app 'GUID_SESSION_DISPLAY_STATUS/On' 'M6 user-facing resume boundary must be session-display On.'
@@ -52,8 +55,10 @@ Assert-Contains $app 'WatchdogReleaseVerified: true' 'M6 pre-sleep and final han
 Assert-Contains $app 'AllowCustomAdmissionAfterRecoveryAsync' 'M6 must explicitly reopen admission only after recovery.'
 Assert-Contains $app 'recoveryTimestamp <=' 'M6 must require telemetry newer than display-On boundary.'
 Assert-Contains $app 'Automatic policy remains OFF' 'M6 qualification mode must not enable automatic policy.'
+Assert-Contains $app 'registered-WM_POWERBROADCAST/PBT_APMSUSPEND' 'M6 registered PBT suspend must be the synchronous pre-suspend completion barrier.'
 Assert-Contains $app 'WM_POWERBROADCAST/PBT_APMSUSPEND fallback' 'M6 must retain a safety-only PBT suspend fallback.'
 Assert-Contains $app 'primaryDisplaySignal: false' 'PBT suspend fallback must not masquerade as primary session-display proof.'
+Assert-Contains $app 'WaitForHardwareReadQuiescenceAsync' 'M6 must quiesce telemetry hardware reads before restore IO.'
 Assert-NotContains $app 'SetSuspendState' 'M6 app must not dispatch suspend itself.'
 $m6Start=$app.IndexOf('private async Task AdvanceM6ModernStandbyHardwareTestAsync()',[StringComparison]::Ordinal)
 $m6End=$app.IndexOf('private async Task AdvanceGateDHardwareTestAsync()',[StringComparison]::Ordinal)
@@ -69,11 +74,18 @@ $offEnd=$app.IndexOf('private void HandleM6SessionDisplayOn(',[StringComparison]
 $offBlock=$app.Substring($offMethod,$offEnd-$offMethod)
 $fenceIndex=$offBlock.IndexOf('_fanCoordinator.CloseCustomAdmissionForLifecycleBoundary();',[StringComparison]::Ordinal)
 $suspendIndex=$offBlock.IndexOf('_worker.NotifySuspend(source);',[StringComparison]::Ordinal)
+$taskIndex=$offBlock.IndexOf('_m6PreSleepRestoreTask =',[StringComparison]::Ordinal)
+$quiesceIndex=$offBlock.IndexOf('WaitForHardwareReadQuiescenceAsync',[StringComparison]::Ordinal)
 $restoreIndex=$offBlock.IndexOf('_fanCoordinator.BlockCustomAdmissionAndRestoreAsync(',[StringComparison]::Ordinal)
-if($fenceIndex-lt 0 -or $suspendIndex-lt 0 -or $restoreIndex-lt 0 -or
-   -not ($fenceIndex-lt $suspendIndex -and $suspendIndex-lt $restoreIndex)){
-    throw 'M6 display-Off order must remain admission fence -> telemetry Suspended -> blocking firmware/watchdog restore.'
+$completeIndex=$offBlock.IndexOf('private void CompleteM6PreSleepRestore(',[StringComparison]::Ordinal)
+if($fenceIndex-lt 0 -or $suspendIndex-lt 0 -or $taskIndex-lt 0 -or
+   $quiesceIndex-lt 0 -or $restoreIndex-lt 0 -or $completeIndex-lt 0 -or
+   -not ($fenceIndex-lt $suspendIndex -and $suspendIndex-lt $taskIndex -and
+         $taskIndex-lt $quiesceIndex -and $quiesceIndex-lt $restoreIndex)){
+    throw 'M6 display-Off order must remain fence -> telemetry Suspended -> background hardware quiescence -> restore, with registered PBT as completion barrier.'
 }
+Assert-Contains $offBlock 'restoreTrigger=' 'M6 pre-sleep marker must record the registered suspend completion trigger.'
+Assert-Contains $offBlock 'displayOffAt=' 'M6 pre-sleep marker must retain the primary Display-Off boundary timestamp.'
 
 $onEnd=$app.IndexOf('private (bool Verified, byte Cpu, byte Gpu, int Samples, string Detail)',[StringComparison]::Ordinal)
 $onBlock=$app.Substring($onMethod,$onEnd-$onMethod)
@@ -83,6 +95,13 @@ if($onFenceIndex-lt 0 -or $notifyResumeIndex-lt 0 -or $onFenceIndex-ge $notifyRe
     throw 'M6 display-On order must advance the lifecycle freshness fence before telemetry NotifyResume.'
 }
 
+Assert-Contains $worker '_hardwareReadGate' 'M6 telemetry worker must serialize hardware snapshot IO.'
+Assert-Contains $worker 'WaitForHardwareReadQuiescenceAsync' 'M6 telemetry worker must expose a bounded hardware-read quiescence barrier.'
+Assert-Contains $worker 'ReadSnapshotIfCurrentAsync' 'Telemetry reads must be centralized behind the lifecycle-aware hardware gate.'
+$directReads=[regex]::Matches($worker,'_reader!?\s*\.ReadSnapshot\(\)').Count
+if($directReads-ne 1){
+    throw "TelemetryWorker must contain exactly one direct ReadSnapshot call behind the hardware gate; found $directReads."
+}
 Assert-Contains $reader 'WatchdogM4' 'M6 watchdog reader must use the HP 8C40 M4 service root.'
 Assert-Contains $reader 'm4-8c40.status.json' 'M6 watchdog reader must use the M4 exact-target status marker.'
 Assert-Contains $reader 'Hp8C40TargetProfile.Instance.Id' 'M6 watchdog state must exact-match the HP 8C40 target.'
