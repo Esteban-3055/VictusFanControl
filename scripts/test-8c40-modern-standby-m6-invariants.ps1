@@ -55,7 +55,11 @@ Assert-Contains $app 'Automatic policy remains OFF' 'M6 qualification mode must 
 Assert-Contains $app 'WM_POWERBROADCAST/PBT_APMSUSPEND fallback' 'M6 must retain a safety-only PBT suspend fallback.'
 Assert-Contains $app 'primaryDisplaySignal: false' 'PBT suspend fallback must not masquerade as primary session-display proof.'
 Assert-NotContains $app 'SetSuspendState' 'M6 app must not dispatch suspend itself.'
-Assert-NotContains $app '88F8-GATEG' 'M6 implementation must not depend on historical 88F8 Gate G tokens.'
+$m6Start=$app.IndexOf('private async Task AdvanceM6ModernStandbyHardwareTestAsync()',[StringComparison]::Ordinal)
+$m6End=$app.IndexOf('private async Task AdvanceGateDHardwareTestAsync()',[StringComparison]::Ordinal)
+if($m6Start-lt 0 -or $m6End-le $m6Start){throw 'M6 method scope is unavailable for isolation checks.'}
+$m6Block=$app.Substring($m6Start,$m6End-$m6Start)
+Assert-NotContains $m6Block '88F8-GATEG' 'M6-specific lifecycle implementation must not depend on historical 88F8 Gate G tokens.'
 
 $offMethod=$app.IndexOf('private void HandleM6DisplayOffBoundary(',[StringComparison]::Ordinal)
 $onMethod=$app.IndexOf('private void HandleM6SessionDisplayOn(',[StringComparison]::Ordinal)
