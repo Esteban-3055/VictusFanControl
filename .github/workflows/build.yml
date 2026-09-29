@@ -97,6 +97,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-8c40-modern-standby-m6-invariants.ps1
 
+      - name: HP 8C40 M6 preflight/physical harness invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-modern-standby-m6-harness-invariants.ps1
+
       - name: HP 8C40 M5/M6 invariants Windows PowerShell 5.1 compatibility
         shell: powershell
         run: |
@@ -111,6 +115,7 @@ jobs:
           .\scripts\test-watchdog-m5d-write-armed-invariants.ps1
           .\scripts\test-watchdog-m5e-write-armed-double-death-invariants.ps1
           .\scripts\test-8c40-modern-standby-m6-invariants.ps1
+          .\scripts\test-8c40-modern-standby-m6-harness-invariants.ps1
 
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
