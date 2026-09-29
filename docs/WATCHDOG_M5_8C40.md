@@ -945,3 +945,101 @@ complete.
 
 `WatchdogRecoveryValidated` remains false and automatic/adaptive policy
 remains OFF.
+
+
+## M5E - WRITE_ARMED post-WMI / pre-Commit double death
+
+M5D proved the live-watchdog controller-death branch of the real
+post-WMI/pre-Commit WRITE_ARMED window. M5E extends that exact physical boundary
+to loss of **both** original recovery domains.
+
+The M5E parent deliberately reuses the already-qualified M5D child instead of
+adding another fan-write path:
+
+~~~text
+PREPARE generation 1
+  -> durable WRITE_INTENT generation 2 / Pending 30/30
+  -> real HP WMI SetFanLevel(30/30)
+  -> EC 30/30 acknowledgement
+  -> both physical tachometers acknowledge
+  -> M5D qualification hook holds before watchdog Commit
+~~~
+
+Immediately before fault injection, M5E independently requires:
+
+~~~text
+READY stage = WRITE_ARMED_POST_WMI_EC_TACH_ACK_PRE_COMMIT
+exact target HP-8C40-9D0R1LA-F18
+exact controller PID + creation time
+exact original watchdog PID + creation time
+journal schema 2
+phase WriteArmed
+generation 2
+PreviousOwned null
+Pending 30/30
+Owned null
+independent EC 30/30
+delayed safety fallback alive
+~~~
+
+The fault request ordering is fixed:
+
+~~~text
+watchdog Kill()
+controller Kill()
+~~~
+
+with no sleep, EC read, SCM query or journal read between the two requests and
+a default maximum request interval of 50 ms.
+
+The temporary SCM first restart remains 5000 ms so the parent can prove a
+pre-restart causal window where:
+
+~~~text
+both original processes are dead
+replacement service is still absent
+EC is still 30/30
+exact durable WRITE_ARMED generation-2 journal is still present
+Commit never occurred
+~~~
+
+Only then may a distinct SCM-restarted LocalSystem watchdog satisfy PASS by
+loading the retained WRITE_ARMED journal, recognizing the physically observed
+30/30 as the permitted Pending target, executing the already-qualified
+firmware restore, verifying FF/FF and deleting the journal.
+
+A dedicated delayed M5E fallback is armed before the write-capable child. It is
+restricted to the exact target and exact generation-2 WRITE_ARMED pending 30/30
+journal. It may terminate only the exact journal-bound controller and may only
+start/restart the already-qualified M4 recovery service. It has no ordinary
+fan-target authority, no direct HP/WMI restore authority and no journal-deletion
+authority. If it takes over, the hardware may be safely recovered but the run
+cannot count as M5E PASS.
+
+Cleanup deliberately keeps that fallback alive until FF/FF plus journal absence
+have been independently proven.
+
+### M5E preparation CI result
+
+M5E preparation is **CODE/CI PASS / PHYSICAL PENDING**.
+
+The final preparation head
+`f4bf35d7fb51bc53ee5cde2f8ec1f9cea8122852` passed GitHub Actions
+**#631** (run `36512183955`) on 2026-09-29.
+
+That run passed:
+
+- PowerShell syntax validation;
+- historical Gate E/F/G0/G1/G2 invariants;
+- HP 8C40 M5A/M5B/M5C/M5D invariants;
+- the new M5E invariant under PowerShell Core;
+- the complete M5 invariant set under Windows PowerShell 5.1;
+- warnings-as-errors solution build;
+- M0, Gate B/C and HP 8C40 M2/M3/M4 self-tests;
+- SafetyGate and FanControlCoordinator self-tests;
+- HP BIOS-contract and HP backend self-tests.
+
+No M5E physical fault injection has yet been executed.
+
+`WatchdogRecoveryValidated` remains false and automatic/adaptive policy remains
+OFF until the remaining physical/lifecycle qualification gates are complete.
