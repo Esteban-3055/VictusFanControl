@@ -4,10 +4,12 @@ $repoRoot=Split-Path -Parent $PSScriptRoot
 $preflightPath=Join-Path $PSScriptRoot 'test-8c40-modern-standby-m6-preflight.ps1'
 $physicalPath=Join-Path $PSScriptRoot 'test-8c40-modern-standby-m6.ps1'
 $appPath=Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs'
+$m4WorkerPath=Join-Path $repoRoot 'src\VictusFanControl.Watchdog\M4Hp8C40LeaseWorker.cs'
 
 $preflight=Get-Content $preflightPath -Raw
 $physical=Get-Content $physicalPath -Raw
 $app=Get-Content $appPath -Raw
+$m4Worker=Get-Content $m4WorkerPath -Raw
 
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
     if($Text.IndexOf($Needle,[StringComparison]::Ordinal)-lt 0){throw $Message}
@@ -39,12 +41,16 @@ Assert-Contains $physical '--8c40-m6-modern-standby-test' 'M6 physical harness m
 Assert-Contains $physical 'Start -> Power -> Sleep' 'M6 physical harness must instruct a user-initiated sleep.'
 Assert-Contains $physical 'Wait-ModernStandbyKernelEvidence' 'M6 must require OS-level Modern Standby evidence.'
 Assert-Contains $physical 'Get-M6PowerTransitionDisqualifier' 'M6 must reject disqualifying battery/hibernate transitions before marker acceptance.'
+Assert-Contains $physical 'Get-KernelPowerRecordBoundary' 'M6 must causally isolate the requested cycle from older Kernel-Power events.'
+Assert-Contains $physical '$_.RecordId -gt $AfterRecordId' 'M6 Kernel-Power acceptance must require EventRecordID newer than the pre-sleep boundary.'
 Assert-Contains $physical '$_.Id -eq 524' 'M6 must reject Kernel-Power 524 critical-battery evidence.'
 Assert-Contains $physical '$_.Id -eq 506' 'M6 must require Kernel-Power 506.'
 Assert-Contains $physical '$_.Id -eq 507' 'M6 must require Kernel-Power 507.'
 Assert-Contains $physical "`$_.Message -match '(?i)hibern'" 'M6 must reject Kernel-Power hibernate-resume evidence.'
 Assert-Contains $physical 'source=GUID_SESSION_DISPLAY_STATUS/Off' 'M6 must require the primary display-Off handoff marker.'
 Assert-Contains $physical 'primaryDisplaySignal=True' 'M6 must reject a PBT fallback as primary lifecycle proof.'
+Assert-Contains $physical 'restoreTrigger=registered-WM_POWERBROADCAST/PBT_APMSUSPEND' 'M6 must prove restore completion inside the registered pre-suspend notification.'
+Assert-Contains $physical 'displayOffAt=' 'M6 must carry the primary display-Off timestamp separately from pre-suspend completion.'
 Assert-Contains $physical 'watchdogRelease=True' 'M6 must require durable watchdog Release before sleep handoff acceptance.'
 Assert-Contains $physical 'resumeAutomaticWhileOff=True' 'M6 must validate maintenance/automatic resume deferral when observed.'
 Assert-Contains $physical 'resumeSuspendWhileOff=True' 'M6 must validate resume-suspend deferral when observed.'
@@ -74,6 +80,12 @@ if($finallyIndex-lt 0 -or $safetyIndex-lt $finallyIndex -or $diagnosticsIndex-lt
     throw 'M6 abnormal cleanup must recover/prove firmware safety before collecting potentially slow power diagnostics.'
 }
 
+# M4 must retain durable evidence and retry EC-specific observational
+# contention instead of terminating the exact watchdog during handoff.
+Assert-Contains $m4Worker 'M4 MONITOR RETRYABLE EC FAILURE:' 'M6 requires retryable EC contention to keep M4 alive.'
+Assert-Contains $m4Worker 'durable journal retained and monitor will retry' 'M4 retryable monitor failure must retain durable ownership evidence.'
+Assert-Contains $m4Worker 'M4 MONITOR RECOVERED:' 'M4 status must heal after retryable EC contention once the lease is safely gone.'
+Assert-Contains $m4Worker 'IsRetryableEcMonitorFailure' 'M4 retry policy must be restricted to EC-specific failures.'
 # App-specific lifecycle ordering and anti-maintenance-wake invariants.
 Assert-Contains $app '_m6ResumeAutomaticObservedWhileDisplayOff = true' 'M6 app must record automatic resume while display remains Off.'
 Assert-Contains $app '_m6ResumeSuspendObservedWhileDisplayOff = true' 'M6 app must record resume-suspend while display remains Off.'
