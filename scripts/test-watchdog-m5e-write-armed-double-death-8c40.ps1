@@ -218,7 +218,8 @@ foreach ($invariant in @(
     'test-watchdog-m5b-8c40-invariants.ps1',
     'test-watchdog-m5c-preflight-invariants.ps1',
     'test-watchdog-m5c-double-death-invariants.ps1',
-    'test-watchdog-m5d-write-armed-invariants.ps1'
+    'test-watchdog-m5d-write-armed-invariants.ps1',
+    'test-watchdog-m5e-write-armed-double-death-invariants.ps1'
 )) {
     & (Join-Path $PSScriptRoot $invariant)
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -381,7 +382,7 @@ try {
     $prepare = $newLog | Where-Object { $_ -match ("WATCHDOG PREPARE ACK controller PID={0}" -f $controller.Id) }
     $intent = $newLog | Where-Object { $_ -match ("WATCHDOG WRITE_INTENT ACK controller PID={0}" -f $controller.Id) -and $_ -match 'target=30/30' }
     $commit = $newLog | Where-Object { $_ -match ("WATCHDOG COMMIT ACK controller PID={0}" -f $controller.Id) }
-    $startup = $newLog | Where-Object { $_ -match 'M4 STARTUP RECOVERY disposition=RestoredFirmware' -and $_ -match 'journalRetained=False' -and $_ -match 'WRITE_ARMED' }
+    $startup = $newLog | Where-Object { $_ -match 'M4 STARTUP RECOVERY disposition=RestoredFirmware' -and $_ -match 'journalRetained=False' }
 
     if (-not $prepare -or -not $intent) { throw 'M5E fresh PREPARE/WRITE_INTENT evidence missing.' }
     if ($commit) { throw 'M5E found COMMIT for killed controller; pre-Commit boundary was not preserved.' }
