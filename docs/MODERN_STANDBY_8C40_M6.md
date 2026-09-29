@@ -240,3 +240,17 @@ M6 physical evidence remains pending.
 
 `WatchdogRecoveryValidated` remains **false** and automatic/adaptive policy
 remains **OFF**.
+
+
+## Final preparation head before no-write preflight
+
+The safety-first cleanup ordering was locked in commit
+`b312c11f3b7034f4b8ee507084e53a77d66657c1`.
+
+GitHub Actions **#656** (run `36626491883`) completed successfully on
+2026-09-29. The run passed the complete M5/M6 invariant set, Windows
+PowerShell 5.1 compatibility, warnings-as-errors build, Modern Standby M0,
+Gate B/C, M2/M3/M4, SafetyGate, FanControlCoordinator and HP backend tests.
+
+This is the exact code baseline for the M6 no-write preflight. Physical M6
+remains blocked until that local preflight passes.

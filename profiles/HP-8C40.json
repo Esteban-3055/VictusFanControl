@@ -1583,9 +1583,9 @@
     },
     "preparationCi": {
       "result": "PASS",
-      "finalCommit": "adecb6af9331d93ad4f7ac766f1e145e1aee2a33",
-      "runNumber": 654,
-      "runId": 36625953717,
+      "finalCommit": "b312c11f3b7034f4b8ee507084e53a77d66657c1",
+      "runNumber": 656,
+      "runId": 36626491883,
       "completedAt": "2026-09-29",
       "lifecycleInvariantPowerShellCore": true,
       "harnessInvariantPowerShellCore": true,
@@ -1595,7 +1595,8 @@
       "m4SelfTest": true,
       "safetyGateSelfTest": true,
       "coordinatorSelfTest": true,
-      "hpBackendSelfTest": true
+      "hpBackendSelfTest": true,
+      "cleanupOrderingLocked": true
     },
     "noWritePreflightStatus": "PENDING",
     "physicalStatus": "PENDING",
