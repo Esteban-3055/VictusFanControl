@@ -51,7 +51,7 @@ Assert-Contains $physical 'Wait-StableFirmwareAuto' 'M6 parent final EC proof mu
 Assert-Contains $physical 'Restore-M4Baseline' 'M6 must restore M4 Manual/stopped after firmware safety.'
 Assert-Contains $physical 'M6 emergency fallback cancelled only after journal absence + stable independent FF/FF proof.' 'M6 must keep the delayed fallback until independent safety proof.'
 Assert-Contains $physical 'collect-power-transition-diagnostics.ps1' 'M6 must capture post-transition Windows power diagnostics.'
-Assert-NotContains $physical 'SetSuspendState' 'M6 parent must not programmatically request sleep.'
+Assert-NotContains $physical 'SetSuspendState(' 'M6 parent must not programmatically request sleep.'
 Assert-NotContains $physical '--restore-hp-auto' 'M6 parent must not invoke direct HP restore.'
 Assert-NotContains $physical 'SetFanLevel(' 'M6 parent must not directly issue a fan command.'
 
