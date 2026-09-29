@@ -293,3 +293,20 @@ critical-battery or hibernate evidence in the armed window and to surface the
 persistent VFC application log so the exact pre-Off authority transition can
 be diagnosed. No production watchdog promotion or automatic policy change is
 authorized by this attempt.
+
+
+## One-command last-run diagnostics
+
+To keep physical qualification operator steps limited to repository update plus
+versioned scripts, the read-only helper below correlates the most recent M6
+markers with the persistent GUI log, M4 watchdog log and Windows Kernel-Power /
+Power-Troubleshooter events:
+
+~~~powershell
+.\scripts\diagnose-8c40-modern-standby-m6-last-run.ps1
+~~~
+
+It also prints the current branch, HEAD and working-tree status. The helper does
+not issue a fan command, firmware restore, service mutation or sleep request.
+It is intended for post-run diagnosis only and cannot satisfy an M6 PASS gate
+by itself.
