@@ -5,6 +5,16 @@ using VictusFanControl.Hardware.Hp;
 
 namespace VictusFanControl.App;
 
+internal sealed record M6LeaseSnapshot(
+    int SchemaVersion,
+    string TargetProfileId,
+    int ControllerProcessId,
+    long ControllerStartUtcTicks,
+    int Phase,
+    long Generation,
+    int? OwnedCpu,
+    int? OwnedGpu);
+
 internal sealed record M6WatchdogSnapshot(
     bool Ready,
     bool Blocked,
@@ -174,6 +184,94 @@ internal static class M6WatchdogStateReader
         {
             throw new InvalidOperationException(
                 $"M6 requires the same watchdog creation time across Modern Standby; expected {expectedStartUtcTicks.Value}, observed {snapshot.ProcessStartUtcTicks}.");
+        }
+    }
+
+    public static M6LeaseSnapshot ReadOwnedLease(
+        M6WatchdogSnapshot watchdog)
+    {
+        if (!watchdog.JournalPresent)
+        {
+            throw new InvalidOperationException(
+                $"M6 requires a durable OWNED journal at '{watchdog.JournalPath}'.");
+        }
+
+        using var document =
+            JsonDocument.Parse(
+                File.ReadAllText(watchdog.JournalPath));
+
+        var root = document.RootElement;
+
+        var schemaVersion =
+            root.GetProperty("SchemaVersion").GetInt32();
+
+        var targetProfileId =
+            root.GetProperty("TargetProfileId").GetString() ??
+            string.Empty;
+
+        var controller =
+            root.GetProperty("Controller");
+
+        var phaseElement =
+            root.GetProperty("Phase");
+
+        var phase =
+            phaseElement.ValueKind == JsonValueKind.Number
+                ? phaseElement.GetInt32()
+                : string.Equals(
+                    phaseElement.GetString(),
+                    "Owned",
+                    StringComparison.Ordinal)
+                    ? 2
+                    : -1;
+
+        var ownedCpu = (int?)null;
+        var ownedGpu = (int?)null;
+
+        if (root.TryGetProperty(
+                "Owned",
+                out var owned) &&
+            owned.ValueKind != JsonValueKind.Null)
+        {
+            ownedCpu =
+                owned.GetProperty("Cpu").GetInt32();
+            ownedGpu =
+                owned.GetProperty("Gpu").GetInt32();
+        }
+
+        return new M6LeaseSnapshot(
+            schemaVersion,
+            targetProfileId,
+            controller.GetProperty("ProcessId").GetInt32(),
+            controller.GetProperty("ProcessStartUtcTicks").GetInt64(),
+            phase,
+            root.GetProperty("Generation").GetInt64(),
+            ownedCpu,
+            ownedGpu);
+    }
+
+    public static void RequireOwned30(
+        M6WatchdogSnapshot watchdog,
+        int expectedControllerPid,
+        long expectedControllerStartUtcTicks)
+    {
+        var lease =
+            ReadOwnedLease(watchdog);
+
+        if (lease.SchemaVersion != 2 ||
+            !string.Equals(
+                lease.TargetProfileId,
+                Hp8C40TargetProfile.Instance.Id,
+                StringComparison.Ordinal) ||
+            lease.ControllerProcessId != expectedControllerPid ||
+            lease.ControllerStartUtcTicks != expectedControllerStartUtcTicks ||
+            lease.Phase != 2 ||
+            lease.Generation != 3 ||
+            lease.OwnedCpu != 30 ||
+            lease.OwnedGpu != 30)
+        {
+            throw new InvalidOperationException(
+                $"M6 requires exact schema-v2 OWNED generation-3 30/30 journal for controller PID={expectedControllerPid}, startTicks={expectedControllerStartUtcTicks}; observed phase={lease.Phase}, generation={lease.Generation}, owned={lease.OwnedCpu?.ToString() ?? "null"}/{lease.OwnedGpu?.ToString() ?? "null"}.");
         }
     }
 
