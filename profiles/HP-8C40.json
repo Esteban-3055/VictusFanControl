@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abc-awake-pass-m5d-code-ci-pass-physical-pending-lifecycle-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcd-awake-pass-m5e-write-armed-double-death-pending-lifecycle-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -924,7 +924,7 @@
     "normalAwakeLeaseQualificationComplete": true
   },
   "watchdogM5Qualification": {
-    "status": "M5A_M5B_M5C_AWAKE_PHYSICAL_PASS_M5D_WRITE_ARMED_CODE_CI_PASS_PHYSICAL_PENDING",
+    "status": "M5A_M5B_M5C_M5D_AWAKE_PHYSICAL_PASS_M5E_WRITE_ARMED_DOUBLE_DEATH_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "controllerDeathToken": "8C40-M5A-CONTROLLER-DEATH30",
@@ -944,7 +944,7 @@
     "automaticPolicyEnabled": false,
     "m5aPhysicalStatus": "PASS",
     "m5bPhysicalStatus": "PASS",
-    "m5cPhysicalStatus": "PENDING",
+    "m5cPhysicalStatus": "PASS",
     "preparationCi": {
       "result": "PASS",
       "implementationCommit": "2c34b97697b16b7551fe5312a53efff4c3b97761",
@@ -1252,7 +1252,7 @@
     },
     "awakeFailureDomainQualificationComplete": true,
     "m5d": {
-      "status": "CODE_CI_PASS_PHYSICAL_PENDING",
+      "status": "CODE_CI_PHYSICAL_PASS",
       "targetProfileId": "HP-8C40-9D0R1LA-F18",
       "qualificationLevel": 30,
       "token": "8C40-M5D-WRITE-ARMED-CRASH30",
@@ -1280,7 +1280,7 @@
       },
       "codePrepared": true,
       "ciStatus": "PASS",
-      "physicalStatus": "PENDING",
+      "physicalStatus": "PASS",
       "preparationCi": {
         "result": "PASS",
         "finalCommit": "877aa9eb49d905e00511540eb78f2798260aee32",
@@ -1291,7 +1291,79 @@
         "windowsPowerShell51Invariant": true,
         "warningsAsErrorsBuild": true,
         "backendHookOrderingSelfTest": true
+      },
+      "pidCollisionHardening": {
+        "result": "PASS",
+        "commit": "02a69b808fa86a4334262d741d4dadfc37bdfa73",
+        "runNumber": 625,
+        "runId": 36510969868,
+        "completedAt": "2026-09-28",
+        "change": "Replace the case-insensitive PowerShell $pid helper parameter with $ControllerProcessId / $ControllerStartTicks and statically forbid reintroduction."
+      },
+      "physicalAttempt1": {
+        "result": "SAFE_HARNESS_FALSE_NEGATIVE",
+        "completedAt": "2026-09-28",
+        "targetProfileId": "HP-8C40-9D0R1LA-F18",
+        "controllerPid": 19520,
+        "controllerStartUtcTicks": 639262442161456000,
+        "readyStage": "WRITE_ARMED_POST_WMI_EC_TACH_ACK_PRE_COMMIT",
+        "journalPhase": "WriteArmed",
+        "journalGeneration": 2,
+        "pendingSetpoint": "30/30",
+        "owned": null,
+        "cpuRpm": 2909,
+        "gpuRpm": 2822,
+        "failure": "Windows PowerShell automatic $PID variable collision in Assert-WriteArmedJournal helper parameter binding.",
+        "cleanupFinalEc": "FF/FF",
+        "qualificationPass": false
+      },
+      "physicalResult": {
+        "result": "PASS",
+        "completedAt": "2026-09-28",
+        "targetProfileId": "HP-8C40-9D0R1LA-F18",
+        "initialEc": "FF/FF",
+        "originalServicePid": 20824,
+        "originalServiceAccount": "NT AUTHORITY\\SYSTEM",
+        "controllerPid": 22592,
+        "controllerStartUtcTicks": 639262445516182500,
+        "readyStage": "WRITE_ARMED_POST_WMI_EC_TACH_ACK_PRE_COMMIT",
+        "ownedSetpointAtHardware": "30/30",
+        "cpuRpm": 2882,
+        "gpuRpm": 2655,
+        "guardState": "MaxFan=0x00, FanSwitch=0x00",
+        "journalSchemaVersion": 2,
+        "journalPhase": "WriteArmed",
+        "journalGeneration": 2,
+        "previousOwned": null,
+        "pendingSetpoint": "30/30",
+        "owned": null,
+        "independentPreKillEc": "30/30",
+        "exactControllerForceKilled": true,
+        "originalWatchdogMustRemainSame": true,
+        "commitObserved": false,
+        "ownerLossReason": "named-pipe EOF",
+        "recoveryDisposition": "RestoredFirmware",
+        "recoveryObservedEc": "FF/FF",
+        "restoreAttempted": true,
+        "journalRetainedAfterRecovery": false,
+        "independentFinalEc": "FF/FF",
+        "measuredRecoverySeconds": 0.458,
+        "postTestEc": "FF/FF",
+        "qualificationPass": true
       }
+    },
+    "awakeWriteArmedControllerDeathQualificationComplete": true,
+    "awakeTransactionalCrashMatrixComplete": false,
+    "m5e": {
+      "status": "PLANNED_CODE_PENDING",
+      "purpose": "WRITE_ARMED post-WMI/pre-Commit watchdog+controller double-death with replacement-service startup recovery",
+      "targetProfileId": "HP-8C40-9D0R1LA-F18",
+      "qualificationLevel": 30,
+      "requiredJournalPhase": "WriteArmed",
+      "requiredGeneration": 2,
+      "requiredPending": "30/30",
+      "requiredOwned": null,
+      "physicalStatus": "PENDING"
     }
   }
 }

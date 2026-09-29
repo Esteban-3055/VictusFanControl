@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M5 - failure-domain qualification
 
-Status: **M5A/M5B/M5C CODE/CI/PHYSICAL PASS for awake durable-OWNED failure domains. Lifecycle/Modern Standby promotion remains pending.**
+Status: **M5A/M5B/M5C/M5D CODE/CI/PHYSICAL PASS for awake OWNED plus controller-death WRITE_ARMED recovery. WRITE_ARMED double-death and lifecycle/Modern Standby promotion remain pending.**
 M4 normal awake lease qualification is complete at equal 10/30/50.
 
 Production watchdog construction and automatic/adaptive policy remain OFF.
@@ -856,3 +856,92 @@ those runs.
 M5D is therefore **CODE/CI PASS / PHYSICAL PENDING**. This does not alter the
 public production backend watchdog prohibition, `WatchdogRecoveryValidated`
 remains false, and automatic/adaptive policy remains OFF.
+
+
+## M5D physical result - WRITE_ARMED post-WMI / pre-Commit controller death
+
+**PASSED on real hardware, 2026-09-28**, on exact target
+`HP-8C40-9D0R1LA-F18`.
+
+The first physical attempt reached the intended real post-WMI/pre-Commit
+boundary, but the parent harness hit a Windows PowerShell automatic-variable
+collision because a helper declared a case-insensitive `$pid` parameter.
+Cleanup killed the exact controller, watchdog recovery returned EC to FF/FF,
+and the run was correctly retained as a harness false negative rather than
+accepted as M5D PASS.
+
+The harness was corrected to use
+`$ControllerProcessId` / `$ControllerStartTicks`, and its invariant now
+forbids reintroducing a `$pid` parameter. The corrected head
+`02a69b808fa86a4334262d741d4dadfc37bdfa73` passed complete GitHub
+Actions run **#625** before the second physical execution.
+
+Accepted physical result:
+
+~~~text
+baseline:
+  EC FF/FF
+  original watchdog PID 20824
+  LocalSystem / Session 0
+  exact target HP-8C40-9D0R1LA-F18
+
+controller:
+  PID 22592
+  startTicks 639262445516182484
+  real WMI target 30/30
+  EC 30/30
+  dual physical tach ACK 2882/2655 RPM
+  guards MaxFan=0x00 / FanSwitch=0x00
+  READY stage WRITE_ARMED_POST_WMI_EC_TACH_ACK_PRE_COMMIT
+
+durable journal at crash boundary:
+  schema 2
+  phase WriteArmed
+  generation 2
+  PreviousOwned null
+  Pending 30/30
+  Owned null
+  exact controller PID + creation time
+
+independent pre-kill proof:
+  EC 30/30
+  original watchdog process unchanged
+  watchdog Commit not dispatched
+
+fault:
+  force-kill exact controller PID 22592
+
+recovery:
+  same live watchdog detects named-pipe EOF
+  disposition RestoredFirmware
+  observed FF/FF
+  restoreAttempted=True
+  journalRetained=False
+  independent final EC FF/FF
+  measured parent-observed recovery interval 0.458 s
+  post-test EC FF/FF
+~~~
+
+Fresh service-log evidence recorded only:
+
+~~~text
+PREPARE generation 1
+WRITE_INTENT generation 2 target 30/30
+OWNER LOSS named-pipe EOF -> RestoredFirmware
+~~~
+
+for the killed controller. The harness explicitly rejects any fresh
+`WATCHDOG COMMIT ACK` for that PID, so the PASS proves that the crash remained
+inside the intended durable WRITE_ARMED window rather than silently advancing
+to OWNED.
+
+M5D therefore closes the **controller-death** branch of the real
+post-WMI/pre-Commit WRITE_ARMED ambiguity window.
+
+This does not yet prove a simultaneous watchdog + controller loss while the
+journal is WRITE_ARMED. A separate M5E-style double-death/startup-recovery gate
+is still required before calling the entire awake transactional crash matrix
+complete.
+
+`WatchdogRecoveryValidated` remains false and automatic/adaptive policy
+remains OFF.
