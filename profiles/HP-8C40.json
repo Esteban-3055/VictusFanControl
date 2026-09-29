@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-transactional-pass-lifecycle-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-code-ci-pass-preflight-physical-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -38,10 +38,16 @@
     "watchdogM5AControllerDeathPassed": true,
     "watchdogM5BWatchdogDeathPrepared": true,
     "watchdogM5BWatchdogDeathPassed": true,
-    "watchdogM5CDoubleDeathPrepared": false,
+    "watchdogM5CDoubleDeathPrepared": true,
     "watchdogM5CDoubleDeathPassed": true,
     "watchdogM5CPreflightPrepared": true,
-    "watchdogM5CPreflightPassed": true
+    "watchdogM5CPreflightPassed": true,
+    "modernStandbyM6Prepared": true,
+    "modernStandbyM6CodeCiPassed": true,
+    "modernStandbyM6NoWritePreflightPassed": false,
+    "modernStandbyM6PhysicalPassed": false,
+    "displayAwareResumeQualificationPending": true,
+    "hibernationQualificationPending": true
   },
   "control": {
     "enabledByDefault": false,
@@ -1514,5 +1520,85 @@
         "additionalFanWriteAuthority": false
       }
     }
+  },
+  "modernStandbyM6Qualification": {
+    "status": "CODE_CI_PASS_NO_WRITE_PREFLIGHT_PENDING_PHYSICAL_PENDING",
+    "targetProfileId": "HP-8C40-9D0R1LA-F18",
+    "sleepModel": "ModernStandbyS0LowPowerIdle",
+    "legacyS3Available": false,
+    "qualificationLevel": 30,
+    "token": "8C40-M6-MODERN-STANDBY30",
+    "service": "VictusFanControlWatchdogM4",
+    "pipe": "VictusFanControl.Watchdog.M4.8C40.v2",
+    "productionFactoryStillBlocked": true,
+    "automaticPolicyEnabled": false,
+    "primarySuspendBoundary": "GUID_SESSION_DISPLAY_STATUS Off",
+    "pbtSuspendRole": "secondary observation / safety-only fallback",
+    "maintenanceResumePolicy": "PBT_APMRESUMEAUTOMATIC and PBT_APMRESUMESUSPEND while display Off do not resume telemetry or reopen Custom",
+    "primaryUserResumeBoundary": "GUID_SESSION_DISPLAY_STATUS On",
+    "telemetryResumePolicy": "single NotifyResume only after display On; RuntimeStateMachine must recover through five fresh snapshots",
+    "preSleepRequirements": [
+      "Custom 30/30 physically acknowledged by WMI+EC+dual tachs",
+      "durable schema-v2 generation-3 OWNED 30/30 journal bound to exact GUI PID+creation time",
+      "lifecycle admission fence closed before restore IO",
+      "telemetry marked Suspended before restore IO",
+      "coordinator firmware restore completed",
+      "local FF/FF acknowledgement verified",
+      "watchdog Release verified",
+      "journal absent",
+      "two consecutive independent FF/FF samples",
+      "same watchdog PID+creation time"
+    ],
+    "resumeRequirements": [
+      "real Kernel-Power 506/507 Modern Standby evidence",
+      "PBT resume notification observed while display remains Off",
+      "no admission reopen during display-Off maintenance wake",
+      "SESSION_DISPLAY_STATUS On accepted exactly once",
+      "fresh Healthy telemetry snapshot newer than display-On boundary",
+      "same watchdog PID+creation time Ready",
+      "journal absent",
+      "stable FF/FF before reopen"
+    ],
+    "controlledReentryRequired": true,
+    "controlledReentryLevel": "30/30",
+    "finalRequirements": [
+      "durable OWNED 30/30 proven after controlled re-entry",
+      "final coordinator firmware restore",
+      "watchdog Release verified",
+      "journal absent",
+      "two consecutive independent FF/FF samples",
+      "same watchdog process survived the normal lifecycle cycle"
+    ],
+    "noWritePreflightScript": "scripts/test-8c40-modern-standby-m6-preflight.ps1",
+    "physicalHarnessScript": "scripts/test-8c40-modern-standby-m6.ps1",
+    "physicalSleepInitiation": "manual Windows Start -> Power -> Sleep; harness does not call SetSuspendState",
+    "delayedFailsafe": {
+      "source": "existing exact-target M5C OWNED 30/30 service failsafe",
+      "defaultDelaySeconds": 300,
+      "armedBeforeWriteCapableGui": true,
+      "directHpRestoreAuthority": false,
+      "ordinaryFanTargetAuthority": false,
+      "cancelledOnlyAfterJournalAbsentAndStableFfFf": true,
+      "passIfTakeoverOccurs": false
+    },
+    "preparationCi": {
+      "result": "PASS",
+      "finalCommit": "adecb6af9331d93ad4f7ac766f1e145e1aee2a33",
+      "runNumber": 654,
+      "runId": 36625953717,
+      "completedAt": "2026-09-29",
+      "lifecycleInvariantPowerShellCore": true,
+      "harnessInvariantPowerShellCore": true,
+      "windowsPowerShell51Compatibility": true,
+      "warningsAsErrorsBuild": true,
+      "modernStandbyM0SelfTest": true,
+      "m4SelfTest": true,
+      "safetyGateSelfTest": true,
+      "coordinatorSelfTest": true,
+      "hpBackendSelfTest": true
+    },
+    "noWritePreflightStatus": "PENDING",
+    "physicalStatus": "PENDING",
+    "watchdogRecoveryValidated": false
   }
 }
