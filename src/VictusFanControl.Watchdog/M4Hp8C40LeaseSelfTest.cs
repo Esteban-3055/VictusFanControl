@@ -30,6 +30,11 @@ internal static class M4Hp8C40LeaseSelfTest
             "M4 A/B/C gate mapping pins only 30/10/50 and exact tokens",
             EndpointGateMappingAsync);
 
+        failures += await CaseAsync(
+            output,
+            "M4 classifies only EC-specific monitor contention as retryable",
+            RetryableMonitorFailureClassificationAsync);
+
         if (failures == 0)
         {
             output.WriteLine(
@@ -161,6 +166,32 @@ internal static class M4Hp8C40LeaseSelfTest
         return Task.CompletedTask;
     }
 
+    private static Task RetryableMonitorFailureClassificationAsync()
+    {
+        Assert(
+            M4Hp8C40LeaseWorker.IsRetryableEcMonitorFailure(
+                new TimeoutException(
+                    @"Timed out waiting for Global\Access_EC.")));
+
+        Assert(
+            M4Hp8C40LeaseWorker.IsRetryableEcMonitorFailure(
+                new IOException(
+                    "EC fan setpoint snapshot 0x34/0x35 failed after 5 attempts.",
+                    new TimeoutException(
+                        @"Timed out waiting for Global\Access_EC."))));
+
+        Assert(
+            !M4Hp8C40LeaseWorker.IsRetryableEcMonitorFailure(
+                new IOException(
+                    "Synthetic durable journal disk failure.")));
+
+        Assert(
+            !M4Hp8C40LeaseWorker.IsRetryableEcMonitorFailure(
+                new InvalidOperationException(
+                    "Synthetic unrelated monitor failure.")));
+
+        return Task.CompletedTask;
+    }
     private static Task ProtocolContractAsync()
     {
         Assert(
