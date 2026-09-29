@@ -218,6 +218,7 @@ internal sealed class MainForm : Form
     private bool _m6BackendAckVerified;
     private bool _m6SessionDisplayOff;
     private bool _m6DisplayOffObserved;
+    private bool _m6PrimaryDisplayOffObserved;
     private bool _m6DisplayOnObserved;
     private bool _m6PbtSuspendObserved;
     private bool _m6ResumeAutomaticObservedWhileDisplayOff;
@@ -558,27 +559,523 @@ internal sealed class MainForm : Form
         if (m.Msg == WmPowerBroadcast)
         {
             var code = m.WParam.ToInt32();
-            switch (code)
+
+            if (_m6ModernStandbyHardwareTest)
             {
-                case PbtApmSuspend:
-                    HandleSuspendLifecycle("WM_POWERBROADCAST/PBT_APMSUSPEND");
-                    break;
+                if (code == PbtPowerSettingChange)
+                {
+                    HandleM6PowerSettingChange(m.LParam);
+                }
+                else
+                {
+                    HandleM6PowerBroadcast(code);
+                }
+            }
+            else
+            {
+                switch (code)
+                {
+                    case PbtApmSuspend:
+                        HandleSuspendLifecycle("WM_POWERBROADCAST/PBT_APMSUSPEND");
+                        break;
 
-                case PbtApmResumeAutomatic:
-                    HandleResumeLifecycle("WM_POWERBROADCAST/PBT_APMRESUMEAUTOMATIC");
-                    break;
+                    case PbtApmResumeAutomatic:
+                        HandleResumeLifecycle("WM_POWERBROADCAST/PBT_APMRESUMEAUTOMATIC");
+                        break;
 
-                case PbtApmResumeSuspend:
-                    HandleResumeLifecycle("WM_POWERBROADCAST/PBT_APMRESUMESUSPEND");
-                    break;
+                    case PbtApmResumeSuspend:
+                        HandleResumeLifecycle("WM_POWERBROADCAST/PBT_APMRESUMESUSPEND");
+                        break;
 
-                case PbtApmResumeCritical:
-                    HandleResumeLifecycle("WM_POWERBROADCAST/PBT_APMRESUMECRITICAL");
-                    break;
+                    case PbtApmResumeCritical:
+                        HandleResumeLifecycle("WM_POWERBROADCAST/PBT_APMRESUMECRITICAL");
+                        break;
+                }
             }
         }
 
         base.WndProc(ref m);
+    }
+
+    private void RegisterM6SessionDisplayNotification()
+    {
+        if (!_m6ModernStandbyHardwareTest ||
+            _m6SessionDisplayRegistration != IntPtr.Zero)
+        {
+            return;
+        }
+
+        var setting = GuidSessionDisplayStatus;
+
+        _m6SessionDisplayRegistration =
+            RegisterPowerSettingNotification(
+                Handle,
+                ref setting,
+                DeviceNotifyWindowHandle);
+
+        if (_m6SessionDisplayRegistration == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                $"M6 RegisterPowerSettingNotification(GUID_SESSION_DISPLAY_STATUS) failed with Win32 error {Marshal.GetLastWin32Error()}.");
+        }
+    }
+
+    private void UnregisterM6SessionDisplayNotification()
+    {
+        if (_m6SessionDisplayRegistration == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _ =
+            UnregisterPowerSettingNotification(
+                _m6SessionDisplayRegistration);
+
+        _m6SessionDisplayRegistration = IntPtr.Zero;
+    }
+
+    private void HandleM6PowerSettingChange(IntPtr data)
+    {
+        if (data == IntPtr.Zero)
+        {
+            AppendEvent(
+                "M6: PBT_POWERSETTINGCHANGE arrived with a null payload; ignored fail-closed.");
+            return;
+        }
+
+        try
+        {
+            var header =
+                Marshal.PtrToStructure<PowerBroadcastSetting>(
+                    data);
+
+            if (header.PowerSetting !=
+                    GuidSessionDisplayStatus ||
+                header.DataLength < sizeof(uint))
+            {
+                return;
+            }
+
+            var valueAddress =
+                IntPtr.Add(
+                    data,
+                    Marshal.SizeOf<PowerBroadcastSetting>());
+
+            var value =
+                unchecked(
+                    (uint)Marshal.ReadInt32(
+                        valueAddress));
+
+            switch (value)
+            {
+                case 0:
+                    _m6PrimaryDisplayOffObserved = true;
+                    HandleM6DisplayOffBoundary(
+                        "GUID_SESSION_DISPLAY_STATUS/Off",
+                        primaryDisplaySignal: true);
+                    break;
+
+                case 1:
+                    HandleM6SessionDisplayOn(
+                        "GUID_SESSION_DISPLAY_STATUS/On");
+                    break;
+
+                default:
+                    AppendEvent(
+                        $"M6: SESSION_DISPLAY_STATUS value={value} observed; no lifecycle transition accepted.");
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendEvent(
+                $"M6: failed to parse SESSION_DISPLAY_STATUS notification: {ex.Message}");
+            AppLog.Write(
+                $"M6 power-setting parse failure: {ex}");
+        }
+    }
+
+    private void HandleM6PowerBroadcast(int code)
+    {
+        switch (code)
+        {
+            case PbtApmSuspend:
+                _m6PbtSuspendObserved = true;
+
+                AppendEvent(
+                    $"M6: PBT_APMSUSPEND observed; displayOff={_m6SessionDisplayOff}, primaryDisplayBoundary={_m6PrimaryDisplayOffObserved}, authority={_fanCoordinator.Authority}.");
+
+                if (_m6Armed &&
+                    !_m6DisplayOffObserved)
+                {
+                    // Safety fallback only. A physical M6 PASS still requires
+                    // the earlier SESSION_DISPLAY_STATUS Off boundary proven by
+                    // M0; PBT_APMSUSPEND may arrive too late on Modern Standby.
+                    HandleM6DisplayOffBoundary(
+                        "WM_POWERBROADCAST/PBT_APMSUSPEND fallback",
+                        primaryDisplaySignal: false);
+                }
+
+                break;
+
+            case PbtApmResumeAutomatic:
+                if (_m6SessionDisplayOff)
+                {
+                    _m6ResumeAutomaticObservedWhileDisplayOff = true;
+                    AppendEvent(
+                        "M6: PBT_APMRESUMEAUTOMATIC observed while SESSION_DISPLAY_STATUS remains Off; telemetry/admission resume deliberately deferred.");
+                }
+                else
+                {
+                    AppendEvent(
+                        "M6: PBT_APMRESUMEAUTOMATIC observed after display On; treated as observational duplicate.");
+                }
+
+                break;
+
+            case PbtApmResumeSuspend:
+                if (_m6SessionDisplayOff)
+                {
+                    _m6ResumeSuspendObservedWhileDisplayOff = true;
+                    AppendEvent(
+                        "M6: PBT_APMRESUMESUSPEND observed while SESSION_DISPLAY_STATUS remains Off; telemetry/admission resume deliberately deferred.");
+                }
+                else
+                {
+                    AppendEvent(
+                        "M6: PBT_APMRESUMESUSPEND observed after display On; treated as observational duplicate.");
+                }
+
+                break;
+
+            case PbtApmResumeCritical:
+                AppendEvent(
+                    $"M6: PBT_APMRESUMECRITICAL observed; displayOff={_m6SessionDisplayOff}. Admission remains lifecycle-fenced until user-visible display On plus Healthy telemetry.");
+                break;
+        }
+    }
+
+    private void HandleM6DisplayOffBoundary(
+        string source,
+        bool primaryDisplaySignal)
+    {
+        if (_m6Completed ||
+            _m6DisplayOffObserved)
+        {
+            return;
+        }
+
+        _m6DisplayOffObserved = true;
+        _m6SessionDisplayOff = true;
+        _m6DisplayOffBoundaryUtc =
+            DateTimeOffset.UtcNow;
+
+        var wasCustom =
+            _fanCoordinator.Authority ==
+            FanAuthority.Custom;
+
+        var backendAck =
+            _m6BackendAckVerified;
+
+        var watch =
+            Stopwatch.StartNew();
+
+        AppendEvent(
+            $"M6: lifecycle boundary from {source}; primaryDisplaySignal={primaryDisplaySignal}; authority={_fanCoordinator.Authority}; backendAck={backendAck}. Closing admission and pausing telemetry before restore IO.");
+
+        _fanCoordinator.CloseCustomAdmissionForLifecycleBoundary();
+        _worker.NotifySuspend(source);
+
+        try
+        {
+            _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
+                    $"M6 Modern Standby display-off handoff ({source}).",
+                    _m6DisplayOffBoundaryUtc.Value,
+                    CancellationToken.None)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+
+            watch.Stop();
+
+            var restoreEvidence =
+                _fanCoordinator.LastRestoreEvidence;
+
+            var watchdog =
+                M6WatchdogStateReader.Read();
+
+            M6WatchdogStateReader.RequireReady(
+                watchdog,
+                _m6WatchdogPid == 0
+                    ? null
+                    : _m6WatchdogPid,
+                _m6WatchdogStartUtcTicks == 0
+                    ? null
+                    : _m6WatchdogStartUtcTicks);
+
+            var ec =
+                ReadStableM6FirmwareAutoProof();
+
+            _m6PreSleepRestoreVerified =
+                primaryDisplaySignal &&
+                _m6PrimaryDisplayOffObserved &&
+                _m6Armed &&
+                wasCustom &&
+                backendAck &&
+                _fanCoordinator.Authority ==
+                    FanAuthority.Firmware &&
+                restoreEvidence is
+                {
+                    LocalFirmwareAckVerified: true,
+                    WatchdogLeaseRequired: true,
+                    WatchdogReleaseVerified: true
+                } &&
+                !watchdog.JournalPresent &&
+                ec.Verified;
+
+            var marker =
+                $"{(_m6PreSleepRestoreVerified ? "PASS" : "FAIL")}|" +
+                $"{DateTimeOffset.Now:O}|" +
+                $"source={source}|" +
+                $"primaryDisplaySignal={primaryDisplaySignal}|" +
+                $"wasCustom={wasCustom}|" +
+                $"backendAck={backendAck}|" +
+                $"authority={_fanCoordinator.Authority}|" +
+                $"restoreMs={watch.Elapsed.TotalMilliseconds.ToString("0.0", CultureInfo.InvariantCulture)}|" +
+                $"localFirmwareAck={restoreEvidence?.LocalFirmwareAckVerified ?? false}|" +
+                $"watchdogRelease={restoreEvidence?.WatchdogReleaseVerified ?? false}|" +
+                $"watchdogPid={watchdog.ProcessId}|" +
+                $"watchdogStartTicks={watchdog.ProcessStartUtcTicks}|" +
+                $"journal={(watchdog.JournalPresent ? "PRESENT" : "absent")}|" +
+                $"ec={ec.Cpu}/{ec.Gpu}|" +
+                $"ecProof={(ec.Verified ? "stable-two-sample-FF/FF" : ec.Detail)}|" +
+                $"pbtSuspendAlreadyObserved={_m6PbtSuspendObserved}|" +
+                $"guiPid={Environment.ProcessId}";
+
+            M6WatchdogStateReader.WriteDurableMarker(
+                M6PreSleepPath,
+                marker);
+
+            AppendEvent(
+                _m6PreSleepRestoreVerified
+                    ? $"M6: PRE-SLEEP RELEASE VERIFIED from session-display Off in {watch.Elapsed.TotalMilliseconds:0.0} ms; Firmware + stable FF/FF + watchdog Release + journal absent; watchdog PID {watchdog.ProcessId} unchanged."
+                    : $"M6: PRE-SLEEP RELEASE FAILED validation; {marker}");
+        }
+        catch (Exception ex)
+        {
+            watch.Stop();
+            _m6PreSleepRestoreVerified = false;
+
+            try
+            {
+                M6WatchdogStateReader.WriteDurableMarker(
+                    M6PreSleepPath,
+                    $"FAIL|{DateTimeOffset.Now:O}|source={source}|exception={ex.Message}|guiPid={Environment.ProcessId}");
+            }
+            catch
+            {
+            }
+
+            AppendEvent(
+                $"M6: CRITICAL pre-sleep release verification failed: {ex.Message}");
+            AppLog.Write(
+                $"M6 pre-sleep release failure: {ex}");
+        }
+    }
+
+    private void HandleM6SessionDisplayOn(string source)
+    {
+        if (_m6Completed)
+        {
+            return;
+        }
+
+        _m6SessionDisplayOff = false;
+
+        if (!_m6DisplayOffObserved)
+        {
+            AppendEvent(
+                "M6: SESSION_DISPLAY_STATUS On observed without a preceding M6 Off boundary; ignored.");
+            return;
+        }
+
+        if (_m6DisplayOnObserved)
+        {
+            AppendEvent(
+                "M6: duplicate SESSION_DISPLAY_STATUS On ignored.");
+            return;
+        }
+
+        _m6DisplayOnObserved = true;
+        _m6DisplayOnBoundaryUtc =
+            DateTimeOffset.UtcNow;
+
+        try
+        {
+            if (!_m6PreSleepRestoreVerified ||
+                !_m6PrimaryDisplayOffObserved)
+            {
+                throw new InvalidOperationException(
+                    "M6 cannot accept display-On resume because the proactive SESSION_DISPLAY_STATUS Off firmware handoff was not verified.");
+            }
+
+            var watchdog =
+                M6WatchdogStateReader.Read();
+
+            M6WatchdogStateReader.RequireReady(
+                watchdog,
+                _m6WatchdogPid,
+                _m6WatchdogStartUtcTicks);
+
+            if (watchdog.JournalPresent)
+            {
+                throw new InvalidOperationException(
+                    $"M6 display-On resume requires journal absence; found '{watchdog.JournalPath}'.");
+            }
+
+            var ec =
+                ReadStableM6FirmwareAutoProof();
+
+            if (!ec.Verified)
+            {
+                throw new InvalidOperationException(
+                    $"M6 display-On resume firmware baseline is not stable FF/FF: {ec.Detail}; last={ec.Cpu}/{ec.Gpu}.");
+            }
+
+            // Advance the freshness fence to the actual user-visible wake
+            // boundary before allowing telemetry to resume. Maintenance PBT
+            // notifications while display was Off never reached NotifyResume.
+            _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
+                    $"M6 user-visible resume gate ({source}).",
+                    _m6DisplayOnBoundaryUtc.Value,
+                    CancellationToken.None)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+
+            var accepted =
+                _worker.NotifyResume(source);
+
+            if (!accepted)
+            {
+                throw new InvalidOperationException(
+                    "M6 SESSION_DISPLAY_STATUS On was not accepted as the single telemetry resume boundary.");
+            }
+
+            _m6AcceptedUserResumeCount++;
+
+            var marker =
+                $"GATED|{DateTimeOffset.Now:O}|" +
+                $"source={source}|" +
+                $"acceptedUserResumes={_m6AcceptedUserResumeCount}|" +
+                $"resumeAutomaticWhileOff={_m6ResumeAutomaticObservedWhileDisplayOff}|" +
+                $"resumeSuspendWhileOff={_m6ResumeSuspendObservedWhileDisplayOff}|" +
+                $"pbtSuspendObserved={_m6PbtSuspendObserved}|" +
+                $"authority={_fanCoordinator.Authority}|" +
+                $"ec={ec.Cpu}/{ec.Gpu}|" +
+                $"watchdogPid={watchdog.ProcessId}|" +
+                $"journal=absent|" +
+                $"guiPid={Environment.ProcessId}";
+
+            M6WatchdogStateReader.WriteDurableMarker(
+                M6ResumeGatePath,
+                marker);
+
+            AppendEvent(
+                "M6: SESSION_DISPLAY_STATUS On accepted as the sole user-facing resume boundary. Admission remains closed until five-snapshot Healthy telemetry recovery and watchdog Ready/journal-absent revalidation.");
+        }
+        catch (Exception ex)
+        {
+            CompleteM6ModernStandbyHardwareTest(
+                success: false,
+                exitCode: 131,
+                message:
+                    $"Display-On resume gate failed: {ex.Message}");
+        }
+    }
+
+    private (bool Verified, byte Cpu, byte Gpu, int Samples, string Detail)
+        ReadStableM6FirmwareAutoProof(
+            int maxSamples = 8)
+    {
+        var probe =
+            new Hp8C40EcControlStateProbe(
+                _modulesDirectory);
+
+        var consecutiveFirmwareAuto = 0;
+        var unexpectedCpu = -1;
+        var unexpectedGpu = -1;
+        var unexpectedSamples = 0;
+        byte lastCpu = 0;
+        byte lastGpu = 0;
+
+        for (var sample = 1;
+             sample <= maxSamples;
+             sample++)
+        {
+            var setpoint =
+                probe.ReadSetpoint();
+
+            lastCpu = setpoint.CpuSetpoint;
+            lastGpu = setpoint.GpuSetpoint;
+
+            if (lastCpu == byte.MaxValue &&
+                lastGpu == byte.MaxValue)
+            {
+                consecutiveFirmwareAuto++;
+                unexpectedCpu = -1;
+                unexpectedGpu = -1;
+                unexpectedSamples = 0;
+
+                if (consecutiveFirmwareAuto >= 2)
+                {
+                    return (
+                        true,
+                        lastCpu,
+                        lastGpu,
+                        sample,
+                        "two consecutive FF/FF samples");
+                }
+            }
+            else
+            {
+                consecutiveFirmwareAuto = 0;
+
+                if (lastCpu == unexpectedCpu &&
+                    lastGpu == unexpectedGpu)
+                {
+                    unexpectedSamples++;
+                }
+                else
+                {
+                    unexpectedCpu = lastCpu;
+                    unexpectedGpu = lastGpu;
+                    unexpectedSamples = 1;
+                }
+
+                if (unexpectedSamples >= 2)
+                {
+                    return (
+                        false,
+                        lastCpu,
+                        lastGpu,
+                        sample,
+                        $"unexpected setpoint {lastCpu}/{lastGpu} repeated twice");
+                }
+            }
+
+            if (sample < maxSamples)
+            {
+                Thread.Sleep(75);
+            }
+        }
+
+        return (
+            false,
+            lastCpu,
+            lastGpu,
+            maxSamples,
+            "stable FF/FF was not observed twice consecutively");
     }
 
 
