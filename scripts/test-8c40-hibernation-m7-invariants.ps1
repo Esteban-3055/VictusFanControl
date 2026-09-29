@@ -5,10 +5,10 @@ $program=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\Program.cs')
 $factory=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\HpFanControlBackendFactory.cs') -Raw
 
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
-    if(-not $Text.Contains($Needle,[StringComparison]::Ordinal)){throw $Message}
+    if(-not $Text.IndexOf($Needle,[StringComparison]::Ordinal) -ge 0){throw $Message}
 }
 function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
-    if($Text.Contains($Needle,[StringComparison]::Ordinal)){throw $Message}
+    if($Text.IndexOf($Needle,[StringComparison]::Ordinal) -ge 0){throw $Message}
 }
 
 Assert-Contains $program '--8c40-m7-hibernation-test' 'M7 app mode is missing.'
