@@ -5,7 +5,7 @@ $program=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\Program.cs')
 $factory=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\HpFanControlBackendFactory.cs') -Raw
 
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
-    if(-not $Text.IndexOf($Needle,[StringComparison]::Ordinal) -ge 0){throw $Message}
+    if($Text.IndexOf($Needle,[StringComparison]::Ordinal) -lt 0){throw $Message}
 }
 function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
     if($Text.IndexOf($Needle,[StringComparison]::Ordinal) -ge 0){throw $Message}
