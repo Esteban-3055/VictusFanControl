@@ -173,6 +173,9 @@ Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/wat
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B child PASS/parent FAIL_CLOSED must not be promoted without independent causal evidence audit.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B further physical execution remains blocked pending exact durable evidence audit.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[3].classification 'CONTROLLER_REPORTED_PASS_PARENT_EXITCODE_UNAVAILABLE' 'M8B latest controller/parent discrepancy classification changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.status 'CODE_CI_PASS_EVIDENCE_AUDIT_PENDING_PHYSICAL_BLOCKED' 'M8B tracked-child hardening status changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.ci.commit '1d672389ee2bc7980bdfd38aa56fbeb390567f32' 'M8B native-child helper CI commit changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.ci.runNumber 801 'M8B native-child CI run changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].result 'FAIL_CLOSED_NO_WRITE' 'M8B attempt 3 must remain fail-closed/no-write.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].representativeSamples 2 'M8B attempt 3 qualifying sample count changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].maximumConsecutiveRepresentative 1 'M8B attempt 3 qualifying streak changed.'
@@ -218,7 +221,8 @@ foreach($needle in @(
     'ExitCode was unavailable',
     '30/30 representative',
     'Full causal chain and no-failsafe-takeover proof are still pending',
-    'M8B physical execution remains blocked'
+    'M8B physical execution remains blocked',
+    'Both PowerShell 7 and Windows PowerShell 5.1 exercised successful child exit code 0'
 )){
     Assert-Contains $doc $needle ("M8B documentation invariant missing: {0}" -f $needle)
 }

@@ -764,7 +764,16 @@ read from the same instance; a hardware-free synthetic regression covers exit st
 0 and 7 under PowerShell 7 and Windows PowerShell 5.1. This does not waive the exit-code
 requirement, change fan thresholds, redo any physical hardware test, or infer a PASS.
 
-**M8B physical execution remains blocked** pending CI and retrospective evidence audit.
+The tracked native-child code/invariant correction is **CODE/CI PASS** at commit
+`1d672389ee2bc7980bdfd38aa56fbeb390567f32`, GitHub Actions **#801** (run `36678972013`).
+Both PowerShell 7 and Windows PowerShell 5.1 exercised successful child exit code 0 and
+nonzero child exit code 7; full M4-M8/Adaptive invariants, warnings-as-errors build,
+SafetyGate, coordinator, BIOS and backend regressions passed. Run #800 failed solely on a
+static invariant string left pointing to the old launch form, before executing the new
+native-child test; that assertion was aligned and #801 passed fully.
+
+**M8B physical execution remains blocked** pending retrospective evidence audit; passing the
+new process helper does not promote the previous parent FAIL_CLOSED to physical PASS.
 M8C physical execution, production watchdog promotion and automatic/adaptive policy remain OFF.
 
 ## 8. Physical harness safety and evidence
