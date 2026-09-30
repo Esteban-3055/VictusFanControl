@@ -202,7 +202,7 @@ public static class Hp8C40ProductionWatchdogGate
     internal static bool IsM9CPhysicalQualificationScopeActive =>
         M9CQualificationScopeDepth.Value == 1;
 
-    internal static bool IsM9DPhysicalQualificationScopeActive =>
+    public static bool IsM9DPhysicalQualificationScopeActive =>
         M9DQualificationScopeDepth.Value == 1;
 
     private sealed class M9CConstructionScope : IDisposable
