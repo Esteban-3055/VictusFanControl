@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. PRODUCTION WATCHDOG CONSTRUCTION BLOCKED. NO WRITE-CAPABLE M9 PHYSICAL EXECUTION AUTHORIZED. M9B READ-ONLY PREFLIGHT IS NEXT.**
+Status: **M9A CODE/CI PASS. M9B READ-ONLY PREFLIGHT CODE PREPARED / CI PENDING / EXECUTION BLOCKED. PRODUCTION WATCHDOG CONSTRUCTION AND ALL WRITE-CAPABLE M9 PHYSICAL EXECUTION REMAIN BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -139,3 +139,38 @@ prohibition inside the factory/backend. That invariant was migrated to assert th
 new centralized M9 gate and fail-closed ordering; no runtime authorization changed.
 
 M9A is therefore closed. The next step is M9B read-only preflight preparation.
+
+
+## 6. M9B read-only preflight preparation
+
+The versioned preflight is `scripts/test-8c40-production-watchdog-m9b-preflight.ps1`.
+Its execution gate is currently closed in the profile until the preparation commit
+passes the complete same-HEAD CI workflow.
+
+The script is intentionally stricter than the earlier M8 no-write preflight because
+M9 is qualifying the last-mile production watchdog dependency. M9B requires the already
+qualified `VictusFanControlWatchdogM4` service to be installed, but it must be:
+
+- `Manual`;
+- `Stopped`;
+- PID 0;
+- LocalSystem;
+- still configured to the versioned M4 exact-target lease-service binary/mode;
+- free of any retained `lease.json`.
+
+M9B does **not** start or stop the service, reinstall it, acquire a named-pipe lease,
+call `SetFanLevel`, restore firmware, dispatch a power transition or enable the M9
+production construction gate.
+
+The hardware-side operations are read-only:
+
+- exact SMBIOS/CIM target fingerprint;
+- AC/battery baseline;
+- existing M8 read-only telemetry/SafetyGate probe;
+- independent narrow EC setpoint reads requiring two consecutive FF/FF samples.
+
+The preflight also runs the relevant M5-M9 invariants and deterministic self-tests,
+then proves the service state, repository HEAD and durable journal state did not change.
+
+Evidence is written only below a new timestamped `logs/m9b-production-watchdog-preflight_*`
+directory. Historical evidence is never deleted.

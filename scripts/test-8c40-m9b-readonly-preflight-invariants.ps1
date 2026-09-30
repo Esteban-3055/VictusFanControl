@@ -1,0 +1,77 @@
+$ErrorActionPreference='Stop'
+
+$repoRoot=Split-Path -Parent $PSScriptRoot
+$preflight=Get-Content (Join-Path $PSScriptRoot 'test-8c40-production-watchdog-m9b-preflight.ps1') -Raw
+$profile=Get-Content (Join-Path $repoRoot 'profiles\HP-8C40.json') -Raw | ConvertFrom-Json
+$doc=Get-Content (Join-Path $repoRoot 'docs\PRODUCTION_WATCHDOG_8C40_M9.md') -Raw
+$gate=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40ProductionWatchdogGate.cs') -Raw
+
+function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
+    if($Text.IndexOf($Needle,[StringComparison]::Ordinal)-lt 0){throw $Message}
+}
+function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
+    if($Text.IndexOf($Needle,[StringComparison]::Ordinal)-ge 0){throw $Message}
+}
+function Assert-True([bool]$Value,[string]$Message){if(-not $Value){throw $Message}}
+function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
+
+Assert-True ([bool]$profile.lifecycle.watchdogM9CodeCiPassed) 'M9B preparation requires closed M9A CODE/CI PASS.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M9B requires M8C physical PASS.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M9B must keep M8C closed.'
+Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9B must not promote watchdog recovery.'
+Assert-False ([bool]$profile.control.enabledByDefault) 'M9B must keep default control OFF.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9B must keep automatic/adaptive policy OFF.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9B must keep M9 production construction blocked.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyExecutionAuthorized) 'M9B preparation commit must keep read-only execution blocked until CI passes.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.physicalWriteAuthorized) 'M9B must never authorize fan writes.'
+
+foreach($needle in @(
+    'M9B PRODUCTION WATCHDOG READ-ONLY PREFLIGHT',
+    'READ-ONLY AUTHORIZATION BARRIER',
+    'feature/victus-8c40-m9-production-watchdog',
+    'Assert-RepositoryHead',
+    'Assert-Exact8C40Target',
+    'Assert-ProfileBoundary',
+    'Assert-M4ServiceBaseline',
+    'VictusFanControlWatchdogM4',
+    '--m4-8c40-lease-service',
+    'LocalSystem',
+    'Assert-ServiceUnchanged',
+    'Assert-StableFirmwareBaseline',
+    '--8c40-m8-preflight-probe',
+    'M8_PREFLIGHT_TELEMETRY_PASS',
+    'test-8c40-m9-production-watchdog-invariants.ps1',
+    'test-8c40-m9b-readonly-preflight-invariants.ps1',
+    'm9b-preflight-result.json',
+    'telemetry-output.txt',
+    'FAIL_CLOSED'
+)){
+    Assert-Contains $preflight $needle ("M9B preflight invariant missing: {0}" -f $needle)
+}
+
+foreach($forbidden in @(
+    'SetFanLevel(',
+    '--restore-hp-auto',
+    'Start-Service',
+    'Stop-Service',
+    'Set-Service',
+    'New-Service',
+    'sc.exe ',
+    '--8c40-m4-lease10',
+    '--8c40-m4-lease30',
+    '--8c40-m4-lease50',
+    'NamedPipeFanControlWatchdogLeaseClient',
+    'CreateLeaseIfAuthorized',
+    'shutdown.exe',
+    'SetSuspendState',
+    'git clean',
+    'Remove-Item'
+)){
+    Assert-NotContains $preflight $forbidden ("M9B read-only preflight contains forbidden active operation: {0}" -f $forbidden)
+}
+
+Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'M9 production construction gate must remain closed during M9B.'
+Assert-Contains $doc 'M9B READ-ONLY PREFLIGHT CODE PREPARED / CI PENDING / EXECUTION BLOCKED' 'M9B documentation preparation status missing.'
+Assert-Contains $doc 'does **not** start or stop the service' 'M9B documentation must preserve the no-service-mutation contract.'
+
+Write-Host 'HP 8C40 M9B read-only preflight invariant: PASS' -ForegroundColor Green
