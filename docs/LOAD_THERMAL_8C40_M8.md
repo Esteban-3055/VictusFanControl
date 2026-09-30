@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 4 CONTROLLER-REPORTED PASS AT 30/30 BUT PARENT FAIL_CLOSED ON UNAVAILABLE EXITCODE; RETROSPECTIVE CAUSAL/FAILSAFE/CLOSURE EVIDENCE AUDIT PENDING. NO FURTHER PHYSICAL M8B AUTHORIZED. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 4 CONTROLLER-REPORTED PASS AT 30/30 BUT PARENT FAIL_CLOSED ON UNAVAILABLE EXITCODE; ORIGINAL INDEPENDENT M4/FAILSAFE LOGS ARE UNAVAILABLE. M8B RETRY 5 IS EXPLICITLY PHYSICALLY AUTHORIZED THROUGH THE VERSIONED HARNESS AFTER NATIVE EXITCODE HARDENING. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -772,9 +772,35 @@ SafetyGate, coordinator, BIOS and backend regressions passed. Run #800 failed so
 static invariant string left pointing to the old launch form, before executing the new
 native-child test; that assertion was aligned and #801 passed fully.
 
-**M8B physical execution remains blocked** pending retrospective evidence audit; passing the
-new process helper does not promote the previous parent FAIL_CLOSED to physical PASS.
-M8C physical execution, production watchdog promotion and automatic/adaptive policy remain OFF.
+At HEAD `b350106c824af9953c2541f651f62418396ac1e4`, **M8B physical execution remained blocked** pending retrospective evidence audit. The original independent M4/failsafe logs are now confirmed unavailable, so that historical attempt remains incomplete rather than being promoted.
+
+A fresh **M8B retry 5 is explicitly authorized** through the unchanged versioned M8B harness after the native tracked-child ExitCode fix. This authorization does not change the 50/50 target, representative-load predicate, thermal limits, watchdog protocol, failsafe behavior, or closure requirements. M8C physical execution, production watchdog promotion and automatic/adaptive policy remain OFF.
+
+
+## 7B.5. M8B physical retry 5 - explicitly authorized
+
+Because the original attempt-4 independent M4 service log and optional failsafe log are no longer
+available, the previous run cannot be promoted retrospectively. Repeating M8B is therefore
+explicitly authorized solely to obtain a complete, self-consistent evidence set using the already
+CI-validated native tracked-child ExitCode path.
+
+Retry 5 must use only `scripts/test-8c40-load-thermal-m8b.ps1` on the exact
+`HP-8C40-9D0R1LA-F18` target. All existing criteria remain unchanged: normal representative
+game/3D load, 3 consecutive qualifying samples before the write, exactly one equal-only 50/50
+ApplyAsync, 30-second supervision with >=22/30 representative and >=10 consecutive, CPU temporal
+confirmation/hard boundary unchanged, GPU 82 C physical abort unchanged, exact M4 watchdog identity,
+schema-v2 journal binding, causal PREPARE -> WRITE_INTENT -> COMMIT -> RESTORE_BEGIN -> RELEASE,
+no failsafe takeover, final journal absence, two independent FF/FF observations, and M4 restored to
+Manual/Stopped.
+
+Immediately after the run, preserve the entire newly created `logs/m8b-watchdog-load_*` directory
+and copy the same-date `C:\ProgramData\VictusFanControl\WatchdogM4\logs\watchdog-m4-8c40-YYYY-MM-DD.log`
+into that evidence directory before cleanup or another qualification attempt. The harness-generated
+`m8b-failsafe.log` must also be kept if present. Do not lower load thresholds or bypass a FAIL_CLOSED
+to force PASS.
+
+This authorization is **M8B only**. M8C physical execution remains blocked; production watchdog
+promotion and automatic/adaptive fan control remain OFF.
 
 ## 8. Physical harness safety and evidence
 

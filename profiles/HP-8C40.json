@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-attempt4-childpass-parent-failclosed-native-exit-fix-ci-pass-audit-pending-m8c-code-ci-pass-adaptive-shadow-ci-pass-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-retry5-physical-authorized-native-exit-fix-ci-pass-m8c-code-ci-pass-adaptive-shadow-ci-pass-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -2192,9 +2192,9 @@
       }
     },
     "m8b": {
-      "status": "ATTEMPT4_CHILD_PASS_PARENT_FAIL_CLOSED_NATIVE_EXITCODE_FIX_CODE_CI_PASS_EVIDENCE_AUDIT_PENDING",
+      "status": "RETRY5_PHYSICAL_EXECUTION_AUTHORIZED_NATIVE_EXIT_FIX_CI_PASS",
       "physicalPassed": false,
-      "physicalExecutionAuthorized": false,
+      "physicalExecutionAuthorized": true,
       "writeCapable": true,
       "requiredToken": "8C40-M8B-LOAD50",
       "harnessScript": "scripts/test-8c40-load-thermal-m8b.ps1",
@@ -2372,7 +2372,7 @@
         "m8cPhysicalExecutionAuthorized": false
       },
       "processExitHardening": {
-        "status": "CODE_CI_PASS_EVIDENCE_AUDIT_PENDING_PHYSICAL_BLOCKED",
+        "status": "CODE_CI_PASS_RETRY5_PHYSICAL_AUTHORIZED",
         "approach": "directly owned System.Diagnostics.Process.Start + bounded native WaitForExit + ExitCode on same process object",
         "psCompatibility": "PowerShell 5.1 and PowerShell 7 native positive/negative exit selftests",
         "newPhysicalAttemptAuthorized": false,
@@ -2393,6 +2393,22 @@
           "hardwareTestPerformed": false,
           "note": "Run #800 failed in M8B static invariant wording after launcher changed, before the native child selftest; static assertion aligned to native launch; run #801 fully PASS."
         }
+      },
+      "retry5Authorization": {
+        "authorized": true,
+        "date": "2026-09-30",
+        "sourceHead": "b350106c824af9953c2541f651f62418396ac1e4",
+        "reason": "Attempt 4 controller evidence was internally consistent but parent failed closed before causal-log audit because ExitCode was unavailable. Original independent M4/failsafe logs are no longer available, so a fresh evidence-complete M8B run is authorized after the native tracked-child fix.",
+        "constraints": [
+          "versioned M8B harness only",
+          "exact HP-8C40-9D0R1LA-F18 target only",
+          "normal representative game/3D workload only; no synthetic stress",
+          "exactly one equal 50/50 command after representative-load admission",
+          "unchanged thermal/load/ownership/watchdog/failsafe thresholds",
+          "M8C remains physically blocked",
+          "automatic/adaptive policy remains off",
+          "preserve complete evidence directory and dated M4 watchdog log immediately after the run"
+        ]
       }
     },
     "m8c": {
@@ -2513,6 +2529,7 @@
         "existingM5M8Regressions": true,
         "physicalExecution": false
       }
-    }
+    },
+    "m8bAuthorizationScope": "M8B retry 5 physical execution authorized only through the versioned M8B harness after native tracked-child ExitCode hardening; M8C remains blocked."
   }
 }

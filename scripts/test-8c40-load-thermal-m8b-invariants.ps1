@@ -171,9 +171,9 @@ Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8B p
 Assert-Equal $profile.loadThermalM8Qualification.m8b.harnessScript 'scripts/test-8c40-load-thermal-m8b.ps1' 'M8B harness path changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/watchdog-m8b-service-failsafe-8c40.ps1' 'M8B failsafe path changed.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B child PASS/parent FAIL_CLOSED must not be promoted without independent causal evidence audit.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B further physical execution remains blocked pending exact durable evidence audit.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B retry 5 must be explicitly authorized in the versioned profile.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[3].classification 'CONTROLLER_REPORTED_PASS_PARENT_EXITCODE_UNAVAILABLE' 'M8B latest controller/parent discrepancy classification changed.'
-Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.status 'CODE_CI_PASS_EVIDENCE_AUDIT_PENDING_PHYSICAL_BLOCKED' 'M8B tracked-child hardening status changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.status 'CODE_CI_PASS_RETRY5_PHYSICAL_AUTHORIZED' 'M8B tracked-child hardening/retry authorization status changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.ci.commit '1d672389ee2bc7980bdfd38aa56fbeb390567f32' 'M8B native-child helper CI commit changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.ci.runNumber 801 'M8B native-child CI run changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].result 'FAIL_CLOSED_NO_WRITE' 'M8B attempt 3 must remain fail-closed/no-write.'
@@ -221,7 +221,8 @@ foreach($needle in @(
     'ExitCode was unavailable',
     '30/30 representative',
     'Full causal chain and no-failsafe-takeover proof are still pending',
-    'M8B physical execution remains blocked',
+    'M8B physical retry 5 - explicitly authorized',
+    'M8C physical execution remains blocked',
     'Both PowerShell 7 and Windows PowerShell 5.1 exercised successful child exit code 0'
 )){
     Assert-Contains $doc $needle ("M8B documentation invariant missing: {0}" -f $needle)
