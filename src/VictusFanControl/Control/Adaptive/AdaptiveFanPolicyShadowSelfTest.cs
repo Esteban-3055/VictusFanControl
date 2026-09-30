@@ -364,8 +364,8 @@ public static class AdaptiveFanPolicyShadowSelfTest
                 AdaptiveFanPolicyShadowConfig.Parse(
                     BuildConfigJson()
                         .Replace(
-                            ""authorizedForProduction": false",
-                            ""authorizedForProduction": true",
+                            "\"authorizedForProduction\": false",
+                            "\"authorizedForProduction\": true",
                             StringComparison.Ordinal));
         }
         catch (InvalidDataException)
@@ -379,8 +379,8 @@ public static class AdaptiveFanPolicyShadowSelfTest
                 AdaptiveFanPolicyShadowConfig.Parse(
                     BuildConfigJson()
                         .Replace(
-                            ""purpose": "shadow-only"",
-                            ""purpose": "production"",
+                            "\"purpose\": \"shadow-only\"",
+                            "\"purpose\": \"production\"",
                             StringComparison.Ordinal));
         }
         catch (InvalidDataException)
@@ -414,9 +414,11 @@ public static class AdaptiveFanPolicyShadowSelfTest
                     .Select(index =>
                         $"C{index}:Performance:70.0"));
 
+        const char quote = '"';
+
         var line =
-            $"2026-09-30T00:00:00.0000000+00:00,"Intel, CPU",70,70,70," +
-            $""{coreText}",45,50,"{Hp8C40TargetProfile.ExpectedGpuName}"," +
+            $"2026-09-30T00:00:00.0000000+00:00,{quote}Intel, CPU{quote},70,70,70," +
+            $"{quote}{coreText}{quote},45,50,{quote}{Hp8C40TargetProfile.ExpectedGpuName}{quote}," +
             "65,60,80,3000,3000";
 
         var snapshot =
