@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS. M8C ATTEMPT 1 FAIL_CLOSED BEFORE READY ON AN EC FAN-TACH READ IOException; PARENT CLEANUP DID NOT PROVE TWO CONSECUTIVE FF/FF READS (FF/FF THEN 144/FF). M8C RETRY IS BLOCKED PENDING PRESERVED-EVIDENCE REVIEW. AUTOMATIC EVIDENCE PACKAGING PASSED FULL CI #824; FUTURE PASS/FAIL_CLOSED RUNS COPY THE M4 LOG AND CREATE THE ZIP AUTOMATICALLY. WATCHDOG RECOVERY REMAINS UNPROMOTED AND AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS. M8C ATTEMPT 1 EVIDENCE REVIEW PROVES A REAL 50/50 WRITE/SETPOINT ACK FOLLOWED BY EC TACH-SNAPSHOT FAILURE BEFORE WATCHDOG COMMIT; RESTORE_BEGIN/RELEASE CLEARED THE DURABLE LEASE BUT PARENT STABLE FF/FF PROOF WAS INCOMPLETE. BOUNDED EC-TRANSIENT + SIX-READ/2-CONSECUTIVE FF/FF EVIDENCE HARDENING PASSED FULL CI #828. M8C ATTEMPT 2 IS EXPLICITLY AUTHORIZED THROUGH THE VERSIONED HARNESS. WATCHDOG RECOVERY REMAINS UNPROMOTED AND AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -1047,7 +1047,7 @@ as proof of persistent ownership.
 
 ### Bounded EC transient hardening
 
-No physical retry is authorized yet. The code-only hardening keeps the command fail-closed and
+At the attempt-1 evidence-review commit no physical retry was yet authorized. The code-only hardening keeps the command fail-closed and
 changes only the post-write tachometer acknowledgement loop:
 
 - one fully exhausted low-level EC snapshot no longer immediately abandons an otherwise
@@ -1069,6 +1069,44 @@ not silently count as firmware ownership.
 The packager now distinguishes the original qualification HEAD from a later packaging-code HEAD,
 so pulling tooling updates before packaging cannot obscure which binary actually ran the physical
 test.
+
+
+## 7B.12. M8C attempt 2 - explicitly authorized after bounded EC-transient hardening CI PASS
+
+The attempt-1 evidence review led to a deliberately narrow correction. The hardening is
+**CODE/CI PASS** at commit `ac036a246f0bb4703bf9b346658d191b9d507de5`, GitHub Actions
+**#828** (run `36771357047`). The full workflow passed PowerShell syntax, the new EC-transient
+invariant under PowerShell 7 and Windows PowerShell 5.1, automatic evidence-packaging tests,
+warnings-as-errors build, M8C synthetic preemption, SafetyGate, FanControlCoordinator, watchdog,
+BIOS and HP-backend regressions.
+
+The HP-backend deterministic tests prove both sides of the new boundary:
+
+- one fully exhausted post-write EC control-state/tach snapshot may recover inside the existing
+  acknowledgement window and only then reach watchdog Commit;
+- three such failed snapshots still fail closed before Commit.
+
+**M8C attempt 2 is explicitly authorized** only through
+`scripts/test-8c40-load-thermal-m8c.ps1` on
+`feature/victus-8c40-m8c-ec-transient-hardening` with local HEAD equal to its tracked upstream.
+The parent and compiled controller authorization gates are both opened by this commit.
+
+Nothing broadens the physical command envelope: equal-only 10..50 remains mandatory and each
+subcycle still issues at most one real 50/50 command. The change does not weaken setpoint,
+ownership or control-guard checks. Watchdog Commit cannot occur until a successful post-write
+snapshot proves expected 50/50 ownership, sane guards and consecutive dual-tach response.
+
+The CPU and GPU thermal stimuli remain qualification-only synthetic SafetyGate frames. Real silicon
+is not intentionally driven to 95 C or 87 C. Final/cleanup ownership proof now permits up to six
+independent narrow setpoint reads solely to tolerate a transient observation, while still requiring
+two **consecutive** FF/FF observations. All those observations are persisted in JSON.
+
+The harness automatically packages evidence on PASS or FAIL_CLOSED. If the CPU subcycle fails,
+the GPU subcycle is not attempted. Any failsafe takeover, retained journal, incomplete causal
+watchdog chain, missing stable FF/FF proof or non-Manual/Stopped final M4 state invalidates PASS.
+
+This authorization does not set `m8c.physicalPassed=true`, does not set
+`WatchdogRecoveryValidated=true`, and does not enable automatic/adaptive fan control.
 
 ## 8. Physical harness safety and evidence
 

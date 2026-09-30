@@ -109,7 +109,7 @@ foreach($needle in @(
 Assert-Contains $failsafe 'M8C FAILSAFE ARMED:' 'M8C delayed failsafe must publish durable ARMED evidence before sleeping.'
 Assert-NotContains $failsafe 'SetFanLevel(' 'M8C delayed failsafe must not issue ordinary fan targets.'
 Assert-NotContains $failsafe '--restore-hp-auto' 'M8C delayed failsafe must not invoke direct HP restore.'
-Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M8C compiled controller must be re-blocked after attempt 1 FAIL_CLOSED.'
+Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = true;' 'M8C compiled controller must be explicitly authorized for attempt 2.'
 $trackedHelper=Get-Content (Join-Path $PSScriptRoot 'm8c-tracked-child.ps1') -Raw
 $trackedSelfTest=Get-Content (Join-Path $PSScriptRoot 'test-8c40-m8c-tracked-child-selftest.ps1') -Raw
 Assert-Contains $trackedHelper 'New-Object System.Diagnostics.Process' 'M8C helper must own the native process object.'
@@ -118,7 +118,7 @@ Assert-Contains $trackedSelfTest 'foreach($expected in @(0,7))' 'M8C helper self
 Assert-NotContains $harness '$controller=Start-Process' 'M8C controller must not use PowerShell Start-Process -PassThru.'
 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C harness preparation must preserve recorded M8B physical PASS.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C harness retry must remain profile-blocked after attempt 1 FAIL_CLOSED.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C harness attempt 2 must be explicitly profile-authorized after hardening CI.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8C harness preparation must not mark physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'Automatic policy must remain OFF.'
 
@@ -127,8 +127,9 @@ foreach($needle in @(
     'two independent physical subcycles',
     'profile gate',
     'm8b.physicalPassed=true',
-    'physicalExecutionAuthorized=false',
+    'physicalExecutionAuthorized=true',
     'M8C attempt 1 - FAIL_CLOSED before READY',
+    'M8C attempt 2 - explicitly authorized after bounded EC-transient hardening CI PASS',
     'M8C attempt-1 evidence review - real write reached, tach EC snapshot failed before Commit',
     'at most **two** failed high-level control-state snapshots'
 )){

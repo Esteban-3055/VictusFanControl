@@ -22,7 +22,7 @@ function Assert-True([bool]$Value,[string]$Message){
     if(-not $Value){throw $Message}
 }
 
-Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M8C physical controller must be re-blocked after attempt 1 FAIL_CLOSED pending evidence review.'
+Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = true;' 'M8C physical controller must be explicitly authorized for attempt 2 after EC-transient hardening CI PASS.'
 Assert-Contains $controller '8C40-M8C-THERMAL50' 'M8C future explicit token changed.'
 Assert-Contains $controller 'Hp8C40M8CPhysicalCase.CpuConfirmed95' 'M8C CPU physical subcycle missing.'
 Assert-Contains $controller 'Hp8C40M8CPhysicalCase.GpuImmediate87' 'M8C GPU physical subcycle missing.'
@@ -79,7 +79,7 @@ foreach($needle in @(
     '--8c40-m8c-physical-ready-path',
     '--8c40-m8c-physical-continue-path',
     '--8c40-m8c-physical-result-path',
-    'BLOCKED M8C PHYSICAL'
+    'ACTIVE M8C ATTEMPT-2 GATE'
 )){
     Assert-Contains $cli $needle ("M8C blocked CLI preparation missing: {0}" -f $needle)
 }
@@ -89,15 +89,16 @@ Assert-Contains $program 'Hp8C40M8CPhysicalThermalPreemptionQualificationTest.Ru
 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C physical preparation now requires recorded M8B physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8C physical preparation must not mark M8C PASS.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C physical retry must remain profile-blocked after attempt 1 FAIL_CLOSED.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C attempt 2 must be profile-authorized only after EC-transient hardening CI PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'Automatic policy must remain OFF.'
 
 foreach($needle in @(
     'M8C physical-controller preparation',
-    'PhysicalExecutionAuthorized=false',
+    'PhysicalExecutionAuthorized=true',
     'M8C_READY_BEFORE_INJECTION',
     'M8C-CONTINUE',
     'M8C attempt 1 - FAIL_CLOSED before READY',
+    'M8C attempt 2 - explicitly authorized after bounded EC-transient hardening CI PASS',
     'M8C attempt-1 evidence review - real write reached, tach EC snapshot failed before Commit'
 )){
     Assert-Contains $doc $needle ("M8C physical-controller documentation missing: {0}" -f $needle)

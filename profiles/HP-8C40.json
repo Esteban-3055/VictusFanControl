@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-physical-pass-m8c-attempt1-fail-closed-retry-blocked-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-physical-pass-m8c-attempt2-ec-transient-retry-authorized-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -2534,9 +2534,9 @@
       }
     },
     "m8c": {
-      "status": "ATTEMPT1_EVIDENCE_REVIEWED_REAL_WRITE_ACK_TACH_EC_TRANSIENT_FAIL_CLOSED_RETRY_BLOCKED",
+      "status": "ATTEMPT2_PHYSICAL_EXECUTION_AUTHORIZED_AFTER_EC_TRANSIENT_HARDENING_CI_828",
       "physicalPassed": false,
-      "physicalExecutionAuthorized": false,
+      "physicalExecutionAuthorized": true,
       "requiresM8BPhysicalPass": true,
       "realOvertemperatureRequired": false,
       "syntheticSelfTestMode": "--8c40-m8c-self-test",
@@ -2551,7 +2551,7 @@
         "inFlightApply": "thermal handoff must cancel an in-flight ApplyAsync and end in firmware authority"
       },
       "physicalHarnessPrepared": true,
-      "physicalPrerequisite": "M8B physical PASS remains satisfied. M8C retry is blocked after attempt 1 FAIL_CLOSED until the preserved result/watchdog evidence is reviewed.",
+      "physicalPrerequisite": "M8B physical PASS remains satisfied. M8C attempt 2 is explicitly authorized after attempt-1 evidence review and bounded EC tach-read transient hardening passed full CI #828.",
       "automaticPolicyEnabled": false,
       "watchdogRecoveryValidated": false,
       "syntheticCodeCi": {
@@ -2569,9 +2569,9 @@
         "note": "Initial build run #731 found a compile-only profile-access error in the new synthetic helper. The helper was corrected to use Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount; run #737 passed the full workflow. No hardware path was executed."
       },
       "physicalControllerPrepared": true,
-      "physicalControllerStatus": "PHYSICAL_RETRY_BLOCKED_AFTER_ATTEMPT1_FAIL_CLOSED",
+      "physicalControllerStatus": "CODE_CI_PASS_ATTEMPT2_PHYSICAL_AUTHORIZED",
       "physicalControllerType": "Hp8C40M8CPhysicalThermalPreemptionQualificationTest",
-      "physicalControllerAuthorizationConstant": false,
+      "physicalControllerAuthorizationConstant": true,
       "physicalControllerToken": "8C40-M8C-THERMAL50",
       "physicalControllerSubcycles": [
         "cpu",
@@ -2579,7 +2579,7 @@
       ],
       "parentContinueMarker": "M8C-CONTINUE",
       "parentHandoff": "M8C_READY_BEFORE_INJECTION",
-      "physicalHarnessStatus": "EVIDENCE_AUTOPACKAGING_PREPARED_RETRY_BLOCKED",
+      "physicalHarnessStatus": "CODE_CI_PASS_ATTEMPT2_PHYSICAL_AUTHORIZED_AUTOPACKAGING",
       "physicalHarnessScript": "scripts/test-8c40-load-thermal-m8c.ps1",
       "physicalHarnessInvariantScript": "scripts/test-8c40-load-thermal-m8c-harness-invariants.ps1",
       "independentFailsafeScript": "scripts/watchdog-m8c-service-failsafe-8c40.ps1",
@@ -2587,7 +2587,7 @@
         "requiresM8BPhysicalPassed": true,
         "requiresM8CPhysicalExecutionAuthorized": true,
         "currentM8BPhysicalPassed": true,
-        "currentM8CPhysicalExecutionAuthorized": false
+        "currentM8CPhysicalExecutionAuthorized": true
       },
       "physicalSubcyclePlan": [
         "CPU: independent real 50/50 OWNED -> parent journal/failsafe proof -> five synthetic 95 C frames -> firmware handoff on 5/5",
@@ -2742,16 +2742,60 @@
         }
       },
       "ecTransientHardening": {
-        "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+        "status": "CODE_CI_PASS_ATTEMPT2_PHYSICAL_AUTHORIZED",
         "evidenceAttempt": 1,
-        "evidenceHead": "9db47317265fd71dc5416222382bcc81ca887932",
+        "evidenceHead": "7d247b2580688af60e1f9cf9144b48f831178a9e",
         "purpose": "Tolerate only a very small bounded number of fully exhausted EC control-state snapshot failures during post-write tachometer acknowledgement, while keeping the watchdog journal WRITE_ARMED and forbidding Commit until a successful ownership/guard/dual-tach proof is obtained.",
         "maximumAdditionalFailedTachSnapshots": 2,
         "lowLevelReadRetriesPerSnapshot": 5,
         "commitOnReadFailure": false,
         "controlBehaviorScope": "Only the post-write tachometer acknowledgement loop changes; setpoint/ownership/guard validation, thermal limits, command envelope, watchdog order, and restore behavior remain unchanged.",
         "cleanupProof": "Parent final/cleanup evidence now samples up to 6 independent narrow setpoint probes and requires 2 consecutive FF/FF; every sample is persisted to JSON.",
-        "physicalExecutionAuthorized": false
+        "physicalExecutionAuthorized": true,
+        "ci": {
+          "result": "PASS",
+          "commit": "ac036a246f0bb4703bf9b346658d191b9d507de5",
+          "runNumber": 828,
+          "runId": 36771357047,
+          "powerShellSyntax": true,
+          "invariantPowerShell7": true,
+          "invariantWindowsPowerShell51": true,
+          "packagingSelfTestPowerShell7": true,
+          "packagingSelfTestWindowsPowerShell51": true,
+          "warningsAsErrorsBuild": true,
+          "backendSelfTest": true,
+          "singleExhaustedEcSnapshotRecoversBeforeCommit": true,
+          "threeExhaustedEcSnapshotsFailClosedBeforeCommit": true,
+          "safetyGateSelfTest": true,
+          "fanCoordinatorSelfTest": true,
+          "watchdogRegressions": true,
+          "physicalExecution": false
+        }
+      },
+      "physicalRetry2Authorization": {
+        "authorized": true,
+        "date": "2026-09-30",
+        "sourceHead": "ac036a246f0bb4703bf9b346658d191b9d507de5",
+        "sourceCiRunNumber": 828,
+        "sourceCiRunId": 36771357047,
+        "requiredToken": "8C40-M8C-THERMAL50",
+        "scope": "one complete versioned M8C harness execution; CPU subcycle first, GPU subcycle second only if CPU closes PASS",
+        "purpose": "Test the bounded post-write EC tach snapshot transient hardening and complete the qualification-only CPU/GPU thermal-preemption gate.",
+        "constraints": [
+          "exact HP-8C40-9D0R1LA-F18 target only",
+          "feature/victus-8c40-m8c-ec-transient-hardening branch and upstream must match",
+          "scripts/test-8c40-load-thermal-m8c.ps1 only",
+          "normal representative game/3D workload; no deliberate thermal stress",
+          "one equal-only 50/50 ApplyAsync per subcycle",
+          "watchdog Commit forbidden until expected setpoint, sane guards and dual-tach acknowledgement succeed",
+          "at most two fully exhausted high-level EC control-state snapshots may be skipped only inside post-write tach acknowledgement; third failure remains fail-closed",
+          "CPU 95 C x5 and GPU 87 C are qualification-only synthetic frames; real silicon is not intentionally heated to either threshold",
+          "two consecutive FF/FF required within the bounded six-read independent final/cleanup proof",
+          "automatic evidence ZIP generation required on PASS or FAIL_CLOSED",
+          "any failsafe takeover invalidates PASS",
+          "WatchdogRecoveryValidated remains false",
+          "automatic/adaptive policy remains OFF"
+        ]
       }
     },
     "productionRaceAuditCodeCi": {

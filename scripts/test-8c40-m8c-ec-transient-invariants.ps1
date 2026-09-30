@@ -45,7 +45,11 @@ foreach($needle in @(
 
 Assert-Contains $controller '"APPLY_50_BEGIN"' 'M8C controller must persist the real write-dispatch boundary.'
 Assert-Contains $controller '"APPLY_50_COMPLETE"' 'M8C controller must persist completed setpoint/tach/Commit acknowledgement.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C retry must remain physically blocked during EC transient hardening.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C attempt 2 must be physically authorized only after EC transient hardening CI PASS.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.ecTransientHardening.ci.backendSelfTest) 'M8C EC transient hardening backend self-test CI evidence must remain PASS.'
+if([string]$profile.loadThermalM8Qualification.m8c.ecTransientHardening.ci.commit -cne 'ac036a246f0bb4703bf9b346658d191b9d507de5'){throw 'M8C EC transient hardening CI commit changed.'}
+if([int]$profile.loadThermalM8Qualification.m8c.ecTransientHardening.ci.runNumber -ne 828){throw 'M8C EC transient hardening CI run changed.'}
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalRetry2Authorization.authorized) 'M8C attempt-2 authorization must be explicit.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8C must remain physically unvalidated.'
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalAttempts[0].realWriteAttempted) 'Attempt 1 must record that the real write boundary was crossed.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalAttempts[0].watchdogCommitObserved) 'Attempt 1 must record that watchdog Commit was not reached.'

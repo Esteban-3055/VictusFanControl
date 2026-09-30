@@ -24,7 +24,7 @@ public enum Hp8C40M8CPhysicalCase
 /// </summary>
 public static class Hp8C40M8CPhysicalThermalPreemptionQualificationTest
 {
-    public static readonly bool PhysicalExecutionAuthorized = false;
+    public static readonly bool PhysicalExecutionAuthorized = true;
     public const string RequiredToken = "8C40-M8C-THERMAL50";
     public const int QualificationLevel = 50;
 
@@ -78,11 +78,11 @@ public static class Hp8C40M8CPhysicalThermalPreemptionQualificationTest
     {
         // This authorization test MUST remain before every hardware identity,
         // PawnIO, watchdog, WMI or EC construction. It is the compile-time
-        // execution barrier re-closed after M8C attempt 1 FAIL_CLOSED pending evidence review.
+        // execution barrier explicitly opened for one M8C attempt-2 qualification after bounded EC-transient hardening CI PASS.
         if (!PhysicalExecutionAuthorized)
         {
             Console.Error.WriteLine(
-                "M8C PHYSICAL REFUSED: retry is blocked after attempt 1 FAIL_CLOSED pending evidence review.");
+                "M8C PHYSICAL REFUSED: the qualification-only physical route is not authorized in this build.");
             return 222;
         }
 
