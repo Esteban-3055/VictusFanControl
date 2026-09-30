@@ -125,6 +125,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-8c40-load-thermal-m8b-invariants.ps1
 
+      - name: HP 8C40 M8C synthetic thermal-preemption invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-load-thermal-m8c-invariants.ps1
+
       - name: HP 8C40 M5-M8 invariants Windows PowerShell 5.1 compatibility
         shell: powershell
         run: |
@@ -146,12 +150,16 @@ jobs:
           .\scripts\test-8c40-load-thermal-m8-preflight-invariants.ps1
           .\scripts\test-8c40-load-thermal-m8a-invariants.ps1
           .\scripts\test-8c40-load-thermal-m8b-invariants.ps1
+          .\scripts\test-8c40-load-thermal-m8c-invariants.ps1
 
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
       - name: HP 8C40 M8A representative-load classifier self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --8c40-m8a-self-test
+
+      - name: HP 8C40 M8C synthetic thermal-preemption self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --8c40-m8c-self-test
 
       - name: Modern Standby M0 observer self-test
         run: dotnet run --project .\src\VictusFanControl.ModernStandbyProbe -c Release --no-build -- --self-test
