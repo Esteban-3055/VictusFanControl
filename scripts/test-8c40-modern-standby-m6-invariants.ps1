@@ -30,8 +30,8 @@ Assert-Contains $program 'Hp8C40TargetProfile.Matches' 'M6 must exact-match HP 8
 Assert-Contains $backend 'LifecycleQualificationToken' 'M6 qualification token is missing from HP 8C40 backend.'
 Assert-Contains $backend 'CreateLifecycleQualificationBackend' 'M6 qualification-only backend factory is missing.'
 Assert-Contains $backend 'Exact HP 8C40 M6 Modern Standby lifecycle qualification backend.' 'M6 backend must identify its qualification-only scope.'
-Assert-Contains $backend 'HP 8C40 watchdog recovery is not yet physically validated.' 'Ordinary public HP 8C40 watchdog construction must remain blocked before lifecycle qualification.'
-Assert-Contains $factory 'HP 8C40 matched, but watchdog/service recovery has not yet' 'Production factory must remain blocked from watchdog-backed HP 8C40.'
+Assert-Contains $backend 'HP 8C40 production watchdog/unattended recovery promotion remains blocked.' 'Ordinary public HP 8C40 watchdog construction must remain blocked until post-M7 production qualification closes.'
+Assert-Contains $factory 'HP 8C40 matched, but production watchdog/unattended recovery' 'Production factory must remain blocked from watchdog-backed HP 8C40.'
 Assert-NotContains $factory 'CreateLifecycleQualificationBackend' 'Production backend factory must not route through the M6 qualification bypass.'
 
 Assert-Contains $app 'FanControlWatchdogLeaseContract.Hp8C40M4PipeName' 'M6 must use the isolated HP 8C40 M4 pipe.'
