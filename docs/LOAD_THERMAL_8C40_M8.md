@@ -250,6 +250,30 @@ An earlier intermediate run (#731) failed at compile time because the new helper
 14-core count as a nonexistent static target-profile member; the code was corrected to use the
 versioned target-profile instance and #737 passed. No hardware execution occurred.
 
+### M8C physical-controller preparation
+
+The real-hardware M8C controller is now prepared in code but deliberately unreachable. Its
+`PhysicalExecutionAuthorized=false` constant is checked before hardware identity, PawnIO,
+watchdog, WMI, EC or telemetry hardware objects are constructed. The profile independently keeps
+`physicalExecutionAuthorized=false` and still requires M8B physical PASS.
+
+When a later evidence-backed commit authorizes it, each physical subcycle will:
+
+1. prove representative real load and firmware-owned FF/FF;
+2. acquire the real M4 watchdog-backed Custom path;
+3. issue exactly one already-qualified real 50/50 command and prove EC + dual-tach ownership;
+4. prove a fresh representative real sample below the CPU temporal candidate threshold;
+5. publish `M8C_READY_BEFORE_INJECTION` and stop;
+6. require a parent-side `M8C-CONTINUE` marker only after the parent has independently checked
+   watchdog/journal/failsafe evidence;
+7. execute either the CPU five-frame 95 C synthetic subcycle or the one-frame GPU 87 C subcycle
+   through the real coordinator;
+8. require firmware authority and local FF/FF after preemption.
+
+The hard-CPU 99 C case remains synthetic/code-only because no real-silicon excursion is required.
+The parent physical harness and independent journal/failsafe closure are intentionally separate
+from the controller. **M8C physical execution remains blocked until M8B physical PASS.**
+
 ## 5. Remaining production-race audit
 
 Before M8 is closed, code/CI and the physical harness must explicitly review the already-known race
