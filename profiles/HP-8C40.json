@@ -1907,14 +1907,14 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_ATTEMPT1_FAIL_CLOSED_TELEMETRY_EPOCH_FIX_CODE_CI_PASS_RETRY_AUTHORIZED_PENDING_M8C_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_RETRY_AUTHORIZED_PENDING_M8C_SYNTHETIC_CODE_PREPARED_CI_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
     "representativeLoadGate": "M8A CODE/CI/PHYSICAL PASS",
     "watchdogBackedLoadGate": "M8B attempt 1 FAIL_CLOSED; telemetry-epoch/closure hardening CODE/CI PASS; physical retry authorized and pending",
-    "thermalPreemptionGate": "M8C pending",
-    "productionRaceAudit": "pending",
+    "thermalPreemptionGate": "M8C synthetic code prepared / CI pending; physical execution blocked until M8B physical PASS",
+    "productionRaceAudit": "existing coordinator/backend race coverage mapped; M8C thermal preemption synthetic coverage prepared; final code/CI audit pending",
     "realOvertemperatureRequired": false,
     "qualificationFanLevel": "50/50 equal-only",
     "physicalAbortLimits": "M8A closed with CPU raw threshold 95 C requiring 5 unique consecutive fresh samples, CPU >=99 C immediate hard abort, GPU >=82 C immediate physical abort. M8B must version its write-capable physical boundaries before execution.",
@@ -2234,6 +2234,28 @@
           "note": "Run #725 failed only because the new documentation invariant looked for a phrase split across a Markdown line break. The invariant literal was aligned without runtime changes; #726 passed fully."
         }
       }
+    },
+    "m8c": {
+      "status": "SYNTHETIC_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED_BY_M8B",
+      "physicalPassed": false,
+      "physicalExecutionAuthorized": false,
+      "requiresM8BPhysicalPass": true,
+      "realOvertemperatureRequired": false,
+      "syntheticSelfTestMode": "--8c40-m8c-self-test",
+      "syntheticInvariantScript": "scripts/test-8c40-load-thermal-m8c-invariants.ps1",
+      "syntheticInjectionType": "Hp8C40M8CThermalQualificationInjection",
+      "syntheticEvidenceMarker": "M8C_SYNTHETIC_QUALIFICATION_ONLY",
+      "productionRuntimeExposure": false,
+      "cases": {
+        "cpuConfirmed": "five unique consecutive synthetic snapshots at effective CPU 95 C; first four remain admitted, fifth must preempt",
+        "gpuImmediate": "one synthetic GPU 87 C snapshot must preempt immediately",
+        "cpuHardImmediate": "one synthetic effective CPU 99 C snapshot must preempt immediately",
+        "inFlightApply": "thermal handoff must cancel an in-flight ApplyAsync and end in firmware authority"
+      },
+      "physicalHarnessPrepared": false,
+      "physicalPrerequisite": "M8B physical PASS on the hardened retry is required before any M8C hardware execution or authorization",
+      "automaticPolicyEnabled": false,
+      "watchdogRecoveryValidated": false
     }
   }
 }
