@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A REPRESENTATIVE-LOAD HARNESS CODE/CI PASS / PHYSICAL PENDING. M8B/M8C WRITE-CAPABLE HARNESS NOT YET AUTHORIZED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A ATTEMPT 1 FAIL_CLOSED / NO-WRITE. FIVE-SAMPLE CPU THERMAL CONFIRMATION HARDENING CODE PREPARED / CI PENDING. M8B/M8C REMAIN BLOCKED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -65,19 +65,31 @@ The following rules remain unchanged:
 
 M8 must reuse the production SafetyGate contract; it must not invent a second thermal policy.
 
-Current handoff thresholds:
+Current raw SafetyGate thresholds remain unchanged:
 
-- CPU emergency: effective CPU >= 95 C;
+- CPU raw threshold: effective CPU >= 95 C;
 - GPU emergency: GPU >= 87 C;
 - effective CPU = max(package, hottest reported core-context).
 
-The existing per-core characterization script aborts at 90 C and is read-only. It is useful
-historical sensor evidence, but it is **not** a thermal-emergency qualification.
+Physical M8A attempt 1 showed that the exact i7-13700H target can produce a short 96 C effective
+CPU spike during otherwise representative gaming load. Treating one >=90 C sample as an M8A
+hard abort therefore prevented the harness from distinguishing a transient Turbo spike from a
+sustained thermal condition.
 
-M8 must not deliberately heat real silicon to the production emergency thresholds merely to
-exercise preemption. The physical harness will use conservative real-temperature abort limits
-of **90 C CPU effective** and **82 C GPU**. Reaching either physical abort limit is an immediate
-fail-closed restore/cleanup condition, not the intended trigger for M8C.
+The exact HP 8C40 path now adds a temporal CPU confirmation layer **above** the stateless
+SafetyGate. CPU 95..98.x C requires **five consecutive unique fresh telemetry readings** before
+the condition is promoted to an effective thermal emergency. Re-evaluating the same timestamp
+cannot advance the counter; a sample below 95 C, an unsafe non-thermal state, a lifecycle/freshness
+gap or a target mismatch resets it. GPU >=87 C remains immediate.
+
+The i7-13700H has an Intel-specified Tjunction / maximum operating temperature of 100 C. M8A uses
+**99 C as an immediate CPU hard-abort boundary**, leaving a 1 C qualification margin; it does
+not wait for five samples at or above that level. M8A also retains the conservative **82 C GPU**
+physical abort. These changes are exact-target qualification behavior and do not enable automatic
+fan policy or watchdog production recovery.
+
+M8 must not deliberately heat real silicon to these boundaries merely to exercise preemption.
+M8C will use qualification-only synthetic thermal evidence for the confirmation path.
 
 ## 4. Gate decomposition
 
@@ -108,8 +120,11 @@ The versioned M8A harness now fixes those criteria before physical use:
 - at least **10 consecutive** samples must satisfy it;
 - GPU load >= 35% **and** GPU power >= 20 W;
 - CPU load >= 5% **or** CPU package power >= 15 W;
-- every sample must be complete, fresh (<=3 s), production-SafetyGate-ready, exact-GPU valid
-  and below the 90 C CPU / 82 C GPU physical abort limits;
+- every sample must be complete, fresh (<=3 s), exact-GPU valid and accepted by the effective
+  HP 8C40 safety path;
+- CPU 95..98.x C is tracked as a transient candidate and requires **five consecutive unique**
+  fresh readings before thermal FAIL_CLOSED;
+- CPU >=99 C is an immediate hard FAIL_CLOSED; GPU >=82 C remains an immediate physical abort;
 - AC must remain online and battery present at >=20%;
 - narrow read-only EC evidence is checked at the start, every 5 samples and at the end;
   ownership must remain FF/FF and MaxFan/FanSwitch must remain 00/00;
@@ -175,8 +190,10 @@ and real hardware acknowledgement as M8B.
 The controller may then use an **internal qualification-only injection point** to submit a
 synthetic SafetyGate snapshot that crosses exactly one production threshold:
 
-- CPU case: effective CPU = 95 C while GPU remains below 87 C;
-- GPU case: GPU = 87 C while effective CPU remains below 95 C.
+- CPU case: five unique consecutive synthetic snapshots with effective CPU = 95 C while GPU
+  remains below 87 C; preemption must occur on the fifth and not before;
+- GPU case: one synthetic snapshot with GPU = 87 C while effective CPU remains below 95 C;
+- hard-CPU static/CI case: effective CPU >=99 C must remain immediate without waiting for five.
 
 The injected frame must be explicitly marked as synthetic qualification evidence and must never
 be exposed through the ordinary production runtime path.
@@ -306,13 +323,42 @@ sleep transition or deliberate stress load occurred. The physical NO-WRITE prefl
 is therefore closed as PASS. M8A representative-load admission is now the next
 development/qualification step; M8B/M8C remain blocked.
 
+## 7A.1. M8A physical attempt 1 - FAIL_CLOSED / NO-WRITE
+
+On 2026-09-29, physical M8A attempt 1 ran at HEAD
+`cc5d5a97cb36d65c02a97663c3294f4f5163b6ba`. The versioned preflight passed again on the
+exact HP 8C40 target with M4 Manual/stopped, AC online, 100% battery, complete telemetry,
+zero Intel/EC/NVML recoveries and stable firmware-owned FF/FF.
+
+The first representative-load sample was already valid gaming load:
+
+- effective CPU 77 C, 38.4 W, 26.6% load;
+- GPU 73 C, 59.1 W, 85% load;
+- fan tachometers 3871 / 3636 RPM;
+- representative=true.
+
+The following read reached effective CPU 96 C and the original one-sample M8A CPU >=90 C
+physical-abort rule terminated the run as `FAIL_CLOSED / NO-WRITE`. The controller never
+entered a write-capable path. Because the v1 wrapper threw immediately after the qualification
+result, its independent post-failure FF/FF closure step did not run; this attempt therefore cannot
+be promoted beyond FAIL_CLOSED even though the M8A mode itself contains no fan-write, restore or
+watchdog-lease dependency.
+
+The retry hardening records the complete thermal sample before deciding FAIL_CLOSED, uses the
+five-unique-reading 95 C CPU confirmation rule plus immediate 99 C hard CPU boundary, and moves
+the independent journal/service/FF/FF closure proof so it executes after both PASS and
+FAIL_CLOSED results.
+
 ## 7A. M8A code preparation
 
 M8A code preparation adds a read-only representative-load classifier and a versioned physical
-harness. This preparation does not authorize M8B or M8C, does not create a watchdog lease,
-does not construct a fan-control backend/coordinator and cannot issue SetFanLevel or a firmware
-restore. GitHub Actions CI must pass the new PowerShell 7 / Windows PowerShell 5.1 invariant,
-warnings-as-errors build and the synthetic M8A classifier self-test before physical M8A use.
+harness. The thermal-confirmation hardening keeps the stateless SafetyGate raw CPU threshold at
+95 C but requires five unique consecutive 95..98.x C snapshots on the exact 8C40 target; CPU
+>=99 C and GPU emergency remain immediate. This preparation does not authorize M8B or M8C,
+does not create a watchdog lease, does not construct a fan-control backend/coordinator and
+cannot issue SetFanLevel or a firmware restore. GitHub Actions CI must pass PowerShell 7 /
+Windows PowerShell 5.1 invariants, warnings-as-errors build, SafetyGate/confirmation self-tests
+and the M8A classifier before physical retry.
 
 M8A preparation is now **CODE/CI PASS** at commit
 `c50510fc627e22d48a762d24c378bd89c724b7d2`, GitHub Actions **#703** (run `36658025006`).

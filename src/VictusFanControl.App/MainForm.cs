@@ -125,6 +125,7 @@ internal sealed class MainForm : Form
     private readonly string _fanBackendStartupDetail;
     private readonly HardwareIdentity _hardwareIdentity;
     private readonly HardwareTargetProfile? _targetProfile;
+    private readonly Hp8C40ThermalEmergencyConfirmation _thermalEmergencyConfirmation = new();
     private readonly string _modulesDirectory;
     private readonly bool _suspendLifecycleHardwareTest;
     private readonly bool _gateDHardwareTest;
@@ -2034,9 +2035,49 @@ internal sealed class MainForm : Form
 
 
 
+    private SafetyGateResult EvaluateControlSafety(
+        HardwareIdentity hardware,
+        SystemState state,
+        TelemetrySnapshot? snapshot,
+        DateTimeOffset now,
+        bool fanWritePathPresent = false)
+    {
+        var raw = SafetyGate.Evaluate(
+            hardware,
+            state,
+            snapshot,
+            now,
+            fanWritePathPresent);
+
+        return _thermalEmergencyConfirmation.Apply(
+            hardware,
+            snapshot,
+            raw);
+    }
+
+    private SafetyGateResult EvaluateDisplaySafety(
+        HardwareIdentity hardware,
+        SystemState state,
+        TelemetrySnapshot? snapshot,
+        DateTimeOffset now,
+        bool fanWritePathPresent = false)
+    {
+        var raw = SafetyGate.EvaluateForDisplay(
+            hardware,
+            state,
+            snapshot,
+            now,
+            fanWritePathPresent);
+
+        return _thermalEmergencyConfirmation.Preview(
+            hardware,
+            snapshot,
+            raw);
+    }
+
     private async Task EnforceLatestFanSafetyAsync(string reason)
     {
-        var result = SafetyGate.Evaluate(
+        var result = EvaluateControlSafety(
             _hardwareIdentity,
             _worker.StateMachine.State,
             _lastSnapshot,
@@ -2690,7 +2731,7 @@ internal sealed class MainForm : Form
                 snapshot);
 
             var safety =
-                SafetyGate.Evaluate(
+                EvaluateControlSafety(
                     _hardwareIdentity,
                     _worker.StateMachine.State,
                     snapshot,
@@ -2781,7 +2822,7 @@ internal sealed class MainForm : Form
                 snapshot);
 
             var safety =
-                SafetyGate.Evaluate(
+                EvaluateControlSafety(
                     _hardwareIdentity,
                     _worker.StateMachine.State,
                     snapshot,
@@ -2904,7 +2945,7 @@ internal sealed class MainForm : Form
 
             EnsureSuspendHardwareTestLightLoad(snapshot);
 
-            var safety = SafetyGate.Evaluate(
+            var safety = EvaluateControlSafety(
                 _hardwareIdentity,
                 _worker.StateMachine.State,
                 snapshot,
@@ -2942,7 +2983,7 @@ internal sealed class MainForm : Form
             var latest = _lastSnapshot ?? snapshot;
             EnsureSuspendHardwareTestLightLoad(latest);
 
-            var commandSafety = SafetyGate.Evaluate(
+            var commandSafety = EvaluateControlSafety(
                 _hardwareIdentity,
                 _worker.StateMachine.State,
                 latest,
@@ -3039,7 +3080,7 @@ internal sealed class MainForm : Form
 
             EnsureSuspendHardwareTestLightLoad(snapshot);
 
-            var safety = SafetyGate.Evaluate(
+            var safety = EvaluateControlSafety(
                 _hardwareIdentity,
                 _worker.StateMachine.State,
                 snapshot,
@@ -3077,7 +3118,7 @@ internal sealed class MainForm : Form
             var latest = _lastSnapshot ?? snapshot;
             EnsureSuspendHardwareTestLightLoad(latest);
 
-            var commandSafety = SafetyGate.Evaluate(
+            var commandSafety = EvaluateControlSafety(
                 _hardwareIdentity,
                 _worker.StateMachine.State,
                 latest,
@@ -3175,7 +3216,7 @@ internal sealed class MainForm : Form
 
             EnsureSuspendHardwareTestLightLoad(snapshot);
 
-            var safety = SafetyGate.Evaluate(
+            var safety = EvaluateControlSafety(
                 _hardwareIdentity,
                 _worker.StateMachine.State,
                 snapshot,
@@ -3213,7 +3254,7 @@ internal sealed class MainForm : Form
             var latest = _lastSnapshot ?? snapshot;
             EnsureSuspendHardwareTestLightLoad(latest);
 
-            var commandSafety = SafetyGate.Evaluate(
+            var commandSafety = EvaluateControlSafety(
                 _hardwareIdentity,
                 _worker.StateMachine.State,
                 latest,
@@ -3311,7 +3352,7 @@ internal sealed class MainForm : Form
 
             EnsureSuspendHardwareTestLightLoad(snapshot);
 
-            var safety = SafetyGate.Evaluate(
+            var safety = EvaluateControlSafety(
                 _hardwareIdentity,
                 _worker.StateMachine.State,
                 snapshot,
@@ -3349,7 +3390,7 @@ internal sealed class MainForm : Form
             var latest = _lastSnapshot ?? snapshot;
             EnsureSuspendHardwareTestLightLoad(latest);
 
-            var commandSafety = SafetyGate.Evaluate(
+            var commandSafety = EvaluateControlSafety(
                 _hardwareIdentity,
                 _worker.StateMachine.State,
                 latest,
@@ -3450,7 +3491,7 @@ internal sealed class MainForm : Form
 
                 EnsureSuspendHardwareTestLightLoad(snapshot);
 
-                var safety = SafetyGate.Evaluate(
+                var safety = EvaluateControlSafety(
                     _hardwareIdentity,
                     _worker.StateMachine.State,
                     snapshot,
@@ -3488,7 +3529,7 @@ internal sealed class MainForm : Form
                 var latest = _lastSnapshot ?? snapshot;
                 EnsureSuspendHardwareTestLightLoad(latest);
 
-                var commandSafety = SafetyGate.Evaluate(
+                var commandSafety = EvaluateControlSafety(
                     _hardwareIdentity,
                     _worker.StateMachine.State,
                     latest,
@@ -3860,7 +3901,7 @@ internal sealed class MainForm : Form
                 lastObservedTimestamp = snapshot.Timestamp;
 
                 var displaySafety =
-                    SafetyGate.EvaluateForDisplay(
+                    EvaluateDisplaySafety(
                         _hardwareIdentity,
                         _worker.StateMachine.State,
                         snapshot,
@@ -3922,7 +3963,7 @@ internal sealed class MainForm : Form
 
             EnsureSuspendHardwareTestLightLoad(snapshot);
 
-            var safety = SafetyGate.Evaluate(
+            var safety = EvaluateControlSafety(
                 _hardwareIdentity,
                 _worker.StateMachine.State,
                 snapshot,
@@ -3986,7 +4027,7 @@ internal sealed class MainForm : Form
 
             EnsureSuspendHardwareTestLightLoad(snapshot);
 
-            var safety = SafetyGate.Evaluate(
+            var safety = EvaluateControlSafety(
                 _hardwareIdentity,
                 _worker.StateMachine.State,
                 snapshot,
@@ -4261,7 +4302,7 @@ internal sealed class MainForm : Form
 
     private void UpdateSafetyStatus()
     {
-        var result = SafetyGate.EvaluateForDisplay(
+        var result = EvaluateDisplaySafety(
             _hardwareIdentity,
             _worker.StateMachine.State,
             _lastSnapshot,

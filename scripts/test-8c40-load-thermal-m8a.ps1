@@ -93,7 +93,8 @@ Write-Host '  GPU: load >=35% AND power >=20 W.'
 Write-Host '  CPU: load >=5% OR package power >=15 W.'
 Write-Host '  Every sample: complete/fresh SafetyGate-ready telemetry, AC/battery sane.'
 Write-Host '  Firmware ownership remains FF/FF; guards remain 00/00.'
-Write-Host '  Immediate fail-closed at effective CPU >=90 C or GPU >=82 C.'
+Write-Host '  CPU >=95 C requires 5 unique consecutive readings before thermal handoff.'
+Write-Host '  CPU >=99 C is an immediate hard abort; GPU >=82 C remains immediate.'
 Write-Host ''
 Write-Host 'Start a normal game or 3D workload now and reach active gameplay/rendering.' -ForegroundColor Yellow
 Write-Host 'Do not start a synthetic stress test and do not change fan-control software.' -ForegroundColor Yellow
@@ -126,25 +127,47 @@ if(-not (Test-Path $resultPath)){
 }
 
 $result=Get-Content $resultPath -Raw | ConvertFrom-Json
+$qualificationPassed=
+    $qualificationExit -eq 0 -and
+    [string]$result.result -ceq 'PASS'
 
-if($qualificationExit -ne 0 -or
-   [string]$result.result -cne 'PASS'){
-    Write-Host ("M8A durable evidence: {0}" -f $resultPath) -ForegroundColor Yellow
+Write-Host ''
+Write-Host 'Step 4: independent no-mutation closure proof (runs on PASS or FAIL_CLOSED)...' -ForegroundColor Cyan
 
-    throw ("M8A representative-load admission did not PASS. exit={0} result={1} reason={2}" -f
+$closureFailure=$null
+
+try {
+    if(Test-Path $journalPath){
+        Get-Content $journalPath
+        throw 'M8A unexpectedly created or retained a watchdog journal.'
+    }
+
+    Assert-M4ServiceBaseline
+    Assert-FinalStableFirmwareOwnership
+
+    Write-Host 'M8A closure proof: PASS (journal absent / M4 baseline unchanged / FF/FF twice).' -ForegroundColor Green
+}
+catch {
+    $closureFailure=$_.Exception.Message
+    Write-Host ("M8A closure proof: FAIL - {0}" -f $closureFailure) -ForegroundColor Red
+}
+
+Write-Host ("M8A durable evidence: {0}" -f $resultPath) -ForegroundColor Yellow
+
+if(-not $qualificationPassed){
+    if($closureFailure){
+        throw ("M8A representative-load admission FAIL_CLOSED and closure proof failed. exit={0} result={1} reason={2} closure={3}" -f
+            $qualificationExit,$result.result,$result.failureReason,$closureFailure)
+    }
+
+    throw ("M8A representative-load admission did not PASS. exit={0} result={1} reason={2}. Final no-mutation closure proof PASSED." -f
         $qualificationExit,$result.result,$result.failureReason)
 }
 
-Write-Host ''
-Write-Host 'Step 4: independent no-mutation closure proof...' -ForegroundColor Cyan
-
-if(Test-Path $journalPath){
-    Get-Content $journalPath
-    throw 'M8A unexpectedly created or retained a watchdog journal.'
+if($closureFailure){
+    throw ("M8A qualification result was PASS but final no-mutation closure proof failed: {0}" -f
+        $closureFailure)
 }
-
-Assert-M4ServiceBaseline
-Assert-FinalStableFirmwareOwnership
 
 Write-Host ''
 Write-Host 'PASS: HP 8C40 M8A representative-load admission completed NO-WRITE.' -ForegroundColor Green

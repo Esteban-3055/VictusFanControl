@@ -243,6 +243,13 @@ public static class SafetyGateSelfTest
         }
 
         output.WriteLine();
+
+        if (Hp8C40ThermalEmergencyConfirmationSelfTest.Run(output) != 0)
+        {
+            failed++;
+        }
+
+        output.WriteLine();
         output.WriteLine(failed == 0
             ? "SafetyGate self-test: PASS"
             : $"SafetyGate self-test: FAIL ({failed} case(s))");

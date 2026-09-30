@@ -28,6 +28,10 @@ Assert-Contains $script '--8c40-m8a-representative-load' 'M8A script must invoke
 Assert-Contains $script '--8c40-m8a-result-path' 'M8A must persist machine-readable evidence.'
 Assert-Contains $script 'Assert-FinalStableFirmwareOwnership' 'M8A must independently prove final FF/FF twice.'
 Assert-Contains $script 'M8B remains blocked' 'M8A PASS must not authorize M8B automatically.'
+Assert-Contains $script 'runs on PASS or FAIL_CLOSED' 'M8A closure proof must execute after both PASS and FAIL_CLOSED.'
+Assert-Contains $script 'Final no-mutation closure proof PASSED' 'M8A FAIL_CLOSED must retain explicit closure evidence.'
+Assert-Contains $script 'CPU >=95 C requires 5 unique consecutive readings' 'M8A script must expose the 5-reading CPU confirmation contract.'
+Assert-Contains $script 'CPU >=99 C is an immediate hard abort' 'M8A script must expose the immediate CPU hard boundary.'
 
 Assert-NotContains $source '_ = EvaluateAndValidateSnapshot(' 'M8A warm-up sample must not require complete differential telemetry.'
 
@@ -59,9 +63,14 @@ foreach($required in @(
     'MinimumGpuPowerW = 20.0',
     'MinimumCpuLoadPercent = 5.0',
     'MinimumCpuPackagePowerW = 15.0',
-    'CpuPhysicalAbortC = 90.0',
+    'CpuHardAbortC = Hp8C40ThermalEmergencyConfirmation.CpuHardEmergencyC',
     'GpuPhysicalAbortC = 82.0',
-    'EnsurePhysicalAbortLimits(warmup);',
+    'Hp8C40ThermalEmergencyConfirmation',
+    'CPU95=',
+    'schemaVersion = 2',
+    'cpuSamplesAtOrAbove95C',
+    'cpuMaximumConsecutive95C',
+    'EnsureHardPhysicalAbortLimits(warmup);',
     'telemetry.ResetHealthWindow();',
     'EcEvidenceIntervalSamples = 5',
     'MaximumUnexpectedEcConfirmationReads = 3',
@@ -78,6 +87,9 @@ foreach($required in @(
 )){
     Assert-Contains $source $required ("M8A source invariant missing: {0}" -f $required)
 }
+
+Assert-NotContains $source 'CpuPhysicalAbortC = 90.0' 'M8A must not restore the obsolete one-sample 90 C CPU abort.'
+Assert-NotContains $script 'effective CPU >=90 C' 'M8A operator contract must not claim a one-sample 90 C CPU abort.'
 
 foreach($forbidden in @(
     'SetFanLevel(',
@@ -108,5 +120,7 @@ Assert-Contains $doc 'GPU load >= 35%' 'M8A GPU-load threshold must be versioned
 Assert-Contains $doc 'GPU power >= 20 W' 'M8A GPU-power threshold must be versioned in docs.'
 Assert-Contains $doc 'CPU load >= 5%' 'M8A CPU-load threshold must be versioned in docs.'
 Assert-Contains $doc 'CPU package power >= 15 W' 'M8A CPU-power threshold must be versioned in docs.'
+Assert-Contains $doc 'five consecutive' 'M8A CPU high-temperature confirmation count must be versioned in docs.'
+Assert-Contains $doc '99 C' 'M8A immediate CPU hard boundary must be versioned in docs.'
 
 Write-Host 'HP 8C40 M8A representative-load no-write harness invariant self-test: PASS' -ForegroundColor Green

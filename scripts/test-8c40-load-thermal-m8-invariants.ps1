@@ -8,6 +8,8 @@ $safetyPath=Join-Path $repoRoot 'src\VictusFanControl\Safety\SafetyGate.cs'
 $coordinatorPath=Join-Path $repoRoot 'src\VictusFanControl\Control\FanControlCoordinator.cs'
 $backendPath=Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs'
 $factoryPath=Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\HpFanControlBackendFactory.cs'
+$thermalConfirmationPath=Join-Path $repoRoot 'src\VictusFanControl\Safety\Hp8C40ThermalEmergencyConfirmation.cs'
+$mainFormPath=Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs'
 
 $profile=Get-Content $profilePath -Raw | ConvertFrom-Json
 $spec=Get-Content $specPath -Raw
@@ -16,6 +18,8 @@ $safety=Get-Content $safetyPath -Raw
 $coordinator=Get-Content $coordinatorPath -Raw
 $backend=Get-Content $backendPath -Raw
 $factory=Get-Content $factoryPath -Raw
+$thermalConfirmation=Get-Content $thermalConfirmationPath -Raw
+$mainForm=Get-Content $mainFormPath -Raw
 
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
     if($Text.IndexOf($Needle,[StringComparison]::Ordinal) -lt 0){throw $Message}
@@ -65,6 +69,16 @@ Assert-Contains $safety 'effectiveCpuTemperature.Value >= CpuEmergencyC' 'M8 CPU
 Assert-Contains $safety 'snapshot!.GpuTemperatureC!.Value >= GpuEmergencyC' 'M8 GPU emergency decision path is missing.'
 Assert-Contains $safety 'ThermalEmergency: thermalEmergency' 'M8 requires the real SafetyGate ThermalEmergency result.'
 
+# Exact HP 8C40 CPU transient confirmation sits above the stateless raw SafetyGate.
+Assert-Contains $thermalConfirmation 'RequiredConsecutiveCpuSamples = 5' 'M8 CPU confirmation must require five unique consecutive samples.'
+Assert-Contains $thermalConfirmation 'CpuHardEmergencyC = 99.0' 'M8 HP 8C40 CPU hard boundary must remain 99 C.'
+Assert-Contains $thermalConfirmation 'snapshot.Timestamp > _lastObservedSnapshotTimestamp.Value' 'M8 CPU confirmation must count unique newer telemetry only.'
+Assert-Contains $thermalConfirmation 'MaximumConfirmationSampleGap' 'M8 CPU confirmation must not bridge lifecycle/telemetry gaps.'
+Assert-Contains $thermalConfirmation 'gpuTemperature.Value >= SafetyGate.GpuEmergencyC' 'M8 GPU emergency must remain immediate.'
+Assert-Contains $thermalConfirmation 'effectiveCpu.Value >= CpuHardEmergencyC' 'M8 CPU hard emergency must remain immediate.'
+Assert-Contains $mainForm '_thermalEmergencyConfirmation.Apply(' 'Production control safety evaluation must apply HP 8C40 temporal confirmation.'
+Assert-Contains $mainForm '_thermalEmergencyConfirmation.Preview(' 'Display safety must preview without consuming confirmation samples.'
+
 # Coordinator preemption/restore machinery must remain present.
 Assert-Contains $coordinator 'if (!safety.CustomControlPermitted)' 'M8 requires unsafe SafetyGate enforcement.'
 Assert-Contains $coordinator 'CancelActiveCommand();' 'M8 requires in-flight command preemption.'
@@ -90,7 +104,8 @@ foreach($required in @(
     'M8C - physical preemption path with qualification-only thermal injection',
     'CPU emergency: effective CPU >= 95 C',
     'GPU emergency: GPU >= 87 C',
-    '90 C CPU effective',
+    'five consecutive',
+    '99 C',
     '82 C GPU',
     'fan-stop / level 0 is forbidden',
     'asymmetric CPU/GPU commands remain unqualified',

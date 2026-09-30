@@ -24,7 +24,7 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
     public const double MinimumGpuPowerW = 20.0;
     public const double MinimumCpuLoadPercent = 5.0;
     public const double MinimumCpuPackagePowerW = 15.0;
-    public const double CpuPhysicalAbortC = 90.0;
+    public const double CpuHardAbortC = Hp8C40ThermalEmergencyConfirmation.CpuHardEmergencyC;
     public const double GpuPhysicalAbortC = 82.0;
     public const int EcEvidenceIntervalSamples = 5;
     public const int MaximumUnexpectedEcConfirmationReads = 3;
@@ -119,6 +119,7 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
         var samples = new List<SampleEvidence>(QualificationSamples);
         var ecChecks = new List<EcEvidence>();
         var representativeFlags = new List<bool>(QualificationSamples);
+        var thermalConfirmation = new Hp8C40ThermalEmergencyConfirmation();
 
         try
         {
@@ -170,9 +171,9 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
             // The first telemetry sample primes differential CPU power/load
             // counters and may therefore be intentionally incomplete. It is
             // excluded from M8A load qualification, but real temperatures still
-            // retain the conservative physical abort boundary.
+            // retain the immediate hard CPU/GPU abort boundary.
             var warmup = telemetry.ReadSnapshot();
-            EnsurePhysicalAbortLimits(warmup);
+            EnsureHardPhysicalAbortLimits(warmup);
 
             telemetry.ResetHealthWindow();
 
@@ -196,18 +197,23 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
                 var safety = EvaluateAndValidateSnapshot(
                     hardware,
                     snapshot,
-                    previousTimestamp);
+                    previousTimestamp,
+                    thermalConfirmation);
 
                 previousTimestamp = snapshot.Timestamp;
 
                 var representative = IsRepresentativeLoad(snapshot);
                 representativeFlags.Add(representative);
 
+                var effectiveCpu = snapshot.CpuControlTemperatureC!.Value;
+                var cpuHigh =
+                    effectiveCpu >= SafetyGate.CpuEmergencyC;
+
                 var evidence = new SampleEvidence(
                     Index: sampleIndex,
                     TimestampUtc: snapshot.Timestamp,
                     Representative: representative,
-                    CpuEffectiveC: snapshot.CpuControlTemperatureC!.Value,
+                    CpuEffectiveC: effectiveCpu,
                     CpuPackageC: snapshot.CpuTemperatureC!.Value,
                     CpuCoreMaxC: snapshot.CpuCoreMaxTemperatureC!.Value,
                     CpuPowerW: snapshot.CpuPackagePowerW!.Value,
@@ -217,6 +223,10 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
                     GpuLoadPercent: snapshot.GpuLoadPercent!.Value,
                     CpuFanRpm: snapshot.CpuFanRpm!.Value,
                     GpuFanRpm: snapshot.GpuFanRpm!.Value,
+                    CpuAtOrAbove95C: cpuHigh,
+                    CpuHighStreak: thermalConfirmation.CurrentCpuConsecutiveHighSamples,
+                    CpuHardEmergency:
+                        effectiveCpu >= CpuHardAbortC,
                     SafetyPreconditionsReady: safety.PreconditionsReady,
                     GpuIdentityValid: safety.TelemetryDeviceIdentityValid,
                     ThermalEmergency: safety.ThermalEmergency,
@@ -229,12 +239,46 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
                     $"M8A_SAMPLE {sampleIndex}/{QualificationSamples} " +
                     $"representative={representative} " +
                     $"CPU={evidence.CpuEffectiveC:0.0}C " +
+                    $"pkg={evidence.CpuPackageC:0.0}C " +
+                    $"coreMax={evidence.CpuCoreMaxC:0.0}C " +
                     $"{evidence.CpuPowerW:0.0}W " +
                     $"{evidence.CpuLoadPercent:0.0}% " +
+                    $"CPU95={evidence.CpuHighStreak}/{Hp8C40ThermalEmergencyConfirmation.RequiredConsecutiveCpuSamples} " +
                     $"GPU={evidence.GpuTemperatureC:0.0}C " +
                     $"{evidence.GpuPowerW:0.0}W " +
                     $"{evidence.GpuLoadPercent:0.0}% " +
-                    $"FAN={evidence.CpuFanRpm:0}/{evidence.GpuFanRpm:0}rpm");
+                    $"FAN={evidence.CpuFanRpm:0}/{evidence.GpuFanRpm:0}rpm " +
+                    $"thermalEmergency={evidence.ThermalEmergency}");
+
+                if (effectiveCpu >= CpuHardAbortC)
+                {
+                    throw new InvalidOperationException(
+                        $"M8A immediate CPU hard abort: {effectiveCpu:0.0} C >= " +
+                        $"{CpuHardAbortC:0} C.");
+                }
+
+                if (evidence.GpuTemperatureC >= GpuPhysicalAbortC)
+                {
+                    throw new InvalidOperationException(
+                        $"M8A physical GPU abort: {evidence.GpuTemperatureC:0.0} C >= " +
+                        $"{GpuPhysicalAbortC:0} C.");
+                }
+
+                if (safety.ThermalEmergency)
+                {
+                    throw new InvalidOperationException(
+                        "M8A confirmed thermal emergency: " +
+                        string.Join(" | ", safety.Reasons));
+                }
+
+                if (!safety.PreconditionsReady ||
+                    !safety.TelemetryDeviceIdentityValid)
+                {
+                    throw new InvalidOperationException(
+                        "M8A production safety path refused read-only " +
+                        "representative-load telemetry: " +
+                        string.Join(" | ", safety.Reasons));
+                }
 
                 if (sampleIndex % EcEvidenceIntervalSamples == 0)
                 {
@@ -310,7 +354,7 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
 
         var evidenceObject = new
         {
-            schemaVersion = 1,
+            schemaVersion = 2,
             gate = "M8A",
             result,
             failureReason,
@@ -336,8 +380,13 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
                     "cpuLoad >= minimumCpuLoadPercent OR cpuPackagePower >= minimumCpuPackagePowerW",
                 gpuActivityRule =
                     "gpuLoad >= minimumGpuLoadPercent AND gpuPower >= minimumGpuPowerW",
-                cpuPhysicalAbortC = CpuPhysicalAbortC,
+                cpuRawThresholdC = SafetyGate.CpuEmergencyC,
+                cpuRequiredConsecutiveHighSamples =
+                    Hp8C40ThermalEmergencyConfirmation.RequiredConsecutiveCpuSamples,
+                cpuHardAbortC = CpuHardAbortC,
                 gpuPhysicalAbortC = GpuPhysicalAbortC,
+                thermalPolicy =
+                    "CPU 95..98.x C requires 5 unique consecutive fresh samples; CPU >=99 C immediate; GPU >=82 C physical M8A abort",
                 maximumTelemetryAgeSeconds = MaximumTelemetryAge.TotalSeconds,
                 maximumInterSampleGapSeconds = MaximumInterSampleGap.TotalSeconds,
                 ecEvidenceIntervalSamples = EcEvidenceIntervalSamples
@@ -348,6 +397,23 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
                 maximumConsecutiveRepresentative =
                     windowSummary.MaximumConsecutiveRepresentative,
                 passed = windowSummary.Passed
+            },
+            thermalCharacterization = new
+            {
+                cpuMaximumEffectiveC =
+                    samples.Count == 0 ? (double?)null : samples.Max(sample => sample.CpuEffectiveC),
+                cpuMaximumPackageC =
+                    samples.Count == 0 ? (double?)null : samples.Max(sample => sample.CpuPackageC),
+                cpuMaximumCoreC =
+                    samples.Count == 0 ? (double?)null : samples.Max(sample => sample.CpuCoreMaxC),
+                gpuMaximumC =
+                    samples.Count == 0 ? (double?)null : samples.Max(sample => sample.GpuTemperatureC),
+                cpuSamplesAtOrAbove95C =
+                    samples.Count(sample => sample.CpuAtOrAbove95C),
+                cpuMaximumConsecutive95C =
+                    samples.Count == 0 ? 0 : samples.Max(sample => sample.CpuHighStreak),
+                cpuHardEmergencySamples =
+                    samples.Count(sample => sample.CpuHardEmergency)
             },
             acceptedSamples = samples.Count,
             samples,
@@ -447,7 +513,8 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
     private static SafetyGateResult EvaluateAndValidateSnapshot(
         HardwareIdentity hardware,
         TelemetrySnapshot snapshot,
-        DateTimeOffset? previousTimestamp)
+        DateTimeOffset? previousTimestamp,
+        Hp8C40ThermalEmergencyConfirmation thermalConfirmation)
     {
         var now = DateTimeOffset.UtcNow;
         var age = now - snapshot.Timestamp;
@@ -499,46 +566,37 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
                 "M8A effective CPU safety aggregate is unavailable.");
         }
 
-        EnsurePhysicalAbortLimits(snapshot);
-
-        var safety = SafetyGate.Evaluate(
+        var rawSafety = SafetyGate.Evaluate(
             hardware,
             SystemState.Healthy,
             snapshot,
             now,
             fanWritePathPresent: false);
 
-        if (!safety.PreconditionsReady ||
-            !safety.TelemetryDeviceIdentityValid ||
-            safety.ThermalEmergency)
-        {
-            throw new InvalidOperationException(
-                "M8A production SafetyGate refused read-only " +
-                "representative-load telemetry: " +
-                string.Join(" | ", safety.Reasons));
-        }
-
-        return safety;
+        return thermalConfirmation.Apply(
+            hardware,
+            snapshot,
+            rawSafety);
     }
 
-    private static void EnsurePhysicalAbortLimits(
+    private static void EnsureHardPhysicalAbortLimits(
         TelemetrySnapshot snapshot)
     {
         var effectiveCpu = snapshot.CpuControlTemperatureC;
 
         if (effectiveCpu.HasValue &&
-            effectiveCpu.Value >= CpuPhysicalAbortC)
+            effectiveCpu.Value >= CpuHardAbortC)
         {
             throw new InvalidOperationException(
-                $"M8A physical CPU abort: {effectiveCpu.Value:0.0} C >= " +
-                $"{CpuPhysicalAbortC:0} C.");
+                $"M8A warm-up CPU hard abort: {effectiveCpu.Value:0.0} C >= " +
+                $"{CpuHardAbortC:0} C.");
         }
 
         if (snapshot.GpuTemperatureC.HasValue &&
             snapshot.GpuTemperatureC.Value >= GpuPhysicalAbortC)
         {
             throw new InvalidOperationException(
-                $"M8A physical GPU abort: {snapshot.GpuTemperatureC.Value:0.0} C >= " +
+                $"M8A warm-up GPU physical abort: {snapshot.GpuTemperatureC.Value:0.0} C >= " +
                 $"{GpuPhysicalAbortC:0} C.");
         }
     }
@@ -750,6 +808,9 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
         double GpuLoadPercent,
         double CpuFanRpm,
         double GpuFanRpm,
+        bool CpuAtOrAbove95C,
+        int CpuHighStreak,
+        bool CpuHardEmergency,
         bool SafetyPreconditionsReady,
         bool GpuIdentityValid,
         bool ThermalEmergency,

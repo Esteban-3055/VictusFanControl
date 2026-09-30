@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-code-ci-pass-physical-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-attempt1-failclosed-thermal-confirmation-code-prepared-ci-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1907,17 +1907,17 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_CODE_CI_PASS_PHYSICAL_PENDING_M8B_M8C_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_ATTEMPT1_FAIL_CLOSED_THERMAL_CONFIRMATION_CODE_PREPARED_CI_PENDING_M8B_M8C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
-    "representativeLoadGate": "M8A code/CI PASS / physical pending",
+    "representativeLoadGate": "M8A attempt 1 FAIL_CLOSED / temporal CPU confirmation hardening code prepared / CI pending / physical retry pending",
     "watchdogBackedLoadGate": "M8B pending",
     "thermalPreemptionGate": "M8C pending",
     "productionRaceAudit": "pending",
     "realOvertemperatureRequired": false,
     "qualificationFanLevel": "50/50 equal-only",
-    "physicalAbortLimits": "effective CPU 90 C / GPU 82 C",
+    "physicalAbortLimits": "M8A: CPU raw threshold 95 C requires 5 unique consecutive fresh samples; CPU >=99 C immediate hard abort; GPU >=82 C immediate physical abort. M8B/M8C write-capable limits remain blocked pending M8A closure.",
     "noWritePreflightScript": "scripts/test-8c40-load-thermal-m8-preflight.ps1",
     "physicalHarnessScript": null,
     "preparationCi": {
@@ -2009,7 +2009,7 @@
     "representativeLoadHarnessScript": "scripts/test-8c40-load-thermal-m8a.ps1",
     "representativeLoadInvariantScript": "scripts/test-8c40-load-thermal-m8a-invariants.ps1",
     "m8a": {
-      "status": "CODE_CI_PASS_PHYSICAL_PENDING",
+      "status": "ATTEMPT1_FAIL_CLOSED_THERMAL_CONFIRMATION_CODE_PREPARED_CI_PENDING_RETRY_PENDING",
       "physicalPassed": false,
       "writeCapable": false,
       "cliMode": "--8c40-m8a-representative-load",
@@ -2022,11 +2022,13 @@
         "minimumConsecutiveRepresentativeSamples": 10,
         "gpu": "load >= 35% AND power >= 20 W",
         "cpu": "load >= 5% OR package power >= 15 W",
-        "cpuAbortC": 90,
         "gpuAbortC": 82,
         "telemetry": "every sample complete/fresh and SafetyGate PreconditionsReady; exact GPU identity",
         "power": "AC online; battery present >=20%",
-        "ownership": "FF/FF throughout; guards 00/00; bounded 3-read/25ms confirmation for isolated unexpected EC evidence"
+        "ownership": "FF/FF throughout; guards 00/00; bounded 3-read/25ms confirmation for isolated unexpected EC evidence",
+        "cpuThermalConfirmation": "5 unique consecutive fresh samples >=95 C",
+        "cpuHardAbortC": 99,
+        "thermalEvidence": "persist package/coreMax/effective temperatures, streak, hard-boundary flag and full sample before thermal FAIL_CLOSED"
       },
       "m8bAuthorized": false,
       "preparationCi": {
@@ -2050,6 +2052,38 @@
         "hpBackendSelfTest": true,
         "physicalExecution": false,
         "note": "Run 702 failed closed at PowerShell syntax after adding the warm-up invariant; no physical execution occurred. Run 703 passed after syntax correction. The warm-up path now primes differential counters without requiring completeness while retaining CPU/GPU physical abort checks."
+      },
+      "closureProof": "always runs after PASS or FAIL_CLOSED: journal absent, M4 Manual/stopped, two independent FF/FF",
+      "physicalAttempts": [
+        {
+          "attempt": 1,
+          "date": "2026-09-29",
+          "evidenceHead": "cc5d5a97cb36d65c02a97663c3294f4f5163b6ba",
+          "result": "FAIL_CLOSED_NO_WRITE",
+          "representativeLoadObserved": true,
+          "firstRepresentativeSample": "CPU effective 77 C, 38.4 W, 26.6%; GPU 73 C, 59.1 W, 85%; fans 3871/3636 RPM",
+          "failure": "next CPU effective sample reached 96 C and old one-sample 90 C physical abort fired",
+          "finalIndependentClosureExecuted": false,
+          "interpretation": "safety mechanism worked, but the one-sample 90 C M8A abort cannot distinguish short i7-13700H turbo spikes from sustained thermal danger; retry requires versioned temporal confirmation hardening",
+          "fanWriteAttempted": false,
+          "firmwareRestoreAttempted": false,
+          "watchdogLeaseAttempted": false
+        }
+      ],
+      "thermalConfirmationHardening": {
+        "status": "CODE_PREPARED_CI_PENDING",
+        "rawCpuThresholdC": 95,
+        "requiredConsecutiveUniqueSamples": 5,
+        "cpuHardImmediateC": 99,
+        "gpuRawEmergencyC": 87,
+        "gpuM8APhysicalAbortC": 82,
+        "duplicateTimestampCounts": false,
+        "maximumInterHighSampleGapSeconds": 3,
+        "targetScope": "exact HP-8C40-9D0R1LA-F18 only",
+        "safetyGateRawThresholdUnchanged": true,
+        "automaticPolicyEnabled": false,
+        "watchdogRecoveryValidated": false,
+        "rationale": "Intel specifies i7-13700H Tjunction / max operating temperature as 100 C; qualification keeps a 1 C immediate hard margin while requiring persistence only for 95..98.x C CPU spikes."
       }
     }
   }
