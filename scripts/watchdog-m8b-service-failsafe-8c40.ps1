@@ -22,17 +22,72 @@ function Log-Line {
     Add-Content -Path $LogPath -Value ("{0:O}  {1}" -f (Get-Date), $Text)
 }
 
-function Test-OwnedPhase {
-    param($Phase)
+function Test-Phase {
+    param(
+        $Phase,
+        [string]$Name,
+        [int]$Numeric
+    )
 
     if ($null -eq $Phase) { return $false }
 
     if ($Phase -is [string]) {
-        return ($Phase -ceq 'Owned' -or $Phase -ceq '2')
+        return ($Phase -ceq $Name -or $Phase -ceq [string]$Numeric)
     }
 
-    try { return ([int]$Phase -eq 2) }
+    try { return ([int]$Phase -eq $Numeric) }
     catch { return $false }
+}
+
+function Get-M8BQualifiedLeasePhase {
+    param($Journal)
+
+    if ([int]$Journal.SchemaVersion -ne 2 -or
+        $Journal.TargetProfileId -cne 'HP-8C40-9D0R1LA-F18') {
+        return $null
+    }
+
+    if (Test-Phase -Phase $Journal.Phase -Name 'WriteArmed' -Numeric 1) {
+        if ($null -eq $Journal.PreviousOwned -and
+            $null -eq $Journal.Owned -and
+            $null -ne $Journal.Pending -and
+            [int]$Journal.Pending.Cpu -eq 50 -and
+            [int]$Journal.Pending.Gpu -eq 50) {
+            return 'WRITE_ARMED'
+        }
+
+        return $null
+    }
+
+    if (Test-Phase -Phase $Journal.Phase -Name 'Owned' -Numeric 2) {
+        if ($null -ne $Journal.Owned -and
+            [int]$Journal.Owned.Cpu -eq 50 -and
+            [int]$Journal.Owned.Gpu -eq 50) {
+            return 'OWNED'
+        }
+
+        return $null
+    }
+
+    if (Test-Phase -Phase $Journal.Phase -Name 'Restoring' -Numeric 3) {
+        $previousMatches =
+            $null -ne $Journal.PreviousOwned -and
+            [int]$Journal.PreviousOwned.Cpu -eq 50 -and
+            [int]$Journal.PreviousOwned.Gpu -eq 50
+
+        $ownedMatches =
+            $null -ne $Journal.Owned -and
+            [int]$Journal.Owned.Cpu -eq 50 -and
+            [int]$Journal.Owned.Gpu -eq 50
+
+        if ($previousMatches -or $ownedMatches) {
+            return 'RESTORING'
+        }
+
+        return $null
+    }
+
+    return $null
 }
 
 function Get-ServiceState {
@@ -126,12 +181,10 @@ try {
 
     $journal = Get-Content $journalPath -Raw | ConvertFrom-Json
 
-    if ([int]$journal.SchemaVersion -ne 2 -or
-        $journal.TargetProfileId -cne 'HP-8C40-9D0R1LA-F18' -or
-        -not (Test-OwnedPhase -Phase $journal.Phase) -or
-        [int]$journal.Owned.Cpu -ne 50 -or
-        [int]$journal.Owned.Gpu -ne 50) {
-        Log-Line 'M8B FAILSAFE REFUSED: retained journal is not exact-target durable OWNED 50/50.'
+    $qualifiedPhase = Get-M8BQualifiedLeasePhase -Journal $journal
+
+    if ($null -eq $qualifiedPhase) {
+        Log-Line 'M8B FAILSAFE REFUSED: retained journal is not an exact-target WRITE_ARMED pending 50/50, OWNED 50/50, or RESTORING 50/50 lease.'
         exit 2
     }
 
@@ -143,8 +196,8 @@ try {
         exit 3
     }
 
-    Log-Line ("M8B FAILSAFE TAKEOVER: exact-target OWNED 50/50 remains after delay; controller PID={0} startTicks={1}." -f
-        $ownerPid,$ownerStartTicks)
+    Log-Line ("M8B FAILSAFE TAKEOVER: exact-target {0} 50/50 lease remains after delay; controller PID={1} startTicks={2}." -f
+        $qualifiedPhase,$ownerPid,$ownerStartTicks)
 
     $service = Get-ServiceState
     if (-not $service) {
@@ -171,15 +224,15 @@ try {
     if ($service -and
         $service.State -eq 'Running' -and
         [int]$service.ProcessId -gt 0) {
-        Log-Line ("M8B FAILSAFE SERVICE-LIVE: waiting for watchdog PID={0} owner-loss recovery." -f
-            [int]$service.ProcessId)
+        Log-Line ("M8B FAILSAFE SERVICE-LIVE: waiting for watchdog PID={0} owner-loss/deadline/restore recovery from phase {1}." -f
+            [int]$service.ProcessId,$qualifiedPhase)
 
         if (Wait-JournalGone -Seconds 15) {
-            Log-Line 'M8B FAILSAFE RECOVERED: running watchdog cleared the journal after exact owner loss.'
+            Log-Line 'M8B FAILSAFE RECOVERED: running watchdog cleared the active M8B journal after exact owner loss/recovery.'
             exit 0
         }
 
-        Log-Line 'M8B FAILSAFE SERVICE-RESTART: journal persists after owner death; restarting qualified watchdog.'
+        Log-Line 'M8B FAILSAFE SERVICE-RESTART: active M8B journal persists after owner loss; restarting qualified watchdog.'
         Restart-Service -Name $serviceName -Force
     }
     else {

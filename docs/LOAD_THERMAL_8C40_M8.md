@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B WATCHDOG-BACKED 50/50 HARNESS CODE PREPARED / CI PENDING; M8B PHYSICAL EXECUTION AND M8C REMAIN BLOCKED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B WATCHDOG-BACKED 50/50 HARNESS CODE HARDENED / CI PENDING; M8B PHYSICAL EXECUTION AND M8C REMAIN BLOCKED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -447,6 +447,10 @@ The versioned M8B contract is:
   confirm token `8C40-M8B-LOAD50`;
 - an **independent delayed failsafe** is armed before the write-capable controller is launched;
   any failsafe takeover makes the run safe but invalid as an M8B PASS;
+- the failsafe recognizes exact-target durable **WRITE_ARMED/OWNED/RESTORING** states for this
+  50/50 gate, is bound to the exact controller PID + creation ticks, and never performs direct
+  HP fan I/O itself; if recovery is required it kills only the exact owner and delegates hardware
+  recovery to the already-qualified LocalSystem watchdog;
 - before Custom admission, the controller requires **3 consecutive representative samples**
   within at most 10 samples;
 - the controller contains **exactly one** `ApplyAsync(50,50)` call;

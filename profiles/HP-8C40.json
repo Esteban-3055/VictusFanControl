@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-code-prepared-ci-pending-physical-blocked-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-code-hardened-ci-pending-physical-blocked-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1907,7 +1907,7 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED_M8C_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_CODE_HARDENED_CI_PENDING_PHYSICAL_BLOCKED_M8C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
@@ -2150,7 +2150,7 @@
       }
     },
     "m8b": {
-      "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "status": "CODE_HARDENED_CI_PENDING_PHYSICAL_BLOCKED",
       "physicalPassed": false,
       "physicalExecutionAuthorized": false,
       "writeCapable": true,
@@ -2168,13 +2168,17 @@
         "thermal": "CPU 95..98.x C requires 5 unique consecutive fresh readings; CPU >=99 C immediate; GPU >=82 C immediate M8B qualification abort",
         "ownership": "schema-v2 exact-target OWNED 50/50 bound to exact controller PID + creation ticks; guards 00/00; dual tachs",
         "watchdog": "existing isolated M4 LocalSystem service, exact target/pipe, same PID + creation ticks throughout normal run",
-        "failsafe": "independent delayed process armed before controller; any takeover invalidates PASS",
+        "failsafe": "independent delayed process armed before controller; recognizes exact-target WRITE_ARMED pending 50/50, OWNED 50/50 and RESTORING 50/50 durable phases; kills only exact PID+creation-ticks owner and starts/restarts qualified watchdog if needed; any takeover invalidates PASS",
         "retransmit": "no repeated fan command during supervision; coordinator safety/status checks only",
         "causalChain": "exactly one PREPARE, WRITE_INTENT target 50/50, COMMIT target 50/50, RESTORE_BEGIN and RELEASE ACK for controller in watchdog log",
         "closure": "journal absent, two independent FF/FF, M4 Manual/stopped"
       },
       "preparationCi": {
-        "result": "PENDING"
+        "result": "PENDING_AFTER_FAILSAFE_PHASE_HARDENING",
+        "previousRunNumber": 717,
+        "previousRunId": 36662807855,
+        "previousResult": "PASS",
+        "reviewFinding": "independent failsafe initially recognized only OWNED 50/50; hardened before physical authorization to cover WRITE_ARMED pending 50/50 and RESTORING 50/50 as well"
       },
       "physicalExecutionNote": "BLOCKED until this code/spec commit passes CI and is explicitly reviewed"
     }
