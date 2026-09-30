@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; TELEMETRY-EPOCH/CLOSURE HARDENING CODE/CI PASS; PHYSICAL RETRY AUTHORIZED-PENDING. M8C REMAINS BLOCKED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; TELEMETRY-EPOCH/CLOSURE HARDENING CODE/CI PASS; PHYSICAL RETRY AUTHORIZED-PENDING. M8C SYNTHETIC CODE PREPARED / CI PENDING; M8C PHYSICAL EXECUTION REMAINS BLOCKED BY M8B PHYSICAL PASS.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -211,6 +211,35 @@ For each case PASS requires:
 9. exact controller/watchdog identities and event ordering are retained in evidence.
 
 CPU and GPU threshold cases are separate subcycles; one does not imply the other.
+
+### M8C synthetic preparation
+
+M8C synthetic preparation is allowed to advance before the M8B physical retry because it performs
+no hardware I/O and cannot authorize M8C physical execution. The internal
+`Hp8C40M8CThermalQualificationInjection` boundary creates telemetry frames marked
+`M8C_SYNTHETIC_QUALIFICATION_ONLY` and routes them only through the production
+`SafetyGate`, exact-target `Hp8C40ThermalEmergencyConfirmation`, and
+`FanControlCoordinator` using a synthetic backend.
+
+The hardware-free M8C self-test covers all of the threshold/preemption semantics needed before
+the physical harness is worth constructing:
+
+- CPU effective 95 C is submitted as five unique consecutive fresh synthetic snapshots;
+  raw SafetyGate sees the threshold on every frame, the 8C40 confirmation layer keeps the first
+  four admitted, and the fifth must force firmware handoff;
+- GPU = 87 C must force immediate handoff on the first synthetic snapshot;
+- effective CPU >=99 C must force immediate hard handoff without consuming a five-sample streak;
+- thermal handoff racing an in-flight `ApplyAsync` must cancel the command and finish in
+  firmware authority.
+
+The injection helper is intentionally hardware-free: it cannot construct HP WMI/EC hardware,
+the real HP 8C40 backend or a watchdog lease, and production GUI/runtime code must not reference it.
+Static invariants enforce that isolation.
+
+**M8C physical execution remains blocked until M8B physical PASS.** A green synthetic M8C result
+proves only threshold, sequencing and coordinator-preemption behavior; it cannot prove local
+FF/FF restore acknowledgement, watchdog Release, journal cleanup, dual-tach behavior or the
+real physical race timing required for M8C closure.
 
 ## 5. Remaining production-race audit
 
