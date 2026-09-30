@@ -2686,7 +2686,7 @@
         }
       ],
       "evidencePackaging": {
-        "status": "CODE_PREPARED_CI_PENDING",
+        "status": "CODE_CI_PASS_RETRY_BLOCKED",
         "automaticForFutureHarnessRuns": true,
         "helperScript": "scripts/package-latest-m8c-evidence.ps1",
         "behavior": [
@@ -2697,7 +2697,25 @@
           "create a ZIP adjacent to the evidence directory",
           "run automatically from the M8C parent finally block on PASS or FAIL_CLOSED"
         ],
-        "currentAttemptRecovery": "After pulling this change, one helper command packages the latest already-existing M8C attempt without rerunning hardware."
+        "currentAttemptRecovery": "After pulling this change, one helper command packages the latest already-existing M8C attempt without rerunning hardware.",
+        "ci": {
+          "result": "PASS",
+          "commit": "eb07da0323735b38655b541cad9fe3759255ec17",
+          "runNumber": 824,
+          "runId": 36768128791,
+          "powerShell7PackagingSelfTest": true,
+          "windowsPowerShell51PackagingSelfTest": true,
+          "m8cSyntheticInvariant": true,
+          "m8cPhysicalPreparationInvariant": true,
+          "m8cParentHarnessInvariant": true,
+          "warningsAsErrorsBuild": true,
+          "m8cSyntheticSelfTest": true,
+          "safetyGateSelfTest": true,
+          "fanCoordinatorSelfTest": true,
+          "watchdogRegressions": true,
+          "hpBackendSelfTest": true,
+          "physicalExecution": false
+        }
       }
     },
     "productionRaceAuditCodeCi": {

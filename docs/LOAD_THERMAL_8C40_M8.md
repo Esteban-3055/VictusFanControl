@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS. M8C ATTEMPT 1 FAIL_CLOSED BEFORE READY ON AN EC FAN-TACH READ IOException; PARENT CLEANUP DID NOT PROVE TWO CONSECUTIVE FF/FF READS (FF/FF THEN 144/FF). M8C RETRY IS BLOCKED PENDING PRESERVED-EVIDENCE REVIEW. AUTOMATIC EVIDENCE PACKAGING IS BEING ADDED SO FUTURE PASS/FAIL_CLOSED RUNS COPY THE M4 LOG AND CREATE THE ZIP AUTOMATICALLY. WATCHDOG RECOVERY REMAINS UNPROMOTED AND AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS. M8C ATTEMPT 1 FAIL_CLOSED BEFORE READY ON AN EC FAN-TACH READ IOException; PARENT CLEANUP DID NOT PROVE TWO CONSECUTIVE FF/FF READS (FF/FF THEN 144/FF). M8C RETRY IS BLOCKED PENDING PRESERVED-EVIDENCE REVIEW. AUTOMATIC EVIDENCE PACKAGING PASSED FULL CI #824; FUTURE PASS/FAIL_CLOSED RUNS COPY THE M4 LOG AND CREATE THE ZIP AUTOMATICALLY. WATCHDOG RECOVERY REMAINS UNPROMOTED AND AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -1013,7 +1013,7 @@ retained lease, records git HEAD/status and service state, writes
 `m8c-package-manifest.json`, and creates `m8c-thermal-preemption_*.zip` next to the evidence
 directory.
 
-The same helper can package this already-existing attempt without rerunning hardware.
+The same helper can package this already-existing attempt without rerunning hardware. The packaging path is **CODE/CI PASS** at commit `eb07da0323735b38655b541cad9fe3759255ec17`, GitHub Actions **#824** (run `36768128791`), including the packaging self-test under both PowerShell 7 and Windows PowerShell 5.1.
 
 ## 8. Physical harness safety and evidence
 
