@@ -107,7 +107,7 @@ internal sealed class ShadowFanCurveEditorForm : Form
             (_, _) => _timer.Stop();
     }
 
-    private Control BuildSidePanel()
+    private System.Windows.Forms.Control BuildSidePanel()
     {
         var panel =
             new TableLayoutPanel
@@ -184,7 +184,7 @@ internal sealed class ShadowFanCurveEditorForm : Form
         TableLayoutPanel panel,
         int row,
         string name,
-        Control value)
+        System.Windows.Forms.Control value)
     {
         panel.Controls.Add(
             new Label

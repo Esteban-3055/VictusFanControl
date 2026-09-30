@@ -7,7 +7,7 @@ namespace VictusFanControl.App;
 /// Hardware-free draggable temperature/equal-fan-level editor used only by the
 /// explicit shadow/simulation form.
 /// </summary>
-internal sealed class ShadowFanCurveEditorControl : Control
+internal sealed class ShadowFanCurveEditorControl : System.Windows.Forms.Control
 {
     private const int PointRadius = 7;
     private readonly FanCurveEditorModel _model;
