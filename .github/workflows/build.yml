@@ -133,6 +133,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-8c40-load-thermal-m8c-physical-preparation-invariants.ps1
 
+      - name: HP 8C40 M8C parent physical harness preparation invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-load-thermal-m8c-harness-invariants.ps1
+
       - name: HP 8C40 M8 production-race code/CI audit invariant
         shell: pwsh
         run: .\scripts\test-8c40-m8-production-race-audit-invariants.ps1
@@ -164,6 +168,7 @@ jobs:
           .\scripts\test-8c40-load-thermal-m8b-invariants.ps1
           .\scripts\test-8c40-load-thermal-m8c-invariants.ps1
           .\scripts\test-8c40-load-thermal-m8c-physical-preparation-invariants.ps1
+          .\scripts\test-8c40-load-thermal-m8c-harness-invariants.ps1
           .\scripts\test-8c40-m8-production-race-audit-invariants.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
