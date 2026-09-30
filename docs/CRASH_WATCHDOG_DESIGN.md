@@ -973,7 +973,7 @@ blocked.
 
 ### HP 8C40 M7 - hibernation qualification
 
-**CODE/CI PASS; no-write preflight and physical qualification pending.**
+**PHYSICAL PASS on exact HP 8C40 target, 2026-09-29.**
 
 M7 is the next distinct lifecycle gate after the physical M6 Modern Standby
 PASS. Its dedicated app mode reuses the hardened display-aware lifecycle
@@ -988,3 +988,19 @@ accept SESSION_DISPLAY_STATUS On exactly once, recover through five fresh
 Healthy snapshots, perform one controlled watchdog-backed 30/30 re-entry and
 finish with verified Release, journal absence and stable FF/FF. Production
 watchdog promotion and automatic/adaptive policy remain blocked.
+
+M7 physical evidence: real watchdog-backed Custom 30/30 reached durable OWNED
+generation 3, display-Off plus registered PBT_APMSUSPEND released Firmware and
+cleared the journal before Kernel-Power 42, Windows recorded Application API
+hibernation followed by 507 `Resume from Hibernate`, and the system power
+report independently classified the transition as Hibernate (TargetState=5,
+EffectiveState=5, requestor `shutdown.exe`). The same GUI/watchdog identities
+survived the transition. Display-On was accepted exactly once, five fresh
+Healthy snapshots preceded one controlled 30/30 re-entry, and final Release
+ended with journal absent and stable FF/FF. The delayed fallback did not take
+over and M4 returned to Manual/stopped.
+
+Hibernation is therefore closed. Representative CPU/GPU/gaming load,
+thermal-emergency and any remaining production-race gates remain separate.
+`WatchdogRecoveryValidated` stays false and automatic/adaptive policy stays
+OFF until those gates are explicitly closed.
