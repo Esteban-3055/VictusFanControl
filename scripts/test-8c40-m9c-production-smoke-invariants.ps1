@@ -79,9 +79,18 @@ Assert-Contains $backend 'RequireProductionConstructionAuthorized' 'Public HP 8C
 
 $scopeEnter=$controller.IndexOf('EnterM9CPhysicalQualificationConstructionScope',[StringComparison]::Ordinal)
 $factoryCreate=$controller.IndexOf('HpFanControlBackendFactory.Create(',[StringComparison]::Ordinal)
-$scopeProof=$controller.IndexOf('constructionScopeClosedBeforeCustom =',[StringComparison]::Ordinal)
-$customAdmission=$controller.IndexOf('coordinator.TryEnterCustomAsync(',[StringComparison]::Ordinal)
-$apply=$controller.IndexOf('await coordinator.ApplyAsync(',[StringComparison]::Ordinal)
+$scopeProof=$controller.IndexOf(
+    'constructionScopeClosedBeforeCustom =',
+    [Math]::Max(0,$factoryCreate),
+    [StringComparison]::Ordinal)
+$customAdmission=$controller.IndexOf(
+    'coordinator.TryEnterCustomAsync(',
+    [Math]::Max(0,$scopeProof),
+    [StringComparison]::Ordinal)
+$apply=$controller.IndexOf(
+    'await coordinator.ApplyAsync(',
+    [Math]::Max(0,$customAdmission),
+    [StringComparison]::Ordinal)
 if($scopeEnter-lt 0 -or $factoryCreate-lt 0 -or $scopeProof-lt 0 -or $customAdmission-lt 0 -or $apply-lt 0 -or
    -not ($scopeEnter-lt $factoryCreate -and $factoryCreate-lt $scopeProof -and $scopeProof-lt $customAdmission -and $customAdmission-lt $apply)){
     throw 'M9C construction scope ordering must be scope -> factory -> scope-closed proof -> Custom admission -> Apply.'
