@@ -92,13 +92,15 @@ internal static class IntelRaplCodec
         var thermalRaw = (ushort)(raw & 0x7FFF);
         var minimumRaw = (ushort)((raw >> 16) & 0x7FFF);
         var maximumRaw = (ushort)((raw >> 32) & 0x7FFF);
-        var maximumTimeRaw = (byte)((raw >> 48) & 0x3F);
+        var maximumTimeRaw = (byte)((raw >> 48) & 0x7F);
 
         return new IntelRaplPackagePowerInfo(
             ThermalSpecWatts: thermalRaw * units.PowerWatts,
             MinimumWatts: minimumRaw * units.PowerWatts,
             MaximumWatts: maximumRaw * units.PowerWatts,
-            MaximumTimeWindowSeconds: maximumTimeRaw * units.TimeSeconds,
+            MaximumTimeWindowSeconds: DecodeTimeWindow(
+                maximumTimeRaw,
+                units.TimeSeconds),
             Raw: raw);
     }
 
@@ -181,7 +183,9 @@ internal static class IntelRaplCodecSelfTest
             RequireClose(info.MaximumWatts, 115.0, "maximum power");
             RequireClose(
                 info.MaximumTimeWindowSeconds,
-                maximumTimeRaw * units.TimeSeconds,
+                Math.Pow(2.0, maximumTimeRaw & 0x1F) *
+                (1.0 + (((maximumTimeRaw >> 5) & 0x03) / 4.0)) *
+                units.TimeSeconds,
                 "maximum time window");
 
             output.WriteLine("Intel RAPL codec self-test: PASS");
