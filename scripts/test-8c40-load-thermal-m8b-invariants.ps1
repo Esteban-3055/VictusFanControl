@@ -37,6 +37,10 @@ Assert-Contains $harness 'test-8c40-load-thermal-m8-preflight.ps1' 'M8B must rer
 Assert-Contains $harness 'test-8c40-load-thermal-m8b-invariants.ps1' 'M8B must run its own invariant before the physical boundary.'
 Assert-Contains $harness 'type exactly $token' 'M8B must require an explicit operator token after normal load is active.'
 Assert-Contains $harness 'Start-M8BFailsafe' 'M8B must arm an independent delayed failsafe.'
+Assert-Contains $harness 'Start-Sleep -Seconds 5' 'M8B requires a fixed no-write post-token game refocus grace.'
+Assert-Contains $harness 'Return to active gameplay/rendering NOW' 'M8B must tell operator to foreground normal rendering.'
+Assert-Contains $harness '$earlyResult.FailureReason' 'Early controller failure must surface preserved durable result reason.'
+Assert-Contains $harness 'result evidence unavailable' 'Early controller failure must report missing evidence explicitly.'
 Assert-Contains $harness 'ARM INDEPENDENT FAILSAFE BEFORE WRITE-CAPABLE CONTROLLER' 'Failsafe ordering must be explicit.'
 Assert-Contains $harness '--8c40-m8b-watchdog-load' 'M8B harness must launch the dedicated controller mode.'
 Assert-Contains $harness 'Assert-M8BOwnedJournal' 'M8B must externally bind schema-v2 OWNED evidence to exact controller identity.'
@@ -147,8 +151,11 @@ Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8B 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8B preparation requires M8A authorization.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.harnessScript 'scripts/test-8c40-load-thermal-m8b.ps1' 'M8B harness path changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/watchdog-m8b-service-failsafe-8c40.ps1' 'M8B failsafe path changed.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B must remain physical-pending until attempt 2 evidence is reviewed.'
-Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B telemetry-epoch/closure CODE/CI PASS must authorize only the versioned attempt-2 harness.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B must not be marked physical PASS after attempt 2 no-write refusal.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B physical retry must stay blocked until post-token refocus/evidence hardening passes CI.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[1].result 'FAIL_CLOSED_NO_WRITE' 'M8B attempt 2 must be preserved as no-write FAIL_CLOSED.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[1].representativeSamples 0 'M8B attempt 2 observed zero representative samples.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.refocusHardening.graceSeconds 5 'M8B refocus grace changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[0].evidenceHead '68750bdd997e9530c5712af5c33e5bf2910a0f55' 'M8B attempt-1 evidence HEAD changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[0].result 'FAIL_CLOSED' 'M8B attempt-1 result must remain FAIL_CLOSED.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.telemetryEpochHardening.ci.finalCommit '7b5b104c9cd3c1f695f217693043383299410ec2' 'M8B telemetry-epoch hardening CI commit changed.'
@@ -173,7 +180,10 @@ foreach($needle in @(
     'M8B attempt 1',
     '3.364 s',
     'continuity epoch after COMMIT/READY',
-    'M8B physical attempt 2 is now authorized'
+    'M8B physical attempt 2 is now authorized',
+    'M8B physical attempt 2 - FAIL_CLOSED / NO-WRITE',
+    '5-second no-write refocus grace',
+    'M8B physical attempt 3 remains blocked'
 )){
     Assert-Contains $doc $needle ("M8B documentation invariant missing: {0}" -f $needle)
 }

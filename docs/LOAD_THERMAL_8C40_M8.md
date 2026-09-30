@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; TELEMETRY-EPOCH/CLOSURE HARDENING CODE/CI PASS; PHYSICAL RETRY AUTHORIZED-PENDING. M8C SYNTHETIC + PHYSICAL-PREPARATION CODE/CI PASS; M8C PHYSICAL EXECUTION REMAINS BLOCKED BY M8B PHYSICAL PASS. AUTOMATIC/ADAPTIVE POLICY REMAINS OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; ATTEMPT 2 FAIL_CLOSED / NO-WRITE FROM INSUFFICIENT GPU LOAD; POST-TOKEN REFOCUS/EVIDENCE FIX CI PENDING. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -642,6 +642,39 @@ M8B physical attempt 2 is now authorized only through the versioned harness. The
 remains unchanged **inside** the supervision epoch; the patch only prevents the intentional
 PREPARE/WRITE_INTENT/WMI/ACK/COMMIT transaction from being misclassified as a telemetry/lifecycle
 sampling gap.
+
+## 7B.2. M8B physical attempt 2 - FAIL_CLOSED / NO-WRITE
+
+On 2026-09-30, the operator supplied a partial terminal excerpt for the second physical
+attempt, with durable controller evidence at
+`logs/m8b-watchdog-load_2026-09-30_005823/m8b-result.json`.
+The excerpt does not show the initial repository HEAD; the preserved result/summary must be
+checked before attributing an exact evidence SHA.
+
+All **10/10 pre-write samples were non-representative**, with 0/3 consecutive representative
+samples. CPU load ranged from 20.2% to 67.8% and package power from 28.0 W to 91.8 W;
+the CPU activity requirement was fulfilled. GPU power remained **4.3..17.8 W** even when
+GPU load intermittently crossed 35%. The unchanged representative predicate requires
+**GPU load >=35% AND GPU power >=20 W**, plus material CPU activity. The classifier correctly
+failed closed **before PREPARE, WRITE_INTENT, the only allowed 50/50 ApplyAsync, COMMIT or READY**.
+No M8B fan write was attempted. The terminal showed independent cleanup FF/FF twice and
+M4 `StartType=Manual, Status=Stopped`; the journal/failsafe outcome requires confirmation
+from the retained harness summary rather than assumption from terminal silence.
+
+One plausible explanation is that foregrounding PowerShell to type the token makes the game
+reduce background rendering; this is **not proven** by the excerpt. The harness now prints an
+explicit request to return to active gameplay/rendering and provides a fixed
+**5-second no-write refocus grace** immediately after the exact token and *before* starting
+the M4 watchdog, failsafe or write-capable controller. GPU thresholds, 3/10 pre-write
+consecutive requirement, safety boundaries and watchdog ordering remain unchanged.
+
+The parent also surfaces durable `m8b-result.json` failureReason when the child exits before
+READY instead of showing only an empty `ExitCode=`. This improves diagnosis without
+changing fan hardware operations.
+
+M8B physical attempt 3 remains blocked until these code/invariant/documentation changes pass
+CI on one exact HEAD and are explicitly authorized. No prior M8B physical attempt is promoted
+to PASS. M8C physical qualification and automatic/adaptive production remain blocked.
 
 ## 8. Physical harness safety and evidence
 

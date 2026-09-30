@@ -256,8 +256,33 @@ function Wait-ReadyMarker {
         }
 
         if($controller -and $controller.HasExited){
+            try {[void]$controller.WaitForExit(5000)}catch{}
             $controller.Refresh()
-            throw "M8B controller exited before READY. ExitCode=$($controller.ExitCode)."
+
+            $exitCode='unavailable'
+            try {
+                if($null -ne $controller.ExitCode){
+                    $exitCode=[string]$controller.ExitCode
+                    if([string]::IsNullOrWhiteSpace($exitCode)){$exitCode='unavailable'}
+                }
+            }
+            catch {}
+
+            $resultDetail='result evidence unavailable'
+            if(Test-Path $resultPath){
+                try {
+                    $earlyResult=Get-Content $resultPath -Raw | ConvertFrom-Json
+                    $resultDetail=("result={0}; reason={1}" -f
+                        [string]$earlyResult.Result,
+                        [string]$earlyResult.FailureReason)
+                }
+                catch {
+                    $resultDetail=("result evidence unreadable: {0}" -f $_.Exception.Message)
+                }
+            }
+
+            throw ("M8B controller exited before READY. ExitCode={0}; {1}" -f
+                $exitCode,$resultDetail)
         }
 
         Start-Sleep -Milliseconds 100
@@ -446,6 +471,11 @@ try {
     if($confirm -cne $token){
         throw 'M8B cancelled before service start/failsafe/controller write boundary.'
     }
+
+    Write-Host ''
+    Write-Host 'Return to active gameplay/rendering NOW. There are 5 seconds to refocus the game before watchdog/controller startup.' -ForegroundColor Yellow
+    Write-Host 'Do not leave the game minimized or paused; the representative GPU power gate remains unchanged.' -ForegroundColor Yellow
+    Start-Sleep -Seconds 5
 
     Write-Host ''
     Write-Host 'Step 4: start and bind the exact LocalSystem M4 watchdog...' -ForegroundColor Cyan
