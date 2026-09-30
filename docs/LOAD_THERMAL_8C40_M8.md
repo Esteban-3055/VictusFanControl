@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; ATTEMPT 2 FAIL_CLOSED / NO-WRITE FROM INSUFFICIENT GPU LOAD; POST-TOKEN REFOCUS/EVIDENCE FIX CI PENDING. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPTS 1/2 PRESERVED FAIL_CLOSED; POST-TOKEN REFOCUS/EVIDENCE FIX CODE/CI PASS; M8B ATTEMPT 3 PHYSICAL AUTHORIZED-PENDING. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -672,9 +672,17 @@ The parent also surfaces durable `m8b-result.json` failureReason when the child 
 READY instead of showing only an empty `ExitCode=`. This improves diagnosis without
 changing fan hardware operations.
 
-M8B physical attempt 3 remains blocked until these code/invariant/documentation changes pass
-CI on one exact HEAD and are explicitly authorized. No prior M8B physical attempt is promoted
-to PASS. M8C physical qualification and automatic/adaptive production remain blocked.
+The post-token refocus and early-failure diagnostic patch passed the full GitHub Actions
+workflow **#797** (run `36676421562`) on exact HEAD
+`68e190dea8d3131fb74c87429e3ddbf32b2294c4`. M8B/M8C invariants, PowerShell syntax and 5.1 compatibility,
+warnings-as-errors build, SafetyGate, fan coordinator, watchdog, M8C synthetic,
+HP backend and adaptive shadow-isolation regressions passed.
+
+**M8B physical attempt 3 is now authorized**, only through the versioned M8B harness, after
+its fresh same-HEAD no-write preflight and independent failsafe. The operator must return
+focus to the normal game during the five-second post-token grace; insufficient load still
+fails closed without any fan write. No prior M8B attempt is promoted to PASS. M8C physical
+qualification and automatic/adaptive production remain blocked.
 
 ## 8. Physical harness safety and evidence
 

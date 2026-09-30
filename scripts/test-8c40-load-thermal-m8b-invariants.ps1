@@ -55,6 +55,13 @@ Assert-Contains $harness "M8B cleanup service baseline" 'M8B FAIL_CLOSED cleanup
 Assert-Contains $harness "controller terminated but ExitCode was unavailable" 'M8B must fail closed if child ExitCode is unavailable.'
 Assert-Contains $harness 'The journal was not deleted.' 'M8B must preserve retained ownership evidence.'
 
+$tokenIndex=$harness.IndexOf('$confirm=Read-Host "When the workload is active, type exactly $token"',[StringComparison]::Ordinal)
+$refocusIndex=$harness.IndexOf('Start-Sleep -Seconds 5',[StringComparison]::Ordinal)
+$watchdogStartIndex=$harness.IndexOf('    Start-Service -Name $serviceName',[StringComparison]::Ordinal)
+if($tokenIndex -lt 0 -or $refocusIndex -le $tokenIndex -or $watchdogStartIndex -le $refocusIndex){
+    throw 'M8B refocus grace must occur after operator token and before starting M4/watchdog or any write-capable controller.'
+}
+
 $armIndex=$harness.IndexOf('$failsafe=Start-M8BFailsafe',[StringComparison]::Ordinal)
 $controllerIndex=$harness.IndexOf('$controller=Start-Process',[StringComparison]::Ordinal)
 
@@ -151,8 +158,10 @@ Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8B 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8B preparation requires M8A authorization.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.harnessScript 'scripts/test-8c40-load-thermal-m8b.ps1' 'M8B harness path changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/watchdog-m8b-service-failsafe-8c40.ps1' 'M8B failsafe path changed.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B must not be marked physical PASS after attempt 2 no-write refusal.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B physical retry must stay blocked until post-token refocus/evidence hardening passes CI.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B must not be marked physical PASS before attempt 3 evidence is reviewed.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B attempt 3 is authorized only after exact-head refocus/evidence CI PASS.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.refocusHardening.ci.commit '68e190dea8d3131fb74c87429e3ddbf32b2294c4' 'M8B post-token hardening CI SHA changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.refocusHardening.ci.runNumber 797 'M8B post-token hardening CI run changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[1].result 'FAIL_CLOSED_NO_WRITE' 'M8B attempt 2 must be preserved as no-write FAIL_CLOSED.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[1].representativeSamples 0 'M8B attempt 2 observed zero representative samples.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.refocusHardening.graceSeconds 5 'M8B refocus grace changed.'
@@ -183,7 +192,7 @@ foreach($needle in @(
     'M8B physical attempt 2 is now authorized',
     'M8B physical attempt 2 - FAIL_CLOSED / NO-WRITE',
     '5-second no-write refocus grace',
-    'M8B physical attempt 3 remains blocked'
+    'M8B physical attempt 3 is now authorized'
 )){
     Assert-Contains $doc $needle ("M8B documentation invariant missing: {0}" -f $needle)
 }
