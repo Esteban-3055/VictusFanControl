@@ -274,6 +274,31 @@ The hard-CPU 99 C case remains synthetic/code-only because no real-silicon excur
 The parent physical harness and independent journal/failsafe closure are intentionally separate
 from the controller. **M8C physical execution remains blocked until M8B physical PASS.**
 
+### M8C parent physical harness preparation
+
+The parent harness `scripts/test-8c40-load-thermal-m8c.ps1` and its independent delayed failsafe
+are prepared but remain unreachable. A **profile gate** is the first executable boundary in the
+script and requires both `m8b.physicalPassed=true` and
+`m8c.physicalExecutionAuthorized=true` before Administrator checks, service operations, process
+launches, PawnIO probes or fan-control activity can occur.
+
+Once a future evidence-backed commit authorizes that boundary, the harness performs **two
+independent physical subcycles**:
+
+- CPU: real representative load + real watchdog-backed 50/50 ownership, parent journal/failsafe
+  proof, then five qualification-only 95 C frames with handoff required on frame 5/5;
+- GPU: a fresh independent real 50/50 ownership cycle followed by one qualification-only 87 C
+  frame with immediate handoff.
+
+Each subcycle arms an independent delayed failsafe before launching the write-capable controller,
+proves the exact schema-v2 OWNED 50/50 journal bound to PID + process creation time before writing
+`M8C-CONTINUE`, and requires the causal watchdog sequence
+PREPARE -> WRITE_INTENT -> COMMIT -> RESTORE_BEGIN -> RELEASE. It then independently proves
+journal absence, two FF/FF observations and restoration of the M4 service to Manual/Stopped.
+
+The harness cannot currently pass its first profile gate, and the controller independently retains
+`PhysicalExecutionAuthorized=false`. Preparing these files does not authorize or perform M8C.
+
 ## 5. Remaining production-race audit
 
 Before M8 is closed, code/CI and the physical harness must explicitly review the already-known race
