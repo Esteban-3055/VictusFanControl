@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 $repoRoot=Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
-$expectedBranch='feature/victus-8c40-port'
+$expectedBranch='feature/victus-8c40-m8b-retry5'
 $serviceName='VictusFanControlWatchdogM4'
 $journalPath=Join-Path $env:ProgramData 'VictusFanControl\WatchdogM4\state\lease.json'
 $profilePath=Join-Path $repoRoot 'profiles\HP-8C40.json'
