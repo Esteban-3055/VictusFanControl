@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-code-ci-pass-physical-preflight-retry-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-physical-pass-m8a-code-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1907,7 +1907,7 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "PREFLIGHT_CODE_CI_PASS_NO_WRITE_ATTEMPT1_FAIL_CLOSED_RETRY_PENDING_PHYSICAL_HARNESS_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_CODE_PENDING_M8B_M8C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
@@ -1938,7 +1938,7 @@
     "noWritePreflightInvariantScript": "scripts/test-8c40-load-thermal-m8-preflight-invariants.ps1",
     "readOnlyProbe": "--8c40-m8-preflight-probe",
     "readOnlyTelemetryRequirement": "3 consecutive SafetyGate PreconditionsReady samples, exact GPU identity, GPU temp > 0 C",
-    "noWritePreflightPassed": false,
+    "noWritePreflightPassed": true,
     "preflightCodeCi": {
       "result": "PASS",
       "commit": "53adc295d7888b0669dcd38e5e7d3e9457965e02",
@@ -1971,13 +1971,40 @@
         "serviceMutationAttempted": false,
         "deliberateStressLoadAttempted": false,
         "remediation": "allow only untracked ?? logs/... historical evidence while still rejecting all tracked changes and untracked paths outside logs/"
+      },
+      {
+        "attempt": 2,
+        "result": "PASS",
+        "evidenceHead": "16ea0578d5dd4c69a39a0a0405b4522f37cef0aa",
+        "exactTarget": true,
+        "acOnline": true,
+        "batteryPercent": 100,
+        "m4Service": "Manual/Stopped",
+        "regressions": "PASS",
+        "telemetry": "3/3 complete; 14/14 cores; zero recoveries; exact RTX 4060 identity",
+        "firmwareOwnership": "two consecutive FF/FF",
+        "prohibitedActions": "none"
       }
     ],
     "provenancePolicy": "HEAD must equal tracked upstream; tracked changes/deletions and untracked paths outside logs/ are blocking; untracked logs/ evidence is preserved and reported",
     "preflightHardening": {
-      "result": "CODE_PREPARED_CI_PENDING",
-      "parentHead": "f771022b3c5b35555db03a11d0c930664db432fc",
-      "reason": "attempt 1 exposed historical evidence false-positive"
+      "result": "PASS",
+      "commit": "16ea0578d5dd4c69a39a0a0405b4522f37cef0aa",
+      "ciRunNumber": 698,
+      "ciRunId": 36655903936,
+      "reason": "historical logs preserved without weakening tracked-source/config provenance"
+    },
+    "noWritePreflightPass": {
+      "result": "PASS",
+      "date": "2026-09-30",
+      "evidenceHead": "16ea0578d5dd4c69a39a0a0405b4522f37cef0aa",
+      "exactTarget": "HP 8C40 rev 63.43 / Victus 15-fa1xxx / SKU 9D0R1LA#AKH / BIOS F.18",
+      "acBatteryBaseline": "AC Online / 100% / High",
+      "m4ServiceBaseline": "Manual / Stopped",
+      "build": "PASS 0 warnings 0 errors",
+      "telemetry": "3/3 complete, 14/14 core context, Intel/EC/NVML recoveries 0, CPU effective 50/49/49 C, GPU 47/47/47 C, exact RTX 4060 identity, PreconditionsReady true, no thermal emergency",
+      "firmwareOwnershipProof": "FF/FF then FF/FF",
+      "prohibitedActions": "none"
     }
   }
 }
