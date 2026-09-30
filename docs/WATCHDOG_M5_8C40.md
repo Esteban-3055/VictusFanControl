@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M5 - failure-domain qualification
 
-Status: **M5A/M5B/M5C/M5D/M5E CODE/CI/PHYSICAL PASS for the complete awake OWNED/WRITE_ARMED failure matrix. M6 Modern Standby and M7 hibernation subsequently passed; M8 representative-load/thermal-preemption qualification is now pending.**
+Status: **M5A/M5B/M5C/M5D/M5E CODE/CI/PHYSICAL PASS for the complete awake OWNED/WRITE_ARMED failure matrix. M6 Modern Standby, M7 hibernation and M8 representative-load/thermal-preemption have subsequently passed physically. Production watchdog promotion remains a separate explicit post-M8 gate and `WatchdogRecoveryValidated=false`.**
 M4 normal awake lease qualification is complete at equal 10/30/50.
 
 Production watchdog construction and automatic/adaptive policy remain OFF.
@@ -1205,7 +1205,7 @@ M5D controller death in WRITE_ARMED       PASS
 M5E watchdog + controller death in WRITE_ARMED PASS
 ~~~
 
-`WatchdogRecoveryValidated` deliberately remains false. The remaining
-promotion boundary is lifecycle qualification on the real HP 8C40 Modern
-Standby path, followed by the separately required hibernation/power-transition
-checks. Automatic/adaptive policy remains OFF.
+`WatchdogRecoveryValidated` deliberately remained false at M5 closure. M6 Modern
+Standby, M7 hibernation and M8 representative-load/thermal-preemption have since
+closed physically. The current remaining boundary is a separate explicit post-M8
+production watchdog/race promotion gate. Automatic/adaptive policy remains OFF.

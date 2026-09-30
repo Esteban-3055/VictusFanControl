@@ -57,8 +57,8 @@ public static class HpFanControlBackendFactory
             {
                 throw new NotSupportedException(
                     "HP 8C40 matched, but production watchdog/unattended recovery " +
-                    "promotion remains blocked pending representative-load, thermal-preemption " +
-                    "and remaining production-race qualification.");
+                    "promotion remains blocked pending an explicit post-M8 production-watchdog/race " +
+                    "promotion gate. M8 physical closure does not authorize production watchdog construction.");
             }
 
             var backend = new Hp8C40FanControlBackend(modulesDirectory);
