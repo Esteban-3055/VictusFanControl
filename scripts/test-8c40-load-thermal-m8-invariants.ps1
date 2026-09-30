@@ -102,7 +102,7 @@ foreach($required in @(
     'M8A - representative-load admission',
     'M8B - watchdog-backed 50/50 under representative load',
     'M8C - physical preemption path with qualification-only thermal injection',
-    'CPU emergency: effective CPU >= 95 C',
+    'CPU raw threshold: effective CPU >= 95 C',
     'GPU emergency: GPU >= 87 C',
     'five consecutive',
     '99 C',
