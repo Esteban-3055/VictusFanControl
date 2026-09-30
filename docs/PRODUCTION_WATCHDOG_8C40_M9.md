@@ -439,3 +439,80 @@ No M9D physical path executed. Both
 `PhysicalExecutionAuthorized=false` and
 `M9DPhysicalQualificationConstructionAuthorized=false` remain closed, M9C remains
 physically blocked, and production watchdog promotion remains false.
+
+
+## 10. M9E production watchdog service lifecycle
+
+M9E is prepared as a separate gate after M9D. Its job is not to change fan-control
+logic; it qualifies how the already physically proven watchdog service becomes
+available in normal production.
+
+The selected candidate policy deliberately **keeps**:
+
+- service name `VictusFanControlWatchdogM4`;
+- pipe `VictusFanControl.Watchdog.M4.8C40.v2`;
+- LocalSystem account;
+- exact existing service binary and `--m4-8c40-lease-service` mode;
+- the service-side restriction that there is no ordinary fan-target write authority.
+
+M9E **does not replace the installed watchdog binary**. Renaming the service, changing
+the pipe or republishing a different service image here would create a new last-mile
+boundary and throw away much of the M4-M9D physical evidence.
+
+### Candidate production SCM policy
+
+The candidate is **Automatic (non-delayed)** startup plus the same autonomous restart
+sequence already physically qualified temporarily by M5C/M5E:
+
+```text
+StartMode: Automatic
+DelayedAutoStart: false
+Reset period: 86400 s
+Failure action 1: restart after 5000 ms
+Failure action 2: restart after 5000 ms
+Failure action 3: restart after 10000 ms
+Failure actions on non-crash failures: enabled
+```
+
+Automatic rather than delayed startup is intentional: the production GUI should never
+need to gain SCM start authority or race a delayed service at first Custom admission.
+The privileged watchdog starts independently, validates the exact target, runs startup
+journal recovery if needed, and otherwise waits without issuing ordinary fan commands.
+
+### M9E stage 1 - service-policy arm
+
+`scripts/test-8c40-production-watchdog-m9e-arm.ps1` is versioned but hard-blocked.
+It requires formal M9B, M9C and M9D physical closure plus a later dedicated M9E
+authorization commit before it can mutate SCM.
+
+After an explicit token, stage 1 changes only SCM lifecycle configuration, starts the
+already-installed exact service, verifies Ready + FF/FF + journal absence, records
+binary/module/profile hashes and writes a durable
+`%ProgramData%\VictusFanControl\M9E\m9e-reboot-arm.json` marker.
+
+It contains no fan target, no watchdog lease acquisition, no direct HP restore and no
+reboot command. On PASS the service intentionally remains Automatic/Running for the
+reboot qualification.
+
+### M9E stage 2 - actual reboot verification
+
+`scripts/test-8c40-production-watchdog-m9e-postreboot.ps1` performs no service
+mutation, fan write or lease acquisition. It requires the preserved stage-1 arm marker
+and proves an **actual reboot** occurred after arming.
+
+PASS requires:
+
+- same armed repository HEAD and branch;
+- service Automatically running after that boot;
+- LocalSystem and exact unchanged service path/mode;
+- exact 5000/5000/10000 ms SCM recovery policy with 86400 s reset;
+- watchdog Ready on the exact target/pipe;
+- service process creation newer than the qualified boot;
+- journal absent;
+- two consecutive independent FF/FF observations;
+- installed watchdog/PawnIO hashes captured.
+
+Only after stage 2 evidence is reviewed may M9E be marked physical PASS. Even then,
+`WatchdogRecoveryValidated=false`, production construction remains blocked, default
+control remains OFF and automatic/adaptive policy remains OFF until the final separate
+M9 promotion commit.
