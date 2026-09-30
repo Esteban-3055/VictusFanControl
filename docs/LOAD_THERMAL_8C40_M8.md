@@ -236,7 +236,7 @@ The injection helper is intentionally hardware-free: it cannot construct HP WMI/
 the real HP 8C40 backend or a watchdog lease, and production GUI/runtime code must not reference it.
 Static invariants enforce that isolation.
 
-**M8B physical PASS is now satisfied; M8C physical execution remains blocked pending post-M8B process/evidence hardening CI and a separate explicit authorization.** A green synthetic M8C result
+At the synthetic-preparation stage, **M8C physical execution remained blocked pending M8B physical PASS and later post-M8B process/evidence hardening.** A green synthetic M8C result
 proves only threshold, sequencing and coordinator-preemption behavior; it cannot prove local
 FF/FF restore acknowledgement, watchdog Release, journal cleanup, dual-tach behavior or the
 real physical race timing required for M8C closure.
@@ -252,10 +252,10 @@ versioned target-profile instance and #737 passed. No hardware execution occurre
 
 ### M8C physical-controller preparation
 
-The real-hardware M8C controller remains prepared in code but deliberately unreachable while post-M8B process/evidence hardening is validated. Its
-`PhysicalExecutionAuthorized=true` readonly qualification authorization flag is checked before hardware identity, PawnIO,
-watchdog, WMI, EC or telemetry hardware objects are constructed. The profile independently keeps
-`physicalExecutionAuthorized=false`; the M8B physical prerequisite is now recorded PASS.
+At the physical-controller preparation stage, the real-hardware M8C controller was prepared in code but deliberately unreachable. Its
+`PhysicalExecutionAuthorized=false` readonly barrier was checked before hardware identity, PawnIO,
+watchdog, WMI, EC or telemetry hardware objects were constructed, and the profile independently kept
+`physicalExecutionAuthorized=false`. That historical barrier is superseded only by the evidence-backed authorization in section 7B.9.
 
 When a later evidence-backed commit authorizes it, each physical subcycle will:
 
@@ -272,15 +272,16 @@ When a later evidence-backed commit authorizes it, each physical subcycle will:
 
 The hard-CPU 99 C case remains synthetic/code-only because no real-silicon excursion is required.
 The parent physical harness and independent journal/failsafe closure are intentionally separate
-from the controller. **M8B physical PASS is now satisfied; M8C physical execution remains blocked pending post-M8B process/evidence hardening CI and a separate explicit authorization.**
+from the controller. At that preparation stage, physical execution remained blocked; current authorization is recorded in section 7B.9.
 
 ### M8C parent physical harness preparation
 
-The parent harness `scripts/test-8c40-load-thermal-m8c.ps1` and its independent delayed failsafe
-are prepared but remain unreachable. A **profile gate** is the first executable boundary in the
-script and requires both `m8b.physicalPassed=true` and
+At the parent-harness preparation stage, `scripts/test-8c40-load-thermal-m8c.ps1` and its
+independent delayed failsafe were prepared but remained unreachable. A **profile gate** is the first
+executable boundary in the script and requires both `m8b.physicalPassed=true` and
 `m8c.physicalExecutionAuthorized=true` before Administrator checks, service operations, process
-launches, PawnIO probes or fan-control activity can occur.
+launches, PawnIO probes or fan-control activity can occur. Those conditions are now satisfied only by
+the later evidence-backed authorization in section 7B.9.
 
 Once a future evidence-backed commit authorizes that boundary, the harness performs **two independent physical subcycles**:
 
@@ -295,8 +296,10 @@ proves the exact schema-v2 OWNED 50/50 journal bound to PID + process creation t
 PREPARE -> WRITE_INTENT -> COMMIT -> RESTORE_BEGIN -> RELEASE. It then independently proves
 journal absence, two FF/FF observations and restoration of the M4 service to Manual/Stopped.
 
-The M8B side of the profile gate is now satisfied, but M8C authorization remains false and the controller is now separately authorized only by the evidence-backed M8C authorization commit with
-`PhysicalExecutionAuthorized=true`. Preparing these files does not authorize or perform M8C.
+At the preparation commit, neither side of the M8C execution authorization was promoted by these
+files alone: the profile still blocked M8C and the controller retained
+`PhysicalExecutionAuthorized=false`. Preparing those files did not authorize or perform M8C; the
+later authorization boundary is documented separately in section 7B.9.
 
 The complete no-hardware preparation is **CODE/CI PASS** at commit
 `ccb11f285a92c6f789929eee6911b5213fd95ddd`, GitHub Actions **#773**
@@ -950,8 +953,10 @@ PowerShell 7 and Windows PowerShell 5.1, the new M8C native child exit-code 0/7 
 warnings-as-errors build, M8C synthetic thermal-preemption self-test, SafetyGate,
 FanControlCoordinator, watchdog and HP-backend regressions. No physical M8C execution occurred in CI.
 
-The qualification controller and profile are now separately opened for M8C. **M8C physical
-execution is explicitly authorized** only through
+The qualification controller and profile are now separately opened for M8C:
+`m8b.physicalPassed=true`, controller `PhysicalExecutionAuthorized=true`, and profile
+`m8c.physicalExecutionAuthorized=true`. **M8C physical execution is explicitly authorized**
+only through
 `scripts/test-8c40-load-thermal-m8c.ps1` on the exact
 `HP-8C40-9D0R1LA-F18` target.
 
