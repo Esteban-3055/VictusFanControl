@@ -16,6 +16,9 @@ $stamp=Get-Date -Format 'yyyy-MM-dd_HHmmss'
 $evidenceRoot=Join-Path $repoRoot ("logs\m9b-production-watchdog-preflight_{0}" -f $stamp)
 $resultPath=Join-Path $evidenceRoot 'm9b-preflight-result.json'
 $telemetryPath=Join-Path $evidenceRoot 'telemetry-output.txt'
+$packagingScript=Join-Path $PSScriptRoot 'package-m9b-evidence.ps1'
+$packagePath=$null
+$packageSha256=$null
 
 $profile=Get-Content $profilePath -Raw | ConvertFrom-Json
 
@@ -288,6 +291,10 @@ $serviceBefore=$null
 $serviceAfter=$null
 $ffProof=$null
 $telemetryOutput=$null
+$terminalFailure=$null
+$serviceExeSha256=$null
+$serviceModuleSha256=$null
+$profileSha256=$null
 
 try {
     Write-Host 'Step 1: repository + target + profile boundary...' -ForegroundColor Cyan
@@ -305,6 +312,10 @@ try {
     }
     $serviceBefore=Get-M4ServiceSnapshot
     Assert-M4ServiceBaseline $serviceBefore
+
+    $serviceExeSha256=(Get-FileHash -LiteralPath $serviceExe -Algorithm SHA256).Hash.ToLowerInvariant()
+    $serviceModuleSha256=(Get-FileHash -LiteralPath $serviceModule -Algorithm SHA256).Hash.ToLowerInvariant()
+    $profileSha256=(Get-FileHash -LiteralPath $profilePath -Algorithm SHA256).Hash.ToLowerInvariant()
 
     Write-Host 'Step 3: build + M5-M9 deterministic/static regressions...' -ForegroundColor Cyan
     dotnet build .\VictusFanControl.sln -c Release -warnaserror
@@ -369,11 +380,11 @@ try {
 }
 catch {
     $failure=$_.Exception.Message
-    throw
+    $terminalFailure=$_.Exception
 }
 finally {
     if(Test-Path -LiteralPath $evidenceRoot){
-        [ordered]@{
+        $resultObject=[ordered]@{
             schemaVersion=1
             gate='M9B'
             result=$(if($passed){'PASS'}else{'FAIL_CLOSED'})
@@ -385,6 +396,9 @@ finally {
             powerAfter=$powerAfter
             serviceBefore=$serviceBefore
             serviceAfter=$serviceAfter
+            serviceExeSha256=$serviceExeSha256
+            serviceModuleSha256=$serviceModuleSha256
+            profileSha256=$profileSha256
             journalPresent=(Test-Path -LiteralPath $journalPath)
             firmwareProof=$ffProof
             telemetryEvidencePath=$telemetryPath
@@ -396,11 +410,47 @@ finally {
             firmwareRestoreAttempted=$false
             watchdogLeaseAttempted=$false
             serviceMutationAttempted=$false
-        } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resultPath -Encoding UTF8
+            packagePath=$packagePath
+            packageSha256=$packageSha256
+        }
+
+        $resultObject | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resultPath -Encoding UTF8
+
+        try {
+            $package=& $packagingScript -EvidenceRoot $evidenceRoot -RepositoryRoot $repoRoot
+            $packagePath=[string]$package.ZipPath
+            $packageSha256=[string]$package.ZipSha256
+
+            $resultObject.packagePath=$packagePath
+            $resultObject.packageSha256=$packageSha256
+            $resultObject | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resultPath -Encoding UTF8
+        }
+        catch {
+            $packagingMessage="M9B evidence packaging failed: $($_.Exception.Message)"
+            $passed=$false
+            if([string]::IsNullOrWhiteSpace($failure)){
+                $failure=$packagingMessage
+                $terminalFailure=$_.Exception
+            } else {
+                $failure="$failure | $packagingMessage"
+            }
+
+            $resultObject.result='FAIL_CLOSED'
+            $resultObject.failure=$failure
+            $resultObject.packagePath=$null
+            $resultObject.packageSha256=$null
+            $resultObject | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resultPath -Encoding UTF8
+        }
     }
+}
+
+if(-not $passed){
+    throw $(if([string]::IsNullOrWhiteSpace($failure)){'M9B FAIL_CLOSED.'}else{$failure})
 }
 
 Write-Host ''
 Write-Host 'PASS: HP 8C40 M9B production-watchdog read-only preflight completed.' -ForegroundColor Green
-Write-Host ("Evidence: {0}" -f $resultPath) -ForegroundColor Green
+Write-Host ("Evidence result: {0}" -f $resultPath) -ForegroundColor Green
+Write-Host ("Evidence ZIP   : {0}" -f $packagePath) -ForegroundColor Green
+Write-Host ("ZIP SHA256     : {0}" -f $packageSha256) -ForegroundColor Green
 Write-Host 'No fan write, firmware restore, watchdog lease, service mutation or power transition was performed.' -ForegroundColor Green

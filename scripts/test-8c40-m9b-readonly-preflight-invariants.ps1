@@ -5,6 +5,8 @@ $preflight=Get-Content (Join-Path $PSScriptRoot 'test-8c40-production-watchdog-m
 $profile=Get-Content (Join-Path $repoRoot 'profiles\HP-8C40.json') -Raw | ConvertFrom-Json
 $doc=Get-Content (Join-Path $repoRoot 'docs\PRODUCTION_WATCHDOG_8C40_M9.md') -Raw
 $gate=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40ProductionWatchdogGate.cs') -Raw
+$packager=Get-Content (Join-Path $PSScriptRoot 'package-m9b-evidence.ps1') -Raw
+$packagingSelfTest=Get-Content (Join-Path $PSScriptRoot 'test-8c40-m9b-evidence-packaging.ps1') -Raw
 
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
     if($Text.IndexOf($Needle,[StringComparison]::Ordinal)-lt 0){throw $Message}
@@ -49,6 +51,11 @@ foreach($needle in @(
     'test-8c40-m9b-readonly-preflight-invariants.ps1',
     'm9b-preflight-result.json',
     'telemetry-output.txt',
+    'package-m9b-evidence.ps1',
+    'serviceExeSha256',
+    'serviceModuleSha256',
+    'profileSha256',
+    'packageSha256',
     'FAIL_CLOSED'
 )){
     Assert-Contains $preflight $needle ("M9B preflight invariant missing: {0}" -f $needle)
@@ -80,3 +87,28 @@ Assert-Contains $doc 'M9B READ-ONLY PREFLIGHT CODE/CI PASS AND READ-ONLY EXECUTI
 Assert-Contains $doc 'does **not** start or stop the service' 'M9B documentation must preserve the no-service-mutation contract.'
 
 Write-Host 'HP 8C40 M9B read-only preflight invariant: PASS' -ForegroundColor Green
+
+
+foreach($needle in @(
+    'Get-FileHash',
+    'm9b-package-manifest.json',
+    'Compress-Archive',
+    'ZipSha256',
+    'destructiveOperations=$false'
+)){
+    Assert-Contains $packager $needle ("M9B packaging invariant missing: {0}" -f $needle)
+}
+
+foreach($forbidden in @(
+    'SetFanLevel(',
+    'Start-Service',
+    'Stop-Service',
+    'Set-Service',
+    'New-Service',
+    'sc.exe ',
+    'Remove-Item'
+)){
+    Assert-NotContains $packager $forbidden ("M9B packager contains forbidden active/destructive operation: {0}" -f $forbidden)
+}
+
+Assert-Contains $packagingSelfTest 'HP 8C40 M9B evidence packaging self-test: PASS' 'M9B packaging deterministic self-test missing.'

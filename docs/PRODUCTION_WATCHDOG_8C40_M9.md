@@ -194,3 +194,16 @@ The profile now sets only:
 Therefore the versioned M9B preflight may be executed on the exact target, but it
 cannot start the watchdog, acquire a lease or write a fan level. M9C remains blocked
 until the resulting M9B evidence is reviewed and committed.
+
+
+### M9B automatic evidence packaging
+
+The preflight now packages its evidence automatically on both PASS and FAIL_CLOSED.
+`scripts/package-m9b-evidence.ps1` records repository provenance/status, hashes the
+result, telemetry transcript, profile, M9 documentation, preflight script and the
+installed M4 service executable/module when present, then creates an adjacent ZIP and
+SHA-256 sidecar. Packaging is gate-critical: a run that cannot preserve/package its
+evidence must not be treated as PASS.
+
+The packaging helper is host/file-only. It contains no EC/WMI/fan/service mutation,
+does not delete historical evidence and has its own deterministic CI self-test.

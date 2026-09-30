@@ -2995,7 +2995,7 @@
         "read-only telemetry/SafetyGate preflight healthy",
         "service and repository state unchanged by the preflight"
       ],
-      "evidence": "logs/m9b-production-watchdog-preflight_*/{m9b-preflight-result.json,telemetry-output.txt}",
+      "evidence": "logs/m9b-production-watchdog-preflight_*/ + adjacent ZIP/SHA256 sidecar",
       "codeCi": {
         "result": "PASS",
         "commit": "2ec00f047943c46885a15ab96642ec7c69a1e6dd",
@@ -3008,7 +3008,21 @@
         "hpBackendSelfTest": true,
         "hardwareExecution": false
       },
-      "noWritePreflightPassed": false
+      "noWritePreflightPassed": false,
+      "evidencePackaging": {
+        "status": "CODE_PREPARED",
+        "helperScript": "scripts/package-m9b-evidence.ps1",
+        "selfTestScript": "scripts/test-8c40-m9b-evidence-packaging.ps1",
+        "behavior": [
+          "preserve result/telemetry evidence",
+          "capture git HEAD/status without mutating repository",
+          "SHA256 manifest for result, telemetry, profile, M9 doc, preflight script and installed service/module when present",
+          "create ZIP adjacent to evidence directory",
+          "write ZIP SHA256 sidecar",
+          "never delete logs, journal or historical evidence"
+        ],
+        "gateCritical": true
+      }
     },
     "m9c": {
       "status": "NOT_AUTHORIZED",
