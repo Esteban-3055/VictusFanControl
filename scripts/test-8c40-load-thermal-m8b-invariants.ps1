@@ -170,7 +170,7 @@ foreach($needle in @(
     'RELEASE',
     'M8B attempt 1',
     '3.364 s',
-    'telemetry continuity epoch',
+    'continuity epoch after COMMIT/READY',
     'M8B physical retry remains blocked'
 )){
     Assert-Contains $doc $needle ("M8B documentation invariant missing: {0}" -f $needle)
