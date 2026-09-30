@@ -1,6 +1,7 @@
 using VictusFanControl.Cli;
 using VictusFanControl.Control;
 using VictusFanControl.Hardware.Hp;
+using VictusFanControl.Hardware.Intel;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
@@ -33,6 +34,18 @@ internal static class Program
         {
             CliOptions.PrintHelp();
             return 0;
+        }
+
+        if (options.RaplSelfTest)
+        {
+            return IntelRaplCodecSelfTest.Run(Console.Out);
+        }
+
+        if (options.RaplProbe)
+        {
+            return IntelRaplReadOnlyProbe.Run(
+                options.ModulesDirectory,
+                Console.Out);
         }
 
         if (options.SafetySelfTest)
