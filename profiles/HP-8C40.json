@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-retry5-physical-authorized-native-exit-fix-ci-pass-m8c-code-ci-pass-adaptive-shadow-ci-pass-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-retry5-failclosed-diagnostic-observability-prepared-physical-blocked-m8c-code-ci-pass-adaptive-shadow-ci-pass-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -2192,9 +2192,9 @@
       }
     },
     "m8b": {
-      "status": "RETRY5_PHYSICAL_EXECUTION_AUTHORIZED_NATIVE_EXIT_FIX_CI_PASS",
+      "status": "RETRY5_FAIL_CLOSED_AFTER_27_REPRESENTATIVE_SUPERVISION_SAMPLES_DIAGNOSTIC_OBSERVABILITY_CODE_PREPARED_PHYSICAL_BLOCKED",
       "physicalPassed": false,
-      "physicalExecutionAuthorized": true,
+      "physicalExecutionAuthorized": false,
       "writeCapable": true,
       "requiredToken": "8C40-M8B-LOAD50",
       "harnessScript": "scripts/test-8c40-load-thermal-m8b.ps1",
@@ -2235,7 +2235,7 @@
         "physicalExecution": false,
         "reviewNote": "Initial M8B preparation also passed run #717. Pre-physical review found the independent failsafe covered only OWNED 50/50; it was hardened before authorization to cover exact-target WRITE_ARMED pending 50/50, OWNED 50/50 and RESTORING 50/50. Hardened run #718 passed fully."
       },
-      "physicalExecutionNote": "M8B further write-capable execution BLOCKED. Native Process lifetime/ExitCode fix CODE/CI PASS #801; retrospective physical attempt-4 controller/parent/Watchdog M4 evidence audit pending.",
+      "physicalExecutionNote": "M8B retry 5 failed closed after 27/27 representative recorded supervision samples when the coordinator returned authority to firmware. Final journal/FF/FF/service closure passed and the dated M4 log proves PREPARE->WRITE_INTENT->COMMIT->RESTORE_BEGIN->RELEASE. No further physical M8B execution is authorized until diagnostic-observability code/CI closes.",
       "physicalAttempts": [
         {
           "attempt": 1,
@@ -2314,6 +2314,40 @@
           "causalChainPass": "not checked by parent due ExitCode gate; requires retained watchdog service log",
           "failsafeTakeover": "not determined from terminal; inspect retained summary and failsafe log",
           "journalClosure": "not determined from terminal; inspect retained harness summary",
+          "physicalPassed": false,
+          "retrospectiveAudit": {
+            "result": "PASS_EVIDENCE_CHAIN_RECONSTRUCTED",
+            "recoveredFrom": "dated Watchdog M4 log copied with retry-5 evidence",
+            "controllerPid": 13688,
+            "controllerStartUtcTicks": 639263462484122400,
+            "causalChain": "exactly one PREPARE -> WRITE_INTENT 50/50 -> COMMIT 50/50 -> RESTORE_BEGIN -> RELEASE for matching PID/start-ticks",
+            "failsafeInterpretation": "summary configured 120 s delay while attempt duration was about 44 s; harness cleanup terminates a still-sleeping failsafe, so no m8b-failsafe.log is expected and summary failsafeTakeover=false is consistent",
+            "promotion": "historical attempt evidence is internally coherent, but M8B remains globally open because retry 5 exposed a later intermittent supervision handoff"
+          }
+        },
+        {
+          "attempt": 5,
+          "date": "2026-09-30",
+          "workload": "God of War 2018",
+          "evidenceHead": "fc31d42b7e2d06d7a52b34cb19e59f3d8e0dffe6",
+          "evidencePath": "logs/m8b-watchdog-load_2026-09-30_152657/m8b-result.json",
+          "summaryPath": "logs/m8b-watchdog-load_2026-09-30_152657/m8b-harness-summary.json",
+          "readyPath": "logs/m8b-watchdog-load_2026-09-30_152657/m8b-ready.json",
+          "copiedWatchdogLog": "watchdog-m4-8c40-2026-09-30.log",
+          "result": "FAIL_CLOSED",
+          "classification": "FAIL_CLOSED_BACKEND_SUPERVISION_HANDOFF_DETAIL_NOT_PERSISTED",
+          "preWrite": "3/3 consecutive representative samples; GPU 89-100%, 53.8-68.5 W; CPU effective 65-69 C",
+          "owned": "READY controller PID 14472, creation ticks 639263896604537167, journal generation 3, EC 50/50, dual tach 3878/3564 RPM",
+          "supervision": "27/27 recorded samples representative and consecutive before handoff; every recorded sample EC=50/50; CPU effective max 70 C; GPU max 74 C; no CPU95 streak",
+          "failure": "EnforceSafetyAsync returned false between recorded sample 27 and would-be sample 28. SafetyGate reason list was empty, so evidence points to coordinator backend ownership/feedback status; exact backend detail was discarded by the old M8B exception text and was not persisted.",
+          "watchdogCausalChain": "dated M4 log contains exactly ordered PREPARE, WRITE_INTENT 50/50, COMMIT 50/50, RESTORE_BEGIN, RELEASE for PID 14472",
+          "failsafeTakeover": false,
+          "finalClosurePass": true,
+          "finalJournalAbsent": true,
+          "finalFirmwareProofPass": true,
+          "finalServiceBaselinePass": true,
+          "finalFirmwareOwned": true,
+          "normalRestoreCompleted": false,
           "physicalPassed": false
         }
       ],
@@ -2365,14 +2399,14 @@
         }
       },
       "nextStep": {
-        "status": "EVIDENCE_AND_WORKLOAD_REVIEW_PENDING",
-        "request": "operator to attach preserved m8b-result.json and m8b-harness-summary.json for attempt 3; identify exact game/render scene and whether it was active in foreground; compare against M8A representative scenario",
-        "permittedAction": "read-only evidence analysis and versioned code/CI preparation, not another write-capable physical M8B attempt",
-        "unchanged": "M8B 35% GPU load AND 20 W GPU power, 3 consecutive in 10 samples, all safety and watchdog limits",
+        "status": "DIAGNOSTIC_OBSERVABILITY_CI_PENDING",
+        "request": "Run full code/CI on the diagnostic-only branch. Do not perform another write-capable physical M8B attempt until diagnostic instrumentation passes and a separate explicit authorization commit is made.",
+        "permittedAction": "code/static/self-test/CI only",
+        "unchanged": "M8B 35% GPU load AND 20 W GPU power, 3 consecutive in 10 samples, 50/50 single write, all thermal/watchdog/ownership/restore limits",
         "m8cPhysicalExecutionAuthorized": false
       },
       "processExitHardening": {
-        "status": "CODE_CI_PASS_RETRY5_PHYSICAL_AUTHORIZED",
+        "status": "CODE_CI_PASS_RETRY5_EXECUTED",
         "approach": "directly owned System.Diagnostics.Process.Start + bounded native WaitForExit + ExitCode on same process object",
         "psCompatibility": "PowerShell 5.1 and PowerShell 7 native positive/negative exit selftests",
         "newPhysicalAttemptAuthorized": false,
@@ -2408,7 +2442,26 @@
           "M8C remains physically blocked",
           "automatic/adaptive policy remains off",
           "preserve complete evidence directory and dated M4 watchdog log immediately after the run"
-        ]
+        ],
+        "completed": true,
+        "result": "FAIL_CLOSED",
+        "evidenceHead": "fc31d42b7e2d06d7a52b34cb19e59f3d8e0dffe6",
+        "evidencePath": "logs/m8b-watchdog-load_2026-09-30_152657/"
+      },
+      "diagnosticHardening": {
+        "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+        "purpose": "Preserve the exact cause of an M8B supervision handoff without changing safety, ownership, thermal, load, watchdog, command, or restore behavior.",
+        "changes": [
+          "record every FanControlCoordinator AuthorityChanged transition into M8B durable evidence",
+          "persist the Custom->Restoring reason, including backendStatus.Detail for ownership/feedback failures",
+          "persist the failing supervision telemetry/SafetyGate snapshot before throwing",
+          "emit an M8B_AUTHORITY terminal line for immediate diagnosis",
+          "make the independent delayed failsafe publish an ARMED log entry before its sleep and bind its PID/log presence into the parent summary"
+        ],
+        "physicalBehaviorChanged": false,
+        "thresholdsChanged": false,
+        "commandCountChanged": false,
+        "physicalExecutionAuthorized": false
       }
     },
     "m8c": {

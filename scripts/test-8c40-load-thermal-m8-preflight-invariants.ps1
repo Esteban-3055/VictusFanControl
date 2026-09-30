@@ -19,7 +19,7 @@ Assert-Contains $preflight '--untracked-files=all' 'M8 preflight must inspect al
 Assert-Contains $preflight "StartsWith('?? logs/'" 'M8 preflight may exempt only untracked historical evidence under logs/.'
 Assert-Contains $preflight '$blockingStatus' 'M8 preflight must still reject every non-evidence working-tree change.'
 Assert-Contains $preflight 'Preserved untracked historical evidence under logs/' 'M8 preflight must explicitly report preserved evidence instead of deleting it.'
-Assert-Contains $preflight "feature/victus-8c40-m8b-retry5" 'M8 preflight must require the dedicated M8B retry qualification branch.'
+Assert-Contains $preflight "feature/victus-8c40-m8b-diagnostics" 'M8 preflight must require the dedicated M8B diagnostic qualification branch.'
 Assert-Contains $preflight 'Assert-Exact8C40Target' 'M8 preflight must exact-match HP 8C40.'
 Assert-Contains $preflight 'Assert-ProfileBoundary' 'M8 preflight must verify M6/M7 and policy/profile boundaries.'
 Assert-Contains $preflight 'Assert-AcBatterySane' 'M8 preflight must require AC/battery sanity.'

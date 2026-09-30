@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 4 CONTROLLER-REPORTED PASS AT 30/30 BUT PARENT FAIL_CLOSED ON UNAVAILABLE EXITCODE; ORIGINAL INDEPENDENT M4/FAILSAFE LOGS ARE UNAVAILABLE. M8B RETRY 5 IS EXPLICITLY PHYSICALLY AUTHORIZED THROUGH THE VERSIONED HARNESS AFTER NATIVE EXITCODE HARDENING. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 4 RETROSPECTIVE CAUSAL EVIDENCE RECONSTRUCTED FROM THE RECOVERED DATED M4 LOG. M8B RETRY 5 FAIL_CLOSED AFTER 27/27 REPRESENTATIVE RECORDED SUPERVISION SAMPLES ON AN UNDIFFERENTIATED COORDINATOR/BACKEND HANDOFF; FINAL FF/FF/JOURNAL/SERVICE CLOSURE PASS. DIAGNOSTIC-ONLY OBSERVABILITY HARDENING IS PREPARED; FURTHER PHYSICAL M8B IS BLOCKED PENDING CI AND SEPARATE AUTHORIZATION. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -801,6 +801,67 @@ to force PASS.
 
 This authorization is **M8B only**. M8C physical execution remains blocked; production watchdog
 promotion and automatic/adaptive fan control remain OFF.
+
+
+## 7B.6. Attempt-4 retrospective chain recovered; retry 5 FAIL_CLOSED exposes a diagnostic gap
+
+The evidence bundle preserved after retry 5 included the complete dated M4 service log for
+2026-09-30. That log also contains the earlier God of War attempt-4 controller PID **13688**,
+creation ticks **639263462484122422**, matching the preserved READY/result/summary identity.
+For that controller the dated service log contains exactly one ordered:
+
+`PREPARE -> WRITE_INTENT target=50/50 -> COMMIT target=50/50 -> RESTORE_BEGIN -> RELEASE`.
+
+The historical attempt-4 summary configured the independent failsafe for **120 s**, while the
+controller/harness attempt completed in about **44 s**. The versioned failsafe sleeps for the full
+delay before its first action, and the parent cleanup terminates it if the run has already ended.
+Therefore absence of `m8b-failsafe.log` in that historical bundle is expected and is consistent
+with `failsafeTakeover=false`; it is not evidence of a hidden takeover. Attempt 4 is therefore
+classified as having a **retrospectively reconstructed causal evidence PASS**, while its historical
+parent result remains FAIL_CLOSED because the old PowerShell child ExitCode gate aborted before
+the parent itself called the causal-log assertion.
+
+Retry 5 ran on HEAD `fc31d42b7e2d06d7a52b34cb19e59f3d8e0dffe6` under God of War 2018.
+It admitted 3/3 representative pre-write samples, issued exactly one 50/50 command, reached READY
+with controller PID **14472**, creation ticks **639263896604537167**, journal generation **3**,
+and recorded **27/27 representative consecutive supervision samples** before the next supervision
+cycle returned authority to firmware. All 27 persisted samples showed EC 50/50; CPU effective
+temperature stayed <=70 C, GPU <=74 C and CPU95 streak remained 0/5.
+
+The controller result was FAIL_CLOSED with:
+
+`M8B safety/ownership supervision returned authority to firmware:`
+
+and no text after the colon. The SafetyGate reason list was empty. The current M8B controller only
+prints `safety.Reasons` when `EnforceSafetyAsync` returns false, even though the coordinator can
+also return false after a backend ownership/feedback status failure. The exact backend
+`FanBackendStatus.Detail` is present in the coordinator's Custom->Restoring transition reason, but
+retry 5 did not subscribe to/persist that transition. The exact failing backend state is therefore
+not recoverable from retry-5 evidence.
+
+The retry-5 watchdog log still proves ordered
+`PREPARE -> WRITE_INTENT -> COMMIT -> RESTORE_BEGIN -> RELEASE` for PID 14472. Parent cleanup
+proved journal absent, two FF/FF observations and M4 Manual/Stopped; the summary reports
+`failsafeTakeover=false` and `finalClosurePass=true`. The failure was therefore safe, but it
+reopens M8B until the intermittent status handoff is explained.
+
+### Diagnostic-only observability hardening
+
+Before any further physical write, the M8B qualification controller is hardened only for evidence:
+
+- subscribe to `FanControlCoordinator.AuthorityChanged`;
+- persist every authority transition and the exact Custom->Restoring reason;
+- preserve the failing supervision telemetry/SafetyGate snapshot in structured JSON;
+- include the captured handoff reason in the thrown FAIL_CLOSED message;
+- print `M8B_AUTHORITY` transitions to the terminal;
+- make the independent failsafe write an `M8B FAILSAFE ARMED` line before its delay;
+- store failsafe PID and log-presence state in the parent summary.
+
+No fan target, command count, load predicate, SafetyGate threshold, thermal confirmation, watchdog
+lease behavior, ownership rule or restore behavior is changed. **Further M8B physical execution is
+blocked until this diagnostic-only change passes the complete CI suite and a separate explicit
+authorization commit is made.** M8C remains physically blocked and automatic/adaptive control
+remains OFF.
 
 ## 8. Physical harness safety and evidence
 

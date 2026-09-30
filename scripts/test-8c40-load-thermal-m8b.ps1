@@ -40,6 +40,7 @@ $controllerStartTicks=0L
 $journalGeneration=$null
 $logLineBoundary=0
 $failsafeTakeover=$false
+$failsafePid=0
 $causalChainPass=$false
 $finalClosurePass=$false
 $finalJournalAbsent=$false
@@ -224,6 +225,30 @@ function Start-M8BFailsafe {
         throw 'M8B independent failsafe exited before the controller launch.'
     }
 
+    $armedDeadline=(Get-Date).AddSeconds(3)
+    $armed=$false
+
+    while((Get-Date) -lt $armedDeadline){
+        if(Test-Path $failsafeLog){
+            $armedText=Get-Content $failsafeLog -Raw -ErrorAction SilentlyContinue
+            if($armedText -match 'M8B FAILSAFE ARMED:'){
+                $armed=$true
+                break
+            }
+        }
+
+        $process.Refresh()
+        if($process.HasExited){
+            throw 'M8B independent failsafe exited before publishing its ARMED evidence.'
+        }
+
+        Start-Sleep -Milliseconds 50
+    }
+
+    if(-not $armed){
+        throw 'M8B independent failsafe did not publish ARMED evidence before controller launch.'
+    }
+
     return $process
 }
 
@@ -379,6 +404,8 @@ function Write-HarnessSummary {
         controllerStartUtcTicks=$controllerStartTicks
         journalGeneration=$journalGeneration
         failsafeDelaySeconds=$FailsafeDelaySeconds
+        failsafePid=$failsafePid
+        failsafeLogPresent=(Test-Path $failsafeLog)
         failsafeTakeover=$failsafeTakeover
         causalChainPass=$causalChainPass
         finalClosurePass=$finalClosurePass
@@ -497,6 +524,7 @@ try {
     Write-Host 'Step 5: ARM INDEPENDENT FAILSAFE BEFORE WRITE-CAPABLE CONTROLLER...' -ForegroundColor Yellow
 
     $failsafe=Start-M8BFailsafe
+    $failsafePid=$failsafe.Id
     Write-Host ("Failsafe PID={0} delay={1}s log={2}" -f
         $failsafe.Id,$FailsafeDelaySeconds,$failsafeLog)
 

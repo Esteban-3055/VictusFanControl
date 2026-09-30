@@ -57,6 +57,9 @@ Assert-Contains $harness 'finalJournalAbsent' 'M8B summary must distinguish jour
 Assert-Contains $harness 'finalFirmwareProofPass' 'M8B summary must distinguish FF/FF closure.'
 Assert-Contains $harness 'finalServiceBaselinePass' 'M8B summary must distinguish Manual/stopped closure.'
 Assert-Contains $harness "M8B cleanup service baseline" 'M8B FAIL_CLOSED cleanup must print service closure evidence.'
+Assert-Contains $harness 'failsafePid=$failsafePid' 'M8B summary must persist the independent failsafe PID.'
+Assert-Contains $harness 'failsafeLogPresent=(Test-Path $failsafeLog)' 'M8B summary must persist whether failsafe evidence exists.'
+Assert-Contains $harness 'M8B independent failsafe did not publish ARMED evidence before controller launch.' 'M8B parent must bind controller launch to a durable failsafe ARMED marker.'
 $trackedHelper=Get-Content (Join-Path $PSScriptRoot 'm8b-tracked-child.ps1') -Raw
 $trackedSelfTest=Get-Content (Join-Path $PSScriptRoot 'test-8c40-m8b-tracked-child-selftest.ps1') -Raw
 Assert-Contains $trackedHelper 'New-Object System.Diagnostics.Process' 'M8B helper must own the native process object.'
@@ -115,7 +118,13 @@ foreach($required in @(
     'finalFirmwareOwned',
     'previousPreWriteTimestamp',
     'previousSupervisionTimestamp',
-    'SUPERVISION_TELEMETRY_EPOCH_BEGIN'
+    'SUPERVISION_TELEMETRY_EPOCH_BEGIN',
+    'AuthorityChanged +=',
+    'AUTHORITY_TRANSITION',
+    'SUPERVISION_HANDOFF',
+    'lastCustomHandoffReason',
+    'supervisionFailure',
+    'SafetyGate reasons='
 )){
     Assert-Contains $source $required ("M8B source invariant missing: {0}" -f $required)
 }
@@ -131,6 +140,7 @@ Assert-NotContains $source 'while (true)' 'M8B source must remain bounded.'
 Assert-Contains $source 'coordinator.EnforceSafetyAsync(' 'M8B must continuously supervise safety/ownership without retransmitting 50/50.'
 
 foreach($required in @(
+    'M8B FAILSAFE ARMED:',
     'M8B FAILSAFE TAKEOVER:',
     'M8B FAILSAFE CONTROLLER-KILL:',
     'WRITE_ARMED',
@@ -165,15 +175,22 @@ Assert-Contains $cli '--8c40-m8b-ready-path' 'M8B CLI READY path missing.'
 Assert-Contains $cli '--8c40-m8b-result-path' 'M8B CLI result path missing.'
 Assert-Contains $program 'Hp8C40M8BWatchdogLoadQualificationTest.RunAsync' 'M8B Program route missing.'
 Assert-Contains $program 'Hp8C40M8BWatchdogLoadQualificationTest.RequiredToken' 'M8B Program route must validate exact token.'
+Assert-Contains (Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Control\FanControlCoordinatorSelfTest.cs') -Raw) 'backend ownership handoff reason is observable before restore' 'Coordinator self-test must prove backend handoff reasons remain observable.'
 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8B preparation requires closed M8A physical PASS.'
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8B preparation requires M8A authorization.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.harnessScript 'scripts/test-8c40-load-thermal-m8b.ps1' 'M8B harness path changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/watchdog-m8b-service-failsafe-8c40.ps1' 'M8B failsafe path changed.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B child PASS/parent FAIL_CLOSED must not be promoted without independent causal evidence audit.'
-Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B retry 5 must be explicitly authorized in the versioned profile.'
-Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[3].classification 'CONTROLLER_REPORTED_PASS_PARENT_EXITCODE_UNAVAILABLE' 'M8B latest controller/parent discrepancy classification changed.'
-Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.status 'CODE_CI_PASS_RETRY5_PHYSICAL_AUTHORIZED' 'M8B tracked-child hardening/retry authorization status changed.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B must be physically blocked while retry-5 handoff diagnostics are being hardened.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[3].classification 'CONTROLLER_REPORTED_PASS_PARENT_EXITCODE_UNAVAILABLE' 'M8B attempt-4 controller/parent discrepancy classification changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[4].classification 'FAIL_CLOSED_BACKEND_SUPERVISION_HANDOFF_DETAIL_NOT_PERSISTED' 'M8B retry-5 diagnostic classification changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[4].evidenceHead 'fc31d42b7e2d06d7a52b34cb19e59f3d8e0dffe6' 'M8B retry-5 evidence HEAD changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[4].result 'FAIL_CLOSED' 'M8B retry-5 result changed.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalAttempts[4].finalClosurePass) 'M8B retry-5 final closure evidence changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.diagnosticHardening.status 'CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED' 'M8B diagnostic hardening status changed.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.diagnosticHardening.physicalExecutionAuthorized) 'M8B diagnostic hardening must not authorize hardware before CI.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.status 'CODE_CI_PASS_RETRY5_EXECUTED' 'M8B tracked-child hardening/retry execution status changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.ci.commit '1d672389ee2bc7980bdfd38aa56fbeb390567f32' 'M8B native-child helper CI commit changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.ci.runNumber 801 'M8B native-child CI run changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].result 'FAIL_CLOSED_NO_WRITE' 'M8B attempt 3 must remain fail-closed/no-write.'
@@ -222,6 +239,10 @@ foreach($needle in @(
     '30/30 representative',
     'Full causal chain and no-failsafe-takeover proof are still pending',
     'M8B physical retry 5 - explicitly authorized',
+    'Attempt-4 retrospective chain recovered; retry 5 FAIL_CLOSED exposes a diagnostic gap',
+    '27/27 representative consecutive supervision samples',
+    'M8B FAILSAFE ARMED',
+    'Further M8B physical execution is blocked',
     'M8C physical execution remains blocked',
     'Both PowerShell 7 and Windows PowerShell 5.1 exercised successful child exit code 0'
 )){

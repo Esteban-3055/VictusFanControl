@@ -172,6 +172,9 @@ function Kill-ExactController {
 }
 
 try {
+    Log-Line ("M8B FAILSAFE ARMED: pid={0} delaySeconds={1}; no takeover action occurs before the delay expires." -f
+        $PID,$DelaySeconds)
+
     Start-Sleep -Seconds $DelaySeconds
 
     if (-not (Test-Path $journalPath)) {

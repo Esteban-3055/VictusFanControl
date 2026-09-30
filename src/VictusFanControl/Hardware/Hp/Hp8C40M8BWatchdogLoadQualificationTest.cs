@@ -81,6 +81,8 @@ public static class Hp8C40M8BWatchdogLoadQualificationTest
         var normalRestoreCompleted = false;
         var finalFirmwareOwned = false;
         var readyPublished = false;
+        string? lastCustomHandoffReason = null;
+        SupervisionFailureEvidence? supervisionFailure = null;
 
         FanControlCoordinator? coordinator = null;
         Hp8C40EcControlStateProbe? ecProbe = null;
@@ -325,6 +327,31 @@ public static class Hp8C40M8BWatchdogLoadQualificationTest
                 new FanControlCoordinator(
                     backend);
 
+            coordinator.AuthorityChanged +=
+                (_, transition) =>
+                {
+                    var transitionDetail =
+                        $"{transition.Previous}->{transition.Current}: {transition.Reason}";
+
+                    events.Add(
+                        new EventEvidence(
+                            transition.Timestamp,
+                            "AUTHORITY_TRANSITION",
+                            transitionDetail));
+
+                    Console.WriteLine(
+                        $"M8B_AUTHORITY {transitionDetail}");
+
+                    if (transition.Previous ==
+                            FanAuthority.Custom &&
+                        transition.Current ==
+                            FanAuthority.Restoring)
+                    {
+                        lastCustomHandoffReason =
+                            transition.Reason;
+                    }
+                };
+
             events.Add(
                 new EventEvidence(
                     DateTimeOffset.UtcNow,
@@ -521,9 +548,48 @@ public static class Hp8C40M8BWatchdogLoadQualificationTest
                 {
                     customWasOwned = false;
 
+                    var safetyReasons =
+                        safety.Reasons.Count == 0
+                            ? "none"
+                            : string.Join(" | ", safety.Reasons);
+
+                    var handoffReason =
+                        string.IsNullOrWhiteSpace(
+                            lastCustomHandoffReason)
+                            ? "unavailable"
+                            : lastCustomHandoffReason;
+
+                    supervisionFailure =
+                        new SupervisionFailureEvidence(
+                            sampleIndex,
+                            snapshot.Timestamp,
+                            snapshot.CpuControlTemperatureC!.Value,
+                            snapshot.CpuTemperatureC!.Value,
+                            snapshot.CpuCoreMaxTemperatureC!.Value,
+                            snapshot.CpuPackagePowerW!.Value,
+                            snapshot.CpuLoadPercent!.Value,
+                            snapshot.GpuTemperatureC!.Value,
+                            snapshot.GpuPowerW!.Value,
+                            snapshot.GpuLoadPercent!.Value,
+                            snapshot.CpuFanRpm!.Value,
+                            snapshot.GpuFanRpm!.Value,
+                            safety.CustomControlPermitted,
+                            safety.ThermalEmergency,
+                            safetyReasons,
+                            coordinator.Authority.ToString(),
+                            handoffReason);
+
+                    events.Add(
+                        new EventEvidence(
+                            DateTimeOffset.UtcNow,
+                            "SUPERVISION_HANDOFF",
+                            $"sample={sampleIndex}; SafetyGate reasons={safetyReasons}; " +
+                            $"coordinator={coordinator.Authority}; handoff={handoffReason}"));
+
                     throw new InvalidOperationException(
                         "M8B safety/ownership supervision returned authority to firmware: " +
-                        string.Join(" | ", safety.Reasons));
+                        $"SafetyGate reasons={safetyReasons}; " +
+                        $"coordinator handoff={handoffReason}");
                 }
 
                 var ec =
@@ -781,6 +847,8 @@ public static class Hp8C40M8BWatchdogLoadQualificationTest
                         customWasOwned,
                     normalRestoreCompleted,
                     finalFirmwareOwned,
+                    lastCustomHandoffReason,
+                    supervisionFailure,
                     criteria =
                         new
                         {
@@ -1326,6 +1394,25 @@ public static class Hp8C40M8BWatchdogLoadQualificationTest
         bool ThermalEmergency,
         bool EcRecoveredTransient,
         int EcReads);
+
+    private sealed record SupervisionFailureEvidence(
+        int SampleIndex,
+        DateTimeOffset SnapshotTimestampUtc,
+        double CpuEffectiveC,
+        double CpuPackageC,
+        double CpuCoreMaxC,
+        double CpuPowerW,
+        double CpuLoadPercent,
+        double GpuTemperatureC,
+        double GpuPowerW,
+        double GpuLoadPercent,
+        double CpuFanRpm,
+        double GpuFanRpm,
+        bool SafetyCustomControlPermitted,
+        bool SafetyThermalEmergency,
+        string SafetyReasons,
+        string CoordinatorAuthority,
+        string LastCustomHandoffReason);
 
     private sealed record EventEvidence(
         DateTimeOffset TimestampUtc,

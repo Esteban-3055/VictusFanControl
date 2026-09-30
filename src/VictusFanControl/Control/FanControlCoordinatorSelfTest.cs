@@ -29,6 +29,7 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestSafetyPreemptsInFlightCommandAsync(output, safety, now);
         failures += await TestUnsafeReentryRestoresAsync(output, safety, now);
         failures += await TestRuntimeOwnershipMismatchRestoresAsync(output, safety);
+        failures += await TestBackendOwnershipFailureReasonObservableAsync(output, safety);
         failures += await TestRuntimeFeedbackFailureRestoresAsync(output, safety);
         failures += await TestBackendStatusFailureRestoresAsync(output, safety);
         failures += await TestControlDependencyFailurePreemptsUnsafeSafetyAsync(output, safety, now);
@@ -406,6 +407,47 @@ public static class FanControlCoordinatorSelfTest
             backend.RestoreCalls == 1 &&
             coordinator.Authority == FanAuthority.Firmware);
     }
+
+    private static async Task<int> TestBackendOwnershipFailureReasonObservableAsync(
+        TextWriter output,
+        SafetyGateResult safety)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+
+        string? customExitReason = null;
+
+        coordinator.AuthorityChanged +=
+            (_, transition) =>
+            {
+                if (transition.Previous == FanAuthority.Custom &&
+                    transition.Current == FanAuthority.Restoring)
+                {
+                    customExitReason = transition.Reason;
+                }
+            };
+
+        var entered = await coordinator.TryEnterCustomAsync(
+            safety,
+            CancellationToken.None);
+
+        backend.OwnershipValid = false;
+
+        var stillSafe = await coordinator.EnforceSafetyAsync(
+            safety,
+            "synthetic ownership diagnostic",
+            CancellationToken.None);
+
+        return Report(
+            output,
+            "backend ownership handoff reason is observable before restore",
+            entered &&
+            !stillSafe &&
+            customExitReason ==
+                "Backend ownership validation failed: self-test" &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
 
     private static async Task<int> TestUnsafeReentryRestoresAsync(
         TextWriter output,
