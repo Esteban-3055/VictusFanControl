@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-load-thermal-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-code-ci-pass-preflight-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -58,7 +58,7 @@
     "validatedMinimumLevel": 10,
     "validatedMaximumLevel": 50,
     "supportsIndependentLevels": false,
-    "notes": "Equal-only 10..50 is fully integrated for bounded production control after complete physical characterization, restart-from-zero, large-transition qualification, qualification endpoint coordinator PASS, and final post-promotion regression through the unmodified production backend at both endpoints. Independent CPU/GPU levels remain unqualified and rejected. Automatic policy and 8C40 watchdog/Modern Standby recovery remain OFF."
+    "notes": "Equal-only 10..50 is fully integrated for bounded production control after complete physical characterization, restart-from-zero, large-transition qualification, endpoint coordinator PASS, and final post-promotion regression through the unmodified production backend at both endpoints. Independent CPU/GPU levels remain unqualified and rejected. Automatic/adaptive policy and production watchdog/unattended recovery remain blocked pending M8 representative-load, thermal-preemption and any remaining production-race qualification."
   },
   "observedCalibration": [
     {
@@ -1904,6 +1904,36 @@
       },
       "qualificationPass": true,
       "interpretation": "M7 physically qualifies Windows hibernation on the exact HP 8C40 target. A real watchdog-backed Custom 30/30 lease was released to Firmware before S4, Windows recorded an Application API hibernation and Resume from Hibernate under the same GUI/watchdog identities, recovery waited for the display-On gate and fresh Healthy telemetry, one controlled 30/30 re-entry succeeded, and final Release ended with journal absent plus stable FF/FF. Hibernation is closed. Representative load/thermal production validation and any remaining production-race qualification stay separate; WatchdogRecoveryValidated remains false and automatic/adaptive policy remains OFF."
+    }
+  },
+  "loadThermalM8Qualification": {
+    "status": "SPEC_INVARIANTS_CODE_CI_PASS_NO_WRITE_PREFLIGHT_PENDING_PHYSICAL_PENDING",
+    "targetProfileId": "HP-8C40-9D0R1LA-F18",
+    "automaticPolicyEnabled": false,
+    "watchdogRecoveryValidated": false,
+    "representativeLoadGate": "M8A pending",
+    "watchdogBackedLoadGate": "M8B pending",
+    "thermalPreemptionGate": "M8C pending",
+    "productionRaceAudit": "pending",
+    "realOvertemperatureRequired": false,
+    "qualificationFanLevel": "50/50 equal-only",
+    "physicalAbortLimits": "effective CPU 90 C / GPU 82 C",
+    "noWritePreflightScript": null,
+    "physicalHarnessScript": null,
+    "preparationCi": {
+      "result": "PASS",
+      "finalCommit": "a1c4e6adaa25518b36d6b1f59b9d800845b1fc82",
+      "runNumber": 694,
+      "runId": 36653787634,
+      "completedAtLocalDate": "2026-09-29",
+      "powershellCoreInvariant": true,
+      "windowsPowerShell51Compatibility": true,
+      "warningsAsErrorsBuild": true,
+      "m6Regression": true,
+      "m7Regression": true,
+      "safetyGateSelfTest": true,
+      "coordinatorSelfTest": true,
+      "hpBackendSelfTest": true
     }
   }
 }

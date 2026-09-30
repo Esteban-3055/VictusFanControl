@@ -2,13 +2,24 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **SPECIFICATION / INVARIANTS PREPARATION. CI PENDING. NO-WRITE PREFLIGHT AND PHYSICAL HARNESS NOT YET AUTHORIZED.**
+Status: **SPECIFICATION + STATIC/SYNTHETIC INVARIANTS CODE/CI PASS. NO-WRITE PREFLIGHT PENDING. PHYSICAL HARNESS PENDING.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
 automatic/adaptive fan policy.
 
 `WatchdogRecoveryValidated` remains **false**. Automatic/adaptive fan policy remains **OFF**.
+
+Preparation CI is closed at commit `a1c4e6adaa25518b36d6b1f59b9d800845b1fc82`,
+GitHub Actions **#694** (run `36653787634`) **SUCCESS**. The M8 invariant passed
+under PowerShell 7 and Windows PowerShell 5.1, with warnings-as-errors build,
+M6/M7 regressions, SafetyGate, coordinator and HP backend self-tests green.
+
+Two earlier preparation runs (#692 and #693) failed closed only because existing
+legacy/M6 static invariants still matched the old wording of the production
+watchdog prohibition after that wording was corrected for the post-M7 state.
+Those invariants were updated without changing fan authority, watchdog authority,
+thermal thresholds or hardware write behavior. No physical M8 execution occurred.
 
 ## 1. Objective
 

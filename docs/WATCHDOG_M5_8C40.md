@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M5 - failure-domain qualification
 
-Status: **M5A/M5B/M5C/M5D CODE/CI/PHYSICAL PASS for awake OWNED plus controller-death WRITE_ARMED recovery. WRITE_ARMED double-death and lifecycle/Modern Standby promotion remain pending.**
+Status: **M5A/M5B/M5C/M5D/M5E CODE/CI/PHYSICAL PASS for the complete awake OWNED/WRITE_ARMED failure matrix. M6 Modern Standby and M7 hibernation subsequently passed; M8 representative-load/thermal-preemption qualification is now pending.**
 M4 normal awake lease qualification is complete at equal 10/30/50.
 
 Production watchdog construction and automatic/adaptive policy remain OFF.

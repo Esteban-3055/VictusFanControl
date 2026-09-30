@@ -1,6 +1,6 @@
 # HP 8C40 watchdog M4 - target-bound live lease qualification
 
-Status: **M4A/M4B/M4C CODE/CI/PHYSICAL PASS. Normal awake target-bound lease qualification is complete at 30/10/50. M5 failure-domain qualification remains pending.**
+Status: **M4A/M4B/M4C CODE/CI/PHYSICAL PASS. Normal awake target-bound lease qualification is complete at 30/10/50. M5A-E, M6 and M7 subsequently passed; M8 representative-load/thermal-preemption qualification is now pending.**
 
 M3 physically qualified the LocalSystem restore-only primitive. M4 is the next
 separate authorization boundary: durable watchdog lease ownership around a real
