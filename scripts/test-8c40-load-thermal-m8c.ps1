@@ -29,6 +29,7 @@ $cli=Join-Path $repoRoot 'src\VictusFanControl\bin\Release\net8.0-windows\Victus
 $modulesDir=Join-Path $repoRoot 'modules'
 $failsafeScript=Join-Path $PSScriptRoot 'watchdog-m8c-service-failsafe-8c40.ps1'
 $token='8C40-M8C-THERMAL50'
+. (Join-Path $PSScriptRoot 'm8c-tracked-child.ps1')
 
 $stamp=Get-Date -Format 'yyyy-MM-dd_HHmmss'
 $evidenceRoot=Join-Path $repoRoot ("logs\m8c-thermal-preemption_{0}" -f $stamp)
@@ -204,6 +205,30 @@ function Start-M8CFailsafe {
     $process.Refresh()
     if($process.HasExited){throw 'M8C independent failsafe exited before controller launch.'}
 
+    $armedDeadline=(Get-Date).AddSeconds(3)
+    $armed=$false
+
+    while((Get-Date) -lt $armedDeadline){
+        if(Test-Path $LogPath){
+            $armedText=Get-Content $LogPath -Raw -ErrorAction SilentlyContinue
+            if($armedText -match 'M8C FAILSAFE ARMED:'){
+                $armed=$true
+                break
+            }
+        }
+
+        $process.Refresh()
+        if($process.HasExited){
+            throw 'M8C independent failsafe exited before publishing its ARMED evidence.'
+        }
+
+        Start-Sleep -Milliseconds 50
+    }
+
+    if(-not $armed){
+        throw 'M8C independent failsafe did not publish ARMED evidence before controller launch.'
+    }
+
     return $process
 }
 
@@ -226,7 +251,8 @@ function Wait-ReadyMarker {
         [string]$Path,
         [int]$ExpectedPid,
         [string]$ExpectedCase,
-        [System.Diagnostics.Process]$Controller
+        [System.Diagnostics.Process]$Controller,
+        [string]$ResultPath
     )
 
     $deadline=(Get-Date).AddSeconds(35)
@@ -248,7 +274,29 @@ function Wait-ReadyMarker {
 
         $Controller.Refresh()
         if($Controller.HasExited){
-            throw "M8C controller exited before READY. ExitCode=$($Controller.ExitCode)."
+            $exitCode='unavailable'
+            try {
+                $exitCode=[string](Wait-M8CTrackedChildExitCode -Process $Controller -Seconds 1)
+            }
+            catch {
+                $exitCode=("unavailable ({0})" -f $_.Exception.Message)
+            }
+
+            $resultDetail='result evidence unavailable'
+            if(Test-Path $ResultPath){
+                try {
+                    $early=Get-Content $ResultPath -Raw | ConvertFrom-Json
+                    $resultDetail=("result={0}; reason={1}" -f
+                        [string]$early.Result,
+                        [string]$early.FailureReason)
+                }
+                catch {
+                    $resultDetail=("result evidence unreadable: {0}" -f $_.Exception.Message)
+                }
+            }
+
+            throw ("M8C controller exited before READY. ExitCode={0}; {1}" -f
+                $exitCode,$resultDetail)
         }
 
         Start-Sleep -Milliseconds 100
@@ -263,12 +311,7 @@ function Wait-ControllerExit {
         [int]$Seconds
     )
 
-    if(-not $Controller.WaitForExit($Seconds*1000)){
-        throw "M8C controller did not exit within $Seconds s after parent continue."
-    }
-
-    $Controller.Refresh()
-    return [int]$Controller.ExitCode
+    return Wait-M8CTrackedChildExitCode -Process $Controller -Seconds $Seconds
 }
 
 function Assert-CausalServiceLog {
@@ -362,7 +405,9 @@ function Run-M8CSubcycle {
 
         $failsafe=Start-M8CFailsafe -LogPath $failsafeLog
 
-        $controller=Start-Process -FilePath 'dotnet' -ArgumentList @(
+        $dotnetExecutable=(Get-Command dotnet.exe -CommandType Application -ErrorAction Stop).Source
+
+        $controller=Start-M8CTrackedChild -Executable $dotnetExecutable -Arguments @(
             $cli,
             '--8c40-m8c-physical-thermal',
             '--8c40-m8c-physical-token',$token,
@@ -371,12 +416,12 @@ function Run-M8CSubcycle {
             '--8c40-m8c-physical-continue-path',$continuePath,
             '--8c40-m8c-physical-result-path',$resultPath,
             '--modules-dir',$modulesDir
-        ) -PassThru -NoNewWindow
+        ) -WorkingDirectory $repoRoot
 
         $controllerPid=$controller.Id
         $controllerStartTicks=[long]$controller.StartTime.ToUniversalTime().Ticks
 
-        $ready=Wait-ReadyMarker -Path $readyPath -ExpectedPid $controllerPid -ExpectedCase $caseName -Controller $controller
+        $ready=Wait-ReadyMarker -Path $readyPath -ExpectedPid $controllerPid -ExpectedCase $caseName -Controller $controller -ResultPath $resultPath
 
         if([int]$ready.SchemaVersion -ne 1 -or
            $ready.Gate -cne 'M8C' -or
@@ -464,6 +509,8 @@ function Run-M8CSubcycle {
             controllerStartUtcTicks=$controllerStartTicks
             watchdogPid=$watchdogPid
             watchdogStartUtcTicks=$watchdogStartTicks
+            failsafePid=$(if($failsafe){$failsafe.Id}else{0})
+            failsafeLogPresent=(Test-Path $failsafeLog)
             failsafeTakeover=$failsafeTakeover
             readyPath=$readyPath
             resultPath=$resultPath

@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-retry5-failclosed-diagnostics-ci-pass-retry6-authorized-m8c-code-ci-pass-adaptive-shadow-ci-pass-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-physical-pass-m8c-process-hardening-ci-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -2192,9 +2192,9 @@
       }
     },
     "m8b": {
-      "status": "RETRY6_DIAGNOSTIC_PHYSICAL_EXECUTION_AUTHORIZED_AFTER_FULL_CI_811",
-      "physicalPassed": false,
-      "physicalExecutionAuthorized": true,
+      "status": "PHYSICAL_PASS_RETRY6_30_OF_30_CAUSAL_AND_FINAL_CLOSURE_PASS",
+      "physicalPassed": true,
+      "physicalExecutionAuthorized": false,
       "writeCapable": true,
       "requiredToken": "8C40-M8B-LOAD50",
       "harnessScript": "scripts/test-8c40-load-thermal-m8b.ps1",
@@ -2235,7 +2235,7 @@
         "physicalExecution": false,
         "reviewNote": "Initial M8B preparation also passed run #717. Pre-physical review found the independent failsafe covered only OWNED 50/50; it was hardened before authorization to cover exact-target WRITE_ARMED pending 50/50, OWNED 50/50 and RESTORING 50/50. Hardened run #718 passed fully."
       },
-      "physicalExecutionNote": "M8B retry 6 is explicitly authorized only through the versioned diagnostic harness after full CI #811 passed. Purpose: capture the exact backend/coordinator handoff if the retry-5 anomaly recurs, or obtain a complete 30/30 evidence set if it does not. No thresholds, fan targets, command count, watchdog behavior, ownership rules, or restore behavior changed.",
+      "physicalExecutionNote": "M8B is physically closed PASS from retry 6. Further M8B write-capable qualification is blocked; proceed only to the separately gated M8C path.",
       "physicalAttempts": [
         {
           "attempt": 1,
@@ -2349,6 +2349,39 @@
           "finalFirmwareOwned": true,
           "normalRestoreCompleted": false,
           "physicalPassed": false
+        },
+        {
+          "attempt": 6,
+          "date": "2026-09-30",
+          "workload": "God of War 2018",
+          "evidenceHead": "b634d1581e8837c19f60c26fbd01fcff40639e83",
+          "evidencePath": "logs/m8b-watchdog-load_2026-09-30_160224/m8b-result.json",
+          "summaryPath": "logs/m8b-watchdog-load_2026-09-30_160224/m8b-harness-summary.json",
+          "readyPath": "logs/m8b-watchdog-load_2026-09-30_160224/m8b-ready.json",
+          "failsafeLog": "logs/m8b-watchdog-load_2026-09-30_160224/m8b-failsafe.log",
+          "copiedWatchdogLog": "logs/m8b-watchdog-load_2026-09-30_160224/watchdog-m4-8c40-2026-09-30.log",
+          "result": "PASS",
+          "classification": "PHYSICAL_PASS_COMPLETE_EVIDENCE",
+          "controllerPid": 3896,
+          "controllerStartUtcTicks": 639263917907280100,
+          "watchdogPid": 23700,
+          "watchdogStartUtcTicks": 639263917888353400,
+          "failsafePid": 22728,
+          "journalGeneration": 3,
+          "preWrite": "3/3 consecutive representative; CPU effective 66..79 C; GPU 69..71 C, 59.528..69.309 W, 88..100%",
+          "owned": "READY EC 50/50; guards 00/00; dual tach 3776/3307 RPM; applyCalls=1",
+          "supervision": "30/30 representative, maximum consecutive 30; CPU effective 63..88 C; GPU 68..72 C; GPU power 58.549..74.869 W; GPU load 93..100%; CPU95 streak max 0/5; no EC recovered transients",
+          "normalRestoreCompleted": true,
+          "finalFirmwareOwned": true,
+          "failsafeEvidence": "M8B FAILSAFE ARMED pid=22728 delaySeconds=120; no takeover markers",
+          "failsafeTakeover": false,
+          "causalChainPass": true,
+          "watchdogCausalChain": "exactly one PREPARE -> WRITE_INTENT 50/50 -> COMMIT 50/50 -> RESTORE_BEGIN -> RELEASE for PID 3896",
+          "finalClosurePass": true,
+          "finalJournalAbsent": true,
+          "finalFirmwareProofPass": true,
+          "finalServiceBaselinePass": true,
+          "physicalPassed": true
         }
       ],
       "telemetryEpochHardening": {
@@ -2399,10 +2432,9 @@
         }
       },
       "nextStep": {
-        "status": "RETRY6_PHYSICAL_AUTHORIZED",
-        "request": "Run one bounded M8B retry using the versioned diagnostic branch and preserve all evidence. If it FAIL_CLOSED, stop and inspect supervisionFailure/lastCustomHandoffReason before any further write-capable attempt.",
-        "permittedAction": "one bounded M8B retry through the versioned harness",
-        "unchanged": "M8B 35% GPU load AND 20 W GPU power, 3 consecutive in 10 samples, one 50/50 write, 30-s supervision, all thermal/watchdog/ownership/restore limits",
+        "status": "PHYSICAL_PASS_CLOSED",
+        "request": "No further M8B physical execution. Prepare M8C physical path independently; production watchdog promotion and automatic/adaptive policy remain blocked.",
+        "permittedAction": "M8C code/static/self-test/CI hardening only until separately authorized",
         "m8cPhysicalExecutionAuthorized": false
       },
       "processExitHardening": {
@@ -2449,7 +2481,7 @@
         "evidencePath": "logs/m8b-watchdog-load_2026-09-30_152657/"
       },
       "diagnosticHardening": {
-        "status": "CODE_CI_PASS_RETRY6_PHYSICAL_AUTHORIZED",
+        "status": "PHYSICAL_PASS_RETRY6_CLOSED",
         "purpose": "Preserve the exact cause of an M8B supervision handoff without changing safety, ownership, thermal, load, watchdog, command, or restore behavior.",
         "changes": [
           "record every FanControlCoordinator AuthorityChanged transition into M8B durable evidence",
@@ -2461,7 +2493,7 @@
         "physicalBehaviorChanged": false,
         "thresholdsChanged": false,
         "commandCountChanged": false,
-        "physicalExecutionAuthorized": true,
+        "physicalExecutionAuthorized": false,
         "ci": {
           "result": "PASS",
           "commit": "d6b625d006f546e71ad11cf619c8413bf4209bc9",
@@ -2494,11 +2526,15 @@
           "unchanged M4 watchdog and independent delayed failsafe behavior",
           "preserve the entire new evidence directory plus dated M4 log",
           "M8C remains physically blocked and automatic/adaptive policy remains OFF"
-        ]
+        ],
+        "completed": true,
+        "result": "PASS",
+        "evidenceHead": "b634d1581e8837c19f60c26fbd01fcff40639e83",
+        "evidencePath": "logs/m8b-watchdog-load_2026-09-30_160224/"
       }
     },
     "m8c": {
-      "status": "SYNTHETIC_AND_PHYSICAL_PREPARATION_CODE_CI_PASS_PHYSICAL_BLOCKED_BY_M8B",
+      "status": "M8B_PREREQUISITE_PASS_M8C_PROCESS_AND_FAILSAFE_EVIDENCE_HARDENING_CI_PENDING_PHYSICAL_BLOCKED",
       "physicalPassed": false,
       "physicalExecutionAuthorized": false,
       "requiresM8BPhysicalPass": true,
@@ -2515,7 +2551,7 @@
         "inFlightApply": "thermal handoff must cancel an in-flight ApplyAsync and end in firmware authority"
       },
       "physicalHarnessPrepared": true,
-      "physicalPrerequisite": "M8B physical PASS on the hardened retry is required before any M8C hardware execution or authorization",
+      "physicalPrerequisite": "M8B physical PASS is now satisfied; M8C remains blocked pending native child ExitCode and failsafe-armed evidence hardening CI.",
       "automaticPolicyEnabled": false,
       "watchdogRecoveryValidated": false,
       "syntheticCodeCi": {
@@ -2533,7 +2569,7 @@
         "note": "Initial build run #731 found a compile-only profile-access error in the new synthetic helper. The helper was corrected to use Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount; run #737 passed the full workflow. No hardware path was executed."
       },
       "physicalControllerPrepared": true,
-      "physicalControllerStatus": "CODE_CI_PASS_HARD_BLOCKED_BY_M8B",
+      "physicalControllerStatus": "CODE_CI_PASS_COMPILED_BUT_PHYSICAL_BLOCKED_PENDING_POST_M8B_HARDENING",
       "physicalControllerType": "Hp8C40M8CPhysicalThermalPreemptionQualificationTest",
       "physicalControllerAuthorizationConstant": false,
       "physicalControllerToken": "8C40-M8C-THERMAL50",
@@ -2543,14 +2579,14 @@
       ],
       "parentContinueMarker": "M8C-CONTINUE",
       "parentHandoff": "M8C_READY_BEFORE_INJECTION",
-      "physicalHarnessStatus": "CODE_CI_PASS_PROFILE_AND_CONTROLLER_HARD_BLOCKED",
+      "physicalHarnessStatus": "PROCESS_AND_FAILSAFE_EVIDENCE_HARDENING_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
       "physicalHarnessScript": "scripts/test-8c40-load-thermal-m8c.ps1",
       "physicalHarnessInvariantScript": "scripts/test-8c40-load-thermal-m8c-harness-invariants.ps1",
       "independentFailsafeScript": "scripts/watchdog-m8c-service-failsafe-8c40.ps1",
       "parentProfileGate": {
         "requiresM8BPhysicalPassed": true,
         "requiresM8CPhysicalExecutionAuthorized": true,
-        "currentM8BPhysicalPassed": false,
+        "currentM8BPhysicalPassed": true,
         "currentM8CPhysicalExecutionAuthorized": false
       },
       "physicalSubcyclePlan": [
@@ -2572,6 +2608,20 @@
         "adaptivePolicyRegression": true,
         "existingM5M8Regressions": true,
         "physicalExecution": false
+      },
+      "postM8BHardening": {
+        "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+        "reason": "M8B demonstrated that PowerShell Start-Process -PassThru can lose ExitCode. M8C still used that pattern and its delayed failsafe did not publish an ARMED marker before sleeping.",
+        "changes": [
+          "native System.Diagnostics.Process ownership for the M8C controller and ExitCode",
+          "host-only exit 0/7 regression under PowerShell 7 and Windows PowerShell 5.1",
+          "durable M8C FAILSAFE ARMED marker before the 120 s delay",
+          "parent waits for ARMED evidence before launching the write-capable controller",
+          "subcycle summary records failsafe PID and log presence"
+        ],
+        "controlBehaviorChanged": false,
+        "thresholdsChanged": false,
+        "physicalExecutionAuthorized": false
       }
     },
     "productionRaceAuditCodeCi": {

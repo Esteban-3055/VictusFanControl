@@ -20,6 +20,9 @@ function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
 function Assert-False([bool]$Value,[string]$Message){
     if($Value){throw $Message}
 }
+function Assert-True([bool]$Value,[string]$Message){
+    if(-not $Value){throw $Message}
+}
 
 $barrier=$harness.IndexOf('if(-not [bool]$profile.loadThermalM8Qualification.m8b.physicalPassed',[StringComparison]::Ordinal)
 if($barrier -lt 0){throw 'M8C parent physical profile barrier is missing.'}
@@ -28,7 +31,7 @@ foreach($activeAnchor in @(
     'Assert-Administrator',
     'Start-Service -Name $serviceName',
     'Start-Process powershell.exe',
-    "Start-Process -FilePath 'dotnet'",
+    'Start-M8CTrackedChild',
     '& dotnet $cli --probe-8c40-setpoint'
 )){
     $index=$harness.IndexOf($activeAnchor,[StringComparison]::Ordinal)
@@ -52,7 +55,13 @@ foreach($needle in @(
     'PREPARE < WRITE_INTENT < COMMIT < RESTORE_BEGIN < RELEASE',
     'Assert-StableFirmwareOwned',
     'finalJournalAbsent',
-    'Manual/Stopped'
+    'Manual/Stopped',
+    'm8c-tracked-child.ps1',
+    'Start-M8CTrackedChild',
+    'Wait-M8CTrackedChildExitCode',
+    'M8C independent failsafe did not publish ARMED evidence before controller launch.',
+    'failsafePid=',
+    'failsafeLogPresent='
 )){
     Assert-Contains $harness $needle ("M8C parent harness invariant missing: {0}" -f $needle)
 }
@@ -64,7 +73,7 @@ if($cpuIndex -lt 0 -or $gpuIndex -lt 0 -or $cpuIndex -ge $gpuIndex){
 }
 
 $failSafeStart=$harness.IndexOf('$failsafe=Start-M8CFailsafe',[StringComparison]::Ordinal)
-$controllerStart=$harness.IndexOf('$controller=Start-Process -FilePath ''dotnet''',[StringComparison]::Ordinal)
+$controllerStart=$harness.IndexOf('$controller=Start-M8CTrackedChild',[StringComparison]::Ordinal)
 if($failSafeStart -lt 0 -or $controllerStart -lt 0 -or $failSafeStart -ge $controllerStart){
     throw 'M8C must arm the independent delayed failsafe before the real controller.'
 }
@@ -91,11 +100,18 @@ foreach($needle in @(
     Assert-Contains $failsafe $needle ("M8C delayed failsafe invariant missing: {0}" -f $needle)
 }
 
+Assert-Contains $failsafe 'M8C FAILSAFE ARMED:' 'M8C delayed failsafe must publish durable ARMED evidence before sleeping.'
 Assert-NotContains $failsafe 'SetFanLevel(' 'M8C delayed failsafe must not issue ordinary fan targets.'
 Assert-NotContains $failsafe '--restore-hp-auto' 'M8C delayed failsafe must not invoke direct HP restore.'
-Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M8C compiled controller must remain independently blocked.'
+Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M8C compiled controller must remain independently blocked during hardening CI.'
+$trackedHelper=Get-Content (Join-Path $PSScriptRoot 'm8c-tracked-child.ps1') -Raw
+$trackedSelfTest=Get-Content (Join-Path $PSScriptRoot 'test-8c40-m8c-tracked-child-selftest.ps1') -Raw
+Assert-Contains $trackedHelper 'New-Object System.Diagnostics.Process' 'M8C helper must own the native process object.'
+Assert-Contains $trackedHelper '$Process.ExitCode' 'M8C helper must read ExitCode from the owned native process.'
+Assert-Contains $trackedSelfTest 'foreach($expected in @(0,7))' 'M8C helper self-test must cover exit 0 and 7.'
+Assert-NotContains $harness '$controller=Start-Process' 'M8C controller must not use PowerShell Start-Process -PassThru.'
 
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C harness preparation must not imply M8B physical PASS.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C harness preparation must preserve recorded M8B physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C harness must remain profile-blocked.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8C harness preparation must not mark physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'Automatic policy must remain OFF.'

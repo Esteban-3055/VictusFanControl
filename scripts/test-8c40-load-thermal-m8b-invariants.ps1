@@ -181,19 +181,26 @@ Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8B 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8B preparation requires M8A authorization.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.harnessScript 'scripts/test-8c40-load-thermal-m8b.ps1' 'M8B harness path changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/watchdog-m8b-service-failsafe-8c40.ps1' 'M8B failsafe path changed.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B child PASS/parent FAIL_CLOSED must not be promoted without independent causal evidence audit.'
-Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B retry 6 must be explicitly authorized only after diagnostic CI PASS.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B retry 6 complete evidence must be recorded as physical PASS.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B must block further write-capable qualification after physical PASS.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[3].classification 'CONTROLLER_REPORTED_PASS_PARENT_EXITCODE_UNAVAILABLE' 'M8B attempt-4 controller/parent discrepancy classification changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[4].classification 'FAIL_CLOSED_BACKEND_SUPERVISION_HANDOFF_DETAIL_NOT_PERSISTED' 'M8B retry-5 diagnostic classification changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[4].evidenceHead 'fc31d42b7e2d06d7a52b34cb19e59f3d8e0dffe6' 'M8B retry-5 evidence HEAD changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[4].result 'FAIL_CLOSED' 'M8B retry-5 result changed.'
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalAttempts[4].finalClosurePass) 'M8B retry-5 final closure evidence changed.'
-Assert-Equal $profile.loadThermalM8Qualification.m8b.diagnosticHardening.status 'CODE_CI_PASS_RETRY6_PHYSICAL_AUTHORIZED' 'M8B diagnostic hardening status changed.'
-Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.diagnosticHardening.physicalExecutionAuthorized) 'M8B diagnostic hardening must authorize retry 6 only after full CI PASS.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.diagnosticHardening.status 'PHYSICAL_PASS_RETRY6_CLOSED' 'M8B diagnostic hardening closure status changed.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.diagnosticHardening.physicalExecutionAuthorized) 'M8B diagnostic path must be blocked after retry-6 physical PASS.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.diagnosticHardening.ci.commit 'd6b625d006f546e71ad11cf619c8413bf4209bc9' 'M8B diagnostic CI commit changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.diagnosticHardening.ci.runNumber 811 'M8B diagnostic CI run changed.'
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.retry6Authorization.authorized) 'M8B retry 6 authorization must be explicit.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.retry6Authorization.sourceHead 'd6b625d006f546e71ad11cf619c8413bf4209bc9' 'M8B retry 6 authorization source HEAD changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[5].result 'PASS' 'M8B retry-6 result changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[5].evidenceHead 'b634d1581e8837c19f60c26fbd01fcff40639e83' 'M8B retry-6 evidence HEAD changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[5].controllerPid 3896 'M8B retry-6 controller PID evidence changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[5].journalGeneration 3 'M8B retry-6 journal generation changed.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalAttempts[5].causalChainPass) 'M8B retry-6 causal chain must remain PASS.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalAttempts[5].finalClosurePass) 'M8B retry-6 final closure must remain PASS.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalAttempts[5].failsafeTakeover) 'M8B retry-6 must not record failsafe takeover.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.status 'CODE_CI_PASS_RETRY5_EXECUTED' 'M8B tracked-child hardening/retry execution status changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.ci.commit '1d672389ee2bc7980bdfd38aa56fbeb390567f32' 'M8B native-child helper CI commit changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.processExitHardening.ci.runNumber 801 'M8B native-child CI run changed.'
@@ -247,6 +254,10 @@ foreach($needle in @(
     '27/27 representative consecutive supervision samples',
     'M8B FAILSAFE ARMED',
     'M8B retry 6 is explicitly physically authorized',
+    'M8B retry 6 - PHYSICAL PASS / gate closed',
+    '30/30 representative',
+    'causalChainPass=true',
+    'finalClosurePass=true',
     'supervisionFailure',
     'lastCustomHandoffReason',
     'M8C physical execution remains blocked',

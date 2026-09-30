@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 4 RETROSPECTIVE CAUSAL EVIDENCE RECONSTRUCTED FROM THE RECOVERED DATED M4 LOG. M8B RETRY 5 FAIL_CLOSED AFTER 27/27 REPRESENTATIVE RECORDED SUPERVISION SAMPLES ON AN UNDIFFERENTIATED COORDINATOR/BACKEND HANDOFF; FINAL FF/FF/JOURNAL/SERVICE CLOSURE PASS. DIAGNOSTIC-ONLY OBSERVABILITY HARDENING PASSED FULL CI #811 AND M8B RETRY 6 IS EXPLICITLY PHYSICALLY AUTHORIZED THROUGH THE VERSIONED HARNESS. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS ON RETRY 6 WITH 30/30 REPRESENTATIVE SUPERVISION, EXACT CAUSAL WATCHDOG CHAIN, ARMED FAILSAFE EVIDENCE AND COMPLETE FINAL CLOSURE. M8C M8B-PREREQUISITE IS SATISFIED BUT PHYSICAL EXECUTION REMAINS BLOCKED WHILE ITS CHILD-PROCESS/FAILSAFE EVIDENCE PATH IS HARDENED AND RE-RUN THROUGH CI. AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -236,7 +236,7 @@ The injection helper is intentionally hardware-free: it cannot construct HP WMI/
 the real HP 8C40 backend or a watchdog lease, and production GUI/runtime code must not reference it.
 Static invariants enforce that isolation.
 
-**M8C physical execution remains blocked until M8B physical PASS.** A green synthetic M8C result
+**M8B physical PASS is now satisfied; M8C physical execution remains blocked pending post-M8B process/evidence hardening CI and a separate explicit authorization.** A green synthetic M8C result
 proves only threshold, sequencing and coordinator-preemption behavior; it cannot prove local
 FF/FF restore acknowledgement, watchdog Release, journal cleanup, dual-tach behavior or the
 real physical race timing required for M8C closure.
@@ -252,10 +252,10 @@ versioned target-profile instance and #737 passed. No hardware execution occurre
 
 ### M8C physical-controller preparation
 
-The real-hardware M8C controller is now prepared in code but deliberately unreachable. Its
+The real-hardware M8C controller remains prepared in code but deliberately unreachable while post-M8B process/evidence hardening is validated. Its
 `PhysicalExecutionAuthorized=false` readonly authorization flag is checked before hardware identity, PawnIO,
 watchdog, WMI, EC or telemetry hardware objects are constructed. The profile independently keeps
-`physicalExecutionAuthorized=false` and still requires M8B physical PASS.
+`physicalExecutionAuthorized=false`; the M8B physical prerequisite is now recorded PASS.
 
 When a later evidence-backed commit authorizes it, each physical subcycle will:
 
@@ -272,7 +272,7 @@ When a later evidence-backed commit authorizes it, each physical subcycle will:
 
 The hard-CPU 99 C case remains synthetic/code-only because no real-silicon excursion is required.
 The parent physical harness and independent journal/failsafe closure are intentionally separate
-from the controller. **M8C physical execution remains blocked until M8B physical PASS.**
+from the controller. **M8B physical PASS is now satisfied; M8C physical execution remains blocked pending post-M8B process/evidence hardening CI and a separate explicit authorization.**
 
 ### M8C parent physical harness preparation
 
@@ -295,7 +295,7 @@ proves the exact schema-v2 OWNED 50/50 journal bound to PID + process creation t
 PREPARE -> WRITE_INTENT -> COMMIT -> RESTORE_BEGIN -> RELEASE. It then independently proves
 journal absence, two FF/FF observations and restoration of the M4 service to Manual/Stopped.
 
-The harness cannot currently pass its first profile gate, and the controller independently retains
+The M8B side of the profile gate is now satisfied, but M8C authorization remains false and the controller independently retains
 `PhysicalExecutionAuthorized=false`. Preparing these files does not authorize or perform M8C.
 
 The complete no-hardware preparation is **CODE/CI PASS** at commit
@@ -885,6 +885,60 @@ set can then be reviewed for gate closure.
 
 This authorization does not authorize M8C, production watchdog promotion, or automatic/adaptive
 fan control.
+
+
+## 7B.8. M8B retry 6 - PHYSICAL PASS / gate closed
+
+Retry 6 ran on 2026-09-30 at HEAD
+`b634d1581e8837c19f60c26fbd01fcff40639e83` using God of War 2018 and the
+diagnostic-only hardened harness.
+
+The preserved evidence set is complete:
+
+- controller PID **3896**, creation ticks **639263917907280082**;
+- watchdog PID **23700**, creation ticks **639263917888353441**;
+- independent failsafe PID **22728** with durable `M8B FAILSAFE ARMED` evidence before controller launch;
+- journal generation **3** at OWNED;
+- 3/3 consecutive representative pre-write samples;
+- exactly one real equal-only 50/50 ApplyAsync;
+- READY EC 50/50, guards 00/00 and dual tach **3776/3307 RPM**;
+- **30/30 representative** supervision samples, maximum consecutive **30**;
+- effective CPU **63..88 C**, GPU **68..72 C**, GPU power **58.549..74.869 W** and GPU load **93..100%**;
+- CPU95 confirmation streak remained 0/5 and no EC transient recovery was required;
+- `normalRestoreCompleted=true`, `finalFirmwareOwned=true`;
+- no failsafe takeover;
+- exactly one ordered watchdog chain for the same controller:
+  `PREPARE -> WRITE_INTENT 50/50 -> COMMIT 50/50 -> RESTORE_BEGIN -> RELEASE`;
+- parent summary `result=PASS`, `causalChainPass=true`,
+  `finalClosurePass=true`, `finalJournalAbsent=true`,
+  `finalFirmwareProofPass=true`, `finalServiceBaselinePass=true`.
+
+The diagnostic fields also behaved as intended: there was no abnormal supervision handoff,
+`supervisionFailure=null`, and the only Custom->Restoring reason was the expected normal
+M8B release after the full 30-s window.
+
+**M8B is physically closed PASS.** Further M8B write-capable qualification is disabled in the
+profile. This PASS does not promote production watchdog recovery and does not enable automatic or
+adaptive fan control.
+
+### Post-M8B M8C process/evidence hardening
+
+Review of the already-prepared M8C parent found one issue that must be fixed before M8C can be
+authorized: it still launches the controller with PowerShell `Start-Process -PassThru`, the same
+process-wrapper pattern that previously made M8B child ExitCode unavailable. M8C also arms a delayed
+failsafe but, unlike the hardened M8B path, does not durably prove `ARMED` before controller launch.
+
+Therefore the M8B prerequisite is now satisfied, but M8C remains physically blocked while the
+following hardware-neutral changes pass CI:
+
+- directly owned `System.Diagnostics.Process` controller launch and bounded ExitCode read;
+- exit-code 0/7 host-only regression under PowerShell 7 and Windows PowerShell 5.1;
+- `M8C FAILSAFE ARMED` written before the failsafe delay;
+- parent waits for that ARMED marker before launching the real controller;
+- failsafe PID/log-presence retained in subcycle evidence.
+
+No M8C threshold, fan level, representative-load criterion, watchdog lease rule or restore behavior
+is changed by this hardening.
 
 ## 8. Physical harness safety and evidence
 

@@ -85,7 +85,7 @@ Assert-Contains $cli '--8c40-m8c-self-test' 'M8C synthetic CLI switch missing.'
 Assert-Contains $program 'Hp8C40M8CThermalPreemptionSelfTest' 'M8C synthetic CLI route missing.'
 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8C code preparation requires M8A physical PASS.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C physical execution must not silently assume M8B PASS.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C must require the now-recorded M8B physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8C must remain physically unvalidated.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C physical execution must remain blocked before M8B PASS.'
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.requiresM8BPhysicalPass) 'M8C must retain the M8B physical prerequisite.'
@@ -100,7 +100,7 @@ foreach($needle in @(
     'GPU = 87 C',
     'effective CPU >=99 C',
     'M8C synthetic preparation',
-    'physical execution remains blocked until M8B physical PASS'
+    'M8B physical PASS is now satisfied; physical execution remains blocked pending post-M8B process/evidence hardening CI and explicit authorization'
 )){
     Assert-Contains $doc $needle ("M8C documentation invariant missing: {0}" -f $needle)
 }

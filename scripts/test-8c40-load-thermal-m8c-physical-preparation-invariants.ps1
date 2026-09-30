@@ -18,6 +18,9 @@ function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
 function Assert-False([bool]$Value,[string]$Message){
     if($Value){throw $Message}
 }
+function Assert-True([bool]$Value,[string]$Message){
+    if(-not $Value){throw $Message}
+}
 
 Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M8C physical controller must remain compile-time blocked before M8B PASS.'
 Assert-Contains $controller '8C40-M8C-THERMAL50' 'M8C future explicit token changed.'
@@ -84,7 +87,7 @@ foreach($needle in @(
 Assert-Contains $program 'Hp8C40M8CPhysicalThermalPreemptionQualificationTest.RequiredToken' 'M8C blocked Program token gate missing.'
 Assert-Contains $program 'Hp8C40M8CPhysicalThermalPreemptionQualificationTest.RunAsync' 'M8C blocked Program route missing.'
 
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C physical preparation must not imply M8B physical PASS.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C physical preparation now requires recorded M8B physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8C physical preparation must not mark M8C PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C physical execution must remain profile-blocked.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'Automatic policy must remain OFF.'
@@ -94,7 +97,7 @@ foreach($needle in @(
     'PhysicalExecutionAuthorized=false',
     'M8C_READY_BEFORE_INJECTION',
     'M8C-CONTINUE',
-    'physical execution remains blocked until M8B physical PASS'
+    'M8B physical PASS is now satisfied; physical execution remains blocked pending post-M8B process/evidence hardening CI and explicit authorization'
 )){
     Assert-Contains $doc $needle ("M8C physical-controller documentation missing: {0}" -f $needle)
 }
