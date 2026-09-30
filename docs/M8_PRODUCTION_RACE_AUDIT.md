@@ -12,14 +12,14 @@ race is already deterministically covered by production code plus synthetic/inva
 
 | Race boundary | Deterministic code/test evidence | Physical status |
 | --- | --- | --- |
-| stale SafetyGate result vs newer accepted result | `TestStaleSafetyEvaluationCannotTearDownNewerSessionAsync`, `TestStaleCommandSafetyCannotTearDownNewerSessionAsync` | Code/CI can close ordering; M8B/M8C still provide real under-load context |
-| safety preemption vs in-flight `ApplyAsync` | coordinator `TestSafetyPreemptsInFlightCommandAsync` plus M8C `TestThermalPreemptionCancelsInFlightApplyAsync` | Thermal physical restore remains M8C |
+| stale SafetyGate result vs newer accepted result | `TestStaleSafetyEvaluationCannotTearDownNewerSessionAsync`, `TestStaleCommandSafetyCannotTearDownNewerSessionAsync` | Code/CI closes this ordering; M8B/M8C now provide the physically closed real under-load context |
+| safety preemption vs in-flight `ApplyAsync` | coordinator `TestSafetyPreemptsInFlightCommandAsync` plus M8C `TestThermalPreemptionCancelsInFlightApplyAsync` | M8C PHYSICAL PASS closes the thermal-preemption/restore physical context |
 | lifecycle/admission fence vs command dispatch | `TestLifecycleFenceClosesBeforeCoordinatorGateAsync`, `TestCancellationAtPreDispatchPreventsWriteAsync` | M6/M7 already physically closed; M8 does not repeat them solely for history |
-| watchdog liveness vs concurrent EC/telemetry failure | `TestControlDependencyFailurePreemptsUnsafeSafetyAsync`, `TestWatchdogLossWinsConcurrentEcFailureAsync` | Historical watchdog failure domains already qualified; M8B load soak still pending |
+| watchdog liveness vs concurrent EC/telemetry failure | `TestControlDependencyFailurePreemptsUnsafeSafetyAsync`, `TestWatchdogLossWinsConcurrentEcFailureAsync` | Historical watchdog failure domains are qualified; M8B representative-load soak is PHYSICAL PASS |
 | external override before first write | `TestOwnershipConflictDoesNotClearExternalOverrideAsync`, `TestFirstCommandExternalOverrideIsNoWriteAsync` | no new destructive test required unless implementation changes |
-| external override after durable WRITE_INTENT | `TestWatchdogPostIntentExternalRaceAsync`, `TestWatchdogCancellationAfterIntentAbortsAsync` | M5D/M5E already establish physical WRITE_ARMED boundaries; M8B load context pending |
-| transient guard / torn-read confirmation | `TestStatusToleratesSingleGuardTransientAsync`, `TestStatusRejectsRepeatedGuardConflictAsync` | real M8B/M8C supervision observes the same production path |
-| restore / journal cleanup ordering | `TestWatchdogCommitFailureRestoresAsync`, `TestWatchdogRestoreIpcFailureDoesNotBlockLocalRestoreAsync`, M5D/M5E invariants | local/independent physical closure remains required by M8B/M8C PASS criteria |
+| external override after durable WRITE_INTENT | `TestWatchdogPostIntentExternalRaceAsync`, `TestWatchdogCancellationAfterIntentAbortsAsync` | M5D/M5E establish physical WRITE_ARMED boundaries; M8B load context is PHYSICAL PASS |
+| transient guard / torn-read confirmation | `TestStatusToleratesSingleGuardTransientAsync`, `TestStatusRejectsRepeatedGuardConflictAsync` | real M8B/M8C supervision physically observed the same production path |
+| restore / journal cleanup ordering | `TestWatchdogCommitFailureRestoresAsync`, `TestWatchdogRestoreIpcFailureDoesNotBlockLocalRestoreAsync`, M5D/M5E invariants | local/independent physical closure was satisfied by the M8B/M8C PASS criteria |
 
 ## Audit rule
 
