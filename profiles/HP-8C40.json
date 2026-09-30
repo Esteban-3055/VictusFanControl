@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-attempt1-failclosed-telemetry-epoch-fix-ci-pass-retry-authorized-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-retry-pending-m8c-code-ci-pass-physical-blocked-adaptive-engine-ci-pass-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -60,7 +60,7 @@
     "supportsIndependentLevels": false,
     "notes": "Equal-only 10..50 is fully integrated for bounded production control after complete physical characterization, restart-from-zero, large-transition qualification, endpoint coordinator PASS, and final post-promotion regression through the unmodified production backend at both endpoints. Independent CPU/GPU levels remain unqualified and rejected. Automatic/adaptive policy and production watchdog/unattended recovery remain blocked pending M8 representative-load, thermal-preemption and any remaining production-race qualification.",
     "adaptivePolicyPreparation": {
-      "status": "PURE_ENGINE_CODE_PREPARED_CI_PENDING_NOT_INTEGRATED",
+      "status": "PURE_ENGINE_CODE_CI_PASS_NOT_INTEGRATED",
       "productionIntegrated": false,
       "enabledByDefault": false,
       "hardwareWriteCapable": false,
@@ -86,7 +86,20 @@
       ],
       "productionCurveDefined": false,
       "productionCurveValidated": false,
-      "blockedBy": "M8 physical closure and later explicit policy-integration gate"
+      "blockedBy": "M8 physical closure and later explicit policy-integration gate",
+      "codeCi": {
+        "result": "PASS",
+        "commit": "ccb11f285a92c6f789929eee6911b5213fd95ddd",
+        "runNumber": 773,
+        "runId": 36669038036,
+        "powerShellSyntax": true,
+        "isolationInvariantPowerShell7": true,
+        "isolationInvariantWindowsPowerShell51": true,
+        "warningsAsErrorsBuild": true,
+        "deterministicSelfTest": true,
+        "productionIntegrated": false,
+        "physicalExecution": false
+      }
     }
   },
   "observedCalibration": [
@@ -1936,14 +1949,14 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_RETRY_AUTHORIZED_PENDING_M8C_SYNTHETIC_CODE_CI_PASS_PHYSICAL_BLOCKED",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_RETRY_AUTHORIZED_PENDING_M8C_CODE_CI_PASS_PHYSICAL_BLOCKED_ADAPTIVE_POLICY_ENGINE_CI_PASS_POLICY_OFF",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
     "representativeLoadGate": "M8A CODE/CI/PHYSICAL PASS",
     "watchdogBackedLoadGate": "M8B attempt 1 FAIL_CLOSED; telemetry-epoch/closure hardening CODE/CI PASS; physical retry authorized and pending",
-    "thermalPreemptionGate": "M8C synthetic CODE/CI PASS; physical execution blocked until M8B physical PASS",
-    "productionRaceAudit": "existing coordinator/backend race coverage mapped; dedicated static/CI audit preparation next; physical load confirmation remains pending",
+    "thermalPreemptionGate": "M8C synthetic + hard-blocked physical controller/harness CODE/CI PASS; physical execution blocked until M8B physical PASS",
+    "productionRaceAudit": "CODE/CI PASS for mapped deterministic races; representative-load/real physical timing closure remains dependent on M8B/M8C physical PASS",
     "realOvertemperatureRequired": false,
     "qualificationFanLevel": "50/50 equal-only",
     "physicalAbortLimits": "M8A closed with CPU raw threshold 95 C requiring 5 unique consecutive fresh samples, CPU >=99 C immediate hard abort, GPU >=82 C immediate physical abort. M8B must version its write-capable physical boundaries before execution.",
@@ -2265,7 +2278,7 @@
       }
     },
     "m8c": {
-      "status": "SYNTHETIC_CODE_CI_PASS_PHYSICAL_BLOCKED_BY_M8B",
+      "status": "SYNTHETIC_AND_PHYSICAL_PREPARATION_CODE_CI_PASS_PHYSICAL_BLOCKED_BY_M8B",
       "physicalPassed": false,
       "physicalExecutionAuthorized": false,
       "requiresM8BPhysicalPass": true,
@@ -2300,7 +2313,7 @@
         "note": "Initial build run #731 found a compile-only profile-access error in the new synthetic helper. The helper was corrected to use Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount; run #737 passed the full workflow. No hardware path was executed."
       },
       "physicalControllerPrepared": true,
-      "physicalControllerStatus": "CODE_PREPARED_CI_PENDING_HARD_BLOCKED",
+      "physicalControllerStatus": "CODE_CI_PASS_HARD_BLOCKED_BY_M8B",
       "physicalControllerType": "Hp8C40M8CPhysicalThermalPreemptionQualificationTest",
       "physicalControllerAuthorizationConstant": false,
       "physicalControllerToken": "8C40-M8C-THERMAL50",
@@ -2310,7 +2323,7 @@
       ],
       "parentContinueMarker": "M8C-CONTINUE",
       "parentHandoff": "M8C_READY_BEFORE_INJECTION",
-      "physicalHarnessStatus": "CODE_PREPARED_CI_PENDING_PROFILE_AND_CONTROLLER_HARD_BLOCKED",
+      "physicalHarnessStatus": "CODE_CI_PASS_PROFILE_AND_CONTROLLER_HARD_BLOCKED",
       "physicalHarnessScript": "scripts/test-8c40-load-thermal-m8c.ps1",
       "physicalHarnessInvariantScript": "scripts/test-8c40-load-thermal-m8c-harness-invariants.ps1",
       "independentFailsafeScript": "scripts/watchdog-m8c-service-failsafe-8c40.ps1",
@@ -2323,7 +2336,35 @@
       "physicalSubcyclePlan": [
         "CPU: independent real 50/50 OWNED -> parent journal/failsafe proof -> five synthetic 95 C frames -> firmware handoff on 5/5",
         "GPU: independent real 50/50 OWNED -> parent journal/failsafe proof -> one synthetic 87 C frame -> immediate firmware handoff"
-      ]
+      ],
+      "physicalPreparationCodeCi": {
+        "result": "PASS",
+        "commit": "ccb11f285a92c6f789929eee6911b5213fd95ddd",
+        "runNumber": 773,
+        "runId": 36669038036,
+        "powerShellSyntax": true,
+        "physicalControllerInvariantPowerShell7": true,
+        "physicalHarnessInvariantPowerShell7": true,
+        "physicalControllerAndHarnessWindowsPowerShell51": true,
+        "warningsAsErrorsBuild": true,
+        "syntheticThermalPreemptionSelfTest": true,
+        "productionRaceAuditInvariant": true,
+        "adaptivePolicyRegression": true,
+        "existingM5M8Regressions": true,
+        "physicalExecution": false
+      }
+    },
+    "productionRaceAuditCodeCi": {
+      "result": "PASS",
+      "commit": "ccb11f285a92c6f789929eee6911b5213fd95ddd",
+      "runNumber": 773,
+      "runId": 36669038036,
+      "staticInvariant": true,
+      "coordinatorSelfTest": true,
+      "hpBackendSelfTest": true,
+      "m5dM5eOrderingInvariants": true,
+      "m8cThermalPreemptionSelfTest": true,
+      "physicalExecution": false
     }
   }
 }
