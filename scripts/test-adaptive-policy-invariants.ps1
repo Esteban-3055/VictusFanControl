@@ -81,7 +81,7 @@ Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 
 Assert-False ([bool]$profile.loadThermalM8Qualification.watchdogRecoveryValidated) 'Watchdog recovery must remain unpromoted.'
 
 foreach($needle in @(
-    'Production integration is disabled',
+    'production integration is disabled',
     'one equal CPU/GPU fan level',
     'no baked-in production curve',
     'Hardware integration remains blocked until M8 is physically closed'
