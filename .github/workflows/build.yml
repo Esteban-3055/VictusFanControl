@@ -129,6 +129,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-8c40-load-thermal-m8c-invariants.ps1
 
+      - name: HP 8C40 M8 production-race code/CI audit invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m8-production-race-audit-invariants.ps1
+
       - name: HP 8C40 M5-M8 invariants Windows PowerShell 5.1 compatibility
         shell: powershell
         run: |
@@ -151,6 +155,7 @@ jobs:
           .\scripts\test-8c40-load-thermal-m8a-invariants.ps1
           .\scripts\test-8c40-load-thermal-m8b-invariants.ps1
           .\scripts\test-8c40-load-thermal-m8c-invariants.ps1
+          .\scripts\test-8c40-m8-production-race-audit-invariants.ps1
 
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
