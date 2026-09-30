@@ -64,7 +64,7 @@ if($cpuIndex -lt 0 -or $gpuIndex -lt 0 -or $cpuIndex -ge $gpuIndex){
 }
 
 $failSafeStart=$harness.IndexOf('$failsafe=Start-M8CFailsafe',[StringComparison]::Ordinal)
-$controllerStart=$harness.IndexOf("$controller=Start-Process -FilePath 'dotnet'",[StringComparison]::Ordinal)
+$controllerStart=$harness.IndexOf('$controller=Start-Process -FilePath ''dotnet''',[StringComparison]::Ordinal)
 if($failSafeStart -lt 0 -or $controllerStart -lt 0 -or $failSafeStart -ge $controllerStart){
     throw 'M8C must arm the independent delayed failsafe before the real controller.'
 }
