@@ -104,9 +104,11 @@ Windows PowerShell 5.1, warnings-as-errors solution build, Modern Standby M0,
 watchdog Gate B/C and 8C40 M2/M3/M4 self-tests, SafetyGate,
 FanControlCoordinator, BIOS-contract and HP backend self-tests.
 
-This closes only M7 code/CI preparation. The no-write local preflight and
-physical hibernation transition remain pending. `WatchdogRecoveryValidated`
-remains false and automatic/adaptive policy remains OFF.
+That preparation baseline is retained as historical code/CI evidence. The
+subsequent no-write preflight and physical hibernation qualification both
+passed, as documented below. `WatchdogRecoveryValidated` remains false because
+representative-load, thermal-emergency and any remaining production-race gates
+are still separate; automatic/adaptive policy remains OFF.
 
 ## No-write preflight result
 
@@ -122,10 +124,10 @@ M5/M6/M7 synthetic regression set, and two consecutive independent FF/FF
 samples.
 
 No fan write, watchdog lease, service mutation or hibernation transition was
-performed by this stage. M7 physical qualification is therefore authorized as
-the next separate gate, but remains **PENDING** until the write-capable
-hibernation harness passes. `WatchdogRecoveryValidated` remains false and
-automatic/adaptive policy remains OFF.
+performed by that stage. It authorized the subsequent write-capable physical
+qualification, which has now passed and is documented below.
+`WatchdogRecoveryValidated` remains false and automatic/adaptive policy remains
+OFF.
 
 ## Physical hibernation result
 
