@@ -100,7 +100,7 @@ foreach($needle in @(
     'GPU = 87 C',
     'effective CPU >=99 C',
     'M8C synthetic preparation',
-    'M8C physical execution is explicitly authorized'
+    'M8C post-M8B hardening CI PASS; physical qualification authorized'
 )){
     Assert-Contains $doc $needle ("M8C documentation invariant missing: {0}" -f $needle)
 }
