@@ -249,3 +249,51 @@ and Windows PowerShell 5.1. The invariant verifies the pre-hardware authorizatio
 barrier, both closed compile-time gates, exact factory/public-backend construction,
 scope teardown before Custom admission, the one-write 30/30 contract, conservative
 thermal/power bounds and continued production/adaptive blocks.
+
+
+## 8. M9C parent harness, recovery and evidence stack
+
+The complete future M9C physical stack is now versioned but remains hard-blocked.
+The parent harness is `scripts/test-8c40-production-watchdog-m9c.ps1`. Its very
+first gate reads only the versioned profile and refuses unless M9B physical PASS,
+a dedicated M9C physical authorization, controller execution authorization and
+temporary construction authorization are all true. At the current stage all M9C
+write-capable authorizations remain false.
+
+The parent does not install or replace the watchdog service. It requires the already
+qualified `VictusFanControlWatchdogM4` definition to remain Manual/Stopped/PID 0,
+LocalSystem and to retain the M4 target-bound command line. Before the one 30/30
+transaction it requires repository/upstream equality, exact target, AC/battery
+sanity, absent journal and a stable read-only firmware baseline.
+
+Before launching the write-capable controller the harness starts the exact M4
+service, binds watchdog PID + creation ticks and arms a separate 120-second
+`watchdog-m9c-service-failsafe-8c40.ps1`. The controller is launched by the
+native `System.Diagnostics.Process` helper rather than `Start-Process -PassThru`,
+preserving reliable PID/ExitCode evidence.
+
+The parent writes `M9C-CONTINUE` only after READY proves one 30/30 ApplyAsync,
+the temporary construction scope is already closed, the durable schema-v2
+generation-3 OWNED journal is bound to the exact controller PID + creation ticks,
+the watchdog PID + creation ticks are unchanged and the independent failsafe has
+not taken over.
+
+PASS requires exactly one causal M4 sequence:
+
+```text
+PREPARE
+ -> WRITE_INTENT 30/30
+ -> COMMIT 30/30
+ -> RESTORE_BEGIN
+ -> RELEASE
+```
+
+Final and cleanup firmware proof each sample up to six independent setpoint reads
+and require two consecutive FF/FF. Every sample is persisted. Journal absence and
+M4 Manual/Stopped/PID0/LocalSystem are required. If retained ownership exists,
+the harness preserves a copy of the journal and allows the qualified watchdog/
+failsafe recovery path to clear it; it never deletes the journal to satisfy a gate.
+
+Evidence is automatically packaged on PASS and FAIL_CLOSED by
+`package-m9c-evidence.ps1`, with source/installed-binary hashes, service/log
+snapshots, manifest, ZIP and ZIP SHA-256. Packaging failure invalidates PASS.

@@ -199,24 +199,39 @@ public static class Hp8C40M9CProductionPathQualificationTest
                 .ConfigureAwait(false);
             EnsureExpectedEc(preConstruction, byte.MaxValue, byte.MaxValue, "before production construction");
 
-            var lease = new NamedPipeFanControlWatchdogLeaseClient(
-                Hp8C40TargetProfile.Instance.Id,
-                FanControlWatchdogLeaseContract.Hp8C40M4PipeName);
+            IFanControlWatchdogLeaseClient? lease =
+                new NamedPipeFanControlWatchdogLeaseClient(
+                    Hp8C40TargetProfile.Instance.Id,
+                    FanControlWatchdogLeaseContract.Hp8C40M4PipeName);
 
             HpFanBackendSelection selection;
-            using (Hp8C40ProductionWatchdogGate.EnterM9CPhysicalQualificationConstructionScope(
-                       hardware,
-                       RequiredToken))
+            try
             {
-                events.Add(new EventEvidence(
-                    DateTimeOffset.UtcNow,
-                    "M9C_CONSTRUCTION_SCOPE_ENTER",
-                    "Temporary construction-only scope entered; no Custom authority or fan write yet."));
+                using (Hp8C40ProductionWatchdogGate.EnterM9CPhysicalQualificationConstructionScope(
+                           hardware,
+                           RequiredToken))
+                {
+                    events.Add(new EventEvidence(
+                        DateTimeOffset.UtcNow,
+                        "M9C_CONSTRUCTION_SCOPE_ENTER",
+                        "Temporary construction-only scope entered; no Custom authority or fan write yet."));
 
-                selection = HpFanControlBackendFactory.Create(
-                    modulesDirectory,
-                    hardware,
-                    lease);
+                    selection = HpFanControlBackendFactory.Create(
+                        modulesDirectory,
+                        hardware,
+                        lease);
+                }
+
+                // Ownership transfers to the selected backend on successful
+                // construction. Do not double-dispose the lease below.
+                lease = null;
+            }
+            finally
+            {
+                if (lease is not null)
+                {
+                    await lease.DisposeAsync().ConfigureAwait(false);
+                }
             }
 
             constructionScopeClosedBeforeCustom =

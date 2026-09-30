@@ -58,7 +58,8 @@
     "watchdogM9PhysicalPassed": false,
     "watchdogM9BCodeCiPassed": true,
     "watchdogM9CCodePrepared": true,
-    "watchdogM9CCodeCiPassed": false
+    "watchdogM9CCodeCiPassed": false,
+    "watchdogM9CControllerCodeCiPassed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -2932,7 +2933,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9A_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_M9C_CODE_PREPARED_CI_PENDING_WRITE_BLOCKED",
+    "status": "M9A_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_M9C_FULL_HARNESS_PREPARED_CI_PENDING_WRITE_BLOCKED",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -3027,7 +3028,7 @@
       }
     },
     "m9c": {
-      "status": "CODE_PREPARED_CI_PENDING_WRITE_BLOCKED",
+      "status": "FULL_HARNESS_CODE_PREPARED_CI_PENDING_WRITE_BLOCKED",
       "purpose": "bounded 30/30 physical smoke through the exact normal HP factory + public backend construction path under a temporary M9C-only construction scope; full production promotion remains closed",
       "controllerType": "Hp8C40M9CProductionPathQualificationTest",
       "controllerCli": "--8c40-m9c-production-smoke",
@@ -3067,15 +3068,52 @@
         "five supervision frames, no repeated SetFanLevel",
         "finally restore if authority remains Custom"
       ],
-      "harnessStatus": "NOT_YET_ADDED",
+      "harnessStatus": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
       "codeCi": {
-        "result": "PENDING",
+        "result": "PENDING_FULL_HARNESS",
         "commit": null,
         "runNumber": null,
         "runId": null,
         "physicalExecution": false
       },
-      "physicalEvidence": null
+      "physicalEvidence": null,
+      "harnessScript": "scripts/test-8c40-production-watchdog-m9c.ps1",
+      "harnessInvariantScript": "scripts/test-8c40-m9c-harness-invariants.ps1",
+      "trackedChildHelper": "scripts/m9c-tracked-child.ps1",
+      "trackedChildSelfTest": "scripts/test-8c40-m9c-tracked-child-selftest.ps1",
+      "independentFailsafeScript": "scripts/watchdog-m9c-service-failsafe-8c40.ps1",
+      "evidencePackagingScript": "scripts/package-m9c-evidence.ps1",
+      "evidencePackagingSelfTest": "scripts/test-8c40-m9c-evidence-packaging.ps1",
+      "parentContinueMarker": "M9C-CONTINUE",
+      "failsafeDelaySeconds": 120,
+      "finalFirmwareProof": "up to 6 independent reads; require 2 consecutive FF/FF; persist every read",
+      "requiredJournal": {
+        "schemaVersion": 2,
+        "phase": "Owned",
+        "generation": 3,
+        "setpoint": "30/30",
+        "exactControllerIdentity": "PID + ProcessStartUtcTicks"
+      },
+      "controllerPreparationCi": {
+        "result": "PASS",
+        "commit": "946ae96dbb498b94593a23e5c363e2ffab336cbb",
+        "runNumber": 843,
+        "runId": 36782878035,
+        "warningsAsErrorsBuild": true,
+        "powerShell7Invariant": true,
+        "windowsPowerShell51Invariant": true,
+        "hpBackendSelfTest": true,
+        "physicalExecution": false,
+        "note": "Run #842 failed only because the first M9C static ordering check matched the declaration of constructionScopeClosedBeforeCustom instead of the post-factory assignment. The invariant was corrected to search after factory construction; run #843 passed the complete workflow."
+      },
+      "physicalAuthorization": {
+        "authorized": false,
+        "sourceHead": null,
+        "sourceCiRunNumber": null,
+        "sourceCiRunId": null,
+        "prerequisite": "M9B read-only physical PASS must be reviewed and formally recorded first.",
+        "scope": "one versioned M9C harness execution only"
+      }
     },
     "promotion": {
       "authorized": false,
@@ -3084,7 +3122,7 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Finish M9C code/harness preparation and same-HEAD CI while keeping M9B as the first required machine-side command. Do not authorize M9C until M9B has physically passed and its evidence is formally recorded.",
+    "nextStep": "Obtain same-HEAD CI for the complete hard-blocked M9C parent harness/failsafe/tracked-child/packaging stack. M9B remains the first required machine-side execution; M9C cannot be authorized until M9B PASS evidence is reviewed and committed.",
     "m9d": {
       "status": "DESIGN_PENDING_M9C",
       "purpose": "focused full GUI/lifecycle last-mile regression after M9C; no authorization yet",

@@ -119,3 +119,8 @@ Assert-Contains $doc 'M9C production-path smoke' 'M9 documentation must define M
 Assert-Contains $doc 'M9C cannot be opened until M9B has physically passed' 'M9C documentation must preserve M9B physical prerequisite.'
 
 Write-Host 'HP 8C40 M9C production-path smoke preparation invariant: PASS' -ForegroundColor Green
+
+
+Assert-Contains $controller 'IFanControlWatchdogLeaseClient? lease' 'M9C controller must explicitly own the lease before factory handoff.'
+Assert-Contains $controller 'lease = null;' 'M9C controller must mark successful lease ownership transfer to backend.'
+Assert-Contains $controller 'await lease.DisposeAsync()' 'M9C controller must dispose an untransferred lease if factory construction fails.'
