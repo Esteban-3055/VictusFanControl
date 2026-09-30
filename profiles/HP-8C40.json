@@ -1949,7 +1949,7 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_RETRY_AUTHORIZED_PENDING_M8C_CODE_CI_PASS_PHYSICAL_BLOCKED_ADAPTIVE_POLICY_ENGINE_CI_PASS_POLICY_OFF",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_RETRY_AUTHORIZED_PENDING_M8C_CODE_CI_PASS_PHYSICAL_BLOCKED_ADAPTIVE_ENGINE_SHADOW_REPLAY_CI_PASS_POLICY_OFF",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
@@ -2365,6 +2365,36 @@
       "m5dM5eOrderingInvariants": true,
       "m8cThermalPreemptionSelfTest": true,
       "physicalExecution": false
+    },
+    "adaptivePolicyPreparation": {
+      "productionEnabled": false,
+      "engine": "CODE_CI_PASS",
+      "shadowReplay": "CODE_CI_PASS",
+      "targetProfileId": "HP-8C40-9D0R1LA-F18",
+      "configurationPurpose": "shadow-only",
+      "exampleAuthorizedForProduction": false,
+      "hardwareWriteCapable": false,
+      "runtimeHardwareIntegration": "DISCONNECTED_PENDING_M8_PHYSICAL_CLOSURE",
+      "guiIntegrated": false,
+      "backendIntegrated": false,
+      "watchdogIntegrated": false,
+      "offlineReplayInput": "existing VictusFanControl telemetry CSV",
+      "offlineReplayOutput": "recommendations and notional control intents only",
+      "ci": {
+        "result": "PASS",
+        "commit": "0c547f8e80ede4b014adbc12b2d4ae07d1c8cf3c",
+        "runNumber": 791,
+        "runId": 36675569560,
+        "powerShell7Invariant": true,
+        "windowsPowerShell51Invariant": true,
+        "warningsAsErrorsBuild": true,
+        "deterministicEngineSelfTest": true,
+        "shadowPlannerSelfTest": true,
+        "thermalShadowSelfTest": true,
+        "csvReplayParserSelfTest": true,
+        "existingM5M8Regressions": true,
+        "physicalExecution": false
+      }
     }
   }
 }
