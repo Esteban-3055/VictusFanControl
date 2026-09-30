@@ -147,10 +147,12 @@ Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8B 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8B preparation requires M8A authorization.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.harnessScript 'scripts/test-8c40-load-thermal-m8b.ps1' 'M8B harness path changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/watchdog-m8b-service-failsafe-8c40.ps1' 'M8B failsafe path changed.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B must remain physical-pending until real evidence is reviewed.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B retry must remain blocked until the telemetry-epoch patch passes CI.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B must remain physical-pending until attempt 2 evidence is reviewed.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B telemetry-epoch/closure CODE/CI PASS must authorize only the versioned attempt-2 harness.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[0].evidenceHead '68750bdd997e9530c5712af5c33e5bf2910a0f55' 'M8B attempt-1 evidence HEAD changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[0].result 'FAIL_CLOSED' 'M8B attempt-1 result must remain FAIL_CLOSED.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.telemetryEpochHardening.ci.finalCommit '7b5b104c9cd3c1f695f217693043383299410ec2' 'M8B telemetry-epoch hardening CI commit changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.telemetryEpochHardening.ci.runNumber 726 'M8B telemetry-epoch hardening CI run changed.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.watchdogRecoveryValidated) 'M8B must not promote production watchdog recovery.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M8B must not enable automatic/adaptive policy.'
 
@@ -171,7 +173,7 @@ foreach($needle in @(
     'M8B attempt 1',
     '3.364 s',
     'continuity epoch after COMMIT/READY',
-    'M8B physical retry remains blocked'
+    'M8B physical attempt 2 is now authorized'
 )){
     Assert-Contains $doc $needle ("M8B documentation invariant missing: {0}" -f $needle)
 }

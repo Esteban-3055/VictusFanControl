@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; TELEMETRY-EPOCH FIX CODE PREPARED / CI PENDING; PHYSICAL RETRY BLOCKED. M8C REMAINS BLOCKED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; TELEMETRY-EPOCH/CLOSURE HARDENING CODE/CI PASS; PHYSICAL RETRY AUTHORIZED-PENDING. M8C REMAINS BLOCKED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -531,8 +531,17 @@ so that closure is not inferred from absence of an error. The retry hardening no
 journal absence, FF/FF proof and M4 Manual/stopped proof as separate closure booleans and fails
 closed if the child ExitCode is unavailable.
 
-M8B physical retry remains blocked until this telemetry-epoch and closure-evidence patch passes
-CI and is explicitly reauthorized.
+The telemetry-epoch and closure-evidence hardening is **CODE/CI PASS** at commit
+`7b5b104c9cd3c1f695f217693043383299410ec2`, GitHub Actions **#726** (run `36666102187`). PowerShell syntax,
+M8B invariants under PowerShell 7 and Windows PowerShell 5.1, warnings-as-errors build,
+SafetyGate, coordinator, watchdog and HP-backend regressions all passed. Run #725 failed only
+because the new documentation invariant searched for a literal phrase split by a Markdown line
+break; aligning that invariant did not change runtime behavior.
+
+M8B physical attempt 2 is now authorized only through the versioned harness. The 3 s gap limit
+remains unchanged **inside** the supervision epoch; the patch only prevents the intentional
+PREPARE/WRITE_INTENT/WMI/ACK/COMMIT transaction from being misclassified as a telemetry/lifecycle
+sampling gap.
 
 ## 8. Physical harness safety and evidence
 
