@@ -297,3 +297,25 @@ failsafe recovery path to clear it; it never deletes the journal to satisfy a ga
 Evidence is automatically packaged on PASS and FAIL_CLOSED by
 `package-m9c-evidence.ps1`, with source/installed-binary hashes, service/log
 snapshots, manifest, ZIP and ZIP SHA-256. Packaging failure invalidates PASS.
+
+
+### M9C full code/CI closure
+
+The complete hard-blocked M9C stack passed GitHub Actions **#844**
+(run `36783609945`) at commit
+`5d5d2d93f7d5aee0d79ee37bf1597cec197882c2`.
+
+This run covered the controller/factory construction invariant, parent harness,
+independent 30/30 delayed failsafe, native tracked-child PID/ExitCode helper and
+automatic evidence packaging under PowerShell 7 and Windows PowerShell 5.1,
+plus warnings-as-errors build and the existing M5-M8/SafetyGate/coordinator/
+watchdog/backend regressions. No physical hardware path was executed.
+
+M9C is therefore **CODE/CI PASS**, not physical PASS. All three write/promotion
+barriers remain closed:
+
+- `m9c.physicalAuthorization.authorized=false`;
+- `m9c.physicalExecutionAuthorized=false`;
+- `m9c.qualificationConstructionAuthorized=false`.
+
+M9B remains the first unavoidable machine-side evidence boundary.
