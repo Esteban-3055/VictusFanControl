@@ -138,7 +138,8 @@ Assert-Contains $shadowSelfTest 'TestGpuImmediateThermalRelease' 'Adaptive shado
 Assert-Contains $shadowSelfTest 'TestDuplicateEpochReleasesNotionalCustom' 'Adaptive shadow duplicate-epoch self-test missing.'
 Assert-Contains $shadowSelfTest 'TestWrongTargetNeverRecommendsCustom' 'Adaptive shadow wrong-target self-test missing.'
 Assert-Contains $shadowSelfTest 'TestConfigAuthorizationGuards' 'Adaptive shadow config guard self-test missing.'
-Assert-Contains $shadowSelfTest 'TestCsvReplayParser' 'Adaptive shadow CSV replay self-test missing.'
+Assert-Contains $shadowSelfTest 'TestCsvReplayParser' 'Adaptive shadow CSV parser self-test missing.'
+Assert-Contains $shadowSelfTest 'TestEndToEndOfflineReplay' 'Adaptive shadow end-to-end replay self-test missing.'
 
 Assert-False ([bool]$shadowExample.authorizedForProduction) 'Adaptive shadow example must explicitly remain unauthorized for production.'
 if([string]$shadowExample.purpose -ne 'shadow-only'){throw 'Adaptive shadow example purpose must remain shadow-only.'}
