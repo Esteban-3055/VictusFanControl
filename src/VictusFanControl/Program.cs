@@ -56,8 +56,13 @@ internal static class Program
                 AdaptiveFanPolicyShadowSelfTest.Run(
                     Console.Out);
 
+            var comfortResult =
+                AdaptiveComfortShadowSelfTest.Run(
+                    Console.Out);
+
             return engineResult == 0 &&
-                   shadowResult == 0
+                   shadowResult == 0 &&
+                   comfortResult == 0
                 ? 0
                 : 33;
         }

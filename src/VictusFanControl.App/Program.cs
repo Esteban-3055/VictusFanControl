@@ -36,6 +36,37 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
 
+        var adaptiveCurveEditorShadow =
+            args.Any(
+                arg => string.Equals(
+                    arg,
+                    "--adaptive-curve-editor-shadow",
+                    StringComparison.OrdinalIgnoreCase));
+
+        if (adaptiveCurveEditorShadow)
+        {
+            if (args.Length != 1)
+            {
+                AppLog.Write(
+                    "Shadow curve editor startup refused: --adaptive-curve-editor-shadow must be used alone.");
+                Environment.ExitCode = 60;
+                return;
+            }
+
+            AppLog.Write(
+                "Starting hardware-free adaptive curve editor shadow simulation.");
+
+            using var editor =
+                new ShadowFanCurveEditorForm();
+
+            Application.Run(editor);
+
+            AppLog.Write(
+                "Shadow curve editor exited.");
+
+            return;
+        }
+
         Application.ThreadException += (_, eventArgs) =>
         {
             AppLog.Write($"UI THREAD EXCEPTION: {eventArgs.Exception}");

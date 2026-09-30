@@ -17,7 +17,8 @@ public sealed record AdaptiveFanPolicyConfig(
     IReadOnlyList<AdaptiveFanCurvePoint> CpuPowerCurve,
     IReadOnlyList<AdaptiveFanCurvePoint> GpuPowerCurve,
     IReadOnlyList<AdaptiveFanCurvePoint> CpuLoadCurve,
-    IReadOnlyList<AdaptiveFanCurvePoint> GpuLoadCurve);
+    IReadOnlyList<AdaptiveFanCurvePoint> GpuLoadCurve,
+    IReadOnlyList<AdaptiveFanCurvePoint>? CpuTemperatureTrendCurve = null);
 
 public sealed record AdaptiveFanPolicyInput(
     DateTimeOffset Timestamp,
@@ -26,7 +27,8 @@ public sealed record AdaptiveFanPolicyInput(
     double CpuLoadPercent,
     double GpuTemperatureC,
     double GpuPowerW,
-    double GpuLoadPercent);
+    double GpuLoadPercent,
+    double CpuTemperatureTrendCPerSecond = 0);
 
 public sealed record AdaptiveFanPolicyDecision(
     bool Accepted,
@@ -108,7 +110,7 @@ public sealed class AdaptiveFanPolicyEngine
 
         _lastTimestamp = input.Timestamp;
 
-        var rawDemand = new[]
+        var demands = new List<double>
         {
             Interpolate(
                 _config.CpuTemperatureCurve,
@@ -128,7 +130,18 @@ public sealed class AdaptiveFanPolicyEngine
             Interpolate(
                 _config.GpuLoadCurve,
                 input.GpuLoadPercent)
-        }.Max();
+        };
+
+        if (_config.CpuTemperatureTrendCurve is not null)
+        {
+            demands.Add(
+                Interpolate(
+                    _config.CpuTemperatureTrendCurve,
+                    input.CpuTemperatureTrendCPerSecond));
+        }
+
+        var rawDemand =
+            demands.Max();
 
         rawDemand = Math.Clamp(
             rawDemand,
@@ -276,6 +289,11 @@ public sealed class AdaptiveFanPolicyEngine
         yield return config.GpuPowerCurve;
         yield return config.CpuLoadCurve;
         yield return config.GpuLoadCurve;
+
+        if (config.CpuTemperatureTrendCurve is not null)
+        {
+            yield return config.CpuTemperatureTrendCurve;
+        }
     }
 
     private static void ValidateCurve(
@@ -326,7 +344,9 @@ public sealed class AdaptiveFanPolicyEngine
             !double.IsFinite(input.GpuPowerW) ||
             input.GpuPowerW is < 0 or > 300 ||
             !double.IsFinite(input.GpuLoadPercent) ||
-            input.GpuLoadPercent is < 0 or > 100)
+            input.GpuLoadPercent is < 0 or > 100 ||
+            !double.IsFinite(input.CpuTemperatureTrendCPerSecond) ||
+            input.CpuTemperatureTrendCPerSecond is < -50 or > 50)
         {
             failure =
                 "Adaptive policy refused invalid or implausible telemetry.";

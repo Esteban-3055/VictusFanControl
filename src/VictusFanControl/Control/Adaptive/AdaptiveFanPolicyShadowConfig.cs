@@ -23,6 +23,7 @@ public sealed record AdaptiveFanPolicyShadowConfigDocument
     public List<AdaptiveFanCurvePoint>? GpuPowerCurve { get; init; }
     public List<AdaptiveFanCurvePoint>? CpuLoadCurve { get; init; }
     public List<AdaptiveFanCurvePoint>? GpuLoadCurve { get; init; }
+    public List<AdaptiveFanCurvePoint>? CpuTemperatureTrendCurve { get; init; }
 }
 
 /// <summary>
@@ -158,7 +159,9 @@ public static class AdaptiveFanPolicyShadowConfig
                 CpuPowerCurve: document.CpuPowerCurve,
                 GpuPowerCurve: document.GpuPowerCurve,
                 CpuLoadCurve: document.CpuLoadCurve,
-                GpuLoadCurve: document.GpuLoadCurve);
+                GpuLoadCurve: document.GpuLoadCurve,
+                CpuTemperatureTrendCurve:
+                    document.CpuTemperatureTrendCurve);
 
         // Constructor validation is deliberately reused so shadow config and
         // the pure policy engine cannot drift apart.

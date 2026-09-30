@@ -47,5 +47,12 @@
     { "input": 20, "level": 10 },
     { "input": 50, "level": 20 },
     { "input": 100, "level": 30 }
+  ],
+  "cpuTemperatureTrendCurve": [
+    { "input": -2.0, "level": 10 },
+    { "input": 0.0, "level": 10 },
+    { "input": 1.0, "level": 20 },
+    { "input": 3.0, "level": 35 },
+    { "input": 6.0, "level": 50 }
   ]
 }

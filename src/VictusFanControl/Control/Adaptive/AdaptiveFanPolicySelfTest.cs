@@ -9,6 +9,7 @@ public static class AdaptiveFanPolicySelfTest
         failures += TestInterpolation(output);
         failures += TestHighestDomainWins(output);
         failures += TestUpwardSlew(output);
+        failures += TestTrendFeedForward(output);
         failures += TestDownwardConfirmation(output);
         failures += TestEnvelope(output);
         failures += TestDuplicateTimestampRefused(output);
@@ -107,6 +108,43 @@ public static class AdaptiveFanPolicySelfTest
             "upward slew limits one policy step",
             first.EqualFanLevel == 10 &&
             second.EqualFanLevel == 14);
+    }
+
+
+    private static int TestTrendFeedForward(TextWriter output)
+    {
+        var engine =
+            new AdaptiveFanPolicyEngine(
+                BuildConfig(
+                    maximumUpStep: 50) with
+                {
+                    CpuTemperatureTrendCurve =
+                    [
+                        new(-2, 10),
+                        new(0, 10),
+                        new(1, 25),
+                        new(3, 45)
+                    ]
+                });
+
+        var decision =
+            engine.Evaluate(
+                new AdaptiveFanPolicyInput(
+                    Timestamp: DateTimeOffset.UtcNow,
+                    CpuEffectiveTemperatureC: 55,
+                    CpuPackagePowerW: 5,
+                    CpuLoadPercent: 5,
+                    GpuTemperatureC: 40,
+                    GpuPowerW: 5,
+                    GpuLoadPercent: 5,
+                    CpuTemperatureTrendCPerSecond: 3));
+
+        return Report(
+            output,
+            "positive CPU temperature trend can anticipate rising fan demand in shadow policy",
+            decision.Accepted &&
+            decision.RawDemandLevel is >= 45 &&
+            decision.EqualFanLevel is >= 45);
     }
 
     private static int TestDownwardConfirmation(TextWriter output)

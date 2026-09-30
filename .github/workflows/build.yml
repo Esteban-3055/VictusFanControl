@@ -149,6 +149,14 @@ jobs:
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
 
+      - name: Adaptive comfort shadow isolation/invariant self-test
+        shell: pwsh
+        run: .\scripts\test-adaptive-comfort-shadow-invariants.ps1
+
+      - name: HP 8C40 M8B retrospective audit isolation invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m8b-retrospective-audit-invariants.ps1
+
       - name: HP 8C40 M5-M8 invariants Windows PowerShell 5.1 compatibility
         shell: powershell
         run: |
@@ -176,6 +184,8 @@ jobs:
           .\scripts\test-8c40-load-thermal-m8c-harness-invariants.ps1
           .\scripts\test-8c40-m8-production-race-audit-invariants.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
+          .\scripts\test-adaptive-comfort-shadow-invariants.ps1
+          .\scripts\test-8c40-m8b-retrospective-audit-invariants.ps1
 
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
