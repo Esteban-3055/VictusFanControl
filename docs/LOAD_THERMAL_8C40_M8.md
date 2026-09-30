@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; TELEMETRY-EPOCH/CLOSURE HARDENING CODE/CI PASS; PHYSICAL RETRY AUTHORIZED-PENDING. M8C SYNTHETIC CODE/CI PASS; M8C PHYSICAL EXECUTION REMAINS BLOCKED BY M8B PHYSICAL PASS.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; TELEMETRY-EPOCH/CLOSURE HARDENING CODE/CI PASS; PHYSICAL RETRY AUTHORIZED-PENDING. M8C SYNTHETIC + PHYSICAL-PREPARATION CODE/CI PASS; M8C PHYSICAL EXECUTION REMAINS BLOCKED BY M8B PHYSICAL PASS. AUTOMATIC/ADAPTIVE POLICY REMAINS OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -253,7 +253,7 @@ versioned target-profile instance and #737 passed. No hardware execution occurre
 ### M8C physical-controller preparation
 
 The real-hardware M8C controller is now prepared in code but deliberately unreachable. Its
-`PhysicalExecutionAuthorized=false` constant is checked before hardware identity, PawnIO,
+`PhysicalExecutionAuthorized=false` readonly authorization flag is checked before hardware identity, PawnIO,
 watchdog, WMI, EC or telemetry hardware objects are constructed. The profile independently keeps
 `physicalExecutionAuthorized=false` and still requires M8B physical PASS.
 
@@ -298,6 +298,15 @@ journal absence, two FF/FF observations and restoration of the M4 service to Man
 The harness cannot currently pass its first profile gate, and the controller independently retains
 `PhysicalExecutionAuthorized=false`. Preparing these files does not authorize or perform M8C.
 
+The complete no-hardware preparation is **CODE/CI PASS** at commit
+`ccb11f285a92c6f789929eee6911b5213fd95ddd`, GitHub Actions **#773**
+(run `36669038036`). That full workflow passed PowerShell syntax, all M5-M8 invariants under
+PowerShell 7, the M8C controller/harness invariants under Windows PowerShell 5.1,
+warnings-as-errors build, M8A classifier, M8C synthetic preemption, watchdog M2/M3/M4
+self-tests, SafetyGate, coordinator, adaptive-policy, BIOS-contract and HP-backend regressions.
+No physical M8B/M8C execution occurred.
+
+
 ## 5. Remaining production-race audit
 
 Before M8 is closed, code/CI and the physical harness must explicitly review the already-known race
@@ -315,6 +324,11 @@ At minimum retain coverage for:
 
 If implementation review finds a new unqualified physical race, it becomes an explicit M8
 sub-gate. M5D/M5E are not repeated solely to reproduce historical post-check behavior.
+
+The deterministic production-race audit is **CODE/CI PASS** in GitHub Actions #773. This closes
+the code/synthetic ordering questions listed above, but it does not replace the remaining real
+under-load M8B retry or the eventual real restore/journal/tach timing evidence required by M8C.
+
 
 ## 6. Required stage order
 
