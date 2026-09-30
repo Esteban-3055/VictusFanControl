@@ -29,6 +29,9 @@ Assert-Contains $script '--8c40-m8a-result-path' 'M8A must persist machine-reada
 Assert-Contains $script 'Assert-FinalStableFirmwareOwnership' 'M8A must independently prove final FF/FF twice.'
 Assert-Contains $script 'M8B remains blocked' 'M8A PASS must not authorize M8B automatically.'
 
+Assert-NotContains $source '_ = EvaluateAndValidateSnapshot(
+    'M8A warm-up sample must not require complete differential telemetry.'
+
 foreach($forbidden in @(
     'SetFanLevel(',
     '--restore-hp-auto',
@@ -59,6 +62,8 @@ foreach($required in @(
     'MinimumCpuPackagePowerW = 15.0',
     'CpuPhysicalAbortC = 90.0',
     'GpuPhysicalAbortC = 82.0',
+    'EnsurePhysicalAbortLimits(warmup);',
+    'telemetry.ResetHealthWindow();',
     'EcEvidenceIntervalSamples = 5',
     'MaximumUnexpectedEcConfirmationReads = 3',
     'RequiredConsecutiveUnexpectedEcSamples = 2',

@@ -167,11 +167,12 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
                     "M8A exact-target telemetry backends are not fully initialized.");
             }
 
+            // The first telemetry sample primes differential CPU power/load
+            // counters and may therefore be intentionally incomplete. It is
+            // excluded from M8A load qualification, but real temperatures still
+            // retain the conservative physical abort boundary.
             var warmup = telemetry.ReadSnapshot();
-            _ = EvaluateAndValidateSnapshot(
-                hardware,
-                warmup,
-                previousTimestamp: null);
+            EnsurePhysicalAbortLimits(warmup);
 
             telemetry.ResetHealthWindow();
 
@@ -498,19 +499,7 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
                 "M8A effective CPU safety aggregate is unavailable.");
         }
 
-        if (effectiveCpu.Value >= CpuPhysicalAbortC)
-        {
-            throw new InvalidOperationException(
-                $"M8A physical CPU abort: {effectiveCpu.Value:0.0} C >= " +
-                $"{CpuPhysicalAbortC:0} C.");
-        }
-
-        if (snapshot.GpuTemperatureC.Value >= GpuPhysicalAbortC)
-        {
-            throw new InvalidOperationException(
-                $"M8A physical GPU abort: {snapshot.GpuTemperatureC.Value:0.0} C >= " +
-                $"{GpuPhysicalAbortC:0} C.");
-        }
+        EnsurePhysicalAbortLimits(snapshot);
 
         var safety = SafetyGate.Evaluate(
             hardware,
@@ -530,6 +519,28 @@ public static class Hp8C40M8RepresentativeLoadQualificationTest
         }
 
         return safety;
+    }
+
+    private static void EnsurePhysicalAbortLimits(
+        TelemetrySnapshot snapshot)
+    {
+        var effectiveCpu = snapshot.CpuControlTemperatureC;
+
+        if (effectiveCpu.HasValue &&
+            effectiveCpu.Value >= CpuPhysicalAbortC)
+        {
+            throw new InvalidOperationException(
+                $"M8A physical CPU abort: {effectiveCpu.Value:0.0} C >= " +
+                $"{CpuPhysicalAbortC:0} C.");
+        }
+
+        if (snapshot.GpuTemperatureC.HasValue &&
+            snapshot.GpuTemperatureC.Value >= GpuPhysicalAbortC)
+        {
+            throw new InvalidOperationException(
+                $"M8A physical GPU abort: {snapshot.GpuTemperatureC.Value:0.0} C >= " +
+                $"{GpuPhysicalAbortC:0} C.");
+        }
     }
 
     private static void EnsurePowerStatus(SystemPowerStatusSample status)
