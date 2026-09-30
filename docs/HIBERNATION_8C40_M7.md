@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **CODE/CI PASS / NO-WRITE PREFLIGHT PASS / PHYSICAL PENDING**.
+Status: **CODE/CI PASS / NO-WRITE PREFLIGHT PASS / PHYSICAL PASS**.
 
 M6 has physically closed the display-aware Modern Standby path. M7 is a
 separate gate for Windows hibernation. It does not enable automatic/adaptive
@@ -87,9 +87,11 @@ as M6. After READY and a final explicit prompt, the script itself executes
 
 ## Gate status
 
-M7 remains physically pending until a clean hibernation run produces all of the
-proof above. A code/CI PASS alone does not authorize production watchdog
-promotion or automatic/adaptive fan control.
+M7 is physically closed on the exact target. This closes the hibernation
+lifecycle gate, but does not by itself authorize unattended/adaptive control.
+Representative-load, thermal-emergency and any remaining production-race
+validation stay separate. `WatchdogRecoveryValidated` remains false and
+automatic/adaptive fan control remains OFF.
 
 ## Code/CI preparation result
 
@@ -124,3 +126,42 @@ performed by this stage. M7 physical qualification is therefore authorized as
 the next separate gate, but remains **PENDING** until the write-capable
 hibernation harness passes. `WatchdogRecoveryValidated` remains false and
 automatic/adaptive policy remains OFF.
+
+## Physical hibernation result
+
+**PASS — 2026-09-29 — repository head
+`0a916adc4adfda58076fd093031f55c7430cf10a`.**
+
+The write-capable M7 harness reached real watchdog-backed Custom 30/30 with a
+durable OWNED generation-3 lease. Watchdog PID 21968
+(start ticks `639263244753105927`) and GUI PID 27320
+(start ticks `639263244891936226`) were bound into the proof.
+
+The proactive lifecycle handoff was causally ordered:
+
+- READY at 21:21:40.3047081 -03:00 in Custom 30/30;
+- primary SESSION_DISPLAY_STATUS Off at 00:21:45.6820512Z;
+- registered PBT_APMSUSPEND completed restore at
+  21:21:46.5032823 -03:00;
+- restore duration 689.5 ms;
+- Firmware authority, local FF/FF, watchdog Release and journal absence were
+  all established before the OS hibernation event.
+
+Windows then recorded Kernel-Power 42 at 21:21:47.012924 -03:00 with
+Application API causality, followed by Kernel-Power 507 at
+21:22:19.8585117 -03:00 with `Resume from Hibernate`. The measured
+hibernation evidence window was 32.8 s. The system power report independently
+classified Session 70 as type Hibernate, TargetState=5, EffectiveState=5,
+requested by `shutdown.exe`, on AC, with 69546 mWh remaining both at entry and
+exit. No battery-triggered event or Kernel-Power 524 occurred inside the armed
+test window.
+
+After resume, SESSION_DISPLAY_STATUS On was accepted exactly once at
+21:22:20.1734446 -03:00 while authority was still Firmware, EC was FF/FF and
+the journal was absent. Five fresh Healthy snapshots completed recovery before
+one controlled watchdog-backed 30/30 re-entry. The final Release succeeded,
+independent and post-test EC probes each produced two consecutive FF/FF samples,
+the delayed 300 s fallback never took over, and M4 returned to Manual/stopped.
+
+This is accepted as the physical M7 PASS. M6 does not need to be repeated and
+M7 does not need to be repeated merely for documentation.
