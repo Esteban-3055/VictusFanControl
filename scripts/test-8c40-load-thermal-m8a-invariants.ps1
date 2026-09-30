@@ -29,8 +29,7 @@ Assert-Contains $script '--8c40-m8a-result-path' 'M8A must persist machine-reada
 Assert-Contains $script 'Assert-FinalStableFirmwareOwnership' 'M8A must independently prove final FF/FF twice.'
 Assert-Contains $script 'M8B remains blocked' 'M8A PASS must not authorize M8B automatically.'
 
-Assert-NotContains $source '_ = EvaluateAndValidateSnapshot(
-    'M8A warm-up sample must not require complete differential telemetry.'
+Assert-NotContains $source '_ = EvaluateAndValidateSnapshot(' 'M8A warm-up sample must not require complete differential telemetry.'
 
 foreach($forbidden in @(
     'SetFanLevel(',
