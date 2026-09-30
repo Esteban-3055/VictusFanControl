@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B READ-ONLY PREFLIGHT CODE PREPARED / CI PENDING / EXECUTION BLOCKED. PRODUCTION WATCHDOG CONSTRUCTION AND ALL WRITE-CAPABLE M9 PHYSICAL EXECUTION REMAIN BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B READ-ONLY PREFLIGHT CODE/CI PASS AND READ-ONLY EXECUTION AUTHORIZED. PRODUCTION WATCHDOG CONSTRUCTION AND ALL WRITE-CAPABLE M9 PHYSICAL EXECUTION REMAIN BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -174,3 +174,23 @@ then proves the service state, repository HEAD and durable journal state did not
 
 Evidence is written only below a new timestamped `logs/m9b-production-watchdog-preflight_*`
 directory. Historical evidence is never deleted.
+
+
+### M9B code/CI closure and authorization
+
+M9B preparation is **CODE/CI PASS** at commit
+`2ec00f047943c46885a15ab96642ec7c69a1e6dd`, GitHub Actions **#838**
+(run `36779270309`). The complete workflow passed the new M9B invariant under
+PowerShell 7 and Windows PowerShell 5.1, warnings-as-errors build, the M9
+factory/gate self-test and all existing M5-M8 regressions. No hardware path ran.
+
+The profile now sets only:
+
+- `m9b.readOnlyExecutionAuthorized=true`;
+- `m9b.physicalWriteAuthorized=false`;
+- `m9a.productionConstructionAuthorized=false`;
+- `WatchdogRecoveryValidated=false`.
+
+Therefore the versioned M9B preflight may be executed on the exact target, but it
+cannot start the watchdog, acquire a lease or write a fan level. M9C remains blocked
+until the resulting M9B evidence is reviewed and committed.

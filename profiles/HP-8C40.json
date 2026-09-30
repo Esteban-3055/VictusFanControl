@@ -55,7 +55,8 @@
     "watchdogM9ProductionIntegrationPrepared": true,
     "watchdogM9CodeCiPassed": true,
     "watchdogM9NoWritePreflightPassed": false,
-    "watchdogM9PhysicalPassed": false
+    "watchdogM9PhysicalPassed": false,
+    "watchdogM9BCodeCiPassed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -2929,7 +2930,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9A_CODE_CI_PASS_M9B_CODE_PREPARED_CI_PENDING_READ_ONLY_BLOCKED",
+    "status": "M9A_CODE_CI_PASS_M9B_CODE_CI_PASS_READ_ONLY_AUTHORIZED_WRITE_BLOCKED",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -2971,11 +2972,11 @@
       "status": "CODE_CI_PASS"
     },
     "m9b": {
-      "status": "CODE_PREPARED_CI_PENDING_READ_ONLY_BLOCKED",
+      "status": "CODE_CI_PASS_READ_ONLY_EXECUTION_AUTHORIZED",
       "purpose": "versioned read-only production-watchdog preflight on the exact HP 8C40 target",
       "preflightScript": "scripts/test-8c40-production-watchdog-m9b-preflight.ps1",
       "invariantScript": "scripts/test-8c40-m9b-readonly-preflight-invariants.ps1",
-      "readOnlyExecutionAuthorized": false,
+      "readOnlyExecutionAuthorized": true,
       "physicalWriteAuthorized": false,
       "serviceMutationAuthorized": false,
       "watchdogLeaseAcquisitionAuthorized": false,
@@ -2996,15 +2997,18 @@
       ],
       "evidence": "logs/m9b-production-watchdog-preflight_*/{m9b-preflight-result.json,telemetry-output.txt}",
       "codeCi": {
-        "result": "PENDING",
-        "commit": null,
-        "runNumber": null,
-        "runId": null,
-        "powerShell7Invariant": null,
-        "windowsPowerShell51Invariant": null,
-        "warningsAsErrorsBuild": null,
+        "result": "PASS",
+        "commit": "2ec00f047943c46885a15ab96642ec7c69a1e6dd",
+        "runNumber": 838,
+        "runId": 36779270309,
+        "powerShell7Invariant": true,
+        "windowsPowerShell51Invariant": true,
+        "warningsAsErrorsBuild": true,
+        "existingM5M9Regressions": true,
+        "hpBackendSelfTest": true,
         "hardwareExecution": false
-      }
+      },
+      "noWritePreflightPassed": false
     },
     "m9c": {
       "status": "NOT_AUTHORIZED",
@@ -3018,6 +3022,6 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Obtain same-HEAD CI for the prepared M9B read-only preflight. Only after CI PASS may a closure commit set m9b.readOnlyExecutionAuthorized=true; write-capable M9C remains blocked."
+    "nextStep": "Run the authorized versioned M9B read-only preflight on the exact target from this tracked branch/HEAD. Do not run M9C or enable production watchdog construction; M9C remains write-blocked until the M9B evidence is reviewed and formally recorded."
   }
 }

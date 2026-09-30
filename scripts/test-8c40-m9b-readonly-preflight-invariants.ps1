@@ -22,8 +22,13 @@ Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9B must not 
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9B must keep default control OFF.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9B must keep automatic/adaptive policy OFF.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9B must keep M9 production construction blocked.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyExecutionAuthorized) 'M9B preparation commit must keep read-only execution blocked until CI passes.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyExecutionAuthorized) 'M9B read-only execution authorization must remain recorded after code/CI closure.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.physicalWriteAuthorized) 'M9B must never authorize fan writes.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed) 'M9B code/CI closure must not imply the physical read-only preflight already passed.'
+if([string]$profile.watchdogM9ProductionIntegration.m9b.codeCi.result -cne 'PASS'){throw 'M9B code/CI result must remain PASS.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9b.codeCi.commit -cne '2ec00f047943c46885a15ab96642ec7c69a1e6dd'){throw 'M9B code/CI evidence commit changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9b.codeCi.runNumber -ne 838){throw 'M9B code/CI run number changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9b.codeCi.runId -ne 36779270309){throw 'M9B code/CI run id changed.'}
 
 foreach($needle in @(
     'M9B PRODUCTION WATCHDOG READ-ONLY PREFLIGHT',
@@ -71,7 +76,7 @@ foreach($forbidden in @(
 }
 
 Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'M9 production construction gate must remain closed during M9B.'
-Assert-Contains $doc 'M9B READ-ONLY PREFLIGHT CODE PREPARED / CI PENDING / EXECUTION BLOCKED' 'M9B documentation preparation status missing.'
+Assert-Contains $doc 'M9B READ-ONLY PREFLIGHT CODE/CI PASS AND READ-ONLY EXECUTION AUTHORIZED' 'M9B documentation closure status missing.'
 Assert-Contains $doc 'does **not** start or stop the service' 'M9B documentation must preserve the no-service-mutation contract.'
 
 Write-Host 'HP 8C40 M9B read-only preflight invariant: PASS' -ForegroundColor Green
