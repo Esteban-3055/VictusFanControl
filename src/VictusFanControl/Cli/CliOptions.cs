@@ -12,6 +12,9 @@ public sealed class CliOptions
     public bool BiosContractSelfTest { get; private set; }
     public bool HpBackendSelfTest { get; private set; }
     public bool Hp8C40M8PreflightProbe { get; private set; }
+    public bool Hp8C40M8ARepresentativeLoad { get; private set; }
+    public bool Hp8C40M8ASelfTest { get; private set; }
+    public string? Hp8C40M8AResultPath { get; private set; }
     public bool RestoreHpAuto { get; private set; }
     public bool SkipEcSnapshots { get; private set; }
     public bool FirstFanWriteTest { get; private set; }
@@ -105,6 +108,18 @@ public sealed class CliOptions
 
                 case "--8c40-m8-preflight-probe":
                     options.Hp8C40M8PreflightProbe = true;
+                    break;
+                case "--8c40-m8a-representative-load":
+                    options.Hp8C40M8ARepresentativeLoad = true;
+                    break;
+
+                case "--8c40-m8a-self-test":
+                    options.Hp8C40M8ASelfTest = true;
+                    break;
+
+                case "--8c40-m8a-result-path":
+                    options.Hp8C40M8AResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
                 case "--restore-hp-auto":
@@ -332,6 +347,8 @@ public sealed class CliOptions
             (options.BiosContractSelfTest ? 1 : 0) +
             (options.HpBackendSelfTest ? 1 : 0) +
             (options.Hp8C40M8PreflightProbe ? 1 : 0) +
+            (options.Hp8C40M8ARepresentativeLoad ? 1 : 0) +
+            (options.Hp8C40M8ASelfTest ? 1 : 0) +
             (options.RestoreHpAuto ? 1 : 0) +
             (options.FirstFanWriteTest ? 1 : 0) +
             (options.IntegratedCoordinatorTest ? 1 : 0) +
@@ -354,6 +371,20 @@ public sealed class CliOptions
         {
             throw new ArgumentException(
                 "Choose only one probe/test/write operation per invocation.");
+        }
+
+        if (options.Hp8C40M8AResultPath is not null &&
+            !options.Hp8C40M8ARepresentativeLoad)
+        {
+            throw new ArgumentException(
+                "--8c40-m8a-result-path is valid only with --8c40-m8a-representative-load.");
+        }
+
+        if (options.Hp8C40M8ARepresentativeLoad &&
+            string.IsNullOrWhiteSpace(options.Hp8C40M8AResultPath))
+        {
+            throw new ArgumentException(
+                "--8c40-m8a-representative-load requires --8c40-m8a-result-path.");
         }
 
         if (options.SkipEcSnapshots && !options.RestoreHpAuto)
@@ -517,6 +548,9 @@ public sealed class CliOptions
         Console.WriteLine("  --bios-contract-self-test Validate 88F8 + 8C40 BIOS/WMI request envelopes.");
         Console.WriteLine("  --hp-backend-self-test    Test the 88F8 + 8C40 backend boundaries with synthetic hardware.");
         Console.WriteLine("  --8c40-m8-preflight-probe READ-ONLY: exact-target telemetry + SafetyGate readiness for M8.");
+        Console.WriteLine("  --8c40-m8a-representative-load  READ-ONLY: observe the fixed 60 s M8A representative gaming/3D load window.");
+        Console.WriteLine("  --8c40-m8a-result-path <path>   Required durable JSON evidence path for M8A.");
+        Console.WriteLine("  --8c40-m8a-self-test            Synthetic self-test for M8A load/window classification.");
         Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");

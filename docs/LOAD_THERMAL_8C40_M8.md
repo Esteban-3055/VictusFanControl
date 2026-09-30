@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **SPECIFICATION + STATIC/SYNTHETIC INVARIANTS CODE/CI PASS. NO-WRITE PREFLIGHT PHYSICAL PASS. M8A REPRESENTATIVE-LOAD HARNESS NEXT. M8B/M8C WRITE-CAPABLE HARNESS NOT YET AUTHORIZED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A REPRESENTATIVE-LOAD HARNESS CODE PREPARED / CI PENDING. M8B/M8C WRITE-CAPABLE HARNESS NOT YET AUTHORIZED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -101,6 +101,33 @@ If the representative-load window is not proven, M8A ends **FAIL_CLOSED / NO-WRI
 
 The exact numeric load/duration criteria must be versioned in the harness before physical use and
 must be reported in the final evidence. They are not to be improvised by operator commands.
+The versioned M8A harness now fixes those criteria before physical use:
+
+- **60 samples at 1 second** (approximately one minute);
+- at least **45/60** samples must simultaneously satisfy the representative-load predicate;
+- at least **10 consecutive** samples must satisfy it;
+- GPU load >= 35% **and** GPU power >= 20 W;
+- CPU load >= 5% **or** CPU package power >= 15 W;
+- every sample must be complete, fresh (<=3 s), production-SafetyGate-ready, exact-GPU valid
+  and below the 90 C CPU / 82 C GPU physical abort limits;
+- AC must remain online and battery present at >=20%;
+- narrow read-only EC evidence is checked at the start, every 5 samples and at the end;
+  ownership must remain FF/FF and MaxFan/FanSwitch must remain 00/00;
+- an isolated unexpected EC ownership/guard sample gets at most three read-only reads with
+  25 ms spacing; two consecutive identical unexpected samples are treated as persistent and
+  M8A fails closed.
+
+The threshold pair is intentionally a **material-load** gate rather than a maximum-stress gate:
+GPU utilization alone is insufficient (idle/video-like low-power activity is excluded by the
+20 W requirement), while CPU activity may be demonstrated by either scheduler load or package
+power. VictusFanControl generates no stress load itself; the operator supplies normal gameplay
+or a normal 3D workload.
+
+The harness is `scripts/test-8c40-load-thermal-m8a.ps1`. It first reruns the versioned M8
+NO-WRITE preflight, then waits for the operator to reach active gameplay/rendering and explicitly
+confirm `M8A`. The observation mode is `--8c40-m8a-representative-load` with a required
+`--8c40-m8a-result-path`. Durable evidence is written under
+`logs/m8a-representative-load_*/m8a-result.json`. The entire M8A path remains NO-WRITE.
 
 ### M8B - watchdog-backed 50/50 under representative load
 
@@ -278,6 +305,14 @@ No fan write, firmware restore, watchdog lease, service mutation, fault injectio
 sleep transition or deliberate stress load occurred. The physical NO-WRITE preflight
 is therefore closed as PASS. M8A representative-load admission is now the next
 development/qualification step; M8B/M8C remain blocked.
+
+## 7A. M8A code preparation
+
+M8A code preparation adds a read-only representative-load classifier and a versioned physical
+harness. This preparation does not authorize M8B or M8C, does not create a watchdog lease,
+does not construct a fan-control backend/coordinator and cannot issue SetFanLevel or a firmware
+restore. GitHub Actions CI must pass the new PowerShell 7 / Windows PowerShell 5.1 invariant,
+warnings-as-errors build and the synthetic M8A classifier self-test before physical M8A use.
 
 ## 8. Physical harness safety and evidence
 

@@ -82,6 +82,26 @@ internal static class Program
                 return 130;
             }
         }
+        if (options.Hp8C40M8ASelfTest)
+        {
+            return Hp8C40M8RepresentativeLoadQualificationTest
+                .RunClassifierSelfTest(Console.Out);
+        }
+
+        if (options.Hp8C40M8ARepresentativeLoad)
+        {
+            using var m8aCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                m8aCts.Cancel();
+            };
+
+            return await Hp8C40M8RepresentativeLoadQualificationTest.RunAsync(
+                options.ModulesDirectory,
+                options.Hp8C40M8AResultPath!,
+                m8aCts.Token);
+        }
 
         if (options.RestoreHpAuto)
         {

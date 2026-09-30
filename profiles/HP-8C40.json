@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-physical-pass-m8a-code-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-code-prepared-ci-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1907,11 +1907,11 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_CODE_PENDING_M8B_M8C_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_CODE_PREPARED_CI_PENDING_M8B_M8C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
-    "representativeLoadGate": "M8A pending",
+    "representativeLoadGate": "M8A code prepared / CI pending / physical pending",
     "watchdogBackedLoadGate": "M8B pending",
     "thermalPreemptionGate": "M8C pending",
     "productionRaceAudit": "pending",
@@ -2005,6 +2005,33 @@
       "telemetry": "3/3 complete, 14/14 core context, Intel/EC/NVML recoveries 0, CPU effective 50/49/49 C, GPU 47/47/47 C, exact RTX 4060 identity, PreconditionsReady true, no thermal emergency",
       "firmwareOwnershipProof": "FF/FF then FF/FF",
       "prohibitedActions": "none"
+    },
+    "representativeLoadHarnessScript": "scripts/test-8c40-load-thermal-m8a.ps1",
+    "representativeLoadInvariantScript": "scripts/test-8c40-load-thermal-m8a-invariants.ps1",
+    "m8a": {
+      "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_PENDING",
+      "physicalPassed": false,
+      "writeCapable": false,
+      "cliMode": "--8c40-m8a-representative-load",
+      "selfTestMode": "--8c40-m8a-self-test",
+      "evidence": "logs/m8a-representative-load_*/m8a-result.json",
+      "criteria": {
+        "samples": 60,
+        "intervalSeconds": 1,
+        "minimumRepresentativeSamples": 45,
+        "minimumConsecutiveRepresentativeSamples": 10,
+        "gpu": "load >= 35% AND power >= 20 W",
+        "cpu": "load >= 5% OR package power >= 15 W",
+        "cpuAbortC": 90,
+        "gpuAbortC": 82,
+        "telemetry": "every sample complete/fresh and SafetyGate PreconditionsReady; exact GPU identity",
+        "power": "AC online; battery present >=20%",
+        "ownership": "FF/FF throughout; guards 00/00; bounded 3-read/25ms confirmation for isolated unexpected EC evidence"
+      },
+      "m8bAuthorized": false,
+      "preparationCi": {
+        "result": "PENDING"
+      }
     }
   }
 }
