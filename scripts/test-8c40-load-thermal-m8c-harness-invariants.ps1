@@ -93,7 +93,7 @@ foreach($needle in @(
 
 Assert-NotContains $failsafe 'SetFanLevel(' 'M8C delayed failsafe must not issue ordinary fan targets.'
 Assert-NotContains $failsafe '--restore-hp-auto' 'M8C delayed failsafe must not invoke direct HP restore.'
-Assert-Contains $controller 'public const bool PhysicalExecutionAuthorized = false;' 'M8C compiled controller must remain independently blocked.'
+Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M8C compiled controller must remain independently blocked.'
 
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C harness preparation must not imply M8B physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C harness must remain profile-blocked.'
