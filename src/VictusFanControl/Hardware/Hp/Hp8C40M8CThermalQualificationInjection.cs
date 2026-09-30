@@ -94,7 +94,7 @@ internal static class Hp8C40M8CThermalQualificationInjection
         var coreTemperatures =
             Enumerable.Range(
                     0,
-                    Hp8C40TargetProfile.ExpectedPhysicalCoreCount)
+                    Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount)
                 .Select(index =>
                     new CpuCoreTemperatureSample(
                         CoreIndex: index,
@@ -121,7 +121,7 @@ internal static class Hp8C40M8CThermalQualificationInjection
             GpuFanRpm: 5000.0)
         {
             CpuExpectedPhysicalCoreCount =
-                Hp8C40TargetProfile.ExpectedPhysicalCoreCount,
+                Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount,
             CpuCoreTemperatures = coreTemperatures
         };
 
