@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; TELEMETRY-EPOCH/CLOSURE HARDENING CODE/CI PASS; PHYSICAL RETRY AUTHORIZED-PENDING. M8C SYNTHETIC CODE PREPARED / CI PENDING; M8C PHYSICAL EXECUTION REMAINS BLOCKED BY M8B PHYSICAL PASS.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; TELEMETRY-EPOCH/CLOSURE HARDENING CODE/CI PASS; PHYSICAL RETRY AUTHORIZED-PENDING. M8C SYNTHETIC CODE/CI PASS; M8C PHYSICAL EXECUTION REMAINS BLOCKED BY M8B PHYSICAL PASS.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -240,6 +240,15 @@ Static invariants enforce that isolation.
 proves only threshold, sequencing and coordinator-preemption behavior; it cannot prove local
 FF/FF restore acknowledgement, watchdog Release, journal cleanup, dual-tach behavior or the
 real physical race timing required for M8C closure.
+
+The synthetic M8C block is **CODE/CI PASS** at commit
+`738e308def4824c9200f9c364121a8a1d56ce0f1`, GitHub Actions **#737**
+(run `36667160690`). The workflow passed PowerShell syntax, the M8C static invariant under
+PowerShell 7 and Windows PowerShell 5.1, warnings-as-errors build, the synthetic M8C
+thermal-preemption self-test and the existing M5-M8/SafetyGate/coordinator/backend regressions.
+An earlier intermediate run (#731) failed at compile time because the new helper referenced the
+14-core count as a nonexistent static target-profile member; the code was corrected to use the
+versioned target-profile instance and #737 passed. No hardware execution occurred.
 
 ## 5. Remaining production-race audit
 
