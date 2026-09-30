@@ -9,6 +9,7 @@ public sealed class CliOptions
     public bool Probe88F8Setpoint { get; private set; }
     public bool Probe8C40Setpoint { get; private set; }
     public bool ControlSelfTest { get; private set; }
+    public bool AdaptivePolicySelfTest { get; private set; }
     public bool BiosContractSelfTest { get; private set; }
     public bool HpBackendSelfTest { get; private set; }
     public bool Hp8C40M8PreflightProbe { get; private set; }
@@ -101,6 +102,10 @@ public sealed class CliOptions
 
                 case "--control-self-test":
                     options.ControlSelfTest = true;
+                    break;
+
+                case "--adaptive-policy-self-test":
+                    options.AdaptivePolicySelfTest = true;
                     break;
 
                 case "--bios-contract-self-test":
@@ -372,6 +377,7 @@ public sealed class CliOptions
             (options.Probe88F8Setpoint ? 1 : 0) +
             (options.Probe8C40Setpoint ? 1 : 0) +
             (options.ControlSelfTest ? 1 : 0) +
+            (options.AdaptivePolicySelfTest ? 1 : 0) +
             (options.BiosContractSelfTest ? 1 : 0) +
             (options.HpBackendSelfTest ? 1 : 0) +
             (options.Hp8C40M8PreflightProbe ? 1 : 0) +
@@ -593,6 +599,7 @@ public sealed class CliOptions
         Console.WriteLine("  --probe-88f8-setpoint     Read only 88F8 ownership setpoints 0x34/0x35 (read-only).");
         Console.WriteLine("  --probe-8c40-setpoint     Read only 8C40 ownership setpoints 0x34/0x35 (read-only).");
         Console.WriteLine("  --control-self-test       Test authority/fallback coordinator with fake backend.");
+        Console.WriteLine("  --adaptive-policy-self-test  Test hardware-independent adaptive policy smoothing/validation; no fan writes.");
         Console.WriteLine("  --bios-contract-self-test Validate 88F8 + 8C40 BIOS/WMI request envelopes.");
         Console.WriteLine("  --hp-backend-self-test    Test the 88F8 + 8C40 backend boundaries with synthetic hardware.");
         Console.WriteLine("  --8c40-m8-preflight-probe READ-ONLY: exact-target telemetry + SafetyGate readiness for M8.");
