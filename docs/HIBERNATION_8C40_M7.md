@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **CODE/CI PASS / NO-WRITE PREFLIGHT PENDING / PHYSICAL PENDING**.
+Status: **CODE/CI PASS / NO-WRITE PREFLIGHT PASS / PHYSICAL PENDING**.
 
 M6 has physically closed the display-aware Modern Standby path. M7 is a
 separate gate for Windows hibernation. It does not enable automatic/adaptive
@@ -105,3 +105,22 @@ FanControlCoordinator, BIOS-contract and HP backend self-tests.
 This closes only M7 code/CI preparation. The no-write local preflight and
 physical hibernation transition remain pending. `WatchdogRecoveryValidated`
 remains false and automatic/adaptive policy remains OFF.
+
+## No-write preflight result
+
+The exact target completed the local M7 no-write preflight successfully on
+2026-09-29 from repository head
+`fa8d6bc1324bc8146735ebfccb8eeaaf4d6c86b5`.
+
+The preflight confirmed HP 8C40 / board 63.43 / SKU 9D0R1LA#AKH / BIOS F.18,
+Windows hibernation availability, Modern Standby S0 Low Power Idle, no legacy
+S3, 100% reported battery charge, no active power requests, M4 Manual/stopped,
+no retained watchdog journal, warnings-as-errors build success, the complete
+M5/M6/M7 synthetic regression set, and two consecutive independent FF/FF
+samples.
+
+No fan write, watchdog lease, service mutation or hibernation transition was
+performed by this stage. M7 physical qualification is therefore authorized as
+the next separate gate, but remains **PENDING** until the write-capable
+hibernation harness passes. `WatchdogRecoveryValidated` remains false and
+automatic/adaptive policy remains OFF.
