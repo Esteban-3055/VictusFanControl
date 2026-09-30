@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A REPRESENTATIVE-LOAD HARNESS CODE PREPARED / CI PENDING. M8B/M8C WRITE-CAPABLE HARNESS NOT YET AUTHORIZED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A REPRESENTATIVE-LOAD HARNESS CODE/CI PASS / PHYSICAL PENDING. M8B/M8C WRITE-CAPABLE HARNESS NOT YET AUTHORIZED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -313,6 +313,21 @@ harness. This preparation does not authorize M8B or M8C, does not create a watch
 does not construct a fan-control backend/coordinator and cannot issue SetFanLevel or a firmware
 restore. GitHub Actions CI must pass the new PowerShell 7 / Windows PowerShell 5.1 invariant,
 warnings-as-errors build and the synthetic M8A classifier self-test before physical M8A use.
+
+M8A preparation is now **CODE/CI PASS** at commit
+`c50510fc627e22d48a762d24c378bd89c724b7d2`, GitHub Actions **#703** (run `36658025006`).
+The run passed PowerShell syntax, the M8A invariant under PowerShell 7 and Windows PowerShell
+5.1, warnings-as-errors build, the M8A representative-load classifier self-test and the
+existing M6/M7/M8/SafetyGate/coordinator/BIOS/backend regressions.
+
+During review before physical execution, the initial M8A warm-up sample was hardened: the first
+`HardwareTelemetryReader` snapshot exists only to prime differential CPU power/load counters
+and may be incomplete by design. It is now excluded from representative-load/SafetyGate
+qualification while still enforcing the real 90 C CPU / 82 C GPU physical abort boundary.
+GitHub Actions #702 failed closed only because the first static invariant edit had a PowerShell
+string-termination syntax error; no physical M8A execution occurred in that run. The corrected
+invariant and warm-up behavior passed #703.
+
 
 ## 8. Physical harness safety and evidence
 
