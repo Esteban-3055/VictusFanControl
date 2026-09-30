@@ -6,8 +6,9 @@ Status: **CODE/CI PASS / NO-WRITE PREFLIGHT PASS / PHYSICAL PASS**.
 
 M5A through M5E have closed the awake watchdog/crash matrix. M6 now closes the
 display-aware Modern Standby lifecycle gate on the exact 8C40 target.
-`WatchdogRecoveryValidated` nevertheless remains false until M8 representative-load,
-thermal-preemption and any remaining production-race gates are physically closed.
+`WatchdogRecoveryValidated` remains false even though M8 representative-load and
+thermal-preemption are now physically closed. The remaining production-watchdog
+integration/promotion boundary is M9.
 
 Automatic/adaptive fan policy remains OFF.
 

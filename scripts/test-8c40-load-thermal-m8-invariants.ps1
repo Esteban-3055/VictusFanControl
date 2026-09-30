@@ -8,6 +8,7 @@ $safetyPath=Join-Path $repoRoot 'src\VictusFanControl\Safety\SafetyGate.cs'
 $coordinatorPath=Join-Path $repoRoot 'src\VictusFanControl\Control\FanControlCoordinator.cs'
 $backendPath=Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs'
 $factoryPath=Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\HpFanControlBackendFactory.cs'
+$m9GatePath=Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40ProductionWatchdogGate.cs'
 $thermalConfirmationPath=Join-Path $repoRoot 'src\VictusFanControl\Safety\Hp8C40ThermalEmergencyConfirmation.cs'
 $mainFormPath=Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs'
 
@@ -18,6 +19,7 @@ $safety=Get-Content $safetyPath -Raw
 $coordinator=Get-Content $coordinatorPath -Raw
 $backend=Get-Content $backendPath -Raw
 $factory=Get-Content $factoryPath -Raw
+$m9Gate=Get-Content $m9GatePath -Raw
 $thermalConfirmation=Get-Content $thermalConfirmationPath -Raw
 $mainForm=Get-Content $mainFormPath -Raw
 
@@ -93,12 +95,14 @@ Assert-Contains $backend 'RequiredConsecutiveUnexpectedGuardSamples = 2' 'M8 gua
 Assert-Contains $backend 'VerifyExistingOwnership' 'M8 requires ownership rechecks.'
 Assert-Contains $backend '_hardware.SetFanLevel(cpuTarget, gpuTarget);' 'M8 must continue through HP fan-level hardware abstraction.'
 Assert-Contains $backend 'WaitForTachometerResponseAsync' 'M8 requires dual-tach hardware acknowledgement.'
-Assert-Contains $backend 'HP 8C40 production watchdog/unattended recovery promotion remains blocked.' 'M8 preparation must keep the public watchdog path blocked.'
+Assert-Contains $backend 'RequireProductionConstructionAuthorized' 'M8 closure must keep the public watchdog path behind the explicit M9 gate.'
 
 # Qualification bypass must not leak into the production factory.
 Assert-NotContains $factory 'CreateLifecycleQualificationBackend' 'Production factory must not use a qualification-only bypass.'
-Assert-Contains $factory 'production watchdog/unattended recovery' 'Factory must report the current production-watchdog block.'
-Assert-Contains $factory 'automatic policy and watchdog remain OFF' 'Factory must keep automatic policy/watchdog OFF.'
+Assert-Contains $factory 'RequireProductionConstructionAuthorized' 'Factory must route HP 8C40 watchdog construction through M9.'
+Assert-Contains $factory 'automatic policy and watchdog remain OFF' 'Factory must keep automatic policy/watchdog OFF while M9 is closed.'
+Assert-Contains $m9Gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'M9 production construction must remain closed after M8.'
+Assert-Contains $m9Gate 'WatchdogRecoveryValidated=false' 'M9 gate must require explicit watchdog recovery promotion.'
 
 # Specification itself locks the intended M8 safety boundary.
 foreach($required in @(

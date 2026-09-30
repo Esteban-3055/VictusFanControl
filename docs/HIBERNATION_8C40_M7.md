@@ -89,9 +89,10 @@ as M6. After READY and a final explicit prompt, the script itself executes
 
 M7 is physically closed on the exact target. This closes the hibernation
 lifecycle gate, but does not by itself authorize unattended/adaptive control.
-Representative-load, thermal-emergency and any remaining production-race
-validation stay separate. `WatchdogRecoveryValidated` remains false and
-automatic/adaptive fan control remains OFF.
+M8 representative-load and thermal-preemption have since closed physically.
+The remaining production-watchdog integration/promotion boundary is M9.
+`WatchdogRecoveryValidated` remains false and automatic/adaptive fan control
+remains OFF.
 
 ## Code/CI preparation result
 
@@ -106,9 +107,10 @@ FanControlCoordinator, BIOS-contract and HP backend self-tests.
 
 That preparation baseline is retained as historical code/CI evidence. The
 subsequent no-write preflight and physical hibernation qualification both
-passed, as documented below. `WatchdogRecoveryValidated` remains false because
-representative-load, thermal-emergency and any remaining production-race gates
-are still separate; automatic/adaptive policy remains OFF.
+passed, as documented below. M8 has since closed representative-load and
+thermal-preemption physically; `WatchdogRecoveryValidated` remains false
+pending the separate M9 production-watchdog integration/promotion boundary.
+Automatic/adaptive policy remains OFF.
 
 ## No-write preflight result
 

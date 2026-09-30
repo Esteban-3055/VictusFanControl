@@ -7,6 +7,7 @@ $readerPath=Join-Path $repoRoot 'src\VictusFanControl.App\M6WatchdogState.cs'
 $workerPath=Join-Path $repoRoot 'src\VictusFanControl.App\TelemetryWorker.cs'
 $backendPath=Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs'
 $factoryPath=Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\HpFanControlBackendFactory.cs'
+$m9GatePath=Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40ProductionWatchdogGate.cs'
 
 $app=Get-Content $appPath -Raw
 $program=Get-Content $programPath -Raw
@@ -14,6 +15,7 @@ $reader=Get-Content $readerPath -Raw
 $worker=Get-Content $workerPath -Raw
 $backend=Get-Content $backendPath -Raw
 $factory=Get-Content $factoryPath -Raw
+$m9Gate=Get-Content $m9GatePath -Raw
 
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
     if($Text.IndexOf($Needle,[StringComparison]::Ordinal)-lt 0){throw $Message}
@@ -30,8 +32,10 @@ Assert-Contains $program 'Hp8C40TargetProfile.Matches' 'M6 must exact-match HP 8
 Assert-Contains $backend 'LifecycleQualificationToken' 'M6 qualification token is missing from HP 8C40 backend.'
 Assert-Contains $backend 'CreateLifecycleQualificationBackend' 'M6 qualification-only backend factory is missing.'
 Assert-Contains $backend 'Exact HP 8C40 M6 Modern Standby lifecycle qualification backend.' 'M6 backend must identify its qualification-only scope.'
-Assert-Contains $backend 'HP 8C40 production watchdog/unattended recovery promotion remains blocked.' 'Ordinary public HP 8C40 watchdog construction must remain blocked until post-M7 production qualification closes.'
-Assert-Contains $factory 'HP 8C40 matched, but production watchdog/unattended recovery' 'Production factory must remain blocked from watchdog-backed HP 8C40.'
+Assert-Contains $backend 'RequireProductionConstructionAuthorized' 'Ordinary public HP 8C40 watchdog construction must remain behind the M9 production gate.'
+Assert-Contains $factory 'RequireProductionConstructionAuthorized' 'Production factory must remain behind the M9 gate for watchdog-backed HP 8C40.'
+Assert-Contains $m9Gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'M9 production construction must still be closed during preparation.'
+Assert-Contains $m9Gate 'WatchdogRecoveryValidated=false' 'M9 gate must require explicit watchdog-recovery promotion.'
 Assert-NotContains $factory 'CreateLifecycleQualificationBackend' 'Production backend factory must not route through the M6 qualification bypass.'
 
 Assert-Contains $app 'FanControlWatchdogLeaseContract.Hp8C40M4PipeName' 'M6 must use the isolated HP 8C40 M4 pipe.'

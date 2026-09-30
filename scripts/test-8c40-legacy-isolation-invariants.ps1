@@ -7,6 +7,7 @@ $gateGStatePath = Join-Path $repoRoot 'src\VictusFanControl.App\GateG1WatchdogSt
 $probe88Path = Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp88F8EcControlStateProbe.cs'
 $factoryPath = Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\HpFanControlBackendFactory.cs'
 $backend8Path = Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs'
+$m9GatePath = Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40ProductionWatchdogGate.cs'
 $m2InstallerPath = Join-Path $PSScriptRoot 'install-watchdog-m2-8c40.ps1'
 $cleanupPath = Join-Path $PSScriptRoot 'cleanup-watchdog-88f8-services.ps1'
 
@@ -44,6 +45,7 @@ $gateGState = Get-Content $gateGStatePath -Raw
 $probe88 = Get-Content $probe88Path -Raw
 $factory = Get-Content $factoryPath -Raw
 $backend8 = Get-Content $backend8Path -Raw
+$m9Gate = Get-Content $m9GatePath -Raw
 $m2Installer = Get-Content $m2InstallerPath -Raw
 $cleanup = Get-Content $cleanupPath -Raw
 
@@ -134,9 +136,10 @@ Assert-ContainsLiteral -Text $cleanup -Needle 'sc.exe config $name start= disabl
 Assert-ContainsLiteral -Text $cleanup -Needle 'sc.exe delete $name' -Description 'cleanup removes legacy service registrations'
 Assert-ContainsLiteral -Text $cleanup -Needle 'Historical ProgramData logs/journals are NOT deleted' -Description 'cleanup preserves historical forensic evidence'
 
-Assert-ContainsLiteral -Text $factory -Needle 'HP 8C40 matched, but production watchdog/unattended recovery' -Description 'production factory still documents the 8C40 watchdog prohibition'
-Assert-ContainsLiteral -Text $factory -Needle 'throw new NotSupportedException(' -Description 'production factory still fail-closes unsupported watchdog construction'
-Assert-ContainsLiteral -Text $backend8 -Needle 'HP 8C40 production watchdog/unattended recovery promotion remains blocked.' -Description '8C40 backend independently documents the watchdog prohibition'
+Assert-ContainsLiteral -Text $factory -Needle 'RequireProductionConstructionAuthorized' -Description 'production factory routes supplied HP 8C40 watchdog leases through the closed M9 gate'
+Assert-ContainsLiteral -Text $m9Gate -Needle 'public static readonly bool ProductionConstructionAuthorized = false;' -Description 'M9 production watchdog construction remains compile-time blocked'
+Assert-ContainsLiteral -Text $m9Gate -Needle 'WatchdogRecoveryValidated=false' -Description 'M9 gate also requires explicit WatchdogRecoveryValidated promotion'
+Assert-ContainsLiteral -Text $backend8 -Needle 'RequireProductionConstructionAuthorized' -Description '8C40 public backend independently applies the M9 watchdog gate'
 
 $watchdogGuardStart = $backend8.IndexOf(
     'if (_targetSupported && watchdogLease is not null)',
@@ -149,7 +152,7 @@ if ($watchdogGuardStart -lt 0 -or $watchdogGuardEnd -le $watchdogGuardStart) {
     throw '8C40 isolation invariant missing: backend watchdog-construction guard.'
 }
 $watchdogGuard = $backend8.Substring($watchdogGuardStart, $watchdogGuardEnd - $watchdogGuardStart)
-Assert-ContainsLiteral -Text $watchdogGuard -Needle 'throw new NotSupportedException(' -Description '8C40 backend rejects watchdog lease before storing it'
+Assert-ContainsLiteral -Text $watchdogGuard -Needle 'RequireProductionConstructionAuthorized' -Description '8C40 backend rejects watchdog lease through the closed M9 gate before storing it'
 
 Write-Host ''
 Write-Host 'HP 8C40 / legacy 88F8 isolation invariant self-test: PASS' -ForegroundColor Green
