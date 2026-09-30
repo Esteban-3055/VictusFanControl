@@ -241,11 +241,24 @@ It must verify at least:
 - AC online and sane battery status;
 - two consecutive independent FF/FF samples.
 
-The preflight additionally binds evidence to a clean
-`feature/victus-8c40-port` working tree whose HEAD matches its configured upstream,
-checks M6/M7/profile policy boundaries, requires AC online with at least 20% readable
-battery charge, requires M4 Manual/stopped if installed, and proves two consecutive
-independent FF/FF setpoint reads before declaring PASS.
+The preflight binds executable/source provenance to
+`feature/victus-8c40-port` with local HEAD equal to its configured upstream.
+Tracked modifications/deletions and untracked files outside `logs/` remain blocking.
+Untracked historical evidence below `logs/` is explicitly preserved and allowed because
+it cannot alter the committed executable/configuration under test; the preflight reports
+those paths and never deletes them. It also checks M6/M7/profile policy boundaries,
+requires AC online with at least 20% readable battery charge, requires M4 Manual/stopped
+if installed, and proves two consecutive independent FF/FF setpoint reads before declaring PASS.
+
+### Physical no-write preflight attempt 1
+
+Attempt 1 failed closed at repository provenance before target/telemetry/EC stages because
+historical M0/M6/M7/power-transition evidence existed as untracked paths under `logs/`.
+No fan write, restore, watchdog lease, service mutation, stress load or control path was
+entered. This exposed an overly strict provenance rule: preserved historical evidence was
+being treated the same as an untracked source/configuration change. The rule was hardened
+to allow only `?? logs/...` entries while continuing to fail closed for every other
+working-tree change.
 
 ## 8. Physical harness safety and evidence
 

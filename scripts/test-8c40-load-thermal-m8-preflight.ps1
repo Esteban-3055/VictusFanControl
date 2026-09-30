@@ -33,14 +33,34 @@ function Assert-RepositoryHead {
         throw "M8 preflight could not resolve a valid git HEAD. Raw='$head'"
     }
 
-    $dirty=(& git status --porcelain=v1 --untracked-files=normal 2>&1 | Out-String).Trim()
+    $statusText=(& git status --porcelain=v1 --untracked-files=all 2>&1 | Out-String)
     if($LASTEXITCODE -ne 0){
         throw 'M8 preflight could not inspect repository working-tree state.'
     }
 
-    if(-not [string]::IsNullOrWhiteSpace($dirty)){
-        Write-Host $dirty
-        throw 'M8 preflight requires a clean working tree so physical evidence is bound to an exact commit.'
+    $statusLines=@(
+        $statusText -split "[\r\n]+" |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+
+    $preservedEvidence=@(
+        $statusLines |
+            Where-Object { $_.StartsWith('?? logs/',[StringComparison]::Ordinal) }
+    )
+
+    $blockingStatus=@(
+        $statusLines |
+            Where-Object { -not $_.StartsWith('?? logs/',[StringComparison]::Ordinal) }
+    )
+
+    if($preservedEvidence.Count -gt 0){
+        Write-Host 'Preserved untracked historical evidence under logs/ is allowed and will not be deleted:' -ForegroundColor DarkYellow
+        $preservedEvidence | ForEach-Object { Write-Host ("  {0}" -f $_) }
+    }
+
+    if($blockingStatus.Count -gt 0){
+        $blockingStatus | ForEach-Object { Write-Host $_ }
+        throw 'M8 preflight requires committed source/config state; only untracked historical evidence under logs/ is allowed.'
     }
 
     if($branch -cne $expectedBranch){

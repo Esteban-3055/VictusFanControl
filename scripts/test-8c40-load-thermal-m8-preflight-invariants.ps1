@@ -15,6 +15,10 @@ function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
 
 Assert-Contains $preflight 'M8 LOAD/THERMAL NO-WRITE PREFLIGHT' 'M8 preflight identity is missing.'
 Assert-Contains $preflight 'Assert-RepositoryHead' 'M8 preflight must bind evidence to branch/HEAD provenance.'
+Assert-Contains $preflight '--untracked-files=all' 'M8 preflight must inspect all untracked paths before allowing historical evidence.'
+Assert-Contains $preflight "StartsWith('?? logs/'" 'M8 preflight may exempt only untracked historical evidence under logs/.'
+Assert-Contains $preflight '$blockingStatus' 'M8 preflight must still reject every non-evidence working-tree change.'
+Assert-Contains $preflight 'Preserved untracked historical evidence under logs/' 'M8 preflight must explicitly report preserved evidence instead of deleting it.'
 Assert-Contains $preflight "feature/victus-8c40-port" 'M8 preflight must require the qualification branch.'
 Assert-Contains $preflight 'Assert-Exact8C40Target' 'M8 preflight must exact-match HP 8C40.'
 Assert-Contains $preflight 'Assert-ProfileBoundary' 'M8 preflight must verify M6/M7 and policy/profile boundaries.'
@@ -45,7 +49,9 @@ foreach($forbidden in @(
     '--core-thermal-characterization',
     '--health-test-minutes',
     'shutdown.exe',
-    'SetSuspendState'
+    'SetSuspendState',
+    'git clean',
+    'Remove-Item'
 )){
     Assert-NotContains $preflight $forbidden ("M8 no-write preflight contains forbidden operation: {0}" -f $forbidden)
 }
