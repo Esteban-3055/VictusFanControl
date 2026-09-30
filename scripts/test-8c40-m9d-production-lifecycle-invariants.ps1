@@ -40,7 +40,8 @@ foreach($needle in @(
 }
 
 Assert-Contains $m9d 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M9D compile-time execution gate must remain false.'
-Assert-Contains $m9d '8C40-M9D-PRODUCTION-LIFECYCLE30' 'M9D exact token is missing.'
+Assert-Contains $m9d 'Hp8C40ProductionWatchdogGate.M9DPhysicalQualificationToken' 'M9D qualification class must share the centralized gate token.'
+Assert-Contains $gate 'M9DPhysicalQualificationToken = "8C40-M9D-PRODUCTION-LIFECYCLE30"' 'M9D exact token literal is missing from the centralized gate.'
 
 foreach($needle in @(
     '--8c40-m9d-production-lifecycle-test',
