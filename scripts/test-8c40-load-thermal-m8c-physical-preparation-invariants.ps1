@@ -58,7 +58,7 @@ foreach($needle in @(
     'coordinator.EnforceSafetyAsync(',
     'FanAuthority.Firmware',
     'post-preemption local restore',
-    'M8C_SYNTHETIC_QUALIFICATION_ONLY'
+    'Hp8C40M8CThermalQualificationInjection.EvidenceMarker'
 )){
     Assert-Contains $controller $needle ("M8C physical preparation invariant missing: {0}" -f $needle)
 }
