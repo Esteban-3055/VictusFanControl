@@ -14,6 +14,7 @@ public sealed class CliOptions
     public bool Hp8C40M8PreflightProbe { get; private set; }
     public bool Hp8C40M8ARepresentativeLoad { get; private set; }
     public bool Hp8C40M8ASelfTest { get; private set; }
+    public bool Hp8C40M8CSelfTest { get; private set; }
     public string? Hp8C40M8AResultPath { get; private set; }
     public bool Hp8C40M8BWatchdogLoad { get; private set; }
     public string? Hp8C40M8BToken { get; private set; }
@@ -119,6 +120,10 @@ public sealed class CliOptions
 
                 case "--8c40-m8a-self-test":
                     options.Hp8C40M8ASelfTest = true;
+                    break;
+
+                case "--8c40-m8c-self-test":
+                    options.Hp8C40M8CSelfTest = true;
                     break;
 
                 case "--8c40-m8a-result-path":
@@ -372,6 +377,7 @@ public sealed class CliOptions
             (options.Hp8C40M8PreflightProbe ? 1 : 0) +
             (options.Hp8C40M8ARepresentativeLoad ? 1 : 0) +
             (options.Hp8C40M8ASelfTest ? 1 : 0) +
+            (options.Hp8C40M8CSelfTest ? 1 : 0) +
             (options.Hp8C40M8BWatchdogLoad ? 1 : 0) +
             (options.RestoreHpAuto ? 1 : 0) +
             (options.FirstFanWriteTest ? 1 : 0) +
@@ -593,6 +599,7 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-m8a-representative-load  READ-ONLY: observe the fixed 60 s M8A representative gaming/3D load window.");
         Console.WriteLine("  --8c40-m8a-result-path <path>   Required durable JSON evidence path for M8A.");
         Console.WriteLine("  --8c40-m8a-self-test            Synthetic self-test for M8A load/window classification.");
+        Console.WriteLine("  --8c40-m8c-self-test            Synthetic M8C thermal-preemption test; no hardware writes.");
         Console.WriteLine("  --8c40-m8b-watchdog-load        ACTIVE M8B GATE: one watchdog-backed 50/50 write under representative load.");
         Console.WriteLine("  --8c40-m8b-token <token>        Required exact token: 8C40-M8B-LOAD50.");
         Console.WriteLine("  --8c40-m8b-ready-path <path>    Required durable OWNED-ready marker path for M8B.");
