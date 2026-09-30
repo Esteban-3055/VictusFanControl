@@ -1,6 +1,6 @@
 # Adaptive fan policy preparation
 
-Target scope: architecture only. **PURE ENGINE CODE/CI PASS; production integration is disabled.**
+Target scope: architecture + offline shadow planning/replay. **Production integration is disabled.**
 
 This preparation intentionally stops before the policy can command hardware. The
 `AdaptiveFanPolicyEngine` is a pure telemetry-to-equal-level state machine with no reference to
@@ -26,6 +26,35 @@ The engine:
 The policy has no baked-in production curve. Self-tests use synthetic curves only to prove
 interpolation and state-machine behavior. Final HP 8C40 curve values remain a later tuning task.
 
+## Offline shadow/replay preparation
+
+A second hardware-independent layer is prepared around the pure engine so future tuning can be
+done against recorded telemetry before any automatic control is authorized.
+
+The shadow path combines:
+
+- the production `SafetyGate` evaluated with `fanWritePathPresent:false`;
+- the exact HP 8C40 temporal CPU thermal-confirmation semantics;
+- the pure adaptive policy engine;
+- a pure notional intent planner that emits only `EnterCustomAndApply`,
+  `ApplyChangedLevel`, `HoldCustom`, `ReleaseToFirmware` or `HoldFirmware`;
+- an offline replay reader for the existing VictusFanControl telemetry CSV format.
+
+The replay never constructs `HardwareTelemetryReader`, `FanControlCoordinator`,
+`Hp8C40FanControlBackend`, a watchdog lease, WMI or a PawnIO write session. Its output is a CSV
+of recommendations and **notional** control intents only; hardware writes are structurally absent.
+
+Replay configuration is deliberately external and strict. A JSON document must identify
+`HP-8C40-9D0R1LA-F18`, declare `purpose="shadow-only"`, explicitly set
+`authorizedForProduction=false`, remain inside the physically validated equal-only 10..50
+envelope and pass the same engine validation used by code. The checked-in
+`profiles/HP-8C40.adaptive-shadow.example.json` is synthetic/illustrative and is **not** a
+production fan curve.
+
+This offline shadow replay does not authorize production integration. It exists to let future
+recorded workloads be compared against candidate curves while M8B/M8C physical closure remains
+pending.
+
 ## Safety boundary
 
 This work does **not**:
@@ -41,7 +70,8 @@ This work does **not**:
 The production profile remains `enabledByDefault=false`,
 `automaticPolicyEnabled=false` and `WatchdogRecoveryValidated=false`.
 
-Hardware integration remains blocked until M8 is physically closed.
+Hardware integration remains blocked until M8 is physically closed. Offline shadow replay may
+evaluate recorded telemetry, but it cannot acquire fan authority or execute its notional intents.
 
 ## Code/CI closure
 
