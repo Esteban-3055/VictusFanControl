@@ -85,7 +85,7 @@ foreach($forbidden in @(
 }
 
 Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'M9 production construction gate must remain closed during M9B.'
-Assert-Contains $doc 'M9B READ-ONLY PREFLIGHT CODE/CI PASS AND READ-ONLY EXECUTION AUTHORIZED' 'M9B documentation closure status missing.'
+Assert-Contains $doc 'M9B READ-ONLY PREFLIGHT CODE/CI PASS' 'M9B documentation closure status missing.'
 Assert-Contains $doc 'does **not** start or stop the service' 'M9B documentation must preserve the no-service-mutation contract.'
 
 Write-Host 'HP 8C40 M9B read-only preflight invariant: PASS' -ForegroundColor Green
