@@ -115,6 +115,46 @@ internal static class Program
                 m8aCts.Token);
         }
 
+        if (options.Hp8C40M8CPhysicalThermal)
+        {
+            if (!string.Equals(
+                    options.Hp8C40M8CPhysicalToken,
+                    Hp8C40M8CPhysicalThermalPreemptionQualificationTest.RequiredToken,
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    $"HP 8C40 M8C physical refused: explicit --8c40-m8c-physical-token " +
+                    $"{Hp8C40M8CPhysicalThermalPreemptionQualificationTest.RequiredToken} is required.");
+                return 222;
+            }
+
+            if (!Hp8C40M8CPhysicalThermalPreemptionQualificationTest.TryParseCase(
+                    options.Hp8C40M8CPhysicalCase!,
+                    out var m8cCase))
+            {
+                Console.Error.WriteLine(
+                    "HP 8C40 M8C physical refused: --8c40-m8c-physical-case must be cpu or gpu.");
+                return 222;
+            }
+
+            using var m8cPhysicalCts =
+                new CancellationTokenSource();
+
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                m8cPhysicalCts.Cancel();
+            };
+
+            return await Hp8C40M8CPhysicalThermalPreemptionQualificationTest.RunAsync(
+                options.ModulesDirectory,
+                m8cCase,
+                options.Hp8C40M8CPhysicalReadyPath!,
+                options.Hp8C40M8CPhysicalContinuePath!,
+                options.Hp8C40M8CPhysicalResultPath!,
+                m8cPhysicalCts.Token);
+        }
+
         if (options.Hp8C40M8BWatchdogLoad)
         {
             if (!string.Equals(
