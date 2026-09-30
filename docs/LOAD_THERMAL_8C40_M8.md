@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPTS 1/2 PRESERVED FAIL_CLOSED; POST-TOKEN REFOCUS/EVIDENCE FIX CODE/CI PASS; M8B ATTEMPT 3 PHYSICAL AUTHORIZED-PENDING. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; ATTEMPTS 2 AND 3 FAIL_CLOSED / NO-WRITE DUE INSUFFICIENT REPRESENTATIVE GPU LOAD; EVIDENCE/WORKLOAD REVIEW PENDING; FURTHER M8B PHYSICAL BLOCKED. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -683,6 +683,47 @@ its fresh same-HEAD no-write preflight and independent failsafe. The operator mu
 focus to the normal game during the five-second post-token grace; insufficient load still
 fails closed without any fan write. No prior M8B attempt is promoted to PASS. M8C physical
 qualification and automatic/adaptive production remain blocked.
+
+## 7B.3. M8B physical attempt 3 - FAIL_CLOSED / NO-WRITE
+
+The third operator-supplied M8B terminal excerpt on 2026-09-30 reports controller evidence
+at `logs/m8b-watchdog-load_2026-09-30_031121/m8b-result.json` and parent evidence at
+`logs/m8b-watchdog-load_2026-09-30_031121/m8b-harness-summary.json`. The excerpt starts
+at step 6 and does not independently show the preflight/HEAD or the durable closure booleans.
+The versioned authorizing HEAD was `71db885fe0158be4298dba91f813f6c25d0c1ee4`;
+attribute the physical run's actual HEAD only after checking the retained harness summary.
+
+The controller's initial firmware-owned EC baseline showed one isolated unexpected read that
+recovered on **read 2/3**. No persistent unexpected state was reported; the first raw EC value
+was not included in the console excerpt and must not be inferred.
+
+The pre-write sample window yielded **2/10 representative samples** (indices 4 and 9) and
+**maximum consecutive streak 1/3**. GPU telemetry showed the precise limiting behavior:
+sample 3 = 37%/19.9 W (under power limit); sample 4 = 35%/21.2 W (representative);
+sample 9 = 38%/21.5 W (representative); sample 10 = 30%/25.4 W (under GPU load limit).
+GPU temperature was 49..56 C; CPU effective maximum 93 C, and CPU activity was material.
+The fixed predicate is GPU load >=35% **AND** GPU power >=20 W **AND** material CPU activity;
+three consecutive qualifying samples were never obtained.
+
+The controller therefore emitted `FAIL_CLOSED`:
+`M8B representative load was not established before the write boundary`.
+Its classifier throws before Custom admission/coordinator/backend construction, PREPARE,
+WRITE_INTENT, ApplyAsync, COMMIT and READY, so **no M8B fan write occurred**.
+The parent printed two independent final FF/FF observations and M4 Manual/stopped.
+The `finalJournalAbsent`, `finalClosurePass` and `failsafeTakeover` outcome must still
+be checked directly from the preserved harness summary, rather than inferred from
+absence of an alarm.
+
+The five-second post-token refocus grace operated before watchdog/controller launch, but it
+did not establish sufficiently sustained GPU demand. A CPU-limited or capped scene, a background
+rendering behavior, or a different workload from the earlier M8A physical PASS are possible
+explanations, not proven diagnoses. The earlier M8A attempt 2 had 59/60 representative samples
+and GPU power reaching 70.4 W; this is evidence that representative load was achievable under
+a different observed workload condition.
+
+**M8B attempt 4 remains blocked** pending durable evidence/workload review. Do not lower
+35%/20 W or remove the three-consecutive rule to force a PASS; do not rerun M8B blindly.
+M8C hardware qualification and production watchdog/adaptive policy remain blocked.
 
 ## 8. Physical harness safety and evidence
 

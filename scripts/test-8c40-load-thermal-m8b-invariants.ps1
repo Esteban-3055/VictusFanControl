@@ -158,8 +158,12 @@ Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8B 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8B preparation requires M8A authorization.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.harnessScript 'scripts/test-8c40-load-thermal-m8b.ps1' 'M8B harness path changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/watchdog-m8b-service-failsafe-8c40.ps1' 'M8B failsafe path changed.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B must not be marked physical PASS before attempt 3 evidence is reviewed.'
-Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B attempt 3 is authorized only after exact-head refocus/evidence CI PASS.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B attempt 3 no-write refusal must not mark physical PASS.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B attempt 4 must remain blocked pending complete attempt-3 evidence/workload review.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].result 'FAIL_CLOSED_NO_WRITE' 'M8B attempt 3 must remain fail-closed/no-write.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].representativeSamples 2 'M8B attempt 3 qualifying sample count changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].maximumConsecutiveRepresentative 1 'M8B attempt 3 qualifying streak changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].classification 'EXPECTED_FAIL_CLOSED_INSUFFICIENT_CONSECUTIVE_GPU_LOAD_NO_WRITE' 'M8B attempt 3 no-write classification changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.refocusHardening.ci.commit '68e190dea8d3131fb74c87429e3ddbf32b2294c4' 'M8B post-token hardening CI SHA changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.refocusHardening.ci.runNumber 797 'M8B post-token hardening CI run changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[1].result 'FAIL_CLOSED_NO_WRITE' 'M8B attempt 2 must be preserved as no-write FAIL_CLOSED.'
@@ -192,7 +196,11 @@ foreach($needle in @(
     'M8B physical attempt 2 is now authorized',
     'M8B physical attempt 2 - FAIL_CLOSED / NO-WRITE',
     '5-second no-write refocus grace',
-    'M8B physical attempt 3 is now authorized'
+    'M8B physical attempt 3 is now authorized',
+    'M8B physical attempt 3 - FAIL_CLOSED / NO-WRITE',
+    '2/10 representative samples',
+    'maximum consecutive streak 1/3',
+    'M8B attempt 4 remains blocked'
 )){
     Assert-Contains $doc $needle ("M8B documentation invariant missing: {0}" -f $needle)
 }

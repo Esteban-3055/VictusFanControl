@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-attempt2-no-write-refocus-ci-pass-attempt3-authorized-m8c-code-ci-pass-adaptive-shadow-ci-pass-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-attempt3-no-write-failclosed-load-review-pending-m8c-code-ci-pass-adaptive-shadow-ci-pass-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1949,12 +1949,12 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_ATTEMPT2_FAIL_CLOSED_NO_WRITE_REFOCUS_FIX_CODE_CI_PASS_ATTEMPT3_AUTHORIZED_M8C_CODE_CI_PASS_PHYSICAL_BLOCKED_ADAPTIVE_ENGINE_SHADOW_REPLAY_CI_PASS_POLICY_OFF",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_ATTEMPT3_FAIL_CLOSED_NO_WRITE_LOAD_REVIEW_PENDING_M8C_CODE_CI_PASS_PHYSICAL_BLOCKED_ADAPTIVE_ENGINE_SHADOW_REPLAY_CI_PASS_POLICY_OFF",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
     "representativeLoadGate": "M8A CODE/CI/PHYSICAL PASS",
-    "watchdogBackedLoadGate": "M8B attempts 1/2 retained FAIL_CLOSED; fixed telemetry epoch and five-second refocus hardening CODE/CI PASS; attempt 3 authorized / pending physical evidence",
+    "watchdogBackedLoadGate": "M8B attempt 1 FAIL_CLOSED after owned 50/50; attempts 2 and 3 FAIL_CLOSED / NO-WRITE on insufficient sustained representative GPU load; evidence/workload review pending; further physical execution blocked",
     "thermalPreemptionGate": "M8C synthetic + hard-blocked physical controller/harness CODE/CI PASS; physical execution blocked until M8B physical PASS",
     "productionRaceAudit": "CODE/CI PASS for mapped deterministic races; representative-load/real physical timing closure remains dependent on M8B/M8C physical PASS",
     "realOvertemperatureRequired": false,
@@ -2192,9 +2192,9 @@
       }
     },
     "m8b": {
-      "status": "ATTEMPT2_FAIL_CLOSED_NO_WRITE_REFOCUS_FIX_CODE_CI_PASS_ATTEMPT3_AUTHORIZED_PENDING",
+      "status": "ATTEMPT3_FAIL_CLOSED_NO_WRITE_EVIDENCE_AND_WORKLOAD_REVIEW_PENDING",
       "physicalPassed": false,
-      "physicalExecutionAuthorized": true,
+      "physicalExecutionAuthorized": false,
       "writeCapable": true,
       "requiredToken": "8C40-M8B-LOAD50",
       "harnessScript": "scripts/test-8c40-load-thermal-m8b.ps1",
@@ -2235,7 +2235,7 @@
         "physicalExecution": false,
         "reviewNote": "Initial M8B preparation also passed run #717. Pre-physical review found the independent failsafe covered only OWNED 50/50; it was hardened before authorization to cover exact-target WRITE_ARMED pending 50/50, OWNED 50/50 and RESTORING 50/50. Hardened run #718 passed fully."
       },
-      "physicalExecutionNote": "Attempt 3 AUTHORIZED only through scripts/test-8c40-load-thermal-m8b.ps1 on current exact HEAD, with fresh no-write preflight and independent failsafe; operator returns to active game during 5-second post-token grace; any failsafe takeover blocks PASS.",
+      "physicalExecutionNote": "Attempt 4 BLOCKED. Review retained attempt-3 m8b-result.json and m8b-harness-summary.json including finalJournalAbsent, finalClosurePass, failsafeTakeover and exact evidence HEAD, then characterize real workload without changing the qualified 35%/20 W GPU predicate.",
       "physicalAttempts": [
         {
           "attempt": 1,
@@ -2269,6 +2269,30 @@
           "failure": "M8B representative load was not established before the write boundary",
           "classification": "EXPECTED_FAIL_CLOSED_INSUFFICIENT_GPU_LOAD_NO_WRITE",
           "cleanupEvidence": "Terminal shows two independent FF/FF and M4 Manual/Stopped. Exact durable journal and failsafe outcome should be confirmed from retained harness summary before physical retry.",
+          "physicalPassed": false
+        },
+        {
+          "attempt": 3,
+          "date": "2026-09-30",
+          "evidenceHead": "not shown in terminal excerpt; profile authorizing head was 71db885fe0158be4298dba91f813f6c25d0c1ee4; verify retained harness summary before attributing evidence",
+          "evidencePath": "logs/m8b-watchdog-load_2026-09-30_031121/m8b-result.json",
+          "summaryPath": "logs/m8b-watchdog-load_2026-09-30_031121/m8b-harness-summary.json",
+          "result": "FAIL_CLOSED_NO_WRITE",
+          "preWriteSamples": 10,
+          "representativeSamples": 2,
+          "maximumConsecutiveRepresentative": 1,
+          "representativeSamplesIndices": [
+            4,
+            9
+          ],
+          "cpuEvidence": "effective CPU max 93 C; CPU power max 87.3 W, CPU load max 52.3%; no CPU95 streak",
+          "gpuEvidence": "GPU temperature 49..56 C; power 10.3..25.4 W; sample 3 19.9 W/37%, sample 4 21.2 W/35% representative, sample 9 21.5 W/38% representative, sample 10 25.4 W/30% non-representative",
+          "ecTransient": "one initial firmware-owned baseline EC read recovered on read 2/3; first raw unexpected state not provided in console excerpt",
+          "failure": "M8B representative load was not established before the write boundary",
+          "classification": "EXPECTED_FAIL_CLOSED_INSUFFICIENT_CONSECUTIVE_GPU_LOAD_NO_WRITE",
+          "writeBoundary": "Representative check throws before coordinator/backend construction and PREPARE/WRITE_INTENT/ApplyAsync/COMMIT/READY; no M8B fan write",
+          "terminalClosure": "independent FF/FF two probes and M4 Manual/Stopped printed",
+          "durableClosure": "journal-absence/failsafe-takeover booleans require retained summary; not inferred from console silence",
           "physicalPassed": false
         }
       ],
@@ -2318,6 +2342,13 @@
           "hpBackendSelfTest": true,
           "physicalExecution": false
         }
+      },
+      "nextStep": {
+        "status": "EVIDENCE_AND_WORKLOAD_REVIEW_PENDING",
+        "request": "operator to attach preserved m8b-result.json and m8b-harness-summary.json for attempt 3; identify exact game/render scene and whether it was active in foreground; compare against M8A representative scenario",
+        "permittedAction": "read-only evidence analysis and versioned code/CI preparation, not another write-capable physical M8B attempt",
+        "unchanged": "M8B 35% GPU load AND 20 W GPU power, 3 consecutive in 10 samples, all safety and watchdog limits",
+        "m8cPhysicalExecutionAuthorized": false
       }
     },
     "m8c": {
