@@ -511,14 +511,16 @@ public static class AdaptiveFanPolicyShadowReplay
             return string.Empty;
         }
 
+        const char quote = '"';
+
         var escaped =
             value.Replace(
-                """,
-                """");
+                quote.ToString(),
+                new string(quote, 2));
 
         return escaped.IndexOfAny(
-                   [',', '"', '\r', '\n']) >= 0
-            ? $""{escaped}""
+                   [',', quote, '\r', '\n']) >= 0
+            ? $"{quote}{escaped}{quote}"
             : escaped;
     }
 
