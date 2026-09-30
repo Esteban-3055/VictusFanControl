@@ -55,6 +55,19 @@ This offline shadow replay does not authorize production integration. It exists 
 recorded workloads be compared against candidate curves while M8B/M8C physical closure remains
 pending.
 
+## Shadow/replay code and CI closure
+
+The offline shadow/replay layer is **CODE/CI PASS** at commit
+`0c547f8e80ede4b014adbc12b2d4ae07d1c8cf3c`, GitHub Actions **#791**
+(run `36675569560`). The workflow passed the PowerShell 7 and Windows PowerShell 5.1
+isolation invariants, warnings-as-errors build, deterministic pure-engine tests, notional-intent
+tests, exact-target SafetyGate/thermal-confirmation shadow tests, CSV parser/replay tests and the
+existing M5-M8/coordinator/backend regressions.
+
+No hardware fan write, watchdog lease, production backend construction or GUI integration was
+added. Automatic/adaptive policy remains OFF and this code/CI closure does not promote M8B or
+M8C physical status.
+
 ## Safety boundary
 
 This work does **not**:
