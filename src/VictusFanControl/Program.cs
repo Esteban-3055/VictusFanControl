@@ -48,6 +48,31 @@ internal static class Program
                 Console.Out);
         }
 
+        if (options.RaplObserve)
+        {
+            using var raplObserveCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                raplObserveCts.Cancel();
+            };
+
+            try
+            {
+                return await IntelRaplStabilityProbe.RunAsync(
+                    options.ModulesDirectory,
+                    options.DurationSeconds,
+                    Console.Out,
+                    raplObserveCts.Token);
+            }
+            catch (OperationCanceledException) when (raplObserveCts.IsCancellationRequested)
+            {
+                Console.WriteLine();
+                Console.WriteLine("RAPL P0.5 observation cancelled.");
+                return 130;
+            }
+        }
+
         if (options.SafetySelfTest)
         {
             return SafetyGateSelfTest.Run(Console.Out);
