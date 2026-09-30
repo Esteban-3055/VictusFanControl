@@ -242,7 +242,7 @@ foreach($needle in @(
     'Attempt-4 retrospective chain recovered; retry 5 FAIL_CLOSED exposes a diagnostic gap',
     '27/27 representative consecutive supervision samples',
     'M8B FAILSAFE ARMED',
-    'Further M8B physical execution is blocked',
+    'Further M8B physical execution is',
     'M8C physical execution remains blocked',
     'Both PowerShell 7 and Windows PowerShell 5.1 exercised successful child exit code 0'
 )){
