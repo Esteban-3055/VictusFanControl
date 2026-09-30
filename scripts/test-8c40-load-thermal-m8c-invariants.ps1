@@ -43,7 +43,7 @@ foreach($needle in @(
     'SafetyGate.CpuEmergencyC',
     'SafetyGate.GpuEmergencyC',
     'Hp8C40ThermalEmergencyConfirmation.CpuHardEmergencyC',
-    'Hp8C40TargetProfile.ExpectedPhysicalCoreCount'
+    'Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount'
 )){
     Assert-Contains $injection $needle ("M8C injection invariant missing: {0}" -f $needle)
 }
