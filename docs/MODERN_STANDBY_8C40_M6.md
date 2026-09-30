@@ -399,8 +399,8 @@ boundaries.
 ## Next gate: M7 hibernation
 
 M6 is physically closed and must not be repeated merely to exercise
-hibernation. The separate M7 gate is defined in
-`docs/HIBERNATION_8C40_M7.md`. M7 code/CI preparation is green at the
-documented baseline, while its no-write preflight and physical hibernation run
-remain pending. Production watchdog promotion and automatic/adaptive policy
-remain blocked.
+hibernation. The separate M7 gate in `docs/HIBERNATION_8C40_M7.md` has now
+also passed its code/CI, no-write preflight and physical hibernation
+qualification. Production watchdog promotion and automatic/adaptive policy
+remain blocked by representative-load, thermal-emergency and any remaining
+production-race gates.
