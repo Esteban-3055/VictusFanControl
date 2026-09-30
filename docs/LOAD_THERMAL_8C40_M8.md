@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B WATCHDOG-BACKED 50/50 HARNESS CODE/CI PASS / PHYSICAL AUTHORIZED-PENDING. M8C REMAINS BLOCKED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; TELEMETRY-EPOCH FIX CODE PREPARED / CI PENDING; PHYSICAL RETRY BLOCKED. M8C REMAINS BLOCKED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -491,6 +491,48 @@ M8B physical execution is now authorized **only** through the versioned
 `scripts/test-8c40-load-thermal-m8b.ps1` harness. The operator must not substitute ad-hoc
 commands. Any independent-failsafe takeover invalidates PASS even if the machine is returned
 safely to firmware ownership. M8C remains blocked.
+
+## 7B.1. M8B physical attempt 1 - FAIL_CLOSED after OWNED 50/50
+
+On 2026-09-30, M8B attempt 1 ran at HEAD
+`68750bdd997e9530c5712af5c33e5bf2910a0f55`. The current-HEAD no-write
+preflight passed first: branch/upstream matched, the exact HP 8C40 / Victus 15-fa1xxx /
+SKU 9D0R1LA#AKH / BIOS F.18 target was present, AC was online, battery was 100%, M4 was
+Manual/stopped, the warnings-as-errors build had 0 warnings / 0 errors, the M5-M8 regression
+set passed, telemetry produced 3/3 accepted samples with zero Intel/EC/NVML recoveries, and the
+independent firmware baseline was FF/FF twice.
+
+With normal game/3D load active, the pre-write load gate then passed immediately with **3/3
+consecutive representative samples**. The watchdog and independent delayed failsafe were armed,
+and the controller reached real watchdog-backed OWNED 50/50:
+
+- controller PID 15908, creation ticks 639263365082810966;
+- EC setpoint 50/50;
+- dual tach feedback 2929 / 2753 RPM;
+- durable journal generation 3.
+
+The run then failed closed **before supervision sample 1** with
+`M8B invalid inter-sample gap: 3.364 s`. This was not a thermal, load, EC-ownership or tach
+failure. Static review of the exact source showed that one `previousTimestamp` variable was
+carried from the final pre-write telemetry frame across PREPARE -> WRITE_INTENT -> WMI ->
+hardware ACK -> COMMIT -> READY. That synchronous control transaction naturally consumed enough
+time to exceed the 3 s sampling-gap fence.
+
+The correction does **not** widen the 3 s supervision gap. Instead it creates a new telemetry
+continuity epoch after COMMIT/READY. The first supervision frame must still be individually
+fresh, complete, exact-GPU valid and SafetyGate-valid; only its comparison against the last
+pre-write timestamp is omitted. From supervision sample 1 onward, the <=3 s inter-sample fence
+remains unchanged.
+
+Attempt 1 therefore remains **FAIL_CLOSED** and is preserved as physical evidence. The terminal
+showed independent cleanup FF/FF twice after the controller failure. The original harness did
+not print a separate successful Manual/stopped service-baseline line in its FAIL_CLOSED cleanup,
+so that closure is not inferred from absence of an error. The retry hardening now records
+journal absence, FF/FF proof and M4 Manual/stopped proof as separate closure booleans and fails
+closed if the child ExitCode is unavailable.
+
+M8B physical retry remains blocked until this telemetry-epoch and closure-evidence patch passes
+CI and is explicitly reauthorized.
 
 ## 8. Physical harness safety and evidence
 

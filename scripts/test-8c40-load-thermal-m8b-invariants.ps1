@@ -44,6 +44,11 @@ Assert-Contains $harness 'Assert-CausalServiceLog' 'M8B must prove the watchdog 
 Assert-Contains $harness 'PREPARE -> WRITE_INTENT(50/50) -> COMMIT(50/50) -> RESTORE_BEGIN -> RELEASE' 'M8B causal chain text missing.'
 Assert-Contains $harness 'M8B final' 'M8B must perform independent final FF/FF closure.'
 Assert-Contains $harness 'Manual' 'M8B must restore/verify M4 Manual/stopped baseline.'
+Assert-Contains $harness 'finalJournalAbsent' 'M8B summary must distinguish journal closure.'
+Assert-Contains $harness 'finalFirmwareProofPass' 'M8B summary must distinguish FF/FF closure.'
+Assert-Contains $harness 'finalServiceBaselinePass' 'M8B summary must distinguish Manual/stopped closure.'
+Assert-Contains $harness "M8B cleanup service baseline" 'M8B FAIL_CLOSED cleanup must print service closure evidence.'
+Assert-Contains $harness "controller terminated but ExitCode was unavailable" 'M8B must fail closed if child ExitCode is unavailable.'
 Assert-Contains $harness 'The journal was not deleted.' 'M8B must preserve retained ownership evidence.'
 
 $armIndex=$harness.IndexOf('$failsafe=Start-M8BFailsafe',[StringComparison]::Ordinal)
@@ -84,7 +89,10 @@ foreach($required in @(
     'NORMAL_RESTORE_BEGIN',
     'NORMAL_RESTORE_COMPLETE',
     'normalRestoreCompleted',
-    'finalFirmwareOwned'
+    'finalFirmwareOwned',
+    'previousPreWriteTimestamp',
+    'previousSupervisionTimestamp',
+    'SUPERVISION_TELEMETRY_EPOCH_BEGIN'
 )){
     Assert-Contains $source $required ("M8B source invariant missing: {0}" -f $required)
 }
@@ -140,9 +148,9 @@ Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8B p
 Assert-Equal $profile.loadThermalM8Qualification.m8b.harnessScript 'scripts/test-8c40-load-thermal-m8b.ps1' 'M8B harness path changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/watchdog-m8b-service-failsafe-8c40.ps1' 'M8B failsafe path changed.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B must remain physical-pending until real evidence is reviewed.'
-Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B hardened code/CI PASS should authorize only the versioned physical harness.'
-Assert-Equal $profile.loadThermalM8Qualification.m8b.preparationCi.finalCommit '6d3547756f7c011231c6e3e099cb111612d4b060' 'M8B hardened preparation CI commit changed.'
-Assert-Equal $profile.loadThermalM8Qualification.m8b.preparationCi.runNumber 718 'M8B hardened preparation CI run changed.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B retry must remain blocked until the telemetry-epoch patch passes CI.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[0].evidenceHead '68750bdd997e9530c5712af5c33e5bf2910a0f55' 'M8B attempt-1 evidence HEAD changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[0].result 'FAIL_CLOSED' 'M8B attempt-1 result must remain FAIL_CLOSED.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.watchdogRecoveryValidated) 'M8B must not promote production watchdog recovery.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M8B must not enable automatic/adaptive policy.'
 
@@ -160,7 +168,10 @@ foreach($needle in @(
     'COMMIT',
     'RESTORE_BEGIN',
     'RELEASE',
-    'M8B physical execution is now authorized'
+    'M8B attempt 1',
+    '3.364 s',
+    'telemetry continuity epoch',
+    'M8B physical retry remains blocked'
 )){
     Assert-Contains $doc $needle ("M8B documentation invariant missing: {0}" -f $needle)
 }

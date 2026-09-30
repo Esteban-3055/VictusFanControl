@@ -176,7 +176,7 @@ public static class Hp8C40M8BWatchdogLoadQualificationTest
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            DateTimeOffset? previousTimestamp = null;
+            DateTimeOffset? previousPreWriteTimestamp = null;
             var preWriteConsecutiveRepresentative = 0;
             TelemetrySnapshot? lastPreWriteSnapshot = null;
             SafetyGateResult? lastPreWriteSafety = null;
@@ -197,11 +197,11 @@ public static class Hp8C40M8BWatchdogLoadQualificationTest
                     EvaluateEffectiveSafety(
                         hardware,
                         snapshot,
-                        previousTimestamp,
+                        previousPreWriteTimestamp,
                         thermalConfirmation,
                         fanWritePathPresent: true);
 
-                previousTimestamp =
+                previousPreWriteTimestamp =
                     snapshot.Timestamp;
 
                 EnsureImmediatePhysicalLimits(
@@ -453,6 +453,20 @@ public static class Hp8C40M8BWatchdogLoadQualificationTest
                 $"EC={owned.State.CpuSetpoint}/{owned.State.GpuSetpoint} " +
                 $"RPM={owned.State.CpuRpm}/{owned.State.GpuRpm}");
 
+            // PREPARE -> WRITE_INTENT -> WMI -> hardware ACK -> COMMIT ->
+            // READY is an intentional synchronous control transaction, not a
+            // telemetry/lifecycle sampling interval. Do not compare the first
+            // post-Commit supervision timestamp against the last pre-write
+            // sample. The first supervision frame must still be individually
+            // fresh/complete and every later supervision gap remains bounded.
+            DateTimeOffset? previousSupervisionTimestamp = null;
+
+            events.Add(
+                new EventEvidence(
+                    DateTimeOffset.UtcNow,
+                    "SUPERVISION_TELEMETRY_EPOCH_BEGIN",
+                    "Post-Commit supervision starts a new telemetry continuity epoch; freshness remains enforced and only the intentional control transaction gap is excluded."));
+
             for (var sampleIndex = 1;
                  sampleIndex <= SupervisionSamples;
                  sampleIndex++)
@@ -469,11 +483,11 @@ public static class Hp8C40M8BWatchdogLoadQualificationTest
                     EvaluateEffectiveSafety(
                         hardware,
                         snapshot,
-                        previousTimestamp,
+                        previousSupervisionTimestamp,
                         thermalConfirmation,
                         fanWritePathPresent: true);
 
-                previousTimestamp =
+                previousSupervisionTimestamp =
                     snapshot.Timestamp;
 
                 // Qualification boundary: GPU >=82 C is intentionally more

@@ -41,6 +41,9 @@ $logLineBoundary=0
 $failsafeTakeover=$false
 $causalChainPass=$false
 $finalClosurePass=$false
+$finalJournalAbsent=$false
+$finalFirmwareProofPass=$false
+$finalServiceBaselinePass=$false
 
 function Assert-Administrator {
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
@@ -271,7 +274,13 @@ function Wait-ControllerExit {
     }
 
     $controller.Refresh()
-    return $controller.ExitCode
+    $exitCode=$controller.ExitCode
+
+    if($null -eq $exitCode){
+        throw 'M8B controller terminated but ExitCode was unavailable.'
+    }
+
+    return [int]$exitCode
 }
 
 function Wait-JournalGone {
@@ -358,6 +367,9 @@ function Write-HarnessSummary {
         failsafeTakeover=$failsafeTakeover
         causalChainPass=$causalChainPass
         finalClosurePass=$finalClosurePass
+        finalJournalAbsent=$finalJournalAbsent
+        finalFirmwareProofPass=$finalFirmwareProofPass
+        finalServiceBaselinePass=$finalServiceBaselinePass
         readyPath=$readyPath
         resultPath=$resultPath
         failsafeLog=$failsafeLog
@@ -565,7 +577,13 @@ try {
     Write-Host ''
     Write-Host 'Step 8: independent final firmware/service closure...' -ForegroundColor Cyan
 
+    if(Test-Path $journalPath){
+        throw 'M8B final closure found a retained journal after normal Release.'
+    }
+    $finalJournalAbsent=$true
+
     Assert-StableFirmwareOwned -Context 'M8B final'
+    $finalFirmwareProofPass=$true
 
     Stop-Service -Name $serviceName -Force
     $serviceStartedByHarness=$false
@@ -574,8 +592,14 @@ try {
     if($finalService.StartType -ne 'Manual' -or $finalService.Status -ne 'Stopped'){
         throw "M8B final service baseline invalid: StartType=$($finalService.StartType) Status=$($finalService.Status)."
     }
+    $finalServiceBaselinePass=$true
+    Write-Host ("M8B final service baseline: StartType={0}, Status={1}" -f
+        $finalService.StartType,$finalService.Status) -ForegroundColor Green
 
-    $finalClosurePass=$true
+    $finalClosurePass=
+        $finalJournalAbsent -and
+        $finalFirmwareProofPass -and
+        $finalServiceBaselinePass
     $pass=$true
 
     Write-Host ''
@@ -628,12 +652,15 @@ finally {
         [void](Wait-JournalGone -Seconds 25)
     }
 
-    if(-not (Test-Path $journalPath)){
+    $finalJournalAbsent=(-not (Test-Path $journalPath))
+
+    if($finalJournalAbsent){
         try {
             Assert-StableFirmwareOwned -Context 'M8B cleanup'
-            if(-not $finalClosurePass){$finalClosurePass=$true}
+            $finalFirmwareProofPass=$true
         }
         catch {
+            $finalFirmwareProofPass=$false
             Write-Warning "M8B cleanup FF/FF proof failed: $($_.Exception.Message)"
         }
 
@@ -644,15 +671,28 @@ finally {
             }
 
             $svc=Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-            if($svc -and ($svc.StartType -ne 'Manual' -or $svc.Status -ne 'Stopped')){
-                Write-Warning "M8B cleanup service baseline is StartType=$($svc.StartType) Status=$($svc.Status)."
+            if($svc -and $svc.StartType -eq 'Manual' -and $svc.Status -eq 'Stopped'){
+                $finalServiceBaselinePass=$true
+                Write-Host ("M8B cleanup service baseline: StartType={0}, Status={1}" -f
+                    $svc.StartType,$svc.Status) -ForegroundColor Green
+            }
+            else {
+                $finalServiceBaselinePass=$false
+                Write-Warning "M8B cleanup service baseline is not verified Manual/Stopped."
             }
         }
         catch {
+            $finalServiceBaselinePass=$false
             Write-Warning "M8B cleanup service stop failed: $($_.Exception.Message)"
         }
+
+        $finalClosurePass=
+            $finalJournalAbsent -and
+            $finalFirmwareProofPass -and
+            $finalServiceBaselinePass
     }
     else {
+        $finalClosurePass=$false
         Write-Host ''
         Write-Host 'CRITICAL: durable M8B ownership evidence remains and was NOT deleted.' -ForegroundColor Red
         Write-Host "Journal: $journalPath" -ForegroundColor Red

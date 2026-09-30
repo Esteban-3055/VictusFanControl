@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-code-ci-pass-physical-authorized-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-attempt1-failclosed-telemetry-epoch-fix-ci-pending-retry-blocked-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1907,12 +1907,12 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_CODE_CI_PASS_PHYSICAL_AUTHORIZED_PENDING_M8C_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_ATTEMPT1_FAIL_CLOSED_TELEMETRY_EPOCH_FIX_CI_PENDING_RETRY_BLOCKED_M8C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
     "representativeLoadGate": "M8A CODE/CI/PHYSICAL PASS",
-    "watchdogBackedLoadGate": "M8B code/CI PASS / physical execution authorized and pending",
+    "watchdogBackedLoadGate": "M8B attempt 1 FAIL_CLOSED after successful OWNED 50/50; telemetry-epoch harness fix CI pending; retry blocked",
     "thermalPreemptionGate": "M8C pending",
     "productionRaceAudit": "pending",
     "realOvertemperatureRequired": false,
@@ -2150,9 +2150,9 @@
       }
     },
     "m8b": {
-      "status": "CODE_CI_PASS_PHYSICAL_AUTHORIZED_PENDING",
+      "status": "ATTEMPT1_FAIL_CLOSED_TELEMETRY_EPOCH_FIX_CI_PENDING_RETRY_BLOCKED",
       "physicalPassed": false,
-      "physicalExecutionAuthorized": true,
+      "physicalExecutionAuthorized": false,
       "writeCapable": true,
       "requiredToken": "8C40-M8B-LOAD50",
       "harnessScript": "scripts/test-8c40-load-thermal-m8b.ps1",
@@ -2193,7 +2193,32 @@
         "physicalExecution": false,
         "reviewNote": "Initial M8B preparation also passed run #717. Pre-physical review found the independent failsafe covered only OWNED 50/50; it was hardened before authorization to cover exact-target WRITE_ARMED pending 50/50, OWNED 50/50 and RESTORING 50/50. Hardened run #718 passed fully."
       },
-      "physicalExecutionNote": "AUTHORIZED for exact versioned harness after run #718; operator must use only git pull + scripts/test-8c40-load-thermal-m8b.ps1 and preserve all evidence. Any failsafe takeover invalidates PASS."
+      "physicalExecutionNote": "BLOCKED after attempt 1 until the intentional pre-write -> post-Commit telemetry epoch split and closure-evidence hardening pass CI and are explicitly reauthorized.",
+      "physicalAttempts": [
+        {
+          "attempt": 1,
+          "date": "2026-09-30",
+          "evidenceHead": "68750bdd997e9530c5712af5c33e5bf2910a0f55",
+          "result": "FAIL_CLOSED",
+          "terminalEvidence": "user-supplied full terminal capture",
+          "preflight": "PASS on exact HEAD; branch/upstream identical; exact HP 8C40 target; AC online; battery 100%; M4 Manual/Stopped; build 0 warnings/0 errors; static/synthetic regressions PASS; 3/3 telemetry accepted; Intel/EC/NVML recoveries 0; baseline FF/FF twice",
+          "representativePreWrite": "3/3 consecutive representative samples",
+          "writeBoundary": "READY reached with exact controller PID/start ticks, EC 50/50, dual tachs 2929/2753 RPM, durable journal generation 3",
+          "failure": "first supervision safety evaluation compared its timestamp against the last pre-write sample across the intentional PREPARE/WRITE_INTENT/WMI/ACK/COMMIT/READY control transaction; observed gap 3.364 s > 3 s and failed closed before supervision sample 1",
+          "classification": "HARNESS_TIMING_EPOCH_BUG_NOT_THERMAL_NOT_OWNERSHIP",
+          "normalSoakCompleted": false,
+          "thermalEmergencyObserved": false,
+          "cleanupEvidence": "controller returned to firmware; parent independently observed FF/FF twice. Terminal did not separately print final service Manual/Stopped proof in v1 harness, so closure is not promoted beyond the observed FF/FF evidence.",
+          "failsafeTakeover": "not established from supplied terminal alone",
+          "physicalPassed": false
+        }
+      ],
+      "telemetryEpochHardening": {
+        "status": "CODE_PREPARED_CI_PENDING",
+        "change": "split pre-write and post-Commit supervision inter-sample continuity epochs; first post-Commit sample remains freshness/completeness/SafetyGate checked but is not compared with the last pre-write timestamp",
+        "safetyRationale": "the synchronous watchdog+WMI+hardware-ACK+Commit transaction is intentional control work, not a lifecycle telemetry gap; supervision gaps remain bounded from sample 1 onward",
+        "closureHardening": "FAIL_CLOSED summary now distinguishes journal absence, independent FF/FF proof, and M4 Manual/stopped proof; unavailable child ExitCode is itself fail-closed"
+      }
     }
   }
 }
