@@ -48,7 +48,49 @@ internal static class Program
 
         if (options.AdaptivePolicySelfTest)
         {
-            return AdaptiveFanPolicySelfTest.Run(Console.Out);
+            var engineResult =
+                AdaptiveFanPolicySelfTest.Run(
+                    Console.Out);
+
+            var shadowResult =
+                AdaptiveFanPolicyShadowSelfTest.Run(
+                    Console.Out);
+
+            return engineResult == 0 &&
+                   shadowResult == 0
+                ? 0
+                : 33;
+        }
+
+        if (options.AdaptivePolicyShadowReplay)
+        {
+            using var adaptiveShadowCts =
+                new CancellationTokenSource();
+
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                adaptiveShadowCts.Cancel();
+            };
+
+            try
+            {
+                return await AdaptiveFanPolicyShadowReplay.RunAsync(
+                    options.AdaptivePolicyShadowConfigPath!,
+                    options.AdaptivePolicyShadowInputPath!,
+                    options.AdaptivePolicyShadowOutputPath!,
+                    Console.Out,
+                    adaptiveShadowCts.Token);
+            }
+            catch (OperationCanceledException)
+                when (adaptiveShadowCts.IsCancellationRequested)
+            {
+                Console.WriteLine();
+                Console.WriteLine(
+                    "Adaptive policy shadow replay cancelled.");
+
+                return 130;
+            }
         }
 
         if (options.BiosContractSelfTest)
