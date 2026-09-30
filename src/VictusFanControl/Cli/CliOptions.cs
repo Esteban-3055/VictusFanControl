@@ -11,6 +11,7 @@ public sealed class CliOptions
     public bool ControlSelfTest { get; private set; }
     public bool BiosContractSelfTest { get; private set; }
     public bool HpBackendSelfTest { get; private set; }
+    public bool Hp8C40M8PreflightProbe { get; private set; }
     public bool RestoreHpAuto { get; private set; }
     public bool SkipEcSnapshots { get; private set; }
     public bool FirstFanWriteTest { get; private set; }
@@ -100,6 +101,10 @@ public sealed class CliOptions
 
                 case "--hp-backend-self-test":
                     options.HpBackendSelfTest = true;
+                    break;
+
+                case "--8c40-m8-preflight-probe":
+                    options.Hp8C40M8PreflightProbe = true;
                     break;
 
                 case "--restore-hp-auto":
@@ -326,6 +331,7 @@ public sealed class CliOptions
             (options.ControlSelfTest ? 1 : 0) +
             (options.BiosContractSelfTest ? 1 : 0) +
             (options.HpBackendSelfTest ? 1 : 0) +
+            (options.Hp8C40M8PreflightProbe ? 1 : 0) +
             (options.RestoreHpAuto ? 1 : 0) +
             (options.FirstFanWriteTest ? 1 : 0) +
             (options.IntegratedCoordinatorTest ? 1 : 0) +
@@ -510,6 +516,7 @@ public sealed class CliOptions
         Console.WriteLine("  --control-self-test       Test authority/fallback coordinator with fake backend.");
         Console.WriteLine("  --bios-contract-self-test Validate 88F8 + 8C40 BIOS/WMI request envelopes.");
         Console.WriteLine("  --hp-backend-self-test    Test the 88F8 + 8C40 backend boundaries with synthetic hardware.");
+        Console.WriteLine("  --8c40-m8-preflight-probe READ-ONLY: exact-target telemetry + SafetyGate readiness for M8.");
         Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");

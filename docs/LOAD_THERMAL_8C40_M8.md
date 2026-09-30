@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **SPECIFICATION + STATIC/SYNTHETIC INVARIANTS CODE/CI PASS. NO-WRITE PREFLIGHT PENDING. PHYSICAL HARNESS PENDING.**
+Status: **SPECIFICATION + STATIC/SYNTHETIC INVARIANTS CODE/CI PASS. NO-WRITE PREFLIGHT IMPLEMENTED / CI PENDING. PHYSICAL EXECUTION PENDING. PHYSICAL HARNESS NOT YET AUTHORIZED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -205,8 +205,21 @@ No physical M8 execution is authorized before the no-write preflight passes on t
 
 ## 7. No-write preflight requirements
 
-The future M8 preflight must perform **no fan write, no firmware restore, no watchdog lease,
-no service start/stop mutation and no deliberate stress load**.
+The versioned preflight is now implemented as
+`scripts/test-8c40-load-thermal-m8-preflight.ps1`. At this commit it is prepared for CI;
+it has **not** yet been authorized for physical execution.
+
+The preflight performs **no fan write, no firmware restore, no watchdog lease,
+no service start/stop mutation and no deliberate stress load**. A dedicated
+`--8c40-m8-preflight-probe` path constructs only the exact-target
+`HardwareTelemetryReader` and evaluates the production `SafetyGate` with
+`fanWritePathPresent:false`; it never constructs a fan backend, coordinator or watchdog lease.
+
+The read-only telemetry probe requires three consecutive `PreconditionsReady` samples,
+the exact RTX 4060 Laptop GPU identity, GPU temperature > 0 C, complete 14/14 core-context
+telemetry, plausible power/load/tach data, and temperatures below the M8 physical abort
+limits (effective CPU < 90 C and GPU < 82 C).
+
 
 It must verify at least:
 
@@ -224,7 +237,11 @@ It must verify at least:
 - AC online and sane battery status;
 - two consecutive independent FF/FF samples.
 
-The preflight script does not exist yet at this specification stage.
+The preflight additionally binds evidence to a clean
+`feature/victus-8c40-port` working tree whose HEAD matches its configured upstream,
+checks M6/M7/profile policy boundaries, requires AC online with at least 20% readable
+battery charge, requires M4 Manual/stopped if installed, and proves two consecutive
+independent FF/FF setpoint reads before declaring PASS.
 
 ## 8. Physical harness safety and evidence
 

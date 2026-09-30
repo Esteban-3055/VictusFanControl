@@ -59,6 +59,30 @@ internal static class Program
             return oldTarget == 0 && newTarget == 0 ? 0 : 12;
         }
 
+        if (options.Hp8C40M8PreflightProbe)
+        {
+            using var m8PreflightCts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                m8PreflightCts.Cancel();
+            };
+
+            try
+            {
+                return await Hp8C40M8ReadOnlyPreflightProbe.RunAsync(
+                    options.ModulesDirectory,
+                    Console.Out,
+                    m8PreflightCts.Token);
+            }
+            catch (OperationCanceledException) when (m8PreflightCts.IsCancellationRequested)
+            {
+                Console.WriteLine();
+                Console.WriteLine("M8 read-only preflight probe cancelled.");
+                return 130;
+            }
+        }
+
         if (options.RestoreHpAuto)
         {
             try

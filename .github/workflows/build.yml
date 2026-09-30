@@ -113,6 +113,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-8c40-load-thermal-m8-invariants.ps1
 
+      - name: HP 8C40 M8 no-write preflight invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-load-thermal-m8-preflight-invariants.ps1
+
       - name: HP 8C40 M5-M8 invariants Windows PowerShell 5.1 compatibility
         shell: powershell
         run: |
@@ -131,6 +135,7 @@ jobs:
           .\scripts\test-8c40-hibernation-m7-invariants.ps1
           .\scripts\test-8c40-hibernation-m7-harness-invariants.ps1
           .\scripts\test-8c40-load-thermal-m8-invariants.ps1
+          .\scripts\test-8c40-load-thermal-m8-preflight-invariants.ps1
 
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
