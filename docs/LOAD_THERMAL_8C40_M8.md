@@ -282,8 +282,7 @@ script and requires both `m8b.physicalPassed=true` and
 `m8c.physicalExecutionAuthorized=true` before Administrator checks, service operations, process
 launches, PawnIO probes or fan-control activity can occur.
 
-Once a future evidence-backed commit authorizes that boundary, the harness performs **two
-independent physical subcycles**:
+Once a future evidence-backed commit authorizes that boundary, the harness performs **two independent physical subcycles**:
 
 - CPU: real representative load + real watchdog-backed 50/50 ownership, parent journal/failsafe
   proof, then five qualification-only 95 C frames with handoff required on frame 5/5;
