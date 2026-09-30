@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-attempt1-failclosed-thermal-confirmation-code-prepared-ci-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-attempt1-failclosed-thermal-confirmation-code-ci-pass-retry-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1907,11 +1907,11 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_ATTEMPT1_FAIL_CLOSED_THERMAL_CONFIRMATION_CODE_PREPARED_CI_PENDING_M8B_M8C_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_ATTEMPT1_FAIL_CLOSED_THERMAL_CONFIRMATION_CODE_CI_PASS_RETRY_PENDING_M8B_M8C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
-    "representativeLoadGate": "M8A attempt 1 FAIL_CLOSED / temporal CPU confirmation hardening code prepared / CI pending / physical retry pending",
+    "representativeLoadGate": "M8A attempt 1 FAIL_CLOSED / five-sample CPU thermal confirmation CODE/CI PASS / physical retry pending",
     "watchdogBackedLoadGate": "M8B pending",
     "thermalPreemptionGate": "M8C pending",
     "productionRaceAudit": "pending",
@@ -2009,7 +2009,7 @@
     "representativeLoadHarnessScript": "scripts/test-8c40-load-thermal-m8a.ps1",
     "representativeLoadInvariantScript": "scripts/test-8c40-load-thermal-m8a-invariants.ps1",
     "m8a": {
-      "status": "ATTEMPT1_FAIL_CLOSED_THERMAL_CONFIRMATION_CODE_PREPARED_CI_PENDING_RETRY_PENDING",
+      "status": "ATTEMPT1_FAIL_CLOSED_THERMAL_CONFIRMATION_CODE_CI_PASS_RETRY_PENDING",
       "physicalPassed": false,
       "writeCapable": false,
       "cliMode": "--8c40-m8a-representative-load",
@@ -2071,7 +2071,7 @@
         }
       ],
       "thermalConfirmationHardening": {
-        "status": "CODE_PREPARED_CI_PENDING",
+        "status": "CODE_CI_PASS_PHYSICAL_RETRY_PENDING",
         "rawCpuThresholdC": 95,
         "requiredConsecutiveUniqueSamples": 5,
         "cpuHardImmediateC": 99,
@@ -2083,7 +2083,23 @@
         "safetyGateRawThresholdUnchanged": true,
         "automaticPolicyEnabled": false,
         "watchdogRecoveryValidated": false,
-        "rationale": "Intel specifies i7-13700H Tjunction / max operating temperature as 100 C; qualification keeps a 1 C immediate hard margin while requiring persistence only for 95..98.x C CPU spikes."
+        "rationale": "Intel specifies i7-13700H Tjunction / max operating temperature as 100 C; qualification keeps a 1 C immediate hard margin while requiring persistence only for 95..98.x C CPU spikes.",
+        "ci": {
+          "result": "PASS",
+          "finalCommit": "09e673c4433853ab0e0756fca06fa92dcf847d17",
+          "runNumber": 706,
+          "runId": 36660582473,
+          "powerShellSyntax": true,
+          "m8Invariant": true,
+          "m8aInvariant": true,
+          "windowsPowerShell51Compatibility": true,
+          "warningsAsErrorsBuild": true,
+          "safetyGateAndThermalConfirmationSelfTest": true,
+          "coordinatorSelfTest": true,
+          "biosContractSelfTest": true,
+          "hpBackendSelfTest": true,
+          "note": "Run 705 failed closed only because the M8 documentation invariant still expected the pre-hardening phrase 'CPU emergency: effective CPU >= 95 C'. The invariant wording was aligned; run 706 passed. No physical execution occurred in either CI run."
+        }
       }
     }
   }

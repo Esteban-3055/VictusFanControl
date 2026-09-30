@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A ATTEMPT 1 FAIL_CLOSED / NO-WRITE. FIVE-SAMPLE CPU THERMAL CONFIRMATION HARDENING CODE PREPARED / CI PENDING. M8B/M8C REMAIN BLOCKED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A ATTEMPT 1 FAIL_CLOSED / NO-WRITE. FIVE-SAMPLE CPU THERMAL CONFIRMATION HARDENING CODE/CI PASS / PHYSICAL RETRY PENDING. M8B/M8C REMAIN BLOCKED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -374,6 +374,22 @@ GitHub Actions #702 failed closed only because the first static invariant edit h
 string-termination syntax error; no physical M8A execution occurred in that run. The corrected
 invariant and warm-up behavior passed #703.
 
+
+### M8A five-sample thermal-confirmation CI
+
+The exact-target thermal-confirmation hardening is **CODE/CI PASS** at commit
+`09e673c4433853ab0e0756fca06fa92dcf847d17`, GitHub Actions **#706** (run `36660582473`). The run passed
+PowerShell syntax, M8/M8A invariants under PowerShell 7 and Windows PowerShell 5.1,
+warnings-as-errors build, the M8A classifier, the SafetyGate plus HP 8C40 temporal
+confirmation self-test, coordinator, BIOS-contract and HP-backend regressions.
+
+Run #705 failed closed before build because the M8 static documentation invariant still expected
+the old literal wording `CPU emergency: effective CPU >= 95 C` after the documentation was
+refined to distinguish the raw 95 C threshold from the five-sample effective handoff. The
+invariant wording was aligned without changing runtime behavior; no physical execution occurred.
+
+The next authorized physical step is an M8A NO-WRITE retry using the versioned harness. M8B and
+M8C remain blocked until that retry is reviewed and explicitly closed.
 
 ## 8. Physical harness safety and evidence
 
