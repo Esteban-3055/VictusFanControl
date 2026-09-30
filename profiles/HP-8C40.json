@@ -58,7 +58,36 @@
     "validatedMinimumLevel": 10,
     "validatedMaximumLevel": 50,
     "supportsIndependentLevels": false,
-    "notes": "Equal-only 10..50 is fully integrated for bounded production control after complete physical characterization, restart-from-zero, large-transition qualification, endpoint coordinator PASS, and final post-promotion regression through the unmodified production backend at both endpoints. Independent CPU/GPU levels remain unqualified and rejected. Automatic/adaptive policy and production watchdog/unattended recovery remain blocked pending M8 representative-load, thermal-preemption and any remaining production-race qualification."
+    "notes": "Equal-only 10..50 is fully integrated for bounded production control after complete physical characterization, restart-from-zero, large-transition qualification, endpoint coordinator PASS, and final post-promotion regression through the unmodified production backend at both endpoints. Independent CPU/GPU levels remain unqualified and rejected. Automatic/adaptive policy and production watchdog/unattended recovery remain blocked pending M8 representative-load, thermal-preemption and any remaining production-race qualification.",
+    "adaptivePolicyPreparation": {
+      "status": "PURE_ENGINE_CODE_PREPARED_CI_PENDING_NOT_INTEGRATED",
+      "productionIntegrated": false,
+      "enabledByDefault": false,
+      "hardwareWriteCapable": false,
+      "policyEngine": "AdaptiveFanPolicyEngine",
+      "selfTestMode": "--adaptive-policy-self-test",
+      "invariantScript": "scripts/test-adaptive-policy-invariants.ps1",
+      "outputContract": "one equal CPU/GPU fan level",
+      "validatedEnvelope": "10..50 only when a future integration binds this generic engine to HP 8C40",
+      "demandDomains": [
+        "CPU effective temperature",
+        "GPU temperature",
+        "CPU package power",
+        "GPU power",
+        "CPU load",
+        "GPU load"
+      ],
+      "smoothing": [
+        "independent bounded upward/downward slew",
+        "consecutive-sample confirmation before decrease",
+        "decrease deadband",
+        "duplicate/out-of-order telemetry refusal",
+        "telemetry continuity-gap refusal"
+      ],
+      "productionCurveDefined": false,
+      "productionCurveValidated": false,
+      "blockedBy": "M8 physical closure and later explicit policy-integration gate"
+    }
   },
   "observedCalibration": [
     {
