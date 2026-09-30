@@ -1,5 +1,6 @@
 using VictusFanControl.Cli;
 using VictusFanControl.Control;
+using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Safety;
@@ -43,6 +44,11 @@ internal static class Program
         if (options.ControlSelfTest)
         {
             return await FanControlCoordinatorSelfTest.RunAsync(Console.Out);
+        }
+
+        if (options.AdaptivePolicySelfTest)
+        {
+            return AdaptiveFanPolicySelfTest.Run(Console.Out);
         }
 
         if (options.BiosContractSelfTest)
