@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B CODE/SPEC PREPARATION AUTHORIZED; M8B PHYSICAL EXECUTION AND M8C REMAIN BLOCKED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B WATCHDOG-BACKED 50/50 HARNESS CODE PREPARED / CI PENDING; M8B PHYSICAL EXECUTION AND M8C REMAIN BLOCKED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -429,6 +429,51 @@ invariant wording was aligned without changing runtime behavior; no physical exe
 
 M8A physical retry subsequently passed and is recorded above. M8B code/spec preparation is now
 allowed; M8B physical execution and M8C remain blocked pending their own versioned harness/CI gates.
+
+## 7B. M8B watchdog-backed 50/50 representative-load gate
+
+M8B is the first write-capable M8 sub-gate. Its purpose is **not** to validate an adaptive
+curve. It proves that the already-qualified equal-only 50/50 endpoint can be acquired exactly
+once through the real watchdog-backed coordinator/backend chain while a representative gaming/3D
+load is already present, then supervised without retransmitting the command.
+
+The versioned M8B contract is:
+
+- the existing M8 no-write preflight must PASS again on the exact current HEAD;
+- M8A must already be recorded CODE/CI/PHYSICAL PASS;
+- the existing M4 service must be Manual/stopped (or be installed by the versioned M4 installer
+  only when absent), must start as LocalSystem/session 0 and resolve the exact 8C40 target/pipe;
+- the operator must establish a normal game/3D workload before the write boundary and explicitly
+  confirm token `8C40-M8B-LOAD50`;
+- an **independent delayed failsafe** is armed before the write-capable controller is launched;
+  any failsafe takeover makes the run safe but invalid as an M8B PASS;
+- before Custom admission, the controller requires **3 consecutive representative samples**
+  within at most 10 samples;
+- the controller contains **exactly one** `ApplyAsync(50,50)` call;
+- the real causal chain must be PREPARE -> WRITE_INTENT(50/50) -> one hardware 50/50 ACK ->
+  COMMIT -> OWNED;
+- after COMMIT, a schema-v2 durable journal must prove exact target, OWNED 50/50, exact controller
+  PID + creation ticks, while EC guards remain 00/00 and both tachometers report feedback;
+- supervision lasts **30 samples at 1 second** and must contain at least **22/30**
+  representative samples with at least **10 consecutive**;
+- supervision uses SafetyGate plus the exact-target five-reading CPU thermal confirmation,
+  continuously calls coordinator safety/ownership supervision and **never retransmits 50/50**;
+- CPU >=99 C is immediate fail-closed; GPU >=82 C is an immediate conservative M8B qualification
+  abort; CPU 95..98.x C continues to require five unique consecutive fresh readings;
+- normal completion must prove RESTORE_BEGIN -> local FF/FF -> watchdog RELEASE;
+- the watchdog log must contain exactly one PREPARE, WRITE_INTENT target 50/50, COMMIT target
+  50/50, RESTORE_BEGIN and RELEASE ACK for the exact controller in causal order;
+- final independent closure requires journal absent, two independent FF/FF probes and the M4
+  qualification service restored to Manual/stopped.
+
+The controller mode is `--8c40-m8b-watchdog-load`. The parent harness is
+`scripts/test-8c40-load-thermal-m8b.ps1`; the independent fallback is
+`scripts/watchdog-m8b-service-failsafe-8c40.ps1`. Evidence is preserved under
+`logs/m8b-watchdog-load_*/` as controller READY/result JSON, parent summary and failsafe log.
+
+M8B physical execution remains blocked until this code/spec preparation passes GitHub Actions,
+the result is recorded in the profile/documentation, and the write-capable harness is reviewed
+again against the live HEAD. M8C remains blocked regardless of M8B code preparation.
 
 ## 8. Physical harness safety and evidence
 

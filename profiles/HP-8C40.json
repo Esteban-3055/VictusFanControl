@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-code-preparation-authorized-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-code-prepared-ci-pending-physical-blocked-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1907,19 +1907,19 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_CODE_PREPARATION_AUTHORIZED_M8C_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED_M8C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
     "representativeLoadGate": "M8A CODE/CI/PHYSICAL PASS",
-    "watchdogBackedLoadGate": "M8B code/spec preparation authorized; physical harness not yet authorized",
+    "watchdogBackedLoadGate": "M8B code prepared / CI pending / physical execution blocked",
     "thermalPreemptionGate": "M8C pending",
     "productionRaceAudit": "pending",
     "realOvertemperatureRequired": false,
     "qualificationFanLevel": "50/50 equal-only",
     "physicalAbortLimits": "M8A closed with CPU raw threshold 95 C requiring 5 unique consecutive fresh samples, CPU >=99 C immediate hard abort, GPU >=82 C immediate physical abort. M8B must version its write-capable physical boundaries before execution.",
     "noWritePreflightScript": "scripts/test-8c40-load-thermal-m8-preflight.ps1",
-    "physicalHarnessScript": null,
+    "physicalHarnessScript": "scripts/test-8c40-load-thermal-m8b.ps1",
     "preparationCi": {
       "result": "PASS",
       "finalCommit": "a1c4e6adaa25518b36d6b1f59b9d800845b1fc82",
@@ -2128,7 +2128,7 @@
           "note": "Run 705 failed closed only because the M8 documentation invariant still expected the pre-hardening phrase 'CPU emergency: effective CPU >= 95 C'. The invariant wording was aligned; run 706 passed. No physical execution occurred in either CI run."
         }
       },
-      "m8bAuthorizationScope": "code/spec preparation only; physical M8B requires versioned harness, CI PASS, independent failsafe and explicit review",
+      "m8bAuthorizationScope": "M8B code/spec preparation only until M8B preparation CI passes; physical execution remains separately gated",
       "physicalPass": {
         "result": "PASS_NO_WRITE",
         "date": "2026-09-29",
@@ -2148,6 +2148,35 @@
         "finalClosure": "PASS: journal absent / M4 Manual-stopped / two independent FF/FF",
         "conclusion": "short 95-98 C CPU spikes were observed but never reached the five-unique-sample persistence criterion; representative gaming load remained thermally bounded by the versioned M8A contract"
       }
+    },
+    "m8b": {
+      "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "physicalPassed": false,
+      "physicalExecutionAuthorized": false,
+      "writeCapable": true,
+      "requiredToken": "8C40-M8B-LOAD50",
+      "harnessScript": "scripts/test-8c40-load-thermal-m8b.ps1",
+      "invariantScript": "scripts/test-8c40-load-thermal-m8b-invariants.ps1",
+      "failsafeScript": "scripts/watchdog-m8b-service-failsafe-8c40.ps1",
+      "controllerMode": "--8c40-m8b-watchdog-load",
+      "evidence": "logs/m8b-watchdog-load_*/{m8b-ready.json,m8b-result.json,m8b-harness-summary.json,m8b-failsafe.log}",
+      "criteria": {
+        "fanTarget": "exactly one equal-only 50/50 ApplyAsync after load admission",
+        "preWriteLoad": "3 consecutive representative samples within at most 10",
+        "representativePredicate": "GPU load >=35% AND GPU power >=20 W AND (CPU load >=5% OR CPU package power >=15 W)",
+        "supervision": "30 samples at 1 second; >=22/30 representative; >=10 consecutive",
+        "thermal": "CPU 95..98.x C requires 5 unique consecutive fresh readings; CPU >=99 C immediate; GPU >=82 C immediate M8B qualification abort",
+        "ownership": "schema-v2 exact-target OWNED 50/50 bound to exact controller PID + creation ticks; guards 00/00; dual tachs",
+        "watchdog": "existing isolated M4 LocalSystem service, exact target/pipe, same PID + creation ticks throughout normal run",
+        "failsafe": "independent delayed process armed before controller; any takeover invalidates PASS",
+        "retransmit": "no repeated fan command during supervision; coordinator safety/status checks only",
+        "causalChain": "exactly one PREPARE, WRITE_INTENT target 50/50, COMMIT target 50/50, RESTORE_BEGIN and RELEASE ACK for controller in watchdog log",
+        "closure": "journal absent, two independent FF/FF, M4 Manual/stopped"
+      },
+      "preparationCi": {
+        "result": "PENDING"
+      },
+      "physicalExecutionNote": "BLOCKED until this code/spec commit passes CI and is explicitly reviewed"
     }
   }
 }

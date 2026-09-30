@@ -15,6 +15,10 @@ public sealed class CliOptions
     public bool Hp8C40M8ARepresentativeLoad { get; private set; }
     public bool Hp8C40M8ASelfTest { get; private set; }
     public string? Hp8C40M8AResultPath { get; private set; }
+    public bool Hp8C40M8BWatchdogLoad { get; private set; }
+    public string? Hp8C40M8BToken { get; private set; }
+    public string? Hp8C40M8BReadyPath { get; private set; }
+    public string? Hp8C40M8BResultPath { get; private set; }
     public bool RestoreHpAuto { get; private set; }
     public bool SkipEcSnapshots { get; private set; }
     public bool FirstFanWriteTest { get; private set; }
@@ -119,6 +123,25 @@ public sealed class CliOptions
 
                 case "--8c40-m8a-result-path":
                     options.Hp8C40M8AResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m8b-watchdog-load":
+                    options.Hp8C40M8BWatchdogLoad = true;
+                    break;
+
+                case "--8c40-m8b-token":
+                    options.Hp8C40M8BToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m8b-ready-path":
+                    options.Hp8C40M8BReadyPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m8b-result-path":
+                    options.Hp8C40M8BResultPath =
                         Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
@@ -349,6 +372,7 @@ public sealed class CliOptions
             (options.Hp8C40M8PreflightProbe ? 1 : 0) +
             (options.Hp8C40M8ARepresentativeLoad ? 1 : 0) +
             (options.Hp8C40M8ASelfTest ? 1 : 0) +
+            (options.Hp8C40M8BWatchdogLoad ? 1 : 0) +
             (options.RestoreHpAuto ? 1 : 0) +
             (options.FirstFanWriteTest ? 1 : 0) +
             (options.IntegratedCoordinatorTest ? 1 : 0) +
@@ -385,6 +409,24 @@ public sealed class CliOptions
         {
             throw new ArgumentException(
                 "--8c40-m8a-representative-load requires --8c40-m8a-result-path.");
+        }
+
+        if ((options.Hp8C40M8BToken is not null ||
+             options.Hp8C40M8BReadyPath is not null ||
+             options.Hp8C40M8BResultPath is not null) &&
+            !options.Hp8C40M8BWatchdogLoad)
+        {
+            throw new ArgumentException(
+                "--8c40-m8b-token/ready-path/result-path are valid only with --8c40-m8b-watchdog-load.");
+        }
+
+        if (options.Hp8C40M8BWatchdogLoad &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40M8BToken) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M8BReadyPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M8BResultPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-m8b-watchdog-load requires --8c40-m8b-token, --8c40-m8b-ready-path and --8c40-m8b-result-path.");
         }
 
         if (options.SkipEcSnapshots && !options.RestoreHpAuto)
@@ -551,6 +593,10 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-m8a-representative-load  READ-ONLY: observe the fixed 60 s M8A representative gaming/3D load window.");
         Console.WriteLine("  --8c40-m8a-result-path <path>   Required durable JSON evidence path for M8A.");
         Console.WriteLine("  --8c40-m8a-self-test            Synthetic self-test for M8A load/window classification.");
+        Console.WriteLine("  --8c40-m8b-watchdog-load        ACTIVE M8B GATE: one watchdog-backed 50/50 write under representative load.");
+        Console.WriteLine("  --8c40-m8b-token <token>        Required exact token: 8C40-M8B-LOAD50.");
+        Console.WriteLine("  --8c40-m8b-ready-path <path>    Required durable OWNED-ready marker path for M8B.");
+        Console.WriteLine("  --8c40-m8b-result-path <path>   Required durable controller evidence path for M8B.");
         Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");

@@ -103,6 +103,35 @@ internal static class Program
                 m8aCts.Token);
         }
 
+        if (options.Hp8C40M8BWatchdogLoad)
+        {
+            if (!string.Equals(
+                    options.Hp8C40M8BToken,
+                    Hp8C40M8BWatchdogLoadQualificationTest.RequiredToken,
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    $"HP 8C40 M8B refused: explicit --8c40-m8b-token " +
+                    $"{Hp8C40M8BWatchdogLoadQualificationTest.RequiredToken} is required.");
+                return 210;
+            }
+
+            using var m8bCts =
+                new CancellationTokenSource();
+
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                m8bCts.Cancel();
+            };
+
+            return await Hp8C40M8BWatchdogLoadQualificationTest.RunAsync(
+                options.ModulesDirectory,
+                options.Hp8C40M8BReadyPath!,
+                options.Hp8C40M8BResultPath!,
+                m8bCts.Token);
+        }
+
         if (options.RestoreHpAuto)
         {
             try
