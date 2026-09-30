@@ -88,6 +88,12 @@ internal static class Program
                 .RunClassifierSelfTest(Console.Out);
         }
 
+        if (options.Hp8C40M8CSelfTest)
+        {
+            return await Hp8C40M8CThermalPreemptionSelfTest
+                .RunAsync(Console.Out);
+        }
+
         if (options.Hp8C40M8ARepresentativeLoad)
         {
             using var m8aCts = new CancellationTokenSource();
