@@ -145,7 +145,7 @@ Assert-False ([bool]$shadowExample.authorizedForProduction) 'Adaptive shadow exa
 if([string]$shadowExample.purpose -ne 'shadow-only'){throw 'Adaptive shadow example purpose must remain shadow-only.'}
 if([string]$shadowExample.targetProfileId -ne 'HP-8C40-9D0R1LA-F18'){throw 'Adaptive shadow example must stay bound to the exact HP 8C40 target.'}
 
-Assert-NotContains $mainForm 'AdaptiveFanPolicyEngine' 'Adaptive policy must not be wired into the GUI before M8 physical closure.'
+Assert-NotContains $mainForm 'AdaptiveFanPolicyEngine' 'Adaptive policy must remain disconnected from the GUI until the separate post-M8 policy-integration gate closes.'
 Assert-NotContains $factory 'AdaptiveFanPolicyEngine' 'Adaptive policy must not be wired into production backend construction.'
 Assert-Contains $program 'automatic fan policy remains OFF' 'Program banner must keep automatic fan policy OFF.'
 Assert-Contains $program 'AdaptiveFanPolicySelfTest.Run' 'Adaptive policy engine self-test CLI route missing.'
@@ -155,14 +155,14 @@ Assert-Contains $workflow '--adaptive-policy-self-test' 'Adaptive policy determi
 Assert-Contains $workflow 'test-adaptive-policy-invariants.ps1' 'Adaptive policy static invariant is not wired into CI.'
 
 Assert-False ([bool]$profile.control.enabledByDefault) 'Production fan control must remain disabled by default.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'Automatic/adaptive policy must remain OFF during M8.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'Automatic/adaptive policy must remain OFF after M8 until explicitly promoted.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.watchdogRecoveryValidated) 'Watchdog recovery must remain unpromoted.'
 
 foreach($needle in @(
     'Production integration is disabled',
     'one equal CPU/GPU fan level',
     'no baked-in production curve',
-    'Hardware integration remains blocked until M8 is physically closed',
+    'Hardware integration remains blocked after M8 physical closure',
     'offline shadow replay',
     'does not authorize production'
 )){

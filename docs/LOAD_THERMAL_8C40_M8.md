@@ -2,11 +2,11 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS. M8C ATTEMPT 1 EVIDENCE REVIEW PROVES A REAL 50/50 WRITE/SETPOINT ACK FOLLOWED BY EC TACH-SNAPSHOT FAILURE BEFORE WATCHDOG COMMIT; RESTORE_BEGIN/RELEASE CLEARED THE DURABLE LEASE BUT PARENT STABLE FF/FF PROOF WAS INCOMPLETE. BOUNDED EC-TRANSIENT + SIX-READ/2-CONSECUTIVE FF/FF EVIDENCE HARDENING PASSED FULL CI #828. M8C ATTEMPT 2 IS EXPLICITLY AUTHORIZED THROUGH THE VERSIONED HARNESS. WATCHDOG RECOVERY REMAINS UNPROMOTED AND AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS. M8C ATTEMPT 2 PHYSICAL PASS WITH COMPLETE CPU 5/5 + GPU 1/1 PREEMPTION, CAUSAL M4 CHAINS, STABLE FF/FF FINAL/CLEANUP, NO FAILSAFE TAKEOVER, JOURNAL ABSENT AND M4 MANUAL/STOPPED. M8C PHYSICAL EXECUTION IS RE-BLOCKED IN PROFILE AND COMPILED CONTROLLER. WATCHDOG RECOVERY REMAINS UNPROMOTED AND AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
-M8 is the next independent authorization boundary before production watchdog promotion or any
-automatic/adaptive fan policy.
+M8 is physically closed. Production watchdog promotion, any remaining production-race acceptance,
+and automatic/adaptive fan policy remain separate explicit authorization boundaries.
 
 `WatchdogRecoveryValidated` remains **false**. Automatic/adaptive fan policy remains **OFF**.
 
@@ -1108,9 +1108,63 @@ watchdog chain, missing stable FF/FF proof or non-Manual/Stopped final M4 state 
 This authorization does not set `m8c.physicalPassed=true`, does not set
 `WatchdogRecoveryValidated=true`, and does not enable automatic/adaptive fan control.
 
+## 7B.13. M8C attempt 2 - PHYSICAL PASS and formal repository closure
+
+Attempt 2 ran on 2026-09-30 with qualification and packaging HEAD
+`f6d260355957571e06cf080c1af16a798865733c` after the bounded EC-transient hardening had passed CI #828.
+The evidence archive is `m8c-thermal-preemption_2026-09-30_172448.zip`,
+SHA-256 `11daa282e1eeb5d42f3efa922c0dd7f697d1075ef80d7084db8759cc3b84e015`.
+
+The CPU subcycle controller PID was **8224**. It issued exactly one real 50/50
+`ApplyAsync`, reached READY with **3636/3166 RPM**, and produced the exact M4 chain
+`PREPARE -> WRITE_INTENT 50/50 -> COMMIT 50/50 -> RESTORE_BEGIN -> RELEASE`.
+Qualification-only effective CPU 95 C frames retained Custom for 1/5 through 4/5 and
+preempted to Firmware exactly on 5/5. Final and cleanup ownership proofs each obtained
+two consecutive FF/FF observations.
+
+The GPU subcycle controller PID was **23848**. It issued exactly one real 50/50
+`ApplyAsync`, reached READY with **3802/3564 RPM**, and produced the same complete
+M4 causal chain. One qualification-only GPU 87 C frame caused immediate 1/1 handoff
+to Firmware. Final and cleanup ownership proofs each obtained two consecutive FF/FF
+observations.
+
+The independent failsafe was durably ARMED for both subcycles and did not take over.
+The final durable journal was absent. The M4 service ended **Stopped / Manual / PID 0**
+under LocalSystem with no retained lease. The bounded EC transient allowance added after
+attempt 1 was not exercised during attempt 2; its one-failure recovery / three-failure
+fail-closed boundary remains deterministically covered by CI #828.
+
+Attempt-2 hashes:
+
+- CPU result: `58a02b86fac50a14fc363d2e64e0ef549a1eed49970d965bed63c06a86bd578e`
+- GPU result: `2801eb936e67d07b742796b0e2896801f5d193999aff62f4c00ae584941d031d`
+- harness summary: `bd479690e6db303dcd394b89a41df3b98eb4d0eeea8f4a48d84610e36f4c5604`
+- package manifest: `90284460c9fbb31d7c12dc5a38ae961e25cbfbb2bcbee06f3d891be6f8a36bc0`
+
+The PASS harness requires exact controller PID + creation-ticks binding in the journal/M4
+causal checks. The accessible v1.5 continuity source transcribes PIDs 8224/23848 but does
+**not** transcribe the two numeric attempt-2 creation-tick values. This closure therefore
+records that identity check as validated by the packaged PASS evidence and deliberately
+does not invent numeric ticks. The evidence ZIP/ready/journal/M4 records remain the
+authoritative source for those exact numbers.
+
+Formal repository state after this closure:
+
+- `m8c.physicalPassed=true`;
+- `m8c.physicalExecutionAuthorized=false`;
+- compiled `PhysicalExecutionAuthorized=false`;
+- M8C parent harness therefore fails closed before any active boundary;
+- `WatchdogRecoveryValidated=false`;
+- `automaticPolicyEnabled=false`;
+- `control.enabledByDefault=false`.
+
+M8C is closed and must not be rerun merely to reproduce this evidence. Any future
+write-capable hardware execution requires a new explicit gate, versioned harness,
+same-HEAD CI and separate authorization.
+
 ## 8. Physical harness safety and evidence
 
-The future physical harness must:
+The M8 physical harness contract used for qualification required:
 
 - arm the delayed independent failsafe before launching any write-capable controller;
 - preserve journal and marker evidence durably;

@@ -22,7 +22,7 @@ function Assert-True([bool]$Value,[string]$Message){
     if(-not $Value){throw $Message}
 }
 
-Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = true;' 'M8C physical controller must be explicitly authorized for attempt 2 after EC-transient hardening CI PASS.'
+Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M8C physical controller must be re-blocked after attempt-2 physical PASS.'
 Assert-Contains $controller '8C40-M8C-THERMAL50' 'M8C future explicit token changed.'
 Assert-Contains $controller 'Hp8C40M8CPhysicalCase.CpuConfirmed95' 'M8C CPU physical subcycle missing.'
 Assert-Contains $controller 'Hp8C40M8CPhysicalCase.GpuImmediate87' 'M8C GPU physical subcycle missing.'
@@ -88,20 +88,20 @@ Assert-Contains $program 'Hp8C40M8CPhysicalThermalPreemptionQualificationTest.Re
 Assert-Contains $program 'Hp8C40M8CPhysicalThermalPreemptionQualificationTest.RunAsync' 'M8C blocked Program route missing.'
 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C physical preparation now requires recorded M8B physical PASS.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8C physical preparation must not mark M8C PASS.'
-Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C attempt 2 must be profile-authorized only after EC-transient hardening CI PASS.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8C closure must preserve recorded physical PASS.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C physical execution must be re-blocked after PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'Automatic policy must remain OFF.'
 
 foreach($needle in @(
     'M8C physical-controller preparation',
-    'PhysicalExecutionAuthorized=true',
+    'PhysicalExecutionAuthorized=false',
     'M8C_READY_BEFORE_INJECTION',
     'M8C-CONTINUE',
     'M8C attempt 1 - FAIL_CLOSED before READY',
-    'M8C attempt 2 - explicitly authorized after bounded EC-transient hardening CI PASS',
+    'M8C attempt 2 - PHYSICAL PASS and formal repository closure',
     'M8C attempt-1 evidence review - real write reached, tach EC snapshot failed before Commit'
 )){
     Assert-Contains $doc $needle ("M8C physical-controller documentation missing: {0}" -f $needle)
 }
 
-Write-Host 'HP 8C40 M8C hard-blocked physical-controller preparation invariant: PASS' -ForegroundColor Green
+Write-Host 'HP 8C40 M8C closed physical-controller invariant: PASS' -ForegroundColor Green

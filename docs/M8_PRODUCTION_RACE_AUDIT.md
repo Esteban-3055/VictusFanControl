@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **CODE/CI PASS. PHYSICAL UNDER-LOAD CLOSURE REMAINS DEPENDENT ON M8B/M8C.**
+Status: **CODE/CI PASS. M8B REPRESENTATIVE-LOAD AND M8C THERMAL-PREEMPTION PHYSICAL CONTEXTS ARE CLOSED; PRODUCTION PROMOTION REMAINS A SEPARATE GATE.**
 
 This audit does not add fan authority and does not replace physical M8 evidence. Its purpose is to
 prevent the project from repeatedly re-running destructive historical gates when the corresponding
@@ -30,8 +30,8 @@ A race is considered **code/CI covered** only when:
 3. the test is executed by GitHub Actions;
 4. no qualification-only bypass is exposed through the production GUI/runtime.
 
-Code/CI coverage is not a physical PASS. M8B and M8C remain the only gates allowed to close the
-remaining representative-load and thermal-preemption hardware evidence.
+Code/CI coverage is not a physical PASS. M8B and M8C have now closed the representative-load and thermal-preemption hardware evidence.
+This does not itself promote the production watchdog or automatic/adaptive policy.
 
 The complete audit is **CODE/CI PASS** at commit
 `ccb11f285a92c6f789929eee6911b5213fd95ddd`, GitHub Actions **#773**
@@ -45,5 +45,5 @@ M5D/M5E, M6 and M7 are not repeated only to reproduce historical evidence. A new
 sub-gate is created only if implementation review or CI exposes a new race whose outcome depends
 on real WMI/EC/tach/watchdog timing and cannot be resolved deterministically in synthetic code.
 
-Automatic/adaptive policy remains OFF and `WatchdogRecoveryValidated` remains false until M8 is
-physically closed.
+Automatic/adaptive policy remains OFF and `WatchdogRecoveryValidated` remains false even after M8
+physical closure. Promotion requires a separate explicit post-M8 gate and same-HEAD CI/evidence review.

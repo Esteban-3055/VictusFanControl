@@ -52,8 +52,8 @@ envelope and pass the same engine validation used by code. The checked-in
 production fan curve.
 
 This offline shadow replay does not authorize production integration. It exists to let future
-recorded workloads be compared against candidate curves while M8B/M8C physical closure remains
-pending.
+recorded workloads be compared against candidate curves while the M8B/M8C physical gates were still pending; those gates are now closed, but
+production integration remains separately blocked.
 
 ## Shadow/replay code and CI closure
 
@@ -83,7 +83,8 @@ This work does **not**:
 The production profile remains `enabledByDefault=false`,
 `automaticPolicyEnabled=false` and `WatchdogRecoveryValidated=false`.
 
-Hardware integration remains blocked until M8 is physically closed. Offline shadow replay may
+Hardware integration remains blocked after M8 physical closure until an explicit post-M8
+watchdog/race promotion gate and a separate policy-integration gate are closed. Offline shadow replay may
 evaluate recorded telemetry, but it cannot acquire fan authority or execute its notional intents.
 
 ## Code/CI closure

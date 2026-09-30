@@ -85,7 +85,7 @@ foreach($needle in @(
 }
 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'Race audit must preserve the recorded M8B physical PASS.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'Race audit must not imply M8C physical PASS.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'Race audit must preserve the recorded M8C physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'Race audit must keep automatic policy OFF.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.watchdogRecoveryValidated) 'Race audit must keep watchdog recovery unpromoted.'
 

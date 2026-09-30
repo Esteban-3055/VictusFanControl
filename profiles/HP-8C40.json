@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-physical-pass-m8c-attempt2-ec-transient-retry-authorized-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-physical-pass-m8c-physical-pass-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -58,7 +58,7 @@
     "validatedMinimumLevel": 10,
     "validatedMaximumLevel": 50,
     "supportsIndependentLevels": false,
-    "notes": "Equal-only 10..50 is fully integrated for bounded production control after complete physical characterization, restart-from-zero, large-transition qualification, endpoint coordinator PASS, and final post-promotion regression through the unmodified production backend at both endpoints. Independent CPU/GPU levels remain unqualified and rejected. Automatic/adaptive policy and production watchdog/unattended recovery remain blocked pending M8 representative-load, thermal-preemption and any remaining production-race qualification.",
+    "notes": "Equal-only 10..50 is fully integrated for bounded production control after complete physical characterization, restart-from-zero, large-transition qualification, endpoint coordinator PASS, and final post-promotion regression through the unmodified production backend at both endpoints. Independent CPU/GPU levels remain unqualified and rejected. M8 representative-load and thermal-preemption qualification is physically closed, but automatic/adaptive policy and production watchdog/unattended recovery remain blocked pending an explicit post-M8 production-promotion/race gate and separate policy-integration qualification.",
     "adaptivePolicyPreparation": {
       "status": "PURE_ENGINE_CODE_CI_PASS_NOT_INTEGRATED",
       "productionIntegrated": false,
@@ -86,7 +86,7 @@
       ],
       "productionCurveDefined": false,
       "productionCurveValidated": false,
-      "blockedBy": "M8 physical closure and later explicit policy-integration gate",
+      "blockedBy": "post-M8 production watchdog/race promotion and later explicit policy-integration gate",
       "codeCi": {
         "result": "PASS",
         "commit": "ccb11f285a92c6f789929eee6911b5213fd95ddd",
@@ -1949,14 +1949,14 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_ATTEMPT4_CHILD_PASS_PARENT_FAIL_CLOSED_NATIVE_EXIT_FIX_CODE_CI_PASS_EVIDENCE_AUDIT_PENDING_M8C_CODE_CI_PASS_PHYSICAL_BLOCKED_ADAPTIVE_ENGINE_SHADOW_REPLAY_CI_PASS_POLICY_OFF",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_PHYSICAL_PASS_M8C_PHYSICAL_PASS_FORMALLY_CLOSED_POLICY_OFF",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
     "representativeLoadGate": "M8A CODE/CI/PHYSICAL PASS",
-    "watchdogBackedLoadGate": "Attempt 4 30/30 real load and controller-reported PASS; parent FAIL_CLOSED before watchdog log audit from unavailable PowerShell ExitCode; no physical PASS until durable causal/closure/failsafe evidence audit",
-    "thermalPreemptionGate": "M8C synthetic + hard-blocked physical controller/harness CODE/CI PASS; physical execution blocked until M8B physical PASS",
-    "productionRaceAudit": "CODE/CI PASS for mapped deterministic races; representative-load/real physical timing closure remains dependent on M8B/M8C physical PASS",
+    "watchdogBackedLoadGate": "M8B PHYSICAL PASS retry 6: 3/3 representative prewrite, one real 50/50 ApplyAsync, 30/30 representative supervision, causal M4 closure, no failsafe takeover, final firmware/service/journal closure.",
+    "thermalPreemptionGate": "M8C PHYSICAL PASS attempt 2 on f6d260355957571e06cf080c1af16a798865733c: independent real watchdog-backed 50/50 CPU/GPU subcycles followed by qualification-only thermal frames; CPU preempted exactly at 95 C 5/5 and GPU immediately at 87 C; both restored to firmware.",
+    "productionRaceAudit": "CODE/CI PASS for mapped deterministic races; M8B representative-load and M8C thermal-preemption physical contexts are closed. WatchdogRecoveryValidated and production policy promotion remain a separate explicit post-M8 gate.",
     "realOvertemperatureRequired": false,
     "qualificationFanLevel": "50/50 equal-only",
     "physicalAbortLimits": "M8A closed with CPU raw threshold 95 C requiring 5 unique consecutive fresh samples, CPU >=99 C immediate hard abort, GPU >=82 C immediate physical abort. M8B must version its write-capable physical boundaries before execution.",
@@ -2534,9 +2534,9 @@
       }
     },
     "m8c": {
-      "status": "ATTEMPT2_PHYSICAL_EXECUTION_AUTHORIZED_AFTER_EC_TRANSIENT_HARDENING_CI_828",
-      "physicalPassed": false,
-      "physicalExecutionAuthorized": true,
+      "status": "PHYSICAL_PASS_ATTEMPT2_CLOSED_EXECUTION_REBLOCKED",
+      "physicalPassed": true,
+      "physicalExecutionAuthorized": false,
       "requiresM8BPhysicalPass": true,
       "realOvertemperatureRequired": false,
       "syntheticSelfTestMode": "--8c40-m8c-self-test",
@@ -2551,7 +2551,7 @@
         "inFlightApply": "thermal handoff must cancel an in-flight ApplyAsync and end in firmware authority"
       },
       "physicalHarnessPrepared": true,
-      "physicalPrerequisite": "M8B physical PASS remains satisfied. M8C attempt 2 is explicitly authorized after attempt-1 evidence review and bounded EC tach-read transient hardening passed full CI #828.",
+      "physicalPrerequisite": "M8B physical PASS is satisfied and M8C attempt 2 completed PHYSICAL PASS; no further M8C physical execution is authorized by the closed profile.",
       "automaticPolicyEnabled": false,
       "watchdogRecoveryValidated": false,
       "syntheticCodeCi": {
@@ -2569,9 +2569,9 @@
         "note": "Initial build run #731 found a compile-only profile-access error in the new synthetic helper. The helper was corrected to use Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount; run #737 passed the full workflow. No hardware path was executed."
       },
       "physicalControllerPrepared": true,
-      "physicalControllerStatus": "CODE_CI_PASS_ATTEMPT2_PHYSICAL_AUTHORIZED",
+      "physicalControllerStatus": "PHYSICAL_PASS_CLOSED_EXECUTION_BLOCKED",
       "physicalControllerType": "Hp8C40M8CPhysicalThermalPreemptionQualificationTest",
-      "physicalControllerAuthorizationConstant": true,
+      "physicalControllerAuthorizationConstant": false,
       "physicalControllerToken": "8C40-M8C-THERMAL50",
       "physicalControllerSubcycles": [
         "cpu",
@@ -2579,7 +2579,7 @@
       ],
       "parentContinueMarker": "M8C-CONTINUE",
       "parentHandoff": "M8C_READY_BEFORE_INJECTION",
-      "physicalHarnessStatus": "CODE_CI_PASS_ATTEMPT2_PHYSICAL_AUTHORIZED_AUTOPACKAGING",
+      "physicalHarnessStatus": "PHYSICAL_PASS_CLOSED_EXECUTION_BLOCKED_AUTOPACKAGING_RETAINED",
       "physicalHarnessScript": "scripts/test-8c40-load-thermal-m8c.ps1",
       "physicalHarnessInvariantScript": "scripts/test-8c40-load-thermal-m8c-harness-invariants.ps1",
       "independentFailsafeScript": "scripts/watchdog-m8c-service-failsafe-8c40.ps1",
@@ -2587,7 +2587,7 @@
         "requiresM8BPhysicalPassed": true,
         "requiresM8CPhysicalExecutionAuthorized": true,
         "currentM8BPhysicalPassed": true,
-        "currentM8CPhysicalExecutionAuthorized": true
+        "currentM8CPhysicalExecutionAuthorized": false
       },
       "physicalSubcyclePlan": [
         "CPU: independent real 50/50 OWNED -> parent journal/failsafe proof -> five synthetic 95 C frames -> firmware handoff on 5/5",
@@ -2707,10 +2707,75 @@
           "finalJournalAbsent": true,
           "causalInterpretation": "PREPARE and WRITE_INTENT are present, COMMIT is absent, then RESTORE_BEGIN and RELEASE. Backend source order plus tach-snapshot IOException proves WMI dispatch occurred and 50/50 setpoint acknowledgement completed before dual-tach proof failed.",
           "retryDecision": "BLOCKED_PENDING_EC_TRANSIENT_HARDENING_CI"
+        },
+        {
+          "attempt": 2,
+          "date": "2026-09-30",
+          "evidenceHead": "f6d260355957571e06cf080c1af16a798865733c",
+          "qualificationEvidenceHead": "f6d260355957571e06cf080c1af16a798865733c",
+          "packagingHead": "f6d260355957571e06cf080c1af16a798865733c",
+          "result": "PASS",
+          "classification": "PHYSICAL_PASS_COMPLETE_EVIDENCE",
+          "evidenceArchive": "m8c-thermal-preemption_2026-09-30_172448.zip",
+          "evidenceZipSha256": "11daa282e1eeb5d42f3efa922c0dd7f697d1075ef80d7084db8759cc3b84e015",
+          "harnessResult": "PASS",
+          "failure": null,
+          "cpu": {
+            "controllerPid": 8224,
+            "controllerStartUtcTicks": null,
+            "controllerStartUtcTicksEvidence": "Required and causally validated by exact PID+creation-ticks journal/M4 matching in the packaged PASS evidence; the numeric tick value is not transcribed in the v1.5 continuity source and is intentionally not invented here.",
+            "applyCalls": 1,
+            "readySetpoint": "50/50",
+            "readyCpuRpm": 3636,
+            "readyGpuRpm": 3166,
+            "syntheticThermalEvidence": "effective CPU 95 C x5; Custom retained for 1/5 through 4/5; handoff to Firmware exactly on 5/5",
+            "m4CausalChain": "PREPARE -> WRITE_INTENT 50/50 -> COMMIT 50/50 -> RESTORE_BEGIN -> RELEASE",
+            "controllerResult": "PASS_CONTROLLER_LOCAL_CLOSURE",
+            "normalThermalHandoffCompleted": true,
+            "finalFirmwareOwned": true,
+            "finalFfProof": "2 consecutive FF/FF",
+            "cleanupFfProof": "2 consecutive FF/FF"
+          },
+          "gpu": {
+            "controllerPid": 23848,
+            "controllerStartUtcTicks": null,
+            "controllerStartUtcTicksEvidence": "Required and causally validated by exact PID+creation-ticks journal/M4 matching in the packaged PASS evidence; the numeric tick value is not transcribed in the v1.5 continuity source and is intentionally not invented here.",
+            "applyCalls": 1,
+            "readySetpoint": "50/50",
+            "readyCpuRpm": 3802,
+            "readyGpuRpm": 3564,
+            "syntheticThermalEvidence": "GPU 87 C x1; immediate handoff to Firmware",
+            "m4CausalChain": "PREPARE -> WRITE_INTENT 50/50 -> COMMIT 50/50 -> RESTORE_BEGIN -> RELEASE",
+            "controllerResult": "PASS_CONTROLLER_LOCAL_CLOSURE",
+            "normalThermalHandoffCompleted": true,
+            "finalFirmwareOwned": true,
+            "finalFfProof": "2 consecutive FF/FF",
+            "cleanupFfProof": "2 consecutive FF/FF"
+          },
+          "failsafeArmed": true,
+          "failsafeTakeover": false,
+          "finalJournalAbsent": true,
+          "finalFirmwareProofPass": true,
+          "finalServiceBaselinePass": true,
+          "finalService": {
+            "state": "Stopped",
+            "startMode": "Manual",
+            "processId": 0,
+            "account": "LocalSystem",
+            "retainedLease": false
+          },
+          "transientEcToleranceActivated": false,
+          "transientEcTolerancePhysicalInterpretation": "Not exercised during attempt 2; bounded behavior remains validated by deterministic CI #828.",
+          "hashes": {
+            "cpuResultSha256": "58a02b86fac50a14fc363d2e64e0ef549a1eed49970d965bed63c06a86bd578e",
+            "gpuResultSha256": "2801eb936e67d07b742796b0e2896801f5d193999aff62f4c00ae584941d031d",
+            "harnessSummarySha256": "bd479690e6db303dcd394b89a41df3b98eb4d0eeea8f4a48d84610e36f4c5604",
+            "packageManifestSha256": "90284460c9fbb31d7c12dc5a38ae961e25cbfbb2bcbee06f3d891be6f8a36bc0"
+          }
         }
       ],
       "evidencePackaging": {
-        "status": "CODE_CI_PASS_RETRY_BLOCKED",
+        "status": "CODE_CI_PASS_PHYSICAL_PASS_EVIDENCE_PACKAGED",
         "automaticForFutureHarnessRuns": true,
         "helperScript": "scripts/package-latest-m8c-evidence.ps1",
         "behavior": [
@@ -2742,7 +2807,7 @@
         }
       },
       "ecTransientHardening": {
-        "status": "CODE_CI_PASS_ATTEMPT2_PHYSICAL_AUTHORIZED",
+        "status": "CODE_CI_PASS_M8C_PHYSICAL_PASS_TRANSIENT_NOT_EXERCISED_IN_ATTEMPT2",
         "evidenceAttempt": 1,
         "evidenceHead": "7d247b2580688af60e1f9cf9144b48f831178a9e",
         "purpose": "Tolerate only a very small bounded number of fully exhausted EC control-state snapshot failures during post-write tachometer acknowledgement, while keeping the watchdog journal WRITE_ARMED and forbidding Commit until a successful ownership/guard/dual-tach proof is obtained.",
@@ -2751,7 +2816,7 @@
         "commitOnReadFailure": false,
         "controlBehaviorScope": "Only the post-write tachometer acknowledgement loop changes; setpoint/ownership/guard validation, thermal limits, command envelope, watchdog order, and restore behavior remain unchanged.",
         "cleanupProof": "Parent final/cleanup evidence now samples up to 6 independent narrow setpoint probes and requires 2 consecutive FF/FF; every sample is persisted to JSON.",
-        "physicalExecutionAuthorized": true,
+        "physicalExecutionAuthorized": false,
         "ci": {
           "result": "PASS",
           "commit": "ac036a246f0bb4703bf9b346658d191b9d507de5",
@@ -2795,7 +2860,24 @@
           "any failsafe takeover invalidates PASS",
           "WatchdogRecoveryValidated remains false",
           "automatic/adaptive policy remains OFF"
-        ]
+        ],
+        "completed": true,
+        "result": "PASS",
+        "attemptHead": "f6d260355957571e06cf080c1af16a798865733c",
+        "executionNowAuthorized": false,
+        "evidenceArchive": "m8c-thermal-preemption_2026-09-30_172448.zip",
+        "evidenceZipSha256": "11daa282e1eeb5d42f3efa922c0dd7f697d1075ef80d7084db8759cc3b84e015"
+      },
+      "formalClosure": {
+        "date": "2026-09-30",
+        "evidenceHead": "f6d260355957571e06cf080c1af16a798865733c",
+        "physicalPassed": true,
+        "physicalExecutionAuthorized": false,
+        "compileTimePhysicalGateClosed": true,
+        "watchdogRecoveryValidated": false,
+        "automaticPolicyEnabled": false,
+        "controlEnabledByDefault": false,
+        "note": "Formal repository closure records the complete attempt-2 PASS and re-closes all M8C physical execution gates. Exact attempt-2 numeric controller creation ticks are not transcribed in the available v1.5 continuity source; they are required/validated by the packaged harness/journal/M4 identity checks and are not fabricated here."
       }
     },
     "productionRaceAuditCodeCi": {
@@ -2818,7 +2900,7 @@
       "configurationPurpose": "shadow-only",
       "exampleAuthorizedForProduction": false,
       "hardwareWriteCapable": false,
-      "runtimeHardwareIntegration": "DISCONNECTED_PENDING_M8_PHYSICAL_CLOSURE",
+      "runtimeHardwareIntegration": "DISCONNECTED_PENDING_POST_M8_PROMOTION_AND_POLICY_INTEGRATION_GATE",
       "guiIntegrated": false,
       "backendIntegrated": false,
       "watchdogIntegrated": false,
@@ -2840,6 +2922,6 @@
         "physicalExecution": false
       }
     },
-    "m8bAuthorizationScope": "M8B retry 5 physical execution authorized only through the versioned M8B harness after native tracked-child ExitCode hardening; M8C remains blocked."
+    "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   }
 }

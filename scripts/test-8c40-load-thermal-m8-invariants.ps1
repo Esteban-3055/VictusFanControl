@@ -51,6 +51,9 @@ Assert-True ([bool]$profile.lifecycle.modernStandbyM6PhysicalPassed) 'M8 require
 Assert-True ([bool]$profile.lifecycle.hibernationM7PhysicalPassed) 'M8 requires M7 physical PASS.'
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M8 preparation must not set WatchdogRecoveryValidated=true.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M8 preparation must not enable automatic control by default.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8 formal closure must record M8C physical PASS.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8 formal closure must re-block M8C physical execution.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M8 closure must keep automatic/adaptive policy OFF.'
 
 # Fan command envelope must not move.
 Assert-Equal $profile.control.validatedMinimumLevel 10 'M8 minimum fan level must remain 10.'

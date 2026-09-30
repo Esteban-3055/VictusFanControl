@@ -16,15 +16,16 @@ public enum Hp8C40M8CPhysicalCase
 }
 
 /// <summary>
-/// Prepared-but-blocked M8C physical thermal-preemption controller.
+/// Closed M8C physical thermal-preemption qualification controller.
 ///
-/// The complete real-hardware sequence is compiled so it can be reviewed and
-/// tested statically before M8B closes, but PhysicalExecutionAuthorized remains
-/// false until a later explicit commit made from real M8B PASS evidence.
+/// The real-hardware sequence is retained for audit/regression, but
+/// PhysicalExecutionAuthorized is permanently re-closed after M8C attempt 2
+/// produced complete physical PASS evidence. Any future hardware execution
+/// requires a new explicit qualification gate and commit.
 /// </summary>
 public static class Hp8C40M8CPhysicalThermalPreemptionQualificationTest
 {
-    public static readonly bool PhysicalExecutionAuthorized = true;
+    public static readonly bool PhysicalExecutionAuthorized = false;
     public const string RequiredToken = "8C40-M8C-THERMAL50";
     public const int QualificationLevel = 50;
 
@@ -78,7 +79,7 @@ public static class Hp8C40M8CPhysicalThermalPreemptionQualificationTest
     {
         // This authorization test MUST remain before every hardware identity,
         // PawnIO, watchdog, WMI or EC construction. It is the compile-time
-        // execution barrier explicitly opened for one M8C attempt-2 qualification after bounded EC-transient hardening CI PASS.
+        // execution barrier re-closed after M8C attempt-2 physical PASS; historical route retained only for audit/regression.
         if (!PhysicalExecutionAuthorized)
         {
             Console.Error.WriteLine(
