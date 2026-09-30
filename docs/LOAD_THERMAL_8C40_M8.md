@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A ATTEMPT 1 FAIL_CLOSED / NO-WRITE. FIVE-SAMPLE CPU THERMAL CONFIRMATION HARDENING CODE/CI PASS / PHYSICAL RETRY PENDING. M8B/M8C REMAIN BLOCKED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B CODE/SPEC PREPARATION AUTHORIZED; M8B PHYSICAL EXECUTION AND M8C REMAIN BLOCKED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -369,11 +369,50 @@ existing M6/M7/M8/SafetyGate/coordinator/BIOS/backend regressions.
 During review before physical execution, the initial M8A warm-up sample was hardened: the first
 `HardwareTelemetryReader` snapshot exists only to prime differential CPU power/load counters
 and may be incomplete by design. It is now excluded from representative-load/SafetyGate
-qualification while still enforcing the real 90 C CPU / 82 C GPU physical abort boundary.
+qualification while still enforcing the current immediate 99 C CPU / 82 C GPU physical abort boundary.
 GitHub Actions #702 failed closed only because the first static invariant edit had a PowerShell
 string-termination syntax error; no physical M8A execution occurred in that run. The corrected
 invariant and warm-up behavior passed #703.
 
+
+## 7A.2. M8A physical attempt 2 - PASS / NO-WRITE
+
+On 2026-09-29, physical M8A attempt 2 ran at HEAD
+`90e3786da6addd43c1e6a733d7389119729e7192` after the five-sample CPU
+thermal-confirmation hardening.
+
+The versioned M8 no-write preflight passed again on the same HEAD: exact HP 8C40 rev 63.43 /
+Victus 15-fa1xxx / SKU 9D0R1LA#AKH / BIOS F.18, AC online, battery 100%, M4
+Manual/stopped, warnings-as-errors build 0 warnings / 0 errors, 3/3 accepted telemetry samples,
+14/14 physical-core context, zero Intel/EC/NVML recoveries and two consecutive FF/FF ownership
+samples.
+
+The 60-second representative-load window then completed successfully:
+
+- **59/60** samples satisfied the representative-load predicate;
+- maximum consecutive representative streak: **58** (required >=10);
+- effective CPU maximum: **98 C**;
+- CPU package maximum: **97 C**;
+- hottest-core maximum: **98 C**;
+- exactly **3** samples reached >=95 C and the maximum consecutive >=95 C streak was **2/5**;
+- the observed high sequence was 98 C (1/5), 95 C (2/5), then 82 C reset; later 97 C
+  (1/5), then 79 C reset;
+- no CPU sample reached the 99 C immediate hard boundary;
+- GPU maximum was **77 C**, below the 82 C M8A physical abort;
+- no effective thermal emergency was confirmed.
+
+The representative-load requirement passed with `59/60` and `58` consecutive samples.
+The final independent no-mutation closure also passed: retained watchdog journal absent, M4
+service still Manual/stopped and two independent final EC probes both observed FF/FF. M8A made
+no fan write, firmware restore or watchdog lease.
+
+This result physically validates the five-unique-reading CPU transient filter on the exact
+target for the observed gaming workload: short 95-98 C Turbo excursions did not persist long
+enough to qualify as sustained thermal emergency. M8A is therefore **CODE/CI/PHYSICAL PASS**.
+
+M8B code/spec preparation is now authorized. M8B physical execution is still blocked until a
+versioned watchdog-backed 50/50 load harness, independent delayed failsafe, CI PASS and explicit
+pre-test review are complete.
 
 ### M8A five-sample thermal-confirmation CI
 
@@ -388,8 +427,8 @@ the old literal wording `CPU emergency: effective CPU >= 95 C` after the documen
 refined to distinguish the raw 95 C threshold from the five-sample effective handoff. The
 invariant wording was aligned without changing runtime behavior; no physical execution occurred.
 
-The next authorized physical step is an M8A NO-WRITE retry using the versioned harness. M8B and
-M8C remain blocked until that retry is reviewed and explicitly closed.
+M8A physical retry subsequently passed and is recorded above. M8B code/spec preparation is now
+allowed; M8B physical execution and M8C remain blocked pending their own versioned harness/CI gates.
 
 ## 8. Physical harness safety and evidence
 

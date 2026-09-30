@@ -20,6 +20,9 @@ function Assert-Equal($Actual,$Expected,[string]$Message){
 function Assert-False([bool]$Value,[string]$Message){
     if($Value){throw $Message}
 }
+function Assert-True([bool]$Value,[string]$Message){
+    if(-not $Value){throw $Message}
+}
 
 Assert-Contains $script 'M8A REPRESENTATIVE-LOAD ADMISSION (NO-WRITE)' 'M8A script identity missing.'
 Assert-Contains $script 'test-8c40-load-thermal-m8-preflight.ps1' 'M8A must rerun the versioned M8 no-write preflight.'
@@ -109,7 +112,15 @@ Assert-Contains $cli '--8c40-m8a-result-path' 'CLI M8A result path missing.'
 Assert-Contains $cli '--8c40-m8a-self-test' 'CLI M8A classifier self-test missing.'
 
 Assert-Equal $profile.loadThermalM8Qualification.representativeLoadHarnessScript 'scripts/test-8c40-load-thermal-m8a.ps1' 'M8A profile harness path changed.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8A code preparation must not mark physical PASS.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8A physical PASS record must remain closed after attempt 2.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8A physical PASS must authorize only M8B code/spec preparation.'
+Assert-Equal $profile.loadThermalM8Qualification.m8a.physicalPass.evidenceHead '90e3786da6addd43c1e6a733d7389119729e7192' 'M8A physical PASS evidence HEAD changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8a.physicalPass.representativeSamples 59 'M8A physical PASS representative sample count changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8a.physicalPass.maximumConsecutiveRepresentative 58 'M8A physical PASS representative streak changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8a.physicalPass.cpuEffectiveMaximumC 98 'M8A physical PASS CPU maximum changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8a.physicalPass.cpuMaximumConsecutive95C 2 'M8A physical PASS CPU high streak changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8a.physicalPass.gpuMaximumC 77 'M8A physical PASS GPU maximum changed.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8a.physicalPass.thermalEmergencyObserved) 'M8A physical PASS must not contain a confirmed thermal emergency.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.watchdogRecoveryValidated) 'M8A must not promote watchdog recovery.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M8A must not enable automatic policy.'
 
@@ -122,5 +133,8 @@ Assert-Contains $doc 'CPU load >= 5%' 'M8A CPU-load threshold must be versioned 
 Assert-Contains $doc 'CPU package power >= 15 W' 'M8A CPU-power threshold must be versioned in docs.'
 Assert-Contains $doc 'five consecutive' 'M8A CPU high-temperature confirmation count must be versioned in docs.'
 Assert-Contains $doc '99 C' 'M8A immediate CPU hard boundary must be versioned in docs.'
+Assert-Contains $doc '59/60' 'M8A physical PASS representative count must be documented.'
+Assert-Contains $doc 'maximum consecutive >=95 C streak was **2/5**' 'M8A physical PASS thermal streak must be documented.'
+Assert-Contains $doc 'M8A is therefore **CODE/CI/PHYSICAL PASS**' 'M8A physical closure must be documented.'
 
 Write-Host 'HP 8C40 M8A representative-load no-write harness invariant self-test: PASS' -ForegroundColor Green

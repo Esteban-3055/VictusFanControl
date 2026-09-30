@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-attempt1-failclosed-thermal-confirmation-code-ci-pass-retry-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-code-preparation-authorized-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1907,17 +1907,17 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_ATTEMPT1_FAIL_CLOSED_THERMAL_CONFIRMATION_CODE_CI_PASS_RETRY_PENDING_M8B_M8C_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_CODE_PREPARATION_AUTHORIZED_M8C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
-    "representativeLoadGate": "M8A attempt 1 FAIL_CLOSED / five-sample CPU thermal confirmation CODE/CI PASS / physical retry pending",
-    "watchdogBackedLoadGate": "M8B pending",
+    "representativeLoadGate": "M8A CODE/CI/PHYSICAL PASS",
+    "watchdogBackedLoadGate": "M8B code/spec preparation authorized; physical harness not yet authorized",
     "thermalPreemptionGate": "M8C pending",
     "productionRaceAudit": "pending",
     "realOvertemperatureRequired": false,
     "qualificationFanLevel": "50/50 equal-only",
-    "physicalAbortLimits": "M8A: CPU raw threshold 95 C requires 5 unique consecutive fresh samples; CPU >=99 C immediate hard abort; GPU >=82 C immediate physical abort. M8B/M8C write-capable limits remain blocked pending M8A closure.",
+    "physicalAbortLimits": "M8A closed with CPU raw threshold 95 C requiring 5 unique consecutive fresh samples, CPU >=99 C immediate hard abort, GPU >=82 C immediate physical abort. M8B must version its write-capable physical boundaries before execution.",
     "noWritePreflightScript": "scripts/test-8c40-load-thermal-m8-preflight.ps1",
     "physicalHarnessScript": null,
     "preparationCi": {
@@ -2009,8 +2009,8 @@
     "representativeLoadHarnessScript": "scripts/test-8c40-load-thermal-m8a.ps1",
     "representativeLoadInvariantScript": "scripts/test-8c40-load-thermal-m8a-invariants.ps1",
     "m8a": {
-      "status": "ATTEMPT1_FAIL_CLOSED_THERMAL_CONFIRMATION_CODE_CI_PASS_RETRY_PENDING",
-      "physicalPassed": false,
+      "status": "CODE_CI_PHYSICAL_PASS",
+      "physicalPassed": true,
       "writeCapable": false,
       "cliMode": "--8c40-m8a-representative-load",
       "selfTestMode": "--8c40-m8a-self-test",
@@ -2030,7 +2030,7 @@
         "cpuHardAbortC": 99,
         "thermalEvidence": "persist package/coreMax/effective temperatures, streak, hard-boundary flag and full sample before thermal FAIL_CLOSED"
       },
-      "m8bAuthorized": false,
+      "m8bAuthorized": true,
       "preparationCi": {
         "result": "PASS",
         "finalCommit": "c50510fc627e22d48a762d24c378bd89c724b7d2",
@@ -2068,10 +2068,37 @@
           "fanWriteAttempted": false,
           "firmwareRestoreAttempted": false,
           "watchdogLeaseAttempted": false
+        },
+        {
+          "attempt": 2,
+          "date": "2026-09-29",
+          "evidenceHead": "90e3786da6addd43c1e6a733d7389119729e7192",
+          "result": "PASS_NO_WRITE",
+          "evidencePath": "logs/m8a-representative-load_2026-09-29_234435/m8a-result.json",
+          "preflight": "PASS on same HEAD; exact HP 8C40 target; AC online; battery 100%; M4 Manual/Stopped; build 0 warnings/0 errors; 3/3 accepted telemetry samples; 14/14 core context; Intel/EC/NVML recoveries 0; initial FF/FF baseline twice",
+          "representativeWindow": "59/60 representative samples; maximum consecutive representative streak 58; requirement 45/60 and >=10 consecutive",
+          "thermalEvidence": {
+            "cpuEffectiveMaximumC": 98,
+            "cpuPackageMaximumC": 97,
+            "cpuCoreMaximumC": 98,
+            "cpuSamplesAtOrAbove95C": 3,
+            "cpuMaximumConsecutive95C": 2,
+            "cpuHardEmergencySamplesAtOrAbove99C": 0,
+            "gpuMaximumC": 77,
+            "gpuSamplesAtOrAbove82C": 0,
+            "confirmedThermalEmergency": false,
+            "observedHighCpuSequence": "sample 3=98 C (1/5), sample 4=95 C (2/5), sample 5=82 C reset; sample 7=97 C (1/5), sample 8=79 C reset"
+          },
+          "loadEvidence": "GPU representative predicate met in 59/60 samples overall window; GPU power reached 70.4 W and load reached 100%; CPU activity remained material",
+          "finalIndependentClosure": "PASS: journal absent, M4 Manual/Stopped, FF/FF twice",
+          "fanWriteAttempted": false,
+          "firmwareRestoreAttempted": false,
+          "watchdogLeaseAttempted": false,
+          "m8bPhysicalExecutionAuthorized": false
         }
       ],
       "thermalConfirmationHardening": {
-        "status": "CODE_CI_PASS_PHYSICAL_RETRY_PENDING",
+        "status": "CODE_CI_PHYSICAL_PASS",
         "rawCpuThresholdC": 95,
         "requiredConsecutiveUniqueSamples": 5,
         "cpuHardImmediateC": 99,
@@ -2100,6 +2127,26 @@
           "hpBackendSelfTest": true,
           "note": "Run 705 failed closed only because the M8 documentation invariant still expected the pre-hardening phrase 'CPU emergency: effective CPU >= 95 C'. The invariant wording was aligned; run 706 passed. No physical execution occurred in either CI run."
         }
+      },
+      "m8bAuthorizationScope": "code/spec preparation only; physical M8B requires versioned harness, CI PASS, independent failsafe and explicit review",
+      "physicalPass": {
+        "result": "PASS_NO_WRITE",
+        "date": "2026-09-29",
+        "evidenceHead": "90e3786da6addd43c1e6a733d7389119729e7192",
+        "evidencePath": "logs/m8a-representative-load_2026-09-29_234435/m8a-result.json",
+        "representativeSamples": 59,
+        "totalSamples": 60,
+        "maximumConsecutiveRepresentative": 58,
+        "cpuEffectiveMaximumC": 98,
+        "cpuPackageMaximumC": 97,
+        "cpuCoreMaximumC": 98,
+        "cpuSamplesAtOrAbove95C": 3,
+        "cpuMaximumConsecutive95C": 2,
+        "cpuHardEmergencySamples": 0,
+        "gpuMaximumC": 77,
+        "thermalEmergencyObserved": false,
+        "finalClosure": "PASS: journal absent / M4 Manual-stopped / two independent FF/FF",
+        "conclusion": "short 95-98 C CPU spikes were observed but never reached the five-unique-sample persistence criterion; representative gaming load remained thermally bounded by the versioned M8A contract"
       }
     }
   }
