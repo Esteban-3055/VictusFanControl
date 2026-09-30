@@ -24,7 +24,7 @@ public enum Hp8C40M8CPhysicalCase
 /// </summary>
 public static class Hp8C40M8CPhysicalThermalPreemptionQualificationTest
 {
-    public const bool PhysicalExecutionAuthorized = false;
+    public static readonly bool PhysicalExecutionAuthorized = false;
     public const string RequiredToken = "8C40-M8C-THERMAL50";
     public const int QualificationLevel = 50;
 
