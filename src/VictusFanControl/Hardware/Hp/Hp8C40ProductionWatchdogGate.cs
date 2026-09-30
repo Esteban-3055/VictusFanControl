@@ -15,10 +15,17 @@ namespace VictusFanControl.Hardware.Hp;
 public static class Hp8C40ProductionWatchdogGate
 {
     public const string GateId = "M9";
+    public const string M9CPhysicalQualificationToken = "8C40-M9C-PRODUCTION30";
 
-    // M9A prepares wiring only. Do not set true until the separately versioned
-    // M9 physical production-path gates have passed and the profile is promoted.
+    private static readonly AsyncLocal<int> M9CQualificationScopeDepth = new();
+
+    // M9A prepares production wiring only. Do not set true until the separately
+    // versioned M9 physical gates have passed and the profile is promoted.
     public static readonly bool ProductionConstructionAuthorized = false;
+
+    // Separate temporary construction gate for one versioned M9C physical
+    // qualification. It remains false until M9B evidence is physically closed.
+    public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;
 
     public static bool IsProductionConstructionAuthorizedFor(
         HardwareIdentity hardware,
@@ -59,11 +66,102 @@ public static class Hp8C40ProductionWatchdogGate
     public static void RequireProductionConstructionAuthorized(
         HardwareIdentity hardware)
     {
+        ArgumentNullException.ThrowIfNull(hardware);
+
+        // M9C may temporarily traverse the exact same factory/public constructor
+        // only inside its separately authorized AsyncLocal construction scope.
+        // The scope is disposed before Custom admission or any fan write.
+        if (M9CQualificationScopeDepth.Value == 1)
+        {
+            if (!Hp8C40TargetProfile.Matches(
+                    hardware,
+                    out var qualificationTargetReason))
+            {
+                throw new NotSupportedException(
+                    $"M9C exact-target refusal: {qualificationTargetReason}");
+            }
+
+            return;
+        }
+
         if (!IsProductionConstructionAuthorizedFor(
                 hardware,
                 out var reason))
         {
             throw new NotSupportedException(reason);
+        }
+    }
+
+    public static IDisposable EnterM9CPhysicalQualificationConstructionScope(
+        HardwareIdentity hardware,
+        string qualificationToken)
+    {
+        ArgumentNullException.ThrowIfNull(hardware);
+
+        if (!Hp8C40TargetProfile.Matches(
+                hardware,
+                out var targetReason))
+        {
+            throw new NotSupportedException(
+                $"M9C exact-target refusal: {targetReason}");
+        }
+
+        if (!string.Equals(
+                qualificationToken,
+                M9CPhysicalQualificationToken,
+                StringComparison.Ordinal))
+        {
+            throw new UnauthorizedAccessException(
+                $"M9C construction requires exact token '{M9CPhysicalQualificationToken}'.");
+        }
+
+        if (!M9CPhysicalQualificationConstructionAuthorized)
+        {
+            throw new NotSupportedException(
+                "M9C physical qualification construction is compile-time blocked.");
+        }
+
+        if (ProductionConstructionAuthorized ||
+            Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated)
+        {
+            throw new InvalidOperationException(
+                "M9C qualification scope is forbidden while/after production watchdog promotion is active.");
+        }
+
+        if (M9CQualificationScopeDepth.Value != 0)
+        {
+            throw new InvalidOperationException(
+                "Nested M9C production-watchdog construction scopes are forbidden.");
+        }
+
+        M9CQualificationScopeDepth.Value = 1;
+        return new M9CConstructionScope();
+    }
+
+    internal static bool IsM9CPhysicalQualificationScopeActive =>
+        M9CQualificationScopeDepth.Value == 1;
+
+    private sealed class M9CConstructionScope : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+
+            if (M9CQualificationScopeDepth.Value != 1)
+            {
+                M9CQualificationScopeDepth.Value = 0;
+                throw new InvalidOperationException(
+                    "M9C construction scope depth was corrupted.");
+            }
+
+            M9CQualificationScopeDepth.Value = 0;
         }
     }
 

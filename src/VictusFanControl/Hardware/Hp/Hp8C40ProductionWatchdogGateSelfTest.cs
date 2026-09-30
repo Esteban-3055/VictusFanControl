@@ -14,6 +14,7 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
             output,
             "M9 production watchdog gate is closed by default",
             !Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized &&
+            !Hp8C40ProductionWatchdogGate.M9CPhysicalQualificationConstructionAuthorized &&
             !Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated);
 
         var authorized =
@@ -65,6 +66,32 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
             "factory rejects supplied 8C40 production lease before backend/hardware construction",
             factoryBlocked &&
             fakeLease.Calls == 0);
+
+        var m9cBlocked = false;
+
+        try
+        {
+            using var scope =
+                Hp8C40ProductionWatchdogGate
+                    .EnterM9CPhysicalQualificationConstructionScope(
+                        exact,
+                        Hp8C40ProductionWatchdogGate.M9CPhysicalQualificationToken);
+
+            _ = scope;
+        }
+        catch (NotSupportedException ex)
+            when (ex.Message.Contains(
+                "M9C",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            m9cBlocked = true;
+        }
+
+        failures += Report(
+            output,
+            "M9C temporary construction scope is compile-time blocked before physical authorization",
+            m9cBlocked &&
+            !Hp8C40ProductionWatchdogGate.IsM9CPhysicalQualificationScopeActive);
 
         var wrongTarget =
             exact with

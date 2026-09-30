@@ -31,6 +31,11 @@ public sealed class CliOptions
     public string? Hp8C40M8CPhysicalReadyPath { get; private set; }
     public string? Hp8C40M8CPhysicalContinuePath { get; private set; }
     public string? Hp8C40M8CPhysicalResultPath { get; private set; }
+    public bool Hp8C40M9CProductionSmoke { get; private set; }
+    public string? Hp8C40M9CToken { get; private set; }
+    public string? Hp8C40M9CReadyPath { get; private set; }
+    public string? Hp8C40M9CContinuePath { get; private set; }
+    public string? Hp8C40M9CResultPath { get; private set; }
     public bool RestoreHpAuto { get; private set; }
     public bool SkipEcSnapshots { get; private set; }
     public bool FirstFanWriteTest { get; private set; }
@@ -210,6 +215,29 @@ public sealed class CliOptions
 
                 case "--8c40-m8c-physical-result-path":
                     options.Hp8C40M8CPhysicalResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m9c-production-smoke":
+                    options.Hp8C40M9CProductionSmoke = true;
+                    break;
+
+                case "--8c40-m9c-token":
+                    options.Hp8C40M9CToken = ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m9c-ready-path":
+                    options.Hp8C40M9CReadyPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m9c-continue-path":
+                    options.Hp8C40M9CContinuePath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m9c-result-path":
+                    options.Hp8C40M9CResultPath =
                         Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
@@ -445,6 +473,7 @@ public sealed class CliOptions
             (options.Hp8C40M8CSelfTest ? 1 : 0) +
             (options.Hp8C40M8BWatchdogLoad ? 1 : 0) +
             (options.Hp8C40M8CPhysicalThermal ? 1 : 0) +
+            (options.Hp8C40M9CProductionSmoke ? 1 : 0) +
             (options.RestoreHpAuto ? 1 : 0) +
             (options.FirstFanWriteTest ? 1 : 0) +
             (options.IntegratedCoordinatorTest ? 1 : 0) +
@@ -540,6 +569,26 @@ public sealed class CliOptions
         {
             throw new ArgumentException(
                 "--8c40-m8c-physical-thermal requires token, case, ready-path, continue-path and result-path.");
+        }
+
+        if ((options.Hp8C40M9CToken is not null ||
+             options.Hp8C40M9CReadyPath is not null ||
+             options.Hp8C40M9CContinuePath is not null ||
+             options.Hp8C40M9CResultPath is not null) &&
+            !options.Hp8C40M9CProductionSmoke)
+        {
+            throw new ArgumentException(
+                "--8c40-m9c-token/ready-path/continue-path/result-path are valid only with --8c40-m9c-production-smoke.");
+        }
+
+        if (options.Hp8C40M9CProductionSmoke &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40M9CToken) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M9CReadyPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M9CContinuePath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M9CResultPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-m9c-production-smoke requires token, ready-path, continue-path and result-path.");
         }
 
         if (options.SkipEcSnapshots && !options.RestoreHpAuto)
@@ -722,6 +771,11 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-m8c-physical-ready-path <path>     Required real-OWNED pre-injection marker.");
         Console.WriteLine("  --8c40-m8c-physical-continue-path <path>  Required parent verification handoff marker.");
         Console.WriteLine("  --8c40-m8c-physical-result-path <path>    Required durable controller evidence.");
+        Console.WriteLine("  --8c40-m9c-production-smoke       HARD-BLOCKED M9C: one watchdog-backed 30/30 through normal factory/public backend construction.");
+        Console.WriteLine("  --8c40-m9c-token <token>          Required exact token: 8C40-M9C-PRODUCTION30.");
+        Console.WriteLine("  --8c40-m9c-ready-path <path>      READY marker after real 30/30 EC+tachs+watchdog COMMIT.");
+        Console.WriteLine("  --8c40-m9c-continue-path <path>   Parent continuation after journal/PID/failsafe proof.");
+        Console.WriteLine("  --8c40-m9c-result-path <path>     Durable M9C controller evidence.");
         Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");

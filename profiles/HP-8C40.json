@@ -56,7 +56,9 @@
     "watchdogM9CodeCiPassed": true,
     "watchdogM9NoWritePreflightPassed": false,
     "watchdogM9PhysicalPassed": false,
-    "watchdogM9BCodeCiPassed": true
+    "watchdogM9BCodeCiPassed": true,
+    "watchdogM9CCodePrepared": true,
+    "watchdogM9CCodeCiPassed": false
   },
   "control": {
     "enabledByDefault": false,
@@ -2930,7 +2932,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9A_CODE_CI_PASS_M9B_CODE_CI_PASS_READ_ONLY_AUTHORIZED_WRITE_BLOCKED",
+    "status": "M9A_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_M9C_CODE_PREPARED_CI_PENDING_WRITE_BLOCKED",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -3025,9 +3027,55 @@
       }
     },
     "m9c": {
-      "status": "NOT_AUTHORIZED",
-      "purpose": "bounded physical smoke through the normal production construction path only after M9B and separate authorization",
-      "physicalWriteAuthorized": false
+      "status": "CODE_PREPARED_CI_PENDING_WRITE_BLOCKED",
+      "purpose": "bounded 30/30 physical smoke through the exact normal HP factory + public backend construction path under a temporary M9C-only construction scope; full production promotion remains closed",
+      "controllerType": "Hp8C40M9CProductionPathQualificationTest",
+      "controllerCli": "--8c40-m9c-production-smoke",
+      "requiredToken": "8C40-M9C-PRODUCTION30",
+      "qualificationLevel": "30/30",
+      "physicalExecutionAuthorized": false,
+      "qualificationConstructionAuthorized": false,
+      "requiresM9BNoWritePreflightPass": true,
+      "requiresM9BCodeCiPass": true,
+      "productionConstructionAuthorized": false,
+      "watchdogRecoveryValidated": false,
+      "automaticPolicyEnabled": false,
+      "controlEnabledByDefault": false,
+      "constructionPath": [
+        "exact HardwareIdentity",
+        "temporary M9C qualification construction scope",
+        "NamedPipeFanControlWatchdogLeaseClient on VictusFanControl.Watchdog.M4.8C40.v2",
+        "HpFanControlBackendFactory.Create",
+        "public Hp8C40FanControlBackend constructor",
+        "FanControlCoordinator",
+        "SafetyGate",
+        "one ApplyAsync 30/30",
+        "EC + dual tach ACK + watchdog COMMIT",
+        "bounded supervision without WMI re-send",
+        "normal RESTORE_BEGIN -> local FF/FF -> RELEASE"
+      ],
+      "controllerSafety": [
+        "authorization barrier before Administrator/SMBIOS/PawnIO/WMI/EC construction",
+        "exact target only",
+        "AC online and battery >=20%",
+        "three consecutive fresh complete SafetyGate-permitted bounded-load snapshots before Custom",
+        "CPU physical abort >=90 C",
+        "GPU physical abort >=82 C",
+        "no asymmetric commands and no level 0",
+        "exactly one 30/30 ApplyAsync",
+        "parent continue required only after journal/PID/failsafe proof",
+        "five supervision frames, no repeated SetFanLevel",
+        "finally restore if authority remains Custom"
+      ],
+      "harnessStatus": "NOT_YET_ADDED",
+      "codeCi": {
+        "result": "PENDING",
+        "commit": null,
+        "runNumber": null,
+        "runId": null,
+        "physicalExecution": false
+      },
+      "physicalEvidence": null
     },
     "promotion": {
       "authorized": false,
@@ -3036,6 +3084,11 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Run the authorized versioned M9B read-only preflight on the exact target from this tracked branch/HEAD. Do not run M9C or enable production watchdog construction; M9C remains write-blocked until the M9B evidence is reviewed and formally recorded."
+    "nextStep": "Finish M9C code/harness preparation and same-HEAD CI while keeping M9B as the first required machine-side command. Do not authorize M9C until M9B has physically passed and its evidence is formally recorded.",
+    "m9d": {
+      "status": "DESIGN_PENDING_M9C",
+      "purpose": "focused full GUI/lifecycle last-mile regression after M9C; no authorization yet",
+      "physicalExecutionAuthorized": false
+    }
   }
 }

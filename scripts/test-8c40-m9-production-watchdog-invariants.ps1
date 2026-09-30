@@ -41,6 +41,7 @@ if([long]$profile.watchdogM9ProductionIntegration.m9a.codeCi.runId -ne 367784190
 
 foreach($needle in @(
     'public static readonly bool ProductionConstructionAuthorized = false;',
+    'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;',
     'WatchdogRecoveryValidated',
     'RequireProductionConstructionAuthorized',
     'CreateLeaseIfAuthorized',

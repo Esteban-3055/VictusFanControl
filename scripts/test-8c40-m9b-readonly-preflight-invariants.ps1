@@ -26,6 +26,8 @@ Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9B must keep M9 production construction blocked.'
 Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyExecutionAuthorized) 'M9B read-only execution authorization must remain recorded after code/CI closure.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.physicalWriteAuthorized) 'M9B must never authorize fan writes.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9B must keep M9C physical execution blocked.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9B must keep M9C construction blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed) 'M9B code/CI closure must not imply the physical read-only preflight already passed.'
 if([string]$profile.watchdogM9ProductionIntegration.m9b.codeCi.result -cne 'PASS'){throw 'M9B code/CI result must remain PASS.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9b.codeCi.commit -cne '2ec00f047943c46885a15ab96642ec7c69a1e6dd'){throw 'M9B code/CI evidence commit changed.'}

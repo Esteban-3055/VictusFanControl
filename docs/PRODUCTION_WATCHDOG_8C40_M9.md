@@ -207,3 +207,35 @@ evidence must not be treated as PASS.
 
 The packaging helper is host/file-only. It contains no EC/WMI/fan/service mutation,
 does not delete historical evidence and has its own deterministic CI self-test.
+
+
+## 7. M9C production-path smoke - advance code preparation
+
+M9C is now compiled in advance so M9B remains the next machine-side dependency.
+It is **not physically authorized**: the controller gate, the temporary
+construction gate and the profile write gate are all false.
+
+M9C deliberately does not instantiate `Hp8C40FanHardware` or
+`Hp8C40FanControlBackend` directly. A short-lived exact-target/token
+construction scope is entered only around the existing normal route:
+
+```text
+HpFanControlBackendFactory.Create(...)
+  -> public Hp8C40FanControlBackend(...)
+```
+
+The AsyncLocal construction scope is disposed and verified closed before
+`TryEnterCustomAsync`, PREPARE or any WMI write. Normal GUI production
+construction remains blocked by `WatchdogRecoveryValidated=false` and
+`ProductionConstructionAuthorized=false`.
+
+The future physical transaction is intentionally smaller than M8B: three
+consecutive fresh complete SafetyGate-permitted bounded-load frames, exactly
+one 30/30 ApplyAsync, parent journal/PID/failsafe proof, five supervision
+frames without command retransmission, then normal RESTORE_BEGIN -> FF/FF ->
+RELEASE. Qualification-only abort limits are CPU >=90 C and GPU >=82 C; the
+controller also refuses to hold 30/30 above 60 W CPU package or 75 W GPU power.
+These limits do not modify production SafetyGate thresholds.
+
+M9C cannot be opened until M9B has physically passed and its evidence is
+reviewed/committed. M9D remains a later full GUI/lifecycle last-mile regression.
