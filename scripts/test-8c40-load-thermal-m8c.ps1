@@ -80,19 +80,91 @@ function Read-8C40Setpoint {
 }
 
 function Assert-StableFirmwareOwned {
-    param([string]$Context)
+    param(
+        [string]$Context,
+        [string]$EvidencePath
+    )
 
-    $first=Read-8C40Setpoint
-    Start-Sleep -Milliseconds 75
-    $second=Read-8C40Setpoint
+    $maximumReads=6
+    $requiredConsecutive=2
+    $consecutive=0
+    $samples=@()
+    $passed=$false
 
-    Write-Host ("{0} EC 1/2: {1}" -f $Context,$first.Raw)
-    Write-Host ("{0} EC 2/2: {1}" -f $Context,$second.Raw)
+    for($read=1;$read -le $maximumReads;$read++){
+        try {
+            $sample=Read-8C40Setpoint
+            $matches=($sample.Cpu -eq 255 -and $sample.Gpu -eq 255)
 
-    if($first.Cpu -ne 255 -or $first.Gpu -ne 255 -or
-       $second.Cpu -ne 255 -or $second.Gpu -ne 255){
-        throw "$Context requires two consecutive independent FF/FF observations."
+            $samples+=@([pscustomobject]@{
+                read=$read
+                timestampUtc=(Get-Date).ToUniversalTime().ToString('O')
+                cpu=$sample.Cpu
+                gpu=$sample.Gpu
+                raw=$sample.Raw
+                matchesFirmwareAuto=$matches
+                error=$null
+            })
+
+            Write-Host ("{0} EC {1}/{2}: {3}" -f
+                $Context,$read,$maximumReads,$sample.Raw)
+
+            if($matches){
+                $consecutive++
+                if($consecutive -ge $requiredConsecutive){
+                    $passed=$true
+                    break
+                }
+            }
+            else {
+                $consecutive=0
+            }
+        }
+        catch {
+            $samples+=@([pscustomobject]@{
+                read=$read
+                timestampUtc=(Get-Date).ToUniversalTime().ToString('O')
+                cpu=$null
+                gpu=$null
+                raw=$null
+                matchesFirmwareAuto=$false
+                error=$_.Exception.Message
+            })
+
+            Write-Warning ("{0} EC {1}/{2} read failed: {3}" -f
+                $Context,$read,$maximumReads,$_.Exception.Message)
+            $consecutive=0
+        }
+
+        if($read -lt $maximumReads){
+            Start-Sleep -Milliseconds 100
+        }
     }
+
+    $proof=[ordered]@{
+        schemaVersion=1
+        gate='M8C-FF-PROOF'
+        context=$Context
+        requiredConsecutive=$requiredConsecutive
+        maximumReads=$maximumReads
+        passed=$passed
+        samples=$samples
+    }
+
+    if(-not [string]::IsNullOrWhiteSpace($EvidencePath)){
+        $proof | ConvertTo-Json -Depth 6 |
+            Set-Content -LiteralPath $EvidencePath -Encoding UTF8
+    }
+
+    if(-not $passed){
+        $observed=($samples | ForEach-Object {
+            if($_.error){"error"}else{"$($_.cpu)/$($_.gpu)"}
+        }) -join ', '
+
+        throw "$Context requires two consecutive independent FF/FF observations within $maximumReads reads. Observed: $observed"
+    }
+
+    return [pscustomobject]$proof
 }
 
 function Assert-ServiceBaseline {
@@ -491,7 +563,7 @@ function Run-M8CSubcycle {
         }
 
         Assert-CausalServiceLog -ControllerPid $controllerPid -LineBoundary $logBoundary
-        Assert-StableFirmwareOwned -Context "M8C $Case final"
+        [void](Assert-StableFirmwareOwned -Context "M8C $Case final" -EvidencePath (Join-Path $caseRoot 'm8c-final-ff-proof.json'))
 
         Stop-Service -Name $serviceName -Force
         $serviceStarted=$false
@@ -556,8 +628,12 @@ function Run-M8CSubcycle {
         }
 
         if(-not (Test-Path $journalPath)){
-            try { Assert-StableFirmwareOwned -Context "M8C $Case cleanup" }
-            catch { Write-Warning "M8C $Case cleanup FF/FF proof failed: $($_.Exception.Message)" }
+            try {
+                [void](Assert-StableFirmwareOwned -Context "M8C $Case cleanup" -EvidencePath (Join-Path $caseRoot 'm8c-cleanup-ff-proof.json'))
+            }
+            catch {
+                Write-Warning "M8C $Case cleanup FF/FF proof failed: $($_.Exception.Message)"
+            }
 
             try {
                 $svc=Get-Service -Name $serviceName -ErrorAction SilentlyContinue

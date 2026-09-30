@@ -63,7 +63,11 @@ foreach($needle in @(
     'failsafePid=',
     'failsafeLogPresent=',
     'package-latest-m8c-evidence.ps1',
-    'M8C automatic evidence package:'
+    'M8C automatic evidence package:',
+    'maximumReads=6',
+    'requiredConsecutive=2',
+    'm8c-cleanup-ff-proof.json',
+    'm8c-final-ff-proof.json'
 )){
     Assert-Contains $harness $needle ("M8C parent harness invariant missing: {0}" -f $needle)
 }
@@ -124,7 +128,9 @@ foreach($needle in @(
     'profile gate',
     'm8b.physicalPassed=true',
     'physicalExecutionAuthorized=false',
-    'M8C attempt 1 - FAIL_CLOSED before READY'
+    'M8C attempt 1 - FAIL_CLOSED before READY',
+    'M8C attempt-1 evidence review - real write reached, tach EC snapshot failed before Commit',
+    'at most **two** failed high-level control-state snapshots'
 )){
     Assert-Contains $doc $needle ("M8C parent harness documentation missing: {0}" -f $needle)
 }

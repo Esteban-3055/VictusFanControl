@@ -2534,7 +2534,7 @@
       }
     },
     "m8c": {
-      "status": "PHYSICAL_ATTEMPT1_FAIL_CLOSED_EC_TACH_IO_CLEANUP_FF_PROOF_INCOMPLETE_RETRY_BLOCKED",
+      "status": "ATTEMPT1_EVIDENCE_REVIEWED_REAL_WRITE_ACK_TACH_EC_TRANSIENT_FAIL_CLOSED_RETRY_BLOCKED",
       "physicalPassed": false,
       "physicalExecutionAuthorized": false,
       "requiresM8BPhysicalPass": true,
@@ -2682,7 +2682,31 @@
           "cleanupEvidence": "Parent cleanup read FF/FF once, then CPU=144 GPU=255 on the second independent setpoint probe; independent final firmware-ownership proof therefore failed.",
           "finalClosurePass": false,
           "physicalPassed": false,
-          "retryAuthorized": false
+          "retryAuthorized": false,
+          "evidenceZipSha256": "3082e3e0e64d47ad27a8b29c7ba363513905dda4a4171d2400e5a8928ee27b50",
+          "resultSha256": "1500a5bc474a5a6b9aafa34a48e93b8fefd458eb8a1b8dd2cd97b87ce8326adf",
+          "controllerPid": 21624,
+          "controllerStartUtcTicks": 639263938564414600,
+          "watchdogPid": 23332,
+          "failsafePid": 23436,
+          "realWriteAttempted": true,
+          "setpoint50_50AcknowledgedBeforeFailure": true,
+          "watchdogWriteIntentObserved": true,
+          "watchdogCommitObserved": false,
+          "watchdogRestoreBeginObserved": true,
+          "watchdogReleaseObserved": true,
+          "failureStage": "post-WMI dual-tach acknowledgement after real 50/50 setpoint acknowledgement and before watchdog COMMIT",
+          "failsafeArmed": true,
+          "failsafeTakeover": false,
+          "controllerFinalFirmwareOwned": true,
+          "parentStableFirmwareProof": false,
+          "parentObservedCleanupSequence": [
+            "255/255",
+            "144/255"
+          ],
+          "finalJournalAbsent": true,
+          "causalInterpretation": "PREPARE and WRITE_INTENT are present, COMMIT is absent, then RESTORE_BEGIN and RELEASE. Backend source order plus tach-snapshot IOException proves WMI dispatch occurred and 50/50 setpoint acknowledgement completed before dual-tach proof failed.",
+          "retryDecision": "BLOCKED_PENDING_EC_TRANSIENT_HARDENING_CI"
         }
       ],
       "evidencePackaging": {
@@ -2716,6 +2740,18 @@
           "hpBackendSelfTest": true,
           "physicalExecution": false
         }
+      },
+      "ecTransientHardening": {
+        "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+        "evidenceAttempt": 1,
+        "evidenceHead": "9db47317265fd71dc5416222382bcc81ca887932",
+        "purpose": "Tolerate only a very small bounded number of fully exhausted EC control-state snapshot failures during post-write tachometer acknowledgement, while keeping the watchdog journal WRITE_ARMED and forbidding Commit until a successful ownership/guard/dual-tach proof is obtained.",
+        "maximumAdditionalFailedTachSnapshots": 2,
+        "lowLevelReadRetriesPerSnapshot": 5,
+        "commitOnReadFailure": false,
+        "controlBehaviorScope": "Only the post-write tachometer acknowledgement loop changes; setpoint/ownership/guard validation, thermal limits, command envelope, watchdog order, and restore behavior remain unchanged.",
+        "cleanupProof": "Parent final/cleanup evidence now samples up to 6 independent narrow setpoint probes and requires 2 consecutive FF/FF; every sample is persisted to JSON.",
+        "physicalExecutionAuthorized": false
       }
     },
     "productionRaceAuditCodeCi": {

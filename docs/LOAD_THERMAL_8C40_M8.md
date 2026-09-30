@@ -1015,6 +1015,61 @@ directory.
 
 The same helper can package this already-existing attempt without rerunning hardware. The packaging path is **CODE/CI PASS** at commit `eb07da0323735b38655b541cad9fe3759255ec17`, GitHub Actions **#824** (run `36768128791`), including the packaging self-test under both PowerShell 7 and Windows PowerShell 5.1.
 
+
+## 7B.11. M8C attempt-1 evidence review - real write reached, tach EC snapshot failed before Commit
+
+The automatically packaged attempt-1 ZIP has SHA-256
+`3082e3e0e64d47ad27a8b29c7ba363513905dda4a4171d2400e5a8928ee27b50`.
+Its controller result is bound to qualification HEAD
+`7d247b2580688af60e1f9cf9144b48f831178a9e` and records
+`applyCalls=1`, `readyPublished=false`, `continueObserved=false`,
+`synthetic=[]`, `customWasOwnedAtFinally=false`, and
+`finalFirmwareOwned=true`.
+
+The dated M4 log identifies controller PID **21624** with creation ticks
+**639263938564414565** and proves:
+
+`PREPARE -> WRITE_INTENT target=50/50 -> RESTORE_BEGIN -> RELEASE`
+
+with **no COMMIT**. The backend source order is decisive: after WRITE_INTENT it validates EC,
+dispatches the WMI `SetFanLevel(50,50)`, waits for the narrow 50/50 setpoint acknowledgement, and
+only then enters the dual-tach acknowledgement loop. The durable exception is specifically an
+`EC fan tachometer snapshot 0xB0/0xB1 and 0xB2/0xB3` IOException. Therefore attempt 1 did cross
+the real write boundary and did acknowledge 50/50 setpoints; it failed before dual-tach proof and
+before watchdog Commit.
+
+The independent failsafe was durably ARMED (PID **23436**, 120 s) and never took over. The
+watchdog accepted RESTORE_BEGIN and RELEASE and the durable journal was absent at parent closure.
+The controller obtained a matching firmware-owned final snapshot, but the parent cleanup sequence
+was **FF/FF followed by CPU=144/GPU=255**, so the stronger independent two-consecutive-FF/FF
+closure proof did not pass. That isolated 144/255 sample is treated as unresolved EC evidence, not
+as proof of persistent ownership.
+
+### Bounded EC transient hardening
+
+No physical retry is authorized yet. The code-only hardening keeps the command fail-closed and
+changes only the post-write tachometer acknowledgement loop:
+
+- one fully exhausted low-level EC snapshot no longer immediately abandons an otherwise
+  watchdog-protected WRITE_ARMED transaction;
+- at most **two** failed high-level control-state snapshots may be skipped inside the existing
+  bounded tach acknowledgement window;
+- watchdog Commit remains forbidden until a successful EC sample proves the expected setpoints,
+  sane control guards and the required consecutive dual-tach response;
+- a third failed high-level snapshot throws with explicit observability-loss evidence and restores
+  fail-closed;
+- setpoint acknowledgement, command range, equal-only rule, thermal gates, watchdog ordering and
+  restore semantics are unchanged.
+
+The parent FF/FF proof is also made evidence-oriented rather than brittle: it may take up to six
+independent narrow setpoint reads, but still requires **two consecutive FF/FF** samples to pass.
+Every final/cleanup sample is written to JSON. A transient non-FF sample resets the streak; it does
+not silently count as firmware ownership.
+
+The packager now distinguishes the original qualification HEAD from a later packaging-code HEAD,
+so pulling tooling updates before packaging cannot obscure which binary actually ran the physical
+test.
+
 ## 8. Physical harness safety and evidence
 
 The future physical harness must:

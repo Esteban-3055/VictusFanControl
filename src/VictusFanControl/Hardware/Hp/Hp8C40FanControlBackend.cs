@@ -121,6 +121,7 @@ public sealed class Hp8C40FanControlBackend :
     private const int DirectionLevelDeadband = 2;
     private const int MinimumDirectionalRpmDelta = 150;
     private const int RequiredTachConfirmationSamples = 2;
+    private const int MaximumTransientTachSnapshotReadFailures = 2;
     private const int RequiredConsecutiveUnexpectedGuardSamples = 2;
     private const int MaximumUnexpectedGuardConfirmationReads = 3;
     private static readonly TimeSpan UnexpectedGuardConfirmationDelay = TimeSpan.FromMilliseconds(25);
@@ -844,7 +845,9 @@ public sealed class Hp8C40FanControlBackend :
         var cpuEverAcknowledged = false;
         var gpuEverAcknowledged = false;
         var confirmationSamples = 0;
+        var transientSnapshotReadFailures = 0;
         Hp8C40EcControlState? last = null;
+        string? lastSnapshotReadFailure = null;
 
         while (!ActiveTimeClock.HasElapsed(
                    _activeTimeClock,
@@ -853,7 +856,34 @@ public sealed class Hp8C40FanControlBackend :
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            last = _hardware!.ReadEcState();
+            try
+            {
+                last = _hardware!.ReadEcState();
+            }
+            catch (IOException ex)
+            {
+                transientSnapshotReadFailures++;
+                lastSnapshotReadFailure =
+                    $"{ex.GetType().Name}: {ex.Message}";
+                confirmationSamples = 0;
+
+                if (transientSnapshotReadFailures >
+                    MaximumTransientTachSnapshotReadFailures)
+                {
+                    throw new IOException(
+                        $"Tachometer acknowledgement lost EC observability after " +
+                        $"{transientSnapshotReadFailures} failed control-state snapshots. " +
+                        $"The real command remains uncommitted and must be restored fail-closed. " +
+                        $"Last failure: {ex.Message}",
+                        ex);
+                }
+
+                await Task.Delay(
+                        _timing.PollInterval,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                continue;
+            }
 
             if (last.CpuSetpoint != cpuTarget ||
                 last.GpuSetpoint != gpuTarget)
@@ -912,7 +942,9 @@ public sealed class Hp8C40FanControlBackend :
             $"CPU ever-ack={cpuEverAcknowledged}, GPU ever-ack={gpuEverAcknowledged}, " +
             $"baseline RPM={baseline.CpuRpm}/{baseline.GpuRpm}, " +
             $"last RPM={last?.CpuRpm.ToString() ?? "n/a"}/{last?.GpuRpm.ToString() ?? "n/a"}, " +
-            $"baseline current-level={currentLevels.CpuLevel}/{currentLevels.GpuLevel}.");
+            $"baseline current-level={currentLevels.CpuLevel}/{currentLevels.GpuLevel}, " +
+            $"transient EC snapshot failures={transientSnapshotReadFailures}, " +
+            $"last EC snapshot failure={lastSnapshotReadFailure ?? "none"}.");
     }
 
     private static TachExpectation DetermineExpectation(

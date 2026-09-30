@@ -35,6 +35,8 @@ public static class Hp8C40FanControlBackendSelfTest
         failures += await TestStatusToleratesSingleGuardTransientAsync(output);
         failures += await TestStatusRejectsRepeatedGuardConflictAsync(output);
         failures += await TestStoppedFansCanSpinUpWithinAckWindowAsync(output);
+        failures += await TestTransientEcReadDuringTachAckRecoversAsync(output);
+        failures += await TestRepeatedEcReadDuringTachAckFailsClosedAsync(output);
         failures += await TestOneSampleDirectionalSpikeIsRejectedAsync(output);
         failures += await TestCancellationAtPreDispatchPreventsWriteAsync(output);
         failures += await TestWatchdogPrepareFailureIsNoWriteAsync(output);
@@ -696,6 +698,84 @@ public static class Hp8C40FanControlBackendSelfTest
             readsAfter == readsBefore + 2 &&
             heartbeatCount == 0);
     }
+    private static async Task<int> TestTransientEcReadDuringTachAckRecoversAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware
+        {
+            TransientEcReadFailuresDuringTachAck = 1
+        };
+        var lease = new FakeWatchdogLeaseClient();
+        await using var backend = NewProtectedBackend(hardware, lease);
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        var passed = true;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "transient-ec-during-tach-ack"),
+                CancellationToken.None);
+        }
+        catch
+        {
+            passed = false;
+        }
+
+        var commitCalls =
+            lease.Calls.Count(call => call == "commit:30/30");
+
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "one exhausted EC tach snapshot is bounded-retried before watchdog Commit",
+            passed &&
+            hardware.SetCalls == 1 &&
+            hardware.TransientEcReadFailuresDuringTachAck == 0 &&
+            commitCalls == 1);
+    }
+
+    private static async Task<int> TestRepeatedEcReadDuringTachAckFailsClosedAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware
+        {
+            TransientEcReadFailuresDuringTachAck = 3
+        };
+        var lease = new FakeWatchdogLeaseClient();
+        await using var backend = NewProtectedBackend(hardware, lease);
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        var failedClosed = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "persistent-ec-during-tach-ack"),
+                CancellationToken.None);
+        }
+        catch (IOException ex)
+            when (ex.Message.Contains(
+                "lost EC observability after 3 failed control-state snapshots",
+                StringComparison.Ordinal))
+        {
+            failedClosed = true;
+        }
+
+        var commitCalls =
+            lease.Calls.Count(call => call.StartsWith("commit:", StringComparison.Ordinal));
+
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "three exhausted EC tach snapshots remain fail-closed before watchdog Commit",
+            failedClosed &&
+            hardware.SetCalls == 1 &&
+            commitCalls == 0);
+    }
+
     private static async Task<int> TestOneSampleDirectionalSpikeIsRejectedAsync(TextWriter output)
     {
         var hardware = new FakeHardware
@@ -1455,6 +1535,7 @@ public static class Hp8C40FanControlBackendSelfTest
         public bool FreezeCpuTach { get; set; }
         public bool FreezeGpuTach { get; set; }
         public bool PulseCpuTachOnceThenReturnBaseline { get; set; }
+        public int TransientEcReadFailuresDuringTachAck { get; set; }
         public Action<int>? OnEcRead { get; set; }
         public Action? OnSetFanLevel { get; set; }
         public Queue<(byte MaxFan, byte FanSwitch)> GuardReadOverrides { get; } = new();
@@ -1471,6 +1552,21 @@ public static class Hp8C40FanControlBackendSelfTest
             {
                 throw ReadEcStateException;
             }
+
+            // The first post-SetFanLevel ReadEcState is consumed by the fake's
+            // default ReadSetpoint path. Begin transient injection only after
+            // that setpoint acknowledgement has advanced _postSetReadCount, so
+            // the failure deterministically lands in tachometer acknowledgement.
+            if (_targetCpu.HasValue &&
+                _targetGpu.HasValue &&
+                _postSetReadCount >= 1 &&
+                TransientEcReadFailuresDuringTachAck > 0)
+            {
+                TransientEcReadFailuresDuringTachAck--;
+                throw new IOException(
+                    "synthetic exhausted EC tach snapshot: OBF did not become full");
+            }
+
             if (_targetCpu.HasValue && _targetGpu.HasValue)
             {
                 var cpuDesired = DesiredCpuRpm(_targetCpu.Value);

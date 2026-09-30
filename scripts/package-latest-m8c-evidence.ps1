@@ -92,6 +92,18 @@ try {
 }
 catch {}
 
+$qualificationHead='unavailable'
+$summaryPath=Join-Path $resolvedEvidence 'm8c-harness-summary.json'
+if(Test-Path -LiteralPath $summaryPath -PathType Leaf){
+    try {
+        $summary=Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+        if(-not [string]::IsNullOrWhiteSpace([string]$summary.evidenceHead)){
+            $qualificationHead=[string]$summary.evidenceHead
+        }
+    }
+    catch {}
+}
+
 $gitStatus='unavailable'
 try {
     $gitStatus=(& git -C $RepoRoot status --porcelain=v1 --untracked-files=all 2>&1 | Out-String).TrimEnd()
@@ -99,6 +111,7 @@ try {
 catch {}
 
 Set-Content -LiteralPath (Join-Path $resolvedEvidence 'm8c-head.txt') -Value $head -Encoding ASCII
+Set-Content -LiteralPath (Join-Path $resolvedEvidence 'm8c-qualification-head.txt') -Value $qualificationHead -Encoding ASCII
 Set-Content -LiteralPath (Join-Path $resolvedEvidence 'm8c-git-status.txt') -Value $gitStatus -Encoding UTF8
 
 $zipPath=("{0}.zip" -f $resolvedEvidence)
@@ -108,7 +121,8 @@ $manifest=[ordered]@{
     gate='M8C-EVIDENCE-PACKAGE'
     packagedUtc=(Get-Date).ToUniversalTime().ToString('O')
     evidenceRoot=$resolvedEvidence
-    sourceHead=$head
+    packagingHead=$head
+    qualificationEvidenceHead=$qualificationHead
     watchdogLogSource=$WatchdogLogPath
     watchdogLogCopied=$watchdogLogCopied
     watchdogStatusSource=$WatchdogStatusPath

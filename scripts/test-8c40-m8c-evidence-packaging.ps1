@@ -10,7 +10,7 @@ $fakeJournal=Join-Path $temp 'lease.json'
 
 try {
     New-Item -ItemType Directory -Force -Path $evidence | Out-Null
-    Set-Content -LiteralPath (Join-Path $evidence 'm8c-harness-summary.json') -Value '{"result":"FAIL_CLOSED"}' -Encoding ASCII
+    Set-Content -LiteralPath (Join-Path $evidence 'm8c-harness-summary.json') -Value '{"result":"FAIL_CLOSED","evidenceHead":"qualification-head-test"}' -Encoding ASCII
     Set-Content -LiteralPath $fakeLog -Value 'WATCHDOG TEST LOG' -Encoding ASCII
     Set-Content -LiteralPath $fakeStatus -Value '{"Ready":true}' -Encoding ASCII
     Set-Content -LiteralPath $fakeJournal -Value '{"SchemaVersion":2}' -Encoding ASCII
@@ -24,6 +24,7 @@ try {
         'm8c-retained-lease-final.json',
         'm8c-service-final.json',
         'm8c-head.txt',
+        'm8c-qualification-head.txt',
         'm8c-git-status.txt',
         'm8c-package-manifest.json'
     )){
@@ -37,6 +38,10 @@ try {
     }
 
     $manifest=Get-Content (Join-Path $evidence 'm8c-package-manifest.json') -Raw | ConvertFrom-Json
+    if([string]$manifest.qualificationEvidenceHead -cne 'qualification-head-test'){
+        throw 'M8C packaging self-test did not preserve the qualification evidence HEAD.'
+    }
+
     if(-not [bool]$manifest.watchdogLogCopied -or
        -not [bool]$manifest.watchdogStatusCopied -or
        -not [bool]$manifest.retainedJournalCopied){

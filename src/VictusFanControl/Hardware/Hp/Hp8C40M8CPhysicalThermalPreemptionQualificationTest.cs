@@ -319,6 +319,12 @@ public static class Hp8C40M8CPhysicalThermalPreemptionQualificationTest
                     "CUSTOM_ADMITTED_PREPARED",
                     "Watchdog PREPARE acknowledged; no fan-level write yet."));
 
+            events.Add(
+                new EventEvidence(
+                    DateTimeOffset.UtcNow,
+                    "APPLY_50_BEGIN",
+                    "Dispatching the single real 50/50 command; watchdog Commit is not yet proven."));
+
             applyCalls++;
 
             await coordinator.ApplyAsync(
@@ -329,6 +335,12 @@ public static class Hp8C40M8CPhysicalThermalPreemptionQualificationTest
                     admittedSafety,
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            events.Add(
+                new EventEvidence(
+                    DateTimeOffset.UtcNow,
+                    "APPLY_50_COMPLETE",
+                    "Real 50/50 setpoint + dual-tach acknowledgement + watchdog Commit completed."));
 
             customWasOwned = true;
 
