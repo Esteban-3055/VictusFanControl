@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-physical-pass-m8c-process-hardening-ci-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-physical-pass-m8c-physical-authorized-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -2534,9 +2534,9 @@
       }
     },
     "m8c": {
-      "status": "M8B_PREREQUISITE_PASS_M8C_PROCESS_AND_FAILSAFE_EVIDENCE_HARDENING_CI_PENDING_PHYSICAL_BLOCKED",
+      "status": "PHYSICAL_EXECUTION_AUTHORIZED_POST_M8B_HARDENING_CI_817",
       "physicalPassed": false,
-      "physicalExecutionAuthorized": false,
+      "physicalExecutionAuthorized": true,
       "requiresM8BPhysicalPass": true,
       "realOvertemperatureRequired": false,
       "syntheticSelfTestMode": "--8c40-m8c-self-test",
@@ -2551,7 +2551,7 @@
         "inFlightApply": "thermal handoff must cancel an in-flight ApplyAsync and end in firmware authority"
       },
       "physicalHarnessPrepared": true,
-      "physicalPrerequisite": "M8B physical PASS is now satisfied; M8C remains blocked pending native child ExitCode and failsafe-armed evidence hardening CI.",
+      "physicalPrerequisite": "M8B physical PASS is satisfied. M8C physical execution is explicitly authorized after post-M8B native child/failsafe evidence hardening passed full CI #817.",
       "automaticPolicyEnabled": false,
       "watchdogRecoveryValidated": false,
       "syntheticCodeCi": {
@@ -2569,7 +2569,7 @@
         "note": "Initial build run #731 found a compile-only profile-access error in the new synthetic helper. The helper was corrected to use Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount; run #737 passed the full workflow. No hardware path was executed."
       },
       "physicalControllerPrepared": true,
-      "physicalControllerStatus": "CODE_CI_PASS_COMPILED_BUT_PHYSICAL_BLOCKED_PENDING_POST_M8B_HARDENING",
+      "physicalControllerStatus": "CODE_CI_PASS_PHYSICAL_AUTHORIZED_QUALIFICATION_ONLY",
       "physicalControllerType": "Hp8C40M8CPhysicalThermalPreemptionQualificationTest",
       "physicalControllerAuthorizationConstant": false,
       "physicalControllerToken": "8C40-M8C-THERMAL50",
@@ -2579,7 +2579,7 @@
       ],
       "parentContinueMarker": "M8C-CONTINUE",
       "parentHandoff": "M8C_READY_BEFORE_INJECTION",
-      "physicalHarnessStatus": "PROCESS_AND_FAILSAFE_EVIDENCE_HARDENING_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "physicalHarnessStatus": "CODE_CI_PASS_PHYSICAL_AUTHORIZED_QUALIFICATION_ONLY",
       "physicalHarnessScript": "scripts/test-8c40-load-thermal-m8c.ps1",
       "physicalHarnessInvariantScript": "scripts/test-8c40-load-thermal-m8c-harness-invariants.ps1",
       "independentFailsafeScript": "scripts/watchdog-m8c-service-failsafe-8c40.ps1",
@@ -2587,7 +2587,7 @@
         "requiresM8BPhysicalPassed": true,
         "requiresM8CPhysicalExecutionAuthorized": true,
         "currentM8BPhysicalPassed": true,
-        "currentM8CPhysicalExecutionAuthorized": false
+        "currentM8CPhysicalExecutionAuthorized": true
       },
       "physicalSubcyclePlan": [
         "CPU: independent real 50/50 OWNED -> parent journal/failsafe proof -> five synthetic 95 C frames -> firmware handoff on 5/5",
@@ -2610,7 +2610,7 @@
         "physicalExecution": false
       },
       "postM8BHardening": {
-        "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+        "status": "CODE_CI_PASS_PHYSICAL_AUTHORIZED",
         "reason": "M8B demonstrated that PowerShell Start-Process -PassThru can lose ExitCode. M8C still used that pattern and its delayed failsafe did not publish an ARMED marker before sleeping.",
         "changes": [
           "native System.Diagnostics.Process ownership for the M8C controller and ExitCode",
@@ -2621,7 +2621,49 @@
         ],
         "controlBehaviorChanged": false,
         "thresholdsChanged": false,
-        "physicalExecutionAuthorized": false
+        "physicalExecutionAuthorized": true,
+        "ci": {
+          "result": "PASS",
+          "commit": "8b70181eccc0684db69fb7c38db5a42a1549b0a8",
+          "runNumber": 817,
+          "runId": 36764799392,
+          "powerShellSyntax": true,
+          "nativeChildExitSelfTestPowerShell7": true,
+          "nativeChildExitSelfTestWindowsPowerShell51": true,
+          "m8cSyntheticInvariant": true,
+          "m8cPhysicalPreparationInvariant": true,
+          "m8cParentHarnessInvariant": true,
+          "m8ProductionRaceInvariant": true,
+          "warningsAsErrorsBuild": true,
+          "m8cSyntheticSelfTest": true,
+          "safetyGateSelfTest": true,
+          "fanCoordinatorSelfTest": true,
+          "watchdogRegressions": true,
+          "hpBackendSelfTest": true,
+          "physicalExecution": false
+        }
+      },
+      "physicalAuthorization": {
+        "authorized": true,
+        "date": "2026-09-30",
+        "sourceHead": "8b70181eccc0684db69fb7c38db5a42a1549b0a8",
+        "sourceCiRunNumber": 817,
+        "sourceCiRunId": 36764799392,
+        "requiredToken": "8C40-M8C-THERMAL50",
+        "scope": "one versioned M8C harness execution containing the CPU and GPU qualification-only thermal-preemption subcycles",
+        "constraints": [
+          "exact HP-8C40-9D0R1LA-F18 target only",
+          "scripts/test-8c40-load-thermal-m8c.ps1 only",
+          "normal representative game/3D workload; no synthetic stress application",
+          "real fan command remains exactly one equal-only 50/50 ApplyAsync per subcycle",
+          "CPU 95 C x5 and GPU 87 C are qualification-only synthetic SafetyGate frames; real silicon is not intentionally heated to those thresholds",
+          "native tracked child ExitCode path and durable failsafe ARMED proof are mandatory",
+          "causal PREPARE -> WRITE_INTENT -> COMMIT -> RESTORE_BEGIN -> RELEASE required for each subcycle",
+          "journal absence, independent FF/FF and M4 Manual/Stopped required after each subcycle",
+          "any failsafe takeover invalidates PASS",
+          "WatchdogRecoveryValidated remains false",
+          "automatic/adaptive policy remains OFF"
+        ]
       }
     },
     "productionRaceAuditCodeCi": {

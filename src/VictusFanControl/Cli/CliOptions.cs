@@ -716,12 +716,12 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-m8b-token <token>        Required exact token: 8C40-M8B-LOAD50.");
         Console.WriteLine("  --8c40-m8b-ready-path <path>    Required durable OWNED-ready marker path for M8B.");
         Console.WriteLine("  --8c40-m8b-result-path <path>   Required durable controller evidence path for M8B.");
-        Console.WriteLine("  --8c40-m8c-physical-thermal     PREPARED/BLOCKED M8C PHYSICAL: hard-refused until M8B physical PASS authorization.");
-        Console.WriteLine("  --8c40-m8c-physical-token <t>   Future exact token: 8C40-M8C-THERMAL50.");
-        Console.WriteLine("  --8c40-m8c-physical-case <c>    Future subcycle: cpu or gpu.");
-        Console.WriteLine("  --8c40-m8c-physical-ready-path <path>     Future real-OWNED pre-injection marker.");
-        Console.WriteLine("  --8c40-m8c-physical-continue-path <path>  Future parent verification handoff marker.");
-        Console.WriteLine("  --8c40-m8c-physical-result-path <path>    Future durable controller evidence.");
+        Console.WriteLine("  --8c40-m8c-physical-thermal     ACTIVE M8C PHYSICAL GATE: real 50/50 ownership + qualification-only synthetic thermal preemption.");
+        Console.WriteLine("  --8c40-m8c-physical-token <t>   Required exact token: 8C40-M8C-THERMAL50.");
+        Console.WriteLine("  --8c40-m8c-physical-case <c>    Qualification subcycle: cpu or gpu.");
+        Console.WriteLine("  --8c40-m8c-physical-ready-path <path>     Required real-OWNED pre-injection marker.");
+        Console.WriteLine("  --8c40-m8c-physical-continue-path <path>  Required parent verification handoff marker.");
+        Console.WriteLine("  --8c40-m8c-physical-result-path <path>    Required durable controller evidence.");
         Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");

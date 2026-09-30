@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS ON RETRY 6 WITH 30/30 REPRESENTATIVE SUPERVISION, EXACT CAUSAL WATCHDOG CHAIN, ARMED FAILSAFE EVIDENCE AND COMPLETE FINAL CLOSURE. M8C M8B-PREREQUISITE IS SATISFIED BUT PHYSICAL EXECUTION REMAINS BLOCKED WHILE ITS CHILD-PROCESS/FAILSAFE EVIDENCE PATH IS HARDENED AND RE-RUN THROUGH CI. AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS ON RETRY 6 WITH 30/30 REPRESENTATIVE SUPERVISION, EXACT CAUSAL WATCHDOG CHAIN, ARMED FAILSAFE EVIDENCE AND COMPLETE FINAL CLOSURE. M8C POST-M8B PROCESS/FAILSAFE HARDENING PASSED FULL CI #817 AND M8C PHYSICAL EXECUTION IS EXPLICITLY AUTHORIZED FOR THE BOUNDED QUALIFICATION-ONLY CPU/GPU PREEMPTION HARNESS. WATCHDOG RECOVERY REMAINS UNPROMOTED AND AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -253,7 +253,7 @@ versioned target-profile instance and #737 passed. No hardware execution occurre
 ### M8C physical-controller preparation
 
 The real-hardware M8C controller remains prepared in code but deliberately unreachable while post-M8B process/evidence hardening is validated. Its
-`PhysicalExecutionAuthorized=false` readonly authorization flag is checked before hardware identity, PawnIO,
+`PhysicalExecutionAuthorized=true` readonly qualification authorization flag is checked before hardware identity, PawnIO,
 watchdog, WMI, EC or telemetry hardware objects are constructed. The profile independently keeps
 `physicalExecutionAuthorized=false`; the M8B physical prerequisite is now recorded PASS.
 
@@ -295,8 +295,8 @@ proves the exact schema-v2 OWNED 50/50 journal bound to PID + process creation t
 PREPARE -> WRITE_INTENT -> COMMIT -> RESTORE_BEGIN -> RELEASE. It then independently proves
 journal absence, two FF/FF observations and restoration of the M4 service to Manual/Stopped.
 
-The M8B side of the profile gate is now satisfied, but M8C authorization remains false and the controller independently retains
-`PhysicalExecutionAuthorized=false`. Preparing these files does not authorize or perform M8C.
+The M8B side of the profile gate is now satisfied, but M8C authorization remains false and the controller is now separately authorized only by the evidence-backed M8C authorization commit with
+`PhysicalExecutionAuthorized=true`. Preparing these files does not authorize or perform M8C.
 
 The complete no-hardware preparation is **CODE/CI PASS** at commit
 `ccb11f285a92c6f789929eee6911b5213fd95ddd`, GitHub Actions **#773**
@@ -939,6 +939,36 @@ following hardware-neutral changes pass CI:
 
 No M8C threshold, fan level, representative-load criterion, watchdog lease rule or restore behavior
 is changed by this hardening.
+
+
+## 7B.9. M8C post-M8B hardening CI PASS; physical qualification authorized
+
+The post-M8B M8C process/evidence hardening is **CODE/CI PASS** at commit
+`8b70181eccc0684db69fb7c38db5a42a1549b0a8`, GitHub Actions **#817**
+(run `36764799392`). The full workflow passed PowerShell syntax, M4-M8 invariants under
+PowerShell 7 and Windows PowerShell 5.1, the new M8C native child exit-code 0/7 regression,
+warnings-as-errors build, M8C synthetic thermal-preemption self-test, SafetyGate,
+FanControlCoordinator, watchdog and HP-backend regressions. No physical M8C execution occurred in CI.
+
+The qualification controller and profile are now separately opened for M8C. **M8C physical
+execution is explicitly authorized** only through
+`scripts/test-8c40-load-thermal-m8c.ps1` on the exact
+`HP-8C40-9D0R1LA-F18` target.
+
+The physical run contains two independent subcycles. Each acquires real watchdog-backed 50/50
+ownership under representative gameplay, proves EC/tach/journal ownership, and only then lets the
+parent release a qualification-only synthetic thermal frame sequence through the production
+SafetyGate/coordinator path. The CPU subcycle injects five synthetic effective-CPU 95 C frames and
+must preempt exactly on 5/5; the GPU subcycle injects one synthetic GPU 87 C frame and must preempt
+immediately. **Real silicon is not intentionally heated to either injected threshold.**
+
+The native tracked-child path, durable `M8C FAILSAFE ARMED` evidence, no-takeover requirement,
+causal watchdog chain, journal absence, independent FF/FF proof and M4 Manual/Stopped closure remain
+mandatory. Any mismatch fails closed.
+
+This authorization does **not** set `m8c.physicalPassed=true`, does not set
+`WatchdogRecoveryValidated=true`, does not expose the qualification injection through production
+runtime/UI, and does not enable automatic/adaptive fan control.
 
 ## 8. Physical harness safety and evidence
 

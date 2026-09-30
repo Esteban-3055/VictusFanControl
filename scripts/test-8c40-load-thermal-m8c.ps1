@@ -583,7 +583,7 @@ Assert-Administrator
 New-Item -ItemType Directory -Force -Path $evidenceRoot | Out-Null
 
 Write-Host 'VictusFanControl - HP 8C40 M8C PHYSICAL THERMAL PREEMPTION' -ForegroundColor Cyan
-Write-Host 'This gate is reachable only after a future evidence-backed profile authorization.' -ForegroundColor Yellow
+Write-Host 'This gate is explicitly authorized only for the bounded M8C qualification path recorded in the profile.' -ForegroundColor Yellow
 Write-Host 'It performs two independent subcycles: CPU synthetic 95 C x5 and GPU synthetic 87 C x1.' -ForegroundColor Yellow
 Write-Host 'Real silicon is not intentionally heated to either production threshold.' -ForegroundColor Yellow
 
