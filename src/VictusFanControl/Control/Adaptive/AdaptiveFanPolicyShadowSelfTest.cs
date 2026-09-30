@@ -44,6 +44,10 @@ public static class AdaptiveFanPolicyShadowSelfTest
             TestCsvReplayParser(
                 output);
 
+        failures +=
+            TestEndToEndOfflineReplay(
+                output);
+
         output.WriteLine();
         output.WriteLine(
             failures == 0
@@ -437,6 +441,144 @@ public static class AdaptiveFanPolicyShadowSelfTest
                     .ExpectedPhysicalCoreCount &&
             snapshot.GpuName ==
                 Hp8C40TargetProfile.ExpectedGpuName);
+    }
+
+    private static int TestEndToEndOfflineReplay(
+        TextWriter output)
+    {
+        var root =
+            Path.Combine(
+                Path.GetTempPath(),
+                "VictusFanControl-adaptive-shadow-" +
+                Guid.NewGuid().ToString("N"));
+
+        Directory.CreateDirectory(
+            root);
+
+        try
+        {
+            var configPath =
+                Path.Combine(
+                    root,
+                    "shadow.json");
+
+            var inputPath =
+                Path.Combine(
+                    root,
+                    "telemetry.csv");
+
+            var outputPath =
+                Path.Combine(
+                    root,
+                    "shadow-output.csv");
+
+            File.WriteAllText(
+                configPath,
+                BuildConfigJson());
+
+            const string header =
+                "timestamp_utc,cpu_name,cpu_package_temp_c,cpu_core_max_temp_c," +
+                "cpu_core_avg_temp_c,cpu_core_temps_c,cpu_package_power_w,cpu_load_pct," +
+                "gpu_name,gpu_temp_c,gpu_power_w,gpu_load_pct,cpu_fan_rpm,gpu_fan_rpm";
+
+            var coreText =
+                string.Join(
+                    "|",
+                    Enumerable.Range(
+                            0,
+                            Hp8C40TargetProfile.Instance
+                                .ExpectedPhysicalCoreCount)
+                        .Select(index =>
+                            $"C{index}:Performance:70.0"));
+
+            const char quote = '"';
+
+            string Row(
+                DateTimeOffset timestamp,
+                int cpuTemperature,
+                int gpuTemperature) =>
+                $"{timestamp:O},{quote}Intel, CPU{quote},{cpuTemperature}," +
+                $"{cpuTemperature},{cpuTemperature},{quote}{coreText}{quote}," +
+                $"45,50,{quote}{Hp8C40TargetProfile.ExpectedGpuName}{quote}," +
+                $"{gpuTemperature},60,80,3000,3000";
+
+            File.WriteAllLines(
+                inputPath,
+                [
+                    header,
+                    Row(
+                        new DateTimeOffset(
+                            2026,
+                            9,
+                            30,
+                            0,
+                            0,
+                            0,
+                            TimeSpan.Zero),
+                        70,
+                        65),
+                    Row(
+                        new DateTimeOffset(
+                            2026,
+                            9,
+                            30,
+                            0,
+                            0,
+                            1,
+                            TimeSpan.Zero),
+                        72,
+                        66)
+                ]);
+
+            using var console =
+                new StringWriter();
+
+            var exitCode =
+                AdaptiveFanPolicyShadowReplay.RunAsync(
+                        configPath,
+                        inputPath,
+                        outputPath,
+                        console,
+                        CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+
+            var replay =
+                File.Exists(outputPath)
+                    ? File.ReadAllText(outputPath)
+                    : string.Empty;
+
+            var log =
+                console.ToString();
+
+            return Report(
+                output,
+                "offline shadow replay runs end-to-end without hardware authority",
+                exitCode == 0 &&
+                replay.Contains(
+                    "EnterCustomAndApply",
+                    StringComparison.Ordinal) &&
+                replay.Contains(
+                    "HoldCustom",
+                    StringComparison.Ordinal) &&
+                log.Contains(
+                    "hardware writes       : 0",
+                    StringComparison.Ordinal));
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(
+                    root,
+                    recursive: true);
+            }
+            catch
+            {
+                // A temporary-file cleanup failure must not change the
+                // functional replay assertion.
+            }
+        }
     }
 
     private static AdaptiveFanPolicyShadowEvaluator
