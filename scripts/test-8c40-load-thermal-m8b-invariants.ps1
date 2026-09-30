@@ -40,7 +40,7 @@ Assert-Contains $harness "m8b.physicalExecutionAuthorized" 'M8B hardware harness
 Assert-Contains $harness "Start-M8BTrackedChild" 'M8B must launch controller with a directly owned native process instead of Start-Process -PassThru.'
 Assert-Contains $harness "Wait-M8BTrackedChildExitCode" 'M8B must retain native PID/ExitCode evidence across READY and final exit.'
 Assert-Contains $harness "m8b-tracked-child.ps1" 'M8B must source the versioned native process helper.'
-Assert-NotContains $harness "$"+"controller=Start-Process" 'M8B controller must not use PowerShell Start-Process -PassThru.'
+Assert-NotContains $harness '$controller=Start-Process' 'M8B controller must not use PowerShell Start-Process -PassThru.'
 Assert-Contains $harness 'Start-M8BFailsafe' 'M8B must arm an independent delayed failsafe.'
 Assert-Contains $harness 'Start-Sleep -Seconds 5' 'M8B requires a fixed no-write post-token game refocus grace.'
 Assert-Contains $harness 'Return to active gameplay/rendering NOW' 'M8B must tell operator to foreground normal rendering.'
@@ -75,7 +75,7 @@ if($tokenIndex -lt 0 -or $refocusIndex -le $tokenIndex -or $watchdogStartIndex -
 }
 
 $armIndex=$harness.IndexOf('$failsafe=Start-M8BFailsafe',[StringComparison]::Ordinal)
-$controllerIndex=$harness.IndexOf('$controller=Start-Process',[StringComparison]::Ordinal)
+$controllerIndex=$harness.IndexOf('$controller=Start-M8BTrackedChild',[StringComparison]::Ordinal)
 
 if($armIndex -lt 0 -or $controllerIndex -lt 0 -or $armIndex -ge $controllerIndex){
     throw 'M8B harness must arm the independent failsafe before launching the write-capable controller.'
