@@ -121,7 +121,8 @@ foreach($needle in @(
     'two independent physical subcycles',
     'profile gate',
     'm8b.physicalPassed=true',
-    'physicalExecutionAuthorized=true'
+    'physicalExecutionAuthorized=true',
+    'M8C post-M8B hardening CI PASS; physical qualification authorized'
 )){
     Assert-Contains $doc $needle ("M8C parent harness documentation missing: {0}" -f $needle)
 }
