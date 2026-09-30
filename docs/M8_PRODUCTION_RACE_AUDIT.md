@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **CODE/SYNTHETIC COVERAGE MAPPED; CI GATE PREPARED. PHYSICAL UNDER-LOAD CLOSURE REMAINS DEPENDENT ON M8B/M8C.**
+Status: **CODE/CI PASS. PHYSICAL UNDER-LOAD CLOSURE REMAINS DEPENDENT ON M8B/M8C.**
 
 This audit does not add fan authority and does not replace physical M8 evidence. Its purpose is to
 prevent the project from repeatedly re-running destructive historical gates when the corresponding
@@ -32,6 +32,12 @@ A race is considered **code/CI covered** only when:
 
 Code/CI coverage is not a physical PASS. M8B and M8C remain the only gates allowed to close the
 remaining representative-load and thermal-preemption hardware evidence.
+
+The complete audit is **CODE/CI PASS** at commit
+`ccb11f285a92c6f789929eee6911b5213fd95ddd`, GitHub Actions **#773**
+(run `36669038036`). The workflow executed the mapped coordinator/backend/M5D/M5E/M8C
+coverage plus PowerShell 7 / Windows PowerShell 5.1 invariants and the warnings-as-errors build.
+No additional physical race was discovered by that review, and no hardware execution occurred.
 
 ## No-repeat rule
 
