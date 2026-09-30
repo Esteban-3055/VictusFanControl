@@ -134,9 +134,9 @@ Assert-ContainsLiteral -Text $cleanup -Needle 'sc.exe config $name start= disabl
 Assert-ContainsLiteral -Text $cleanup -Needle 'sc.exe delete $name' -Description 'cleanup removes legacy service registrations'
 Assert-ContainsLiteral -Text $cleanup -Needle 'Historical ProgramData logs/journals are NOT deleted' -Description 'cleanup preserves historical forensic evidence'
 
-Assert-ContainsLiteral -Text $factory -Needle 'HP 8C40 matched, but watchdog/service recovery has not yet' -Description 'production factory still documents the 8C40 watchdog prohibition'
+Assert-ContainsLiteral -Text $factory -Needle 'HP 8C40 matched, but production watchdog/unattended recovery' -Description 'production factory still documents the 8C40 watchdog prohibition'
 Assert-ContainsLiteral -Text $factory -Needle 'throw new NotSupportedException(' -Description 'production factory still fail-closes unsupported watchdog construction'
-Assert-ContainsLiteral -Text $backend8 -Needle 'HP 8C40 watchdog recovery is not yet physically validated.' -Description '8C40 backend independently documents the watchdog prohibition'
+Assert-ContainsLiteral -Text $backend8 -Needle 'HP 8C40 production watchdog/unattended recovery promotion remains blocked.' -Description '8C40 backend independently documents the watchdog prohibition'
 
 $watchdogGuardStart = $backend8.IndexOf(
     'if (_targetSupported && watchdogLease is not null)',
