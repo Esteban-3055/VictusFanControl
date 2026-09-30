@@ -10,6 +10,7 @@ public sealed class CliOptions
     public bool Probe8C40Setpoint { get; private set; }
     public bool RaplProbe { get; private set; }
     public bool RaplSelfTest { get; private set; }
+    public bool RaplObserve { get; private set; }
     public bool ControlSelfTest { get; private set; }
     public bool BiosContractSelfTest { get; private set; }
     public bool HpBackendSelfTest { get; private set; }
@@ -102,6 +103,10 @@ public sealed class CliOptions
 
                 case "--rapl-self-test":
                     options.RaplSelfTest = true;
+                    break;
+
+                case "--rapl-observe":
+                    options.RaplObserve = true;
                     break;
 
                 case "--control-self-test":
@@ -355,6 +360,7 @@ public sealed class CliOptions
             (options.Probe8C40Setpoint ? 1 : 0) +
             (options.RaplProbe ? 1 : 0) +
             (options.RaplSelfTest ? 1 : 0) +
+            (options.RaplObserve ? 1 : 0) +
             (options.ControlSelfTest ? 1 : 0) +
             (options.BiosContractSelfTest ? 1 : 0) +
             (options.HpBackendSelfTest ? 1 : 0) +
@@ -383,6 +389,13 @@ public sealed class CliOptions
         {
             throw new ArgumentException(
                 "Choose only one probe/test/write operation per invocation.");
+        }
+
+        if (options.RaplObserve &&
+            (options.DurationSeconds < 10 || options.DurationSeconds > 600))
+        {
+            throw new ArgumentException(
+                "--rapl-observe requires --duration-seconds between 10 and 600.");
         }
 
         if (options.Hp8C40M8AResultPath is not null &&
@@ -558,6 +571,7 @@ public sealed class CliOptions
         Console.WriteLine("  --probe-8c40-setpoint     Read only 8C40 ownership setpoints 0x34/0x35 (read-only).");
         Console.WriteLine("  --rapl-probe              READ-ONLY: decode Intel RAPL 0x606/0x610/0x614 and observe 0x610 stability.");
         Console.WriteLine("  --rapl-self-test          Synthetic self-test for Intel RAPL bitfield decoding.");
+        Console.WriteLine("  --rapl-observe            READ-ONLY: observe 0x610 plus CPU power/temp/load for a bounded interval.");
         Console.WriteLine("  --control-self-test       Test authority/fallback coordinator with fake backend.");
         Console.WriteLine("  --bios-contract-self-test Validate 88F8 + 8C40 BIOS/WMI request envelopes.");
         Console.WriteLine("  --hp-backend-self-test    Test the 88F8 + 8C40 backend boundaries with synthetic hardware.");
