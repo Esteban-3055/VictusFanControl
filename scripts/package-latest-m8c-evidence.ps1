@@ -57,11 +57,15 @@ $watchdogLogCopied=Copy-EvidenceIfPresent -Source $WatchdogLogPath -DestinationN
 $statusCopied=Copy-EvidenceIfPresent -Source $WatchdogStatusPath -DestinationName 'm8c-watchdog-status-final.json'
 $journalCopied=Copy-EvidenceIfPresent -Source $WatchdogJournalPath -DestinationName 'm8c-retained-lease-final.json'
 
-$serviceSnapshot=$null
+$serviceSnapshot=[ordered]@{
+    installed=$false
+    name='VictusFanControlWatchdogM4'
+}
 try {
     $svc=Get-CimInstance Win32_Service -Filter "Name='VictusFanControlWatchdogM4'" -ErrorAction SilentlyContinue
     if($svc){
         $serviceSnapshot=[ordered]@{
+            installed=$true
             name=[string]$svc.Name
             state=[string]$svc.State
             startMode=[string]$svc.StartMode
@@ -72,7 +76,11 @@ try {
     }
 }
 catch {
-    $serviceSnapshot=[ordered]@{ error=$_.Exception.Message }
+    $serviceSnapshot=[ordered]@{
+        installed=$false
+        name='VictusFanControlWatchdogM4'
+        error=$_.Exception.Message
+    }
 }
 
 $serviceSnapshot | ConvertTo-Json -Depth 5 |
