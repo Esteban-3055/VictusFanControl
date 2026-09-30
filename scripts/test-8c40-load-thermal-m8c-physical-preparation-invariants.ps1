@@ -97,7 +97,7 @@ foreach($needle in @(
     'PhysicalExecutionAuthorized=true',
     'M8C_READY_BEFORE_INJECTION',
     'M8C-CONTINUE',
-    'M8C physical execution is explicitly authorized'
+    'M8C post-M8B hardening CI PASS; physical qualification authorized'
 )){
     Assert-Contains $doc $needle ("M8C physical-controller documentation missing: {0}" -f $needle)
 }
