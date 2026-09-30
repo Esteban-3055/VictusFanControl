@@ -36,6 +36,11 @@ Assert-Contains $harness 'M8B WATCHDOG-BACKED REPRESENTATIVE LOAD 50/50' 'M8B ha
 Assert-Contains $harness 'test-8c40-load-thermal-m8-preflight.ps1' 'M8B must rerun the versioned M8 no-write preflight.'
 Assert-Contains $harness 'test-8c40-load-thermal-m8b-invariants.ps1' 'M8B must run its own invariant before the physical boundary.'
 Assert-Contains $harness 'type exactly $token' 'M8B must require an explicit operator token after normal load is active.'
+Assert-Contains $harness "m8b.physicalExecutionAuthorized" 'M8B hardware harness must enforce versioned physical-execution authorization before service/failsafe/controller launch.'
+Assert-Contains $harness "Start-M8BTrackedChild" 'M8B must launch controller with a directly owned native process instead of Start-Process -PassThru.'
+Assert-Contains $harness "Wait-M8BTrackedChildExitCode" 'M8B must retain native PID/ExitCode evidence across READY and final exit.'
+Assert-Contains $harness "m8b-tracked-child.ps1" 'M8B must source the versioned native process helper.'
+Assert-NotContains $harness "$"+"controller=Start-Process" 'M8B controller must not use PowerShell Start-Process -PassThru.'
 Assert-Contains $harness 'Start-M8BFailsafe' 'M8B must arm an independent delayed failsafe.'
 Assert-Contains $harness 'Start-Sleep -Seconds 5' 'M8B requires a fixed no-write post-token game refocus grace.'
 Assert-Contains $harness 'Return to active gameplay/rendering NOW' 'M8B must tell operator to foreground normal rendering.'
@@ -52,7 +57,14 @@ Assert-Contains $harness 'finalJournalAbsent' 'M8B summary must distinguish jour
 Assert-Contains $harness 'finalFirmwareProofPass' 'M8B summary must distinguish FF/FF closure.'
 Assert-Contains $harness 'finalServiceBaselinePass' 'M8B summary must distinguish Manual/stopped closure.'
 Assert-Contains $harness "M8B cleanup service baseline" 'M8B FAIL_CLOSED cleanup must print service closure evidence.'
-Assert-Contains $harness "controller terminated but ExitCode was unavailable" 'M8B must fail closed if child ExitCode is unavailable.'
+$trackedHelper=Get-Content (Join-Path $PSScriptRoot 'm8b-tracked-child.ps1') -Raw
+$trackedSelfTest=Get-Content (Join-Path $PSScriptRoot 'test-8c40-m8b-tracked-child-selftest.ps1') -Raw
+Assert-Contains $trackedHelper 'New-Object System.Diagnostics.Process' 'M8B helper must own the native process object.'
+Assert-Contains $trackedHelper '$process.Start()' 'M8B helper must start its own native process instance.'
+Assert-Contains $trackedHelper '$Process.WaitForExit($Seconds*1000)' 'M8B process wait must remain bounded.'
+Assert-Contains $trackedHelper '$Process.ExitCode' 'M8B process exit code must be read from owned native process instance.'
+Assert-Contains $trackedHelper 'ExitCode remains unavailable' 'M8B process exit code unavailability must remain fail-closed.'
+Assert-Contains $trackedSelfTest 'foreach($expected in @(0,7))' 'M8B helper must be tested for both successful and nonzero child exits.'
 Assert-Contains $harness 'The journal was not deleted.' 'M8B must preserve retained ownership evidence.'
 
 $tokenIndex=$harness.IndexOf('$confirm=Read-Host "When the workload is active, type exactly $token"',[StringComparison]::Ordinal)
@@ -158,8 +170,9 @@ Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8B 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8B preparation requires M8A authorization.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.harnessScript 'scripts/test-8c40-load-thermal-m8b.ps1' 'M8B harness path changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/watchdog-m8b-service-failsafe-8c40.ps1' 'M8B failsafe path changed.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B attempt 3 no-write refusal must not mark physical PASS.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B attempt 4 must remain blocked pending complete attempt-3 evidence/workload review.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B child PASS/parent FAIL_CLOSED must not be promoted without independent causal evidence audit.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B further physical execution remains blocked pending exact durable evidence audit.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[3].classification 'CONTROLLER_REPORTED_PASS_PARENT_EXITCODE_UNAVAILABLE' 'M8B latest controller/parent discrepancy classification changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].result 'FAIL_CLOSED_NO_WRITE' 'M8B attempt 3 must remain fail-closed/no-write.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].representativeSamples 2 'M8B attempt 3 qualifying sample count changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.physicalAttempts[2].maximumConsecutiveRepresentative 1 'M8B attempt 3 qualifying streak changed.'
@@ -200,7 +213,12 @@ foreach($needle in @(
     'M8B physical attempt 3 - FAIL_CLOSED / NO-WRITE',
     '2/10 representative samples',
     'maximum consecutive streak 1/3',
-    'M8B attempt 4 remains blocked'
+    'M8B attempt 4 remains blocked',
+    'M8B physical attempt 4 - CONTROLLER PASS / PARENT FAIL_CLOSED',
+    'ExitCode was unavailable',
+    '30/30 representative',
+    'Full causal chain and no-failsafe-takeover proof are still pending',
+    'M8B physical execution remains blocked'
 )){
     Assert-Contains $doc $needle ("M8B documentation invariant missing: {0}" -f $needle)
 }

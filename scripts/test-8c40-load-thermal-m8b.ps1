@@ -19,6 +19,7 @@ $cli=Join-Path $repoRoot 'src\VictusFanControl\bin\Release\net8.0-windows\Victus
 $modulesDir=Join-Path $repoRoot 'modules'
 $failsafeScript=Join-Path $PSScriptRoot 'watchdog-m8b-service-failsafe-8c40.ps1'
 $token='8C40-M8B-LOAD50'
+. (Join-Path $PSScriptRoot 'm8b-tracked-child.ps1')
 
 $stamp=Get-Date -Format 'yyyy-MM-dd_HHmmss'
 $evidenceRoot=Join-Path $repoRoot ("logs\m8b-watchdog-load_{0}" -f $stamp)
@@ -294,18 +295,7 @@ function Wait-ReadyMarker {
 function Wait-ControllerExit {
     param([int]$Seconds)
 
-    if(-not $controller.WaitForExit($Seconds*1000)){
-        throw "M8B controller did not exit within $Seconds s after READY."
-    }
-
-    $controller.Refresh()
-    $exitCode=$controller.ExitCode
-
-    if($null -eq $exitCode){
-        throw 'M8B controller terminated but ExitCode was unavailable.'
-    }
-
-    return [int]$exitCode
+    return Wait-M8BTrackedChildExitCode -Process $controller -Seconds $Seconds
 }
 
 function Wait-JournalGone {
@@ -438,6 +428,10 @@ try {
         throw 'M8B refuses because M8A has not authorized M8B code/spec progression.'
     }
 
+    if(-not [bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized){
+        throw 'M8B physical execution is blocked in the versioned profile; evidence review and explicit authorization are required before a new write-capable gate.'
+    }
+
     if([bool]$profile.lifecycle.watchdogRecoveryValidated -or
        [bool]$profile.control.enabledByDefault){
         throw 'M8B refuses if production watchdog recovery or automatic policy is already enabled.'
@@ -509,14 +503,16 @@ try {
     Write-Host ''
     Write-Host 'Step 6: launch M8B controller; it must prove load before its single 50/50 write...' -ForegroundColor Cyan
 
-    $controller=Start-Process -FilePath 'dotnet' -ArgumentList @(
+    $dotnetExecutable=(Get-Command dotnet.exe -CommandType Application -ErrorAction Stop).Source
+
+    $controller=Start-M8BTrackedChild -Executable $dotnetExecutable -Arguments @(
         $cli,
         '--8c40-m8b-watchdog-load',
         '--8c40-m8b-token',$token,
         '--8c40-m8b-ready-path',$readyPath,
         '--8c40-m8b-result-path',$resultPath,
         '--modules-dir',$modulesDir
-    ) -PassThru -NoNewWindow
+    ) -WorkingDirectory $repoRoot
 
     $controllerPid=$controller.Id
     $controllerStartTicks=[long]$controller.StartTime.ToUniversalTime().Ticks

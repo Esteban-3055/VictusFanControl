@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 1 FAIL_CLOSED AFTER OWNED 50/50; ATTEMPTS 2 AND 3 FAIL_CLOSED / NO-WRITE DUE INSUFFICIENT REPRESENTATIVE GPU LOAD; EVIDENCE/WORKLOAD REVIEW PENDING; FURTHER M8B PHYSICAL BLOCKED. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 4 CONTROLLER-REPORTED PASS AT 30/30 BUT PARENT FAIL_CLOSED ON UNAVAILABLE EXITCODE; RETROSPECTIVE CAUSAL/FAILSAFE/CLOSURE EVIDENCE AUDIT PENDING. NO FURTHER PHYSICAL M8B AUTHORIZED. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -724,6 +724,48 @@ a different observed workload condition.
 **M8B attempt 4 remains blocked** pending durable evidence/workload review. Do not lower
 35%/20 W or remove the three-consecutive rule to force a PASS; do not rerun M8B blindly.
 M8C hardware qualification and production watchdog/adaptive policy remain blocked.
+
+## 7B.4. M8B physical attempt 4 - CONTROLLER PASS / PARENT FAIL_CLOSED
+
+The operator reports a later M8B run under **God of War 2018** with preserved evidence at
+`logs/m8b-watchdog-load_2026-09-30_032326/`. The console excerpt begins at step 6,
+so its exact physical-run HEAD and preceding preflight must be confirmed from the parent
+summary rather than inferred from the current Git branch.
+
+The real pre-write classifier passed 3/3 representative samples: GPU utilization
+91/99/98%, GPU power 62.7/68.3/68.1 W. The controller reached real READY at
+PID **13688**, creation ticks **639263462484122422**, durable journal generation **3**,
+EC **50/50**, dual tach **4400/4076 RPM**. Every printed supervision sample remained
+representative with exact EC 50/50: **30/30 representative**, maximum consecutive **30**,
+CPU effective temperature maximum **76 C**, GPU maximum **74 C**, GPU power maximum
+**70.7 W**, CPU high-temperature streak 0/5. The controller printed
+`PASS: HP 8C40 M8B watchdog-backed 50/50 representative-load gate completed`,
+following its normal restore logic.
+
+The **parent nevertheless FAIL_CLOSED** before reaching `Assert-CausalServiceLog` because
+the PowerShell `Start-Process -PassThru` child object returned an unavailable `ExitCode`
+after exit (`M8B controller terminated but ExitCode was unavailable.`).
+The parent cleanup printed independent firmware-owned **FF/FF twice** and service
+`Manual/Stopped`. This is a distinction between physical controller evidence and the
+parent's formal harness outcome; do not promote the run to M8B PHYSICAL PASS from console text.
+
+**Full causal chain and no-failsafe-takeover proof are still pending.** Inspect the retained
+`m8b-ready.json`, `m8b-result.json`, `m8b-harness-summary.json`,
+`m8b-failsafe.log` if present, plus the dated watchdog M4 service log. An offline
+evidence review must confirm exact HEAD/target/process identity, normal restore/Release,
+one PREPARE -> WRITE_INTENT 50/50 -> COMMIT 50/50 -> RESTORE_BEGIN -> RELEASE,
+independent final journal absence and FF/FF, and no independent failsafe takeover.
+The parent summary's `causalChainPass=false` is expected from the early ExitCode abort
+and cannot be treated as proof that the causal chain did or did not occur.
+
+The code-level correction moves controller launch and exit waiting to a directly owned
+`System.Diagnostics.Process` with a bounded native `WaitForExit` and `ExitCode`
+read from the same instance; a hardware-free synthetic regression covers exit status
+0 and 7 under PowerShell 7 and Windows PowerShell 5.1. This does not waive the exit-code
+requirement, change fan thresholds, redo any physical hardware test, or infer a PASS.
+
+**M8B physical execution remains blocked** pending CI and retrospective evidence audit.
+M8C physical execution, production watchdog promotion and automatic/adaptive policy remain OFF.
 
 ## 8. Physical harness safety and evidence
 
