@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-physical-pass-m8c-physical-authorized-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-physical-pass-m8c-attempt1-fail-closed-retry-blocked-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -2534,9 +2534,9 @@
       }
     },
     "m8c": {
-      "status": "PHYSICAL_EXECUTION_AUTHORIZED_POST_M8B_HARDENING_CI_817",
+      "status": "PHYSICAL_ATTEMPT1_FAIL_CLOSED_EC_TACH_IO_CLEANUP_FF_PROOF_INCOMPLETE_RETRY_BLOCKED",
       "physicalPassed": false,
-      "physicalExecutionAuthorized": true,
+      "physicalExecutionAuthorized": false,
       "requiresM8BPhysicalPass": true,
       "realOvertemperatureRequired": false,
       "syntheticSelfTestMode": "--8c40-m8c-self-test",
@@ -2551,7 +2551,7 @@
         "inFlightApply": "thermal handoff must cancel an in-flight ApplyAsync and end in firmware authority"
       },
       "physicalHarnessPrepared": true,
-      "physicalPrerequisite": "M8B physical PASS is satisfied. M8C physical execution is explicitly authorized after post-M8B native child/failsafe evidence hardening passed full CI #817.",
+      "physicalPrerequisite": "M8B physical PASS remains satisfied. M8C retry is blocked after attempt 1 FAIL_CLOSED until the preserved result/watchdog evidence is reviewed.",
       "automaticPolicyEnabled": false,
       "watchdogRecoveryValidated": false,
       "syntheticCodeCi": {
@@ -2569,7 +2569,7 @@
         "note": "Initial build run #731 found a compile-only profile-access error in the new synthetic helper. The helper was corrected to use Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount; run #737 passed the full workflow. No hardware path was executed."
       },
       "physicalControllerPrepared": true,
-      "physicalControllerStatus": "CODE_CI_PASS_PHYSICAL_AUTHORIZED_QUALIFICATION_ONLY",
+      "physicalControllerStatus": "PHYSICAL_RETRY_BLOCKED_AFTER_ATTEMPT1_FAIL_CLOSED",
       "physicalControllerType": "Hp8C40M8CPhysicalThermalPreemptionQualificationTest",
       "physicalControllerAuthorizationConstant": false,
       "physicalControllerToken": "8C40-M8C-THERMAL50",
@@ -2579,7 +2579,7 @@
       ],
       "parentContinueMarker": "M8C-CONTINUE",
       "parentHandoff": "M8C_READY_BEFORE_INJECTION",
-      "physicalHarnessStatus": "CODE_CI_PASS_PHYSICAL_AUTHORIZED_QUALIFICATION_ONLY",
+      "physicalHarnessStatus": "EVIDENCE_AUTOPACKAGING_PREPARED_RETRY_BLOCKED",
       "physicalHarnessScript": "scripts/test-8c40-load-thermal-m8c.ps1",
       "physicalHarnessInvariantScript": "scripts/test-8c40-load-thermal-m8c-harness-invariants.ps1",
       "independentFailsafeScript": "scripts/watchdog-m8c-service-failsafe-8c40.ps1",
@@ -2587,7 +2587,7 @@
         "requiresM8BPhysicalPassed": true,
         "requiresM8CPhysicalExecutionAuthorized": true,
         "currentM8BPhysicalPassed": true,
-        "currentM8CPhysicalExecutionAuthorized": true
+        "currentM8CPhysicalExecutionAuthorized": false
       },
       "physicalSubcyclePlan": [
         "CPU: independent real 50/50 OWNED -> parent journal/failsafe proof -> five synthetic 95 C frames -> firmware handoff on 5/5",
@@ -2610,7 +2610,7 @@
         "physicalExecution": false
       },
       "postM8BHardening": {
-        "status": "CODE_CI_PASS_PHYSICAL_AUTHORIZED",
+        "status": "CODE_CI_PASS_ATTEMPT1_EXECUTED_RETRY_BLOCKED",
         "reason": "M8B demonstrated that PowerShell Start-Process -PassThru can lose ExitCode. M8C still used that pattern and its delayed failsafe did not publish an ARMED marker before sleeping.",
         "changes": [
           "native System.Diagnostics.Process ownership for the M8C controller and ExitCode",
@@ -2621,7 +2621,7 @@
         ],
         "controlBehaviorChanged": false,
         "thresholdsChanged": false,
-        "physicalExecutionAuthorized": true,
+        "physicalExecutionAuthorized": false,
         "ci": {
           "result": "PASS",
           "commit": "8b70181eccc0684db69fb7c38db5a42a1549b0a8",
@@ -2644,7 +2644,7 @@
         }
       },
       "physicalAuthorization": {
-        "authorized": true,
+        "authorized": false,
         "date": "2026-09-30",
         "sourceHead": "8b70181eccc0684db69fb7c38db5a42a1549b0a8",
         "sourceCiRunNumber": 817,
@@ -2663,7 +2663,41 @@
           "any failsafe takeover invalidates PASS",
           "WatchdogRecoveryValidated remains false",
           "automatic/adaptive policy remains OFF"
-        ]
+        ],
+        "completed": true,
+        "result": "FAIL_CLOSED",
+        "attemptHead": "7d247b2580688af60e1f9cf9144b48f831178a9e",
+        "retryAuthorized": false
+      },
+      "physicalAttempts": [
+        {
+          "attempt": 1,
+          "date": "2026-09-30",
+          "evidenceHead": "7d247b2580688af60e1f9cf9144b48f831178a9e",
+          "result": "FAIL_CLOSED",
+          "parentFailure": "M8C controller exited before READY. ExitCode=223.",
+          "controllerFailure": "IOException: EC fan tachometer snapshot 0xB0/0xB1 and 0xB2/0xB3 failed after 5 attempts: EC output buffer did not become full. Last status=0x00 after 30 polls.",
+          "readyReached": false,
+          "writeBoundary": "UNKNOWN_FROM_TERMINAL_ONLY: READY was not reached, but M8C applies real 50/50 before READY; inspect m8c-result.json ApplyCalls/custom/final fields before classifying the write boundary.",
+          "cleanupEvidence": "Parent cleanup read FF/FF once, then CPU=144 GPU=255 on the second independent setpoint probe; independent final firmware-ownership proof therefore failed.",
+          "finalClosurePass": false,
+          "physicalPassed": false,
+          "retryAuthorized": false
+        }
+      ],
+      "evidencePackaging": {
+        "status": "CODE_PREPARED_CI_PENDING",
+        "automaticForFutureHarnessRuns": true,
+        "helperScript": "scripts/package-latest-m8c-evidence.ps1",
+        "behavior": [
+          "copy dated M4 watchdog log into the M8C evidence directory when present",
+          "snapshot watchdog status and any retained lease evidence when present",
+          "record git HEAD/status and watchdog service snapshot",
+          "create m8c-package-manifest.json",
+          "create a ZIP adjacent to the evidence directory",
+          "run automatically from the M8C parent finally block on PASS or FAIL_CLOSED"
+        ],
+        "currentAttemptRecovery": "After pulling this change, one helper command packages the latest already-existing M8C attempt without rerunning hardware."
       }
     },
     "productionRaceAuditCodeCi": {

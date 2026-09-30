@@ -716,7 +716,7 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-m8b-token <token>        Required exact token: 8C40-M8B-LOAD50.");
         Console.WriteLine("  --8c40-m8b-ready-path <path>    Required durable OWNED-ready marker path for M8B.");
         Console.WriteLine("  --8c40-m8b-result-path <path>   Required durable controller evidence path for M8B.");
-        Console.WriteLine("  --8c40-m8c-physical-thermal     ACTIVE M8C PHYSICAL GATE: real 50/50 ownership + qualification-only synthetic thermal preemption.");
+        Console.WriteLine("  --8c40-m8c-physical-thermal     BLOCKED M8C PHYSICAL: attempt 1 failed closed; preserve/package evidence before any retry.");
         Console.WriteLine("  --8c40-m8c-physical-token <t>   Required exact token: 8C40-M8C-THERMAL50.");
         Console.WriteLine("  --8c40-m8c-physical-case <c>    Qualification subcycle: cpu or gpu.");
         Console.WriteLine("  --8c40-m8c-physical-ready-path <path>     Required real-OWNED pre-injection marker.");

@@ -87,7 +87,7 @@ Assert-Contains $program 'Hp8C40M8CThermalPreemptionSelfTest' 'M8C synthetic CLI
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8C code preparation requires M8A physical PASS.'
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8C must require the now-recorded M8B physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8C must remain physically unvalidated.'
-Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C physical execution must be explicitly authorized after M8B PASS and post-M8B hardening CI.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8C retry must be blocked after attempt 1 FAIL_CLOSED pending evidence review.'
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.requiresM8BPhysicalPass) 'M8C must retain the M8B physical prerequisite.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M8C code preparation must not enable automatic policy.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.watchdogRecoveryValidated) 'M8C code preparation must not promote watchdog recovery.'
@@ -100,7 +100,7 @@ foreach($needle in @(
     'GPU = 87 C',
     'effective CPU >=99 C',
     'M8C synthetic preparation',
-    'M8C post-M8B hardening CI PASS; physical qualification authorized'
+    'M8C attempt 1 - FAIL_CLOSED before READY'
 )){
     Assert-Contains $doc $needle ("M8C documentation invariant missing: {0}" -f $needle)
 }

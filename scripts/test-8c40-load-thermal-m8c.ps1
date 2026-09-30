@@ -28,6 +28,7 @@ $serviceLog=Join-Path $serviceRoot ("logs\watchdog-m4-8c40-{0}.log" -f (Get-Date
 $cli=Join-Path $repoRoot 'src\VictusFanControl\bin\Release\net8.0-windows\VictusFanControl.dll'
 $modulesDir=Join-Path $repoRoot 'modules'
 $failsafeScript=Join-Path $PSScriptRoot 'watchdog-m8c-service-failsafe-8c40.ps1'
+$packageScript=Join-Path $PSScriptRoot 'package-latest-m8c-evidence.ps1'
 $token='8C40-M8C-THERMAL50'
 . (Join-Path $PSScriptRoot 'm8c-tracked-child.ps1')
 
@@ -639,6 +640,15 @@ finally {
     }
 
     $summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
+
+    try {
+        $packOutput=@(& $packageScript -EvidenceRoot $evidenceRoot -RepoRoot $repoRoot)
+        $zipPath=($packOutput | Select-Object -Last 1)
+        Write-Host ("M8C automatic evidence package: {0}" -f $zipPath) -ForegroundColor Green
+    }
+    catch {
+        Write-Warning ("M8C evidence auto-packaging failed without masking the qualification result: {0}" -f $_.Exception.Message)
+    }
 }
 
 if(-not $pass){throw "M8C FAILED: $failure"}

@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS ON RETRY 6 WITH 30/30 REPRESENTATIVE SUPERVISION, EXACT CAUSAL WATCHDOG CHAIN, ARMED FAILSAFE EVIDENCE AND COMPLETE FINAL CLOSURE. M8C POST-M8B PROCESS/FAILSAFE HARDENING PASSED FULL CI #817 AND M8C PHYSICAL EXECUTION IS EXPLICITLY AUTHORIZED FOR THE BOUNDED QUALIFICATION-ONLY CPU/GPU PREEMPTION HARNESS. WATCHDOG RECOVERY REMAINS UNPROMOTED AND AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B PHYSICAL PASS. M8C ATTEMPT 1 FAIL_CLOSED BEFORE READY ON AN EC FAN-TACH READ IOException; PARENT CLEANUP DID NOT PROVE TWO CONSECUTIVE FF/FF READS (FF/FF THEN 144/FF). M8C RETRY IS BLOCKED PENDING PRESERVED-EVIDENCE REVIEW. AUTOMATIC EVIDENCE PACKAGING IS BEING ADDED SO FUTURE PASS/FAIL_CLOSED RUNS COPY THE M4 LOG AND CREATE THE ZIP AUTOMATICALLY. WATCHDOG RECOVERY REMAINS UNPROMOTED AND AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -974,6 +974,46 @@ mandatory. Any mismatch fails closed.
 This authorization does **not** set `m8c.physicalPassed=true`, does not set
 `WatchdogRecoveryValidated=true`, does not expose the qualification injection through production
 runtime/UI, and does not enable automatic/adaptive fan control.
+
+
+## 7B.10. M8C attempt 1 - FAIL_CLOSED before READY; retry blocked
+
+The first physical M8C attempt ran on 2026-09-30 at HEAD
+`7d247b2580688af60e1f9cf9144b48f831178a9e`. The same-HEAD no-write preflight passed,
+the initial parent baseline proved FF/FF twice, and the CPU subcycle began from another
+two-read FF/FF baseline.
+
+The child then failed closed with exit code **223** and durable failure text reporting:
+
+`IOException: EC fan tachometer snapshot 0xB0/0xB1 and 0xB2/0xB3 failed after 5 attempts: EC output buffer did not become full. Last status=0x00 after 30 polls.`
+
+The parent never observed `M8C_READY_BEFORE_INJECTION`, so no synthetic 95 C qualification
+sequence was released. However, READY occurs **after** the real 50/50 ApplyAsync in the controller,
+so the terminal alone is insufficient to classify whether this exception happened before or after
+the real write boundary. The preserved `cpu/m8c-result.json` fields such as `ApplyCalls`,
+`customWasOwnedAtFinally`, event ordering and final firmware ownership must be inspected before
+making that determination.
+
+Cleanup was also not sufficient for closure: the parent observed one FF/FF setpoint read followed
+by **CPU=144 / GPU=255**, so the required two consecutive independent FF/FF proof failed. This does
+not by itself establish persistent Custom ownership, but it is enough to block another physical
+attempt until the result JSON, M4 watchdog log, failsafe log and any retained journal/status
+evidence are reviewed together.
+
+M8C physical execution is therefore re-blocked in both the profile and compiled controller.
+`m8c.physicalPassed=false`, `WatchdogRecoveryValidated=false`, and automatic/adaptive control
+remain unchanged.
+
+### Automatic M8C evidence packaging
+
+To remove manual evidence commands, the parent harness now invokes
+`scripts/package-latest-m8c-evidence.ps1` from its final block on both PASS and FAIL_CLOSED.
+The packager copies the dated M4 watchdog log when present, snapshots watchdog status and any
+retained lease, records git HEAD/status and service state, writes
+`m8c-package-manifest.json`, and creates `m8c-thermal-preemption_*.zip` next to the evidence
+directory.
+
+The same helper can package this already-existing attempt without rerunning hardware.
 
 ## 8. Physical harness safety and evidence
 
