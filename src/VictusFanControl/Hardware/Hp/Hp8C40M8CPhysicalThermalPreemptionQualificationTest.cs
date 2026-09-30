@@ -682,15 +682,22 @@ public static class Hp8C40M8CPhysicalThermalPreemptionQualificationTest
         List<EventEvidence> events,
         CancellationToken cancellationToken)
     {
+        var syntheticEpoch =
+            DateTimeOffset.UtcNow;
+
         for (var ordinal = 1;
              ordinal <=
              Hp8C40ThermalEmergencyConfirmation.RequiredConsecutiveCpuSamples;
              ordinal++)
         {
+            // The temporal confirmation contract advances only on unique
+            // telemetry timestamps. Derive them deterministically instead of
+            // relying on OS clock resolution during a tight synthetic loop.
             var frame =
                 Hp8C40M8CThermalQualificationInjection
                     .CpuConfirmedThreshold(
-                        DateTimeOffset.UtcNow,
+                        syntheticEpoch +
+                        TimeSpan.FromMilliseconds(ordinal),
                         ordinal);
 
             var evaluation =
