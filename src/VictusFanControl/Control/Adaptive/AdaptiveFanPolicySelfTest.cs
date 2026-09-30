@@ -60,15 +60,15 @@ public static class AdaptiveFanPolicySelfTest
                     cpuPowerW: 20,
                     cpuLoad: 20,
                     gpuC: 60,
-                    gpuPowerW: 90,
+                    gpuPowerW: 120,
                     gpuLoad: 95));
 
         return Report(
             output,
             "maximum thermal/load/power demand wins",
             decision.Accepted &&
-            decision.RawDemandLevel is >= 40 &&
-            decision.EqualFanLevel is >= 40);
+            decision.RawDemandLevel is >= 45 &&
+            decision.EqualFanLevel is >= 45);
     }
 
     private static int TestUpwardSlew(TextWriter output)
@@ -373,6 +373,7 @@ public static class AdaptiveFanPolicySelfTest
             CpuPowerCurve:
             [
                 new(0, 10),
+                new(15, 10),
                 new(30, 18),
                 new(60, 30),
                 new(100, 45)
@@ -380,6 +381,7 @@ public static class AdaptiveFanPolicySelfTest
             GpuPowerCurve:
             [
                 new(0, 10),
+                new(15, 10),
                 new(30, 18),
                 new(70, 32),
                 new(120, 45)
@@ -387,12 +389,14 @@ public static class AdaptiveFanPolicySelfTest
             CpuLoadCurve:
             [
                 new(0, 10),
+                new(20, 10),
                 new(50, 20),
                 new(100, 30)
             ],
             GpuLoadCurve:
             [
                 new(0, 10),
+                new(20, 10),
                 new(50, 20),
                 new(100, 30)
             ]);
