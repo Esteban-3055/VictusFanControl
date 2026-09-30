@@ -19,7 +19,7 @@ function Assert-False([bool]$Value,[string]$Message){
     if($Value){throw $Message}
 }
 
-Assert-Contains $controller 'public const bool PhysicalExecutionAuthorized = false;' 'M8C physical controller must remain compile-time blocked before M8B PASS.'
+Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M8C physical controller must remain compile-time blocked before M8B PASS.'
 Assert-Contains $controller '8C40-M8C-THERMAL50' 'M8C future explicit token changed.'
 Assert-Contains $controller 'Hp8C40M8CPhysicalCase.CpuConfirmed95' 'M8C CPU physical subcycle missing.'
 Assert-Contains $controller 'Hp8C40M8CPhysicalCase.GpuImmediate87' 'M8C GPU physical subcycle missing.'
