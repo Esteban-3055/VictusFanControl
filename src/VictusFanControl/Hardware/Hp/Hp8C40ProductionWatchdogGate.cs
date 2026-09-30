@@ -16,8 +16,10 @@ public static class Hp8C40ProductionWatchdogGate
 {
     public const string GateId = "M9";
     public const string M9CPhysicalQualificationToken = "8C40-M9C-PRODUCTION30";
+    public const string M9DPhysicalQualificationToken = "8C40-M9D-PRODUCTION-LIFECYCLE30";
 
     private static readonly AsyncLocal<int> M9CQualificationScopeDepth = new();
+    private static readonly AsyncLocal<int> M9DQualificationScopeDepth = new();
 
     // M9A prepares production wiring only. Do not set true until the separately
     // versioned M9 physical gates have passed and the profile is promoted.
@@ -26,6 +28,11 @@ public static class Hp8C40ProductionWatchdogGate
     // Separate temporary construction gate for one versioned M9C physical
     // qualification. It remains false until M9B evidence is physically closed.
     public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;
+
+    // M9D is a distinct full-GUI/lifecycle qualification boundary. It remains
+    // hard-blocked until M9C physical evidence is reviewed and a later explicit
+    // authorization commit opens only this temporary construction scope.
+    public static readonly bool M9DPhysicalQualificationConstructionAuthorized = false;
 
     public static bool IsProductionConstructionAuthorizedFor(
         HardwareIdentity hardware,
@@ -71,14 +78,20 @@ public static class Hp8C40ProductionWatchdogGate
         // M9C may temporarily traverse the exact same factory/public constructor
         // only inside its separately authorized AsyncLocal construction scope.
         // The scope is disposed before Custom admission or any fan write.
-        if (M9CQualificationScopeDepth.Value == 1)
+        if (M9CQualificationScopeDepth.Value == 1 ||
+            M9DQualificationScopeDepth.Value == 1)
         {
             if (!Hp8C40TargetProfile.Matches(
                     hardware,
                     out var qualificationTargetReason))
             {
+                var gate =
+                    M9DQualificationScopeDepth.Value == 1
+                        ? "M9D"
+                        : "M9C";
+
                 throw new NotSupportedException(
-                    $"M9C exact-target refusal: {qualificationTargetReason}");
+                    $"{gate} exact-target refusal: {qualificationTargetReason}");
             }
 
             return;
@@ -128,18 +141,69 @@ public static class Hp8C40ProductionWatchdogGate
                 "M9C qualification scope is forbidden while/after production watchdog promotion is active.");
         }
 
-        if (M9CQualificationScopeDepth.Value != 0)
+        if (M9CQualificationScopeDepth.Value != 0 ||
+            M9DQualificationScopeDepth.Value != 0)
         {
             throw new InvalidOperationException(
-                "Nested M9C production-watchdog construction scopes are forbidden.");
+                "Nested or overlapping M9C/M9D production-watchdog construction scopes are forbidden.");
         }
 
         M9CQualificationScopeDepth.Value = 1;
         return new M9CConstructionScope();
     }
 
+    public static IDisposable EnterM9DPhysicalQualificationConstructionScope(
+        HardwareIdentity hardware,
+        string qualificationToken)
+    {
+        ArgumentNullException.ThrowIfNull(hardware);
+
+        if (!Hp8C40TargetProfile.Matches(
+                hardware,
+                out var targetReason))
+        {
+            throw new NotSupportedException(
+                $"M9D exact-target refusal: {targetReason}");
+        }
+
+        if (!string.Equals(
+                qualificationToken,
+                M9DPhysicalQualificationToken,
+                StringComparison.Ordinal))
+        {
+            throw new UnauthorizedAccessException(
+                $"M9D construction requires exact token '{M9DPhysicalQualificationToken}'.");
+        }
+
+        if (!M9DPhysicalQualificationConstructionAuthorized)
+        {
+            throw new NotSupportedException(
+                "M9D physical qualification construction is compile-time blocked.");
+        }
+
+        if (ProductionConstructionAuthorized ||
+            Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated)
+        {
+            throw new InvalidOperationException(
+                "M9D qualification scope is forbidden while/after production watchdog promotion is active.");
+        }
+
+        if (M9CQualificationScopeDepth.Value != 0 ||
+            M9DQualificationScopeDepth.Value != 0)
+        {
+            throw new InvalidOperationException(
+                "Nested or overlapping M9C/M9D production-watchdog construction scopes are forbidden.");
+        }
+
+        M9DQualificationScopeDepth.Value = 1;
+        return new M9DConstructionScope();
+    }
+
     internal static bool IsM9CPhysicalQualificationScopeActive =>
         M9CQualificationScopeDepth.Value == 1;
+
+    internal static bool IsM9DPhysicalQualificationScopeActive =>
+        M9DQualificationScopeDepth.Value == 1;
 
     private sealed class M9CConstructionScope : IDisposable
     {
@@ -165,6 +229,30 @@ public static class Hp8C40ProductionWatchdogGate
         }
     }
 
+    private sealed class M9DConstructionScope : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+
+            if (M9DQualificationScopeDepth.Value != 1)
+            {
+                M9DQualificationScopeDepth.Value = 0;
+                throw new InvalidOperationException(
+                    "M9D construction scope depth was corrupted.");
+            }
+
+            M9DQualificationScopeDepth.Value = 0;
+        }
+    }
+
     /// <summary>
     /// Normal GUI wiring point. While M9 is open this returns null and performs
     /// no IPC/service/hardware work. After a future explicit M9 promotion it
@@ -174,6 +262,26 @@ public static class Hp8C40ProductionWatchdogGate
     public static IFanControlWatchdogLeaseClient? CreateLeaseIfAuthorized(
         HardwareIdentity hardware)
     {
+        ArgumentNullException.ThrowIfNull(hardware);
+
+        // M9D intentionally exercises this exact normal GUI helper. The
+        // qualification scope is construction-only and is closed before
+        // FanControlCoordinator can admit Custom authority.
+        if (M9DQualificationScopeDepth.Value == 1)
+        {
+            if (!Hp8C40TargetProfile.Matches(
+                    hardware,
+                    out var qualificationReason))
+            {
+                throw new NotSupportedException(
+                    $"M9D exact-target refusal: {qualificationReason}");
+            }
+
+            return new NamedPipeFanControlWatchdogLeaseClient(
+                Hp8C40TargetProfile.Instance.Id,
+                FanControlWatchdogLeaseContract.Hp8C40M4PipeName);
+        }
+
         if (!IsProductionConstructionAuthorizedFor(
                 hardware,
                 out _))

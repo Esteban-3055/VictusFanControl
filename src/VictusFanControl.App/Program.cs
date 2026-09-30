@@ -136,6 +136,16 @@ internal static class Program
             args,
             "--8c40-m7-test-token");
 
+        var m9dProductionLifecycleHardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--8c40-m9d-production-lifecycle-test",
+                StringComparison.OrdinalIgnoreCase));
+
+        var m9dProductionLifecycleHardwareTestToken = ReadOptionValue(
+            args,
+            "--8c40-m9d-test-token");
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
@@ -145,12 +155,13 @@ internal static class Program
             (gateG1HardwareTest ? 1 : 0) +
             (gateG2HardwareTest ? 1 : 0) +
             (m6ModernStandbyHardwareTest ? 1 : 0) +
-            (m7HibernationHardwareTest ? 1 : 0);
+            (m7HibernationHardwareTest ? 1 : 0) +
+            (m9dProductionLifecycleHardwareTest ? 1 : 0);
 
         if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
-                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2, HP 8C40 M6 and HP 8C40 M7 hardware-test modes are mutually exclusive.");
+                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2, HP 8C40 M6, M7 and M9D hardware-test modes are mutually exclusive.");
             Environment.ExitCode = 60;
             return;
         }
@@ -337,6 +348,36 @@ internal static class Program
             return;
         }
 
+        if (m9dProductionLifecycleHardwareTest &&
+            !string.Equals(
+                m9dProductionLifecycleHardwareTestToken,
+                Hp8C40M9DProductionLifecycleQualification.RequiredToken,
+                StringComparison.Ordinal))
+        {
+            AppLog.Write(
+                $"HP 8C40 M9D production lifecycle test refused: explicit --8c40-m9d-test-token {Hp8C40M9DProductionLifecycleQualification.RequiredToken} is required.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (!m9dProductionLifecycleHardwareTest &&
+            m9dProductionLifecycleHardwareTestToken is not null)
+        {
+            AppLog.Write(
+                "Startup refused: --8c40-m9d-test-token is valid only with --8c40-m9d-production-lifecycle-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (m9dProductionLifecycleHardwareTest &&
+            !Hp8C40M9DProductionLifecycleQualification.PhysicalExecutionAuthorized)
+        {
+            AppLog.Write(
+                "HP 8C40 M9D production lifecycle test is compile-time blocked. M9B/M9C physical evidence and a later explicit authorization commit are required.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -383,7 +424,8 @@ internal static class Program
         }
 
         if (m6ModernStandbyHardwareTest ||
-            m7HibernationHardwareTest)
+            m7HibernationHardwareTest ||
+            m9dProductionLifecycleHardwareTest)
         {
             var hardware = HardwareIdentityReader.ReadCurrent();
 
@@ -392,9 +434,11 @@ internal static class Program
                     out var lifecycleTargetReason))
             {
                 var gateLabel =
-                    m7HibernationHardwareTest
-                        ? "M7 hibernation"
-                        : "M6 Modern Standby";
+                    m9dProductionLifecycleHardwareTest
+                        ? "M9D production Modern Standby"
+                        : m7HibernationHardwareTest
+                            ? "M7 hibernation"
+                            : "M6 Modern Standby";
 
                 AppLog.Write(
                     $"HP 8C40 {gateLabel} startup refused before MainForm/backend creation: " +
@@ -423,7 +467,8 @@ internal static class Program
             gateG1HardwareTest,
             gateG2HardwareTest,
             m6ModernStandbyHardwareTest,
-            m7HibernationHardwareTest);
+            m7HibernationHardwareTest,
+            m9dProductionLifecycleHardwareTest);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");

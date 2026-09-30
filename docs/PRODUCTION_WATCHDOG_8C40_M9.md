@@ -319,3 +319,56 @@ barriers remain closed:
 - `m9c.qualificationConstructionAuthorized=false`.
 
 M9B remains the first unavoidable machine-side evidence boundary.
+
+
+## 9. M9D full-GUI production-path lifecycle preparation
+
+M9D is the final planned last-mile integration regression before watchdog promotion.
+Its code is being prepared while M9B remains the first unavoidable target-side evidence
+boundary and M9C remains physically blocked.
+
+The M9D App mode is
+`--8c40-m9d-production-lifecycle-test` with exact token
+`8C40-M9D-PRODUCTION-LIFECYCLE30`. Two independent compile-time barriers remain
+false: `Hp8C40M9DProductionLifecycleQualification.PhysicalExecutionAuthorized`
+and `Hp8C40ProductionWatchdogGate.M9DPhysicalQualificationConstructionAuthorized`.
+
+Unlike historical M6/M7, M9D does not call
+`CreateLifecycleQualificationBackend`. It enters a short-lived, exact-target,
+token-bound construction scope and then uses the normal production surfaces:
+
+```text
+Hp8C40ProductionWatchdogGate.CreateLeaseIfAuthorized
+ -> HpFanControlBackendFactory.Create
+ -> public Hp8C40FanControlBackend constructor
+ -> scope disposed
+ -> FanControlCoordinator
+```
+
+The scope must be closed before coordinator admission, PREPARE, lease acquisition or
+any fan write. Normal GUI construction outside that scope remains blocked by
+`WatchdogRecoveryValidated=false` and `ProductionConstructionAuthorized=false`.
+
+M9D reuses the already-qualified M6 display-aware lifecycle engine rather than creating
+a second implementation of the safety-critical ordering. Evidence markers use a
+separate `m9d-production-lifecycle.*` namespace and record transition mode
+`m9d-production-modern-standby`.
+
+The future physical gate is planned as two fresh GUI subcycles:
+
+1. **D1 controller death:** reach durable OWNED 30/30 through the full GUI production
+   construction path, bind GUI PID + creation ticks, then force-kill only that exact
+   GUI process. The still-running watchdog must restore firmware, clear the journal and
+   retain its own PID/creation identity.
+2. **D2 Modern Standby lifecycle:** launch a fresh M9D GUI, reach OWNED 30/30, then
+   perform a user-initiated Modern Standby cycle. SESSION_DISPLAY_STATUS Off must
+   proactively close admission and restore/release before suspend; display On plus five
+   fresh Healthy samples are required before one controlled 30/30 re-entry and final
+   restore.
+
+M9D does not repeat hibernation because M7 already physically closed that distinct
+power-transition boundary. It focuses on whether the newly wired full GUI production
+construction path preserves the already-qualified controller-death and display-aware
+Modern Standby semantics.
+
+No M9D physical execution is authorized by this preparation.
