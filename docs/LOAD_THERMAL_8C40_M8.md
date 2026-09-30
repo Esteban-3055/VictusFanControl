@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **SPECIFICATION + STATIC/SYNTHETIC INVARIANTS CODE/CI PASS. NO-WRITE PREFLIGHT IMPLEMENTED / CI PENDING. PHYSICAL EXECUTION PENDING. PHYSICAL HARNESS NOT YET AUTHORIZED.**
+Status: **SPECIFICATION + STATIC/SYNTHETIC INVARIANTS CODE/CI PASS. NO-WRITE PREFLIGHT CODE/CI PASS. PHYSICAL PREFLIGHT PENDING. PHYSICAL HARNESS NOT YET AUTHORIZED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -205,9 +205,13 @@ No physical M8 execution is authorized before the no-write preflight passes on t
 
 ## 7. No-write preflight requirements
 
-The versioned preflight is now implemented as
-`scripts/test-8c40-load-thermal-m8-preflight.ps1`. At this commit it is prepared for CI;
-it has **not** yet been authorized for physical execution.
+The versioned preflight is implemented as
+`scripts/test-8c40-load-thermal-m8-preflight.ps1`. Its code/invariant preparation passed
+GitHub Actions **#696** (run `36655313676`) at commit
+`53adc295d7888b0669dcd38e5e7d3e9457965e02`, including PowerShell 7,
+Windows PowerShell 5.1, warnings-as-errors build, M6/M7 regressions and the
+SafetyGate/coordinator/BIOS/backend self-tests. It is now the next authorized
+**NO-WRITE** physical step; the write-capable M8 harness is still not authorized.
 
 The preflight performs **no fan write, no firmware restore, no watchdog lease,
 no service start/stop mutation and no deliberate stress load**. A dedicated

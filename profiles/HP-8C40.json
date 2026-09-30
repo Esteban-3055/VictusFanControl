@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-code-ci-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-code-ci-pass-physical-preflight-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1907,7 +1907,7 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "PREFLIGHT_CODE_PREPARED_CI_PENDING_NO_WRITE_PHYSICAL_PREFLIGHT_PENDING",
+    "status": "PREFLIGHT_CODE_CI_PASS_NO_WRITE_PHYSICAL_PREFLIGHT_PENDING_PHYSICAL_HARNESS_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
@@ -1940,8 +1940,22 @@
     "readOnlyTelemetryRequirement": "3 consecutive SafetyGate PreconditionsReady samples, exact GPU identity, GPU temp > 0 C",
     "noWritePreflightPassed": false,
     "preflightCodeCi": {
-      "result": "PENDING",
-      "noWritePhysicalExecution": false
+      "result": "PASS",
+      "commit": "53adc295d7888b0669dcd38e5e7d3e9457965e02",
+      "runNumber": 696,
+      "runId": 36655313676,
+      "powershellCoreInvariant": true,
+      "windowsPowerShell51Compatibility": true,
+      "warningsAsErrorsBuild": true,
+      "m6Regression": true,
+      "m7Regression": true,
+      "baseM8Invariant": true,
+      "m8PreflightInvariant": true,
+      "safetyGateSelfTest": true,
+      "coordinatorSelfTest": true,
+      "biosContractSelfTest": true,
+      "hpBackendSelfTest": true,
+      "physicalExecution": false
     }
   }
 }
