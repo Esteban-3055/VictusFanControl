@@ -1907,14 +1907,14 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_RETRY_AUTHORIZED_PENDING_M8C_SYNTHETIC_CODE_PREPARED_CI_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_RETRY_AUTHORIZED_PENDING_M8C_SYNTHETIC_CODE_CI_PASS_PHYSICAL_BLOCKED",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
     "representativeLoadGate": "M8A CODE/CI/PHYSICAL PASS",
     "watchdogBackedLoadGate": "M8B attempt 1 FAIL_CLOSED; telemetry-epoch/closure hardening CODE/CI PASS; physical retry authorized and pending",
-    "thermalPreemptionGate": "M8C synthetic code prepared / CI pending; physical execution blocked until M8B physical PASS",
-    "productionRaceAudit": "existing coordinator/backend race coverage mapped; M8C thermal preemption synthetic coverage prepared; final code/CI audit pending",
+    "thermalPreemptionGate": "M8C synthetic CODE/CI PASS; physical execution blocked until M8B physical PASS",
+    "productionRaceAudit": "existing coordinator/backend race coverage mapped; dedicated static/CI audit preparation next; physical load confirmation remains pending",
     "realOvertemperatureRequired": false,
     "qualificationFanLevel": "50/50 equal-only",
     "physicalAbortLimits": "M8A closed with CPU raw threshold 95 C requiring 5 unique consecutive fresh samples, CPU >=99 C immediate hard abort, GPU >=82 C immediate physical abort. M8B must version its write-capable physical boundaries before execution.",
@@ -2236,7 +2236,7 @@
       }
     },
     "m8c": {
-      "status": "SYNTHETIC_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED_BY_M8B",
+      "status": "SYNTHETIC_CODE_CI_PASS_PHYSICAL_BLOCKED_BY_M8B",
       "physicalPassed": false,
       "physicalExecutionAuthorized": false,
       "requiresM8BPhysicalPass": true,
@@ -2255,7 +2255,21 @@
       "physicalHarnessPrepared": false,
       "physicalPrerequisite": "M8B physical PASS on the hardened retry is required before any M8C hardware execution or authorization",
       "automaticPolicyEnabled": false,
-      "watchdogRecoveryValidated": false
+      "watchdogRecoveryValidated": false,
+      "syntheticCodeCi": {
+        "result": "PASS",
+        "finalCommit": "738e308def4824c9200f9c364121a8a1d56ce0f1",
+        "runNumber": 737,
+        "runId": 36667160690,
+        "warningsAsErrorsBuild": true,
+        "powerShellSyntax": true,
+        "powershellCoreInvariant": true,
+        "windowsPowerShell51Compatibility": true,
+        "syntheticThermalPreemptionSelfTest": true,
+        "existingM5M8Regressions": true,
+        "physicalExecution": false,
+        "note": "Initial build run #731 found a compile-only profile-access error in the new synthetic helper. The helper was corrected to use Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount; run #737 passed the full workflow. No hardware path was executed."
+      }
     }
   }
 }
