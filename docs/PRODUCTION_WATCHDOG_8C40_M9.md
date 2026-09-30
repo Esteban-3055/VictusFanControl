@@ -372,3 +372,48 @@ construction path preserves the already-qualified controller-death and display-a
 Modern Standby semantics.
 
 No M9D physical execution is authorized by this preparation.
+
+
+### M9D parent harness and evidence stack
+
+The complete future M9D parent stack is now versioned but remains hard-blocked.
+`scripts/test-8c40-production-watchdog-m9d.ps1` refuses before Administrator,
+CIM, evidence creation, service mutation or EC access unless all of the following are
+formally recorded in the profile:
+
+- M9B read-only physical PASS;
+- M9C physical PASS;
+- a dedicated M9D physical authorization;
+- M9D controller execution authorization;
+- M9D temporary construction authorization.
+
+The harness never installs/replaces the watchdog service and never deletes a retained
+journal or lifecycle marker to satisfy a gate.
+
+M9D is one authorized harness invocation containing two fresh GUI subcycles. The M4
+LocalSystem watchdog starts once and its PID + creation ticks must remain stable.
+
+**D1** launches the full `VictusFanControl.App` M9D mode, proves schema-v2
+generation-3 OWNED 30/30 bound to the exact GUI PID + creation ticks, preserves the
+READY marker, and force-kills only that exact GUI process. The parent issues no HP
+restore. PASS requires watchdog owner-loss `RestoredFirmware`, journal disappearance,
+stable independent FF/FF and the original watchdog PID/creation identity. The delayed
+independent failsafe must not take over.
+
+**D2** launches a fresh full-GUI M9D instance from a fresh FF/FF/journal-absent
+baseline. After READY the operator must explicitly type `M9D-SLEEP` and then use
+Windows **Start -> Power -> Sleep**. The harness contains no `shutdown.exe`,
+`SetSuspendState` or equivalent transition command. PASS requires the existing
+display-aware engine to produce the M9D-specific pre-sleep, resume-gate, re-entry and
+result markers plus causal Kernel-Power 506 -> 507 Modern Standby evidence. Critical
+battery and hibernation evidence invalidate the run.
+
+The D2 watchdog log must contain exactly two complete normal transactions for the same
+GUI identity: initial 30/30 and the single controlled post-resume 30/30 re-entry. Final
+closure requires journal absent, stable two-consecutive FF/FF, delayed failsafe unused
+and M4 returned to Manual/Stopped/PID0/LocalSystem.
+
+`watchdog-m9d-service-failsafe-8c40.ps1` is an isolated copy of the already-pinned
+bounded 30/30 M9C delayed recovery design. `package-m9d-evidence.ps1` packages PASS
+and FAIL_CLOSED evidence with source/installed-binary hashes, full watchdog log/status,
+service snapshot, ZIP and SHA-256 sidecar. Packaging never deletes source evidence.

@@ -189,6 +189,14 @@ jobs:
         shell: pwsh
         run: .\scripts\test-8c40-m9d-production-lifecycle-invariants.ps1
 
+      - name: HP 8C40 M9D parent harness/failsafe/evidence invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9d-harness-invariants.ps1
+
+      - name: HP 8C40 M9D evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-m9d-evidence-packaging.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -230,6 +238,8 @@ jobs:
           .\scripts\test-8c40-m9c-tracked-child-selftest.ps1
           .\scripts\test-8c40-m9c-evidence-packaging.ps1
           .\scripts\test-8c40-m9d-production-lifecycle-invariants.ps1
+          .\scripts\test-8c40-m9d-harness-invariants.ps1
+          .\scripts\test-8c40-m9d-evidence-packaging.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build

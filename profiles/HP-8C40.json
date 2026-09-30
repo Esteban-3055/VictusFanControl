@@ -3127,7 +3127,8 @@
         "sourceCiRunId": null,
         "prerequisite": "M9B read-only physical PASS must be executed, reviewed, hashed and formally recorded before any M9C authorization commit.",
         "scope": "one versioned M9C harness execution only"
-      }
+      },
+      "physicalPassed": false
     },
     "promotion": {
       "authorized": false,
@@ -3136,9 +3137,9 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "M9D app-path code is prepared on an isolated branch but hard-blocked. Continue with deterministic CI and the full blocked parent/evidence harness. M9B remains the first unavoidable machine-side evidence boundary.",
+    "nextStep": "M9D full parent/failsafe/evidence stack is prepared but hard-blocked. After same-HEAD CI closes this preparation, continue with production service-lifecycle/promotion design. M9B remains the first unavoidable machine-side evidence boundary.",
     "m9d": {
-      "status": "APP_PATH_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "status": "FULL_HARNESS_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
       "purpose": "focused last-mile full-GUI production-path recovery + display-aware Modern Standby regression after M9C physical PASS",
       "controllerSurface": "VictusFanControl.App MainForm",
       "appMode": "--8c40-m9d-production-lifecycle-test",
@@ -3187,9 +3188,37 @@
         "warningsAsErrorsBuild": null,
         "powerShell7Invariant": null,
         "windowsPowerShell51Invariant": null,
-        "physicalExecution": false
+        "physicalExecution": false,
+        "fullHarness": {
+          "result": "PENDING",
+          "commit": null,
+          "runNumber": null,
+          "runId": null,
+          "powerShell7HarnessInvariant": null,
+          "powerShell7EvidencePackagingSelfTest": null,
+          "windowsPowerShell51HarnessInvariant": null,
+          "windowsPowerShell51EvidencePackagingSelfTest": null,
+          "warningsAsErrorsBuild": null,
+          "physicalExecution": false
+        }
       },
-      "physicalEvidence": null
+      "physicalEvidence": null,
+      "harnessStatus": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "harnessScript": "scripts/test-8c40-production-watchdog-m9d.ps1",
+      "harnessInvariantScript": "scripts/test-8c40-m9d-harness-invariants.ps1",
+      "independentFailsafeScript": "scripts/watchdog-m9d-service-failsafe-8c40.ps1",
+      "evidencePackagingScript": "scripts/package-m9d-evidence.ps1",
+      "evidencePackagingSelfTest": "scripts/test-8c40-m9d-evidence-packaging.ps1",
+      "failsafeDelaySeconds": 120,
+      "finalFirmwareProof": "up to 6 independent reads; require 2 consecutive FF/FF; persist every read",
+      "physicalAuthorization": {
+        "authorized": false,
+        "sourceHead": null,
+        "sourceCiRunNumber": null,
+        "sourceCiRunId": null,
+        "prerequisite": "M9B read-only physical PASS and M9C physical PASS must both be reviewed, hashed and formally recorded before any M9D authorization commit.",
+        "scope": "one versioned M9D harness execution containing D1 controller-death and D2 user-initiated Modern Standby subcycles"
+      }
     }
   }
 }

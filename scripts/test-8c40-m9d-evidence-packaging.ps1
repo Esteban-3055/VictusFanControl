@@ -1,0 +1,58 @@
+$ErrorActionPreference='Stop'
+
+$repoRoot=Split-Path -Parent $PSScriptRoot
+$pack=Join-Path $PSScriptRoot 'package-m9d-evidence.ps1'
+$temp=Join-Path $env:TEMP ("vfc-m9d-pack-{0}" -f ([guid]::NewGuid().ToString('N')))
+$evidence=Join-Path $temp 'm9d-production-smoke_2026-09-30_220000'
+$fakeLog=Join-Path $temp 'watchdog-m4.log'
+$fakeStatus=Join-Path $temp 'm4-status.json'
+$fakeJournal=Join-Path $temp 'lease.json'
+
+try {
+    New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+    Set-Content -LiteralPath (Join-Path $evidence 'm9d-harness-summary.json') -Value '{"gate":"M9D-HARNESS","result":"FAIL_CLOSED"}' -Encoding ASCII
+    Set-Content -LiteralPath (Join-Path $evidence 'm9d-result.json') -Value '{"gate":"M9D","result":"FAIL_CLOSED"}' -Encoding ASCII
+    Set-Content -LiteralPath $fakeLog -Value 'WATCHDOG TEST LOG' -Encoding ASCII
+    Set-Content -LiteralPath $fakeStatus -Value '{"Ready":true}' -Encoding ASCII
+    Set-Content -LiteralPath $fakeJournal -Value '{"SchemaVersion":2}' -Encoding ASCII
+
+    $package=& $pack -EvidenceRoot $evidence -RepoRoot $repoRoot -WatchdogLogPath $fakeLog -WatchdogStatusPath $fakeStatus -WatchdogJournalPath $fakeJournal
+
+    foreach($required in @(
+        'm9d-watchdog-full.log',
+        'm9d-watchdog-status-final.json',
+        'm9d-retained-lease-final.json',
+        'm9d-service-final.json',
+        'm9d-head.txt',
+        'm9d-git-status.txt',
+        'm9d-package-manifest.json'
+    )){
+        if(-not (Test-Path -LiteralPath (Join-Path $evidence $required) -PathType Leaf)){
+            throw "M9D packaging self-test missing $required"
+        }
+    }
+
+    if(-not (Test-Path -LiteralPath $package.ZipPath -PathType Leaf)){throw 'M9D packaging self-test ZIP missing.'}
+    if(-not (Test-Path -LiteralPath $package.Sha256SidecarPath -PathType Leaf)){throw 'M9D packaging self-test SHA sidecar missing.'}
+
+    $actual=(Get-FileHash -LiteralPath $package.ZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if($actual -cne [string]$package.ZipSha256){throw 'M9D packaging self-test ZIP SHA mismatch.'}
+
+    $manifest=Get-Content -LiteralPath $package.ManifestPath -Raw | ConvertFrom-Json
+    if($manifest.gate -cne 'M9D-EVIDENCE-PACKAGE' -or
+       [int]$manifest.schemaVersion -ne 1 -or
+       [bool]$manifest.destructiveOperations){
+        throw 'M9D packaging self-test manifest contract mismatch.'
+    }
+
+    if(-not (Test-Path -LiteralPath (Join-Path $evidence 'm9d-result.json'))){
+        throw 'M9D packager deleted source evidence.'
+    }
+
+    Write-Host 'HP 8C40 M9D evidence packaging self-test: PASS' -ForegroundColor Green
+}
+finally {
+    if(Test-Path -LiteralPath $temp){
+        Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}

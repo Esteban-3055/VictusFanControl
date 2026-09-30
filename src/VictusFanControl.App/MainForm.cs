@@ -439,13 +439,39 @@ internal sealed class MainForm : Form
         if (DisplayAware8C40LifecycleHardwareTest)
         {
             Directory.CreateDirectory(SuspendHardwareTestRoot);
-            // M7 deliberately reuses the already-hardened M6 marker transport;
-            // transitionMode distinguishes hibernation from Modern Standby.
-            TryDeleteFile(DisplayAwareReadyPath);
-            TryDeleteFile(DisplayAwarePreSleepPath);
-            TryDeleteFile(DisplayAwareResumeGatePath);
-            TryDeleteFile(DisplayAwareReentryPath);
-            TryDeleteFile(DisplayAwareResultPath);
+
+            if (_m9dProductionLifecycleHardwareTest)
+            {
+                // M9D evidence is gate-critical. Refuse stale marker files
+                // instead of deleting them; the parent harness preserves/moves
+                // completed subcycle markers into its evidence directory.
+                foreach (var path in new[]
+                {
+                    DisplayAwareReadyPath,
+                    DisplayAwarePreSleepPath,
+                    DisplayAwareResumeGatePath,
+                    DisplayAwareReentryPath,
+                    DisplayAwareResultPath
+                })
+                {
+                    if (File.Exists(path))
+                    {
+                        throw new InvalidOperationException(
+                            $"M9D refused because preserved lifecycle marker evidence already exists: {path}");
+                    }
+                }
+            }
+            else
+            {
+                // M7 deliberately reuses the already-hardened M6 marker
+                // transport; transitionMode distinguishes hibernation from
+                // Modern Standby.
+                TryDeleteFile(DisplayAwareReadyPath);
+                TryDeleteFile(DisplayAwarePreSleepPath);
+                TryDeleteFile(DisplayAwareResumeGatePath);
+                TryDeleteFile(DisplayAwareReentryPath);
+                TryDeleteFile(DisplayAwareResultPath);
+            }
         }
 
         IFanControlBackend backend;
