@@ -2298,7 +2298,18 @@
         "existingM5M8Regressions": true,
         "physicalExecution": false,
         "note": "Initial build run #731 found a compile-only profile-access error in the new synthetic helper. The helper was corrected to use Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount; run #737 passed the full workflow. No hardware path was executed."
-      }
+      },
+      "physicalControllerPrepared": true,
+      "physicalControllerStatus": "CODE_PREPARED_CI_PENDING_HARD_BLOCKED",
+      "physicalControllerType": "Hp8C40M8CPhysicalThermalPreemptionQualificationTest",
+      "physicalControllerAuthorizationConstant": false,
+      "physicalControllerToken": "8C40-M8C-THERMAL50",
+      "physicalControllerSubcycles": [
+        "cpu",
+        "gpu"
+      ],
+      "parentContinueMarker": "M8C-CONTINUE",
+      "parentHandoff": "M8C_READY_BEFORE_INJECTION"
     }
   }
 }
