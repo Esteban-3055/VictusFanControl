@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 4 RETROSPECTIVE CAUSAL EVIDENCE RECONSTRUCTED FROM THE RECOVERED DATED M4 LOG. M8B RETRY 5 FAIL_CLOSED AFTER 27/27 REPRESENTATIVE RECORDED SUPERVISION SAMPLES ON AN UNDIFFERENTIATED COORDINATOR/BACKEND HANDOFF; FINAL FF/FF/JOURNAL/SERVICE CLOSURE PASS. DIAGNOSTIC-ONLY OBSERVABILITY HARDENING IS PREPARED; FURTHER PHYSICAL M8B IS BLOCKED PENDING CI AND SEPARATE AUTHORIZATION. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B ATTEMPT 4 RETROSPECTIVE CAUSAL EVIDENCE RECONSTRUCTED FROM THE RECOVERED DATED M4 LOG. M8B RETRY 5 FAIL_CLOSED AFTER 27/27 REPRESENTATIVE RECORDED SUPERVISION SAMPLES ON AN UNDIFFERENTIATED COORDINATOR/BACKEND HANDOFF; FINAL FF/FF/JOURNAL/SERVICE CLOSURE PASS. DIAGNOSTIC-ONLY OBSERVABILITY HARDENING PASSED FULL CI #811 AND M8B RETRY 6 IS EXPLICITLY PHYSICALLY AUTHORIZED THROUGH THE VERSIONED HARNESS. M8C CODE/CI PASS BUT PHYSICAL BLOCKED BY M8B. AUTOMATIC/ADAPTIVE POLICY OFF.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -858,10 +858,33 @@ Before any further physical write, the M8B qualification controller is hardened 
 - store failsafe PID and log-presence state in the parent summary.
 
 No fan target, command count, load predicate, SafetyGate threshold, thermal confirmation, watchdog
-lease behavior, ownership rule or restore behavior is changed. **Further M8B physical execution is
-blocked until this diagnostic-only change passes the complete CI suite and a separate explicit
-authorization commit is made.** M8C remains physically blocked and automatic/adaptive control
-remains OFF.
+lease behavior, ownership rule or restore behavior is changed. At the diagnostic-preparation commit,
+further M8B physical execution remained blocked pending complete CI and a separate authorization.
+That CI/authorization boundary is closed in the following subsection. M8C remains physically blocked
+and automatic/adaptive control remains OFF.
+
+
+## 7B.7. Diagnostic hardening CI PASS; M8B retry 6 authorized
+
+The diagnostic-only hardening is **CODE/CI PASS** at commit
+`d6b625d006f546e71ad11cf619c8413bf4209bc9`, GitHub Actions **#811**
+(run `36761787998`). PowerShell syntax, M4-M8 invariants under PowerShell 7 and Windows
+PowerShell 5.1, warnings-as-errors build, native M8B child ExitCode regression, SafetyGate,
+FanControlCoordinator, watchdog and HP backend self-tests all passed.
+
+The change does not relax fail-closed behavior. It only makes the previously lost failure cause
+durable: authority transitions, the exact Custom->Restoring reason, the failing supervision
+snapshot and the independent failsafe ARMED marker are now preserved.
+
+One bounded **M8B retry 6 is explicitly physically authorized** through
+`scripts/test-8c40-load-thermal-m8b.ps1` on the exact target. All physical criteria remain
+unchanged. If the status anomaly recurs, the run must stop after FAIL_CLOSED and
+`supervisionFailure` plus `lastCustomHandoffReason` must be reviewed before any further
+write-capable attempt. If the full 30/30 window and normal closure pass, the complete M8B evidence
+set can then be reviewed for gate closure.
+
+This authorization does not authorize M8C, production watchdog promotion, or automatic/adaptive
+fan control.
 
 ## 8. Physical harness safety and evidence
 

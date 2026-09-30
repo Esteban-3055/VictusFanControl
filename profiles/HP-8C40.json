@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-retry5-failclosed-diagnostic-observability-prepared-physical-blocked-m8c-code-ci-pass-adaptive-shadow-ci-pass-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-retry5-failclosed-diagnostics-ci-pass-retry6-authorized-m8c-code-ci-pass-adaptive-shadow-ci-pass-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -2192,9 +2192,9 @@
       }
     },
     "m8b": {
-      "status": "RETRY5_FAIL_CLOSED_AFTER_27_REPRESENTATIVE_SUPERVISION_SAMPLES_DIAGNOSTIC_OBSERVABILITY_CODE_PREPARED_PHYSICAL_BLOCKED",
+      "status": "RETRY6_DIAGNOSTIC_PHYSICAL_EXECUTION_AUTHORIZED_AFTER_FULL_CI_811",
       "physicalPassed": false,
-      "physicalExecutionAuthorized": false,
+      "physicalExecutionAuthorized": true,
       "writeCapable": true,
       "requiredToken": "8C40-M8B-LOAD50",
       "harnessScript": "scripts/test-8c40-load-thermal-m8b.ps1",
@@ -2235,7 +2235,7 @@
         "physicalExecution": false,
         "reviewNote": "Initial M8B preparation also passed run #717. Pre-physical review found the independent failsafe covered only OWNED 50/50; it was hardened before authorization to cover exact-target WRITE_ARMED pending 50/50, OWNED 50/50 and RESTORING 50/50. Hardened run #718 passed fully."
       },
-      "physicalExecutionNote": "M8B retry 5 failed closed after 27/27 representative recorded supervision samples when the coordinator returned authority to firmware. Final journal/FF/FF/service closure passed and the dated M4 log proves PREPARE->WRITE_INTENT->COMMIT->RESTORE_BEGIN->RELEASE. No further physical M8B execution is authorized until diagnostic-observability code/CI closes.",
+      "physicalExecutionNote": "M8B retry 6 is explicitly authorized only through the versioned diagnostic harness after full CI #811 passed. Purpose: capture the exact backend/coordinator handoff if the retry-5 anomaly recurs, or obtain a complete 30/30 evidence set if it does not. No thresholds, fan targets, command count, watchdog behavior, ownership rules, or restore behavior changed.",
       "physicalAttempts": [
         {
           "attempt": 1,
@@ -2399,10 +2399,10 @@
         }
       },
       "nextStep": {
-        "status": "DIAGNOSTIC_OBSERVABILITY_CI_PENDING",
-        "request": "Run full code/CI on the diagnostic-only branch. Do not perform another write-capable physical M8B attempt until diagnostic instrumentation passes and a separate explicit authorization commit is made.",
-        "permittedAction": "code/static/self-test/CI only",
-        "unchanged": "M8B 35% GPU load AND 20 W GPU power, 3 consecutive in 10 samples, 50/50 single write, all thermal/watchdog/ownership/restore limits",
+        "status": "RETRY6_PHYSICAL_AUTHORIZED",
+        "request": "Run one bounded M8B retry using the versioned diagnostic branch and preserve all evidence. If it FAIL_CLOSED, stop and inspect supervisionFailure/lastCustomHandoffReason before any further write-capable attempt.",
+        "permittedAction": "one bounded M8B retry through the versioned harness",
+        "unchanged": "M8B 35% GPU load AND 20 W GPU power, 3 consecutive in 10 samples, one 50/50 write, 30-s supervision, all thermal/watchdog/ownership/restore limits",
         "m8cPhysicalExecutionAuthorized": false
       },
       "processExitHardening": {
@@ -2449,7 +2449,7 @@
         "evidencePath": "logs/m8b-watchdog-load_2026-09-30_152657/"
       },
       "diagnosticHardening": {
-        "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+        "status": "CODE_CI_PASS_RETRY6_PHYSICAL_AUTHORIZED",
         "purpose": "Preserve the exact cause of an M8B supervision handoff without changing safety, ownership, thermal, load, watchdog, command, or restore behavior.",
         "changes": [
           "record every FanControlCoordinator AuthorityChanged transition into M8B durable evidence",
@@ -2461,7 +2461,40 @@
         "physicalBehaviorChanged": false,
         "thresholdsChanged": false,
         "commandCountChanged": false,
-        "physicalExecutionAuthorized": false
+        "physicalExecutionAuthorized": true,
+        "ci": {
+          "result": "PASS",
+          "commit": "d6b625d006f546e71ad11cf619c8413bf4209bc9",
+          "runNumber": 811,
+          "runId": 36761787998,
+          "powerShellSyntax": true,
+          "m8bInvariantPowerShell7": true,
+          "m8bInvariantWindowsPowerShell51": true,
+          "warningsAsErrorsBuild": true,
+          "nativeChildExitSelfTest": true,
+          "fanCoordinatorSelfTest": true,
+          "safetyGateSelfTest": true,
+          "watchdogRegressions": true,
+          "hpBackendSelfTest": true,
+          "physicalExecution": false
+        }
+      },
+      "retry6Authorization": {
+        "authorized": true,
+        "date": "2026-09-30",
+        "sourceHead": "d6b625d006f546e71ad11cf619c8413bf4209bc9",
+        "purpose": "One bounded evidence-complete M8B rerun with diagnostic-only observability enabled.",
+        "constraints": [
+          "exact HP-8C40-9D0R1LA-F18 target only",
+          "versioned scripts/test-8c40-load-thermal-m8b.ps1 only",
+          "normal representative game/3D workload; no synthetic stress",
+          "exactly one equal-only 50/50 ApplyAsync after load admission",
+          "unchanged 35% GPU load / 20 W GPU power / CPU activity predicate",
+          "unchanged CPU/GPU thermal thresholds and temporal confirmation",
+          "unchanged M4 watchdog and independent delayed failsafe behavior",
+          "preserve the entire new evidence directory plus dated M4 log",
+          "M8C remains physically blocked and automatic/adaptive policy remains OFF"
+        ]
       }
     },
     "m8c": {
