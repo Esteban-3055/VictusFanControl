@@ -139,8 +139,10 @@ Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.physicalPassed) 'M8B 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8a.m8bAuthorized) 'M8B preparation requires M8A authorization.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.harnessScript 'scripts/test-8c40-load-thermal-m8b.ps1' 'M8B harness path changed.'
 Assert-Equal $profile.loadThermalM8Qualification.m8b.failsafeScript 'scripts/watchdog-m8b-service-failsafe-8c40.ps1' 'M8B failsafe path changed.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B code preparation must not mark physical PASS.'
-Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B physical execution must remain blocked until code/CI review closes.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.m8b.physicalPassed) 'M8B must remain physical-pending until real evidence is reviewed.'
+Assert-True ([bool]$profile.loadThermalM8Qualification.m8b.physicalExecutionAuthorized) 'M8B hardened code/CI PASS should authorize only the versioned physical harness.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.preparationCi.finalCommit '6d3547756f7c011231c6e3e099cb111612d4b060' 'M8B hardened preparation CI commit changed.'
+Assert-Equal $profile.loadThermalM8Qualification.m8b.preparationCi.runNumber 718 'M8B hardened preparation CI run changed.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.watchdogRecoveryValidated) 'M8B must not promote production watchdog recovery.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M8B must not enable automatic/adaptive policy.'
 
@@ -158,7 +160,7 @@ foreach($needle in @(
     'COMMIT',
     'RESTORE_BEGIN',
     'RELEASE',
-    'M8B physical execution remains blocked'
+    'M8B physical execution is now authorized'
 )){
     Assert-Contains $doc $needle ("M8B documentation invariant missing: {0}" -f $needle)
 }

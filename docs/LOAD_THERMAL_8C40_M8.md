@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B WATCHDOG-BACKED 50/50 HARNESS CODE HARDENED / CI PENDING; M8B PHYSICAL EXECUTION AND M8C REMAIN BLOCKED.**
+Status: **NO-WRITE PREFLIGHT PHYSICAL PASS. M8A CODE/CI/PHYSICAL PASS. M8B WATCHDOG-BACKED 50/50 HARNESS CODE/CI PASS / PHYSICAL AUTHORIZED-PENDING. M8C REMAINS BLOCKED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -475,9 +475,22 @@ The controller mode is `--8c40-m8b-watchdog-load`. The parent harness is
 `scripts/watchdog-m8b-service-failsafe-8c40.ps1`. Evidence is preserved under
 `logs/m8b-watchdog-load_*/` as controller READY/result JSON, parent summary and failsafe log.
 
-M8B physical execution remains blocked until this code/spec preparation passes GitHub Actions,
-the result is recorded in the profile/documentation, and the write-capable harness is reviewed
-again against the live HEAD. M8C remains blocked regardless of M8B code preparation.
+M8B code/spec preparation first passed GitHub Actions #717, then underwent an additional
+pre-physical review. That review identified a failsafe coverage gap: the delayed independent
+fallback recognized only an OWNED 50/50 journal. Before physical authorization, it was hardened
+to recognize the exact-target WRITE_ARMED pending 50/50, OWNED 50/50 and RESTORING 50/50
+durable phases while remaining bound to the exact controller PID + creation ticks and delegating
+all HP hardware recovery to the already-qualified LocalSystem watchdog.
+
+The hardened path is **CODE/CI PASS** at commit
+`6d3547756f7c011231c6e3e099cb111612d4b060`, GitHub Actions **#718** (run `36663164142`). PowerShell syntax,
+M8/M8A/M8B invariants under PowerShell 7 and Windows PowerShell 5.1, warnings-as-errors build,
+SafetyGate, coordinator, watchdog Gate C/M4, BIOS-contract and HP-backend regressions all passed.
+
+M8B physical execution is now authorized **only** through the versioned
+`scripts/test-8c40-load-thermal-m8b.ps1` harness. The operator must not substitute ad-hoc
+commands. Any independent-failsafe takeover invalidates PASS even if the machine is returned
+safely to firmware ownership. M8C remains blocked.
 
 ## 8. Physical harness safety and evidence
 

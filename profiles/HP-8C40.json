@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-code-hardened-ci-pending-physical-blocked-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-m8-preflight-pass-m8a-physical-pass-m8b-code-ci-pass-physical-authorized-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -1907,12 +1907,12 @@
     }
   },
   "loadThermalM8Qualification": {
-    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_CODE_HARDENED_CI_PENDING_PHYSICAL_BLOCKED_M8C_PENDING",
+    "status": "NO_WRITE_PREFLIGHT_PHYSICAL_PASS_M8A_PHYSICAL_PASS_M8B_CODE_CI_PASS_PHYSICAL_AUTHORIZED_PENDING_M8C_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "automaticPolicyEnabled": false,
     "watchdogRecoveryValidated": false,
     "representativeLoadGate": "M8A CODE/CI/PHYSICAL PASS",
-    "watchdogBackedLoadGate": "M8B code prepared / CI pending / physical execution blocked",
+    "watchdogBackedLoadGate": "M8B code/CI PASS / physical execution authorized and pending",
     "thermalPreemptionGate": "M8C pending",
     "productionRaceAudit": "pending",
     "realOvertemperatureRequired": false,
@@ -2128,7 +2128,7 @@
           "note": "Run 705 failed closed only because the M8 documentation invariant still expected the pre-hardening phrase 'CPU emergency: effective CPU >= 95 C'. The invariant wording was aligned; run 706 passed. No physical execution occurred in either CI run."
         }
       },
-      "m8bAuthorizationScope": "M8B code/spec preparation only until M8B preparation CI passes; physical execution remains separately gated",
+      "m8bAuthorizationScope": "M8B code/spec/physical execution authorized only through the versioned M8B harness after hardened CI #718; M8C remains blocked.",
       "physicalPass": {
         "result": "PASS_NO_WRITE",
         "date": "2026-09-29",
@@ -2150,9 +2150,9 @@
       }
     },
     "m8b": {
-      "status": "CODE_HARDENED_CI_PENDING_PHYSICAL_BLOCKED",
+      "status": "CODE_CI_PASS_PHYSICAL_AUTHORIZED_PENDING",
       "physicalPassed": false,
-      "physicalExecutionAuthorized": false,
+      "physicalExecutionAuthorized": true,
       "writeCapable": true,
       "requiredToken": "8C40-M8B-LOAD50",
       "harnessScript": "scripts/test-8c40-load-thermal-m8b.ps1",
@@ -2174,13 +2174,26 @@
         "closure": "journal absent, two independent FF/FF, M4 Manual/stopped"
       },
       "preparationCi": {
-        "result": "PENDING_AFTER_FAILSAFE_PHASE_HARDENING",
-        "previousRunNumber": 717,
-        "previousRunId": 36662807855,
-        "previousResult": "PASS",
-        "reviewFinding": "independent failsafe initially recognized only OWNED 50/50; hardened before physical authorization to cover WRITE_ARMED pending 50/50 and RESTORING 50/50 as well"
+        "result": "PASS",
+        "finalCommit": "6d3547756f7c011231c6e3e099cb111612d4b060",
+        "runNumber": 718,
+        "runId": 36663164142,
+        "powerShellSyntax": true,
+        "m8Invariant": true,
+        "m8aInvariant": true,
+        "m8bInvariant": true,
+        "windowsPowerShell51Compatibility": true,
+        "warningsAsErrorsBuild": true,
+        "safetyGateSelfTest": true,
+        "coordinatorSelfTest": true,
+        "watchdogGateCSelfTest": true,
+        "m4WatchdogSelfTest": true,
+        "biosContractSelfTest": true,
+        "hpBackendSelfTest": true,
+        "physicalExecution": false,
+        "reviewNote": "Initial M8B preparation also passed run #717. Pre-physical review found the independent failsafe covered only OWNED 50/50; it was hardened before authorization to cover exact-target WRITE_ARMED pending 50/50, OWNED 50/50 and RESTORING 50/50. Hardened run #718 passed fully."
       },
-      "physicalExecutionNote": "BLOCKED until this code/spec commit passes CI and is explicitly reviewed"
+      "physicalExecutionNote": "AUTHORIZED for exact versioned harness after run #718; operator must use only git pull + scripts/test-8c40-load-thermal-m8b.ps1 and preserve all evidence. Any failsafe takeover invalidates PASS."
     }
   }
 }
