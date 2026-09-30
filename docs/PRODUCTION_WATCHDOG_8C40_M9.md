@@ -239,3 +239,13 @@ These limits do not modify production SafetyGate thresholds.
 
 M9C cannot be opened until M9B has physically passed and its evidence is
 reviewed/committed. M9D remains a later full GUI/lifecycle last-mile regression.
+
+
+### M9C deterministic invariant coverage
+
+The M9C controller/construction boundary is now pinned by
+`scripts/test-8c40-m9c-production-smoke-invariants.ps1` under both PowerShell 7
+and Windows PowerShell 5.1. The invariant verifies the pre-hardware authorization
+barrier, both closed compile-time gates, exact factory/public-backend construction,
+scope teardown before Custom admission, the one-write 30/30 contract, conservative
+thermal/power bounds and continued production/adaptive blocks.
