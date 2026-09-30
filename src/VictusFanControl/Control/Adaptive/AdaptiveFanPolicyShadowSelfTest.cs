@@ -526,8 +526,8 @@ public static class AdaptiveFanPolicyShadowSelfTest
                             0,
                             1,
                             TimeSpan.Zero),
-                        72,
-                        66)
+                        70,
+                        65)
                 ]);
 
             using var console =
