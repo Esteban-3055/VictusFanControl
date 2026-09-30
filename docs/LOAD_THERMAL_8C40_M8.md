@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **SPECIFICATION + STATIC/SYNTHETIC INVARIANTS CODE/CI PASS. NO-WRITE PREFLIGHT CODE/CI PASS. PHYSICAL PREFLIGHT PENDING. PHYSICAL HARNESS NOT YET AUTHORIZED.**
+Status: **SPECIFICATION + STATIC/SYNTHETIC INVARIANTS CODE/CI PASS. NO-WRITE PREFLIGHT PHYSICAL PASS. M8A REPRESENTATIVE-LOAD HARNESS NEXT. M8B/M8C WRITE-CAPABLE HARNESS NOT YET AUTHORIZED.**
 
 M4A/B/C, M5A-E, M6 Modern Standby and M7 hibernation are already physically closed.
 M8 is the next independent authorization boundary before production watchdog promotion or any
@@ -259,6 +259,25 @@ entered. This exposed an overly strict provenance rule: preserved historical evi
 being treated the same as an untracked source/configuration change. The rule was hardened
 to allow only `?? logs/...` entries while continuing to fail closed for every other
 working-tree change.
+
+### Physical no-write preflight attempt 2 - PASS
+
+Attempt 2 passed on 2026-09-30 at repository HEAD
+`16ea0578d5dd4c69a39a0a0405b4522f37cef0aa`. The exact HP 8C40 target,
+AC/battery baseline and M4 Manual/Stopped baseline all matched the M8 contract.
+The warnings-as-errors build completed with 0 warnings and 0 errors and the full
+M5-M8 static/synthetic regression set passed.
+
+The dedicated read-only M8 telemetry path resolved the exact RTX 4060 Laptop GPU.
+Three consecutive samples were complete with 14/14 physical-core context, zero
+Intel/EC/NVML recoveries, effective CPU temperatures 50/49/49 C, GPU temperature
+47 C, `PreconditionsReady=true`, valid GPU identity and no thermal emergency.
+
+The independent final ownership proof observed `FF/FF` twice consecutively.
+No fan write, firmware restore, watchdog lease, service mutation, fault injection,
+sleep transition or deliberate stress load occurred. The physical NO-WRITE preflight
+is therefore closed as PASS. M8A representative-load admission is now the next
+development/qualification step; M8B/M8C remain blocked.
 
 ## 8. Physical harness safety and evidence
 
