@@ -441,6 +441,17 @@ internal sealed class MainForm : Form
             }
             else
             {
+                // M9 preparation: the normal production path is wired to the
+                // already-qualified HP 8C40 target-bound lease, but the gate
+                // remains closed. With WatchdogRecoveryValidated=false and
+                // ProductionConstructionAuthorized=false this returns null and
+                // causes no service connection, lease acquisition or hardware
+                // behavior change.
+                watchdogLease ??=
+                    Hp8C40ProductionWatchdogGate
+                        .CreateLeaseIfAuthorized(
+                            _hardwareIdentity);
+
                 var selection = HpFanControlBackendFactory.Create(
                     modulesDirectory,
                     _hardwareIdentity,

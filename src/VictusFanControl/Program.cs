@@ -104,7 +104,13 @@ internal static class Program
         {
             var oldTarget = await Hp88F8FanControlBackendSelfTest.RunAsync(Console.Out);
             var newTarget = await Hp8C40FanControlBackendSelfTest.RunAsync(Console.Out);
-            return oldTarget == 0 && newTarget == 0 ? 0 : 12;
+            var m9Gate = Hp8C40ProductionWatchdogGateSelfTest.Run(Console.Out);
+
+            return oldTarget == 0 &&
+                   newTarget == 0 &&
+                   m9Gate == 0
+                ? 0
+                : 12;
         }
 
         if (options.Hp8C40M8PreflightProbe)

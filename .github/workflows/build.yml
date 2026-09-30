@@ -157,6 +157,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-8c40-m8-production-race-audit-invariants.ps1
 
+      - name: HP 8C40 M9 production-watchdog preparation invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9-production-watchdog-invariants.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -190,6 +194,7 @@ jobs:
           .\scripts\test-8c40-load-thermal-m8c-physical-preparation-invariants.ps1
           .\scripts\test-8c40-load-thermal-m8c-harness-invariants.ps1
           .\scripts\test-8c40-m8-production-race-audit-invariants.ps1
+          .\scripts\test-8c40-m9-production-watchdog-invariants.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build

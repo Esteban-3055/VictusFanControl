@@ -46,4 +46,4 @@ sub-gate is created only if implementation review or CI exposes a new race whose
 on real WMI/EC/tach/watchdog timing and cannot be resolved deterministically in synthetic code.
 
 Automatic/adaptive policy remains OFF and `WatchdogRecoveryValidated` remains false even after M8
-physical closure. Promotion requires a separate explicit post-M8 gate and same-HEAD CI/evidence review.
+physical closure. That separate boundary is now named **M9 production-watchdog integration/promotion**; it requires its own same-HEAD CI/evidence review and does not inherit authorization from M8.

@@ -109,8 +109,9 @@ internal readonly record struct Hp8C40FanBackendTiming(
 /// - fixed-level ownership is acknowledged through EC 0x34/0x35;
 /// - both physical tachometers must acknowledge every new command;
 /// - firmware restore uses the hardware-validated FF,FF -> LegacyDefault path;
-/// - watchdog/service recovery is intentionally disabled until separately
-///   qualified on the target's Modern Standby lifecycle.
+/// - production watchdog-backed construction is separately M9-gated even
+///   after the M4-M8 qualification chain; automatic policy remains outside
+///   the backend.
 ///
 /// It does not implement a fan curve. Policy remains outside the backend.
 /// </summary>
@@ -156,10 +157,9 @@ public sealed class Hp8C40FanControlBackend :
 
         if (_targetSupported && watchdogLease is not null)
         {
-            throw new NotSupportedException(
-                "HP 8C40 production watchdog/unattended recovery promotion remains blocked. " +
-                "Use the bounded local backend without a watchdog lease until representative-load, " +
-                "thermal-preemption and remaining production-race qualification are closed.");
+            Hp8C40ProductionWatchdogGate
+                .RequireProductionConstructionAuthorized(
+                    identity);
         }
 
         _watchdogLease = watchdogLease;

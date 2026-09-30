@@ -55,20 +55,24 @@ public static class HpFanControlBackendFactory
         {
             if (watchdogLease is not null)
             {
-                throw new NotSupportedException(
-                    "HP 8C40 matched, but production watchdog/unattended recovery " +
-                    "promotion remains blocked pending an explicit post-M8 production-watchdog/race " +
-                    "promotion gate. M8 physical closure does not authorize production watchdog construction.");
+                Hp8C40ProductionWatchdogGate
+                    .RequireProductionConstructionAuthorized(
+                        hardware);
             }
 
-            var backend = new Hp8C40FanControlBackend(modulesDirectory);
+            var backend =
+                new Hp8C40FanControlBackend(
+                    modulesDirectory,
+                    watchdogLease);
 
             return new HpFanBackendSelection(
                 backend,
                 target,
-                "HP 8C40 bounded write/restore backend selected. " +
-                $"Production envelope is equal-only {Hp8C40TargetProfile.MinimumValidatedFanLevel}.." +
-                $"{Hp8C40TargetProfile.MaximumValidatedFanLevel}; automatic policy and watchdog remain OFF.");
+                watchdogLease is null
+                    ? "HP 8C40 bounded write/restore backend selected. " +
+                      $"Production envelope is equal-only {Hp8C40TargetProfile.MinimumValidatedFanLevel}.." +
+                      $"{Hp8C40TargetProfile.MaximumValidatedFanLevel}; automatic policy and watchdog remain OFF."
+                    : "HP 8C40 production watchdog-backed backend selected through the explicit M9 promotion gate; automatic policy remains OFF.");
         }
 
         return new HpFanBackendSelection(
