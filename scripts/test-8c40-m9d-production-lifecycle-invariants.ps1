@@ -27,6 +27,11 @@ Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationCo
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D physical execution must remain blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D temporary construction must remain blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.productionConstructionAuthorized) 'M9D must not imply production promotion.'
+Assert-True ([bool]$profile.lifecycle.watchdogM9DCodeCiPassed) 'M9D code/CI PASS must remain recorded after closure.'
+if([string]$profile.watchdogM9ProductionIntegration.m9d.codeCi.result -cne 'PASS'){throw 'M9D code/CI result must remain PASS.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.codeCi.commit -cne 'da0d366aaddb0f2584b898a45df013d823ed9423'){throw 'M9D code/CI evidence commit changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.codeCi.runNumber -ne 852){throw 'M9D code/CI run number changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9d.codeCi.runId -ne 36790394395){throw 'M9D code/CI run id changed.'}
 
 foreach($needle in @(
     'public static readonly bool M9DPhysicalQualificationConstructionAuthorized = false;',

@@ -23,6 +23,9 @@ Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecuti
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D construction must remain blocked.'
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D harness preparation must not promote watchdog recovery.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D harness preparation must not promote production construction.'
+if([string]$profile.watchdogM9ProductionIntegration.m9d.codeCi.fullHarness.result -cne 'PASS'){throw 'M9D full harness code/CI PASS must remain recorded.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.codeCi.fullHarness.commit -cne 'da0d366aaddb0f2584b898a45df013d823ed9423'){throw 'M9D full harness evidence commit changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.codeCi.fullHarness.runNumber -ne 852){throw 'M9D full harness CI run number changed.'}
 
 $barrier=$harness.IndexOf('# HARD VERSIONED AUTHORIZATION BARRIER',[StringComparison]::Ordinal)
 $admin=$harness.IndexOf('Assert-Administrator',[StringComparison]::Ordinal)

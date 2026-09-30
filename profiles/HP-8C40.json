@@ -60,7 +60,7 @@
     "watchdogM9CCodePrepared": true,
     "watchdogM9CCodeCiPassed": true,
     "watchdogM9CControllerCodeCiPassed": true,
-    "watchdogM9DCodeCiPassed": false
+    "watchdogM9DCodeCiPassed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -2934,7 +2934,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9A_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_M9C_CODE_CI_PASS_WRITE_BLOCKED_M9D_APP_PATH_PREPARED_CI_PENDING",
+    "status": "M9A_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_M9C_CODE_CI_PASS_WRITE_BLOCKED_M9D_CODE_CI_PASS_PHYSICAL_BLOCKED",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -3137,9 +3137,9 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "M9D full parent/failsafe/evidence stack is prepared but hard-blocked. After same-HEAD CI closes this preparation, continue with production service-lifecycle/promotion design. M9B remains the first unavoidable machine-side evidence boundary.",
+    "nextStep": "M9D code/CI is closed while all M9C/M9D physical gates remain blocked. Continue with hard-blocked production service-lifecycle/promotion preparation and rebind the eventual single M9B read-only preflight to the final prepared branch/HEAD before asking for machine-side evidence.",
     "m9d": {
-      "status": "FULL_HARNESS_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "status": "FULL_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED",
       "purpose": "focused last-mile full-GUI production-path recovery + display-aware Modern Standby regression after M9C physical PASS",
       "controllerSurface": "VictusFanControl.App MainForm",
       "appMode": "--8c40-m9d-production-lifecycle-test",
@@ -3181,29 +3181,34 @@
       ],
       "markerNamespace": "%LOCALAPPDATA%\\VictusFanControl\\m9d-production-lifecycle.*",
       "codeCi": {
-        "result": "PENDING",
-        "commit": null,
-        "runNumber": null,
-        "runId": null,
-        "warningsAsErrorsBuild": null,
-        "powerShell7Invariant": null,
-        "windowsPowerShell51Invariant": null,
-        "physicalExecution": false,
+        "result": "PASS",
+        "commit": "da0d366aaddb0f2584b898a45df013d823ed9423",
+        "runNumber": 852,
+        "runId": 36790394395,
+        "warningsAsErrorsBuild": true,
+        "powerShell7Invariant": true,
+        "windowsPowerShell51Invariant": true,
         "fullHarness": {
-          "result": "PENDING",
-          "commit": null,
-          "runNumber": null,
-          "runId": null,
-          "powerShell7HarnessInvariant": null,
-          "powerShell7EvidencePackagingSelfTest": null,
-          "windowsPowerShell51HarnessInvariant": null,
-          "windowsPowerShell51EvidencePackagingSelfTest": null,
-          "warningsAsErrorsBuild": null,
+          "result": "PASS",
+          "commit": "da0d366aaddb0f2584b898a45df013d823ed9423",
+          "runNumber": 852,
+          "runId": 36790394395,
+          "powerShell7HarnessInvariant": true,
+          "powerShell7EvidencePackagingSelfTest": true,
+          "windowsPowerShell51HarnessInvariant": true,
+          "windowsPowerShell51EvidencePackagingSelfTest": true,
+          "warningsAsErrorsBuild": true,
           "physicalExecution": false
-        }
+        },
+        "existingM5M9Regressions": true,
+        "safetyGateSelfTest": true,
+        "fanCoordinatorSelfTest": true,
+        "hpBackendSelfTest": true,
+        "physicalExecution": false,
+        "note": "Runs #847-#851 exposed only stale invariant wording/shared-token visibility and one App assembly visibility error while M9D remained compile-time blocked. Commit da0d366aaddb0f2584b898a45df013d823ed9423 passed the complete workflow as #852, including both PowerShell engines, full M9D parent/failsafe/evidence invariants, packaging self-test and warnings-as-errors build."
       },
       "physicalEvidence": null,
-      "harnessStatus": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "harnessStatus": "CODE_CI_PASS_PHYSICAL_BLOCKED",
       "harnessScript": "scripts/test-8c40-production-watchdog-m9d.ps1",
       "harnessInvariantScript": "scripts/test-8c40-m9d-harness-invariants.ps1",
       "independentFailsafeScript": "scripts/watchdog-m9d-service-failsafe-8c40.ps1",

@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B READ-ONLY PREFLIGHT CODE/CI PASS AND READ-ONLY EXECUTION AUTHORIZED. PRODUCTION WATCHDOG CONSTRUCTION AND ALL WRITE-CAPABLE M9 PHYSICAL EXECUTION REMAIN BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B READ-ONLY PREFLIGHT CODE/CI PASS (execution will be rebound to the final prepared HEAD before use). M9C CODE/CI PASS / PHYSICAL BLOCKED. M9D FULL CODE/CI PASS / PHYSICAL BLOCKED. PRODUCTION WATCHDOG CONSTRUCTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -417,3 +417,25 @@ and M4 returned to Manual/Stopped/PID0/LocalSystem.
 bounded 30/30 M9C delayed recovery design. `package-m9d-evidence.ps1` packages PASS
 and FAIL_CLOSED evidence with source/installed-binary hashes, full watchdog log/status,
 service snapshot, ZIP and SHA-256 sidecar. Packaging never deletes source evidence.
+
+
+### M9D code/CI closure
+
+The complete M9D App path, parent harness, independent delayed failsafe and evidence
+packaging stack are **CODE/CI PASS** at
+`da0d366aaddb0f2584b898a45df013d823ed9423`, GitHub Actions **#852**
+(run `36790394395`).
+
+That exact run passed:
+
+- the M9D construction/lifecycle invariant under PowerShell 7 and Windows PowerShell 5.1;
+- the complete D1/D2 parent/failsafe/evidence invariant in both shells;
+- M9D evidence-packaging self-test in both shells;
+- all historical M5-M9 invariants;
+- warnings-as-errors solution build;
+- SafetyGate, coordinator and HP backend self-tests.
+
+No M9D physical path executed. Both
+`PhysicalExecutionAuthorized=false` and
+`M9DPhysicalQualificationConstructionAuthorized=false` remain closed, M9C remains
+physically blocked, and production watchdog promotion remains false.
