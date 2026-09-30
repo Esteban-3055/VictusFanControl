@@ -2281,7 +2281,7 @@
         "cpuHardImmediate": "one synthetic effective CPU 99 C snapshot must preempt immediately",
         "inFlightApply": "thermal handoff must cancel an in-flight ApplyAsync and end in firmware authority"
       },
-      "physicalHarnessPrepared": false,
+      "physicalHarnessPrepared": true,
       "physicalPrerequisite": "M8B physical PASS on the hardened retry is required before any M8C hardware execution or authorization",
       "automaticPolicyEnabled": false,
       "watchdogRecoveryValidated": false,
@@ -2309,7 +2309,21 @@
         "gpu"
       ],
       "parentContinueMarker": "M8C-CONTINUE",
-      "parentHandoff": "M8C_READY_BEFORE_INJECTION"
+      "parentHandoff": "M8C_READY_BEFORE_INJECTION",
+      "physicalHarnessStatus": "CODE_PREPARED_CI_PENDING_PROFILE_AND_CONTROLLER_HARD_BLOCKED",
+      "physicalHarnessScript": "scripts/test-8c40-load-thermal-m8c.ps1",
+      "physicalHarnessInvariantScript": "scripts/test-8c40-load-thermal-m8c-harness-invariants.ps1",
+      "independentFailsafeScript": "scripts/watchdog-m8c-service-failsafe-8c40.ps1",
+      "parentProfileGate": {
+        "requiresM8BPhysicalPassed": true,
+        "requiresM8CPhysicalExecutionAuthorized": true,
+        "currentM8BPhysicalPassed": false,
+        "currentM8CPhysicalExecutionAuthorized": false
+      },
+      "physicalSubcyclePlan": [
+        "CPU: independent real 50/50 OWNED -> parent journal/failsafe proof -> five synthetic 95 C frames -> firmware handoff on 5/5",
+        "GPU: independent real 50/50 OWNED -> parent journal/failsafe proof -> one synthetic 87 C frame -> immediate firmware handoff"
+      ]
     }
   }
 }
