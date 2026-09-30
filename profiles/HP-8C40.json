@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-code-ci-pass-hibernation-preflight-pending-physical-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-code-ci-preflight-pass-hibernation-physical-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -50,7 +50,7 @@
     "hibernationQualificationPending": true,
     "hibernationM7Prepared": true,
     "hibernationM7CodeCiPassed": true,
-    "hibernationM7NoWritePreflightPassed": false,
+    "hibernationM7NoWritePreflightPassed": true,
     "hibernationM7PhysicalPassed": false
   },
   "control": {
@@ -1734,7 +1734,7 @@
     }
   },
   "hibernationM7Qualification": {
-    "status": "CODE_CI_PASS_NO_WRITE_PREFLIGHT_PENDING_PHYSICAL_PENDING",
+    "status": "CODE_CI_PASS_NO_WRITE_PREFLIGHT_PASS_PHYSICAL_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "token": "8C40-M7-HIBERNATION30",
@@ -1789,6 +1789,35 @@
       "safetyGateSelfTest": true,
       "coordinatorSelfTest": true,
       "hpBackendSelfTest": true
+    },
+    "noWritePreflight": {
+      "result": "PASS",
+      "completedAt": "2026-09-29",
+      "repositoryHead": "fa8d6bc1324bc8146735ebfccb8eeaaf4d6c86b5",
+      "exactTarget": {
+        "board": "HP 8C40",
+        "boardVersion": "63.43",
+        "system": "Victus by HP Gaming Laptop 15-fa1xxx",
+        "sku": "9D0R1LA#AKH",
+        "bios": "F.18"
+      },
+      "windowsPower": {
+        "modernStandbyS0LowPowerIdle": true,
+        "hibernationAvailable": true,
+        "legacyS3Available": false,
+        "batteryStatus": 2,
+        "batteryChargePercent": 100,
+        "powerRequests": "none"
+      },
+      "serviceBaseline": "VictusFanControlWatchdogM4 Manual/stopped",
+      "retainedJournalObserved": false,
+      "build": "PASS; 0 warnings; 0 errors",
+      "regressions": "M5A-M5E, M6, M7 lifecycle/harness, M0, M4, Gate C, SafetyGate, coordinator, HP backends all PASS",
+      "finalEcProof": "two consecutive FF/FF",
+      "fanWritePerformed": false,
+      "serviceMutationPerformed": false,
+      "watchdogLeasePerformed": false,
+      "hibernationPerformed": false
     }
   }
 }
