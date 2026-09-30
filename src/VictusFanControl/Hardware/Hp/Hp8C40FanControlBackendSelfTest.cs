@@ -723,7 +723,7 @@ public static class Hp8C40FanControlBackendSelfTest
         }
 
         var commitCalls =
-            lease.Calls.Count(call => call == "commit:30/30");
+            lease.Calls.Count(call => call == "commit");
 
         await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
 
@@ -764,7 +764,7 @@ public static class Hp8C40FanControlBackendSelfTest
         }
 
         var commitCalls =
-            lease.Calls.Count(call => call.StartsWith("commit:", StringComparison.Ordinal));
+            lease.Calls.Count(call => call == "commit");
 
         await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
 
