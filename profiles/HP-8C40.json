@@ -1730,7 +1730,7 @@
         "postTestStableFfFf": true
       },
       "qualificationPass": true,
-      "interpretation": "M6 display-aware Modern Standby lifecycle is physically qualified on the exact 8C40 target. Custom 30/30 was released to Firmware at SESSION_DISPLAY_STATUS Off, registered PBT_APMSUSPEND completed the verified handoff, maintenance PBT resume notifications were deferred while display remained Off, SESSION_DISPLAY_STATUS On was accepted exactly once, five-snapshot Healthy recovery preceded one controlled watchdog-backed 30/30 re-entry, and final Release ended with journal absent plus stable FF/FF under the same watchdog process. This closes M6 only; hibernation and remaining race/load/thermal production gates stay pending and WatchdogRecoveryValidated remains false."
+      "interpretation": "M6 display-aware Modern Standby lifecycle is physically qualified on the exact 8C40 target. Custom 30/30 was released to Firmware at SESSION_DISPLAY_STATUS Off, registered PBT_APMSUSPEND completed the verified handoff, maintenance PBT resume notifications were deferred while display remained Off, SESSION_DISPLAY_STATUS On was accepted exactly once, five-snapshot Healthy recovery preceded one controlled watchdog-backed 30/30 re-entry, and final Release ended with journal absent plus stable FF/FF under the same watchdog process. This closes M6. M7 hibernation has since also passed physically; representative load/thermal and any remaining production-race gates stay pending, so WatchdogRecoveryValidated remains false."
     }
   },
   "hibernationM7Qualification": {
