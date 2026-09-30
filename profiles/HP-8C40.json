@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-code-ci-preflight-pass-hibernation-physical-pending-policy-off",
+  "status": "production-range-10-50-m4abc-pass-m5abcde-awake-pass-m6-physical-pass-m7-physical-pass-load-thermal-pending-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -47,11 +47,11 @@
     "modernStandbyM6NoWritePreflightPassed": true,
     "modernStandbyM6PhysicalPassed": true,
     "displayAwareResumeQualificationPending": false,
-    "hibernationQualificationPending": true,
+    "hibernationQualificationPending": false,
     "hibernationM7Prepared": true,
     "hibernationM7CodeCiPassed": true,
     "hibernationM7NoWritePreflightPassed": true,
-    "hibernationM7PhysicalPassed": false
+    "hibernationM7PhysicalPassed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -1734,7 +1734,7 @@
     }
   },
   "hibernationM7Qualification": {
-    "status": "CODE_CI_PASS_NO_WRITE_PREFLIGHT_PASS_PHYSICAL_PENDING",
+    "status": "CODE_CI_PASS_NO_WRITE_PREFLIGHT_PASS_PHYSICAL_PASS",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "qualificationLevel": 30,
     "token": "8C40-M7-HIBERNATION30",
@@ -1771,7 +1771,7 @@
     "noWritePreflightScript": "scripts/test-8c40-hibernation-m7-preflight.ps1",
     "physicalHarnessScript": "scripts/test-8c40-hibernation-m7.ps1",
     "delayedFailsafeTakeoverAllowedForPass": false,
-    "physicalStatus": "PENDING",
+    "physicalStatus": "PASS",
     "watchdogRecoveryValidated": false,
     "preparationCi": {
       "result": "PASS",
@@ -1818,6 +1818,92 @@
       "serviceMutationPerformed": false,
       "watchdogLeasePerformed": false,
       "hibernationPerformed": false
+    },
+    "physicalResult": {
+      "result": "PASS",
+      "completedAt": "2026-09-29",
+      "repositoryHead": "0a916adc4adfda58076fd093031f55c7430cf10a",
+      "qualificationLevel": 30,
+      "watchdog": {
+        "processId": 21968,
+        "processStartUtcTicks": "639263244753105927",
+        "survivedTransition": true
+      },
+      "gui": {
+        "processId": 27320,
+        "processStartUtcTicks": "639263244891936226",
+        "survivedTransition": true
+      },
+      "delayedFailsafe": {
+        "processId": 24252,
+        "delaySeconds": 300,
+        "takeover": false,
+        "cancelledOnlyAfterJournalAbsentAndStableFfFf": true
+      },
+      "ready": {
+        "timestampLocal": "2026-09-29T21:21:40.3047081-03:00",
+        "authority": "Custom",
+        "target": "30/30",
+        "ack": "backend-ec+tachs+watchdog-owned",
+        "journal": "Owned30",
+        "transitionMode": "hibernation"
+      },
+      "preHibernateHandoff": {
+        "displayOffAtUtc": "2026-09-30T00:21:45.6820512+00:00",
+        "completionLocal": "2026-09-29T21:21:46.5032823-03:00",
+        "source": "GUID_SESSION_DISPLAY_STATUS/Off",
+        "restoreTrigger": "registered-WM_POWERBROADCAST/PBT_APMSUSPEND",
+        "wasCustom": true,
+        "backendAck": true,
+        "restoreMs": 689.5,
+        "finalAuthority": "Firmware",
+        "localFirmwareAck": true,
+        "watchdogRelease": true,
+        "journal": "absent",
+        "ec": "FF/FF",
+        "ecProof": "stable-two-sample-FF/FF"
+      },
+      "windowsEvidence": {
+        "kernelPowerRecordBoundary": 3554,
+        "event42Local": "2026-09-29T21:21:47.0129240-03:00",
+        "event42Reason": "Application API",
+        "event507Local": "2026-09-29T21:22:19.8585117-03:00",
+        "event507Reason": "Resume from Hibernate",
+        "hibernationWindowSeconds": 32.8,
+        "systemPowerReportSessionId": 70,
+        "systemPowerReportSessionType": "Hibernate",
+        "targetState": 5,
+        "effectiveState": 5,
+        "requestor": "shutdown.exe",
+        "onAc": true,
+        "entryRemainingCapacityMWh": 69546,
+        "exitRemainingCapacityMWh": 69546,
+        "batteryTriggeredTransitionObserved": false,
+        "criticalBattery524ObservedInArmedWindow": false
+      },
+      "resume": {
+        "displayOnGateLocal": "2026-09-29T21:22:20.1734446-03:00",
+        "acceptedUserResumes": 1,
+        "pbtSuspendObserved": true,
+        "authorityBeforeReentry": "Firmware",
+        "ecBeforeReentry": "FF/FF",
+        "journalBeforeReentry": "absent",
+        "fiveFreshHealthySnapshots": true,
+        "reentryLocal": "2026-09-29T21:22:30.3778745-03:00",
+        "reentryTarget": "30/30",
+        "reentryAck": "backend-ec+tachs+watchdog-owned"
+      },
+      "final": {
+        "resultLocal": "2026-09-29T21:22:31.4161979-03:00",
+        "finalAuthority": "Firmware",
+        "finalJournal": "absent",
+        "finalEc": "FF/FF",
+        "independentFinalFfFf": true,
+        "postTestStableFfFf": true,
+        "m4BaselineRestored": "Manual/stopped"
+      },
+      "qualificationPass": true,
+      "interpretation": "M7 physically qualifies Windows hibernation on the exact HP 8C40 target. A real watchdog-backed Custom 30/30 lease was released to Firmware before S4, Windows recorded an Application API hibernation and Resume from Hibernate under the same GUI/watchdog identities, recovery waited for the display-On gate and fresh Healthy telemetry, one controlled 30/30 re-entry succeeded, and final Release ended with journal absent plus stable FF/FF. Hibernation is closed. Representative load/thermal production validation and any remaining production-race qualification stay separate; WatchdogRecoveryValidated remains false and automatic/adaptive policy remains OFF."
     }
   }
 }
