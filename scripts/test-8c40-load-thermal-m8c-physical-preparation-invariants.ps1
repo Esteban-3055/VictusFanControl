@@ -53,6 +53,8 @@ foreach($needle in @(
     'WaitForParentContinueAsync',
     'M8C-CONTINUE',
     'CpuConfirmedThreshold(',
+    'syntheticEpoch +',
+    'TimeSpan.FromMilliseconds(ordinal)',
     'GpuImmediateThreshold(',
     'RequiredConsecutiveCpuSamples',
     'coordinator.EnforceSafetyAsync(',
