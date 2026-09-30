@@ -74,7 +74,7 @@ Get-ChildItem -LiteralPath $resolved -File |
 
 $manifest=Join-Path $resolved 'm9e-package-manifest.json'
 $zip="$resolved.zip";$sha="$zip.sha256"
-if(Test-Path -LiteralPath $zip -or Test-Path -LiteralPath $sha){throw 'M9E packager refuses to overwrite an existing ZIP/SHA sidecar.'}
+if((Test-Path -LiteralPath $zip) -or (Test-Path -LiteralPath $sha)){throw 'M9E packager refuses to overwrite an existing ZIP/SHA sidecar.'}
 [ordered]@{
     schemaVersion=1;gate='M9E-EVIDENCE-PACKAGE';packagedUtc=(Get-Date).ToUniversalTime().ToString('O');
     repositoryHead=$head;evidenceFiles=$evidenceHashes;externalFiles=$externalHashes;

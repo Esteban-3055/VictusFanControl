@@ -213,7 +213,7 @@ $power=Assert-PowerSane
 foreach($name in @('OmenMon','OmenMon-Reborn','VictusFanControl.App')){
     if(Get-Process -Name $name -ErrorAction SilentlyContinue){throw "M9E refused while '$name' is running."}
 }
-if(Test-Path -LiteralPath $armPath -or Test-Path -LiteralPath $postRebootPath){
+if((Test-Path -LiteralPath $armPath) -or (Test-Path -LiteralPath $postRebootPath)){
     throw 'M9E refuses to overwrite preserved M9E reboot evidence in ProgramData.'
 }
 if(Test-Path -LiteralPath $journalPath){
