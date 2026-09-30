@@ -56,9 +56,9 @@ public static class HpFanControlBackendFactory
             if (watchdogLease is not null)
             {
                 throw new NotSupportedException(
-                    "HP 8C40 matched, but watchdog/service recovery has not yet " +
-                    "been physically validated for Modern Standby. The old 88F8 " +
-                    "S3 watchdog gates must not be reused on this target.");
+                    "HP 8C40 matched, but production watchdog/unattended recovery " +
+                    "promotion remains blocked pending representative-load, thermal-preemption " +
+                    "and remaining production-race qualification.");
             }
 
             var backend = new Hp8C40FanControlBackend(modulesDirectory);

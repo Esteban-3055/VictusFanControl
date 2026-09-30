@@ -156,8 +156,9 @@ public sealed class Hp8C40FanControlBackend :
         if (_targetSupported && watchdogLease is not null)
         {
             throw new NotSupportedException(
-                "HP 8C40 watchdog recovery is not yet physically validated. " +
-                "Use the bounded local backend without a watchdog lease until Modern Standby and service recovery are qualified.");
+                "HP 8C40 production watchdog/unattended recovery promotion remains blocked. " +
+                "Use the bounded local backend without a watchdog lease until representative-load, " +
+                "thermal-preemption and remaining production-race qualification are closed.");
         }
 
         _watchdogLease = watchdogLease;
