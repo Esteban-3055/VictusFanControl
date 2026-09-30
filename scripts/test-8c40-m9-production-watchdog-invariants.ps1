@@ -28,12 +28,16 @@ Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9A must not 
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9A must keep production control disabled by default.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9A must keep automatic/adaptive policy OFF.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9ProductionIntegrationPrepared) 'M9 preparation flag missing.'
-Assert-False ([bool]$profile.lifecycle.watchdogM9CodeCiPassed) 'M9A profile must remain CI-pending before the closure commit.'
+Assert-True ([bool]$profile.lifecycle.watchdogM9CodeCiPassed) 'M9A code/CI PASS must remain recorded after closure.'
 Assert-False ([bool]$profile.lifecycle.watchdogM9NoWritePreflightPassed) 'M9B no-write preflight must not be implied by M9A.'
 Assert-False ([bool]$profile.lifecycle.watchdogM9PhysicalPassed) 'M9 physical PASS must not be implied by code preparation.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9A must keep production construction blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.physicalExecutionAuthorized) 'M9A must authorize no physical execution.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.promotion.authorized) 'M9 promotion must remain blocked.'
+if([string]$profile.watchdogM9ProductionIntegration.m9a.codeCi.result -cne 'PASS'){throw 'M9A CI result must remain PASS.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9a.codeCi.commit -cne 'f426df1480d92d87b9c5c5b55eb927a5a83dbf93'){throw 'M9A CI evidence commit changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9a.codeCi.runNumber -ne 836){throw 'M9A CI run number changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9a.codeCi.runId -ne 36778419056){throw 'M9A CI run id changed.'}
 
 foreach($needle in @(
     'public static readonly bool ProductionConstructionAuthorized = false;',
@@ -71,7 +75,7 @@ foreach($needle in @(
 Assert-Contains $program 'Hp8C40ProductionWatchdogGateSelfTest.Run' 'M9 self-test is not part of --hp-backend-self-test.'
 
 foreach($needle in @(
-    'M9A CODE PREPARED / CI PENDING',
+    'M9A CODE/CI PASS',
     'ProductionConstructionAuthorized',
     'M9B - read-only production preflight',
     'M9C - bounded normal-production-path smoke',

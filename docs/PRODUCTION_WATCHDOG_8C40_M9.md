@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE PREPARED / CI PENDING. PRODUCTION WATCHDOG CONSTRUCTION BLOCKED. NO M9 PHYSICAL EXECUTION AUTHORIZED.**
+Status: **M9A CODE/CI PASS. PRODUCTION WATCHDOG CONSTRUCTION BLOCKED. NO WRITE-CAPABLE M9 PHYSICAL EXECUTION AUTHORIZED. M9B READ-ONLY PREFLIGHT IS NEXT.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -127,4 +127,15 @@ M9A PASS requires:
 - existing M5-M8/watchdog/SafetyGate/coordinator regressions green;
 - zero physical execution.
 
-Until that is recorded in the profile, M9A is only prepared, not closed.
+M9A is **CODE/CI PASS** at commit `f426df1480d92d87b9c5c5b55eb927a5a83dbf93`,
+GitHub Actions **#836** (run `36778419056`). The complete workflow passed the
+M9 invariant under PowerShell 7 and Windows PowerShell 5.1, warnings-as-errors
+build, HP backend tests including deterministic factory/gate refusal, and all
+existing M5-M8/watchdog/SafetyGate/coordinator regressions. No hardware path ran.
+
+The immediately preceding preparation run #835 failed only because the historical
+legacy-88F8 isolation invariant still required the old literal pre-M9 watchdog
+prohibition inside the factory/backend. That invariant was migrated to assert the
+new centralized M9 gate and fail-closed ordering; no runtime authorization changed.
+
+M9A is therefore closed. The next step is M9B read-only preflight preparation.
