@@ -2941,7 +2941,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9B_PHYSICAL_PASS_M9C_PHYSICAL_PASS_M9D_FAILED_CLOSED_EC_MUTEX_RETRY_FIX_CI_PENDING",
+    "status": "M9B_PHYSICAL_PASS_M9C_PHYSICAL_PASS_M9D_FAILED_CLOSED_EC_MUTEX_CONTENTION_FIX_PENDING_CI",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -3307,9 +3307,9 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Obtain complete CI for the bounded M4 Global\\Access_EC ownership-read retry with all M9D physical gates reclosed. Then issue a fresh one-run M9D authorization commit, require complete same-HEAD canonical CI, and only then rerun the versioned M9D lifecycle harness. Production promotion remains blocked.",
+    "nextStep": "Qualify a bounded M4 service-side retry for retryable Global\\Access_EC contention during lease admission, with all M9D gates reclosed. After complete CI, issue a fresh one-run M9D authorization, require exact same-HEAD canonical CI, and only then rerun the M9D lifecycle harness. Production promotion remains blocked.",
     "m9d": {
-      "status": "FAILED_CLOSED_EC_MUTEX_RETRY_FIX_CI_PENDING",
+      "status": "FAILED_CLOSED_EC_MUTEX_CONTENTION_FIX_PENDING_CI",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",
       "appMode": "--8c40-m9d-production-lifecycle-test",
       "requiredToken": "8C40-M9D-PRODUCTION-LIFECYCLE30",
@@ -3375,23 +3375,24 @@
         "authorizedExecutionCiRunNumber": 990,
         "authorizedExecutionCiRunId": 36820839972,
         "authorizedExecutionCiResult": "SUCCESS",
-        "prerequisite": "M9B and M9C physical PASS formally closed; corrected PID-collision retry authorized only for one run.",
+        "prerequisite": "M9B and M9C physical PASS formally closed; PID-collision fix CODE/CI PASS.",
         "prerequisiteSatisfied": true,
         "m9bPhysicalPass": true,
         "m9cPhysicalPass": true,
-        "scope": "the corrected one-run M9D retry was consumed by a fail-closed pre-READY lease-admission failure before any fan write or operator Modern Standby transition",
+        "scope": "the corrected M9D retry was consumed by a fail-closed GUI admission failure before READY and before the operator Modern Standby transition",
         "sameHeadCiRequiredBeforeExecution": true,
         "completed": true,
         "result": "FAIL_CLOSED",
         "failure": "Custom fan authority admission failed before any fan write was attempted: WatchdogLeaseRejectedException: Watchdog lease rejected request: INTERNAL_ERROR: Timed out waiting for Global\\Access_EC.",
         "operatorSleepTransitionReached": false,
-        "fanWriteAttempted": false,
+        "readyReached": false,
+        "realFanWriteAttempted": false,
         "cleanupFirmwareProofConsoleObserved": "2 consecutive FF/FF",
         "productionPromotionAuthorized": false
       },
       "physicalEvidence": null,
       "expectedPhysicalBranch": "feature/victus-8c40-m9-canonical-prehardware",
-      "harnessStatus": "FAILED_CLOSED_EC_MUTEX_RETRY_FIX_CI_PENDING",
+      "harnessStatus": "FAILED_CLOSED_EC_MUTEX_CONTENTION_FIX_PENDING_CI",
       "harnessScript": "scripts/test-8c40-production-watchdog-m9d.ps1",
       "harnessInvariantScript": "scripts/test-8c40-m9d-harness-invariants.ps1",
       "trackedChildHelper": "scripts/m9d-tracked-child.ps1",
@@ -3434,7 +3435,6 @@
       "lastFailedAttempt": {
         "result": "FAIL_CLOSED",
         "executionHead": "1eea8c07624a7dcf1c179551984df3061d2348d4",
-        "timestampLocal": "2026-10-01T02:56:20.2269015-03:00",
         "watchdogPid": 8812,
         "watchdogStartUtcTicks": 639264309731212400,
         "guiPid": 16592,
@@ -3444,13 +3444,14 @@
         "displayOn": false,
         "acceptedUserResumes": 0,
         "constructionRoute": "production-factory-public-backend",
-        "failure": "Custom fan authority admission failed before any fan write was attempted: WatchdogLeaseRejectedException: Watchdog lease rejected request: INTERNAL_ERROR: Timed out waiting for Global\\Access_EC.",
-        "rootCause": "Transient contention on the cross-process Global\\Access_EC mutex during watchdog PREPARE ownership read. The 500 ms single-attempt mutex acquisition rejected Custom admission before any fan write.",
+        "failure": "Watchdog lease rejected request: INTERNAL_ERROR: Timed out waiting for Global\\Access_EC.",
+        "rootCause": "M4 lease Prepare performs a service-side EC setpoint read after GUI-side EC admission checks. The process-global Global\\Access_EC mutex used a single 500 ms acquisition window, so transient cross-process EC contention was surfaced as INTERNAL_ERROR instead of being retried within the existing 4 s lease request budget.",
         "operatorSleepTransitionReached": false,
-        "fanWriteAttempted": false,
+        "readyReached": false,
+        "realFanWriteAttempted": false,
         "cleanupFirmwareProofConsoleObserved": "FF/FF twice",
         "physicalPassClaimed": false,
-        "note": "No M9D physical PASS is recorded. The consumed retry authorization is reblocked while a bounded M4 ownership-read contention retry is qualified."
+        "note": "No M9D physical PASS is recorded. The one-run retry authorization is consumed and all M9D gates are reblocked pending bounded EC-mutex contention hardening, CI, and a fresh authorization."
       },
       "ecMutexContentionFix": {
         "status": "CODE_PREPARED_CI_PENDING",
