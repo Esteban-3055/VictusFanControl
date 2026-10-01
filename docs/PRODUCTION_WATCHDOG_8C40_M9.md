@@ -319,3 +319,43 @@ barriers remain closed:
 - `m9c.qualificationConstructionAuthorized=false`.
 
 M9B remains the first unavoidable machine-side evidence boundary.
+
+
+## 8. M9D production-path Modern Standby lifecycle preparation
+
+Development continues beyond the already CI-green, write-blocked M9C harness so that
+M9B remains the first unavoidable machine-side command.
+
+M9D is a focused last-mile lifecycle regression. Unlike historical M6, its GUI backend
+is constructed through the normal production route:
+
+```text
+MainForm M9D mode
+ -> temporary M9D construction-only scope
+ -> HpFanControlBackendFactory.Create
+ -> public Hp8C40FanControlBackend
+ -> scope disposed and proven closed
+ -> FanControlCoordinator
+ -> existing display-aware Modern Standby lifecycle engine
+```
+
+The temporary scope exists only to qualify the still-unpromoted production constructor.
+It is forbidden to remain active at Custom admission and does not set
+`WatchdogRecoveryValidated=true` or `ProductionConstructionAuthorized=true`.
+
+The M9D app mode is `--8c40-m9d-production-lifecycle-test` with token
+`8C40-M9D-PRODUCTION-LIFECYCLE30`. Both the compile-time execution gate and the
+construction gate remain false during preparation.
+
+M9D reuses the physically qualified M6 display-aware lifecycle engine rather than
+forking a new power-state implementation. Evidence uses a separate namespace:
+
+- `m9d-production-lifecycle.ready`
+- `m9d-production-lifecycle.presleep`
+- `m9d-production-lifecycle.resume-gate`
+- `m9d-production-lifecycle.reentry`
+- `m9d-production-lifecycle.result`
+
+Physical authorization is forbidden until M9B read-only physical PASS and M9C
+production-path smoke PASS are both formally recorded. Automatic/adaptive policy and
+default control remain OFF.
