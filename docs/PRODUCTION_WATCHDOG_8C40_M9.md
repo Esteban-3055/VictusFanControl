@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B CODE/CI PASS BUT CANONICAL PRE-HARDWARE REBIND CI PENDING / M9B READ-ONLY EXECUTION BLOCKED. M9C/M9D CODE/CI PASS WITH WRITE PATHS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B CODE/CI PASS AND CANONICAL PRE-HARDWARE REBIND CODE/CI PASS / M9B READ-ONLY EXECUTION BLOCKED. M9C/M9D CODE/CI PASS WITH WRITE PATHS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -144,8 +144,9 @@ M9A is therefore closed. The next step is M9B read-only preflight preparation.
 ## 6. M9B read-only preflight preparation
 
 The versioned preflight is `scripts/test-8c40-production-watchdog-m9b-preflight.ps1`.
-Its execution gate is currently closed in the profile until the preparation commit
-passes the complete same-HEAD CI workflow.
+The canonical pre-hardware rebind has now passed complete same-HEAD CI, but the
+execution gate intentionally remains closed. M9B read-only execution requires a
+separate authorization commit and complete CI on that exact authorization SHA.
 
 The script is intentionally stricter than the earlier M8 no-write preflight because
 M9 is qualifying the last-mile production watchdog dependency. M9B requires the already
@@ -539,10 +540,14 @@ single canonical line for the next target-side evidence is therefore prepared as
 `feature/victus-8c40-m9-canonical-prehardware`
 
 This preparation rebinds M9B, M9C and M9D repository-provenance checks to that same
-branch while keeping every active boundary closed. In the preparation commit,
-`m9b.readOnlyExecutionAuthorized=false`; M9B will be re-authorized only by a later
-closure commit after complete same-HEAD CI. M9C/M9D physical execution/construction,
-`WatchdogRecoveryValidated`, production construction, default control and the
-automatic/adaptive policy all remain false.
+branch while keeping every active boundary closed. Commit
+`e896d0d52f22079608302f81f5b0177e5d47d093` completed GitHub Actions **#912**
+(run `36806751677`) with **SUCCESS**, closing the canonical rebind as software-only
+CODE/CI PASS. No physical hardware path ran.
 
-Status: **CANONICAL PRE-HARDWARE REBIND CI PENDING / M9B READ-ONLY EXECUTION BLOCKED**.
+`m9b.readOnlyExecutionAuthorized=false` remains intentional. The next change must be a
+separate read-only authorization commit followed by complete CI on that exact SHA.
+M9C/M9D physical execution/construction, `WatchdogRecoveryValidated`, production
+construction, default control and the automatic/adaptive policy all remain false.
+
+Status: **CANONICAL PRE-HARDWARE REBIND CODE/CI PASS / M9B READ-ONLY EXECUTION BLOCKED**.
