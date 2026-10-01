@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current state: **P15A remains formally closed/re-blocked. Both P15B preflight corrections are formally closed, and a fresh one-shot 30/30 authorization now opens only the dedicated P15B harness/controller barriers. Target execution is still forbidden until this exact authorization HEAD itself completes full CI successfully.**
+Current state: **P15A remains formally closed/re-blocked. P15B has a complete independently reviewed physical PASS from authorization HEAD `f6261383c1cdc40808bf1ac232c93e3686478716` / CI #1114 SUCCESS. This closure re-blocks both P15B physical gates and records `physicalPassed=true` / `evidenceClosed=true`; no subsequent physical gate is opened by this commit.**
 
 ### P15A preparation closure
 
@@ -111,10 +111,18 @@ P15B was immediately re-blocked. The correction is implemented: all local uses i
 
 A fresh P15B authorization is now based on that closure. It opens only the qualification harness/controller gates, preserves both prior target preflight failures as no-write evidence, keeps P15A/user-facing Manual/Automatic/Candidate/M9C/M9D closed, and requires a **full SUCCESS on the new authorization HEAD itself before target execution**.
 
+### P15B physical PASS and evidence closure
+
+The authorized run on HEAD `f6261383c1cdc40808bf1ac232c93e3686478716` / GitHub Actions **#1114 SUCCESS** completed the exact one-shot production Manual transaction and strong restore. Evidence ZIP `p15b-manual30_2026-10-01_195332.zip` has SHA-256 `a34ea5d14de161be685e767e5d54e727b17d9b8c2cc5396c9ffa6ec7e61335da`; the separately preserved `.zip.sha256` sidecar names that exact digest and was independently checked.
+
+Independent review verified the archive and all manifest evidence hashes, exact target/source identity, exactly one `ApplyManualAsync(30)`, equal 30/30 parent proof, durable schema-v2 OWNED generation 3 bound to controller PID/start identity, three bounded supervision samples, and strict watchdog causality `PREPARE < WRITE_INTENT < COMMIT < RESTORE_BEGIN < RELEASE`. Strong restore completed with local FF/FF acknowledgement, watchdog RELEASE, absent final journal, two controller final FF/FF samples, two additional independent parent FF/FF samples, and two cleanup FF/FF samples. The independent failsafe was armed and did not take over.
+
+The initial watchdog baseline was `Manual/Running/PID7980/LocalSystem` and the same PID/start identity remained Running through the complete transaction and restore. The harness did not start or restart it. User-facing Manual, Automatic, Candidate V1, M9C and M9D qualification gates remained closed. This closure records the physical PASS and immediately re-blocks the dedicated P15B harness/controller gates. It does **not** prepare or authorize Automatic; a subsequent gate may be considered only after this closure commit itself has full same-HEAD CI SUCCESS.
+
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
-- P15B Manual 30/30 execution: **FRESHLY REAUTHORIZED AFTER BOTH PREFLIGHT CORRECTIONS / AWAITING SAME-HEAD CI SUCCESS**
+- P15B Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED; closure commit still requires its own same-HEAD CI SUCCESS before any next gate**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**

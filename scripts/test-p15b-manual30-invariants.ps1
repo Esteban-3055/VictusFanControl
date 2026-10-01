@@ -21,7 +21,7 @@ $baselineHelper=Get-Content -LiteralPath (Join-Path $root 'scripts\p15b-service-
 $baselineSelfTest=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15b-service-baseline-selftest.ps1') -Raw
 
 $status=[string]$contract.status
-if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PASS_GATE_CLOSED')){throw 'P15B preparation/authorization/correction state mismatch.'}
+if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_PHYSICAL_PASS_FORMALLY_CLOSED')){throw 'P15B preparation/authorization/correction state mismatch.'}
 Assert-True ([bool]$contract.startupNoWrite.physicalPassed) 'P15B requires P15A physical PASS.'
 Assert-True ([bool]$contract.startupNoWrite.evidenceClosed) 'P15B requires P15A evidence closed.'
 Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A must remain re-blocked.'
@@ -31,7 +31,7 @@ if($status -eq 'P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED'){
     Assert-False ([bool]$contract.manual30.preparationCiValidated) 'Pending P15B preparation must not pre-claim CI validation.'
     Assert-False ([bool]$contract.manual30.preparationClosure.closed) 'Pending P15B preparation must not pre-close.'
 }
-if($status -in @('P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PASS_GATE_CLOSED')){
+if($status -in @('P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_PHYSICAL_PASS_FORMALLY_CLOSED')){
     Assert-True ([bool]$contract.manual30.preparationCiValidated) 'Closed P15B preparation must be CI validated.'
     Assert-True ([bool]$contract.manual30.preparationClosure.closed) 'Closed P15B preparation must record closure.'
     $pc=$contract.manual30.preparationClosure
@@ -109,7 +109,7 @@ if($status -eq 'P15B_MANUAL30_POWERSHELL_PID_COLLISION_PREFLIGHT_FAIL_CLOSED_GAT
     Assert-False ([bool]$corr.ciValidated) 'P15B PID-collision correction cannot pre-claim CI.'
     Assert-False ([bool]$corr.closure.closed) 'P15B PID-collision correction cannot pre-close.'
 }
-if($status -in @('P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PASS_GATE_CLOSED')){
+if($status -in @('P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_PHYSICAL_PASS_FORMALLY_CLOSED')){
     Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B must remain re-blocked during/after PID-collision correction until fresh authorization.'
     Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B controller must remain re-blocked during/after PID-collision correction until fresh authorization.'
     Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15B controller gate must remain closed during PID-collision correction/closure.'
@@ -163,8 +163,28 @@ if($status -eq 'P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
     Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B controller physical gate must remain CLOSED during preparation/closure.'
     Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15B preparation/closure requires qualification controller gate closed.'
 }
-Assert-False ([bool]$contract.manual30.physicalPassed) 'P15B cannot pre-claim physical PASS.'
-Assert-False ([bool]$contract.manual30.evidenceClosed) 'P15B cannot pre-close physical evidence.'
+if($status -eq 'P15B_MANUAL30_PHYSICAL_PASS_FORMALLY_CLOSED'){
+    Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B execution must be re-blocked after physical PASS.'
+    Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B qualification controller must be re-blocked after physical PASS.'
+    Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15B controller hard gate must be closed after physical PASS.'
+    Assert-True ([bool]$contract.manual30.physicalPassed) 'P15B physical PASS closure must set physicalPassed.'
+    Assert-True ([bool]$contract.manual30.evidenceClosed) 'P15B physical PASS closure must close evidence.'
+    $p=$contract.manual30.physicalPassClosure
+    Assert-True ([bool]$p.closed) 'P15B physical PASS closure must be closed.'
+    if([string]$p.result -cne 'PASS' -or [string]$p.sourceHead -cne 'f6261383c1cdc40808bf1ac232c93e3686478716' -or [int]$p.sourceCiRunNumber -ne 1114 -or [long]$p.sourceCiRunId -ne 36935852739 -or [string]$p.sourceCiResult -cne 'SUCCESS'){throw 'P15B physical PASS source/CI identity mismatch.'}
+    if([string]$p.evidenceZipSha256 -cne 'a34ea5d14de161be685e767e5d54e727b17d9b8c2cc5396c9ffa6ec7e61335da' -or [string]$p.packageManifestSha256 -cne 'bfb9ec3aa79001ca4e351900c39c3da2cdf7486f4cfd9c66630d313c5f4fed1a' -or [string]$p.harnessSummarySha256 -cne '7c8111bea09227fc057aaa58a49800f2a9503893ffc820f85c25b044757f7f83' -or [string]$p.controllerResultSha256 -cne 'a5c96550bd454b33556a413818768ad61f67872f9f57cb8f6d26a6a0a4160bba'){throw 'P15B physical PASS evidence identity mismatch.'}
+    if([string]$p.evidenceSidecarSha256 -cne '2f16fe448f18b15a0b2c7e69637df117e50a006dfcff6e00cf509b8dbc6f96e8'){throw 'P15B physical PASS sidecar identity mismatch.'}
+    foreach($n in @('archiveIntegrityVerified','packageManifestEmbeddedHashesVerified','packageManifestSourceIdentityEntriesVerified','repositoryHeadMatched','upstreamHeadMatchedAtExecution','trackedSourceClean','onlyPreservedUntrackedLogsObserved','targetMatched','causalPrepareWriteIntentCommitRestoreReleaseVerified','strongRestoreVerified','localFirmwareAckVerified','watchdogReleaseVerified','finalJournalAbsent','watchdogProcessIdentityStable','initialServiceStatePreserved','failsafeArmed','evidenceIndependentlyReviewed','physicalPassSupported')){Assert-True ([bool]$p.$n) ("P15B physical PASS closure expected true: {0}" -f $n)}
+    if([int]$p.packageManifestEmbeddedEvidenceHashCount -ne 13 -or [int]$p.packageManifestSourceIdentityEntryCount -ne 5){throw 'P15B physical PASS manifest verification counts mismatch.'}
+    if([int]$p.exactApplyManualCalls -ne 1 -or [string]$p.equalLevel -cne '30/30' -or [int]$p.preWriteSamples -ne 3 -or [int]$p.supervisionSamples -ne 3){throw 'P15B physical PASS bounded Manual transaction mismatch.'}
+    if([int]$p.ownedJournalSchemaVersion -ne 2 -or [int]$p.ownedJournalGeneration -ne 3 -or [int]$p.ownedJournalControllerPid -ne 22568 -or [long]$p.ownedJournalControllerStartUtcTicks -ne 639264920440344831){throw 'P15B physical PASS OWNED journal binding mismatch.'}
+    if([int]$p.controllerFinalFirmwareSamples -ne 2 -or [int]$p.independentFinalFfFfSamples -ne 2 -or [int]$p.cleanupFfFfSamples -ne 2){throw 'P15B physical PASS final FF/FF proof count mismatch.'}
+    if([string]$p.initialServiceState -cne 'Manual/Running/PID7980/LocalSystem' -or [string]$p.finalServiceState -cne 'Manual/Running/PID7980/LocalSystem' -or [int]$p.watchdogPid -ne 7980 -or [long]$p.watchdogStartUtcTicks -ne 639264861577277909){throw 'P15B physical PASS preserved service baseline mismatch.'}
+    foreach($n in @('serviceStartedByHarness','serviceRestartedForCleanup','failsafeTakeover','userFacingManualExecutionAuthorized','automaticExecutionAuthorized','candidateCurveAuthorizedForProduction','m9cQualificationConstructionAuthorized','m9dQualificationConstructionAuthorized','nextPhysicalGateOpened')){Assert-False ([bool]$p.$n) ("P15B physical PASS closure expected false: {0}" -f $n)}
+}else{
+    Assert-False ([bool]$contract.manual30.physicalPassed) 'P15B cannot pre-claim physical PASS.'
+    Assert-False ([bool]$contract.manual30.evidenceClosed) 'P15B cannot pre-close physical evidence.'
+}
 if([int]$contract.manual30.equalLevel -ne 30 -or [int]$contract.manual30.exactApplyManualCalls -ne 1){throw 'P15B must be exactly one equal 30/30 Manual call.'}
 Assert-True ([bool]$contract.manual30.strongRestoreRequired) 'P15B strong restore must be required.'
 foreach($p in @('productionRestorePathRequired','ffReleaseRequired','legacyDefaultRequired','localFfFfAckRequired','watchdogRestoreBeginRequired','watchdogReleaseRequired','stableIndependentFfFfRequired','watchdogJournalAbsentRequired','watchdogProcessIdentityStableRequired')){Assert-True ([bool]$contract.manual30.strongRestore.$p) ("P15B strong restore contract missing: {0}" -f $p)}
