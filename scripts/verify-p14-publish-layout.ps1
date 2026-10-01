@@ -35,9 +35,9 @@ if ($moduleBins.Count -ne 0) { throw 'P14.2 publish stage must not silently inje
 
 foreach ($assemblyPath in @((Join-Path $app 'VictusFanControl.App.dll'),(Join-Path $watchdog 'VictusFanControl.Watchdog.dll'))) {
     $assembly = [Reflection.AssemblyName]::GetAssemblyName($assemblyPath)
-    if ($assembly.Version.ToString() -ne '0.4.0.0') { throw "Unexpected assembly version in $assemblyPath: $($assembly.Version)" }
+    if ($assembly.Version.ToString() -ne '0.4.0.0') { throw "Unexpected assembly version in ${assemblyPath}: $($assembly.Version)" }
     $versionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($assemblyPath)
-    if ($versionInfo.ProductVersion -ne '0.4.0-rc.1') { throw "Unexpected product version in $assemblyPath: '$($versionInfo.ProductVersion)'" }
+    if ($versionInfo.ProductVersion -ne '0.4.0-rc.1') { throw "Unexpected product version in ${assemblyPath}: '$($versionInfo.ProductVersion)'" }
 }
 
 Write-Host 'HP 8C40 P14.2 win-x64 publish layout verification: PASS' -ForegroundColor Green
