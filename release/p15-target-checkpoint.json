@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED",
+  "status": "P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PASS_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -437,14 +437,21 @@
       "acceptExactQualifiedRunningReadyNoJournalBaselinePlanned": true,
       "preserveInitialServiceStatePlanned": true,
       "implementationComplete": true,
-      "ciValidated": false,
+      "ciValidated": true,
       "closure": {
-        "closed": false,
-        "result": null,
-        "implementationHead": null,
-        "sourceCiRunNumber": null,
-        "sourceCiRunId": null,
-        "sourceCiResult": null,
+        "closed": true,
+        "result": "PASS",
+        "implementationHead": "b24308e6b72e50e9a2ae40501c95f77bcfcf9f43",
+        "sourceCiRunNumber": 1108,
+        "sourceCiRunId": 36932942781,
+        "sourceCiResult": "SUCCESS",
+        "powerShellSyntaxValidated": true,
+        "p15aInvariantValidated": true,
+        "p15bInvariantValidated": true,
+        "serviceBaselineSelfTestValidated": true,
+        "powerShell51CompatibilityValidated": true,
+        "warningsAsErrorsBuildValidated": true,
+        "retainedRcRegressionValidated": true,
         "hardwareExecution": false
       },
       "selfTestImplemented": true
