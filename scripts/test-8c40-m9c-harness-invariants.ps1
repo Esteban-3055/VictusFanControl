@@ -36,9 +36,12 @@ if($barrier-lt 0 -or $admin-lt 0 -or $startService-lt 0 -or $evidenceCreate-lt 0
 foreach($needle in @(
     'm9b.noWritePreflightPassed',
     'physicalAuthorization.authorized',
+    'physicalAuthorization.sourceHead',
+    'git rev-parse HEAD^',
+    'direct child of its same-CI source HEAD',
     'physicalExecutionAuthorized',
     'qualificationConstructionAuthorized',
-    'feature/victus-8c40-m9-production-watchdog',
+    'feature/victus-8c40-m9-final-prehardware',
     'Assert-RepositoryProvenance',
     'Assert-ExactTarget',
     'Assert-ServiceBaseline',

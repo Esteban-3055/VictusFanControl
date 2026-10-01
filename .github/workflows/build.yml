@@ -205,6 +205,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-8c40-m9e-evidence-packaging.ps1
 
+      - name: HP 8C40 M9F final promotion preparation invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9f-promotion-preparation-invariants.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -250,6 +254,7 @@ jobs:
           .\scripts\test-8c40-m9d-evidence-packaging.ps1
           .\scripts\test-8c40-m9e-service-lifecycle-invariants.ps1
           .\scripts\test-8c40-m9e-evidence-packaging.ps1
+          .\scripts\test-8c40-m9f-promotion-preparation-invariants.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build

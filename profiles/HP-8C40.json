@@ -61,7 +61,7 @@
     "watchdogM9CCodeCiPassed": true,
     "watchdogM9CControllerCodeCiPassed": true,
     "watchdogM9DCodeCiPassed": true,
-    "watchdogM9ECodeCiPassed": false
+    "watchdogM9ECodeCiPassed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -2935,7 +2935,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9A_D_CODE_CI_PASS_PHYSICAL_GATES_BLOCKED_M9E_SERVICE_LIFECYCLE_CODE_PREPARED_CI_PENDING",
+    "status": "M9A_E_CODE_CI_PASS_ALL_PHYSICAL_GATES_BLOCKED_FINAL_PREHARDWARE_PREPARED",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -2986,7 +2986,7 @@
       "serviceMutationAuthorized": false,
       "watchdogLeaseAcquisitionAuthorized": false,
       "requirements": [
-        "local HEAD equals tracked upstream on feature/victus-8c40-m9-production-watchdog",
+        "local HEAD equals tracked upstream on feature/victus-8c40-m9-final-prehardware",
         "exact HP-8C40-9D0R1LA-F18 target",
         "M8C PHYSICAL PASS and M8C execution re-blocked",
         "M9A CODE/CI PASS",
@@ -3138,7 +3138,7 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "M9E production service-lifecycle code is prepared but hard-blocked. After same-HEAD CI, prepare final promotion-readiness invariants and rebind the single M9B read-only preflight to the final pre-hardware branch/HEAD. No machine command is required yet.",
+    "nextStep": "Obtain same-HEAD CI on the canonical final-prehardware branch. No target-side command is needed until that CI is green; after closure, M9B remains the first unavoidable read-only machine evidence.",
     "m9d": {
       "status": "FULL_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED",
       "purpose": "focused last-mile full-GUI production-path recovery + display-aware Modern Standby regression after M9C physical PASS",
@@ -3228,7 +3228,7 @@
       "physicalPassed": false
     },
     "m9e": {
-      "status": "SERVICE_LIFECYCLE_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "status": "SERVICE_LIFECYCLE_CODE_CI_PASS_PHYSICAL_BLOCKED",
       "purpose": "qualify the production watchdog service startup/restart policy after M9D physical closure, without changing watchdog code, service identity, pipe or ordinary fan authority",
       "serviceName": "VictusFanControlWatchdogM4",
       "pipeName": "VictusFanControl.Watchdog.M4.8C40.v2",
@@ -3257,15 +3257,17 @@
         "m9dPhysicalPassed": false
       },
       "codeCi": {
-        "result": "PENDING",
-        "commit": null,
-        "runNumber": null,
-        "runId": null,
-        "powerShell7Invariant": null,
-        "windowsPowerShell51Invariant": null,
-        "evidencePackagingSelfTest": null,
-        "warningsAsErrorsBuild": null,
-        "physicalExecution": false
+        "result": "PASS",
+        "commit": "3e7bdf36bafadff93d4908e1ecded049165728d7",
+        "runNumber": 857,
+        "runId": 36791699626,
+        "powerShell7Invariant": true,
+        "windowsPowerShell51Invariant": true,
+        "evidencePackagingSelfTest": true,
+        "warningsAsErrorsBuild": true,
+        "existingM5M9Regressions": true,
+        "physicalExecution": false,
+        "note": "Run #856 exposed only PowerShell boolean/Test-Path expression parsing in the new M9E scripts. Commit 3e7bdf36bafadff93d4908e1ecded049165728d7 corrected those expressions; full workflow #857 passed with all hardware/service mutation gates still closed."
       },
       "stage1": {
         "name": "service-policy-arm",
@@ -3301,6 +3303,62 @@
       "promotionAuthorized": false,
       "note": "M9E is a service-lifecycle gate only. It does not set WatchdogRecoveryValidated, ProductionConstructionAuthorized, automaticPolicyEnabled or control.enabledByDefault.",
       "nextStep": "Obtain same-HEAD code/CI. Keep stage1 physical authorization false until M9B, M9C and M9D physical evidence are all formally closed."
+    },
+    "finalPrehardware": {
+      "status": "CODE_PREPARED_CI_PENDING",
+      "canonicalBranch": "feature/victus-8c40-m9-final-prehardware",
+      "sourceBaseline": {
+        "branch": "feature/victus-8c40-m9e-service-lifecycle",
+        "head": "3e7bdf36bafadff93d4908e1ecded049165728d7",
+        "ciRunNumber": 857,
+        "ciRunId": 36791699626
+      },
+      "purpose": "Single canonical branch for all remaining M9B-E machine-side evidence, eliminating cross-branch execution drift.",
+      "branchBindings": {
+        "m9b": "feature/victus-8c40-m9-final-prehardware",
+        "m9c": "feature/victus-8c40-m9-final-prehardware",
+        "m9d": "feature/victus-8c40-m9-final-prehardware",
+        "m9e": "feature/victus-8c40-m9-final-prehardware"
+      },
+      "writeAuthorizationHardening": "M9C/M9D/M9E authorization commit must be the direct child of the sourceHead that passed same-head CI.",
+      "hardwareExecution": false
+    },
+    "m9f": {
+      "status": "FINAL_PROMOTION_PLAN_CODE_PREPARED_CI_PENDING_PHYSICAL_PREREQUISITES",
+      "purpose": "repository-only final watchdog promotion after M9B/M9C/M9D/M9E evidence is formally closed; no new hardware authority or automatic fan policy",
+      "physicalExecutionRequired": false,
+      "prerequisites": {
+        "m9bNoWritePreflightPassed": false,
+        "m9cPhysicalPassed": false,
+        "m9dPhysicalPassed": false,
+        "m9ePhysicalPassed": false,
+        "m9ePromotionAuthorized": false
+      },
+      "finalPromotionChanges": [
+        "Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated: false -> true",
+        "Hp8C40ProductionWatchdogGate.FinalPromotionAuthorized: false -> true",
+        "Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized: false -> true",
+        "profile.lifecycle.watchdogRecoveryValidated: false -> true",
+        "profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized: false -> true",
+        "profile.watchdogM9ProductionIntegration.promotion.authorized: false -> true"
+      ],
+      "invariantsAfterPromotion": [
+        "control.enabledByDefault remains false",
+        "automaticPolicyEnabled remains false",
+        "equal-only 10..50 remains unchanged",
+        "no fan-stop / no level 0",
+        "SafetyGate raw/effective safety semantics unchanged",
+        "M9C/M9D qualification scopes are no longer used for normal production"
+      ],
+      "compileTimeLatch": "Hp8C40ProductionWatchdogGate.FinalPromotionAuthorized=false",
+      "promotionAuthorized": false,
+      "codeCi": {
+        "result": "PENDING",
+        "commit": null,
+        "runNumber": null,
+        "runId": null,
+        "physicalExecution": false
+      }
     }
   }
 }

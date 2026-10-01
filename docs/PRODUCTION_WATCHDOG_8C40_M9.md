@@ -516,3 +516,50 @@ Only after stage 2 evidence is reviewed may M9E be marked physical PASS. Even th
 `WatchdogRecoveryValidated=false`, production construction remains blocked, default
 control remains OFF and automatic/adaptive policy remains OFF until the final separate
 M9 promotion commit.
+
+
+## 11. Canonical final-prehardware branch and authorization binding
+
+All remaining target-side M9 evidence is consolidated onto
+`feature/victus-8c40-m9-final-prehardware`. M9B, M9C, M9D and M9E must refuse execution from their older
+preparation branches.
+
+M9C, M9D and M9E now add a stronger provenance condition for any future
+write/service-mutation authorization commit: the running authorization commit must be
+the **direct child** of the exact `sourceHead` that passed the preceding same-head CI.
+This prevents an authorization flag from silently surviving intervening source changes.
+
+The M9E service-lifecycle implementation baseline is CODE/CI PASS at
+`3e7bdf36bafadff93d4908e1ecded049165728d7`, GitHub Actions **#857**
+(run `36791699626`). No service mutation or hardware path executed in CI.
+
+## 12. M9F final promotion plan
+
+M9F is repository-only. It requires no additional fan write and must not be used to
+compensate for missing M9B-E evidence.
+
+The final production watchdog path stays triple-latched until all physical/service
+evidence is formally closed:
+
+```text
+Hp8C40TargetProfile.WatchdogRecoveryValidated == false
+Hp8C40ProductionWatchdogGate.FinalPromotionAuthorized == false
+Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized == false
+```
+
+Only after M9B read-only PASS, M9C physical PASS, M9D physical PASS and M9E
+post-reboot service-lifecycle PASS may a dedicated repository promotion commit flip
+those three code/profile boundaries. The same commit may set the profile's M9
+promotion metadata, but it must **not** enable the automatic/adaptive fan policy or
+default fan control.
+
+The intended post-M9 state therefore remains:
+
+- watchdog-backed production construction allowed on the exact HP 8C40 target;
+- service lifecycle supplied by the already-qualified M4 service identity/pipe;
+- fan command envelope still equal-only 10..50;
+- `control.enabledByDefault=false`;
+- `automaticPolicyEnabled=false`;
+- SafetyGate unchanged and authoritative.
+
+Automatic/adaptive curve integration remains a separate later gate.

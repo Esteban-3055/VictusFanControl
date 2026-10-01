@@ -13,6 +13,7 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
         failures += Report(
             output,
             "M9 production watchdog gate is closed by default",
+            !Hp8C40ProductionWatchdogGate.FinalPromotionAuthorized &&
             !Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized &&
             !Hp8C40ProductionWatchdogGate.M9CPhysicalQualificationConstructionAuthorized &&
             !Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated);

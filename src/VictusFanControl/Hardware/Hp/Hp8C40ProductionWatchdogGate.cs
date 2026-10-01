@@ -25,6 +25,12 @@ public static class Hp8C40ProductionWatchdogGate
     // versioned M9 physical gates have passed and the profile is promoted.
     public static readonly bool ProductionConstructionAuthorized = false;
 
+    // Final repository-promotion latch. This is intentionally separate from
+    // WatchdogRecoveryValidated and ProductionConstructionAuthorized so an
+    // accidental one-flag edit cannot expose the production watchdog path.
+    // M9B/M9C/M9D/M9E physical evidence must be formally closed first.
+    public static readonly bool FinalPromotionAuthorized = false;
+
     // Separate temporary construction gate for one versioned M9C physical
     // qualification. It remains false until M9B evidence is physically closed.
     public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;
@@ -57,11 +63,19 @@ public static class Hp8C40ProductionWatchdogGate
             return false;
         }
 
+        if (!FinalPromotionAuthorized)
+        {
+            reason =
+                "M9 final production promotion is compile-time blocked. " +
+                "M9B/M9C/M9D/M9E physical closure and a dedicated promotion commit are required.";
+            return false;
+        }
+
         if (!ProductionConstructionAuthorized)
         {
             reason =
                 "M9 production watchdog construction is compile-time blocked. " +
-                "A dedicated post-M8 promotion commit is required.";
+                "A dedicated M9 final promotion commit is required.";
             return false;
         }
 
@@ -134,7 +148,8 @@ public static class Hp8C40ProductionWatchdogGate
                 "M9C physical qualification construction is compile-time blocked.");
         }
 
-        if (ProductionConstructionAuthorized ||
+        if (FinalPromotionAuthorized ||
+            ProductionConstructionAuthorized ||
             Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated)
         {
             throw new InvalidOperationException(
@@ -181,7 +196,8 @@ public static class Hp8C40ProductionWatchdogGate
                 "M9D physical qualification construction is compile-time blocked.");
         }
 
-        if (ProductionConstructionAuthorized ||
+        if (FinalPromotionAuthorized ||
+            ProductionConstructionAuthorized ||
             Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated)
         {
             throw new InvalidOperationException(

@@ -18,7 +18,7 @@ $stamp=Get-Date -Format 'yyyy-MM-dd_HHmmss'
 $evidenceRoot=Join-Path $repoRoot ("logs\m9e-postreboot_{0}" -f $stamp)
 $resultPath=Join-Path $evidenceRoot 'm9e-postreboot-result.json'
 $packageScript=Join-Path $PSScriptRoot 'package-m9e-evidence.ps1'
-$expectedBranch='feature/victus-8c40-m9-preproduction'
+$expectedBranch='feature/victus-8c40-m9-final-prehardware'
 
 # Stage2 is read-only with respect to service/fans, but it is only meaningful
 # after the versioned M9E stage1 arm and earlier physical gates.
