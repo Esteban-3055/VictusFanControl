@@ -49,7 +49,7 @@ internal sealed class P13FanControlSurface : UserControl
         _authorityValue.Text = authority.ToString();
     }
 
-    private Control BuildUi(string targetDescription)
+    private System.Windows.Forms.Control BuildUi(string targetDescription)
     {
         var root = new TableLayoutPanel
         {
