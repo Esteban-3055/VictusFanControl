@@ -197,9 +197,6 @@
     "pawnIoModulesVersion": "0.2.11",
     "pawnIoModulesArchiveSha256": "43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4",
     "ciArtifactUploadImplemented": true,
-    "finalSoftwareRcAuditClosed": false,
-    "manualExecutionAuthorized": false,
-    "automaticExecutionAuthorized": false,
     "ciArtifactUploadCiValidated": true,
     "ciArtifactRetentionDays": 30,
     "ciArtifactNamePattern": "VictusFanControl-0.4.0-rc.1-win-x64-{sourceHead}",
@@ -228,7 +225,10 @@
       "sourceHeadBindingVerified": true,
       "retainedArtifactDownloadedAndVerified": true,
       "hardwareExecution": false
-    }
+    },
+    "finalSoftwareRcAuditClosed": false,
+    "manualExecutionAuthorized": false,
+    "automaticExecutionAuthorized": false
   },
   "observedCalibration": [
     {
@@ -3549,9 +3549,9 @@
         "sku": "9D0R1LA#AKH",
         "bios": "F.18",
         "watchdogPid": 25380,
-        "watchdogStartUtcTicks": 639264337215345500,
+        "watchdogStartUtcTicks": 639264337215345550,
         "guiPid": 29396,
-        "guiStartUtcTicks": 639264337161518100,
+        "guiStartUtcTicks": 639264337161518091,
         "failsafePid": 16884,
         "failsafeTakeover": false,
         "constructionRoute": "production-factory-public-backend",
