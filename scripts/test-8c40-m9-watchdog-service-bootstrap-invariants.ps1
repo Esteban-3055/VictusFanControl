@@ -16,9 +16,9 @@ function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'Service bootstrap preparation must not promote watchdog recovery.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'Service bootstrap preparation must not open production construction.'
-if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed){throw 'Service bootstrap M9D authorization requires formally closed M9C physical PASS.'}
-if(-not [bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized){throw 'Service bootstrap invariant must observe explicit bounded M9D physical authorization.'}
-if(-not [bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized){throw 'Service bootstrap invariant must observe explicit bounded M9D construction authorization.'}
+if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed){throw 'Service bootstrap fix preparation requires formally closed M9C physical PASS.'}
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'Service bootstrap invariant must observe M9D reblocked after FAIL_CLOSED.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'Service bootstrap invariant must observe M9D construction reblocked after FAIL_CLOSED.'
 if(-not [bool]$profile.lifecycle.watchdogM9DServiceBootstrapCodeCiPassed){throw 'GUI service-bootstrap CODE/CI PASS must remain recorded.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9d.serviceBootstrap.codeCi.result -cne 'PASS'){throw 'GUI service-bootstrap code/CI result changed.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9d.serviceBootstrap.codeCi.commit -cne 'f322e195523b8001b11449f8d18cb7f2facf5d74'){throw 'GUI service-bootstrap code/CI commit changed.'}
