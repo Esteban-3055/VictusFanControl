@@ -21,3 +21,8 @@ Opening the GUI therefore does not acquire Custom authority through P13.
 P13.2 will wire mode selection through `AdaptiveFanProductionController` while both execution gates remain false. P13.3 will add Manual equal-level 10..50 controls behind the closed Manual gate. P13.4 will add Automatic candidate-curve preview/recommendation status behind the closed Automatic gate. P13.5 will add persistence/tray/status hardening and the final P13 software closure.
 
 No P13 step may open a target-side hardware gate. That belongs to P15 or a later separately authorized qualification.
+
+
+## P13.2 — mode selector wiring
+
+Firmware / Manual / Automatic buttons now call only `AdaptiveFanProductionController.SetModeAsync`. The same compile-time Manual/Automatic gates remain false. The P13 surface has no `ApplyManualAsync`, `ProcessAutomaticAsync`, coordinator admission, FanCommand, WMI, EC or watchdog/backend access in this step.

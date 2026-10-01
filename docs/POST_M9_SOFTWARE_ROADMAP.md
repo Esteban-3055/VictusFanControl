@@ -37,7 +37,11 @@ Prepare Firmware / Manual / Automatic modes, manual equal-level 10..50 controls,
 
 ### P13.1 — presentation-only mode surface
 
-Implemented: the normal GUI now exposes the intended Firmware / Manual / Automatic mode model and candidate-curve identity, but all P13 controls are presentation-only. Manual and Automatic execution gates remain compile-time false and there are no P13 callbacks capable of requesting Custom authority.
+Closed in CI. The normal GUI exposed the intended Firmware / Manual / Automatic model with both execution gates compile-time false.
+
+### P13.2 — mode selector wired through the production adapter
+
+Implemented: Firmware / Manual / Automatic mode requests now route only through `AdaptiveFanProductionController.SetModeAsync`. Manual and Automatic remain compile-time blocked and the P13 surface contains no command/apply path, so a blocked mode request cannot reach the backend.
 
 ## P14 — release-candidate productization
 
