@@ -11,5 +11,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VictusFanControl\VictusFanControl.csproj" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" />
   </ItemGroup>
 </Project>

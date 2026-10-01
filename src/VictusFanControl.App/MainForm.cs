@@ -153,6 +153,7 @@ internal sealed class MainForm : Form
     private readonly bool _m7HibernationHardwareTest;
     private readonly bool _m9dProductionLifecycleHardwareTest;
     private readonly string? _m9dProductionLifecycleMarkerRoot;
+    private Hp8C40WatchdogBootstrapEvidence? _m9WatchdogBootstrapEvidence;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
 
@@ -506,6 +507,11 @@ internal sealed class MainForm : Form
 
             if (_m9dProductionLifecycleHardwareTest)
             {
+                _m9WatchdogBootstrapEvidence =
+                    Hp8C40WatchdogServiceBootstrap
+                        .EnsureM9DQualificationReady(
+                            _hardwareIdentity);
+
                 IFanControlWatchdogLeaseClient? m9dLease =
                     new NamedPipeFanControlWatchdogLeaseClient(
                         Hp8C40TargetProfile.Instance.Id,
@@ -571,12 +577,24 @@ internal sealed class MainForm : Form
             }
             else
             {
-                // M9 preparation: the normal production path is wired to the
-                // already-qualified HP 8C40 target-bound lease, but the gate
-                // remains closed. With WatchdogRecoveryValidated=false and
-                // ProductionConstructionAuthorized=false this returns null and
-                // causes no service connection, lease acquisition or hardware
-                // behavior change.
+                // M9 last-mile wiring. While production promotion is closed,
+                // IsProductionConstructionAuthorizedFor is false and this
+                // performs no service/IPC/hardware action. After a future
+                // explicit promotion, the elevated GUI starts only the
+                // already-installed Manual M4 service, verifies exact Ready +
+                // journal absence, then constructs the normal target-bound
+                // named-pipe lease.
+                if (Hp8C40ProductionWatchdogGate
+                    .IsProductionConstructionAuthorizedFor(
+                        _hardwareIdentity,
+                        out _))
+                {
+                    _m9WatchdogBootstrapEvidence =
+                        Hp8C40WatchdogServiceBootstrap
+                            .EnsureProductionReady(
+                                _hardwareIdentity);
+                }
+
                 watchdogLease ??=
                     Hp8C40ProductionWatchdogGate
                         .CreateLeaseIfAuthorized(
@@ -2840,6 +2858,10 @@ internal sealed class MainForm : Form
             $"guiStartTicks={processStartTicks}|" +
             $"transitionMode={DisplayAwareLifecycleTransitionMode}|" +
             $"constructionRoute={(_m9dProductionLifecycleHardwareTest ? "production-factory-public-backend" : "historical-lifecycle-qualification-backend")}|" +
+            $"serviceBootstrap={(_m9dProductionLifecycleHardwareTest ? "gui-ensure-ready" : "external-qualified-service")}|" +
+            $"bootstrapStarted={_m9WatchdogBootstrapEvidence?.StartedByApplication ?? false}|" +
+            $"bootstrapWatchdogPid={_m9WatchdogBootstrapEvidence?.ProcessId ?? 0}|" +
+            $"bootstrapWatchdogStartTicks={_m9WatchdogBootstrapEvidence?.ProcessStartUtcTicks ?? 0}|" +
             $"resumePolicy=session-display-on-only");
 
         AppendEvent(

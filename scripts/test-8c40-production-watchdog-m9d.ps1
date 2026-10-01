@@ -259,17 +259,9 @@ $pass=$false;$failure=$null;$app=$null;$failsafe=$null;$servicePid=0;$serviceTic
 try {
     New-Item -ItemType Directory -Path $markerRoot -Force | Out-Null
 
-    Start-Service -Name $serviceName
-    $deadline=(Get-Date).AddSeconds(15)
-    while($servicePid -le 0 -and (Get-Date)-lt $deadline){
-        $svc=Get-ServiceSnapshot
-        if($svc.State -ceq 'Running'){$servicePid=[int]$svc.ProcessId}
-        if($servicePid -le 0){Start-Sleep -Milliseconds 100}
-    }
-    if($servicePid -le 0){throw 'M9D service did not reach Running.'}
-    $serviceTicks=Get-ServiceStartTicks $servicePid
-    [void](Wait-ServiceReady $servicePid $serviceTicks)
-
+    # The parent deliberately leaves M4 Manual/Stopped here. M9D must prove
+    # that the actual elevated GUI production route starts and validates the
+    # already-installed service itself.
     $failsafe=Start-Process powershell.exe -ArgumentList @(
         '-NoProfile','-ExecutionPolicy','Bypass','-File',$failsafeScript,
         '-DelaySeconds',[string]$FailsafeDelaySeconds,'-LogPath',$failsafeLog
@@ -291,6 +283,28 @@ try {
         '--modules-dir',$modulesDir
     )
 
+    $serviceDeadline=(Get-Date).AddSeconds(20)
+    while($servicePid -le 0 -and (Get-Date)-lt $serviceDeadline){
+        if($app.HasExited){
+            $app.WaitForExit();$app.Refresh()
+            throw "M9D GUI exited before bootstrapping watchdog service. ExitCode=$($app.ExitCode)"
+        }
+
+        $svc=Get-ServiceSnapshot
+        if($svc.State -ceq 'Running' -and [int]$svc.ProcessId -gt 0){
+            $servicePid=[int]$svc.ProcessId
+        } else {
+            Start-Sleep -Milliseconds 100
+        }
+    }
+
+    if($servicePid -le 0){
+        throw 'M9D GUI did not bootstrap the existing watchdog service to Running.'
+    }
+
+    $serviceTicks=Get-ServiceStartTicks $servicePid
+    [void](Wait-ServiceReady $servicePid $serviceTicks)
+
     if(-not (Wait-File $readyPath 45 $app)){
         if($app.HasExited){$app.WaitForExit();$app.Refresh();throw "M9D GUI exited before READY. ExitCode=$($app.ExitCode)"}
         throw 'M9D timed out waiting for READY marker.'
@@ -304,6 +318,10 @@ try {
        $ready -notmatch 'journal=Owned30' -or
        $ready -notmatch 'transitionMode=m9d-production-modern-standby' -or
        $ready -notmatch 'constructionRoute=production-factory-public-backend' -or
+       $ready -notmatch 'serviceBootstrap=gui-ensure-ready' -or
+       $ready -notmatch 'bootstrapStarted=True' -or
+       $ready -notmatch ("bootstrapWatchdogPid={0}" -f $servicePid) -or
+       $ready -notmatch ("bootstrapWatchdogStartTicks={0}" -f $serviceTicks) -or
        $ready -notmatch ("watchdogPid={0}" -f $servicePid) -or
        $ready -notmatch ("watchdogStartTicks={0}" -f $serviceTicks) -or
        $ready -notmatch ("guiPid={0}" -f $app.Id) -or

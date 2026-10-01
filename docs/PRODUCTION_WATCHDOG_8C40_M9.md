@@ -404,3 +404,34 @@ regressions. No physical M9D execution occurred.
 
 This closure does not authorize M9D. Its controller/construction/physical authorization
 flags remain false and M9D still requires formally recorded M9B and M9C physical PASS.
+
+
+## 9. GUI-side production watchdog service bootstrap
+
+A final software-only gap was identified after the first M9D closure: the future normal
+GUI could construct the target-bound named-pipe client only if the M4 service was
+already running. Leaving service startup to an external harness would not qualify the
+true production path.
+
+The application now contains `Hp8C40WatchdogServiceBootstrap`. It is deliberately
+narrow:
+
+- it runs only after the exact production gate, or the separately blocked M9D physical
+  gate, has authorized the route;
+- it requires the existing `VictusFanControlWatchdogM4` service;
+- it requires startup type `Manual`;
+- it may start that existing service, but never installs, deletes or reconfigures it;
+- it waits for the exact M4 Ready state and validates Session 0, LocalSystem,
+  target profile, live PID + creation time and journal absence;
+- it has no fan/EC/WMI write method.
+
+While M9 production promotion is closed, the ordinary GUI never invokes this bootstrap,
+so current production behavior remains unchanged.
+
+The M9D harness was correspondingly hardened: it now requires M4 to begin
+Manual/Stopped and deliberately does **not** start it on the normal path. The M9D GUI
+must bootstrap M4 itself before constructing the target-bound lease. READY evidence
+binds `serviceBootstrap=gui-ensure-ready`, the bootstrap PID/start ticks and the later
+watchdog OWNED lease to the same process identity. Failure-recovery code may still start
+the qualified service when a retained journal exists; that path cannot satisfy normal
+M9D PASS.

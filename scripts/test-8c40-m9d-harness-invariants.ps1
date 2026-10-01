@@ -32,12 +32,14 @@ Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 
 $barrier=$harness.IndexOf('# HARD VERSIONED AUTHORIZATION BARRIER.',[StringComparison]::Ordinal)
 $admin=$harness.IndexOf('Assert-Administrator',[StringComparison]::Ordinal)
 $evidenceCreate=$harness.IndexOf('New-Item -ItemType Directory -Path $markerRoot',[StringComparison]::Ordinal)
-$serviceStart=$harness.IndexOf('Start-Service -Name $serviceName',[StringComparison]::Ordinal)
-$appStart=$harness.IndexOf('Start-M9DTrackedChild',[StringComparison]::Ordinal)
-if($barrier-lt 0 -or $admin-lt 0 -or $evidenceCreate-lt 0 -or $serviceStart-lt 0 -or $appStart-lt 0 -or
-   -not ($barrier-lt $admin -and $barrier-lt $evidenceCreate -and $barrier-lt $serviceStart -and $barrier-lt $appStart)){
-    throw 'M9D hard authorization barrier must precede Administrator/evidence/service/GUI active paths.'
+$appStart=$harness.IndexOf('$app=Start-M9DTrackedChild',[StringComparison]::Ordinal)
+if($barrier-lt 0 -or $admin-lt 0 -or $evidenceCreate-lt 0 -or $appStart-lt 0 -or
+   -not ($barrier-lt $admin -and $barrier-lt $evidenceCreate -and $barrier-lt $appStart)){
+    throw 'M9D hard authorization barrier must precede Administrator/evidence/GUI active paths.'
 }
+
+$normalActivePrefix=$harness.Substring($barrier,$appStart-$barrier)
+Assert-NotContains $normalActivePrefix 'Start-Service -Name $serviceName' 'M9D parent must leave Manual/Stopped watchdog bootstrap to the GUI production route.'
 
 foreach($needle in @(
     'm9b.noWritePreflightPassed',
@@ -55,6 +57,8 @@ foreach($needle in @(
     '--8c40-m9d-production-lifecycle-test',
     '--8c40-m9d-marker-root',
     'constructionRoute=production-factory-public-backend',
+    'serviceBootstrap=gui-ensure-ready',
+    'bootstrapStarted=True',
     'transitionMode=m9d-production-modern-standby',
     'Start -> Power -> Sleep',
     'Kernel-Power',

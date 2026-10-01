@@ -6,6 +6,7 @@ $gate=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40P
 $meta=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40M9DProductionLifecycleQualificationTest.cs') -Raw
 $appProgram=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\Program.cs') -Raw
 $mainForm=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs') -Raw
+$bootstrap=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\Hp8C40WatchdogServiceBootstrap.cs') -Raw
 $doc=Get-Content (Join-Path $repoRoot 'docs\PRODUCTION_WATCHDOG_8C40_M9.md') -Raw
 
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
@@ -84,7 +85,10 @@ foreach($needle in @(
     'AllowCustomAdmissionAfterRecoveryAsync',
     'M6WatchdogStateReader.RequireOwned30',
     'constructionRoute=',
-    'production-factory-public-backend'
+    'production-factory-public-backend',
+    'Hp8C40WatchdogServiceBootstrap',
+    'EnsureM9DQualificationReady',
+    'serviceBootstrap='
 )){
     Assert-Contains $mainForm $needle ("M9D MainForm/lifecycle invariant missing: {0}" -f $needle)
 }
@@ -105,5 +109,19 @@ Assert-NotContains $m9dBlock 'CreateLifecycleQualificationBackend' 'M9D must use
 
 Assert-Contains $doc 'M9D production-path Modern Standby lifecycle preparation' 'M9 documentation must describe M9D.'
 Assert-Contains $doc 'M9B read-only physical PASS and M9C' 'M9D documentation must retain M9B/M9C physical prerequisites.'
+
+foreach($needle in @(
+    'ServiceName = "VictusFanControlWatchdogM4"',
+    'ServiceStartMode.Manual',
+    'M6WatchdogStateReader.RequireReady',
+    'snapshot.JournalPresent',
+    'EnsureProductionReady',
+    'EnsureM9DQualificationReady'
+)){
+    Assert-Contains $bootstrap $needle ("M9D service-bootstrap invariant missing: {0}" -f $needle)
+}
+Assert-NotContains $bootstrap 'sc.exe' 'GUI watchdog bootstrap must not reconfigure services.'
+Assert-NotContains $bootstrap 'Delete' 'GUI watchdog bootstrap must not delete service/evidence.'
+Assert-NotContains $bootstrap 'SetFanLevel' 'GUI watchdog bootstrap must not write fan state.'
 
 Write-Host 'HP 8C40 M9D production-lifecycle preparation invariant: PASS' -ForegroundColor Green
