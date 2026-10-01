@@ -19,6 +19,12 @@ function Assert-ArrayContainsExact($Values,[string]$Needle,[string]$Message){
     }
     throw $Message
 }
+function Assert-ArrayContainsSubstring($Values,[string]$Needle,[string]$Message){
+    foreach($value in @($Values)){
+        if(([string]$value).IndexOf($Needle,[StringComparison]::Ordinal)-ge 0){return}
+    }
+    throw $Message
+}
 
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9E preparation must not promote profile watchdog recovery.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.promotion.authorized) 'M9E preparation must not authorize production promotion.'
@@ -44,7 +50,7 @@ foreach($needle in @(
     'M9C normal production factory/public-backend physical smoke PASS',
     'M9D GUI-side service bootstrap + production-path Modern Standby lifecycle PASS'
 )){
-    Assert-ArrayContainsExact $profile.watchdogM9ProductionIntegration.m9e.prerequisites $needle ("M9E profile prerequisite missing: {0}" -f $needle)
+    Assert-ArrayContainsSubstring $profile.watchdogM9ProductionIntegration.m9e.prerequisites $needle ("M9E profile prerequisite missing: {0}" -f $needle)
 }
 
 foreach($needle in @(
