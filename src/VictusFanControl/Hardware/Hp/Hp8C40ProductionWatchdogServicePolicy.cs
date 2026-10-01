@@ -14,6 +14,7 @@ public static class Hp8C40ProductionWatchdogServicePolicy
     public const string ServiceName = "VictusFanControlWatchdogM4";
     public const string PipeName = FanControlWatchdogLeaseContract.Hp8C40M4PipeName;
     public const string ServiceModeArgument = "--m4-8c40-lease-service";
+    public const string QualificationToken = "8C40-M9E-SERVICE-LIFECYCLE";
 
     public const int FailureResetSeconds = 86400;
     public const int FirstRestartDelayMs = 5000;
