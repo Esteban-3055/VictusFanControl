@@ -62,7 +62,7 @@ Assert-Contains $bios 'ExecuteRestoreSequence(' 'P15B restore must execute both 
 foreach($n in @('HARD VERSIONED AUTHORIZATION BARRIER','manual30.executionAuthorized','controllerPhysicalExecutionAuthorized','Assert-RepositoryProvenance','Assert-ExactTarget','Assert-ServiceBaseline','Assert-StableSetpoint 255 255','Start-Service -Name $serviceName','Start-P15BFailsafe','--8c40-p15b-manual30','Assert-OwnedJournal','Assert-StableSetpoint 30 30','P15B-CONTINUE','Assert-CausalServiceLog','Assert-StableSetpoint 255 255','Stop-Service -Name $serviceName','package-p15b-evidence.ps1','FAIL_CLOSED')){Assert-Contains $harness $n ("P15B harness invariant missing: {0}" -f $n)}
 foreach($n in @('SetFanLevel(','--restore-hp-auto','git clean','Set-Service','New-Service','sc.exe ')){Assert-NotContains $harness $n ("P15B harness contains forbidden direct operation: {0}" -f $n)}
 Assert-Contains $failsafe "TargetProfileId -cne 'HP-8C40-9D0R1LA-F18'" 'P15B failsafe must bind exact target.'
-Assert-Contains $failsafe "[int]$Journal.Owned.Cpu -eq 30" 'P15B failsafe must bind exact 30/30 ownership.'
+Assert-Contains $failsafe '[int]$Journal.Owned.Cpu -eq 30' 'P15B failsafe must bind exact 30/30 ownership.'
 Assert-Contains $packager 'sourceEvidencePreserved=$true' 'P15B packager preservation marker missing.'
 Assert-Contains $packager 'gitCleanUsed=$false' 'P15B packager must record no git clean.'
 Assert-NotContains $packager 'git clean' 'P15B packager must never invoke git clean.'
