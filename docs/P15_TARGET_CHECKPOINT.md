@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current preparation state: **the failed P15A evidence package has been independently reviewed and is internally consistent through the operator checkpoint. P15A remains CLOSED while the confirmation checkpoint is hardened to permit three bounded exact-token attempts. P15B and Automatic remain closed.**
+Current preparation state: **the failed P15A evidence review is closed and the three-attempt exact-token confirmation hardening passed full CI. P15A remains CLOSED pending a fresh separate authorization. P15B and Automatic remain closed.**
 
 ### P15A preparation closure
 
@@ -53,7 +53,7 @@ The preserved evidence ZIP was independently reviewed at SHA-256 `fee6d9c00eab58
 
 ### P15A operator-confirmation hardening
 
-A single non-matching or empty console response should not discard an otherwise healthy no-write run immediately. While P15A remains unauthorized, the harness now permits up to three bounded attempts to enter the exact case-sensitive token `P15A-OBSERVED`. Before each attempt it refreshes the GUI process and fails closed if the GUI has already exited. The token requirement itself is not weakened; after three mismatches the run still fails closed. This change performs no hardware operation and must pass full CI before it can be formally closed and separately reauthorized.
+A single non-matching or empty console response should not discard an otherwise healthy no-write run immediately. While P15A remains unauthorized, the harness now permits up to three bounded attempts to enter the exact case-sensitive token `P15A-OBSERVED`. Before each attempt it refreshes the GUI process and fails closed if the GUI has already exited. The token requirement itself is not weakened; after three mismatches the run still fails closed. This change performs no hardware operation. Implementation HEAD `a714767225f558b3f8934dffcc575e49ad72127b` passed the full workflow in **#1097**, run ID `36925940706`, including syntax validation, the P15A invariant, Windows PowerShell 5.1 compatibility, warnings-as-errors build and evidence-packaging self-test. The hardening is formally closed; P15A remains unauthorized until a fresh separate authorization commit.
 
 ### P15A authorization window
 
@@ -69,7 +69,7 @@ P15B is intentionally not implemented or authorized by the P15A preparation. Its
 
 ## Current authorization boundary
 
-- P15A startup/no-write execution: **CLOSED DURING OPERATOR-CONFIRMATION HARDENING CI**
+- P15A startup/no-write execution: **CLOSED AFTER CONFIRMATION-HARDENING CI PASS; AWAITING FRESH AUTHORIZATION**
 - P15B Manual 30/30 execution: **CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**

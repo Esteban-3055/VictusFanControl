@@ -15,10 +15,10 @@ $payloadResolver=Get-Content -LiteralPath (Join-Path $root 'scripts\expand-p15-r
 $payloadResolverSelfTest=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15-rc-payload-layout.ps1') -Raw
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P15_TARGET_CHECKPOINT.md') -Raw
 if([string]$contract.milestone -cne 'P15A'){throw 'P15A milestone mismatch.'}
-if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED')){throw 'P15A state mismatch.'}
+if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PASS_GATE_CLOSED')){throw 'P15A state mismatch.'}
 $executionAuthorized=[bool]$contract.startupNoWrite.executionAuthorized
 if($executionAuthorized -and [string]$contract.status -cne 'P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI'){throw 'P15A authorized state/status mismatch.'}
-if((-not $executionAuthorized) -and [string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED')){throw 'P15A closed state/status mismatch.'}
+if((-not $executionAuthorized) -and [string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PASS_GATE_CLOSED')){throw 'P15A closed state/status mismatch.'}
 if([string]$contract.targetProfileId -cne 'HP-8C40-9D0R1LA-F18'){throw 'P15A target mismatch.'}
 if([string]$contract.p14Baseline.closureHead -cne '6945b2e34526e5e266189da6553bf3ea010d3893' -or [int]$contract.p14Baseline.closureCiRunNumber -ne 1086 -or [long]$contract.p14Baseline.closureCiRunId -ne 36913062832 -or [string]$contract.p14Baseline.closureCiResult -cne 'SUCCESS'){throw 'P15A P14 closure baseline mismatch.'}
 if([string]$contract.p14Baseline.auditedRcSourceHead -cne 'eebcdd5e833256466c1ae023c35f7cef8d40d6ec' -or [string]$contract.p14Baseline.auditedRcArtifactSha256 -cne '588058a8b57c0ca1bb41649288682e0981be845ab747654472d3d10c88d572b5' -or [string]$contract.p14Baseline.auditedRcPayloadZipSha256 -cne '704983caa20abb21c3520ffbd165ad69f9843139b6b2fa47d9e9e2448a32ef68'){throw 'P15A audited RC identity mismatch.'}
@@ -75,6 +75,19 @@ if([string]$contract.status -eq 'P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING
     Assert-True ([bool]$h.guiMustRemainRunningDuringConfirmation) 'P15A must require GUI to remain running during confirmation.'
     Assert-False ([bool]$h.implementationCiValidated) 'Pending operator hardening must not pre-claim CI validation.'
     Assert-False ([bool]$h.closure.closed) 'Pending operator hardening must not pre-close.'
+}
+if([string]$contract.status -eq 'P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PASS_GATE_CLOSED'){
+    Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A must remain closed after hardening CI until separately reauthorized.'
+    $h=$contract.startupNoWrite.operatorConfirmationHardening
+    Assert-True ([bool]$h.implementationCiValidated) 'Closed operator hardening must be CI validated.'
+    Assert-True ([bool]$h.closure.closed) 'Closed operator hardening must record closure.'
+    if([string]$h.closure.result -cne 'PASS' -or [string]$h.closure.implementationHead -cne 'a714767225f558b3f8934dffcc575e49ad72127b' -or [int]$h.closure.sourceCiRunNumber -ne 1097 -or [long]$h.closure.sourceCiRunId -ne 36925940706 -or [string]$h.closure.sourceCiResult -cne 'SUCCESS'){throw 'P15A operator hardening closure identity mismatch.'}
+    Assert-True ([bool]$h.closure.powerShellSyntaxValidated) 'P15A hardening closure must record PowerShell syntax validation.'
+    Assert-True ([bool]$h.closure.powerShell51CompatibilityValidated) 'P15A hardening closure must record PowerShell 5.1 validation.'
+    Assert-True ([bool]$h.closure.warningsAsErrorsBuildValidated) 'P15A hardening closure must record warnings-as-errors build.'
+    Assert-True ([bool]$h.closure.p15aInvariantValidated) 'P15A hardening closure must record P15A invariant validation.'
+    Assert-True ([bool]$h.closure.evidencePackagingSelfTestValidated) 'P15A hardening closure must record packaging self-test.'
+    Assert-False ([bool]$h.closure.hardwareExecution) 'P15A hardening closure must record no hardware execution.'
 }
 if([bool]$contract.startupNoWrite.correction.required){
     if([string]$contract.status -in @('P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED')){

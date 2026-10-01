@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED",
+  "status": "P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PASS_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -139,9 +139,19 @@
       "maxAttempts": 3,
       "exactCaseSensitiveMatchRequired": true,
       "guiMustRemainRunningDuringConfirmation": true,
-      "implementationCiValidated": false,
+      "implementationCiValidated": true,
       "closure": {
-        "closed": false,
+        "closed": true,
+        "result": "PASS",
+        "implementationHead": "a714767225f558b3f8934dffcc575e49ad72127b",
+        "sourceCiRunNumber": 1097,
+        "sourceCiRunId": 36925940706,
+        "sourceCiResult": "SUCCESS",
+        "powerShellSyntaxValidated": true,
+        "powerShell51CompatibilityValidated": true,
+        "warningsAsErrorsBuildValidated": true,
+        "p15aInvariantValidated": true,
+        "evidencePackagingSelfTestValidated": true,
         "hardwareExecution": false
       }
     },
