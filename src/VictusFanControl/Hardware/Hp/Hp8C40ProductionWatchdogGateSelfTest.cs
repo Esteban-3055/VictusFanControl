@@ -12,9 +12,10 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
 
         failures += Report(
             output,
-            "M9 production and M9C qualification gates are closed after M9C physical PASS",
+            "M9 production and M9C/M9D qualification gates are closed after M9D physical PASS",
             !Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized &&
             !Hp8C40ProductionWatchdogGate.M9CPhysicalQualificationConstructionAuthorized &&
+            !Hp8C40ProductionWatchdogGate.M9DPhysicalQualificationConstructionAuthorized &&
             !Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated);
 
         var authorized =

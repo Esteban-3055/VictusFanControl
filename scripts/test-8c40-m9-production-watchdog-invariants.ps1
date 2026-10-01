@@ -30,7 +30,13 @@ Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 
 Assert-True ([bool]$profile.lifecycle.watchdogM9ProductionIntegrationPrepared) 'M9 preparation flag missing.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9CodeCiPassed) 'M9A code/CI PASS must remain recorded after closure.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9NoWritePreflightPassed) 'M9B physical read-only PASS must remain formally recorded after closure.'
-Assert-False ([bool]$profile.lifecycle.watchdogM9PhysicalPassed) 'M9 physical PASS must not be implied by code preparation.'
+Assert-True ([bool]$profile.lifecycle.watchdogM9PhysicalPassed) 'M9D formal physical closure must set lifecycle.watchdogM9PhysicalPassed=true.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalPassed) 'M9D physical PASS must be formally recorded.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'M9D physical authorization must be consumed/reblocked after PASS.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D execution gate must be reclosed after PASS.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D construction gate must be reclosed after PASS.'
+if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.evidenceHead -cne '950378ae8debdba897b4fca0cd2dbd35d6c693f8'){throw 'M9D physical evidence HEAD changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.evidenceZipSha256 -cne 'c613459d172d2c75c6ea0c677d092505481af26cdb69bdcd8fb005bfa5d019b0'){throw 'M9D evidence ZIP hash changed.'}
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9A must keep production construction blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.physicalExecutionAuthorized) 'M9A must authorize no physical execution.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.promotion.authorized) 'M9 promotion must remain blocked.'
@@ -42,6 +48,7 @@ if([long]$profile.watchdogM9ProductionIntegration.m9a.codeCi.runId -ne 367784190
 foreach($needle in @(
     'public static readonly bool ProductionConstructionAuthorized = false;',
     'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;',
+    'public static readonly bool M9DPhysicalQualificationConstructionAuthorized = false;',
     'WatchdogRecoveryValidated',
     'RequireProductionConstructionAuthorized',
     'CreateLeaseIfAuthorized',

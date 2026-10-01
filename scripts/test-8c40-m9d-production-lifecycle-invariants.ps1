@@ -21,9 +21,22 @@ function Assert-True([bool]$Value,[string]$Message){if(-not $Value){throw $Messa
 Assert-True ([bool]$profile.lifecycle.watchdogM9DCodePrepared) 'M9D code-prepared flag missing.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9DCodeCiPassed) 'M9D code/CI PASS must remain recorded after closure.'
 Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed) 'M9D client EC-retry authorization requires formally closed M9C physical PASS.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D execution must be explicitly authorized for the client EC-retry lifecycle run.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D construction must be explicitly authorized for the client EC-retry lifecycle run.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'M9D client EC-retry physical authorization record must be true.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D execution must be reblocked after physical PASS.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D construction must be reblocked after physical PASS.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'M9D physical authorization must be consumed/reblocked after PASS.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalPassed) 'M9D physical PASS must be formally recorded.'
+Assert-True ([bool]$profile.lifecycle.watchdogM9PhysicalPassed) 'Lifecycle M9 physical PASS flag must be true after formal closure.'
+if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.result -cne 'PASS'){throw 'M9D physical evidence result must be PASS.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.evidenceHead -cne '950378ae8debdba897b4fca0cd2dbd35d6c693f8'){throw 'M9D physical evidence HEAD changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.evidenceZipSha256 -cne 'c613459d172d2c75c6ea0c677d092505481af26cdb69bdcd8fb005bfa5d019b0'){throw 'M9D evidence ZIP SHA-256 changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.watchdogPid -ne 25380){throw 'M9D watchdog PID changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.watchdogStartUtcTicks -ne 639264337215345550){throw 'M9D watchdog creation ticks changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.guiPid -ne 29396){throw 'M9D GUI PID changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.guiStartUtcTicks -ne 639264337161518091){throw 'M9D GUI creation ticks changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.failsafePid -ne 16884){throw 'M9D failsafe PID changed.'}
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.failsafeTakeover) 'M9D failsafe takeover must remain false.'
+if([int]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.resume.acceptedUserResumes -ne 1){throw 'M9D must record exactly one accepted visible resume.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.postResume.healthySnapshots -ne 5){throw 'M9D must record five fresh Healthy snapshots before re-entry.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.sourceHead -cne 'a5d8ad001ad64f72bc654a6bbd6b667965a2e0ca'){throw 'M9D client EC-retry authorization source HEAD changed.'}
 if([int]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.sourceCiRunNumber -ne 1030){throw 'M9D client EC-retry authorization source CI run changed.'}
 if([long]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.sourceCiRunId -ne 36824956422){throw 'M9D client EC-retry authorization source CI run id changed.'}
@@ -41,7 +54,7 @@ if([long]$profile.watchdogM9ProductionIntegration.m9d.codeCi.runId -ne 368038642
 
 foreach($needle in @(
     'M9DPhysicalQualificationToken = "8C40-M9D-PRODUCTION-LIFECYCLE30"',
-    'M9DPhysicalQualificationConstructionAuthorized = true;',
+    'M9DPhysicalQualificationConstructionAuthorized = false;',
     'EnterM9DPhysicalQualificationConstructionScope',
     'IsM9DPhysicalQualificationScopeActive',
     'Nested/overlapping M9 production-watchdog construction scopes are forbidden'
@@ -50,7 +63,7 @@ foreach($needle in @(
 }
 
 foreach($needle in @(
-    'PhysicalExecutionAuthorized = true;',
+    'PhysicalExecutionAuthorized = false;',
     'QualificationLevel = 30',
     'M9DPhysicalQualificationToken'
 )){
@@ -113,7 +126,7 @@ $m9dBlock=$mainForm.Substring($m9dBranch,$m9dBlockEnd-$m9dBranch)
 Assert-NotContains $m9dBlock 'CreateLifecycleQualificationBackend' 'M9D must use normal factory/public backend rather than the M6 qualification constructor.'
 
 Assert-Contains $doc 'M9D production-path Modern Standby lifecycle preparation' 'M9 documentation must describe M9D.'
-Assert-Contains $doc 'M9D CLIENT EC-RETRY PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI' 'M9D documentation must record client EC-retry authorization.'
+Assert-Contains $doc 'M9D PHYSICAL PASS / FORMALLY CLOSED' 'M9D documentation must record formal physical closure.'
 
 foreach($needle in @(
     'ServiceName = "VictusFanControlWatchdogM4"',

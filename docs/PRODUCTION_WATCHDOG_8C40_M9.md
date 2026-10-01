@@ -456,6 +456,56 @@ The fresh bounded authorization opens only:
 Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. Execution is valid only after complete CI on this exact authorization SHA and the same SHA as the canonical branch HEAD.
 
 
+### M9D PHYSICAL PASS / FORMALLY CLOSED
+
+The final M9D run completed the real Modern Standby lifecycle on exact evidence HEAD
+`950378ae8debdba897b4fca0cd2dbd35d6c693f8`. Canonical GitHub Actions
+**#1041** (run `36825629143`) was SUCCESS on that same SHA before execution.
+The evidence archive is
+`m9d-production-lifecycle_2026-10-01_034135.zip`, SHA-256
+`c613459d172d2c75c6ea0c677d092505481af26cdb69bdcd8fb005bfa5d019b0`.
+
+The audited process identities are watchdog PID `25380` with
+ProcessStartUtcTicks `639264337215345550`, GUI PID `29396` with
+ProcessStartUtcTicks `639264337161518091`, and failsafe PID `16884`.
+The failsafe remained armed without takeover. The installed qualified M4 service
+was not replaced.
+
+Pre-sleep evidence records real `SESSION_DISPLAY_STATUS Off`,
+`restoreTrigger=PBT_APMSUSPEND`, authority returned to Firmware in 933.5 ms,
+watchdog Release verified, journal absent and stable FF/FF proof. Resume events
+arriving while display remained Off were deferred; exactly one Display On boundary
+was accepted. Five fresh complete snapshots recovered Healthy, then one controlled
+30/30 re-entry occurred through the same production factory/public-backend route.
+The final restore returned to Firmware with FF/FF, journal absent and
+`VictusFanControlWatchdogM4` Manual/Stopped/PID0/LocalSystem; watchdog STOP
+reported exitCode=0.
+
+The watchdog log proves two complete causal cycles:
+
+```text
+PREPARE -> WRITE_INTENT -> COMMIT -> RESTORE_BEGIN -> RELEASE
+PREPARE -> WRITE_INTENT -> COMMIT -> RESTORE_BEGIN -> RELEASE
+```
+
+Formal closure consumes and re-blocks every M9D-only execution surface:
+`m9d.physicalAuthorization.authorized=false`,
+`m9d.physicalExecutionAuthorized=false`,
+`m9d.qualificationConstructionAuthorized=false`,
+`Hp8C40M9DProductionLifecycleQualificationTest.PhysicalExecutionAuthorized=false`
+and `Hp8C40ProductionWatchdogGate.M9DPhysicalQualificationConstructionAuthorized=false`.
+The profile records `m9d.physicalPassed=true` and
+`lifecycle.watchdogM9PhysicalPassed=true`.
+
+This closure does **not** promote production watchdog construction:
+`WatchdogRecoveryValidated=false`,
+`ProductionConstructionAuthorized=false`,
+`control.enabledByDefault=false` and `automaticPolicyEnabled=false` remain
+unchanged. M9D must not be repeated from this consumed authorization. The next
+step is complete CI on the closure SHA, canonical same-HEAD CI after fast-forward,
+and only then the separate M9E readiness/promotion transaction.
+
+
 ## 9. GUI-side production watchdog service bootstrap
 
 A final software-only gap was identified after the first M9D closure: the future normal
