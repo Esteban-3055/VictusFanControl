@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI. M9D REMAINS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D REMAINS BLOCKED PENDING SEPARATE AUTHORIZATION. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -217,10 +217,10 @@ does not delete historical evidence and has its own deterministic CI self-test.
 
 ## 7. M9C production-path smoke - advance code preparation
 
-M9B is now physically closed PASS, so M9C is the next machine-side dependency.
-A separate authorization opens only the M9C controller gate, the temporary
-construction gate and the profile M9C execution gate. Normal production construction,
-WatchdogRecoveryValidated, M9D, default control and the automatic/adaptive policy remain closed.
+M9B is physically closed PASS and M9C has now completed its one bounded production-path smoke PASS.
+The M9C controller gate, temporary construction gate and profile execution authorization are
+reclosed after evidence capture. Normal production construction, WatchdogRecoveryValidated,
+M9D, default control and the automatic/adaptive policy remain closed.
 
 M9C deliberately does not instantiate `Hp8C40FanHardware` or
 `Hp8C40FanControlBackend` directly. A short-lived exact-target/token
@@ -236,7 +236,7 @@ The AsyncLocal construction scope is disposed and verified closed before
 construction remains blocked by `WatchdogRecoveryValidated=false` and
 `ProductionConstructionAuthorized=false`.
 
-The future physical transaction is intentionally smaller than M8B: three
+The physical transaction was intentionally smaller than M8B: three
 consecutive fresh complete SafetyGate-permitted bounded-load frames, exactly
 one 30/30 ApplyAsync, parent journal/PID/failsafe proof, five supervision
 frames without command retransmission, then normal RESTORE_BEGIN -> FF/FF ->
@@ -244,7 +244,7 @@ RELEASE. Qualification-only abort limits are CPU >=90 C and GPU >=82 C; the
 controller also refuses to hold 30/30 above 60 W CPU package or 75 W GPU power.
 These limits do not modify production SafetyGate thresholds.
 
-M9C could not be opened until M9B had physically passed and its evidence was reviewed/committed. That prerequisite is now satisfied by the formal M9B closure at `c65e3970bbb04cdd75186354947a6ad49f89e89d`, canonical GitHub Actions **#931** (run `36816264269`) SUCCESS. The M9C authorization still requires complete CI on its exact authorization SHA and then the same SHA as the canonical branch HEAD before one harness execution. M9D remains a later full GUI/lifecycle last-mile regression.
+M9C executed only after formal M9B closure and exact canonical same-HEAD CI. The authorized execution HEAD was `acfa9f670d8d8a36655c7b4ff7d1d8aac7a12dc8`, with canonical GitHub Actions **#949** (run `36817654536`) SUCCESS before execution. The resulting evidence archive `m9c-production-smoke_2026-10-01_020239.zip` has SHA-256 `4851434d5cbf59b7ae326857fa9757803e855bd03ac447654eddb8c0a1a698f3`. M9D is now the next machine-side lifecycle dependency but remains blocked pending its own authorization.
 
 
 ### M9C deterministic invariant coverage
@@ -259,7 +259,7 @@ thermal/power bounds and continued production/adaptive blocks.
 
 ## 8. M9C parent harness, recovery and evidence stack
 
-The complete M9C physical stack is versioned. The parent harness is `scripts/test-8c40-production-watchdog-m9c.ps1`. Its very first gate reads only the versioned profile and refuses unless M9B physical PASS, a dedicated M9C physical authorization, controller execution authorization and temporary construction authorization are all true. Those M9C-only gates are now authorized for one bounded run, but execution remains contingent on complete CI and exact canonical branch/HEAD equality.
+The complete M9C physical stack is versioned. The parent harness is `scripts/test-8c40-production-watchdog-m9c.ps1`. Its very first gate reads only the versioned profile and refuses unless M9B physical PASS, a dedicated M9C physical authorization, controller execution authorization and temporary construction authorization are all true. The one authorized run has completed PASS and all M9C-only execution/construction authorization gates are reclosed.
 
 The parent does not install or replace the watchdog service. It requires the already
 qualified `VictusFanControlWatchdogM4` definition to remain Manual/Stopped/PID 0,
@@ -312,13 +312,15 @@ automatic evidence packaging under PowerShell 7 and Windows PowerShell 5.1,
 plus warnings-as-errors build and the existing M5-M8/SafetyGate/coordinator/
 watchdog/backend regressions. No physical hardware path was executed.
 
-M9C remains **CODE/CI PASS**, not physical PASS. After formal M9B closure, the three M9C-only qualification gates are intentionally opened for one bounded execution:
+M9C is now **PHYSICAL PASS / FORMALLY CLOSED**. The attached evidence proves one 30/30 ApplyAsync through the normal factory/public-backend route, exact watchdog/controller PID + creation ticks, generation-3 OWNED state, five healthy supervision frames, causal `PREPARE -> WRITE_INTENT -> COMMIT -> RESTORE_BEGIN -> RELEASE`, no failsafe takeover, journal absence, final and cleanup two-sample FF/FF proof, and M4 returned to Manual/Stopped/PID0/LocalSystem.
 
-- `m9c.physicalAuthorization.authorized=true`;
-- `m9c.physicalExecutionAuthorized=true`;
-- `m9c.qualificationConstructionAuthorized=true`.
+The three M9C-only qualification gates are reclosed:
 
-This does **not** promote the normal production watchdog path: `WatchdogRecoveryValidated=false`, `ProductionConstructionAuthorized=false`, `control.enabledByDefault=false` and `automaticPolicyEnabled=false` remain unchanged. The authorization is valid only after complete same-HEAD CI on the exact canonical authorization SHA.
+- `m9c.physicalAuthorization.authorized=false`;
+- `m9c.physicalExecutionAuthorized=false`;
+- `m9c.qualificationConstructionAuthorized=false`.
+
+This does **not** promote the normal production watchdog path: `WatchdogRecoveryValidated=false`, `ProductionConstructionAuthorized=false`, `control.enabledByDefault=false` and `automaticPolicyEnabled=false` remain unchanged.
 
 
 ## 8. M9D production-path Modern Standby lifecycle preparation
@@ -356,9 +358,9 @@ forking a new power-state implementation. Evidence uses a separate namespace:
 - `m9d-production-lifecycle.reentry`
 - `m9d-production-lifecycle.result`
 
-Physical authorization is forbidden until M9B read-only physical PASS and M9C
-production-path smoke PASS are both formally recorded. Automatic/adaptive policy and
-default control remain OFF.
+M9B read-only physical PASS and M9C production-path smoke PASS are both formally recorded.
+M9D nevertheless remains blocked until a separate explicit authorization commit and exact
+same-HEAD canonical CI. Automatic/adaptive policy and default control remain OFF.
 
 
 ### M9D parent harness preparation
@@ -403,7 +405,8 @@ warnings-as-errors build, and the existing M5-M9/SafetyGate/coordinator/backend
 regressions. No physical M9D execution occurred.
 
 This closure does not authorize M9D. Its controller/construction/physical authorization
-flags remain false and M9D still requires formally recorded M9B and M9C physical PASS.
+flags remain false. The M9B and M9C physical prerequisites are now satisfied; the remaining
+boundary is a separate M9D authorization commit followed by exact same-HEAD canonical CI.
 
 
 ## 9. GUI-side production watchdog service bootstrap
