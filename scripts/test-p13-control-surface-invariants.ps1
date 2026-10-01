@@ -81,6 +81,7 @@ Assert-Contains $candidate 'PhysicallyValidated = false' 'Candidate curve must r
 Assert-Contains $candidate 'AuthorizedForProduction = false' 'Candidate curve must remain production-unauthorized.'
 Assert-Contains $gate 'ManualExecutionAuthorized = false' 'P13 Manual execution gate must remain CLOSED.'
 Assert-Contains $gate 'AutomaticExecutionAuthorized = false' 'P13 Automatic execution gate must remain CLOSED.'
+Assert-Contains $gate 'P13_SOFTWARE_PASS_FORMALLY_CLOSED_MANUAL_AUTOMATIC_GATES_CLOSED' 'P13 gate status must match formal software closure.'
 
 $prep = $profile.control.adaptivePolicyPreparation
 if ([string]$prep.p13UiStatus -ne 'P13_SOFTWARE_PASS_FORMALLY_CLOSED_HARDWARE_GATES_CLOSED') { throw 'Unexpected final P13 closure status.' }

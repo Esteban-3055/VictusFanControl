@@ -14,5 +14,5 @@ public static class Hp8C40PostM9UserControlGate
     public const bool AutomaticExecutionAuthorized = false;
 
     public const string Status =
-        "P13_STEP1_PRESENTATION_ONLY_MANUAL_AUTOMATIC_GATES_CLOSED";
+        "P13_SOFTWARE_PASS_FORMALLY_CLOSED_MANUAL_AUTOMATIC_GATES_CLOSED";
 }
