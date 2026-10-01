@@ -16,8 +16,8 @@ $watchdogGate = Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\
 $p14doc = Get-Content -LiteralPath (Join-Path $root 'docs\P14_RELEASE_CANDIDATE.md') -Raw
 
 if ([int]$release.schemaVersion -ne 1) { throw 'P14.1 release contract schemaVersion must be 1.' }
-if ([string]$release.milestone -ne 'P14.1') { throw 'P14.1 milestone mismatch.' }
-if ([string]$release.status -ne 'P14_1_SOFTWARE_READINESS_BASELINE') { throw 'P14.1 status mismatch.' }
+if ([string]$release.milestone -ne 'P14.2') { throw 'P14.2 milestone mismatch.' }
+if ([string]$release.status -ne 'P14_2_VERSIONED_WIN_X64_PUBLISH_LAYOUT_IMPLEMENTED_AWAITING_CI') { throw 'P14.2 status mismatch.' }
 if ([string]$release.targetProfileId -ne 'HP-8C40-9D0R1LA-F18') { throw 'P14.1 exact target mismatch.' }
 
 if ([string]$release.p13Baseline.head -ne '7395a8c14afcaf352ad5e5be48f66c897f03fd2e') { throw 'P14.1 P13 baseline HEAD mismatch.' }
@@ -44,8 +44,9 @@ Assert-Contains $candidate 'AuthorizedForProduction = false' 'Candidate V1 must 
 Assert-Contains $watchdogGate 'M9CPhysicalQualificationConstructionAuthorized = false' 'M9C qualification gate must remain closed.'
 Assert-Contains $watchdogGate 'M9DPhysicalQualificationConstructionAuthorized = false' 'M9D qualification gate must remain closed.'
 
-Assert-True (-not [bool]$release.productization.centralizedRcVersionImplemented) 'P14.1 must not claim P14.2 version centralization.'
-Assert-True (-not [bool]$release.productization.deterministicPublishImplemented) 'P14.1 must not claim deterministic publish.'
+Assert-True ([bool]$release.productization.centralizedRcVersionImplemented) 'P14.2 must centralize the RC version.'
+Assert-True ([bool]$release.productization.deterministicPublishImplemented) 'P14.2 must implement the fixed publish layout.'
+Assert-True (-not [bool]$release.productization.publishLayoutCiValidated) 'Implementation commit must not pre-claim P14.2 CI validation.'
 Assert-True (-not [bool]$release.productization.deterministicPackageImplemented) 'P14.1 must not claim deterministic packaging.'
 Assert-True (-not [bool]$release.productization.sha256ManifestImplemented) 'P14.1 must not claim SHA-256 manifest completion.'
 Assert-True (-not [bool]$release.productization.ciArtifactUploadImplemented) 'P14.1 must not claim CI artifact upload.'

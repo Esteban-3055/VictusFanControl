@@ -4,7 +4,6 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <AssemblyName>VictusFanControl.Watchdog</AssemblyName>
     <RootNamespace>VictusFanControl.Watchdog</RootNamespace>
-    <Version>0.4.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>

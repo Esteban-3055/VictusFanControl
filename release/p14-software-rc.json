@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "milestone": "P14.1",
-  "status": "P14_1_SOFTWARE_READINESS_BASELINE",
+  "milestone": "P14.2",
+  "status": "P14_2_VERSIONED_WIN_X64_PUBLISH_LAYOUT_IMPLEMENTED_AWAITING_CI",
   "scope": "release-candidate productization before any post-P13 target-side execution",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p13Baseline": {
@@ -22,11 +22,21 @@
     "m9dQualificationConstructionAuthorized": false
   },
   "productization": {
-    "centralizedRcVersionImplemented": false,
-    "deterministicPublishImplemented": false,
+    "centralizedRcVersionImplemented": true,
+    "deterministicPublishImplemented": true,
     "deterministicPackageImplemented": false,
     "sha256ManifestImplemented": false,
     "ciArtifactUploadImplemented": false,
-    "finalSoftwareRcAuditClosed": false
-  }
+    "finalSoftwareRcAuditClosed": false,
+    "publishLayoutCiValidated": false,
+    "runtimeIdentifier": "win-x64",
+    "selfContained": false,
+    "publishSingleFile": false,
+    "debugSymbolsIncluded": false,
+    "readyToRun": false,
+    "appDirectory": "app",
+    "watchdogDirectory": "watchdog",
+    "pawnIoModulesIncludedAtPublishStage": false
+  },
+  "version": "0.4.0-rc.1"
 }

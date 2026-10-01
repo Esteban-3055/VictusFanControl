@@ -28,3 +28,24 @@ No publish package is created in P14.1.
 P14.2 centralizes the software-RC version and defines a deterministic `win-x64` publish layout. P14.3 adds packaging plus SHA-256 manifest generation. P14.4 uploads and verifies the package as a CI artifact. P14.5 performs the final software-RC audit and formally closes P14.
 
 No P14 step may silently authorize Manual or Automatic execution.
+
+
+## P14.2 — versioned deterministic win-x64 publish layout
+
+P14.2 centralizes the release-candidate version as `0.4.0-rc.1` in `Directory.Build.props`. Per-project `<Version>` overrides are removed so the GUI, core, watchdog and diagnostic projects cannot silently drift to different product versions.
+
+The release publish layout is intentionally narrow:
+
+```text
+p14-publish/
+  app/       VictusFanControl.App framework-dependent win-x64 publish
+  watchdog/  VictusFanControl.Watchdog framework-dependent win-x64 publish
+```
+
+The end-user RC excludes the standalone core CLI and the Modern Standby qualification probe from this publish layout. The core assembly is still included transitively where required by the GUI/watchdog.
+
+Publish settings are fixed to `Release`, `win-x64`, framework-dependent, multi-file, no PDB/debug symbols, no ReadyToRun and deterministic compilation. This is a fixed/auditable publish layout; P14.3 is responsible for the final package container and SHA-256 manifest.
+
+PawnIO module binaries are deliberately not introduced by P14.2. They remain pinned external inputs and will be brought into the final package only by the separately verified P14.3 packaging step.
+
+The build and verification scripts refuse to perform fan-control operations. They only invoke `dotnet publish` and inspect the resulting files.
