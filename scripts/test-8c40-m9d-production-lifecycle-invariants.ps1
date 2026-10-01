@@ -1,0 +1,99 @@
+$ErrorActionPreference='Stop'
+
+$repoRoot=Split-Path -Parent $PSScriptRoot
+$profile=Get-Content (Join-Path $repoRoot 'profiles\HP-8C40.json') -Raw | ConvertFrom-Json
+$gate=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40ProductionWatchdogGate.cs') -Raw
+$meta=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40M9DProductionLifecycleQualificationTest.cs') -Raw
+$appProgram=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\Program.cs') -Raw
+$mainForm=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs') -Raw
+$doc=Get-Content (Join-Path $repoRoot 'docs\PRODUCTION_WATCHDOG_8C40_M9.md') -Raw
+
+function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
+    if($Text.IndexOf($Needle,[StringComparison]::Ordinal)-lt 0){throw $Message}
+}
+function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
+    if($Text.IndexOf($Needle,[StringComparison]::Ordinal)-ge 0){throw $Message}
+}
+function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
+function Assert-True([bool]$Value,[string]$Message){if(-not $Value){throw $Message}}
+
+Assert-True ([bool]$profile.lifecycle.watchdogM9DCodePrepared) 'M9D code-prepared flag missing.'
+Assert-False ([bool]$profile.lifecycle.watchdogM9DCodeCiPassed) 'M9D preparation must remain CI-pending until closure commit.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D physical execution must remain blocked.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D qualification construction must remain blocked.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'M9D physical authorization must remain false.'
+Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D must not promote watchdog recovery.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D must not promote normal production construction.'
+Assert-False ([bool]$profile.control.enabledByDefault) 'M9D must keep control disabled by default.'
+Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9D must keep automatic/adaptive policy OFF.'
+
+foreach($needle in @(
+    'M9DPhysicalQualificationToken = "8C40-M9D-PRODUCTION-LIFECYCLE30"',
+    'M9DPhysicalQualificationConstructionAuthorized = false;',
+    'EnterM9DPhysicalQualificationConstructionScope',
+    'IsM9DPhysicalQualificationScopeActive',
+    'Nested/overlapping M9 production-watchdog construction scopes are forbidden'
+)){
+    Assert-Contains $gate $needle ("M9D gate invariant missing: {0}" -f $needle)
+}
+
+foreach($needle in @(
+    'PhysicalExecutionAuthorized = false;',
+    'QualificationLevel = 30',
+    'M9DPhysicalQualificationToken'
+)){
+    Assert-Contains $meta $needle ("M9D metadata invariant missing: {0}" -f $needle)
+}
+
+foreach($needle in @(
+    '--8c40-m9d-production-lifecycle-test',
+    '--8c40-m9d-test-token',
+    'Hp8C40M9DProductionLifecycleQualificationTest.PhysicalExecutionAuthorized',
+    'Hp8C40ProductionWatchdogGate.M9DPhysicalQualificationConstructionAuthorized',
+    'm9dProductionLifecycleHardwareTest'
+)){
+    Assert-Contains $appProgram $needle ("M9D app startup invariant missing: {0}" -f $needle)
+}
+
+$programBarrier=$appProgram.IndexOf('Hp8C40M9DProductionLifecycleQualificationTest.PhysicalExecutionAuthorized',[StringComparison]::Ordinal)
+$programModules=$appProgram.IndexOf('var modulesDirectory = ResolveModulesDirectory(args);',[StringComparison]::Ordinal)
+if($programBarrier-lt 0 -or $programModules-lt 0 -or $programBarrier-ge $programModules){
+    throw 'M9D hard execution barrier must precede modules/backend construction.'
+}
+
+foreach($needle in @(
+    '_m9dProductionLifecycleHardwareTest',
+    'EnterM9DPhysicalQualificationConstructionScope',
+    'HpFanControlBackendFactory.Create(',
+    'IsM9DPhysicalQualificationScopeActive',
+    'm9d-production-lifecycle.ready',
+    'm9d-production-lifecycle.presleep',
+    'm9d-production-lifecycle.resume-gate',
+    'm9d-production-lifecycle.reentry',
+    'm9d-production-lifecycle.result',
+    'DisplayAware8C40LifecycleHardwareTest',
+    'WaitForHardwareReadQuiescenceAsync',
+    'AllowCustomAdmissionAfterRecoveryAsync',
+    'M6WatchdogStateReader.RequireOwned30'
+)){
+    Assert-Contains $mainForm $needle ("M9D MainForm/lifecycle invariant missing: {0}" -f $needle)
+}
+
+$m9dBranch=$mainForm.IndexOf('if (_m9dProductionLifecycleHardwareTest)',[StringComparison]::Ordinal)
+$scope=$mainForm.IndexOf('EnterM9DPhysicalQualificationConstructionScope',[Math]::Max(0,$m9dBranch),[StringComparison]::Ordinal)
+$factory=$mainForm.IndexOf('HpFanControlBackendFactory.Create(',[Math]::Max(0,$scope),[StringComparison]::Ordinal)
+$scopeProof=$mainForm.IndexOf('IsM9DPhysicalQualificationScopeActive',[Math]::Max(0,$factory),[StringComparison]::Ordinal)
+if($m9dBranch-lt 0 -or $scope-lt 0 -or $factory-lt 0 -or $scopeProof-lt 0 -or
+   -not ($m9dBranch-lt $scope -and $scope-lt $factory -and $factory-lt $scopeProof)){
+    throw 'M9D production-path construction order must be mode -> temporary scope -> normal factory -> scope-closed proof.'
+}
+
+$m9dBlockEnd=$mainForm.IndexOf('else if (DisplayAware8C40LifecycleHardwareTest)',[Math]::Max(0,$m9dBranch),[StringComparison]::Ordinal)
+if($m9dBlockEnd-le $m9dBranch){throw 'M9D backend block boundary missing.'}
+$m9dBlock=$mainForm.Substring($m9dBranch,$m9dBlockEnd-$m9dBranch)
+Assert-NotContains $m9dBlock 'CreateLifecycleQualificationBackend' 'M9D must use normal factory/public backend rather than the M6 qualification constructor.'
+
+Assert-Contains $doc 'M9D production-path Modern Standby lifecycle preparation' 'M9 documentation must describe M9D.'
+Assert-Contains $doc 'M9B read-only physical PASS and M9C' 'M9D documentation must retain M9B/M9C physical prerequisites.'
+
+Write-Host 'HP 8C40 M9D production-lifecycle preparation invariant: PASS' -ForegroundColor Green
