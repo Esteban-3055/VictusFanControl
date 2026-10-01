@@ -22,7 +22,7 @@ function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 Assert-True ([bool]$profile.lifecycle.watchdogM9CodeCiPassed) 'M9C preparation requires M9A CODE/CI PASS.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9BCodeCiPassed) 'M9C preparation requires M9B CODE/CI PASS.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9CCodeCiPassed) 'M9C full code/CI PASS must remain recorded after closure.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed) 'M9C preparation must not fabricate M9B physical read-only PASS.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed) 'M9C preparation now requires the formally recorded M9B physical read-only PASS.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9C physical execution must remain blocked during preparation.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9C qualification construction must remain blocked during preparation.'
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9C preparation must not promote watchdog recovery.'
