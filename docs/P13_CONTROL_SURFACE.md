@@ -62,3 +62,12 @@ P13 is considered software-complete only while all of the following stay true:
 - the UI contains no direct WMI, EC, PawnIO, watchdog lease or backend access.
 
 Opening hardware execution is not part of P13 and remains a later target-side qualification.
+
+
+## Formal P13 software closure
+
+Source implementation HEAD: `4f48d1ba68cccfc931f116793672d70efeb8ba52`.
+
+Full GitHub Actions validation: **#1069**, run ID `36892688980`, **SUCCESS**.
+
+This closes P13 as a software/UI milestone only. It does not authorize Manual or Automatic fan execution, does not validate Candidate V1 physically, and does not change the P15 hardware-validation boundary.

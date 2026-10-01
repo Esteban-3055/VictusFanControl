@@ -62,3 +62,8 @@ Add a software readiness audit, deterministic package build, versioned release-c
 ## P15 — first required target-side checkpoint
 
 P15 is deliberately outside this document's software authorization. The first target-side validation must begin with ordinary startup/control OFF, followed by a separately authorized one-shot manual 30/30 transaction and verified strong restore. Only after that may an automatic-policy physical gate be considered.
+
+
+### P13 formal software closure
+
+P13 software implementation passed the full branch workflow at source HEAD `4f48d1ba68cccfc931f116793672d70efeb8ba52`, GitHub Actions #1069 (run ID `36892688980`), result **SUCCESS**. The closure records software readiness only: Manual and Automatic target-side execution remain closed, Candidate V1 remains unvalidated, and P15 remains the first hardware checkpoint.

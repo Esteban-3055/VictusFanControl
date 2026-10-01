@@ -83,7 +83,7 @@ Assert-Contains $gate 'ManualExecutionAuthorized = false' 'P13 Manual execution 
 Assert-Contains $gate 'AutomaticExecutionAuthorized = false' 'P13 Automatic execution gate must remain CLOSED.'
 
 $prep = $profile.control.adaptivePolicyPreparation
-if ([string]$prep.p13UiStatus -ne 'P13_SOFTWARE_COMPLETE_HARDWARE_GATES_CLOSED') { throw 'Unexpected final P13 status.' }
+if ([string]$prep.p13UiStatus -ne 'P13_SOFTWARE_PASS_FORMALLY_CLOSED_HARDWARE_GATES_CLOSED') { throw 'Unexpected final P13 closure status.' }
 if (-not [bool]$prep.p13ModeSelectorWired -or
     -not [bool]$prep.p13ManualUiWired -or
     -not [bool]$prep.p13AutomaticUiWired -or
@@ -92,6 +92,17 @@ if (-not [bool]$prep.p13ModeSelectorWired -or
     throw 'P13 final software components are not all recorded complete.'
 }
 if ([bool]$prep.p13ManualExecutionAuthorized -or [bool]$prep.p13AutomaticExecutionAuthorized) { throw 'P13 execution gates must remain closed.' }
+if (-not [bool]$prep.p13SoftwareClosure.closed) { throw 'P13 software closure must be recorded closed.' }
+if ([string]$prep.p13SoftwareClosure.result -ne 'PASS') { throw 'P13 software closure result must be PASS.' }
+if ([string]$prep.p13SoftwareClosure.sourceHead -ne '4f48d1ba68cccfc931f116793672d70efeb8ba52') { throw 'P13 closure source HEAD mismatch.' }
+if ([int]$prep.p13SoftwareClosure.sourceCiRunNumber -ne 1069) { throw 'P13 closure source CI run number mismatch.' }
+if ([long]$prep.p13SoftwareClosure.sourceCiRunId -ne 36892688980) { throw 'P13 closure source CI run ID mismatch.' }
+if ([string]$prep.p13SoftwareClosure.sourceCiResult -ne 'SUCCESS') { throw 'P13 closure source CI result mismatch.' }
+if ([bool]$prep.p13SoftwareClosure.manualExecutionAuthorized -or
+    [bool]$prep.p13SoftwareClosure.automaticExecutionAuthorized) {
+    throw 'P13 formal closure must preserve both physical execution gates closed.'
+}
+
 if ([bool]$prep.candidateCurveValidated -or [bool]$prep.candidateCurveAuthorizedForProduction) { throw 'P13 must not validate/promote Candidate V1.' }
 if ([bool]$profile.control.enabledByDefault) { throw 'P13 must keep control disabled by default.' }
 if ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) { throw 'P13 must keep automatic policy OFF.' }
