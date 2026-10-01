@@ -3137,7 +3137,7 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "M9D GUI production-lifecycle route is prepared for code/CI in an isolated branch while M9B remains the first unavoidable machine-side evidence boundary. No M9C/M9D physical authorization or production promotion is implied.",
+    "nextStep": "Obtain same-HEAD CI for the full M9D app+harness preparation. M9B remains the first unavoidable local-machine evidence step; M9C/M9D physical execution and production promotion remain blocked.",
     "m9d": {
       "status": "GUI_PRODUCTION_LIFECYCLE_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",
@@ -3185,7 +3185,18 @@
         "prerequisite": "M9B read-only physical PASS and M9C physical production-path smoke PASS must both be formally recorded before M9D authorization.",
         "scope": "one versioned M9D Modern Standby lifecycle execution"
       },
-      "physicalEvidence": null
+      "physicalEvidence": null,
+      "expectedPhysicalBranch": "feature/victus-8c40-m9-production-watchdog",
+      "harnessStatus": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "harnessScript": "scripts/test-8c40-production-watchdog-m9d.ps1",
+      "harnessInvariantScript": "scripts/test-8c40-m9d-harness-invariants.ps1",
+      "trackedChildHelper": "scripts/m9d-tracked-child.ps1",
+      "trackedChildSelfTest": "scripts/test-8c40-m9d-tracked-child-selftest.ps1",
+      "independentFailsafeScript": "scripts/watchdog-m9d-service-failsafe-8c40.ps1",
+      "evidencePackagingScript": "scripts/package-m9d-evidence.ps1",
+      "evidencePackagingSelfTest": "scripts/test-8c40-m9d-evidence-packaging.ps1",
+      "failsafeDelaySeconds": 300,
+      "finalFirmwareProof": "two consecutive independent FF/FF reads after GUI lifecycle PASS and before service baseline closure"
     }
   }
 }
