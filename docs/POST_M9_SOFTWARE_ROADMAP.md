@@ -41,7 +41,11 @@ Closed in CI. The normal GUI exposed the intended Firmware / Manual / Automatic 
 
 ### P13.2 — mode selector wired through the production adapter
 
-Implemented: Firmware / Manual / Automatic mode requests now route only through `AdaptiveFanProductionController.SetModeAsync`. Manual and Automatic remain compile-time blocked and the P13 surface contains no command/apply path, so a blocked mode request cannot reach the backend.
+Closed in CI. Firmware / Manual / Automatic mode requests route only through `AdaptiveFanProductionController.SetModeAsync`; both execution gates remain closed.
+
+### P13.3 — Manual equal-level control behind the closed gate
+
+Implemented: the GUI exposes an equal CPU/GPU level selector constrained to 10..50 and a Manual apply path routed only through `AdaptiveFanProductionController.ApplyManualAsync`. The Manual gate is checked before obtaining a control SafetyGate evaluation. The saved preference contains only the numeric manual level; mode and authorization are never persisted and startup remains Firmware.
 
 ## P14 — release-candidate productization
 

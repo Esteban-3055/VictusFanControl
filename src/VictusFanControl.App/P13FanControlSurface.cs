@@ -1,5 +1,6 @@
 using VictusFanControl.Control;
 using VictusFanControl.Control.Adaptive;
+using VictusFanControl.Safety;
 
 namespace VictusFanControl.App;
 
@@ -14,6 +15,7 @@ namespace VictusFanControl.App;
 internal sealed class P13FanControlSurface : UserControl
 {
     private readonly AdaptiveFanProductionController _controller;
+    private readonly Func<SafetyGateResult?> _controlSafetyProvider;
     private readonly Action<string> _log;
 
     private readonly Label _modeValue = ValueLabel();
@@ -22,13 +24,19 @@ internal sealed class P13FanControlSurface : UserControl
     private readonly Label _automaticGateValue = ValueLabel();
     private readonly Label _candidateValue = ValueLabel();
     private readonly Label _statusValue = new();
+    private readonly NumericUpDown _manualLevel = new();
+    private readonly Button _manualApply = new();
 
     public P13FanControlSurface(
         AdaptiveFanProductionController controller,
         string targetDescription,
+        Func<SafetyGateResult?> controlSafetyProvider,
         Action<string> log)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
+        _controlSafetyProvider =
+            controlSafetyProvider ??
+            throw new ArgumentNullException(nameof(controlSafetyProvider));
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         Dock = DockStyle.Fill;
@@ -56,9 +64,10 @@ internal sealed class P13FanControlSurface : UserControl
             Dock = DockStyle.Fill,
             Padding = new Padding(18),
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             AutoScroll = true
         };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -183,6 +192,60 @@ internal sealed class P13FanControlSurface : UserControl
         content.Controls.Add(state, 0, 1);
         group.Controls.Add(content);
 
+        var manualGroup = new GroupBox
+        {
+            Text = "Manual equal fan level",
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Padding = new Padding(12),
+            Margin = new Padding(3, 8, 3, 8)
+        };
+
+        var manualFlow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true
+        };
+
+        var saved =
+            P13UiSettingsStore.Load();
+
+        _manualLevel.Minimum = 10;
+        _manualLevel.Maximum = 50;
+        _manualLevel.Value = saved.ManualEqualLevel;
+        _manualLevel.Width = 70;
+        _manualLevel.ValueChanged += (_, _) =>
+        {
+            try
+            {
+                P13UiSettingsStore.SaveManualEqualLevel(
+                    decimal.ToInt32(_manualLevel.Value));
+            }
+            catch (Exception ex)
+            {
+                _log(
+                    $"P13 manual-level preference save failed harmlessly: {ex.Message}");
+            }
+        };
+
+        _manualApply.Text = "Apply equal CPU/GPU level";
+        _manualApply.AutoSize = true;
+        _manualApply.Click += async (_, _) =>
+            await ApplyManualAsync();
+
+        manualFlow.Controls.Add(new Label
+        {
+            Text = "Level 10..50:",
+            AutoSize = true,
+            Margin = new Padding(3, 7, 3, 3)
+        });
+        manualFlow.Controls.Add(_manualLevel);
+        manualFlow.Controls.Add(_manualApply);
+
+        manualGroup.Controls.Add(manualFlow);
+
         _statusValue.AutoSize = true;
         _statusValue.MaximumSize = new Size(760, 0);
         _statusValue.Margin = new Padding(3, 12, 3, 3);
@@ -193,14 +256,72 @@ internal sealed class P13FanControlSurface : UserControl
             MaximumSize = new Size(760, 0),
             Margin = new Padding(3, 12, 3, 3),
             Text =
-                "P13.2 boundary: mode requests are wired only through AdaptiveFanProductionController. " +
-                "Manual and Automatic execution remain CLOSED, so selecting them cannot touch the fan backend."
+                "P13.3 boundary: the manual 10..50 control is wired behind the separate Manual execution gate. " +
+                "The saved value is a UI preference only; mode/authorization are never persisted."
         };
 
         root.Controls.Add(group, 0, 1);
-        root.Controls.Add(_statusValue, 0, 2);
-        root.Controls.Add(safetyBoundary, 0, 3);
+        root.Controls.Add(manualGroup, 0, 2);
+        root.Controls.Add(_statusValue, 0, 3);
+        root.Controls.Add(safetyBoundary, 0, 4);
         return root;
+    }
+
+    private async Task ApplyManualAsync()
+    {
+        var level =
+            decimal.ToInt32(
+                _manualLevel.Value);
+
+        // The provider is intentionally not consulted while the compile/runtime
+        // Manual gate is closed. A UI click cannot consume a SafetyGate
+        // sequence or touch the coordinator/backend in the blocked state.
+        if (!_controller.ManualExecutionAuthorized)
+        {
+            RefreshState(
+                $"Manual {level}/{level} blocked: post-M9 Manual execution gate is CLOSED.");
+            _log(
+                $"P13 manual request {level}/{level}: BLOCKED before SafetyGate/coordinator access; Manual gate CLOSED.");
+            return;
+        }
+
+        if (_controller.Mode != AdaptiveFanProductionMode.Manual)
+        {
+            RefreshState(
+                "Manual apply refused because Manual mode is not selected.");
+            return;
+        }
+
+        var safety =
+            _controlSafetyProvider();
+
+        if (safety is null)
+        {
+            RefreshState(
+                "Manual apply refused because no current control SafetyGate result is available.");
+            return;
+        }
+
+        try
+        {
+            var result =
+                await _controller.ApplyManualAsync(
+                    level,
+                    safety,
+                    CancellationToken.None);
+
+            RefreshState(result.Detail);
+            _log(
+                $"P13 manual request {level}/{level}: action={result.Action}; " +
+                $"authorized={result.ExecutionAuthorized}; authority={result.Authority}; {result.Detail}");
+        }
+        catch (Exception ex)
+        {
+            RefreshState(
+                $"Manual request failed closed: {ex.Message}");
+            _log(
+                $"P13 manual request {level}/{level} FAILED CLOSED: {ex}");
+        }
     }
 
     private async Task RequestModeAsync(

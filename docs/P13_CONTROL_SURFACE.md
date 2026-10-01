@@ -26,3 +26,10 @@ No P13 step may open a target-side hardware gate. That belongs to P15 or a later
 ## P13.2 — mode selector wiring
 
 Firmware / Manual / Automatic buttons now call only `AdaptiveFanProductionController.SetModeAsync`. The same compile-time Manual/Automatic gates remain false. The P13 surface has no `ApplyManualAsync`, `ProcessAutomaticAsync`, coordinator admission, FanCommand, WMI, EC or watchdog/backend access in this step.
+
+
+## P13.3 — Manual equal-level UI and safe preference persistence
+
+The GUI now exposes a 10..50 equal-level selector. A future authorized Manual execution routes only through `AdaptiveFanProductionController.ApplyManualAsync`; while the Manual gate is false, the click returns locally before requesting a control-order SafetyGate result.
+
+Only the numeric preferred manual level is persisted in `%LOCALAPPDATA%\\VictusFanControl\\p13-ui-settings.json`. Mode, ownership, gate authorization and automatic-policy state are deliberately absent from the settings schema, so every launch still begins in Firmware mode.

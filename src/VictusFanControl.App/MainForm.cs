@@ -656,6 +656,7 @@ internal sealed class MainForm : Form
             new P13FanControlSurface(
                 _fanProductionController,
                 p13TargetDescription,
+                GetP13ControlSafety,
                 AppendEvent);
         _p13FanControlSurface.UpdateAuthority(
             _fanCoordinator.Authority);
@@ -2207,6 +2208,33 @@ internal sealed class MainForm : Form
     }
 
 
+
+    private SafetyGateResult? GetP13ControlSafety()
+    {
+        // P13 must not create/consume control-order SafetyGate evaluations
+        // while both post-M9 execution gates are closed.
+        if (!_fanProductionController.ManualExecutionAuthorized &&
+            !_fanProductionController.AutomaticExecutionAuthorized)
+        {
+            return null;
+        }
+
+        var snapshot =
+            _lastSnapshot;
+
+        if (snapshot is null)
+        {
+            return null;
+        }
+
+        return EvaluateControlSafety(
+            _hardwareIdentity,
+            _worker.StateMachine.State,
+            snapshot,
+            DateTimeOffset.UtcNow,
+            fanWritePathPresent:
+                _fanCoordinator.BackendCanWrite);
+    }
 
     private SafetyGateResult EvaluateControlSafety(
         HardwareIdentity hardware,
