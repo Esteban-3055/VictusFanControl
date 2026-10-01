@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current preparation state: **authorization temporarily REVOKED while a fail-closed RC payload-layout correction is validated in CI. P15B and Automatic remain closed.**
+Current preparation state: **payload-layout correction CI validated and formally closed; P15A execution authorization remains CLOSED pending a fresh separate authorization commit. P15B and Automatic remain closed.**
 
 ### P15A preparation closure
 
@@ -41,7 +41,7 @@ The first authorized P15A attempt on HEAD `8e91c649056ba868ec94aa1864c7669aa90f4
 
 The failure occurred before the service baseline check, before any EC setpoint probe, before GUI launch and before any fan-control command, firmware restore or watchdog lease acquisition. Because the failure occurred before the harness's evidence-packaging `try/finally`, no P15A evidence ZIP was produced; that absence is recorded rather than reconstructed.
 
-The correction introduces a dedicated no-hardware payload resolver that requires exactly one package root matching the inner ZIP basename and verifies `PACKAGE-MANIFEST.json`, the GUI executable and both app PawnIO modules beneath that root. A CI self-test constructs the same nested ZIP shape so this exact integration mistake cannot silently recur. P15A execution authorization is re-closed while this correction is under CI.
+The correction introduces a dedicated no-hardware payload resolver that requires exactly one package root matching the inner ZIP basename and verifies `PACKAGE-MANIFEST.json`, the GUI executable and both app PawnIO modules beneath that root. A CI self-test constructs the same nested ZIP shape so this exact integration mistake cannot silently recur. The correction implementation HEAD `2a56913030c403637618e98112eaf03accde2b31` passed the full workflow in **#1093**, run ID `36922825446`, including the new payload-layout self-test, Windows PowerShell 5.1 compatibility and warnings-as-errors build. No target-side hardware execution occurred in that CI run. P15A execution authorization remains re-closed until a fresh separate authorization commit.
 
 ### P15A authorization window
 
@@ -57,7 +57,7 @@ P15B is intentionally not implemented or authorized by the P15A preparation. Its
 
 ## Current authorization boundary
 
-- P15A startup/no-write execution: **CLOSED DURING PAYLOAD-LAYOUT CORRECTION CI**
+- P15A startup/no-write execution: **CLOSED AFTER CORRECTION CI PASS; AWAITING FRESH AUTHORIZATION**
 - P15B Manual 30/30 execution: **CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**

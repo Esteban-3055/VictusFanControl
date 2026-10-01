@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED",
+  "status": "P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -89,9 +89,17 @@
       "evidencePackageProduced": false,
       "payloadRootResolverImplemented": true,
       "payloadRootResolverSelfTestImplemented": true,
-      "ciValidated": false,
+      "ciValidated": true,
       "closure": {
-        "closed": false,
+        "closed": true,
+        "result": "PASS",
+        "implementationHead": "2a56913030c403637618e98112eaf03accde2b31",
+        "sourceCiRunNumber": 1093,
+        "sourceCiRunId": 36922825446,
+        "sourceCiResult": "SUCCESS",
+        "payloadLayoutSelfTestValidated": true,
+        "powerShell51CompatibilityValidated": true,
+        "warningsAsErrorsBuildValidated": true,
         "hardwareExecution": false
       }
     },

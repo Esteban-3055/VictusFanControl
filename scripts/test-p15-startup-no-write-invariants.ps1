@@ -15,10 +15,10 @@ $payloadResolver=Get-Content -LiteralPath (Join-Path $root 'scripts\expand-p15-r
 $payloadResolverSelfTest=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15-rc-payload-layout.ps1') -Raw
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P15_TARGET_CHECKPOINT.md') -Raw
 if([string]$contract.milestone -cne 'P15A'){throw 'P15A milestone mismatch.'}
-if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED')){throw 'P15A state mismatch.'}
+if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED')){throw 'P15A state mismatch.'}
 $executionAuthorized=[bool]$contract.startupNoWrite.executionAuthorized
 if($executionAuthorized -and [string]$contract.status -cne 'P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI'){throw 'P15A authorized state/status mismatch.'}
-if((-not $executionAuthorized) -and [string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED')){throw 'P15A closed state/status mismatch.'}
+if((-not $executionAuthorized) -and [string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED')){throw 'P15A closed state/status mismatch.'}
 if([string]$contract.targetProfileId -cne 'HP-8C40-9D0R1LA-F18'){throw 'P15A target mismatch.'}
 if([string]$contract.p14Baseline.closureHead -cne '6945b2e34526e5e266189da6553bf3ea010d3893' -or [int]$contract.p14Baseline.closureCiRunNumber -ne 1086 -or [long]$contract.p14Baseline.closureCiRunId -ne 36913062832 -or [string]$contract.p14Baseline.closureCiResult -cne 'SUCCESS'){throw 'P15A P14 closure baseline mismatch.'}
 if([string]$contract.p14Baseline.auditedRcSourceHead -cne 'eebcdd5e833256466c1ae023c35f7cef8d40d6ec' -or [string]$contract.p14Baseline.auditedRcArtifactSha256 -cne '588058a8b57c0ca1bb41649288682e0981be845ab747654472d3d10c88d572b5' -or [string]$contract.p14Baseline.auditedRcPayloadZipSha256 -cne '704983caa20abb21c3520ffbd165ad69f9843139b6b2fa47d9e9e2448a32ef68'){throw 'P15A audited RC identity mismatch.'}
@@ -39,9 +39,8 @@ if($executionAuthorized){
     Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A physical startup execution must remain CLOSED during preparation.'
 }
 Assert-False ([bool]$contract.startupNoWrite.physicalPassed) 'P15A cannot pre-claim physical PASS.'
-if([string]$contract.status -eq 'P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED'){
-    Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A authorization must be revoked while payload-layout correction is under CI.'
-    Assert-True ([bool]$contract.startupNoWrite.correction.required) 'P15A correction record must be present.'
+if([bool]$contract.startupNoWrite.correction.required){
+    Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A authorization must remain revoked until correction closure is separately authorized.'
     if([string]$contract.startupNoWrite.correction.failedAttemptSourceHead -cne '8e91c649056ba868ec94aa1864c7669aa90f4550' -or [int]$contract.startupNoWrite.correction.failedAttemptCiRunNumber -ne 1092 -or [long]$contract.startupNoWrite.correction.failedAttemptCiRunId -ne 36920046370 -or [string]$contract.startupNoWrite.correction.failedAttemptResult -cne 'FAIL_CLOSED'){throw 'P15A failed preflight identity mismatch.'}
     Assert-True ([bool]$contract.startupNoWrite.correction.auditedArtifactVerifiedBeforeFailure) 'P15A failed preflight must record audited artifact verification.'
     Assert-False ([bool]$contract.startupNoWrite.correction.guiStarted) 'P15A failed preflight must record GUI not started.'
@@ -52,8 +51,19 @@ if([string]$contract.status -eq 'P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION
     Assert-False ([bool]$contract.startupNoWrite.correction.evidencePackageProduced) 'P15A failed preflight did not produce an evidence package.'
     Assert-True ([bool]$contract.startupNoWrite.correction.payloadRootResolverImplemented) 'P15A payload-root resolver correction missing.'
     Assert-True ([bool]$contract.startupNoWrite.correction.payloadRootResolverSelfTestImplemented) 'P15A payload-root resolver self-test missing.'
-    Assert-False ([bool]$contract.startupNoWrite.correction.ciValidated) 'Pending P15A correction must not pre-claim CI validation.'
-    Assert-False ([bool]$contract.startupNoWrite.correction.closure.closed) 'Pending P15A correction must not pre-close correction.'
+    if([string]$contract.status -eq 'P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED'){
+        Assert-False ([bool]$contract.startupNoWrite.correction.ciValidated) 'Pending P15A correction must not pre-claim CI validation.'
+        Assert-False ([bool]$contract.startupNoWrite.correction.closure.closed) 'Pending P15A correction must not pre-close correction.'
+    }
+    if([string]$contract.status -eq 'P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED'){
+        Assert-True ([bool]$contract.startupNoWrite.correction.ciValidated) 'Closed P15A correction must be CI validated.'
+        Assert-True ([bool]$contract.startupNoWrite.correction.closure.closed) 'Closed P15A correction must record closure.'
+        if([string]$contract.startupNoWrite.correction.closure.result -cne 'PASS' -or [string]$contract.startupNoWrite.correction.closure.implementationHead -cne '2a56913030c403637618e98112eaf03accde2b31' -or [int]$contract.startupNoWrite.correction.closure.sourceCiRunNumber -ne 1093 -or [long]$contract.startupNoWrite.correction.closure.sourceCiRunId -ne 36922825446 -or [string]$contract.startupNoWrite.correction.closure.sourceCiResult -cne 'SUCCESS'){throw 'P15A correction closure CI identity mismatch.'}
+        Assert-True ([bool]$contract.startupNoWrite.correction.closure.payloadLayoutSelfTestValidated) 'P15A correction closure must record payload-layout self-test.'
+        Assert-True ([bool]$contract.startupNoWrite.correction.closure.powerShell51CompatibilityValidated) 'P15A correction closure must record PowerShell 5.1 validation.'
+        Assert-True ([bool]$contract.startupNoWrite.correction.closure.warningsAsErrorsBuildValidated) 'P15A correction closure must record warnings-as-errors build.'
+        Assert-False ([bool]$contract.startupNoWrite.correction.closure.hardwareExecution) 'P15A correction closure must record no hardware execution.'
+    }
 }
 Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B Manual 30/30 must remain closed.'
 Assert-False ([bool]$contract.automatic.executionAuthorized) 'Automatic execution must remain closed.'
