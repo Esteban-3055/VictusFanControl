@@ -20,12 +20,14 @@ function Assert-True([bool]$Value,[string]$Message){if(-not $Value){throw $Messa
 
 Assert-True ([bool]$profile.lifecycle.watchdogM9DCodePrepared) 'M9D code-prepared flag missing.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9DCodeCiPassed) 'M9D code/CI PASS must remain recorded after closure.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed) 'M9D fix preparation requires formally closed M9C physical PASS.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D execution must be reblocked while PID-collision fix CI is pending.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D construction must be reblocked while PID-collision fix CI is pending.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'Consumed M9D authorization must be reblocked after FAIL_CLOSED.'
-if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.result -cne 'FAIL_CLOSED'){throw 'M9D failed attempt result must remain FAIL_CLOSED.'}
-if([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.operatorSleepTransitionReached){throw 'M9D failed attempt must remain recorded as pre-Modern-Standby.'}
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed) 'M9D retry authorization requires formally closed M9C physical PASS.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D execution must be explicitly authorized for the corrected retry.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D construction must be explicitly authorized for the corrected retry.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'M9D retry authorization record must be true.'
+if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.sourceHead -cne '384a184c4e19ea76213e5d84ce1cd5a972ee60d5'){throw 'M9D retry authorization source HEAD changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.sourceCiRunNumber -ne 980){throw 'M9D retry authorization source CI run changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.sourceCiRunId -ne 36820304060){throw 'M9D retry authorization source CI run id changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.priorAttemptResult -cne 'FAIL_CLOSED'){throw 'M9D retry must preserve prior failed attempt classification.'}
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D must not promote watchdog recovery.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D must not promote normal production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9D must keep control disabled by default.'
@@ -37,7 +39,7 @@ if([long]$profile.watchdogM9ProductionIntegration.m9d.codeCi.runId -ne 368038642
 
 foreach($needle in @(
     'M9DPhysicalQualificationToken = "8C40-M9D-PRODUCTION-LIFECYCLE30"',
-    'M9DPhysicalQualificationConstructionAuthorized = false;',
+    'M9DPhysicalQualificationConstructionAuthorized = true;',
     'EnterM9DPhysicalQualificationConstructionScope',
     'IsM9DPhysicalQualificationScopeActive',
     'Nested/overlapping M9 production-watchdog construction scopes are forbidden'
@@ -46,7 +48,7 @@ foreach($needle in @(
 }
 
 foreach($needle in @(
-    'PhysicalExecutionAuthorized = false;',
+    'PhysicalExecutionAuthorized = true;',
     'QualificationLevel = 30',
     'M9DPhysicalQualificationToken'
 )){
@@ -109,7 +111,7 @@ $m9dBlock=$mainForm.Substring($m9dBranch,$m9dBlockEnd-$m9dBranch)
 Assert-NotContains $m9dBlock 'CreateLifecycleQualificationBackend' 'M9D must use normal factory/public backend rather than the M6 qualification constructor.'
 
 Assert-Contains $doc 'M9D production-path Modern Standby lifecycle preparation' 'M9 documentation must describe M9D.'
-Assert-Contains $doc 'M9D FAIL_CLOSED / PID-COLLISION FIX CODE PREPARED' 'M9D documentation must record fail-closed PID fix preparation.'
+Assert-Contains $doc 'M9D CORRECTED RETRY PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI' 'M9D documentation must record corrected retry authorization.'
 
 foreach($needle in @(
     'ServiceName = "VictusFanControlWatchdogM4"',
