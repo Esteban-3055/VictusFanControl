@@ -28,7 +28,7 @@ if([bool]$profile.lifecycle.watchdogRecoveryValidated -or
     throw 'M9C refuses if production watchdog/default/automatic policy has already been promoted.'
 }
 
-$expectedBranch='feature/victus-8c40-m9-production-watchdog'
+$expectedBranch='feature/victus-8c40-m9-canonical-prehardware'
 $serviceName='VictusFanControlWatchdogM4'
 $serviceRoot=Join-Path $env:ProgramData 'VictusFanControl\WatchdogM4'
 $stateDir=Join-Path $serviceRoot 'state'

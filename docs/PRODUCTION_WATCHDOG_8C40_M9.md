@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B READ-ONLY PREFLIGHT CODE/CI PASS AND READ-ONLY EXECUTION AUTHORIZED. PRODUCTION WATCHDOG CONSTRUCTION AND ALL WRITE-CAPABLE M9 PHYSICAL EXECUTION REMAIN BLOCKED.**
+Status: **M9 SOFTWARE-ONLY PREPARATION CODE/CI PASS THROUGH THE PROMOTION-READINESS AUDITOR. CANONICAL PRE-HARDWARE REBIND CI PENDING / M9B READ-ONLY EXECUTION BLOCKED. M9C/M9D WRITE PATHS AND PRODUCTION WATCHDOG PROMOTION REMAIN BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -528,3 +528,21 @@ M9 software-only promotion preparation has therefore reached its evidence bounda
 The next trustworthy step is target-side M9B read-only evidence on a single canonical
 pre-hardware branch/HEAD; M9C/M9D and the final production promotion must remain blocked
 until that evidence chain is formally closed.
+
+
+## 11. Canonical pre-hardware branch rebind
+
+After the software-only M9 readiness work, the repository contained several historical
+parallel M9 branches. Physical evidence must not be split across those branches. The
+single canonical line for the next target-side evidence is therefore prepared as:
+
+`feature/victus-8c40-m9-canonical-prehardware`
+
+This preparation rebinds M9B, M9C and M9D repository-provenance checks to that same
+branch while keeping every active boundary closed. In the preparation commit,
+`m9b.readOnlyExecutionAuthorized=false`; M9B will be re-authorized only by a later
+closure commit after complete same-HEAD CI. M9C/M9D physical execution/construction,
+`WatchdogRecoveryValidated`, production construction, default control and the
+automatic/adaptive policy all remain false.
+
+Status: **CANONICAL PRE-HARDWARE REBIND CI PENDING / M9B READ-ONLY EXECUTION BLOCKED**.

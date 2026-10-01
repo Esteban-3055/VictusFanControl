@@ -65,7 +65,9 @@
     "watchdogM9DServiceBootstrapPrepared": true,
     "watchdogM9DServiceBootstrapCodeCiPassed": true,
     "watchdogM9PromotionReadinessPrepared": true,
-    "watchdogM9PromotionReadinessCodeCiPassed": true
+    "watchdogM9PromotionReadinessCodeCiPassed": true,
+    "watchdogM9CanonicalPrehardwarePrepared": true,
+    "watchdogM9CanonicalPrehardwareCodeCiPassed": false
   },
   "control": {
     "enabledByDefault": false,
@@ -2939,7 +2941,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9A_M9D_CODE_CI_PASS_M9E_PROMOTION_READINESS_CODE_CI_PASS_PHYSICAL_EVIDENCE_PENDING",
+    "status": "M9_SOFTWARE_PREPARATION_CODE_CI_PASS_CANONICAL_PREHARDWARE_REBIND_CI_PENDING_ALL_WRITE_GATES_BLOCKED",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -2981,16 +2983,16 @@
       "status": "CODE_CI_PASS"
     },
     "m9b": {
-      "status": "CODE_CI_PASS_READ_ONLY_EXECUTION_AUTHORIZED",
+      "status": "CANONICAL_PREHARDWARE_REBIND_CODE_PREPARED_CI_PENDING_READ_ONLY_BLOCKED",
       "purpose": "versioned read-only production-watchdog preflight on the exact HP 8C40 target",
       "preflightScript": "scripts/test-8c40-production-watchdog-m9b-preflight.ps1",
       "invariantScript": "scripts/test-8c40-m9b-readonly-preflight-invariants.ps1",
-      "readOnlyExecutionAuthorized": true,
+      "readOnlyExecutionAuthorized": false,
       "physicalWriteAuthorized": false,
       "serviceMutationAuthorized": false,
       "watchdogLeaseAcquisitionAuthorized": false,
       "requirements": [
-        "local HEAD equals tracked upstream on feature/victus-8c40-m9-production-watchdog",
+        "local HEAD equals tracked upstream on feature/victus-8c40-m9-canonical-prehardware",
         "exact HP-8C40-9D0R1LA-F18 target",
         "M8C PHYSICAL PASS and M8C execution re-blocked",
         "M9A CODE/CI PASS",
@@ -3031,6 +3033,21 @@
           "never delete logs, journal or historical evidence"
         ],
         "gateCritical": true
+      },
+      "canonicalRebind": {
+        "status": "CODE_PREPARED_CI_PENDING",
+        "branch": "feature/victus-8c40-m9-canonical-prehardware",
+        "sourceHead": "514294beca991ac1660738f7984a7677ed6499d6",
+        "readOnlyExecutionAuthorized": false,
+        "physicalWriteAuthorized": false,
+        "purpose": "Bind the single M9B read-only target preflight to the final canonical pre-hardware line after all software-only M9 readiness work.",
+        "codeCi": {
+          "result": "PENDING",
+          "commit": null,
+          "runNumber": null,
+          "runId": null,
+          "physicalExecution": false
+        }
       }
     },
     "m9c": {
@@ -3132,7 +3149,8 @@
         "sourceCiRunId": null,
         "prerequisite": "M9B read-only physical PASS must be executed, reviewed, hashed and formally recorded before any M9C authorization commit.",
         "scope": "one versioned M9C harness execution only"
-      }
+      },
+      "expectedPhysicalBranch": "feature/victus-8c40-m9-canonical-prehardware"
     },
     "promotion": {
       "authorized": false,
@@ -3141,7 +3159,7 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "No further trustworthy software-only promotion step is required on this M9 readiness line. M9B read-only target evidence remains the first unresolved hardware boundary; M9C/M9D and production promotion stay blocked until prerequisite physical evidence is formally recorded. Do not enable WatchdogRecoveryValidated, production construction, default control or automatic/adaptive policy.",
+    "nextStep": "Obtain complete same-HEAD CI for the canonical pre-hardware rebind. Only after CI PASS may M9B read-only execution be re-authorized on that branch. M9C/M9D writes and final production promotion remain blocked.",
     "m9d": {
       "status": "FULL_APP_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED_PENDING_M9B_M9C",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",
@@ -3203,7 +3221,7 @@
         "scope": "one versioned M9D Modern Standby lifecycle execution"
       },
       "physicalEvidence": null,
-      "expectedPhysicalBranch": "feature/victus-8c40-m9-production-watchdog",
+      "expectedPhysicalBranch": "feature/victus-8c40-m9-canonical-prehardware",
       "harnessStatus": "CODE_CI_PASS_PHYSICAL_BLOCKED",
       "harnessScript": "scripts/test-8c40-production-watchdog-m9d.ps1",
       "harnessInvariantScript": "scripts/test-8c40-m9d-harness-invariants.ps1",

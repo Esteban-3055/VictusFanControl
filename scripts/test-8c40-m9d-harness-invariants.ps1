@@ -28,6 +28,7 @@ Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D must not 
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D must not promote normal production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9D must keep default control OFF.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9D must keep automatic/adaptive policy OFF.'
+if([string]$m9d.expectedPhysicalBranch -cne 'feature/victus-8c40-m9-canonical-prehardware'){throw 'M9D expected physical branch must stay on the canonical pre-hardware line.'}
 
 $barrier=$harness.IndexOf('# HARD VERSIONED AUTHORIZATION BARRIER.',[StringComparison]::Ordinal)
 $admin=$harness.IndexOf('Assert-Administrator',[StringComparison]::Ordinal)

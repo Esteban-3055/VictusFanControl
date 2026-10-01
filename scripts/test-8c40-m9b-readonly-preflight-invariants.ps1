@@ -24,7 +24,7 @@ Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9B must not 
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9B must keep default control OFF.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9B must keep automatic/adaptive policy OFF.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9B must keep M9 production construction blocked.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyExecutionAuthorized) 'M9B read-only execution authorization must remain recorded after code/CI closure.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyExecutionAuthorized) 'Canonical M9B rebind must remain read-only execution-blocked until same-HEAD CI closes.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.physicalWriteAuthorized) 'M9B must never authorize fan writes.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9B must keep M9C physical execution blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9B must keep M9C construction blocked.'
@@ -33,11 +33,13 @@ if([string]$profile.watchdogM9ProductionIntegration.m9b.codeCi.result -cne 'PASS
 if([string]$profile.watchdogM9ProductionIntegration.m9b.codeCi.commit -cne '2ec00f047943c46885a15ab96642ec7c69a1e6dd'){throw 'M9B code/CI evidence commit changed.'}
 if([int]$profile.watchdogM9ProductionIntegration.m9b.codeCi.runNumber -ne 838){throw 'M9B code/CI run number changed.'}
 if([long]$profile.watchdogM9ProductionIntegration.m9b.codeCi.runId -ne 36779270309){throw 'M9B code/CI run id changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9b.canonicalRebind.branch -cne 'feature/victus-8c40-m9-canonical-prehardware'){throw 'M9B canonical branch binding changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9b.canonicalRebind.status -cne 'CODE_PREPARED_CI_PENDING'){throw 'M9B canonical rebind preparation status changed.'}
 
 foreach($needle in @(
     'M9B PRODUCTION WATCHDOG READ-ONLY PREFLIGHT',
     'READ-ONLY AUTHORIZATION BARRIER',
-    'feature/victus-8c40-m9-production-watchdog',
+    'feature/victus-8c40-m9-canonical-prehardware',
     'Assert-RepositoryHead',
     'Assert-Exact8C40Target',
     'Assert-ProfileBoundary',
@@ -85,7 +87,7 @@ foreach($forbidden in @(
 }
 
 Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'M9 production construction gate must remain closed during M9B.'
-Assert-Contains $doc 'M9B READ-ONLY PREFLIGHT CODE/CI PASS AND READ-ONLY EXECUTION AUTHORIZED' 'M9B documentation closure status missing.'
+Assert-Contains $doc 'CANONICAL PRE-HARDWARE REBIND CI PENDING / M9B READ-ONLY EXECUTION BLOCKED' 'M9B canonical rebind documentation status missing.'
 Assert-Contains $doc 'does **not** start or stop the service' 'M9B documentation must preserve the no-service-mutation contract.'
 
 Write-Host 'HP 8C40 M9B read-only preflight invariant: PASS' -ForegroundColor Green

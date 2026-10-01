@@ -23,6 +23,7 @@ Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecuti
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9C temporary construction must remain blocked.'
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9C harness preparation must not promote watchdog recovery.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9C harness preparation must not promote production construction.'
+if([string]$profile.watchdogM9ProductionIntegration.m9c.expectedPhysicalBranch -cne 'feature/victus-8c40-m9-canonical-prehardware'){throw 'M9C expected physical branch must stay on the canonical pre-hardware line.'}
 
 $barrier=$harness.IndexOf('# HARD VERSIONED AUTHORIZATION BARRIER',[StringComparison]::Ordinal)
 $admin=$harness.IndexOf('Assert-Administrator',[StringComparison]::Ordinal)
@@ -38,7 +39,7 @@ foreach($needle in @(
     'physicalAuthorization.authorized',
     'physicalExecutionAuthorized',
     'qualificationConstructionAuthorized',
-    'feature/victus-8c40-m9-production-watchdog',
+    'feature/victus-8c40-m9-canonical-prehardware',
     'Assert-RepositoryProvenance',
     'Assert-ExactTarget',
     'Assert-ServiceBaseline',
