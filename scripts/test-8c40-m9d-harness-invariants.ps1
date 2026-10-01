@@ -8,7 +8,7 @@ $tracked=Get-Content (Join-Path $PSScriptRoot 'm9d-tracked-child.ps1') -Raw
 $packager=Get-Content (Join-Path $PSScriptRoot 'package-m9d-evidence.ps1') -Raw
 $appProgram=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\Program.cs') -Raw
 $mainForm=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs') -Raw
-$m4Hardware=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.Watchdog\M4Hp8C40LeaseHardware.cs') -Raw
+$leaseClient=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Control\NamedPipeFanControlWatchdogLeaseClient.cs') -Raw
 $gate=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40ProductionWatchdogGate.cs') -Raw
 $meta=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40M9DProductionLifecycleQualificationTest.cs') -Raw
 
@@ -22,12 +22,11 @@ function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 
 $m9d=$profile.watchdogM9ProductionIntegration.m9d
 if(-not [bool]$profile.lifecycle.watchdogM9DCodeCiPassed){throw 'M9D full harness CODE/CI PASS must remain recorded.'}
-if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed){throw 'M9D EC-retry authorization requires formally closed M9C physical PASS.'}
-if(-not [bool]$m9d.physicalAuthorization.authorized){throw 'M9D EC-retry physical authorization must be explicitly recorded.'}
-if(-not [bool]$m9d.physicalExecutionAuthorized){throw 'M9D execution gate must be open for the EC-retry lifecycle run.'}
-if(-not [bool]$m9d.qualificationConstructionAuthorized){throw 'M9D construction gate must be open for the EC-retry lifecycle run.'}
-if([string]$m9d.physicalAuthorization.sourceHead -cne 'c9995c346101585d53e6af717883925b2d5c7c54'){throw 'M9D EC-retry source HEAD changed.'}
-if([string]$m9d.ecMutexContentionFix.status -cne 'CODE_CI_PASS'){throw 'M9D EC contention fix must remain CODE/CI PASS.'}
+if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed){throw 'M9D client EC-retry fix requires formally closed M9C physical PASS.'}
+Assert-False ([bool]$m9d.physicalAuthorization.authorized) 'M9D physical authorization must be reblocked during client retry CI.'
+Assert-False ([bool]$m9d.physicalExecutionAuthorized) 'M9D execution must be reblocked during client retry CI.'
+Assert-False ([bool]$m9d.qualificationConstructionAuthorized) 'M9D construction must be reblocked during client retry CI.'
+if([string]$m9d.clientPrepareEcMutexRetry.status -cne 'CODE_PREPARED_CI_PENDING'){throw 'M9D client retry must remain CI-pending.'}
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D must not promote WatchdogRecoveryValidated.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D must not promote normal production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9D must keep default control OFF.'
@@ -116,16 +115,17 @@ foreach($needle in @(
 }
 Assert-NotContains $packager 'Remove-Item' 'M9D packager must never delete evidence.'
 
-Assert-Contains $meta 'PhysicalExecutionAuthorized = true;' 'M9D compile-time execution gate must be open only for the EC-retry authorization.'
-Assert-Contains $gate 'M9DPhysicalQualificationConstructionAuthorized = true;' 'M9D construction gate must be open only for the EC-retry authorization.'
+Assert-Contains $meta 'PhysicalExecutionAuthorized = false;' 'M9D execution gate must be reclosed during client retry qualification.'
+Assert-Contains $gate 'M9DPhysicalQualificationConstructionAuthorized = false;' 'M9D construction gate must be reclosed during client retry qualification.'
 if($harness -match '(?i)\$pid\b'){throw 'M9D harness must not declare or assign $Pid/$PID because PowerShell reserves automatic variable $PID.'}
 Assert-Contains $appProgram 'Hp8C40M9DProductionLifecycleQualificationTest.PhysicalExecutionAuthorized' 'M9D app must enforce compile-time physical gate before MainForm.'
 Assert-Contains $appProgram '--8c40-m9d-marker-root' 'M9D app must require isolated marker root.'
 Assert-Contains $mainForm 'M9D refuses to overwrite existing evidence marker' 'M9D GUI must refuse marker overwrite.'
 Assert-Contains $mainForm 'constructionRoute=' 'M9D GUI must publish construction-route evidence.'
-Assert-Contains $m4Hardware 'EcMutexReadAttempts = 4' 'M9D EC contention fix must pin four bounded ownership-read attempts.'
-Assert-Contains $m4Hardware 'TimeSpan.FromMilliseconds(75)' 'M9D EC contention fix must pin the short retry delay.'
-Assert-Contains $m4Hardware 'Global\Access_EC' 'M9D EC contention fix must be restricted to the named EC mutex contention.'
-Assert-Contains $m4Hardware 'catch (TimeoutException ex)' 'M9D EC contention fix must retry only TimeoutException-based mutex contention.'
+Assert-Contains $leaseClient 'PrepareEcContentionAttempts = 4' 'M9D client fix must pin four bounded PREPARE attempts.'
+Assert-Contains $leaseClient 'TimeSpan.FromMilliseconds(75)' 'M9D client fix must pin the short retry delay.'
+Assert-Contains $leaseClient 'INTERNAL_ERROR' 'M9D client retry must require watchdog INTERNAL_ERROR.'
+Assert-Contains $leaseClient 'Global\Access_EC' 'M9D client retry must be restricted to the named EC mutex contention.'
+Assert-Contains $leaseClient 'WatchdogLeaseRejectedException' 'M9D client retry must act only on explicit lease rejection.'
 
 Write-Host 'HP 8C40 M9D parent harness invariant: PASS' -ForegroundColor Green
