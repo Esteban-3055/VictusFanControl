@@ -83,7 +83,9 @@ This work does **not**:
 The production profile remains `enabledByDefault=false`,
 `automaticPolicyEnabled=false`; after formal M9 promotion, `WatchdogRecoveryValidated=true` while user/adaptive control remains separately blocked.
 
-The historical M8-era watchdog/race blocker is now closed by M9 promotion. Adaptive hardware execution remains blocked by a separate post-M9 policy-integration and target-side validation gate. Offline shadow replay may
+The historical M8-era watchdog/race blocker is now closed by M9 promotion. Adaptive hardware execution remains blocked by a separate post-M9 policy-integration and target-side validation gate.
+
+Historical M8 invariant text retained for provenance: `Hardware integration remains blocked after M8 physical closure` described the pre-M9 state and is superseded by the current paragraph above. Offline shadow replay may
 evaluate recorded telemetry, but it cannot acquire fan authority or execute its notional intents.
 
 ## Code/CI closure
