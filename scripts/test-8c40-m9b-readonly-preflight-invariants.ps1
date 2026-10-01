@@ -7,6 +7,7 @@ $doc=Get-Content (Join-Path $repoRoot 'docs\PRODUCTION_WATCHDOG_8C40_M9.md') -Ra
 $gate=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40ProductionWatchdogGate.cs') -Raw
 $packager=Get-Content (Join-Path $PSScriptRoot 'package-m9b-evidence.ps1') -Raw
 $packagingSelfTest=Get-Content (Join-Path $PSScriptRoot 'test-8c40-m9b-evidence-packaging.ps1') -Raw
+$pawnIoSetup=Get-Content (Join-Path $PSScriptRoot 'setup-pawnio-modules.ps1') -Raw
 
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
     if($Text.IndexOf($Needle,[StringComparison]::Ordinal)-lt 0){throw $Message}
@@ -25,17 +26,20 @@ Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9B must not 
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9B must keep default control OFF.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9B must keep automatic/adaptive policy OFF.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9B must keep M9 production construction blocked.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyExecutionAuthorized) 'Canonical M9B read-only execution must be explicitly authorized in this authorization commit.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyExecutionAuthorized) 'M9B runtime-bootstrap preparation must re-block target-side execution until same-HEAD CI closes.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.physicalWriteAuthorized) 'M9B must never authorize fan writes.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9B must keep M9C physical execution blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9B must keep M9C construction blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed) 'M9B authorization must not imply the physical read-only preflight already passed.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.authorized) 'M9B read-only authorization record must be true.'
-if([string]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.status -cne 'AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI'){throw 'M9B read-only authorization status changed.'}
-if([string]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.prerequisiteHead -cne '4dcaff63bc79b8cd8866c5af22d87e44d4c68b78'){throw 'M9B authorization prerequisite HEAD changed.'}
-if([int]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.prerequisiteCiRunNumber -ne 915){throw 'M9B authorization prerequisite CI run number changed.'}
-if([long]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.prerequisiteCiRunId -ne 36811353546){throw 'M9B authorization prerequisite CI run id changed.'}
-if([string]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.prerequisiteCiResult -cne 'SUCCESS'){throw 'M9B authorization prerequisite CI result changed.'}
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.authorized) 'M9B runtime-bootstrap preparation must close read-only authorization.'
+if([string]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.status -cne 'BLOCKED_PENDING_RUNTIME_BOOTSTRAP_CI'){throw 'M9B read-only authorization preparation status changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.previousAuthorizedHead -cne '1d5470fe258719b22e61c2770bd2b9afc568b63b'){throw 'M9B previous authorized HEAD changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.previousAuthorizedCiRunNumber -ne 918){throw 'M9B previous authorization CI run number changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.previousAuthorizedCiRunId -ne 36811842327){throw 'M9B previous authorization CI run id changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.previousAuthorizedCiResult -cne 'SUCCESS'){throw 'M9B previous authorization CI result changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9b.runtimeDependencyBootstrap.status -cne 'CODE_PREPARED_CI_PENDING'){throw 'M9B runtime dependency bootstrap must remain CI-pending in the preparation commit.'}
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.runtimeDependencyBootstrap.hardwareMutation) 'M9B runtime bootstrap must not mutate hardware.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.runtimeDependencyBootstrap.serviceMutation) 'M9B runtime bootstrap must not mutate the watchdog service.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.physicalWriteAuthorized) 'M9B authorization must not authorize fan writes.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.serviceMutationAuthorized) 'M9B authorization must not authorize service mutation.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.watchdogLeaseAcquisitionAuthorized) 'M9B authorization must not authorize watchdog lease acquisition.'
@@ -45,7 +49,7 @@ if([int]$profile.watchdogM9ProductionIntegration.m9b.codeCi.runNumber -ne 838){t
 if([long]$profile.watchdogM9ProductionIntegration.m9b.codeCi.runId -ne 36779270309){throw 'M9B code/CI run id changed.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9b.canonicalRebind.branch -cne 'feature/victus-8c40-m9-canonical-prehardware'){throw 'M9B canonical branch binding changed.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9b.canonicalRebind.status -cne 'CODE_CI_PASS'){throw 'M9B canonical rebind CODE/CI closure changed.'}
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.canonicalRebind.readOnlyExecutionAuthorized) 'Canonical rebind must expose the explicit M9B read-only authorization.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.canonicalRebind.readOnlyExecutionAuthorized) 'Canonical M9B execution must be re-blocked while runtime-bootstrap CI is pending.'
 if([string]$profile.watchdogM9ProductionIntegration.m9b.canonicalRebind.codeCi.result -cne 'PASS'){throw 'M9B canonical rebind CI result must be PASS.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9b.canonicalRebind.codeCi.commit -cne 'e896d0d52f22079608302f81f5b0177e5d47d093'){throw 'M9B canonical rebind CI evidence commit changed.'}
 if([int]$profile.watchdogM9ProductionIntegration.m9b.canonicalRebind.codeCi.runNumber -ne 912){throw 'M9B canonical rebind CI run number changed.'}
@@ -56,6 +60,10 @@ foreach($needle in @(
     'M9B PRODUCTION WATCHDOG READ-ONLY PREFLIGHT',
     'READ-ONLY AUTHORIZATION BARRIER',
     'feature/victus-8c40-m9-canonical-prehardware',
+    'Ensure-LocalPawnIoModules',
+    'setup-pawnio-modules.ps1',
+    'IntelMSR.bin',
+    'LpcACPIEC.bin',
     'Assert-RepositoryHead',
     'Assert-Exact8C40Target',
     'Assert-ProfileBoundary',
@@ -102,8 +110,21 @@ foreach($forbidden in @(
     Assert-NotContains $preflight $forbidden ("M9B read-only preflight contains forbidden active operation: {0}" -f $forbidden)
 }
 
+foreach($needle in @(
+    "$release = '0.2.11'",
+    "$expectedSha256 = '43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4'",
+    'Get-FileHash',
+    'IntelMSR.bin',
+    'LpcACPIEC.bin'
+)){
+    Assert-Contains $pawnIoSetup $needle ("M9B PawnIO setup invariant missing: {0}" -f $needle)
+}
+foreach($forbidden in @('SetFanLevel(','Start-Service','Stop-Service','Set-Service','New-Service','sc.exe ','shutdown.exe','SetSuspendState')){
+    Assert-NotContains $pawnIoSetup $forbidden ("M9B PawnIO setup contains forbidden hardware/service operation: {0}" -f $forbidden)
+}
+
 Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'M9 production construction gate must remain closed during M9B.'
-Assert-Contains $doc 'CANONICAL PRE-HARDWARE REBIND CODE/CI PASS / M9B READ-ONLY AUTHORIZED SUBJECT TO SAME-HEAD CI' 'M9B canonical read-only authorization documentation status missing.'
+Assert-Contains $doc 'M9B RUNTIME-DEPENDENCY BOOTSTRAP CODE PREPARED / READ-ONLY EXECUTION BLOCKED PENDING CI' 'M9B runtime-bootstrap preparation documentation status missing.'
 Assert-Contains $doc 'does **not** start or stop the service' 'M9B documentation must preserve the no-service-mutation contract.'
 
 Write-Host 'HP 8C40 M9B read-only preflight invariant: PASS' -ForegroundColor Green

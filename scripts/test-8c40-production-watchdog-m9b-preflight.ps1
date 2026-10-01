@@ -17,6 +17,7 @@ $evidenceRoot=Join-Path $repoRoot ("logs\m9b-production-watchdog-preflight_{0}" 
 $resultPath=Join-Path $evidenceRoot 'm9b-preflight-result.json'
 $telemetryPath=Join-Path $evidenceRoot 'telemetry-output.txt'
 $packagingScript=Join-Path $PSScriptRoot 'package-m9b-evidence.ps1'
+$pawnIoSetupScript=Join-Path $PSScriptRoot 'setup-pawnio-modules.ps1'
 $packagePath=$null
 $packageSha256=$null
 
@@ -33,6 +34,32 @@ function Assert-Administrator {
     if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
         throw 'M9B read-only preflight must run from an elevated PowerShell.'
     }
+}
+
+function Ensure-LocalPawnIoModules {
+    $required=@('IntelMSR.bin','LpcACPIEC.bin')
+    $missing=@($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $modulesDir $_) -PathType Leaf) })
+
+    if($missing.Count -eq 0){
+        Write-Host 'PawnIO runtime modules already present.' -ForegroundColor DarkGreen
+        return
+    }
+
+    if(-not (Test-Path -LiteralPath $pawnIoSetupScript -PathType Leaf)){
+        throw "M9B cannot provision missing PawnIO modules because setup script is absent: $pawnIoSetupScript"
+    }
+
+    Write-Host ("PawnIO runtime modules missing ({0}); provisioning pinned signed modules..." -f ($missing -join ', ')) -ForegroundColor Yellow
+    & $pawnIoSetupScript
+
+    foreach($name in $required){
+        $path=Join-Path $modulesDir $name
+        if(-not (Test-Path -LiteralPath $path -PathType Leaf)){
+            throw "M9B PawnIO bootstrap did not produce required module: $path"
+        }
+    }
+
+    Write-Host 'PawnIO runtime bootstrap verified.' -ForegroundColor Green
 }
 
 function Assert-RepositoryHead {
@@ -303,6 +330,9 @@ try {
     $profileEvidence=Assert-ProfileBoundary
 
     New-Item -ItemType Directory -Force -Path $evidenceRoot | Out-Null
+
+    Write-Host 'Step 1b: local PawnIO runtime dependency readiness...' -ForegroundColor Cyan
+    Ensure-LocalPawnIoModules
 
     Write-Host 'Step 2: AC/battery + installed M4 service/journal baseline...' -ForegroundColor Cyan
     $powerBefore=Assert-AcBatterySane

@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B CODE/CI PASS AND CANONICAL PRE-HARDWARE REBIND CODE/CI PASS / M9B READ-ONLY AUTHORIZED SUBJECT TO SAME-HEAD CI. M9C/M9D CODE/CI PASS WITH WRITE PATHS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B RUNTIME-DEPENDENCY BOOTSTRAP CODE PREPARED / READ-ONLY EXECUTION BLOCKED PENDING CI. M9C/M9D CODE/CI PASS WITH WRITE PATHS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -144,10 +144,10 @@ M9A is therefore closed. The next step is M9B read-only preflight preparation.
 ## 6. M9B read-only preflight preparation
 
 The versioned preflight is `scripts/test-8c40-production-watchdog-m9b-preflight.ps1`.
-The canonical pre-hardware rebind has passed complete same-HEAD CI. A separate
-M9B read-only authorization is now present, but it is executable only after the exact
-authorization SHA itself passes the complete workflow and that same SHA is the HEAD of
-`feature/victus-8c40-m9-canonical-prehardware`.
+The canonical pre-hardware rebind and the first read-only authorization passed same-HEAD
+CI. The first target-side M9B attempt then failed closed at telemetry initialization because
+the isolated worktree did not contain the gitignored runtime PawnIO modules. M9B execution
+is temporarily re-blocked while a deterministic runtime-dependency bootstrap is qualified.
 
 The script is intentionally stricter than the earlier M8 no-write preflight because
 M9 is qualifying the last-mile production watchdog dependency. M9B requires the already
@@ -164,7 +164,9 @@ M9B does **not** start or stop the service, reinstall it, acquire a named-pipe l
 call `SetFanLevel`, restore firmware, dispatch a power transition or enable the M9
 production construction gate.
 
-The hardware-side operations are read-only:
+Before hardware reads, the preflight may provision missing local runtime dependencies by invoking the existing pinned `scripts/setup-pawnio-modules.ps1`. That helper downloads PawnIO.Modules 0.2.11, verifies archive SHA-256 `43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4`, and copies only `IntelMSR.bin` and `LpcACPIEC.bin` into the gitignored local `modules/` directory. It does not alter the watchdog service or fan hardware.
+
+The hardware-side operations remain read-only:
 
 - exact SMBIOS/CIM target fingerprint;
 - AC/battery baseline;
@@ -186,16 +188,14 @@ M9B preparation is **CODE/CI PASS** at commit
 PowerShell 7 and Windows PowerShell 5.1, warnings-as-errors build, the M9
 factory/gate self-test and all existing M5-M8 regressions. No hardware path ran.
 
-The profile now sets only:
+During runtime-bootstrap preparation the profile deliberately returns to:
 
-- `m9b.readOnlyExecutionAuthorized=true`;
+- `m9b.readOnlyExecutionAuthorized=false`;
 - `m9b.physicalWriteAuthorized=false`;
 - `m9a.productionConstructionAuthorized=false`;
 - `WatchdogRecoveryValidated=false`.
 
-Therefore the versioned M9B preflight may be executed on the exact target, but it
-cannot start the watchdog, acquire a lease or write a fan level. M9C remains blocked
-until the resulting M9B evidence is reviewed and committed.
+The preparation commit is software-only. M9B may not be rerun until this bootstrap change passes complete CI and a separate authorization commit is green on the exact canonical HEAD. M9C remains blocked until a real M9B PASS is reviewed and committed.
 
 
 ### M9B automatic evidence packaging
@@ -558,4 +558,4 @@ being the canonical branch HEAD. M9C/M9D physical execution/construction,
 `WatchdogRecoveryValidated`, production construction, default control and the
 automatic/adaptive policy all remain false.
 
-Status: **CANONICAL PRE-HARDWARE REBIND CODE/CI PASS / M9B READ-ONLY AUTHORIZED SUBJECT TO SAME-HEAD CI**.
+Status: **M9B RUNTIME-DEPENDENCY BOOTSTRAP CODE PREPARED / READ-ONLY EXECUTION BLOCKED PENDING CI**.
