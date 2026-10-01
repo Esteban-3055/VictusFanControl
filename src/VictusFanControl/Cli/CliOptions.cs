@@ -9,6 +9,7 @@ public sealed class CliOptions
     public bool Probe88F8Setpoint { get; private set; }
     public bool Probe8C40Setpoint { get; private set; }
     public bool ControlSelfTest { get; private set; }
+    public bool WatchdogLeaseClientSelfTest { get; private set; }
     public bool AdaptivePolicySelfTest { get; private set; }
     public bool AdaptivePolicyShadowReplay { get; private set; }
     public string? AdaptivePolicyShadowConfigPath { get; private set; }
@@ -117,6 +118,10 @@ public sealed class CliOptions
 
                 case "--control-self-test":
                     options.ControlSelfTest = true;
+                    break;
+
+                case "--watchdog-lease-client-self-test":
+                    options.WatchdogLeaseClientSelfTest = true;
                     break;
 
                 case "--adaptive-policy-self-test":
@@ -749,6 +754,7 @@ public sealed class CliOptions
         Console.WriteLine("  --probe-88f8-setpoint     Read only 88F8 ownership setpoints 0x34/0x35 (read-only).");
         Console.WriteLine("  --probe-8c40-setpoint     Read only 8C40 ownership setpoints 0x34/0x35 (read-only).");
         Console.WriteLine("  --control-self-test       Test authority/fallback coordinator with fake backend.");
+        Console.WriteLine("  --watchdog-lease-client-self-test  Test named-pipe watchdog client protocol/retry logic; no hardware access.");
         Console.WriteLine("  --adaptive-policy-self-test  Test hardware-independent adaptive policy + shadow/replay logic; no fan writes.");
         Console.WriteLine("  --adaptive-policy-shadow-replay      OFFLINE/NO-WRITE: replay telemetry CSV through SafetyGate + adaptive policy.");
         Console.WriteLine("  --adaptive-policy-shadow-config <p>  Required shadow-only JSON config; authorizedForProduction must be false.");
