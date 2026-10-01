@@ -37,9 +37,9 @@ if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed){throw
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9E must observe M9C execution reclosed after PASS.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9E must observe M9C construction reclosed after PASS.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalAuthorization.authorized) 'M9E must observe M9C authorization consumed/reblocked after PASS.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'M9E must observe consumed M9D retry reblocked after FAIL_CLOSED.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9E must observe M9D execution reblocked during EC contention fix qualification.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9E must observe M9D construction reblocked during EC contention fix qualification.'
+if(-not [bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized){throw 'M9E readiness audit must observe explicit EC-hardened M9D retry authorization.'}
+if(-not [bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized){throw 'M9E readiness audit must observe EC-hardened M9D execution authorization.'}
+if(-not [bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized){throw 'M9E readiness audit must observe EC-hardened M9D construction authorization.'}
 if(-not [bool]$profile.lifecycle.watchdogM9PromotionReadinessCodeCiPassed){throw 'M9E promotion-readiness code/CI PASS flag must remain recorded.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9e.codeCi.result -cne 'PASS'){throw 'M9E promotion-readiness code/CI result must remain PASS.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9e.codeCi.commit -cne 'ac9041ffef21adc96f8f2190455d3468cf13204a'){throw 'M9E promotion-readiness CI evidence commit changed.'}
@@ -53,7 +53,7 @@ Assert-False ([bool]$profile.control.supportsIndependentLevels) 'M9E must remain
 Assert-Contains $target 'WatchdogRecoveryValidated: false' 'Target runtime watchdog promotion gate must remain false before physical closure.'
 Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'Production construction gate must remain false before physical closure.'
 Assert-Contains $gate 'M9CPhysicalQualificationConstructionAuthorized = false;' 'M9C construction gate must be reclosed after bounded physical PASS.'
-Assert-Contains $gate 'M9DPhysicalQualificationConstructionAuthorized = false;' 'M9D construction gate must be reclosed during EC contention fix qualification.'
+Assert-Contains $gate 'M9DPhysicalQualificationConstructionAuthorized = true;' 'M9D construction gate must match the EC-hardened retry authorization.'
 
 foreach($needle in @(
     'M9B read-only physical preflight PASS',
