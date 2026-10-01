@@ -259,12 +259,7 @@ thermal/power bounds and continued production/adaptive blocks.
 
 ## 8. M9C parent harness, recovery and evidence stack
 
-The complete future M9C physical stack is now versioned but remains hard-blocked.
-The parent harness is `scripts/test-8c40-production-watchdog-m9c.ps1`. Its very
-first gate reads only the versioned profile and refuses unless M9B physical PASS,
-a dedicated M9C physical authorization, controller execution authorization and
-temporary construction authorization are all true. At the current stage all M9C
-write-capable authorizations remain false.
+The complete M9C physical stack is versioned. The parent harness is `scripts/test-8c40-production-watchdog-m9c.ps1`. Its very first gate reads only the versioned profile and refuses unless M9B physical PASS, a dedicated M9C physical authorization, controller execution authorization and temporary construction authorization are all true. Those M9C-only gates are now authorized for one bounded run, but execution remains contingent on complete CI and exact canonical branch/HEAD equality.
 
 The parent does not install or replace the watchdog service. It requires the already
 qualified `VictusFanControlWatchdogM4` definition to remain Manual/Stopped/PID 0,
