@@ -111,8 +111,8 @@ foreach($forbidden in @(
 }
 
 foreach($needle in @(
-    "$release = '0.2.11'",
-    "$expectedSha256 = '43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4'",
+    '$release = ''0.2.11''',
+    '$expectedSha256 = ''43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4''',
     'Get-FileHash',
     'IntelMSR.bin',
     'LpcACPIEC.bin'
