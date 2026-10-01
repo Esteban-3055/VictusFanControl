@@ -319,3 +319,57 @@ barriers remain closed:
 - `m9c.qualificationConstructionAuthorized=false`.
 
 M9B remains the first unavoidable machine-side evidence boundary.
+
+
+## 7. M9D - production lifecycle last-mile regression
+
+M9D is being prepared completely in code before any additional machine-side command is
+requested. Its purpose is narrower than M6: M6 already proved the display-aware Modern
+Standby algorithm physically. M9D proves that **the same lifecycle algorithm still
+works when MainForm constructs the HP 8C40 backend through the normal production
+factory and public backend constructor**, rather than through
+`CreateLifecycleQualificationBackend`.
+
+M9D therefore reuses the established display-aware engine:
+
+```text
+production App mode hard gate
+ -> exact target
+ -> M4 target-bound named-pipe lease
+ -> temporary M9D construction-only scope
+ -> HpFanControlBackendFactory.Create
+ -> public Hp8C40FanControlBackend
+ -> construction scope CLOSED
+ -> normal FanControlCoordinator
+ -> initial OWNED 30/30
+ -> SESSION_DISPLAY_STATUS Off
+ -> telemetry/admission fenced
+ -> hardware reads quiesced
+ -> Firmware restore + FF/FF + watchdog Release
+ -> registered PBT_APMSUSPEND completion proof
+ -> PBT resume while display Off does not reopen
+ -> SESSION_DISPLAY_STATUS On
+ -> five fresh Healthy samples
+ -> admission reopen
+ -> one controlled 30/30 re-entry
+ -> final Firmware + FF/FF + Release
+```
+
+M9D has its own marker namespace
+`%LOCALAPPDATA%\VictusFanControl\m9d-production-lifecycle.*` so historical
+M6/M7 marker evidence is not overwritten.
+
+The App has two independent physical barriers:
+
+- `Hp8C40M9DProductionLifecycleQualification.PhysicalExecutionAuthorized=false`;
+- `Hp8C40ProductionWatchdogGate.M9DPhysicalQualificationConstructionAuthorized=false`.
+
+The first is checked before module resolution, SMBIOS/target reads and MainForm
+construction. The second controls only the short factory-construction scope. The scope
+must be disposed and proven inactive before the lifecycle engine can acquire Custom
+authority.
+
+M9D cannot be physically authorized until M9B read-only PASS and M9C physical
+production-path smoke PASS are both formally recorded. M9D code preparation does not
+change `WatchdogRecoveryValidated`, production construction, automatic policy or
+default control.
