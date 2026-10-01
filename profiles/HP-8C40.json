@@ -61,7 +61,7 @@
     "watchdogM9CCodeCiPassed": true,
     "watchdogM9CControllerCodeCiPassed": true,
     "watchdogM9DCodePrepared": true,
-    "watchdogM9DCodeCiPassed": false
+    "watchdogM9DCodeCiPassed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -3137,9 +3137,9 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Obtain same-HEAD CI for the full M9D app+harness preparation. M9B remains the first unavoidable local-machine evidence step; M9C/M9D physical execution and production promotion remain blocked.",
+    "nextStep": "M9A/M9B/M9C/M9D software preparation is now CI-green. Before any write-capable local test, the first unavoidable machine-side boundary remains the already-authorized M9B read-only preflight. M9C and M9D stay blocked until prior physical evidence is reviewed and formally recorded.",
     "m9d": {
-      "status": "GUI_PRODUCTION_LIFECYCLE_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "status": "FULL_APP_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED_PENDING_M9B_M9C",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",
       "appMode": "--8c40-m9d-production-lifecycle-test",
       "requiredToken": "8C40-M9D-PRODUCTION-LIFECYCLE30",
@@ -3174,10 +3174,23 @@
         "final local FF/FF + watchdog Release + journal absent"
       ],
       "codeCi": {
-        "result": "PENDING",
-        "commit": null,
-        "runNumber": null,
-        "runId": null,
+        "result": "PASS",
+        "commit": "91332ac590a456c0489406e9262d25b85a6528ca",
+        "runNumber": 894,
+        "runId": 36803864224,
+        "powerShell7PreparationInvariant": true,
+        "powerShell7HarnessInvariant": true,
+        "powerShell7TrackedChildSelfTest": true,
+        "powerShell7EvidencePackagingSelfTest": true,
+        "windowsPowerShell51PreparationInvariant": true,
+        "windowsPowerShell51HarnessInvariant": true,
+        "windowsPowerShell51TrackedChildSelfTest": true,
+        "windowsPowerShell51EvidencePackagingSelfTest": true,
+        "warningsAsErrorsBuild": true,
+        "existingM5M9Regressions": true,
+        "safetyGateSelfTest": true,
+        "fanCoordinatorSelfTest": true,
+        "hpBackendSelfTest": true,
         "physicalExecution": false
       },
       "physicalAuthorization": {
@@ -3187,7 +3200,7 @@
       },
       "physicalEvidence": null,
       "expectedPhysicalBranch": "feature/victus-8c40-m9-production-watchdog",
-      "harnessStatus": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "harnessStatus": "CODE_CI_PASS_PHYSICAL_BLOCKED",
       "harnessScript": "scripts/test-8c40-production-watchdog-m9d.ps1",
       "harnessInvariantScript": "scripts/test-8c40-m9d-harness-invariants.ps1",
       "trackedChildHelper": "scripts/m9d-tracked-child.ps1",
