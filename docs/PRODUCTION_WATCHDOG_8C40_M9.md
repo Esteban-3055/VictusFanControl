@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D FAIL_CLOSED / EC-MUTEX RETRY FIX CODE PREPARED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D EC-MUTEX-HARDENED RETRY PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -367,7 +367,7 @@ authorized corrected retry also failed closed before READY and before any fan wr
 watchdog rejected PREPARE after its single 500 ms ownership read timed out waiting for the
 cross-process `Global\Access_EC` mutex while the GUI telemetry path was active. Cleanup again
 proved two consecutive FF/FF reads and the operator Modern Standby step was never reached.
-That retry authorization is consumed and M9D is reblocked while the bounded EC-contention fix
+The second retry authorization is consumed. The bounded EC-contention fix
 is qualified. Automatic/adaptive policy and default control remain OFF.
 
 
@@ -436,7 +436,7 @@ During this fix qualification:
 - `m9d.physicalExecutionAuthorized=false`;
 - `m9d.qualificationConstructionAuthorized=false`.
 
-Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. A fresh one-run M9D authorization may be issued only after the EC-contention fix passes complete CI.
+The bounded M4 EC-mutex contention fix passed complete CI at `68e471da9c0063c1b1ecc4b949702690c0a584e6`, GitHub Actions **#1019** (run `36824565736`). A fresh one-run M9D authorization now opens only the M9D execution and temporary construction gates, and remains executable only after complete CI on its exact authorization SHA plus canonical same-HEAD CI. Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false.
 
 
 ## 9. GUI-side production watchdog service bootstrap
@@ -553,7 +553,7 @@ This historical M9E code/CI closure changed **no** production or hardware author
 - `WatchdogRecoveryValidated=false`;
 - `ProductionConstructionAuthorized=false`;
 - M9C execution/construction gates are reclosed after PASS;
-- M9D execution/construction gates are reblocked after the pre-READY EC-mutex FAIL_CLOSED while the bounded ownership-read retry is qualified;
+- M9D execution/construction gates are temporarily open only for the separately authorized EC-mutex-hardened retry;
 - M8C remains physically re-blocked;
 - `control.enabledByDefault=false`;
 - `automaticPolicyEnabled=false`.
