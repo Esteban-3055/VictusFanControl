@@ -136,10 +136,10 @@ Assert-ContainsLiteral -Text $cleanup -Needle 'sc.exe config $name start= disabl
 Assert-ContainsLiteral -Text $cleanup -Needle 'sc.exe delete $name' -Description 'cleanup removes legacy service registrations'
 Assert-ContainsLiteral -Text $cleanup -Needle 'Historical ProgramData logs/journals are NOT deleted' -Description 'cleanup preserves historical forensic evidence'
 
-Assert-ContainsLiteral -Text $factory -Needle 'RequireProductionConstructionAuthorized' -Description 'production factory routes supplied HP 8C40 watchdog leases through the closed M9 gate'
-Assert-ContainsLiteral -Text $m9Gate -Needle 'public static readonly bool ProductionConstructionAuthorized = false;' -Description 'M9 production watchdog construction remains compile-time blocked'
+Assert-ContainsLiteral -Text $factory -Needle 'RequireProductionConstructionAuthorized' -Description 'production factory routes supplied HP 8C40 watchdog leases through the exact-target M9 gate'
+Assert-ContainsLiteral -Text $m9Gate -Needle 'public static readonly bool ProductionConstructionAuthorized = true;' -Description 'M9 production watchdog construction is promoted only after formal M9B/M9C/M9D closure'
 Assert-ContainsLiteral -Text $m9Gate -Needle 'WatchdogRecoveryValidated=false' -Description 'M9 gate also requires explicit WatchdogRecoveryValidated promotion'
-Assert-ContainsLiteral -Text $backend8 -Needle 'RequireProductionConstructionAuthorized' -Description '8C40 public backend independently applies the M9 watchdog gate'
+Assert-ContainsLiteral -Text $backend8 -Needle 'RequireProductionConstructionAuthorized' -Description '8C40 public backend independently applies the promoted exact-target M9 watchdog gate'
 
 $watchdogGuardStart = $backend8.IndexOf(
     'if (_targetSupported && watchdogLease is not null)',
@@ -152,7 +152,7 @@ if ($watchdogGuardStart -lt 0 -or $watchdogGuardEnd -le $watchdogGuardStart) {
     throw '8C40 isolation invariant missing: backend watchdog-construction guard.'
 }
 $watchdogGuard = $backend8.Substring($watchdogGuardStart, $watchdogGuardEnd - $watchdogGuardStart)
-Assert-ContainsLiteral -Text $watchdogGuard -Needle 'RequireProductionConstructionAuthorized' -Description '8C40 backend rejects watchdog lease through the closed M9 gate before storing it'
+Assert-ContainsLiteral -Text $watchdogGuard -Needle 'RequireProductionConstructionAuthorized' -Description '8C40 backend still requires explicit M9 production authorization before storing a watchdog lease'
 
 Write-Host ''
 Write-Host 'HP 8C40 / legacy 88F8 isolation invariant self-test: PASS' -ForegroundColor Green
