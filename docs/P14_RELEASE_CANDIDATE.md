@@ -120,3 +120,17 @@ P14.5 is the last software-only checkpoint before P15. It re-audits the exact HP
 The same CI run first retains the source-bound RC through the P14.4 artifact path. After that upload returns its artifact ID and GitHub SHA-256 digest, P14.5 writes a separate `P14-FINAL-SOFTWARE-RC-AUDIT.json` that binds those values to the exact source HEAD/run and to the inner RC ZIP/hash files. The audit JSON is uploaded separately as `VictusFanControl-P14.5-final-audit-<sourceHead>`.
 
 The separation prevents self-reference: neither the RC payload nor the final audit evidence embeds its own GitHub wrapper digest. The implementation state remains `P14_5_FINAL_SOFTWARE_RC_AUDIT_IMPLEMENTED_AWAITING_CI` until both retained artifacts have been downloaded and independently verified. P15 remains unopened.
+
+### P14.5 formal closure
+
+Audited software-RC source HEAD: `eebcdd5e833256466c1ae023c35f7cef8d40d6ec`.
+
+Full GitHub Actions validation: **#1084**, run ID `36911964126`, **SUCCESS**.
+
+The same run retained RC artifact ID `11187157320` and final-audit artifact ID `11186817552`. Both retained wrappers were downloaded and their SHA-256 values matched GitHub's reported artifact digests exactly: RC wrapper `588058a8b57c0ca1bb41649288682e0981be845ab747654472d3d10c88d572b5`; audit wrapper `e0b50389462cd2a3777a0e0deadddad365d8b5f4ce0eae3ee7442da7f2975975`.
+
+The RC wrapper contained exactly three expected files. Its inner deterministic RC ZIP SHA-256 was `704983caa20abb21c3520ffbd165ad69f9843139b6b2fa47d9e9e2448a32ef68`, the adjacent `.sha256` authenticated that exact value, the P14.4 attestation matched the source/run identity, and all **61/61** `PACKAGE-MANIFEST.json` payload entries were rehashed with no path, size or SHA-256 mismatch. The separate P14.5 artifact contained exactly one `P14-FINAL-SOFTWARE-RC-AUDIT.json` with SHA-256 `c3497104ffcb3dbb8de13c5c06b1cc746a84ad3ebf732f425c008ca735b7141a`, result `PASS`, and an explicit `p15NotExecuted=true` / `hardwareExecution=false` boundary.
+
+GitHub Actions #1083 remains preserved as failed history. It reached and successfully uploaded the P14.4 RC artifact but failed closed before P14.5 evidence upload because the first audit writer expected a `sha256:` prefix while `actions/upload-artifact@v4` exposed `artifact-digest` to the workflow as bare hexadecimal. The compatibility fix normalized both forms; no hardware execution occurred in #1083.
+
+At closure time the canonical M9 branch was rechecked at `9b49a57661b683a9ef67be510047d4ca364292f0`, with canonical CI #1053 SUCCESS. This closes **P14.5 and therefore P14 software productization only**. P15 remains unopened and still begins with startup/no-write before any separately authorized one-shot Manual 30/30 transaction.

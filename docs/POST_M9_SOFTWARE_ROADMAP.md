@@ -77,7 +77,7 @@ Closed from implementation HEAD `1c7ee997b5bbac02eb89e1c7d3f91e7130828c1d` after
 
 ### P14.5 — final software RC audit
 
-Implemented awaiting CI: the final software-only audit rechecks the exact target, all previous closures, packaging/artifact provenance and every closed hardware boundary. After the same-run RC artifact is uploaded, an independent audit JSON binds its artifact ID/digest to the source HEAD and inner RC payload identity. No P15 gate is opened.
+Closed from audited source HEAD `eebcdd5e833256466c1ae023c35f7cef8d40d6ec` after GitHub Actions #1084 SUCCESS. The retained RC artifact and separate final-audit artifact were both downloaded and independently verified; the RC manifest rehashed 61/61 payload files and the audit JSON recorded PASS with `p15NotExecuted=true` and `hardwareExecution=false`. Failed CI #1083 is retained as history for the corrected upload-artifact digest-format assumption. P14 software productization is closed; P15 remains unopened.
 
 ## P15 — first required target-side checkpoint
 

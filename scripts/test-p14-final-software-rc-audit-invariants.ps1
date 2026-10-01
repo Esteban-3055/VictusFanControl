@@ -34,7 +34,26 @@ Assert-True ([bool]$release.productization.artifactClosure.retainedArtifactDownl
 Assert-True ([bool]$release.productization.finalSoftwareRcAuditImplemented) 'P14.5 audit implementation missing.'
 Assert-True ([bool]$release.productization.finalSoftwareRcAuditEvidenceImplemented) 'P14.5 audit evidence implementation missing.'
 if ([int]$release.productization.finalSoftwareRcAuditRetentionDays -ne 30) { throw 'P14.5 retention mismatch.' }
-if ($closed) { Assert-True ([bool]$release.productization.finalSoftwareRcAuditCiValidated) 'Closed audit requires CI validation.'; Assert-True ([bool]$release.productization.finalSoftwareRcAuditClosure.closed) 'Closure object missing.'; if ([string]$release.productization.finalSoftwareRcAuditClosure.result -ne 'PASS' -or [bool]$release.productization.finalSoftwareRcAuditClosure.hardwareExecution) { throw 'P14.5 closure evidence invalid.' } } else { Assert-True (-not [bool]$release.productization.finalSoftwareRcAuditCiValidated) 'Implementation cannot pre-claim CI validation.' }
+if ($closed) {
+    Assert-True ([bool]$release.productization.finalSoftwareRcAuditCiValidated) 'Closed audit requires CI validation.'
+    Assert-True ([bool]$release.productization.finalSoftwareRcAuditClosure.closed) 'Closure object missing.'
+    if ([string]$release.productization.finalSoftwareRcAuditClosure.result -ne 'PASS' -or [bool]$release.productization.finalSoftwareRcAuditClosure.hardwareExecution) { throw 'P14.5 closure evidence invalid.' }
+    if ([string]$release.productization.finalSoftwareRcAuditClosure.auditedSourceHead -ne 'eebcdd5e833256466c1ae023c35f7cef8d40d6ec') { throw 'P14.5 audited source HEAD mismatch.' }
+    if ([int]$release.productization.finalSoftwareRcAuditClosure.sourceCiRunNumber -ne 1084) { throw 'P14.5 source CI run number mismatch.' }
+    if ([long]$release.productization.finalSoftwareRcAuditClosure.sourceCiRunId -ne 36911964126) { throw 'P14.5 source CI run ID mismatch.' }
+    if ([long]$release.productization.finalSoftwareRcAuditClosure.rcArtifactId -ne 11187157320) { throw 'P14.5 RC artifact ID mismatch.' }
+    if ([string]$release.productization.finalSoftwareRcAuditClosure.rcArtifactDigest -ne 'sha256:588058a8b57c0ca1bb41649288682e0981be845ab747654472d3d10c88d572b5') { throw 'P14.5 RC artifact digest mismatch.' }
+    if ([string]$release.productization.finalSoftwareRcAuditClosure.rcPayloadZipSha256 -ne '704983caa20abb21c3520ffbd165ad69f9843139b6b2fa47d9e9e2448a32ef68') { throw 'P14.5 RC payload ZIP digest mismatch.' }
+    if ([int]$release.productization.finalSoftwareRcAuditClosure.rcPayloadManifestFilesVerified -ne 61) { throw 'P14.5 RC manifest verification count mismatch.' }
+    if ([long]$release.productization.finalSoftwareRcAuditClosure.auditArtifactId -ne 11186817552) { throw 'P14.5 audit artifact ID mismatch.' }
+    if ([string]$release.productization.finalSoftwareRcAuditClosure.auditArtifactDigest -ne 'sha256:e0b50389462cd2a3777a0e0deadddad365d8b5f4ce0eae3ee7442da7f2975975') { throw 'P14.5 audit artifact digest mismatch.' }
+    if ([string]$release.productization.finalSoftwareRcAuditClosure.auditJsonSha256 -ne 'c3497104ffcb3dbb8de13c5c06b1cc746a84ad3ebf732f425c008ca735b7141a') { throw 'P14.5 audit JSON digest mismatch.' }
+    if ([string]$release.productization.finalSoftwareRcAuditClosure.canonicalM9HeadRechecked -ne '9b49a57661b683a9ef67be510047d4ca364292f0') { throw 'P14.5 canonical M9 HEAD mismatch.' }
+    if ([int]$release.productization.finalSoftwareRcAuditClosure.canonicalM9CiRunNumber -ne 1053 -or [long]$release.productization.finalSoftwareRcAuditClosure.canonicalM9CiRunId -ne 36856124313 -or [string]$release.productization.finalSoftwareRcAuditClosure.canonicalM9CiResult -ne 'SUCCESS') { throw 'P14.5 canonical M9 CI identity mismatch.' }
+    Assert-True (-not [bool]$release.productization.finalSoftwareRcAuditClosure.p15Executed) 'P14.5 closure must record P15 not executed.'
+} else {
+    Assert-True (-not [bool]$release.productization.finalSoftwareRcAuditCiValidated) 'Implementation cannot pre-claim CI validation.'
+}
 Assert-Contains $props '<Version>0.4.0-rc.1</Version>' 'Centralized version drifted.'
 if ([string]$layout.version -ne '0.4.0-rc.1' -or [string]$layout.runtimeIdentifier -ne 'win-x64' -or [bool]$layout.selfContained -or [bool]$layout.publishSingleFile -or [bool]$layout.debugSymbolsIncluded -or [bool]$layout.readyToRun) { throw 'Publish layout drifted.' }
 if ([string]$external.pawnIoModules.version -ne '0.2.11' -or [string]$external.pawnIoModules.sha256 -ne '43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4') { throw 'Pinned PawnIO input drifted.' }

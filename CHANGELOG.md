@@ -10,7 +10,7 @@
 - P14.2: centralize version 0.4.0-rc.1 and close the fixed win-x64 GUI/watchdog publish layout after static and generated-output CI verification (#1076).
 - P14.3: close pinned-input deterministic RC packaging after CI #1078 produced two identical verified ZIPs (SHA-256 603ac7b2ca6816fe00002598410983ba031529ec168a70c5ec59041e5a71756c).
 - P14.4: retain the RC ZIP + `.sha256` + external attestation in GitHub Actions; #1080 retained artifact 11186116708 and its downloaded wrapper matched GitHub digest eb42b9c7d8a5d29e7c30a4f35f19f7e07fecacb83dee26aaf638093cbf2826b2. No physical gate was opened.
-- P14.5: add the final software-only RC audit and a separate source/run-bound audit-evidence artifact that authenticates the same-run retained RC artifact without self-reference.
+- P14.5: formally close the final software-only RC audit from source HEAD eebcdd5e833256466c1ae023c35f7cef8d40d6ec / CI #1084 SUCCESS after downloading and verifying both retained artifacts, all 61 package-manifest payload files, and the separate PASS audit evidence; P15 remains unopened.
 - Keep default control and automatic/adaptive policy disabled pending separate post-M9 target-side validation.
 - Add post-M9/P13 invariants that prevent accidental reopening or UI bypass of physical control gates.
 
