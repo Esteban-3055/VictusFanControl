@@ -11,7 +11,7 @@ namespace VictusFanControl.Hardware.Hp;
 
 public static class Hp8C40M9CProductionPathQualificationTest
 {
-    public static readonly bool PhysicalExecutionAuthorized = true;
+    public static readonly bool PhysicalExecutionAuthorized = false;
 
     public const string RequiredToken =
         Hp8C40ProductionWatchdogGate.M9CPhysicalQualificationToken;
