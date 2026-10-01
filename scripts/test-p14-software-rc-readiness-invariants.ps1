@@ -16,8 +16,13 @@ $watchdogGate = Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\
 $p14doc = Get-Content -LiteralPath (Join-Path $root 'docs\P14_RELEASE_CANDIDATE.md') -Raw
 
 if ([int]$release.schemaVersion -ne 1) { throw 'P14.1 release contract schemaVersion must be 1.' }
-if ([string]$release.milestone -ne 'P14.4') { throw 'P14.4 milestone mismatch.' }
-if ([string]$release.status -ne 'P14_4_RETAINED_ARTIFACT_CI_PASS_FORMALLY_CLOSED') { throw 'P14.4 status mismatch.' }
+if ([string]$release.milestone -ne 'P14.5') { throw 'P14.5 milestone mismatch.' }
+$finalAuditClosed = [bool]$release.productization.finalSoftwareRcAuditClosed
+if ($finalAuditClosed) {
+    if ([string]$release.status -ne 'P14_5_FINAL_SOFTWARE_RC_AUDIT_CI_PASS_FORMALLY_CLOSED') { throw 'P14.5 closed status mismatch.' }
+} else {
+    if ([string]$release.status -ne 'P14_5_FINAL_SOFTWARE_RC_AUDIT_IMPLEMENTED_AWAITING_CI') { throw 'P14.5 implementation status mismatch.' }
+}
 if ([string]$release.targetProfileId -ne 'HP-8C40-9D0R1LA-F18') { throw 'P14.1 exact target mismatch.' }
 
 if ([string]$release.p13Baseline.head -ne '7395a8c14afcaf352ad5e5be48f66c897f03fd2e') { throw 'P14.1 P13 baseline HEAD mismatch.' }
@@ -81,7 +86,17 @@ Assert-True ([bool]$release.productization.artifactClosure.sha256FileVerified) '
 Assert-True ([bool]$release.productization.artifactClosure.externalAttestationVerified) 'P14.4 external attestation verification missing.'
 Assert-True ([bool]$release.productization.artifactClosure.retainedArtifactDownloadedAndVerified) 'P14.4 retained artifact download verification missing.'
 Assert-True (-not [bool]$release.productization.artifactClosure.hardwareExecution) 'P14.4 must record no hardware execution.'
-Assert-True (-not [bool]$release.productization.finalSoftwareRcAuditClosed) 'P14.4 must leave P14.5 final audit open.'
+Assert-True ([bool]$release.productization.finalSoftwareRcAuditImplemented) 'P14.5 final software RC audit must be implemented.'
+Assert-True ([bool]$release.productization.finalSoftwareRcAuditEvidenceImplemented) 'P14.5 final audit evidence must be implemented.'
+if ([int]$release.productization.finalSoftwareRcAuditRetentionDays -ne 30) { throw 'P14.5 audit retention mismatch.' }
+if ($finalAuditClosed) {
+    Assert-True ([bool]$release.productization.finalSoftwareRcAuditCiValidated) 'P14.5 closed state requires CI validation.'
+    if (-not [bool]$release.productization.finalSoftwareRcAuditClosure.closed) { throw 'P14.5 final audit closure must be recorded closed.' }
+    if ([string]$release.productization.finalSoftwareRcAuditClosure.result -ne 'PASS') { throw 'P14.5 final audit closure result must be PASS.' }
+    Assert-True (-not [bool]$release.productization.finalSoftwareRcAuditClosure.hardwareExecution) 'P14.5 final audit closure must record no hardware execution.'
+} else {
+    Assert-True (-not [bool]$release.productization.finalSoftwareRcAuditCiValidated) 'P14.5 implementation must not pre-claim CI validation.'
+}
 
 Assert-Contains $p14doc 'P14.1 — software readiness baseline' 'P14.1 documentation boundary missing.'
 

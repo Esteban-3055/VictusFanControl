@@ -75,6 +75,10 @@ Closed in CI #1078: the pinned PawnIO.Modules 0.2.11 archive was hash-verified, 
 
 Closed from implementation HEAD `1c7ee997b5bbac02eb89e1c7d3f91e7130828c1d` after GitHub Actions #1080 SUCCESS. Artifact ID `11186116708` was retained for 30 days, downloaded and independently verified as an exact three-file set (RC ZIP + `.sha256` + external attestation). GitHub wrapper digest and downloaded-wrapper SHA-256 both equal `eb42b9c7d8a5d29e7c30a4f35f19f7e07fecacb83dee26aaf638093cbf2826b2`. P14.5 remains the final software RC audit; no hardware gate was opened.
 
+### P14.5 — final software RC audit
+
+Implemented awaiting CI: the final software-only audit rechecks the exact target, all previous closures, packaging/artifact provenance and every closed hardware boundary. After the same-run RC artifact is uploaded, an independent audit JSON binds its artifact ID/digest to the source HEAD and inner RC payload identity. No P15 gate is opened.
+
 ## P15 — first required target-side checkpoint
 
 P15 is deliberately outside this document's software authorization. The first target-side validation must begin with ordinary startup/control OFF, followed by a separately authorized one-shot manual 30/30 transaction and verified strong restore. Only after that may an automatic-policy physical gate be considered.

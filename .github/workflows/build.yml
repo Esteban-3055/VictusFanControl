@@ -241,6 +241,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p14-artifact-invariants.ps1
 
+      - name: HP 8C40 P14.5 final software RC audit invariant
+        shell: pwsh
+        run: .\scripts\test-p14-final-software-rc-audit-invariants.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -295,6 +299,7 @@ jobs:
           .\scripts\test-p14-publish-layout-invariants.ps1
           .\scripts\test-p14-package-invariants.ps1
           .\scripts\test-p14-artifact-invariants.ps1
+          .\scripts\test-p14-final-software-rc-audit-invariants.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build
@@ -408,3 +413,39 @@ jobs:
           Write-Host "P14.4 GitHub artifact ID: $env:P14_ARTIFACT_ID"
           Write-Host "P14.4 GitHub artifact digest: $env:P14_ARTIFACT_DIGEST"
           Write-Host "P14.4 GitHub artifact URL: $env:P14_ARTIFACT_URL"
+
+      - name: HP 8C40 P14.5 write final audit evidence
+        shell: pwsh
+        env:
+          P14_RC_ARTIFACT_ID: ${{ steps.p14_artifact.outputs.artifact-id }}
+          P14_RC_ARTIFACT_DIGEST: ${{ steps.p14_artifact.outputs.artifact-digest }}
+        run: |
+          $evidenceDir = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.5-audit'
+          $rcStage = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.4-artifact'
+          $rcName = "VictusFanControl-0.4.0-rc.1-win-x64-${{ github.sha }}"
+          .\scripts\write-p14-final-audit-attestation.ps1 -EvidenceDirectory $evidenceDir -RcStageDirectory $rcStage -SourceHead '${{ github.sha }}' -Repository '${{ github.repository }}' -Ref '${{ github.ref }}' -RunId '${{ github.run_id }}' -RunNumber '${{ github.run_number }}' -RcArtifactId $env:P14_RC_ARTIFACT_ID -RcArtifactName $rcName -RcArtifactDigest $env:P14_RC_ARTIFACT_DIGEST
+          .\scripts\verify-p14-final-audit-evidence.ps1 -EvidenceDirectory $evidenceDir -RcStageDirectory $rcStage -ExpectedSourceHead '${{ github.sha }}' -ExpectedRepository '${{ github.repository }}' -ExpectedRef '${{ github.ref }}' -ExpectedRunId '${{ github.run_id }}' -ExpectedRunNumber '${{ github.run_number }}' -ExpectedRcArtifactId $env:P14_RC_ARTIFACT_ID -ExpectedRcArtifactName $rcName -ExpectedRcArtifactDigest $env:P14_RC_ARTIFACT_DIGEST
+
+      - name: HP 8C40 P14.5 upload final audit evidence
+        id: p14_final_audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: VictusFanControl-P14.5-final-audit-${{ github.sha }}
+          path: ${{ runner.temp }}/VictusFanControl-P14.5-audit
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          overwrite: false
+
+      - name: HP 8C40 P14.5 report final audit evidence identity
+        shell: pwsh
+        env:
+          P14_AUDIT_ARTIFACT_ID: ${{ steps.p14_final_audit.outputs.artifact-id }}
+          P14_AUDIT_ARTIFACT_URL: ${{ steps.p14_final_audit.outputs.artifact-url }}
+          P14_AUDIT_ARTIFACT_DIGEST: ${{ steps.p14_final_audit.outputs.artifact-digest }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:P14_AUDIT_ARTIFACT_ID)) { throw 'P14.5 audit upload did not return an artifact ID.' }
+          if ([string]::IsNullOrWhiteSpace($env:P14_AUDIT_ARTIFACT_DIGEST)) { throw 'P14.5 audit upload did not return an artifact digest.' }
+          Write-Host "P14.5 audit artifact ID: $env:P14_AUDIT_ARTIFACT_ID"
+          Write-Host "P14.5 audit artifact digest: $env:P14_AUDIT_ARTIFACT_DIGEST"
+          Write-Host "P14.5 audit artifact URL: $env:P14_AUDIT_ARTIFACT_URL"

@@ -9,8 +9,8 @@ $writer = Get-Content -LiteralPath (Join-Path $root 'scripts\write-p14-artifact-
 $verifier = Get-Content -LiteralPath (Join-Path $root 'scripts\verify-p14-artifact-stage.ps1') -Raw
 $package = Get-Content -LiteralPath (Join-Path $root 'scripts\package-p14-rc.ps1') -Raw
 
-if ([string]$release.milestone -ne 'P14.4') { throw 'P14.4 formal closure milestone mismatch.' }
-if ([string]$release.status -ne 'P14_4_RETAINED_ARTIFACT_CI_PASS_FORMALLY_CLOSED') { throw 'P14.4 formal closure status mismatch.' }
+if ([string]$release.milestone -notin @('P14.4','P14.5')) { throw 'P14.4 artifact invariant requires P14.4 or later P14.5 state.' }
+if ([string]$release.milestone -eq 'P14.4' -and [string]$release.status -ne 'P14_4_RETAINED_ARTIFACT_CI_PASS_FORMALLY_CLOSED') { throw 'P14.4 formal closure status mismatch.' }
 if (-not [bool]$release.productization.ciArtifactUploadImplemented) { throw 'P14.4 artifact upload implementation must be recorded.' }
 if (-not [bool]$release.productization.ciArtifactUploadCiValidated) { throw 'P14.4 retained artifact CI validation must be recorded.' }
 if (-not [bool]$release.productization.externalArtifactAttestationImplemented) { throw 'P14.4 external attestation implementation must be recorded.' }
@@ -25,8 +25,6 @@ if ([string]$release.productization.artifactClosure.payloadZipSha256 -ne 'e0ceb4
 if ([int]$release.productization.artifactClosure.artifactFileCount -ne 3) { throw 'P14.4 closure artifact file count mismatch.' }
 if (-not [bool]$release.productization.artifactClosure.retainedArtifactDownloadedAndVerified) { throw 'P14.4 retained artifact must have been downloaded and verified.' }
 if ([bool]$release.productization.artifactClosure.hardwareExecution) { throw 'P14.4 must record zero hardware execution.' }
-if ([bool]$release.productization.finalSoftwareRcAuditClosed) { throw 'P14.4 must not close P14.5.' }
-
 Assert-Contains $workflow 'HP 8C40 P14.4 final retained artifact verification' 'P14.4 final pre-upload verification step missing.'
 Assert-Contains $workflow 'uses: actions/upload-artifact@v4' 'P14.4 must use GitHub Actions artifact upload v4.'
 Assert-Contains $workflow 'id: p14_artifact' 'P14.4 upload step must expose artifact outputs.'

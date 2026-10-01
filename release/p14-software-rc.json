@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "milestone": "P14.4",
-  "status": "P14_4_RETAINED_ARTIFACT_CI_PASS_FORMALLY_CLOSED",
+  "milestone": "P14.5",
+  "status": "P14_5_FINAL_SOFTWARE_RC_AUDIT_IMPLEMENTED_AWAITING_CI",
   "scope": "release-candidate productization before any post-P13 target-side execution",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p13Baseline": {
@@ -27,7 +27,12 @@
     "deterministicPackageImplemented": true,
     "sha256ManifestImplemented": true,
     "ciArtifactUploadImplemented": true,
+    "finalSoftwareRcAuditImplemented": true,
+    "finalSoftwareRcAuditEvidenceImplemented": true,
+    "finalSoftwareRcAuditCiValidated": false,
     "finalSoftwareRcAuditClosed": false,
+    "finalSoftwareRcAuditRetentionDays": 30,
+    "finalSoftwareRcAuditArtifactNamePattern": "VictusFanControl-P14.5-final-audit-{sourceHead}",
     "publishLayoutCiValidated": true,
     "runtimeIdentifier": "win-x64",
     "selfContained": false,

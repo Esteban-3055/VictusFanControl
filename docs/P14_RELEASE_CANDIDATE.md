@@ -112,3 +112,11 @@ This closes P14.4 only. The closure commit necessarily changes repository metada
 The first formal-closure commit `8c9f47bbb3fabe04b8db911fa3adfd0b5c5bd6f4` triggered GitHub Actions **#1081** and failed closed in the pre-existing M9D invariant before any P14.4 upload step. The cause was not a fan-control or lifecycle regression: the closure edit had reserialized the full HP-8C40 profile through a JavaScript numeric parser, losing precision in historical 64-bit creation-tick values. The M9D invariant correctly detected the changed watchdog creation ticks.
 
 The failed run is retained as evidence. The correction restores the profile byte values from the last green P14.4 implementation HEAD and applies only the narrow P14.4 textual metadata edit, preserving all historical 64-bit evidence exactly. No hardware execution occurred in #1081 and its P14.4 artifact upload steps were skipped.
+
+## P14.5 — final software RC audit
+
+P14.5 is the last software-only checkpoint before P15. It re-audits the exact HP 8C40 target contract, all prior P13/P14 closure evidence, version/publish/package contracts, pinned PawnIO input, retained-artifact provenance, compile-time Manual/Automatic gates, Candidate V1 authorization state, M9C/M9D qualification-gate closure, default-control state and automatic-policy state.
+
+The same CI run first retains the source-bound RC through the P14.4 artifact path. After that upload returns its artifact ID and GitHub SHA-256 digest, P14.5 writes a separate `P14-FINAL-SOFTWARE-RC-AUDIT.json` that binds those values to the exact source HEAD/run and to the inner RC ZIP/hash files. The audit JSON is uploaded separately as `VictusFanControl-P14.5-final-audit-<sourceHead>`.
+
+The separation prevents self-reference: neither the RC payload nor the final audit evidence embeds its own GitHub wrapper digest. The implementation state remains `P14_5_FINAL_SOFTWARE_RC_AUDIT_IMPLEMENTED_AWAITING_CI` until both retained artifacts have been downloaded and independently verified. P15 remains unopened.

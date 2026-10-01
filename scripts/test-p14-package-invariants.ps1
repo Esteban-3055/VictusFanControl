@@ -7,7 +7,7 @@ $external = Get-Content -LiteralPath (Join-Path $root 'release\p14-external-inpu
 $fetch = Get-Content -LiteralPath (Join-Path $root 'scripts\fetch-p14-external-inputs.ps1') -Raw
 $package = Get-Content -LiteralPath (Join-Path $root 'scripts\package-p14-rc.ps1') -Raw
 $verify = Get-Content -LiteralPath (Join-Path $root 'scripts\verify-p14-package.ps1') -Raw
-if ([string]$release.milestone -notin @('P14.3','P14.4')) { throw 'P14.3 package invariant requires P14.3 or later P14.4 state.' }
+if ([string]$release.milestone -notin @('P14.3','P14.4','P14.5')) { throw 'P14.3 package invariant requires P14.3 or later P14 state.' }
 if (-not [bool]$release.productization.deterministicPackageImplemented) { throw 'P14.3 deterministic package must be implemented.' }
 if (-not [bool]$release.productization.sha256ManifestImplemented) { throw 'P14.3 SHA-256 manifest must be implemented.' }
 if (-not [bool]$release.productization.externalInputsPinned) { throw 'P14.3 external inputs must be pinned.' }
