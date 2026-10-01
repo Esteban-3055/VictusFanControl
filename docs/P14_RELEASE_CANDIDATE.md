@@ -134,3 +134,9 @@ The RC wrapper contained exactly three expected files. Its inner deterministic R
 GitHub Actions #1083 remains preserved as failed history. It reached and successfully uploaded the P14.4 RC artifact but failed closed before P14.5 evidence upload because the first audit writer expected a `sha256:` prefix while `actions/upload-artifact@v4` exposed `artifact-digest` to the workflow as bare hexadecimal. The compatibility fix normalized both forms; no hardware execution occurred in #1083.
 
 At closure time the canonical M9 branch was rechecked at `9b49a57661b683a9ef67be510047d4ca364292f0`, with canonical CI #1053 SUCCESS. This closes **P14.5 and therefore P14 software productization only**. P15 remains unopened and still begins with startup/no-write before any separately authorized one-shot Manual 30/30 transaction.
+
+### P14.5 closure revalidation correction history
+
+The first closure revalidation, GitHub Actions **#1085** (run ID `36912668232`), failed closed after all static invariants, Windows PowerShell 5.1 compatibility checks, build, publish layout and deterministic package checks had passed. The failure occurred at the P14.4 artifact-staging helper because that historical writer still contained an obsolete guard requiring `finalSoftwareRcAuditClosed=false`.
+
+That guard is inappropriate for post-closure CI revalidation: rebuilding and attesting a new non-canonical RC artifact from the closure HEAD is software-only and does not reopen P14.4 or any physical gate. The guard was removed while the actual P14.4/P14.5 provenance assertions remain intact. Run #1085 produced no retained artifacts after the failure and performed no hardware execution. Its failure remains preserved in the repository closure history.

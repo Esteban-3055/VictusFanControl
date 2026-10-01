@@ -16,7 +16,6 @@ $release = Get-Content -LiteralPath (Join-Path $root 'release\p14-software-rc.js
 if ([string]$release.version -ne '0.4.0-rc.1') { throw 'Unexpected P14 RC version.' }
 if (-not [bool]$release.productization.packageClosure.closed) { throw 'P14.4 requires the formal P14.3 package closure.' }
 if ([string]$release.productization.packageClosure.result -ne 'PASS') { throw 'P14.4 requires P14.3 package PASS.' }
-if ([bool]$release.productization.finalSoftwareRcAuditClosed) { throw 'P14.5 final audit must remain open during P14.4.' }
 if (-not [bool]$release.safetyBoundary.softwareOnly) { throw 'P14.4 must remain software-only.' }
 if ([bool]$release.safetyBoundary.controlEnabledByDefault -or [bool]$release.safetyBoundary.automaticPolicyEnabled -or [bool]$release.safetyBoundary.manualExecutionAuthorized -or [bool]$release.safetyBoundary.automaticExecutionAuthorized) { throw 'P14.4 hardware/control boundary is unexpectedly open.' }
 

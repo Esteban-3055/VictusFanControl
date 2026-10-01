@@ -267,6 +267,13 @@
           "result": "FAILURE",
           "cause": "P14.5 audit writer initially required a sha256: prefix while actions/upload-artifact exposed artifact-digest as bare hexadecimal",
           "hardwareExecution": false
+        },
+        {
+          "runNumber": 1085,
+          "runId": 36912668232,
+          "result": "FAILURE",
+          "cause": "closure revalidation reached P14.4 artifact staging after all static/build/package checks but the historical P14.4 attestation writer still rejected finalSoftwareRcAuditClosed=true; no artifact upload or hardware execution occurred",
+          "hardwareExecution": false
         }
       ],
       "p15Executed": false,
