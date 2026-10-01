@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D CORRECTED RETRY PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D FAIL_CLOSED / EC-MUTEX RETRY FIX CODE PREPARED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -361,12 +361,14 @@ forking a new power-state implementation. Evidence uses a separate namespace:
 M9B read-only physical PASS and M9C production-path smoke PASS are both formally recorded.
 The first authorized M9D attempt failed closed before the operator Modern Standby step because
 PowerShell variable names are case-insensitive and the harness used `$Pid`, colliding with the
-read-only automatic `$PID` variable. Cleanup reached two consecutive FF/FF reads. That one-run
-authorization was consumed. The corrected harness passed complete CI at commit
-`384a184c4e19ea76213e5d84ce1cd5a972ee60d5`, GitHub Actions **#980** (run `36820304060`).
-A fresh one-run M9D retry authorization now opens only the M9D execution and temporary
-construction gates, still subject to exact same-HEAD canonical CI. Automatic/adaptive policy
-and default control remain OFF.
+read-only automatic `$PID` variable. That defect was fixed and passed CI at commit
+`384a184c4e19ea76213e5d84ce1cd5a972ee60d5`, GitHub Actions **#980**. The subsequently
+authorized corrected retry also failed closed before READY and before any fan write: the M4
+watchdog rejected PREPARE after its single 500 ms ownership read timed out waiting for the
+cross-process `Global\Access_EC` mutex while the GUI telemetry path was active. Cleanup again
+proved two consecutive FF/FF reads and the operator Modern Standby step was never reached.
+That retry authorization is consumed and M9D is reblocked while the bounded EC-contention fix
+is qualified. Automatic/adaptive policy and default control remain OFF.
 
 
 ### M9D parent harness preparation
@@ -417,16 +419,24 @@ The M9B and M9C physical prerequisites remain satisfied. Formal M9C closure is a
 (run `36819497182`) SUCCESS, but the harness itself failed closed before the manual sleep
 transition because `$Pid` collided with PowerShell automatic `$PID`.
 
-The fix renames all such function parameters/local state to non-reserved identifiers and adds
-a regression invariant that rejects any future `$Pid` declaration/assignment in the M9D parent
-harness. The fix is CODE/CI PASS at `384a184c4e19ea76213e5d84ce1cd5a972ee60d5`, GitHub Actions **#980**.
-The fresh retry authorization opens only:
+The PID-collision fix remains CODE/CI PASS. The second failure exposed a separate transient
+contention boundary: watchdog PREPARE uses the restore-only M4 hardware adapter to prove FF/FF,
+and that ownership read previously made one `Global\Access_EC` acquisition attempt with the
+shared 500 ms mutex timeout. Under the full GUI telemetry path this can legitimately collide
+with a concurrent read even though no unsafe ownership exists.
 
-- `m9d.physicalAuthorization.authorized=true`;
-- `m9d.physicalExecutionAuthorized=true`;
-- `m9d.qualificationConstructionAuthorized=true`.
+The M4 ownership-read adapter now retries **only** this named-mutex TimeoutException, up to four
+bounded attempts with 75 ms gaps. It does not retry unrelated EC transaction failures, does not
+authorize any fan write while the proof is unavailable, and persistent contention still fails
+closed within the existing 4 s lease-request timeout.
 
-Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. The retry is executable only after complete CI on its exact authorization SHA and that same SHA is the canonical branch HEAD.
+During this fix qualification:
+
+- `m9d.physicalAuthorization.authorized=false`;
+- `m9d.physicalExecutionAuthorized=false`;
+- `m9d.qualificationConstructionAuthorized=false`.
+
+Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. A fresh one-run M9D authorization may be issued only after the EC-contention fix passes complete CI.
 
 
 ## 9. GUI-side production watchdog service bootstrap
@@ -543,7 +553,7 @@ This historical M9E code/CI closure changed **no** production or hardware author
 - `WatchdogRecoveryValidated=false`;
 - `ProductionConstructionAuthorized=false`;
 - M9C execution/construction gates are reclosed after PASS;
-- M9D execution/construction gates are temporarily open only for the corrected separately authorized retry;
+- M9D execution/construction gates are reblocked after the pre-READY EC-mutex FAIL_CLOSED while the bounded ownership-read retry is qualified;
 - M8C remains physically re-blocked;
 - `control.enabledByDefault=false`;
 - `automaticPolicyEnabled=false`.
