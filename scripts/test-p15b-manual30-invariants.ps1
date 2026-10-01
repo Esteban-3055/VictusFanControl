@@ -19,7 +19,7 @@ $cli=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Cli\CliOpti
 $program=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Program.cs') -Raw
 
 $status=[string]$contract.status
-if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI')){throw 'P15B preparation/authorization state mismatch.'}
+if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED')){throw 'P15B preparation/authorization/correction state mismatch.'}
 Assert-True ([bool]$contract.startupNoWrite.physicalPassed) 'P15B requires P15A physical PASS.'
 Assert-True ([bool]$contract.startupNoWrite.evidenceClosed) 'P15B requires P15A evidence closed.'
 Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A must remain re-blocked.'
@@ -29,7 +29,7 @@ if($status -eq 'P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED'){
     Assert-False ([bool]$contract.manual30.preparationCiValidated) 'Pending P15B preparation must not pre-claim CI validation.'
     Assert-False ([bool]$contract.manual30.preparationClosure.closed) 'Pending P15B preparation must not pre-close.'
 }
-if($status -in @('P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI')){
+if($status -in @('P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED')){
     Assert-True ([bool]$contract.manual30.preparationCiValidated) 'Closed P15B preparation must be CI validated.'
     Assert-True ([bool]$contract.manual30.preparationClosure.closed) 'Closed P15B preparation must record closure.'
     $pc=$contract.manual30.preparationClosure
@@ -43,6 +43,28 @@ if($status -in @('P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_
     $failed=@($pc.failedCiHistoryPreserved)
     if($failed.Count -ne 2 -or [int]$failed[0].runNumber -ne 1101 -or [int]$failed[1].runNumber -ne 1102){throw 'P15B preparation failed-CI history mismatch.'}
     foreach($entry in $failed){Assert-False ([bool]$entry.hardwareExecution) 'P15B failed preparation CI must record no hardware execution.'}
+}
+if($status -eq 'P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED'){
+    Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B authorization must be revoked after target preflight FAIL_CLOSED.'
+    Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B controller authorization must be revoked after target preflight FAIL_CLOSED.'
+    Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15B controller gate must be closed after target preflight FAIL_CLOSED.'
+    $pf=$contract.manual30.priorFailClosedAttempt
+    if([string]$pf.sourceHead -cne '6fe617693d4de54bfc709e07728c825f2246072d' -or
+       [int]$pf.sourceCiRunNumber -ne 1106 -or
+       [long]$pf.sourceCiRunId -ne 36931559263 -or
+       [string]$pf.result -cne 'FAIL_CLOSED' -or
+       [int]$pf.observedServicePid -ne 7980){throw 'P15B target preflight FAIL_CLOSED identity mismatch.'}
+    foreach($p in @('repositoryHeadMatched','onlyPreservedUntrackedLogsObserved','targetFingerprintPassed','administratorCheckPassed','acBatterySanityPassed','watchdogJournalAbsent')){Assert-True ([bool]$pf.$p) ("P15B target preflight expected true: {0}" -f $p)}
+    foreach($p in @('conflictingControllerProcessObserved','operatorTokenPromptReached','ecSetpointProbeExecuted','watchdogLeaseAcquired','failsafeArmed','controllerStarted','fanWriteExecuted','firmwareRestoreExecuted','evidencePackageProduced','physicalPassClaimed','automaticAuthorizationOpened')){Assert-False ([bool]$pf.$p) ("P15B target preflight expected false: {0}" -f $p)}
+    $corr=$contract.manual30.serviceBaselineCorrection
+    Assert-True ([bool]$corr.required) 'P15B inherited-running service correction must be required.'
+    Assert-True ([bool]$corr.inheritedRunningBaselineObserved) 'P15B correction must record inherited Running baseline.'
+    Assert-True ([bool]$corr.acceptExactQualifiedStoppedBaselinePlanned) 'P15B correction must preserve stopped baseline support.'
+    Assert-True ([bool]$corr.acceptExactQualifiedRunningReadyNoJournalBaselinePlanned) 'P15B correction must plan safe inherited Running support.'
+    Assert-True ([bool]$corr.preserveInitialServiceStatePlanned) 'P15B correction must preserve initial service state.'
+    Assert-False ([bool]$corr.implementationComplete) 'P15B correction cannot pre-claim implementation.'
+    Assert-False ([bool]$corr.ciValidated) 'P15B correction cannot pre-claim CI.'
+    Assert-False ([bool]$corr.closure.closed) 'P15B correction cannot pre-close.'
 }
 if($status -eq 'P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
     Assert-True ([bool]$contract.manual30.executionAuthorized) 'P15B harness execution authorization must be open.'

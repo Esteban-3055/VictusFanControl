@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current state: **P15A remains formally closed/re-blocked. P15B Manual 30/30 has been freshly authorized at both dedicated qualification barriers, but target execution is still forbidden until this authorization HEAD itself completes the full CI workflow successfully. User-facing Manual, Automatic and all later gates remain closed.**
+Current state: **P15A remains formally closed/re-blocked. The first target-side P15B attempt failed closed at the service-baseline preflight because the exact qualified M4 watchdog was still Manual/Running from P15A. No token, EC probe, lease, failsafe, controller or fan write was reached. P15B has been re-blocked while the inherited-running service baseline is corrected. User-facing Manual, Automatic and all later gates remain closed.**
 
 ### P15A preparation closure
 
@@ -89,10 +89,18 @@ Preparation status: **CI PASS / formally closed**. Final preparation implementat
 
 A fresh authorization commit now opens only `manual30.executionAuthorized` and the dedicated `Hp8C40P15BManual30QualificationTest.PhysicalExecutionAuthorized` barrier. It does not open P15A again, the user-facing Manual gate, Automatic, Candidate V1, M9C or M9D qualification construction. The authorization is based on closure HEAD `0aee1b32f1bc063b31083e42c826e0eb87d35546` / CI #1104 SUCCESS and explicitly requires a **full SUCCESS on the authorization HEAD itself before target execution**. The first authorization HEAD `cf7ba5cd0ec31aeddd62cc7f86160c9328e3c82d` failed software-only CI #1105 because the legacy P15A invariant still asserted that P15B Manual authorization must remain closed even after P15A closure. No target-side execution was permitted or performed; the P15A invariant was narrowed so post-P15A P15B authorization is accepted while P15A itself stays re-blocked.
 
+### P15B inherited-running service preflight correction
+
+The first target-side attempt on authorization HEAD `6fe617693d4de54bfc709e07728c825f2246072d` / CI #1106 SUCCESS failed closed before the operator token because the M4 service was `Manual/Running/PID7980/LocalSystem`. The durable journal was absent and no conflicting OmenMon/OmenMon-Reborn/VictusFanControl.App process was present. This state is consistent with the completed P15A run, whose normal GUI startup intentionally started the exact Manual watchdog and left it running after GUI exit.
+
+The original P15B preflight incorrectly treated only `Manual/Stopped/PID0` as valid. No EC setpoint probe, watchdog lease, failsafe, P15B controller, fan write or firmware restore occurred in this failed attempt, and no evidence ZIP was produced because the refusal occurred before the evidence-root/physical sequence.
+
+P15B is re-blocked. The correction will accept either the exact qualified Manual/Stopped baseline or an exact qualified Manual/Running/Ready/no-journal inherited baseline, preserve the initial service state, and avoid requiring the operator to stop or reconfigure the watchdog manually.
+
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
-- P15B Manual 30/30 execution: **FRESHLY AUTHORIZED ONLY AFTER SAME-HEAD CI SUCCESS**
+- P15B Manual 30/30 execution: **RE-BLOCKED AFTER SERVICE-BASELINE PREFLIGHT FAIL_CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**

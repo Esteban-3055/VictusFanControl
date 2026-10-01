@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI",
+  "status": "P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -316,8 +316,8 @@
       ],
       "hardwareExecution": false
     },
-    "executionAuthorized": true,
-    "controllerPhysicalExecutionAuthorized": true,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
     "physicalPassed": false,
     "evidenceClosed": false,
     "equalLevel": 30,
@@ -400,6 +400,53 @@
           "hardwareExecution": false
         }
       ]
+    },
+    "priorFailClosedAttempt": {
+      "sourceHead": "6fe617693d4de54bfc709e07728c825f2246072d",
+      "sourceCiRunNumber": 1106,
+      "sourceCiRunId": 36931559263,
+      "sourceCiResult": "SUCCESS",
+      "result": "FAIL_CLOSED",
+      "failure": "P15B requires M4 Manual/Stopped/PID0; observed Manual/Running/PID7980.",
+      "stage": "pre-controller service baseline before token, EC setpoint probe, watchdog lease, failsafe or fan write",
+      "repositoryHeadMatched": true,
+      "onlyPreservedUntrackedLogsObserved": true,
+      "targetFingerprintPassed": true,
+      "administratorCheckPassed": true,
+      "acBatterySanityPassed": true,
+      "observedServiceState": "Manual/Running/PID7980/LocalSystem",
+      "observedServicePid": 7980,
+      "watchdogJournalAbsent": true,
+      "conflictingControllerProcessObserved": false,
+      "operatorTokenPromptReached": false,
+      "ecSetpointProbeExecuted": false,
+      "watchdogLeaseAcquired": false,
+      "failsafeArmed": false,
+      "controllerStarted": false,
+      "fanWriteExecuted": false,
+      "firmwareRestoreExecuted": false,
+      "evidencePackageProduced": false,
+      "physicalPassClaimed": false,
+      "automaticAuthorizationOpened": false
+    },
+    "serviceBaselineCorrection": {
+      "required": true,
+      "reason": "P15A intentionally left the exact qualified Manual M4 watchdog Running after normal GUI exit, while the original P15B harness required Manual/Stopped/PID0. P15B must preserve and safely accept that inherited no-journal Running baseline instead of requiring an operator to stop the service manually.",
+      "inheritedRunningBaselineObserved": true,
+      "acceptExactQualifiedStoppedBaselinePlanned": true,
+      "acceptExactQualifiedRunningReadyNoJournalBaselinePlanned": true,
+      "preserveInitialServiceStatePlanned": true,
+      "implementationComplete": false,
+      "ciValidated": false,
+      "closure": {
+        "closed": false,
+        "result": null,
+        "implementationHead": null,
+        "sourceCiRunNumber": null,
+        "sourceCiRunId": null,
+        "sourceCiResult": null,
+        "hardwareExecution": false
+      }
     }
   },
   "automatic": {
