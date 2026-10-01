@@ -33,6 +33,11 @@ internal static class FanControlWatchdogLeaseClientSelfTest
             "watchdog request timeout excludes suspended wall time",
             RequestTimeoutExcludesSuspendedWallTimeAsync);
 
+        failures += await RunCaseAsync(
+            output,
+            "Prepare retries bounded Global\\Access_EC INTERNAL_ERROR then succeeds",
+            PrepareEcContentionRetryAsync);
+
         return failures;
     }
 
@@ -279,6 +284,85 @@ internal static class FanControlWatchdogLeaseClientSelfTest
         await serverTask.ConfigureAwait(false);
     }
 
+    private static async Task PrepareEcContentionRetryAsync()
+    {
+        var pipeName =
+            "VictusFanControl-LeaseClientEcRetry-" +
+            Guid.NewGuid().ToString("N");
+
+        var sessionId = Guid.NewGuid();
+
+        var serverTask = Task.Run(async () =>
+        {
+            for (var attempt = 1;
+                 attempt <= NamedPipeFanControlWatchdogLeaseClient.PrepareEcContentionAttempts;
+                 attempt++)
+            {
+                await using var server =
+                    new NamedPipeServerStream(
+                        pipeName,
+                        PipeDirection.InOut,
+                        maxNumberOfServerInstances: 1,
+                        PipeTransmissionMode.Byte,
+                        PipeOptions.Asynchronous);
+
+                await server.WaitForConnectionAsync()
+                    .ConfigureAwait(false);
+
+                var hello = await RequireRequestAsync(server);
+                AssertType(
+                    hello,
+                    FanControlWatchdogLeaseContract.Hello);
+
+                await ReplyAsync(
+                    server,
+                    hello,
+                    code: "HELLO_OK",
+                    message: "test hello");
+
+                var prepare = await RequireRequestAsync(server);
+                AssertType(
+                    prepare,
+                    FanControlWatchdogLeaseContract.Prepare);
+
+                if (attempt <
+                    NamedPipeFanControlWatchdogLeaseClient.PrepareEcContentionAttempts)
+                {
+                    await ReplyAsync(
+                        server,
+                        prepare,
+                        ok: false,
+                        code: "INTERNAL_ERROR",
+                        message: @"Timed out waiting for Global\Access_EC.");
+                }
+                else
+                {
+                    await ReplyAsync(
+                        server,
+                        prepare,
+                        sessionId: sessionId,
+                        generation: 1,
+                        phase: "Prepared");
+                }
+            }
+        });
+
+        var timing = new FanControlWatchdogLeaseClientTiming(
+            ConnectTimeout: TimeSpan.FromMilliseconds(500),
+            RequestTimeout: TimeSpan.FromMilliseconds(750),
+            ReleaseTimeout: TimeSpan.FromMilliseconds(100));
+
+        await using var client =
+            new NamedPipeFanControlWatchdogLeaseClient(
+                TestTargetProfileId,
+                pipeName,
+                activeTimeClock: null,
+                timing: timing);
+
+        await client.PrepareAsync(CancellationToken.None);
+        await serverTask.ConfigureAwait(false);
+    }
+
     private static async Task BrokenPipeClassificationAsync()
     {
         var pipeName =
@@ -493,6 +577,7 @@ internal static class FanControlWatchdogLeaseClientSelfTest
     private static ValueTask ReplyAsync(
         Stream stream,
         FanControlWatchdogLeaseRequest request,
+        bool ok = true,
         string code = "OK",
         string message = "ok",
         Guid? sessionId = null,
@@ -504,7 +589,7 @@ internal static class FanControlWatchdogLeaseClientSelfTest
                 FanControlWatchdogLeaseContract.ProtocolVersion,
                 request.RequestId,
                 request.TargetProfileId,
-                Ok: true,
+                Ok: ok,
                 Code: code,
                 Message: message,
                 SessionId: sessionId,
