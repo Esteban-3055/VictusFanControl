@@ -55,6 +55,9 @@ if($status -eq 'P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
        [string]$a.basisCiResult -cne 'SUCCESS'){throw 'P15B authorization basis mismatch.'}
     Assert-True ([bool]$a.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P15B authorization must require same-HEAD CI success.'
     foreach($p in @('p15aAuthorizationOpened','userFacingManualGateOpened','automaticAuthorizationOpened','candidateCurveAuthorizationOpened','m9cQualificationConstructionOpened','m9dQualificationConstructionOpened','hardwareExecutionAtAuthorizationCommit')){Assert-False ([bool]$a.$p) ("P15B authorization opened forbidden scope: {0}" -f $p)}
+    $failedAuth=@($a.failedSameHeadCiHistory)
+    if($failedAuth.Count -ne 1 -or [int]$failedAuth[0].runNumber -ne 1105 -or [long]$failedAuth[0].runId -ne 36931207120 -or [string]$failedAuth[0].head -cne 'cf7ba5cd0ec31aeddd62cc7f86160c9328e3c82d' -or [string]$failedAuth[0].result -cne 'FAILURE'){throw 'P15B failed authorization CI history mismatch.'}
+    Assert-False ([bool]$failedAuth[0].hardwareExecution) 'Failed P15B authorization CI must record no hardware execution.'
     Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15B authorized state requires dedicated qualification controller gate open.'
 }else{
     Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B physical execution must remain CLOSED during preparation/closure.'

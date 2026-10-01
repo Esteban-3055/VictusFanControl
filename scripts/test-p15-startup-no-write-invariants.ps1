@@ -172,7 +172,11 @@ if([bool]$contract.startupNoWrite.correction.required){
         Assert-False ([bool]$contract.startupNoWrite.correction.closure.hardwareExecution) 'P15A correction closure must record no hardware execution.'
     }
 }
-Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B Manual 30/30 must remain closed.'
+if($status -eq 'P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
+    Assert-True ([bool]$contract.manual30.executionAuthorized) 'Post-P15A P15B authorization state must open only the P15B Manual30 gate.'
+}else{
+    Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B Manual 30/30 must remain closed before its dedicated authorization.'
+}
 Assert-False ([bool]$contract.automatic.executionAuthorized) 'Automatic execution must remain closed.'
 Assert-False ([bool]$contract.safetyBoundary.controlEnabledByDefault) 'P15A default control must remain OFF.'
 Assert-False ([bool]$contract.safetyBoundary.automaticPolicyEnabled) 'P15A automatic policy must remain OFF.'

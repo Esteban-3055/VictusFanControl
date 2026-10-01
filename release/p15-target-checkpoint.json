@@ -388,7 +388,18 @@
       "candidateCurveAuthorizationOpened": false,
       "m9cQualificationConstructionOpened": false,
       "m9dQualificationConstructionOpened": false,
-      "hardwareExecutionAtAuthorizationCommit": false
+      "hardwareExecutionAtAuthorizationCommit": false,
+      "failedSameHeadCiHistory": [
+        {
+          "runNumber": 1105,
+          "runId": 36931207120,
+          "head": "cf7ba5cd0ec31aeddd62cc7f86160c9328e3c82d",
+          "result": "FAILURE",
+          "cause": "Legacy P15A invariant still required P15B Manual authorization to remain closed after P15A had already been formally closed.",
+          "failureStep": "HP 8C40 P15A startup no-write preparation invariant",
+          "hardwareExecution": false
+        }
+      ]
     }
   },
   "automatic": {
