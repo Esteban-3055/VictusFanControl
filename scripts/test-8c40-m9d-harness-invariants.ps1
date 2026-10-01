@@ -20,6 +20,7 @@ function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
 function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 
 $m9d=$profile.watchdogM9ProductionIntegration.m9d
+if(-not [bool]$profile.lifecycle.watchdogM9DCodeCiPassed){throw 'M9D full harness CODE/CI PASS must remain recorded.'}
 Assert-False ([bool]$m9d.physicalAuthorization.authorized) 'M9D physical authorization must remain false.'
 Assert-False ([bool]$m9d.physicalExecutionAuthorized) 'M9D physical execution must remain false.'
 Assert-False ([bool]$m9d.qualificationConstructionAuthorized) 'M9D construction authorization must remain false.'
