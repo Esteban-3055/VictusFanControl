@@ -61,10 +61,15 @@ internal static class Program
                 AdaptiveFanPolicyShadowSelfTest.Run(
                     Console.Out);
 
+            var productionResult =
+                await AdaptiveFanProductionControllerSelfTest.RunAsync(
+                    Console.Out);
+
             return engineResult == 0 &&
-                   shadowResult == 0
+                   shadowResult == 0 &&
+                   productionResult == 0
                 ? 0
-                : 33;
+                : 34;
         }
 
         if (options.AdaptivePolicyShadowReplay)
