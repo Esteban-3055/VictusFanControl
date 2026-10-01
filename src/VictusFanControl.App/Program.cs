@@ -146,6 +146,10 @@ internal static class Program
             args,
             "--8c40-m9d-test-token");
 
+        var m9dMarkerRoot = ReadOptionValue(
+            args,
+            "--8c40-m9d-marker-root");
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
@@ -369,6 +373,24 @@ internal static class Program
             return;
         }
 
+        if (m9dProductionLifecycleHardwareTest &&
+            string.IsNullOrWhiteSpace(m9dMarkerRoot))
+        {
+            AppLog.Write(
+                "M9D production lifecycle test requires --8c40-m9d-marker-root <unique evidence directory>.");
+            Environment.ExitCode = 233;
+            return;
+        }
+
+        if (!m9dProductionLifecycleHardwareTest &&
+            m9dMarkerRoot is not null)
+        {
+            AppLog.Write(
+                "Startup refused: --8c40-m9d-marker-root is valid only with --8c40-m9d-production-lifecycle-test.");
+            Environment.ExitCode = 233;
+            return;
+        }
+
         // HARD M9D BARRIER. This is deliberately before module resolution,
         // SMBIOS target reads, MainForm, PawnIO, pipe, WMI or EC construction.
         if (m9dProductionLifecycleHardwareTest &&
@@ -471,7 +493,8 @@ internal static class Program
             gateG2HardwareTest,
             m6ModernStandbyHardwareTest,
             m7HibernationHardwareTest,
-            m9dProductionLifecycleHardwareTest);
+            m9dProductionLifecycleHardwareTest,
+            m9dMarkerRoot);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");

@@ -3162,6 +3162,7 @@
         "existing display-aware M6 lifecycle engine"
       ],
       "physicalProofPlan": [
+        "unique per-run marker root must be empty/new; existing evidence causes FAIL_CLOSED rather than deletion",
         "initial watchdog-backed 30/30 OWNED via the production factory/public backend path",
         "SESSION_DISPLAY_STATUS Off closes admission and suspends telemetry before restore IO",
         "registered PBT_APMSUSPEND completes Firmware + local FF/FF + watchdog Release + journal absence",
@@ -3172,7 +3173,7 @@
         "one controlled production-path 30/30 re-entry after validated recovery",
         "final Firmware + stable FF/FF + watchdog Release + journal absence"
       ],
-      "markerNamespace": "%LOCALAPPDATA%/VictusFanControl/m9d-production-lifecycle.*",
+      "markerNamespace": "unique per-run parent-supplied directory via --8c40-m9d-marker-root; existing markers are never overwritten",
       "codeCi": {
         "result": "PENDING",
         "commit": null,

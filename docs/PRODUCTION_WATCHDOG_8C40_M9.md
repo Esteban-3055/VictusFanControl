@@ -355,9 +355,10 @@ production App mode hard gate
  -> final Firmware + FF/FF + Release
 ```
 
-M9D has its own marker namespace
-`%LOCALAPPDATA%\VictusFanControl\m9d-production-lifecycle.*` so historical
-M6/M7 marker evidence is not overwritten.
+M9D uses a **unique per-run marker/evidence root** supplied by the versioned parent
+harness through `--8c40-m9d-marker-root`. MainForm refuses to overwrite any existing
+M9D marker in that root. This prevents both M9D retry evidence and historical M6/M7
+marker evidence from being deleted merely to satisfy a gate.
 
 The App has two independent physical barriers:
 

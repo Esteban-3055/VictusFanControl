@@ -41,6 +41,8 @@ foreach($needle in @(
 Assert-Contains $contract 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M9D App execution gate must be compile-time closed.'
 Assert-Contains $contract 'QualificationLevel = 30' 'M9D qualification level must remain 30.'
 
+Assert-Contains $appProgram '--8c40-m9d-marker-root' 'M9D App mode must require a unique marker/evidence root.'
+
 $mode=$appProgram.IndexOf('--8c40-m9d-production-lifecycle-test',[StringComparison]::Ordinal)
 $barrier=$appProgram.IndexOf('// HARD M9D BARRIER',[StringComparison]::Ordinal)
 $modules=$appProgram.IndexOf('var modulesDirectory = ResolveModulesDirectory(args);',[StringComparison]::Ordinal)
@@ -53,11 +55,12 @@ if($mode-lt 0 -or $barrier-lt 0 -or $modules-lt 0 -or $target-lt 0 -or $mainForm
 
 foreach($needle in @(
     '_m9dProductionLifecycleHardwareTest',
-    'm9d-production-lifecycle.ready',
-    'm9d-production-lifecycle.presleep',
-    'm9d-production-lifecycle.resume-gate',
-    'm9d-production-lifecycle.reentry',
-    'm9d-production-lifecycle.result',
+    'M9DMarkerPath("ready.marker")',
+    'M9DMarkerPath("presleep.marker")',
+    'M9DMarkerPath("resume-gate.marker")',
+    'M9DMarkerPath("reentry.marker")',
+    'M9DMarkerPath("result.marker")',
+    'M9D refuses to overwrite existing marker evidence',
     'EnterM9DPhysicalQualificationConstructionScope',
     'HpFanControlBackendFactory.Create(',
     'IsM9DPhysicalQualificationScopeActive',
@@ -83,7 +86,9 @@ if($m9dRoute-lt 0 -or $factory-lt 0 -or $scopeProof-lt 0 -or $arm-lt 0 -or $admi
     throw 'M9D ordering must be mode -> production factory -> scope-closed proof -> arm guard -> Custom admission.'
 }
 
-Assert-NotContains $mainForm 'M9DHardwareTestReadyPath' 'M9D must use the dedicated DisplayAware marker abstraction, not an accidental stale symbol.'
+Assert-NotContains $mainForm 'M9DLifecycleReadyPath' 'M9D must not use a fixed shared marker path.'
+Assert-Contains $mainForm 'else if (DisplayAware8C40LifecycleHardwareTest)' 'Historical M6/M7 marker behavior must remain isolated from M9D.'
+Assert-Contains $mainForm 'if (File.Exists(path))' 'M9D must refuse existing marker evidence instead of deleting it.'
 Assert-Contains $doc 'M9D - production lifecycle last-mile regression' 'M9 documentation must define M9D.'
 
 Write-Host 'HP 8C40 M9D production lifecycle preparation invariant: PASS' -ForegroundColor Green

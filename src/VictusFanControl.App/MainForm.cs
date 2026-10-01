@@ -120,21 +120,6 @@ internal sealed class MainForm : Form
     private static readonly string M6LifecycleResultPath =
         Path.Combine(SuspendHardwareTestRoot, "m6-modern-standby.result");
 
-    private static readonly string M9DLifecycleReadyPath =
-        Path.Combine(SuspendHardwareTestRoot, "m9d-production-lifecycle.ready");
-
-    private static readonly string M9DLifecyclePreSleepPath =
-        Path.Combine(SuspendHardwareTestRoot, "m9d-production-lifecycle.presleep");
-
-    private static readonly string M9DLifecycleResumeGatePath =
-        Path.Combine(SuspendHardwareTestRoot, "m9d-production-lifecycle.resume-gate");
-
-    private static readonly string M9DLifecycleReentryPath =
-        Path.Combine(SuspendHardwareTestRoot, "m9d-production-lifecycle.reentry");
-
-    private static readonly string M9DLifecycleResultPath =
-        Path.Combine(SuspendHardwareTestRoot, "m9d-production-lifecycle.result");
-
     private readonly TelemetryWorker _worker;
     private readonly FanControlCoordinator _fanCoordinator;
     private readonly string _fanBackendStartupDetail;
@@ -152,6 +137,7 @@ internal sealed class MainForm : Form
     private readonly bool _m6ModernStandbyHardwareTest;
     private readonly bool _m7HibernationHardwareTest;
     private readonly bool _m9dProductionLifecycleHardwareTest;
+    private readonly string? _m9dMarkerRoot;
     private bool _m9dConstructionScopeClosedBeforeCustom;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
@@ -269,28 +255,41 @@ internal sealed class MainForm : Form
 
     private string DisplayAwareReadyPath =>
         _m9dProductionLifecycleHardwareTest
-            ? M9DLifecycleReadyPath
+            ? M9DMarkerPath("ready.marker")
             : M6LifecycleReadyPath;
 
     private string DisplayAwarePreSleepPath =>
         _m9dProductionLifecycleHardwareTest
-            ? M9DLifecyclePreSleepPath
+            ? M9DMarkerPath("presleep.marker")
             : M6LifecyclePreSleepPath;
 
     private string DisplayAwareResumeGatePath =>
         _m9dProductionLifecycleHardwareTest
-            ? M9DLifecycleResumeGatePath
+            ? M9DMarkerPath("resume-gate.marker")
             : M6LifecycleResumeGatePath;
 
     private string DisplayAwareReentryPath =>
         _m9dProductionLifecycleHardwareTest
-            ? M9DLifecycleReentryPath
+            ? M9DMarkerPath("reentry.marker")
             : M6LifecycleReentryPath;
 
     private string DisplayAwareResultPath =>
         _m9dProductionLifecycleHardwareTest
-            ? M9DLifecycleResultPath
+            ? M9DMarkerPath("result.marker")
             : M6LifecycleResultPath;
+
+    private string M9DMarkerPath(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(_m9dMarkerRoot))
+        {
+            throw new InvalidOperationException(
+                "M9D marker root is unavailable.");
+        }
+
+        return Path.Combine(
+            _m9dMarkerRoot,
+            fileName);
+    }
 
     private bool GateGHardwareTest =>
         _gateG1HardwareTest || _gateG2HardwareTest;
@@ -347,7 +346,8 @@ internal sealed class MainForm : Form
         bool gateG2HardwareTest = false,
         bool m6ModernStandbyHardwareTest = false,
         bool m7HibernationHardwareTest = false,
-        bool m9dProductionLifecycleHardwareTest = false)
+        bool m9dProductionLifecycleHardwareTest = false,
+        string? m9dMarkerRoot = null)
     {
         Text = "VictusFanControl v0.4-dev — backend integrated / automatic policy OFF";
         StartPosition = FormStartPosition.CenterScreen;
@@ -365,6 +365,10 @@ internal sealed class MainForm : Form
         _m6ModernStandbyHardwareTest = m6ModernStandbyHardwareTest;
         _m7HibernationHardwareTest = m7HibernationHardwareTest;
         _m9dProductionLifecycleHardwareTest = m9dProductionLifecycleHardwareTest;
+        _m9dMarkerRoot =
+            string.IsNullOrWhiteSpace(m9dMarkerRoot)
+                ? null
+                : Path.GetFullPath(m9dMarkerRoot);
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
         _targetProfile =
             HpHardwareTargetResolver.Resolve(
@@ -430,7 +434,33 @@ internal sealed class MainForm : Form
             }
         }
 
-        if (DisplayAware8C40LifecycleHardwareTest)
+        if (_m9dProductionLifecycleHardwareTest)
+        {
+            if (string.IsNullOrWhiteSpace(_m9dMarkerRoot))
+            {
+                throw new InvalidOperationException(
+                    "M9D requires a unique marker/evidence root.");
+            }
+
+            Directory.CreateDirectory(_m9dMarkerRoot);
+
+            foreach (var path in new[]
+                     {
+                         DisplayAwareReadyPath,
+                         DisplayAwarePreSleepPath,
+                         DisplayAwareResumeGatePath,
+                         DisplayAwareReentryPath,
+                         DisplayAwareResultPath
+                     })
+            {
+                if (File.Exists(path))
+                {
+                    throw new InvalidOperationException(
+                        $"M9D refuses to overwrite existing marker evidence: {path}");
+                }
+            }
+        }
+        else if (DisplayAware8C40LifecycleHardwareTest)
         {
             Directory.CreateDirectory(SuspendHardwareTestRoot);
             // M7 deliberately reuses the already-hardened M6 marker transport;
