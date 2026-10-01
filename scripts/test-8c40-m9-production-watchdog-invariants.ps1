@@ -29,7 +29,7 @@ Assert-False ([bool]$profile.control.enabledByDefault) 'M9A must keep production
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9A must keep automatic/adaptive policy OFF.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9ProductionIntegrationPrepared) 'M9 preparation flag missing.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9CodeCiPassed) 'M9A code/CI PASS must remain recorded after closure.'
-Assert-False ([bool]$profile.lifecycle.watchdogM9NoWritePreflightPassed) 'M9B no-write preflight must not be implied by M9A.'
+Assert-True ([bool]$profile.lifecycle.watchdogM9NoWritePreflightPassed) 'M9B physical read-only PASS must remain formally recorded after closure.'
 Assert-False ([bool]$profile.lifecycle.watchdogM9PhysicalPassed) 'M9 physical PASS must not be implied by code preparation.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9A must keep production construction blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.physicalExecutionAuthorized) 'M9A must authorize no physical execution.'
