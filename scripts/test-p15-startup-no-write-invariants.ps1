@@ -15,10 +15,10 @@ $payloadResolver=Get-Content -LiteralPath (Join-Path $root 'scripts\expand-p15-r
 $payloadResolverSelfTest=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15-rc-payload-layout.ps1') -Raw
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P15_TARGET_CHECKPOINT.md') -Raw
 if([string]$contract.milestone -cne 'P15A'){throw 'P15A milestone mismatch.'}
-if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED')){throw 'P15A state mismatch.'}
+if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED')){throw 'P15A state mismatch.'}
 $executionAuthorized=[bool]$contract.startupNoWrite.executionAuthorized
 if($executionAuthorized -and [string]$contract.status -cne 'P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI'){throw 'P15A authorized state/status mismatch.'}
-if((-not $executionAuthorized) -and [string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED')){throw 'P15A closed state/status mismatch.'}
+if((-not $executionAuthorized) -and [string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED')){throw 'P15A closed state/status mismatch.'}
 if([string]$contract.targetProfileId -cne 'HP-8C40-9D0R1LA-F18'){throw 'P15A target mismatch.'}
 if([string]$contract.p14Baseline.closureHead -cne '6945b2e34526e5e266189da6553bf3ea010d3893' -or [int]$contract.p14Baseline.closureCiRunNumber -ne 1086 -or [long]$contract.p14Baseline.closureCiRunId -ne 36913062832 -or [string]$contract.p14Baseline.closureCiResult -cne 'SUCCESS'){throw 'P15A P14 closure baseline mismatch.'}
 if([string]$contract.p14Baseline.auditedRcSourceHead -cne 'eebcdd5e833256466c1ae023c35f7cef8d40d6ec' -or [string]$contract.p14Baseline.auditedRcArtifactSha256 -cne '588058a8b57c0ca1bb41649288682e0981be845ab747654472d3d10c88d572b5' -or [string]$contract.p14Baseline.auditedRcPayloadZipSha256 -cne '704983caa20abb21c3520ffbd165ad69f9843139b6b2fa47d9e9e2448a32ef68'){throw 'P15A audited RC identity mismatch.'}
@@ -40,6 +40,19 @@ if($executionAuthorized){
     Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A physical startup execution must remain CLOSED while not explicitly authorized.'
 }
 Assert-False ([bool]$contract.startupNoWrite.physicalPassed) 'P15A cannot pre-claim physical PASS.'
+if([string]$contract.status -eq 'P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED'){
+    Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A authorization must be re-closed after a failed physical attempt.'
+    $a=$contract.startupNoWrite.latestPhysicalAttempt
+    if([string]$a.sourceHead -cne '6c43550001c44a04ad33ec96f8400e363d6c0ad8' -or [int]$a.sourceCiRunNumber -ne 1095 -or [long]$a.sourceCiRunId -ne 36923739322 -or [string]$a.result -cne 'FAIL_CLOSED'){throw 'P15A latest physical attempt identity mismatch.'}
+    if([string]$a.failure -cne 'P15A operator observation was not confirmed.'){throw 'P15A latest physical attempt failure mismatch.'}
+    foreach($p in @('auditedRcWrapperVerified','auditedRcPayloadVerified','payloadRootResolved','initialServiceBaselinePassed','initialServiceIntegrityPassed','preStartJournalAbsent','readOnlyEcSetpointProbeExecuted','firmwareProofBeforePassed','guiStarted','healthyFirmwareStartupObserved','manualGateClosedObserved','automaticGateClosedObserved','runtimeServiceIntegrityPassed','runtimeJournalAbsentThroughSampling','requiredFirmwareSamplesDuringPassed')){
+        Assert-True ([bool]$a.$p) ("P15A latest attempt expected true: {0}" -f $p)
+    }
+    foreach($p in @('nonFirmwareSetpointObservedBeforeFailure','operatorConfirmationAccepted','normalTrayExitObservedByHarness','postExitFirmwareProofExecuted','p15aPassClaimed','manual30AuthorizationOpened','automaticAuthorizationOpened')){
+        Assert-False ([bool]$a.$p) ("P15A latest attempt expected false: {0}" -f $p)
+    }
+    Assert-True ([bool]$a.evidencePackageIdentityPendingReview) 'P15A evidence package identity must remain pending until target evidence is reviewed.'
+}
 if([bool]$contract.startupNoWrite.correction.required){
     if([string]$contract.status -in @('P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED')){
         Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A authorization must remain revoked until correction closure is separately authorized.'

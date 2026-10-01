@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current preparation state: **payload-layout correction formally closed and P15A startup/no-write freshly authorized. Physical execution is still forbidden until the fresh authorization HEAD itself completes full CI successfully. P15B and Automatic remain closed.**
+Current preparation state: **the fresh P15A attempt reached Healthy/Firmware with the required pre/during FF/FF evidence, then failed closed because the operator confirmation token was not accepted. P15A authorization is re-closed pending evidence review. P15B and Automatic remain closed.**
 
 ### P15A preparation closure
 
@@ -43,6 +43,12 @@ The failure occurred before the service baseline check, before any EC setpoint p
 
 The correction introduces a dedicated no-hardware payload resolver that requires exactly one package root matching the inner ZIP basename and verifies `PACKAGE-MANIFEST.json`, the GUI executable and both app PawnIO modules beneath that root. A CI self-test constructs the same nested ZIP shape so this exact integration mistake cannot silently recur. The correction implementation HEAD `2a56913030c403637618e98112eaf03accde2b31` passed the full workflow in **#1093**, run ID `36922825446`, including the new payload-layout self-test, Windows PowerShell 5.1 compatibility and warnings-as-errors build. No target-side hardware execution occurred in that CI run. P15A execution authorization was then reopened in a fresh, separate commit based on closure HEAD `1b4c5f86e36bc756c3a2e404b52e04e08c1528cc` / CI #1094 SUCCESS. As before, no target-side execution is permitted until that fresh authorization commit itself has a successful same-HEAD workflow.
 
+### Latest P15A physical attempt
+
+Authorization HEAD `6c43550001c44a04ad33ec96f8400e363d6c0ad8` passed full CI #1095 and was executed on the exact target. The audited wrapper and inner RC payload verified, the corrected package-root resolver succeeded, the initial watchdog baseline/integrity passed, the pre-start journal was absent, the read-only EC proof remained Firmware, and the normal GUI reached Healthy with Firmware mode plus CLOSED Manual/Automatic gates. The required runtime FF/FF samples and no-journal checks also passed.
+
+The attempt then failed closed at the explicit operator checkpoint because `Read-Host` did not receive the exact token `P15A-OBSERVED`. Consequently the harness did not observe the requested tray Exit and did not execute the post-exit FF/FF proof. No P15A PASS is claimed. The evidence directory reported by the target is `logs/p15a-startup-no-write_2026-10-01_175013`; its package identity remains pending target-side review. P15A execution authorization was re-closed immediately.
+
 ### P15A authorization window
 
 This authorization opens exactly one physical operation: execution of `scripts/test-p15-startup-no-write.ps1` against the exact audited P14.5 RC artifact. It does not authorize any fan-level command, firmware-restore command, watchdog lease acquisition, service reconfiguration, Manual/Automatic mode request or power transition.
@@ -57,7 +63,7 @@ P15B is intentionally not implemented or authorized by the P15A preparation. Its
 
 ## Current authorization boundary
 
-- P15A startup/no-write execution: **FRESHLY AUTHORIZED ONLY AFTER SAME-HEAD CI SUCCESS**
+- P15A startup/no-write execution: **CLOSED AFTER OPERATOR-CONFIRMATION FAIL_CLOSED; EVIDENCE REVIEW PENDING**
 - P15B Manual 30/30 execution: **CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
