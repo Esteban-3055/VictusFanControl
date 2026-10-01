@@ -19,7 +19,7 @@ public static class Hp8C40P15BManual30QualificationTest
 {
     // HARD VERSIONED BARRIER. A later, separate authorization commit may set
     // this true only after the P15B preparation contract has passed full CI.
-    public static readonly bool PhysicalExecutionAuthorized = false;
+    public static readonly bool PhysicalExecutionAuthorized = true;
 
     public const string RequiredToken = "8C40-P15B-MANUAL30";
     public const int QualificationLevel = 30;

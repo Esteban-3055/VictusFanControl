@@ -19,7 +19,7 @@ $cli=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Cli\CliOpti
 $program=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Program.cs') -Raw
 
 $status=[string]$contract.status
-if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED')){throw 'P15B preparation state mismatch.'}
+if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI')){throw 'P15B preparation/authorization state mismatch.'}
 Assert-True ([bool]$contract.startupNoWrite.physicalPassed) 'P15B requires P15A physical PASS.'
 Assert-True ([bool]$contract.startupNoWrite.evidenceClosed) 'P15B requires P15A evidence closed.'
 Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A must remain re-blocked.'
@@ -29,7 +29,7 @@ if($status -eq 'P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED'){
     Assert-False ([bool]$contract.manual30.preparationCiValidated) 'Pending P15B preparation must not pre-claim CI validation.'
     Assert-False ([bool]$contract.manual30.preparationClosure.closed) 'Pending P15B preparation must not pre-close.'
 }
-if($status -eq 'P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED'){
+if($status -in @('P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI')){
     Assert-True ([bool]$contract.manual30.preparationCiValidated) 'Closed P15B preparation must be CI validated.'
     Assert-True ([bool]$contract.manual30.preparationClosure.closed) 'Closed P15B preparation must record closure.'
     $pc=$contract.manual30.preparationClosure
@@ -44,8 +44,23 @@ if($status -eq 'P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED'){
     if($failed.Count -ne 2 -or [int]$failed[0].runNumber -ne 1101 -or [int]$failed[1].runNumber -ne 1102){throw 'P15B preparation failed-CI history mismatch.'}
     foreach($entry in $failed){Assert-False ([bool]$entry.hardwareExecution) 'P15B failed preparation CI must record no hardware execution.'}
 }
-Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B physical execution must remain CLOSED during preparation/closure.'
-Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B controller physical gate must remain CLOSED during preparation/closure.'
+if($status -eq 'P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
+    Assert-True ([bool]$contract.manual30.executionAuthorized) 'P15B harness execution authorization must be open.'
+    Assert-True ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B qualification controller authorization must be open.'
+    $a=$contract.manual30.authorization
+    if([string]$a.scope -cne 'P15B one-shot Manual equal 30/30 plus production strong restore only' -or
+       [string]$a.basisHead -cne '0aee1b32f1bc063b31083e42c826e0eb87d35546' -or
+       [int]$a.basisCiRunNumber -ne 1104 -or
+       [long]$a.basisCiRunId -ne 36930713902 -or
+       [string]$a.basisCiResult -cne 'SUCCESS'){throw 'P15B authorization basis mismatch.'}
+    Assert-True ([bool]$a.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P15B authorization must require same-HEAD CI success.'
+    foreach($p in @('p15aAuthorizationOpened','userFacingManualGateOpened','automaticAuthorizationOpened','candidateCurveAuthorizationOpened','m9cQualificationConstructionOpened','m9dQualificationConstructionOpened','hardwareExecutionAtAuthorizationCommit')){Assert-False ([bool]$a.$p) ("P15B authorization opened forbidden scope: {0}" -f $p)}
+    Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15B authorized state requires dedicated qualification controller gate open.'
+}else{
+    Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B physical execution must remain CLOSED during preparation/closure.'
+    Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B controller physical gate must remain CLOSED during preparation/closure.'
+    Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15B preparation/closure requires qualification controller gate closed.'
+}
 Assert-False ([bool]$contract.manual30.physicalPassed) 'P15B cannot pre-claim physical PASS.'
 Assert-False ([bool]$contract.manual30.evidenceClosed) 'P15B cannot pre-close physical evidence.'
 if([int]$contract.manual30.equalLevel -ne 30 -or [int]$contract.manual30.exactApplyManualCalls -ne 1){throw 'P15B must be exactly one equal 30/30 Manual call.'}
@@ -64,7 +79,6 @@ Assert-Contains $prodGate 'M9CPhysicalQualificationConstructionAuthorized = fals
 Assert-Contains $prodGate 'M9DPhysicalQualificationConstructionAuthorized = false' 'P15B must not reopen M9D qualification.'
 Assert-Contains $userGate 'ManualExecutionAuthorized = false' 'P15B must not open user-facing Manual.'
 Assert-Contains $userGate 'AutomaticExecutionAuthorized = false' 'P15B must not open user-facing Automatic.'
-Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15B qualification controller gate must remain closed during preparation.'
 foreach($n in @('Hp8C40ProductionWatchdogGate.CreateLeaseIfAuthorized','HpFanControlBackendFactory.Create','new AdaptiveFanProductionController','manualExecutionAuthorized: true','automaticExecutionAuthorized: false','AdaptiveFanProductionMode.Manual','ApplyManualAsync(','QualificationLevel','ReleaseToFirmwareAsync(','LastRestoreEvidence','WatchdogReleaseVerified','ReadStableFirmwareOwnedAsync','SupervisionSamples = 3')){Assert-Contains $controller $n ("P15B controller route invariant missing: {0}" -f $n)}
 Assert-NotContains $controller 'EnterM9CPhysicalQualificationConstructionScope' 'P15B must not reopen M9C construction scope.'
 Assert-NotContains $controller 'EnterM9DPhysicalQualificationConstructionScope' 'P15B must not reopen M9D construction scope.'

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED",
+  "status": "P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -316,8 +316,8 @@
       ],
       "hardwareExecution": false
     },
-    "executionAuthorized": false,
-    "controllerPhysicalExecutionAuthorized": false,
+    "executionAuthorized": true,
+    "controllerPhysicalExecutionAuthorized": true,
     "physicalPassed": false,
     "evidenceClosed": false,
     "equalLevel": 30,
@@ -374,6 +374,21 @@
       "requiredConsecutiveFinalFfFfSamples": 2,
       "watchdogJournalAbsentRequired": true,
       "watchdogProcessIdentityStableRequired": true
+    },
+    "authorization": {
+      "scope": "P15B one-shot Manual equal 30/30 plus production strong restore only",
+      "basisHead": "0aee1b32f1bc063b31083e42c826e0eb87d35546",
+      "basisCiRunNumber": 1104,
+      "basisCiRunId": 36930713902,
+      "basisCiResult": "SUCCESS",
+      "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
+      "p15aAuthorizationOpened": false,
+      "userFacingManualGateOpened": false,
+      "automaticAuthorizationOpened": false,
+      "candidateCurveAuthorizationOpened": false,
+      "m9cQualificationConstructionOpened": false,
+      "m9dQualificationConstructionOpened": false,
+      "hardwareExecutionAtAuthorizationCommit": false
     }
   },
   "automatic": {
