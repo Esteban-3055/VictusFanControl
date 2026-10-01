@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current preparation state: **CI validated and formally closed; physical execution authorization CLOSED**.
+Current preparation state: **CI validated and formally closed. P15A startup/no-write is explicitly authorized, but physical execution remains forbidden until the authorization HEAD itself has a successful full CI run.**
 
 ### P15A preparation closure
 
@@ -33,7 +33,15 @@ GitHub Actions validation: **#1090**, run ID `36916449876`, **SUCCESS**. The ful
 
 The earlier hardening commit triggered Actions **#1089** (run ID `36916292385`) and failed at the global PowerShell syntax check because one diagnostic string used `$required:`, which PowerShell parses as an invalid drive-qualified variable reference. The interpolation boundary was corrected to `${required}:`; no later CI step and no hardware operation ran in #1089. The failure is retained as evidence.
 
-P15A is now prepared but **not authorized to run**. `startupNoWrite.executionAuthorized=false`, P15B remains unimplemented/closed, and Manual/Automatic user-facing gates remain false.
+P15A preparation is formally closed. A separate authorization commit now sets only `startupNoWrite.executionAuthorized=true`. That authorization is based on preparation closure HEAD `1ea5d081422aced1acc3941e2110ba16289cd791` / CI #1091 SUCCESS and still requires a full **SUCCESS on the authorization HEAD itself before any physical execution**. P15B remains unimplemented/closed, and Manual/Automatic user-facing gates remain false.
+
+### P15A authorization window
+
+This authorization opens exactly one physical operation: execution of `scripts/test-p15-startup-no-write.ps1` against the exact audited P14.5 RC artifact. It does not authorize any fan-level command, firmware-restore command, watchdog lease acquisition, service reconfiguration, Manual/Automatic mode request or power transition.
+
+The operator must first synchronize the dedicated P15 branch and verify that local HEAD equals the upstream authorization HEAD and that GitHub Actions for that exact HEAD completed successfully. The harness independently rechecks local/upstream HEAD equality, target fingerprint, RC artifact identity, service baseline/integrity and all no-write evidence before launching the normal GUI.
+
+After the physical attempt, successful or failed, evidence must be preserved and this authorization must be re-blocked before any P15B preparation begins.
 
 ## P15B — one-shot Manual 30/30
 
@@ -41,7 +49,7 @@ P15B is intentionally not implemented or authorized by the P15A preparation. Its
 
 ## Current authorization boundary
 
-- P15A startup/no-write execution: **CLOSED**
+- P15A startup/no-write execution: **AUTHORIZED ONLY AFTER SAME-HEAD CI SUCCESS**
 - P15B Manual 30/30 execution: **CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**

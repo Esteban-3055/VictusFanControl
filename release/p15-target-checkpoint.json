@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED",
+  "status": "P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -54,7 +54,18 @@
       ],
       "hardwareExecution": false
     },
-    "executionAuthorized": false,
+    "executionAuthorized": true,
+    "authorization": {
+      "scope": "P15A startup/no-write only",
+      "basisHead": "1ea5d081422aced1acc3941e2110ba16289cd791",
+      "basisCiRunNumber": 1091,
+      "basisCiRunId": 36916991549,
+      "basisCiResult": "SUCCESS",
+      "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
+      "manual30AuthorizationOpened": false,
+      "automaticAuthorizationOpened": false,
+      "hardwareExecutionAtAuthorizationCommit": false
+    },
     "physicalPassed": false,
     "evidenceClosed": false,
     "expectedBranch": "feature/victus-8c40-p15-hardware-checkpoint",
