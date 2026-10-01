@@ -5,7 +5,7 @@ function Assert-True([bool]$Value, [string]$Message) {
 }
 
 function Assert-Contains([string]$Text, [string]$Needle, [string]$Message) {
-    Assert-True ($Text.Contains($Needle, [System.StringComparison]::Ordinal)) $Message
+    Assert-True ($Text.IndexOf($Needle, [System.StringComparison]::Ordinal) -ge 0) $Message
 }
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -36,7 +36,7 @@ Assert-Contains $gate 'M9DPhysicalQualificationConstructionAuthorized = false' '
 Assert-Contains $readme 'HP 8C40 / 9D0R1LA / BIOS F.18' 'README must describe the current exact target.'
 Assert-Contains $readme 'control.enabledByDefault=false' 'README must preserve default-control OFF.'
 Assert-Contains $readmeEs 'automaticPolicyEnabled=false' 'Spanish README must preserve automatic-policy OFF.'
-Assert-True (-not $readme.Contains('Current development status: v0.4 backend integration.', [System.StringComparison]::Ordinal)) 'README must not advertise the obsolete v0.4/88F8 current state.'
+Assert-True ($readme.IndexOf('Current development status: v0.4 backend integration.', [System.StringComparison]::Ordinal) -lt 0) 'README must not advertise the obsolete v0.4/88F8 current state.'
 Assert-Contains $adaptive 'WatchdogRecoveryValidated=true' 'Adaptive policy document must reflect post-M9 watchdog promotion.'
 Assert-Contains $roadmap 'P15' 'Post-M9 roadmap must preserve the separate target-side checkpoint.'
 
