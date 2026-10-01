@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PENDING_GATE_CLOSED",
+  "status": "P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PASS_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -509,14 +509,20 @@
       "plannedRename": "$pid -> $servicePid within Get-ValidatedServiceBaseline",
       "addRegressionGuardAgainstPidAutomaticVariableCollision": true,
       "implementationComplete": true,
-      "ciValidated": false,
+      "ciValidated": true,
       "closure": {
-        "closed": false,
-        "result": null,
-        "implementationHead": null,
-        "sourceCiRunNumber": null,
-        "sourceCiRunId": null,
-        "sourceCiResult": null,
+        "closed": true,
+        "result": "PASS",
+        "implementationHead": "3e2ee4851e7bc5f393e23f782c09ef7f5db92b43",
+        "sourceCiRunNumber": 1112,
+        "sourceCiRunId": 36935048160,
+        "sourceCiResult": "SUCCESS",
+        "powerShellSyntaxValidated": true,
+        "p15bInvariantValidated": true,
+        "pidAutomaticVariableRegressionGuardValidated": true,
+        "powerShell51CompatibilityValidated": true,
+        "warningsAsErrorsBuildValidated": true,
+        "retainedRcRegressionValidated": true,
         "hardwareExecution": false
       },
       "regressionGuardImplemented": true
