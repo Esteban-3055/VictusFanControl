@@ -12,9 +12,9 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
 
         failures += Report(
             output,
-            "M9 production gate remains closed while M9C qualification gate is authorized",
+            "M9 production and M9C qualification gates are closed after M9C physical PASS",
             !Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized &&
-            Hp8C40ProductionWatchdogGate.M9CPhysicalQualificationConstructionAuthorized &&
+            !Hp8C40ProductionWatchdogGate.M9CPhysicalQualificationConstructionAuthorized &&
             !Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated);
 
         var authorized =
@@ -89,8 +89,8 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
 
         failures += Report(
             output,
-            "M9C temporary construction scope is authorized and closes after disposal",
-            !m9cBlocked &&
+            "M9C temporary construction scope is re-blocked after physical PASS",
+            m9cBlocked &&
             !Hp8C40ProductionWatchdogGate.IsM9CPhysicalQualificationScopeActive);
 
         var wrongTarget =
