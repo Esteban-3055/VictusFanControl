@@ -435,3 +435,19 @@ binds `serviceBootstrap=gui-ensure-ready`, the bootstrap PID/start ticks and the
 watchdog OWNED lease to the same process identity. Failure-recovery code may still start
 the qualified service when a retained journal exists; that path cannot satisfy normal
 M9D PASS.
+
+
+### GUI service-bootstrap code/CI closure
+
+The GUI-side watchdog service bootstrap and the hardened M9D parent route are
+**CODE/CI PASS** at commit `f322e195523b8001b11449f8d18cb7f2facf5d74`, GitHub Actions **#901**
+(run `36804784469`).
+
+Run #900 had already passed the new PowerShell invariants but the warnings-as-errors
+C# build found one compile-only ambiguity between `System.TimeoutException` and the
+ServiceController package's timeout type. The exception was explicitly qualified as
+`System.TimeoutException`; #901 then passed the complete workflow. No physical
+execution occurred.
+
+The production gate, M9C/M9D physical gates, `WatchdogRecoveryValidated`,
+automatic/adaptive policy and default control all remain closed.
