@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PASS_GATE_CLOSED",
+  "status": "P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -54,26 +54,25 @@
       ],
       "hardwareExecution": false
     },
-    "executionAuthorized": false,
+    "executionAuthorized": true,
     "authorization": {
       "scope": "P15A startup/no-write only",
-      "basisHead": "1b4c5f86e36bc756c3a2e404b52e04e08c1528cc",
-      "basisCiRunNumber": 1094,
-      "basisCiRunId": 36923280354,
+      "basisHead": "bb84846a57f2e81cab68fe7f1c89399af92094e7",
+      "basisCiRunNumber": 1098,
+      "basisCiRunId": 36926380580,
       "basisCiResult": "SUCCESS",
-      "authorizationHead": "6c43550001c44a04ad33ec96f8400e363d6c0ad8",
-      "authorizationCiRunNumber": 1095,
-      "authorizationCiRunId": 36923739322,
-      "authorizationCiResult": "SUCCESS",
       "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
       "manual30AuthorizationOpened": false,
       "automaticAuthorizationOpened": false,
       "hardwareExecutionAtAuthorizationCommit": false,
-      "previousAuthorizationHead": "8e91c649056ba868ec94aa1864c7669aa90f4550",
-      "previousAuthorizationCiRunNumber": 1092,
-      "previousAuthorizationCiRunId": 36920046370,
-      "previousAuthorizationRevokedAfterFailedPreflight": true,
-      "revokedAfterOperatorConfirmationFailClosed": true
+      "previousAuthorizationHead": "6c43550001c44a04ad33ec96f8400e363d6c0ad8",
+      "previousAuthorizationCiRunNumber": 1095,
+      "previousAuthorizationCiRunId": 36923739322,
+      "previousAuthorizationRevokedAfterOperatorConfirmationFailClosed": true,
+      "priorPayloadAuthorizationHead": "8e91c649056ba868ec94aa1864c7669aa90f4550",
+      "priorPayloadAuthorizationCiRunNumber": 1092,
+      "priorPayloadAuthorizationCiRunId": 36920046370,
+      "priorPayloadAuthorizationRevokedAfterFailedPreflight": true
     },
     "latestPhysicalAttempt": {
       "sourceHead": "6c43550001c44a04ad33ec96f8400e363d6c0ad8",

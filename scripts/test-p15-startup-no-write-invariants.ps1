@@ -30,12 +30,15 @@ if([string]$contract.startupNoWrite.preparationClosure.result -cne 'PASS' -or [s
 Assert-False ([bool]$contract.startupNoWrite.preparationClosure.hardwareExecution) 'P15A preparation closure must record no hardware execution.'
 if($executionAuthorized){
     if([string]$contract.startupNoWrite.authorization.scope -cne 'P15A startup/no-write only'){throw 'P15A authorization scope mismatch.'}
-    if([string]$contract.startupNoWrite.authorization.basisHead -cne '1b4c5f86e36bc756c3a2e404b52e04e08c1528cc' -or [int]$contract.startupNoWrite.authorization.basisCiRunNumber -ne 1094 -or [long]$contract.startupNoWrite.authorization.basisCiRunId -ne 36923280354 -or [string]$contract.startupNoWrite.authorization.basisCiResult -cne 'SUCCESS'){throw 'P15A fresh authorization basis mismatch.'}
+    if([string]$contract.startupNoWrite.authorization.basisHead -cne 'bb84846a57f2e81cab68fe7f1c89399af92094e7' -or [int]$contract.startupNoWrite.authorization.basisCiRunNumber -ne 1098 -or [long]$contract.startupNoWrite.authorization.basisCiRunId -ne 36926380580 -or [string]$contract.startupNoWrite.authorization.basisCiResult -cne 'SUCCESS'){throw 'P15A post-hardening authorization basis mismatch.'}
     Assert-True ([bool]$contract.startupNoWrite.authorization.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P15A authorization must require same-HEAD CI success before execution.'
     Assert-False ([bool]$contract.startupNoWrite.authorization.manual30AuthorizationOpened) 'P15A authorization must not open P15B.'
     Assert-False ([bool]$contract.startupNoWrite.authorization.automaticAuthorizationOpened) 'P15A authorization must not open Automatic.'
     Assert-False ([bool]$contract.startupNoWrite.authorization.hardwareExecutionAtAuthorizationCommit) 'P15A authorization commit must record no hardware execution.'
-    if([string]$contract.startupNoWrite.authorization.previousAuthorizationHead -cne '8e91c649056ba868ec94aa1864c7669aa90f4550' -or -not [bool]$contract.startupNoWrite.authorization.previousAuthorizationRevokedAfterFailedPreflight){throw 'P15A prior failed authorization history mismatch.'}
+    if([string]$contract.startupNoWrite.authorization.previousAuthorizationHead -cne '6c43550001c44a04ad33ec96f8400e363d6c0ad8' -or -not [bool]$contract.startupNoWrite.authorization.previousAuthorizationRevokedAfterOperatorConfirmationFailClosed){throw 'P15A prior operator-confirmation authorization history mismatch.'}
+    if([string]$contract.startupNoWrite.authorization.priorPayloadAuthorizationHead -cne '8e91c649056ba868ec94aa1864c7669aa90f4550' -or -not [bool]$contract.startupNoWrite.authorization.priorPayloadAuthorizationRevokedAfterFailedPreflight){throw 'P15A prior payload-layout authorization history mismatch.'}
+    Assert-True ([bool]$contract.startupNoWrite.operatorConfirmationHardening.implementationCiValidated) 'P15A post-hardening authorization requires CI-validated confirmation hardening.'
+    Assert-True ([bool]$contract.startupNoWrite.operatorConfirmationHardening.closure.closed) 'P15A post-hardening authorization requires formally closed confirmation hardening.'
 }else{
     Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A physical startup execution must remain CLOSED while not explicitly authorized.'
 }
