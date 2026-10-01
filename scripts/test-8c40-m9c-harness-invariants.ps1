@@ -15,6 +15,7 @@ function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){
 function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
     if($Text.IndexOf($Needle,[StringComparison]::Ordinal)-ge 0){throw $Message}
 }
+function Assert-True([bool]$Value,[string]$Message){if(-not $Value){throw $Message}}
 function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 
 if(-not [bool]$profile.lifecycle.watchdogM9CCodeCiPassed){throw 'M9C full harness CODE/CI PASS must remain recorded.'}
