@@ -20,12 +20,16 @@ function Assert-True([bool]$Value,[string]$Message){if(-not $Value){throw $Messa
 
 Assert-True ([bool]$profile.lifecycle.watchdogM9DCodePrepared) 'M9D code-prepared flag missing.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9DCodeCiPassed) 'M9D code/CI PASS must remain recorded after closure.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed) 'M9D client EC-retry fix requires formally closed M9C physical PASS.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D execution must be reblocked while client EC retry CI is pending.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D construction must be reblocked while client EC retry CI is pending.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'Superseded M9D authorization must be reblocked.'
-if([string]$profile.watchdogM9ProductionIntegration.m9d.clientPrepareEcMutexRetry.status -cne 'CODE_PREPARED_CI_PENDING'){throw 'M9D client EC retry must remain CI-pending in this commit.'}
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.clientPrepareEcMutexRetry.serviceBinaryMutation) 'Client retry fix must not replace the qualified M4 service.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed) 'M9D client EC-retry authorization requires formally closed M9C physical PASS.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D execution must be explicitly authorized for the client EC-retry lifecycle run.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D construction must be explicitly authorized for the client EC-retry lifecycle run.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'M9D client EC-retry physical authorization record must be true.'
+if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.sourceHead -cne 'a5d8ad001ad64f72bc654a6bbd6b667965a2e0ca'){throw 'M9D client EC-retry authorization source HEAD changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.sourceCiRunNumber -ne 1030){throw 'M9D client EC-retry authorization source CI run changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.sourceCiRunId -ne 36824956422){throw 'M9D client EC-retry authorization source CI run id changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.clientPrepareEcMutexRetry.status -cne 'CODE_CI_PASS'){throw 'M9D client EC retry must remain CODE/CI PASS.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.clientPrepareEcMutexRetry.codeCi.commit -cne 'a5d8ad001ad64f72bc654a6bbd6b667965a2e0ca'){throw 'M9D client retry CI evidence commit changed.'}
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.clientPrepareEcMutexRetry.serviceBinaryMutation) 'M9D client retry must not replace the qualified M4 service.'
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D must not promote watchdog recovery.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D must not promote normal production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9D must keep control disabled by default.'
@@ -37,7 +41,7 @@ if([long]$profile.watchdogM9ProductionIntegration.m9d.codeCi.runId -ne 368038642
 
 foreach($needle in @(
     'M9DPhysicalQualificationToken = "8C40-M9D-PRODUCTION-LIFECYCLE30"',
-    'M9DPhysicalQualificationConstructionAuthorized = false;',
+    'M9DPhysicalQualificationConstructionAuthorized = true;',
     'EnterM9DPhysicalQualificationConstructionScope',
     'IsM9DPhysicalQualificationScopeActive',
     'Nested/overlapping M9 production-watchdog construction scopes are forbidden'
@@ -46,7 +50,7 @@ foreach($needle in @(
 }
 
 foreach($needle in @(
-    'PhysicalExecutionAuthorized = false;',
+    'PhysicalExecutionAuthorized = true;',
     'QualificationLevel = 30',
     'M9DPhysicalQualificationToken'
 )){
@@ -109,7 +113,7 @@ $m9dBlock=$mainForm.Substring($m9dBranch,$m9dBlockEnd-$m9dBranch)
 Assert-NotContains $m9dBlock 'CreateLifecycleQualificationBackend' 'M9D must use normal factory/public backend rather than the M6 qualification constructor.'
 
 Assert-Contains $doc 'M9D production-path Modern Standby lifecycle preparation' 'M9 documentation must describe M9D.'
-Assert-Contains $doc 'M9D CLIENT PREPARE EC-MUTEX RETRY FIX CODE PREPARED' 'M9D documentation must record client retry correction.'
+Assert-Contains $doc 'M9D CLIENT EC-RETRY PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI' 'M9D documentation must record client EC-retry authorization.'
 
 foreach($needle in @(
     'ServiceName = "VictusFanControlWatchdogM4"',
