@@ -18,6 +18,10 @@ internal readonly record struct FanControlWatchdogLeaseClientTiming(
 public sealed class NamedPipeFanControlWatchdogLeaseClient :
     IFanControlWatchdogLeaseClient
 {
+    internal const int PrepareEcContentionAttempts = 4;
+    internal static readonly TimeSpan PrepareEcContentionRetryDelay =
+        TimeSpan.FromMilliseconds(75);
+
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly string _pipeName;
     private readonly string _targetProfileId;
@@ -88,10 +92,36 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
             await EnsureConnectedLockedAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-            var response = await SendLockedAsync(
-                NewRequest(FanControlWatchdogLeaseContract.Prepare),
-                _timing.RequestTimeout,
-                cancellationToken).ConfigureAwait(false);
+            FanControlWatchdogLeaseResponse? response = null;
+
+            for (var attempt = 1;
+                 attempt <= PrepareEcContentionAttempts;
+                 attempt++)
+            {
+                try
+                {
+                    response = await SendLockedAsync(
+                        NewRequest(FanControlWatchdogLeaseContract.Prepare),
+                        _timing.RequestTimeout,
+                        cancellationToken).ConfigureAwait(false);
+                    break;
+                }
+                catch (WatchdogLeaseRejectedException ex)
+                    when (IsRetryablePrepareEcContention(ex) &&
+                          attempt < PrepareEcContentionAttempts)
+                {
+                    await Task.Delay(
+                            PrepareEcContentionRetryDelay,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+
+            if (response is null)
+            {
+                throw new InvalidOperationException(
+                    "Watchdog Prepare retry loop completed without a response.");
+            }
 
             ApplyLeaseResponse(response, ClientPhase.Prepared);
         }
@@ -778,6 +808,17 @@ public sealed class NamedPipeFanControlWatchdogLeaseClient :
         Owned,
         Restoring
     }
+
+    internal static bool IsRetryablePrepareEcContention(
+        Exception exception) =>
+        exception is WatchdogLeaseRejectedException rejected &&
+        string.Equals(
+            rejected.Code,
+            "INTERNAL_ERROR",
+            StringComparison.Ordinal) &&
+        rejected.Message.Contains(
+            @"Global\Access_EC",
+            StringComparison.Ordinal);
 
     private sealed class WatchdogLeaseRejectedException :
         InvalidOperationException
