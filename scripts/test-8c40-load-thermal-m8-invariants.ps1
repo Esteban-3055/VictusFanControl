@@ -51,7 +51,7 @@ Assert-Equal $profile.validatedTarget.physicalCoreCount 14 'M8 physical-core cou
 # M6/M7 must remain closed while production watchdog/policy remain blocked.
 Assert-True ([bool]$profile.lifecycle.modernStandbyM6PhysicalPassed) 'M8 requires M6 physical PASS.'
 Assert-True ([bool]$profile.lifecycle.hibernationM7PhysicalPassed) 'M8 requires M7 physical PASS.'
-Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M8 preparation must not set WatchdogRecoveryValidated=true.'
+Assert-True ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'Post-M9 promotion must preserve closed M8 evidence while lifecycle watchdog recovery is validated.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M8 preparation must not enable automatic control by default.'
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M8 formal closure must record M8C physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M8 formal closure must re-block M8C physical execution.'
@@ -64,7 +64,7 @@ Assert-False ([bool]$profile.control.supportsIndependentLevels) 'M8 must remain 
 Assert-Contains $target 'MinimumPhysicallyQualifiedFanLevel = 10' 'HP 8C40 target minimum is no longer 10.'
 Assert-Contains $target 'MaximumPhysicallyQualifiedFanLevel = 50' 'HP 8C40 target maximum is no longer 50.'
 Assert-Contains $target 'SupportsIndependentFanLevels: false' 'HP 8C40 target must reject asymmetric fan commands.'
-Assert-Contains $target 'WatchdogRecoveryValidated: false' 'HP 8C40 production watchdog must remain blocked during M8 preparation.'
+Assert-Contains $target 'WatchdogRecoveryValidated: true' 'HP 8C40 target profile must reflect the later M9 watchdog-recovery promotion.'
 
 # Reuse the existing thermal contract exactly.
 Assert-Contains $safety 'public const double CpuEmergencyC = 95.0;' 'M8 CPU emergency threshold drifted.'
@@ -101,7 +101,7 @@ Assert-Contains $backend 'RequireProductionConstructionAuthorized' 'M8 closure m
 Assert-NotContains $factory 'CreateLifecycleQualificationBackend' 'Production factory must not use a qualification-only bypass.'
 Assert-Contains $factory 'RequireProductionConstructionAuthorized' 'Factory must route HP 8C40 watchdog construction through M9.'
 Assert-Contains $factory 'automatic policy and watchdog remain OFF' 'Factory must keep automatic policy/watchdog OFF while M9 is closed.'
-Assert-Contains $m9Gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'M9 production construction must remain closed after M8.'
+Assert-Contains $m9Gate 'public static readonly bool ProductionConstructionAuthorized = true;' 'M9 production construction must be promoted only by the later M9B/M9C/M9D transaction.'
 Assert-Contains $m9Gate 'WatchdogRecoveryValidated=false' 'M9 gate must require explicit watchdog recovery promotion.'
 
 # Specification itself locks the intended M8 safety boundary.
