@@ -644,7 +644,19 @@
       "evidencePackagingSelfTestValidated": false,
       "powerShell51CompatibilityValidated": false,
       "warningsAsErrorsBuildValidated": false,
-      "hardwareExecution": false
+      "hardwareExecution": false,
+      "failedCiHistoryPreserved": [
+        {
+          "runNumber": 1117,
+          "runId": 36941758398,
+          "head": "33bb63828561ff88664f1896f76a8e2c95863698",
+          "result": "FAILURE",
+          "failureStep": "Build",
+          "cause": "Program.cs directly referenced compile-time false normal user Manual/Automatic const gates inside a branch, so warnings-as-errors reported CS0162 unreachable code in the P15C startup guard.",
+          "hardwareExecution": false,
+          "physicalGatesOpened": false
+        }
+      ]
     },
     "executionAuthorized": false,
     "controllerPhysicalExecutionAuthorized": false,

@@ -41,6 +41,10 @@ internal static class Hp8C40P15CGuiManualQualificationGate
     public const string ResultFileName = "p15c-gui-result.json";
     public const string EventsFileName = "p15c-gui-events.jsonl";
 
+    public static bool NormalUserExecutionGatesClosed() =>
+        !Hp8C40PostM9UserControlGate.ManualExecutionAuthorized &&
+        !Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized;
+
     public static readonly JsonSerializerOptions JsonOptions =
         new()
         {

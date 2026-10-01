@@ -135,7 +135,7 @@ The Firmware button must exercise the production mode-transition restore, not a 
 
 The P15C parent harness never starts, stops or reconfigures the M4 service and never issues a direct fan command or restore command. It accepts the already-qualified Stopped or Running/Ready/no-journal baseline. If the service begins Stopped, normal production GUI bootstrap may start it; normal GUI shutdown is therefore allowed to leave the exact qualified service Running/Ready, matching the established GUI behavior. All evidence is preserved and `git clean` remains forbidden.
 
-**Preparation state in this commit:** implementation present, CI not yet claimed, both P15C physical gates CLOSED. A later preparation-closure commit may record CI success, but physical execution still requires a separate authorization commit and another same-HEAD CI SUCCESS.
+**Preparation state:** implementation is present and both P15C physical gates remain CLOSED. The first preparation implementation HEAD `33bb63828561ff88664f1896f76a8e2c95863698` reached all new P15C PowerShell invariants/self-tests but failed software-only build CI **#1117** (run `36941758398`) because a P15C startup guard directly referenced the normal user Manual/Automatic `const false` gates, producing warnings-as-errors CS0162 unreachable code. No hardware execution was authorized or performed. The correction routes that assertion through the dedicated runtime qualification helper while leaving both normal user gates and both P15C physical gates false. CI success is not pre-claimed; a later preparation-closure commit may record it, and physical execution still requires a separate authorization commit plus same-HEAD CI SUCCESS.
 
 ## Current authorization boundary
 

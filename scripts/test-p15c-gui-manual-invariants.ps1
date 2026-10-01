@@ -38,6 +38,17 @@ Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P
 
 $g=$contract.guiManual
 Assert-True ([bool]$g.preparationImplemented) 'P15C preparation must be implemented.'
+$failedPreparation=@($g.preparationClosure.failedCiHistoryPreserved)
+if($failedPreparation.Count -ne 1 -or
+   [int]$failedPreparation[0].runNumber -ne 1117 -or
+   [long]$failedPreparation[0].runId -ne 36941758398 -or
+   [string]$failedPreparation[0].head -cne '33bb63828561ff88664f1896f76a8e2c95863698' -or
+   [string]$failedPreparation[0].result -cne 'FAILURE' -or
+   [string]$failedPreparation[0].failureStep -cne 'Build'){
+    throw 'P15C failed preparation CI history mismatch.'
+}
+Assert-False ([bool]$failedPreparation[0].hardwareExecution) 'P15C failed preparation CI must record no hardware execution.'
+Assert-False ([bool]$failedPreparation[0].physicalGatesOpened) 'P15C failed preparation CI must record physical gates closed.'
 if([string]$g.prerequisite -cne 'P15B Manual30 physical PASS formally closed'){throw 'P15C prerequisite mismatch.'}
 if([string]$g.expectedBranch -cne 'feature/victus-8c40-p15-hardware-checkpoint'){throw 'P15C branch contract mismatch.'}
 if([string]$g.requiredToken -cne '8C40-P15C-GUI-MANUAL30'){throw 'P15C token contract mismatch.'}
@@ -111,6 +122,7 @@ foreach($needle in @(
  'RequiredToken = "8C40-P15C-GUI-MANUAL30"',
  'QualificationLevel = 30',
  'RequiredHealthyPreWriteSamples = 3',
+ 'NormalUserExecutionGatesClosed()',
  'MaximumCpuPhysicalC = 90.0',
  'MaximumGpuPhysicalC = 82.0',
  'p15c-parent-owned-verified.txt'
@@ -121,6 +133,7 @@ foreach($needle in @(
  '--8c40-p15c-test-token',
  '--8c40-p15c-marker-root',
  'Hp8C40P15CGuiManualQualificationGate.PhysicalExecutionAuthorized',
+ 'Hp8C40P15CGuiManualQualificationGate.NormalUserExecutionGatesClosed()',
  'Hp8C40TargetProfile.Matches'
 )){Assert-Contains $program $needle ("P15C Program boundary missing: {0}" -f $needle)}
 
@@ -130,6 +143,7 @@ Assert-NotContains $main 'ProcessAutomaticAsync(' 'P15C MainForm must not execut
 foreach($needle in @(
  '_p15cGuiManualHardwareTest',
  'Hp8C40P15CGuiManualQualificationGate.PhysicalExecutionAuthorized',
+ 'Hp8C40P15CGuiManualQualificationGate.NormalUserExecutionGatesClosed()',
  'OnP15CControlInteraction',
  'TryPublishP15CGuiReadyAsync',
  'p15cManualExecutionAuthorized',

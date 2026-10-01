@@ -1,4 +1,3 @@
-using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 
@@ -451,8 +450,7 @@ internal static class Program
                 return;
             }
 
-            if (Hp8C40PostM9UserControlGate.ManualExecutionAuthorized ||
-                Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized)
+            if (!Hp8C40P15CGuiManualQualificationGate.NormalUserExecutionGatesClosed())
             {
                 AppLog.Write(
                     "HP 8C40 P15C requires the normal post-M9 user Manual/Automatic gates to remain closed.");

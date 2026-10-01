@@ -2745,8 +2745,7 @@ internal sealed class MainForm : Form
                     "P15C dedicated GUI qualification gate is closed.");
             }
 
-            if (Hp8C40PostM9UserControlGate.ManualExecutionAuthorized ||
-                Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized)
+            if (!Hp8C40P15CGuiManualQualificationGate.NormalUserExecutionGatesClosed())
             {
                 throw new InvalidOperationException(
                     "P15C requires the normal user Manual/Automatic gates to remain closed.");
