@@ -118,7 +118,7 @@ foreach($needle in @(
 }
 
 Assert-Contains $doc 'M9C production-path smoke' 'M9 documentation must define M9C production-path smoke.'
-Assert-Contains $doc 'M9C cannot be opened until M9B has physically passed' 'M9C documentation must preserve M9B physical prerequisite.'
+Assert-Contains $doc 'That prerequisite is now satisfied by the formal M9B closure' 'M9C documentation must record the satisfied M9B physical prerequisite.'
 
 Write-Host 'HP 8C40 M9C production-path smoke preparation invariant: PASS' -ForegroundColor Green
 
