@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D FAIL_CLOSED / PID-COLLISION FIX CODE PREPARED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D CORRECTED RETRY PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -362,8 +362,11 @@ M9B read-only physical PASS and M9C production-path smoke PASS are both formally
 The first authorized M9D attempt failed closed before the operator Modern Standby step because
 PowerShell variable names are case-insensitive and the harness used `$Pid`, colliding with the
 read-only automatic `$PID` variable. Cleanup reached two consecutive FF/FF reads. That one-run
-authorization is consumed; M9D execution and construction are reblocked while the fix is
-qualified. Automatic/adaptive policy and default control remain OFF.
+authorization was consumed. The corrected harness passed complete CI at commit
+`384a184c4e19ea76213e5d84ce1cd5a972ee60d5`, GitHub Actions **#980** (run `36820304060`).
+A fresh one-run M9D retry authorization now opens only the M9D execution and temporary
+construction gates, still subject to exact same-HEAD canonical CI. Automatic/adaptive policy
+and default control remain OFF.
 
 
 ### M9D parent harness preparation
@@ -416,13 +419,14 @@ transition because `$Pid` collided with PowerShell automatic `$PID`.
 
 The fix renames all such function parameters/local state to non-reserved identifiers and adds
 a regression invariant that rejects any future `$Pid` declaration/assignment in the M9D parent
-harness. During fix qualification:
+harness. The fix is CODE/CI PASS at `384a184c4e19ea76213e5d84ce1cd5a972ee60d5`, GitHub Actions **#980**.
+The fresh retry authorization opens only:
 
-- `m9d.physicalAuthorization.authorized=false`;
-- `m9d.physicalExecutionAuthorized=false`;
-- `m9d.qualificationConstructionAuthorized=false`.
+- `m9d.physicalAuthorization.authorized=true`;
+- `m9d.physicalExecutionAuthorized=true`;
+- `m9d.qualificationConstructionAuthorized=true`.
 
-Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. A fresh M9D one-run authorization may be issued only after this fix passes complete CI.
+Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. The retry is executable only after complete CI on its exact authorization SHA and that same SHA is the canonical branch HEAD.
 
 
 ## 9. GUI-side production watchdog service bootstrap
@@ -539,7 +543,7 @@ This historical M9E code/CI closure changed **no** production or hardware author
 - `WatchdogRecoveryValidated=false`;
 - `ProductionConstructionAuthorized=false`;
 - M9C execution/construction gates are reclosed after PASS;
-- M9D execution/construction gates are reblocked after the failed bounded attempt while the PID-collision fix is qualified;
+- M9D execution/construction gates are temporarily open only for the corrected separately authorized retry;
 - M8C remains physically re-blocked;
 - `control.enabledByDefault=false`;
 - `automaticPolicyEnabled=false`.
