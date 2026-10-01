@@ -2941,7 +2941,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9_SOFTWARE_PREPARATION_CODE_CI_PASS_CANONICAL_PREHARDWARE_REBIND_CODE_CI_PASS_M9B_READ_ONLY_BLOCKED",
+    "status": "M9_SOFTWARE_PREPARATION_CODE_CI_PASS_CANONICAL_PREHARDWARE_REBIND_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -2983,11 +2983,11 @@
       "status": "CODE_CI_PASS"
     },
     "m9b": {
-      "status": "CANONICAL_PREHARDWARE_REBIND_CODE_CI_PASS_READ_ONLY_BLOCKED",
+      "status": "CANONICAL_PREHARDWARE_REBIND_CODE_CI_PASS_READ_ONLY_AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI",
       "purpose": "versioned read-only production-watchdog preflight on the exact HP 8C40 target",
       "preflightScript": "scripts/test-8c40-production-watchdog-m9b-preflight.ps1",
       "invariantScript": "scripts/test-8c40-m9b-readonly-preflight-invariants.ps1",
-      "readOnlyExecutionAuthorized": false,
+      "readOnlyExecutionAuthorized": true,
       "physicalWriteAuthorized": false,
       "serviceMutationAuthorized": false,
       "watchdogLeaseAcquisitionAuthorized": false,
@@ -3034,11 +3034,24 @@
         ],
         "gateCritical": true
       },
+      "readOnlyAuthorization": {
+        "status": "AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI",
+        "authorized": true,
+        "prerequisiteHead": "4dcaff63bc79b8cd8866c5af22d87e44d4c68b78",
+        "prerequisiteCiRunNumber": 915,
+        "prerequisiteCiRunId": 36811353546,
+        "prerequisiteCiResult": "SUCCESS",
+        "scope": "one versioned M9B read-only preflight on the exact target; no fan write, service mutation or watchdog lease acquisition",
+        "sameHeadCiRequiredBeforeExecution": true,
+        "physicalWriteAuthorized": false,
+        "serviceMutationAuthorized": false,
+        "watchdogLeaseAcquisitionAuthorized": false
+      },
       "canonicalRebind": {
         "status": "CODE_CI_PASS",
         "branch": "feature/victus-8c40-m9-canonical-prehardware",
         "sourceHead": "514294beca991ac1660738f7984a7677ed6499d6",
-        "readOnlyExecutionAuthorized": false,
+        "readOnlyExecutionAuthorized": true,
         "physicalWriteAuthorized": false,
         "purpose": "Bind the single M9B read-only target preflight to the final canonical pre-hardware line after all software-only M9 readiness work.",
         "codeCi": {
@@ -3159,7 +3172,7 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Prepare a separate M9B read-only authorization commit on the canonical pre-hardware line, keep every write/service/lease gate false and noWritePreflightPassed=false, then require complete CI on that exact authorization SHA before any target-side M9B execution. M9C/M9D writes and final production promotion remain blocked.",
+    "nextStep": "M9B read-only authorization is present, but execution is permitted only when this exact authorization SHA is the HEAD of feature/victus-8c40-m9-canonical-prehardware and GitHub Actions on the same SHA is SUCCESS. Then execute only the versioned M9B read-only preflight. Keep M9C/M9D writes and final production promotion blocked.",
     "m9d": {
       "status": "FULL_APP_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED_PENDING_M9B_M9C",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",

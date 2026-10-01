@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B CODE/CI PASS AND CANONICAL PRE-HARDWARE REBIND CODE/CI PASS / M9B READ-ONLY EXECUTION BLOCKED. M9C/M9D CODE/CI PASS WITH WRITE PATHS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B CODE/CI PASS AND CANONICAL PRE-HARDWARE REBIND CODE/CI PASS / M9B READ-ONLY AUTHORIZED SUBJECT TO SAME-HEAD CI. M9C/M9D CODE/CI PASS WITH WRITE PATHS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -144,9 +144,10 @@ M9A is therefore closed. The next step is M9B read-only preflight preparation.
 ## 6. M9B read-only preflight preparation
 
 The versioned preflight is `scripts/test-8c40-production-watchdog-m9b-preflight.ps1`.
-The canonical pre-hardware rebind has now passed complete same-HEAD CI, but the
-execution gate intentionally remains closed. M9B read-only execution requires a
-separate authorization commit and complete CI on that exact authorization SHA.
+The canonical pre-hardware rebind has passed complete same-HEAD CI. A separate
+M9B read-only authorization is now present, but it is executable only after the exact
+authorization SHA itself passes the complete workflow and that same SHA is the HEAD of
+`feature/victus-8c40-m9-canonical-prehardware`.
 
 The script is intentionally stricter than the earlier M8 no-write preflight because
 M9 is qualifying the last-mile production watchdog dependency. M9B requires the already
@@ -545,9 +546,16 @@ branch while keeping every active boundary closed. Commit
 (run `36806751677`) with **SUCCESS**, closing the canonical rebind as software-only
 CODE/CI PASS. No physical hardware path ran.
 
-`m9b.readOnlyExecutionAuthorized=false` remains intentional. The next change must be a
-separate read-only authorization commit followed by complete CI on that exact SHA.
-M9C/M9D physical execution/construction, `WatchdogRecoveryValidated`, production
-construction, default control and the automatic/adaptive policy all remain false.
+The canonical line was then advanced to
+`4dcaff63bc79b8cd8866c5af22d87e44d4c68b78`, and GitHub Actions **#915**
+(run `36811353546`) completed **SUCCESS** on that exact SHA and canonical branch.
+That closes the prerequisite for a separate M9B read-only authorization.
 
-Status: **CANONICAL PRE-HARDWARE REBIND CODE/CI PASS / M9B READ-ONLY EXECUTION BLOCKED**.
+The authorization sets `m9b.readOnlyExecutionAuthorized=true` only. It does not authorize
+fan writes, service mutation, watchdog lease acquisition or a completed M9B preflight.
+Execution remains contingent on complete CI for the exact authorization SHA and that SHA
+being the canonical branch HEAD. M9C/M9D physical execution/construction,
+`WatchdogRecoveryValidated`, production construction, default control and the
+automatic/adaptive policy all remain false.
+
+Status: **CANONICAL PRE-HARDWARE REBIND CODE/CI PASS / M9B READ-ONLY AUTHORIZED SUBJECT TO SAME-HEAD CI**.
