@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D CLIENT PREPARE EC-MUTEX RETRY FIX CODE PREPARED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D CLIENT EC-RETRY PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -370,9 +370,14 @@ proved two consecutive FF/FF reads and the operator Modern Standby step was neve
 That retry authorization was consumed. A first correction placed the bounded retry in M4
 watchdog source and passed CI, but M9D intentionally does not replace the already-qualified
 installed M4 service. Therefore that placement would not affect the machine-side run. Before
-any further physical execution, the authorization was superseded and reblocked. The retry is
-now moved to the freshly built named-pipe client's PREPARE path, leaving the installed M4
-service binary untouched. Automatic/adaptive policy and default control remain OFF.
+any further physical execution, the authorization was superseded and reblocked. The retry was
+moved to the freshly built named-pipe client's PREPARE path, leaving the installed M4 service
+binary untouched. That corrected client implementation passed complete CI at
+`a5d8ad001ad64f72bc654a6bbd6b667965a2e0ca`, GitHub Actions **#1030**
+(run `36824956422`), including a functional named-pipe test that rejects the first three
+PREPARE requests with the exact EC-mutex failure and succeeds on the fourth. A fresh one-run
+M9D authorization is now open subject to exact same-HEAD CI. Automatic/adaptive policy and
+default control remain OFF.
 
 
 ### M9D parent harness preparation
@@ -429,25 +434,26 @@ and that ownership read previously made one `Global\Access_EC` acquisition attem
 shared 500 ms mutex timeout. Under the full GUI telemetry path this can legitimately collide
 with a concurrent read even though no unsafe ownership exists.
 
-The M4 ownership-read adapter now retries **only** this named-mutex TimeoutException, up to four
-bounded attempts with 75 ms gaps. It does not retry unrelated EC transaction failures, does not
-authorize any fan write while the proof is unavailable, and persistent contention still fails
-closed within the existing 4 s lease-request timeout.
+A service-side retry was considered and passed software CI, but it was deliberately reverted
+before another physical attempt because M9D must not replace the already-qualified installed
+M4 service. The installed M4 implementation therefore remains unchanged.
 
-The corrected design retries only a rejected **PREPARE** on the GUI/client side when the
-watchdog returns `INTERNAL_ERROR` and the message names `Global\Access_EC`. It performs at
-most four attempts separated by 75 ms. No local lease phase is entered on rejected attempts,
-no fan write is authorized, unrelated watchdog/EC failures are not retried, and persistent
-contention remains fail-closed.
+The corrected design retries only a rejected **PREPARE** on the freshly built GUI/client side
+when the watchdog returns `INTERNAL_ERROR` and the message names `Global\Access_EC`. It
+performs at most four attempts separated by 75 ms. No local lease phase is entered on rejected
+attempts, no fan write is authorized, unrelated watchdog/EC failures are not retried, and
+persistent contention remains fail-closed. The exact behavior passed full CI at
+`a5d8ad001ad64f72bc654a6bbd6b667965a2e0ca`, GitHub Actions **#1030**
+(run `36824956422`), including the dedicated named-pipe protocol/retry self-test.
 
-During this correction CI:
+The fresh bounded authorization opens only:
 
-- `m9d.physicalAuthorization.authorized=false`;
-- `m9d.physicalExecutionAuthorized=false`;
-- `m9d.qualificationConstructionAuthorized=false`;
-- the installed qualified M4 service is not replaced.
+- `m9d.physicalAuthorization.authorized=true`;
+- `m9d.physicalExecutionAuthorized=true`;
+- `m9d.qualificationConstructionAuthorized=true`;
+- the installed qualified M4 service is still not replaced.
 
-Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false.
+Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. Execution is valid only after complete CI on this exact authorization SHA and the same SHA as the canonical branch HEAD.
 
 
 ## 9. GUI-side production watchdog service bootstrap
@@ -564,7 +570,7 @@ This historical M9E code/CI closure changed **no** production or hardware author
 - `WatchdogRecoveryValidated=false`;
 - `ProductionConstructionAuthorized=false`;
 - M9C execution/construction gates are reclosed after PASS;
-- M9D execution/construction gates are reblocked while the client-side PREPARE retry correction is qualified;
+- M9D execution/construction gates are temporarily open only for the fresh separately authorized client EC-retry lifecycle run;
 - M8C remains physically re-blocked;
 - `control.enabledByDefault=false`;
 - `automaticPolicyEnabled=false`.
