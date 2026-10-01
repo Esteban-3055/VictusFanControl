@@ -73,7 +73,7 @@ if($backendGate -lt 0 -or $backendHardware -lt 0 -or $backendGate -ge $backendHa
 }
 
 foreach($needle in @(
-    'M9 production and M9C qualification gates are closed after M9C physical PASS',
+    'M9 production and M9C/M9D qualification gates are closed after M9D physical PASS',
     'factory rejects supplied 8C40 production lease before backend/hardware construction',
     'fakeLease.Calls == 0'
 )){
