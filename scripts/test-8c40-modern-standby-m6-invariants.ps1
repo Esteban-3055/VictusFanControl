@@ -34,7 +34,7 @@ Assert-Contains $backend 'CreateLifecycleQualificationBackend' 'M6 qualification
 Assert-Contains $backend 'Exact HP 8C40 M6 Modern Standby lifecycle qualification backend.' 'M6 backend must identify its qualification-only scope.'
 Assert-Contains $backend 'RequireProductionConstructionAuthorized' 'Ordinary public HP 8C40 watchdog construction must remain behind the M9 production gate.'
 Assert-Contains $factory 'RequireProductionConstructionAuthorized' 'Production factory must remain behind the M9 gate for watchdog-backed HP 8C40.'
-Assert-Contains $m9Gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'M9 production construction must still be closed during preparation.'
+Assert-Contains $m9Gate 'public static readonly bool ProductionConstructionAuthorized = true;' 'M6 qualification remains isolated after the later, separately qualified M9 production-watchdog promotion.'
 Assert-Contains $m9Gate 'WatchdogRecoveryValidated=false' 'M9 gate must require explicit watchdog-recovery promotion.'
 Assert-NotContains $factory 'CreateLifecycleQualificationBackend' 'Production backend factory must not route through the M6 qualification bypass.'
 
