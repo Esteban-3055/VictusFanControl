@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current state: **P15A startup/no-write has a physically verified PASS and is formally closed/re-blocked. P15B Manual 30/30 software preparation is implemented but its physical/controller authorization remains CLOSED pending full CI. Automatic remains closed.**
+Current state: **P15A is formally closed/re-blocked. P15B Manual 30/30 software preparation has passed full CI and is formally closed, while both P15B physical gates remain CLOSED pending a fresh separate authorization. Automatic remains closed.**
 
 ### P15A preparation closure
 
@@ -85,12 +85,12 @@ After three bounded supervision samples, the controller must return through `Ada
 
 An independent delayed exact-target 30/30 failsafe is armed before the controller. It is a safety backstop only; if it takes over, the run is safe but invalid. Evidence is preserved on PASS or FAIL_CLOSED and `git clean` is forbidden.
 
-Preparation status: **CI pending / physical execution CLOSED**. `Hp8C40P15BManual30QualificationTest.PhysicalExecutionAuthorized=false`, `manual30.executionAuthorized=false`, user-facing Manual=false, Automatic=false. A later separate authorization commit is required after this preparation itself passes full CI.
+Preparation status: **CI PASS / formally closed / physical execution CLOSED**. Final preparation implementation HEAD `111d1e7a817c2468a4d6196447ec335d57c59d65` passed the full workflow in **#1103**, run ID `36930333854`: PowerShell syntax, P15A closure invariant, P15B invariant, native child self-test, evidence-packaging self-test, Windows PowerShell 5.1 compatibility, warnings-as-errors build and the full retained RC regression path all passed. No target-side hardware execution occurred. Failed software-only runs #1101 and #1102 remain preserved. `Hp8C40P15BManual30QualificationTest.PhysicalExecutionAuthorized=false`, `manual30.executionAuthorized=false`, user-facing Manual=false and Automatic=false. A fresh separate authorization commit is required before target execution.
 
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
-- P15B Manual 30/30 execution: **PREPARATION IMPLEMENTED / PHYSICAL GATES CLOSED PENDING CI**
+- P15B Manual 30/30 execution: **PREPARATION CI PASS FORMALLY CLOSED / PHYSICAL GATES CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**

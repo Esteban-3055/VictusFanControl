@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED",
+  "status": "P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -281,14 +281,39 @@
   },
   "manual30": {
     "preparationImplemented": true,
-    "preparationCiValidated": false,
+    "preparationCiValidated": true,
     "preparationClosure": {
-      "closed": false,
-      "result": null,
-      "implementationHead": null,
-      "sourceCiRunNumber": null,
-      "sourceCiRunId": null,
-      "sourceCiResult": null,
+      "closed": true,
+      "result": "PASS",
+      "implementationHead": "111d1e7a817c2468a4d6196447ec335d57c59d65",
+      "sourceCiRunNumber": 1103,
+      "sourceCiRunId": 36930333854,
+      "sourceCiResult": "SUCCESS",
+      "powerShellSyntaxValidated": true,
+      "p15aClosureInvariantValidated": true,
+      "p15bInvariantValidated": true,
+      "trackedChildSelfTestValidated": true,
+      "evidencePackagingSelfTestValidated": true,
+      "powerShell51CompatibilityValidated": true,
+      "warningsAsErrorsBuildValidated": true,
+      "failedCiHistoryPreserved": [
+        {
+          "runNumber": 1101,
+          "runId": 36929803105,
+          "head": "76f763229fd0f4b0f00bcf23ee4740c5c20bcce4",
+          "result": "FAILURE",
+          "cause": "P15A invariant had not yet been extended to accept post-P15A P15B contract states.",
+          "hardwareExecution": false
+        },
+        {
+          "runNumber": 1102,
+          "runId": 36930069409,
+          "head": "49d613c08204db38fa24ac4e29074e501471e20f",
+          "result": "FAILURE",
+          "cause": "P15B static invariant used a double-quoted PowerShell search literal, expanding $Journal instead of matching the failsafe source text.",
+          "hardwareExecution": false
+        }
+      ],
       "hardwareExecution": false
     },
     "executionAuthorized": false,

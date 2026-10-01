@@ -18,16 +18,34 @@ $failsafe=Get-Content -LiteralPath (Join-Path $root 'scripts\watchdog-p15b-servi
 $cli=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Cli\CliOptions.cs') -Raw
 $program=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Program.cs') -Raw
 
-if([string]$contract.status -cne 'P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED'){throw 'P15B preparation state mismatch.'}
+$status=[string]$contract.status
+if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED')){throw 'P15B preparation state mismatch.'}
 Assert-True ([bool]$contract.startupNoWrite.physicalPassed) 'P15B requires P15A physical PASS.'
 Assert-True ([bool]$contract.startupNoWrite.evidenceClosed) 'P15B requires P15A evidence closed.'
 Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A must remain re-blocked.'
 if([string]$contract.startupNoWrite.physicalPassClosure.evidenceZipSha256 -cne 'cd8e7dfe2fef365e75b886ccca1c6c101ce12030754f21a8f9bc7f305f76c24e'){throw 'P15B P15A evidence prerequisite mismatch.'}
 Assert-True ([bool]$contract.manual30.preparationImplemented) 'P15B preparation must be implemented.'
-Assert-False ([bool]$contract.manual30.preparationCiValidated) 'Pending P15B preparation must not pre-claim CI validation.'
-Assert-False ([bool]$contract.manual30.preparationClosure.closed) 'Pending P15B preparation must not pre-close.'
-Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B physical execution must remain CLOSED during preparation.'
-Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B controller physical gate must remain CLOSED during preparation.'
+if($status -eq 'P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED'){
+    Assert-False ([bool]$contract.manual30.preparationCiValidated) 'Pending P15B preparation must not pre-claim CI validation.'
+    Assert-False ([bool]$contract.manual30.preparationClosure.closed) 'Pending P15B preparation must not pre-close.'
+}
+if($status -eq 'P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED'){
+    Assert-True ([bool]$contract.manual30.preparationCiValidated) 'Closed P15B preparation must be CI validated.'
+    Assert-True ([bool]$contract.manual30.preparationClosure.closed) 'Closed P15B preparation must record closure.'
+    $pc=$contract.manual30.preparationClosure
+    if([string]$pc.result -cne 'PASS' -or
+       [string]$pc.implementationHead -cne '111d1e7a817c2468a4d6196447ec335d57c59d65' -or
+       [int]$pc.sourceCiRunNumber -ne 1103 -or
+       [long]$pc.sourceCiRunId -ne 36930333854 -or
+       [string]$pc.sourceCiResult -cne 'SUCCESS'){throw 'P15B preparation closure CI identity mismatch.'}
+    foreach($p in @('powerShellSyntaxValidated','p15aClosureInvariantValidated','p15bInvariantValidated','trackedChildSelfTestValidated','evidencePackagingSelfTestValidated','powerShell51CompatibilityValidated','warningsAsErrorsBuildValidated')){Assert-True ([bool]$pc.$p) ("P15B preparation closure missing validation: {0}" -f $p)}
+    Assert-False ([bool]$pc.hardwareExecution) 'P15B preparation closure must record no hardware execution.'
+    $failed=@($pc.failedCiHistoryPreserved)
+    if($failed.Count -ne 2 -or [int]$failed[0].runNumber -ne 1101 -or [int]$failed[1].runNumber -ne 1102){throw 'P15B preparation failed-CI history mismatch.'}
+    foreach($entry in $failed){Assert-False ([bool]$entry.hardwareExecution) 'P15B failed preparation CI must record no hardware execution.'}
+}
+Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B physical execution must remain CLOSED during preparation/closure.'
+Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B controller physical gate must remain CLOSED during preparation/closure.'
 Assert-False ([bool]$contract.manual30.physicalPassed) 'P15B cannot pre-claim physical PASS.'
 Assert-False ([bool]$contract.manual30.evidenceClosed) 'P15B cannot pre-close physical evidence.'
 if([int]$contract.manual30.equalLevel -ne 30 -or [int]$contract.manual30.exactApplyManualCalls -ne 1){throw 'P15B must be exactly one equal 30/30 Manual call.'}
