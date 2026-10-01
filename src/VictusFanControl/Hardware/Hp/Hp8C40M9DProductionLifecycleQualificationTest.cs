@@ -11,5 +11,5 @@ public static class Hp8C40M9DProductionLifecycleQualificationTest
 
     public const int QualificationLevel = 30;
 
-    public static readonly bool PhysicalExecutionAuthorized = true;
+    public static readonly bool PhysicalExecutionAuthorized = false;
 }
