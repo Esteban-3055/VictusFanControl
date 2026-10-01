@@ -80,3 +80,17 @@ Full GitHub Actions validation: **#1078**, run ID `36903426730`, **SUCCESS**.
 CI independently built the RC ZIP twice from the same source and pinned external input, verified every manifest entry, and obtained the identical ZIP SHA-256 `603ac7b2ca6816fe00002598410983ba031529ec168a70c5ec59041e5a71756c` for both builds. The pinned PawnIO.Modules archive hash was verified before extraction.
 
 This closes P14.3 only. The ZIP is reproducible and integrity-manifested, but GitHub Actions does not yet retain it as a downloadable workflow artifact; artifact publication/retention is P14.4. No physical fan execution was performed.
+
+## P14.4 — retained GitHub Actions artifact and external identity
+
+P14.4 retains the deterministic RC output in GitHub Actions without placing the final artifact/container digest inside the RC payload.
+
+Identity is deliberately split into three layers:
+
+- **RC payload identity:** SHA-256 of `VictusFanControl-0.4.0-rc.1-win-x64.zip`, authenticated by the adjacent `.sha256` file and by `PACKAGE-MANIFEST.json` inside the RC ZIP.
+- **CI/source identity:** `P14-ARTIFACT-ATTESTATION.json` lives beside the RC ZIP, not inside it. It binds the payload SHA-256 to the exact source HEAD, repository, ref, Actions run ID/number, pinned PawnIO input hash and the closed hardware-execution boundary.
+- **GitHub transport identity:** `actions/upload-artifact@v4` supplies an artifact ID and SHA-256 `artifact-digest` for GitHub's retained wrapper. That digest exists only after upload and is therefore kept outside the RC payload/attestation to avoid self-reference.
+
+The retained artifact has a source-bound name `VictusFanControl-0.4.0-rc.1-win-x64-<sourceHead>`, contains exactly the RC ZIP, its `.sha256`, and the external attestation, and uses a documented 30-day retention period. The workflow performs a final stage verification after all self-tests and only then uploads the artifact with missing-file behavior set to error.
+
+The implementation commit deliberately leaves the machine-readable P14 state at the formally closed P14.3 boundary until a real Actions run has completed and the retained artifact has been queried/downloaded and verified. Only a separate closure commit may then record P14.4 as CI-validated. P14.4 does not enable Manual or Automatic execution and performs no target-side hardware test.
