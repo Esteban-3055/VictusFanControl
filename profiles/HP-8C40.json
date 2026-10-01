@@ -153,7 +153,7 @@
     }
   },
   "releaseCandidateP14": {
-    "status": "P14_2_VERSIONED_WIN_X64_PUBLISH_LAYOUT_IMPLEMENTED_AWAITING_CI",
+    "status": "P14_2_VERSIONED_WIN_X64_PUBLISH_LAYOUT_CI_PASS_FORMALLY_CLOSED",
     "version": "0.4.0-rc.1",
     "runtimeIdentifier": "win-x64",
     "selfContained": false,
@@ -165,7 +165,17 @@
     "softwareOnly": true,
     "centralizedRcVersionImplemented": true,
     "deterministicPublishImplemented": true,
-    "publishLayoutCiValidated": false,
+    "publishLayoutCiValidated": true,
+    "publishLayoutClosure": {
+      "closed": true,
+      "result": "PASS",
+      "sourceHead": "7bc405b4103014e52cf606a6064c71d748123ad7",
+      "sourceCiRunNumber": 1076,
+      "sourceCiRunId": 36901860532,
+      "sourceCiResult": "SUCCESS",
+      "actualPublishOutputVerified": true,
+      "hardwareExecution": false
+    },
     "deterministicPackageImplemented": false,
     "sha256ManifestImplemented": false,
     "ciArtifactUploadImplemented": false,

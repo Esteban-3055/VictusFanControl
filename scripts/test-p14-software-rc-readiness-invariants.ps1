@@ -17,7 +17,7 @@ $p14doc = Get-Content -LiteralPath (Join-Path $root 'docs\P14_RELEASE_CANDIDATE.
 
 if ([int]$release.schemaVersion -ne 1) { throw 'P14.1 release contract schemaVersion must be 1.' }
 if ([string]$release.milestone -ne 'P14.2') { throw 'P14.2 milestone mismatch.' }
-if ([string]$release.status -ne 'P14_2_VERSIONED_WIN_X64_PUBLISH_LAYOUT_IMPLEMENTED_AWAITING_CI') { throw 'P14.2 status mismatch.' }
+if ([string]$release.status -ne 'P14_2_VERSIONED_WIN_X64_PUBLISH_LAYOUT_CI_PASS_FORMALLY_CLOSED') { throw 'P14.2 status mismatch.' }
 if ([string]$release.targetProfileId -ne 'HP-8C40-9D0R1LA-F18') { throw 'P14.1 exact target mismatch.' }
 
 if ([string]$release.p13Baseline.head -ne '7395a8c14afcaf352ad5e5be48f66c897f03fd2e') { throw 'P14.1 P13 baseline HEAD mismatch.' }
@@ -46,8 +46,15 @@ Assert-Contains $watchdogGate 'M9DPhysicalQualificationConstructionAuthorized = 
 
 Assert-True ([bool]$release.productization.centralizedRcVersionImplemented) 'P14.2 must centralize the RC version.'
 Assert-True ([bool]$release.productization.deterministicPublishImplemented) 'P14.2 must implement the fixed publish layout.'
-Assert-True (-not [bool]$release.productization.publishLayoutCiValidated) 'Implementation commit must not pre-claim P14.2 CI validation.'
-Assert-True (-not [bool]$release.productization.deterministicPackageImplemented) 'P14.1 must not claim deterministic packaging.'
+Assert-True ([bool]$release.productization.publishLayoutCiValidated) 'P14.2 publish layout must be CI validated after formal closure.'
+if (-not [bool]$release.productization.publishLayoutClosure.closed) { throw 'P14.2 publish-layout closure must be recorded closed.' }
+if ([string]$release.productization.publishLayoutClosure.result -ne 'PASS') { throw 'P14.2 publish-layout closure result must be PASS.' }
+if ([string]$release.productization.publishLayoutClosure.sourceHead -ne '7bc405b4103014e52cf606a6064c71d748123ad7') { throw 'P14.2 closure source HEAD mismatch.' }
+if ([int]$release.productization.publishLayoutClosure.sourceCiRunNumber -ne 1076) { throw 'P14.2 closure CI number mismatch.' }
+if ([long]$release.productization.publishLayoutClosure.sourceCiRunId -ne 36901860532) { throw 'P14.2 closure CI ID mismatch.' }
+if ([string]$release.productization.publishLayoutClosure.sourceCiResult -ne 'SUCCESS') { throw 'P14.2 closure CI result mismatch.' }
+Assert-True (-not [bool]$release.productization.publishLayoutClosure.hardwareExecution) 'P14.2 closure must record no hardware execution.'
+Assert-True (-not [bool]$release.productization.deterministicPackageImplemented) 'P14.2 must not claim deterministic packaging.'
 Assert-True (-not [bool]$release.productization.sha256ManifestImplemented) 'P14.1 must not claim SHA-256 manifest completion.'
 Assert-True (-not [bool]$release.productization.ciArtifactUploadImplemented) 'P14.1 must not claim CI artifact upload.'
 Assert-True (-not [bool]$release.productization.finalSoftwareRcAuditClosed) 'P14.1 must not claim final P14 closure.'

@@ -65,7 +65,7 @@ Implemented: the final P13 HEAD/CI is pinned as the P14 baseline, a machine-read
 
 ### P14.2 — versioned win-x64 publish layout
 
-Implemented pending CI closure: version `0.4.0-rc.1` is centralized, GUI and production watchdog publish into a fixed framework-dependent `win-x64` app/watchdog layout, qualification-only standalone executables are excluded, and CI builds then verifies the actual publish output. PawnIO modules and the final archive/hash manifest remain deferred to P14.3.
+Closed in CI: version `0.4.0-rc.1` is centralized, GUI and production watchdog publish into a fixed framework-dependent `win-x64` app/watchdog layout, qualification-only standalone executables are excluded, and CI #1076 built and verified the actual publish output. PawnIO modules and the final archive/hash manifest remain deferred to P14.3.
 
 ## P15 — first required target-side checkpoint
 

@@ -49,3 +49,12 @@ Publish settings are fixed to `Release`, `win-x64`, framework-dependent, multi-f
 PawnIO module binaries are deliberately not introduced by P14.2. They remain pinned external inputs and will be brought into the final package only by the separately verified P14.3 packaging step.
 
 The build and verification scripts refuse to perform fan-control operations. They only invoke `dotnet publish` and inspect the resulting files.
+
+
+### P14.2 formal closure
+
+Implementation/fix source HEAD: `7bc405b4103014e52cf606a6064c71d748123ad7`.
+
+Full GitHub Actions validation: **#1076**, run ID `36901860532`, **SUCCESS**. The workflow compiled the entire solution, ran all prior safety/watchdog/P10-P13 invariants, ran the P14.2 static invariant, then built and verified the actual framework-dependent `win-x64` GUI/watchdog publish layout.
+
+This closes P14.2 only. It does not create the final distributable archive, does not package PawnIO modules, does not generate the P14.3 SHA-256 manifest, and does not authorize Manual or Automatic hardware execution.

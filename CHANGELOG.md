@@ -7,7 +7,7 @@
 - P12: add HP 8C40 Candidate V1 as shadow-only / physically unvalidated.
 - P13: complete the WinForms Firmware/Manual/Automatic control surface, safe 10..50 manual preference, live no-write adaptive preview, candidate visualization, and tray/status reporting while both execution gates remain closed.
 - P14.1: pin the final P13 source/CI baseline and add a software-release readiness contract that keeps every physical execution gate closed.
-- P14.2: centralize version 0.4.0-rc.1 and add a fixed win-x64 GUI/watchdog publish layout with static and generated-output verification.
+- P14.2: centralize version 0.4.0-rc.1 and close the fixed win-x64 GUI/watchdog publish layout after static and generated-output CI verification (#1076).
 - Keep default control and automatic/adaptive policy disabled pending separate post-M9 target-side validation.
 - Add post-M9/P13 invariants that prevent accidental reopening or UI bypass of physical control gates.
 

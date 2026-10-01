@@ -42,6 +42,10 @@ Assert-Contains $verify 'P14.2 publish stage must not silently inject PawnIO mod
 
 if (-not [bool]$release.productization.centralizedRcVersionImplemented) { throw 'Release contract must record centralized RC version.' }
 if (-not [bool]$release.productization.deterministicPublishImplemented) { throw 'Release contract must record P14.2 publish implementation.' }
-if ([bool]$release.productization.publishLayoutCiValidated) { throw 'Implementation commit must not pre-claim publish-layout CI validation.' }
+if (-not [bool]$release.productization.publishLayoutCiValidated) { throw 'P14.2 formal closure requires publish-layout CI validation.' }
+if (-not [bool]$release.productization.publishLayoutClosure.closed) { throw 'P14.2 closure record must be closed.' }
+if ([string]$release.productization.publishLayoutClosure.sourceHead -ne '7bc405b4103014e52cf606a6064c71d748123ad7') { throw 'P14.2 closure source HEAD mismatch.' }
+if ([int]$release.productization.publishLayoutClosure.sourceCiRunNumber -ne 1076) { throw 'P14.2 closure CI number mismatch.' }
+if ([long]$release.productization.publishLayoutClosure.sourceCiRunId -ne 36901860532) { throw 'P14.2 closure CI ID mismatch.' }
 
 Write-Host 'HP 8C40 P14.2 publish-layout static invariant: PASS' -ForegroundColor Green
