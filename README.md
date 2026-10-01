@@ -25,6 +25,8 @@ User fan control is still deliberately **OFF by default**:
 - `automaticPolicyEnabled=false`
 - no automatic curve commands are issued during ordinary startup
 - M9C and M9D qualification-only construction/execution gates remain closed
+- P13 user-facing Firmware/Manual/Automatic UI is software-complete
+- Manual and Automatic execution gates remain closed
 - post-M9 manual/automatic hardware validation is a separate later gate
 
 Launching the GUI therefore does not by itself request Custom authority.

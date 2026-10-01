@@ -16,11 +16,9 @@ Implemented in the normal WinForms GUI:
 
 Opening the GUI therefore does not acquire Custom authority through P13.
 
-## Remaining P13 steps
+## P13 step progression
 
-P13.2 will wire mode selection through `AdaptiveFanProductionController` while both execution gates remain false. P13.3 will add Manual equal-level 10..50 controls behind the closed Manual gate. P13.4 will add Automatic candidate-curve preview/recommendation status behind the closed Automatic gate. P13.5 will add persistence/tray/status hardening and the final P13 software closure.
-
-No P13 step may open a target-side hardware gate. That belongs to P15 or a later separately authorized qualification.
+P13.2 through P13.5 are now complete and documented below. No P13 step opened a target-side hardware gate; Manual and Automatic execution remain closed. Target-side execution belongs to P15 or a later separately authorized qualification.
 
 
 ## P13.2 — mode selector wiring

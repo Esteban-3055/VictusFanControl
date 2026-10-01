@@ -221,7 +221,7 @@ jobs:
         shell: pwsh
         run: .\scripts\test-adaptive-candidate-v1-invariants.ps1
 
-      - name: HP 8C40 P13.1 presentation-only control surface invariant
+      - name: HP 8C40 P13 final software control-surface invariant
         shell: pwsh
         run: .\scripts\test-p13-control-surface-invariants.ps1
 

@@ -25,6 +25,8 @@ El control de ventiladores para el usuario continúa deliberadamente **apagado p
 - `automaticPolicyEnabled=false`
 - el arranque normal no envía comandos de curva automática
 - los gates de cualificación M9C/M9D siguen cerrados
+- la interfaz P13 Firmware/Manual/Automatic está completa a nivel de software
+- los gates de ejecución Manual y Automatic siguen cerrados
 - la validación física post-M9 de control manual/automático será un gate separado
 
 Por lo tanto, abrir la GUI por sí solo no debe solicitar autoridad Custom.

@@ -4,7 +4,7 @@
   "productId": "8C40",
   "boardVersionObserved": "63.43",
   "biosVersionValidated": "F.18",
-  "status": "production-range-10-50-m9-watchdog-promoted-post-m9-software-preparation-policy-off",
+  "status": "production-range-10-50-m9-watchdog-promoted-p13-software-pass-hardware-gates-closed-policy-off",
   "fanCount": 2,
   "validatedTarget": {
     "systemProductName": "Victus by HP Gaming Laptop 15-fa1xxx",
@@ -79,7 +79,7 @@
     "supportsIndependentLevels": false,
     "notes": "Equal-only 10..50 is physically qualified and M9 production-watchdog construction is promoted for the exact HP 8C40 target. Independent CPU/GPU levels remain unqualified and rejected. User control remains disabled by default and automatic/adaptive policy remains OFF pending separate post-M9 software integration plus new target-side validation gates.",
     "adaptivePolicyPreparation": {
-      "status": "PRODUCTION_ADAPTER_CODE_PRESENT_HARDWARE_GATE_CLOSED",
+      "status": "P13_SOFTWARE_PASS_HARDWARE_GATES_CLOSED",
       "productionIntegrated": false,
       "productionAdapterImplemented": true,
       "productionAdapterHardwareAuthorized": false,

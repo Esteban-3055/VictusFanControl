@@ -84,6 +84,8 @@ Assert-Contains $gate 'AutomaticExecutionAuthorized = false' 'P13 Automatic exec
 Assert-Contains $gate 'P13_SOFTWARE_PASS_FORMALLY_CLOSED_MANUAL_AUTOMATIC_GATES_CLOSED' 'P13 gate status must match formal software closure.'
 
 $prep = $profile.control.adaptivePolicyPreparation
+if ([string]$profile.status -ne 'production-range-10-50-m9-watchdog-promoted-p13-software-pass-hardware-gates-closed-policy-off') { throw 'Top-level profile status must record final P13 software closure.' }
+if ([string]$prep.status -ne 'P13_SOFTWARE_PASS_HARDWARE_GATES_CLOSED') { throw 'Adaptive preparation status must record final P13 software closure.' }
 if ([string]$prep.p13UiStatus -ne 'P13_SOFTWARE_PASS_FORMALLY_CLOSED_HARDWARE_GATES_CLOSED') { throw 'Unexpected final P13 closure status.' }
 if (-not [bool]$prep.p13ModeSelectorWired -or
     -not [bool]$prep.p13ManualUiWired -or
