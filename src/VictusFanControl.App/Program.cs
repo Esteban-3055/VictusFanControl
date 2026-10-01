@@ -146,6 +146,10 @@ internal static class Program
             args,
             "--8c40-m9d-test-token");
 
+        var m9dProductionLifecycleMarkerRoot = ReadOptionValue(
+            args,
+            "--8c40-m9d-marker-root");
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
@@ -378,6 +382,30 @@ internal static class Program
             return;
         }
 
+        if (m9dProductionLifecycleHardwareTest &&
+            string.IsNullOrWhiteSpace(m9dProductionLifecycleMarkerRoot))
+        {
+            AppLog.Write(
+                "HP 8C40 M9D production lifecycle requires --8c40-m9d-marker-root for isolated evidence.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (!m9dProductionLifecycleHardwareTest &&
+            m9dProductionLifecycleMarkerRoot is not null)
+        {
+            AppLog.Write(
+                "Startup refused: --8c40-m9d-marker-root is valid only with --8c40-m9d-production-lifecycle-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (m9dProductionLifecycleMarkerRoot is not null)
+        {
+            m9dProductionLifecycleMarkerRoot =
+                Path.GetFullPath(m9dProductionLifecycleMarkerRoot);
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -468,7 +496,8 @@ internal static class Program
             gateG2HardwareTest,
             m6ModernStandbyHardwareTest,
             m7HibernationHardwareTest,
-            m9dProductionLifecycleHardwareTest);
+            m9dProductionLifecycleHardwareTest,
+            m9dProductionLifecycleMarkerRoot);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");
