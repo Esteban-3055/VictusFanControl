@@ -266,13 +266,6 @@ internal sealed class MainForm : Form
                 ? "m9d-production-modern-standby"
                 : "modern-standby";
 
-    private string DisplayAwareLifecycleLabel =>
-        _m7HibernationHardwareTest
-            ? "M7"
-            : _m9dProductionLifecycleHardwareTest
-                ? "M9D"
-                : "M6";
-
     private string DisplayAwareReadyPath =>
         _m9dProductionLifecycleHardwareTest
             ? M9DHardwareTestReadyPath
@@ -663,7 +656,7 @@ internal sealed class MainForm : Form
                 AppendEvent(
                     _m7HibernationHardwareTest
                         ? "M7 HIBERNATION TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; registered PBT_APMSUSPEND is the synchronous completion barrier; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF."
-                        : $"{DisplayAwareLifecycleLabel} MODERN STANDBY TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; PBT resume notifications while display remains Off are observational only; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF.");
+                        : "M6 MODERN STANDBY TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; PBT resume notifications while display remains Off are observational only; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF.");
             }
 
             _uiTimer.Start();
@@ -750,7 +743,7 @@ internal sealed class MainForm : Form
             }
 
             throw new InvalidOperationException(
-                $"{DisplayAwareLifecycleLabel} power-notification registration is partially initialized.");
+                "M6 power-notification registration is partially initialized.");
         }
 
         _m6SuspendResumeRegistration =
@@ -761,7 +754,7 @@ internal sealed class MainForm : Form
         if (_m6SuspendResumeRegistration == IntPtr.Zero)
         {
             throw new InvalidOperationException(
-                $$"{DisplayAwareLifecycleLabel} RegisterSuspendResumeNotification failed with Win32 error {Marshal.GetLastWin32Error()}.");
+                $"M6 RegisterSuspendResumeNotification failed with Win32 error {Marshal.GetLastWin32Error()}.");
         }
 
         try
@@ -777,7 +770,7 @@ internal sealed class MainForm : Form
             if (_m6SessionDisplayRegistration == IntPtr.Zero)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} RegisterPowerSettingNotification(GUID_SESSION_DISPLAY_STATUS) failed with Win32 error {Marshal.GetLastWin32Error()}.");
+                    $"M6 RegisterPowerSettingNotification(GUID_SESSION_DISPLAY_STATUS) failed with Win32 error {Marshal.GetLastWin32Error()}.");
             }
         }
         catch
@@ -816,7 +809,7 @@ internal sealed class MainForm : Form
         if (data == IntPtr.Zero)
         {
             AppendEvent(
-                $"{DisplayAwareLifecycleLabel}: PBT_POWERSETTINGCHANGE arrived with a null payload; ignored fail-closed.");
+                "M6: PBT_POWERSETTINGCHANGE arrived with a null payload; ignored fail-closed.");
             return;
         }
 
@@ -859,16 +852,16 @@ internal sealed class MainForm : Form
 
                 default:
                     AppendEvent(
-                        $$"{DisplayAwareLifecycleLabel}: SESSION_DISPLAY_STATUS value={value} observed; no lifecycle transition accepted.");
+                        $"M6: SESSION_DISPLAY_STATUS value={value} observed; no lifecycle transition accepted.");
                     break;
             }
         }
         catch (Exception ex)
         {
             AppendEvent(
-                $$"{DisplayAwareLifecycleLabel}: failed to parse SESSION_DISPLAY_STATUS notification: {ex.Message}");
+                $"M6: failed to parse SESSION_DISPLAY_STATUS notification: {ex.Message}");
             AppLog.Write(
-                $$"{DisplayAwareLifecycleLabel} power-setting parse failure: {ex}");
+                $"M6 power-setting parse failure: {ex}");
         }
     }
 
@@ -880,7 +873,7 @@ internal sealed class MainForm : Form
                 _m6PbtSuspendObserved = true;
 
                 AppendEvent(
-                    $$"{DisplayAwareLifecycleLabel}: registered PBT_APMSUSPEND observed; displayOff={_m6SessionDisplayOff}, primaryDisplayBoundary={_m6PrimaryDisplayOffObserved}, authority={_fanCoordinator.Authority}. Completing the already-started pre-sleep restore before returning from the suspend notification.");
+                    $"M6: registered PBT_APMSUSPEND observed; displayOff={_m6SessionDisplayOff}, primaryDisplayBoundary={_m6PrimaryDisplayOffObserved}, authority={_fanCoordinator.Authority}. Completing the already-started pre-sleep restore before returning from the suspend notification.");
 
                 if (_m6Armed &&
                     !_m6DisplayOffObserved)
@@ -905,12 +898,12 @@ internal sealed class MainForm : Form
                 {
                     _m6ResumeAutomaticObservedWhileDisplayOff = true;
                     AppendEvent(
-                        $"{DisplayAwareLifecycleLabel}: PBT_APMRESUMEAUTOMATIC observed while SESSION_DISPLAY_STATUS remains Off; telemetry/admission resume deliberately deferred.");
+                        "M6: PBT_APMRESUMEAUTOMATIC observed while SESSION_DISPLAY_STATUS remains Off; telemetry/admission resume deliberately deferred.");
                 }
                 else
                 {
                     AppendEvent(
-                        $"{DisplayAwareLifecycleLabel}: PBT_APMRESUMEAUTOMATIC observed after display On; treated as observational duplicate.");
+                        "M6: PBT_APMRESUMEAUTOMATIC observed after display On; treated as observational duplicate.");
                 }
 
                 break;
@@ -920,19 +913,19 @@ internal sealed class MainForm : Form
                 {
                     _m6ResumeSuspendObservedWhileDisplayOff = true;
                     AppendEvent(
-                        $"{DisplayAwareLifecycleLabel}: PBT_APMRESUMESUSPEND observed while SESSION_DISPLAY_STATUS remains Off; telemetry/admission resume deliberately deferred.");
+                        "M6: PBT_APMRESUMESUSPEND observed while SESSION_DISPLAY_STATUS remains Off; telemetry/admission resume deliberately deferred.");
                 }
                 else
                 {
                     AppendEvent(
-                        $"{DisplayAwareLifecycleLabel}: PBT_APMRESUMESUSPEND observed after display On; treated as observational duplicate.");
+                        "M6: PBT_APMRESUMESUSPEND observed after display On; treated as observational duplicate.");
                 }
 
                 break;
 
             case PbtApmResumeCritical:
                 AppendEvent(
-                    $$"{DisplayAwareLifecycleLabel}: PBT_APMRESUMECRITICAL observed; displayOff={_m6SessionDisplayOff}. Admission remains lifecycle-fenced until user-visible display On plus Healthy telemetry.");
+                    $"M6: PBT_APMRESUMECRITICAL observed; displayOff={_m6SessionDisplayOff}. Admission remains lifecycle-fenced until user-visible display On plus Healthy telemetry.");
                 break;
         }
     }
@@ -959,7 +952,7 @@ internal sealed class MainForm : Form
             _m6BackendAckVerified;
 
         AppendEvent(
-            $$"{DisplayAwareLifecycleLabel}: lifecycle boundary from {source}; primaryDisplaySignal={primaryDisplaySignal}; authority={_fanCoordinator.Authority}; backendAck={_m6DisplayOffBackendAckVerified}. Closing admission and pausing telemetry immediately; verified restore starts off the UI thread and registered PBT_APMSUSPEND is the synchronous pre-suspend completion barrier.");
+            $"M6: lifecycle boundary from {source}; primaryDisplaySignal={primaryDisplaySignal}; authority={_fanCoordinator.Authority}; backendAck={_m6DisplayOffBackendAckVerified}. Closing admission and pausing telemetry immediately; verified restore starts off the UI thread and registered PBT_APMSUSPEND is the synchronous pre-suspend completion barrier.");
 
         // Close admission and publish Suspended synchronously before any
         // potentially blocking hardware operation.
@@ -984,11 +977,11 @@ internal sealed class MainForm : Form
                     if (!quiesced)
                     {
                         throw new TimeoutException(
-                            $"{DisplayAwareLifecycleLabel} telemetry hardware activity did not quiesce within 750 ms after SESSION_DISPLAY_STATUS Off.");
+                            "M6 telemetry hardware activity did not quiesce within 750 ms after SESSION_DISPLAY_STATUS Off.");
                     }
 
                     await _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
-                            $$"{DisplayAwareLifecycleLabel} Modern Standby pre-suspend handoff ({source}).",
+                            $"M6 Modern Standby pre-suspend handoff ({source}).",
                             boundary,
                             CancellationToken.None)
                         .ConfigureAwait(false);
@@ -1016,7 +1009,7 @@ internal sealed class MainForm : Form
             var restoreTask =
                 _m6PreSleepRestoreTask ??
                 throw new InvalidOperationException(
-                    $"{DisplayAwareLifecycleLabel} suspend notification arrived without a pre-sleep restore task.");
+                    "M6 suspend notification arrived without a pre-sleep restore task.");
 
             var restoreMs =
                 restoreTask.GetAwaiter().GetResult();
@@ -1083,8 +1076,8 @@ internal sealed class MainForm : Form
 
             AppendEvent(
                 _m6PreSleepRestoreVerified
-                    ? $$"{DisplayAwareLifecycleLabel}: PRE-SLEEP RELEASE VERIFIED across session-display Off -> registered PBT_APMSUSPEND; restore work {restoreMs:0.0} ms; Firmware + stable FF/FF + watchdog Release + journal absent; watchdog PID {watchdog.ProcessId} unchanged."
-                    : $$"{DisplayAwareLifecycleLabel}: PRE-SLEEP RELEASE FAILED validation; {marker}");
+                    ? $"M6: PRE-SLEEP RELEASE VERIFIED across session-display Off -> registered PBT_APMSUSPEND; restore work {restoreMs:0.0} ms; Firmware + stable FF/FF + watchdog Release + journal absent; watchdog PID {watchdog.ProcessId} unchanged."
+                    : $"M6: PRE-SLEEP RELEASE FAILED validation; {marker}");
         }
         catch (Exception ex)
         {
@@ -1101,9 +1094,9 @@ internal sealed class MainForm : Form
             }
 
             AppendEvent(
-                $$"{DisplayAwareLifecycleLabel}: CRITICAL pre-sleep release verification failed: {ex.Message}");
+                $"M6: CRITICAL pre-sleep release verification failed: {ex.Message}");
             AppLog.Write(
-                $$"{DisplayAwareLifecycleLabel} pre-sleep release failure: {ex}");
+                $"M6 pre-sleep release failure: {ex}");
         }
     }
     private void HandleM6SessionDisplayOn(string source)
@@ -1118,14 +1111,14 @@ internal sealed class MainForm : Form
         if (!_m6DisplayOffObserved)
         {
             AppendEvent(
-                $"{DisplayAwareLifecycleLabel}: SESSION_DISPLAY_STATUS On observed without a preceding M6 Off boundary; ignored.");
+                "M6: SESSION_DISPLAY_STATUS On observed without a preceding M6 Off boundary; ignored.");
             return;
         }
 
         if (_m6DisplayOnObserved)
         {
             AppendEvent(
-                $"{DisplayAwareLifecycleLabel}: duplicate SESSION_DISPLAY_STATUS On ignored.");
+                "M6: duplicate SESSION_DISPLAY_STATUS On ignored.");
             return;
         }
 
@@ -1139,7 +1132,7 @@ internal sealed class MainForm : Form
                 !_m6PrimaryDisplayOffObserved)
             {
                 throw new InvalidOperationException(
-                    $"{DisplayAwareLifecycleLabel} cannot accept display-On resume because the proactive SESSION_DISPLAY_STATUS Off firmware handoff was not verified.");
+                    "M6 cannot accept display-On resume because the proactive SESSION_DISPLAY_STATUS Off firmware handoff was not verified.");
             }
 
             var watchdog =
@@ -1153,7 +1146,7 @@ internal sealed class MainForm : Form
             if (watchdog.JournalPresent)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} display-On resume requires journal absence; found '{watchdog.JournalPath}'.");
+                    $"M6 display-On resume requires journal absence; found '{watchdog.JournalPath}'.");
             }
 
             var ec =
@@ -1162,14 +1155,14 @@ internal sealed class MainForm : Form
             if (!ec.Verified)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} display-On resume firmware baseline is not stable FF/FF: {ec.Detail}; last={ec.Cpu}/{ec.Gpu}.");
+                    $"M6 display-On resume firmware baseline is not stable FF/FF: {ec.Detail}; last={ec.Cpu}/{ec.Gpu}.");
             }
 
             // Advance the freshness fence to the actual user-visible wake
             // boundary before allowing telemetry to resume. Maintenance PBT
             // notifications while display was Off never reached NotifyResume.
             _fanCoordinator.BlockCustomAdmissionAndRestoreAsync(
-                    $$"{DisplayAwareLifecycleLabel} user-visible resume gate ({source}).",
+                    $"M6 user-visible resume gate ({source}).",
                     _m6DisplayOnBoundaryUtc.Value,
                     CancellationToken.None)
                 .AsTask()
@@ -1182,7 +1175,7 @@ internal sealed class MainForm : Form
             if (!accepted)
             {
                 throw new InvalidOperationException(
-                    $"{DisplayAwareLifecycleLabel} SESSION_DISPLAY_STATUS On was not accepted as the single telemetry resume boundary.");
+                    "M6 SESSION_DISPLAY_STATUS On was not accepted as the single telemetry resume boundary.");
             }
 
             _m6AcceptedUserResumeCount++;
@@ -1205,7 +1198,7 @@ internal sealed class MainForm : Form
                 marker);
 
             AppendEvent(
-                $"{DisplayAwareLifecycleLabel}: SESSION_DISPLAY_STATUS On accepted as the sole user-facing resume boundary. Admission remains closed until five-snapshot Healthy telemetry recovery and watchdog Ready/journal-absent revalidation.");
+                "M6: SESSION_DISPLAY_STATUS On accepted as the sole user-facing resume boundary. Admission remains closed until five-snapshot Healthy telemetry recovery and watchdog Ready/journal-absent revalidation.");
         }
         catch (Exception ex)
         {
@@ -2503,7 +2496,7 @@ internal sealed class MainForm : Form
                 if (_m6DisplayOffObserved)
                 {
                     throw new InvalidOperationException(
-                        $"{DisplayAwareLifecycleLabel} observed a lifecycle display-off boundary before the watchdog-owned 30/30 READY state was armed.");
+                        "M6 observed a lifecycle display-off boundary before the watchdog-owned 30/30 READY state was armed.");
                 }
 
                 await ArmM6ModernStandbyHardwareTestAsync();
@@ -2519,13 +2512,13 @@ internal sealed class MainForm : Form
                 !_m6PreSleepRestoreVerified)
             {
                 throw new InvalidOperationException(
-                    $"{DisplayAwareLifecycleLabel} post-resume continuation requires a verified proactive SESSION_DISPLAY_STATUS Off handoff.");
+                    "M6 post-resume continuation requires a verified proactive SESSION_DISPLAY_STATUS Off handoff.");
             }
 
             if (!_m6PbtSuspendObserved)
             {
                 throw new InvalidOperationException(
-                    $"{DisplayAwareLifecycleLabel} did not observe PBT_APMSUSPEND for the armed Modern Standby cycle.");
+                    "M6 did not observe PBT_APMSUSPEND for the armed Modern Standby cycle.");
             }
 
             if (_m6ModernStandbyHardwareTest &&
@@ -2533,19 +2526,19 @@ internal sealed class MainForm : Form
                 !_m6ResumeSuspendObservedWhileDisplayOff)
             {
                 throw new InvalidOperationException(
-                    $"{DisplayAwareLifecycleLabel} did not exercise a PBT resume notification while SESSION_DISPLAY_STATUS remained Off; maintenance/user-wake deferral was not physically proven.");
+                    "M6 did not exercise a PBT resume notification while SESSION_DISPLAY_STATUS remained Off; maintenance/user-wake deferral was not physically proven.");
             }
 
             if (_m6AcceptedUserResumeCount != 1)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} requires exactly one user-facing display-On telemetry resume; observed {_m6AcceptedUserResumeCount}.");
+                    $"M6 requires exactly one user-facing display-On telemetry resume; observed {_m6AcceptedUserResumeCount}.");
             }
 
             if (_worker.StateMachine.State != SystemState.Healthy)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} post-resume continuation requires Healthy telemetry; state={_worker.StateMachine.State}.");
+                    $"M6 post-resume continuation requires Healthy telemetry; state={_worker.StateMachine.State}.");
             }
 
             var watchdog =
@@ -2559,7 +2552,7 @@ internal sealed class MainForm : Form
             if (watchdog.JournalPresent)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} post-resume watchdog is not clean; journal remains at '{watchdog.JournalPath}'.");
+                    $"M6 post-resume watchdog is not clean; journal remains at '{watchdog.JournalPath}'.");
             }
 
             var firmwareProof =
@@ -2570,37 +2563,37 @@ internal sealed class MainForm : Form
                     FanAuthority.Firmware)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} post-resume firmware baseline invalid: authority={_fanCoordinator.Authority}, EC={firmwareProof.Cpu}/{firmwareProof.Gpu}, detail={firmwareProof.Detail}.");
+                    $"M6 post-resume firmware baseline invalid: authority={_fanCoordinator.Authority}, EC={firmwareProof.Cpu}/{firmwareProof.Gpu}, detail={firmwareProof.Detail}.");
             }
 
             var recoveryTimestamp =
                 _lastSnapshot?.Timestamp ??
                 throw new InvalidOperationException(
-                    $"{DisplayAwareLifecycleLabel} Healthy state has no validated post-resume telemetry snapshot.");
+                    "M6 Healthy state has no validated post-resume telemetry snapshot.");
 
             if (!_m6DisplayOnBoundaryUtc.HasValue ||
                 recoveryTimestamp <=
                     _m6DisplayOnBoundaryUtc.Value)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} Healthy snapshot {recoveryTimestamp:O} is not newer than display-On boundary {_m6DisplayOnBoundaryUtc:O}.");
+                    $"M6 Healthy snapshot {recoveryTimestamp:O} is not newer than display-On boundary {_m6DisplayOnBoundaryUtc:O}.");
             }
 
             var reopened =
                 await _fanCoordinator
                     .AllowCustomAdmissionAfterRecoveryAsync(
                         recoveryTimestamp,
-                        $"{DisplayAwareLifecycleLabel}: user-visible display On + fresh five-snapshot Healthy recovery + watchdog Ready/journal absent.",
+                        "M6: user-visible display On + fresh five-snapshot Healthy recovery + watchdog Ready/journal absent.",
                         CancellationToken.None);
 
             if (!reopened)
             {
                 throw new InvalidOperationException(
-                    $"{DisplayAwareLifecycleLabel} lifecycle fence refused to reopen after validated display-aware recovery.");
+                    "M6 lifecycle fence refused to reopen after validated display-aware recovery.");
             }
 
             AppendEvent(
-                $$"{DisplayAwareLifecycleLabel}: admission reopened only after display-On boundary and Healthy snapshot {recoveryTimestamp:O}; watchdog PID {_m6WatchdogPid} remained unchanged.");
+                $"M6: admission reopened only after display-On boundary and Healthy snapshot {recoveryTimestamp:O}; watchdog PID {_m6WatchdogPid} remained unchanged.");
 
             var reentered =
                 await TryEnterM6CustomAuthorityAsync(
@@ -2611,14 +2604,14 @@ internal sealed class MainForm : Form
                     FanAuthority.Custom)
             {
                 throw new InvalidOperationException(
-                    $"{DisplayAwareLifecycleLabel} could not reacquire watchdog-protected Custom authority after validated user-visible recovery.");
+                    "M6 could not reacquire watchdog-protected Custom authority after validated user-visible recovery.");
             }
 
             await ApplyM6CommandWithFreshSafetyAsync(
                 new FanCommand(
                     SuspendHardwareTestLevel,
                     SuspendHardwareTestLevel,
-                    $"{DisplayAwareLifecycleLabel} controlled post-resume 30/30 re-entry"),
+                    "M6 controlled post-resume 30/30 re-entry"),
                 "controlled post-resume 30/30 re-entry");
 
             var processStartTicks =
@@ -2649,7 +2642,7 @@ internal sealed class MainForm : Form
                 $"guiStartTicks={processStartTicks}");
 
             await _fanCoordinator.RestoreFirmwareAsync(
-                $"{DisplayAwareLifecycleLabel} controlled post-resume re-entry complete; return authority to HP firmware.",
+                "M6 controlled post-resume re-entry complete; return authority to HP firmware.",
                 CancellationToken.None);
 
             var finalRestore =
@@ -2678,7 +2671,7 @@ internal sealed class MainForm : Form
                 !finalEc.Verified)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} final handoff invalid: authority={_fanCoordinator.Authority}, localAck={finalRestore?.LocalFirmwareAckVerified ?? false}, watchdogRelease={finalRestore?.WatchdogReleaseVerified ?? false}, journal={(watchdogFinal.JournalPresent ? "PRESENT" : "absent")}, EC={finalEc.Cpu}/{finalEc.Gpu}, detail={finalEc.Detail}.");
+                    $"M6 final handoff invalid: authority={_fanCoordinator.Authority}, localAck={finalRestore?.LocalFirmwareAckVerified ?? false}, watchdogRelease={finalRestore?.WatchdogReleaseVerified ?? false}, journal={(watchdogFinal.JournalPresent ? "PRESENT" : "absent")}, EC={finalEc.Cpu}/{finalEc.Gpu}, detail={finalEc.Detail}.");
             }
 
             CompleteM6ModernStandbyHardwareTest(
@@ -2694,13 +2687,13 @@ internal sealed class MainForm : Form
             try
             {
                 await _fanCoordinator.RestoreFirmwareAsync(
-                    $"{DisplayAwareLifecycleLabel} hardware-test failure cleanup.",
+                    "M6 hardware-test failure cleanup.",
                     CancellationToken.None);
             }
             catch (Exception restoreEx)
             {
                 AppLog.Write(
-                    $$"{DisplayAwareLifecycleLabel}: cleanup restore also failed: {restoreEx}");
+                    $"M6: cleanup restore also failed: {restoreEx}");
             }
 
             CompleteM6ModernStandbyHardwareTest(
@@ -2722,13 +2715,13 @@ internal sealed class MainForm : Form
         if (_m6SessionDisplayOff)
         {
             throw new InvalidOperationException(
-                $"{DisplayAwareLifecycleLabel} refuses to arm Custom authority while SESSION_DISPLAY_STATUS is Off.");
+                "M6 refuses to arm Custom authority while SESSION_DISPLAY_STATUS is Off.");
         }
 
         var snapshot =
             _lastSnapshot ??
             throw new InvalidOperationException(
-                $"{DisplayAwareLifecycleLabel} has no telemetry snapshot for initial admission.");
+                "M6 has no telemetry snapshot for initial admission.");
 
         EnsureSuspendHardwareTestLightLoad(
             snapshot);
@@ -2742,7 +2735,7 @@ internal sealed class MainForm : Form
         if (watchdog.JournalPresent)
         {
             throw new InvalidOperationException(
-                $$"{DisplayAwareLifecycleLabel} initial baseline requires no durable journal; found '{watchdog.JournalPath}'.");
+                $"M6 initial baseline requires no durable journal; found '{watchdog.JournalPath}'.");
         }
 
         _m6WatchdogPid =
@@ -2756,7 +2749,7 @@ internal sealed class MainForm : Form
         if (!firmwareProof.Verified)
         {
             throw new InvalidOperationException(
-                $$"{DisplayAwareLifecycleLabel} initial firmware baseline is not stable FF/FF: {firmwareProof.Detail}; last={firmwareProof.Cpu}/{firmwareProof.Gpu}.");
+                $"M6 initial firmware baseline is not stable FF/FF: {firmwareProof.Detail}; last={firmwareProof.Cpu}/{firmwareProof.Gpu}.");
         }
 
         var entered =
@@ -2768,14 +2761,14 @@ internal sealed class MainForm : Form
                 FanAuthority.Custom)
         {
             throw new InvalidOperationException(
-                $"{DisplayAwareLifecycleLabel} coordinator did not grant watchdog-protected Custom authority.");
+                "M6 coordinator did not grant watchdog-protected Custom authority.");
         }
 
         await ApplyM6CommandWithFreshSafetyAsync(
             new FanCommand(
                 SuspendHardwareTestLevel,
                 SuspendHardwareTestLevel,
-                $"{DisplayAwareLifecycleLabel} initial watchdog-protected Modern Standby lifecycle qualification"),
+                "M6 initial watchdog-protected Modern Standby lifecycle qualification"),
             "initial 30/30 command");
 
         var processStartTicks =
@@ -2814,7 +2807,7 @@ internal sealed class MainForm : Form
         AppendEvent(
             _m7HibernationHardwareTest
                 ? $"M7: READY at 30/30 with durable OWNED lease. Watchdog PID={_m6WatchdogPid}; GUI PID={Environment.ProcessId}. Parent harness will request Windows hibernation after explicit operator confirmation; SESSION_DISPLAY_STATUS Off must release firmware authority first."
-                : $$"{DisplayAwareLifecycleLabel}: READY at 30/30 with durable OWNED lease. Watchdog PID={_m6WatchdogPid}; GUI PID={Environment.ProcessId}. Use Windows Start -> Power -> Sleep. SESSION_DISPLAY_STATUS Off must release firmware authority before the Modern Standby transition.");
+                : $"M6: READY at 30/30 with durable OWNED lease. Watchdog PID={_m6WatchdogPid}; GUI PID={Environment.ProcessId}. Use Windows Start -> Power -> Sleep. SESSION_DISPLAY_STATUS Off must release firmware authority before the Modern Standby transition.");
     }
 
     private async Task<bool> TryEnterM6CustomAuthorityAsync(
@@ -2830,13 +2823,13 @@ internal sealed class MainForm : Form
                 SystemState.Healthy)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} {phase} requires Healthy telemetry; state={_worker.StateMachine.State}.");
+                    $"M6 {phase} requires Healthy telemetry; state={_worker.StateMachine.State}.");
             }
 
             var snapshot =
                 _lastSnapshot ??
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} {phase} has no telemetry snapshot.");
+                    $"M6 {phase} has no telemetry snapshot.");
 
             EnsureSuspendHardwareTestLightLoad(
                 snapshot);
@@ -2878,7 +2871,7 @@ internal sealed class MainForm : Form
                 }
 
                 AppendEvent(
-                    $$"{DisplayAwareLifecycleLabel} {phase}: SafetyGate sequence {safety.EvaluationSequence} was superseded; retry {attempt}/{maxAttempts}.");
+                    $"M6 {phase}: SafetyGate sequence {safety.EvaluationSequence} was superseded; retry {attempt}/{maxAttempts}.");
 
                 await Task.Yield();
             }
@@ -2897,7 +2890,7 @@ internal sealed class MainForm : Form
                 }
 
                 AppendEvent(
-                    $$"{DisplayAwareLifecycleLabel} {phase}: transient no-write ownership sample recovered after stable read-only FF/FF confirmation; retry {attempt}/{maxAttempts}. No compensating restore/write issued.");
+                    $"M6 {phase}: transient no-write ownership sample recovered after stable read-only FF/FF confirmation; retry {attempt}/{maxAttempts}. No compensating restore/write issued.");
 
                 await Task.Delay(
                     50);
@@ -2921,13 +2914,13 @@ internal sealed class MainForm : Form
                 SystemState.Healthy)
             {
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} {phase} requires Healthy telemetry before fan command; state={_worker.StateMachine.State}.");
+                    $"M6 {phase} requires Healthy telemetry before fan command; state={_worker.StateMachine.State}.");
             }
 
             var snapshot =
                 _lastSnapshot ??
                 throw new InvalidOperationException(
-                    $$"{DisplayAwareLifecycleLabel} {phase} has no telemetry snapshot.");
+                    $"M6 {phase} has no telemetry snapshot.");
 
             EnsureSuspendHardwareTestLightLoad(
                 snapshot);
@@ -2962,14 +2955,14 @@ internal sealed class MainForm : Form
                       FanAuthority.Custom)
             {
                 AppendEvent(
-                    $$"{DisplayAwareLifecycleLabel} {phase}: command SafetyGate sequence {safety.EvaluationSequence} was superseded; retry {attempt}/{maxAttempts}.");
+                    $"M6 {phase}: command SafetyGate sequence {safety.EvaluationSequence} was superseded; retry {attempt}/{maxAttempts}.");
 
                 await Task.Yield();
             }
         }
 
         throw new InvalidOperationException(
-            $$"{DisplayAwareLifecycleLabel} {phase} could not obtain a current SafetyGate evaluation after {maxAttempts} bounded retries.");
+            $"M6 {phase} could not obtain a current SafetyGate evaluation after {maxAttempts} bounded retries.");
     }
 
     private static long GetCurrentProcessStartUtcTicks()
@@ -3020,11 +3013,11 @@ internal sealed class MainForm : Form
         catch (Exception ex)
         {
             AppLog.Write(
-                $$"{DisplayAwareLifecycleLabel}: could not write result marker: {ex}");
+                $"M6: could not write result marker: {ex}");
         }
 
         AppendEvent(
-            $$"{DisplayAwareLifecycleLabel} RESULT: {message}");
+            $"M6 RESULT: {message}");
 
         Environment.ExitCode =
             exitCode;
