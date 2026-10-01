@@ -58,3 +58,14 @@ Implementation/fix source HEAD: `7bc405b4103014e52cf606a6064c71d748123ad7`.
 Full GitHub Actions validation: **#1076**, run ID `36901860532`, **SUCCESS**. The workflow compiled the entire solution, ran all prior safety/watchdog/P10-P13 invariants, ran the P14.2 static invariant, then built and verified the actual framework-dependent `win-x64` GUI/watchdog publish layout.
 
 This closes P14.2 only. It does not create the final distributable archive, does not package PawnIO modules, does not generate the P14.3 SHA-256 manifest, and does not authorize Manual or Automatic hardware execution.
+
+
+## P14.3 — deterministic package and SHA-256 manifest
+
+P14.3 turns the verified P14.2 publish layout into a deterministic software-RC ZIP. External PawnIO module input is pinned in `release/p14-external-inputs.json` to PawnIO.Modules 0.2.11 and archive SHA-256 `43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4`.
+
+The network fetch is separated from packaging: `fetch-p14-external-inputs.ps1` downloads and verifies the pinned archive; `package-p14-rc.ps1` accepts only that verified archive as an input. The GUI package receives `IntelMSR.bin` and `LpcACPIEC.bin`; the watchdog package receives only `LpcACPIEC.bin`.
+
+`PACKAGE-MANIFEST.json` records SHA-256 and size for every payload file. The ZIP is created with files sorted by normalized relative path, a fixed UTC ZIP timestamp (`2000-01-01T00:00:00Z`) and no-compression entries to minimize host-dependent byte variation. A separate `.sha256` file authenticates the complete ZIP.
+
+CI builds two packages independently from the same publish tree and pinned external archive, verifies both manifests, and requires the complete ZIP SHA-256 values to be identical. P14.3 still does not upload a retained GitHub artifact; that is P14.4.

@@ -67,6 +67,10 @@ Implemented: the final P13 HEAD/CI is pinned as the P14 baseline, a machine-read
 
 Closed in CI: version `0.4.0-rc.1` is centralized, GUI and production watchdog publish into a fixed framework-dependent `win-x64` app/watchdog layout, qualification-only standalone executables are excluded, and CI #1076 built and verified the actual publish output. PawnIO modules and the final archive/hash manifest remain deferred to P14.3.
 
+### P14.3 — deterministic package and SHA-256 manifest
+
+Implemented pending CI closure: the pinned PawnIO.Modules 0.2.11 archive is hash-verified, only the required module binaries enter the package, every payload file is SHA-256 manifested, and the RC ZIP is produced with normalized ordering/timestamps. CI performs a two-build byte-for-byte ZIP reproducibility check. Artifact retention remains P14.4.
+
 ## P15 — first required target-side checkpoint
 
 P15 is deliberately outside this document's software authorization. The first target-side validation must begin with ordinary startup/control OFF, followed by a separately authorized one-shot manual 30/30 transaction and verified strong restore. Only after that may an automatic-policy physical gate be considered.

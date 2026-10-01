@@ -233,6 +233,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p14-publish-layout-invariants.ps1
 
+      - name: HP 8C40 P14.3 deterministic package static invariant
+        shell: pwsh
+        run: .\scripts\test-p14-package-invariants.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -285,6 +289,7 @@ jobs:
           .\scripts\test-p13-control-surface-invariants.ps1
           .\scripts\test-p14-software-rc-readiness-invariants.ps1
           .\scripts\test-p14-publish-layout-invariants.ps1
+          .\scripts\test-p14-package-invariants.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build
@@ -297,6 +302,26 @@ jobs:
           .\scripts\build-p14-publish-layout.ps1 -OutputRoot $out
           .\scripts\verify-p14-publish-layout.ps1 -OutputRoot $out
 
+      - name: HP 8C40 P14.3 build and verify deterministic RC package twice
+        shell: pwsh
+        run: |
+          $publish = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.3-publish'
+          $external = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.3-external'
+          $pkg1 = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.3-package-a'
+          $pkg2 = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.3-package-b'
+          .\scripts\build-p14-publish-layout.ps1 -OutputRoot $publish
+          .\scripts\fetch-p14-external-inputs.ps1 -OutputDirectory $external
+          $pawn = Join-Path $external 'release_0_2_11.zip'
+          .\scripts\package-p14-rc.ps1 -PublishRoot $publish -PawnIoArchivePath $pawn -OutputDirectory $pkg1 -SourceHead '${{ github.sha }}'
+          .\scripts\package-p14-rc.ps1 -PublishRoot $publish -PawnIoArchivePath $pawn -OutputDirectory $pkg2 -SourceHead '${{ github.sha }}'
+          $zip1 = Join-Path $pkg1 'VictusFanControl-0.4.0-rc.1-win-x64.zip'
+          $zip2 = Join-Path $pkg2 'VictusFanControl-0.4.0-rc.1-win-x64.zip'
+          .\scripts\verify-p14-package.ps1 -ZipPath $zip1 -Sha256Path ($zip1 + '.sha256') -ExpectedSourceHead '${{ github.sha }}'
+          .\scripts\verify-p14-package.ps1 -ZipPath $zip2 -Sha256Path ($zip2 + '.sha256') -ExpectedSourceHead '${{ github.sha }}'
+          $hash1 = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip1).Hash
+          $hash2 = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip2).Hash
+          if ($hash1 -ne $hash2) { throw "P14.3 deterministic package mismatch: $hash1 vs $hash2" }
+          Write-Host "P14.3 reproducible ZIP SHA-256: $hash1"
       - name: HP 8C40 M8A representative-load classifier self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --8c40-m8a-self-test
 
