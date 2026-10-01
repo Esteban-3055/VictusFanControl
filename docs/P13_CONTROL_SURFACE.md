@@ -33,3 +33,10 @@ Firmware / Manual / Automatic buttons now call only `AdaptiveFanProductionContro
 The GUI now exposes a 10..50 equal-level selector. A future authorized Manual execution routes only through `AdaptiveFanProductionController.ApplyManualAsync`; while the Manual gate is false, the click returns locally before requesting a control-order SafetyGate result.
 
 Only the numeric preferred manual level is persisted in `%LOCALAPPDATA%\\VictusFanControl\\p13-ui-settings.json`. Mode, ownership, gate authorization and automatic-policy state are deliberately absent from the settings schema, so every launch still begins in Firmware mode.
+
+
+## P13.4 — Automatic shadow preview
+
+Live telemetry is now fed into the no-write `AdaptiveFanPolicyShadowEvaluator`. The UI displays shadow safety readiness, the candidate equal recommendation, raw demand, notional intent and explanatory detail, plus all six Candidate V1 demand curves.
+
+This is visualization only. `ProcessAutomaticAsync` is deliberately absent from the P13 surface and `AutomaticExecutionAuthorized=false` remains unchanged. Runtime degradation resets the shadow evaluator and returns the preview to HoldFirmware.

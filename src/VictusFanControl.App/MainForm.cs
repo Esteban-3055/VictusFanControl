@@ -655,6 +655,7 @@ internal sealed class MainForm : Form
         _p13FanControlSurface =
             new P13FanControlSurface(
                 _fanProductionController,
+                _hardwareIdentity,
                 p13TargetDescription,
                 GetP13ControlSafety,
                 AppendEvent);
@@ -2467,6 +2468,9 @@ internal sealed class MainForm : Form
             _gpuLoad.Text = Format(snapshot.GpuLoadPercent, "%");
             _gpuFan.Text = Format(snapshot.GpuFanRpm, "RPM", 0);
 
+            _p13FanControlSurface.UpdateTelemetry(
+                _worker.StateMachine.State,
+                snapshot);
             UpdateSafetyStatus();
             UpdateTray();
         });
@@ -2504,6 +2508,7 @@ internal sealed class MainForm : Form
         {
             _stateValue.Text = e.Current.ToString();
             _stateReason.Text = e.Reason;
+            _p13FanControlSurface.UpdateRuntimeState(e.Current);
 
             if (_trayStateItem is not null)
             {

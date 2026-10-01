@@ -45,7 +45,11 @@ Closed in CI. Firmware / Manual / Automatic mode requests route only through `Ad
 
 ### P13.3 — Manual equal-level control behind the closed gate
 
-Implemented: the GUI exposes an equal CPU/GPU level selector constrained to 10..50 and a Manual apply path routed only through `AdaptiveFanProductionController.ApplyManualAsync`. The Manual gate is checked before obtaining a control SafetyGate evaluation. The saved preference contains only the numeric manual level; mode and authorization are never persisted and startup remains Firmware.
+Closed in CI. The equal CPU/GPU selector is constrained to 10..50, routes only through the production adapter after the Manual gate, and persists only the numeric UI preference.
+
+### P13.4 — live Automatic shadow preview and candidate visualization
+
+Implemented: each telemetry snapshot is evaluated by `AdaptiveFanPolicyShadowEvaluator` using Candidate V1. The GUI shows shadow SafetyGate readiness, recommended equal level, raw demand, notional intent, detail, and all six candidate curves. Runtime degradation resets the preview. The Automatic execution gate remains false and the P13 surface deliberately has no `ProcessAutomaticAsync` path.
 
 ## P14 — release-candidate productization
 
