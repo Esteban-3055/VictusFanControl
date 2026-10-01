@@ -2802,6 +2802,7 @@ internal sealed class MainForm : Form
             $"guiPid={Environment.ProcessId}|" +
             $"guiStartTicks={processStartTicks}|" +
             $"transitionMode={DisplayAwareLifecycleTransitionMode}|" +
+            $"constructionRoute={(_m9dProductionLifecycleHardwareTest ? "production-factory-public-backend" : "historical-lifecycle-qualification-backend")}|" +
             $"resumePolicy=session-display-on-only");
 
         AppendEvent(
@@ -3002,6 +3003,7 @@ internal sealed class MainForm : Form
             $"resumeSuspendWhileOff={_m6ResumeSuspendObservedWhileDisplayOff}|" +
             $"displayOn={_m6DisplayOnObserved}|" +
             $"acceptedUserResumes={_m6AcceptedUserResumeCount}|" +
+            $"constructionRoute={(_m9dProductionLifecycleHardwareTest ? "production-factory-public-backend" : "historical-lifecycle-qualification-backend")}|" +
             message;
 
         try
