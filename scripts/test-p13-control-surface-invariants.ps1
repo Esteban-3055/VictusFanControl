@@ -20,7 +20,7 @@ foreach ($needle in @(
     'Automatic (locked)',
     'Hp8C40PostM9UserControlGate.ManualExecutionAuthorized',
     'Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized',
-    'HP-8C40-ADAPTIVE-CANDIDATE-V1',
+    'Hp8C40AdaptiveCandidateV1.Id',
     'this tab has no control callbacks'
 )) {
     Assert-Contains $main $needle ("P13 step 1 GUI invariant missing: {0}" -f $needle)
