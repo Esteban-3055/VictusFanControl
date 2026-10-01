@@ -25,7 +25,7 @@ Synchronize current documentation/profile language with the promoted M9 state an
 
 ## P11 — production policy adapter, hardware gate closed
 
-Join the pure adaptive engine to `FanControlCoordinator` through a narrow adapter. The adapter may execute only when a separate post-M9 authorization says so. It must suppress unchanged commands, reset on loss of firmware/custom state, and restore on policy/safety loss.
+Implemented in software as `AdaptiveFanProductionController`. The adapter joins the pure engine to `FanControlCoordinator`, requires separate Manual/Automatic execution authorization, suppresses unchanged commands, resets across authority changes, and releases to firmware on policy/safety loss. Hardware authorization remains false; CI closure is recorded by the branch workflow rather than by opening a physical gate.
 
 ## P12 — conservative candidate curve
 

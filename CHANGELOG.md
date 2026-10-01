@@ -3,6 +3,7 @@
 ## Unreleased — post-M9 software RC preparation
 
 - P10: synchronize repository documentation/profile state after HP 8C40 M9 production-watchdog promotion.
+- P11: add the coordinator-only adaptive production adapter with independent Manual/Automatic execution authorization, equal-only commands, no-retransmit behavior and deterministic fake-backend tests.
 - Keep default control and automatic/adaptive policy disabled pending separate post-M9 target-side validation.
 - Add a post-M9 invariant that prevents accidental reopening of consumed M9C/M9D qualification gates.
 

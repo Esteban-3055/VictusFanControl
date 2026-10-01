@@ -109,3 +109,8 @@ GUI, coordinator and HP backend; automatic/adaptive policy remains OFF.
 ## Current post-M9 status
 
 The pure engine and offline shadow/replay layers remain valid. M9 has promoted the exact-target production watchdog path, but this does not authorize adaptive control. P10-P14 may connect and productize the software path only while all post-M9 manual/automatic hardware execution gates remain closed. See `POST_M9_SOFTWARE_ROADMAP.md`.
+
+
+## P11 production adapter
+
+A narrow `AdaptiveFanProductionController` now connects policy intent to `FanControlCoordinator` in software. It has no HP backend, WMI, EC, PawnIO or watchdog dependency of its own. Manual and Automatic execution each require an explicit constructor authorization; the repository profile records hardware authorization as false. The adapter emits equal-only commands, suppresses unchanged targets, and releases Custom authority when effective SafetyGate admission is lost. Deterministic fake-backend tests exercise the closed-gate, manual, automatic, no-retransmit and safety-release paths. This is software integration only and does not authorize a target-side fan write.
