@@ -359,3 +359,32 @@ forking a new power-state implementation. Evidence uses a separate namespace:
 Physical authorization is forbidden until M9B read-only physical PASS and M9C
 production-path smoke PASS are both formally recorded. Automatic/adaptive policy and
 default control remain OFF.
+
+
+### M9D parent harness preparation
+
+The versioned parent harness is
+`scripts/test-8c40-production-watchdog-m9d.ps1`. It is hard-blocked before
+Administrator checks, evidence creation, service start, PawnIO/EC access, GUI launch or
+fan writes unless all of the following are formally recorded:
+
+- M9B no-write physical PASS;
+- M9C physical production-path smoke PASS;
+- explicit M9D physical authorization;
+- M9D controller execution authorization;
+- M9D temporary construction authorization.
+
+The harness does not reinstall or replace the already-qualified M4 service. It requires
+the installed service to begin `Manual / Stopped / LocalSystem / PID 0`, starts it only
+inside the authorized physical boundary, binds PID + creation ticks, and returns it to
+the same Manual/Stopped baseline after independent FF/FF and journal-absence proof.
+
+A delayed independent M9D failsafe is armed before GUI launch. Any takeover invalidates
+normal-path PASS. Evidence uses a unique timestamped directory and the GUI receives that
+directory through `--8c40-m9d-marker-root`; existing lifecycle markers are never
+overwritten. PASS/FAIL evidence is packaged automatically with a manifest, per-file
+SHA-256 hashes, ZIP and ZIP SHA-256 sidecar.
+
+The real power transition is intentionally not dispatched by the harness. After READY,
+the operator must explicitly choose Windows **Start -> Power -> Sleep**, preserving the
+same manual transition model used by the physically qualified M6 gate.
