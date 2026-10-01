@@ -18,6 +18,10 @@ Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'Service boots
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'Service bootstrap preparation must not open production construction.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'Service bootstrap preparation must not authorize M9D physical execution.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'Service bootstrap preparation must not authorize M9D construction.'
+if(-not [bool]$profile.lifecycle.watchdogM9DServiceBootstrapCodeCiPassed){throw 'GUI service-bootstrap CODE/CI PASS must remain recorded.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.serviceBootstrap.codeCi.result -cne 'PASS'){throw 'GUI service-bootstrap code/CI result changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.serviceBootstrap.codeCi.commit -cne 'f322e195523b8001b11449f8d18cb7f2facf5d74'){throw 'GUI service-bootstrap code/CI commit changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.serviceBootstrap.codeCi.runNumber -ne 901){throw 'GUI service-bootstrap CI run changed.'}
 
 foreach($needle in @(
     'ServiceName = "VictusFanControlWatchdogM4"',
