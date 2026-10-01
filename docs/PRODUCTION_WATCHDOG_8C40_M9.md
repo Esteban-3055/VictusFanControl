@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D REMAINS BLOCKED PENDING SEPARATE AUTHORIZATION. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -359,8 +359,10 @@ forking a new power-state implementation. Evidence uses a separate namespace:
 - `m9d-production-lifecycle.result`
 
 M9B read-only physical PASS and M9C production-path smoke PASS are both formally recorded.
-M9D nevertheless remains blocked until a separate explicit authorization commit and exact
-same-HEAD canonical CI. Automatic/adaptive policy and default control remain OFF.
+A separate M9D authorization now opens only the M9D execution and temporary construction
+gates for one lifecycle run. Execution remains contingent on complete CI on the exact
+authorization SHA and then that same SHA being the canonical branch HEAD. Automatic/adaptive
+policy and default control remain OFF.
 
 
 ### M9D parent harness preparation
@@ -404,9 +406,15 @@ PowerShell 7 and Windows PowerShell 5.1, native child and packaging self-tests,
 warnings-as-errors build, and the existing M5-M9/SafetyGate/coordinator/backend
 regressions. No physical M9D execution occurred.
 
-This closure does not authorize M9D. Its controller/construction/physical authorization
-flags remain false. The M9B and M9C physical prerequisites are now satisfied; the remaining
-boundary is a separate M9D authorization commit followed by exact same-HEAD canonical CI.
+The M9B and M9C physical prerequisites are now satisfied. Formal M9C closure is anchored at
+`3e131fd767b841ed186aaa51c4bcfb6cdee59b88`, canonical GitHub Actions **#960**
+(run `36818905113`) SUCCESS. A separate M9D authorization opens only:
+
+- `m9d.physicalAuthorization.authorized=true`;
+- `m9d.physicalExecutionAuthorized=true`;
+- `m9d.qualificationConstructionAuthorized=true`.
+
+Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. The M9D authorization is valid only after complete same-HEAD CI on the exact authorization SHA and the canonical branch.
 
 
 ## 9. GUI-side production watchdog service bootstrap
@@ -518,11 +526,12 @@ matching rather than exact array equality. The final invariant now checks prereq
 array entries by ordinal substring and the atomic promotion/invariant arrays by exact
 ordinal value. This preserves the intended contract without depending on JSON escaping.
 
-This closure changes **no** production or hardware authorization. In particular:
+This historical M9E code/CI closure changed **no** production or hardware authorization. At the current M9D qualification stage:
 
 - `WatchdogRecoveryValidated=false`;
 - `ProductionConstructionAuthorized=false`;
-- M9C and M9D physical execution/construction gates remain false;
+- M9C execution/construction gates are reclosed after PASS;
+- M9D execution/construction gates are temporarily open only for the separately authorized bounded lifecycle run;
 - M8C remains physically re-blocked;
 - `control.enabledByDefault=false`;
 - `automaticPolicyEnabled=false`.
