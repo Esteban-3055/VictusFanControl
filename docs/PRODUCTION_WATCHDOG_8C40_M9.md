@@ -312,14 +312,13 @@ automatic evidence packaging under PowerShell 7 and Windows PowerShell 5.1,
 plus warnings-as-errors build and the existing M5-M8/SafetyGate/coordinator/
 watchdog/backend regressions. No physical hardware path was executed.
 
-M9C is therefore **CODE/CI PASS**, not physical PASS. All three write/promotion
-barriers remain closed:
+M9C remains **CODE/CI PASS**, not physical PASS. After formal M9B closure, the three M9C-only qualification gates are intentionally opened for one bounded execution:
 
-- `m9c.physicalAuthorization.authorized=false`;
-- `m9c.physicalExecutionAuthorized=false`;
-- `m9c.qualificationConstructionAuthorized=false`.
+- `m9c.physicalAuthorization.authorized=true`;
+- `m9c.physicalExecutionAuthorized=true`;
+- `m9c.qualificationConstructionAuthorized=true`.
 
-M9B remains the first unavoidable machine-side evidence boundary.
+This does **not** promote the normal production watchdog path: `WatchdogRecoveryValidated=false`, `ProductionConstructionAuthorized=false`, `control.enabledByDefault=false` and `automaticPolicyEnabled=false` remain unchanged. The authorization is valid only after complete same-HEAD CI on the exact canonical authorization SHA.
 
 
 ## 8. M9D production-path Modern Standby lifecycle preparation
