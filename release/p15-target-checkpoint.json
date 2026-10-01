@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PASS_GATE_CLOSED",
+  "status": "P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -316,8 +316,8 @@
       ],
       "hardwareExecution": false
     },
-    "executionAuthorized": false,
-    "controllerPhysicalExecutionAuthorized": false,
+    "executionAuthorized": true,
+    "controllerPhysicalExecutionAuthorized": true,
     "physicalPassed": false,
     "evidenceClosed": false,
     "equalLevel": 30,
@@ -377,13 +377,16 @@
     },
     "authorization": {
       "scope": "P15B one-shot Manual equal 30/30 plus production strong restore only",
-      "basisHead": "4ed93815b9bb87b422fb354a3b79ac6f979240a4",
-      "basisCiRunNumber": 1109,
-      "basisCiRunId": 36933283887,
+      "basisHead": "ccd52aaab7e7d3ac2a33c9419c2cd0a06b341147",
+      "basisCiRunNumber": 1113,
+      "basisCiRunId": 36935433765,
       "basisCiResult": "SUCCESS",
       "serviceBaselineCorrectionClosed": true,
       "serviceBaselineCorrectionImplementationHead": "b24308e6b72e50e9a2ae40501c95f77bcfcf9f43",
       "serviceBaselineCorrectionCiRunNumber": 1108,
+      "powerShellPidCollisionCorrectionClosed": true,
+      "powerShellPidCollisionCorrectionImplementationHead": "3e2ee4851e7bc5f393e23f782c09ef7f5db92b43",
+      "powerShellPidCollisionCorrectionCiRunNumber": 1112,
       "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
       "p15aAuthorizationOpened": false,
       "userFacingManualGateOpened": false,
@@ -392,16 +395,26 @@
       "m9cQualificationConstructionOpened": false,
       "m9dQualificationConstructionOpened": false,
       "hardwareExecutionAtAuthorizationCommit": false,
-      "previousTargetAuthorization": {
-        "authorizationHead": "6fe617693d4de54bfc709e07728c825f2246072d",
-        "authorizationCiRunNumber": 1106,
-        "authorizationCiRunId": 36931559263,
-        "authorizationCiResult": "SUCCESS",
-        "targetAttemptResult": "FAIL_CLOSED",
-        "failure": "P15B requires M4 Manual/Stopped/PID0; observed Manual/Running/PID7980.",
-        "physicalWriteExecuted": false,
-        "authorizationRevoked": true
-      },
+      "priorTargetAttempts": [
+        {
+          "authorizationHead": "6fe617693d4de54bfc709e07728c825f2246072d",
+          "authorizationCiRunNumber": 1106,
+          "authorizationCiRunId": 36931559263,
+          "result": "FAIL_CLOSED",
+          "failure": "Manual/Running watchdog baseline was not accepted.",
+          "physicalWriteExecuted": false,
+          "authorizationRevoked": true
+        },
+        {
+          "authorizationHead": "df355a0a49c76115f6cac7885650b5a7bec9aa86",
+          "authorizationCiRunNumber": 1110,
+          "authorizationCiRunId": 36933720023,
+          "result": "FAIL_CLOSED",
+          "failure": "PowerShell local $pid collided with read-only automatic $PID.",
+          "physicalWriteExecuted": false,
+          "authorizationRevoked": true
+        }
+      ],
       "earlierAuthorizationBasis": {
         "basisHead": "0aee1b32f1bc063b31083e42c826e0eb87d35546",
         "basisCiRunNumber": 1104,
