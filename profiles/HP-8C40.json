@@ -2986,7 +2986,7 @@
       "serviceMutationAuthorized": false,
       "watchdogLeaseAcquisitionAuthorized": false,
       "requirements": [
-        "local HEAD equals tracked upstream on feature/victus-8c40-m9-production-watchdog",
+        "local HEAD equals tracked upstream on feature/victus-8c40-m9-preproduction",
         "exact HP-8C40-9D0R1LA-F18 target",
         "M8C PHYSICAL PASS and M8C execution re-blocked",
         "M9A CODE/CI PASS",
@@ -3027,7 +3027,8 @@
           "never delete logs, journal or historical evidence"
         ],
         "gateCritical": true
-      }
+      },
+      "canonicalPhysicalBranch": "feature/victus-8c40-m9-preproduction"
     },
     "m9c": {
       "status": "FULL_HARNESS_CODE_CI_PASS_WRITE_BLOCKED_PENDING_M9B_PHYSICAL",
@@ -3129,7 +3130,8 @@
         "prerequisite": "M9B read-only physical PASS must be executed, reviewed, hashed and formally recorded before any M9C authorization commit.",
         "scope": "one versioned M9C harness execution only"
       },
-      "physicalPassed": false
+      "physicalPassed": false,
+      "canonicalPhysicalBranch": "feature/victus-8c40-m9-preproduction"
     },
     "promotion": {
       "authorized": false,
@@ -3138,7 +3140,7 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "M9E production service-lifecycle code is prepared but hard-blocked. After same-HEAD CI, prepare final promotion-readiness invariants and rebind the single M9B read-only preflight to the final pre-hardware branch/HEAD. No machine command is required yet.",
+    "nextStep": "All future M9B/M9C/M9D/M9E physical evidence is bound to the canonical preproduction branch. Continue code/CI preparation before asking for any target-side command.",
     "m9d": {
       "status": "FULL_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED",
       "purpose": "focused last-mile full-GUI production-path recovery + display-aware Modern Standby regression after M9C physical PASS",
@@ -3225,7 +3227,8 @@
         "prerequisite": "M9B read-only physical PASS and M9C physical PASS must both be reviewed, hashed and formally recorded before any M9D authorization commit.",
         "scope": "one versioned M9D harness execution containing D1 controller-death and D2 user-initiated Modern Standby subcycles"
       },
-      "physicalPassed": false
+      "physicalPassed": false,
+      "canonicalPhysicalBranch": "feature/victus-8c40-m9-preproduction"
     },
     "m9e": {
       "status": "SERVICE_LIFECYCLE_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",

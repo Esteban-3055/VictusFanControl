@@ -3,7 +3,7 @@ $ErrorActionPreference='Stop'
 $repoRoot=Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
-$expectedBranch='feature/victus-8c40-m9-production-watchdog'
+$expectedBranch='feature/victus-8c40-m9-preproduction'
 $serviceName='VictusFanControlWatchdogM4'
 $serviceRoot=Join-Path $env:ProgramData 'VictusFanControl\WatchdogM4'
 $serviceExe=Join-Path $serviceRoot 'bin\VictusFanControl.Watchdog.exe'

@@ -42,7 +42,7 @@ foreach($needle in @(
     'm9d.physicalAuthorization.authorized',
     'm9d.physicalExecutionAuthorized',
     'm9d.qualificationConstructionAuthorized',
-    'feature/victus-8c40-m9d-preparation',
+    'feature/victus-8c40-m9-preproduction',
     'Assert-RepositoryProvenance',
     'Assert-ExactTarget',
     'Assert-ServiceBaseline',

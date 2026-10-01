@@ -516,3 +516,12 @@ Only after stage 2 evidence is reviewed may M9E be marked physical PASS. Even th
 `WatchdogRecoveryValidated=false`, production construction remains blocked, default
 control remains OFF and automatic/adaptive policy remains OFF until the final separate
 M9 promotion commit.
+
+
+## 11. Canonical M9 preproduction branch
+
+All future target-side M9 evidence is rebound to
+`feature/victus-8c40-m9-preproduction`. M9B, M9C and M9D now refuse any
+different branch and still require local HEAD to equal the tracked upstream.
+This prevents a physical PASS from being attributed to divergent preparation
+branches. M9E already uses the same canonical branch.

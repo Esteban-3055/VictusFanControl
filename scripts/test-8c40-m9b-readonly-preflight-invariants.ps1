@@ -37,7 +37,7 @@ if([long]$profile.watchdogM9ProductionIntegration.m9b.codeCi.runId -ne 367792703
 foreach($needle in @(
     'M9B PRODUCTION WATCHDOG READ-ONLY PREFLIGHT',
     'READ-ONLY AUTHORIZATION BARRIER',
-    'feature/victus-8c40-m9-production-watchdog',
+    'feature/victus-8c40-m9-preproduction',
     'Assert-RepositoryHead',
     'Assert-Exact8C40Target',
     'Assert-ProfileBoundary',
