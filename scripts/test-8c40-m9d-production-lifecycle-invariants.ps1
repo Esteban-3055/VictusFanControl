@@ -48,6 +48,7 @@ foreach($needle in @(
 foreach($needle in @(
     '--8c40-m9d-production-lifecycle-test',
     '--8c40-m9d-test-token',
+    '--8c40-m9d-marker-root',
     'Hp8C40M9DProductionLifecycleQualificationTest.PhysicalExecutionAuthorized',
     'Hp8C40ProductionWatchdogGate.M9DPhysicalQualificationConstructionAuthorized',
     'm9dProductionLifecycleHardwareTest'
@@ -71,6 +72,7 @@ foreach($needle in @(
     'm9d-production-lifecycle.resume-gate',
     'm9d-production-lifecycle.reentry',
     'm9d-production-lifecycle.result',
+    'M9D refuses to overwrite existing evidence marker',
     'DisplayAware8C40LifecycleHardwareTest',
     'WaitForHardwareReadQuiescenceAsync',
     'AllowCustomAdmissionAfterRecoveryAsync',
