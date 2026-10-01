@@ -41,7 +41,7 @@ if([long]$profile.watchdogM9ProductionIntegration.m9a.codeCi.runId -ne 367784190
 
 foreach($needle in @(
     'public static readonly bool ProductionConstructionAuthorized = false;',
-    'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = true;',
+    'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;',
     'WatchdogRecoveryValidated',
     'RequireProductionConstructionAuthorized',
     'CreateLeaseIfAuthorized',
@@ -66,7 +66,7 @@ if($backendGate -lt 0 -or $backendHardware -lt 0 -or $backendGate -ge $backendHa
 }
 
 foreach($needle in @(
-    'M9 production gate remains closed while M9C qualification gate is authorized',
+    'M9 production and M9C qualification gates are closed after M9C physical PASS',
     'factory rejects supplied 8C40 production lease before backend/hardware construction',
     'fakeLease.Calls == 0'
 )){
