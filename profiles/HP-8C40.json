@@ -63,7 +63,7 @@
     "watchdogM9DCodePrepared": true,
     "watchdogM9DCodeCiPassed": true,
     "watchdogM9DServiceBootstrapPrepared": true,
-    "watchdogM9DServiceBootstrapCodeCiPassed": false
+    "watchdogM9DServiceBootstrapCodeCiPassed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -3139,7 +3139,7 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Obtain same-HEAD CI for GUI-side watchdog bootstrap + hardened M9D harness. M9B remains the first unavoidable local-machine evidence boundary; M9C/M9D physical execution and production promotion remain blocked.",
+    "nextStep": "All currently identified M9 software-only last-mile pieces (M9A, M9B harness, M9C harness, M9D GUI lifecycle, GUI-side service bootstrap) are code/CI green. Prepare promotion-readiness auditing next; M9B remains the first unavoidable local-machine evidence boundary.",
     "m9d": {
       "status": "FULL_APP_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED_PENDING_M9B_M9C",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",
@@ -3213,7 +3213,7 @@
       "failsafeDelaySeconds": 300,
       "finalFirmwareProof": "two consecutive independent FF/FF reads after GUI lifecycle PASS and before service baseline closure",
       "serviceBootstrap": {
-        "status": "CODE_PREPARED_CI_PENDING",
+        "status": "CODE_CI_PASS",
         "type": "Hp8C40WatchdogServiceBootstrap",
         "productionBehaviorWhileGateClosed": "NO_OP",
         "serviceName": "VictusFanControlWatchdogM4",
@@ -3229,11 +3229,17 @@
         "readyProof": "M4 target-bound Ready + Session0 LocalSystem + live PID/creation ticks + journal absent",
         "m9dEvidence": "READY marker must prove gui-ensure-ready and same watchdog PID/start ticks",
         "codeCi": {
-          "result": "PENDING",
-          "commit": null,
-          "runNumber": null,
-          "runId": null,
-          "physicalExecution": false
+          "result": "PASS",
+          "commit": "f322e195523b8001b11449f8d18cb7f2facf5d74",
+          "runNumber": 901,
+          "runId": 36804784469,
+          "powerShell7Invariant": true,
+          "windowsPowerShell51Invariant": true,
+          "warningsAsErrorsBuild": true,
+          "existingM5M9Regressions": true,
+          "hpBackendSelfTest": true,
+          "physicalExecution": false,
+          "note": "Run #900 reached all new static/invariant tests but failed warnings-as-errors build only because TimeoutException was ambiguous after adding System.ServiceProcess.ServiceController. The source was qualified as System.TimeoutException; run #901 passed the complete workflow."
         }
       }
     }
