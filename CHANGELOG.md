@@ -6,6 +6,7 @@
 - P11: add the coordinator-only adaptive production adapter with independent Manual/Automatic execution authorization, equal-only commands, no-retransmit behavior and deterministic fake-backend tests.
 - P12: add HP 8C40 Candidate V1 as shadow-only / physically unvalidated.
 - P13: complete the WinForms Firmware/Manual/Automatic control surface, safe 10..50 manual preference, live no-write adaptive preview, candidate visualization, and tray/status reporting while both execution gates remain closed.
+- P14.1: pin the final P13 source/CI baseline and add a software-release readiness contract that keeps every physical execution gate closed.
 - Keep default control and automatic/adaptive policy disabled pending separate post-M9 target-side validation.
 - Add post-M9/P13 invariants that prevent accidental reopening or UI bypass of physical control gates.
 

@@ -152,6 +152,23 @@
       }
     }
   },
+  "releaseCandidateP14": {
+    "status": "P14_1_SOFTWARE_READINESS_BASELINE",
+    "targetProfileId": "HP-8C40-9D0R1LA-F18",
+    "p13BaselineHead": "7395a8c14afcaf352ad5e5be48f66c897f03fd2e",
+    "p13BaselineCiRunNumber": 1072,
+    "p13BaselineCiRunId": 36899789506,
+    "p13BaselineCiResult": "SUCCESS",
+    "softwareOnly": true,
+    "centralizedRcVersionImplemented": false,
+    "deterministicPublishImplemented": false,
+    "deterministicPackageImplemented": false,
+    "sha256ManifestImplemented": false,
+    "ciArtifactUploadImplemented": false,
+    "finalSoftwareRcAuditClosed": false,
+    "manualExecutionAuthorized": false,
+    "automaticExecutionAuthorized": false
+  },
   "observedCalibration": [
     {
       "level": 30,

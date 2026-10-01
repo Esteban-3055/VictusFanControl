@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "milestone": "P14.1",
+  "status": "P14_1_SOFTWARE_READINESS_BASELINE",
+  "scope": "release-candidate productization before any post-P13 target-side execution",
+  "targetProfileId": "HP-8C40-9D0R1LA-F18",
+  "p13Baseline": {
+    "head": "7395a8c14afcaf352ad5e5be48f66c897f03fd2e",
+    "ciRunNumber": 1072,
+    "ciRunId": 36899789506,
+    "ciResult": "SUCCESS"
+  },
+  "safetyBoundary": {
+    "softwareOnly": true,
+    "controlEnabledByDefault": false,
+    "automaticPolicyEnabled": false,
+    "manualExecutionAuthorized": false,
+    "automaticExecutionAuthorized": false,
+    "candidateCurvePhysicallyValidated": false,
+    "candidateCurveAuthorizedForProduction": false,
+    "m9cQualificationConstructionAuthorized": false,
+    "m9dQualificationConstructionAuthorized": false
+  },
+  "productization": {
+    "centralizedRcVersionImplemented": false,
+    "deterministicPublishImplemented": false,
+    "deterministicPackageImplemented": false,
+    "sha256ManifestImplemented": false,
+    "ciArtifactUploadImplemented": false,
+    "finalSoftwareRcAuditClosed": false
+  }
+}

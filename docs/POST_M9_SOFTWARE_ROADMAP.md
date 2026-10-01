@@ -59,6 +59,10 @@ Implemented: the tray now reports runtime state, CPU/GPU, fan authority, request
 
 Add a software readiness audit, deterministic package build, versioned release-candidate artifacts and final CI coverage. The resulting package is a software RC only.
 
+### P14.1 — software readiness baseline
+
+Implemented: the final P13 HEAD/CI is pinned as the P14 baseline, a machine-readable release contract is present, and CI now fails if any Manual/Automatic/default-policy/M9 qualification boundary is reopened. No publish package or release artifact is produced in this step.
+
 ## P15 — first required target-side checkpoint
 
 P15 is deliberately outside this document's software authorization. The first target-side validation must begin with ordinary startup/control OFF, followed by a separately authorized one-shot manual 30/30 transaction and verified strong restore. Only after that may an automatic-policy physical gate be considered.
