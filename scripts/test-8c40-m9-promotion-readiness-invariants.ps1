@@ -13,6 +13,12 @@ function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 function Assert-Equal($Actual,$Expected,[string]$Message){
     if($Actual -ne $Expected){throw ("{0} Expected='{1}' Actual='{2}'" -f $Message,$Expected,$Actual)}
 }
+function Assert-ArrayContainsExact($Values,[string]$Needle,[string]$Message){
+    foreach($value in @($Values)){
+        if([string]$value -ceq $Needle){return}
+    }
+    throw $Message
+}
 
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9E preparation must not promote profile watchdog recovery.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.promotion.authorized) 'M9E preparation must not authorize production promotion.'
@@ -36,16 +42,23 @@ Assert-Contains $gate 'M9DPhysicalQualificationConstructionAuthorized = false;' 
 foreach($needle in @(
     'M9B read-only physical preflight PASS',
     'M9C normal production factory/public-backend physical smoke PASS',
-    'M9D GUI-side service bootstrap + production-path Modern Standby lifecycle PASS',
+    'M9D GUI-side service bootstrap + production-path Modern Standby lifecycle PASS'
+)){
+    Assert-ArrayContainsExact $profile.watchdogM9ProductionIntegration.m9e.prerequisites $needle ("M9E profile prerequisite missing: {0}" -f $needle)
+}
+
+foreach($needle in @(
     'Hp8C40TargetProfile.Instance WatchdogRecoveryValidated: false -> true',
-    'Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized: false -> true',
+    'Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized: false -> true'
+)){
+    Assert-ArrayContainsExact $profile.watchdogM9ProductionIntegration.m9e.atomicPromotionChanges $needle ("M9E profile atomic promotion change missing: {0}" -f $needle)
+}
+
+foreach($needle in @(
     'control.enabledByDefault=false',
     'automaticPolicyEnabled=false'
 )){
-    $serialized=$profile.watchdogM9ProductionIntegration.m9e | ConvertTo-Json -Depth 10
-    if($serialized.IndexOf($needle,[StringComparison]::Ordinal)-lt 0){
-        throw ("M9E profile promotion contract missing: {0}" -f $needle)
-    }
+    Assert-ArrayContainsExact $profile.watchdogM9ProductionIntegration.m9e.invariantsThatMustRemain $needle ("M9E profile preserved invariant missing: {0}" -f $needle)
 }
 
 Assert-Contains $doc 'M9E promotion-readiness auditor' 'M9 documentation does not define M9E.'
