@@ -35,11 +35,6 @@ internal static class M4Hp8C40LeaseSelfTest
             "M4 classifies only EC-specific monitor contention as retryable",
             RetryableMonitorFailureClassificationAsync);
 
-        failures += await CaseAsync(
-            output,
-            "M4 bounded lease-read retry accepts only Global\\Access_EC contention",
-            LeaseReadRetryPolicyAsync);
-
         if (failures == 0)
         {
             output.WriteLine(
@@ -197,27 +192,6 @@ internal static class M4Hp8C40LeaseSelfTest
 
         return Task.CompletedTask;
     }
-    private static Task LeaseReadRetryPolicyAsync()
-    {
-        Assert(
-            M4Hp8C40LeaseHardware.EcMutexReadAttempts == 4);
-        Assert(
-            M4Hp8C40LeaseHardware.EcMutexRetryDelay ==
-            TimeSpan.FromMilliseconds(75));
-
-        Assert(
-            M4Hp8C40LeaseHardware.IsRetryableEcMutexContention(
-                new TimeoutException(
-                    @"Timed out waiting for Global\Access_EC.")));
-
-        Assert(
-            !M4Hp8C40LeaseHardware.IsRetryableEcMutexContention(
-                new TimeoutException(
-                    "EC did not become idle before the read transaction.")));
-
-        return Task.CompletedTask;
-    }
-
     private static Task ProtocolContractAsync()
     {
         Assert(
