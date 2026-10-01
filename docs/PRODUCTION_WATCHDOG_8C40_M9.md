@@ -451,3 +451,48 @@ execution occurred.
 
 The production gate, M9C/M9D physical gates, `WatchdogRecoveryValidated`,
 automatic/adaptive policy and default control all remain closed.
+
+
+## 10. M9E promotion-readiness auditor
+
+M9E is not a physical test and does not promote anything. Its purpose is to make the
+future production promotion transaction explicit and mechanically audited before any
+boolean is changed.
+
+Production watchdog promotion is allowed only after formal physical closure of:
+
+1. M9B read-only exact-target preflight;
+2. M9C bounded normal factory/public-backend 30/30 smoke;
+3. M9D GUI-side service-bootstrap + production-path Modern Standby lifecycle regression.
+
+The eventual promotion must be a single reviewable transaction that changes both
+independent runtime gates together:
+
+```text
+Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated
+    false -> true
+
+Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized
+    false -> true
+```
+
+and records the same state in `profiles/HP-8C40.json`.
+
+A half-promotion is explicitly invalid. Setting only one runtime gate must keep
+production construction blocked rather than creating an alternate route.
+
+Even after M9 production promotion, the following must remain unchanged:
+
+- `control.enabledByDefault=false`;
+- `automaticPolicyEnabled=false`;
+- equal-only 10..50;
+- no level 0/fan-stop;
+- no asymmetric CPU/GPU commands;
+- no arbitrary EC writes;
+- SafetyGate thermal authority unchanged;
+- M8C remains physically re-blocked;
+- qualification-only M9C/M9D gates are reclosed after their evidence is captured.
+
+The M9E auditor intentionally contains no mutator that flips these values. Promotion
+must remain an explicit evidence-driven repository change, followed by complete
+same-HEAD CI.

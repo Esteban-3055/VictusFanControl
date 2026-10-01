@@ -63,7 +63,9 @@
     "watchdogM9DCodePrepared": true,
     "watchdogM9DCodeCiPassed": true,
     "watchdogM9DServiceBootstrapPrepared": true,
-    "watchdogM9DServiceBootstrapCodeCiPassed": true
+    "watchdogM9DServiceBootstrapCodeCiPassed": true,
+    "watchdogM9PromotionReadinessPrepared": true,
+    "watchdogM9PromotionReadinessCodeCiPassed": false
   },
   "control": {
     "enabledByDefault": false,
@@ -3139,7 +3141,7 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "All currently identified M9 software-only last-mile pieces (M9A, M9B harness, M9C harness, M9D GUI lifecycle, GUI-side service bootstrap) are code/CI green. Prepare promotion-readiness auditing next; M9B remains the first unavoidable local-machine evidence boundary.",
+    "nextStep": "Finish CI for the promotion-readiness auditor. After that, no further trustworthy software-only promotion work is needed before M9B local read-only evidence; M9C/M9D and actual production promotion remain blocked.",
     "m9d": {
       "status": "FULL_APP_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED_PENDING_M9B_M9C",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",
@@ -3241,6 +3243,44 @@
           "physicalExecution": false,
           "note": "Run #900 reached all new static/invariant tests but failed warnings-as-errors build only because TimeoutException was ambiguous after adding System.ServiceProcess.ServiceController. The source was qualified as System.TimeoutException; run #901 passed the complete workflow."
         }
+      }
+    },
+    "m9e": {
+      "status": "PROMOTION_READINESS_AUDITOR_CODE_PREPARED_CI_PENDING_PREREQUISITES_BLOCKED",
+      "purpose": "define and continuously audit the atomic production-watchdog promotion transaction without performing it",
+      "promotionAuthorized": false,
+      "physicalExecutionAuthorized": false,
+      "prerequisites": [
+        "M9B read-only physical preflight PASS formally recorded with ZIP/hash evidence",
+        "M9C normal production factory/public-backend physical smoke PASS formally recorded",
+        "M9D GUI-side service bootstrap + production-path Modern Standby lifecycle PASS formally recorded",
+        "all three evidence heads/hashes causally reviewed",
+        "same-head complete CI immediately before promotion"
+      ],
+      "atomicPromotionChanges": [
+        "Hp8C40TargetProfile.Instance WatchdogRecoveryValidated: false -> true",
+        "Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized: false -> true",
+        "profiles/HP-8C40.json lifecycle.watchdogRecoveryValidated: false -> true",
+        "profiles/HP-8C40.json watchdogM9ProductionIntegration.promotion.authorized: false -> true",
+        "record M9B/M9C/M9D evidence hashes and qualification heads"
+      ],
+      "invariantsThatMustRemain": [
+        "control.enabledByDefault=false",
+        "automaticPolicyEnabled=false",
+        "equal-only CPU/GPU",
+        "validated range 10..50",
+        "no level 0/fan-stop",
+        "SafetyGate raw/effective thermal authority unchanged",
+        "M8C physicalExecutionAuthorized=false",
+        "M9C/M9D qualification-only execution gates reclosed after evidence"
+      ],
+      "rollbackModel": "Promotion changes construction admission only. Hardware ownership remains transactional and watchdog-backed; any startup/bootstrap/IPC/ownership failure leaves Custom unavailable/fail-closed.",
+      "codeCi": {
+        "result": "PENDING",
+        "commit": null,
+        "runNumber": null,
+        "runId": null,
+        "physicalExecution": false
       }
     }
   }
