@@ -40,3 +40,25 @@ Only the numeric preferred manual level is persisted in `%LOCALAPPDATA%\\VictusF
 Live telemetry is now fed into the no-write `AdaptiveFanPolicyShadowEvaluator`. The UI displays shadow safety readiness, the candidate equal recommendation, raw demand, notional intent and explanatory detail, plus all six Candidate V1 demand curves.
 
 This is visualization only. `ProcessAutomaticAsync` is deliberately absent from the P13 surface and `AutomaticExecutionAuthorized=false` remains unchanged. Runtime degradation resets the shadow evaluator and returns the preview to HoldFirmware.
+
+
+## P13.5 — tray/status hardening and software completion
+
+The tray now exposes requested mode, adaptive shadow recommendation and Manual/Automatic gate state in addition to runtime, CPU/GPU and fan authority. The P13 surface keeps the last real `FanAuthority` delivered by the coordinator so a Firmware mode request cannot cosmetically overwrite a Faulted/Restoring authority state.
+
+### P13 software completion boundary
+
+P13 is considered software-complete only while all of the following stay true:
+
+- startup mode is Firmware;
+- `control.enabledByDefault=false`;
+- `automaticPolicyEnabled=false`;
+- `ManualExecutionAuthorized=false`;
+- `AutomaticExecutionAuthorized=false`;
+- Candidate V1 remains physically unvalidated and production-unauthorized;
+- the Manual UI reaches hardware only through `AdaptiveFanProductionController` after its closed gate;
+- Automatic in P13 is shadow/recommendation only and has no `ProcessAutomaticAsync` execution path;
+- persisted settings contain only the equal manual preference 10..50;
+- the UI contains no direct WMI, EC, PawnIO, watchdog lease or backend access.
+
+Opening hardware execution is not part of P13 and remains a later target-side qualification.

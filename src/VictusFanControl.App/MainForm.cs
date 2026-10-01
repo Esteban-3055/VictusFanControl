@@ -184,6 +184,9 @@ internal sealed class MainForm : Form
     private ToolStripMenuItem? _trayCpuItem;
     private ToolStripMenuItem? _trayGpuItem;
     private ToolStripMenuItem? _trayAuthorityItem;
+    private ToolStripMenuItem? _trayModeItem;
+    private ToolStripMenuItem? _trayAdaptiveItem;
+    private ToolStripMenuItem? _trayGateItem;
 
     private readonly SortedDictionary<long, string> _pendingSequencedEvents = new();
     private long _nextEventSequence = 1;
@@ -359,7 +362,7 @@ internal sealed class MainForm : Form
         bool m9dProductionLifecycleHardwareTest = false,
         string? m9dProductionLifecycleMarkerRoot = null)
     {
-        Text = "VictusFanControl v0.4-dev — post-M9 / user control gates CLOSED";
+        Text = "VictusFanControl v0.4-dev — P13 software UI complete / hardware gates CLOSED";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(780, 560);
         Size = new Size(900, 680);
@@ -2176,6 +2179,9 @@ internal sealed class MainForm : Form
         _trayCpuItem = new ToolStripMenuItem("CPU: waiting") { Enabled = false };
         _trayGpuItem = new ToolStripMenuItem("GPU: waiting") { Enabled = false };
         _trayAuthorityItem = new ToolStripMenuItem("Fan authority: HP firmware") { Enabled = false };
+        _trayModeItem = new ToolStripMenuItem("Mode: Firmware") { Enabled = false };
+        _trayAdaptiveItem = new ToolStripMenuItem("Adaptive preview: waiting") { Enabled = false };
+        _trayGateItem = new ToolStripMenuItem("Manual/Automatic gates: CLOSED") { Enabled = false };
 
         var open = new ToolStripMenuItem("Open VictusFanControl");
         var exit = new ToolStripMenuItem("Exit");
@@ -2191,6 +2197,9 @@ internal sealed class MainForm : Form
         menu.Items.Add(_trayCpuItem);
         menu.Items.Add(_trayGpuItem);
         menu.Items.Add(_trayAuthorityItem);
+        menu.Items.Add(_trayModeItem);
+        menu.Items.Add(_trayAdaptiveItem);
+        menu.Items.Add(_trayGateItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(open);
         menu.Items.Add(new ToolStripSeparator());
@@ -4568,7 +4577,13 @@ internal sealed class MainForm : Form
 
     private void UpdateTray()
     {
-        if (_trayStateItem is null || _trayCpuItem is null || _trayGpuItem is null || _trayAuthorityItem is null)
+        if (_trayStateItem is null ||
+            _trayCpuItem is null ||
+            _trayGpuItem is null ||
+            _trayAuthorityItem is null ||
+            _trayModeItem is null ||
+            _trayAdaptiveItem is null ||
+            _trayGateItem is null)
         {
             return;
         }
@@ -4590,10 +4605,13 @@ internal sealed class MainForm : Form
         }
 
         _trayAuthorityItem.Text = $"Fan authority: {_fanCoordinator.Authority}";
+        _trayModeItem.Text = _p13FanControlSurface.ModeStatusText;
+        _trayAdaptiveItem.Text = _p13FanControlSurface.AdaptivePreviewStatusText;
+        _trayGateItem.Text = _p13FanControlSurface.GateStatusText;
 
         var tooltip = _lastSnapshot is null
-            ? $"VFC {state}"
-            : $"VFC {state} | CPU {FormatCompact(_lastSnapshot.CpuControlTemperatureC, "C")} GPU {FormatCompact(_lastSnapshot.GpuTemperatureC, "C")}";
+            ? $"VFC {state} | {_fanProductionController.Mode}"
+            : $"VFC {state} | {_fanProductionController.Mode} | CPU {FormatCompact(_lastSnapshot.CpuControlTemperatureC, "C")} GPU {FormatCompact(_lastSnapshot.GpuTemperatureC, "C")}";
 
         _trayIcon.Text = tooltip.Length <= 63 ? tooltip : tooltip[..63];
     }

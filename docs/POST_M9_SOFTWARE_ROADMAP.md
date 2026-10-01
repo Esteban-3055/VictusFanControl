@@ -49,7 +49,11 @@ Closed in CI. The equal CPU/GPU selector is constrained to 10..50, routes only t
 
 ### P13.4 — live Automatic shadow preview and candidate visualization
 
-Implemented: each telemetry snapshot is evaluated by `AdaptiveFanPolicyShadowEvaluator` using Candidate V1. The GUI shows shadow SafetyGate readiness, recommended equal level, raw demand, notional intent, detail, and all six candidate curves. Runtime degradation resets the preview. The Automatic execution gate remains false and the P13 surface deliberately has no `ProcessAutomaticAsync` path.
+Closed in CI. Each telemetry snapshot is evaluated by the no-write shadow evaluator; all six Candidate V1 curves and recommendation state are visible while Automatic execution remains absent/closed.
+
+### P13.5 — tray/status hardening and software completion
+
+Implemented: the tray now reports runtime state, CPU/GPU, fan authority, requested P13 mode, adaptive shadow recommendation and both post-M9 gate states. The control surface tracks actual coordinator authority instead of inferring it from the requested mode. P13 is software-complete with Manual and Automatic execution still compile-time false; no saved setting can restore a mode or authority at startup.
 
 ## P14 — release-candidate productization
 

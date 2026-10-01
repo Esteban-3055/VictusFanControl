@@ -22,6 +22,7 @@ internal sealed class P13FanControlSurface : UserControl
     private readonly AdaptiveFanPolicyConfig _candidateConfig;
     private readonly Func<SafetyGateResult?> _controlSafetyProvider;
     private readonly Action<string> _log;
+    private FanAuthority _lastAuthority = FanAuthority.Firmware;
 
     private readonly Label _modeValue = ValueLabel();
     private readonly Label _authorityValue = ValueLabel();
@@ -71,6 +72,10 @@ internal sealed class P13FanControlSurface : UserControl
 
     public string AdaptivePreviewStatusText =>
         $"Adaptive preview: {_previewLevelValue.Text}";
+
+    public string GateStatusText =>
+        $"Manual gate: {(_controller.ManualExecutionAuthorized ? "OPEN" : "CLOSED")} | " +
+        $"Automatic gate: {(_controller.AutomaticExecutionAuthorized ? "OPEN" : "CLOSED")}";
 
     public void UpdateTelemetry(
         SystemState state,
@@ -140,6 +145,7 @@ internal sealed class P13FanControlSurface : UserControl
 
     public void UpdateAuthority(FanAuthority authority)
     {
+        _lastAuthority = authority;
         _authorityValue.Text = authority.ToString();
     }
 
@@ -551,9 +557,15 @@ internal sealed class P13FanControlSurface : UserControl
     private void RefreshState(string detail)
     {
         _modeValue.Text = _controller.Mode.ToString();
-        _authorityValue.Text = _controller.Mode == AdaptiveFanProductionMode.Firmware
-            ? "Firmware"
-            : _authorityValue.Text;
+        _authorityValue.Text = _lastAuthority.ToString();
+        _manualGateValue.Text =
+            _controller.ManualExecutionAuthorized
+                ? "OPEN"
+                : "CLOSED";
+        _automaticGateValue.Text =
+            _controller.AutomaticExecutionAuthorized
+                ? "OPEN"
+                : "CLOSED";
         _statusValue.Text = detail;
     }
 
