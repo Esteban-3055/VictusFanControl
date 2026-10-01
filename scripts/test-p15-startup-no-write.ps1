@@ -144,7 +144,7 @@ function Get-StrictFirmwareProof([int]$required,[string]$phase) {
     for($i=1;$i -le $required;$i++){
         $s=Read-Setpoint
         $samples+=@($s)
-        if($s.Cpu -ne 255 -or $s.Gpu -ne 255){throw "P15A observed non-firmware setpoint during $phase sample $i/$required: $($s.Cpu)/$($s.Gpu)."}
+        if($s.Cpu -ne 255 -or $s.Gpu -ne 255){throw "P15A observed non-firmware setpoint during $phase sample $i/${required}: $($s.Cpu)/$($s.Gpu)."}
         Assert-NoJournal $phase
         if($i -lt $required){Start-Sleep -Milliseconds 125}
     }
