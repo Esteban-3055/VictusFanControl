@@ -2941,7 +2941,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9_SOFTWARE_PREPARATION_CODE_CI_PASS_M9B_RUNTIME_BOOTSTRAP_CODE_PREPARED_CI_PENDING_READ_ONLY_BLOCKED",
+    "status": "M9_SOFTWARE_PREPARATION_CODE_CI_PASS_M9B_RUNTIME_BOOTSTRAP_CODE_CI_PASS_READ_ONLY_AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -2983,11 +2983,11 @@
       "status": "CODE_CI_PASS"
     },
     "m9b": {
-      "status": "RUNTIME_DEPENDENCY_BOOTSTRAP_CODE_PREPARED_CI_PENDING_READ_ONLY_BLOCKED",
+      "status": "RUNTIME_DEPENDENCY_BOOTSTRAP_CODE_CI_PASS_READ_ONLY_AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI",
       "purpose": "versioned read-only production-watchdog preflight on the exact HP 8C40 target",
       "preflightScript": "scripts/test-8c40-production-watchdog-m9b-preflight.ps1",
       "invariantScript": "scripts/test-8c40-m9b-readonly-preflight-invariants.ps1",
-      "readOnlyExecutionAuthorized": false,
+      "readOnlyExecutionAuthorized": true,
       "physicalWriteAuthorized": false,
       "serviceMutationAuthorized": false,
       "watchdogLeaseAcquisitionAuthorized": false,
@@ -3035,12 +3035,12 @@
         "gateCritical": true
       },
       "readOnlyAuthorization": {
-        "status": "BLOCKED_PENDING_RUNTIME_BOOTSTRAP_CI",
-        "authorized": false,
-        "previousAuthorizedHead": "1d5470fe258719b22e61c2770bd2b9afc568b63b",
-        "previousAuthorizedCiRunNumber": 918,
-        "previousAuthorizedCiRunId": 36811842327,
-        "previousAuthorizedCiResult": "SUCCESS",
+        "status": "AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI",
+        "authorized": true,
+        "prerequisiteHead": "3d61b8721a9c67a509e4cff6459940378dacd553",
+        "prerequisiteCiRunNumber": 921,
+        "prerequisiteCiRunId": 36813276213,
+        "prerequisiteCiResult": "SUCCESS",
         "scope": "one versioned M9B read-only preflight on the exact target; no fan write, service mutation or watchdog lease acquisition",
         "sameHeadCiRequiredBeforeExecution": true,
         "physicalWriteAuthorized": false,
@@ -3048,7 +3048,7 @@
         "watchdogLeaseAcquisitionAuthorized": false
       },
       "runtimeDependencyBootstrap": {
-        "status": "CODE_PREPARED_CI_PENDING",
+        "status": "CODE_CI_PASS",
         "trigger": "only when local modules/IntelMSR.bin or modules/LpcACPIEC.bin is missing",
         "script": "scripts/setup-pawnio-modules.ps1",
         "pawnIoModulesRelease": "0.2.11",
@@ -3060,13 +3060,20 @@
         "hardwareMutation": false,
         "serviceMutation": false,
         "repositoryTrackedMutation": false,
+        "codeCi": {
+          "result": "PASS",
+          "commit": "3d61b8721a9c67a509e4cff6459940378dacd553",
+          "runNumber": 921,
+          "runId": 36813276213,
+          "physicalExecution": false
+        },
         "note": "The modules directory is gitignored runtime state. The bootstrap verifies the pinned official archive SHA-256 before copying only the two required signed PawnIO modules."
       },
       "canonicalRebind": {
         "status": "CODE_CI_PASS",
         "branch": "feature/victus-8c40-m9-canonical-prehardware",
         "sourceHead": "514294beca991ac1660738f7984a7677ed6499d6",
-        "readOnlyExecutionAuthorized": false,
+        "readOnlyExecutionAuthorized": true,
         "physicalWriteAuthorized": false,
         "purpose": "Bind the single M9B read-only target preflight to the final canonical pre-hardware line after all software-only M9 readiness work.",
         "codeCi": {
@@ -3187,7 +3194,7 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Obtain complete CI for the M9B runtime-dependency bootstrap preparation. Then issue a separate read-only authorization commit with that CI evidence, require same-HEAD CI on the canonical branch, and only then rerun the versioned M9B read-only preflight. M9C/M9D writes and final production promotion remain blocked.",
+    "nextStep": "Require complete CI for this exact M9B runtime-bootstrap authorization SHA and then fast-forward feature/victus-8c40-m9-canonical-prehardware to the same SHA. Only after same-HEAD canonical CI SUCCESS may the versioned M9B read-only preflight be rerun. M9C/M9D writes and final production promotion remain blocked.",
     "m9d": {
       "status": "FULL_APP_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED_PENDING_M9B_M9C",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",

@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B RUNTIME-DEPENDENCY BOOTSTRAP CODE PREPARED / READ-ONLY EXECUTION BLOCKED PENDING CI. M9C/M9D CODE/CI PASS WITH WRITE PATHS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B RUNTIME-DEPENDENCY BOOTSTRAP CODE/CI PASS / READ-ONLY AUTHORIZED SUBJECT TO SAME-HEAD CI. M9C/M9D CODE/CI PASS WITH WRITE PATHS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -195,7 +195,7 @@ During runtime-bootstrap preparation the profile deliberately returns to:
 - `m9a.productionConstructionAuthorized=false`;
 - `WatchdogRecoveryValidated=false`.
 
-The preparation commit is software-only. M9B may not be rerun until this bootstrap change passes complete CI and a separate authorization commit is green on the exact canonical HEAD. M9C remains blocked until a real M9B PASS is reviewed and committed.
+The runtime-bootstrap preparation closed with **CODE/CI PASS** at commit `3d61b8721a9c67a509e4cff6459940378dacd553`, GitHub Actions **#921** (run `36813276213`). No hardware path ran. A separate read-only authorization is now reopened, but M9B may be rerun only after the exact authorization SHA passes complete CI and is the canonical branch HEAD. M9C remains blocked until a real M9B PASS is reviewed and committed.
 
 
 ### M9B automatic evidence packaging
@@ -558,4 +558,4 @@ being the canonical branch HEAD. M9C/M9D physical execution/construction,
 `WatchdogRecoveryValidated`, production construction, default control and the
 automatic/adaptive policy all remain false.
 
-Status: **M9B RUNTIME-DEPENDENCY BOOTSTRAP CODE PREPARED / READ-ONLY EXECUTION BLOCKED PENDING CI**.
+Status: **M9B RUNTIME-DEPENDENCY BOOTSTRAP CODE/CI PASS / READ-ONLY AUTHORIZED SUBJECT TO SAME-HEAD CI**.
