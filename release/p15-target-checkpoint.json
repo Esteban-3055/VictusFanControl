@@ -584,7 +584,7 @@
       "ownedJournalSchemaVersion": 2,
       "ownedJournalGeneration": 3,
       "ownedJournalControllerPid": 22568,
-      "ownedJournalControllerStartUtcTicks": 639264920440344800,
+      "ownedJournalControllerStartUtcTicks": "639264920440344831",
       "causalPrepareWriteIntentCommitRestoreReleaseVerified": true,
       "strongRestoreVerified": true,
       "localFirmwareAckVerified": true,
@@ -596,7 +596,7 @@
       "initialServiceState": "Manual/Running/PID7980/LocalSystem",
       "finalServiceState": "Manual/Running/PID7980/LocalSystem",
       "watchdogPid": 7980,
-      "watchdogStartUtcTicks": 639264861577278000,
+      "watchdogStartUtcTicks": "639264861577277909",
       "watchdogProcessIdentityStable": true,
       "initialServiceStatePreserved": true,
       "serviceStartedByHarness": false,
@@ -610,7 +610,20 @@
       "m9dQualificationConstructionAuthorized": false,
       "evidenceIndependentlyReviewed": true,
       "physicalPassSupported": true,
-      "nextPhysicalGateOpened": false
+      "nextPhysicalGateOpened": false,
+      "failedClosureCiHistory": [
+        {
+          "head": "6461255172a816326edc738da6007a43d400e3da",
+          "runNumber": 1115,
+          "runId": 36938847664,
+          "result": "FAILURE",
+          "failureStep": "HP 8C40 P15B Manual30 preparation invariant",
+          "cause": "The formal-closure metadata serialized 64-bit controller/watchdog process-start tick identities through JavaScript Number, rounding the evidence values before CI comparison.",
+          "hardwareExecution": false,
+          "physicalEvidenceReused": true,
+          "physicalGatesRemainedClosed": true
+        }
+      ]
     }
   },
   "automatic": {

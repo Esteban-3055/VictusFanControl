@@ -119,6 +119,8 @@ Independent review verified the archive and all manifest evidence hashes, exact 
 
 The initial watchdog baseline was `Manual/Running/PID7980/LocalSystem` and the same PID/start identity remained Running through the complete transaction and restore. The harness did not start or restart it. User-facing Manual, Automatic, Candidate V1, M9C and M9D qualification gates remained closed. This closure records the physical PASS and immediately re-blocks the dedicated P15B harness/controller gates. It does **not** prepare or authorize Automatic; a subsequent gate may be considered only after this closure commit itself has full same-HEAD CI SUCCESS.
 
+The first formal-closure commit `6461255172a816326edc738da6007a43d400e3da` is preserved with GitHub Actions **#1115 FAILURE**. The failure was software-only in the P15B invariant: JavaScript Number serialization rounded the two 64-bit process-start tick identities in closure metadata. It did not execute hardware, reopen either P15B physical gate, alter the reviewed ZIP, or invalidate the physical PASS. The follow-up correction stores those tick identities as exact decimal strings so PowerShell can cast them losslessly to `Int64` during CI.
+
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
