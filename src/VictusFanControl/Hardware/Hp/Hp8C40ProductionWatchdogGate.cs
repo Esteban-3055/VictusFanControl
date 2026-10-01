@@ -27,7 +27,7 @@ public static class Hp8C40ProductionWatchdogGate
 
     // Separate temporary construction gate for one versioned M9C physical
     // qualification. It remains false until M9B evidence is physically closed.
-    public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;
+    public static readonly bool M9CPhysicalQualificationConstructionAuthorized = true;
 
     // Separate construction-only gate for the M9D GUI lifecycle regression.
     public static readonly bool M9DPhysicalQualificationConstructionAuthorized = false;
