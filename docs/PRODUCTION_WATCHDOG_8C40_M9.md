@@ -388,3 +388,19 @@ SHA-256 hashes, ZIP and ZIP SHA-256 sidecar.
 The real power transition is intentionally not dispatched by the harness. After READY,
 the operator must explicitly choose Windows **Start -> Power -> Sleep**, preserving the
 same manual transition model used by the physically qualified M6 gate.
+
+
+### M9D code/CI closure
+
+The complete M9D GUI route, parent harness, independent failsafe, native tracked-child
+helper and evidence packager are **CODE/CI PASS** at commit
+`91332ac590a456c0489406e9262d25b85a6528ca`, GitHub Actions **#894**
+(run `36803864224`).
+
+The workflow passed the M9D preparation and parent-harness invariants under both
+PowerShell 7 and Windows PowerShell 5.1, native child and packaging self-tests,
+warnings-as-errors build, and the existing M5-M9/SafetyGate/coordinator/backend
+regressions. No physical M9D execution occurred.
+
+This closure does not authorize M9D. Its controller/construction/physical authorization
+flags remain false and M9D still requires formally recorded M9B and M9C physical PASS.
