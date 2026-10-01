@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current preparation state: **CI validated and formally closed. P15A startup/no-write is explicitly authorized, but physical execution remains forbidden until the authorization HEAD itself has a successful full CI run.**
+Current preparation state: **authorization temporarily REVOKED while a fail-closed RC payload-layout correction is validated in CI. P15B and Automatic remain closed.**
 
 ### P15A preparation closure
 
@@ -34,6 +34,14 @@ GitHub Actions validation: **#1090**, run ID `36916449876`, **SUCCESS**. The ful
 The earlier hardening commit triggered Actions **#1089** (run ID `36916292385`) and failed at the global PowerShell syntax check because one diagnostic string used `$required:`, which PowerShell parses as an invalid drive-qualified variable reference. The interpolation boundary was corrected to `${required}:`; no later CI step and no hardware operation ran in #1089. The failure is retained as evidence.
 
 P15A preparation is formally closed. A separate authorization commit now sets only `startupNoWrite.executionAuthorized=true`. That authorization is based on preparation closure HEAD `1ea5d081422aced1acc3941e2110ba16289cd791` / CI #1091 SUCCESS and still requires a full **SUCCESS on the authorization HEAD itself before any physical execution**. P15B remains unimplemented/closed, and Manual/Automatic user-facing gates remain false.
+
+### P15A payload-layout correction
+
+The first authorized P15A attempt on HEAD `8e91c649056ba868ec94aa1864c7669aa90f4550` / CI #1092 SUCCESS failed closed after the exact P14.5 artifact and inner package hashes had already verified. The harness expanded the deterministic inner RC ZIP correctly, but then looked for `app\VictusFanControl.App.exe` directly under the extraction directory. P14.3 packages intentionally contain one top-level package root named `VictusFanControl-0.4.0-rc.1-win-x64`, so the real GUI is one level deeper.
+
+The failure occurred before the service baseline check, before any EC setpoint probe, before GUI launch and before any fan-control command, firmware restore or watchdog lease acquisition. Because the failure occurred before the harness's evidence-packaging `try/finally`, no P15A evidence ZIP was produced; that absence is recorded rather than reconstructed.
+
+The correction introduces a dedicated no-hardware payload resolver that requires exactly one package root matching the inner ZIP basename and verifies `PACKAGE-MANIFEST.json`, the GUI executable and both app PawnIO modules beneath that root. A CI self-test constructs the same nested ZIP shape so this exact integration mistake cannot silently recur. P15A execution authorization is re-closed while this correction is under CI.
 
 ### P15A authorization window
 
@@ -49,7 +57,7 @@ P15B is intentionally not implemented or authorized by the P15A preparation. Its
 
 ## Current authorization boundary
 
-- P15A startup/no-write execution: **AUTHORIZED ONLY AFTER SAME-HEAD CI SUCCESS**
+- P15A startup/no-write execution: **CLOSED DURING PAYLOAD-LAYOUT CORRECTION CI**
 - P15B Manual 30/30 execution: **CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**

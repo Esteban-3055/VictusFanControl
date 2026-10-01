@@ -32,6 +32,7 @@ $setpointPath=Join-Path $evidenceRoot 'setpoint-samples.json'
 $servicePath=Join-Path $evidenceRoot 'service-snapshots.json'
 $artifactPath=Join-Path $evidenceRoot 'rc-artifact-identity.json'
 $packager=Join-Path $PSScriptRoot 'package-p15-startup-evidence.ps1'
+$payloadResolver=Join-Path $PSScriptRoot 'expand-p15-rc-payload.ps1'
 $tempRoot=Join-Path ([IO.Path]::GetTempPath()) ('VFC-P15A-'+[Guid]::NewGuid().ToString('N'))
 $outerStage=Join-Path $tempRoot 'outer'
 $payloadRoot=Join-Path $tempRoot 'payload'
@@ -179,10 +180,10 @@ $artifactName=[string]$contract.p14Baseline.auditedRcArtifactName
 $innerZip=Join-Path $outerStage 'VictusFanControl-0.4.0-rc.1-win-x64.zip'
 $innerHash=(Get-FileHash -LiteralPath $innerZip -Algorithm SHA256).Hash.ToLowerInvariant()
 if($innerHash -cne ([string]$contract.p14Baseline.auditedRcPayloadZipSha256).ToLowerInvariant()){throw 'P15A inner audited RC ZIP SHA-256 mismatch.'}
-Expand-Archive -LiteralPath $innerZip -DestinationPath $payloadRoot
-$appExe=Join-Path $payloadRoot 'app\VictusFanControl.App.exe'
-$script:modulesDir=Join-Path $payloadRoot 'app\modules'
-if(-not (Test-Path -LiteralPath $appExe -PathType Leaf)){throw 'P15A audited RC GUI executable missing.'}
+$payload=& $payloadResolver -InnerZipPath $innerZip -DestinationPath $payloadRoot
+$appExe=[string]$payload.AppExe
+$script:modulesDir=[string]$payload.ModulesDirectory
+if(-not (Test-Path -LiteralPath $appExe -PathType Leaf)){throw 'P15A audited RC GUI executable missing after validated package-root resolution.'}
 
 $serviceBefore=Get-ServiceSnapshot
 Assert-ServiceBaseline $serviceBefore

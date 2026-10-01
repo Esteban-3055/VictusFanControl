@@ -249,6 +249,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p15-startup-no-write-invariants.ps1
 
+      - name: HP 8C40 P15A RC payload layout self-test
+        shell: pwsh
+        run: .\scripts\test-p15-rc-payload-layout.ps1
+
       - name: HP 8C40 P15A evidence packaging self-test
         shell: pwsh
         run: .\scripts\test-p15-startup-evidence-packaging.ps1
@@ -309,6 +313,7 @@ jobs:
           .\scripts\test-p14-artifact-invariants.ps1
           .\scripts\test-p14-final-software-rc-audit-invariants.ps1
           .\scripts\test-p15-startup-no-write-invariants.ps1
+          .\scripts\test-p15-rc-payload-layout.ps1
           .\scripts\test-p15-startup-evidence-packaging.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
