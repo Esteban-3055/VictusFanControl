@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B RUNTIME-DEPENDENCY BOOTSTRAP CODE/CI PASS / READ-ONLY AUTHORIZED SUBJECT TO SAME-HEAD CI. M9C/M9D CODE/CI PASS WITH WRITE PATHS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C/M9D CODE/CI PASS WITH WRITE PATHS BLOCKED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -195,7 +195,11 @@ During runtime-bootstrap preparation the profile deliberately returns to:
 - `m9a.productionConstructionAuthorized=false`;
 - `WatchdogRecoveryValidated=false`.
 
-The runtime-bootstrap preparation closed with **CODE/CI PASS** at commit `3d61b8721a9c67a509e4cff6459940378dacd553`, GitHub Actions **#921** (run `36813276213`). No hardware path ran. A separate read-only authorization is now reopened, but M9B may be rerun only after the exact authorization SHA passes complete CI and is the canonical branch HEAD. M9C remains blocked until a real M9B PASS is reviewed and committed.
+The runtime-bootstrap preparation closed with **CODE/CI PASS** at commit `3d61b8721a9c67a509e4cff6459940378dacd553`, GitHub Actions **#921** (run `36813276213`). The read-only authorization was then carried by canonical HEAD `63409c4d734bcc2c39ab968adb3470f18676463d`, with same-HEAD canonical GitHub Actions **#924** (run `36813663295`) SUCCESS.
+
+The target-side M9B run at 2026-10-01T04:28:29Z is **PHYSICAL READ-ONLY PASS**. Evidence archive `m9b-production-watchdog-preflight_2026-10-01_012803.zip` has SHA-256 `d34ec42b4f22f47e383900b4f22e8dd37e26e4752cfd211a0f607e5e080698f1`; its result is PASS on the exact HP-8C40-9D0R1LA-F18 target and exact canonical HEAD. PawnIO Intel MSR, PawnIO ACPI EC and NVIDIA NVML all initialized; three complete/fresh telemetry samples passed with zero recoveries; the independent firmware proof recorded two consecutive 255/255 (FF/FF) samples. Service state was Manual/Stopped/PID0/LocalSystem before and after, no journal remained, and fanWriteAttempted, firmwareRestoreAttempted, watchdogLeaseAttempted and serviceMutationAttempted were all false.
+
+M9B execution is now re-blocked and `noWritePreflightPassed=true` is formally recorded. M9C remains blocked until a separate authorization commit and its own complete same-HEAD CI.
 
 
 ### M9B automatic evidence packaging
@@ -558,4 +562,4 @@ being the canonical branch HEAD. M9C/M9D physical execution/construction,
 `WatchdogRecoveryValidated`, production construction, default control and the
 automatic/adaptive policy all remain false.
 
-Status: **M9B RUNTIME-DEPENDENCY BOOTSTRAP CODE/CI PASS / READ-ONLY AUTHORIZED SUBJECT TO SAME-HEAD CI**.
+Status: **M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED**.
