@@ -658,3 +658,55 @@ being the canonical branch HEAD. M9C/M9D physical execution/construction,
 automatic/adaptive policy all remain false.
 
 Status: **M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED**.
+
+
+## 12. M9 PRODUCTION WATCHDOG PROMOTED
+
+M9E readiness passed only after M9B, M9C and M9D were formally closed and all
+qualification-only execution/construction gates were re-blocked. Canonical
+same-HEAD GitHub Actions **#1046** (run `36829509832`) completed SUCCESS on
+`13bbb2419245a2ae07daf342474295f8e2c0f414` before this separate promotion
+transaction.
+
+The transaction changes the two independent runtime admission gates together:
+
+```text
+Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated: false -> true
+Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized: false -> true
+```
+
+and records the same promoted state in `profiles/HP-8C40.json` with
+`lifecycle.watchdogRecoveryValidated=true` and
+`watchdogM9ProductionIntegration.promotion.authorized=true`.
+
+Qualification evidence bound to the promotion:
+
+- M9B HEAD `63409c4d734bcc2c39ab968adb3470f18676463d`;
+  ZIP SHA-256 `d34ec42b4f22f47e383900b4f22e8dd37e26e4752cfd211a0f607e5e080698f1`.
+- M9C HEAD `acfa9f670d8d8a36655c7b4ff7d1d8aac7a12dc8`;
+  ZIP SHA-256 `4851434d5cbf59b7ae326857fa9757803e855bd03ac447654eddb8c0a1a698f3`.
+- M9D HEAD `950378ae8debdba897b4fca0cd2dbd35d6c693f8`;
+  ZIP SHA-256 `c613459d172d2c75c6ea0c677d092505481af26cdb69bdcd8fb005bfa5d019b0`.
+
+This promotion authorizes only construction of the already-qualified target-bound
+watchdog-backed production path on the exact HP-8C40-9D0R1LA-F18 target.
+M9C and M9D qualification gates remain closed. It does **not** authorize a new
+physical qualification run and does not weaken any restore, ownership, telemetry,
+lifecycle or thermal fail-closed rule.
+
+The following remain deliberately unchanged after promotion:
+
+- `control.enabledByDefault=false`;
+- `automaticPolicyEnabled=false`;
+- equal-only fan commands in the validated 10..50 envelope;
+- no level 0/fan-stop;
+- SafetyGate raw/effective thermal authority;
+- CPU >=99 C and GPU 87 C immediate preemption;
+- CPU 95..98.x C requires five fresh consecutive high samples;
+- no continuous WMI resend;
+- no arbitrary EC writes; 0x62/0x63 remain diagnostic read-only;
+- strong restore remains FF/FF + LegacyDefault + stable FF/FF + RELEASE +
+  journal absent.
+
+The future i7 power/frequency-limiting work remains a separate subsystem and is
+not part of this M9 promotion.

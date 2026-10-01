@@ -14,7 +14,7 @@ function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){
 }
 function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 
-Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'Service bootstrap preparation must not promote watchdog recovery.'
+Assert-True ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'Promoted production bootstrap requires watchdog recovery validation.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'Service bootstrap preparation must not open production construction.'
 if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed){throw 'Service bootstrap invariant requires formally closed M9C physical PASS.'}
 if(-not [bool]$profile.watchdogM9ProductionIntegration.m9d.physicalPassed){throw 'Service bootstrap invariant requires formally closed M9D physical PASS.'}

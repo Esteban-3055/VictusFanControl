@@ -22,7 +22,7 @@ Assert-True ([bool]$profile.lifecycle.watchdogM9CodeCiPassed) 'M9B preparation r
 Assert-True ([bool]$profile.lifecycle.watchdogM9CanonicalPrehardwareCodeCiPassed) 'Canonical M9 pre-hardware rebind must have same-HEAD CODE/CI PASS before read-only authorization.'
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M9B requires M8C physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M9B must keep M8C closed.'
-Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9B must not promote watchdog recovery.'
+Assert-True ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'Post-M9 promotion must preserve the formally closed M9B evidence while watchdog recovery is enabled.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9B must keep default control OFF.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9B must keep automatic/adaptive policy OFF.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9B must keep M9 production construction blocked.'
@@ -138,7 +138,7 @@ foreach($forbidden in @('SetFanLevel(','Start-Service','Stop-Service','Set-Servi
     Assert-NotContains $pawnIoSetup $forbidden ("M9B PawnIO setup contains forbidden hardware/service operation: {0}" -f $forbidden)
 }
 
-Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'M9 production construction gate must remain closed during M9B.'
+Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = true;' 'M9 production construction gate must be open only after the later M9B/M9C/M9D promotion transaction.'
 Assert-Contains $doc 'M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED' 'M9B physical closure documentation status missing.'
 Assert-Contains $doc 'does **not** start or stop the service' 'M9B documentation must preserve the no-service-mutation contract.'
 

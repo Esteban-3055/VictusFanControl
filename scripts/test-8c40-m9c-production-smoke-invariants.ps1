@@ -32,13 +32,13 @@ if([string]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.evidenc
 if([string]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.evidenceZipSha256 -cne '4851434d5cbf59b7ae326857fa9757803e855bd03ac447654eddb8c0a1a698f3'){throw 'M9C evidence ZIP hash changed.'}
 if([int]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.applyCalls -ne 1){throw 'M9C physical evidence must record exactly one ApplyAsync.'}
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.failsafeTakeover) 'M9C PASS cannot include failsafe takeover.'
-Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9C preparation must not promote watchdog recovery.'
+Assert-True ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'Post-M9 promotion must keep formally closed M9C evidence while watchdog recovery is enabled.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9C preparation must not open production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9C preparation must keep control disabled by default.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9C preparation must keep automatic/adaptive policy OFF.'
 
 foreach($needle in @(
-    'public static readonly bool ProductionConstructionAuthorized = false;',
+    'public static readonly bool ProductionConstructionAuthorized = true;',
     'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;',
     'M9CPhysicalQualificationToken = "8C40-M9C-PRODUCTION30"',
     'AsyncLocal<int>',

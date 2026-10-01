@@ -26,8 +26,8 @@ function Assert-ArrayContainsSubstring($Values,[string]$Needle,[string]$Message)
     throw $Message
 }
 
-Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9E preparation must not promote profile watchdog recovery.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.promotion.authorized) 'M9E preparation must not authorize production promotion.'
+if(-not [bool]$profile.lifecycle.watchdogRecoveryValidated){throw 'M9 production promotion must atomically set profile watchdog recovery true.'}
+if(-not [bool]$profile.watchdogM9ProductionIntegration.promotion.authorized){throw 'M9 production promotion must be explicitly authorized after readiness PASS.'}
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9e.promotionAuthorized) 'M9E itself must remain non-promoting.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9e.physicalExecutionAuthorized) 'M9E must have no physical execution path.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9E must keep control disabled by default.'
@@ -50,12 +50,22 @@ if([string]$profile.watchdogM9ProductionIntegration.m9e.codeCi.commit -cne 'ac90
 if([int]$profile.watchdogM9ProductionIntegration.m9e.codeCi.runNumber -ne 908){throw 'M9E promotion-readiness CI run number changed.'}
 if([long]$profile.watchdogM9ProductionIntegration.m9e.codeCi.runId -ne 36806074535){throw 'M9E promotion-readiness CI run id changed.'}
 
+if([string]$profile.watchdogM9ProductionIntegration.promotion.promotionSourceHead -cne '13bbb2419245a2ae07daf342474295f8e2c0f414'){throw 'M9 promotion source HEAD changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.promotion.promotionReadinessCi.runNumber -ne 1046){throw 'M9 promotion readiness CI run number changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.promotion.promotionReadinessCi.runId -ne 36829509832){throw 'M9 promotion readiness CI run id changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.promotion.qualificationEvidence.m9b.evidenceHead -cne '63409c4d734bcc2c39ab968adb3470f18676463d'){throw 'M9B promotion evidence HEAD changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.promotion.qualificationEvidence.m9b.evidenceZipSha256 -cne 'd34ec42b4f22f47e383900b4f22e8dd37e26e4752cfd211a0f607e5e080698f1'){throw 'M9B promotion evidence ZIP hash changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.promotion.qualificationEvidence.m9c.evidenceHead -cne 'acfa9f670d8d8a36655c7b4ff7d1d8aac7a12dc8'){throw 'M9C promotion evidence HEAD changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.promotion.qualificationEvidence.m9c.evidenceZipSha256 -cne '4851434d5cbf59b7ae326857fa9757803e855bd03ac447654eddb8c0a1a698f3'){throw 'M9C promotion evidence ZIP hash changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.promotion.qualificationEvidence.m9d.evidenceHead -cne '950378ae8debdba897b4fca0cd2dbd35d6c693f8'){throw 'M9D promotion evidence HEAD changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.promotion.qualificationEvidence.m9d.evidenceZipSha256 -cne 'c613459d172d2c75c6ea0c677d092505481af26cdb69bdcd8fb005bfa5d019b0'){throw 'M9D promotion evidence ZIP hash changed.'}
+
 Assert-Equal ([int]$profile.control.validatedMinimumLevel) 10 'M9E minimum fan level drifted.'
 Assert-Equal ([int]$profile.control.validatedMaximumLevel) 50 'M9E maximum fan level drifted.'
 Assert-False ([bool]$profile.control.supportsIndependentLevels) 'M9E must remain equal-only.'
 
-Assert-Contains $target 'WatchdogRecoveryValidated: false' 'Target runtime watchdog promotion gate must remain false before physical closure.'
-Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'Production construction gate must remain false before physical closure.'
+Assert-Contains $target 'WatchdogRecoveryValidated: true' 'Target runtime watchdog recovery gate must be true after atomic promotion.'
+Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = true;' 'Production construction gate must be true after atomic promotion.'
 Assert-Contains $gate 'M9CPhysicalQualificationConstructionAuthorized = false;' 'M9C construction gate must be reclosed after bounded physical PASS.'
 Assert-Contains $gate 'M9DPhysicalQualificationConstructionAuthorized = false;' 'M9D construction gate must be reclosed after physical PASS.'
 

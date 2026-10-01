@@ -15,7 +15,7 @@
   "lifecycle": {
     "sleepModel": "ModernStandbyS0LowPowerIdle",
     "legacyS3Available": false,
-    "watchdogRecoveryValidated": false,
+    "watchdogRecoveryValidated": true,
     "modernStandbyM0Characterized": true,
     "watchdogTargetAwareM1Passed": true,
     "watchdogSession0ReadOnlyM2Passed": true,
@@ -2941,7 +2941,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9B_M9C_M9D_PHYSICAL_PASS_FORMALLY_CLOSED_PROMOTION_BLOCKED",
+    "status": "M9_PRODUCTION_WATCHDOG_PROMOTED_POLICY_OFF",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -3301,13 +3301,36 @@
       "physicalPassed": true
     },
     "promotion": {
-      "authorized": false,
+      "authorized": true,
+      "status": "AUTHORIZED_AFTER_M9B_M9C_M9D_PHYSICAL_CLOSURE_AND_SAME_HEAD_READINESS_CI",
+      "promotionSourceHead": "13bbb2419245a2ae07daf342474295f8e2c0f414",
+      "promotionReadinessCi": {
+        "runNumber": 1046,
+        "runId": 36829509832,
+        "result": "SUCCESS",
+        "head": "13bbb2419245a2ae07daf342474295f8e2c0f414",
+        "branch": "feature/victus-8c40-m9-canonical-prehardware"
+      },
+      "qualificationEvidence": {
+        "m9b": {
+          "evidenceHead": "63409c4d734bcc2c39ab968adb3470f18676463d",
+          "evidenceZipSha256": "d34ec42b4f22f47e383900b4f22e8dd37e26e4752cfd211a0f607e5e080698f1"
+        },
+        "m9c": {
+          "evidenceHead": "acfa9f670d8d8a36655c7b4ff7d1d8aac7a12dc8",
+          "evidenceZipSha256": "4851434d5cbf59b7ae326857fa9757803e855bd03ac447654eddb8c0a1a698f3"
+        },
+        "m9d": {
+          "evidenceHead": "950378ae8debdba897b4fca0cd2dbd35d6c693f8",
+          "evidenceZipSha256": "c613459d172d2c75c6ea0c677d092505481af26cdb69bdcd8fb005bfa5d019b0"
+        }
+      },
       "watchdogRecoveryValidatedTargetValue": true,
       "automaticPolicyEnabledAfterPromotion": false,
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Do not repeat M9D. Run complete CI on the formal M9D closure SHA, fast-forward feature/victus-8c40-m9-canonical-prehardware to that exact SHA, require canonical same-HEAD CI SUCCESS, then run the M9E promotion-readiness audit as a separate transaction. Production watchdog promotion, default control and automatic/adaptive policy remain blocked until that later transaction.",
+    "nextStep": "M9 production watchdog construction is promoted only for the exact qualified HP 8C40 target. Keep control.enabledByDefault=false and automatic/adaptive policy OFF; the next work is a separate policy-integration/tuning gate, not another M9D physical run.",
     "m9d": {
       "status": "PHYSICAL_PASS_FORMALLY_CLOSED",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",
@@ -3546,7 +3569,7 @@
       }
     },
     "m9e": {
-      "status": "PROMOTION_READINESS_AUDITOR_CODE_CI_PASS_PREREQUISITES_BLOCKED",
+      "status": "PROMOTION_READINESS_PASS_TRANSACTION_APPLIED",
       "purpose": "define and continuously audit the atomic production-watchdog promotion transaction without performing it",
       "promotionAuthorized": false,
       "physicalExecutionAuthorized": false,

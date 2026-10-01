@@ -43,7 +43,7 @@ if([long]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.sour
 if([string]$profile.watchdogM9ProductionIntegration.m9d.clientPrepareEcMutexRetry.status -cne 'CODE_CI_PASS'){throw 'M9D client EC retry must remain CODE/CI PASS.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9d.clientPrepareEcMutexRetry.codeCi.commit -cne 'a5d8ad001ad64f72bc654a6bbd6b667965a2e0ca'){throw 'M9D client retry CI evidence commit changed.'}
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.clientPrepareEcMutexRetry.serviceBinaryMutation) 'M9D client retry must not replace the qualified M4 service.'
-Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D must not promote watchdog recovery.'
+Assert-True ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'Post-M9 promotion must preserve closed M9D evidence while watchdog recovery is enabled.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D must not promote normal production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9D must keep control disabled by default.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9D must keep automatic/adaptive policy OFF.'

@@ -12,11 +12,11 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
 
         failures += Report(
             output,
-            "M9 production and M9C/M9D qualification gates are closed after M9D physical PASS",
-            !Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized &&
+            "M9 production watchdog is promoted while M9C/M9D qualification gates remain closed",
+            Hp8C40ProductionWatchdogGate.ProductionConstructionAuthorized &&
             !Hp8C40ProductionWatchdogGate.M9CPhysicalQualificationConstructionAuthorized &&
             !Hp8C40ProductionWatchdogGate.M9DPhysicalQualificationConstructionAuthorized &&
-            !Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated);
+            Hp8C40TargetProfile.Instance.WatchdogRecoveryValidated);
 
         var authorized =
             Hp8C40ProductionWatchdogGate
@@ -26,11 +26,11 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
 
         failures += Report(
             output,
-            "exact HP 8C40 still cannot create production watchdog before M9 promotion",
-            !authorized &&
+            "exact HP 8C40 production watchdog construction is authorized after M9 promotion",
+            authorized &&
             reason.Contains(
-                "WatchdogRecoveryValidated=false",
-                StringComparison.Ordinal));
+                "authorized",
+                StringComparison.OrdinalIgnoreCase));
 
         var lease =
             Hp8C40ProductionWatchdogGate
@@ -38,38 +38,26 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
 
         failures += Report(
             output,
-            "normal M9 wiring returns no lease while promotion is closed",
-            lease is null);
+            "normal M9 wiring creates only the target-bound named-pipe lease client after promotion",
+            lease is NamedPipeFanControlWatchdogLeaseClient);
 
-        var fakeLease = new RecordingLease();
-        var factoryBlocked = false;
-
+        var requirePassed = true;
         try
         {
-            _ = HpFanControlBackendFactory.Create(
-                modulesDirectory: "M9-NO-HARDWARE-SENTINEL",
-                hardware: exact,
-                watchdogLease: fakeLease);
+            Hp8C40ProductionWatchdogGate
+                .RequireProductionConstructionAuthorized(exact);
         }
-        catch (NotSupportedException ex)
-            when (ex.Message.Contains(
-                "M9",
-                StringComparison.OrdinalIgnoreCase) ||
-                  ex.Message.Contains(
-                      "WatchdogRecoveryValidated=false",
-                      StringComparison.Ordinal))
+        catch
         {
-            factoryBlocked = true;
+            requirePassed = false;
         }
 
         failures += Report(
             output,
-            "factory rejects supplied 8C40 production lease before backend/hardware construction",
-            factoryBlocked &&
-            fakeLease.Calls == 0);
+            "production authorization check passes without constructing hardware",
+            requirePassed);
 
         var m9cBlocked = false;
-
         try
         {
             using var scope =
@@ -77,7 +65,6 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
                     .EnterM9CPhysicalQualificationConstructionScope(
                         exact,
                         Hp8C40ProductionWatchdogGate.M9CPhysicalQualificationToken);
-
             _ = scope;
         }
         catch (NotSupportedException ex)
@@ -90,9 +77,33 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
 
         failures += Report(
             output,
-            "M9C temporary construction scope is re-blocked after physical PASS",
+            "M9C temporary construction scope remains re-blocked after production promotion",
             m9cBlocked &&
             !Hp8C40ProductionWatchdogGate.IsM9CPhysicalQualificationScopeActive);
+
+        var m9dBlocked = false;
+        try
+        {
+            using var scope =
+                Hp8C40ProductionWatchdogGate
+                    .EnterM9DPhysicalQualificationConstructionScope(
+                        exact,
+                        Hp8C40ProductionWatchdogGate.M9DPhysicalQualificationToken);
+            _ = scope;
+        }
+        catch (NotSupportedException ex)
+            when (ex.Message.Contains(
+                "M9D",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            m9dBlocked = true;
+        }
+
+        failures += Report(
+            output,
+            "M9D temporary construction scope remains re-blocked after production promotion",
+            m9dBlocked &&
+            !Hp8C40ProductionWatchdogGate.IsM9DPhysicalQualificationScopeActive);
 
         var wrongTarget =
             exact with
@@ -135,29 +146,5 @@ public static class Hp8C40ProductionWatchdogGateSelfTest
         output.WriteLine(
             $"{(pass ? "PASS" : "FAIL")}  {name}");
         return pass ? 0 : 1;
-    }
-
-    private sealed class RecordingLease :
-        IFanControlWatchdogLeaseClient
-    {
-        public int Calls { get; private set; }
-
-        private ValueTask Record()
-        {
-            Calls++;
-            return ValueTask.CompletedTask;
-        }
-
-        public ValueTask PrepareAsync(CancellationToken cancellationToken) => Record();
-        public ValueTask CancelPreparedAsync(CancellationToken cancellationToken) => Record();
-        public ValueTask WriteIntentAsync(int cpuLevel, int gpuLevel, CancellationToken cancellationToken) => Record();
-        public ValueTask AbortWriteIntentAsync(CancellationToken cancellationToken) => Record();
-        public ValueTask CommitAsync(int cpuLevel, int gpuLevel, CancellationToken cancellationToken) => Record();
-        public ValueTask ProbeAsync(CancellationToken cancellationToken) => Record();
-        public ValueTask HeartbeatAsync(CancellationToken cancellationToken) => Record();
-        public ValueTask RestoreBeginAsync(CancellationToken cancellationToken) => Record();
-        public ValueTask ReleaseAsync(CancellationToken cancellationToken) => Record();
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

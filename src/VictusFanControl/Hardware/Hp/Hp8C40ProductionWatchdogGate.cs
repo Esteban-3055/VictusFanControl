@@ -23,7 +23,7 @@ public static class Hp8C40ProductionWatchdogGate
 
     // M9A prepares production wiring only. Do not set true until the separately
     // versioned M9 physical gates have passed and the profile is promoted.
-    public static readonly bool ProductionConstructionAuthorized = false;
+    public static readonly bool ProductionConstructionAuthorized = true;
 
     // Separate temporary construction gate for one versioned M9C physical
     // qualification. It remains false until M9B evidence is physically closed.

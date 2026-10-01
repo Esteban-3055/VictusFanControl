@@ -31,7 +31,7 @@ if([string]$m9d.physicalEvidence.evidenceHead -cne '950378ae8debdba897b4fca0cd2d
 if([string]$m9d.physicalEvidence.evidenceZipSha256 -cne 'c613459d172d2c75c6ea0c677d092505481af26cdb69bdcd8fb005bfa5d019b0'){throw 'M9D evidence ZIP SHA-256 changed.'}
 if([string]$m9d.physicalAuthorization.sourceHead -cne 'a5d8ad001ad64f72bc654a6bbd6b667965a2e0ca'){throw 'M9D client EC-retry source HEAD changed.'}
 if([string]$m9d.clientPrepareEcMutexRetry.status -cne 'CODE_CI_PASS'){throw 'M9D client retry must remain CODE/CI PASS.'}
-Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D must not promote WatchdogRecoveryValidated.'
+Assert-True ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'Post-M9 promotion must preserve the closed M9D harness while WatchdogRecoveryValidated=true.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D must not promote normal production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9D must keep default control OFF.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9D must keep automatic/adaptive policy OFF.'

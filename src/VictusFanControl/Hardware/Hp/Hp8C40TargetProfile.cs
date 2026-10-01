@@ -51,7 +51,7 @@ public static class Hp8C40TargetProfile
         SupportsIndependentFanLevels: false,
         FanEcLayout: FanEcRegisterLayout.HpLegacyDualFan,
         SleepModel: WindowsSleepModel.ModernStandbyS0LowPowerIdle,
-        WatchdogRecoveryValidated: false);
+        WatchdogRecoveryValidated: true);
 
     public static bool Matches(HardwareIdentity hardware, out string reason) =>
         Instance.Matches(hardware, out reason);

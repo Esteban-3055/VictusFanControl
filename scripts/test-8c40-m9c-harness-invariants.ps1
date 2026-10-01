@@ -24,7 +24,7 @@ Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalAuthori
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9C controller execution gate must be reclosed after PASS.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9C temporary construction gate must be reclosed after PASS.'
 if([string]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.evidenceZipSha256 -cne '4851434d5cbf59b7ae326857fa9757803e855bd03ac447654eddb8c0a1a698f3'){throw 'M9C parent invariant evidence hash changed.'}
-Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9C harness preparation must not promote watchdog recovery.'
+Assert-True ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'Post-M9 promotion must keep the M9C harness closed while watchdog recovery is enabled.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9C harness preparation must not promote production construction.'
 if([string]$profile.watchdogM9ProductionIntegration.m9c.expectedPhysicalBranch -cne 'feature/victus-8c40-m9-canonical-prehardware'){throw 'M9C expected physical branch must stay on the canonical pre-hardware line.'}
 

@@ -24,7 +24,7 @@ function Assert-False([bool]$Value,[string]$Message){
 
 Assert-True ([bool]$profile.loadThermalM8Qualification.m8c.physicalPassed) 'M9 requires M8C physical PASS.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M9 must keep M8C physical execution closed.'
-Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9A must not promote WatchdogRecoveryValidated.'
+Assert-True ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9 production promotion must set lifecycle.watchdogRecoveryValidated=true.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9A must keep production control disabled by default.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9A must keep automatic/adaptive policy OFF.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9ProductionIntegrationPrepared) 'M9 preparation flag missing.'
@@ -39,14 +39,14 @@ if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.evidenc
 if([string]$profile.watchdogM9ProductionIntegration.m9d.physicalEvidence.evidenceZipSha256 -cne 'c613459d172d2c75c6ea0c677d092505481af26cdb69bdcd8fb005bfa5d019b0'){throw 'M9D evidence ZIP hash changed.'}
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9A must keep production construction blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.physicalExecutionAuthorized) 'M9A must authorize no physical execution.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.promotion.authorized) 'M9 promotion must remain blocked.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.promotion.authorized) 'M9 production promotion must be explicitly authorized after readiness PASS.'
 if([string]$profile.watchdogM9ProductionIntegration.m9a.codeCi.result -cne 'PASS'){throw 'M9A CI result must remain PASS.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9a.codeCi.commit -cne 'f426df1480d92d87b9c5c5b55eb927a5a83dbf93'){throw 'M9A CI evidence commit changed.'}
 if([int]$profile.watchdogM9ProductionIntegration.m9a.codeCi.runNumber -ne 836){throw 'M9A CI run number changed.'}
 if([long]$profile.watchdogM9ProductionIntegration.m9a.codeCi.runId -ne 36778419056){throw 'M9A CI run id changed.'}
 
 foreach($needle in @(
-    'public static readonly bool ProductionConstructionAuthorized = false;',
+    'public static readonly bool ProductionConstructionAuthorized = true;',
     'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;',
     'public static readonly bool M9DPhysicalQualificationConstructionAuthorized = false;',
     'WatchdogRecoveryValidated',
@@ -73,9 +73,12 @@ if($backendGate -lt 0 -or $backendHardware -lt 0 -or $backendGate -ge $backendHa
 }
 
 foreach($needle in @(
-    'M9 production and M9C/M9D qualification gates are closed after M9D physical PASS',
-    'factory rejects supplied 8C40 production lease before backend/hardware construction',
-    'fakeLease.Calls == 0'
+    'M9 production watchdog is promoted while M9C/M9D qualification gates remain closed',
+    'exact HP 8C40 production watchdog construction is authorized after M9 promotion',
+    'normal M9 wiring creates only the target-bound named-pipe lease client after promotion',
+    'production authorization check passes without constructing hardware',
+    'M9C temporary construction scope remains re-blocked after production promotion',
+    'M9D temporary construction scope remains re-blocked after production promotion'
 )){
     Assert-Contains $selfTest $needle ("M9 deterministic self-test missing: {0}" -f $needle)
 }
@@ -89,7 +92,8 @@ foreach($needle in @(
     'M9C - bounded normal-production-path smoke',
     'M9D - last-mile recovery/lifecycle regression',
     'automaticPolicyEnabled=false',
-    'control.enabledByDefault=false'
+    'control.enabledByDefault=false',
+    'M9 PRODUCTION WATCHDOG PROMOTED'
 )){
     Assert-Contains $doc $needle ("M9 documentation invariant missing: {0}" -f $needle)
 }
