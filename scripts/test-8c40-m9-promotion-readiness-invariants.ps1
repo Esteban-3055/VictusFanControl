@@ -33,7 +33,9 @@ Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9e.physicalExecuti
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9E must keep control disabled by default.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9E must keep automatic/adaptive policy OFF.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M9E must keep M8C physical gate closed.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9E must not authorize M9C.'
+if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized){throw 'M9E readiness audit must observe the explicit bounded M9C authorization.'}
+if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized){throw 'M9E readiness audit must observe the temporary M9C construction authorization.'}
+if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalAuthorization.authorized){throw 'M9E readiness audit must observe the explicit M9C physical authorization record.'}
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9E must not authorize M9D.'
 if(-not [bool]$profile.lifecycle.watchdogM9PromotionReadinessCodeCiPassed){throw 'M9E promotion-readiness code/CI PASS flag must remain recorded.'}
 if([string]$profile.watchdogM9ProductionIntegration.m9e.codeCi.result -cne 'PASS'){throw 'M9E promotion-readiness code/CI result must remain PASS.'}
@@ -47,7 +49,7 @@ Assert-False ([bool]$profile.control.supportsIndependentLevels) 'M9E must remain
 
 Assert-Contains $target 'WatchdogRecoveryValidated: false' 'Target runtime watchdog promotion gate must remain false before physical closure.'
 Assert-Contains $gate 'public static readonly bool ProductionConstructionAuthorized = false;' 'Production construction gate must remain false before physical closure.'
-Assert-Contains $gate 'M9CPhysicalQualificationConstructionAuthorized = false;' 'M9C construction gate must remain closed.'
+Assert-Contains $gate 'M9CPhysicalQualificationConstructionAuthorized = true;' 'M9C construction gate must match the bounded physical authorization.'
 Assert-Contains $gate 'M9DPhysicalQualificationConstructionAuthorized = false;' 'M9D construction gate must remain closed.'
 
 foreach($needle in @(
