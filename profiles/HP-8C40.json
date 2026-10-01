@@ -59,7 +59,9 @@
     "watchdogM9BCodeCiPassed": true,
     "watchdogM9CCodePrepared": true,
     "watchdogM9CCodeCiPassed": true,
-    "watchdogM9CControllerCodeCiPassed": true
+    "watchdogM9CControllerCodeCiPassed": true,
+    "watchdogM9DCodePrepared": true,
+    "watchdogM9DCodeCiPassed": false
   },
   "control": {
     "enabledByDefault": false,
@@ -3135,11 +3137,55 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "M9C is fully prepared and CI-green but remains write-blocked. Continue advance development with M9D/service-lifecycle design while M9B remains the first unavoidable machine-side evidence boundary.",
+    "nextStep": "M9D GUI production-lifecycle route is prepared for code/CI in an isolated branch while M9B remains the first unavoidable machine-side evidence boundary. No M9C/M9D physical authorization or production promotion is implied.",
     "m9d": {
-      "status": "DESIGN_PENDING_M9C",
-      "purpose": "focused full GUI/lifecycle last-mile regression after M9C; no authorization yet",
-      "physicalExecutionAuthorized": false
+      "status": "GUI_PRODUCTION_LIFECYCLE_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",
+      "appMode": "--8c40-m9d-production-lifecycle-test",
+      "requiredToken": "8C40-M9D-PRODUCTION-LIFECYCLE30",
+      "physicalExecutionAuthorized": false,
+      "qualificationConstructionAuthorized": false,
+      "requiresM9BNoWritePreflightPass": true,
+      "requiresM9CPhysicalPass": true,
+      "productionConstructionAuthorized": false,
+      "watchdogRecoveryValidated": false,
+      "automaticPolicyEnabled": false,
+      "controlEnabledByDefault": false,
+      "constructionPath": [
+        "exact HardwareIdentity",
+        "temporary M9D construction-only scope",
+        "NamedPipeFanControlWatchdogLeaseClient on VictusFanControl.Watchdog.M4.8C40.v2",
+        "HpFanControlBackendFactory.Create",
+        "public Hp8C40FanControlBackend constructor",
+        "scope closes before Custom admission",
+        "FanControlCoordinator",
+        "existing display-aware M6 lifecycle engine"
+      ],
+      "lifecycleProof": [
+        "initial watchdog-backed 30/30 OWNED",
+        "SESSION_DISPLAY_STATUS Off fences Custom admission",
+        "telemetry hardware reads quiesce before restore IO",
+        "registered PBT_APMSUSPEND completes local FF/FF + watchdog Release before transition",
+        "resume notifications while display Off do not reopen telemetry",
+        "SESSION_DISPLAY_STATUS On is the only accepted user-visible resume boundary",
+        "five fresh post-boundary snapshots recover Healthy",
+        "same GUI/watchdog PID + creation ticks",
+        "one controlled 30/30 re-entry through the same production backend",
+        "final local FF/FF + watchdog Release + journal absent"
+      ],
+      "codeCi": {
+        "result": "PENDING",
+        "commit": null,
+        "runNumber": null,
+        "runId": null,
+        "physicalExecution": false
+      },
+      "physicalAuthorization": {
+        "authorized": false,
+        "prerequisite": "M9B read-only physical PASS and M9C physical production-path smoke PASS must both be formally recorded before M9D authorization.",
+        "scope": "one versioned M9D Modern Standby lifecycle execution"
+      },
+      "physicalEvidence": null
     }
   }
 }
