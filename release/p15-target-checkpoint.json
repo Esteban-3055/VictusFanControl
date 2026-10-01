@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED",
+  "status": "P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -54,22 +54,21 @@
       ],
       "hardwareExecution": false
     },
-    "executionAuthorized": false,
+    "executionAuthorized": true,
     "authorization": {
       "scope": "P15A startup/no-write only",
-      "basisHead": "1ea5d081422aced1acc3941e2110ba16289cd791",
-      "basisCiRunNumber": 1091,
-      "basisCiRunId": 36916991549,
+      "basisHead": "1b4c5f86e36bc756c3a2e404b52e04e08c1528cc",
+      "basisCiRunNumber": 1094,
+      "basisCiRunId": 36923280354,
       "basisCiResult": "SUCCESS",
-      "authorizationHead": "8e91c649056ba868ec94aa1864c7669aa90f4550",
-      "authorizationCiRunNumber": 1092,
-      "authorizationCiRunId": 36920046370,
-      "authorizationCiResult": "SUCCESS",
       "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
       "manual30AuthorizationOpened": false,
       "automaticAuthorizationOpened": false,
       "hardwareExecutionAtAuthorizationCommit": false,
-      "revokedAfterFailedPreflight": true
+      "previousAuthorizationHead": "8e91c649056ba868ec94aa1864c7669aa90f4550",
+      "previousAuthorizationCiRunNumber": 1092,
+      "previousAuthorizationCiRunId": 36920046370,
+      "previousAuthorizationRevokedAfterFailedPreflight": true
     },
     "correction": {
       "required": true,
