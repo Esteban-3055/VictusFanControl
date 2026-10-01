@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15B_MANUAL30_POWERSHELL_PID_COLLISION_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED",
+  "status": "P15B_MANUAL30_POWERSHELL_PID_COLLISION_CORRECTION_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -508,7 +508,7 @@
       "reason": "PowerShell variable names are case-insensitive and $PID is a built-in read-only automatic variable; Get-ValidatedServiceBaseline used local $pid.",
       "plannedRename": "$pid -> $servicePid within Get-ValidatedServiceBaseline",
       "addRegressionGuardAgainstPidAutomaticVariableCollision": true,
-      "implementationComplete": false,
+      "implementationComplete": true,
       "ciValidated": false,
       "closure": {
         "closed": false,
@@ -518,7 +518,8 @@
         "sourceCiRunId": null,
         "sourceCiResult": null,
         "hardwareExecution": false
-      }
+      },
+      "regressionGuardImplemented": true
     }
   },
   "automatic": {

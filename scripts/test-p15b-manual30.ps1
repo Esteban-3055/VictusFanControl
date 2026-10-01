@@ -168,18 +168,18 @@ function Get-ValidatedServiceBaseline {
 
     $journalPresent=Test-Path -LiteralPath $journalPath
     $readyVerified=$false
-    $pid=[int]$svc.ProcessId
+    $servicePid=[int]$svc.ProcessId
     $ticks=0L
 
-    if([string]$svc.State -ceq 'Running' -and $pid -gt 0 -and -not $journalPresent){
-        $ticks=Get-ProcessStartTicks $pid
-        [void](Wait-M4Ready $pid)
+    if([string]$svc.State -ceq 'Running' -and $servicePid -gt 0 -and -not $journalPresent){
+        $ticks=Get-ProcessStartTicks $servicePid
+        [void](Wait-M4Ready $servicePid)
 
         $confirmed=Get-ServiceState
         Assert-ServiceCommon $confirmed 'P15B inherited-running baseline confirmation'
         if([string]$confirmed.State -cne 'Running' -or
-           [int]$confirmed.ProcessId -ne $pid -or
-           (Get-ProcessStartTicks $pid) -ne $ticks){
+           [int]$confirmed.ProcessId -ne $servicePid -or
+           (Get-ProcessStartTicks $servicePid) -ne $ticks){
             throw 'P15B inherited Running watchdog identity changed during Ready verification.'
         }
 
@@ -190,13 +190,13 @@ function Get-ValidatedServiceBaseline {
     $mode=Resolve-P15BServiceBaselineMode -State ([string]$svc.State) -StartMode ([string]$svc.StartMode) -StartName ([string]$svc.StartName) -ProcessId ([int]$svc.ProcessId) -JournalPresent $journalPresent -ReadyVerified $readyVerified
 
     if($mode -ceq 'Stopped'){
-        $pid=0
+        $servicePid=0
         $ticks=0L
     }
 
     [pscustomobject]@{
         Mode=$mode
-        ProcessId=$pid
+        ProcessId=$servicePid
         ProcessStartUtcTicks=$ticks
         Service=$svc
         ReadyVerified=$readyVerified

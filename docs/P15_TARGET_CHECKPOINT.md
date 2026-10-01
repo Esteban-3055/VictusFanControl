@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current state: **P15A remains formally closed/re-blocked. The fresh P15B attempt failed closed during service-baseline validation because the PowerShell harness used local `$pid`, which collides case-insensitively with the read-only automatic variable `$PID`. No operator token or physical control path was reached. P15B is re-blocked pending correction.**
+Current state: **P15A remains formally closed/re-blocked. P15B remains re-blocked while the PowerShell PID-collision correction is under CI. The physical harness now uses `$servicePid` instead of the read-only automatic `$PID`, with a static regression guard preventing reintroduction. No physical gate is open.**
 
 ### P15A preparation closure
 
@@ -107,12 +107,12 @@ The reauthorized target attempt on HEAD `df355a0a49c76115f6cac7885650b5a7bec9aa8
 
 The failure occurred before any EC setpoint probe, watchdog lease acquisition, failsafe arming, P15B controller launch, fan write or firmware restore. The watchdog journal was absent. No evidence ZIP exists for this refusal because the exception occurred before evidence-root creation.
 
-P15B was immediately re-blocked. The correction is limited to renaming that local variable and adding a static regression guard so the physical harness cannot contain a local `$pid` token again.
+P15B was immediately re-blocked. The correction is implemented: all local uses in `Get-ValidatedServiceBaseline` are renamed to `$servicePid`, and the P15B invariant now rejects any line that assigns `$pid` case-insensitively. Correction status: **implementation complete / CI pending / physical gates CLOSED**.
 
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
-- P15B Manual 30/30 execution: **RE-BLOCKED AFTER POWERSHELL PID-COLLISION PREFLIGHT FAIL_CLOSED**
+- P15B Manual 30/30 execution: **PID-COLLISION CORRECTION CI PENDING / PHYSICAL GATES CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**
