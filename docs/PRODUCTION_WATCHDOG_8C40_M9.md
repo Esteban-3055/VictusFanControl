@@ -401,3 +401,18 @@ is present on failure it is copied into the evidence package and preserved.
 
 Automatic ZIP packaging records hashes of the M9 sources, profile, App sources,
 installed watchdog executable/module and collected run evidence.
+
+
+### M9D code/CI closure
+
+The complete M9D App route, parent harness, delayed failsafe, native process tracking,
+unique marker/evidence roots and automatic packaging passed the full GitHub Actions
+workflow at commit `316467b8f36eb9ff01b9365a0ccc120c48d2e1cf`, run **#862**
+(`36797807765`).
+
+The workflow passed both PowerShell 7 and Windows PowerShell 5.1 M9D invariants/self-tests,
+warnings-as-errors solution build, HP backend/M9 gate tests and the full existing M5-M9
+regression chain. No physical M9D path executed.
+
+M9D is therefore **CODE/CI PASS / PHYSICAL BLOCKED**. Its three physical gates remain
+false and M9B/M9C physical evidence remains prerequisite.

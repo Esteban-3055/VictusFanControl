@@ -15,6 +15,7 @@ function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){if($Tex
 function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){if($Text.IndexOf($Needle,[StringComparison]::Ordinal)-ge 0){throw $Message}}
 function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 
+if(-not [bool]$profile.lifecycle.watchdogM9DCodeCiPassed){throw 'M9D full harness CODE/CI PASS must remain recorded.'}
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'M9D physical authorization must remain false during code preparation.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D execution must remain blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D construction must remain blocked.'

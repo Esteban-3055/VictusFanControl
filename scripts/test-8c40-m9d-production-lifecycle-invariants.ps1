@@ -18,6 +18,7 @@ function Assert-True([bool]$Value,[string]$Message){if(-not $Value){throw $Messa
 function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 
 Assert-True ([bool]$profile.lifecycle.watchdogM9CCodeCiPassed) 'M9D preparation requires M9C full code/CI PASS.'
+Assert-True ([bool]$profile.lifecycle.watchdogM9DCodeCiPassed) 'M9D full code/CI PASS must remain recorded after closure.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed) 'M9D code preparation must not fabricate M9B physical read-only PASS.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9D preparation must keep M9C physical execution blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D physical execution must remain blocked.'
@@ -27,6 +28,10 @@ Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D preparati
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D preparation must not open production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9D preparation must keep control disabled by default.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9D preparation must keep automatic/adaptive policy OFF.'
+if([string]$profile.watchdogM9ProductionIntegration.m9d.codeCi.result -cne 'PASS'){throw 'M9D code/CI result must remain PASS.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.codeCi.commit -cne '316467b8f36eb9ff01b9365a0ccc120c48d2e1cf'){throw 'M9D code/CI evidence commit changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.codeCi.runNumber -ne 862){throw 'M9D code/CI run number changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9d.codeCi.runId -ne 36797807765){throw 'M9D code/CI run id changed.'}
 
 foreach($needle in @(
     'M9DPhysicalQualificationToken = "8C40-M9D-LIFECYCLE30"',

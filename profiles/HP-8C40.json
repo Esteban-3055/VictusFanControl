@@ -60,7 +60,7 @@
     "watchdogM9CCodePrepared": true,
     "watchdogM9CCodeCiPassed": true,
     "watchdogM9CControllerCodeCiPassed": true,
-    "watchdogM9DCodeCiPassed": false
+    "watchdogM9DCodeCiPassed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -2934,7 +2934,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9A_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_M9C_FULL_HARNESS_CODE_CI_PASS_M9D_CODE_PREPARED_ALL_PHYSICAL_BLOCKED",
+    "status": "M9A_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_M9C_FULL_HARNESS_CODE_CI_PASS_M9D_FULL_HARNESS_CODE_CI_PASS_ALL_PHYSICAL_BLOCKED",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -3137,9 +3137,9 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Finish same-HEAD CI for the fully prepared but hard-blocked M9D harness. M9B remains the first unavoidable machine-side evidence boundary; M9C/M9D stay physically blocked.",
+    "nextStep": "M9D is fully code/CI prepared and remains physically blocked. Continue code-only production service/startup planning; M9B is still the first unavoidable machine-side evidence boundary.",
     "m9d": {
-      "status": "FULL_HARNESS_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "status": "FULL_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED",
       "purpose": "focused last-mile display-aware Modern Standby lifecycle regression through the normal MainForm -> production factory -> public HP 8C40 backend route",
       "appMode": "--8c40-m9d-production-lifecycle-test",
       "requiredToken": "8C40-M9D-LIFECYCLE30",
@@ -3176,14 +3176,21 @@
       ],
       "markerNamespace": "unique per-run parent-supplied directory via --8c40-m9d-marker-root; existing markers are never overwritten",
       "codeCi": {
-        "result": "PENDING",
-        "commit": null,
-        "runNumber": null,
-        "runId": null,
-        "powerShell7Invariant": null,
-        "windowsPowerShell51Invariant": null,
-        "warningsAsErrorsBuild": null,
-        "hpBackendSelfTest": null,
+        "result": "PASS",
+        "commit": "316467b8f36eb9ff01b9365a0ccc120c48d2e1cf",
+        "runNumber": 862,
+        "runId": 36797807765,
+        "powerShell7PreparationInvariant": true,
+        "powerShell7HarnessInvariant": true,
+        "powerShell7TrackedChildSelfTest": true,
+        "powerShell7EvidencePackagingSelfTest": true,
+        "windowsPowerShell51PreparationInvariant": true,
+        "windowsPowerShell51HarnessInvariant": true,
+        "windowsPowerShell51TrackedChildSelfTest": true,
+        "windowsPowerShell51EvidencePackagingSelfTest": true,
+        "warningsAsErrorsBuild": true,
+        "hpBackendSelfTest": true,
+        "existingM5M9Regressions": true,
         "physicalExecution": false
       },
       "physicalAuthorization": {
