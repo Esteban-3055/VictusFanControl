@@ -35,6 +35,11 @@ Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 
 Assert-False ([bool]$profile.loadThermalM8Qualification.m8c.physicalExecutionAuthorized) 'M9E must keep M8C physical gate closed.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9E must not authorize M9C.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9E must not authorize M9D.'
+if(-not [bool]$profile.lifecycle.watchdogM9PromotionReadinessCodeCiPassed){throw 'M9E promotion-readiness code/CI PASS flag must remain recorded.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9e.codeCi.result -cne 'PASS'){throw 'M9E promotion-readiness code/CI result must remain PASS.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9e.codeCi.commit -cne 'ac9041ffef21adc96f8f2190455d3468cf13204a'){throw 'M9E promotion-readiness CI evidence commit changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9e.codeCi.runNumber -ne 908){throw 'M9E promotion-readiness CI run number changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9e.codeCi.runId -ne 36806074535){throw 'M9E promotion-readiness CI run id changed.'}
 
 Assert-Equal ([int]$profile.control.validatedMinimumLevel) 10 'M9E minimum fan level drifted.'
 Assert-Equal ([int]$profile.control.validatedMaximumLevel) 50 'M9E maximum fan level drifted.'

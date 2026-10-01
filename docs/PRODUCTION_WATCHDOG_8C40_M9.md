@@ -496,3 +496,35 @@ Even after M9 production promotion, the following must remain unchanged:
 The M9E auditor intentionally contains no mutator that flips these values. Promotion
 must remain an explicit evidence-driven repository change, followed by complete
 same-HEAD CI.
+
+
+### M9E promotion-readiness auditor code/CI closure
+
+The promotion-readiness auditor is **CODE/CI PASS** at commit
+`ac9041ffef21adc96f8f2190455d3468cf13204a`, GitHub Actions **#908**
+(run `36806074535`). The complete workflow passed the M9E readiness invariant
+under both PowerShell 7 and Windows PowerShell 5.1, warnings-as-errors build,
+all historical M5-M9 invariants, SafetyGate, coordinator and HP backend self-tests.
+No physical execution occurred.
+
+The prior #905 failure was not a runtime/control failure. Windows PowerShell 5.1
+serialized the documented `false -> true` strings differently when the invariant
+searched a `ConvertTo-Json` blob. A first correction removed serializer dependence;
+#907 then exposed that prerequisite checks had historically used prefix/substring
+matching rather than exact array equality. The final invariant now checks prerequisite
+array entries by ordinal substring and the atomic promotion/invariant arrays by exact
+ordinal value. This preserves the intended contract without depending on JSON escaping.
+
+This closure changes **no** production or hardware authorization. In particular:
+
+- `WatchdogRecoveryValidated=false`;
+- `ProductionConstructionAuthorized=false`;
+- M9C and M9D physical execution/construction gates remain false;
+- M8C remains physically re-blocked;
+- `control.enabledByDefault=false`;
+- `automaticPolicyEnabled=false`.
+
+M9 software-only promotion preparation has therefore reached its evidence boundary.
+The next trustworthy step is target-side M9B read-only evidence on a single canonical
+pre-hardware branch/HEAD; M9C/M9D and the final production promotion must remain blocked
+until that evidence chain is formally closed.

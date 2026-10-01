@@ -65,7 +65,7 @@
     "watchdogM9DServiceBootstrapPrepared": true,
     "watchdogM9DServiceBootstrapCodeCiPassed": true,
     "watchdogM9PromotionReadinessPrepared": true,
-    "watchdogM9PromotionReadinessCodeCiPassed": false
+    "watchdogM9PromotionReadinessCodeCiPassed": true
   },
   "control": {
     "enabledByDefault": false,
@@ -2939,7 +2939,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9A_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_M9C_FULL_HARNESS_CODE_CI_PASS_WRITE_BLOCKED",
+    "status": "M9A_M9D_CODE_CI_PASS_M9E_PROMOTION_READINESS_CODE_CI_PASS_PHYSICAL_EVIDENCE_PENDING",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -3141,7 +3141,7 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Finish CI for the promotion-readiness auditor. After that, no further trustworthy software-only promotion work is needed before M9B local read-only evidence; M9C/M9D and actual production promotion remain blocked.",
+    "nextStep": "No further trustworthy software-only promotion step is required on this M9 readiness line. M9B read-only target evidence remains the first unresolved hardware boundary; M9C/M9D and production promotion stay blocked until prerequisite physical evidence is formally recorded. Do not enable WatchdogRecoveryValidated, production construction, default control or automatic/adaptive policy.",
     "m9d": {
       "status": "FULL_APP_HARNESS_CODE_CI_PASS_PHYSICAL_BLOCKED_PENDING_M9B_M9C",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",
@@ -3246,7 +3246,7 @@
       }
     },
     "m9e": {
-      "status": "PROMOTION_READINESS_AUDITOR_CODE_PREPARED_CI_PENDING_PREREQUISITES_BLOCKED",
+      "status": "PROMOTION_READINESS_AUDITOR_CODE_CI_PASS_PREREQUISITES_BLOCKED",
       "purpose": "define and continuously audit the atomic production-watchdog promotion transaction without performing it",
       "promotionAuthorized": false,
       "physicalExecutionAuthorized": false,
@@ -3276,11 +3276,19 @@
       ],
       "rollbackModel": "Promotion changes construction admission only. Hardware ownership remains transactional and watchdog-backed; any startup/bootstrap/IPC/ownership failure leaves Custom unavailable/fail-closed.",
       "codeCi": {
-        "result": "PENDING",
-        "commit": null,
-        "runNumber": null,
-        "runId": null,
-        "physicalExecution": false
+        "result": "PASS",
+        "commit": "ac9041ffef21adc96f8f2190455d3468cf13204a",
+        "runNumber": 908,
+        "runId": 36806074535,
+        "powerShell7Invariant": true,
+        "windowsPowerShell51Invariant": true,
+        "warningsAsErrorsBuild": true,
+        "existingM5M9Regressions": true,
+        "safetyGateSelfTest": true,
+        "fanCoordinatorSelfTest": true,
+        "hpBackendSelfTest": true,
+        "physicalExecution": false,
+        "note": "Run #905 exposed a Windows PowerShell 5.1-only false negative caused by ConvertTo-Json escaping '>' in the documented false -> true promotion strings. Run #907 then exposed that the original JSON substring test intentionally matched prerequisite prefixes rather than exact array items. The invariant was corrected to inspect prerequisite arrays by ordinal substring and atomic/invariant arrays by exact ordinal value, avoiding serializer-dependent behavior. Run #908 passed the complete workflow under both PowerShell engines."
       }
     }
   }
