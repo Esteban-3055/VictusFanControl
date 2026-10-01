@@ -21,11 +21,11 @@ function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 
 $m9d=$profile.watchdogM9ProductionIntegration.m9d
 if(-not [bool]$profile.lifecycle.watchdogM9DCodeCiPassed){throw 'M9D full harness CODE/CI PASS must remain recorded.'}
-if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed){throw 'M9D fix preparation requires formally closed M9C physical PASS.'}
-Assert-False ([bool]$m9d.physicalAuthorization.authorized) 'M9D physical authorization must be reblocked after FAIL_CLOSED.'
-Assert-False ([bool]$m9d.physicalExecutionAuthorized) 'M9D execution must be reblocked while PID fix CI is pending.'
-Assert-False ([bool]$m9d.qualificationConstructionAuthorized) 'M9D construction must be reblocked while PID fix CI is pending.'
-if([string]$m9d.physicalAuthorization.result -cne 'FAIL_CLOSED'){throw 'M9D failed attempt result must remain FAIL_CLOSED.'}
+if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed){throw 'M9D retry authorization requires formally closed M9C physical PASS.'}
+if(-not [bool]$m9d.physicalAuthorization.authorized){throw 'M9D corrected retry authorization must be explicitly recorded.'}
+if(-not [bool]$m9d.physicalExecutionAuthorized){throw 'M9D execution gate must be open for the corrected retry.'}
+if(-not [bool]$m9d.qualificationConstructionAuthorized){throw 'M9D construction gate must be open for the corrected retry.'}
+if([string]$m9d.physicalAuthorization.sourceHead -cne '384a184c4e19ea76213e5d84ce1cd5a972ee60d5'){throw 'M9D retry source HEAD changed.'}
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D must not promote WatchdogRecoveryValidated.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D must not promote normal production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9D must keep default control OFF.'
@@ -114,8 +114,8 @@ foreach($needle in @(
 }
 Assert-NotContains $packager 'Remove-Item' 'M9D packager must never delete evidence.'
 
-Assert-Contains $meta 'PhysicalExecutionAuthorized = false;' 'M9D compile-time execution gate must be reclosed during PID-fix qualification.'
-Assert-Contains $gate 'M9DPhysicalQualificationConstructionAuthorized = false;' 'M9D construction gate must be reclosed during PID-fix qualification.'
+Assert-Contains $meta 'PhysicalExecutionAuthorized = true;' 'M9D compile-time execution gate must be open only for the corrected bounded retry.'
+Assert-Contains $gate 'M9DPhysicalQualificationConstructionAuthorized = true;' 'M9D construction gate must be open only for the corrected bounded retry.'
 if($harness -match '(?i)\$pid\b'){throw 'M9D harness must not declare or assign $Pid/$PID because PowerShell reserves automatic variable $PID.'}
 Assert-Contains $appProgram 'Hp8C40M9DProductionLifecycleQualificationTest.PhysicalExecutionAuthorized' 'M9D app must enforce compile-time physical gate before MainForm.'
 Assert-Contains $appProgram '--8c40-m9d-marker-root' 'M9D app must require isolated marker root.'
