@@ -2941,7 +2941,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9B_PHYSICAL_PASS_M9C_PHYSICAL_PASS_M9D_CLIENT_EC_RETRY_FIX_CI_PENDING",
+    "status": "M9B_PHYSICAL_PASS_M9C_PHYSICAL_PASS_M9D_CLIENT_EC_RETRY_AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -3307,14 +3307,14 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Obtain complete CI for the client-side bounded PREPARE retry while M9D gates remain closed. Then issue a fresh one-run M9D authorization, require exact canonical same-HEAD CI, and rerun the versioned M9D harness. Do not replace the qualified installed M4 service. Production promotion remains blocked.",
+    "nextStep": "Require complete CI for this exact client-side M9D retry authorization SHA, then fast-forward feature/victus-8c40-m9-canonical-prehardware to the same SHA and require canonical same-HEAD CI SUCCESS. Only then execute scripts/test-8c40-production-watchdog-m9d.ps1 once. The installed qualified M4 service remains unchanged and production promotion remains blocked.",
     "m9d": {
-      "status": "CLIENT_EC_RETRY_FIX_CI_PENDING",
+      "status": "CLIENT_EC_RETRY_PHYSICAL_AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI",
       "purpose": "focused Modern Standby last-mile regression through the normal GUI + HpFanControlBackendFactory + public Hp8C40FanControlBackend route, reusing the physically qualified display-aware M6 lifecycle engine",
       "appMode": "--8c40-m9d-production-lifecycle-test",
       "requiredToken": "8C40-M9D-PRODUCTION-LIFECYCLE30",
-      "physicalExecutionAuthorized": false,
-      "qualificationConstructionAuthorized": false,
+      "physicalExecutionAuthorized": true,
+      "qualificationConstructionAuthorized": true,
       "requiresM9BNoWritePreflightPass": true,
       "requiresM9CPhysicalPass": true,
       "productionConstructionAuthorized": false,
@@ -3364,24 +3364,29 @@
         "physicalExecution": false
       },
       "physicalAuthorization": {
-        "authorized": false,
-        "status": "SUPERSEDED_REBLOCKED_PENDING_CLIENT_RETRY_CI",
+        "authorized": true,
+        "status": "CLIENT_EC_RETRY_AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI",
         "date": "2026-10-01",
-        "supersededAuthorizationHead": "53cb8e29e815fe241b3f24a65822f50d8f3371d8",
-        "supersededAuthorizationCiRunNumber": 1005,
-        "supersededAuthorizationCiRunId": 36823740890,
-        "supersededAuthorizationCiResult": "SUCCESS",
-        "reason": "M9D intentionally does not replace the already-qualified installed M4 service; the EC contention retry must therefore live in the freshly built named-pipe client/GUI path.",
+        "sourceHead": "a5d8ad001ad64f72bc654a6bbd6b667965a2e0ca",
+        "sourceCiRunNumber": 1030,
+        "sourceCiRunId": 36824956422,
+        "sourceCiResult": "SUCCESS",
+        "prerequisite": "M9B and M9C physical PASS formally closed; previous M9D attempts failed closed before operator sleep; client-side bounded PREPARE retry for exact INTERNAL_ERROR Global\\Access_EC contention passed full CI including functional named-pipe self-test.",
         "prerequisiteSatisfied": true,
         "m9bPhysicalPass": true,
         "m9cPhysicalPass": true,
-        "scope": "no physical execution while client-side PREPARE retry correction is under CI",
+        "priorAttemptResult": "FAIL_CLOSED",
+        "priorAttemptHead": "1eea8c07624a7dcf1c179551984df3061d2348d4",
+        "priorAttemptOperatorSleepTransitionReached": false,
+        "priorAttemptFanWriteAttempted": false,
+        "serviceBinaryMutation": false,
+        "scope": "one fresh versioned M9D Modern Standby lifecycle execution only",
         "sameHeadCiRequiredBeforeExecution": true,
         "productionPromotionAuthorized": false
       },
       "physicalEvidence": null,
       "expectedPhysicalBranch": "feature/victus-8c40-m9-canonical-prehardware",
-      "harnessStatus": "CLIENT_EC_RETRY_FIX_CI_PENDING",
+      "harnessStatus": "CLIENT_EC_RETRY_PHYSICAL_AUTHORIZED_SUBJECT_TO_SAME_HEAD_CI",
       "harnessScript": "scripts/test-8c40-production-watchdog-m9d.ps1",
       "harnessInvariantScript": "scripts/test-8c40-m9d-harness-invariants.ps1",
       "trackedChildHelper": "scripts/m9d-tracked-child.ps1",
@@ -3443,7 +3448,7 @@
         "note": "No M9D physical PASS is recorded. The consumed retry authorization is reblocked while a bounded M4 ownership-read contention retry is qualified."
       },
       "clientPrepareEcMutexRetry": {
-        "status": "CODE_PREPARED_CI_PENDING",
+        "status": "CODE_CI_PASS",
         "scope": "NamedPipeFanControlWatchdogLeaseClient.PrepareAsync only",
         "attempts": 4,
         "retryDelayMs": 75,
@@ -3452,7 +3457,15 @@
         "serviceBinaryMutation": false,
         "hardwareWriteAdded": false,
         "productionPromotionAuthorized": false,
-        "rationale": "M9D starts the already-qualified installed M4 service without replacing it. The fresh GUI/client can retry this specific rejected PREPARE because the service fails before durable lease creation."
+        "rationale": "M9D starts the already-qualified installed M4 service without replacing it. The fresh GUI/client can retry this specific rejected PREPARE because the service fails before durable lease creation.",
+        "codeCi": {
+          "result": "PASS",
+          "commit": "a5d8ad001ad64f72bc654a6bbd6b667965a2e0ca",
+          "runNumber": 1030,
+          "runId": 36824956422,
+          "physicalExecution": false,
+          "functionalSelfTest": "Watchdog lease client protocol and EC contention retry self-test"
+        }
       }
     },
     "m9e": {
