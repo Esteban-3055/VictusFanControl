@@ -1,4 +1,4 @@
-# Post-M9 software roadmap — P10 to P14
+# Post-M9 roadmap — P10 to P15
 
 This document defines the software-only work that follows M9 production-watchdog promotion on the exact HP 8C40 target.
 
@@ -81,7 +81,7 @@ Closed from audited source HEAD `eebcdd5e833256466c1ae023c35f7cef8d40d6ec` after
 
 ## P15 — first required target-side checkpoint
 
-P15 is deliberately outside this document's software authorization. The first target-side validation must begin with ordinary startup/control OFF, followed by a separately authorized one-shot manual 30/30 transaction and verified strong restore. Only after that may an automatic-policy physical gate be considered.
+P15 now has a dedicated branch and a staged physical sequence. **P15A** is prepared as ordinary startup/no-write against the exact audited P14.5 RC, with execution authorization still false. It requires Firmware startup, Manual/Automatic gates closed, Healthy telemetry, journal absence and stable FF/FF before/during/after the GUI session. **P15B** remains unimplemented and unauthorized; it may be prepared only after P15A is physically passed and formally closed, and will contain one separately authorized equal 30/30 transaction plus strong restore. Automatic execution remains later and independent.
 
 
 ### P13 formal software closure

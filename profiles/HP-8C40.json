@@ -282,6 +282,29 @@
     "manualExecutionAuthorized": false,
     "automaticExecutionAuthorized": false
   },
+  "p15TargetCheckpoint": {
+    "status": "P15A_STARTUP_NO_WRITE_PREPARATION_IMPLEMENTED_AWAITING_CI",
+    "targetProfileId": "HP-8C40-9D0R1LA-F18",
+    "branch": "feature/victus-8c40-p15-hardware-checkpoint",
+    "p14ClosureHead": "6945b2e34526e5e266189da6553bf3ea010d3893",
+    "p14ClosureCiRunNumber": 1086,
+    "p14ClosureCiRunId": 36913062832,
+    "p14ClosureCiResult": "SUCCESS",
+    "auditedRcSourceHead": "eebcdd5e833256466c1ae023c35f7cef8d40d6ec",
+    "auditedRcArtifactSha256": "588058a8b57c0ca1bb41649288682e0981be845ab747654472d3d10c88d572b5",
+    "auditedRcPayloadZipSha256": "704983caa20abb21c3520ffbd165ad69f9843139b6b2fa47d9e9e2448a32ef68",
+    "startupNoWritePreparationImplemented": true,
+    "startupNoWritePreparationCiValidated": false,
+    "startupNoWriteExecutionAuthorized": false,
+    "startupNoWritePhysicalPassed": false,
+    "manual30PreparationImplemented": false,
+    "manual30ExecutionAuthorized": false,
+    "manual30PhysicalPassed": false,
+    "manualExecutionAuthorized": false,
+    "automaticExecutionAuthorized": false,
+    "automaticPolicyEnabled": false,
+    "controlEnabledByDefault": false
+  },
   "observedCalibration": [
     {
       "level": 30,

@@ -245,6 +245,14 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p14-final-software-rc-audit-invariants.ps1
 
+      - name: HP 8C40 P15A startup no-write preparation invariant
+        shell: pwsh
+        run: .\scripts\test-p15-startup-no-write-invariants.ps1
+
+      - name: HP 8C40 P15A evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-p15-startup-evidence-packaging.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -300,6 +308,8 @@ jobs:
           .\scripts\test-p14-package-invariants.ps1
           .\scripts\test-p14-artifact-invariants.ps1
           .\scripts\test-p14-final-software-rc-audit-invariants.ps1
+          .\scripts\test-p15-startup-no-write-invariants.ps1
+          .\scripts\test-p15-startup-evidence-packaging.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build
