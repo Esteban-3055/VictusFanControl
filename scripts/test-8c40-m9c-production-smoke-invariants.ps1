@@ -36,7 +36,7 @@ foreach($needle in @(
     'M9CPhysicalQualificationToken = "8C40-M9C-PRODUCTION30"',
     'AsyncLocal<int>',
     'EnterM9CPhysicalQualificationConstructionScope',
-    'Nested M9C production-watchdog construction scopes are forbidden',
+    'Nested/cross M9 production-watchdog construction scopes are forbidden',
     'M9CQualificationScopeDepth.Value = 0'
 )){
     Assert-Contains $gate $needle ("M9C construction-gate invariant missing: {0}" -f $needle)
