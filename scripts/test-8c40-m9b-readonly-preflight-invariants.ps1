@@ -28,8 +28,7 @@ Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9B must keep M9 production construction blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyExecutionAuthorized) 'M9B read-only execution must be re-blocked after physical PASS closure.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.physicalWriteAuthorized) 'M9B must never authorize fan writes.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9B must keep M9C physical execution blocked.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9B must keep M9C construction blocked.'
+# Post-M9B M9C authorization state is validated by the dedicated M9C invariants.
 Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed) 'M9B physical read-only PASS must be formally recorded.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9NoWritePreflightPassed) 'Lifecycle must record the M9B no-write physical PASS.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9b.readOnlyAuthorization.authorized) 'M9B read-only authorization must be closed after PASS.'
