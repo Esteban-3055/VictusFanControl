@@ -217,9 +217,10 @@ does not delete historical evidence and has its own deterministic CI self-test.
 
 ## 7. M9C production-path smoke - advance code preparation
 
-M9C is now compiled in advance so M9B remains the next machine-side dependency.
-It is **not physically authorized**: the controller gate, the temporary
-construction gate and the profile write gate are all false.
+M9B is now physically closed PASS, so M9C is the next machine-side dependency.
+A separate authorization opens only the M9C controller gate, the temporary
+construction gate and the profile M9C execution gate. Normal production construction,
+WatchdogRecoveryValidated, M9D, default control and the automatic/adaptive policy remain closed.
 
 M9C deliberately does not instantiate `Hp8C40FanHardware` or
 `Hp8C40FanControlBackend` directly. A short-lived exact-target/token
