@@ -290,6 +290,9 @@ jobs:
       - name: Fan authority self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --control-self-test
 
+      - name: Watchdog lease client protocol and EC contention retry self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --watchdog-lease-client-self-test
+
       - name: Adaptive fan policy deterministic self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --adaptive-policy-self-test
 
