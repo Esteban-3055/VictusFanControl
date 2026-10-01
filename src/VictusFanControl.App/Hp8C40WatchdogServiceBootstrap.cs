@@ -160,7 +160,7 @@ internal static class Hp8C40WatchdogServiceBootstrap
             }
         }
 
-        throw new TimeoutException(
+        throw new System.TimeoutException(
             $"{scope} watchdog did not reach exact Ready/journal-absent state within {ReadyTimeout.TotalSeconds:0} s.",
             lastFailure);
     }
