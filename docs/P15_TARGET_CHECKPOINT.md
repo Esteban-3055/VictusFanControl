@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current state: **P15A remains formally closed/re-blocked. The first target-side P15B attempt failed closed at the service-baseline preflight because the exact qualified M4 watchdog was still Manual/Running from P15A. No token, EC probe, lease, failsafe, controller or fan write was reached. P15B has been re-blocked while the inherited-running service baseline is corrected. User-facing Manual, Automatic and all later gates remain closed.**
+Current state: **P15A remains formally closed/re-blocked. P15B is re-blocked while a software-only correction is under CI: the harness now accepts either the exact qualified stopped watchdog baseline or the inherited exact qualified Running/Ready/no-journal baseline left by P15A, and preserves whichever state existed initially. No P15B physical gate is open.**
 
 ### P15A preparation closure
 
@@ -95,12 +95,14 @@ The first target-side attempt on authorization HEAD `6fe617693d4de54bfc709e07728
 
 The original P15B preflight incorrectly treated only `Manual/Stopped/PID0` as valid. No EC setpoint probe, watchdog lease, failsafe, P15B controller, fan write or firmware restore occurred in this failed attempt, and no evidence ZIP was produced because the refusal occurred before the evidence-root/physical sequence.
 
-P15B is re-blocked. The correction will accept either the exact qualified Manual/Stopped baseline or an exact qualified Manual/Running/Ready/no-journal inherited baseline, preserve the initial service state, and avoid requiring the operator to stop or reconfigure the watchdog manually.
+P15B is re-blocked. The correction now implements two accepted baselines: exact qualified `Manual/Stopped/PID0/LocalSystem`, or exact qualified `Manual/Running/Ready/LocalSystem` with journal absent and stable PID/start identity. A pure resolver plus synthetic CI self-test covers both accepted states and rejects Running-without-Ready, retained-journal, wrong start mode and inconsistent PID states. The physical harness revalidates the inherited Running identity before the operator token and again after the token, reuses that exact watchdog process instead of restarting it, and leaves it Running after a successful strong restore. If the initial state was Stopped, the harness starts it only for P15B and returns it to Stopped. Thus no operator service manipulation is required.
+
+Correction status: **implementation complete / CI pending / physical gates CLOSED**.
 
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
-- P15B Manual 30/30 execution: **RE-BLOCKED AFTER SERVICE-BASELINE PREFLIGHT FAIL_CLOSED**
+- P15B Manual 30/30 execution: **SERVICE-BASELINE CORRECTION CI PENDING / PHYSICAL GATES CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**

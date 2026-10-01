@@ -40,6 +40,7 @@ $token='8C40-P15B-MANUAL30'
 $packager=Join-Path $PSScriptRoot 'package-p15b-evidence.ps1'
 $failsafeScript=Join-Path $PSScriptRoot 'watchdog-p15b-service-failsafe-8c40.ps1'
 . (Join-Path $PSScriptRoot 'p15b-tracked-child.ps1')
+. (Join-Path $PSScriptRoot 'p15b-service-baseline.ps1')
 
 $stamp=Get-Date -Format 'yyyy-MM-dd_HHmmss'
 $evidenceRoot=Join-Path $repoRoot ("logs\p15b-manual30_{0}" -f $stamp)
@@ -60,6 +61,11 @@ $head=$null
 $controller=$null
 $failsafe=$null
 $serviceStartedByHarness=$false
+$serviceRestartedForCleanup=$false
+$initialServiceMode=$null
+$initialServicePid=0
+$initialServiceStartTicks=0L
+$initialServiceStatePreserved=$false
 $watchdogPid=0
 $watchdogStartTicks=0L
 $controllerPid=0
@@ -156,13 +162,46 @@ function Assert-ServiceCommon($svc,[string]$Context){
     }
 }
 
-function Assert-ServiceBaseline {
+function Get-ValidatedServiceBaseline {
     $svc=Get-ServiceState
     Assert-ServiceCommon $svc 'P15B baseline'
-    if([string]$svc.State -cne 'Stopped' -or [int]$svc.ProcessId -ne 0){
-        throw "P15B requires M4 Manual/Stopped/PID0; observed $($svc.StartMode)/$($svc.State)/PID$($svc.ProcessId)."
+
+    $journalPresent=Test-Path -LiteralPath $journalPath
+    $readyVerified=$false
+    $pid=[int]$svc.ProcessId
+    $ticks=0L
+
+    if([string]$svc.State -ceq 'Running' -and $pid -gt 0 -and -not $journalPresent){
+        $ticks=Get-ProcessStartTicks $pid
+        [void](Wait-M4Ready $pid)
+
+        $confirmed=Get-ServiceState
+        Assert-ServiceCommon $confirmed 'P15B inherited-running baseline confirmation'
+        if([string]$confirmed.State -cne 'Running' -or
+           [int]$confirmed.ProcessId -ne $pid -or
+           (Get-ProcessStartTicks $pid) -ne $ticks){
+            throw 'P15B inherited Running watchdog identity changed during Ready verification.'
+        }
+
+        $readyVerified=$true
+        $svc=$confirmed
     }
-    return $svc
+
+    $mode=Resolve-P15BServiceBaselineMode -State ([string]$svc.State) -StartMode ([string]$svc.StartMode) -StartName ([string]$svc.StartName) -ProcessId ([int]$svc.ProcessId) -JournalPresent $journalPresent -ReadyVerified $readyVerified
+
+    if($mode -ceq 'Stopped'){
+        $pid=0
+        $ticks=0L
+    }
+
+    [pscustomobject]@{
+        Mode=$mode
+        ProcessId=$pid
+        ProcessStartUtcTicks=$ticks
+        Service=$svc
+        ReadyVerified=$readyVerified
+        JournalPresent=$journalPresent
+    }
 }
 
 function Get-PowerSnapshot {
@@ -345,6 +384,9 @@ function Write-Summary([string]$Result,[string]$Failure){
         controllerPid=$controllerPid;controllerStartUtcTicks=$controllerStartTicks;causalChainPass=$causalChainPass;
         strongRestorePass=$strongRestorePass;finalJournalAbsent=$finalJournalAbsent;finalFirmwareProofPass=$finalFirmwareProofPass;
         cleanupFirmwareProofPass=$cleanupFirmwareProofPass;finalServiceBaselinePass=$finalServiceBaselinePass;
+        initialServiceMode=$initialServiceMode;initialServicePid=$initialServicePid;initialServiceStartUtcTicks=$initialServiceStartTicks;
+        serviceStartedByHarness=$serviceStartedByHarness;serviceRestartedForCleanup=$serviceRestartedForCleanup;
+        initialServiceStatePreserved=$initialServiceStatePreserved;
         failsafeTakeover=$failsafeTakeover;manual30ExecutionAuthorized=[bool]$contract.manual30.executionAuthorized;
         controllerPhysicalExecutionAuthorized=[bool]$contract.manual30.controllerPhysicalExecutionAuthorized;
         automaticExecutionAuthorized=[bool]$contract.automatic.executionAuthorized
@@ -356,8 +398,10 @@ $head=Assert-RepositoryProvenance
 Assert-ExactTarget
 Assert-PowerSane
 $serviceBefore=Snapshot-Service 'before'
-Assert-ServiceBaseline | Out-Null
-if(Test-Path -LiteralPath $journalPath){throw 'P15B refuses retained watchdog journal evidence.'}
+$initialBaseline=Get-ValidatedServiceBaseline
+$initialServiceMode=[string]$initialBaseline.Mode
+$initialServicePid=[int]$initialBaseline.ProcessId
+$initialServiceStartTicks=[long]$initialBaseline.ProcessStartUtcTicks
 New-Item -ItemType Directory -Force -Path $evidenceRoot | Out-Null
 
 Write-Host 'VictusFanControl - HP 8C40 P15B ONE-SHOT MANUAL 30/30' -ForegroundColor Cyan
@@ -367,7 +411,7 @@ try{
     Write-Host 'Step 1: same-HEAD build and P15B static regressions...' -ForegroundColor Cyan
     dotnet build .\VictusFanControl.sln -c Release -warnaserror
     if($LASTEXITCODE -ne 0){throw "P15B build failed with exit=$LASTEXITCODE."}
-    foreach($script in @('test-p15b-manual30-invariants.ps1','test-p15b-tracked-child-selftest.ps1','test-p15b-evidence-packaging.ps1')){
+    foreach($script in @('test-p15b-manual30-invariants.ps1','test-p15b-service-baseline-selftest.ps1','test-p15b-tracked-child-selftest.ps1','test-p15b-evidence-packaging.ps1')){
         & (Join-Path $PSScriptRoot $script)
         if($LASTEXITCODE -ne 0){throw "P15B regression '$script' failed with exit=$LASTEXITCODE."}
     }
@@ -382,21 +426,43 @@ try{
 
     Write-Host 'Step 2: independent firmware/service baseline...' -ForegroundColor Cyan
     Assert-StableSetpoint 255 255 'P15B baseline FF/FF' $baselineFfPath
-    Assert-ServiceBaseline | Out-Null
+    $preTokenBaseline=Get-ValidatedServiceBaseline
+    if([string]$preTokenBaseline.Mode -cne $initialServiceMode){
+        throw "P15B service baseline mode changed before token: initial=$initialServiceMode current=$($preTokenBaseline.Mode)."
+    }
+    if($initialServiceMode -ceq 'Running' -and
+       ([int]$preTokenBaseline.ProcessId -ne $initialServicePid -or
+        [long]$preTokenBaseline.ProcessStartUtcTicks -ne $initialServiceStartTicks)){
+        throw 'P15B inherited Running watchdog identity changed before the operator token.'
+    }
     Assert-PowerSane
 
     $confirm=Read-Host "Type exactly $token to authorize one physical Manual 30/30 transaction"
     if($confirm -cne $token){throw 'P15B cancelled before service/failsafe/controller active boundary.'}
 
-    Write-Host 'Step 3: start exact qualified M4 watchdog...' -ForegroundColor Cyan
-    Start-Service -Name $serviceName
-    $serviceStartedByHarness=$true
-    $svc=Get-ServiceState
-    Assert-ServiceCommon $svc 'P15B runtime'
-    if($svc.State -ne 'Running' -or [int]$svc.ProcessId -le 0){throw 'P15B watchdog did not reach Running.'}
-    $watchdogPid=[int]$svc.ProcessId
-    $watchdogStartTicks=Get-ProcessStartTicks $watchdogPid
-    [void](Wait-M4Ready $watchdogPid)
+    Write-Host 'Step 3: establish exact qualified M4 watchdog runtime...' -ForegroundColor Cyan
+    if($initialServiceMode -ceq 'Stopped'){
+        Start-Service -Name $serviceName
+        $serviceStartedByHarness=$true
+        $svc=Get-ServiceState
+        Assert-ServiceCommon $svc 'P15B runtime started by harness'
+        if($svc.State -ne 'Running' -or [int]$svc.ProcessId -le 0){throw 'P15B watchdog did not reach Running.'}
+        $watchdogPid=[int]$svc.ProcessId
+        $watchdogStartTicks=Get-ProcessStartTicks $watchdogPid
+        [void](Wait-M4Ready $watchdogPid)
+    }elseif($initialServiceMode -ceq 'Running'){
+        $svc=Get-ServiceState
+        Assert-ServiceCommon $svc 'P15B inherited runtime'
+        if($svc.State -ne 'Running' -or [int]$svc.ProcessId -ne $initialServicePid -or
+           (Get-ProcessStartTicks $initialServicePid) -ne $initialServiceStartTicks){
+            throw 'P15B inherited Running watchdog identity changed after the operator token.'
+        }
+        $watchdogPid=$initialServicePid
+        $watchdogStartTicks=$initialServiceStartTicks
+        [void](Wait-M4Ready $watchdogPid)
+    }else{
+        throw "P15B internal service-baseline mode is unsupported: $initialServiceMode"
+    }
     $serviceDuring=Snapshot-Service 'running-before-controller'
     if(Test-Path -LiteralPath $serviceLog){$logLineBoundary=@(Get-Content -LiteralPath $serviceLog).Count}
 
@@ -487,15 +553,26 @@ try{
     if(Test-FailsafeTakeover){$failsafeTakeover=$true;throw 'P15B independent failsafe took over; safe but invalid.'}
     $strongRestorePass=$true
 
-    Write-Host 'Step 7: restore service baseline after strong restore proof...' -ForegroundColor Cyan
-    Stop-Service -Name $serviceName
-    $serviceStartedByHarness=$false
-    $serviceAfter=Snapshot-Service 'after'
-    $finalSvc=Get-ServiceState
-    if(-not $finalSvc -or $finalSvc.State -ne 'Stopped' -or $finalSvc.StartMode -ne 'Manual' -or
-       [int]$finalSvc.ProcessId -ne 0 -or [string]$finalSvc.StartName -notmatch 'LocalSystem|Local System'){
-        throw 'P15B final service baseline is not Manual/Stopped/PID0/LocalSystem.'
+    Write-Host 'Step 7: restore/preserve initial service baseline after strong restore proof...' -ForegroundColor Cyan
+    if($initialServiceMode -ceq 'Stopped'){
+        Stop-Service -Name $serviceName
+        $serviceStartedByHarness=$false
+        $finalSvc=Get-ServiceState
+        if(-not $finalSvc -or $finalSvc.State -ne 'Stopped' -or $finalSvc.StartMode -ne 'Manual' -or
+           [int]$finalSvc.ProcessId -ne 0 -or [string]$finalSvc.StartName -notmatch 'LocalSystem|Local System'){
+            throw 'P15B final service baseline did not return to Manual/Stopped/PID0/LocalSystem.'
+        }
+    }else{
+        $finalSvc=Get-ServiceState
+        Assert-ServiceCommon $finalSvc 'P15B final inherited-running baseline'
+        if($finalSvc.State -ne 'Running' -or [int]$finalSvc.ProcessId -ne $initialServicePid -or
+           (Get-ProcessStartTicks $initialServicePid) -ne $initialServiceStartTicks){
+            throw 'P15B did not preserve the inherited Running watchdog PID/start identity.'
+        }
+        [void](Wait-M4Ready $initialServicePid)
     }
+    $initialServiceStatePreserved=$true
+    $serviceAfter=Snapshot-Service 'after'
     $finalServiceBaselinePass=$true
     @($serviceBefore,$serviceDuring,$serviceAfter) | ConvertTo-Json -Depth 8 |
         Set-Content -LiteralPath $serviceSnapshotsPath -Encoding UTF8
@@ -525,7 +602,7 @@ finally{
             if(-not $svc){throw 'P15B cleanup cannot find qualified watchdog service.'}
             if($svc.State -ne 'Running'){
                 Start-Service -Name $serviceName
-                $serviceStartedByHarness=$true
+                if($initialServiceMode -ceq 'Stopped'){$serviceStartedByHarness=$true}else{$serviceRestartedForCleanup=$true}
             }
             if(-not (Wait-JournalGone 25)){throw 'P15B cleanup timed out waiting for watchdog journal recovery.'}
         }
@@ -547,8 +624,33 @@ finally{
         }catch{}
     }
 
-    if($serviceStartedByHarness -and $cleanupSafe -and -not (Test-Path -LiteralPath $journalPath)){
-        try{Stop-Service -Name $serviceName -ErrorAction Stop;$serviceStartedByHarness=$false}catch{}
+    if($cleanupSafe -and -not (Test-Path -LiteralPath $journalPath)){
+        try{
+            $cleanupSvc=Get-ServiceState
+            if($initialServiceMode -ceq 'Stopped'){
+                if($cleanupSvc -and $cleanupSvc.State -eq 'Running'){
+                    Stop-Service -Name $serviceName -ErrorAction Stop
+                }
+                $serviceStartedByHarness=$false
+                $cleanupSvc=Get-ServiceState
+                if($cleanupSvc -and $cleanupSvc.State -eq 'Stopped' -and [int]$cleanupSvc.ProcessId -eq 0){
+                    $initialServiceStatePreserved=$true
+                }
+            }elseif($initialServiceMode -ceq 'Running'){
+                if(-not $cleanupSvc -or $cleanupSvc.State -ne 'Running'){
+                    Start-Service -Name $serviceName -ErrorAction Stop
+                    $serviceRestartedForCleanup=$true
+                    $cleanupSvc=Get-ServiceState
+                }
+                Assert-ServiceCommon $cleanupSvc 'P15B cleanup inherited-running baseline'
+                if($cleanupSvc.State -eq 'Running' -and [int]$cleanupSvc.ProcessId -gt 0){
+                    [void](Wait-M4Ready ([int]$cleanupSvc.ProcessId))
+                    $initialServiceStatePreserved=$true
+                }
+            }
+        }catch{
+            Write-Warning ("P15B cleanup could not restore initial watchdog service state: {0}" -f $_.Exception.Message)
+        }
     }
 
     if(-not (Test-Path -LiteralPath $serviceSnapshotsPath)){

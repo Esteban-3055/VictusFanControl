@@ -17,9 +17,11 @@ $packager=Get-Content -LiteralPath (Join-Path $root 'scripts\package-p15b-eviden
 $failsafe=Get-Content -LiteralPath (Join-Path $root 'scripts\watchdog-p15b-service-failsafe-8c40.ps1') -Raw
 $cli=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Cli\CliOptions.cs') -Raw
 $program=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Program.cs') -Raw
+$baselineHelper=Get-Content -LiteralPath (Join-Path $root 'scripts\p15b-service-baseline.ps1') -Raw
+$baselineSelfTest=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15b-service-baseline-selftest.ps1') -Raw
 
 $status=[string]$contract.status
-if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED')){throw 'P15B preparation/authorization/correction state mismatch.'}
+if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED')){throw 'P15B preparation/authorization/correction state mismatch.'}
 Assert-True ([bool]$contract.startupNoWrite.physicalPassed) 'P15B requires P15A physical PASS.'
 Assert-True ([bool]$contract.startupNoWrite.evidenceClosed) 'P15B requires P15A evidence closed.'
 Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A must remain re-blocked.'
@@ -29,7 +31,7 @@ if($status -eq 'P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED'){
     Assert-False ([bool]$contract.manual30.preparationCiValidated) 'Pending P15B preparation must not pre-claim CI validation.'
     Assert-False ([bool]$contract.manual30.preparationClosure.closed) 'Pending P15B preparation must not pre-close.'
 }
-if($status -in @('P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED')){
+if($status -in @('P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED')){
     Assert-True ([bool]$contract.manual30.preparationCiValidated) 'Closed P15B preparation must be CI validated.'
     Assert-True ([bool]$contract.manual30.preparationClosure.closed) 'Closed P15B preparation must record closure.'
     $pc=$contract.manual30.preparationClosure
@@ -65,6 +67,19 @@ if($status -eq 'P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GA
     Assert-False ([bool]$corr.implementationComplete) 'P15B correction cannot pre-claim implementation.'
     Assert-False ([bool]$corr.ciValidated) 'P15B correction cannot pre-claim CI.'
     Assert-False ([bool]$corr.closure.closed) 'P15B correction cannot pre-close.'
+}
+if($status -eq 'P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED'){
+    Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B must remain re-blocked during service-baseline correction.'
+    Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B controller must remain re-blocked during service-baseline correction.'
+    Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15B controller compile-time gate must remain closed during correction.'
+    $corr=$contract.manual30.serviceBaselineCorrection
+    Assert-True ([bool]$corr.required) 'P15B service-baseline correction must remain required.'
+    Assert-True ([bool]$corr.implementationComplete) 'P15B service-baseline correction implementation must be complete.'
+    Assert-True ([bool]$corr.selfTestImplemented) 'P15B service-baseline correction self-test must be implemented.'
+    Assert-False ([bool]$corr.ciValidated) 'Pending P15B service-baseline correction must not pre-claim CI validation.'
+    Assert-False ([bool]$corr.closure.closed) 'Pending P15B service-baseline correction must not pre-close.'
+    Assert-True ([bool]$contract.manual30.preserveInitialServiceState) 'P15B correction must preserve the initial service state.'
+    if(@($contract.manual30.allowedInitialServiceStates).Count -ne 2){throw 'P15B correction must define exactly two accepted initial service states.'}
 }
 if($status -eq 'P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
     Assert-True ([bool]$contract.manual30.executionAuthorized) 'P15B harness execution authorization must be open.'
@@ -116,7 +131,9 @@ Assert-Contains $backend 'await _watchdogLease.ReleaseAsync(' 'P15B production b
 Assert-Contains $bios 'BuildReleaseFanLevelRequest()' 'P15B strong restore must include FF/FF release.'
 Assert-Contains $bios 'BuildLegacyDefaultRequest()' 'P15B strong restore must include LegacyDefault.'
 Assert-Contains $bios 'ExecuteRestoreSequence(' 'P15B restore must execute both release and LegacyDefault attempts.'
-foreach($n in @('HARD VERSIONED AUTHORIZATION BARRIER','manual30.executionAuthorized','controllerPhysicalExecutionAuthorized','Assert-RepositoryProvenance','Assert-ExactTarget','Assert-ServiceBaseline','Assert-StableSetpoint 255 255','Start-Service -Name $serviceName','Start-P15BFailsafe','--8c40-p15b-manual30','Assert-OwnedJournal','Assert-StableSetpoint 30 30','P15B-CONTINUE','Assert-CausalServiceLog','Assert-StableSetpoint 255 255','Stop-Service -Name $serviceName','package-p15b-evidence.ps1','FAIL_CLOSED')){Assert-Contains $harness $n ("P15B harness invariant missing: {0}" -f $n)}
+foreach($n in @('HARD VERSIONED AUTHORIZATION BARRIER','manual30.executionAuthorized','controllerPhysicalExecutionAuthorized','Assert-RepositoryProvenance','Assert-ExactTarget','Get-ValidatedServiceBaseline','Resolve-P15BServiceBaselineMode','initialServiceMode','initialServiceStatePreserved','Assert-StableSetpoint 255 255','Start-Service -Name $serviceName','Start-P15BFailsafe','--8c40-p15b-manual30','Assert-OwnedJournal','Assert-StableSetpoint 30 30','P15B-CONTINUE','Assert-CausalServiceLog','Assert-StableSetpoint 255 255','Stop-Service -Name $serviceName','package-p15b-evidence.ps1','FAIL_CLOSED')){Assert-Contains $harness $n ("P15B harness invariant missing: {0}" -f $n)}
+foreach($n in @('Stopped','Running','JournalPresent','ReadyVerified')){Assert-Contains $baselineHelper $n ("P15B baseline helper invariant missing: {0}" -f $n)}
+foreach($n in @('Inherited Running baseline','Running without Ready must fail.','Running with retained journal must fail.','Stopped baseline')){Assert-Contains $baselineSelfTest $n ("P15B baseline self-test invariant missing: {0}" -f $n)}
 foreach($n in @('SetFanLevel(','--restore-hp-auto','git clean','Set-Service','New-Service','sc.exe ')){Assert-NotContains $harness $n ("P15B harness contains forbidden direct operation: {0}" -f $n)}
 Assert-Contains $failsafe "TargetProfileId -cne 'HP-8C40-9D0R1LA-F18'" 'P15B failsafe must bind exact target.'
 Assert-Contains $failsafe '[int]$Journal.Owned.Cpu -eq 30' 'P15B failsafe must bind exact 30/30 ownership.'

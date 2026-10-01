@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED",
+  "status": "P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -359,7 +359,7 @@
     "maximumCpuPackagePowerW": 60,
     "maximumGpuPowerW": 75,
     "minimumBatteryPercent": 20,
-    "requiredInitialServiceState": "Manual/Stopped/PID0/LocalSystem",
+    "requiredInitialServiceState": "Manual/Stopped/PID0/LocalSystem OR exact qualified Manual/Running/Ready/LocalSystem with journal absent",
     "expectedRuntimeServiceState": "Manual/Running/LocalSystem",
     "qualifiedInstalledWatchdogExeSha256": "ec10242ce40c12856cf9222d10e43016854498b3946375c8f73e9f927d9912ed",
     "qualifiedInstalledPawnIoModuleSha256": "c38fd116e7aff4d1fdb0a494e296be0a6708e5a22fc72f14587442fb7f8f7906",
@@ -436,7 +436,7 @@
       "acceptExactQualifiedStoppedBaselinePlanned": true,
       "acceptExactQualifiedRunningReadyNoJournalBaselinePlanned": true,
       "preserveInitialServiceStatePlanned": true,
-      "implementationComplete": false,
+      "implementationComplete": true,
       "ciValidated": false,
       "closure": {
         "closed": false,
@@ -446,8 +446,16 @@
         "sourceCiRunId": null,
         "sourceCiResult": null,
         "hardwareExecution": false
-      }
-    }
+      },
+      "selfTestImplemented": true
+    },
+    "allowedInitialServiceStates": [
+      "Manual/Stopped/PID0/LocalSystem",
+      "Manual/Running/Ready/LocalSystem with journal absent and stable PID/start identity"
+    ],
+    "preserveInitialServiceState": true,
+    "serviceBaselineHelper": "scripts/p15b-service-baseline.ps1",
+    "serviceBaselineSelfTest": "scripts/test-p15b-service-baseline-selftest.ps1"
   },
   "automatic": {
     "executionAuthorized": false,
