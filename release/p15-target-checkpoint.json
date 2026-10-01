@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI",
+  "status": "P15B_MANUAL30_POWERSHELL_PID_COLLISION_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -316,8 +316,8 @@
       ],
       "hardwareExecution": false
     },
-    "executionAuthorized": true,
-    "controllerPhysicalExecutionAuthorized": true,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
     "physicalPassed": false,
     "evidenceClosed": false,
     "equalLevel": 30,
@@ -481,7 +481,45 @@
     ],
     "preserveInitialServiceState": true,
     "serviceBaselineHelper": "scripts/p15b-service-baseline.ps1",
-    "serviceBaselineSelfTest": "scripts/test-p15b-service-baseline-selftest.ps1"
+    "serviceBaselineSelfTest": "scripts/test-p15b-service-baseline-selftest.ps1",
+    "priorFailClosedAttempt2": {
+      "sourceHead": "df355a0a49c76115f6cac7885650b5a7bec9aa86",
+      "sourceCiRunNumber": 1110,
+      "sourceCiRunId": 36933720023,
+      "sourceCiResult": "SUCCESS",
+      "result": "FAIL_CLOSED",
+      "failure": "PowerShell automatic variable collision: local assignment to $pid conflicts with read-only $PID.",
+      "stage": "service-baseline validation before evidence directory, operator token, EC setpoint probe, watchdog lease, failsafe, controller or fan write",
+      "observedServiceState": "Manual/Running/PID7980/LocalSystem",
+      "watchdogJournalAbsent": true,
+      "operatorTokenPromptReached": false,
+      "evidenceDirectoryCreated": false,
+      "ecSetpointProbeExecuted": false,
+      "watchdogLeaseAcquired": false,
+      "failsafeArmed": false,
+      "controllerStarted": false,
+      "fanWriteExecuted": false,
+      "firmwareRestoreExecuted": false,
+      "evidencePackageProduced": false,
+      "physicalPassClaimed": false
+    },
+    "powerShellPidCollisionCorrection": {
+      "required": true,
+      "reason": "PowerShell variable names are case-insensitive and $PID is a built-in read-only automatic variable; Get-ValidatedServiceBaseline used local $pid.",
+      "plannedRename": "$pid -> $servicePid within Get-ValidatedServiceBaseline",
+      "addRegressionGuardAgainstPidAutomaticVariableCollision": true,
+      "implementationComplete": false,
+      "ciValidated": false,
+      "closure": {
+        "closed": false,
+        "result": null,
+        "implementationHead": null,
+        "sourceCiRunNumber": null,
+        "sourceCiRunId": null,
+        "sourceCiResult": null,
+        "hardwareExecution": false
+      }
+    }
   },
   "automatic": {
     "executionAuthorized": false,

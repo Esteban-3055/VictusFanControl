@@ -21,7 +21,7 @@ $baselineHelper=Get-Content -LiteralPath (Join-Path $root 'scripts\p15b-service-
 $baselineSelfTest=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15b-service-baseline-selftest.ps1') -Raw
 
 $status=[string]$contract.status
-if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PASS_GATE_CLOSED')){throw 'P15B preparation/authorization/correction state mismatch.'}
+if($status -notin @('P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED')){throw 'P15B preparation/authorization/correction state mismatch.'}
 Assert-True ([bool]$contract.startupNoWrite.physicalPassed) 'P15B requires P15A physical PASS.'
 Assert-True ([bool]$contract.startupNoWrite.evidenceClosed) 'P15B requires P15A evidence closed.'
 Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A must remain re-blocked.'
@@ -31,7 +31,7 @@ if($status -eq 'P15B_MANUAL30_PREPARATION_CI_PENDING_GATE_CLOSED'){
     Assert-False ([bool]$contract.manual30.preparationCiValidated) 'Pending P15B preparation must not pre-claim CI validation.'
     Assert-False ([bool]$contract.manual30.preparationClosure.closed) 'Pending P15B preparation must not pre-close.'
 }
-if($status -in @('P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PASS_GATE_CLOSED')){
+if($status -in @('P15B_MANUAL30_PREPARATION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15B_MANUAL30_INHERITED_RUNNING_SERVICE_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOSED','P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PASS_GATE_CLOSED','P15B_MANUAL30_POWERSHELL_PID_COLLISION_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED')){
     Assert-True ([bool]$contract.manual30.preparationCiValidated) 'Closed P15B preparation must be CI validated.'
     Assert-True ([bool]$contract.manual30.preparationClosure.closed) 'Closed P15B preparation must record closure.'
     $pc=$contract.manual30.preparationClosure
@@ -93,6 +93,21 @@ if($status -in @('P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PENDING_GATE_CLOS
         foreach($p in @('powerShellSyntaxValidated','p15aInvariantValidated','p15bInvariantValidated','serviceBaselineSelfTestValidated','powerShell51CompatibilityValidated','warningsAsErrorsBuildValidated','retainedRcRegressionValidated')){Assert-True ([bool]$cc.$p) ("P15B service-baseline correction closure missing validation: {0}" -f $p)}
         Assert-False ([bool]$cc.hardwareExecution) 'P15B service-baseline correction closure must record no hardware execution.'
     }
+}
+if($status -eq 'P15B_MANUAL30_POWERSHELL_PID_COLLISION_PREFLIGHT_FAIL_CLOSED_GATE_CLOSED'){
+    Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B must be re-blocked after PowerShell preflight failure.'
+    Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B controller must be re-blocked after PowerShell preflight failure.'
+    Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15B controller gate must be closed after PowerShell preflight failure.'
+    $pf=$contract.manual30.priorFailClosedAttempt2
+    if([string]$pf.sourceHead -cne 'df355a0a49c76115f6cac7885650b5a7bec9aa86' -or [int]$pf.sourceCiRunNumber -ne 1110 -or [long]$pf.sourceCiRunId -ne 36933720023 -or [string]$pf.result -cne 'FAIL_CLOSED'){throw 'P15B PowerShell preflight failure identity mismatch.'}
+    foreach($p in @('watchdogJournalAbsent')){Assert-True ([bool]$pf.$p) ("P15B PowerShell preflight expected true: {0}" -f $p)}
+    foreach($p in @('operatorTokenPromptReached','evidenceDirectoryCreated','ecSetpointProbeExecuted','watchdogLeaseAcquired','failsafeArmed','controllerStarted','fanWriteExecuted','firmwareRestoreExecuted','evidencePackageProduced','physicalPassClaimed')){Assert-False ([bool]$pf.$p) ("P15B PowerShell preflight expected false: {0}" -f $p)}
+    $corr=$contract.manual30.powerShellPidCollisionCorrection
+    Assert-True ([bool]$corr.required) 'P15B PowerShell PID-collision correction must be required.'
+    Assert-True ([bool]$corr.addRegressionGuardAgainstPidAutomaticVariableCollision) 'P15B PID-collision correction must require a regression guard.'
+    Assert-False ([bool]$corr.implementationComplete) 'P15B PID-collision correction cannot pre-claim implementation.'
+    Assert-False ([bool]$corr.ciValidated) 'P15B PID-collision correction cannot pre-claim CI.'
+    Assert-False ([bool]$corr.closure.closed) 'P15B PID-collision correction cannot pre-close.'
 }
 if($status -eq 'P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
     Assert-True ([bool]$contract.manual30.executionAuthorized) 'P15B harness execution authorization must be open.'
