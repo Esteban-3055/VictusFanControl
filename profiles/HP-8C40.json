@@ -297,6 +297,8 @@
     "startupNoWritePreparationCiValidated": false,
     "startupNoWriteExecutionAuthorized": false,
     "startupNoWritePhysicalPassed": false,
+    "qualifiedInstalledWatchdogExeSha256": "ec10242ce40c12856cf9222d10e43016854498b3946375c8f73e9f927d9912ed",
+    "qualifiedInstalledPawnIoModuleSha256": "c38fd116e7aff4d1fdb0a494e296be0a6708e5a22fc72f14587442fb7f8f7906",
     "manual30PreparationImplemented": false,
     "manual30ExecutionAuthorized": false,
     "manual30PhysicalPassed": false,

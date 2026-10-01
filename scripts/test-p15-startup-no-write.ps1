@@ -20,6 +20,8 @@ $profilePath=Join-Path $repoRoot 'profiles\HP-8C40.json'
 $p14Path=Join-Path $repoRoot 'release\p14-software-rc.json'
 $serviceName='VictusFanControlWatchdogM4'
 $serviceRoot=Join-Path $env:ProgramData 'VictusFanControl\WatchdogM4'
+$serviceExe=Join-Path $serviceRoot 'bin\VictusFanControl.Watchdog.exe'
+$serviceModule=Join-Path $serviceRoot 'modules\LpcACPIEC.bin'
 $journalPath=Join-Path $serviceRoot 'state\lease.json'
 $appLogPath=Join-Path $env:LOCALAPPDATA ('VictusFanControl\logs\events-{0}.log' -f (Get-Date -Format 'yyyy-MM-dd'))
 $stamp=Get-Date -Format 'yyyy-MM-dd_HHmmss'
@@ -77,15 +79,41 @@ function Get-ServiceSnapshot {
     [pscustomobject]@{Installed=$true;State=[string]$svc.State;StartMode=[string]$svc.StartMode;StartName=[string]$svc.StartName;ProcessId=[int]$svc.ProcessId;PathName=[string]$svc.PathName;ProcessStartUtcTicks=[long]$ticks}
 }
 
-function Assert-ServiceBaseline([object]$s) {
-    if(-not $s.Installed -or $s.State -cne 'Stopped' -or $s.StartMode -cne 'Manual' -or $s.ProcessId -ne 0){throw "P15A initial watchdog baseline must be Manual/Stopped/PID0; observed $($s.State)/$($s.StartMode)/PID$($s.ProcessId)."}
+function Assert-ServiceCommon([object]$s) {
+    if(-not $s.Installed){throw 'P15A requires the already-qualified VictusFanControlWatchdogM4 service.'}
+    if($s.StartMode -cne 'Manual'){throw "P15A requires watchdog StartMode Manual; observed '$($s.StartMode)'."}
     if($s.StartName -notmatch '(^|\\)LocalSystem$' -and $s.StartName -cne 'LocalSystem'){throw "P15A requires LocalSystem service account; observed '$($s.StartName)'."}
+    foreach($required in @($serviceExe,'--service-name VictusFanControlWatchdogM4','--m4-8c40-lease-service','--modules-dir','--result-path','--log-dir')){
+        if($s.PathName.IndexOf($required,[StringComparison]::OrdinalIgnoreCase) -lt 0){throw "P15A watchdog service command line mismatch; missing '$required' in '$($s.PathName)'."}
+    }
+}
+
+function Get-ServiceIntegrity {
+    if(-not (Test-Path -LiteralPath $serviceExe -PathType Leaf)){throw "P15A watchdog executable missing: $serviceExe"}
+    if(-not (Test-Path -LiteralPath $serviceModule -PathType Leaf)){throw "P15A watchdog PawnIO module missing: $serviceModule"}
+    [pscustomobject]@{
+        WatchdogExeSha256=(Get-FileHash -LiteralPath $serviceExe -Algorithm SHA256).Hash.ToLowerInvariant()
+        PawnIoModuleSha256=(Get-FileHash -LiteralPath $serviceModule -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+}
+
+function Assert-ServiceIntegrity([object]$i) {
+    if($i.WatchdogExeSha256 -cne ([string]$contract.startupNoWrite.qualifiedInstalledWatchdogExeSha256).ToLowerInvariant()){throw "P15A installed watchdog executable hash mismatch: $($i.WatchdogExeSha256)."}
+    if($i.PawnIoModuleSha256 -cne ([string]$contract.startupNoWrite.qualifiedInstalledPawnIoModuleSha256).ToLowerInvariant()){throw "P15A installed watchdog PawnIO module hash mismatch: $($i.PawnIoModuleSha256)."}
+}
+
+function Assert-ServiceBaseline([object]$s) {
+    Assert-ServiceCommon $s
+    if($s.State -cne 'Stopped' -or $s.ProcessId -ne 0){throw "P15A initial watchdog baseline must be Manual/Stopped/PID0; observed $($s.State)/$($s.StartMode)/PID$($s.ProcessId)."}
 }
 
 function Assert-ServiceRuntime([object]$s) {
-    if(-not $s.Installed -or $s.State -cne 'Running' -or $s.StartMode -cne 'Manual' -or $s.ProcessId -le 0 -or $s.ProcessStartUtcTicks -le 0){throw "P15A runtime watchdog must be Manual/Running with live PID; observed $($s.State)/$($s.StartMode)/PID$($s.ProcessId)."}
-    if($s.StartName -notmatch '(^|\\)LocalSystem$' -and $s.StartName -cne 'LocalSystem'){throw "P15A runtime service account changed: '$($s.StartName)'."}
+    Assert-ServiceCommon $s
+    if($s.State -cne 'Running' -or $s.ProcessId -le 0 -or $s.ProcessStartUtcTicks -le 0){throw "P15A runtime watchdog must be Manual/Running with live PID; observed $($s.State)/$($s.StartMode)/PID$($s.ProcessId)."}
 }
+
+$script:setpointEvidence=@()
+$script:journalEvidenceDetected=$false
 
 function Read-Setpoint {
     for($attempt=1;$attempt -le 10;$attempt++){
@@ -93,22 +121,34 @@ function Read-Setpoint {
         if($LASTEXITCODE -eq 0){
             $line=($output -split '[\r\n]+' | Where-Object {$_ -match '^setpoint CPU='} | Select-Object -Last 1)
             $m=[regex]::Match([string]$line,'^setpoint CPU=(\d+) GPU=(\d+)$')
-            if($m.Success){return [pscustomobject]@{TimestampUtc=(Get-Date).ToUniversalTime().ToString('O');Cpu=[int]$m.Groups[1].Value;Gpu=[int]$m.Groups[2].Value;Attempt=$attempt}}
+            if($m.Success){
+                $sample=[pscustomobject]@{TimestampUtc=(Get-Date).ToUniversalTime().ToString('O');Cpu=[int]$m.Groups[1].Value;Gpu=[int]$m.Groups[2].Value;Attempt=$attempt}
+                $script:setpointEvidence+=@($sample)
+                return $sample
+            }
         }
         Start-Sleep -Milliseconds 150
     }
     throw 'P15A could not obtain a read-only EC setpoint sample after bounded retries.'
 }
 
-function Get-StableFirmwareProof([int]$required) {
-    $samples=@();$consecutive=0
-    for($i=1;$i -le 20;$i++){
-        $s=Read-Setpoint;$samples+=@($s)
-        if($s.Cpu -eq 255 -and $s.Gpu -eq 255){$consecutive++}else{$consecutive=0}
-        if($consecutive -ge $required){return $samples}
-        Start-Sleep -Milliseconds 125
+function Assert-NoJournal([string]$phase) {
+    if(Test-Path -LiteralPath $journalPath){
+        $script:journalEvidenceDetected=$true
+        throw "P15A watchdog journal evidence detected during $phase."
     }
-    throw "P15A could not prove $required consecutive FF/FF samples."
+}
+
+function Get-StrictFirmwareProof([int]$required,[string]$phase) {
+    $samples=@()
+    for($i=1;$i -le $required;$i++){
+        $s=Read-Setpoint
+        $samples+=@($s)
+        if($s.Cpu -ne 255 -or $s.Gpu -ne 255){throw "P15A observed non-firmware setpoint during $phase sample $i/$required: $($s.Cpu)/$($s.Gpu)."}
+        Assert-NoJournal $phase
+        if($i -lt $required){Start-Sleep -Milliseconds 125}
+    }
+    [pscustomobject]@{Passed=$true;Phase=$phase;RequiredSamples=$required;Samples=$samples}
 }
 
 function Get-NewLogLines([int]$skip) {
@@ -146,16 +186,18 @@ if(-not (Test-Path -LiteralPath $appExe -PathType Leaf)){throw 'P15A audited RC 
 
 $serviceBefore=Get-ServiceSnapshot
 Assert-ServiceBaseline $serviceBefore
-if(Test-Path -LiteralPath $journalPath){throw 'P15A refuses a retained watchdog journal before startup.'}
+$serviceIntegrityBefore=Get-ServiceIntegrity
+Assert-ServiceIntegrity $serviceIntegrityBefore
+Assert-NoJournal 'pre-start baseline'
 
 dotnet build (Join-Path $repoRoot 'src\VictusFanControl\VictusFanControl.csproj') -c Release -warnaserror
 if($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $cli -PathType Leaf)){throw 'P15A read-only probe build failed.'}
 
-$preSamples=Get-StableFirmwareProof ([int]$contract.startupNoWrite.requiredFirmwareSamplesBefore)
+$preProof=Get-StrictFirmwareProof ([int]$contract.startupNoWrite.requiredFirmwareSamplesBefore) 'pre-start firmware baseline'
 $logSkip=0
 if(Test-Path -LiteralPath $appLogPath -PathType Leaf){$logSkip=@(Get-Content -LiteralPath $appLogPath).Count}
 
-$passed=$false;$failure=$null;$app=$null;$serviceDuring=$null;$serviceAfter=$null;$duringSamples=@();$postSamples=@();$sessionLines=@();$packagePath=$null;$packageSha256=$null
+$passed=$false;$failure=$null;$app=$null;$serviceDuring=$null;$serviceAfter=$null;$serviceIntegrityDuring=$null;$serviceIntegrityAfter=$null;$duringSamples=@();$postProof=$null;$sessionLines=@();$packagePath=$null;$packageSha256=$null
 try {
     $args=@('--modules-dir',('"{0}"' -f $script:modulesDir))
     $app=Start-Process -FilePath $appExe -ArgumentList $args -WorkingDirectory (Split-Path -Parent $appExe) -PassThru
@@ -170,11 +212,12 @@ try {
     }
     if(-not $healthy){throw 'P15A did not observe Firmware/CLOSED gates plus Healthy telemetry within 75 s.'}
     $serviceDuring=Get-ServiceSnapshot;Assert-ServiceRuntime $serviceDuring
-    if(Test-Path -LiteralPath $journalPath){throw 'P15A watchdog journal appeared during ordinary startup.'}
+    $serviceIntegrityDuring=Get-ServiceIntegrity;Assert-ServiceIntegrity $serviceIntegrityDuring
+    Assert-NoJournal 'ordinary GUI startup'
     for($i=1;$i -le [int]$contract.startupNoWrite.requiredFirmwareSamplesDuring;$i++){
         $s=Read-Setpoint;$duringSamples+=@($s)
         if($s.Cpu -ne 255 -or $s.Gpu -ne 255){throw "P15A observed non-firmware setpoint during GUI runtime: $($s.Cpu)/$($s.Gpu)."}
-        if(Test-Path -LiteralPath $journalPath){throw 'P15A watchdog journal appeared during runtime sampling.'}
+        Assert-NoJournal 'GUI runtime FF/FF sampling'
         Start-Sleep -Milliseconds 400
     }
     Write-Host ''
@@ -187,13 +230,14 @@ try {
     while(-not $app.HasExited -and (Get-Date) -lt $exitDeadline){Start-Sleep -Milliseconds 500;$app.Refresh()}
     if(-not $app.HasExited){throw 'P15A GUI did not exit normally through the tray within 120 s.'}
     if($app.ExitCode -ne 0){throw "P15A GUI normal exit code was $($app.ExitCode)."}
-    $postSamples=Get-StableFirmwareProof ([int]$contract.startupNoWrite.requiredFirmwareSamplesAfter)
-    if(Test-Path -LiteralPath $journalPath){throw 'P15A watchdog journal remained/appeared after GUI exit.'}
+    $postProof=Get-StrictFirmwareProof ([int]$contract.startupNoWrite.requiredFirmwareSamplesAfter) 'post-exit firmware baseline'
+    Assert-NoJournal 'post-exit baseline'
     $serviceAfter=Get-ServiceSnapshot;Assert-ServiceRuntime $serviceAfter
+    $serviceIntegrityAfter=Get-ServiceIntegrity;Assert-ServiceIntegrity $serviceIntegrityAfter
     if($serviceDuring.ProcessId -ne $serviceAfter.ProcessId -or $serviceDuring.ProcessStartUtcTicks -ne $serviceAfter.ProcessStartUtcTicks){throw 'P15A watchdog process identity changed during ordinary startup/exit.'}
     $sessionLines=Get-NewLogLines $logSkip
     $sessionText=$sessionLines -join [Environment]::NewLine
-    foreach($marker in @('Starting GUI. Modules=','Fan backend:','P13 UI: startup mode=Firmware; manualGate=False; automaticGate=False.','Automatic fan policy is OFF.','Recovery completed; telemetry is healthy after 3 complete snapshots.','GUI exited.')){if($sessionText.IndexOf($marker,[StringComparison]::Ordinal) -lt 0){throw "P15A app log missing marker: $marker"}}
+    foreach($marker in @('Starting GUI. Modules=','Fan backend:','HP 8C40 production watchdog-backed backend selected through the explicit M9 promotion gate; automatic policy remains OFF.','P13 UI: startup mode=Firmware; manualGate=False; automaticGate=False.','Automatic fan policy is OFF.','Recovery completed; telemetry is healthy after 3 complete snapshots.','GUI exited.')){if($sessionText.IndexOf($marker,[StringComparison]::Ordinal) -lt 0){throw "P15A app log missing marker: $marker"}}
     foreach($forbidden in @('P13 mode request Manual','P13 mode request Automatic','P13 manual request')){if($sessionText.IndexOf($forbidden,[StringComparison]::Ordinal) -ge 0){throw "P15A observed forbidden user-control request in app log: $forbidden"}}
     $passed=$true
 } catch {
@@ -201,10 +245,10 @@ try {
 } finally {
     $sessionLines=Get-NewLogLines $logSkip
     $sessionLines | Set-Content -LiteralPath $sessionLogPath -Encoding UTF8
-    @($preSamples+$duringSamples+$postSamples) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $setpointPath -Encoding UTF8
-    [ordered]@{before=$serviceBefore;during=$serviceDuring;after=$serviceAfter;journalPresent=(Test-Path -LiteralPath $journalPath)} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $servicePath -Encoding UTF8
+    @($script:setpointEvidence) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $setpointPath -Encoding UTF8
+    [ordered]@{before=$serviceBefore;during=$serviceDuring;after=$serviceAfter;integrityBefore=$serviceIntegrityBefore;integrityDuring=$serviceIntegrityDuring;integrityAfter=$serviceIntegrityAfter;journalEvidenceDetected=$script:journalEvidenceDetected;journalPresentAtEnd=(Test-Path -LiteralPath $journalPath)} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $servicePath -Encoding UTF8
     [ordered]@{wrapperPath=[IO.Path]::GetFullPath($RcArtifactZipPath);wrapperSha256=$outerHash;artifactName=$artifactName;auditedSourceHead=[string]$contract.p14Baseline.auditedRcSourceHead;innerZipSha256=$innerHash} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $artifactPath -Encoding UTF8
-    $result=[ordered]@{schemaVersion=1;gate='P15A';result=$(if($passed){'PASS'}else{'FAIL_CLOSED'});failure=$failure;timestampUtc=(Get-Date).ToUniversalTime().ToString('O');repository=$repoEvidence;target=$targetEvidence;rcWrapperSha256=$outerHash;rcPayloadZipSha256=$innerHash;startupMode='Firmware';manualExecutionAuthorized=$false;automaticExecutionAuthorized=$false;controlEnabledByDefault=$false;automaticPolicyEnabled=$false;firmwareSetpointBeforePassed=(@($preSamples | Where-Object {$_.Cpu -ne 255 -or $_.Gpu -ne 255}).Count -eq 0);firmwareSetpointDuringPassed=(@($duringSamples).Count -eq [int]$contract.startupNoWrite.requiredFirmwareSamplesDuring -and @($duringSamples | Where-Object {$_.Cpu -ne 255 -or $_.Gpu -ne 255}).Count -eq 0);firmwareSetpointAfterPassed=(@($postSamples | Where-Object {$_.Cpu -ne 255 -or $_.Gpu -ne 255}).Count -eq 0);watchdogJournalPresent=(Test-Path -LiteralPath $journalPath);serviceBefore=$serviceBefore;serviceDuring=$serviceDuring;serviceAfter=$serviceAfter;fanWriteObserved=$false;watchdogLeaseOwnershipObserved=$false;powerTransitionAttempted=$false;manualOrAutomaticRequestObserved=$false;packagePath=$packagePath;packageSha256=$packageSha256}
+    $result=[ordered]@{schemaVersion=1;gate='P15A';result=$(if($passed){'PASS'}else{'FAIL_CLOSED'});failure=$failure;timestampUtc=(Get-Date).ToUniversalTime().ToString('O');repository=$repoEvidence;target=$targetEvidence;rcWrapperSha256=$outerHash;rcPayloadZipSha256=$innerHash;startupMode='Firmware';manualExecutionAuthorized=$false;automaticExecutionAuthorized=$false;controlEnabledByDefault=$false;automaticPolicyEnabled=$false;firmwareProofBefore=$preProof;firmwareSetpointDuringPassed=(@($duringSamples).Count -eq [int]$contract.startupNoWrite.requiredFirmwareSamplesDuring -and @($duringSamples | Where-Object {$_.Cpu -ne 255 -or $_.Gpu -ne 255}).Count -eq 0);firmwareProofAfter=$postProof;nonFirmwareSetpointEvidenceDetected=(@($script:setpointEvidence | Where-Object {$_.Cpu -ne 255 -or $_.Gpu -ne 255}).Count -gt 0);watchdogJournalEvidenceDetected=$script:journalEvidenceDetected;watchdogJournalPresentAtEnd=(Test-Path -LiteralPath $journalPath);serviceBefore=$serviceBefore;serviceDuring=$serviceDuring;serviceAfter=$serviceAfter;serviceIntegrityBefore=$serviceIntegrityBefore;serviceIntegrityDuring=$serviceIntegrityDuring;serviceIntegrityAfter=$serviceIntegrityAfter;watchdogLeaseOwnershipEvidenceDetected=$script:journalEvidenceDetected;powerTransitionAttempted=$false;manualOrAutomaticRequestObserved=$false;packagePath=$packagePath;packageSha256=$packageSha256}
     $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resultPath -Encoding UTF8
     try{
         $package=& $packager -EvidenceRoot $evidenceRoot -RepositoryRoot $repoRoot
