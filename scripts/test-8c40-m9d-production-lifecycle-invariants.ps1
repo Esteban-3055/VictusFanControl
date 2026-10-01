@@ -18,7 +18,7 @@ function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 function Assert-True([bool]$Value,[string]$Message){if(-not $Value){throw $Message}}
 
 Assert-True ([bool]$profile.lifecycle.watchdogM9DCodePrepared) 'M9D code-prepared flag missing.'
-Assert-False ([bool]$profile.lifecycle.watchdogM9DCodeCiPassed) 'M9D preparation must remain CI-pending until closure commit.'
+Assert-True ([bool]$profile.lifecycle.watchdogM9DCodeCiPassed) 'M9D code/CI PASS must remain recorded after closure.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalExecutionAuthorized) 'M9D physical execution must remain blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.qualificationConstructionAuthorized) 'M9D qualification construction must remain blocked.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9d.physicalAuthorization.authorized) 'M9D physical authorization must remain false.'
@@ -28,6 +28,10 @@ Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9D must not 
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9D must not promote normal production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9D must keep control disabled by default.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'M9D must keep automatic/adaptive policy OFF.'
+if([string]$profile.watchdogM9ProductionIntegration.m9d.codeCi.result -cne 'PASS'){throw 'M9D code/CI result must remain PASS.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9d.codeCi.commit -cne '91332ac590a456c0489406e9262d25b85a6528ca'){throw 'M9D code/CI evidence commit changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9d.codeCi.runNumber -ne 894){throw 'M9D code/CI run number changed.'}
+if([long]$profile.watchdogM9ProductionIntegration.m9d.codeCi.runId -ne 36803864224){throw 'M9D code/CI run id changed.'}
 
 foreach($needle in @(
     'M9DPhysicalQualificationToken = "8C40-M9D-PRODUCTION-LIFECYCLE30"',
