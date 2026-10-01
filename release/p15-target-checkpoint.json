@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15A_STARTUP_NO_WRITE_PREPARATION_IMPLEMENTED_AWAITING_CI",
+  "status": "P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -29,7 +29,31 @@
   },
   "startupNoWrite": {
     "preparationImplemented": true,
-    "preparationCiValidated": false,
+    "preparationCiValidated": true,
+    "preparationClosure": {
+      "closed": true,
+      "result": "PASS",
+      "implementationHead": "8779b60ee994b5fd9b34fb753c90908048974fc8",
+      "sourceCiRunNumber": 1090,
+      "sourceCiRunId": 36916449876,
+      "sourceCiResult": "SUCCESS",
+      "powerShellSyntaxValidated": true,
+      "powerShell51CompatibilityValidated": true,
+      "warningsAsErrorsBuildValidated": true,
+      "evidencePackagingSelfTestValidated": true,
+      "exactAuditedRcBindingValidated": true,
+      "qualifiedM4BinaryIdentityValidated": true,
+      "failedCiHistoryPreserved": [
+        {
+          "runNumber": 1089,
+          "runId": 36916292385,
+          "result": "FAILURE",
+          "cause": "PowerShell parser rejected an interpolated variable immediately followed by a colon in a diagnostic-only error string",
+          "hardwareExecution": false
+        }
+      ],
+      "hardwareExecution": false
+    },
     "executionAuthorized": false,
     "physicalPassed": false,
     "evidenceClosed": false,

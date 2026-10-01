@@ -23,7 +23,17 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current preparation state: **implemented, awaiting CI; physical execution authorization CLOSED**.
+Current preparation state: **CI validated and formally closed; physical execution authorization CLOSED**.
+
+### P15A preparation closure
+
+Final hardened preparation HEAD: `8779b60ee994b5fd9b34fb753c90908048974fc8`.
+
+GitHub Actions validation: **#1090**, run ID `36916449876`, **SUCCESS**. The full branch workflow passed PowerShell syntax validation, all historical M5-M9/P10-P14 invariants, the P15A static invariant, P15A evidence-packaging self-test, Windows PowerShell 5.1 compatibility, warnings-as-errors build and the existing RC packaging/artifact audit path. This run performed no target-side physical execution.
+
+The earlier hardening commit triggered Actions **#1089** (run ID `36916292385`) and failed at the global PowerShell syntax check because one diagnostic string used `$required:`, which PowerShell parses as an invalid drive-qualified variable reference. The interpolation boundary was corrected to `${required}:`; no later CI step and no hardware operation ran in #1089. The failure is retained as evidence.
+
+P15A is now prepared but **not authorized to run**. `startupNoWrite.executionAuthorized=false`, P15B remains unimplemented/closed, and Manual/Automatic user-facing gates remain false.
 
 ## P15B — one-shot Manual 30/30
 

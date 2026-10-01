@@ -81,7 +81,7 @@ Closed from audited source HEAD `eebcdd5e833256466c1ae023c35f7cef8d40d6ec` after
 
 ## P15 — first required target-side checkpoint
 
-P15 now has a dedicated branch and a staged physical sequence. **P15A** is prepared as ordinary startup/no-write against the exact audited P14.5 RC, with execution authorization still false. It requires Firmware startup, Manual/Automatic gates closed, Healthy telemetry, journal absence and stable FF/FF before/during/after the GUI session. **P15B** remains unimplemented and unauthorized; it may be prepared only after P15A is physically passed and formally closed, and will contain one separately authorized equal 30/30 transaction plus strong restore. Automatic execution remains later and independent.
+P15 now has a dedicated branch and a staged physical sequence. **P15A preparation is formally closed after CI #1090 SUCCESS**; execution authorization remains false. The hardened startup/no-write harness is bound to the exact audited P14.5 RC, the physically qualified installed M4 executable/module hashes, normal Firmware startup, CLOSED Manual/Automatic gates, Healthy telemetry, journal absence and strict FF/FF before/during/after the GUI session. **P15B** remains unimplemented and unauthorized; it may be prepared only after P15A is physically passed and formally closed, and will contain one separately authorized equal 30/30 transaction plus strong restore. Automatic execution remains later and independent.
 
 
 ### P13 formal software closure

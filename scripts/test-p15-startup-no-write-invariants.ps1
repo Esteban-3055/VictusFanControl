@@ -13,12 +13,16 @@ $harness=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15-startup-no-
 $packager=Get-Content -LiteralPath (Join-Path $root 'scripts\package-p15-startup-evidence.ps1') -Raw
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P15_TARGET_CHECKPOINT.md') -Raw
 if([string]$contract.milestone -cne 'P15A'){throw 'P15A milestone mismatch.'}
-if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_IMPLEMENTED_AWAITING_CI','P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED')){throw 'P15A preparation status mismatch.'}
+if([string]$contract.status -cne 'P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED'){throw 'P15A preparation closure status mismatch.'}
 if([string]$contract.targetProfileId -cne 'HP-8C40-9D0R1LA-F18'){throw 'P15A target mismatch.'}
 if([string]$contract.p14Baseline.closureHead -cne '6945b2e34526e5e266189da6553bf3ea010d3893' -or [int]$contract.p14Baseline.closureCiRunNumber -ne 1086 -or [long]$contract.p14Baseline.closureCiRunId -ne 36913062832 -or [string]$contract.p14Baseline.closureCiResult -cne 'SUCCESS'){throw 'P15A P14 closure baseline mismatch.'}
 if([string]$contract.p14Baseline.auditedRcSourceHead -cne 'eebcdd5e833256466c1ae023c35f7cef8d40d6ec' -or [string]$contract.p14Baseline.auditedRcArtifactSha256 -cne '588058a8b57c0ca1bb41649288682e0981be845ab747654472d3d10c88d572b5' -or [string]$contract.p14Baseline.auditedRcPayloadZipSha256 -cne '704983caa20abb21c3520ffbd165ad69f9843139b6b2fa47d9e9e2448a32ef68'){throw 'P15A audited RC identity mismatch.'}
 if([string]$contract.startupNoWrite.qualifiedInstalledWatchdogExeSha256 -cne 'ec10242ce40c12856cf9222d10e43016854498b3946375c8f73e9f927d9912ed' -or [string]$contract.startupNoWrite.qualifiedInstalledPawnIoModuleSha256 -cne 'c38fd116e7aff4d1fdb0a494e296be0a6708e5a22fc72f14587442fb7f8f7906'){throw 'P15A qualified installed M4 binary/module identity mismatch.'}
 Assert-True ([bool]$p14.productization.finalSoftwareRcAuditClosed) 'P15A requires P14.5 formally closed.'
+Assert-True ([bool]$contract.startupNoWrite.preparationCiValidated) 'P15A preparation must be CI validated.'
+Assert-True ([bool]$contract.startupNoWrite.preparationClosure.closed) 'P15A preparation closure must be recorded.'
+if([string]$contract.startupNoWrite.preparationClosure.result -cne 'PASS' -or [string]$contract.startupNoWrite.preparationClosure.implementationHead -cne '8779b60ee994b5fd9b34fb753c90908048974fc8' -or [int]$contract.startupNoWrite.preparationClosure.sourceCiRunNumber -ne 1090 -or [long]$contract.startupNoWrite.preparationClosure.sourceCiRunId -ne 36916449876 -or [string]$contract.startupNoWrite.preparationClosure.sourceCiResult -cne 'SUCCESS'){throw 'P15A preparation closure CI identity mismatch.'}
+Assert-False ([bool]$contract.startupNoWrite.preparationClosure.hardwareExecution) 'P15A preparation closure must record no hardware execution.'
 Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A physical startup execution must remain CLOSED during preparation.'
 Assert-False ([bool]$contract.startupNoWrite.physicalPassed) 'P15A cannot pre-claim physical PASS.'
 Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B Manual 30/30 must remain closed.'
