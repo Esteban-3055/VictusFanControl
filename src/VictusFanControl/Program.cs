@@ -46,6 +46,11 @@ internal static class Program
             return await FanControlCoordinatorSelfTest.RunAsync(Console.Out);
         }
 
+        if (options.WatchdogLeaseClientSelfTest)
+        {
+            return await FanControlWatchdogLeaseClientSelfTest.RunAsync(Console.Out);
+        }
+
         if (options.AdaptivePolicySelfTest)
         {
             var engineResult =
