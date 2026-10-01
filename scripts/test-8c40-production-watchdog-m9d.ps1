@@ -126,12 +126,12 @@ function Assert-ServiceBaseline([object]$svc){
     if($svc.PathName -notmatch [regex]::Escape('--m4-8c40-lease-service')){throw 'M9D service is not configured for the qualified M4 lease mode.'}
 }
 
-function Get-ServiceStartTicks([int]$Pid){
-    $proc=[Diagnostics.Process]::GetProcessById($Pid)
+function Get-ServiceStartTicks([int]$ProcessId){
+    $proc=[Diagnostics.Process]::GetProcessById($ProcessId)
     try{return [long]$proc.StartTime.ToUniversalTime().Ticks}finally{$proc.Dispose()}
 }
 
-function Wait-ServiceReady([int]$Pid,[long]$Ticks,[int]$Seconds=20){
+function Wait-ServiceReady([int]$ProcessId,[long]$Ticks,[int]$Seconds=20){
     $deadline=(Get-Date).AddSeconds($Seconds)
     while((Get-Date)-lt $deadline){
         if(Test-Path -LiteralPath $statusPath){
@@ -139,11 +139,11 @@ function Wait-ServiceReady([int]$Pid,[long]$Ticks,[int]$Seconds=20){
                 $status=Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
                 $svc=Get-ServiceSnapshot
                 if($status.Ready -and -not $status.Blocked -and
-                   [int]$status.ProcessId -eq $Pid -and $svc.State -ceq 'Running' -and [int]$svc.ProcessId -eq $Pid -and
+                   [int]$status.ProcessId -eq $ProcessId -and $svc.State -ceq 'Running' -and [int]$svc.ProcessId -eq $ProcessId -and
                    [int]$status.SessionId -eq 0 -and $status.AccountName -match 'SYSTEM$' -and
                    $status.TargetProfileId -ceq 'HP-8C40-9D0R1LA-F18' -and
                    $status.PipeName -ceq 'VictusFanControl.Watchdog.M4.8C40.v2' -and
-                   (Get-ServiceStartTicks $Pid) -eq $Ticks){return $status}
+                   (Get-ServiceStartTicks $ProcessId) -eq $Ticks){return $status}
             } catch {}
         }
         Start-Sleep -Milliseconds 100
@@ -181,13 +181,13 @@ function Wait-File([string]$Path,[int]$Seconds,[Diagnostics.Process]$Process){
     return (Test-Path -LiteralPath $Path)
 }
 
-function Assert-OwnedJournal([int]$Pid,[long]$Ticks){
+function Assert-OwnedJournal([int]$ProcessId,[long]$Ticks){
     if(-not (Test-Path -LiteralPath $journalPath)){throw 'M9D READY exists but durable journal is absent.'}
     $j=Get-Content -LiteralPath $journalPath -Raw | ConvertFrom-Json
     $phase=([string]$j.Phase -ceq 'Owned') -or ([string]$j.Phase -ceq '2') -or ([int]$j.Phase -eq 2)
     if([int]$j.SchemaVersion -ne 2 -or $j.TargetProfileId -cne 'HP-8C40-9D0R1LA-F18' -or
        -not $phase -or [long]$j.Generation -ne 3 -or
-       [int]$j.Controller.ProcessId -ne $Pid -or [long]$j.Controller.ProcessStartUtcTicks -ne $Ticks -or
+       [int]$j.Controller.ProcessId -ne $ProcessId -or [long]$j.Controller.ProcessStartUtcTicks -ne $Ticks -or
        [int]$j.Owned.Cpu -ne 30 -or [int]$j.Owned.Gpu -ne 30){
         throw 'M9D journal is not exact schema-v2 generation-3 OWNED 30/30 bound to the exact GUI identity.'
     }
@@ -419,8 +419,8 @@ finally {
         # Exact controller kill is a failure recovery action; retained journal is
         # preserved for the already-qualified watchdog to recover.
         try {
-            $pid=$app.Id;$ticks=[long]$app.StartTime.ToUniversalTime().Ticks
-            $current=[Diagnostics.Process]::GetProcessById($pid)
+            $controllerPid=$app.Id;$ticks=[long]$app.StartTime.ToUniversalTime().Ticks
+            $current=[Diagnostics.Process]::GetProcessById($controllerPid)
             try {
                 if([long]$current.StartTime.ToUniversalTime().Ticks -eq $ticks){$current.Kill();[void]$current.WaitForExit(5000)}
             } finally {$current.Dispose()}
