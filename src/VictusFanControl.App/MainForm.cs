@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using VictusFanControl.Control;
 using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Hp;
@@ -156,6 +157,8 @@ internal sealed class MainForm : Form
     private readonly bool _m7HibernationHardwareTest;
     private readonly bool _m9dProductionLifecycleHardwareTest;
     private readonly string? _m9dProductionLifecycleMarkerRoot;
+    private readonly bool _p15cGuiManualHardwareTest;
+    private readonly string? _p15cGuiManualMarkerRoot;
     private Hp8C40WatchdogBootstrapEvidence? _m9WatchdogBootstrapEvidence;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
@@ -194,6 +197,16 @@ internal sealed class MainForm : Form
     private bool _closeHintShown;
     private bool _shutdownStarted;
     private bool _shutdownComplete;
+
+    private int _p15cReadyGate;
+    private int _p15cReadySafetyStreak;
+    private DateTimeOffset? _p15cLastReadySafetyTimestamp;
+    private volatile bool _p15cReadyPublished;
+    private volatile bool _p15cCompleted;
+    private int _p15cManualModeRequests;
+    private int _p15cManualApplyRequests;
+    private int _p15cFirmwareModeRequests;
+    private int _p15cAutomaticModeRequests;
 
     private int _suspendHardwareTestAdvanceGate;
     private int _gateDHardwareTestAdvanceGate;
@@ -279,6 +292,44 @@ internal sealed class MainForm : Form
         throw new InvalidOperationException(
             "M9D marker root was not configured.");
 
+    private string P15CMarkerRoot =>
+        _p15cGuiManualMarkerRoot ??
+        throw new InvalidOperationException(
+            "P15C marker root was not configured.");
+
+    private string P15CReadyPath =>
+        Path.Combine(
+            P15CMarkerRoot,
+            Hp8C40P15CGuiManualQualificationGate.ReadyFileName);
+
+    private string P15CManualAppliedPath =>
+        Path.Combine(
+            P15CMarkerRoot,
+            Hp8C40P15CGuiManualQualificationGate.ManualAppliedFileName);
+
+    private string P15CParentOwnedVerifiedPath =>
+        Path.Combine(
+            P15CMarkerRoot,
+            Hp8C40P15CGuiManualQualificationGate.ParentOwnedVerifiedFileName);
+
+    private string P15CResultPath =>
+        Path.Combine(
+            P15CMarkerRoot,
+            Hp8C40P15CGuiManualQualificationGate.ResultFileName);
+
+    private string P15CEventsPath =>
+        Path.Combine(
+            P15CMarkerRoot,
+            Hp8C40P15CGuiManualQualificationGate.EventsFileName);
+
+    private static readonly string P15CJournalPath =
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "VictusFanControl",
+            "WatchdogM4",
+            "state",
+            "lease.json");
+
     private string DisplayAwareReadyPath =>
         _m9dProductionLifecycleHardwareTest
             ? Path.Combine(M9DMarkerRoot, "m9d-production-lifecycle.ready")
@@ -360,7 +411,9 @@ internal sealed class MainForm : Form
         bool m6ModernStandbyHardwareTest = false,
         bool m7HibernationHardwareTest = false,
         bool m9dProductionLifecycleHardwareTest = false,
-        string? m9dProductionLifecycleMarkerRoot = null)
+        string? m9dProductionLifecycleMarkerRoot = null,
+        bool p15cGuiManualHardwareTest = false,
+        string? p15cGuiManualMarkerRoot = null)
     {
         Text = "VictusFanControl v0.4-dev — P13 software UI complete / hardware gates CLOSED";
         StartPosition = FormStartPosition.CenterScreen;
@@ -382,6 +435,11 @@ internal sealed class MainForm : Form
             string.IsNullOrWhiteSpace(m9dProductionLifecycleMarkerRoot)
                 ? null
                 : Path.GetFullPath(m9dProductionLifecycleMarkerRoot);
+        _p15cGuiManualHardwareTest = p15cGuiManualHardwareTest;
+        _p15cGuiManualMarkerRoot =
+            string.IsNullOrWhiteSpace(p15cGuiManualMarkerRoot)
+                ? null
+                : Path.GetFullPath(p15cGuiManualMarkerRoot);
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
         _targetProfile =
             HpHardwareTargetResolver.Resolve(
@@ -444,6 +502,33 @@ internal sealed class MainForm : Form
                          "gate-g2.*"))
             {
                 TryDeleteFile(path);
+            }
+        }
+
+        if (_p15cGuiManualHardwareTest)
+        {
+            if (_p15cGuiManualMarkerRoot is null)
+            {
+                throw new InvalidOperationException(
+                    "P15C requires an isolated marker/evidence root.");
+            }
+
+            Directory.CreateDirectory(P15CMarkerRoot);
+
+            foreach (var path in new[]
+                     {
+                         P15CReadyPath,
+                         P15CManualAppliedPath,
+                         P15CParentOwnedVerifiedPath,
+                         P15CResultPath,
+                         P15CEventsPath
+                     })
+            {
+                if (File.Exists(path))
+                {
+                    throw new InvalidOperationException(
+                        $"P15C refuses to overwrite existing evidence marker '{path}'.");
+                }
             }
         }
 
@@ -643,12 +728,26 @@ internal sealed class MainForm : Form
         _fanCoordinator = new FanControlCoordinator(backend);
         _fanCoordinator.AuthorityChanged += FanCoordinatorOnAuthorityChanged;
 
+        var p15cManualExecutionAuthorized =
+            _p15cGuiManualHardwareTest &&
+            Hp8C40P15CGuiManualQualificationGate.PhysicalExecutionAuthorized;
+
+        var manualExecutionAuthorized =
+            _p15cGuiManualHardwareTest
+                ? p15cManualExecutionAuthorized
+                : Hp8C40PostM9UserControlGate.ManualExecutionAuthorized;
+
+        var automaticExecutionAuthorized =
+            _p15cGuiManualHardwareTest
+                ? false
+                : Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized;
+
         _fanProductionController =
             new AdaptiveFanProductionController(
                 _fanCoordinator,
                 Hp8C40AdaptiveCandidateV1.Create(),
-                Hp8C40PostM9UserControlGate.ManualExecutionAuthorized,
-                Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized);
+                manualExecutionAuthorized,
+                automaticExecutionAuthorized);
 
         var p13TargetDescription =
             _targetProfile is null
@@ -661,7 +760,15 @@ internal sealed class MainForm : Form
                 _hardwareIdentity,
                 p13TargetDescription,
                 GetP13ControlSafety,
-                AppendEvent);
+                AppendEvent,
+                manualInteractionReadyProvider:
+                    _p15cGuiManualHardwareTest
+                        ? () => _p15cReadyPublished && !_p15cCompleted
+                        : null,
+                interactionObserver:
+                    _p15cGuiManualHardwareTest
+                        ? OnP15CControlInteraction
+                        : null);
         _p13FanControlSurface.UpdateAuthority(
             _fanCoordinator.Authority);
 
@@ -691,6 +798,12 @@ internal sealed class MainForm : Form
             AppendEvent(
                 $"P13 UI: startup mode={_fanProductionController.Mode}; manualGate={_fanProductionController.ManualExecutionAuthorized}; automaticGate={_fanProductionController.AutomaticExecutionAuthorized}.");
             AppendEvent("Automatic fan policy is OFF. P13 mode selection cannot execute Manual/Automatic fan control while the post-M9 execution gates remain closed.");
+
+            if (_p15cGuiManualHardwareTest)
+            {
+                AppendEvent(
+                    "P15C GUI MANUAL QUALIFICATION: dedicated test mode active. The normal user Manual gate remains CLOSED; Automatic remains CLOSED. Wait for the P15C READY marker before using Manual.");
+            }
 
             if (_suspendLifecycleHardwareTest)
             {
@@ -2464,6 +2577,14 @@ internal sealed class MainForm : Form
         _lastSnapshot = snapshot;
         _ = EnforceLatestFanSafetyAsync("latest telemetry snapshot");
 
+        if (_p15cGuiManualHardwareTest &&
+            !_p15cReadyPublished &&
+            !_p15cCompleted &&
+            _worker.StateMachine.State == SystemState.Healthy)
+        {
+            _ = Task.Run(TryPublishP15CGuiReadyAsync);
+        }
+
         Ui(() =>
         {
             _cpuTemperature.Text =
@@ -2510,6 +2631,13 @@ internal sealed class MainForm : Form
         }
         else
         {
+            if (_p15cGuiManualHardwareTest &&
+                !_p15cReadyPublished)
+            {
+                _p15cReadySafetyStreak = 0;
+                _p15cLastReadySafetyTimestamp = null;
+            }
+
             _ = EnforceLatestFanSafetyAsync($"runtime state changed to {e.Current}");
         }
 
@@ -2564,6 +2692,12 @@ internal sealed class MainForm : Form
             return;
         }
 
+        if (_p15cGuiManualHardwareTest)
+        {
+            await TryPublishP15CGuiReadyAsync();
+            return;
+        }
+
         if (_suspendLifecycleHardwareTest)
         {
             await AdvanceSuspendLifecycleHardwareTestAsync();
@@ -2588,6 +2722,469 @@ internal sealed class MainForm : Form
         {
             await AdvanceGateF2HardwareTestAsync();
         }
+    }
+
+    private Task TryPublishP15CGuiReadyAsync()
+    {
+        if (!_p15cGuiManualHardwareTest ||
+            _p15cCompleted ||
+            _p15cReadyPublished ||
+            Interlocked.CompareExchange(
+                ref _p15cReadyGate,
+                1,
+                0) != 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            if (!Hp8C40P15CGuiManualQualificationGate.PhysicalExecutionAuthorized)
+            {
+                throw new InvalidOperationException(
+                    "P15C dedicated GUI qualification gate is closed.");
+            }
+
+            if (Hp8C40PostM9UserControlGate.ManualExecutionAuthorized ||
+                Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized)
+            {
+                throw new InvalidOperationException(
+                    "P15C requires the normal user Manual/Automatic gates to remain closed.");
+            }
+
+            if (!_fanProductionController.ManualExecutionAuthorized ||
+                _fanProductionController.AutomaticExecutionAuthorized)
+            {
+                throw new InvalidOperationException(
+                    "P15C controller authorization isolation is invalid.");
+            }
+
+            if (_worker.StateMachine.State != SystemState.Healthy ||
+                _fanCoordinator.Authority != FanAuthority.Firmware ||
+                !_fanCoordinator.BackendCanWrite)
+            {
+                _p15cReadySafetyStreak = 0;
+                _p15cLastReadySafetyTimestamp = null;
+                return Task.CompletedTask;
+            }
+
+            if (_lastSnapshot is null)
+            {
+                _p15cReadySafetyStreak = 0;
+                _p15cLastReadySafetyTimestamp = null;
+                return Task.CompletedTask;
+            }
+
+            EnsureP15CQualificationEnvelope(_lastSnapshot);
+
+            var safety =
+                EvaluateControlSafety(
+                    _hardwareIdentity,
+                    _worker.StateMachine.State,
+                    _lastSnapshot,
+                    DateTimeOffset.UtcNow,
+                    fanWritePathPresent:
+                        _fanCoordinator.BackendCanWrite);
+
+            if (!safety.CustomControlPermitted ||
+                !safety.SnapshotTimestamp.HasValue)
+            {
+                _p15cReadySafetyStreak = 0;
+                _p15cLastReadySafetyTimestamp = null;
+                return Task.CompletedTask;
+            }
+
+            var safetyTimestamp =
+                safety.SnapshotTimestamp.Value;
+
+            if (_p15cLastReadySafetyTimestamp.HasValue &&
+                safetyTimestamp <= _p15cLastReadySafetyTimestamp.Value)
+            {
+                return Task.CompletedTask;
+            }
+
+            _p15cLastReadySafetyTimestamp = safetyTimestamp;
+
+            if (File.Exists(P15CJournalPath))
+            {
+                throw new InvalidOperationException(
+                    "P15C cannot publish READY while a durable watchdog journal exists.");
+            }
+
+            _p15cReadySafetyStreak++;
+            if (_p15cReadySafetyStreak <
+                Hp8C40P15CGuiManualQualificationGate.RequiredHealthyPreWriteSamples)
+            {
+                return Task.CompletedTask;
+            }
+
+            using var process = Process.GetCurrentProcess();
+            var processStartTicks =
+                process.StartTime.ToUniversalTime().Ticks;
+
+            var ready =
+                new
+                {
+                    schemaVersion = 1,
+                    gate = "P15C-GUI",
+                    result = "READY",
+                    timestampUtc = DateTimeOffset.UtcNow,
+                    processId = Environment.ProcessId,
+                    processStartUtcTicks = processStartTicks.ToString(
+                        CultureInfo.InvariantCulture),
+                    targetProfileId = Hp8C40TargetProfile.Instance.Id,
+                    mode = _fanProductionController.Mode.ToString(),
+                    authority = _fanCoordinator.Authority.ToString(),
+                    manualQualificationAuthorized =
+                        _fanProductionController.ManualExecutionAuthorized,
+                    userFacingManualAuthorized =
+                        Hp8C40PostM9UserControlGate.ManualExecutionAuthorized,
+                    automaticAuthorized =
+                        _fanProductionController.AutomaticExecutionAuthorized,
+                    safetyPermitted = safety.CustomControlPermitted,
+                    healthySafetySamples = _p15cReadySafetyStreak,
+                    appLogPath = AppLog.CurrentLogPath
+                };
+
+            WriteP15CJson(P15CReadyPath, ready);
+            _p15cReadyPublished = true;
+
+            AppendEvent(
+                "P15C GUI READY: three consecutive Healthy/SafetyGate-permitted observations; Firmware authority; no durable journal. Operator may now use the real Manual button and Apply 30/30 once.");
+        }
+        catch (Exception ex)
+        {
+            CompleteP15CGuiQualification(
+                success: false,
+                $"READY failed closed: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(
+                ref _p15cReadyGate,
+                0);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static void EnsureP15CQualificationEnvelope(
+        TelemetrySnapshot snapshot)
+    {
+        if (!snapshot.IsComplete ||
+            !snapshot.CpuControlTemperatureC.HasValue ||
+            !snapshot.CpuPackagePowerW.HasValue ||
+            !snapshot.GpuTemperatureC.HasValue ||
+            !snapshot.GpuPowerW.HasValue)
+        {
+            throw new InvalidOperationException(
+                "P15C requires complete CPU/GPU temperature and power telemetry before GUI Manual readiness.");
+        }
+
+        if (snapshot.CpuControlTemperatureC.Value >
+                Hp8C40P15CGuiManualQualificationGate.MaximumCpuPhysicalC ||
+            snapshot.GpuTemperatureC.Value >
+                Hp8C40P15CGuiManualQualificationGate.MaximumGpuPhysicalC ||
+            snapshot.CpuPackagePowerW.Value >
+                Hp8C40P15CGuiManualQualificationGate.MaximumCpuPackagePowerW ||
+            snapshot.GpuPowerW.Value >
+                Hp8C40P15CGuiManualQualificationGate.MaximumGpuPowerW)
+        {
+            throw new InvalidOperationException(
+                $"P15C qualification envelope refused readiness: " +
+                $"CPU={snapshot.CpuControlTemperatureC.Value:0.0}C/" +
+                $"{snapshot.CpuPackagePowerW.Value:0.0}W, " +
+                $"GPU={snapshot.GpuTemperatureC.Value:0.0}C/" +
+                $"{snapshot.GpuPowerW.Value:0.0}W.");
+        }
+    }
+
+    private void OnP15CControlInteraction(
+        P13ControlInteractionObservation observation)
+    {
+        if (!_p15cGuiManualHardwareTest ||
+            _p15cCompleted)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(P15CMarkerRoot);
+            File.AppendAllText(
+                P15CEventsPath,
+                JsonSerializer.Serialize(
+                    observation,
+                    Hp8C40P15CGuiManualQualificationGate.JsonOptions) +
+                Environment.NewLine);
+
+            if (!string.IsNullOrWhiteSpace(observation.Failure))
+            {
+                throw new InvalidOperationException(
+                    $"Observed real P13 interaction failed: {observation.Failure}");
+            }
+
+            var result =
+                observation.Result ??
+                throw new InvalidOperationException(
+                    "Observed real P13 interaction is missing its production result.");
+
+            if (observation.Kind == P13ControlInteractionKind.ModeRequest)
+            {
+                switch (observation.RequestedMode)
+                {
+                    case AdaptiveFanProductionMode.Automatic:
+                        _p15cAutomaticModeRequests++;
+                        throw new InvalidOperationException(
+                            "Automatic was requested during P15C; this invalidates the Manual-only qualification.");
+
+                    case AdaptiveFanProductionMode.Manual:
+                        _p15cManualModeRequests++;
+
+                        if (!_p15cReadyPublished ||
+                            _p15cManualModeRequests != 1 ||
+                            _p15cManualApplyRequests != 0 ||
+                            _p15cFirmwareModeRequests != 0 ||
+                            !result.ExecutionAuthorized ||
+                            result.Mode != AdaptiveFanProductionMode.Manual ||
+                            result.Action != AdaptiveFanProductionActionKind.HoldFirmware ||
+                            result.Authority != FanAuthority.Firmware)
+                        {
+                            throw new InvalidOperationException(
+                                "P15C Manual mode selection did not remain a single no-write Firmware-authority transition.");
+                        }
+
+                        AppendEvent(
+                            "P15C observed the real P13 Manual button: mode=Manual, authority still Firmware, no fan command issued.");
+                        return;
+
+                    case AdaptiveFanProductionMode.Firmware:
+                        _p15cFirmwareModeRequests++;
+
+                        if (_p15cManualModeRequests != 1 ||
+                            _p15cManualApplyRequests != 1 ||
+                            _p15cFirmwareModeRequests != 1 ||
+                            _p15cAutomaticModeRequests != 0)
+                        {
+                            throw new InvalidOperationException(
+                                "P15C Firmware click sequence/count is invalid.");
+                        }
+
+                        if (!File.Exists(P15CParentOwnedVerifiedPath))
+                        {
+                            throw new InvalidOperationException(
+                                "P15C Firmware was clicked before the parent independently verified OWNED 30/30.");
+                        }
+
+                        if (!result.ExecutionAuthorized ||
+                            result.Mode != AdaptiveFanProductionMode.Firmware ||
+                            result.Action != AdaptiveFanProductionActionKind.RestoreFirmware ||
+                            result.Authority != FanAuthority.Firmware)
+                        {
+                            throw new InvalidOperationException(
+                                "P15C real Firmware button did not complete the expected production restore action.");
+                        }
+
+                        var restore =
+                            _fanCoordinator.LastRestoreEvidence;
+
+                        if (!restore.HasValue ||
+                            !restore.Value.LocalFirmwareAckVerified ||
+                            !restore.Value.WatchdogLeaseRequired ||
+                            !restore.Value.WatchdogReleaseVerified)
+                        {
+                            throw new InvalidOperationException(
+                                "P15C Firmware button lacks complete strong-restore evidence.");
+                        }
+
+                        if (File.Exists(P15CJournalPath))
+                        {
+                            throw new InvalidOperationException(
+                                "P15C Firmware button returned but durable watchdog journal remains.");
+                        }
+
+                        CompleteP15CGuiQualification(
+                            success: true,
+                            "Real P13 Manual 30/30 -> Firmware strong restore completed.");
+                        return;
+
+                    default:
+                        throw new InvalidOperationException(
+                            "P15C observed an unknown mode request.");
+                }
+            }
+
+            if (observation.Kind == P13ControlInteractionKind.ManualApply)
+            {
+                _p15cManualApplyRequests++;
+
+                if (!_p15cReadyPublished ||
+                    _p15cManualModeRequests != 1 ||
+                    _p15cManualApplyRequests != 1 ||
+                    _p15cFirmwareModeRequests != 0 ||
+                    observation.EqualFanLevel !=
+                        Hp8C40P15CGuiManualQualificationGate.QualificationLevel ||
+                    !result.ExecutionAuthorized ||
+                    result.Mode != AdaptiveFanProductionMode.Manual ||
+                    result.Action != AdaptiveFanProductionActionKind.EnterCustomAndApply ||
+                    result.EqualFanLevel !=
+                        Hp8C40P15CGuiManualQualificationGate.QualificationLevel ||
+                    result.Authority != FanAuthority.Custom)
+                {
+                    throw new InvalidOperationException(
+                        "P15C Manual Apply did not prove exactly one real-P13 30/30 EnterCustomAndApply transaction.");
+                }
+
+                using var process = Process.GetCurrentProcess();
+                var applied =
+                    new
+                    {
+                        schemaVersion = 1,
+                        gate = "P15C-GUI",
+                        result = "MANUAL_APPLIED",
+                        timestampUtc = DateTimeOffset.UtcNow,
+                        processId = Environment.ProcessId,
+                        processStartUtcTicks =
+                            process.StartTime.ToUniversalTime().Ticks.ToString(
+                                CultureInfo.InvariantCulture),
+                        equalFanLevel =
+                            Hp8C40P15CGuiManualQualificationGate.QualificationLevel,
+                        action = result.Action.ToString(),
+                        authority = result.Authority.ToString(),
+                        manualModeRequests = _p15cManualModeRequests,
+                        manualApplyRequests = _p15cManualApplyRequests
+                    };
+
+                WriteP15CJson(
+                    P15CManualAppliedPath,
+                    applied);
+
+                AppendEvent(
+                    "P15C observed the real P13 Apply button: exactly one 30/30 command completed through the production adapter; awaiting independent parent OWNED proof before Firmware click.");
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "P15C observed an unsupported P13 interaction.");
+        }
+        catch (Exception ex)
+        {
+            CompleteP15CGuiQualification(
+                success: false,
+                $"Interaction sequence failed closed: {ex.Message}");
+        }
+    }
+
+    private void CompleteP15CGuiQualification(
+        bool success,
+        string detail)
+    {
+        if (_p15cCompleted)
+        {
+            return;
+        }
+
+        _p15cCompleted = true;
+
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            var restore =
+                _fanCoordinator.LastRestoreEvidence;
+
+            var result =
+                new
+                {
+                    schemaVersion = 1,
+                    gate = "P15C-GUI",
+                    result = success
+                        ? "PASS_GUI_MANUAL30_STRONG_RESTORE"
+                        : "FAIL_CLOSED",
+                    detail,
+                    timestampUtc = DateTimeOffset.UtcNow,
+                    processId = Environment.ProcessId,
+                    processStartUtcTicks =
+                        process.StartTime.ToUniversalTime().Ticks.ToString(
+                            CultureInfo.InvariantCulture),
+                    manualModeRequests = _p15cManualModeRequests,
+                    manualApplyRequests = _p15cManualApplyRequests,
+                    firmwareModeRequests = _p15cFirmwareModeRequests,
+                    automaticModeRequests = _p15cAutomaticModeRequests,
+                    localFirmwareAckVerified =
+                        restore?.LocalFirmwareAckVerified ?? false,
+                    watchdogLeaseRequired =
+                        restore?.WatchdogLeaseRequired ?? false,
+                    watchdogReleaseVerified =
+                        restore?.WatchdogReleaseVerified ?? false,
+                    journalPresentAfterRestore =
+                        File.Exists(P15CJournalPath),
+                    finalAuthority =
+                        _fanCoordinator.Authority.ToString(),
+                    finalMode =
+                        _fanProductionController.Mode.ToString(),
+                    userFacingManualAuthorized =
+                        Hp8C40PostM9UserControlGate.ManualExecutionAuthorized,
+                    automaticAuthorized =
+                        _fanProductionController.AutomaticExecutionAuthorized
+                };
+
+            WriteP15CJson(
+                P15CResultPath,
+                result);
+        }
+        catch (Exception evidenceEx)
+        {
+            AppLog.Write(
+                $"P15C could not write final GUI qualification evidence: {evidenceEx}");
+        }
+
+        AppendEvent(
+            success
+                ? $"P15C GUI RESULT: PASS. {detail}"
+                : $"P15C GUI RESULT: FAIL_CLOSED. {detail}");
+
+        Environment.ExitCode =
+            success ? 0 : 151;
+
+        _allowExit = true;
+
+        if (IsHandleCreated && !IsDisposed)
+        {
+            BeginInvoke(
+                new Action(
+                    () =>
+                    {
+                        Enabled = false;
+                        Close();
+                    }));
+        }
+    }
+
+    private static void WriteP15CJson(
+        string path,
+        object value)
+    {
+        var directory =
+            Path.GetDirectoryName(path);
+
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var tempPath =
+            path + ".tmp";
+
+        File.WriteAllText(
+            tempPath,
+            JsonSerializer.Serialize(
+                value,
+                Hp8C40P15CGuiManualQualificationGate.JsonOptions));
+
+        File.Move(
+            tempPath,
+            path,
+            overwrite: true);
     }
 
     private async Task AdvanceM6ModernStandbyHardwareTestAsync()

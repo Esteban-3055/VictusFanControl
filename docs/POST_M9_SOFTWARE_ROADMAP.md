@@ -81,7 +81,9 @@ Closed from audited source HEAD `eebcdd5e833256466c1ae023c35f7cef8d40d6ec` after
 
 ## P15 — first required target-side checkpoint
 
-P15 now has a dedicated branch and a staged physical sequence. **P15A preparation is formally closed after CI #1090 SUCCESS**; execution authorization remains false. The hardened startup/no-write harness is bound to the exact audited P14.5 RC, the physically qualified installed M4 executable/module hashes, normal Firmware startup, CLOSED Manual/Automatic gates, Healthy telemetry, journal absence and strict FF/FF before/during/after the GUI session. **P15B** remains unimplemented and unauthorized; it may be prepared only after P15A is physically passed and formally closed, and will contain one separately authorized equal 30/30 transaction plus strong restore. Automatic execution remains later and independent.
+P15A startup/no-write and P15B one-shot production Manual 30/30 are both physically passed, independently evidence-reviewed, formally closed and re-blocked. P15B closure HEAD `4493f135b474f0a17ad0737ed9ebde8362e0eb47` passed GitHub Actions #1116 SUCCESS after preserving the software-only #1115 metadata-precision failure.
+
+P15C now prepares the next narrow boundary: qualification of the **real P13 GUI Manual path**. Preparation adds a dedicated, default-false qualification-only GUI gate and exact process/token mode while keeping `Hp8C40PostM9UserControlGate.ManualExecutionAuthorized=false`, Automatic closed, Candidate V1 unvalidated/unauthorized, and M9C/M9D qualification gates closed. A future separately authorized run will require the real Manual button, exactly one real Apply 30/30, independent parent OWNED proof, the real Firmware button and production strong restore. No P15C physical execution is authorized during preparation. Automatic remains later and independent.
 
 
 ### P13 formal software closure

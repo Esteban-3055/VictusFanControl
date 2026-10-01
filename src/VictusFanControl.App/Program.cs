@@ -1,3 +1,4 @@
+using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 
@@ -150,6 +151,20 @@ internal static class Program
             args,
             "--8c40-m9d-marker-root");
 
+        var p15cGuiManualHardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--8c40-p15c-gui-manual-test",
+                StringComparison.OrdinalIgnoreCase));
+
+        var p15cGuiManualHardwareTestToken = ReadOptionValue(
+            args,
+            "--8c40-p15c-test-token");
+
+        var p15cGuiManualMarkerRoot = ReadOptionValue(
+            args,
+            "--8c40-p15c-marker-root");
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
@@ -160,12 +175,13 @@ internal static class Program
             (gateG2HardwareTest ? 1 : 0) +
             (m6ModernStandbyHardwareTest ? 1 : 0) +
             (m7HibernationHardwareTest ? 1 : 0) +
-            (m9dProductionLifecycleHardwareTest ? 1 : 0);
+            (m9dProductionLifecycleHardwareTest ? 1 : 0) +
+            (p15cGuiManualHardwareTest ? 1 : 0);
 
         if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
-                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2, HP 8C40 M6, M7 and M9D hardware-test modes are mutually exclusive.");
+                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2, HP 8C40 M6, M7, M9D and P15C hardware-test modes are mutually exclusive.");
             Environment.ExitCode = 60;
             return;
         }
@@ -406,6 +422,59 @@ internal static class Program
                 Path.GetFullPath(m9dProductionLifecycleMarkerRoot);
         }
 
+        if (p15cGuiManualHardwareTest)
+        {
+            if (!Hp8C40P15CGuiManualQualificationGate.PhysicalExecutionAuthorized)
+            {
+                AppLog.Write(
+                    "HP 8C40 P15C real-GUI Manual qualification refused: dedicated physical gate remains closed.");
+                Environment.ExitCode = 60;
+                return;
+            }
+
+            if (!string.Equals(
+                    p15cGuiManualHardwareTestToken,
+                    Hp8C40P15CGuiManualQualificationGate.RequiredToken,
+                    StringComparison.Ordinal))
+            {
+                AppLog.Write(
+                    $"HP 8C40 P15C real-GUI Manual qualification refused: explicit --8c40-p15c-test-token {Hp8C40P15CGuiManualQualificationGate.RequiredToken} is required.");
+                Environment.ExitCode = 60;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(p15cGuiManualMarkerRoot))
+            {
+                AppLog.Write(
+                    "HP 8C40 P15C real-GUI Manual qualification requires --8c40-p15c-marker-root for isolated evidence.");
+                Environment.ExitCode = 60;
+                return;
+            }
+
+            if (Hp8C40PostM9UserControlGate.ManualExecutionAuthorized ||
+                Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized)
+            {
+                AppLog.Write(
+                    "HP 8C40 P15C requires the normal post-M9 user Manual/Automatic gates to remain closed.");
+                Environment.ExitCode = 60;
+                return;
+            }
+        }
+        else if (p15cGuiManualHardwareTestToken is not null ||
+                 p15cGuiManualMarkerRoot is not null)
+        {
+            AppLog.Write(
+                "Startup refused: P15C token/marker options are valid only with --8c40-p15c-gui-manual-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (p15cGuiManualMarkerRoot is not null)
+        {
+            p15cGuiManualMarkerRoot =
+                Path.GetFullPath(p15cGuiManualMarkerRoot);
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -453,7 +522,8 @@ internal static class Program
 
         if (m6ModernStandbyHardwareTest ||
             m7HibernationHardwareTest ||
-            m9dProductionLifecycleHardwareTest)
+            m9dProductionLifecycleHardwareTest ||
+            p15cGuiManualHardwareTest)
         {
             var hardware = HardwareIdentityReader.ReadCurrent();
 
@@ -462,11 +532,13 @@ internal static class Program
                     out var lifecycleTargetReason))
             {
                 var gateLabel =
-                    m7HibernationHardwareTest
-                        ? "M7 hibernation"
-                        : m9dProductionLifecycleHardwareTest
-                            ? "M9D production-path Modern Standby"
-                            : "M6 Modern Standby";
+                    p15cGuiManualHardwareTest
+                        ? "P15C real-GUI Manual"
+                        : m7HibernationHardwareTest
+                            ? "M7 hibernation"
+                            : m9dProductionLifecycleHardwareTest
+                                ? "M9D production-path Modern Standby"
+                                : "M6 Modern Standby";
 
                 AppLog.Write(
                     $"HP 8C40 {gateLabel} startup refused before MainForm/backend creation: " +
@@ -497,7 +569,9 @@ internal static class Program
             m6ModernStandbyHardwareTest,
             m7HibernationHardwareTest,
             m9dProductionLifecycleHardwareTest,
-            m9dProductionLifecycleMarkerRoot);
+            m9dProductionLifecycleMarkerRoot,
+            p15cGuiManualHardwareTest,
+            p15cGuiManualMarkerRoot);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");

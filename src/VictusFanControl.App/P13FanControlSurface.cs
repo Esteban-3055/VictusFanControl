@@ -22,6 +22,8 @@ internal sealed class P13FanControlSurface : UserControl
     private readonly AdaptiveFanPolicyConfig _candidateConfig;
     private readonly Func<SafetyGateResult?> _controlSafetyProvider;
     private readonly Action<string> _log;
+    private readonly Func<bool>? _manualInteractionReadyProvider;
+    private readonly Action<P13ControlInteractionObservation>? _interactionObserver;
     private FanAuthority _lastAuthority = FanAuthority.Firmware;
 
     private readonly Label _modeValue = ValueLabel();
@@ -43,7 +45,9 @@ internal sealed class P13FanControlSurface : UserControl
         HardwareIdentity hardware,
         string targetDescription,
         Func<SafetyGateResult?> controlSafetyProvider,
-        Action<string> log)
+        Action<string> log,
+        Func<bool>? manualInteractionReadyProvider = null,
+        Action<P13ControlInteractionObservation>? interactionObserver = null)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _candidateConfig =
@@ -56,6 +60,8 @@ internal sealed class P13FanControlSurface : UserControl
             controlSafetyProvider ??
             throw new ArgumentNullException(nameof(controlSafetyProvider));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _manualInteractionReadyProvider = manualInteractionReadyProvider;
+        _interactionObserver = interactionObserver;
 
         Dock = DockStyle.Fill;
         AutoScroll = true;
@@ -216,7 +222,9 @@ internal sealed class P13FanControlSurface : UserControl
 
         var manual = new Button
         {
-            Text = "Manual (locked)",
+            Text = _controller.ManualExecutionAuthorized
+                ? "Manual"
+                : "Manual (locked)",
             AutoSize = true
         };
         manual.Click += async (_, _) =>
@@ -225,7 +233,9 @@ internal sealed class P13FanControlSurface : UserControl
 
         var automatic = new Button
         {
-            Text = "Automatic (locked)",
+            Text = _controller.AutomaticExecutionAuthorized
+                ? "Automatic"
+                : "Automatic (locked)",
             AutoSize = true
         };
         automatic.Click += async (_, _) =>
@@ -491,6 +501,16 @@ internal sealed class P13FanControlSurface : UserControl
             return;
         }
 
+        if (_manualInteractionReadyProvider is not null &&
+            !_manualInteractionReadyProvider())
+        {
+            RefreshState(
+                $"Manual {level}/{level} blocked: qualification readiness has not been published.");
+            _log(
+                $"P13 manual request {level}/{level}: BLOCKED before SafetyGate/coordinator access; qualification readiness is false.");
+            return;
+        }
+
         if (_controller.Mode != AdaptiveFanProductionMode.Manual)
         {
             RefreshState(
@@ -520,6 +540,14 @@ internal sealed class P13FanControlSurface : UserControl
             _log(
                 $"P13 manual request {level}/{level}: action={result.Action}; " +
                 $"authorized={result.ExecutionAuthorized}; authority={result.Authority}; {result.Detail}");
+            _interactionObserver?.Invoke(
+                new P13ControlInteractionObservation(
+                    P13ControlInteractionKind.ManualApply,
+                    null,
+                    level,
+                    result,
+                    null,
+                    DateTimeOffset.UtcNow));
         }
         catch (Exception ex)
         {
@@ -527,12 +555,31 @@ internal sealed class P13FanControlSurface : UserControl
                 $"Manual request failed closed: {ex.Message}");
             _log(
                 $"P13 manual request {level}/{level} FAILED CLOSED: {ex}");
+            _interactionObserver?.Invoke(
+                new P13ControlInteractionObservation(
+                    P13ControlInteractionKind.ManualApply,
+                    null,
+                    level,
+                    null,
+                    ex.ToString(),
+                    DateTimeOffset.UtcNow));
         }
     }
 
     private async Task RequestModeAsync(
         AdaptiveFanProductionMode mode)
     {
+        if (mode == AdaptiveFanProductionMode.Manual &&
+            _manualInteractionReadyProvider is not null &&
+            !_manualInteractionReadyProvider())
+        {
+            RefreshState(
+                "Manual mode request blocked: qualification readiness has not been published.");
+            _log(
+                "P13 mode request Manual: BLOCKED before production adapter access; qualification readiness is false.");
+            return;
+        }
+
         try
         {
             var result =
@@ -544,6 +591,14 @@ internal sealed class P13FanControlSurface : UserControl
             _log(
                 $"P13 mode request {mode}: action={result.Action}; " +
                 $"authorized={result.ExecutionAuthorized}; authority={result.Authority}; {result.Detail}");
+            _interactionObserver?.Invoke(
+                new P13ControlInteractionObservation(
+                    P13ControlInteractionKind.ModeRequest,
+                    mode,
+                    null,
+                    result,
+                    null,
+                    DateTimeOffset.UtcNow));
         }
         catch (Exception ex)
         {
@@ -551,6 +606,14 @@ internal sealed class P13FanControlSurface : UserControl
                 $"Mode request failed closed: {ex.Message}");
             _log(
                 $"P13 mode request {mode} FAILED CLOSED: {ex}");
+            _interactionObserver?.Invoke(
+                new P13ControlInteractionObservation(
+                    P13ControlInteractionKind.ModeRequest,
+                    mode,
+                    null,
+                    null,
+                    ex.ToString(),
+                    DateTimeOffset.UtcNow));
         }
     }
 

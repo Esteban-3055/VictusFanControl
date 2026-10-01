@@ -9,7 +9,9 @@ Exact target: **HP Victus 15-fa1xxx / HP 8C40 rev. 63.43 / SKU 9D0R1LA#AKH / BIO
 1. P15A — ordinary startup / no-write physical checkpoint.
 2. Formally close P15A evidence and re-block its execution authorization.
 3. Only then prepare and separately authorize P15B — one-shot Manual equal 30/30 with strong restore.
-4. Only after P15B closure may later lifecycle/Automatic physical work be considered.
+4. Formally close P15B evidence and re-block both dedicated P15B gates.
+5. Prepare P15C — real P13 GUI Manual 30/30 -> Firmware qualification — while every P15C physical gate remains closed.
+6. Only after P15C is separately CI-closed, authorized, physically passed, evidence-closed and re-blocked may later Manual lifecycle/variable-level or Automatic work be considered.
 
 Manual and Automatic user-facing execution gates remain compile-time false during P15A. Candidate V1 remains physically unvalidated and production-unauthorized. M9C/M9D qualification gates remain closed.
 
@@ -23,7 +25,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current state: **P15A remains formally closed/re-blocked. P15B has a complete independently reviewed physical PASS from authorization HEAD `f6261383c1cdc40808bf1ac232c93e3686478716` / CI #1114 SUCCESS. This closure re-blocks both P15B physical gates and records `physicalPassed=true` / `evidenceClosed=true`; no subsequent physical gate is opened by this commit.**
+Current state: **P15A and P15B are formally closed/re-blocked. P15B closure HEAD `4493f135b474f0a17ad0737ed9ebde8362e0eb47` passed CI #1116 SUCCESS. P15C real-GUI Manual qualification is now in software preparation only: its parent execution gate and dedicated GUI qualification gate are both CLOSED, the normal user-facing Manual/Automatic gates remain CLOSED, and no P15C hardware execution is authorized by this preparation commit.**
 
 ### P15A preparation closure
 
@@ -119,12 +121,27 @@ Independent review verified the archive and all manifest evidence hashes, exact 
 
 The initial watchdog baseline was `Manual/Running/PID7980/LocalSystem` and the same PID/start identity remained Running through the complete transaction and restore. The harness did not start or restart it. User-facing Manual, Automatic, Candidate V1, M9C and M9D qualification gates remained closed. This closure records the physical PASS and immediately re-blocks the dedicated P15B harness/controller gates. It does **not** prepare or authorize Automatic; a subsequent gate may be considered only after this closure commit itself has full same-HEAD CI SUCCESS.
 
-The first formal-closure commit `6461255172a816326edc738da6007a43d400e3da` is preserved with GitHub Actions **#1115 FAILURE**. The failure was software-only in the P15B invariant: JavaScript Number serialization rounded the two 64-bit process-start tick identities in closure metadata. It did not execute hardware, reopen either P15B physical gate, alter the reviewed ZIP, or invalidate the physical PASS. The follow-up correction stores those tick identities as exact decimal strings so PowerShell can cast them losslessly to `Int64` during CI.
+The first formal-closure commit `6461255172a816326edc738da6007a43d400e3da` is preserved with GitHub Actions **#1115 FAILURE**. The failure was software-only in the P15B invariant: JavaScript Number serialization rounded the two 64-bit process-start tick identities in closure metadata. It did not execute hardware, reopen either P15B physical gate, alter the reviewed ZIP, or invalidate the physical PASS. The follow-up correction stores those tick identities as exact decimal strings so PowerShell can cast them losslessly to `Int64` during CI. That corrected closure HEAD `4493f135b474f0a17ad0737ed9ebde8362e0eb47` passed full GitHub Actions **#1116 SUCCESS**, run ID `36939136541`.
+
+## P15C — real GUI Manual qualification
+
+P15C is the first qualification of the **actual P13 user interaction path**, but its preparation deliberately does not open the normal user-facing Manual gate. Its prerequisite is the formally closed P15B physical PASS. The preparation introduces a dedicated qualification-only GUI gate that defaults to false and is usable only with an exact target-bound process mode and explicit token. Automatic remains false, Candidate V1 remains shadow-only/unvalidated, and M9C/M9D qualification construction remains closed.
+
+The intended physical path is the real visible GUI rather than a qualification-only controller: normal production GUI startup -> real P13 **Manual** button -> `AdaptiveFanProductionController.SetModeAsync(Manual)` -> real P13 **Apply equal CPU/GPU level** at exactly 30 -> `AdaptiveFanProductionController.ApplyManualAsync(30)` -> `FanControlCoordinator` -> normal production watchdog-backed HP 8C40 backend. The parent then independently proves EC setpoint 30/30 plus the durable schema-v2 generation-3 OWNED journal bound to the exact GUI PID and creation time before the operator is allowed to click the real **Firmware** button.
+
+The qualification sequence is intentionally bounded to exactly one Manual mode request, exactly one Apply at 30/30, zero Automatic requests and exactly one Firmware request. The GUI refuses Manual interaction before it has published three distinct fresh Healthy/SafetyGate-permitted readiness observations with Firmware authority and no durable journal. A second or out-of-order Manual/Apply/Firmware interaction, any Automatic request, wrong level, missing parent OWNED proof, ownership loss or safety failure invalidates the run and fails closed.
+
+The Firmware button must exercise the production mode-transition restore, not a harness restore shortcut. PASS requires local firmware acknowledgement, watchdog RESTORE_BEGIN -> RELEASE, absent durable journal and Firmware authority/mode. The parent separately verifies strict watchdog causality `PREPARE < WRITE_INTENT < COMMIT < RESTORE_BEGIN < RELEASE`, two consecutive final FF/FF observations and stable watchdog identity. An independent delayed exact-target 30/30 failsafe is armed before GUI interaction; takeover is safe but invalidates the qualification.
+
+The P15C parent harness never starts, stops or reconfigures the M4 service and never issues a direct fan command or restore command. It accepts the already-qualified Stopped or Running/Ready/no-journal baseline. If the service begins Stopped, normal production GUI bootstrap may start it; normal GUI shutdown is therefore allowed to leave the exact qualified service Running/Ready, matching the established GUI behavior. All evidence is preserved and `git clean` remains forbidden.
+
+**Preparation state in this commit:** implementation present, CI not yet claimed, both P15C physical gates CLOSED. A later preparation-closure commit may record CI success, but physical execution still requires a separate authorization commit and another same-HEAD CI SUCCESS.
 
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
-- P15B Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED; closure commit still requires its own same-HEAD CI SUCCESS before any next gate**
+- P15B Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED / CLOSURE CI #1116 SUCCESS**
+- P15C real-GUI Manual 30/30 execution: **PREPARATION CI PENDING / BOTH DEDICATED PHYSICAL GATES CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**
