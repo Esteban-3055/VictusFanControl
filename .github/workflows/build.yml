@@ -221,6 +221,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-adaptive-candidate-v1-invariants.ps1
 
+      - name: HP 8C40 P13.1 presentation-only control surface invariant
+        shell: pwsh
+        run: .\scripts\test-p13-control-surface-invariants.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -270,6 +274,7 @@ jobs:
           .\scripts\test-8c40-post-m9-software-invariants.ps1
           .\scripts\test-adaptive-production-integration-invariants.ps1
           .\scripts\test-adaptive-candidate-v1-invariants.ps1
+          .\scripts\test-p13-control-surface-invariants.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build

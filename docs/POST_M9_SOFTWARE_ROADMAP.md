@@ -35,6 +35,10 @@ Define and version a conservative HP 8C40 candidate curve for shadow/replay. It 
 
 Prepare Firmware / Manual / Automatic modes, manual equal-level 10..50 controls, candidate-curve visualization, recommendation/status telemetry and explicit gate state. Startup remains Firmware and no saved setting may bypass the hardware gate.
 
+### P13.1 — presentation-only mode surface
+
+Implemented: the normal GUI now exposes the intended Firmware / Manual / Automatic mode model and candidate-curve identity, but all P13 controls are presentation-only. Manual and Automatic execution gates remain compile-time false and there are no P13 callbacks capable of requesting Custom authority.
+
 ## P14 — release-candidate productization
 
 Add a software readiness audit, deterministic package build, versioned release-candidate artifacts and final CI coverage. The resulting package is a software RC only.

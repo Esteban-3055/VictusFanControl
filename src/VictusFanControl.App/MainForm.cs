@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using VictusFanControl.Control;
+using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
@@ -164,6 +165,15 @@ internal sealed class MainForm : Form
     private readonly Label _readinessValue = new();
     private readonly Label _freshnessValue = new();
     private readonly Label _safetyReasonValue = new();
+
+    // P13 step 1 is intentionally presentation-only. These controls expose
+    // the future Firmware / Manual / Automatic model and the compile-time
+    // post-M9 gate state, but no P13 UI callback can request Custom authority.
+    private readonly Label _p13RequestedModeValue = ValueLabel();
+    private readonly Label _p13ManualGateValue = ValueLabel();
+    private readonly Label _p13AutomaticGateValue = ValueLabel();
+    private readonly Label _p13CandidateCurveValue = ValueLabel();
+    private readonly Label _p13ControlStatusValue = new();
 
     private readonly Label _cpuTemperature = ValueLabel();
     private readonly Label _cpuPower = ValueLabel();
@@ -356,7 +366,7 @@ internal sealed class MainForm : Form
         bool m9dProductionLifecycleHardwareTest = false,
         string? m9dProductionLifecycleMarkerRoot = null)
     {
-        Text = "VictusFanControl v0.4-dev — backend integrated / automatic policy OFF";
+        Text = "VictusFanControl v0.4-dev — post-M9 / user control gates CLOSED";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(780, 560);
         Size = new Size(900, 680);
@@ -1857,27 +1867,162 @@ internal sealed class MainForm : Form
         var diagnostics = new TabPage("Diagnostics");
         diagnostics.Controls.Add(BuildDiagnostics());
 
-        var fanCurve = new TabPage("Fan Curve");
-        var targetDescription =
-            _targetProfile is null
-                ? "No validated HP hardware target is active."
-                : $"Validated target: {_targetProfile.DisplayName} ({_targetProfile.Id}).";
-
-        fanCurve.Controls.Add(new Label
-        {
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleCenter,
-            Text =
-                targetDescription +
-                "\r\nBackend is integrated behind FanControlCoordinator." +
-                "\r\nAutomatic fan policy is intentionally OFF; no curve commands are issued by this GUI yet.",
-            AutoSize = false
-        });
+        var fanCurve = new TabPage("Fan Control");
+        fanCurve.Controls.Add(BuildP13FanControlSurface());
 
         tabs.TabPages.Add(overview);
         tabs.TabPages.Add(fanCurve);
         tabs.TabPages.Add(diagnostics);
         return tabs;
+    }
+
+    private System.Windows.Forms.Control BuildP13FanControlSurface()
+    {
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(18),
+            ColumnCount = 1,
+            RowCount = 4,
+            AutoScroll = true
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var targetDescription =
+            _targetProfile is null
+                ? "No validated HP hardware target is active."
+                : $"Validated target: {_targetProfile.DisplayName} ({_targetProfile.Id}).";
+
+        var header = new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(760, 0),
+            Font = new Font(Font, FontStyle.Bold),
+            Text =
+                "P13 user-control surface — presentation-only step\r\n" +
+                targetDescription
+        };
+
+        var modeGroup = new GroupBox
+        {
+            Text = "Operating mode",
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Padding = new Padding(12),
+            Margin = new Padding(3, 12, 3, 8)
+        };
+
+        var modeRoot = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 2
+        };
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true
+        };
+
+        // Step 1 deliberately has no click handlers. The controls are a visual
+        // contract only; later P13 steps will wire them through
+        // AdaptiveFanProductionController after adding separate invariants.
+        buttons.Controls.Add(new Button
+        {
+            Text = "Firmware (current)",
+            AutoSize = true,
+            Enabled = false
+        });
+        buttons.Controls.Add(new Button
+        {
+            Text = "Manual (locked)",
+            AutoSize = true,
+            Enabled = false
+        });
+        buttons.Controls.Add(new Button
+        {
+            Text = "Automatic (locked)",
+            AutoSize = true,
+            Enabled = false
+        });
+
+        _p13RequestedModeValue.Text = "Firmware";
+        _p13ManualGateValue.Text =
+            Hp8C40PostM9UserControlGate.ManualExecutionAuthorized
+                ? "OPEN"
+                : "CLOSED";
+        _p13AutomaticGateValue.Text =
+            Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized
+                ? "OPEN"
+                : "CLOSED";
+        _p13CandidateCurveValue.Text =
+            $"{Hp8C40AdaptiveCandidateV1.Id} — shadow-only / unvalidated";
+
+        var state = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            RowCount = 4,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        state.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        state.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        foreach (var value in new[]
+                 {
+                     _p13RequestedModeValue,
+                     _p13ManualGateValue,
+                     _p13AutomaticGateValue,
+                     _p13CandidateCurveValue
+                 })
+        {
+            value.AutoSize = true;
+            value.MaximumSize = new Size(650, 0);
+        }
+
+        state.Controls.Add(new Label { Text = "Requested mode:", AutoSize = true }, 0, 0);
+        state.Controls.Add(_p13RequestedModeValue, 1, 0);
+        state.Controls.Add(new Label { Text = "Manual execution gate:", AutoSize = true }, 0, 1);
+        state.Controls.Add(_p13ManualGateValue, 1, 1);
+        state.Controls.Add(new Label { Text = "Automatic execution gate:", AutoSize = true }, 0, 2);
+        state.Controls.Add(_p13AutomaticGateValue, 1, 2);
+        state.Controls.Add(new Label { Text = "Candidate curve:", AutoSize = true }, 0, 3);
+        state.Controls.Add(_p13CandidateCurveValue, 1, 3);
+
+        modeRoot.Controls.Add(buttons, 0, 0);
+        modeRoot.Controls.Add(state, 0, 1);
+        modeGroup.Controls.Add(modeRoot);
+
+        _p13ControlStatusValue.AutoSize = true;
+        _p13ControlStatusValue.MaximumSize = new Size(760, 0);
+        _p13ControlStatusValue.Margin = new Padding(3, 12, 3, 3);
+        _p13ControlStatusValue.Text =
+            "P13 step 1 safety boundary: this tab has no control callbacks. " +
+            "Manual and Automatic remain compile-time CLOSED; opening the GUI cannot acquire Custom authority.";
+
+        var next = new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(760, 0),
+            Margin = new Padding(3, 12, 3, 3),
+            Text =
+                "Next P13 step: wire the mode selector to AdaptiveFanProductionController " +
+                "while keeping both hardware execution authorizations false."
+        };
+
+        root.Controls.Add(header, 0, 0);
+        root.Controls.Add(modeGroup, 0, 1);
+        root.Controls.Add(_p13ControlStatusValue, 0, 2);
+        root.Controls.Add(next, 0, 3);
+        return root;
     }
 
     private System.Windows.Forms.Control BuildOverview()

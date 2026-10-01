@@ -1,0 +1,23 @@
+# P13 — user-facing control surface
+
+P13 is developed incrementally. It does not authorize hardware execution.
+
+## P13.1 — presentation-only mode surface
+
+Implemented in the normal WinForms GUI:
+
+- the former Fan Curve placeholder is replaced by a Fan Control tab;
+- Firmware, Manual and Automatic are visible as the intended operating modes;
+- Firmware is shown as the startup/requested mode;
+- Manual and Automatic are visibly locked;
+- the HP 8C40 candidate curve ID is shown as shadow-only / unvalidated;
+- the compile-time post-M9 user-control gate exposes both Manual and Automatic execution as false;
+- this step intentionally installs no P13 mode click handlers and calls neither `ApplyManualAsync` nor `ProcessAutomaticAsync`.
+
+Opening the GUI therefore does not acquire Custom authority through P13.
+
+## Remaining P13 steps
+
+P13.2 will wire mode selection through `AdaptiveFanProductionController` while both execution gates remain false. P13.3 will add Manual equal-level 10..50 controls behind the closed Manual gate. P13.4 will add Automatic candidate-curve preview/recommendation status behind the closed Automatic gate. P13.5 will add persistence/tray/status hardening and the final P13 software closure.
+
+No P13 step may open a target-side hardware gate. That belongs to P15 or a later separately authorized qualification.
