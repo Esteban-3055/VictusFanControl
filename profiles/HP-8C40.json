@@ -2933,7 +2933,7 @@
     "m8bAuthorizationScope": "M8B is physically closed PASS from retry 6 and remains blocked from further execution. M8C is physically closed PASS from attempt 2; no M8 write-capable rerun is authorized by this profile."
   },
   "watchdogM9ProductionIntegration": {
-    "status": "M9A_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_M9C_FULL_HARNESS_CODE_CI_PASS_WRITE_BLOCKED",
+    "status": "M9A_CODE_CI_PASS_M9B_READ_ONLY_AUTHORIZED_M9C_FULL_HARNESS_CODE_CI_PASS_WRITE_BLOCKED_M9D_CODE_PREPARED",
     "targetProfileId": "HP-8C40-9D0R1LA-F18",
     "purpose": "Prepare the normal production GUI/factory/backend path to accept the already-qualified target-bound watchdog lease only behind a new explicit post-M8 promotion gate.",
     "prerequisites": {
@@ -3135,11 +3135,58 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "M9C is fully prepared and CI-green but remains write-blocked. Continue advance development with M9D/service-lifecycle design while M9B remains the first unavoidable machine-side evidence boundary.",
+    "nextStep": "Finish M9D code/harness/CI preparation and service-lifecycle promotion design while M9B remains the first unavoidable machine-side evidence boundary. Do not authorize M9C/M9D writes.",
     "m9d": {
-      "status": "DESIGN_PENDING_M9C",
-      "purpose": "focused full GUI/lifecycle last-mile regression after M9C; no authorization yet",
-      "physicalExecutionAuthorized": false
+      "status": "FULL_GUI_LIFECYCLE_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "purpose": "focused full-GUI/display-aware Modern Standby last-mile regression through the normal HP factory + public backend construction path after M9C physical PASS",
+      "appMode": "--8c40-m9d-production-lifecycle-test",
+      "appToken": "8C40-M9D-PRODUCTION-LIFECYCLE30",
+      "physicalExecutionAuthorized": false,
+      "qualificationConstructionAuthorized": false,
+      "requiresM9CPhysicalPass": true,
+      "productionConstructionAuthorized": false,
+      "watchdogRecoveryValidated": false,
+      "automaticPolicyEnabled": false,
+      "controlEnabledByDefault": false,
+      "productionPath": [
+        "VictusFanControl.App MainForm",
+        "temporary M9D construction-only scope",
+        "NamedPipeFanControlWatchdogLeaseClient / M4 exact-target pipe",
+        "HpFanControlBackendFactory.Create",
+        "public Hp8C40FanControlBackend constructor",
+        "FanControlCoordinator",
+        "existing display-aware M6 lifecycle engine",
+        "SESSION_DISPLAY_STATUS Off -> proactive restore",
+        "registered PBT_APMSUSPEND completion barrier",
+        "display-On-only resume",
+        "five-snapshot Healthy recovery",
+        "controlled post-resume 30/30 re-entry",
+        "final RESTORE_BEGIN -> FF/FF -> RELEASE"
+      ],
+      "markerNamespace": "m9d-production-lifecycle.*",
+      "codeCi": {
+        "result": "PENDING",
+        "commit": null,
+        "runNumber": null,
+        "runId": null,
+        "physicalExecution": false
+      },
+      "physicalEvidence": null
+    },
+    "serviceLifecycleDesign": {
+      "status": "DESIGN_REVIEWED_NOT_PROMOTED",
+      "currentService": "VictusFanControlWatchdogM4",
+      "currentStartMode": "Manual",
+      "currentNormalState": "Stopped",
+      "decision": "Reuse the already physically-qualified M4 exact-target service/pipe through M9C/M9D. Do not introduce a new service identity or pipe before M9 physical closure, because that would create a new unqualified privileged recovery boundary.",
+      "productionOpenQuestion": "Final unattended deployment requires an explicit service-startup policy gate after M9D. Automatic/delayed-auto startup must not be enabled merely by M9C/M9D code preparation.",
+      "prohibitedNow": [
+        "renaming the M4 service/pipe",
+        "setting Automatic or delayed-auto startup",
+        "SCM restart policy promotion",
+        "WatchdogRecoveryValidated=true",
+        "ProductionConstructionAuthorized=true"
+      ]
     }
   }
 }

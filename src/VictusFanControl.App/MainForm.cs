@@ -120,6 +120,21 @@ internal sealed class MainForm : Form
     private static readonly string M6HardwareTestResultPath =
         Path.Combine(SuspendHardwareTestRoot, "m6-modern-standby.result");
 
+    private static readonly string M9DHardwareTestReadyPath =
+        Path.Combine(SuspendHardwareTestRoot, "m9d-production-lifecycle.ready");
+
+    private static readonly string M9DPreSleepPath =
+        Path.Combine(SuspendHardwareTestRoot, "m9d-production-lifecycle.presleep");
+
+    private static readonly string M9DResumeGatePath =
+        Path.Combine(SuspendHardwareTestRoot, "m9d-production-lifecycle.resume-gate");
+
+    private static readonly string M9DReentryPath =
+        Path.Combine(SuspendHardwareTestRoot, "m9d-production-lifecycle.reentry");
+
+    private static readonly string M9DHardwareTestResultPath =
+        Path.Combine(SuspendHardwareTestRoot, "m9d-production-lifecycle.result");
+
     private readonly TelemetryWorker _worker;
     private readonly FanControlCoordinator _fanCoordinator;
     private readonly string _fanBackendStartupDetail;
@@ -136,6 +151,7 @@ internal sealed class MainForm : Form
     private readonly bool _gateG2HardwareTest;
     private readonly bool _m6ModernStandbyHardwareTest;
     private readonly bool _m7HibernationHardwareTest;
+    private readonly bool _m9dProductionLifecycleHardwareTest;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
 
@@ -240,12 +256,40 @@ internal sealed class MainForm : Form
 
     private bool DisplayAware8C40LifecycleHardwareTest =>
         _m6ModernStandbyHardwareTest ||
-        _m7HibernationHardwareTest;
+        _m7HibernationHardwareTest ||
+        _m9dProductionLifecycleHardwareTest;
 
     private string DisplayAwareLifecycleTransitionMode =>
-        _m7HibernationHardwareTest
-            ? "hibernation"
-            : "modern-standby";
+        _m9dProductionLifecycleHardwareTest
+            ? "m9d-production-modern-standby"
+            : _m7HibernationHardwareTest
+                ? "hibernation"
+                : "modern-standby";
+
+    private string DisplayAwareReadyPath =>
+        _m9dProductionLifecycleHardwareTest
+            ? M9DHardwareTestReadyPath
+            : M6HardwareTestReadyPath;
+
+    private string DisplayAwarePreSleepPath =>
+        _m9dProductionLifecycleHardwareTest
+            ? M9DPreSleepPath
+            : M6PreSleepPath;
+
+    private string DisplayAwareResumeGatePath =>
+        _m9dProductionLifecycleHardwareTest
+            ? M9DResumeGatePath
+            : M6ResumeGatePath;
+
+    private string DisplayAwareReentryPath =>
+        _m9dProductionLifecycleHardwareTest
+            ? M9DReentryPath
+            : M6ReentryPath;
+
+    private string DisplayAwareResultPath =>
+        _m9dProductionLifecycleHardwareTest
+            ? M9DHardwareTestResultPath
+            : M6HardwareTestResultPath;
 
     private bool GateGHardwareTest =>
         _gateG1HardwareTest || _gateG2HardwareTest;
@@ -301,7 +345,8 @@ internal sealed class MainForm : Form
         bool gateG1HardwareTest = false,
         bool gateG2HardwareTest = false,
         bool m6ModernStandbyHardwareTest = false,
-        bool m7HibernationHardwareTest = false)
+        bool m7HibernationHardwareTest = false,
+        bool m9dProductionLifecycleHardwareTest = false)
     {
         Text = "VictusFanControl v0.4-dev — backend integrated / automatic policy OFF";
         StartPosition = FormStartPosition.CenterScreen;
@@ -318,6 +363,7 @@ internal sealed class MainForm : Form
         _gateG2HardwareTest = gateG2HardwareTest;
         _m6ModernStandbyHardwareTest = m6ModernStandbyHardwareTest;
         _m7HibernationHardwareTest = m7HibernationHardwareTest;
+        _m9dProductionLifecycleHardwareTest = m9dProductionLifecycleHardwareTest;
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
         _targetProfile =
             HpHardwareTargetResolver.Resolve(
@@ -388,11 +434,11 @@ internal sealed class MainForm : Form
             Directory.CreateDirectory(SuspendHardwareTestRoot);
             // M7 deliberately reuses the already-hardened M6 marker transport;
             // transitionMode distinguishes hibernation from Modern Standby.
-            TryDeleteFile(M6HardwareTestReadyPath);
-            TryDeleteFile(M6PreSleepPath);
-            TryDeleteFile(M6ResumeGatePath);
-            TryDeleteFile(M6ReentryPath);
-            TryDeleteFile(M6HardwareTestResultPath);
+            TryDeleteFile(DisplayAwareReadyPath);
+            TryDeleteFile(DisplayAwarePreSleepPath);
+            TryDeleteFile(DisplayAwareResumeGatePath);
+            TryDeleteFile(DisplayAwareReentryPath);
+            TryDeleteFile(DisplayAwareResultPath);
         }
 
         IFanControlBackend backend;
@@ -428,16 +474,46 @@ internal sealed class MainForm : Form
                         Hp8C40TargetProfile.Instance.Id,
                         FanControlWatchdogLeaseContract.Hp8C40M4PipeName);
 
-                backend =
-                    Hp8C40FanControlBackend.CreateLifecycleQualificationBackend(
-                        modulesDirectory,
-                        watchdogLease,
-                        Hp8C40FanControlBackend.LifecycleQualificationToken);
+                if (_m9dProductionLifecycleHardwareTest)
+                {
+                    HpFanBackendSelection selection;
 
-                _fanBackendStartupDetail =
-                    _m7HibernationHardwareTest
-                        ? "Exact HP 8C40 M7 hibernation qualification backend selected with M4 watchdog lease; production factory remains blocked."
-                        : "Exact HP 8C40 M6 Modern Standby qualification backend selected with M4 watchdog lease; production factory remains blocked.";
+                    using (Hp8C40ProductionWatchdogGate
+                               .EnterM9DPhysicalQualificationConstructionScope(
+                                   _hardwareIdentity,
+                                   Hp8C40ProductionWatchdogGate.M9DPhysicalQualificationToken))
+                    {
+                        selection =
+                            HpFanControlBackendFactory.Create(
+                                modulesDirectory,
+                                _hardwareIdentity,
+                                watchdogLease);
+                    }
+
+                    if (Hp8C40ProductionWatchdogGate
+                            .IsM9DPhysicalQualificationScopeActive)
+                    {
+                        throw new InvalidOperationException(
+                            "M9D construction scope remained active after production factory/backend construction.");
+                    }
+
+                    backend = selection.Backend;
+                    _fanBackendStartupDetail =
+                        "Exact HP 8C40 M9D full-GUI lifecycle qualification selected through the normal production factory + public backend with M4 watchdog lease; full production promotion remains blocked.";
+                }
+                else
+                {
+                    backend =
+                        Hp8C40FanControlBackend.CreateLifecycleQualificationBackend(
+                            modulesDirectory,
+                            watchdogLease,
+                            Hp8C40FanControlBackend.LifecycleQualificationToken);
+
+                    _fanBackendStartupDetail =
+                        _m7HibernationHardwareTest
+                            ? "Exact HP 8C40 M7 hibernation qualification backend selected with M4 watchdog lease; production factory remains blocked."
+                            : "Exact HP 8C40 M6 Modern Standby qualification backend selected with M4 watchdog lease; production factory remains blocked.";
+                }
             }
             else
             {
@@ -561,9 +637,11 @@ internal sealed class MainForm : Form
                 RegisterM6PowerNotifications();
 
                 AppendEvent(
-                    _m7HibernationHardwareTest
-                        ? "M7 HIBERNATION TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; registered PBT_APMSUSPEND is the synchronous completion barrier; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF."
-                        : "M6 MODERN STANDBY TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; PBT resume notifications while display remains Off are observational only; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF.");
+                    _m9dProductionLifecycleHardwareTest
+                        ? "M9D PRODUCTION-PATH MODERN STANDBY TEST: exact HP 8C40 full GUI lifecycle mode enabled through the normal factory/public backend path. SESSION_DISPLAY_STATUS Off is the proactive release boundary; Custom may reopen only after display On plus fresh Healthy telemetry. Production promotion and automatic policy remain OFF."
+                        : _m7HibernationHardwareTest
+                            ? "M7 HIBERNATION TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; registered PBT_APMSUSPEND is the synchronous completion barrier; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF."
+                            : "M6 MODERN STANDBY TEST: exact HP 8C40 watchdog-backed lifecycle mode enabled. SESSION_DISPLAY_STATUS Off is the proactive release boundary; PBT resume notifications while display remains Off are observational only; Custom may reopen only after SESSION_DISPLAY_STATUS On plus fresh Healthy telemetry. Automatic policy remains OFF.");
             }
 
             _uiTimer.Start();
@@ -978,7 +1056,7 @@ internal sealed class MainForm : Form
                 $"guiPid={Environment.ProcessId}";
 
             M6WatchdogStateReader.WriteDurableMarker(
-                M6PreSleepPath,
+                DisplayAwarePreSleepPath,
                 marker);
 
             AppendEvent(
@@ -993,7 +1071,7 @@ internal sealed class MainForm : Form
             try
             {
                 M6WatchdogStateReader.WriteDurableMarker(
-                    M6PreSleepPath,
+                    DisplayAwarePreSleepPath,
                     $"FAIL|{DateTimeOffset.Now:O}|source={source}|displayOffAt={_m6DisplayOffBoundaryUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "n/a"}|restoreTrigger={restoreTrigger}|exception={ex.Message}|guiPid={Environment.ProcessId}");
             }
             catch
@@ -1101,7 +1179,7 @@ internal sealed class MainForm : Form
                 $"guiPid={Environment.ProcessId}";
 
             M6WatchdogStateReader.WriteDurableMarker(
-                M6ResumeGatePath,
+                DisplayAwareResumeGatePath,
                 marker);
 
             AppendEvent(
@@ -2428,7 +2506,8 @@ internal sealed class MainForm : Form
                     "M6 did not observe PBT_APMSUSPEND for the armed Modern Standby cycle.");
             }
 
-            if (_m6ModernStandbyHardwareTest &&
+            if ((_m6ModernStandbyHardwareTest ||
+                 _m9dProductionLifecycleHardwareTest) &&
                 !_m6ResumeAutomaticObservedWhileDisplayOff &&
                 !_m6ResumeSuspendObservedWhileDisplayOff)
             {
@@ -2538,7 +2617,7 @@ internal sealed class MainForm : Form
                 processStartTicks);
 
             M6WatchdogStateReader.WriteDurableMarker(
-                M6ReentryPath,
+                DisplayAwareReentryPath,
                 $"REENTRY|{DateTimeOffset.Now:O}|" +
                 $"authority={_fanCoordinator.Authority}|" +
                 $"cpu={SuspendHardwareTestLevel}|gpu={SuspendHardwareTestLevel}|" +
@@ -2585,9 +2664,11 @@ internal sealed class MainForm : Form
                 success: true,
                 exitCode: 0,
                 message:
-                    _m7HibernationHardwareTest
-                        ? $"SESSION_DISPLAY_STATUS Off proactively restored Firmware + stable FF/FF before Hibernation; SESSION_DISPLAY_STATUS On was the only accepted telemetry resume boundary; five-snapshot telemetry recovered Healthy; watchdog PID {_m6WatchdogPid} stayed stable; controlled post-resume 30/30 re-entry and final watchdog Release succeeded; journal absent; final EC FF/FF."
-                        : $"SESSION_DISPLAY_STATUS Off proactively restored Firmware + stable FF/FF before Modern Standby; PBT resume while display Off was deferred; SESSION_DISPLAY_STATUS On was the only accepted resume; five-snapshot telemetry recovered Healthy; watchdog PID {_m6WatchdogPid} stayed stable; controlled post-resume 30/30 re-entry and final watchdog Release succeeded; journal absent; final EC FF/FF.");
+                    _m9dProductionLifecycleHardwareTest
+                        ? $"M9D normal production factory/public backend path: SESSION_DISPLAY_STATUS Off proactively restored Firmware + stable FF/FF before Modern Standby; PBT resume while display Off was deferred; SESSION_DISPLAY_STATUS On was the only accepted resume; five-snapshot telemetry recovered Healthy; watchdog PID {_m6WatchdogPid} stayed stable; controlled post-resume 30/30 re-entry and final watchdog Release succeeded; journal absent; final EC FF/FF."
+                        : _m7HibernationHardwareTest
+                            ? $"SESSION_DISPLAY_STATUS Off proactively restored Firmware + stable FF/FF before Hibernation; SESSION_DISPLAY_STATUS On was the only accepted telemetry resume boundary; five-snapshot telemetry recovered Healthy; watchdog PID {_m6WatchdogPid} stayed stable; controlled post-resume 30/30 re-entry and final watchdog Release succeeded; journal absent; final EC FF/FF."
+                            : $"SESSION_DISPLAY_STATUS Off proactively restored Firmware + stable FF/FF before Modern Standby; PBT resume while display Off was deferred; SESSION_DISPLAY_STATUS On was the only accepted resume; five-snapshot telemetry recovered Healthy; watchdog PID {_m6WatchdogPid} stayed stable; controlled post-resume 30/30 re-entry and final watchdog Release succeeded; journal absent; final EC FF/FF.");
         }
         catch (Exception ex)
         {
@@ -2698,7 +2779,7 @@ internal sealed class MainForm : Form
         _m6Armed = true;
 
         M6WatchdogStateReader.WriteDurableMarker(
-            M6HardwareTestReadyPath,
+            DisplayAwareReadyPath,
             $"READY|{DateTimeOffset.Now:O}|" +
             $"authority={_fanCoordinator.Authority}|" +
             $"cpu={SuspendHardwareTestLevel}|gpu={SuspendHardwareTestLevel}|" +
@@ -2894,7 +2975,7 @@ internal sealed class MainForm : Form
 
         _m6Completed = true;
         TryDeleteFile(
-            M6HardwareTestReadyPath);
+            DisplayAwareReadyPath);
 
         var result =
             $"{(success ? "PASS" : "FAIL")}|" +
@@ -2914,7 +2995,7 @@ internal sealed class MainForm : Form
         try
         {
             M6WatchdogStateReader.WriteDurableMarker(
-                M6HardwareTestResultPath,
+                DisplayAwareResultPath,
                 result);
         }
         catch (Exception ex)

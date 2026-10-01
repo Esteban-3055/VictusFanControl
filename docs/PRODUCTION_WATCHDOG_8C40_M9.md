@@ -319,3 +319,56 @@ barriers remain closed:
 - `m9c.qualificationConstructionAuthorized=false`.
 
 M9B remains the first unavoidable machine-side evidence boundary.
+
+
+## 9. M9D full-GUI lifecycle preparation
+
+M9D is prepared in advance while M9B remains the first unavoidable machine-side
+evidence boundary. M9D must not inherit physical authorization from M9C or M8.
+
+The dedicated application mode is
+`--8c40-m9d-production-lifecycle-test` with token
+`8C40-M9D-PRODUCTION-LIFECYCLE30`. Both compile-time authorization booleans
+remain false.
+
+Unlike M6/M7, M9D does **not** use
+`Hp8C40FanControlBackend.CreateLifecycleQualificationBackend`. It creates the
+target-bound M4 named-pipe lease and enters a narrowly scoped M9D construction
+context only long enough for:
+
+```text
+HpFanControlBackendFactory.Create
+ -> public Hp8C40FanControlBackend constructor
+```
+
+The temporary scope must already be disposed before `FanControlCoordinator`
+can enter Custom authority. The same proven display-aware lifecycle engine then
+handles SESSION_DISPLAY_STATUS Off, telemetry quiescence, verified firmware
+handoff, registered PBT_APMSUSPEND completion, display-On-only telemetry resume,
+five-snapshot Healthy recovery, one controlled post-resume 30/30 re-entry and
+final watchdog Release/FF/FF.
+
+M9D has a separate marker namespace
+`m9d-production-lifecycle.*` so M6/M7 historical evidence is not overwritten.
+
+At code-preparation stage:
+
+- `M9DPhysicalQualificationExecutionAuthorized=false`;
+- `M9DPhysicalQualificationConstructionAuthorized=false`;
+- `ProductionConstructionAuthorized=false`;
+- `WatchdogRecoveryValidated=false`;
+- automatic/adaptive policy and default control remain OFF.
+
+### Service-lifecycle decision before final promotion
+
+The first production promotion should continue to use the already physically
+qualified `VictusFanControlWatchdogM4` service, ProgramData root and
+`VictusFanControl.Watchdog.M4.8C40.v2` pipe. Introducing a renamed production
+service or new pipe before M9 closes would create a new privileged recovery
+boundary that M4-M8 never physically qualified.
+
+However, M4 currently remains Manual/Stopped outside a qualification run.
+That is appropriate during M9 preparation but is not yet a complete unattended
+deployment policy. Automatic or delayed-auto startup, SCM failure-restart
+actions, or any app-driven service start are therefore treated as a later,
+explicit service-startup promotion gate after M9D. None are enabled here.
