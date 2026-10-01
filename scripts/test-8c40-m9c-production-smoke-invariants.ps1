@@ -23,9 +23,15 @@ Assert-True ([bool]$profile.lifecycle.watchdogM9CodeCiPassed) 'M9C preparation r
 Assert-True ([bool]$profile.lifecycle.watchdogM9BCodeCiPassed) 'M9C preparation requires M9B CODE/CI PASS.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9CCodeCiPassed) 'M9C full code/CI PASS must remain recorded after closure.'
 Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed) 'M9C authorization requires the formally recorded M9B physical read-only PASS.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalAuthorization.authorized) 'M9C physical authorization must be explicitly recorded.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9C physical execution gate must be open only for the authorized bounded smoke.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9C temporary construction gate must be open only for the authorized bounded smoke.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed) 'M9C physical PASS must be formally recorded.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalAuthorization.authorized) 'M9C physical authorization must be re-blocked after PASS.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9C physical execution gate must be reclosed after PASS.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9C temporary construction gate must be reclosed after PASS.'
+if([string]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.result -cne 'PASS'){throw 'M9C physical evidence result must remain PASS.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.evidenceHead -cne 'acfa9f670d8d8a36655c7b4ff7d1d8aac7a12dc8'){throw 'M9C physical evidence HEAD changed.'}
+if([string]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.evidenceZipSha256 -cne '4851434d5cbf59b7ae326857fa9757803e855bd03ac447654eddb8c0a1a698f3'){throw 'M9C evidence ZIP hash changed.'}
+if([int]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.applyCalls -ne 1){throw 'M9C physical evidence must record exactly one ApplyAsync.'}
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.failsafeTakeover) 'M9C PASS cannot include failsafe takeover.'
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9C preparation must not promote watchdog recovery.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9C preparation must not open production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9C preparation must keep control disabled by default.'
@@ -33,7 +39,7 @@ Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 
 
 foreach($needle in @(
     'public static readonly bool ProductionConstructionAuthorized = false;',
-    'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = true;',
+    'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;',
     'M9CPhysicalQualificationToken = "8C40-M9C-PRODUCTION30"',
     'AsyncLocal<int>',
     'EnterM9CPhysicalQualificationConstructionScope',
@@ -54,7 +60,7 @@ if($barrier-lt 0 -or $admin-lt 0 -or $identity-lt 0 -or $ec-lt 0 -or $lease-lt 0
 }
 
 foreach($needle in @(
-    'public static readonly bool PhysicalExecutionAuthorized = true;',
+    'public static readonly bool PhysicalExecutionAuthorized = false;',
     'QualificationLevel = 30',
     'RequiredConsecutivePreWriteSamples = 3',
     'SupervisionSamples = 5',
@@ -118,7 +124,7 @@ foreach($needle in @(
 }
 
 Assert-Contains $doc 'M9C production-path smoke' 'M9 documentation must define M9C production-path smoke.'
-Assert-Contains $doc 'That prerequisite is now satisfied by the formal M9B closure' 'M9C documentation must record the satisfied M9B physical prerequisite.'
+Assert-Contains $doc 'M9C PHYSICAL PASS / FORMALLY CLOSED' 'M9C documentation must record the formal physical closure.'
 
 Write-Host 'HP 8C40 M9C production-path smoke preparation invariant: PASS' -ForegroundColor Green
 
