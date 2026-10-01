@@ -30,7 +30,7 @@ public static class Hp8C40ProductionWatchdogGate
     public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;
 
     // Separate construction-only gate for the M9D GUI lifecycle regression.
-    public static readonly bool M9DPhysicalQualificationConstructionAuthorized = false;
+    public static readonly bool M9DPhysicalQualificationConstructionAuthorized = true;
 
     public static bool IsProductionConstructionAuthorizedFor(
         HardwareIdentity hardware,
