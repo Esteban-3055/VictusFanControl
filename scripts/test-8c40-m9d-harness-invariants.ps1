@@ -8,6 +8,7 @@ $tracked=Get-Content (Join-Path $PSScriptRoot 'm9d-tracked-child.ps1') -Raw
 $packager=Get-Content (Join-Path $PSScriptRoot 'package-m9d-evidence.ps1') -Raw
 $appProgram=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\Program.cs') -Raw
 $mainForm=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.App\MainForm.cs') -Raw
+$m4Hardware=Get-Content (Join-Path $repoRoot 'src\VictusFanControl.Watchdog\M4Hp8C40LeaseHardware.cs') -Raw
 $gate=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40ProductionWatchdogGate.cs') -Raw
 $meta=Get-Content (Join-Path $repoRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40M9DProductionLifecycleQualificationTest.cs') -Raw
 
