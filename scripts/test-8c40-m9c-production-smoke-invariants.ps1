@@ -22,9 +22,10 @@ function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 Assert-True ([bool]$profile.lifecycle.watchdogM9CodeCiPassed) 'M9C preparation requires M9A CODE/CI PASS.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9BCodeCiPassed) 'M9C preparation requires M9B CODE/CI PASS.'
 Assert-True ([bool]$profile.lifecycle.watchdogM9CCodeCiPassed) 'M9C full code/CI PASS must remain recorded after closure.'
-Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed) 'M9C preparation now requires the formally recorded M9B physical read-only PASS.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9C physical execution must remain blocked during preparation.'
-Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9C qualification construction must remain blocked during preparation.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed) 'M9C authorization requires the formally recorded M9B physical read-only PASS.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalAuthorization.authorized) 'M9C physical authorization must be explicitly recorded.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9C physical execution gate must be open only for the authorized bounded smoke.'
+Assert-True ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9C temporary construction gate must be open only for the authorized bounded smoke.'
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9C preparation must not promote watchdog recovery.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9C preparation must not open production construction.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'M9C preparation must keep control disabled by default.'
@@ -32,7 +33,7 @@ Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 
 
 foreach($needle in @(
     'public static readonly bool ProductionConstructionAuthorized = false;',
-    'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;',
+    'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = true;',
     'M9CPhysicalQualificationToken = "8C40-M9C-PRODUCTION30"',
     'AsyncLocal<int>',
     'EnterM9CPhysicalQualificationConstructionScope',
@@ -53,7 +54,7 @@ if($barrier-lt 0 -or $admin-lt 0 -or $identity-lt 0 -or $ec-lt 0 -or $lease-lt 0
 }
 
 foreach($needle in @(
-    'public static readonly bool PhysicalExecutionAuthorized = false;',
+    'public static readonly bool PhysicalExecutionAuthorized = true;',
     'QualificationLevel = 30',
     'RequiredConsecutivePreWriteSamples = 3',
     'SupervisionSamples = 5',
