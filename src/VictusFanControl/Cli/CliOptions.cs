@@ -37,6 +37,11 @@ public sealed class CliOptions
     public string? Hp8C40M9CReadyPath { get; private set; }
     public string? Hp8C40M9CContinuePath { get; private set; }
     public string? Hp8C40M9CResultPath { get; private set; }
+    public bool Hp8C40P15BManual30 { get; private set; }
+    public string? Hp8C40P15BToken { get; private set; }
+    public string? Hp8C40P15BReadyPath { get; private set; }
+    public string? Hp8C40P15BContinuePath { get; private set; }
+    public string? Hp8C40P15BResultPath { get; private set; }
     public bool RestoreHpAuto { get; private set; }
     public bool SkipEcSnapshots { get; private set; }
     public bool FirstFanWriteTest { get; private set; }
@@ -243,6 +248,29 @@ public sealed class CliOptions
 
                 case "--8c40-m9c-result-path":
                     options.Hp8C40M9CResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-p15b-manual30":
+                    options.Hp8C40P15BManual30 = true;
+                    break;
+
+                case "--8c40-p15b-token":
+                    options.Hp8C40P15BToken = ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-p15b-ready-path":
+                    options.Hp8C40P15BReadyPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-p15b-continue-path":
+                    options.Hp8C40P15BContinuePath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-p15b-result-path":
+                    options.Hp8C40P15BResultPath =
                         Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
@@ -479,6 +507,7 @@ public sealed class CliOptions
             (options.Hp8C40M8BWatchdogLoad ? 1 : 0) +
             (options.Hp8C40M8CPhysicalThermal ? 1 : 0) +
             (options.Hp8C40M9CProductionSmoke ? 1 : 0) +
+            (options.Hp8C40P15BManual30 ? 1 : 0) +
             (options.RestoreHpAuto ? 1 : 0) +
             (options.FirstFanWriteTest ? 1 : 0) +
             (options.IntegratedCoordinatorTest ? 1 : 0) +
@@ -738,6 +767,25 @@ public sealed class CliOptions
                 "--8c40-m5d-write-armed-crash-controller requires --8c40-m5d-ready-path.");
         }
 
+        if ((options.Hp8C40P15BToken is not null ||
+             options.Hp8C40P15BReadyPath is not null ||
+             options.Hp8C40P15BContinuePath is not null ||
+             options.Hp8C40P15BResultPath is not null) &&
+            !options.Hp8C40P15BManual30)
+        {
+            throw new ArgumentException(
+                "--8c40-p15b-token/ready/continue/result paths are valid only with --8c40-p15b-manual30.");
+        }
+
+        if (options.Hp8C40P15BManual30 &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40P15BReadyPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40P15BContinuePath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40P15BResultPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-p15b-manual30 requires ready, continue and result paths.");
+        }
+
         return options;
     }
 
@@ -782,6 +830,11 @@ public sealed class CliOptions
         Console.WriteLine("  --8c40-m9c-ready-path <path>      READY marker after real 30/30 EC+tachs+watchdog COMMIT.");
         Console.WriteLine("  --8c40-m9c-continue-path <path>   Parent continuation after journal/PID/failsafe proof.");
         Console.WriteLine("  --8c40-m9c-result-path <path>     Durable M9C controller evidence.");
+        Console.WriteLine("  --8c40-p15b-manual30              HARD-BLOCKED P15B: one equal 30/30 through production Manual adapter, then strong restore.");
+        Console.WriteLine("  --8c40-p15b-token <token>         Required exact token: 8C40-P15B-MANUAL30.");
+        Console.WriteLine("  --8c40-p15b-ready-path <path>     READY marker after one production Manual 30/30 ownership commit.");
+        Console.WriteLine("  --8c40-p15b-continue-path <path>  Parent continuation after journal/service/EC proof.");
+        Console.WriteLine("  --8c40-p15b-result-path <path>    Durable P15B controller evidence including strong restore.");
         Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
         Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
         Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");

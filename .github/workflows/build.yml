@@ -257,6 +257,18 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p15-startup-evidence-packaging.ps1
 
+      - name: HP 8C40 P15B Manual30 preparation invariant
+        shell: pwsh
+        run: .\scripts\test-p15b-manual30-invariants.ps1
+
+      - name: HP 8C40 P15B native tracked child self-test
+        shell: pwsh
+        run: .\scripts\test-p15b-tracked-child-selftest.ps1
+
+      - name: HP 8C40 P15B evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-p15b-evidence-packaging.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -315,6 +327,9 @@ jobs:
           .\scripts\test-p15-startup-no-write-invariants.ps1
           .\scripts\test-p15-rc-payload-layout.ps1
           .\scripts\test-p15-startup-evidence-packaging.ps1
+          .\scripts\test-p15b-manual30-invariants.ps1
+          .\scripts\test-p15b-tracked-child-selftest.ps1
+          .\scripts\test-p15b-evidence-packaging.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build

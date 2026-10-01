@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current state: **P15A startup/no-write has a physically verified PASS and its evidence is formally closed. P15A execution is re-blocked. P15B Manual 30/30 and Automatic remain closed.**
+Current state: **P15A startup/no-write has a physically verified PASS and is formally closed/re-blocked. P15B Manual 30/30 software preparation is implemented but its physical/controller authorization remains CLOSED pending full CI. Automatic remains closed.**
 
 ### P15A preparation closure
 
@@ -75,12 +75,22 @@ After the physical attempt, successful or failed, evidence must be preserved and
 
 ## P15B — one-shot Manual 30/30
 
-P15B is intentionally not implemented or authorized by the P15A preparation. Its prerequisite is a formally closed P15A physical PASS. P15B will be a separate review/authorization and must perform exactly one equal 30/30 transaction through the intended production path, then prove strong restore: local `FF/FF`, `LegacyDefault`, stable independent `FF/FF`, watchdog RELEASE and durable journal absence. Automatic execution remains closed throughout P15B.
+P15B is a separate physical gate whose prerequisite is the formally closed P15A PASS. The preparation is now implemented while all P15B physical gates remain closed.
+
+The controller path is deliberately the intended production stack: `Hp8C40ProductionWatchdogGate.CreateLeaseIfAuthorized` -> `HpFanControlBackendFactory.Create` -> `FanControlCoordinator` -> `AdaptiveFanProductionController`. The qualification controller enables Manual only inside its own hard-blocked test process; the compile-time user-facing Manual gate remains false and Automatic is false everywhere in the P15B path.
+
+A valid physical run may issue exactly **one** `ApplyManualAsync(30)`, which must become one equal CPU/GPU `30/30` transaction. Before the write it requires exact-target identity, AC power, battery >=20%, three consecutive fresh complete SafetyGate-permitted bounded-load samples, firmware-owned `FF/FF`, the exact qualified M4 watchdog installation and an absent durable journal. The parent independently verifies the OWNED generation-3 journal, controller PID+creation time, 30/30 setpoint and stable watchdog process identity before allowing the child to continue.
+
+After three bounded supervision samples, the controller must return through `AdaptiveFanProductionController.ReleaseToFirmwareAsync`. Strong restore means the production backend completes its validated `FF/FF -> LegacyDefault` sequence, observes local `FF/FF`, completes watchdog `RESTORE_BEGIN -> RELEASE`, deletes the durable journal, and the parent obtains two consecutive independent final `FF/FF` observations while the same watchdog process remains alive. Only after that proof may the harness stop the Manual M4 service back to its original Manual/Stopped/PID0 baseline.
+
+An independent delayed exact-target 30/30 failsafe is armed before the controller. It is a safety backstop only; if it takes over, the run is safe but invalid. Evidence is preserved on PASS or FAIL_CLOSED and `git clean` is forbidden.
+
+Preparation status: **CI pending / physical execution CLOSED**. `Hp8C40P15BManual30QualificationTest.PhysicalExecutionAuthorized=false`, `manual30.executionAuthorized=false`, user-facing Manual=false, Automatic=false. A later separate authorization commit is required after this preparation itself passes full CI.
 
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
-- P15B Manual 30/30 execution: **CLOSED**
+- P15B Manual 30/30 execution: **PREPARATION IMPLEMENTED / PHYSICAL GATES CLOSED PENDING CI**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**
