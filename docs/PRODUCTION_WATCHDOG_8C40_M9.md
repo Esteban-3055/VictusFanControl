@@ -244,8 +244,7 @@ RELEASE. Qualification-only abort limits are CPU >=90 C and GPU >=82 C; the
 controller also refuses to hold 30/30 above 60 W CPU package or 75 W GPU power.
 These limits do not modify production SafetyGate thresholds.
 
-M9C cannot be opened until M9B has physically passed and its evidence is
-reviewed/committed. M9D remains a later full GUI/lifecycle last-mile regression.
+M9C could not be opened until M9B had physically passed and its evidence was reviewed/committed. That prerequisite is now satisfied by the formal M9B closure at `c65e3970bbb04cdd75186354947a6ad49f89e89d`, canonical GitHub Actions **#931** (run `36816264269`) SUCCESS. The M9C authorization still requires complete CI on its exact authorization SHA and then the same SHA as the canonical branch HEAD before one harness execution. M9D remains a later full GUI/lifecycle last-mile regression.
 
 
 ### M9C deterministic invariant coverage
