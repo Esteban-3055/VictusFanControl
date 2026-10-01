@@ -74,7 +74,9 @@ foreach($needle in @(
     'DisplayAware8C40LifecycleHardwareTest',
     'WaitForHardwareReadQuiescenceAsync',
     'AllowCustomAdmissionAfterRecoveryAsync',
-    'M6WatchdogStateReader.RequireOwned30'
+    'M6WatchdogStateReader.RequireOwned30',
+    'constructionRoute=',
+    'production-factory-public-backend'
 )){
     Assert-Contains $mainForm $needle ("M9D MainForm/lifecycle invariant missing: {0}" -f $needle)
 }
