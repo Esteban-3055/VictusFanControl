@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D FAIL_CLOSED / PID-COLLISION FIX CODE PREPARED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -359,10 +359,11 @@ forking a new power-state implementation. Evidence uses a separate namespace:
 - `m9d-production-lifecycle.result`
 
 M9B read-only physical PASS and M9C production-path smoke PASS are both formally recorded.
-A separate M9D authorization now opens only the M9D execution and temporary construction
-gates for one lifecycle run. Execution remains contingent on complete CI on the exact
-authorization SHA and then that same SHA being the canonical branch HEAD. Automatic/adaptive
-policy and default control remain OFF.
+The first authorized M9D attempt failed closed before the operator Modern Standby step because
+PowerShell variable names are case-insensitive and the harness used `$Pid`, colliding with the
+read-only automatic `$PID` variable. Cleanup reached two consecutive FF/FF reads. That one-run
+authorization is consumed; M9D execution and construction are reblocked while the fix is
+qualified. Automatic/adaptive policy and default control remain OFF.
 
 
 ### M9D parent harness preparation
@@ -406,15 +407,22 @@ PowerShell 7 and Windows PowerShell 5.1, native child and packaging self-tests,
 warnings-as-errors build, and the existing M5-M9/SafetyGate/coordinator/backend
 regressions. No physical M9D execution occurred.
 
-The M9B and M9C physical prerequisites are now satisfied. Formal M9C closure is anchored at
+The M9B and M9C physical prerequisites remain satisfied. Formal M9C closure is anchored at
 `3e131fd767b841ed186aaa51c4bcfb6cdee59b88`, canonical GitHub Actions **#960**
-(run `36818905113`) SUCCESS. A separate M9D authorization opens only:
+(run `36818905113`) SUCCESS. The first M9D authorization ran from canonical HEAD
+`91515121a468b3605930cfcf13e1df1e4b738b8e`, canonical GitHub Actions **#970**
+(run `36819497182`) SUCCESS, but the harness itself failed closed before the manual sleep
+transition because `$Pid` collided with PowerShell automatic `$PID`.
 
-- `m9d.physicalAuthorization.authorized=true`;
-- `m9d.physicalExecutionAuthorized=true`;
-- `m9d.qualificationConstructionAuthorized=true`.
+The fix renames all such function parameters/local state to non-reserved identifiers and adds
+a regression invariant that rejects any future `$Pid` declaration/assignment in the M9D parent
+harness. During fix qualification:
 
-Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. The M9D authorization is valid only after complete same-HEAD CI on the exact authorization SHA and the canonical branch.
+- `m9d.physicalAuthorization.authorized=false`;
+- `m9d.physicalExecutionAuthorized=false`;
+- `m9d.qualificationConstructionAuthorized=false`.
+
+Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. A fresh M9D one-run authorization may be issued only after this fix passes complete CI.
 
 
 ## 9. GUI-side production watchdog service bootstrap
@@ -531,7 +539,7 @@ This historical M9E code/CI closure changed **no** production or hardware author
 - `WatchdogRecoveryValidated=false`;
 - `ProductionConstructionAuthorized=false`;
 - M9C execution/construction gates are reclosed after PASS;
-- M9D execution/construction gates are temporarily open only for the separately authorized bounded lifecycle run;
+- M9D execution/construction gates are reblocked after the failed bounded attempt while the PID-collision fix is qualified;
 - M8C remains physically re-blocked;
 - `control.enabledByDefault=false`;
 - `automaticPolicyEnabled=false`.
