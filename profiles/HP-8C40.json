@@ -3127,7 +3127,8 @@
         "sourceCiRunId": null,
         "prerequisite": "M9B read-only physical PASS must be executed, reviewed, hashed and formally recorded before any M9C authorization commit.",
         "scope": "one versioned M9C harness execution only"
-      }
+      },
+      "physicalPassed": false
     },
     "promotion": {
       "authorized": false,
@@ -3136,9 +3137,9 @@
       "controlEnabledByDefaultAfterPromotion": false,
       "note": "M9 completion may promote watchdog-backed construction only. Automatic/adaptive fan policy remains a later independent gate."
     },
-    "nextStep": "Continue code/CI-only M9D development. M9B remains the first unavoidable machine-side evidence boundary; no M9C/M9D physical execution is authorized.",
+    "nextStep": "Finish same-HEAD CI for the fully prepared but hard-blocked M9D harness. M9B remains the first unavoidable machine-side evidence boundary; M9C/M9D stay physically blocked.",
     "m9d": {
-      "status": "CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
+      "status": "FULL_HARNESS_CODE_PREPARED_CI_PENDING_PHYSICAL_BLOCKED",
       "purpose": "focused last-mile display-aware Modern Standby lifecycle regression through the normal MainForm -> production factory -> public HP 8C40 backend route",
       "appMode": "--8c40-m9d-production-lifecycle-test",
       "requiredToken": "8C40-M9D-LIFECYCLE30",
@@ -3189,7 +3190,31 @@
         "authorized": false,
         "prerequisite": "M9B physical read-only PASS and M9C physical production-path smoke PASS must both be formally recorded first.",
         "scope": "one versioned M9D production-lifecycle harness execution"
-      }
+      },
+      "harnessScript": "scripts/test-8c40-production-watchdog-m9d.ps1",
+      "harnessInvariantScript": "scripts/test-8c40-m9d-harness-invariants.ps1",
+      "trackedChildHelper": "scripts/m9d-tracked-child.ps1",
+      "trackedChildSelfTest": "scripts/test-8c40-m9d-tracked-child-selftest.ps1",
+      "independentFailsafeScript": "scripts/watchdog-m9d-service-failsafe-8c40.ps1",
+      "evidencePackagingScript": "scripts/package-m9d-evidence.ps1",
+      "evidencePackagingSelfTest": "scripts/test-8c40-m9d-evidence-packaging.ps1",
+      "failsafeDelaySeconds": 300,
+      "physicalPassed": false,
+      "parentSafety": [
+        "hard profile authorization barrier before Administrator, evidence directory, service start or app launch",
+        "requires M9B no-write physical PASS and M9C physical PASS",
+        "requires exact tracked branch/upstream HEAD",
+        "requires installed M4 service Manual/Stopped/PID0 LocalSystem and no retained journal",
+        "requires stable two-consecutive FF/FF before service start",
+        "starts only the already-qualified M4 service; never installs/replaces/deletes it",
+        "independent delayed failsafe ARMED before GUI launch",
+        "exact GUI PID + process creation ticks bound to schema-v2 generation-3 OWNED 30/30 journal",
+        "manual Windows Sleep only after READY; harness never dispatches suspend/hibernate itself",
+        "same watchdog PID + creation ticks required across Modern Standby",
+        "final journal absence + stable FF/FF + Manual/Stopped/PID0 service baseline required for PASS",
+        "retained journal is copied as evidence and never deleted"
+      ],
+      "evidence": "logs/m9d-production-lifecycle_*/ + adjacent ZIP/SHA256 sidecar"
     }
   }
 }

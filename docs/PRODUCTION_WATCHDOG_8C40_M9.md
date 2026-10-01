@@ -374,3 +374,30 @@ M9D cannot be physically authorized until M9B read-only PASS and M9C physical
 production-path smoke PASS are both formally recorded. M9D code preparation does not
 change `WatchdogRecoveryValidated`, production construction, automatic policy or
 default control.
+
+
+### M9D full parent harness preparation
+
+The complete future M9D physical route is now versioned as
+`scripts/test-8c40-production-watchdog-m9d.ps1`, but remains hard-blocked.
+
+The parent harness adds several safeguards beyond the App-side lifecycle engine:
+
+- profile authorization is checked before Administrator/hardware/service/evidence work;
+- M9B physical read-only PASS and M9C physical PASS are mandatory prerequisites;
+- the previously qualified M4 service must start from Manual/Stopped/PID 0 and exact
+  LocalSystem/path configuration;
+- a delayed independent M9D failsafe must publish ARMED before the App starts;
+- READY is accepted only with exact GUI PID + process creation ticks bound to a
+  schema-v2 generation-3 OWNED 30/30 journal;
+- the user, not the harness, initiates Windows Sleep after READY;
+- Kernel-Power evidence must show Modern Standby rather than hibernation/critical battery;
+- the watchdog PID + creation time must remain stable across the transition;
+- final PASS requires journal absence, two consecutive FF/FF samples, no failsafe
+  takeover and restoration of the original Manual/Stopped/PID 0 service baseline.
+
+No M9D script reinstalls the service or deletes retained journal/evidence. If a journal
+is present on failure it is copied into the evidence package and preserved.
+
+Automatic ZIP packaging records hashes of the M9 sources, profile, App sources,
+installed watchdog executable/module and collected run evidence.
