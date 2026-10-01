@@ -2,7 +2,7 @@
 
 Target: `HP-8C40-9D0R1LA-F18`.
 
-Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D EC-MUTEX RETRY PHYSICAL AUTHORIZED SUBJECT TO SAME-HEAD CI. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
+Status: **M9A CODE/CI PASS. M9B PHYSICAL READ-ONLY PASS / FORMALLY CLOSED. M9C PHYSICAL PASS / FORMALLY CLOSED. M9D CLIENT PREPARE EC-MUTEX RETRY FIX CODE PREPARED. M9E PROMOTION-READINESS AUDITOR CODE/CI PASS. PRODUCTION WATCHDOG PROMOTION REMAINS BLOCKED.**
 
 M8 is physically closed, including M8B representative-load ownership and M8C thermal
 preemption/restore. That evidence is necessary but does not itself make the watchdog a
@@ -367,11 +367,12 @@ authorized corrected retry also failed closed before READY and before any fan wr
 watchdog rejected PREPARE after its single 500 ms ownership read timed out waiting for the
 cross-process `Global\Access_EC` mutex while the GUI telemetry path was active. Cleanup again
 proved two consecutive FF/FF reads and the operator Modern Standby step was never reached.
-That retry authorization was consumed. The bounded M4 ownership-read contention fix passed
-complete CI at `c9995c346101585d53e6af717883925b2d5c7c54`, GitHub Actions **#1002**
-(run `36823107375`). A fresh one-run M9D authorization now opens only the M9D execution and
-temporary construction gates, subject to complete CI on this authorization SHA and exact
-canonical same-HEAD CI. Automatic/adaptive policy and default control remain OFF.
+That retry authorization was consumed. A first correction placed the bounded retry in M4
+watchdog source and passed CI, but M9D intentionally does not replace the already-qualified
+installed M4 service. Therefore that placement would not affect the machine-side run. Before
+any further physical execution, the authorization was superseded and reblocked. The retry is
+now moved to the freshly built named-pipe client's PREPARE path, leaving the installed M4
+service binary untouched. Automatic/adaptive policy and default control remain OFF.
 
 
 ### M9D parent harness preparation
@@ -433,13 +434,20 @@ bounded attempts with 75 ms gaps. It does not retry unrelated EC transaction fai
 authorize any fan write while the proof is unavailable, and persistent contention still fails
 closed within the existing 4 s lease-request timeout.
 
-The EC-contention fix is now **CODE/CI PASS**. A fresh bounded M9D execution authorization opens only:
+The corrected design retries only a rejected **PREPARE** on the GUI/client side when the
+watchdog returns `INTERNAL_ERROR` and the message names `Global\Access_EC`. It performs at
+most four attempts separated by 75 ms. No local lease phase is entered on rejected attempts,
+no fan write is authorized, unrelated watchdog/EC failures are not retried, and persistent
+contention remains fail-closed.
 
-- `m9d.physicalAuthorization.authorized=true`;
-- `m9d.physicalExecutionAuthorized=true`;
-- `m9d.qualificationConstructionAuthorized=true`.
+During this correction CI:
 
-Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false. The run is valid only after complete CI on this exact authorization SHA and the same SHA as the canonical branch HEAD.
+- `m9d.physicalAuthorization.authorized=false`;
+- `m9d.physicalExecutionAuthorized=false`;
+- `m9d.qualificationConstructionAuthorized=false`;
+- the installed qualified M4 service is not replaced.
+
+Normal production construction, `WatchdogRecoveryValidated`, default control and automatic/adaptive policy remain false.
 
 
 ## 9. GUI-side production watchdog service bootstrap
@@ -556,7 +564,7 @@ This historical M9E code/CI closure changed **no** production or hardware author
 - `WatchdogRecoveryValidated=false`;
 - `ProductionConstructionAuthorized=false`;
 - M9C execution/construction gates are reclosed after PASS;
-- M9D execution/construction gates are temporarily open only for the fresh separately authorized EC-retry lifecycle run;
+- M9D execution/construction gates are reblocked while the client-side PREPARE retry correction is qualified;
 - M8C remains physically re-blocked;
 - `control.enabledByDefault=false`;
 - `automaticPolicyEnabled=false`.
