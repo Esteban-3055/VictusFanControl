@@ -65,11 +65,16 @@ internal static class Program
                 await AdaptiveFanProductionControllerSelfTest.RunAsync(
                     Console.Out);
 
+            var candidateResult =
+                Hp8C40AdaptiveCandidateV1SelfTest.Run(
+                    Console.Out);
+
             return engineResult == 0 &&
                    shadowResult == 0 &&
-                   productionResult == 0
+                   productionResult == 0 &&
+                   candidateResult == 0
                 ? 0
-                : 34;
+                : 35;
         }
 
         if (options.AdaptivePolicyShadowReplay)

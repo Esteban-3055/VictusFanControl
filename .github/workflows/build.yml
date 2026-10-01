@@ -217,6 +217,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-adaptive-production-integration-invariants.ps1
 
+      - name: HP 8C40 P12 adaptive candidate curve invariant
+        shell: pwsh
+        run: .\scripts\test-adaptive-candidate-v1-invariants.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -265,6 +269,7 @@ jobs:
           .\scripts\test-8c40-m9-promotion-readiness-invariants.ps1
           .\scripts\test-8c40-post-m9-software-invariants.ps1
           .\scripts\test-adaptive-production-integration-invariants.ps1
+          .\scripts\test-adaptive-candidate-v1-invariants.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build

@@ -69,7 +69,8 @@
     "watchdogM9CanonicalPrehardwarePrepared": true,
     "watchdogM9CanonicalPrehardwareCodeCiPassed": true,
     "postM9P10SoftwareConsolidationPrepared": true,
-    "postM9P11ProductionAdapterPrepared": true
+    "postM9P11ProductionAdapterPrepared": true,
+    "postM9P12CandidateCurvePrepared": true
   },
   "control": {
     "enabledByDefault": false,
@@ -104,6 +105,11 @@
         "duplicate/out-of-order telemetry refusal",
         "telemetry continuity-gap refusal"
       ],
+      "candidateCurveDefined": true,
+      "candidateCurveId": "HP-8C40-ADAPTIVE-CANDIDATE-V1",
+      "candidateCurveValidated": false,
+      "candidateCurveAuthorizedForProduction": false,
+      "candidateCurveConfig": "profiles/HP-8C40.adaptive-candidate-v1.shadow.json",
       "productionCurveDefined": false,
       "productionCurveValidated": false,
       "blockedBy": "post-M9 software integration plus separate manual/automatic target-side validation gates",
