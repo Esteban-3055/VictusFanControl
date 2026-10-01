@@ -225,9 +225,13 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p13-control-surface-invariants.ps1
 
-      - name: HP 8C40 P14.1 software readiness baseline invariant
+      - name: HP 8C40 P14 software readiness baseline invariant
         shell: pwsh
         run: .\scripts\test-p14-software-rc-readiness-invariants.ps1
+
+      - name: HP 8C40 P14.2 publish-layout static invariant
+        shell: pwsh
+        run: .\scripts\test-p14-publish-layout-invariants.ps1
 
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
@@ -280,10 +284,18 @@ jobs:
           .\scripts\test-adaptive-candidate-v1-invariants.ps1
           .\scripts\test-p13-control-surface-invariants.ps1
           .\scripts\test-p14-software-rc-readiness-invariants.ps1
+          .\scripts\test-p14-publish-layout-invariants.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
+
+      - name: HP 8C40 P14.2 build and verify win-x64 publish layout
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.2-publish'
+          .\scripts\build-p14-publish-layout.ps1 -OutputRoot $out
+          .\scripts\verify-p14-publish-layout.ps1 -OutputRoot $out
 
       - name: HP 8C40 M8A representative-load classifier self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --8c40-m8a-self-test

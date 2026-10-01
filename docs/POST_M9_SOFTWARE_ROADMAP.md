@@ -63,6 +63,10 @@ Add a software readiness audit, deterministic package build, versioned release-c
 
 Implemented: the final P13 HEAD/CI is pinned as the P14 baseline, a machine-readable release contract is present, and CI now fails if any Manual/Automatic/default-policy/M9 qualification boundary is reopened. No publish package or release artifact is produced in this step.
 
+### P14.2 — versioned win-x64 publish layout
+
+Implemented pending CI closure: version `0.4.0-rc.1` is centralized, GUI and production watchdog publish into a fixed framework-dependent `win-x64` app/watchdog layout, qualification-only standalone executables are excluded, and CI builds then verifies the actual publish output. PawnIO modules and the final archive/hash manifest remain deferred to P14.3.
+
 ## P15 — first required target-side checkpoint
 
 P15 is deliberately outside this document's software authorization. The first target-side validation must begin with ordinary startup/control OFF, followed by a separately authorized one-shot manual 30/30 transaction and verified strong restore. Only after that may an automatic-policy physical gate be considered.
