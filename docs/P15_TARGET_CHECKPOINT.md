@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current preparation state: **the failed evidence review and operator-confirmation hardening are formally closed. P15A startup/no-write is freshly authorized, but physical execution remains forbidden until this new authorization HEAD itself passes full CI. P15B and Automatic remain closed.**
+Current state: **P15A startup/no-write has a physically verified PASS and its evidence is formally closed. P15A execution is re-blocked. P15B Manual 30/30 and Automatic remain closed.**
 
 ### P15A preparation closure
 
@@ -55,6 +55,16 @@ The preserved evidence ZIP was independently reviewed at SHA-256 `fee6d9c00eab58
 
 A single non-matching or empty console response should not discard an otherwise healthy no-write run immediately. While P15A remains unauthorized, the harness now permits up to three bounded attempts to enter the exact case-sensitive token `P15A-OBSERVED`. Before each attempt it refreshes the GUI process and fails closed if the GUI has already exited. The token requirement itself is not weakened; after three mismatches the run still fails closed. This change performs no hardware operation. Implementation HEAD `a714767225f558b3f8934dffcc575e49ad72127b` passed the full workflow in **#1097**, run ID `36925940706`, including syntax validation, the P15A invariant, Windows PowerShell 5.1 compatibility, warnings-as-errors build and evidence-packaging self-test. The hardening is formally closed. A fresh separate authorization is based on closure HEAD `bb84846a57f2e81cab68fe7f1c89399af92094e7` / CI #1098 SUCCESS; as before, the authorization HEAD itself must pass the full workflow before target execution.
 
+### P15A physical PASS closure
+
+The post-hardening authorization HEAD `2189402b0d9d96948e44ec3940ad77d17a82b451` passed full CI **#1099** (run ID `36926810332`) and was executed on the exact HP 8C40 target. The preserved target evidence ZIP `p15a-startup-no-write_2026-10-01_181544.zip` has SHA-256 `cd8e7dfe2fef365e75b886ccca1c6c101ce12030754f21a8f9bc7f305f76c24e` and was independently reviewed.
+
+The package binds local HEAD and upstream HEAD to the authorization HEAD, contains no tracked source modifications, identifies the exact target and exact audited P14.5 RC, and records a normal Firmware-mode GUI startup with healthy telemetry and CLOSED Manual/Automatic gates. All nine EC setpoint observations are `FF/FF`: 2 before startup, 5 while the GUI is running, and 2 after normal tray Exit. No non-Firmware setpoint, watchdog journal, lease ownership, Manual/Automatic request or power transition was observed.
+
+The M4 watchdog began at Manual/Stopped/PID0/LocalSystem, was started by normal GUI startup, and remained Manual/Running/LocalSystem with the same PID/process-start identity through GUI exit. Installed watchdog/module hashes matched the physically qualified identities before, during and after the session. The application log contains both explicit application shutdown and GUI-exit markers. These observations satisfy the complete P15A startup/no-write contract.
+
+P15A is therefore physically passed and formally evidence-closed. Its execution authorization is re-blocked. This closure does **not** authorize P15B, user-facing Manual, Automatic, the candidate curve, or any other physical gate.
+
 ### P15A authorization window
 
 This authorization opens exactly one physical operation: execution of `scripts/test-p15-startup-no-write.ps1` against the exact audited P14.5 RC artifact. It does not authorize any fan-level command, firmware-restore command, watchdog lease acquisition, service reconfiguration, Manual/Automatic mode request or power transition.
@@ -69,7 +79,7 @@ P15B is intentionally not implemented or authorized by the P15A preparation. Its
 
 ## Current authorization boundary
 
-- P15A startup/no-write execution: **FRESHLY AUTHORIZED ONLY AFTER SAME-HEAD CI SUCCESS**
+- P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
 - P15B Manual 30/30 execution: **CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**

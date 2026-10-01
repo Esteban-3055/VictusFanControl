@@ -15,10 +15,10 @@ $payloadResolver=Get-Content -LiteralPath (Join-Path $root 'scripts\expand-p15-r
 $payloadResolverSelfTest=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15-rc-payload-layout.ps1') -Raw
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P15_TARGET_CHECKPOINT.md') -Raw
 if([string]$contract.milestone -cne 'P15A'){throw 'P15A milestone mismatch.'}
-if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PASS_GATE_CLOSED')){throw 'P15A state mismatch.'}
+if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PHYSICAL_PASS_FORMALLY_CLOSED')){throw 'P15A state mismatch.'}
 $executionAuthorized=[bool]$contract.startupNoWrite.executionAuthorized
 if($executionAuthorized -and [string]$contract.status -cne 'P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI'){throw 'P15A authorized state/status mismatch.'}
-if((-not $executionAuthorized) -and [string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PASS_GATE_CLOSED')){throw 'P15A closed state/status mismatch.'}
+if((-not $executionAuthorized) -and [string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PHYSICAL_PASS_FORMALLY_CLOSED')){throw 'P15A closed state/status mismatch.'}
 if([string]$contract.targetProfileId -cne 'HP-8C40-9D0R1LA-F18'){throw 'P15A target mismatch.'}
 if([string]$contract.p14Baseline.closureHead -cne '6945b2e34526e5e266189da6553bf3ea010d3893' -or [int]$contract.p14Baseline.closureCiRunNumber -ne 1086 -or [long]$contract.p14Baseline.closureCiRunId -ne 36913062832 -or [string]$contract.p14Baseline.closureCiResult -cne 'SUCCESS'){throw 'P15A P14 closure baseline mismatch.'}
 if([string]$contract.p14Baseline.auditedRcSourceHead -cne 'eebcdd5e833256466c1ae023c35f7cef8d40d6ec' -or [string]$contract.p14Baseline.auditedRcArtifactSha256 -cne '588058a8b57c0ca1bb41649288682e0981be845ab747654472d3d10c88d572b5' -or [string]$contract.p14Baseline.auditedRcPayloadZipSha256 -cne '704983caa20abb21c3520ffbd165ad69f9843139b6b2fa47d9e9e2448a32ef68'){throw 'P15A audited RC identity mismatch.'}
@@ -42,10 +42,55 @@ if($executionAuthorized){
 }else{
     Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A physical startup execution must remain CLOSED while not explicitly authorized.'
 }
-Assert-False ([bool]$contract.startupNoWrite.physicalPassed) 'P15A cannot pre-claim physical PASS.'
+if([string]$contract.status -eq 'P15A_STARTUP_NO_WRITE_PHYSICAL_PASS_FORMALLY_CLOSED'){
+    Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A execution must be re-blocked after physical PASS.'
+    Assert-True ([bool]$contract.startupNoWrite.physicalPassed) 'P15A physical PASS closure must set physicalPassed.'
+    Assert-True ([bool]$contract.startupNoWrite.evidenceClosed) 'P15A physical PASS closure must close evidence.'
+    $p=$contract.startupNoWrite.physicalPassClosure
+    Assert-True ([bool]$p.closed) 'P15A physical PASS closure must be closed.'
+    if([string]$p.result -cne 'PASS' -or [string]$p.sourceHead -cne '2189402b0d9d96948e44ec3940ad77d17a82b451' -or [int]$p.sourceCiRunNumber -ne 1099 -or [long]$p.sourceCiRunId -ne 36926810332 -or [string]$p.sourceCiResult -cne 'SUCCESS'){throw 'P15A physical PASS source/CI identity mismatch.'}
+    if([string]$p.evidenceZipSha256 -cne 'cd8e7dfe2fef365e75b886ccca1c6c101ce12030754f21a8f9bc7f305f76c24e' -or [string]$p.packageManifestSha256 -cne '64da7c3fdc29fd6e3bcd88692c9eff272242622b89ced07fab9f89a55ccb842f' -or [string]$p.embeddedResultSha256 -cne 'ad636ab255c49d4335e66d7cd98c67916e27deadf940097465752bddce1816d0'){throw 'P15A physical PASS evidence identity mismatch.'}
+    Assert-True ([bool]$p.packageEvidenceHashesVerified) 'P15A physical PASS package hashes must be independently verified.'
+    if([int]$p.packageEvidenceHashCount -ne 7){throw 'P15A physical PASS package evidence hash count mismatch.'}
+    Assert-True ([bool]$p.repositoryHeadMatched) 'P15A physical PASS repository HEAD must match.'
+    Assert-True ([bool]$p.upstreamHeadMatched) 'P15A physical PASS upstream HEAD must match.'
+    Assert-True ([bool]$p.trackedSourceClean) 'P15A physical PASS requires no tracked source modifications.'
+    Assert-True ([bool]$p.targetMatched) 'P15A physical PASS target must match.'
+    if([string]$p.auditedRcWrapperSha256 -cne '588058a8b57c0ca1bb41649288682e0981be845ab747654472d3d10c88d572b5' -or [string]$p.auditedRcPayloadZipSha256 -cne '704983caa20abb21c3520ffbd165ad69f9843139b6b2fa47d9e9e2448a32ef68'){throw 'P15A physical PASS audited RC identity mismatch.'}
+    if([string]$p.startupMode -cne 'Firmware'){throw 'P15A physical PASS must remain Firmware-owned.'}
+    Assert-True ([bool]$p.healthyTelemetryObserved) 'P15A physical PASS must observe healthy telemetry.'
+    Assert-True ([bool]$p.manualGateClosedObserved) 'P15A physical PASS must keep Manual gate closed.'
+    Assert-True ([bool]$p.automaticGateClosedObserved) 'P15A physical PASS must keep Automatic gate closed.'
+    Assert-False ([bool]$p.manualOrAutomaticRequestObserved) 'P15A physical PASS must observe no Manual/Automatic request.'
+    Assert-False ([bool]$p.controlEnabledByDefault) 'P15A physical PASS must keep default control OFF.'
+    Assert-False ([bool]$p.automaticPolicyEnabled) 'P15A physical PASS must keep automatic policy OFF.'
+    if([int]$p.firmwareSamplesObserved -ne 9 -or [int]$p.preStartFirmwareSamplesObserved -ne 2 -or [int]$p.runtimeFirmwareSamplesObserved -ne 5 -or [int]$p.postExitFirmwareSamplesObserved -ne 2){throw 'P15A physical PASS firmware sample counts mismatch.'}
+    Assert-True ([bool]$p.allFirmwareSamplesFfFf) 'P15A physical PASS requires every sample FF/FF.'
+    Assert-False ([bool]$p.nonFirmwareSetpointEvidenceDetected) 'P15A physical PASS must have no non-firmware setpoint evidence.'
+    Assert-False ([bool]$p.watchdogJournalEvidenceDetected) 'P15A physical PASS must have no watchdog journal evidence.'
+    Assert-False ([bool]$p.watchdogJournalPresentAtEnd) 'P15A physical PASS must end without journal.'
+    Assert-False ([bool]$p.watchdogLeaseOwnershipEvidenceDetected) 'P15A physical PASS must have no watchdog lease ownership.'
+    Assert-False ([bool]$p.powerTransitionAttempted) 'P15A physical PASS must not attempt power transition.'
+    if([string]$p.initialServiceState -cne 'Manual/Stopped/PID0/LocalSystem' -or [string]$p.runtimeServiceState -cne 'Manual/Running/LocalSystem'){throw 'P15A physical PASS service state mismatch.'}
+    Assert-True ([bool]$p.runtimeServiceProcessIdentityStableThroughExit) 'P15A physical PASS requires stable watchdog process identity through GUI exit.'
+    if([string]$p.qualifiedWatchdogExeSha256 -cne 'ec10242ce40c12856cf9222d10e43016854498b3946375c8f73e9f927d9912ed' -or [string]$p.qualifiedPawnIoModuleSha256 -cne 'c38fd116e7aff4d1fdb0a494e296be0a6708e5a22fc72f14587442fb7f8f7906'){throw 'P15A physical PASS watchdog integrity identity mismatch.'}
+    Assert-True ([bool]$p.serviceIntegrityMatchedBeforeDuringAfter) 'P15A physical PASS requires stable service integrity.'
+    Assert-True ([bool]$p.operatorConfirmationAccepted) 'P15A physical PASS requires accepted operator confirmation.'
+    Assert-True ([bool]$p.normalTrayExitObserved) 'P15A physical PASS requires normal tray Exit.'
+    Assert-True ([bool]$p.explicitApplicationShutdownLogged) 'P15A physical PASS requires explicit shutdown log marker.'
+    Assert-True ([bool]$p.guiExitLogged) 'P15A physical PASS requires GUI exit log marker.'
+    Assert-True ([bool]$p.postExitFirmwareProofPassed) 'P15A physical PASS requires post-exit FF/FF proof.'
+    Assert-True ([bool]$p.evidenceIndependentlyReviewed) 'P15A physical PASS evidence must be independently reviewed.'
+    Assert-True ([bool]$p.physicalPassSupported) 'P15A physical PASS closure must be supported by evidence.'
+    Assert-False ([bool]$p.manual30AuthorizationOpened) 'P15A physical PASS closure must not open P15B.'
+    Assert-False ([bool]$p.automaticAuthorizationOpened) 'P15A physical PASS closure must not open Automatic.'
+}else{
+    Assert-False ([bool]$contract.startupNoWrite.physicalPassed) 'P15A cannot pre-claim physical PASS.'
+    Assert-False ([bool]$contract.startupNoWrite.evidenceClosed) 'P15A cannot pre-close evidence.'
+}
 if([string]$contract.status -eq 'P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED'){
     Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A authorization must be re-closed after a failed physical attempt.'
-    $a=$contract.startupNoWrite.latestPhysicalAttempt
+    $a=$contract.startupNoWrite.priorFailClosedAttempt
     if([string]$a.sourceHead -cne '6c43550001c44a04ad33ec96f8400e363d6c0ad8' -or [int]$a.sourceCiRunNumber -ne 1095 -or [long]$a.sourceCiRunId -ne 36923739322 -or [string]$a.result -cne 'FAIL_CLOSED'){throw 'P15A latest physical attempt identity mismatch.'}
     if([string]$a.failure -cne 'P15A operator observation was not confirmed.'){throw 'P15A latest physical attempt failure mismatch.'}
     foreach($p in @('auditedRcWrapperVerified','auditedRcPayloadVerified','payloadRootResolved','initialServiceBaselinePassed','initialServiceIntegrityPassed','preStartJournalAbsent','readOnlyEcSetpointProbeExecuted','firmwareProofBeforePassed','guiStarted','healthyFirmwareStartupObserved','manualGateClosedObserved','automaticGateClosedObserved','runtimeServiceIntegrityPassed','runtimeJournalAbsentThroughSampling','requiredFirmwareSamplesDuringPassed')){
@@ -58,7 +103,7 @@ if([string]$contract.status -eq 'P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAI
 }
 if([string]$contract.status -eq 'P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED'){
     Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A must remain closed during operator-confirmation hardening.'
-    $a=$contract.startupNoWrite.latestPhysicalAttempt
+    $a=$contract.startupNoWrite.priorFailClosedAttempt
     Assert-False ([bool]$a.evidencePackageIdentityPendingReview) 'Reviewed P15A evidence must not remain pending.'
     $r=$a.evidenceReview
     Assert-True ([bool]$r.reviewed) 'P15A evidence review must be recorded.'
