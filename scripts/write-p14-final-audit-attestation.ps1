@@ -8,7 +8,7 @@ param(
  [Parameter(Mandatory=$true)][int]$RunNumber,
  [Parameter(Mandatory=$true)][long]$RcArtifactId,
  [Parameter(Mandatory=$true)][string]$RcArtifactName,
- [Parameter(Mandatory=$true)][ValidatePattern('^sha256:[0-9a-fA-F]{64}$')][string]$RcArtifactDigest
+ [Parameter(Mandatory=$true)][ValidatePattern('^(?:sha256:)?[0-9a-fA-F]{64}$')][string]$RcArtifactDigest
 )
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
@@ -19,6 +19,8 @@ if ([string]$release.milestone -ne 'P14.5' -or -not [bool]$release.productizatio
 foreach ($v in @('controlEnabledByDefault','automaticPolicyEnabled','manualExecutionAuthorized','automaticExecutionAuthorized','candidateCurvePhysicallyValidated','candidateCurveAuthorizedForProduction','m9cQualificationConstructionAuthorized','m9dQualificationConstructionAuthorized')) { if ([bool]$release.safetyBoundary.$v) { throw "P14.5 safety boundary unexpectedly open: $v" } }
 $expectedRcName="VictusFanControl-0.4.0-rc.1-win-x64-$($SourceHead.ToLowerInvariant())"
 if ($RcArtifactName -ne $expectedRcName) { throw 'RC artifact/source binding mismatch.' }
+$normalizedRcArtifactDigest=$RcArtifactDigest.ToLowerInvariant()
+if (-not $normalizedRcArtifactDigest.StartsWith('sha256:')) { $normalizedRcArtifactDigest='sha256:'+$normalizedRcArtifactDigest }
 & (Join-Path $root 'scripts\verify-p14-artifact-stage.ps1') -ArtifactDirectory $stage -ExpectedSourceHead $SourceHead -ExpectedRepository $Repository -ExpectedRef $Ref -ExpectedRunId $RunId -ExpectedRunNumber $RunNumber -ExpectedArtifactName $RcArtifactName
 if (Test-Path -LiteralPath $out) { if (@(Get-ChildItem -LiteralPath $out -Force).Count -ne 0) { throw 'P14.5 evidence directory must be empty.' } } else { New-Item -ItemType Directory -Force -Path $out | Out-Null }
 $zipName=[string]$release.productization.packageName
@@ -28,7 +30,7 @@ $attPath=Join-Path $stage 'P14-ARTIFACT-ATTESTATION.json'
 $report=[ordered]@{
  schemaVersion=1; kind='VictusFanControl.P14.5.FinalSoftwareRcAudit'; result='PASS'; version=[string]$release.version; targetProfileId=[string]$release.targetProfileId; sourceHead=$SourceHead.ToLowerInvariant();
  github=[ordered]@{repository=$Repository;ref=$Ref;runId=$RunId;runNumber=$RunNumber};
- auditedRcArtifact=[ordered]@{id=$RcArtifactId;name=$RcArtifactName;digest=$RcArtifactDigest.ToLowerInvariant()};
+ auditedRcArtifact=[ordered]@{id=$RcArtifactId;name=$RcArtifactName;digest=$normalizedRcArtifactDigest};
  auditedRcPayload=[ordered]@{zipFileName=$zipName;zipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToLowerInvariant();sha256FileSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $shaPath).Hash.ToLowerInvariant();p14ArtifactAttestationSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $attPath).Hash.ToLowerInvariant();stagedFileCount=3};
  priorClosures=[ordered]@{p14_2=[ordered]@{closed=[bool]$release.productization.publishLayoutClosure.closed;result=[string]$release.productization.publishLayoutClosure.result};p14_3=[ordered]@{closed=[bool]$release.productization.packageClosure.closed;result=[string]$release.productization.packageClosure.result};p14_4=[ordered]@{closed=[bool]$release.productization.artifactClosure.closed;result=[string]$release.productization.artifactClosure.result;downloadedAndVerified=[bool]$release.productization.artifactClosure.retainedArtifactDownloadedAndVerified}};
  pinnedExternalInputs=[ordered]@{pawnIoModulesVersion=[string]$release.productization.pawnIoModulesVersion;pawnIoModulesArchiveSha256=([string]$release.productization.pawnIoModulesArchiveSha256).ToLowerInvariant()};
