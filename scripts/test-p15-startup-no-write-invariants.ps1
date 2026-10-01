@@ -15,10 +15,10 @@ $payloadResolver=Get-Content -LiteralPath (Join-Path $root 'scripts\expand-p15-r
 $payloadResolverSelfTest=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15-rc-payload-layout.ps1') -Raw
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P15_TARGET_CHECKPOINT.md') -Raw
 if([string]$contract.milestone -cne 'P15A'){throw 'P15A milestone mismatch.'}
-if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED')){throw 'P15A state mismatch.'}
+if([string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED')){throw 'P15A state mismatch.'}
 $executionAuthorized=[bool]$contract.startupNoWrite.executionAuthorized
 if($executionAuthorized -and [string]$contract.status -cne 'P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI'){throw 'P15A authorized state/status mismatch.'}
-if((-not $executionAuthorized) -and [string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED')){throw 'P15A closed state/status mismatch.'}
+if((-not $executionAuthorized) -and [string]$contract.status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED')){throw 'P15A closed state/status mismatch.'}
 if([string]$contract.targetProfileId -cne 'HP-8C40-9D0R1LA-F18'){throw 'P15A target mismatch.'}
 if([string]$contract.p14Baseline.closureHead -cne '6945b2e34526e5e266189da6553bf3ea010d3893' -or [int]$contract.p14Baseline.closureCiRunNumber -ne 1086 -or [long]$contract.p14Baseline.closureCiRunId -ne 36913062832 -or [string]$contract.p14Baseline.closureCiResult -cne 'SUCCESS'){throw 'P15A P14 closure baseline mismatch.'}
 if([string]$contract.p14Baseline.auditedRcSourceHead -cne 'eebcdd5e833256466c1ae023c35f7cef8d40d6ec' -or [string]$contract.p14Baseline.auditedRcArtifactSha256 -cne '588058a8b57c0ca1bb41649288682e0981be845ab747654472d3d10c88d572b5' -or [string]$contract.p14Baseline.auditedRcPayloadZipSha256 -cne '704983caa20abb21c3520ffbd165ad69f9843139b6b2fa47d9e9e2448a32ef68'){throw 'P15A audited RC identity mismatch.'}
@@ -52,6 +52,29 @@ if([string]$contract.status -eq 'P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAI
         Assert-False ([bool]$a.$p) ("P15A latest attempt expected false: {0}" -f $p)
     }
     Assert-True ([bool]$a.evidencePackageIdentityPendingReview) 'P15A evidence package identity must remain pending until target evidence is reviewed.'
+}
+if([string]$contract.status -eq 'P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED'){
+    Assert-False ([bool]$contract.startupNoWrite.executionAuthorized) 'P15A must remain closed during operator-confirmation hardening.'
+    $a=$contract.startupNoWrite.latestPhysicalAttempt
+    Assert-False ([bool]$a.evidencePackageIdentityPendingReview) 'Reviewed P15A evidence must not remain pending.'
+    $r=$a.evidenceReview
+    Assert-True ([bool]$r.reviewed) 'P15A evidence review must be recorded.'
+    if([string]$r.zipSha256 -cne 'fee6d9c00eab589c3c22f29de764d86e22475860caa5793c2cd5e454f3b23613' -or [string]$r.packageManifestSha256 -cne 'ed3ed2ba2d4d30a5df6c2a453fa6601b8a999890206838dd27eb284d944e21ce'){throw 'P15A reviewed package identity mismatch.'}
+    if([int]$r.firmwareSamplesObserved -ne 7 -or [int]$r.preStartSamplesObserved -ne 2 -or [int]$r.runtimeSamplesObserved -ne 5 -or [int]$r.postExitSamplesObserved -ne 0){throw 'P15A reviewed sample counts mismatch.'}
+    Assert-True ([bool]$r.firmwareSamplesAllFfFf) 'P15A reviewed samples must all be FF/FF.'
+    Assert-True ([bool]$r.manifestContainedEvidenceHashesVerified) 'P15A reviewed package manifest hashes must be verified.'
+    if([int]$r.manifestContainedEvidenceHashCount -ne 7){throw 'P15A reviewed manifest evidence hash count mismatch.'}
+    Assert-False ([bool]$r.journalEvidenceDetected) 'P15A reviewed evidence must record no journal.'
+    Assert-False ([bool]$r.manualOrAutomaticRequestObserved) 'P15A reviewed evidence must record no Manual/Automatic request.'
+    Assert-False ([bool]$r.normalTrayExitObservedByHarness) 'Failed P15A evidence must not claim tray exit.'
+    Assert-False ([bool]$r.physicalPassSupported) 'Failed P15A evidence must not support PASS.'
+    $h=$contract.startupNoWrite.operatorConfirmationHardening
+    Assert-True ([bool]$h.required) 'P15A operator confirmation hardening must be required.'
+    if([string]$h.exactToken -cne 'P15A-OBSERVED' -or [int]$h.maxAttempts -ne 3){throw 'P15A operator confirmation hardening contract mismatch.'}
+    Assert-True ([bool]$h.exactCaseSensitiveMatchRequired) 'P15A confirmation must remain exact/case-sensitive.'
+    Assert-True ([bool]$h.guiMustRemainRunningDuringConfirmation) 'P15A must require GUI to remain running during confirmation.'
+    Assert-False ([bool]$h.implementationCiValidated) 'Pending operator hardening must not pre-claim CI validation.'
+    Assert-False ([bool]$h.closure.closed) 'Pending operator hardening must not pre-close.'
 }
 if([bool]$contract.startupNoWrite.correction.required){
     if([string]$contract.status -in @('P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED')){
@@ -97,7 +120,7 @@ Assert-Contains $gate 'AutomaticExecutionAuthorized = false' 'Automatic GUI gate
 Assert-Contains $watchdogGate 'public static readonly bool ProductionConstructionAuthorized = true;' 'P15A ordinary startup requires already-promoted M9 production construction.'
 Assert-Contains $watchdogGate 'M9CPhysicalQualificationConstructionAuthorized = false' 'P15A must not reopen M9C.'
 Assert-Contains $watchdogGate 'M9DPhysicalQualificationConstructionAuthorized = false' 'P15A must not reopen M9D.'
-foreach($n in @('P15A AUTHORIZATION BARRIER','expand-p15-rc-payload.ps1','executionAuthorized=false','Assert-RepositoryHead','Assert-ExactTarget','verify-p14-artifact-stage.ps1','auditedRcArtifactSha256','auditedRcPayloadZipSha256','Assert-ServiceCommon','Assert-ServiceIntegrity','qualifiedInstalledWatchdogExeSha256','qualifiedInstalledPawnIoModuleSha256','--m4-8c40-lease-service','Get-StrictFirmwareProof','Assert-NoJournal','nonFirmwareSetpointEvidenceDetected','watchdogJournalEvidenceDetected','HP 8C40 production watchdog-backed backend selected through the explicit M9 promotion gate; automatic policy remains OFF.','P13 UI: startup mode=Firmware; manualGate=False; automaticGate=False.','Recovery completed; telemetry is healthy after 3 complete snapshots.','requiredFirmwareSamplesDuring','P15A-OBSERVED','tray menu','package-p15-startup-evidence.ps1','FAIL_CLOSED')){Assert-Contains $harness $n ("P15A harness invariant missing: {0}" -f $n)}
+foreach($n in @('P15A AUTHORIZATION BARRIER','expand-p15-rc-payload.ps1','executionAuthorized=false','$operatorConfirmationMaxAttempts=3','$confirm -ceq $operatorConfirmationToken','GUI exited before operator confirmation','Assert-RepositoryHead','Assert-ExactTarget','verify-p14-artifact-stage.ps1','auditedRcArtifactSha256','auditedRcPayloadZipSha256','Assert-ServiceCommon','Assert-ServiceIntegrity','qualifiedInstalledWatchdogExeSha256','qualifiedInstalledPawnIoModuleSha256','--m4-8c40-lease-service','Get-StrictFirmwareProof','Assert-NoJournal','nonFirmwareSetpointEvidenceDetected','watchdogJournalEvidenceDetected','HP 8C40 production watchdog-backed backend selected through the explicit M9 promotion gate; automatic policy remains OFF.','P13 UI: startup mode=Firmware; manualGate=False; automaticGate=False.','Recovery completed; telemetry is healthy after 3 complete snapshots.','requiredFirmwareSamplesDuring','P15A-OBSERVED','tray menu','package-p15-startup-evidence.ps1','FAIL_CLOSED')){Assert-Contains $harness $n ("P15A harness invariant missing: {0}" -f $n)}
 foreach($n in @('SetFanLevel(','--restore-hp-auto','Start-Service','Stop-Service','Set-Service','New-Service','sc.exe ','NamedPipeFanControlWatchdogLeaseClient','CreateLeaseIfAuthorized','shutdown.exe','SetSuspendState','git clean','--first-fan-write-test')){Assert-NotContains $harness $n ("P15A harness contains forbidden active operation: {0}" -f $n)}
 Assert-Contains $payloadResolver '[IO.Path]::GetFileNameWithoutExtension' 'P15A resolver must bind package-root name to inner ZIP name.'
 Assert-Contains $payloadResolver 'PACKAGE-MANIFEST.json' 'P15A resolver must require package manifest under the resolved root.'
@@ -112,5 +135,6 @@ Assert-NotContains $packager 'git clean' 'P15A packager must never invoke git cl
 Assert-Contains $doc 'P15A — startup / no-write' 'P15A documentation section missing.'
 if($executionAuthorized){Assert-Contains $doc 'P15A authorization window' 'P15A authorization documentation missing.'}
 Assert-Contains $doc 'P15A payload-layout correction' 'P15A payload-layout correction documentation missing.'
+Assert-Contains $doc 'P15A operator-confirmation hardening' 'P15A operator-confirmation hardening documentation missing.'
 Assert-Contains $doc 'P15B' 'P15B separation documentation missing.'
 Write-Host 'HP 8C40 P15A startup/no-write preparation invariant: PASS' -ForegroundColor Green

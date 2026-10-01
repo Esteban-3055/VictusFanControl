@@ -37,6 +37,8 @@ $tempRoot=Join-Path ([IO.Path]::GetTempPath()) ('VFC-P15A-'+[Guid]::NewGuid().To
 $outerStage=Join-Path $tempRoot 'outer'
 $payloadRoot=Join-Path $tempRoot 'payload'
 $cli=Join-Path $repoRoot 'src\VictusFanControl\bin\Release\net8.0-windows\VictusFanControl.dll'
+$operatorConfirmationToken='P15A-OBSERVED'
+$operatorConfirmationMaxAttempts=3
 
 function Assert-Administrator {
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
@@ -224,8 +226,17 @@ try {
     Write-Host ''
     Write-Host 'P15A normal GUI startup is Healthy with Firmware mode and CLOSED Manual/Automatic gates.' -ForegroundColor Green
     Write-Host 'Do not select Manual or Automatic. Inspect the UI, then use the tray icon -> Exit.' -ForegroundColor Yellow
-    $confirm=Read-Host 'Type P15A-OBSERVED when you have inspected the normal UI and are ready to exit it from the tray'
-    if($confirm -cne 'P15A-OBSERVED'){throw 'P15A operator observation was not confirmed.'}
+    $operatorConfirmed=$false
+    for($confirmationAttempt=1;$confirmationAttempt -le $operatorConfirmationMaxAttempts;$confirmationAttempt++){
+        $app.Refresh()
+        if($app.HasExited){throw "P15A GUI exited before operator confirmation; exitCode=$($app.ExitCode)."}
+        $confirm=Read-Host ("Type {0} when you have inspected the normal UI and are ready to exit it from the tray (attempt {1}/{2})" -f $operatorConfirmationToken,$confirmationAttempt,$operatorConfirmationMaxAttempts)
+        if($confirm -ceq $operatorConfirmationToken){$operatorConfirmed=$true;break}
+        if($confirmationAttempt -lt $operatorConfirmationMaxAttempts){
+            Write-Warning ("P15A confirmation did not match the exact token. GUI remains running; retry {0}/{1}." -f ($confirmationAttempt+1),$operatorConfirmationMaxAttempts)
+        }
+    }
+    if(-not $operatorConfirmed){throw "P15A operator observation was not confirmed after $operatorConfirmationMaxAttempts attempts."}
     Write-Host 'Now choose Exit from the VictusFanControl tray menu. The harness will wait up to 120 seconds.' -ForegroundColor Cyan
     $exitDeadline=(Get-Date).AddSeconds(120)
     while(-not $app.HasExited -and (Get-Date) -lt $exitDeadline){Start-Sleep -Milliseconds 500;$app.Refresh()}

@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current preparation state: **the fresh P15A attempt reached Healthy/Firmware with the required pre/during FF/FF evidence, then failed closed because the operator confirmation token was not accepted. P15A authorization is re-closed pending evidence review. P15B and Automatic remain closed.**
+Current preparation state: **the failed P15A evidence package has been independently reviewed and is internally consistent through the operator checkpoint. P15A remains CLOSED while the confirmation checkpoint is hardened to permit three bounded exact-token attempts. P15B and Automatic remain closed.**
 
 ### P15A preparation closure
 
@@ -47,7 +47,13 @@ The correction introduces a dedicated no-hardware payload resolver that requires
 
 Authorization HEAD `6c43550001c44a04ad33ec96f8400e363d6c0ad8` passed full CI #1095 and was executed on the exact target. The audited wrapper and inner RC payload verified, the corrected package-root resolver succeeded, the initial watchdog baseline/integrity passed, the pre-start journal was absent, the read-only EC proof remained Firmware, and the normal GUI reached Healthy with Firmware mode plus CLOSED Manual/Automatic gates. The required runtime FF/FF samples and no-journal checks also passed.
 
-The attempt then failed closed at the explicit operator checkpoint because `Read-Host` did not receive the exact token `P15A-OBSERVED`. Consequently the harness did not observe the requested tray Exit and did not execute the post-exit FF/FF proof. No P15A PASS is claimed. The evidence directory reported by the target is `logs/p15a-startup-no-write_2026-10-01_175013`; its package identity remains pending target-side review. P15A execution authorization was re-closed immediately.
+The attempt then failed closed at the explicit operator checkpoint because `Read-Host` did not receive the exact token `P15A-OBSERVED`. Consequently the harness did not observe the requested tray Exit and did not execute the post-exit FF/FF proof. No P15A PASS is claimed. P15A execution authorization was re-closed immediately.
+
+The preserved evidence ZIP was independently reviewed at SHA-256 `fee6d9c00eab589c3c22f29de764d86e22475860caa5793c2cd5e454f3b23613`. Its embedded package manifest SHA-256 is `ed3ed2ba2d4d30a5df6c2a453fa6601b8a999890206838dd27eb284d944e21ce`; all seven evidence files represented inside the ZIP match their manifest hashes/lengths. The package binds source HEAD `6c43550001c44a04ad33ec96f8400e363d6c0ad8`, the exact target, exact audited RC identities, 2 pre-start + 5 runtime FF/FF samples, no journal evidence and no Manual/Automatic request. It contains no post-exit samples and therefore cannot support P15A PASS.
+
+### P15A operator-confirmation hardening
+
+A single non-matching or empty console response should not discard an otherwise healthy no-write run immediately. While P15A remains unauthorized, the harness now permits up to three bounded attempts to enter the exact case-sensitive token `P15A-OBSERVED`. Before each attempt it refreshes the GUI process and fails closed if the GUI has already exited. The token requirement itself is not weakened; after three mismatches the run still fails closed. This change performs no hardware operation and must pass full CI before it can be formally closed and separately reauthorized.
 
 ### P15A authorization window
 
@@ -63,7 +69,7 @@ P15B is intentionally not implemented or authorized by the P15A preparation. Its
 
 ## Current authorization boundary
 
-- P15A startup/no-write execution: **CLOSED AFTER OPERATOR-CONFIRMATION FAIL_CLOSED; EVIDENCE REVIEW PENDING**
+- P15A startup/no-write execution: **CLOSED DURING OPERATOR-CONFIRMATION HARDENING CI**
 - P15B Manual 30/30 execution: **CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
