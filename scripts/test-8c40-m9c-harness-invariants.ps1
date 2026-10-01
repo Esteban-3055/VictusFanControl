@@ -19,9 +19,11 @@ function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 
 if(-not [bool]$profile.lifecycle.watchdogM9CCodeCiPassed){throw 'M9C full harness CODE/CI PASS must remain recorded.'}
 if(-not [bool]$profile.watchdogM9ProductionIntegration.m9b.noWritePreflightPassed){throw 'M9C authorization requires formal M9B physical read-only PASS.'}
-if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalAuthorization.authorized){throw 'M9C physical authorization must be explicitly recorded.'}
-if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized){throw 'M9C controller execution gate must be open for the one authorized run.'}
-if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized){throw 'M9C temporary construction gate must be open for the one authorized run.'}
+if(-not [bool]$profile.watchdogM9ProductionIntegration.m9c.physicalPassed){throw 'M9C physical PASS must be formally recorded.'}
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalAuthorization.authorized) 'M9C physical authorization must be re-blocked after PASS.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.physicalExecutionAuthorized) 'M9C controller execution gate must be reclosed after PASS.'
+Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9c.qualificationConstructionAuthorized) 'M9C temporary construction gate must be reclosed after PASS.'
+if([string]$profile.watchdogM9ProductionIntegration.m9c.physicalEvidence.evidenceZipSha256 -cne '4851434d5cbf59b7ae326857fa9757803e855bd03ac447654eddb8c0a1a698f3'){throw 'M9C parent invariant evidence hash changed.'}
 Assert-False ([bool]$profile.lifecycle.watchdogRecoveryValidated) 'M9C harness preparation must not promote watchdog recovery.'
 Assert-False ([bool]$profile.watchdogM9ProductionIntegration.m9a.productionConstructionAuthorized) 'M9C harness preparation must not promote production construction.'
 if([string]$profile.watchdogM9ProductionIntegration.m9c.expectedPhysicalBranch -cne 'feature/victus-8c40-m9-canonical-prehardware'){throw 'M9C expected physical branch must stay on the canonical pre-hardware line.'}
@@ -113,7 +115,7 @@ foreach($needle in @(
 }
 Assert-NotContains $packager 'Remove-Item' 'M9C evidence packager must not delete historical evidence.'
 
-Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = true;' 'M9C controller compile-time physical gate must be open only for this authorization.'
-Assert-Contains $gate 'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = true;' 'M9C temporary construction gate must be open only for this authorization.'
+Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = false;' 'M9C controller compile-time physical gate must be reclosed after physical PASS.'
+Assert-Contains $gate 'public static readonly bool M9CPhysicalQualificationConstructionAuthorized = false;' 'M9C temporary construction gate must be reclosed after physical PASS.'
 
 Write-Host 'HP 8C40 M9C parent harness/failsafe/evidence invariant: PASS' -ForegroundColor Green
