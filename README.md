@@ -1,92 +1,77 @@
 # VictusFanControl
 
-Experimental adaptive fan-control project for HP Victus laptops, starting with the validated HP **88F8** development target.
+VictusFanControl is an experimental, fail-closed fan-control application for the exact validated HP Victus target **HP 8C40 / 9D0R1LA / BIOS F.18**.
 
-> **Current development status: v0.4 backend integration.** The hardware-validated HP 88F8 fan backend is integrated behind the central safety/authority coordinator. The automatic fan policy is still **OFF**, so launching the GUI does not acquire custom fan authority or issue fan-level commands.
+## Current target
 
-## Development target
+The active production-development target is:
 
-Write capability is intentionally narrower than Product ID alone:
+- HP Victus 15-fa1xxx family, validated SKU prefix `9D0R1LA`
+- motherboard `HP 8C40`, board revision `63.43`
+- BIOS `F.18`
+- Intel Core i7-13700H, 14 physical cores
+- NVIDIA GeForce RTX 4060 Laptop GPU
+- equal CPU/GPU fan commands only, physically validated from level **10 through 50**
 
-- HP Victus 16-d0515la family
-- system product: `Victus by HP Laptop 16-d0xxx`
-- SKU prefix: `62C37LA`
-- HP motherboard Product ID `88F8`, board version `88.58`
-- Intel Core i7-11800H
-- NVIDIA GeForce RTX 3060 Laptop GPU
-- normal reference configuration: external monitor connected, RTX 3060 intentionally active
+The older HP 88F8 target remains in the repository as historical/legacy support and qualification evidence. It is not the target of the current post-M9 work.
 
-No unique serial numbers are stored in this repository.
+## Current control state
 
-## Current architecture
+The M9 production watchdog path has been promoted for the exact HP 8C40 target. Normal backend construction now uses the target-bound M4 watchdog lease and the existing fail-closed ownership/restore protocol.
+
+User fan control is still deliberately **OFF by default**:
+
+- `control.enabledByDefault=false`
+- `automaticPolicyEnabled=false`
+- no automatic curve commands are issued during ordinary startup
+- M9C and M9D qualification-only construction/execution gates remain closed
+- post-M9 manual/automatic hardware validation is a separate later gate
+
+Launching the GUI therefore does not by itself request Custom authority.
+
+## Production safety contract
+
+The supported write path is intentionally narrow:
 
 ```text
-Telemetry
-  PawnIO Intel MSR / ACPI EC
-  NVIDIA NVML
-  Windows CPU load
-          |
-          v
-Runtime state + SafetyGate
-          |
-          v
+Telemetry (PawnIO Intel + ACPI EC + NVIDIA NVML + Windows load)
+        |
+        v
+Runtime state + SafetyGate + HP 8C40 thermal confirmation
+        |
+        v
 FanControlCoordinator
-  Firmware / Custom / Restoring / Faulted
-          |
-          v
-Hp88F8FanControlBackend
-  WMI SetFanLevel
-  EC setpoint acknowledgement
-  dual-tachometer acknowledgement
-  FF,FF -> LegacyDefault restore
-          |
-          v
-HP firmware / fans
+        |
+        v
+HP 8C40 production watchdog lease
+        |
+        v
+Hp8C40FanControlBackend
+        |
+        v
+HP WMI SetFanLevel -> EC setpoint ACK -> dual-tach feedback
 ```
 
-The GUI creates this route, but no adaptive policy currently calls `TryEnterCustomAsync` or `ApplyAsync`. HP firmware therefore remains authoritative during ordinary GUI use.
+Core invariants are:
 
-## Validated target fan observations
+- CPU and GPU fan levels are always equal.
+- Validated fan envelope is 10..50; level 0/fan-stop is not used.
+- EC 0x62/0x63 are diagnostic read-only; there are no arbitrary EC writes.
+- GPU >= 87 C and CPU >= 99 C trigger immediate firmware handoff.
+- HP 8C40 CPU 95..98.x C requires five fresh consecutive samples before effective thermal preemption.
+- Missing/stale/implausible telemetry, ownership loss, watchdog failure, lifecycle fencing, or backend failure fail closed.
+- Unchanged fan targets are not intended to be continuously retransmitted.
+- Strong restore is firmware FF/FF + LegacyDefault + stable FF/FF + watchdog RELEASE + journal absence.
 
-| Requested WMI fan level | CPU fan | GPU fan | Notes |
-|---:|---:|---:|---|
-| 14 | ~1,400 RPM | ~1,400 RPM | Stable low-speed point; restart-from-rest still needs dedicated validation |
-| 30 | ~3,000 RPM | ~3,000 RPM | Hardware write/ack/restore test passed |
-| 50 | ~4,330 RPM | ~4,670 RPM | Different physical ceilings |
+## Adaptive policy status
 
-At level 30 the two fans converged near the same physical RPM while EC rate readback was approximately 75% CPU / 68% GPU. The final controller will therefore use one shared physical RPM target with independent per-fan feedback/compensation rather than assuming equal low-level drive implies equal RPM.
+The hardware-independent adaptive policy engine and offline shadow/replay tooling exist and are tested. They consume CPU/GPU temperature, power and load, choose a single equal fan demand, apply bounded slew/decrease confirmation/deadband, and reject duplicate/out-of-order/gapped telemetry.
 
-## Hardware validations completed
-
-- direct PawnIO/NVML telemetry and both tachometers;
-- 30-minute current-reader health soak with 1629/1629 complete samples;
-- post-fix suspend/resume behavior tested successfully for 2 cycles (remaining 3 planned cycles were explicitly waived, so lifecycle hardware validation is partial);
-- WMI `SetFanLevel(30,30)`;
-- EC 0x34/0x35 command ownership;
-- stable dual-fan ~3000 RPM response;
-- firmware release `SetFanLevel(FF,FF) -> FanMode=LegacyDefault`;
-- OMEN Gaming Hub left open and CPU undervolt preserved before/after the bounded write test.
-
-## Safety integration
-
-The v0.4 backend fails closed on:
-
-- target fingerprint mismatch;
-- missing/stale/implausible telemetry;
-- thermal emergency gate;
-- command outside the central 14-50 range;
-- existing external fixed-level ownership during admission;
-- setpoint acknowledgement failure;
-- CPU or GPU tachometer non-response;
-- external setpoint overwrite;
-- suspend/resume freshness boundary;
-- backend exceptions.
-
-Suspend, safety loss and exit return authority to HP when the process is still executing. Forced process termination cannot be protected by managed cleanup and still requires firmware countdown/watchdog characterization before unattended automatic control is enabled.
+A production policy curve is **not yet physically validated** and automatic policy remains disabled. See `docs/ADAPTIVE_POLICY_PREPARATION.md` and `docs/POST_M9_SOFTWARE_ROADMAP.md`.
 
 ## Development setup
 
-Requirements: Windows 11 x64, .NET 8 SDK, Administrator terminal, PawnIO 2.2+, and the NVIDIA driver/NVML.
+Requirements: Windows 11 x64, .NET 8 SDK, Administrator terminal for hardware/service operations, PawnIO 2.2+, and the NVIDIA driver/NVML.
 
 ```powershell
 .\scripts\setup-pawnio-modules.ps1
@@ -94,9 +79,7 @@ Requirements: Windows 11 x64, .NET 8 SDK, Administrator terminal, PawnIO 2.2+, a
 .\scripts\run-gui.ps1
 ```
 
-The GUI reports backend readiness and fan authority, but **automatic control remains disabled**.
-
-See `docs/BACKEND_INTEGRATION_V0.4.md`, `docs/SAFETY.md`, `docs/PRE_CONTROL_CHECKLIST.md`, and `docs/OMENMON_COMPAT_AUDIT.md`.
+Software-only CI/self-tests do not authorize hardware execution. Physical gates must be opened separately and explicitly.
 
 ## License
 

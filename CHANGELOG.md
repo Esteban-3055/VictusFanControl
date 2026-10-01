@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — post-M9 software RC preparation
+
+- P10: synchronize repository documentation/profile state after HP 8C40 M9 production-watchdog promotion.
+- Keep default control and automatic/adaptive policy disabled pending separate post-M9 target-side validation.
+- Add a post-M9 invariant that prevents accidental reopening of consumed M9C/M9D qualification gates.
+
 All notable project changes will be documented here.
 
 ## [Unreleased]

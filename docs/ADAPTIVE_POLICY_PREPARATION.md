@@ -81,10 +81,9 @@ This work does **not**:
 - enable automatic/adaptive control.
 
 The production profile remains `enabledByDefault=false`,
-`automaticPolicyEnabled=false` and `WatchdogRecoveryValidated=false`.
+`automaticPolicyEnabled=false`; after formal M9 promotion, `WatchdogRecoveryValidated=true` while user/adaptive control remains separately blocked.
 
-Hardware integration remains blocked after M8 physical closure until an explicit post-M8
-watchdog/race promotion gate and a separate policy-integration gate are closed. Offline shadow replay may
+The historical M8-era watchdog/race blocker is now closed by M9 promotion. Adaptive hardware execution remains blocked by a separate post-M9 policy-integration and target-side validation gate. Offline shadow replay may
 evaluate recorded telemetry, but it cannot acquire fan authority or execute its notional intents.
 
 ## Code/CI closure
@@ -103,3 +102,8 @@ The hardware-independent engine and its isolation boundary are **CODE/CI PASS** 
 
 No production curve has been defined or validated. The engine remains disconnected from the
 GUI, coordinator and HP backend; automatic/adaptive policy remains OFF.
+
+
+## Current post-M9 status
+
+The pure engine and offline shadow/replay layers remain valid. M9 has promoted the exact-target production watchdog path, but this does not authorize adaptive control. P10-P14 may connect and productize the software path only while all post-M9 manual/automatic hardware execution gates remain closed. See `POST_M9_SOFTWARE_ROADMAP.md`.
