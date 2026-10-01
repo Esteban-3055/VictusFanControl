@@ -71,6 +71,10 @@ Closed in CI: version `0.4.0-rc.1` is centralized, GUI and production watchdog p
 
 Closed in CI #1078: the pinned PawnIO.Modules 0.2.11 archive was hash-verified, only the required module binaries entered the package, every payload file was SHA-256 manifested, and two independent builds produced identical ZIP SHA-256 `603ac7b2ca6816fe00002598410983ba031529ec168a70c5ec59041e5a71756c`. Artifact retention remains P14.4.
 
+### P14.4 — retained CI artifact
+
+Closed from implementation HEAD `1c7ee997b5bbac02eb89e1c7d3f91e7130828c1d` after GitHub Actions #1080 SUCCESS. Artifact ID `11186116708` was retained for 30 days, downloaded and independently verified as an exact three-file set (RC ZIP + `.sha256` + external attestation). GitHub wrapper digest and downloaded-wrapper SHA-256 both equal `eb42b9c7d8a5d29e7c30a4f35f19f7e07fecacb83dee26aaf638093cbf2826b2`. P14.5 remains the final software RC audit; no hardware gate was opened.
+
 ## P15 — first required target-side checkpoint
 
 P15 is deliberately outside this document's software authorization. The first target-side validation must begin with ordinary startup/control OFF, followed by a separately authorized one-shot manual 30/30 transaction and verified strong restore. Only after that may an automatic-policy physical gate be considered.

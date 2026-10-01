@@ -9,9 +9,22 @@ $writer = Get-Content -LiteralPath (Join-Path $root 'scripts\write-p14-artifact-
 $verifier = Get-Content -LiteralPath (Join-Path $root 'scripts\verify-p14-artifact-stage.ps1') -Raw
 $package = Get-Content -LiteralPath (Join-Path $root 'scripts\package-p14-rc.ps1') -Raw
 
-if ([string]$release.milestone -ne 'P14.3') { throw 'P14.4 implementation must preserve formal P14.3 state until CI evidence exists.' }
-if ([string]$release.status -ne 'P14_3_DETERMINISTIC_PACKAGE_CI_PASS_FORMALLY_CLOSED') { throw 'P14.4 implementation must not pre-claim closure.' }
-if ([bool]$release.productization.ciArtifactUploadImplemented) { throw 'P14.4 implementation commit must not pre-claim CI artifact upload validation.' }
+if ([string]$release.milestone -ne 'P14.4') { throw 'P14.4 formal closure milestone mismatch.' }
+if ([string]$release.status -ne 'P14_4_RETAINED_ARTIFACT_CI_PASS_FORMALLY_CLOSED') { throw 'P14.4 formal closure status mismatch.' }
+if (-not [bool]$release.productization.ciArtifactUploadImplemented) { throw 'P14.4 artifact upload implementation must be recorded.' }
+if (-not [bool]$release.productization.ciArtifactUploadCiValidated) { throw 'P14.4 retained artifact CI validation must be recorded.' }
+if (-not [bool]$release.productization.externalArtifactAttestationImplemented) { throw 'P14.4 external attestation implementation must be recorded.' }
+if ([int]$release.productization.ciArtifactRetentionDays -ne 30) { throw 'P14.4 artifact retention mismatch.' }
+if (-not [bool]$release.productization.artifactClosure.closed -or [string]$release.productization.artifactClosure.result -ne 'PASS') { throw 'P14.4 artifact closure must be PASS.' }
+if ([string]$release.productization.artifactClosure.implementationHead -ne '1c7ee997b5bbac02eb89e1c7d3f91e7130828c1d') { throw 'P14.4 closure implementation HEAD mismatch.' }
+if ([int]$release.productization.artifactClosure.sourceCiRunNumber -ne 1080 -or [long]$release.productization.artifactClosure.sourceCiRunId -ne 36907848705) { throw 'P14.4 closure CI identity mismatch.' }
+if ([long]$release.productization.artifactClosure.artifactId -ne 11186116708) { throw 'P14.4 closure artifact ID mismatch.' }
+if ([string]$release.productization.artifactClosure.githubArtifactDigest -ne 'sha256:eb42b9c7d8a5d29e7c30a4f35f19f7e07fecacb83dee26aaf638093cbf2826b2') { throw 'P14.4 closure wrapper digest mismatch.' }
+if ([string]$release.productization.artifactClosure.downloadedArtifactSha256 -ne 'eb42b9c7d8a5d29e7c30a4f35f19f7e07fecacb83dee26aaf638093cbf2826b2') { throw 'P14.4 downloaded wrapper digest mismatch.' }
+if ([string]$release.productization.artifactClosure.payloadZipSha256 -ne 'e0ceb47c4b3be61c98f2d494b652fb546bd0d7624b7e5f452e66627414376d65') { throw 'P14.4 closure payload digest mismatch.' }
+if ([int]$release.productization.artifactClosure.artifactFileCount -ne 3) { throw 'P14.4 closure artifact file count mismatch.' }
+if (-not [bool]$release.productization.artifactClosure.retainedArtifactDownloadedAndVerified) { throw 'P14.4 retained artifact must have been downloaded and verified.' }
+if ([bool]$release.productization.artifactClosure.hardwareExecution) { throw 'P14.4 must record zero hardware execution.' }
 if ([bool]$release.productization.finalSoftwareRcAuditClosed) { throw 'P14.4 must not close P14.5.' }
 
 Assert-Contains $workflow 'HP 8C40 P14.4 final retained artifact verification' 'P14.4 final pre-upload verification step missing.'
@@ -41,4 +54,4 @@ Assert-NotContains $verifier 'SetFanLevel' 'P14.4 verifier must not contain fan-
 Assert-NotContains $writer 'sc.exe' 'P14.4 writer must not mutate services.'
 Assert-NotContains $verifier 'sc.exe' 'P14.4 verifier must not mutate services.'
 
-Write-Host 'HP 8C40 P14.4 CI artifact implementation invariant: PASS' -ForegroundColor Green
+Write-Host 'HP 8C40 P14.4 retained artifact invariant: PASS' -ForegroundColor Green

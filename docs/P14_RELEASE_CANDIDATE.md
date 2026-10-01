@@ -94,3 +94,15 @@ Identity is deliberately split into three layers:
 The retained artifact has a source-bound name `VictusFanControl-0.4.0-rc.1-win-x64-<sourceHead>`, contains exactly the RC ZIP, its `.sha256`, and the external attestation, and uses a documented 30-day retention period. The workflow performs a final stage verification after all self-tests and only then uploads the artifact with missing-file behavior set to error.
 
 The implementation commit deliberately leaves the machine-readable P14 state at the formally closed P14.3 boundary until a real Actions run has completed and the retained artifact has been queried/downloaded and verified. Only a separate closure commit may then record P14.4 as CI-validated. P14.4 does not enable Manual or Automatic execution and performs no target-side hardware test.
+
+### P14.4 formal closure
+
+Implementation source HEAD: `1c7ee997b5bbac02eb89e1c7d3f91e7130828c1d`.
+
+GitHub Actions validation: **#1080**, run ID `36907848705`, **SUCCESS**.
+
+The run retained artifact ID `11186116708`, named `VictusFanControl-0.4.0-rc.1-win-x64-1c7ee997b5bbac02eb89e1c7d3f91e7130828c1d`, with 30-day retention. GitHub reported wrapper digest `sha256:eb42b9c7d8a5d29e7c30a4f35f19f7e07fecacb83dee26aaf638093cbf2826b2`.
+
+The retained artifact was downloaded and independently inspected. It contains exactly three files: the deterministic RC ZIP, its adjacent `.sha256`, and `P14-ARTIFACT-ATTESTATION.json`. The downloaded wrapper SHA-256 exactly matched GitHub's reported artifact digest. The inner RC ZIP SHA-256 was `e0ceb47c4b3be61c98f2d494b652fb546bd0d7624b7e5f452e66627414376d65`; the adjacent `.sha256` matched it; the external attestation bound that digest to source HEAD `1c7ee997...`, run #1080 and the pinned PawnIO.Modules 0.2.11 archive; and all 61 payload entries in `PACKAGE-MANIFEST.json` rehashed with no size/hash/list mismatches.
+
+This closes P14.4 only. The closure commit necessarily changes repository metadata that is included in subsequently rebuilt RC payloads, so later same-head ZIP/artifact digests are expected to differ. Their final identity remains external evidence; no digest is recursively embedded into the artifact it authenticates. P14.5 remains open. No physical fan execution was performed and no Manual/Automatic gate was opened.

@@ -16,8 +16,8 @@ $watchdogGate = Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\
 $p14doc = Get-Content -LiteralPath (Join-Path $root 'docs\P14_RELEASE_CANDIDATE.md') -Raw
 
 if ([int]$release.schemaVersion -ne 1) { throw 'P14.1 release contract schemaVersion must be 1.' }
-if ([string]$release.milestone -ne 'P14.3') { throw 'P14.3 milestone mismatch.' }
-if ([string]$release.status -ne 'P14_3_DETERMINISTIC_PACKAGE_CI_PASS_FORMALLY_CLOSED') { throw 'P14.3 status mismatch.' }
+if ([string]$release.milestone -ne 'P14.4') { throw 'P14.4 milestone mismatch.' }
+if ([string]$release.status -ne 'P14_4_RETAINED_ARTIFACT_CI_PASS_FORMALLY_CLOSED') { throw 'P14.4 status mismatch.' }
 if ([string]$release.targetProfileId -ne 'HP-8C40-9D0R1LA-F18') { throw 'P14.1 exact target mismatch.' }
 
 if ([string]$release.p13Baseline.head -ne '7395a8c14afcaf352ad5e5be48f66c897f03fd2e') { throw 'P14.1 P13 baseline HEAD mismatch.' }
@@ -64,9 +64,25 @@ if ([int]$release.productization.packageClosure.sourceCiRunNumber -ne 1078) { th
 if ([long]$release.productization.packageClosure.sourceCiRunId -ne 36903426730) { throw 'P14.3 closure CI ID mismatch.' }
 if ([string]$release.productization.packageClosure.zipSha256 -ne '603ac7b2ca6816fe00002598410983ba031529ec168a70c5ec59041e5a71756c') { throw 'P14.3 closure ZIP SHA-256 mismatch.' }
 Assert-True (-not [bool]$release.productization.packageClosure.hardwareExecution) 'P14.3 closure must record no hardware execution.'
-Assert-True (-not [bool]$release.productization.ciArtifactUploadImplemented) 'P14.3 must not claim P14.4 CI artifact upload.'
-Assert-True (-not [bool]$release.productization.finalSoftwareRcAuditClosed) 'P14.1 must not claim final P14 closure.'
+Assert-True ([bool]$release.productization.ciArtifactUploadImplemented) 'P14.4 CI artifact upload must be implemented.'
+Assert-True ([bool]$release.productization.ciArtifactUploadCiValidated) 'P14.4 retained artifact must be CI validated.'
+Assert-True ([bool]$release.productization.externalArtifactAttestationImplemented) 'P14.4 external attestation must be implemented.'
+if ([int]$release.productization.ciArtifactRetentionDays -ne 30) { throw 'P14.4 retention mismatch.' }
+if (-not [bool]$release.productization.artifactClosure.closed) { throw 'P14.4 artifact closure must be closed.' }
+if ([string]$release.productization.artifactClosure.result -ne 'PASS') { throw 'P14.4 artifact closure result must be PASS.' }
+if ([string]$release.productization.artifactClosure.implementationHead -ne '1c7ee997b5bbac02eb89e1c7d3f91e7130828c1d') { throw 'P14.4 implementation HEAD mismatch.' }
+if ([int]$release.productization.artifactClosure.sourceCiRunNumber -ne 1080) { throw 'P14.4 CI run number mismatch.' }
+if ([long]$release.productization.artifactClosure.sourceCiRunId -ne 36907848705) { throw 'P14.4 CI run ID mismatch.' }
+if ([long]$release.productization.artifactClosure.artifactId -ne 11186116708) { throw 'P14.4 retained artifact ID mismatch.' }
+if ([string]$release.productization.artifactClosure.githubArtifactDigest -ne 'sha256:eb42b9c7d8a5d29e7c30a4f35f19f7e07fecacb83dee26aaf638093cbf2826b2') { throw 'P14.4 GitHub artifact digest mismatch.' }
+if ([string]$release.productization.artifactClosure.payloadZipSha256 -ne 'e0ceb47c4b3be61c98f2d494b652fb546bd0d7624b7e5f452e66627414376d65') { throw 'P14.4 retained payload ZIP digest mismatch.' }
+Assert-True ([bool]$release.productization.artifactClosure.packageManifestVerified) 'P14.4 package manifest verification missing.'
+Assert-True ([bool]$release.productization.artifactClosure.sha256FileVerified) 'P14.4 adjacent SHA-256 verification missing.'
+Assert-True ([bool]$release.productization.artifactClosure.externalAttestationVerified) 'P14.4 external attestation verification missing.'
+Assert-True ([bool]$release.productization.artifactClosure.retainedArtifactDownloadedAndVerified) 'P14.4 retained artifact download verification missing.'
+Assert-True (-not [bool]$release.productization.artifactClosure.hardwareExecution) 'P14.4 must record no hardware execution.'
+Assert-True (-not [bool]$release.productization.finalSoftwareRcAuditClosed) 'P14.4 must leave P14.5 final audit open.'
 
 Assert-Contains $p14doc 'P14.1 — software readiness baseline' 'P14.1 documentation boundary missing.'
 
-Write-Host 'HP 8C40 P14.1 software readiness baseline invariant: PASS'
+Write-Host 'HP 8C40 P14 software readiness invariant: PASS'
