@@ -99,15 +99,23 @@ if($status -eq 'P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
     Assert-True ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P15B qualification controller authorization must be open.'
     $a=$contract.manual30.authorization
     if([string]$a.scope -cne 'P15B one-shot Manual equal 30/30 plus production strong restore only' -or
-       [string]$a.basisHead -cne '0aee1b32f1bc063b31083e42c826e0eb87d35546' -or
-       [int]$a.basisCiRunNumber -ne 1104 -or
-       [long]$a.basisCiRunId -ne 36930713902 -or
-       [string]$a.basisCiResult -cne 'SUCCESS'){throw 'P15B authorization basis mismatch.'}
+       [string]$a.basisHead -cne '4ed93815b9bb87b422fb354a3b79ac6f979240a4' -or
+       [int]$a.basisCiRunNumber -ne 1109 -or
+       [long]$a.basisCiRunId -ne 36933283887 -or
+       [string]$a.basisCiResult -cne 'SUCCESS'){throw 'P15B corrected authorization basis mismatch.'}
+    Assert-True ([bool]$a.serviceBaselineCorrectionClosed) 'P15B corrected authorization requires closed service-baseline correction.'
+    if([string]$a.serviceBaselineCorrectionImplementationHead -cne 'b24308e6b72e50e9a2ae40501c95f77bcfcf9f43' -or [int]$a.serviceBaselineCorrectionCiRunNumber -ne 1108){throw 'P15B corrected authorization correction identity mismatch.'}
     Assert-True ([bool]$a.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P15B authorization must require same-HEAD CI success.'
     foreach($p in @('p15aAuthorizationOpened','userFacingManualGateOpened','automaticAuthorizationOpened','candidateCurveAuthorizationOpened','m9cQualificationConstructionOpened','m9dQualificationConstructionOpened','hardwareExecutionAtAuthorizationCommit')){Assert-False ([bool]$a.$p) ("P15B authorization opened forbidden scope: {0}" -f $p)}
-    $failedAuth=@($a.failedSameHeadCiHistory)
-    if($failedAuth.Count -ne 1 -or [int]$failedAuth[0].runNumber -ne 1105 -or [long]$failedAuth[0].runId -ne 36931207120 -or [string]$failedAuth[0].head -cne 'cf7ba5cd0ec31aeddd62cc7f86160c9328e3c82d' -or [string]$failedAuth[0].result -cne 'FAILURE'){throw 'P15B failed authorization CI history mismatch.'}
+    $prev=$a.previousTargetAuthorization
+    if([string]$prev.authorizationHead -cne '6fe617693d4de54bfc709e07728c825f2246072d' -or [int]$prev.authorizationCiRunNumber -ne 1106 -or [long]$prev.authorizationCiRunId -ne 36931559263 -or [string]$prev.targetAttemptResult -cne 'FAIL_CLOSED'){throw 'P15B prior target authorization history mismatch.'}
+    Assert-False ([bool]$prev.physicalWriteExecuted) 'Prior P15B refused preflight must record no fan write.'
+    Assert-True ([bool]$prev.authorizationRevoked) 'Prior P15B authorization must have been revoked.'
+    $failedAuth=@($a.earlierAuthorizationBasis.failedSameHeadCiHistory)
+    if($failedAuth.Count -ne 1 -or [int]$failedAuth[0].runNumber -ne 1105 -or [long]$failedAuth[0].runId -ne 36931207120 -or [string]$failedAuth[0].head -cne 'cf7ba5cd0ec31aeddd62cc7f86160c9328e3c82d' -or [string]$failedAuth[0].result -cne 'FAILURE'){throw 'P15B earlier failed authorization CI history mismatch.'}
     Assert-False ([bool]$failedAuth[0].hardwareExecution) 'Failed P15B authorization CI must record no hardware execution.'
+    Assert-True ([bool]$contract.manual30.serviceBaselineCorrection.ciValidated) 'Fresh P15B authorization requires CI-validated service-baseline correction.'
+    Assert-True ([bool]$contract.manual30.serviceBaselineCorrection.closure.closed) 'Fresh P15B authorization requires formally closed service-baseline correction.'
     Assert-Contains $controller 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15B authorized state requires dedicated qualification controller gate open.'
 }else{
     Assert-False ([bool]$contract.manual30.executionAuthorized) 'P15B physical execution must remain CLOSED during preparation/closure.'

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15B_MANUAL30_SERVICE_BASELINE_CORRECTION_CI_PASS_GATE_CLOSED",
+  "status": "P15B_MANUAL30_AUTHORIZED_AWAITING_SAME_HEAD_CI",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -316,8 +316,8 @@
       ],
       "hardwareExecution": false
     },
-    "executionAuthorized": false,
-    "controllerPhysicalExecutionAuthorized": false,
+    "executionAuthorized": true,
+    "controllerPhysicalExecutionAuthorized": true,
     "physicalPassed": false,
     "evidenceClosed": false,
     "equalLevel": 30,
@@ -377,10 +377,13 @@
     },
     "authorization": {
       "scope": "P15B one-shot Manual equal 30/30 plus production strong restore only",
-      "basisHead": "0aee1b32f1bc063b31083e42c826e0eb87d35546",
-      "basisCiRunNumber": 1104,
-      "basisCiRunId": 36930713902,
+      "basisHead": "4ed93815b9bb87b422fb354a3b79ac6f979240a4",
+      "basisCiRunNumber": 1109,
+      "basisCiRunId": 36933283887,
       "basisCiResult": "SUCCESS",
+      "serviceBaselineCorrectionClosed": true,
+      "serviceBaselineCorrectionImplementationHead": "b24308e6b72e50e9a2ae40501c95f77bcfcf9f43",
+      "serviceBaselineCorrectionCiRunNumber": 1108,
       "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
       "p15aAuthorizationOpened": false,
       "userFacingManualGateOpened": false,
@@ -389,17 +392,33 @@
       "m9cQualificationConstructionOpened": false,
       "m9dQualificationConstructionOpened": false,
       "hardwareExecutionAtAuthorizationCommit": false,
-      "failedSameHeadCiHistory": [
-        {
-          "runNumber": 1105,
-          "runId": 36931207120,
-          "head": "cf7ba5cd0ec31aeddd62cc7f86160c9328e3c82d",
-          "result": "FAILURE",
-          "cause": "Legacy P15A invariant still required P15B Manual authorization to remain closed after P15A had already been formally closed.",
-          "failureStep": "HP 8C40 P15A startup no-write preparation invariant",
-          "hardwareExecution": false
-        }
-      ]
+      "previousTargetAuthorization": {
+        "authorizationHead": "6fe617693d4de54bfc709e07728c825f2246072d",
+        "authorizationCiRunNumber": 1106,
+        "authorizationCiRunId": 36931559263,
+        "authorizationCiResult": "SUCCESS",
+        "targetAttemptResult": "FAIL_CLOSED",
+        "failure": "P15B requires M4 Manual/Stopped/PID0; observed Manual/Running/PID7980.",
+        "physicalWriteExecuted": false,
+        "authorizationRevoked": true
+      },
+      "earlierAuthorizationBasis": {
+        "basisHead": "0aee1b32f1bc063b31083e42c826e0eb87d35546",
+        "basisCiRunNumber": 1104,
+        "basisCiRunId": 36930713902,
+        "basisCiResult": "SUCCESS",
+        "failedSameHeadCiHistory": [
+          {
+            "runNumber": 1105,
+            "runId": 36931207120,
+            "head": "cf7ba5cd0ec31aeddd62cc7f86160c9328e3c82d",
+            "result": "FAILURE",
+            "cause": "Legacy P15A invariant still required P15B Manual authorization to remain closed after P15A had already been formally closed.",
+            "failureStep": "HP 8C40 P15A startup no-write preparation invariant",
+            "hardwareExecution": false
+          }
+        ]
+      }
     },
     "priorFailClosedAttempt": {
       "sourceHead": "6fe617693d4de54bfc709e07728c825f2246072d",

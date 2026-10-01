@@ -23,7 +23,7 @@ The test requires: exact target fingerprint; local HEAD equal to upstream on the
 
 The operator must not select Manual or Automatic during P15A. The harness itself contains no fan command, no firmware-restore command, no service-control command, no watchdog lease acquisition, no power transition and no `git clean`. Normal GUI startup is allowed to start the already-installed Manual watchdog service; the harness never starts/stops/reconfigures it directly. Evidence records every successful EC setpoint read, any detected journal/non-firmware evidence, service command line/process identity and binary/module hashes instead of pre-claiming absence for observations that were not made.
 
-Current state: **P15A remains formally closed/re-blocked. The P15B inherited-running watchdog correction has passed full CI and is formally closed, with both P15B physical gates still CLOSED pending a fresh separate authorization.**
+Current state: **P15A remains formally closed/re-blocked. The P15B inherited-running watchdog correction is formally closed and a fresh P15B one-shot 30/30 authorization now opens only the dedicated harness/controller gates. Target execution remains forbidden until this exact authorization HEAD itself completes full CI successfully.**
 
 ### P15A preparation closure
 
@@ -97,12 +97,14 @@ The original P15B preflight incorrectly treated only `Manual/Stopped/PID0` as va
 
 P15B is re-blocked. The correction now implements two accepted baselines: exact qualified `Manual/Stopped/PID0/LocalSystem`, or exact qualified `Manual/Running/Ready/LocalSystem` with journal absent and stable PID/start identity. A pure resolver plus synthetic CI self-test covers both accepted states and rejects Running-without-Ready, retained-journal, wrong start mode and inconsistent PID states. The physical harness revalidates the inherited Running identity before the operator token and again after the token, reuses that exact watchdog process instead of restarting it, and leaves it Running after a successful strong restore. If the initial state was Stopped, the harness starts it only for P15B and returns it to Stopped. Thus no operator service manipulation is required.
 
-Correction status: **CI PASS / formally closed / physical gates CLOSED**. Implementation HEAD `b24308e6b72e50e9a2ae40501c95f77bcfcf9f43` passed full GitHub Actions **#1108**, run ID `36932942781`, including PowerShell syntax, P15A/P15B invariants, the new service-baseline resolver self-test, Windows PowerShell 5.1 compatibility, warnings-as-errors build, and the retained RC regression path. No target-side physical execution occurred in this correction CI. A fresh separate P15B authorization is required.
+Correction status: **CI PASS / formally closed**. Implementation HEAD `b24308e6b72e50e9a2ae40501c95f77bcfcf9f43` passed full GitHub Actions **#1108**, run ID `36932942781`. Formal correction closure HEAD `4ed93815b9bb87b422fb354a3b79ac6f979240a4` then passed **#1109**, run ID `36933283887`.
+
+A fresh authorization now opens only the dedicated P15B harness/controller barriers. Its basis is the corrected closure HEAD `4ed93815b9bb87b422fb354a3b79ac6f979240a4` / CI #1109 SUCCESS. It does not reopen P15A, user-facing Manual, Automatic, Candidate V1, M9C or M9D. As before, **the authorization HEAD itself must complete full CI successfully before any target-side execution**.
 
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
-- P15B Manual 30/30 execution: **SERVICE-BASELINE CORRECTION CI PASS FORMALLY CLOSED / PHYSICAL GATES CLOSED**
+- P15B Manual 30/30 execution: **FRESHLY REAUTHORIZED AFTER CORRECTION / AWAITING SAME-HEAD CI SUCCESS**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**
