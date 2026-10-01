@@ -17,7 +17,7 @@ $p14doc = Get-Content -LiteralPath (Join-Path $root 'docs\P14_RELEASE_CANDIDATE.
 
 if ([int]$release.schemaVersion -ne 1) { throw 'P14.1 release contract schemaVersion must be 1.' }
 if ([string]$release.milestone -ne 'P14.3') { throw 'P14.3 milestone mismatch.' }
-if ([string]$release.status -ne 'P14_3_DETERMINISTIC_PACKAGE_IMPLEMENTED_AWAITING_CI') { throw 'P14.3 status mismatch.' }
+if ([string]$release.status -ne 'P14_3_DETERMINISTIC_PACKAGE_CI_PASS_FORMALLY_CLOSED') { throw 'P14.3 status mismatch.' }
 if ([string]$release.targetProfileId -ne 'HP-8C40-9D0R1LA-F18') { throw 'P14.1 exact target mismatch.' }
 
 if ([string]$release.p13Baseline.head -ne '7395a8c14afcaf352ad5e5be48f66c897f03fd2e') { throw 'P14.1 P13 baseline HEAD mismatch.' }
@@ -56,8 +56,15 @@ if ([string]$release.productization.publishLayoutClosure.sourceCiResult -ne 'SUC
 Assert-True (-not [bool]$release.productization.publishLayoutClosure.hardwareExecution) 'P14.2 closure must record no hardware execution.'
 Assert-True ([bool]$release.productization.deterministicPackageImplemented) 'P14.3 deterministic packaging must be implemented.'
 Assert-True ([bool]$release.productization.sha256ManifestImplemented) 'P14.3 SHA-256 manifest must be implemented.'
-Assert-True (-not [bool]$release.productization.packageCiValidated) 'P14.3 implementation must not pre-claim package CI validation.'
-Assert-True (-not [bool]$release.productization.ciArtifactUploadImplemented) 'P14.1 must not claim CI artifact upload.'
+Assert-True ([bool]$release.productization.packageCiValidated) 'P14.3 package must be CI validated after formal closure.'
+if (-not [bool]$release.productization.packageClosure.closed) { throw 'P14.3 package closure must be recorded closed.' }
+if ([string]$release.productization.packageClosure.result -ne 'PASS') { throw 'P14.3 package closure result must be PASS.' }
+if ([string]$release.productization.packageClosure.sourceHead -ne '9ca006d98b369654ff1fd6ffc3fa7cb1c8745250') { throw 'P14.3 closure source HEAD mismatch.' }
+if ([int]$release.productization.packageClosure.sourceCiRunNumber -ne 1078) { throw 'P14.3 closure CI number mismatch.' }
+if ([long]$release.productization.packageClosure.sourceCiRunId -ne 36903426730) { throw 'P14.3 closure CI ID mismatch.' }
+if ([string]$release.productization.packageClosure.zipSha256 -ne '603ac7b2ca6816fe00002598410983ba031529ec168a70c5ec59041e5a71756c') { throw 'P14.3 closure ZIP SHA-256 mismatch.' }
+Assert-True (-not [bool]$release.productization.packageClosure.hardwareExecution) 'P14.3 closure must record no hardware execution.'
+Assert-True (-not [bool]$release.productization.ciArtifactUploadImplemented) 'P14.3 must not claim P14.4 CI artifact upload.'
 Assert-True (-not [bool]$release.productization.finalSoftwareRcAuditClosed) 'P14.1 must not claim final P14 closure.'
 
 Assert-Contains $p14doc 'P14.1 — software readiness baseline' 'P14.1 documentation boundary missing.'

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P14.3",
-  "status": "P14_3_DETERMINISTIC_PACKAGE_IMPLEMENTED_AWAITING_CI",
+  "status": "P14_3_DETERMINISTIC_PACKAGE_CI_PASS_FORMALLY_CLOSED",
   "scope": "release-candidate productization before any post-P13 target-side execution",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p13Baseline": {
@@ -48,11 +48,24 @@
       "hardwareExecution": false
     },
     "externalInputsPinned": true,
-    "packageCiValidated": false,
+    "packageCiValidated": true,
     "packageName": "VictusFanControl-0.4.0-rc.1-win-x64.zip",
     "deterministicZipTimestampUtc": "2000-01-01T00:00:00Z",
     "pawnIoModulesVersion": "0.2.11",
-    "pawnIoModulesArchiveSha256": "43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4"
+    "pawnIoModulesArchiveSha256": "43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4",
+    "packageClosure": {
+      "closed": true,
+      "result": "PASS",
+      "sourceHead": "9ca006d98b369654ff1fd6ffc3fa7cb1c8745250",
+      "sourceCiRunNumber": 1078,
+      "sourceCiRunId": 36903426730,
+      "sourceCiResult": "SUCCESS",
+      "reproducibilityBuilds": 2,
+      "zipSha256": "603ac7b2ca6816fe00002598410983ba031529ec168a70c5ec59041e5a71756c",
+      "manifestVerified": true,
+      "externalInputArchiveSha256Verified": true,
+      "hardwareExecution": false
+    }
   },
   "version": "0.4.0-rc.1"
 }

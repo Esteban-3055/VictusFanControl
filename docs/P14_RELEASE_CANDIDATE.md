@@ -69,3 +69,14 @@ The network fetch is separated from packaging: `fetch-p14-external-inputs.ps1` d
 `PACKAGE-MANIFEST.json` records SHA-256 and size for every payload file. The ZIP is created with files sorted by normalized relative path, a fixed UTC ZIP timestamp (`2000-01-01T00:00:00Z`) and no-compression entries to minimize host-dependent byte variation. A separate `.sha256` file authenticates the complete ZIP.
 
 CI builds two packages independently from the same publish tree and pinned external archive, verifies both manifests, and requires the complete ZIP SHA-256 values to be identical. P14.3 still does not upload a retained GitHub artifact; that is P14.4.
+
+
+### P14.3 formal closure
+
+Implementation source HEAD: `9ca006d98b369654ff1fd6ffc3fa7cb1c8745250`.
+
+Full GitHub Actions validation: **#1078**, run ID `36903426730`, **SUCCESS**.
+
+CI independently built the RC ZIP twice from the same source and pinned external input, verified every manifest entry, and obtained the identical ZIP SHA-256 `603ac7b2ca6816fe00002598410983ba031529ec168a70c5ec59041e5a71756c` for both builds. The pinned PawnIO.Modules archive hash was verified before extraction.
+
+This closes P14.3 only. The ZIP is reproducible and integrity-manifested, but GitHub Actions does not yet retain it as a downloadable workflow artifact; artifact publication/retention is P14.4. No physical fan execution was performed.

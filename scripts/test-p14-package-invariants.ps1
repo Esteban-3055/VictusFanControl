@@ -11,7 +11,12 @@ if ([string]$release.milestone -ne 'P14.3') { throw 'P14.3 release milestone mis
 if (-not [bool]$release.productization.deterministicPackageImplemented) { throw 'P14.3 deterministic package must be implemented.' }
 if (-not [bool]$release.productization.sha256ManifestImplemented) { throw 'P14.3 SHA-256 manifest must be implemented.' }
 if (-not [bool]$release.productization.externalInputsPinned) { throw 'P14.3 external inputs must be pinned.' }
-if ([bool]$release.productization.packageCiValidated) { throw 'P14.3 implementation must not pre-claim package CI validation.' }
+if (-not [bool]$release.productization.packageCiValidated) { throw 'P14.3 formal closure requires package CI validation.' }
+if (-not [bool]$release.productization.packageClosure.closed) { throw 'P14.3 package closure must be closed.' }
+if ([string]$release.productization.packageClosure.sourceHead -ne '9ca006d98b369654ff1fd6ffc3fa7cb1c8745250') { throw 'P14.3 package closure source HEAD mismatch.' }
+if ([int]$release.productization.packageClosure.sourceCiRunNumber -ne 1078) { throw 'P14.3 package closure CI number mismatch.' }
+if ([long]$release.productization.packageClosure.sourceCiRunId -ne 36903426730) { throw 'P14.3 package closure CI ID mismatch.' }
+if ([string]$release.productization.packageClosure.zipSha256 -ne '603ac7b2ca6816fe00002598410983ba031529ec168a70c5ec59041e5a71756c') { throw 'P14.3 package closure ZIP SHA-256 mismatch.' }
 if ([bool]$release.productization.ciArtifactUploadImplemented) { throw 'P14.3 must not pre-claim P14.4 artifact upload.' }
 if ([string]$external.pawnIoModules.version -ne '0.2.11') { throw 'Unexpected PawnIO.Modules version.' }
 if ([string]$external.pawnIoModules.sha256 -ne '43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4') { throw 'Pinned PawnIO archive SHA-256 changed.' }

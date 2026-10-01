@@ -69,7 +69,7 @@ Closed in CI: version `0.4.0-rc.1` is centralized, GUI and production watchdog p
 
 ### P14.3 — deterministic package and SHA-256 manifest
 
-Implemented pending CI closure: the pinned PawnIO.Modules 0.2.11 archive is hash-verified, only the required module binaries enter the package, every payload file is SHA-256 manifested, and the RC ZIP is produced with normalized ordering/timestamps. CI performs a two-build byte-for-byte ZIP reproducibility check. Artifact retention remains P14.4.
+Closed in CI #1078: the pinned PawnIO.Modules 0.2.11 archive was hash-verified, only the required module binaries entered the package, every payload file was SHA-256 manifested, and two independent builds produced identical ZIP SHA-256 `603ac7b2ca6816fe00002598410983ba031529ec168a70c5ec59041e5a71756c`. Artifact retention remains P14.4.
 
 ## P15 — first required target-side checkpoint
 
