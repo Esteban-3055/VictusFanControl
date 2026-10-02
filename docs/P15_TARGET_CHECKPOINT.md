@@ -139,11 +139,13 @@ The P15C parent harness never starts, stops or reconfigures the M4 service and n
 
 Corrected implementation HEAD `2520cfc67ed416e6497310e31030b31eadc24645` then passed full CI **#1118 SUCCESS** (run `36942085290`). A subsequent safety review intentionally keeps preparation open: the P13 observer records an interaction only after the production-controller call returns, so an incorrect Manual level or a second Apply could otherwise reach the adapter before post-action invalidation. The pending hardening adds a synchronous pre-action fence, serializes control interactions, fixes the qualification UI at level 30, blocks wrong/duplicate/out-of-order actions before adapter access, binds the parent OWNED marker to the exact GUI PID/start identity, and expands the evidence manifest with the startup gate, user gate, production adapter and failsafe source identities. Both P15C physical gates remain CLOSED throughout this hardening. The first hardening commit `b7ed2871a9cab0bbefb3375e0ea005a800054a61` is preserved with software-only CI **#1119 FAILURE** (run `36949301023`): its static invariant looked for two `P13FanControlSurface` pre-action markers in `MainForm.cs`. No hardware execution occurred and both P15C physical gates remained closed; the correction scopes those checks to the source file that actually owns the fence.
 
+The corrected hardening HEAD `356275b56bdfe3324b054e2b79f2bbbf3f4e5067` passed the full workflow in **#1120 SUCCESS** (run `36949763034`), including PowerShell syntax, P13/P15A/P15B/P15C invariants, P15C evidence packaging, Windows PowerShell 5.1 compatibility and warnings-as-errors build. Preparation is therefore formally closed in a separate gate-closed commit. No physical execution occurred during preparation or closure; the dedicated P15C parent/GUI gates remain false until a later separate authorization.
+
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
 - P15B Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED / CLOSURE CI #1116 SUCCESS**
-- P15C real-GUI Manual 30/30 execution: **PREPARATION CI PENDING / BOTH DEDICATED PHYSICAL GATES CLOSED**
+- P15C real-GUI Manual 30/30 execution: **PREPARATION FORMALLY CLOSED / BOTH DEDICATED PHYSICAL GATES CLOSED; separate authorization required**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**

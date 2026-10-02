@@ -39,16 +39,23 @@ Assert-False ([bool]$contract.manual30.controllerPhysicalExecutionAuthorized) 'P
 $g=$contract.guiManual
 Assert-True ([bool]$g.preparationImplemented) 'P15C preparation must be implemented.'
 $failedPreparation=@($g.preparationClosure.failedCiHistoryPreserved)
-if($failedPreparation.Count -ne 1 -or
+if($failedPreparation.Count -ne 2 -or
    [int]$failedPreparation[0].runNumber -ne 1117 -or
    [long]$failedPreparation[0].runId -ne 36941758398 -or
    [string]$failedPreparation[0].head -cne '33bb63828561ff88664f1896f76a8e2c95863698' -or
    [string]$failedPreparation[0].result -cne 'FAILURE' -or
-   [string]$failedPreparation[0].failureStep -cne 'Build'){
+   [string]$failedPreparation[0].failureStep -cne 'Build' -or
+   [int]$failedPreparation[1].runNumber -ne 1119 -or
+   [long]$failedPreparation[1].runId -ne 36949301023 -or
+   [string]$failedPreparation[1].head -cne 'b7ed2871a9cab0bbefb3375e0ea005a800054a61' -or
+   [string]$failedPreparation[1].result -cne 'FAILURE' -or
+   [string]$failedPreparation[1].failureStep -cne 'HP 8C40 P15C real-GUI Manual preparation invariant'){
     throw 'P15C failed preparation CI history mismatch.'
 }
-Assert-False ([bool]$failedPreparation[0].hardwareExecution) 'P15C failed preparation CI must record no hardware execution.'
-Assert-False ([bool]$failedPreparation[0].physicalGatesOpened) 'P15C failed preparation CI must record physical gates closed.'
+foreach($entry in $failedPreparation){
+    Assert-False ([bool]$entry.hardwareExecution) 'P15C failed preparation CI must record no hardware execution.'
+    Assert-False ([bool]$entry.physicalGatesOpened) 'P15C failed preparation CI must record physical gates closed.'
+}
 if([string]$g.prerequisite -cne 'P15B Manual30 physical PASS formally closed'){throw 'P15C prerequisite mismatch.'}
 if([string]$g.expectedBranch -cne 'feature/victus-8c40-p15-hardware-checkpoint'){throw 'P15C branch contract mismatch.'}
 if([string]$g.requiredToken -cne '8C40-P15C-GUI-MANUAL30'){throw 'P15C token contract mismatch.'}
@@ -85,6 +92,28 @@ if($status -eq 'P15C_GUI_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
 if($status -eq 'P15C_GUI_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED'){
     Assert-True ([bool]$g.preparationCiValidated) 'Closed P15C preparation must be CI validated.'
     Assert-True ([bool]$g.preparationClosure.closed) 'Closed P15C preparation must record closure.'
+    $pc=$g.preparationClosure
+    if([string]$pc.result -cne 'PASS' -or
+       [string]$pc.implementationHead -cne '356275b56bdfe3324b054e2b79f2bbbf3f4e5067' -or
+       [int]$pc.sourceCiRunNumber -ne 1120 -or
+       [long]$pc.sourceCiRunId -ne 36949763034 -or
+       [string]$pc.sourceCiResult -cne 'SUCCESS'){
+        throw 'P15C preparation closure CI identity mismatch.'
+    }
+    foreach($p in @('powerShellSyntaxValidated','p15aInvariantValidated','p15bInvariantValidated','p15cInvariantValidated','p13SurfaceInvariantValidated','evidencePackagingSelfTestValidated','powerShell51CompatibilityValidated','warningsAsErrorsBuildValidated','preActionFenceHardeningValidated')){Assert-True ([bool]$pc.$p) ("P15C preparation closure missing validation: {0}" -f $p)}
+    Assert-False ([bool]$pc.hardwareExecution) 'P15C preparation closure must record no hardware execution.'
+    Assert-True ([bool]$hardening.ciValidated) 'P15C preparation closure requires CI-validated pre-action hardening.'
+    Assert-True ([bool]$hardening.closure.closed) 'P15C preparation closure requires formally closed pre-action hardening.'
+    $hc=$hardening.closure
+    if([string]$hc.result -cne 'PASS' -or
+       [string]$hc.implementationHead -cne '356275b56bdfe3324b054e2b79f2bbbf3f4e5067' -or
+       [int]$hc.sourceCiRunNumber -ne 1120 -or
+       [long]$hc.sourceCiRunId -ne 36949763034 -or
+       [string]$hc.sourceCiResult -cne 'SUCCESS'){
+        throw 'P15C pre-action hardening closure CI identity mismatch.'
+    }
+    foreach($p in @('p15cInvariantValidated','p13SurfaceInvariantValidated','evidencePackagingSelfTestValidated','powerShell51CompatibilityValidated','warningsAsErrorsBuildValidated')){Assert-True ([bool]$hc.$p) ("P15C pre-action hardening closure missing validation: {0}" -f $p)}
+    Assert-False ([bool]$hc.hardwareExecution) 'P15C pre-action hardening closure must record no hardware execution.'
     Assert-False ([bool]$g.executionAuthorized) 'Closed P15C preparation must keep harness gate closed.'
     Assert-False ([bool]$g.controllerPhysicalExecutionAuthorized) 'Closed P15C preparation must keep GUI qualification gate closed.'
     Assert-False ([bool]$g.physicalPassed) 'P15C preparation closure cannot pre-claim physical PASS.'
@@ -95,6 +124,8 @@ if($status -eq 'P15C_GUI_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED'){
 if($status -eq 'P15C_GUI_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
     Assert-True ([bool]$g.preparationCiValidated) 'P15C authorization requires CI-validated preparation.'
     Assert-True ([bool]$g.preparationClosure.closed) 'P15C authorization requires formally closed preparation.'
+    Assert-True ([bool]$hardening.ciValidated) 'P15C authorization requires CI-validated pre-action hardening.'
+    Assert-True ([bool]$hardening.closure.closed) 'P15C authorization requires formally closed pre-action hardening.'
     Assert-True ([bool]$g.executionAuthorized) 'P15C authorization must open only the dedicated parent harness gate.'
     Assert-True ([bool]$g.controllerPhysicalExecutionAuthorized) 'P15C authorization must open only the dedicated GUI qualification gate.'
     Assert-Contains $qualification 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15C authorized state requires qualification source gate open.'
