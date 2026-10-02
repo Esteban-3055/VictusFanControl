@@ -172,7 +172,11 @@ function Read-8C40Setpoint {
   $raw=(& dotnet $cli --probe-8c40-setpoint --modules-dir $modulesDir 2>&1|Out-String)
   if($LASTEXITCODE -ne 0){throw "P16 setpoint probe failed. Raw: $raw"}
   $line=($raw -split "[\r\n]+"|Where-Object{$_ -match '^setpoint CPU='}|Select-Object -Last 1)
-  $m=[regex]::Match([string]$line,'^setpoint CPU=(\d+) GPU=(\d+)
+  $m=[regex]::Match([string]$line,'^setpoint CPU=(\d+) GPU=(\d+)$')
+  if(-not $m.Success){throw "P16 could not parse setpoint probe. Raw: $raw"}
+  [pscustomobject]@{timestampUtc=(Get-Date).ToUniversalTime().ToString('O');cpu=[int]$m.Groups[1].Value;gpu=[int]$m.Groups[2].Value;raw=[string]$line}
+ }
+}
 function Assert-StableSetpoint([int]$Cpu,[int]$Gpu,[string]$Context,[string]$EvidencePath){
  $samples=@();$consecutive=0
  for($read=1;$read -le 6;$read++){
@@ -213,9 +217,11 @@ function Wait-P16InteractionOutcome([string]$SuccessPattern,[string]$FailurePatt
  while((Get-Date)-lt $deadline){
   $segment=@(Get-AppLogSegment)
   $window=if($StartIndex -lt $segment.Count){@($segment|Select-Object -Skip $StartIndex)}else{@()}
-  $outcome=Resolve-P16InteractionOutcome -Lines $window -SuccessPattern $SuccessPattern -FailurePattern $FailurePattern
-  if([string]$outcome.Kind -ceq 'Failure'){throw "P16 observed FAILED CLOSED/blocked outcome during $Label: $($outcome.Line)"}
-  if([string]$outcome.Kind -ceq 'Success'){return [string]$outcome.Line}
+  if($window.Count -gt 0){
+   $outcome=Resolve-P16InteractionOutcome -Lines $window -SuccessPattern $SuccessPattern -FailurePattern $FailurePattern
+   if([string]$outcome.Kind -ceq 'Failure'){throw "P16 observed FAILED CLOSED/blocked outcome during $Label: $($outcome.Line)"}
+   if([string]$outcome.Kind -ceq 'Success'){return [string]$outcome.Line}
+  }
   if($gui){$gui.Refresh();if($gui.HasExited){throw "P16 GUI exited before $Label."}}
   Start-Sleep -Milliseconds 100
  }

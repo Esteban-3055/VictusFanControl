@@ -132,6 +132,7 @@ if($isHardened){
  foreach($needle in @('Test-P16EcMutexContentionText','Invoke-P16BoundedEcContentionRetry','Resolve-P16InteractionOutcome','New-P16AuthorizationAttemptFence','[IO.FileMode]::CreateNew')){Assert-Contains $hardeningHelper $needle ("P16B hardening helper missing: {0}" -f $needle)}
  foreach($needle in @('already consumed','failureFirst','non-transient','three transient attempts')){Assert-Contains $hardeningSelfTest $needle ("P16B hardening helper self-test missing: {0}" -f $needle)}
  foreach($needle in @('Invoke-P16BoundedEcContentionRetry','Wait-P16InteractionOutcome','New-P16AuthorizationAttemptFence','attemptFenceClaimed')){Assert-Contains $harness $needle ("P16B hardened harness missing: {0}" -f $needle)}
+ foreach($needle in @('P16 could not parse setpoint probe. Raw:','[pscustomobject]@{timestampUtc=','$window.Count -gt 0')){Assert-Contains $harness $needle ("P16B corrected harness source incomplete: {0}" -f $needle)}
  Assert-Contains $packager 'attempt-fence' 'P16B evidence packager must carry the one-shot attempt fence.'
  Assert-Contains $workflow 'HP 8C40 P16B hardening helper self-test' 'P16B hardening helper self-test must run in CI.'
  Assert-Contains $doc 'P16B software-only hardening staged' 'P16B hardening documentation missing.'

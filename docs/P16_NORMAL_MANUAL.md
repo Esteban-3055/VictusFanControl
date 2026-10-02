@@ -216,3 +216,23 @@ Automatic, Candidate V1 or default control. Full same-head CI SUCCESS and a
 separate formal hardening closure are required before a fresh P16B
 authorization.
 
+### Preserved hardening CI syntax failure
+
+Hardening implementation HEAD
+`77e3fae3300ed6a1b9a6190c84d75fd110cfb401` produced CI #1189 /
+run `37067450978` FAILURE at the PowerShell syntax-check step.
+
+The failure was software-only. The P16 physical source/contract gates were
+already false and no target execution occurred.
+
+The cause was generation of `test-p16-normal-manual.ps1`: a JavaScript
+`String.replace` replacement string contained the PowerShell regex end-anchor
+sequence `$'`, which JavaScript interpreted as a replacement-token for the
+suffix of the original string. That truncated `Read-8C40Setpoint` before its
+closing regex/string/function body.
+
+The correction rebuilds that function as a complete source slice rather than a
+replacement-string expansion and additionally makes the interaction waiter skip
+resolver invocation until at least one new log line exists. The P16 physical
+gate remains closed.
+
