@@ -173,7 +173,7 @@ P15D2 is the next isolated Manual qualification boundary after the formally clos
 
 The planned bounded sequence is: Firmware startup and three fresh Healthy/SafetyGate observations -> real P13 Manual exactly once -> Apply 30/30 -> parent EC + schema-v2 generation-3 OWNED proof -> Apply 40/40 -> parent proves 40/40 with the same session/generation/controller identity -> Apply 40/40 again and require the production adapter result `HoldCustom` with no additional watchdog WRITE_INTENT/COMMIT -> Apply 30/30 -> parent proves 30/30 with the same ownership identity -> real P13 Firmware exactly once -> strong restore -> final FF/FF + watchdog RELEASE + journal absent.
 
-This first P15D2 commit is **software preparation only**. The dedicated P15D2 source gate, parent execution gate and GUI/controller execution gate are all false. Runtime/harness/evidence implementation is not yet claimed, no hardware execution is authorized, and no next physical gate is opened. The normal user Manual gate remains false, Automatic remains false, Candidate V1 remains physically unvalidated/production-unauthorized, and M9C/M9D remain closed. The preparation basis is the formally closed P15D1 HEAD `61542eaad2a66bb92c5e75bbfd07151457cf3127` / CI **#1137 SUCCESS** (run `36971629340`).
+P15D2 preparation HEAD `b55742effc1b46112656ef2febdd96275389dbfc` passed full **#1146 SUCCESS** (run `36972919383`) with every physical/user/Automatic gate closed. The software-only runtime/harness/evidence implementation is now complete but remains CI-pending: dedicated Program/MainForm startup mode, three-sample READY fence, exact real-P13 30 -> 40 -> duplicate 40 -> 30 -> Firmware interaction state machine, parent ownership proofs bound to the GUI identity, same-session journal checks, explicit duplicate-target no-WRITE_INTENT/COMMIT audit, three-write causal watchdog audit, delayed independent failsafe, evidence ZIP packaging and package self-test. The dedicated P15D2 source gate, parent execution gate and GUI/controller execution gate remain false; no hardware execution is authorized and no next physical gate is opened. Staging CI #1148 is preserved as a software-only Build failure caused by wiring Program constructor arguments one sequential commit before the matching MainForm constructor/runtime commit; the following runtime commit restored a clean full build with no gate opening. Normal user Manual remains false, Automatic remains false, Candidate V1 remains physically unvalidated/production-unauthorized, and M9C/M9D remain closed.
 
 ## Current authorization boundary
 
@@ -181,7 +181,7 @@ This first P15D2 commit is **software preparation only**. The dedicated P15D2 so
 - P15B Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED / CLOSURE CI #1116 SUCCESS**
 - P15C real-GUI Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED; normal user Manual and Automatic remain CLOSED**
 - P15D1 real-GUI tray-exit lifecycle: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED; no next physical gate opened**
-- P15D2 real-GUI variable Manual levels: **PREPARATION CI PENDING / ALL PHYSICAL GATES CLOSED**
+- P15D2 real-GUI variable Manual levels: **RUNTIME IMPLEMENTED / IMPLEMENTATION CI PENDING / ALL PHYSICAL GATES CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**
