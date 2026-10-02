@@ -25,7 +25,8 @@ $status=[string]$contract.status
 if($status -notin @(
     'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED',
     'P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED',
-    'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED'
+    'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED',
+    'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI'
 )){
     throw "Unexpected P15D2 preparation status: $status"
 }
@@ -43,18 +44,25 @@ if([string]$contract.guiLifecycleTrayExit.physicalPassClosure.sourceHead -cne 'a
 
 $d=$contract.guiManualVariableLevel
 Assert-True ([bool]$d.preparationImplemented) 'P15D2 preparation contract must be implemented.'
-$isFormalClosure=($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED')
+$isAuthorized=($status -eq 'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
+$isFormalClosure=($status -in @('P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI'))
 if($isFormalClosure){
     Assert-True ([bool]$d.preparationClosure.closed) 'P15D2 formal software closure must close preparation evidence.'
 }else{
     Assert-False ([bool]$d.preparationClosure.closed) 'P15D2 pending implementation stage cannot pre-close software evidence.'
 }
-Assert-False ([bool]$d.executionAuthorized) 'P15D2 parent harness physical gate must remain closed.'
-Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D2 GUI physical gate must remain closed.'
+if($isAuthorized){
+    Assert-True ([bool]$d.executionAuthorized) 'P15D2 authorization must open the dedicated parent harness gate.'
+    Assert-True ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D2 authorization must open the dedicated GUI/controller gate.'
+    Assert-True ([bool]$d.physicalGatesOpened) 'P15D2 authorization contract must record only the dedicated qualification gates open.'
+}else{
+    Assert-False ([bool]$d.executionAuthorized) 'P15D2 parent harness physical gate must remain closed.'
+    Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D2 GUI physical gate must remain closed.'
+    Assert-False ([bool]$d.physicalGatesOpened) 'P15D2 software preparation must keep physical gates closed.'
+}
 Assert-False ([bool]$d.physicalPassed) 'P15D2 cannot pre-claim physical PASS.'
 Assert-False ([bool]$d.evidenceClosed) 'P15D2 cannot pre-close physical evidence.'
-Assert-False ([bool]$d.hardwareExecution) 'P15D2 software preparation must record no hardware execution.'
-Assert-False ([bool]$d.physicalGatesOpened) 'P15D2 software preparation must keep physical gates closed.'
+Assert-False ([bool]$d.hardwareExecution) 'P15D2 authorization commit must record no hardware execution.'
 
 if($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
     Assert-False ([bool]$d.preparationCiValidated) 'Initial P15D2 preparation cannot pre-claim CI.'
@@ -197,7 +205,31 @@ Assert-False ([bool]$d.automaticMayOpen) 'P15D2 must not open Automatic.'
 Assert-False ([bool]$d.userFacingManualMayOpen) 'P15D2 must not open normal user Manual.'
 Assert-False ([bool]$d.m9cOrM9dQualificationMayReopen) 'P15D2 must not reopen M9C/M9D.'
 
-Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15D2 source gate must be hard-closed.'
+if($isAuthorized){
+    Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15D2 authorization requires the dedicated source gate open.'
+    $a=$d.authorization
+    Assert-True ([bool]$a.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P15D2 authorization must require same-head CI.'
+    if([string]$a.preparationClosureHead -cne '71ec64077b545f19d31f0ecde59169083d1f55ab' -or
+       [int]$a.preparationClosureCiRunNumber -ne 1173 -or
+       [long]$a.preparationClosureCiRunId -ne 36981777611 -or
+       [string]$a.preparationClosureCiResult -cne 'SUCCESS' -or
+       [string]$a.implementationHead -cne 'e28dff8540d6508c074eff5f189ce134e488c6bb' -or
+       [int]$a.implementationCiRunNumber -ne 1172 -or
+       [long]$a.implementationCiRunId -ne 36977648743 -or
+       [string]$a.implementationCiResult -cne 'SUCCESS'){
+        throw 'P15D2 authorization basis identity mismatch.'
+    }
+    if([string]$a.sourceGateScope -cne 'P15D2 variable-Manual qualification only'){
+        throw 'P15D2 authorization scope mismatch.'
+    }
+    foreach($flag in @(
+        'p15aAuthorizationOpened','p15bAuthorizationOpened','p15cAuthorizationOpened','p15d1AuthorizationOpened',
+        'userFacingManualGateOpened','automaticAuthorizationOpened','candidateCurveAuthorizationOpened',
+        'm9cQualificationConstructionOpened','m9dQualificationConstructionOpened','hardwareExecutionAtAuthorizationCommit'
+    )){Assert-False ([bool]$a.$flag) ("P15D2 authorization widened forbidden scope: {0}" -f $flag)}
+}else{
+    Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15D2 source gate must be hard-closed.'
+}
 Assert-Contains $gate 'RequiredToken = "8C40-P15D2-MANUAL30-40-40-30"' 'P15D2 source token mismatch.'
 Assert-Contains $gate 'InitialLevel = 30' 'P15D2 initial level mismatch.'
 Assert-Contains $gate 'ChangedLevel = 40' 'P15D2 changed level mismatch.'
@@ -223,7 +255,7 @@ foreach($needle in @(
     'qualification pre-action fence rejected the interaction'
 )){Assert-Contains $surface $needle ("P15D2 real P13 surface prerequisite missing: {0}" -f $needle)}
 
-if($status -in @('P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED')){
+if($status -in @('P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')){
     foreach($needle in @(
         '--8c40-p15d2-variable-manual-test','--8c40-p15d2-test-token','--8c40-p15d2-marker-root',
         'Hp8C40P15D2VariableManualQualificationGate.PhysicalExecutionAuthorized',
