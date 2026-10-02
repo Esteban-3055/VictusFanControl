@@ -6,10 +6,11 @@ namespace VictusFanControl.App;
 /// P16 qualification-only bridge for proving the ordinary user-facing Manual
 /// path without introducing a P16-specific application startup/test mode.
 ///
-/// P16B target attempts failed closed and the dedicated qualification gate is
-/// re-blocked. Preserve both evidence packages and do not reauthorize until the
-/// EC-contention / interaction-fence hardening is implemented, reviewed and
-/// closed by same-head CI. Permanent user Manual and Automatic remain false.
+/// P16B target attempts failed closed; the bounded EC-contention,
+/// first-outcome interaction, and one-shot-attempt hardening has now passed
+/// same-head CI and is formally closed. This dedicated source gate remains
+/// false until a fresh separate P16B authorization commit passes its own
+/// same-head CI. Permanent user Manual and Automatic remain false.
 /// </summary>
 internal static class Hp8C40P16NormalManualQualificationGate
 {

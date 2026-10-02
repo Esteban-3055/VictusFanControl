@@ -29,6 +29,7 @@ if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','
 $isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED'))
 $isPhysicalFailClosed=($status -eq 'P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED')
 $isHardened=($status -in @('P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED'))
+$isHardeningClosed=($status -eq 'P16B_HARDENING_CI_PASS_GATE_CLOSED')
 $hasPhysicalHistory=($isPhysicalFailClosed -or $isHardened)
 $isAuthorized=($status -eq 'P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
 
@@ -142,6 +143,28 @@ if($isHardened){
  Assert-Contains $packager 'attempt-fence' 'P16B evidence packager must carry the one-shot attempt fence.'
  Assert-Contains $workflow 'HP 8C40 P16B hardening helper self-test' 'P16B hardening helper self-test must run in CI.'
  Assert-Contains $doc 'P16B software-only hardening staged' 'P16B hardening documentation missing.'
+ if($isHardeningClosed){
+  Assert-False ([bool]$d.hardeningRequired.required) 'P16B formal hardening closure must clear the outstanding-hardening flag.'
+  Assert-True ([bool]$hi.ciValidated) 'P16B formal hardening closure requires CI validation.'
+  $hc=$d.hardeningRequired.closure
+  if($null -eq $hc){throw 'P16B hardening closure metadata missing.'}
+  if(-not [bool]$hc.closed -or [string]$hc.result -cne 'PASS' -or
+     [string]$hc.implementationHead -cne '6539671204d3e9c548d1d9b5b553920ccd553525' -or
+     [int]$hc.sourceCiRunNumber -ne 1192 -or
+     [long]$hc.sourceCiRunId -ne 37069306742 -or
+     [string]$hc.sourceCiResult -cne 'SUCCESS'){
+   throw 'P16B hardening closure CI identity mismatch.'
+  }
+  Assert-False ([bool]$hc.hardwareExecution) 'P16B hardening closure must be software-only.'
+  Assert-False ([bool]$hc.physicalGatesOpened) 'P16B hardening closure must keep physical gates closed.'
+  Assert-False ([bool]$hc.dedicatedP16SourceGateOpen) 'P16B hardening closure must keep the dedicated source gate false.'
+  Assert-False ([bool]$hc.permanentUserManualExecutionAuthorized) 'P16B hardening closure cannot promote permanent Manual.'
+  Assert-False ([bool]$hc.automaticExecutionAuthorized) 'P16B hardening closure cannot open Automatic.'
+  Assert-False ([bool]$hc.candidateCurvePhysicallyValidated) 'P16B hardening closure cannot validate Candidate V1.'
+  Assert-False ([bool]$hc.candidateCurveAuthorizedForProduction) 'P16B hardening closure cannot promote Candidate V1.'
+  Assert-False ([bool]$hc.controlEnabledByDefault) 'P16B hardening closure cannot enable default control.'
+  Assert-Contains $doc 'P16B hardening formally closed after CI #1192' 'P16B formal hardening-closure documentation missing.'
+ }
 }
 
 if($isAuthorized){

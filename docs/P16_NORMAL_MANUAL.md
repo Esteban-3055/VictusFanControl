@@ -269,3 +269,22 @@ setpoint proof function, one interaction waiter, the safe formatted failure
 diagnostic, and a clean final fail-closed `exit 1`. All physical gates remain
 closed.
 
+## P16B hardening formally closed after CI #1192
+
+The reconstructed software-only hardening HEAD
+`6539671204d3e9c548d1d9b5b553920ccd553525` passed full same-head CI
+#1192 / run `37069306742` with PowerShell syntax validation, the P16 invariant,
+the dedicated P16B hardening helper self-test, Windows PowerShell 5.1
+compatibility, warnings-as-errors build and the HP fan backend self-test all
+passing.
+
+The hardening correction is therefore formally closed. This closure is still
+software-only: the dedicated P16 physical source gate remains false, permanent
+Manual remains false, Automatic remains false, Candidate V1 remains unvalidated
+and unpromoted, and default control remains disabled.
+
+The next physical step is intentionally separate. Only after this closure commit
+itself receives full same-head CI SUCCESS may a fresh one-shot P16B
+authorization be created. The prior authorization is consumed and cannot be
+reused.
+

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+  "status": "P16B_HARDENING_CI_PASS_GATE_CLOSED",
   "scope": "Prepare and hard-close the ordinary application Manual qualification path before permanent normal-user Manual promotion.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
@@ -208,7 +208,7 @@
       }
     ],
     "hardeningRequired": {
-      "required": true,
+      "required": false,
       "physicalGateMustRemainClosed": true,
       "findings": [
         "AcpiEcReader retries EC protocol reads only after mutex acquisition; a Global\\\\Access_EC acquisition timeout is currently a single 500 ms terminal failure.",
@@ -216,10 +216,10 @@
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Run full same-head CI on the reconstructed software-only hardening. If SUCCESS, independently review and formally close the hardening with all gates false before any fresh P16B authorization.",
+      "nextAction": "After this separate closure commit itself passes full same-head CI, create a fresh separate one-shot P16B authorization. Do not execute target hardware from the closure commit.",
       "implementation": {
         "staged": true,
-        "ciValidated": false,
+        "ciValidated": true,
         "productionSetpointAckTransientEcRetry": true,
         "parentEcProbeTransientMutexRetry": true,
         "failedInteractionImmediateAbort": true,
@@ -266,7 +266,23 @@
           "hardwareExecution": false,
           "physicalGatesOpened": false
         }
-      ]
+      ],
+      "closure": {
+        "closed": true,
+        "result": "PASS",
+        "implementationHead": "6539671204d3e9c548d1d9b5b553920ccd553525",
+        "sourceCiRunNumber": 1192,
+        "sourceCiRunId": 37069306742,
+        "sourceCiResult": "SUCCESS",
+        "hardwareExecution": false,
+        "physicalGatesOpened": false,
+        "dedicatedP16SourceGateOpen": false,
+        "permanentUserManualExecutionAuthorized": false,
+        "automaticExecutionAuthorized": false,
+        "candidateCurvePhysicallyValidated": false,
+        "candidateCurveAuthorizedForProduction": false,
+        "controlEnabledByDefault": false
+      }
     }
   },
   "promotion": {
