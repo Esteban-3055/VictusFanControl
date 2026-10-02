@@ -331,16 +331,16 @@ function Test-OwnedPhase($phase){
 }
 
 
-function Assert-OwnedJournal($journal,[int]$ExpectedPid,[long]$ExpectedTicks,[int]$ExpectedLevel,[string]$ExpectedSessionId){
+function Assert-OwnedJournal($journal,[int]$ExpectedPid,[long]$ExpectedTicks,[int]$ExpectedLevel,[long]$ExpectedGeneration,[string]$ExpectedSessionId){
     if([int]$journal.SchemaVersion -ne 2 -or
        $journal.TargetProfileId -cne 'HP-8C40-9D0R1LA-F18' -or
        -not (Test-OwnedPhase $journal.Phase) -or
-       [int]$journal.Generation -ne 3 -or
+       [long]$journal.Generation -ne $ExpectedGeneration -or
        [int]$journal.Controller.ProcessId -ne $ExpectedPid -or
        [long]$journal.Controller.ProcessStartUtcTicks -ne $ExpectedTicks -or
        [int]$journal.Owned.Cpu -ne $ExpectedLevel -or
        [int]$journal.Owned.Gpu -ne $ExpectedLevel){
-        throw "P15D2 durable journal is not schema-v2 generation-3 OWNED $ExpectedLevel/$ExpectedLevel bound to the exact GUI identity."
+        throw "P15D2 durable journal is not schema-v2 generation $ExpectedGeneration OWNED $ExpectedLevel/$ExpectedLevel bound to the exact GUI identity."
     }
     $session=[string]$journal.SessionId
     if([string]::IsNullOrWhiteSpace($session)){throw 'P15D2 durable journal SessionId is missing.'}
@@ -555,7 +555,7 @@ try{
     Assert-StableSetpoint 30 30 'P15D2 parent initial OWNED 30/30' $setpoint30InitialPath
     if(-not (Test-Path -LiteralPath $journalPath)){throw 'P15D2 initial 30/30 journal missing.'}
     $j30=Get-Content -LiteralPath $journalPath -Raw | ConvertFrom-Json
-    $ownedSessionId=Assert-OwnedJournal $j30 $guiPid $guiStartTicks 30 $null
+    $ownedSessionId=Assert-OwnedJournal $j30 $guiPid $guiStartTicks 30 3 $null
     Copy-Item -LiteralPath $journalPath -Destination $journal30InitialPath
     ("P15D2-PARENT-30-VERIFIED|session={0}|{1:O}|guiPid={2}|guiStartTicks={3}" -f $ownedSessionId,(Get-Date),$guiPid,$guiStartTicks) |
         Set-Content -LiteralPath $parent30Path -Encoding ASCII
@@ -567,7 +567,7 @@ try{
     }
     Assert-StableSetpoint 40 40 'P15D2 parent changed OWNED 40/40' $setpoint40Path
     $j40=Get-Content -LiteralPath $journalPath -Raw | ConvertFrom-Json
-    [void](Assert-OwnedJournal $j40 $guiPid $guiStartTicks 40 $ownedSessionId)
+    [void](Assert-OwnedJournal $j40 $guiPid $guiStartTicks 40 5 $ownedSessionId)
     Copy-Item -LiteralPath $journalPath -Destination $journal40Path
     ("P15D2-PARENT-40-VERIFIED|session={0}|{1:O}|guiPid={2}|guiStartTicks={3}" -f $ownedSessionId,(Get-Date),$guiPid,$guiStartTicks) |
         Set-Content -LiteralPath $parent40Path -Encoding ASCII
@@ -582,7 +582,7 @@ try{
     Assert-NoRetransmitAfterBoundary $guiPid $holdLogBoundary
     Assert-StableSetpoint 40 40 'P15D2 parent duplicate 40/40 hold' $setpoint40HoldPath
     $j40Hold=Get-Content -LiteralPath $journalPath -Raw | ConvertFrom-Json
-    [void](Assert-OwnedJournal $j40Hold $guiPid $guiStartTicks 40 $ownedSessionId)
+    [void](Assert-OwnedJournal $j40Hold $guiPid $guiStartTicks 40 5 $ownedSessionId)
     Copy-Item -LiteralPath $journalPath -Destination $journal40HoldPath
     $duplicateNoRetransmitPass=$true
     ("P15D2-PARENT-HOLD40-VERIFIED|session={0}|{1:O}|guiPid={2}|guiStartTicks={3}" -f $ownedSessionId,(Get-Date),$guiPid,$guiStartTicks) |
@@ -595,7 +595,7 @@ try{
     }
     Assert-StableSetpoint 30 30 'P15D2 parent return OWNED 30/30' $setpoint30ReturnPath
     $j30Return=Get-Content -LiteralPath $journalPath -Raw | ConvertFrom-Json
-    [void](Assert-OwnedJournal $j30Return $guiPid $guiStartTicks 30 $ownedSessionId)
+    [void](Assert-OwnedJournal $j30Return $guiPid $guiStartTicks 30 7 $ownedSessionId)
     Copy-Item -LiteralPath $journalPath -Destination $journal30ReturnPath
     ("P15D2-PARENT-RETURN30-VERIFIED|session={0}|{1:O}|guiPid={2}|guiStartTicks={3}" -f $ownedSessionId,(Get-Date),$guiPid,$guiStartTicks) |
         Set-Content -LiteralPath $parentReturn30Path -Encoding ASCII
