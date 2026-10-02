@@ -24,7 +24,8 @@ $p15d1Invariant=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15d1-tr
 $status=[string]$contract.status
 if($status -notin @(
     'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED',
-    'P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED'
+    'P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED',
+    'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED'
 )){
     throw "Unexpected P15D2 preparation status: $status"
 }
@@ -42,7 +43,12 @@ if([string]$contract.guiLifecycleTrayExit.physicalPassClosure.sourceHead -cne 'a
 
 $d=$contract.guiManualVariableLevel
 Assert-True ([bool]$d.preparationImplemented) 'P15D2 preparation contract must be implemented.'
-Assert-False ([bool]$d.preparationClosure.closed) 'P15D2 implementation stage cannot pre-close software evidence.'
+$isFormalClosure=($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED')
+if($isFormalClosure){
+    Assert-True ([bool]$d.preparationClosure.closed) 'P15D2 formal software closure must close preparation evidence.'
+}else{
+    Assert-False ([bool]$d.preparationClosure.closed) 'P15D2 pending implementation stage cannot pre-close software evidence.'
+}
 Assert-False ([bool]$d.executionAuthorized) 'P15D2 parent harness physical gate must remain closed.'
 Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D2 GUI physical gate must remain closed.'
 Assert-False ([bool]$d.physicalPassed) 'P15D2 cannot pre-claim physical PASS.'
@@ -89,8 +95,12 @@ if($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
     Assert-True ([bool]$runtimeSource.sameHeadTargetCiStillRequired) 'P15D2 integrated runtime must still require target same-head CI.'
     Assert-False ([bool]$runtimeSource.hardwareExecution) 'P15D2 runtime source review must be software-only.'
     Assert-False ([bool]$runtimeSource.physicalGatesOpened) 'P15D2 runtime source review must keep physical gates closed.'
-    Assert-True ([bool]$d.runtimeImplementationComplete) 'P15D2 implementation-pending state requires complete runtime/harness implementation.'
-    Assert-False ([bool]$d.runtimeImplementationCiValidated) 'P15D2 implementation-pending state cannot pre-claim runtime CI.'
+    Assert-True ([bool]$d.runtimeImplementationComplete) 'P15D2 implementation/closure state requires complete runtime/harness implementation.'
+    if($isFormalClosure){
+        Assert-True ([bool]$d.runtimeImplementationCiValidated) 'P15D2 formal closure requires same-head target runtime CI validation.'
+    }else{
+        Assert-False ([bool]$d.runtimeImplementationCiValidated) 'P15D2 implementation-pending state cannot pre-claim runtime CI.'
+    }
     $ri=$d.runtimeImplementation
     foreach($flag in @(
         'programBoundaryImplemented','exactTargetBoundaryImplemented','realP13VariableManualPathReused',
@@ -103,7 +113,17 @@ if($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
     $hardening=$d.hardeningReview
     Assert-True ([bool]$hardening.required) 'P15D2 pre-authorization hardening review must remain required.'
     Assert-True ([bool]$hardening.implementationComplete) 'P15D2 hardening fixes must be implemented before CI closure.'
-    Assert-False ([bool]$hardening.ciValidated) 'P15D2 implementation-pending state cannot pre-claim hardening CI.'
+    if($isFormalClosure){
+        Assert-True ([bool]$hardening.ciValidated) 'P15D2 formal closure requires hardening CI validation.'
+        if([string]$hardening.validationHead -cne 'e28dff8540d6508c074eff5f189ce134e488c6bb' -or
+           [int]$hardening.validationCiRunNumber -ne 1172 -or
+           [long]$hardening.validationCiRunId -ne 36977648743 -or
+           [string]$hardening.validationCiResult -cne 'SUCCESS'){
+            throw 'P15D2 hardening target-CI identity mismatch.'
+        }
+    }else{
+        Assert-False ([bool]$hardening.ciValidated) 'P15D2 implementation-pending state cannot pre-claim hardening CI.'
+    }
     Assert-False ([bool]$hardening.hardwareExecution) 'P15D2 hardening must remain software-only.'
     Assert-False ([bool]$hardening.physicalGatesOpened) 'P15D2 hardening must keep physical gates closed.'
     $findings=@($hardening.findings)
@@ -134,6 +154,25 @@ if($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
     foreach($entry in $failed){
         Assert-False ([bool]$entry.hardwareExecution) 'P15D2 failed CI must record no hardware execution.'
         Assert-False ([bool]$entry.physicalGatesOpened) 'P15D2 failed CI must keep physical gates closed.'
+    }
+
+    if($isFormalClosure){
+        $pc=$d.preparationClosure
+        if([string]$pc.result -cne 'PASS' -or
+           [string]$pc.implementationHead -cne 'e28dff8540d6508c074eff5f189ce134e488c6bb' -or
+           [int]$pc.sourceCiRunNumber -ne 1172 -or
+           [long]$pc.sourceCiRunId -ne 36977648743 -or
+           [string]$pc.sourceCiResult -cne 'SUCCESS'){
+            throw 'P15D2 formal preparation closure CI identity mismatch.'
+        }
+        foreach($flag in @(
+            'powerShellSyntaxValidated','p15d1ClosureInvariantValidated','p15d2InvariantValidated',
+            'evidencePackagingSelfTestValidated','powerShell51CompatibilityValidated',
+            'warningsAsErrorsBuildValidated','runtimeWiringBuildValidated',
+            'generationSemanticsValidated','hardeningValidated'
+        )){Assert-True ([bool]$pc.$flag) ("P15D2 formal closure missing validation: {0}" -f $flag)}
+        Assert-False ([bool]$pc.hardwareExecution) 'P15D2 formal closure must record no hardware execution.'
+        Assert-False ([bool]$pc.physicalGatesOpened) 'P15D2 formal closure must keep physical gates closed.'
     }
 }
 
@@ -184,7 +223,7 @@ foreach($needle in @(
     'qualification pre-action fence rejected the interaction'
 )){Assert-Contains $surface $needle ("P15D2 real P13 surface prerequisite missing: {0}" -f $needle)}
 
-if($status -eq 'P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED'){
+if($status -in @('P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED')){
     foreach($needle in @(
         '--8c40-p15d2-variable-manual-test','--8c40-p15d2-test-token','--8c40-p15d2-marker-root',
         'Hp8C40P15D2VariableManualQualificationGate.PhysicalExecutionAuthorized',

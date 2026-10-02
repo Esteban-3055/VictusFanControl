@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED",
+  "status": "P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1326,8 +1326,21 @@
     "preparationImplemented": true,
     "preparationCiValidated": true,
     "preparationClosure": {
-      "closed": false,
-      "result": "PENDING",
+      "closed": true,
+      "result": "PASS",
+      "implementationHead": "e28dff8540d6508c074eff5f189ce134e488c6bb",
+      "sourceCiRunNumber": 1172,
+      "sourceCiRunId": 36977648743,
+      "sourceCiResult": "SUCCESS",
+      "powerShellSyntaxValidated": true,
+      "p15d1ClosureInvariantValidated": true,
+      "p15d2InvariantValidated": true,
+      "evidencePackagingSelfTestValidated": true,
+      "powerShell51CompatibilityValidated": true,
+      "warningsAsErrorsBuildValidated": true,
+      "runtimeWiringBuildValidated": true,
+      "generationSemanticsValidated": true,
+      "hardeningValidated": true,
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
@@ -1441,7 +1454,7 @@
       "physicalGatesOpened": false
     },
     "runtimeImplementationComplete": true,
-    "runtimeImplementationCiValidated": false,
+    "runtimeImplementationCiValidated": true,
     "runtimeImplementation": {
       "programBoundaryImplemented": true,
       "exactTargetBoundaryImplemented": true,
@@ -1494,7 +1507,11 @@
         "Require one stable session/controller identity with committed generation progression 3 -> 5 -> 5 -> 7 for initial 30, changed 40, duplicate 40 HoldCustom, and return 30."
       ],
       "implementationComplete": true,
-      "ciValidated": false,
+      "ciValidated": true,
+      "validationHead": "e28dff8540d6508c074eff5f189ce134e488c6bb",
+      "validationCiRunNumber": 1172,
+      "validationCiRunId": 36977648743,
+      "validationCiResult": "SUCCESS",
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
