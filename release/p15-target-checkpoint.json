@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED",
+  "status": "P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1462,8 +1462,12 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false,
       "correctionImplemented": true,
-      "correctionCiValidated": false,
-      "formalClosure": false
+      "correctionCiValidated": true,
+      "formalClosure": true,
+      "implementationHead": "886b1761058128c784644b8028901217c242f334",
+      "implementationCiRunNumber": 1177,
+      "implementationCiRunId": 37003333223,
+      "implementationCiResult": "SUCCESS"
     },
     "failedPhysicalAttempt": {
       "sourceHead": "aa5be229d7e1fb4c1c0b260f3354db972e98436b",
