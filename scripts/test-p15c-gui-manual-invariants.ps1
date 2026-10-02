@@ -126,8 +126,22 @@ if($status -eq 'P15C_GUI_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
     Assert-True ([bool]$g.preparationClosure.closed) 'P15C authorization requires formally closed preparation.'
     Assert-True ([bool]$hardening.ciValidated) 'P15C authorization requires CI-validated pre-action hardening.'
     Assert-True ([bool]$hardening.closure.closed) 'P15C authorization requires formally closed pre-action hardening.'
+    $a=$g.authorization
+    if([string]$a.basisHead -cne 'a7129f616d955ae22e09ec5ef999bb6a3b64ffc2' -or
+       [int]$a.basisCiRunNumber -ne 1121 -or
+       [long]$a.basisCiRunId -ne 36950212076 -or
+       [string]$a.basisCiResult -cne 'SUCCESS' -or
+       [string]$a.preparationImplementationHead -cne '356275b56bdfe3324b054e2b79f2bbbf3f4e5067' -or
+       [int]$a.preparationImplementationCiRunNumber -ne 1120){
+        throw 'P15C authorization basis mismatch.'
+    }
+    Assert-True ([bool]$a.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P15C authorization must require same-HEAD CI success.'
+    Assert-True ([bool]$a.preActionFenceHardeningClosed) 'P15C authorization requires closed pre-action hardening.'
+    foreach($p in @('p15aAuthorizationOpened','p15bAuthorizationOpened','userFacingManualGateOpened','automaticAuthorizationOpened','candidateCurveAuthorizationOpened','m9cQualificationConstructionOpened','m9dQualificationConstructionOpened','hardwareExecutionAtAuthorizationCommit')){Assert-False ([bool]$a.$p) ("P15C authorization opened forbidden scope: {0}" -f $p)}
     Assert-True ([bool]$g.executionAuthorized) 'P15C authorization must open only the dedicated parent harness gate.'
     Assert-True ([bool]$g.controllerPhysicalExecutionAuthorized) 'P15C authorization must open only the dedicated GUI qualification gate.'
+    Assert-False ([bool]$g.physicalPassed) 'P15C authorization must not pre-claim physical PASS.'
+    Assert-False ([bool]$g.evidenceClosed) 'P15C authorization must not pre-close physical evidence.'
     Assert-Contains $qualification 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15C authorized state requires qualification source gate open.'
 }
 

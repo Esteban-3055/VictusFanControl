@@ -141,11 +141,13 @@ Corrected implementation HEAD `2520cfc67ed416e6497310e31030b31eadc24645` then pa
 
 The corrected hardening HEAD `356275b56bdfe3324b054e2b79f2bbbf3f4e5067` passed the full workflow in **#1120 SUCCESS** (run `36949763034`), including PowerShell syntax, P13/P15A/P15B/P15C invariants, P15C evidence packaging, Windows PowerShell 5.1 compatibility and warnings-as-errors build. Preparation is therefore formally closed in a separate gate-closed commit. No physical execution occurred during preparation or closure; the dedicated P15C parent/GUI gates remain false until a later separate authorization.
 
+Formal preparation closure HEAD `a7129f616d955ae22e09ec5ef999bb6a3b64ffc2` passed **#1121 SUCCESS** (run `36950212076`). A fresh authorization now opens only the two dedicated P15C qualification barriers: the parent harness contract gate and `Hp8C40P15CGuiManualQualificationGate.PhysicalExecutionAuthorized`. The normal user-facing Manual gate remains false, Automatic remains false, Candidate V1 remains unvalidated/unauthorized, and M9C/M9D remain closed. Target execution is forbidden until this exact authorization HEAD itself completes full same-HEAD CI successfully.
+
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
 - P15B Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED / CLOSURE CI #1116 SUCCESS**
-- P15C real-GUI Manual 30/30 execution: **PREPARATION FORMALLY CLOSED / BOTH DEDICATED PHYSICAL GATES CLOSED; separate authorization required**
+- P15C real-GUI Manual 30/30 execution: **FRESHLY AUTHORIZED ON CLOSED PREPARATION / AWAITING SAME-HEAD CI SUCCESS; normal user Manual and Automatic remain CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**
