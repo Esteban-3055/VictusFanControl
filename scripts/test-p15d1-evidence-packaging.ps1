@@ -18,7 +18,7 @@ try{
  $m=Get-Content -LiteralPath $p.ManifestPath -Raw | ConvertFrom-Json
  if([string]$m.gate -cne 'P15D1' -or [bool]$m.gitCleanUsed -or -not [bool]$m.sourceEvidencePreserved){throw 'P15D1 package manifest safety contract mismatch.'}
  $roles=@($m.files | ForEach-Object {[string]$_.role})
- foreach($role in @('program-source','user-gate-source','production-adapter-source','coordinator-source','failsafe-source')){if($role -notin $roles){throw "P15D1 package manifest missing critical source role '$role'."}}
+ foreach($role in @('parent-owned-proof','parent-hidden-owned-proof','program-source','user-gate-source','production-adapter-source','coordinator-source','failsafe-source')){if($role -notin $roles){throw "P15D1 package manifest missing critical role '$role'."}}
  if(-not (Test-Path -LiteralPath (Join-Path $evidence 'p15d1-harness-summary.json'))){throw 'P15D1 packager deleted source evidence.'}
  Write-Host 'HP 8C40 P15D1 evidence packaging self-test: PASS' -ForegroundColor Green
 }finally{

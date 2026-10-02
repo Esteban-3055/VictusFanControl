@@ -22,6 +22,7 @@ $files=@(
  [pscustomobject]@{role='window-hidden';path=(Join-Path $EvidenceRoot 'p15d1-window-hidden.json');required=$false},
  [pscustomobject]@{role='tray-exit-requested';path=(Join-Path $EvidenceRoot 'p15d1-tray-exit-requested.json');required=$false},
  [pscustomobject]@{role='shutdown-result';path=(Join-Path $EvidenceRoot 'p15d1-shutdown-result.json');required=$false},
+ [pscustomobject]@{role='parent-owned-proof';path=(Join-Path $EvidenceRoot 'p15d1-parent-owned-verified.txt');required=$false},
  [pscustomobject]@{role='parent-hidden-owned-proof';path=(Join-Path $EvidenceRoot 'p15d1-parent-hidden-owned-verified.txt');required=$false},
  [pscustomobject]@{role='gui-events';path=(Join-Path $EvidenceRoot 'p15d1-gui-events.jsonl');required=$false},
  [pscustomobject]@{role='app-log';path=(Join-Path $EvidenceRoot 'p15d1-app.log');required=$false},

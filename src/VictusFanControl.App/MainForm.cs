@@ -2400,6 +2400,7 @@ internal sealed class MainForm : Form
                 try
                 {
                     if (_p15d1Completed || !_p15d1ReadyPublished || !_p15d1WindowHidden ||
+                        Visible || ShowInTaskbar ||
                         _p15d1ManualModeRequests != 1 || _p15d1ManualApplyRequests != 1 ||
                         _p15d1FirmwareModeRequests != 0 || _p15d1AutomaticModeRequests != 0 ||
                         _p15d1WindowHideRequests != 1 || _p15d1TrayExitRequests != 0 ||
@@ -5943,6 +5944,15 @@ internal sealed class MainForm : Form
 
     private void RestoreFromTray()
     {
+        if (_p15d1TrayExitHardwareTest &&
+            _p15d1WindowHidden &&
+            !_p15d1Completed)
+        {
+            FailP15D1Qualification(
+                "Window was reopened after the qualified X/hide transition; P15D1 requires tray Exit while the GUI remains hidden.");
+            return;
+        }
+
         ShowInTaskbar = true;
         Show();
         WindowState = FormWindowState.Normal;

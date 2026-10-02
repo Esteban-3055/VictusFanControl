@@ -16,6 +16,12 @@ if(-not [bool]$contract.startupNoWrite.physicalPassed -or
    [bool]$contract.manual30.controllerPhysicalExecutionAuthorized){
     throw 'P15D1 PHYSICAL BLOCKED: P15A/P15B must be formally closed and re-blocked.'
 }
+if(-not [bool]$contract.guiManual.physicalPassed -or
+   -not [bool]$contract.guiManual.evidenceClosed -or
+   [bool]$contract.guiManual.executionAuthorized -or
+   [bool]$contract.guiManual.controllerPhysicalExecutionAuthorized){
+    throw 'P15D1 PHYSICAL BLOCKED: P15C real-GUI Manual must be formally closed and re-blocked.'
+}
 if(-not [bool]$contract.guiLifecycleTrayExit.executionAuthorized -or
    -not [bool]$contract.guiLifecycleTrayExit.controllerPhysicalExecutionAuthorized){
     throw 'P15D1 PHYSICAL BLOCKED: GUI Manual qualification authorization is closed.'
@@ -417,13 +423,13 @@ $initialServiceStartTicks=[long]$initialBaseline.ProcessStartUtcTicks
 New-Item -ItemType Directory -Force -Path $evidenceRoot | Out-Null
 
 Write-Host 'VictusFanControl - HP 8C40 P15D1 REAL GUI MANUAL 30/30' -ForegroundColor Cyan
-Write-Host 'P15D1 uses the real P13 Manual/Firmware buttons. Automatic and the normal user Manual gate remain closed.' -ForegroundColor Yellow
+Write-Host 'P15D1 uses the real P13 Manual path, then real X/hide-to-tray and tray Exit. Do NOT use Firmware or Automatic. Normal user gates remain closed.' -ForegroundColor Yellow
 
 try{
     Write-Host 'Step 1: same-HEAD build and P15D1 static regressions...' -ForegroundColor Cyan
     dotnet build .\VictusFanControl.sln -c Release -warnaserror
     if($LASTEXITCODE -ne 0){throw "P15D1 build failed with exit=$LASTEXITCODE."}
-    foreach($script in @('test-p15d1-gui-manual-invariants.ps1','test-p15d1-evidence-packaging.ps1','test-p15b-manual30-invariants.ps1','test-p13-control-surface-invariants.ps1')){
+    foreach($script in @('test-p15d1-tray-exit-invariants.ps1','test-p15d1-evidence-packaging.ps1','test-p15c-gui-manual-invariants.ps1','test-p15b-manual30-invariants.ps1','test-p13-control-surface-invariants.ps1')){
         & (Join-Path $PSScriptRoot $script)
         if($LASTEXITCODE -ne 0){throw "P15D1 regression '$script' failed with exit=$LASTEXITCODE."}
     }

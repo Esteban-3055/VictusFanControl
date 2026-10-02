@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED",
+  "status": "P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1020,8 +1020,8 @@
     "preparationImplemented": true,
     "preparationCiValidated": true,
     "preparationClosure": {
-      "closed": true,
-      "result": "PASS",
+      "closed": false,
+      "result": "PENDING_HARDENING",
       "implementationHead": "7ac16fbc824fc992ce436ff68cc4ad7cea100c96",
       "sourceCiRunNumber": 1131,
       "sourceCiRunId": 36966420676,
@@ -1044,6 +1044,16 @@
           "result": "FAILURE",
           "failureStep": "HP 8C40 P15A startup no-write preparation invariant",
           "cause": "P15A/P15B/P15C historical invariants had not yet classified the new P15D1 contract status as a valid post-closure state.",
+          "hardwareExecution": false,
+          "physicalGatesOpened": false
+        },
+        {
+          "runNumber": 1132,
+          "runId": 36966794012,
+          "head": "b5270dd594cca53c58595f89242c267908494eaf",
+          "result": "FAILURE",
+          "failureStep": "PowerShell syntax check",
+          "cause": "The formal-closure edit corrupted test-p15d1-tray-exit-invariants.ps1 by inserting an unterminated regex/string and duplicating a large trailing block. CI stopped at PowerShell syntax validation.",
           "hardwareExecution": false,
           "physicalGatesOpened": false
         }
@@ -1131,7 +1141,7 @@
       "hardwareExecutionAtAuthorizationCommit": false
     },
     "runtimeImplementationComplete": true,
-    "runtimeImplementationCiValidated": true,
+    "runtimeImplementationCiValidated": false,
     "runtimeImplementation": {
       "programBoundaryImplemented": true,
       "exactTargetBoundaryImplemented": true,
@@ -1151,6 +1161,35 @@
       "evidencePackagerImplemented": true,
       "evidencePackagingSelfTestImplemented": true,
       "physicalExecution": false
+    },
+    "runtimeImplementationBaseCi": {
+      "head": "7ac16fbc824fc992ce436ff68cc4ad7cea100c96",
+      "runNumber": 1131,
+      "runId": 36966420676,
+      "result": "SUCCESS"
+    },
+    "hardeningReview": {
+      "required": true,
+      "reviewedHead": "7ac16fbc824fc992ce436ff68cc4ad7cea100c96",
+      "reviewedCiRunNumber": 1131,
+      "reviewedCiRunId": 36966420676,
+      "reviewedCiResult": "SUCCESS",
+      "findings": [
+        "The physical harness referenced nonexistent test-p15d1-gui-manual-invariants.ps1, guaranteeing a safe pre-token failure if later authorized.",
+        "The physical harness hard barrier did not directly re-assert P15C physicalPassed/evidenceClosed and both P15C gates re-blocked.",
+        "The evidence packager omitted p15d1-parent-owned-verified.txt, weakening durable proof of the first parent ownership fence.",
+        "The tray Exit path proved the GUI had been hidden, but did not prove it was still hidden if the user reopened it before Exit."
+      ],
+      "fixes": [
+        "Use test-p15d1-tray-exit-invariants.ps1 and rerun the P15C invariant before any operator token.",
+        "Directly require P15C physical PASS/evidence closure and both P15C execution gates closed in the parent harness.",
+        "Package p15d1-parent-owned-verified.txt.",
+        "Fail closed on reopen after the qualified hide and require Visible=false plus ShowInTaskbar=false at tray Exit."
+      ],
+      "implementationComplete": true,
+      "ciValidated": false,
+      "hardwareExecution": false,
+      "physicalGatesOpened": false
     }
   }
 }
