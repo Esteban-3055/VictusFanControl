@@ -27,7 +27,8 @@ $allowed=@(
  'P15C_GUI_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI',
  'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED',
  'P15C_GUI_MANUAL_STALE_SAFETY_FAIL_CLOSED_GATE_CLOSED',
- 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PENDING_GATE_CLOSED'
+ 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PENDING_GATE_CLOSED',
+ 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PASS_GATE_CLOSED'
 )
 if($status -notin $allowed){throw 'P15C contract state mismatch.'}
 
@@ -196,6 +197,35 @@ if($status -eq 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PENDING_GATE_CLOSED')
     }
     Assert-False ([bool]$failedCorrection[0].hardwareExecution) 'P15C stale-Safety correction failed CI must record no hardware execution.'
     Assert-False ([bool]$failedCorrection[0].physicalGatesOpened) 'P15C stale-Safety correction failed CI must keep physical gates closed.'
+}
+
+if($status -eq 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PASS_GATE_CLOSED'){
+    Assert-False ([bool]$g.executionAuthorized) 'Closed P15C stale-Safety correction must keep parent gate closed.'
+    Assert-False ([bool]$g.controllerPhysicalExecutionAuthorized) 'Closed P15C stale-Safety correction must keep GUI gate closed.'
+    Assert-False ([bool]$g.physicalPassed) 'P15C correction closure cannot claim physical PASS.'
+    Assert-False ([bool]$g.evidenceClosed) 'P15C correction closure cannot close physical evidence.'
+    Assert-Contains $qualification 'public static readonly bool PhysicalExecutionAuthorized = false;' 'Closed P15C correction requires qualification source gate closed.'
+    $corr=$g.staleSafetyRaceCorrection
+    Assert-True ([bool]$corr.required) 'P15C stale-Safety correction must remain required.'
+    Assert-True ([bool]$corr.implementationComplete) 'P15C stale-Safety correction implementation must remain complete.'
+    Assert-True ([bool]$corr.ciValidated) 'P15C stale-Safety correction must record CI validation.'
+    Assert-True ([bool]$corr.closure.closed) 'P15C stale-Safety correction closure must be closed.'
+    $cc=$corr.closure
+    if([string]$cc.result -cne 'PASS' -or
+       [string]$cc.implementationHead -cne '550d6372b1e797cc1d7eecf62ee7afb4bb541061' -or
+       [int]$cc.sourceCiRunNumber -ne 1125 -or
+       [long]$cc.sourceCiRunId -ne 36962248019 -or
+       [string]$cc.sourceCiResult -cne 'SUCCESS'){
+        throw 'P15C stale-Safety correction closure CI identity mismatch.'
+    }
+    foreach($p in @('p11ProductionAdapterInvariantValidated','p13SurfaceInvariantValidated','p15cInvariantValidated','p15cEvidencePackagingValidated','powerShell51CompatibilityValidated','warningsAsErrorsBuildValidated','adaptiveProductionSelfTestValidated','freshSafetyRefreshRetrySelfTestValidated','freshSafetyExhaustionRestoreSelfTestValidated')){Assert-True ([bool]$cc.$p) ("P15C stale-Safety correction closure missing validation: {0}" -f $p)}
+    Assert-False ([bool]$cc.automaticPathChanged) 'P15C correction closure must not widen into Automatic.'
+    Assert-False ([bool]$cc.hardwareExecution) 'P15C correction closure must record no hardware execution.'
+    Assert-False ([bool]$cc.physicalGatesOpened) 'P15C correction closure must record physical gates closed.'
+    $failedCorrection=@($corr.failedCiHistoryPreserved)
+    if($failedCorrection.Count -ne 1 -or [int]$failedCorrection[0].runNumber -ne 1124 -or [long]$failedCorrection[0].runId -ne 36962046081 -or [string]$failedCorrection[0].head -cne '10bf1ca322c18feaf884b44b8c8f38026283aba1' -or [string]$failedCorrection[0].result -cne 'FAILURE'){
+        throw 'P15C stale-Safety correction closure failed-CI history mismatch.'
+    }
 }
 
 if($status -eq 'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){
