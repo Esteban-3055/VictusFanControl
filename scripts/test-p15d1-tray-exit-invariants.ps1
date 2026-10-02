@@ -23,7 +23,8 @@ if([string]$contract.status -notin @(
     'P15D1_TRAY_EXIT_IMPLEMENTATION_CI_PENDING_GATE_CLOSED',
     'P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED',
     'P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED',
-    'P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI'
+    'P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI',
+    'P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED'
 )){
     throw "Unexpected P15D1 preparation status: $($contract.status)"
 }
@@ -35,7 +36,7 @@ Assert-False ([bool]$contract.guiManual.executionAuthorized) 'P15C execution mus
 Assert-False ([bool]$contract.guiManual.controllerPhysicalExecutionAuthorized) 'P15C controller gate must remain re-blocked.'
 
 Assert-True ([bool]$d.preparationImplemented) 'P15D1 preparation must be implemented.'
-if([string]$contract.status -in @('P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED','P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED','P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI')){
+if([string]$contract.status -in @('P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED','P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED','P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED')){
     Assert-True ([bool]$d.preparationCiValidated) 'P15D1 hardening/closure requires validated software CI.'
 }else{
     Assert-False ([bool]$d.preparationCiValidated) 'Pending P15D1 preparation must not pre-claim CI.'
@@ -61,7 +62,7 @@ if([string]$contract.status -eq 'P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSE
     Assert-False ([bool]$h.hardwareExecution) 'P15D1 hardening must remain software-only.'
     Assert-False ([bool]$h.physicalGatesOpened) 'P15D1 hardening must keep physical gates closed.'
 }
-if([string]$contract.status -in @('P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED','P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI')){
+if([string]$contract.status -in @('P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED','P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED')){
     Assert-True ([bool]$d.runtimeImplementationCiValidated) 'P15D1 formal closure requires final runtime implementation CI.'
     Assert-True ([bool]$d.preparationClosure.closed) 'P15D1 formal closure must be closed.'
     $pc=$d.preparationClosure
@@ -136,8 +137,26 @@ if([string]$contract.status -eq 'P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_C
     Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D1 GUI/controller execution must remain closed during preparation/closure.'
     Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15D1 dedicated source gate must be hard-closed.'
 }
-Assert-False ([bool]$d.physicalPassed) 'P15D1 cannot pre-claim physical PASS.'
-Assert-False ([bool]$d.evidenceClosed) 'P15D1 cannot pre-close physical evidence.'
+if([string]$contract.status -eq 'P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED'){
+    Assert-True ([bool]$d.physicalPassed) 'P15D1 physical closure must set physicalPassed.'
+    Assert-True ([bool]$d.evidenceClosed) 'P15D1 physical closure must set evidenceClosed.'
+    Assert-False ([bool]$d.executionAuthorized) 'P15D1 physical closure must re-block parent harness.'
+    Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D1 physical closure must re-block GUI qualification gate.'
+    Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15D1 physical closure requires the dedicated source gate closed.'
+    $p=$d.physicalPassClosure
+    Assert-True ([bool]$p.closed) 'P15D1 physical PASS closure must be closed.'
+    if([string]$p.result -cne 'PASS' -or [string]$p.sourceHead -cne 'a905b535aa3382a731faf174e95e21d088cd33bd' -or [int]$p.sourceCiRunNumber -ne 1136 -or [long]$p.sourceCiRunId -ne 36968252221 -or [string]$p.sourceCiResult -cne 'SUCCESS'){throw 'P15D1 physical PASS source/CI identity mismatch.'}
+    if([string]$p.evidenceZipSha256 -cne 'd675d758508b151ec648423f300b8966c0b5a2957eb06aed11ccfbe2face5880' -or [string]$p.evidenceSidecarSha256 -cne '6a47bc67d6d05cb98af9d09a1da136de5eea2e033d1430e3114cab9a46a1091e' -or [string]$p.packageManifestSha256 -cne 'cd1eac52263365f755b1bc3fb27abacd7d291038040ce2e639687a698b6ee88b' -or [string]$p.harnessSummarySha256 -cne 'b1184593c2cc1601553d906ce81d02e17c3e23aa6884051f60bcdbfd68dcd91b'){throw 'P15D1 physical PASS package identity mismatch.'}
+    foreach($flag in @('sidecarReferencesZipSha256','archiveIntegrityVerified','packageManifestEmbeddedHashesVerified','packageManifestSourceIdentityEntriesVerified','repositoryHeadMatched','upstreamHeadMatchedAtExecution','trackedSourceClean','onlyPreservedUntrackedLogsObserved','targetMatched','realP13SurfaceUsed','parentOwnedProofBoundToGuiIdentity','windowHiddenMarkerVerified','hiddenOwnedJournalBoundToGuiIdentity','hiddenOwnedJournalSessionStable','trayExitWhileHiddenVerified','normalExplicitShutdownUsed','coordinatorDisposeBeforeWorkerPreserved','causalPrepareWriteIntentCommitRestoreReleaseVerified','strongRestoreVerified','ffReleaseAndLegacyDefaultPathVerified','localFirmwareAckVerified','watchdogReleaseVerified','finalJournalAbsent','watchdogProcessIdentityStable','initialServiceStatePreserved','failsafeArmed','evidenceIndependentlyReviewed','physicalPassSupported')){Assert-True ([bool]$p.$flag) ("P15D1 physical PASS expected true: {0}" -f $flag)}
+    foreach($flag in @('windowVisibleAfterHide','windowShowInTaskbarAfterHide','serviceStartedByHarness','failsafeTakeover','userFacingManualExecutionAuthorized','automaticExecutionAuthorized','candidateCurvePhysicallyValidated','candidateCurveAuthorizedForProduction','m9cQualificationConstructionAuthorized','m9dQualificationConstructionAuthorized','nextPhysicalGateOpened')){Assert-False ([bool]$p.$flag) ("P15D1 physical PASS expected false: {0}" -f $flag)}
+    if([int]$p.packageManifestEmbeddedEvidenceHashCount -ne 22 -or [int]$p.packageManifestSourceIdentityEntryCount -ne 12 -or [int]$p.healthySafetyReadySamples -ne 3 -or [int]$p.exactManualModeRequests -ne 1 -or [int]$p.exactApplyManualCalls -ne 1 -or [int]$p.exactFirmwareModeRequests -ne 0 -or [int]$p.exactAutomaticModeRequests -ne 0 -or [int]$p.parentOwnedSetpointSamples -ne 2 -or [int]$p.hiddenOwnedSetpointSamples -ne 2 -or [int]$p.windowHideRequests -ne 1 -or [int]$p.trayExitRequests -ne 1 -or [int]$p.ownedJournalSchemaVersion -ne 2 -or [int]$p.ownedJournalGeneration -ne 3 -or [int]$p.independentFinalFfFfSamples -ne 2 -or [int]$p.cleanupFfFfSamples -ne 2){throw 'P15D1 physical PASS bounded evidence counts mismatch.'}
+    if([string]$p.equalLevel -cne '30/30' -or [int]$p.guiPid -ne 24288 -or [string]$p.guiStartUtcTicks -cne '639265156818636278' -or [int]$p.ownedJournalControllerPid -ne 24288 -or [string]$p.ownedJournalControllerStartUtcTicks -cne '639265156818636278' -or [string]$p.ownedJournalSessionId -cne '45600294-7a7c-47e8-9d2e-9b298612f63d' -or [int]$p.watchdogPid -ne 7980 -or [string]$p.watchdogStartUtcTicks -cne '639264861577277909' -or [string]$p.guiFinalAuthority -cne 'Firmware' -or [string]$p.guiControllerModeAtShutdown -cne 'Manual' -or [string]$p.initialServiceState -cne 'Manual/Running/PID7980/LocalSystem' -or [string]$p.finalServiceState -cne 'Manual/Running/PID7980/LocalSystem'){throw 'P15D1 physical PASS identity/state evidence mismatch.'}
+    $c=$p.causalEventCounts
+    if([int]$c.prepare -ne 1 -or [int]$c.writeIntent -ne 1 -or [int]$c.commit -ne 1 -or [int]$c.restoreBegin -ne 1 -or [int]$c.release -ne 1){throw 'P15D1 physical PASS causal event counts mismatch.'}
+}else{
+    Assert-False ([bool]$d.physicalPassed) 'P15D1 cannot pre-claim physical PASS.'
+    Assert-False ([bool]$d.evidenceClosed) 'P15D1 cannot pre-close physical evidence.'
+}
 Assert-Contains $gate 'RequiredToken = "8C40-P15D1-TRAYEXIT30"' 'P15D1 token mismatch.'
 Assert-Contains $gate 'QualificationLevel = 30' 'P15D1 level must remain 30.'
 Assert-Contains $gate 'NormalUserExecutionGatesClosed()' 'P15D1 must assert normal user gate isolation.'
