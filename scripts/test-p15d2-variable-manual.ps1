@@ -613,30 +613,32 @@ try{
     }
 
     if(Test-Path -LiteralPath $journalPath){throw 'P15D2 strong restore returned but durable journal remains.'}
+
+    Write-Host ''
+    Write-Host 'P15D2 FAN-CONTROL RESTORE PROOF COMPLETE. Right-click the VictusFanControl tray icon and choose Exit ONCE for a clean GUI exit.' -ForegroundColor Green
+    $guiExit=Wait-P15BTrackedChildExitCode -Process $gui -Seconds 90
+    if($guiExit -ne 0){throw "P15D2 GUI exited with code $guiExit after qualified Firmware restore."}
+
+    if(Test-Path -LiteralPath $journalPath){throw 'P15D2 clean GUI exit recreated or retained a durable journal after Firmware restore.'}
     $finalJournalAbsent=$true
     Assert-CausalServiceLog $guiPid
     $causalChainPass=$true
-    Assert-StableSetpoint 255 255 'P15D2 independent final FF/FF' $finalFfPath
+    Assert-StableSetpoint 255 255 'P15D2 independent final FF/FF after clean GUI exit' $finalFfPath
     $finalFirmwareProofPass=$true
 
     $finalSvc=Get-ServiceState
-    Assert-ServiceCommon $finalSvc 'P15D2 final Firmware baseline'
+    Assert-ServiceCommon $finalSvc 'P15D2 final post-exit Firmware baseline'
     if([string]$finalSvc.State -cne 'Running' -or [int]$finalSvc.ProcessId -ne $watchdogPid -or
        (Get-ProcessStartTicks $watchdogPid) -ne $watchdogStartTicks){
         throw 'P15D2 final watchdog service is not the same Running/Ready process.'
     }
     [void](Wait-M4Ready $watchdogPid)
-    $serviceAfter=Snapshot-Service 'after-firmware-restore'
+    $serviceAfter=Snapshot-Service 'after-clean-gui-exit'
     @($serviceBefore,$serviceDuring,$serviceAfter) | ConvertTo-Json -Depth 8 |
         Set-Content -LiteralPath $serviceSnapshotsPath -Encoding UTF8
     $finalServiceBaselinePass=$true
     if(Test-FailsafeTakeover){$failsafeTakeover=$true;throw 'P15D2 independent failsafe took over; safe but invalid.'}
     $strongRestorePass=$true
-
-    Write-Host ''
-    Write-Host 'P15D2 FAN-CONTROL PROOF COMPLETE. Right-click the VictusFanControl tray icon and choose Exit ONCE for a clean GUI exit.' -ForegroundColor Green
-    $guiExit=Wait-P15BTrackedChildExitCode -Process $gui -Seconds 90
-    if($guiExit -ne 0){throw "P15D2 GUI exited with code $guiExit after qualified Firmware restore."}
 
     if($appLogPath -and (Test-Path -LiteralPath $appLogPath -PathType Leaf)){
         Copy-Item -LiteralPath $appLogPath -Destination $appLogEvidencePath
