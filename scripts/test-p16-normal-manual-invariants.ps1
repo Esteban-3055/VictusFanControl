@@ -106,14 +106,19 @@ Assert-Contains $candidate 'AuthorizedForProduction = false' 'P16 Candidate V1 p
 if($isPhysicalFailClosed){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B fail-closed closure must re-block the dedicated source gate.'
  $attempts=@($d.physicalAttemptHistory)
- if($attempts.Count -ne 2){throw 'P16B fail-closed history must preserve both target attempts.'}
- if([string]$attempts[0].result -cne 'FAIL_CLOSED' -or [string]$attempts[1].result -cne 'FAIL_CLOSED'){throw 'P16B target attempts must remain FAIL_CLOSED.'}
+ if($attempts.Count -ne 3){throw 'P16B fail-closed history must preserve all three target attempts.'}
+ foreach($a in $attempts){if([string]$a.result -cne 'FAIL_CLOSED'){throw 'Every preserved P16B target attempt must remain FAIL_CLOSED.'}}
  if([string]$attempts[0].evidenceZipSha256 -cne '2f164727994683bb7f5c1d49eeff871b017d6a129dc4c6de9ca1e5c51d44a178'){throw 'P16B attempt-1 evidence identity mismatch.'}
  if([string]$attempts[1].evidenceZipSha256 -cne 'c26eb3afab86a6998c8f52233165b276e4bd1d52a4ec803ef03bc9192978a661'){throw 'P16B attempt-2 evidence identity mismatch.'}
+ if([string]$attempts[2].sourceHead -cne '258d39cd5ab968b55983447f409f2210c7c1fc65' -or [int]$attempts[2].sourceCiRunNumber -ne 1194 -or [long]$attempts[2].sourceCiRunId -ne 37070246335 -or [string]$attempts[2].evidenceZipSha256 -cne '35bfd02daafe126f72af096e57a49c709195e05d563c1fa0666f459bcb2038bd'){throw 'P16B attempt-3 evidence identity mismatch.'}
  Assert-True ([bool]$d.authorization.authorizationConsumed) 'P16B physical authorization must be marked consumed.'
  Assert-True ([bool]$d.authorization.freshAuthorizationRequired) 'P16B retry must require a fresh authorization.'
- Assert-True ([bool]$d.hardeningRequired.required) 'P16B fail-closed state must require hardening.'
+ Assert-True ([bool]$d.authorization.attemptFenceClaimed) 'P16B attempt-3 one-shot fence claim must be preserved.'
+ Assert-True ([bool]$d.hardeningRequired.required) 'P16B fail-closed state must require follow-up hardening/review.'
  Assert-True ([bool]$d.hardeningRequired.physicalGateMustRemainClosed) 'P16B hardening must keep the physical gate closed.'
+ $p3=$d.hardeningRequired.postAttempt3
+ if($null -eq $p3 -or -not [bool]$p3.required -or -not [bool]$p3.appAuditPowerShell51CompatibilityBug -or -not [bool]$p3.anomalousReturn30EcObservationsPreserved -or -not [bool]$p3.strongRestoreProven -or -not [bool]$p3.trayExitProofMissing -or -not [bool]$p3.noPhysicalPassClaimed){throw 'P16B attempt-3 findings incomplete.'}
+ Assert-False ([bool]$p3.hardwareExecutionByReblockCommit) 'P16B re-block commit must be software-only.'
 }
 if($isHardened){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B hardening must keep the dedicated source gate closed.'

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
+  "status": "P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED",
   "scope": "Prepare and hard-close the ordinary application Manual qualification path before permanent normal-user Manual promotion.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
@@ -43,9 +43,9 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": true,
-    "controllerPhysicalExecutionAuthorized": true,
-    "physicalGatesOpened": true,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
+    "physicalGatesOpened": false,
     "physicalPassed": false,
     "evidenceClosed": false,
     "hardwareExecution": true,
@@ -153,13 +153,16 @@
       "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
       "authorizationCommitPerformsHardwareExecution": false,
       "oneShotAttemptFenceRequired": true,
-      "authorizationConsumed": false,
-      "freshAuthorizationRequired": false,
+      "authorizationConsumed": true,
+      "freshAuthorizationRequired": true,
       "permanentUserManualExecutionAuthorized": false,
       "automaticExecutionAuthorized": false,
       "candidateCurvePhysicallyValidated": false,
       "candidateCurveAuthorizedForProduction": false,
-      "controlEnabledByDefault": false
+      "controlEnabledByDefault": false,
+      "consumedByAttempt": 3,
+      "attemptFenceClaimed": true,
+      "attemptFenceAuthorizationHead": "258d39cd5ab968b55983447f409f2210c7c1fc65"
     },
     "physicalAttemptHistory": [
       {
@@ -204,18 +207,43 @@
           "The real GUI logged the return 30/30 Apply as successful, but the parent independent EC probe then failed to acquire Global\\\\Access_EC within its single 500 ms acquisition window.",
           "No return-30 parent proof, Firmware strong-restore proof, tray-exit proof or P16 PASS is claimed."
         ]
+      },
+      {
+        "attempt": 3,
+        "sourceHead": "258d39cd5ab968b55983447f409f2210c7c1fc65",
+        "sourceCiRunNumber": 1194,
+        "sourceCiRunId": 37070246335,
+        "sourceCiResult": "SUCCESS",
+        "evidenceDirectory": "logs/p16-normal-manual_2026-10-02_190623",
+        "evidenceZip": "p16-normal-manual_2026-10-02_190623.zip",
+        "evidenceZipSha256": "35bfd02daafe126f72af096e57a49c709195e05d563c1fa0666f459bcb2038bd",
+        "sidecarFileSha256": "234f4b8eed67ca96a0611935fe8192cc84ec8567b145101ea2af6a8e932d1856",
+        "manifestSha256": "730993a9078121fb43c100bb79b7a1e14d66deb12549111077ee3315719b7a3c",
+        "harnessSummarySha256": "b64d28378a66477874ebe9dbb63761ec45802511d77bc32d4a8bbd9a67d34b36",
+        "attemptFenceSha256": "fdf260afaec6c9a220f711a37a913f0d47e208aa9300b81a4d06f79987cfa5d2",
+        "result": "FAIL_CLOSED",
+        "failure": "Windows PowerShell 5.1 runtime app-interaction audit failed because the two-argument String.Contains overload is unavailable.",
+        "evidenceNotes": [
+          "Generation-2 one-shot authorization was consumed by the ProgramData attempt fence.",
+          "Real normal-app Manual -> 30/30 -> 40/40 -> 30/30 -> Firmware completed before the audit exception.",
+          "Generation 3/5/7 OWNED journals remained in one GUI/controller/session identity.",
+          "Return-30 parent proof preserved anomalous intermediate EC observations 144/30 and 164/17 before two consecutive 30/30 reads.",
+          "Watchdog log preserves PREPARE, three WRITE_INTENT/COMMIT pairs, RESTORE_BEGIN and RELEASE.",
+          "Firmware restore was independently proven by two consecutive FF/FF reads; strongRestorePass and finalJournalAbsent are true.",
+          "Failure occurred in Assert-AppInteractionAudit before tray Exit, so no P16 PASS, post-exit proof or evidence closure is claimed."
+        ]
       }
     ],
     "hardeningRequired": {
-      "required": false,
-      "physicalGateMustRemainClosed": false,
+      "required": true,
+      "physicalGateMustRemainClosed": true,
       "findings": [
         "AcpiEcReader retries EC protocol reads only after mutex acquisition; a Global\\\\Access_EC acquisition timeout is currently a single 500 ms terminal failure.",
         "The independent P16 parent setpoint probe treats one transient Global\\\\Access_EC acquisition timeout as terminal instead of using a bounded whole-probe retry.",
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Wait for full same-head CI SUCCESS on this fresh authorization HEAD. Only then may one target P16B attempt be run; the durable ProgramData attempt fence must consume that exact authorization HEAD before the failsafe/GUI physical boundary.",
+      "nextAction": "Keep P16B re-blocked. Fix the Windows PowerShell 5.1 app-audit compatibility bug and add a runtime regression test. Separately review the preserved 144/30 and 164/17 EC observations before any fresh authorization.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -281,6 +309,23 @@
         "candidateCurvePhysicallyValidated": false,
         "candidateCurveAuthorizedForProduction": false,
         "controlEnabledByDefault": false
+      },
+      "postAttempt3": {
+        "required": true,
+        "sourceAttempt": 3,
+        "sourceHead": "258d39cd5ab968b55983447f409f2210c7c1fc65",
+        "sourceCiRunNumber": 1194,
+        "appAuditPowerShell51CompatibilityBug": true,
+        "anomalousReturn30EcObservationsPreserved": true,
+        "anomalousSamples": [
+          "144/30",
+          "164/17"
+        ],
+        "physicalSequenceReachedFirmwareRestore": true,
+        "strongRestoreProven": true,
+        "trayExitProofMissing": true,
+        "noPhysicalPassClaimed": true,
+        "hardwareExecutionByReblockCommit": false
       }
     },
     "authorizationHistory": [

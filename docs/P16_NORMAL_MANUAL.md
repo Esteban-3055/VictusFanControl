@@ -309,3 +309,15 @@ The original authorization `0eba7426455adcca2594a612abd2c5753a52d235`
 remains preserved as consumed with its two FAIL_CLOSED attempts and cannot be
 reused.
 
+## P16B attempt 3 — preserved FAIL_CLOSED and immediate re-block
+
+Authorization HEAD `258d39cd5ab968b55983447f409f2210c7c1fc65` passed same-head CI #1194 / run `37070246335` SUCCESS and was consumed exactly once by the durable ProgramData attempt fence.
+
+Evidence `p16-normal-manual_2026-10-02_190623.zip` has SHA-256 `35bfd02daafe126f72af096e57a49c709195e05d563c1fa0666f459bcb2038bd`. The session completed the real normal-app Manual sequence 30 -> 40 -> 30 and then the real Firmware restore. Generation 3/5/7 OWNED journals remained bound to one GUI PID/start identity and one ownership session; the watchdog segment preserves PREPARE, three WRITE_INTENT/COMMIT pairs, RESTORE_BEGIN and RELEASE. Independent Firmware proof reached two consecutive FF/FF reads.
+
+The result remains FAIL_CLOSED. `Assert-AppInteractionAudit` called the two-argument `System.String.Contains` overload, which is unavailable under Windows PowerShell 5.1 / .NET Framework, so the harness threw before tray Exit could be requested and proven. The correction must use a Windows-PowerShell-compatible ordinal search and add a runtime compatibility regression test.
+
+The return-30 parent proof also preserved intermediate EC observations `144/30` and `164/17` before two consecutive `30/30` reads. These anomalies must be reviewed rather than discarded before any fresh authorization.
+
+The generation-2 authorization is consumed and all dedicated P16 physical gates are re-blocked. Permanent Manual, Automatic, Candidate V1 and default control remain closed. No target rerun is authorized.
+
