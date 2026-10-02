@@ -398,3 +398,24 @@ source/contract gates remain false; permanent Manual, Automatic, Candidate V1
 and default control remain closed. A fresh one-shot P16B authorization may only
 be created after this closure commit itself receives full same-head CI SUCCESS.
 
+## P16B generation-3 one-shot reauthorization after attempt-3 closure CI #1197
+
+Formal attempt-3 hardening closure HEAD
+`04bd301b5693d8a471ffb556b3ba5dd4ebe122da` passed full same-head CI
+#1197 / run `37073553766` SUCCESS.
+
+Generation 3 opens only the dedicated P16 normal-application Manual
+qualification source/contract gates. Permanent user Manual, Automatic,
+Candidate V1 and default control remain closed.
+
+The generation-1 authorization remains consumed by attempts 1 and 2. The
+generation-2 authorization `258d39cd5ab968b55983447f409f2210c7c1fc65`
+remains consumed by preserved attempt 3 and its ProgramData one-shot fence.
+Neither prior authorization may be reused.
+
+This generation-3 authorization commit performs no hardware execution. Target
+execution is forbidden until this exact new authorization HEAD itself passes
+full same-head CI. After that barrier, the existing ProgramData fence mechanism
+must atomically consume that exact HEAD before the failsafe/GUI physical
+boundary, allowing only one new target invocation.
+

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED",
+  "status": "P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
   "scope": "Prepare and hard-close the ordinary application Manual qualification path before permanent normal-user Manual promotion.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
@@ -43,9 +43,9 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": false,
-    "controllerPhysicalExecutionAuthorized": false,
-    "physicalGatesOpened": false,
+    "executionAuthorized": true,
+    "controllerPhysicalExecutionAuthorized": true,
+    "physicalGatesOpened": true,
     "physicalPassed": false,
     "evidenceClosed": false,
     "hardwareExecution": true,
@@ -145,24 +145,21 @@
       "result": "SUCCESS"
     },
     "authorization": {
-      "authorizationGeneration": 2,
-      "openedFromClosedHardeningHead": "0b32d210468c4bf4a535566da6d5c6bae3b3f3a9",
-      "basisCiRunNumber": 1193,
-      "basisCiRunId": 37069744953,
+      "authorizationGeneration": 3,
+      "openedFromClosedAttempt3HardeningHead": "04bd301b5693d8a471ffb556b3ba5dd4ebe122da",
+      "basisCiRunNumber": 1197,
+      "basisCiRunId": 37073553766,
       "basisCiResult": "SUCCESS",
       "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
       "authorizationCommitPerformsHardwareExecution": false,
       "oneShotAttemptFenceRequired": true,
-      "authorizationConsumed": true,
-      "freshAuthorizationRequired": true,
+      "authorizationConsumed": false,
+      "freshAuthorizationRequired": false,
       "permanentUserManualExecutionAuthorized": false,
       "automaticExecutionAuthorized": false,
       "candidateCurvePhysicallyValidated": false,
       "candidateCurveAuthorizedForProduction": false,
-      "controlEnabledByDefault": false,
-      "consumedByAttempt": 3,
-      "attemptFenceClaimed": true,
-      "attemptFenceAuthorizationHead": "258d39cd5ab968b55983447f409f2210c7c1fc65"
+      "controlEnabledByDefault": false
     },
     "physicalAttemptHistory": [
       {
@@ -236,14 +233,14 @@
     ],
     "hardeningRequired": {
       "required": false,
-      "physicalGateMustRemainClosed": true,
+      "physicalGateMustRemainClosed": false,
       "findings": [
         "AcpiEcReader retries EC protocol reads only after mutex acquisition; a Global\\\\Access_EC acquisition timeout is currently a single 500 ms terminal failure.",
         "The independent P16 parent setpoint probe treats one transient Global\\\\Access_EC acquisition timeout as terminal instead of using a bounded whole-probe retry.",
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "After this separate attempt-3 hardening closure commit itself passes full same-head CI, create a fresh separate one-shot P16B authorization. Do not execute target hardware from the closure commit.",
+      "nextAction": "Wait for full same-head CI SUCCESS on this generation-3 authorization HEAD. Only then may one target P16B attempt be run; the durable ProgramData attempt fence must consume that exact authorization HEAD before the failsafe/GUI physical boundary.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -395,6 +392,22 @@
         "authorizationConsumed": true,
         "targetAttemptCount": 2,
         "result": "CONSUMED_AFTER_TWO_PRESERVED_FAIL_CLOSED_ATTEMPTS"
+      },
+      {
+        "authorizationGeneration": 2,
+        "authorizationHead": "258d39cd5ab968b55983447f409f2210c7c1fc65",
+        "basisHead": "0b32d210468c4bf4a535566da6d5c6bae3b3f3a9",
+        "basisCiRunNumber": 1193,
+        "basisCiRunId": 37069744953,
+        "basisCiResult": "SUCCESS",
+        "authorizationCiRunNumber": 1194,
+        "authorizationCiRunId": 37070246335,
+        "authorizationCiResult": "SUCCESS",
+        "authorizationConsumed": true,
+        "targetAttemptCount": 1,
+        "consumedByAttempt": 3,
+        "attemptFenceClaimed": true,
+        "result": "CONSUMED_AFTER_PRESERVED_ATTEMPT3_FAIL_CLOSED"
       }
     ]
   },

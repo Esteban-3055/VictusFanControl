@@ -71,199 +71,19 @@ if($isP16APrepared){
  Assert-False ([bool]$d.preparationClosure.closed) 'P16A pending implementation cannot pre-close.'
 }
 if($isAuthorized){
- Assert-True ([bool]$d.executionAuthorized) 'P16B authorization must open the dedicated parent contract gate.'
- Assert-True ([bool]$d.controllerPhysicalExecutionAuthorized) 'P16B authorization must open the dedicated source gate.'
- Assert-True ([bool]$d.physicalGatesOpened) 'P16B authorization must record only the dedicated P16 gates open.'
-}else{
- Assert-False ([bool]$d.executionAuthorized) 'P16A parent gate must remain closed.'
- Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P16A source gate must remain closed.'
- Assert-False ([bool]$d.physicalGatesOpened) 'P16A physical gates must remain closed.'
-}
-Assert-False ([bool]$d.physicalPassed) 'P16A cannot pre-claim physical PASS.'
-Assert-False ([bool]$d.evidenceClosed) 'P16A cannot pre-close physical evidence.'
-if($hasPhysicalHistory){Assert-True ([bool]$d.hardwareExecution) 'Post-attempt P16 state must preserve that target hardware execution occurred.'}else{Assert-False ([bool]$d.hardwareExecution) 'Pre-physical P16 state must not claim hardware execution.'}
-Assert-True ([bool]$d.normalApplicationLaunchRequired) 'P16 must use normal app launch.'
-Assert-False ([bool]$d.specialQualificationStartupModeAllowed) 'P16 must not introduce special app startup mode.'
-Assert-True ([bool]$d.requiresRealP13Surface) 'P16 must reuse P13.'
-Assert-True ([bool]$d.requiresProductionAdapter) 'P16 must reuse production adapter.'
-Assert-True ([bool]$d.requiresProductionCoordinator) 'P16 must reuse coordinator.'
-Assert-True ([bool]$d.requiresProductionWatchdog) 'P16 must reuse production watchdog.'
-Assert-True ([bool]$d.requiresAppLogInteractionAudit) 'P16 must audit normal app log.'
-Assert-True ([bool]$d.requiresStrongRestore) 'P16 must prove strong restore.'
-Assert-True ([bool]$d.requiresCleanTrayExit) 'P16 must prove tray Exit.'
-if([string]$d.requiredToken -cne '8C40-P16-NORMAL-MANUAL-30-40-30'){throw 'P16 token mismatch.'}
-if([int]$d.initialLevel -ne 30 -or [int]$d.changedLevel -ne 40 -or [int]$d.returnLevel -ne 30){throw 'P16 levels mismatch.'}
-if([int]$d.exactManualModeRequests -ne 1 -or [int]$d.exactApplyManualCalls -ne 3 -or [int]$d.exactFirmwareModeRequests -ne 1 -or [int]$d.exactAutomaticModeRequests -ne 0){throw 'P16 interaction counts mismatch.'}
-$g=@($d.expectedOwnedGenerations);if($g.Count -ne 3 -or [int]$g[0] -ne 3 -or [int]$g[1] -ne 5 -or [int]$g[2] -ne 7){throw 'P16 generation contract must be 3/5/7.'}
-
-Assert-False ([bool]$p16.safetyBoundary.controlEnabledByDefault) 'P16 must keep default control OFF.'
-Assert-False ([bool]$p16.safetyBoundary.automaticPolicyEnabled) 'P16 must keep automatic policy OFF.'
-Assert-False ([bool]$p16.safetyBoundary.permanentUserManualExecutionAuthorized) 'P16A must keep permanent Manual false.'
-Assert-False ([bool]$p16.safetyBoundary.automaticExecutionAuthorized) 'P16 must keep Automatic false.'
-Assert-False ([bool]$p16.safetyBoundary.candidateCurvePhysicallyValidated) 'P16 must keep Candidate V1 unvalidated.'
-Assert-False ([bool]$p16.safetyBoundary.candidateCurveAuthorizedForProduction) 'P16 must keep Candidate V1 unpromoted.'
-Assert-False ([bool]$profile.control.enabledByDefault) 'P16 must keep profile control disabled by default.'
-Assert-Contains $userGate 'ManualExecutionAuthorized = false' 'P16A permanent Manual compile gate must remain false.'
-Assert-Contains $userGate 'AutomaticExecutionAuthorized = false' 'P16 Automatic compile gate must remain false.'
-Assert-Contains $candidate 'PhysicallyValidated = false' 'P16 Candidate V1 physical false required.'
-Assert-Contains $candidate 'AuthorizedForProduction = false' 'P16 Candidate V1 production false required.'
-
-if($isPhysicalFailClosed){
- Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B fail-closed closure must re-block the dedicated source gate.'
- $attempts=@($d.physicalAttemptHistory)
- if($attempts.Count -ne 3){throw 'P16B fail-closed history must preserve all three target attempts.'}
- foreach($a in $attempts){if([string]$a.result -cne 'FAIL_CLOSED'){throw 'Every preserved P16B target attempt must remain FAIL_CLOSED.'}}
- if([string]$attempts[0].evidenceZipSha256 -cne '2f164727994683bb7f5c1d49eeff871b017d6a129dc4c6de9ca1e5c51d44a178'){throw 'P16B attempt-1 evidence identity mismatch.'}
- if([string]$attempts[1].evidenceZipSha256 -cne 'c26eb3afab86a6998c8f52233165b276e4bd1d52a4ec803ef03bc9192978a661'){throw 'P16B attempt-2 evidence identity mismatch.'}
- if([string]$attempts[2].sourceHead -cne '258d39cd5ab968b55983447f409f2210c7c1fc65' -or [int]$attempts[2].sourceCiRunNumber -ne 1194 -or [long]$attempts[2].sourceCiRunId -ne 37070246335 -or [string]$attempts[2].evidenceZipSha256 -cne '35bfd02daafe126f72af096e57a49c709195e05d563c1fa0666f459bcb2038bd'){throw 'P16B attempt-3 evidence identity mismatch.'}
- Assert-True ([bool]$d.authorization.authorizationConsumed) 'P16B physical authorization must be marked consumed.'
- Assert-True ([bool]$d.authorization.freshAuthorizationRequired) 'P16B retry must require a fresh authorization.'
- Assert-True ([bool]$d.authorization.attemptFenceClaimed) 'P16B attempt-3 one-shot fence claim must be preserved.'
- Assert-True ([bool]$d.hardeningRequired.required) 'P16B fail-closed state must require follow-up hardening/review.'
- Assert-True ([bool]$d.hardeningRequired.physicalGateMustRemainClosed) 'P16B hardening must keep the physical gate closed.'
- $p3=$d.hardeningRequired.postAttempt3
- if($null -eq $p3 -or -not [bool]$p3.required -or -not [bool]$p3.appAuditPowerShell51CompatibilityBug -or -not [bool]$p3.anomalousReturn30EcObservationsPreserved -or -not [bool]$p3.strongRestoreProven -or -not [bool]$p3.trayExitProofMissing -or -not [bool]$p3.noPhysicalPassClaimed){throw 'P16B attempt-3 findings incomplete.'}
- Assert-False ([bool]$p3.hardwareExecutionByReblockCommit) 'P16B re-block commit must be software-only.'
-}
-if($isHardened){
- Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B hardening must keep the dedicated source gate closed.'
- $attempts=@($d.physicalAttemptHistory)
- $expectedHardeningAttemptCount=$(if($isPostAttempt3Hardening){3}else{2})
- if($attempts.Count -ne $expectedHardeningAttemptCount){throw ("P16B hardening must preserve exactly {0} target attempts for this state." -f $expectedHardeningAttemptCount)}
- foreach($a in $attempts){if([string]$a.result -cne 'FAIL_CLOSED'){throw 'P16B hardening must preserve every target attempt as FAIL_CLOSED.'}}
- $hi=$d.hardeningRequired.implementation
- foreach($flag in @('staged','productionSetpointAckTransientEcRetry','parentEcProbeTransientMutexRetry','failedInteractionImmediateAbort','oneShotAuthorizationAttemptFence','evidenceIncludesAttemptFence','deterministicHelperSelfTest','backendDeterministicSelfTests')){
-  Assert-True ([bool]$hi.$flag) ("P16B hardening implementation flag missing: {0}" -f $flag)
- }
- Assert-False ([bool]$hi.ownershipMismatchRelaxed) 'P16B hardening must not relax ownership mismatch detection.'
- Assert-False ([bool]$hi.ecMutexTimeoutGloballyRelaxed) 'P16B hardening must not globally relax the EC mutex timeout.'
- Assert-False ([bool]$hi.hardwareExecutionByHardeningCommit) 'P16B hardening commit must remain software-only.'
- Assert-Contains $backend 'MaximumTransientSetpointReadFailures = 2' 'P16B backend setpoint retry bound missing.'
- Assert-Contains $backend 'Setpoint acknowledgement lost EC observability' 'P16B backend repeated-contention fail-closed diagnostic missing.'
- Assert-Contains $backendSelfTest 'TestTransientSetpointAckReadFailureRecoversAsync' 'P16B backend transient setpoint retry self-test missing.'
- Assert-Contains $backendSelfTest 'TestRepeatedSetpointAckReadFailureFailsClosedAsync' 'P16B backend repeated setpoint failure self-test missing.'
- foreach($needle in @('Test-P16EcMutexContentionText','Invoke-P16BoundedEcContentionRetry','Resolve-P16InteractionOutcome','New-P16AuthorizationAttemptFence','[IO.FileMode]::CreateNew')){Assert-Contains $hardeningHelper $needle ("P16B hardening helper missing: {0}" -f $needle)}
- foreach($needle in @('already consumed','failureFirst','non-transient','three transient attempts')){Assert-Contains $hardeningSelfTest $needle ("P16B hardening helper self-test missing: {0}" -f $needle)}
- foreach($needle in @('Invoke-P16BoundedEcContentionRetry','Wait-P16InteractionOutcome','New-P16AuthorizationAttemptFence','attemptFenceClaimed')){Assert-Contains $harness $needle ("P16B hardened harness missing: {0}" -f $needle)}
- foreach($needle in @('P16 could not parse setpoint probe. Raw:','[pscustomobject]@{timestampUtc=','$window.Count -gt 0')){Assert-Contains $harness $needle ("P16B corrected harness source incomplete: {0}" -f $needle)}
- if(([regex]::Matches($harness,[regex]::Escape('function Read-8C40Setpoint {'))).Count -ne 1){throw 'P16B harness must contain exactly one Read-8C40Setpoint function.'}
- if(([regex]::Matches($harness,[regex]::Escape('function Assert-StableSetpoint'))).Count -ne 1){throw 'P16B harness must contain exactly one Assert-StableSetpoint function.'}
- if(([regex]::Matches($harness,[regex]::Escape('function Wait-P16InteractionOutcome'))).Count -ne 1){throw 'P16B harness must contain exactly one interaction waiter.'}
- Assert-Contains $harness 'during {0}: {1}" -f $Label,$outcome.Line' 'P16B interaction failure diagnostic must avoid colon-adjacent variable interpolation.'
- Assert-NotContains $harness 'during $Label:' 'P16B harness must not contain invalid colon-adjacent Label interpolation.'
- if(-not $harness.TrimEnd().EndsWith('exit 1',[StringComparison]::Ordinal)){throw 'P16B harness must terminate at the single final fail-closed exit.'}
- Assert-Contains $packager 'attempt-fence' 'P16B evidence packager must carry the one-shot attempt fence.'
- Assert-Contains $workflow 'HP 8C40 P16B hardening helper self-test' 'P16B hardening helper self-test must run in CI.'
- Assert-Contains $doc 'P16B software-only hardening staged' 'P16B hardening documentation missing.'
- if($isHardeningClosed){
-  Assert-False ([bool]$d.hardeningRequired.required) 'P16B formal hardening closure must clear the outstanding-hardening flag.'
-  Assert-True ([bool]$hi.ciValidated) 'P16B formal hardening closure requires CI validation.'
-  $hc=$d.hardeningRequired.closure
-  if($null -eq $hc){throw 'P16B hardening closure metadata missing.'}
-  if(-not [bool]$hc.closed -or [string]$hc.result -cne 'PASS' -or
-     [string]$hc.implementationHead -cne '6539671204d3e9c548d1d9b5b553920ccd553525' -or
-     [int]$hc.sourceCiRunNumber -ne 1192 -or
-     [long]$hc.sourceCiRunId -ne 37069306742 -or
-     [string]$hc.sourceCiResult -cne 'SUCCESS'){
-   throw 'P16B hardening closure CI identity mismatch.'
-  }
-  Assert-False ([bool]$hc.hardwareExecution) 'P16B hardening closure must be software-only.'
-  Assert-False ([bool]$hc.physicalGatesOpened) 'P16B hardening closure must keep physical gates closed.'
-  Assert-False ([bool]$hc.dedicatedP16SourceGateOpen) 'P16B hardening closure must keep the dedicated source gate false.'
-  Assert-False ([bool]$hc.permanentUserManualExecutionAuthorized) 'P16B hardening closure cannot promote permanent Manual.'
-  Assert-False ([bool]$hc.automaticExecutionAuthorized) 'P16B hardening closure cannot open Automatic.'
-  Assert-False ([bool]$hc.candidateCurvePhysicallyValidated) 'P16B hardening closure cannot validate Candidate V1.'
-  Assert-False ([bool]$hc.candidateCurveAuthorizedForProduction) 'P16B hardening closure cannot promote Candidate V1.'
-  Assert-False ([bool]$hc.controlEnabledByDefault) 'P16B hardening closure cannot enable default control.'
-  Assert-Contains $doc 'P16B hardening formally closed after CI #1192' 'P16B formal hardening-closure documentation missing.'
- }
-}
-
-if($isPostAttempt3Hardening){
- Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B attempt-3 hardening must keep the dedicated source gate closed.'
- $p3=$d.hardeningRequired.postAttempt3
- if($null -eq $p3){throw 'P16B attempt-3 hardening metadata missing.'}
- $p3i=$p3.implementation
- foreach($flag in @('staged','powershell51OrdinalAuditFix','powershell51RuntimeSelfTest','appAuditRejectsFailedClosedOrBlocked','stableSetpointSnapshotFilter','stableSetpointAppliedToProductionHardware','stableSetpointAppliedToRepositoryProbe','parentProofRejectsStableUnexpectedSetpoint','evidencePackagerIncludesCoherenceSources')){
-  Assert-True ([bool]$p3i.$flag) ("P16B attempt-3 hardening flag missing: {0}" -f $flag)
- }
- if($isPostAttempt3HardeningClosed){
-  Assert-True ([bool]$p3i.ciValidated) 'P16B attempt-3 formal closure requires CI validation.'
-  Assert-False ([bool]$d.hardeningRequired.required) 'P16B attempt-3 formal closure must clear the outstanding-hardening flag.'
-  $p3c=$p3.closure
-  if($null -eq $p3c -or -not [bool]$p3c.closed -or [string]$p3c.result -cne 'PASS' -or
-     [string]$p3c.implementationHead -cne '34c6d8d3a7245d0697f5803c74e2194fe89297f5' -or
-     [int]$p3c.sourceCiRunNumber -ne 1196 -or [long]$p3c.sourceCiRunId -ne 37072759522 -or
-     [string]$p3c.sourceCiResult -cne 'SUCCESS'){
-   throw 'P16B attempt-3 hardening closure CI identity mismatch.'
-  }
-  Assert-False ([bool]$p3c.hardwareExecution) 'P16B attempt-3 hardening closure must be software-only.'
-  Assert-False ([bool]$p3c.physicalGatesOpened) 'P16B attempt-3 hardening closure must keep physical gates closed.'
-  Assert-False ([bool]$p3c.dedicatedP16SourceGateOpen) 'P16B attempt-3 hardening closure must keep the dedicated source gate false.'
-  Assert-False ([bool]$p3c.permanentUserManualExecutionAuthorized) 'P16B attempt-3 hardening closure cannot promote permanent Manual.'
-  Assert-False ([bool]$p3c.automaticExecutionAuthorized) 'P16B attempt-3 hardening closure cannot open Automatic.'
-  Assert-False ([bool]$p3c.candidateCurvePhysicallyValidated) 'P16B attempt-3 hardening closure cannot validate Candidate V1.'
-  Assert-False ([bool]$p3c.candidateCurveAuthorizedForProduction) 'P16B attempt-3 hardening closure cannot promote Candidate V1.'
-  Assert-False ([bool]$p3c.controlEnabledByDefault) 'P16B attempt-3 hardening closure cannot enable default control.'
-  Assert-False ([bool]$p3c.installedM4WatchdogBinaryMutated) 'P16B attempt-3 hardening closure must preserve the installed M4 binary.'
-  Assert-False ([bool]$p3c.installedM4WatchdogCoherenceBehaviorChanged) 'P16B attempt-3 hardening closure must preserve installed M4 runtime behavior.'
-  Assert-Contains $doc 'P16B attempt-3 hardening formally closed after CI #1196' 'P16B attempt-3 closure documentation missing.'
- }else{
-  Assert-False ([bool]$p3i.ciValidated) 'P16B attempt-3 implementation commit cannot pre-claim CI validation.'
-  Assert-True ([bool]$d.hardeningRequired.required) 'P16B attempt-3 staged hardening must remain outstanding until formal closure.'
- }
- Assert-False ([bool]$p3i.ownershipMismatchRelaxed) 'P16B attempt-3 hardening must not relax stable ownership mismatch detection.'
- Assert-False ([bool]$p3i.equalPairAssumptionAdded) 'P16B setpoint coherence must not assume CPU/GPU values are equal.'
- Assert-False ([bool]$p3i.ecWritesAdded) 'P16B setpoint coherence must remain read-only.'
- Assert-False ([bool]$p3i.installedM4WatchdogBinaryMutated) 'P16B attempt-3 software hardening must not replace the qualified installed M4 service.'
- Assert-False ([bool]$p3i.installedM4WatchdogCoherenceBehaviorChanged) 'P16B attempt-3 software hardening must not claim runtime changes inside the installed M4 service.'
- Assert-False ([bool]$p3i.hardwareExecutionByHardeningCommit) 'P16B attempt-3 hardening commit must be software-only.'
- if([int]$p3i.requiredConsecutiveStableSnapshots -ne 2 -or [int]$p3i.maximumStableSnapshotReads -ne 6){throw 'P16B setpoint coherence bound must remain 2 consecutive within 6 snapshots.'}
-
- $hc=$d.hardeningRequired.closure
- if($null -eq $hc -or -not [bool]$hc.closed -or [string]$hc.result -cne 'PASS' -or
-    [string]$hc.implementationHead -cne '6539671204d3e9c548d1d9b5b553920ccd553525' -or
-    [int]$hc.sourceCiRunNumber -ne 1192 -or [long]$hc.sourceCiRunId -ne 37069306742 -or
-    [string]$hc.sourceCiResult -cne 'SUCCESS'){
-   throw 'P16B prior hardening closure must remain preserved while attempt-3 follow-up is staged.'
- }
-
- foreach($needle in @('Test-P16OrdinalContains','IndexOf($Needle,[StringComparison]::Ordinal)')){Assert-Contains $hardeningHelper $needle ("P16B PowerShell 5.1 ordinal helper missing: {0}" -f $needle)}
- foreach($needle in @('exact-case substring','must remain case-sensitive','reported a missing substring')){Assert-Contains $hardeningSelfTest $needle ("P16B Windows PowerShell runtime assertion missing: {0}" -f $needle)}
- Assert-Contains $harness 'Test-P16OrdinalContains -Text ([string]$segment[$i]) -Needle $pattern' 'P16B app audit must use the PS5.1-compatible ordinal helper.'
- Assert-NotContains $harness '.Contains($pattern,[StringComparison]::Ordinal)' 'P16B app audit must not use the unavailable Windows PowerShell 5.1 Contains overload.'
- Assert-Contains $harness '$invalidInteractions=' 'P16B final app audit must explicitly reject FAILED CLOSED/BLOCKED interactions.'
- Assert-Contains $harness "failure='stableUnexpectedSetpoint'" 'P16B parent proof must fail immediately on a coherent unexpected setpoint.'
- Assert-Contains $workflow 'HP 8C40 P16B helper Windows PowerShell 5.1 runtime self-test' 'P16B helper must have an explicit Windows PowerShell 5.1 runtime CI step.'
-
- foreach($needle in @('RequiredConsecutiveMatchingSnapshots = 2','MaximumSnapshots = 6','did not stabilize across','current == previous.Value')){Assert-Contains $setpointStabilizer $needle ("P16B setpoint stabilizer contract missing: {0}" -f $needle)}
- Assert-Contains $ecReader 'public FanSetpointSample ReadStableFanSetpoint' 'P16B stable setpoint reader missing.'
- Assert-Contains $ecReader 'FanSetpointSnapshotStabilizer.ReadStable' 'P16B stable setpoint reader must use the bounded stabilizer.'
- Assert-Contains $ecReader 'var sample = ReadFanSetpoint(FanEcRegisterLayout.HpLegacyDualFan);' 'P16B coherence hardening must not silently change the legacy 88F8 setpoint path.'
- Assert-Contains $backend '_ec.ReadStableFanSetpoint(layout)' 'P16B production control-state path must use coherent setpoint snapshots.'
- Assert-Contains $backend '_ec.ReadStableFanSetpoint(' 'P16B production narrow setpoint path must use coherent snapshots.'
- Assert-Contains $hp8c40Probe 'ec.ReadStableFanSetpoint(Hp8C40TargetProfile.Instance.FanEcLayout)' 'P16B repo-built HP 8C40 narrow probe must use coherent setpoints.'
- Assert-Contains $hp8c40Probe 'ec.ReadStableFanSetpoint(layout)' 'P16B HP 8C40 control-evidence probe must use coherent setpoints.'
- foreach($needle in @('144, 30','164, 17','stable asymmetric/external overwrite','no pair stabilizes within six snapshots')){Assert-Contains $backendSelfTest $needle ("P16B deterministic setpoint coherence self-test missing: {0}" -f $needle)}
-
- foreach($role in @('hp8c40-backend-source','hp8c40-backend-selftest','hp8c40-probe-source','ec-reader-source','setpoint-stabilizer-source')){Assert-Contains $packager $role ("P16B evidence packager missing coherence source role: {0}" -f $role)}
- Assert-Contains $doc 'P16B attempt-3 software hardening staged after CI #1195' 'P16B attempt-3 hardening documentation missing.'
-}
-
-if($isAuthorized){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P16B dedicated source gate must be open.'
  $auth=$d.authorization
  if($null -eq $auth){throw 'P16B authorization metadata missing.'}
- if([int]$auth.authorizationGeneration -ne 2 -or
-    [string]$auth.openedFromClosedHardeningHead -cne '0b32d210468c4bf4a535566da6d5c6bae3b3f3a9' -or
-    [int]$auth.basisCiRunNumber -ne 1193 -or
-    [long]$auth.basisCiRunId -ne 37069744953 -or
+ if([int]$auth.authorizationGeneration -ne 3 -or
+    [string]$auth.openedFromClosedAttempt3HardeningHead -cne '04bd301b5693d8a471ffb556b3ba5dd4ebe122da' -or
+    [int]$auth.basisCiRunNumber -ne 1197 -or
+    [long]$auth.basisCiRunId -ne 37073553766 -or
     [string]$auth.basisCiResult -cne 'SUCCESS'){
-   throw 'P16B fresh authorization basis mismatch.'
+   throw 'P16B generation-3 authorization basis mismatch.'
  }
  Assert-True ([bool]$auth.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P16B requires same-head CI before target execution.'
  Assert-False ([bool]$auth.authorizationCommitPerformsHardwareExecution) 'P16B authorization commit itself must perform no hardware execution.'
- Assert-True ([bool]$auth.oneShotAttemptFenceRequired) 'P16B fresh authorization must require the durable one-shot attempt fence.'
+ Assert-True ([bool]$auth.oneShotAttemptFenceRequired) 'P16B generation-3 authorization must require the durable one-shot attempt fence.'
  Assert-False ([bool]$auth.authorizationConsumed) 'Fresh P16B authorization must be unconsumed before target execution.'
  Assert-False ([bool]$auth.freshAuthorizationRequired) 'Current P16B authorization is already the required fresh authorization.'
  Assert-False ([bool]$auth.permanentUserManualExecutionAuthorized) 'P16B must not promote permanent user Manual.'
@@ -271,22 +91,48 @@ if($isAuthorized){
  Assert-False ([bool]$auth.candidateCurvePhysicallyValidated) 'P16B must not validate Candidate V1.'
  Assert-False ([bool]$auth.candidateCurveAuthorizedForProduction) 'P16B must not promote Candidate V1.'
  Assert-False ([bool]$auth.controlEnabledByDefault) 'P16B must keep default control disabled.'
- Assert-False ([bool]$d.hardeningRequired.required) 'Fresh P16B authorization requires the hardening to be formally closed.'
- Assert-True ([bool]$d.hardeningRequired.implementation.ciValidated) 'Fresh P16B authorization requires CI-validated hardening.'
+ Assert-False ([bool]$d.hardeningRequired.required) 'Generation-3 authorization requires all outstanding hardening to be formally closed.'
+ Assert-True ([bool]$d.hardeningRequired.implementation.ciValidated) 'Generation-3 authorization requires the original P16B hardening CI closure.'
+
  $hc=$d.hardeningRequired.closure
  if($null -eq $hc -or -not [bool]$hc.closed -or [string]$hc.result -cne 'PASS' -or
     [string]$hc.implementationHead -cne '6539671204d3e9c548d1d9b5b553920ccd553525' -or
     [int]$hc.sourceCiRunNumber -ne 1192 -or [long]$hc.sourceCiRunId -ne 37069306742 -or
     [string]$hc.sourceCiResult -cne 'SUCCESS'){
-   throw 'P16B fresh authorization requires the exact formally closed hardening baseline.'
+   throw 'P16B generation-3 authorization requires the original hardening closure.'
  }
+
+ $p3=$d.hardeningRequired.postAttempt3
+ $p3c=$p3.closure
+ if($null -eq $p3c -or -not [bool]$p3c.closed -or [string]$p3c.result -cne 'PASS' -or
+    [string]$p3c.implementationHead -cne '34c6d8d3a7245d0697f5803c74e2194fe89297f5' -or
+    [int]$p3c.sourceCiRunNumber -ne 1196 -or [long]$p3c.sourceCiRunId -ne 37072759522 -or
+    [string]$p3c.sourceCiResult -cne 'SUCCESS'){
+   throw 'P16B generation-3 authorization requires the exact attempt-3 hardening closure.'
+ }
+ Assert-True ([bool]$p3.implementation.ciValidated) 'P16B generation-3 authorization requires CI-validated attempt-3 hardening.'
+ Assert-False ([bool]$p3c.hardwareExecution) 'P16B generation-3 basis must remain software-only.'
+ Assert-False ([bool]$p3c.installedM4WatchdogBinaryMutated) 'P16B generation-3 basis must preserve the installed M4 binary.'
+ Assert-False ([bool]$p3c.installedM4WatchdogCoherenceBehaviorChanged) 'P16B generation-3 basis must preserve installed M4 runtime behavior.'
+
  $history=@($d.authorizationHistory)
- if($history.Count -lt 1 -or [int]$history[0].authorizationGeneration -ne 1 -or
+ if($history.Count -lt 2){throw 'P16B generation-3 authorization must preserve both consumed prior authorization generations.'}
+ if([int]$history[0].authorizationGeneration -ne 1 -or
     [string]$history[0].authorizationHead -cne '0eba7426455adcca2594a612abd2c5753a52d235' -or
     -not [bool]$history[0].authorizationConsumed -or [int]$history[0].targetAttemptCount -ne 2){
-   throw 'P16B previous consumed authorization history is missing or altered.'
+   throw 'P16B generation-1 consumed authorization history is missing or altered.'
  }
- Assert-Contains $doc 'P16B fresh one-shot reauthorization after closure CI #1193' 'P16B fresh authorization documentation missing.'
+ if([int]$history[1].authorizationGeneration -ne 2 -or
+    [string]$history[1].authorizationHead -cne '258d39cd5ab968b55983447f409f2210c7c1fc65' -or
+    [int]$history[1].authorizationCiRunNumber -ne 1194 -or
+    [long]$history[1].authorizationCiRunId -ne 37070246335 -or
+    -not [bool]$history[1].authorizationConsumed -or
+    [int]$history[1].targetAttemptCount -ne 1 -or
+    [int]$history[1].consumedByAttempt -ne 3 -or
+    -not [bool]$history[1].attemptFenceClaimed){
+   throw 'P16B generation-2 consumed authorization history is missing or altered.'
+ }
+ Assert-Contains $doc 'P16B generation-3 one-shot reauthorization after attempt-3 closure CI #1197' 'P16B generation-3 authorization documentation missing.'
 }else{
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16A source gate must remain hard-closed.'
 }

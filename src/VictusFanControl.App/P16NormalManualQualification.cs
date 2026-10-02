@@ -6,15 +6,15 @@ namespace VictusFanControl.App;
 /// P16 qualification-only bridge for proving the ordinary user-facing Manual
 /// path without introducing a P16-specific application startup/test mode.
 ///
-/// P16B attempt-3 software hardening passed same-head CI and is formally
-/// closed. The PowerShell 5.1 audit correction and bounded HP 8C40 setpoint-pair
-/// coherence filter remain behind this false gate. A fresh separate one-shot
-/// authorization plus its own same-head CI is required before any target retry.
-/// Permanent user Manual and Automatic remain false.
+/// Fresh generation-3 P16B one-shot target authorization after formal
+/// attempt-3 hardening closure. This opens only the dedicated normal-Manual
+/// qualification bridge. Target execution remains forbidden until this exact
+/// authorization HEAD passes full same-head CI; the durable attempt fence then
+/// permits only one invocation. Permanent user Manual and Automatic remain false.
 /// </summary>
 internal static class Hp8C40P16NormalManualQualificationGate
 {
-    public static readonly bool PhysicalExecutionAuthorized = false;
+    public static readonly bool PhysicalExecutionAuthorized = true;
 
     public const string RequiredToken = "8C40-P16-NORMAL-MANUAL-30-40-30";
     public const int InitialLevel = 30;
