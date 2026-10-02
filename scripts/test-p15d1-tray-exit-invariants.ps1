@@ -21,7 +21,8 @@ function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){if($
 if([string]$contract.status -notin @(
     'P15D1_TRAY_EXIT_PREPARATION_CI_PENDING_GATE_CLOSED',
     'P15D1_TRAY_EXIT_IMPLEMENTATION_CI_PENDING_GATE_CLOSED',
-    'P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED'
+    'P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED',
+    'P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED'
 )){
     throw "Unexpected P15D1 preparation status: $($contract.status)"
 }
@@ -33,8 +34,8 @@ Assert-False ([bool]$contract.guiManual.executionAuthorized) 'P15C execution mus
 Assert-False ([bool]$contract.guiManual.controllerPhysicalExecutionAuthorized) 'P15C controller gate must remain re-blocked.'
 
 Assert-True ([bool]$d.preparationImplemented) 'P15D1 preparation must be implemented.'
-if([string]$contract.status -eq 'P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED'){
-    Assert-True ([bool]$d.preparationCiValidated) 'P15D1 hardening requires the #1131 software baseline to remain CI validated.'
+if([string]$contract.status -in @('P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED','P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED')){
+    Assert-True ([bool]$d.preparationCiValidated) 'P15D1 hardening/closure requires validated software CI.'
 }else{
     Assert-False ([bool]$d.preparationCiValidated) 'Pending P15D1 preparation must not pre-claim CI.'
 }
@@ -59,7 +60,31 @@ if([string]$contract.status -eq 'P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSE
     Assert-False ([bool]$h.hardwareExecution) 'P15D1 hardening must remain software-only.'
     Assert-False ([bool]$h.physicalGatesOpened) 'P15D1 hardening must keep physical gates closed.'
 }
-Assert-False ([bool]$d.preparationClosure.closed) 'P15D1 preparation must not pre-close CI.'
+if([string]$contract.status -eq 'P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED'){
+    Assert-True ([bool]$d.runtimeImplementationCiValidated) 'P15D1 formal closure requires final runtime implementation CI.'
+    Assert-True ([bool]$d.preparationClosure.closed) 'P15D1 formal closure must be closed.'
+    $pc=$d.preparationClosure
+    if([string]$pc.result -cne 'PASS' -or
+       [string]$pc.implementationHead -cne '67bf967f06b41869ca9113e6844f0a99721b8646' -or
+       [int]$pc.sourceCiRunNumber -ne 1134 -or
+       [long]$pc.sourceCiRunId -ne 36967539573 -or
+       [string]$pc.sourceCiResult -cne 'SUCCESS'){
+        throw 'P15D1 formal preparation closure CI identity mismatch.'
+    }
+    foreach($p in @('p15aClosureInvariantValidated','p15bClosureInvariantValidated','p15cClosureInvariantValidated','p15d1InvariantValidated','evidencePackagingSelfTestValidated','powerShell51CompatibilityValidated','warningsAsErrorsBuildValidated','runtimeWiringBuildValidated','hardeningValidated')){
+        Assert-True ([bool]$pc.$p) ("P15D1 formal closure missing validation: {0}" -f $p)
+    }
+    Assert-False ([bool]$pc.hardwareExecution) 'P15D1 formal closure must record no hardware execution.'
+    Assert-False ([bool]$pc.physicalGatesOpened) 'P15D1 formal closure must keep physical gates closed.'
+    $hc=$d.hardeningReview.closure
+    Assert-True ([bool]$d.hardeningReview.ciValidated) 'P15D1 formal closure requires hardening CI validation.'
+    Assert-True ([bool]$hc.closed) 'P15D1 hardening closure must be closed.'
+    if([string]$hc.result -cne 'PASS' -or [string]$hc.implementationHead -cne '67bf967f06b41869ca9113e6844f0a99721b8646' -or [int]$hc.sourceCiRunNumber -ne 1134 -or [long]$hc.sourceCiRunId -ne 36967539573 -or [string]$hc.sourceCiResult -cne 'SUCCESS'){
+        throw 'P15D1 hardening closure CI identity mismatch.'
+    }
+}else{
+    Assert-False ([bool]$d.preparationClosure.closed) 'P15D1 preparation must not pre-close CI.'
+}
 $failed=@($d.preparationClosure.failedCiHistoryPreserved)
 if($failed.Count -ne 3 -or
    [int]$failed[0].runNumber -ne 1129 -or
