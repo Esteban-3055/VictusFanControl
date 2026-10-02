@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED",
+  "status": "P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED",
   "scope": "Prepare and hard-close the ordinary application Manual qualification path before permanent normal-user Manual promotion.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
@@ -32,14 +32,14 @@
       "result": "SUCCESS"
     },
     "preparationImplemented": true,
-    "preparationCiValidated": false,
+    "preparationCiValidated": true,
     "preparationClosure": {
-      "closed": false,
-      "result": null,
-      "implementationHead": null,
-      "sourceCiRunNumber": null,
-      "sourceCiRunId": null,
-      "sourceCiResult": null,
+      "closed": true,
+      "result": "PASS",
+      "implementationHead": "635e0a0d83922331a4a940206f150d7c68c8b01b",
+      "sourceCiRunNumber": 1185,
+      "sourceCiRunId": 37058666450,
+      "sourceCiResult": "SUCCESS",
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
@@ -137,7 +137,13 @@
         "hardwareExecution": false,
         "physicalGatesOpened": false
       }
-    ]
+    ],
+    "preparationValidation": {
+      "head": "635e0a0d83922331a4a940206f150d7c68c8b01b",
+      "runNumber": 1185,
+      "runId": 37058666450,
+      "result": "SUCCESS"
+    }
   },
   "promotion": {
     "manualExecutionAuthorized": false,

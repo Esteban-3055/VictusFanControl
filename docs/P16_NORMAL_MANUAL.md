@@ -96,3 +96,23 @@ log pattern, but the source invariant searched for the unescaped full string.
 The runtime/harness behavior was not executed and no physical gate was open.
 The next correction only makes that static source assertion insensitive to the
 regex escape.
+
+
+## P16A formal software closure
+
+The completed P16A implementation/correction HEAD
+`635e0a0d83922331a4a940206f150d7c68c8b01b` passed full same-head
+CI #1185 / run `37058666450` / SUCCESS.
+
+That run validated the P16 preparation invariant, P16 evidence packaging,
+Windows PowerShell 5.1 compatibility, the warnings-as-errors build and the
+historical regression suite.
+
+P16A is therefore software-complete. The dedicated parent/source physical
+gates remain false and permanent user Manual is still false. No P16 target
+execution has occurred.
+
+The next milestone is P16B. It must be opened by a separate authorization
+commit from this closed baseline and that authorization HEAD must itself pass
+full same-head CI before `scripts/test-p16-normal-manual.ps1` may be run on
+the target.

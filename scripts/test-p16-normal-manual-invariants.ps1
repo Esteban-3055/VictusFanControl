@@ -43,7 +43,19 @@ Assert-True ([bool]$d.architectureCiValidated) 'P16A requires architecture CI PA
 $a=$d.architectureValidation
 if([string]$a.head -cne '8fbe8aba0dc892f0fba988246164a13357325a7c' -or [int]$a.runNumber -ne 1182 -or [long]$a.runId -ne 37057172456 -or [string]$a.result -cne 'SUCCESS'){throw 'P16A architecture CI identity mismatch.'}
 Assert-True ([bool]$d.preparationImplemented) 'P16A full preparation must be implemented.'
-if($isClosed){Assert-True ([bool]$d.preparationCiValidated) 'P16A closed state requires preparation CI validation.';Assert-True ([bool]$d.preparationClosure.closed) 'P16A closed state requires formal preparation closure.'}else{Assert-False ([bool]$d.preparationCiValidated) 'P16A pending implementation cannot pre-claim CI.';Assert-False ([bool]$d.preparationClosure.closed) 'P16A pending implementation cannot pre-close.'}
+if($isClosed){
+ Assert-True ([bool]$d.preparationCiValidated) 'P16A closed state requires preparation CI validation.'
+ Assert-True ([bool]$d.preparationClosure.closed) 'P16A closed state requires formal preparation closure.'
+ $pv=$d.preparationValidation
+ if([string]$pv.head -cne '635e0a0d83922331a4a940206f150d7c68c8b01b' -or [int]$pv.runNumber -ne 1185 -or [long]$pv.runId -ne 37058666450 -or [string]$pv.result -cne 'SUCCESS'){throw 'P16A preparation validation identity mismatch.'}
+ $pc=$d.preparationClosure
+ if([string]$pc.result -cne 'PASS' -or [string]$pc.implementationHead -cne '635e0a0d83922331a4a940206f150d7c68c8b01b' -or [int]$pc.sourceCiRunNumber -ne 1185 -or [long]$pc.sourceCiRunId -ne 37058666450 -or [string]$pc.sourceCiResult -cne 'SUCCESS'){throw 'P16A formal preparation closure identity mismatch.'}
+ Assert-False ([bool]$pc.hardwareExecution) 'P16A closure must record no hardware execution.'
+ Assert-False ([bool]$pc.physicalGatesOpened) 'P16A closure must keep physical gates closed.'
+}else{
+ Assert-False ([bool]$d.preparationCiValidated) 'P16A pending implementation cannot pre-claim CI.'
+ Assert-False ([bool]$d.preparationClosure.closed) 'P16A pending implementation cannot pre-close.'
+}
 Assert-False ([bool]$d.executionAuthorized) 'P16A parent gate must remain closed.'
 Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P16A source gate must remain closed.'
 Assert-False ([bool]$d.physicalGatesOpened) 'P16A physical gates must remain closed.'
