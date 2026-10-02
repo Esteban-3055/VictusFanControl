@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
+  "status": "P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1344,8 +1344,8 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": true,
-    "controllerPhysicalExecutionAuthorized": true,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
     "physicalPassed": false,
     "evidenceClosed": false,
     "prerequisite": "P15D1 tray-exit lifecycle physical PASS formally closed",
@@ -1451,6 +1451,42 @@
       "m9dQualificationConstructionOpened": false,
       "hardwareExecutionAtAuthorizationCommit": false
     },
+    "failedPhysicalAttempt": {
+      "sourceHead": "aa5be229d7e1fb4c1c0b260f3354db972e98436b",
+      "sourceCiRunNumber": 1174,
+      "sourceCiRunId": 36985472454,
+      "sourceCiResult": "SUCCESS",
+      "result": "FAIL_CLOSED",
+      "failure": "Safety-supervisor EC guard snapshot 0xEC/0xF4 failed after 5 attempts; EC output buffer did not become full, last status 0x00 after 30 polls. The supervisor began Custom->Restoring before the operator Firmware request, so the real Firmware click returned HoldFirmware while authority was Restoring and the qualification correctly refused to claim the exact Firmware strong-restore path.",
+      "evidenceZipName": "p15d2-variable-manual_2026-10-02_054521.zip",
+      "evidenceZipSha256": "66951d9887dc663ee3109c2106ae7c88b322462218ebd16c2c4b45659b3bed02",
+      "sidecarFileSha256": "d646dcf0fccf6174c341bb91ac5580988d3d7203ee3d013c822d717c7f88c132",
+      "packageManifestSha256": "b38e81945f1ee1d8d32152d452ab9a064ac725ade300f32b48d4866bcc5bc88d",
+      "harnessSummarySha256": "263533c7e136724e96219286df75f6bff246a44e5183141d004afc9a59644d4f",
+      "appLogSha256": "1c934ae9c50993a42d27c5a4b7fd3b11528ebfa9b08d73fcc2139578796658f5",
+      "guiEventsSha256": "b5782789bc83bb1c45b5274b4668bd2c8d63425de335e1a2a06d36d9c667eafa",
+      "guiPid": 21836,
+      "guiStartUtcTicks": "639265275494889139",
+      "watchdogPid": 7980,
+      "watchdogStartUtcTicks": "639264861577277909",
+      "ownedSessionId": "c0837a7f-6a54-40df-9348-24b946fbabf2",
+      "initial30Generation": 3,
+      "changed40Generation": 5,
+      "duplicate40Generation": 5,
+      "return30Generation": 7,
+      "duplicateNoRetransmitPass": true,
+      "manualModeRequestsObserved": 1,
+      "manualApplyRequestsObserved": 4,
+      "firmwareModeRequestsObserved": 1,
+      "automaticModeRequestsObserved": 0,
+      "firmwareStrongRestoreQualified": false,
+      "cleanGuiExitQualified": false,
+      "causalChainQualified": false,
+      "cleanupFirmwareProofPass": true,
+      "failsafeTakeover": false,
+      "hardwareSafetyHandoffSucceeded": true,
+      "retryRequiresFreshAuthorization": true
+    },
     "generationSemanticsReview": {
       "required": true,
       "finding": "The initial preparation wording incorrectly implied one stable watchdog generation across changed setpoints; WatchdogLeaseManager increments Generation on every durable WRITE_INTENT and every COMMIT.",
@@ -1538,6 +1574,6 @@
       "physicalGatesOpened": false
     },
     "hardwareExecution": false,
-    "physicalGatesOpened": true
+    "physicalGatesOpened": false
   }
 }

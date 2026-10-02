@@ -26,7 +26,8 @@ if($status -notin @(
     'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED',
     'P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED',
     'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED',
-    'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI'
+    'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI',
+    'P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED'
 )){
     throw "Unexpected P15D2 preparation status: $status"
 }
@@ -45,7 +46,8 @@ if([string]$contract.guiLifecycleTrayExit.physicalPassClosure.sourceHead -cne 'a
 $d=$contract.guiManualVariableLevel
 Assert-True ([bool]$d.preparationImplemented) 'P15D2 preparation contract must be implemented.'
 $isAuthorized=($status -eq 'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
-$isFormalClosure=($status -in @('P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI'))
+$isFailedClosed=($status -eq 'P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED')
+$isFormalClosure=($status -in @('P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED'))
 if($isFormalClosure){
     Assert-True ([bool]$d.preparationClosure.closed) 'P15D2 formal software closure must close preparation evidence.'
 }else{
@@ -229,6 +231,41 @@ if($isAuthorized){
     )){Assert-False ([bool]$a.$flag) ("P15D2 authorization widened forbidden scope: {0}" -f $flag)}
 }else{
     Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15D2 source gate must be hard-closed.'
+}
+if($isFailedClosed){
+    $fp=$d.failedPhysicalAttempt
+    if([string]$fp.sourceHead -cne 'aa5be229d7e1fb4c1c0b260f3354db972e98436b' -or
+       [int]$fp.sourceCiRunNumber -ne 1174 -or
+       [long]$fp.sourceCiRunId -ne 36985472454 -or
+       [string]$fp.sourceCiResult -cne 'SUCCESS' -or
+       [string]$fp.result -cne 'FAIL_CLOSED'){
+        throw 'P15D2 failed physical attempt source identity mismatch.'
+    }
+    if([string]$fp.evidenceZipSha256 -cne '66951d9887dc663ee3109c2106ae7c88b322462218ebd16c2c4b45659b3bed02' -or
+       [string]$fp.sidecarFileSha256 -cne 'd646dcf0fccf6174c341bb91ac5580988d3d7203ee3d013c822d717c7f88c132' -or
+       [string]$fp.packageManifestSha256 -cne 'b38e81945f1ee1d8d32152d452ab9a064ac725ade300f32b48d4866bcc5bc88d' -or
+       [string]$fp.harnessSummarySha256 -cne '263533c7e136724e96219286df75f6bff246a44e5183141d004afc9a59644d4f'){
+        throw 'P15D2 failed physical evidence hash mismatch.'
+    }
+    if([string]$fp.guiStartUtcTicks -cne '639265275494889139' -or
+       [string]$fp.watchdogStartUtcTicks -cne '639264861577277909' -or
+       [string]$fp.ownedSessionId -cne 'c0837a7f-6a54-40df-9348-24b946fbabf2'){
+        throw 'P15D2 failed physical identity evidence mismatch.'
+    }
+    if([int]$fp.initial30Generation -ne 3 -or [int]$fp.changed40Generation -ne 5 -or
+       [int]$fp.duplicate40Generation -ne 5 -or [int]$fp.return30Generation -ne 7 -or
+       -not [bool]$fp.duplicateNoRetransmitPass -or
+       [int]$fp.manualModeRequestsObserved -ne 1 -or [int]$fp.manualApplyRequestsObserved -ne 4 -or
+       [int]$fp.firmwareModeRequestsObserved -ne 1 -or [int]$fp.automaticModeRequestsObserved -ne 0){
+        throw 'P15D2 failed physical variable-level progress evidence mismatch.'
+    }
+    Assert-False ([bool]$fp.firmwareStrongRestoreQualified) 'P15D2 failed attempt cannot qualify final Firmware strong restore.'
+    Assert-False ([bool]$fp.cleanGuiExitQualified) 'P15D2 failed attempt cannot qualify clean GUI exit.'
+    Assert-False ([bool]$fp.causalChainQualified) 'P15D2 failed attempt cannot qualify final causal chain.'
+    Assert-True ([bool]$fp.cleanupFirmwareProofPass) 'P15D2 failed attempt must preserve successful cleanup FF/FF proof.'
+    Assert-False ([bool]$fp.failsafeTakeover) 'P15D2 failed attempt must record no independent failsafe takeover.'
+    Assert-True ([bool]$fp.hardwareSafetyHandoffSucceeded) 'P15D2 failed attempt must record successful production safety handoff.'
+    Assert-True ([bool]$fp.retryRequiresFreshAuthorization) 'P15D2 failed attempt must require fresh authorization before retry.'
 }
 Assert-Contains $gate 'RequiredToken = "8C40-P15D2-MANUAL30-40-40-30"' 'P15D2 source token mismatch.'
 Assert-Contains $gate 'InitialLevel = 30' 'P15D2 initial level mismatch.'
