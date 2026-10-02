@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED",
+  "status": "P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1344,8 +1344,8 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": false,
-    "controllerPhysicalExecutionAuthorized": false,
+    "executionAuthorized": true,
+    "controllerPhysicalExecutionAuthorized": true,
     "physicalPassed": false,
     "evidenceClosed": false,
     "prerequisite": "P15D1 tray-exit lifecycle physical PASS formally closed",
@@ -1391,7 +1391,12 @@
       "return30MustApplyChangedLevel": true,
       "firmwareRequestMustRestore": true,
       "sameOwnedSessionRequiredAcross30To40To40To30": true,
-      "expectedOwnedGenerations": [3, 5, 5, 7],
+      "expectedOwnedGenerations": [
+        3,
+        5,
+        5,
+        7
+      ],
       "generationSemantics": "Prepare starts at 1; every WRITE_INTENT and COMMIT increments generation, so committed 30/40/40-hold/30 states must be 3/5/5/7.",
       "expectedChangedWriteCount": 3,
       "expectedPrepareCount": 1,
@@ -1516,7 +1521,7 @@
       "priorAuthorizationCiRunId": 36985472454,
       "priorAuthorizationCiResult": "SUCCESS",
       "priorAttemptResult": "FAIL_CLOSED",
-      "retryReason": "Repeat the exact bounded P15D2 session because the first attempt's unique variable-level goals passed but an independent EC status-read transient preempted the final Firmware click. Production fail-safe behavior is intentionally unchanged.",
+      "retryReason": "Repeat the exact bounded P15D2 session after the retry-status barrier correction was formally closed; the first physical attempt's variable-level subproofs remain preserved and production safety behavior is unchanged.",
       "sourceGateScope": "P15D2 variable-Manual qualification retry only",
       "p15aAuthorizationOpened": false,
       "p15bAuthorizationOpened": false,
@@ -1527,7 +1532,11 @@
       "candidateCurveAuthorizationOpened": false,
       "m9cQualificationConstructionOpened": false,
       "m9dQualificationConstructionOpened": false,
-      "hardwareExecutionAtAuthorizationCommit": false
+      "hardwareExecutionAtAuthorizationCommit": false,
+      "retryStatusBarrierClosureHead": "abbe464c2921c293923ca0c7670e44ca9f05bccb",
+      "retryStatusBarrierClosureCiRunNumber": 1178,
+      "retryStatusBarrierClosureCiRunId": 37003774275,
+      "retryStatusBarrierClosureCiResult": "SUCCESS"
     },
     "generationSemanticsReview": {
       "required": true,
@@ -1616,6 +1625,6 @@
       "physicalGatesOpened": false
     },
     "hardwareExecution": false,
-    "physicalGatesOpened": false
+    "physicalGatesOpened": true
   }
 }
