@@ -13,6 +13,14 @@ internal static class Hp8C40P15D2VariableManualQualificationGate
     public const int InitialLevel = 30;
     public const int ChangedLevel = 40;
     public const int ReturnLevel = 30;
+    // One watchdog session is retained across the variable-level sequence.
+    // Generation advances on each durable WriteIntent + Commit pair:
+    // Prepare=1, initial 30/30 Commit=3, changed 40/40 Commit=5,
+    // duplicate 40/40 HoldCustom stays 5, return 30/30 Commit=7.
+    public const int InitialOwnedGeneration = 3;
+    public const int ChangedOwnedGeneration = 5;
+    public const int DuplicateHoldOwnedGeneration = 5;
+    public const int ReturnOwnedGeneration = 7;
     public const int RequiredHealthyPreWriteSamples = 3;
 
     public const double MaximumCpuPhysicalC = 90.0;
