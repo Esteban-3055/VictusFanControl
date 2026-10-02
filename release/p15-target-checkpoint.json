@@ -1459,6 +1459,21 @@
         "physicalGatesOpened": false
       }
     ],
+    "hardeningReview": {
+      "required": true,
+      "findings": [
+        "The first P15D2 failsafe draft inherited P15D1's 30/30-only lease classifier, so a delayed takeover during a qualified 40/40 OWNED or WRITE_ARMED state would have refused recovery.",
+        "The first P15D2 parent-harness draft assumed watchdog generation stayed at 3 across changed levels, but WatchdogLeaseManager increments generation on every WRITE_INTENT and every COMMIT."
+      ],
+      "fixes": [
+        "Accept only exact-target equal 30/30 or 40/40 Pending/Owned/PreviousOwned lease states in the independent P15D2 failsafe while preserving exact controller identity checks and qualified watchdog recovery.",
+        "Require one stable session/controller identity with committed generation progression 3 -> 5 -> 5 -> 7 for initial 30, changed 40, duplicate 40 HoldCustom, and return 30."
+      ],
+      "implementationComplete": true,
+      "ciValidated": false,
+      "hardwareExecution": false,
+      "physicalGatesOpened": false
+    },
     "hardwareExecution": false,
     "physicalGatesOpened": false
   }
