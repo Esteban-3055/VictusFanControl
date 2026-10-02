@@ -162,8 +162,6 @@ foreach($needle in @(
  'manualInteractionReadyProvider',
  'interactionAuthorizationProvider',
  'fixedManualQualificationLevel',
- 'TryBeginControlInteraction(',
- 'qualification pre-action fence rejected the interaction',
  'interactionObserver',
  'LastRestoreEvidence',
  'ParentOwnedVerifiedFileName'
@@ -171,6 +169,10 @@ foreach($needle in @(
 
 foreach($needle in @(
  'manualInteractionReadyProvider',
+ 'interactionAuthorizationProvider',
+ 'fixedManualQualificationLevel',
+ 'TryBeginControlInteraction(',
+ 'qualification pre-action fence rejected the interaction',
  'interactionObserver',
  'P13ControlInteractionKind.ModeRequest',
  'P13ControlInteractionKind.ManualApply',

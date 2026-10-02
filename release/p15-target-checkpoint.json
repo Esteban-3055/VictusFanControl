@@ -774,7 +774,19 @@
         "powerShell51CompatibilityValidated": false,
         "warningsAsErrorsBuildValidated": false,
         "hardwareExecution": false
-      }
+      },
+      "failedCiHistoryPreserved": [
+        {
+          "runNumber": 1119,
+          "runId": 36949301023,
+          "head": "b7ed2871a9cab0bbefb3375e0ea005a800054a61",
+          "result": "FAILURE",
+          "failureStep": "HP 8C40 P15C real-GUI Manual preparation invariant",
+          "cause": "The new static invariant searched MainForm.cs for two pre-action fence markers that are implemented in P13FanControlSurface.cs.",
+          "hardwareExecution": false,
+          "physicalGatesOpened": false
+        }
+      ]
     }
   },
   "automatic": {
