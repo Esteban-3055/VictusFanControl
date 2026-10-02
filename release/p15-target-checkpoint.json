@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED",
+  "status": "P15D2_VARIABLE_MANUAL_PREPARATION_HARDENING_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1324,7 +1324,19 @@
   },
   "guiManualVariableLevel": {
     "preparationImplemented": true,
-    "preparationCiValidated": false,
+    "preparationCiValidated": true,
+    "preparationBaseCi": {
+      "head": "b55742effc1b46112656ef2febdd96275389dbfc",
+      "runNumber": 1146,
+      "runId": 36972919383,
+      "result": "SUCCESS",
+      "powerShellSyntaxValidated": true,
+      "p15d1ClosureInvariantValidated": true,
+      "p15d2InvariantValidated": true,
+      "warningsAsErrorsBuildValidated": true,
+      "hardwareExecution": false,
+      "physicalGatesOpened": false
+    },
     "preparationClosure": {
       "closed": false,
       "result": "PENDING",
@@ -1351,19 +1363,20 @@
     "requiresProductionAdapter": true,
     "requiresProductionCoordinator": true,
     "requiresSameOwnershipSessionAcrossChangedLevels": true,
+    "requiresExpectedGenerationProgression": true,
     "requiresDuplicate40NoRetransmit": true,
     "requiresStrongRestore": true,
     "requiredGuiSequence": [
       "Firmware startup and READY after three distinct Healthy/SafetyGate-permitted observations",
       "real P13 Manual mode request exactly once",
       "real P13 Apply equal 30/30 exactly once",
-      "parent independently proves EC 30/30 plus schema-v2 generation-3 OWNED journal bound to the GUI identity",
+      "parent independently proves EC 30/30 plus schema-v2 OWNED journal generation 3 bound to the GUI identity",
       "real P13 Apply equal 40/40 exactly once",
-      "parent independently proves EC 40/40 and the same ownership session/generation/controller identity",
+      "parent independently proves EC 40/40 in the same SessionId/controller identity with OWNED generation advanced to 5",
       "real P13 Apply equal 40/40 a second time",
-      "GUI result must be HoldCustom and parent must prove no new watchdog WRITE_INTENT/COMMIT or physical setpoint change",
+      "GUI result must be HoldCustom and parent must prove no new watchdog WRITE_INTENT/COMMIT, unchanged EC 40/40, and unchanged OWNED generation 5",
       "real P13 Apply equal 30/30 exactly once",
-      "parent independently proves EC 30/30 and the same ownership session/generation/controller identity",
+      "parent independently proves EC 30/30 in the same SessionId/controller identity with OWNED generation advanced to 7",
       "real P13 Firmware request exactly once",
       "production strong restore requires FF/FF + LegacyDefault + stable FF/FF + watchdog RELEASE + journal absent",
       "parent independently proves final FF/FF"
@@ -1378,6 +1391,13 @@
       "return30MustApplyChangedLevel": true,
       "firmwareRequestMustRestore": true,
       "sameOwnedSessionRequiredAcross30To40To40To30": true,
+      "sameOwnedGenerationAcrossChangedWritesForbidden": true,
+      "expectedOwnedGenerations": {
+        "initial30": 3,
+        "changed40": 5,
+        "duplicateHold40": 5,
+        "return30": 7
+      },
       "expectedChangedWriteCount": 3,
       "expectedPrepareCount": 1,
       "expectedWriteIntentCount": 3,
@@ -1393,6 +1413,19 @@
       "automaticMayOpen": false,
       "userFacingManualMayOpen": false,
       "m9cOrM9dQualificationMayReopen": false
+    },
+    "generationSemanticsReview": {
+      "required": true,
+      "reviewedPreparationHead": "b55742effc1b46112656ef2febdd96275389dbfc",
+      "reviewedPreparationCiRunNumber": 1146,
+      "reviewedPreparationCiRunId": 36972919383,
+      "reviewedPreparationCiResult": "SUCCESS",
+      "finding": "The initial preparation wording required the same watchdog generation across changed writes, but the production lease protocol increments Generation on every durable WriteIntent and Commit.",
+      "correction": "Preserve one SessionId and controller PID/start identity while requiring OWNED generations 3 -> 5 -> 5 -> 7 for 30 -> 40 -> duplicate 40 HoldCustom -> 30.",
+      "implementationComplete": true,
+      "ciValidated": false,
+      "hardwareExecution": false,
+      "physicalGatesOpened": false
     },
     "plannedFiles": {
       "qualificationSource": "src/VictusFanControl.App/P15D2VariableManualQualification.cs",
