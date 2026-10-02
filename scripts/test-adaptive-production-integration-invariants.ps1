@@ -21,7 +21,11 @@ foreach ($needle in @(
     'automaticExecutionAuthorized',
     'unchanged manual target was not retransmitted',
     'new FanCommand(',
-    'RestoreFirmwareAsync'
+    'RestoreFirmwareAsync',
+    'ManualFreshSafetyMaximumAttempts = 4',
+    'refreshSafetyProvider',
+    'post-admission SafetyGate refresh',
+    'bounded attempt(s)'
 )) {
     Assert-Contains $controller $needle ("P11 production adapter invariant missing: {0}" -f $needle)
 }
@@ -41,7 +45,9 @@ foreach ($needle in @(
     'TestClosedGatesNeverTouchBackendAsync',
     'TestManualEqualOnlyAndNoRetransmitAsync',
     'TestAutomaticNoRetransmitAndSafetyReleaseAsync',
-    'TestManualRangeGuardAsync'
+    'TestManualRangeGuardAsync',
+    'TestManualFreshSafetyRefreshAndRetryAsync',
+    'TestManualFreshSafetyExhaustionRestoresAsync'
 )) {
     Assert-Contains $selfTest $needle ("P11 self-test coverage missing: {0}" -f $needle)
 }

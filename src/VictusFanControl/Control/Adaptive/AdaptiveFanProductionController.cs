@@ -141,9 +141,37 @@ public sealed class AdaptiveFanProductionController
         }
     }
 
-    public async ValueTask<AdaptiveFanProductionResult> ApplyManualAsync(
+    private const int ManualFreshSafetyMaximumAttempts = 4;
+
+    public ValueTask<AdaptiveFanProductionResult> ApplyManualAsync(
         int equalFanLevel,
         SafetyGateResult effectiveSafety,
+        CancellationToken cancellationToken) =>
+        ApplyManualCoreAsync(
+            equalFanLevel,
+            effectiveSafety,
+            refreshSafetyProvider: null,
+            cancellationToken);
+
+    public ValueTask<AdaptiveFanProductionResult> ApplyManualAsync(
+        int equalFanLevel,
+        SafetyGateResult effectiveSafety,
+        Func<SafetyGateResult?> refreshSafetyProvider,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(refreshSafetyProvider);
+
+        return ApplyManualCoreAsync(
+            equalFanLevel,
+            effectiveSafety,
+            refreshSafetyProvider,
+            cancellationToken);
+    }
+
+    private async ValueTask<AdaptiveFanProductionResult> ApplyManualCoreAsync(
+        int equalFanLevel,
+        SafetyGateResult initialSafety,
+        Func<SafetyGateResult?>? refreshSafetyProvider,
         CancellationToken cancellationToken)
     {
         if (equalFanLevel < _minimumLevel || equalFanLevel > _maximumLevel)
@@ -177,8 +205,8 @@ public sealed class AdaptiveFanProductionController
                     "Manual command refused because Manual mode is not selected.");
             }
 
-            if (!effectiveSafety.CustomControlPermitted ||
-                !effectiveSafety.SnapshotTimestamp.HasValue)
+            if (!initialSafety.CustomControlPermitted ||
+                !initialSafety.SnapshotTimestamp.HasValue)
             {
                 _lastManualAppliedLevel = null;
                 return await RestoreIfOwnedLockedAsync(
@@ -187,71 +215,141 @@ public sealed class AdaptiveFanProductionController
                     cancellationToken).ConfigureAwait(false);
             }
 
-            var enteredNow = false;
-            if (_coordinator.Authority != FanAuthority.Custom)
-            {
-                var entered = await _coordinator.TryEnterCustomAsync(
-                    effectiveSafety,
-                    cancellationToken).ConfigureAwait(false);
+            var safety = initialSafety;
+            var enteredDuringRequest = false;
+            var maximumAttempts =
+                refreshSafetyProvider is null
+                    ? 1
+                    : ManualFreshSafetyMaximumAttempts;
 
-                if (!entered)
+            for (var attempt = 1; attempt <= maximumAttempts; attempt++)
+            {
+                if (attempt > 1)
                 {
+                    safety =
+                        refreshSafetyProvider?.Invoke() ??
+                        throw new InvalidOperationException(
+                            "Manual SafetyGate refresh provider unexpectedly became unavailable.");
+
+                    if (!safety.CustomControlPermitted ||
+                        !safety.SnapshotTimestamp.HasValue)
+                    {
+                        _lastManualAppliedLevel = null;
+                        return await RestoreIfOwnedLockedAsync(
+                            "Manual command released Custom authority because refreshed SafetyGate admission is unavailable.",
+                            true,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                }
+
+                if (_coordinator.Authority != FanAuthority.Custom)
+                {
+                    var entered = await _coordinator.TryEnterCustomAsync(
+                        safety,
+                        cancellationToken).ConfigureAwait(false);
+
+                    if (!entered)
+                    {
+                        _lastManualAppliedLevel = null;
+
+                        if (refreshSafetyProvider is not null &&
+                            !_coordinator.IsSafetyEvaluationCurrent(safety) &&
+                            attempt < maximumAttempts)
+                        {
+                            await Task.Yield();
+                            continue;
+                        }
+
+                        return Result(
+                            AdaptiveFanProductionActionKind.Blocked,
+                            true,
+                            equalFanLevel,
+                            null,
+                            "Manual command could not acquire current Custom authority.");
+                    }
+
+                    enteredDuringRequest = true;
                     _lastManualAppliedLevel = null;
+
+                    // EnterCustomMode is deliberately read-only but can spend
+                    // enough time in EC/watchdog admission for the runtime
+                    // supervisor to accept a newer SafetyGate evaluation. The
+                    // real GUI path therefore refreshes safety after admission
+                    // before the first fan command is allowed to reach ApplyAsync.
+                    if (refreshSafetyProvider is not null)
+                    {
+                        var refreshed = refreshSafetyProvider();
+                        if (refreshed is null ||
+                            !refreshed.CustomControlPermitted ||
+                            !refreshed.SnapshotTimestamp.HasValue)
+                        {
+                            _lastManualAppliedLevel = null;
+                            return await RestoreIfOwnedLockedAsync(
+                                "Manual command released read-only Custom preparation because post-admission SafetyGate refresh is unavailable.",
+                                true,
+                                cancellationToken).ConfigureAwait(false);
+                        }
+
+                        safety = refreshed;
+                    }
+                }
+
+                if (_lastManualAppliedLevel == equalFanLevel)
+                {
                     return Result(
-                        AdaptiveFanProductionActionKind.Blocked,
+                        AdaptiveFanProductionActionKind.HoldCustom,
                         true,
                         equalFanLevel,
                         null,
-                        "Manual command could not acquire current Custom authority.");
+                        $"Holding equal {equalFanLevel}/{equalFanLevel}; unchanged manual target was not retransmitted.");
                 }
 
-                enteredNow = true;
-                _lastManualAppliedLevel = null;
-            }
+                try
+                {
+                    await _coordinator.ApplyAsync(
+                        new FanCommand(
+                            equalFanLevel,
+                            equalFanLevel,
+                            $"manual equal target {equalFanLevel}/{equalFanLevel}"),
+                        safety,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (FanControlStaleSafetyException)
+                    when (refreshSafetyProvider is not null &&
+                          attempt < maximumAttempts)
+                {
+                    _lastManualAppliedLevel = null;
+                    await Task.Yield();
+                    continue;
+                }
+                catch (FanControlStaleSafetyException)
+                {
+                    _lastManualAppliedLevel = null;
+                    return await RestoreIfOwnedLockedAsync(
+                        $"Manual command could not obtain a current SafetyGate evaluation after {maximumAttempts} bounded attempt(s).",
+                        true,
+                        cancellationToken).ConfigureAwait(false);
+                }
 
-            if (_lastManualAppliedLevel == equalFanLevel)
-            {
+                _lastManualAppliedLevel = equalFanLevel;
+                _engine.Reset();
+                _planner.Reset();
+
                 return Result(
-                    AdaptiveFanProductionActionKind.HoldCustom,
+                    enteredDuringRequest
+                        ? AdaptiveFanProductionActionKind.EnterCustomAndApply
+                        : AdaptiveFanProductionActionKind.ApplyChangedLevel,
                     true,
                     equalFanLevel,
                     null,
-                    $"Holding equal {equalFanLevel}/{equalFanLevel}; unchanged manual target was not retransmitted.");
+                    $"Applied one equal manual target {equalFanLevel}/{equalFanLevel} through FanControlCoordinator.");
             }
 
-            try
-            {
-                await _coordinator.ApplyAsync(
-                    new FanCommand(
-                        equalFanLevel,
-                        equalFanLevel,
-                        $"manual equal target {equalFanLevel}/{equalFanLevel}"),
-                    effectiveSafety,
-                    cancellationToken).ConfigureAwait(false);
-            }
-            catch (FanControlStaleSafetyException)
-            {
-                _lastManualAppliedLevel = null;
-                return Result(
-                    AdaptiveFanProductionActionKind.Blocked,
-                    true,
-                    equalFanLevel,
-                    null,
-                    "Manual command was superseded by a newer SafetyGate evaluation.");
-            }
-
-            _lastManualAppliedLevel = equalFanLevel;
-            _engine.Reset();
-            _planner.Reset();
-
-            return Result(
-                enteredNow
-                    ? AdaptiveFanProductionActionKind.EnterCustomAndApply
-                    : AdaptiveFanProductionActionKind.ApplyChangedLevel,
+            _lastManualAppliedLevel = null;
+            return await RestoreIfOwnedLockedAsync(
+                "Manual command exhausted its bounded fresh-Safety attempts.",
                 true,
-                equalFanLevel,
-                null,
-                $"Applied one equal manual target {equalFanLevel}/{equalFanLevel} through FanControlCoordinator.");
+                cancellationToken).ConfigureAwait(false);
         }
         finally
         {

@@ -25,7 +25,8 @@ $allowed=@(
  'P15C_GUI_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED',
  'P15C_GUI_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI',
  'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED',
- 'P15C_GUI_MANUAL_STALE_SAFETY_FAIL_CLOSED_GATE_CLOSED'
+ 'P15C_GUI_MANUAL_STALE_SAFETY_FAIL_CLOSED_GATE_CLOSED',
+ 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PENDING_GATE_CLOSED'
 )
 if($status -notin $allowed){throw 'P15C contract state mismatch.'}
 
@@ -168,6 +169,23 @@ if($status -eq 'P15C_GUI_MANUAL_STALE_SAFETY_FAIL_CLOSED_GATE_CLOSED'){
     Assert-False ([bool]$corr.closure.closed) 'P15C stale-Safety correction cannot pre-close.'
 }
 
+if($status -eq 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PENDING_GATE_CLOSED'){
+    Assert-False ([bool]$g.executionAuthorized) 'P15C correction must keep parent gate closed.'
+    Assert-False ([bool]$g.controllerPhysicalExecutionAuthorized) 'P15C correction must keep GUI gate closed.'
+    Assert-False ([bool]$g.physicalPassed) 'P15C correction cannot claim physical PASS.'
+    Assert-False ([bool]$g.evidenceClosed) 'P15C correction cannot close PASS evidence.'
+    Assert-Contains $qualification 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15C correction requires source gate closed.'
+    $corr=$g.staleSafetyRaceCorrection
+    Assert-True ([bool]$corr.required) 'P15C stale-Safety correction must remain required.'
+    Assert-True ([bool]$corr.implementationComplete) 'P15C stale-Safety correction implementation must be complete.'
+    Assert-False ([bool]$corr.ciValidated) 'P15C correction implementation must not pre-claim CI.'
+    Assert-False ([bool]$corr.closure.closed) 'P15C correction implementation must not pre-close CI.'
+    if([int]$corr.maximumFreshSafetyAttempts -ne 4){throw 'P15C stale-Safety correction retry bound mismatch.'}
+    foreach($p in @('mustRefreshSafetyAfterCustomAdmission','boundedStaleRetryRequired','exhaustedRetryMustRestoreFirmware','productionAdapterRefreshOverloadImplemented','realP13SurfaceUsesRefreshProvider','retryIsNoAdditionalOperatorInteraction','exhaustedRetryRestoresFirmwareImplemented','deterministicRefreshRaceSelfTestImplemented','deterministicExhaustionRestoreSelfTestImplemented')){Assert-True ([bool]$corr.$p) ("P15C stale-Safety correction missing implementation: {0}" -f $p)}
+    Assert-False ([bool]$corr.automaticPathChanged) 'P15C Manual correction must not widen scope into Automatic.'
+    Assert-False ([bool]$corr.hardwareExecution) 'P15C correction implementation must be software-only.'
+}
+
 if($status -eq 'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){
     Assert-False ([bool]$g.executionAuthorized) 'P15C physical closure must re-block parent harness.'
     Assert-False ([bool]$g.controllerPhysicalExecutionAuthorized) 'P15C physical closure must re-block GUI qualification gate.'
@@ -213,6 +231,17 @@ foreach($needle in @(
  'Hp8C40P15CGuiManualQualificationGate.NormalUserExecutionGatesClosed()',
  'Hp8C40TargetProfile.Matches'
 )){Assert-Contains $program $needle ("P15C Program boundary missing: {0}" -f $needle)}
+
+foreach($needle in @(
+ 'ManualFreshSafetyMaximumAttempts = 4',
+ 'Func<SafetyGateResult?> refreshSafetyProvider',
+ 'post-admission SafetyGate refresh',
+ 'Manual command could not obtain a current SafetyGate evaluation after'
+)){Assert-Contains $adaptive $needle ("P15C stale-Safety production-adapter correction missing: {0}" -f $needle)}
+foreach($needle in @(
+ '_controlSafetyProvider,',
+ 'await _controller.ApplyManualAsync('
+)){Assert-Contains $surface $needle ("P15C real-P13 fresh-Safety wiring missing: {0}" -f $needle)}
 
 Assert-NotContains $main 'ApplyManualAsync(' 'P15C MainForm must not bypass the real P13 Manual Apply handler.'
 Assert-NotContains $main 'ProcessAutomaticAsync(' 'P15C MainForm must not execute Automatic policy.'

@@ -652,6 +652,7 @@ internal sealed class P13FanControlSurface : UserControl
                 await _controller.ApplyManualAsync(
                     level,
                     safety,
+                    _controlSafetyProvider,
                     CancellationToken.None);
 
             RefreshState(result.Detail);

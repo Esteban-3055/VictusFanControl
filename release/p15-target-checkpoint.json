@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15C_GUI_MANUAL_STALE_SAFETY_FAIL_CLOSED_GATE_CLOSED",
+  "status": "P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -869,13 +869,22 @@
       "exhaustedRetryMustRestoreFirmware": true,
       "normalUserManualGateMustRemainClosed": true,
       "automaticMustRemainClosed": true,
-      "implementationComplete": false,
+      "implementationComplete": true,
       "ciValidated": false,
       "closure": {
         "closed": false,
         "result": "PENDING",
         "hardwareExecution": false
-      }
+      },
+      "maximumFreshSafetyAttempts": 4,
+      "productionAdapterRefreshOverloadImplemented": true,
+      "realP13SurfaceUsesRefreshProvider": true,
+      "retryIsNoAdditionalOperatorInteraction": true,
+      "exhaustedRetryRestoresFirmwareImplemented": true,
+      "deterministicRefreshRaceSelfTestImplemented": true,
+      "deterministicExhaustionRestoreSelfTestImplemented": true,
+      "automaticPathChanged": false,
+      "hardwareExecution": false
     }
   },
   "automatic": {

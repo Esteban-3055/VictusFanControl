@@ -149,13 +149,13 @@ Authorization HEAD `5eb02ca3b50a6d88dc027b97f2dc76fa5b39490e` passed GitHub Acti
 
 Therefore no physical 30/30 fan-level write occurred. The GUI intentionally produced FAIL_CLOSED and exited. Normal shutdown restored Firmware; the parent cleanup observed two consecutive FF/FF samples. The watchdog remained the same Manual/Running PID/start identity and the independent failsafe did not take over. The attempt is not a P15C physical PASS and must not be repeated from this authorization. Both dedicated P15C gates are re-blocked while a software correction is prepared.
 
-The required correction is narrow but production-relevant: refresh SafetyGate after read-only Custom admission, allow only bounded retries when a newer permitted evaluation supersedes the command evaluation, and restore Firmware if those retries cannot obtain a current evaluation. Automatic, the normal user Manual gate, Candidate V1, M9C and M9D remain closed throughout.
+The required correction is narrow but production-relevant: refresh SafetyGate after read-only Custom admission, allow only bounded retries when a newer permitted evaluation supersedes the command evaluation, and restore Firmware if those retries cannot obtain a current evaluation. Automatic, the normal user Manual gate, Candidate V1, M9C and M9D remain closed throughout. The implementation is now present with a four-attempt bound: the P13 surface supplies a refresh provider to the production adapter, the adapter refreshes immediately after read-only Custom admission and retries only stale SafetyGate refusals, and exhausted retries force Firmware restore without issuing a fan command. Deterministic self-tests cover both successful refresh/retry and exhausted-retry restore. This implementation commit remains software-only and does not reopen either P15C physical gate; CI success and formal correction closure are separate steps.
 
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
 - P15B Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED / CLOSURE CI #1116 SUCCESS**
-- P15C real-GUI Manual 30/30 execution: **TARGET FAIL_CLOSED / BOTH DEDICATED GATES RE-BLOCKED; stale-Safety race correction required; normal user Manual and Automatic remain CLOSED**
+- P15C real-GUI Manual 30/30 execution: **STALE-SAFETY CORRECTION IMPLEMENTED / CI PENDING / BOTH DEDICATED GATES CLOSED; normal user Manual and Automatic remain CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**
