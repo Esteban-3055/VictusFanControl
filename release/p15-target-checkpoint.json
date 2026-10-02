@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED",
+  "status": "P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1344,8 +1344,8 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": false,
-    "controllerPhysicalExecutionAuthorized": false,
+    "executionAuthorized": true,
+    "controllerPhysicalExecutionAuthorized": true,
     "physicalPassed": false,
     "evidenceClosed": false,
     "prerequisite": "P15D1 tray-exit lifecycle physical PASS formally closed",
@@ -1487,6 +1487,30 @@
       "hardwareSafetyHandoffSucceeded": true,
       "retryRequiresFreshAuthorization": true
     },
+    "reauthorizationAfterEcTransient": {
+      "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
+      "failClosedClosureHead": "ca367dad3be7bb6fbe1a7b9f67e4984548edfff5",
+      "failClosedClosureCiRunNumber": 1175,
+      "failClosedClosureCiRunId": 36986494813,
+      "failClosedClosureCiResult": "SUCCESS",
+      "priorAuthorizationHead": "aa5be229d7e1fb4c1c0b260f3354db972e98436b",
+      "priorAuthorizationCiRunNumber": 1174,
+      "priorAuthorizationCiRunId": 36985472454,
+      "priorAuthorizationCiResult": "SUCCESS",
+      "priorAttemptResult": "FAIL_CLOSED",
+      "retryReason": "Repeat the exact bounded P15D2 session because the first attempt's unique variable-level goals passed but an independent EC status-read transient preempted the final Firmware click. Production fail-safe behavior is intentionally unchanged.",
+      "sourceGateScope": "P15D2 variable-Manual qualification retry only",
+      "p15aAuthorizationOpened": false,
+      "p15bAuthorizationOpened": false,
+      "p15cAuthorizationOpened": false,
+      "p15d1AuthorizationOpened": false,
+      "userFacingManualGateOpened": false,
+      "automaticAuthorizationOpened": false,
+      "candidateCurveAuthorizationOpened": false,
+      "m9cQualificationConstructionOpened": false,
+      "m9dQualificationConstructionOpened": false,
+      "hardwareExecutionAtAuthorizationCommit": false
+    },
     "generationSemanticsReview": {
       "required": true,
       "finding": "The initial preparation wording incorrectly implied one stable watchdog generation across changed setpoints; WatchdogLeaseManager increments Generation on every durable WRITE_INTENT and every COMMIT.",
@@ -1574,6 +1598,6 @@
       "physicalGatesOpened": false
     },
     "hardwareExecution": false,
-    "physicalGatesOpened": false
+    "physicalGatesOpened": true
   }
 }
