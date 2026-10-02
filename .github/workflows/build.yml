@@ -289,6 +289,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p15d1-evidence-packaging.ps1
 
+      - name: HP 8C40 P15D2 variable Manual preparation invariant
+        shell: pwsh
+        run: .\scripts\test-p15d2-variable-manual-invariants.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
