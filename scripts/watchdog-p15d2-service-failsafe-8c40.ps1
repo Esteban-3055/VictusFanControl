@@ -22,6 +22,15 @@ function Test-Phase($Phase,[string]$Name,[int]$Numeric){
     try{return ([int]$Phase -eq $Numeric)}catch{return $false}
 }
 
+function Test-P15D2QualifiedLevelPair($Pair){
+    if($null -eq $Pair){return $false}
+    try{
+        $cpu=[int]$Pair.Cpu
+        $gpu=[int]$Pair.Gpu
+        return ($cpu -eq $gpu -and $cpu -in @(30,40))
+    }catch{return $false}
+}
+
 function Get-P15D2QualifiedLeasePhase($Journal){
     if([int]$Journal.SchemaVersion -ne 2 -or
        $Journal.TargetProfileId -cne 'HP-8C40-9D0R1LA-F18'){
@@ -29,34 +38,34 @@ function Get-P15D2QualifiedLeasePhase($Journal){
     }
 
     if(Test-Phase $Journal.Phase 'WriteArmed' 1){
-        if($null -eq $Journal.PreviousOwned -and
-           $null -eq $Journal.Owned -and
-           $null -ne $Journal.Pending -and
-           [int]$Journal.Pending.Cpu -eq 30 -and
-           [int]$Journal.Pending.Gpu -eq 30){return 'WRITE_ARMED'}
-        return $null
+        if(-not (Test-P15D2QualifiedLevelPair $Journal.Pending)){return $null}
+        if($null -ne $Journal.PreviousOwned -and -not (Test-P15D2QualifiedLevelPair $Journal.PreviousOwned)){return $null}
+        if($null -ne $Journal.Owned -and -not (Test-P15D2QualifiedLevelPair $Journal.Owned)){return $null}
+        return 'WRITE_ARMED'
     }
 
     if(Test-Phase $Journal.Phase 'Owned' 2){
-        if($null -ne $Journal.Owned -and
-           [int]$Journal.Owned.Cpu -eq 30 -and
-           [int]$Journal.Owned.Gpu -eq 30){return 'OWNED'}
+        if(Test-P15D2QualifiedLevelPair $Journal.Owned){return 'OWNED'}
         return $null
     }
 
     if(Test-Phase $Journal.Phase 'Restoring' 3){
-        $previousMatches=
-            $null -ne $Journal.PreviousOwned -and
-            [int]$Journal.PreviousOwned.Cpu -eq 30 -and
-            [int]$Journal.PreviousOwned.Gpu -eq 30
-        $ownedMatches=
-            $null -ne $Journal.Owned -and
-            [int]$Journal.Owned.Cpu -eq 30 -and
-            [int]$Journal.Owned.Gpu -eq 30
-        if($previousMatches -or $ownedMatches){return 'RESTORING'}
+        if((Test-P15D2QualifiedLevelPair $Journal.PreviousOwned) -or
+           (Test-P15D2QualifiedLevelPair $Journal.Owned)){
+            return 'RESTORING'
+        }
     }
 
     return $null
+}
+
+function Get-P15D2LeaseDisplay($Journal){
+    foreach($candidate in @($Journal.Pending,$Journal.Owned,$Journal.PreviousOwned)){
+        if(Test-P15D2QualifiedLevelPair $candidate){
+            return ("{0}/{1}" -f [int]$candidate.Cpu,[int]$candidate.Gpu)
+        }
+    }
+    return 'unknown'
 }
 
 function Get-ServiceState {
@@ -125,7 +134,7 @@ try {
     $journal=Get-Content -LiteralPath $journalPath -Raw | ConvertFrom-Json
     $phase=Get-P15D2QualifiedLeasePhase $journal
     if($null -eq $phase){
-        Log-Line 'P15D2 FAILSAFE REFUSED: retained journal is not an exact-target WRITE_ARMED/OWNED/RESTORING 30/30 lease.'
+        Log-Line 'P15D2 FAILSAFE REFUSED: retained journal is not an exact-target WRITE_ARMED/OWNED/RESTORING equal 30/30 or 40/40 lease.'
         exit 2
     }
 
@@ -136,8 +145,9 @@ try {
         exit 3
     }
 
-    Log-Line ("P15D2 FAILSAFE TAKEOVER: exact-target {0} 30/30 lease remains; GUI PID={1} startTicks={2}." -f
-        $phase,$ownerPid,$ownerStartTicks)
+    $leaseDisplay=Get-P15D2LeaseDisplay $journal
+    Log-Line ("P15D2 FAILSAFE TAKEOVER: exact-target {0} {1} lease remains; GUI PID={2} startTicks={3}." -f
+        $phase,$leaseDisplay,$ownerPid,$ownerStartTicks)
 
     $service=Get-ServiceState
     if(-not $service){
