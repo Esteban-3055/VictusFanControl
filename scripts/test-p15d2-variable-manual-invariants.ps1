@@ -12,11 +12,21 @@ $userGate=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Contro
 $candidate=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Control\Adaptive\Hp8C40AdaptiveCandidateV1.cs') -Raw
 $adapter=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Control\Adaptive\AdaptiveFanProductionController.cs') -Raw
 $surface=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\P13FanControlSurface.cs') -Raw
+$program=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\Program.cs') -Raw
+$main=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\MainForm.cs') -Raw
+$harness=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15d2-variable-manual.ps1') -Raw
+$packager=Get-Content -LiteralPath (Join-Path $root 'scripts\package-p15d2-evidence.ps1') -Raw
+$failsafe=Get-Content -LiteralPath (Join-Path $root 'scripts\watchdog-p15d2-service-failsafe-8c40.ps1') -Raw
+$workflow=Get-Content -LiteralPath (Join-Path $root '.github\workflows\build.yml') -Raw
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P15_TARGET_CHECKPOINT.md') -Raw
 $p15d1Invariant=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15d1-tray-exit-invariants.ps1') -Raw
 
-if([string]$contract.status -cne 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
-    throw "Unexpected P15D2 preparation status: $($contract.status)"
+$status=[string]$contract.status
+if($status -notin @(
+    'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED',
+    'P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED'
+)){
+    throw "Unexpected P15D2 preparation status: $status"
 }
 
 Assert-True ([bool]$contract.guiLifecycleTrayExit.physicalPassed) 'P15D2 requires P15D1 physical PASS.'
@@ -32,14 +42,49 @@ if([string]$contract.guiLifecycleTrayExit.physicalPassClosure.sourceHead -cne 'a
 
 $d=$contract.guiManualVariableLevel
 Assert-True ([bool]$d.preparationImplemented) 'P15D2 preparation contract must be implemented.'
-Assert-False ([bool]$d.preparationCiValidated) 'P15D2 preparation cannot pre-claim CI.'
-Assert-False ([bool]$d.preparationClosure.closed) 'P15D2 preparation cannot pre-close software evidence.'
-Assert-False ([bool]$d.runtimeImplementationComplete) 'Initial P15D2 preparation must not pre-claim runtime implementation.'
-Assert-False ([bool]$d.runtimeImplementationCiValidated) 'Initial P15D2 preparation must not pre-claim runtime CI.'
+Assert-False ([bool]$d.preparationClosure.closed) 'P15D2 implementation stage cannot pre-close software evidence.'
 Assert-False ([bool]$d.executionAuthorized) 'P15D2 parent harness physical gate must remain closed.'
 Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D2 GUI physical gate must remain closed.'
 Assert-False ([bool]$d.physicalPassed) 'P15D2 cannot pre-claim physical PASS.'
 Assert-False ([bool]$d.evidenceClosed) 'P15D2 cannot pre-close physical evidence.'
+Assert-False ([bool]$d.hardwareExecution) 'P15D2 software preparation must record no hardware execution.'
+Assert-False ([bool]$d.physicalGatesOpened) 'P15D2 software preparation must keep physical gates closed.'
+
+if($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
+    Assert-False ([bool]$d.preparationCiValidated) 'Initial P15D2 preparation cannot pre-claim CI.'
+    Assert-False ([bool]$d.runtimeImplementationComplete) 'Initial P15D2 preparation cannot pre-claim runtime implementation.'
+    Assert-False ([bool]$d.runtimeImplementationCiValidated) 'Initial P15D2 preparation cannot pre-claim runtime CI.'
+}else{
+    Assert-True ([bool]$d.preparationCiValidated) 'P15D2 runtime implementation requires CI-validated preparation.'
+    $base=$d.preparationBaseCi
+    if([string]$base.head -cne 'b55742effc1b46112656ef2febdd96275389dbfc' -or
+       [int]$base.runNumber -ne 1146 -or
+       [long]$base.runId -ne 36972919383 -or
+       [string]$base.result -cne 'SUCCESS'){
+        throw 'P15D2 preparation base CI identity mismatch.'
+    }
+    Assert-True ([bool]$d.runtimeImplementationComplete) 'P15D2 implementation-pending state requires complete runtime/harness implementation.'
+    Assert-False ([bool]$d.runtimeImplementationCiValidated) 'P15D2 implementation-pending state cannot pre-claim runtime CI.'
+    $ri=$d.runtimeImplementation
+    foreach($flag in @(
+        'programBoundaryImplemented','exactTargetBoundaryImplemented','realP13VariableManualPathReused',
+        'readyRequiresThreeHealthySafetySamples','initial30ParentFenceImplemented','changed40ParentFenceImplemented',
+        'duplicate40HoldCustomFenceImplemented','duplicate40NoRetransmitParentAuditImplemented','return30ParentFenceImplemented',
+        'realFirmwareStrongRestoreImplemented','sameOwnedSessionAuditImplemented','causalThreeWriteWatchdogAuditImplemented',
+        'nativeTrackedGuiProcess','independentFailsafeImplemented','evidencePackagerImplemented','evidencePackagingSelfTestImplemented'
+    )){Assert-True ([bool]$ri.$flag) ("P15D2 runtime implementation flag missing: {0}" -f $flag)}
+    Assert-False ([bool]$ri.physicalExecution) 'P15D2 runtime implementation must remain software-only.'
+    $failed=@($d.failedCiHistoryPreserved)
+    if($failed.Count -ne 1 -or [int]$failed[0].runNumber -ne 1148 -or
+       [long]$failed[0].runId -ne 36973216494 -or
+       [string]$failed[0].head -cne '0e39d6c0583a90b135f2bcb1b903b01a822ed3b5' -or
+       [string]$failed[0].result -cne 'FAILURE' -or
+       [string]$failed[0].failureStep -cne 'Build'){
+        throw 'P15D2 failed-CI history mismatch.'
+    }
+    Assert-False ([bool]$failed[0].hardwareExecution) 'P15D2 failed CI must record no hardware execution.'
+    Assert-False ([bool]$failed[0].physicalGatesOpened) 'P15D2 failed CI must keep physical gates closed.'
+}
 
 if([string]$d.prerequisite -cne 'P15D1 tray-exit lifecycle physical PASS formally closed'){throw 'P15D2 prerequisite mismatch.'}
 if([string]$d.expectedBranch -cne 'feature/victus-8c40-p15-hardware-checkpoint'){throw 'P15D2 branch contract mismatch.'}
@@ -70,16 +115,55 @@ foreach($needle in @(
     'unchanged manual target was not retransmitted',
     'AdaptiveFanProductionActionKind.ApplyChangedLevel',
     'new FanCommand('
-)){
-    Assert-Contains $adapter $needle ("P15D2 existing production-adapter prerequisite missing: {0}" -f $needle)
-}
+)){Assert-Contains $adapter $needle ("P15D2 existing production-adapter prerequisite missing: {0}" -f $needle)}
+
 foreach($needle in @(
     '_manualLevel.Minimum = 10;',
     '_manualLevel.Maximum = 50;',
     'P13ControlInteractionKind.ManualApply',
     'qualification pre-action fence rejected the interaction'
-)){
-    Assert-Contains $surface $needle ("P15D2 real P13 surface prerequisite missing: {0}" -f $needle)
+)){Assert-Contains $surface $needle ("P15D2 real P13 surface prerequisite missing: {0}" -f $needle)}
+
+if($status -eq 'P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED'){
+    foreach($needle in @(
+        '--8c40-p15d2-variable-manual-test','--8c40-p15d2-test-token','--8c40-p15d2-marker-root',
+        'Hp8C40P15D2VariableManualQualificationGate.PhysicalExecutionAuthorized',
+        'Hp8C40P15D2VariableManualQualificationGate.NormalUserExecutionGatesClosed()'
+    )){Assert-Contains $program $needle ("P15D2 Program boundary missing: {0}" -f $needle)}
+
+    foreach($needle in @(
+        '_p15d2VariableManualHardwareTest','TryPublishP15D2ReadyAsync','EnsureP15D2QualificationEnvelope',
+        'IsP15D2ControlInteractionAuthorized','OnP15D2ControlInteraction',
+        'P15D2-PARENT-30-VERIFIED|','P15D2-PARENT-40-VERIFIED|','P15D2-PARENT-HOLD40-VERIFIED|','P15D2-PARENT-RETURN30-VERIFIED|',
+        'AdaptiveFanProductionActionKind.EnterCustomAndApply','AdaptiveFanProductionActionKind.ApplyChangedLevel',
+        'AdaptiveFanProductionActionKind.HoldCustom','AdaptiveFanProductionActionKind.RestoreFirmware',
+        'LastRestoreEvidence','WatchdogReleaseVerified','WriteP15D2Json'
+    )){Assert-Contains $main $needle ("P15D2 MainForm runtime wiring missing: {0}" -f $needle)}
+
+    foreach($needle in @(
+        'HARD VERSIONED AUTHORIZATION BARRIER','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI',
+        'Assert-StableSetpoint 30 30','Assert-StableSetpoint 40 40','Assert-OwnedJournal',
+        'Assert-NoRetransmitAfterBoundary','P15D2-PARENT-30-VERIFIED|','P15D2-PARENT-40-VERIFIED|',
+        'P15D2-PARENT-HOLD40-VERIFIED|','P15D2-PARENT-RETURN30-VERIFIED|',
+        'WATCHDOG WRITE_INTENT ACK','WATCHDOG COMMIT ACK','Assert-CausalServiceLog',
+        'PREPARE < 30 write/commit < 40 write/commit < return-30 write/commit < RESTORE_BEGIN < RELEASE',
+        '--8c40-p15d2-variable-manual-test','Assert-StableSetpoint 255 255','Test-FailsafeTakeover'
+    )){Assert-Contains $harness $needle ("P15D2 harness contract missing: {0}" -f $needle)}
+
+    foreach($forbidden in @('SetFanLevel','--restore-hp-auto','git clean','Start-Service','Stop-Service','Restart-Service')){
+        Assert-NotContains $harness $forbidden ("P15D2 parent harness forbidden bypass: {0}" -f $forbidden)
+    }
+
+    foreach($needle in @(
+        'sourceEvidencePreserved=$true','gitCleanUsed=$false','parent-30-proof','parent-40-proof',
+        'parent-hold40-proof','parent-return30-proof','production-adapter-source','coordinator-source','failsafe-source'
+    )){Assert-Contains $packager $needle ("P15D2 packager contract missing: {0}" -f $needle)}
+
+    foreach($needle in @('P15D2 FAILSAFE ARMED:','P15D2 FAILSAFE TAKEOVER:','P15D2 FAILSAFE CONTROLLER-KILL:','P15D2 FAILSAFE RECOVERED:')){
+        Assert-Contains $failsafe $needle ("P15D2 failsafe contract missing: {0}" -f $needle)
+    }
+
+    Assert-Contains $workflow 'HP 8C40 P15D2 evidence packaging self-test' 'P15D2 evidence packaging self-test must run in CI.'
 }
 
 Assert-False ([bool]$contract.safetyBoundary.controlEnabledByDefault) 'P15D2 must keep default control OFF.'
@@ -97,19 +181,13 @@ Assert-Contains $candidate 'PhysicallyValidated = false' 'P15D2 Candidate V1 phy
 Assert-Contains $candidate 'AuthorizedForProduction = false' 'P15D2 Candidate V1 production flag must remain false.'
 
 foreach($needle in @(
-    'qualificationSource',
-    'P15D2VariableManualQualification.cs',
-    'futureHarness',
-    'test-p15d2-variable-manual.ps1',
-    'futureEvidencePackager',
-    'package-p15d2-evidence.ps1',
-    'futureIndependentFailsafe',
-    'watchdog-p15d2-service-failsafe-8c40.ps1'
-)){
-    Assert-Contains ($d.plannedFiles | ConvertTo-Json -Depth 5) $needle ("P15D2 planned-file contract missing: {0}" -f $needle)
-}
+    'qualificationSource','P15D2VariableManualQualification.cs',
+    'futureHarness','test-p15d2-variable-manual.ps1',
+    'futureEvidencePackager','package-p15d2-evidence.ps1',
+    'futureIndependentFailsafe','watchdog-p15d2-service-failsafe-8c40.ps1'
+)){Assert-Contains ($d.plannedFiles | ConvertTo-Json -Depth 5) $needle ("P15D2 planned-file contract missing: {0}" -f $needle)}
 
 Assert-Contains $p15d1Invariant '$postP15D1State' 'P15D1 historical invariant must explicitly accept later P15D2 states while preserving P15D1 closure.'
 Assert-Contains $doc 'P15D2 preparation — real GUI variable Manual levels' 'P15D2 documentation section is missing.'
 
-Write-Host 'PASS: P15D2 variable-Manual preparation is software-only, hard-closed, and preserves all prior physical closures.' -ForegroundColor Green
+Write-Host 'PASS: P15D2 variable-Manual preparation/runtime is software-only, hard-closed, and preserves all prior physical closures.' -ForegroundColor Green
