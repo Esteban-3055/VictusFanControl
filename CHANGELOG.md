@@ -1,4 +1,5 @@
 # Changelog
+- P15D1 preparation: added a hard-closed real-GUI lifecycle qualification contract and source gate for Manual 30/30 -> window close-to-tray -> retained OWNED proof -> real tray Exit -> production strong restore. The static invariant records the existing production ordering (UserClosing hides to tray; tray Exit opts into close; explicit shutdown disposes FanControlCoordinator before TelemetryWorker; coordinator disposal fences/cancels/restores before backend disposal). No physical gate, normal user Manual, Automatic, Candidate V1, M9C or M9D is opened.
 
 ## Unreleased — post-M9 software RC preparation
 

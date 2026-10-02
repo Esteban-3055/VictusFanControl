@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED",
+  "status": "P15D1_TRAY_EXIT_PREPARATION_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1015,5 +1015,91 @@
     "executionAuthorized": false,
     "physicalPassed": false,
     "prerequisite": "P15A and later manual/lifecycle gates must be separately closed first"
+  },
+  "guiLifecycleTrayExit": {
+    "preparationImplemented": true,
+    "preparationCiValidated": false,
+    "preparationClosure": {
+      "closed": false,
+      "result": "PENDING",
+      "hardwareExecution": false
+    },
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
+    "physicalPassed": false,
+    "evidenceClosed": false,
+    "prerequisite": "P15C real-GUI Manual physical PASS formally closed",
+    "expectedBranch": "feature/victus-8c40-p15-hardware-checkpoint",
+    "requiredToken": "8C40-P15D1-TRAYEXIT30",
+    "equalLevel": 30,
+    "scope": "real GUI Manual 30/30 -> window close hides to tray without releasing ownership -> tray Exit -> production shutdown strong restore",
+    "requiredGuiSequence": [
+      "Firmware startup",
+      "real P13 Manual button exactly once",
+      "real P13 Apply equal 30/30 exactly once",
+      "parent independent OWNED generation-3 30/30 proof",
+      "real window close/X exactly once; application remains alive and hidden to tray",
+      "parent independent retained OWNED 30/30 proof while hidden",
+      "real tray Exit exactly once",
+      "normal MainForm explicit shutdown disposes FanControlCoordinator before TelemetryWorker",
+      "production strong restore and watchdog RELEASE",
+      "GUI process exits cleanly",
+      "parent independent final FF/FF proof"
+    ],
+    "design": {
+      "windowUserCloseMustHideToTray": true,
+      "windowUserCloseMustNotSetAllowExit": true,
+      "hiddenGuiMustRemainAlive": true,
+      "hiddenOwnedJournalMustRemainBoundToGui": true,
+      "hiddenSetpointMustRemainEqual30": true,
+      "trayExitMustBeTheOnlyQualifiedGracefulExitTrigger": true,
+      "trayExitMustSetAllowExitBeforeClose": true,
+      "explicitShutdownMustDisposeCoordinatorBeforeWorker": true,
+      "coordinatorDisposeMustCloseLifecycleFenceAndCancelInFlightCommand": true,
+      "coordinatorDisposeMustBestEffortRestoreBeforeBackendDispose": true,
+      "strongRestoreRequired": true,
+      "exactCausalSequenceRequired": "PREPARE < WRITE_INTENT < COMMIT < RESTORE_BEGIN < RELEASE",
+      "requiredConsecutiveOwnedSetpointSamplesBeforeHide": 2,
+      "requiredConsecutiveOwnedSetpointSamplesWhileHidden": 2,
+      "requiredConsecutiveFinalFfFfSamples": 2,
+      "watchdogProcessIdentityStableRequired": true,
+      "finalJournalAbsentRequired": true,
+      "independentFailsafeRequired": true,
+      "normalUserManualGateRemainsClosed": true,
+      "automaticGateRemainsClosed": true,
+      "candidateCurveMayBePromoted": false,
+      "m9cOrM9dQualificationMayReopen": false
+    },
+    "plannedFiles": {
+      "qualificationSource": "src/VictusFanControl.App/P15D1TrayExitQualification.cs",
+      "invariantScript": "scripts/test-p15d1-tray-exit-invariants.ps1",
+      "futureHarness": "scripts/test-p15d1-tray-exit.ps1",
+      "futureEvidencePackager": "scripts/package-p15d1-evidence.ps1",
+      "futureEvidenceSelfTest": "scripts/test-p15d1-evidence-packaging.ps1",
+      "futureIndependentFailsafe": "scripts/watchdog-p15d1-service-failsafe-8c40.ps1"
+    },
+    "currentProductionLifecycleAudit": {
+      "userWindowCloseHidesToTray": true,
+      "trayExitSetsAllowExitAndCallsClose": true,
+      "explicitShutdownAwaitsCoordinatorDisposeBeforeWorkerDispose": true,
+      "windowsShutdownSynchronouslyDisposesCoordinatorBeforeWorker": true,
+      "coordinatorDisposeClosesLifecycleFence": true,
+      "coordinatorDisposeCancelsActiveCommand": true,
+      "coordinatorDisposeUsesBestEffortRestore": true,
+      "backendDisposeOccursAfterCoordinatorRestoreAttempt": true,
+      "auditHead": "3f81c1db083b4d91f1f70c01bfc7ba3660ab1231"
+    },
+    "authorization": {
+      "sameHeadCiSuccessRequiredBeforeAnyPhysicalAuthorization": true,
+      "p15aAuthorizationOpened": false,
+      "p15bAuthorizationOpened": false,
+      "p15cAuthorizationOpened": false,
+      "userFacingManualGateOpened": false,
+      "automaticAuthorizationOpened": false,
+      "candidateCurveAuthorizationOpened": false,
+      "m9cQualificationConstructionOpened": false,
+      "m9dQualificationConstructionOpened": false,
+      "hardwareExecutionAtPreparationCommit": false
+    }
   }
 }

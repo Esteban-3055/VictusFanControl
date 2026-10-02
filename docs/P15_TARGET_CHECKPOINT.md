@@ -159,11 +159,20 @@ The evidence proves exactly one real P13 Manual request, exactly one real P13 Ap
 
 The watchdog remained the same Manual/Running LocalSystem process PID 7980/start identity `639264861577277909` before, during and after the transaction. The independent delayed failsafe was armed but did not take over. The normal user Manual gate, Automatic, Candidate V1 and M9C/M9D remained closed. P15C is therefore physically passed, evidence-closed and re-blocked; this closure does not open any next physical gate.
 
+### P15D1 preparation — real GUI close-to-tray and tray Exit
+
+P15D1 is the next post-P15C qualification boundary. It does not widen the fan-level envelope and it does not approach Automatic. The intended physical sequence remains equal 30/30 and reuses the already-qualified real P13 Manual path only long enough to validate normal GUI lifecycle semantics: a user window close must hide the application to the tray while retaining the exact OWNED 30/30 lease, and a later explicit tray **Exit** must execute the normal MainForm shutdown path, dispose `FanControlCoordinator` before `TelemetryWorker`, complete production strong restore, clear the durable lease and exit the GUI cleanly.
+
+The current production code was audited before adding the gate: UserClosing with `_allowExit=false` cancels close and calls `HideToTray()`; tray Exit sets `_allowExit=true` then calls `Close()`; explicit shutdown awaits `_fanCoordinator.DisposeAsync()` before `_worker.DisposeAsync()`; coordinator disposal closes the lifecycle fence, cancels an in-flight command, performs best-effort firmware restore and only then disposes the backend. P15D1 will convert those existing semantics into independently packaged physical evidence rather than introducing a second shutdown implementation.
+
+This preparation commit adds only a dedicated hard-closed qualification gate/contract and a static invariant. It performs no hardware action. Future implementation must keep normal user Manual, Automatic, Candidate V1, M9C and M9D closed, use a separate operator token, require parent 30/30 + schema-v2 generation-3 OWNED proof before the close-to-tray step, prove the hidden GUI is still alive and still owns 30/30, then accept exactly one real tray Exit and require `PREPARE < WRITE_INTENT < COMMIT < RESTORE_BEGIN < RELEASE` plus final stable FF/FF and journal absence.
+
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
 - P15B Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED / CLOSURE CI #1116 SUCCESS**
 - P15C real-GUI Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED; normal user Manual and Automatic remain CLOSED**
+- P15D1 real-GUI tray-exit lifecycle: **SOFTWARE PREPARATION / CI PENDING / ALL PHYSICAL GATES CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**
