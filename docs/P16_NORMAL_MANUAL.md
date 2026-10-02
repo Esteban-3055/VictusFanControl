@@ -371,3 +371,30 @@ source/contract gates, permanent Manual, Automatic, Candidate V1 and default
 control closed. Full same-head CI, independent review and a separate formal
 closure are required before another authorization can even be considered.
 
+## P16B attempt-3 hardening formally closed after CI #1196
+
+Software-hardening HEAD
+`34c6d8d3a7245d0697f5803c74e2194fe89297f5` passed full same-head CI
+#1196 / run `37072759522` SUCCESS.
+
+The validating workflow explicitly ran the new helper under Windows PowerShell
+5.1.26100.33438, where the hardening helper self-test passed. The full P16
+invariant and evidence-packaging self-test passed, the warnings-as-errors build
+passed, and the HP 8C40 backend self-test passed the three new setpoint-coherence
+cases: filtering the exact attempt-3 one-off `144/30` and `164/17` samples,
+preserving a stable asymmetric/external overwrite, and failing closed when no
+pair stabilizes within six snapshots.
+
+Independent review confirms that the bounded coherence reader does not assume
+CPU/GPU equality and therefore does not weaken ownership mismatch detection.
+The normal fast path requires two complete identical pair snapshots; instability
+is bounded to six successful snapshots and then fails closed. The repo-built HP
+8C40 production/probe paths use the stable reader, while the already-qualified
+installed M4 watchdog binary/runtime and the legacy 88F8 narrow setpoint path
+remain unchanged.
+
+This formal closure performs no hardware execution. The dedicated P16 physical
+source/contract gates remain false; permanent Manual, Automatic, Candidate V1
+and default control remain closed. A fresh one-shot P16B authorization may only
+be created after this closure commit itself receives full same-head CI SUCCESS.
+

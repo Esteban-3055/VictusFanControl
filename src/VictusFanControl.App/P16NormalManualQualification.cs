@@ -6,12 +6,11 @@ namespace VictusFanControl.App;
 /// P16 qualification-only bridge for proving the ordinary user-facing Manual
 /// path without introducing a P16-specific application startup/test mode.
 ///
-/// P16B attempt 3 consumed the fresh one-shot authorization and failed closed.
-/// The PowerShell 5.1 app-audit correction and bounded HP 8C40 setpoint-pair
-/// coherence filter are now staged software-only behind this still-false gate.
-/// Do not reauthorize until the correction passes same-head CI, independent
-/// review and a separate formal closure. Permanent user Manual and Automatic
-/// remain false.
+/// P16B attempt-3 software hardening passed same-head CI and is formally
+/// closed. The PowerShell 5.1 audit correction and bounded HP 8C40 setpoint-pair
+/// coherence filter remain behind this false gate. A fresh separate one-shot
+/// authorization plus its own same-head CI is required before any target retry.
+/// Permanent user Manual and Automatic remain false.
 /// </summary>
 internal static class Hp8C40P16NormalManualQualificationGate
 {

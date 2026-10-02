@@ -29,11 +29,12 @@ $setpointStabilizer=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanCont
 
 $d=$p16.normalManual
 $status=[string]$p16.status
-if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED')){throw "Unexpected P16 status: $status"}
-$isPostAttempt3Hardening=($status -eq 'P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED')
-$isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED'))
+if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED')){throw "Unexpected P16 status: $status"}
+$isPostAttempt3Hardening=($status -in @('P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED'))
+$isPostAttempt3HardeningClosed=($status -eq 'P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED')
+$isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED'))
 $isPhysicalFailClosed=($status -in @('P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED'))
-$isHardened=($status -in @('P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED'))
+$isHardened=($status -in @('P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED'))
 $isHardeningClosed=($status -eq 'P16B_HARDENING_CI_PASS_GATE_CLOSED')
 $hasPhysicalHistory=(@($d.physicalAttemptHistory).Count -gt 0)
 $isAuthorized=($status -eq 'P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
@@ -186,7 +187,31 @@ if($isPostAttempt3Hardening){
  foreach($flag in @('staged','powershell51OrdinalAuditFix','powershell51RuntimeSelfTest','appAuditRejectsFailedClosedOrBlocked','stableSetpointSnapshotFilter','stableSetpointAppliedToProductionHardware','stableSetpointAppliedToRepositoryProbe','parentProofRejectsStableUnexpectedSetpoint','evidencePackagerIncludesCoherenceSources')){
   Assert-True ([bool]$p3i.$flag) ("P16B attempt-3 hardening flag missing: {0}" -f $flag)
  }
- Assert-False ([bool]$p3i.ciValidated) 'P16B attempt-3 implementation commit cannot pre-claim CI validation.'
+ if($isPostAttempt3HardeningClosed){
+  Assert-True ([bool]$p3i.ciValidated) 'P16B attempt-3 formal closure requires CI validation.'
+  Assert-False ([bool]$d.hardeningRequired.required) 'P16B attempt-3 formal closure must clear the outstanding-hardening flag.'
+  $p3c=$p3.closure
+  if($null -eq $p3c -or -not [bool]$p3c.closed -or [string]$p3c.result -cne 'PASS' -or
+     [string]$p3c.implementationHead -cne '34c6d8d3a7245d0697f5803c74e2194fe89297f5' -or
+     [int]$p3c.sourceCiRunNumber -ne 1196 -or [long]$p3c.sourceCiRunId -ne 37072759522 -or
+     [string]$p3c.sourceCiResult -cne 'SUCCESS'){
+   throw 'P16B attempt-3 hardening closure CI identity mismatch.'
+  }
+  Assert-False ([bool]$p3c.hardwareExecution) 'P16B attempt-3 hardening closure must be software-only.'
+  Assert-False ([bool]$p3c.physicalGatesOpened) 'P16B attempt-3 hardening closure must keep physical gates closed.'
+  Assert-False ([bool]$p3c.dedicatedP16SourceGateOpen) 'P16B attempt-3 hardening closure must keep the dedicated source gate false.'
+  Assert-False ([bool]$p3c.permanentUserManualExecutionAuthorized) 'P16B attempt-3 hardening closure cannot promote permanent Manual.'
+  Assert-False ([bool]$p3c.automaticExecutionAuthorized) 'P16B attempt-3 hardening closure cannot open Automatic.'
+  Assert-False ([bool]$p3c.candidateCurvePhysicallyValidated) 'P16B attempt-3 hardening closure cannot validate Candidate V1.'
+  Assert-False ([bool]$p3c.candidateCurveAuthorizedForProduction) 'P16B attempt-3 hardening closure cannot promote Candidate V1.'
+  Assert-False ([bool]$p3c.controlEnabledByDefault) 'P16B attempt-3 hardening closure cannot enable default control.'
+  Assert-False ([bool]$p3c.installedM4WatchdogBinaryMutated) 'P16B attempt-3 hardening closure must preserve the installed M4 binary.'
+  Assert-False ([bool]$p3c.installedM4WatchdogCoherenceBehaviorChanged) 'P16B attempt-3 hardening closure must preserve installed M4 runtime behavior.'
+  Assert-Contains $doc 'P16B attempt-3 hardening formally closed after CI #1196' 'P16B attempt-3 closure documentation missing.'
+ }else{
+  Assert-False ([bool]$p3i.ciValidated) 'P16B attempt-3 implementation commit cannot pre-claim CI validation.'
+  Assert-True ([bool]$d.hardeningRequired.required) 'P16B attempt-3 staged hardening must remain outstanding until formal closure.'
+ }
  Assert-False ([bool]$p3i.ownershipMismatchRelaxed) 'P16B attempt-3 hardening must not relax stable ownership mismatch detection.'
  Assert-False ([bool]$p3i.equalPairAssumptionAdded) 'P16B setpoint coherence must not assume CPU/GPU values are equal.'
  Assert-False ([bool]$p3i.ecWritesAdded) 'P16B setpoint coherence must remain read-only.'

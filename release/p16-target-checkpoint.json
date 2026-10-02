@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+  "status": "P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED",
   "scope": "Prepare and hard-close the ordinary application Manual qualification path before permanent normal-user Manual promotion.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
@@ -235,7 +235,7 @@
       }
     ],
     "hardeningRequired": {
-      "required": true,
+      "required": false,
       "physicalGateMustRemainClosed": true,
       "findings": [
         "AcpiEcReader retries EC protocol reads only after mutex acquisition; a Global\\\\Access_EC acquisition timeout is currently a single 500 ms terminal failure.",
@@ -243,7 +243,7 @@
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Run full same-head CI on the software-only attempt-3 hardening. If SUCCESS, independently review the PowerShell 5.1 audit fix, setpoint coherence semantics and unchanged installed M4 boundary, then close the hardening in a separate all-gates-closed commit before considering any fresh one-shot authorization.",
+      "nextAction": "After this separate attempt-3 hardening closure commit itself passes full same-head CI, create a fresh separate one-shot P16B authorization. Do not execute target hardware from the closure commit.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -334,7 +334,7 @@
         },
         "implementation": {
           "staged": true,
-          "ciValidated": false,
+          "ciValidated": true,
           "powershell51OrdinalAuditFix": true,
           "powershell51RuntimeSelfTest": true,
           "appAuditRejectsFailedClosedOrBlocked": true,
@@ -360,7 +360,25 @@
           "The legacy 88F8 ReadFanSetpoint path remains unchanged.",
           "The independent parent proof now treats any coherent non-expected pair as immediate FAIL_CLOSED instead of waiting for a later target value.",
           "No EC register write path is added; ordinary fan commands continue through the qualified HP BIOS/WMI route."
-        ]
+        ],
+        "closure": {
+          "closed": true,
+          "result": "PASS",
+          "implementationHead": "34c6d8d3a7245d0697f5803c74e2194fe89297f5",
+          "sourceCiRunNumber": 1196,
+          "sourceCiRunId": 37072759522,
+          "sourceCiResult": "SUCCESS",
+          "hardwareExecution": false,
+          "physicalGatesOpened": false,
+          "dedicatedP16SourceGateOpen": false,
+          "permanentUserManualExecutionAuthorized": false,
+          "automaticExecutionAuthorized": false,
+          "candidateCurvePhysicallyValidated": false,
+          "candidateCurveAuthorizedForProduction": false,
+          "controlEnabledByDefault": false,
+          "installedM4WatchdogBinaryMutated": false,
+          "installedM4WatchdogCoherenceBehaviorChanged": false
+        }
       }
     },
     "authorizationHistory": [
