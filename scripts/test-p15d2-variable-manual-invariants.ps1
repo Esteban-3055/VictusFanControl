@@ -27,7 +27,8 @@ if($status -notin @(
     'P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED',
     'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED',
     'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI',
-    'P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED'
+    'P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED',
+    'P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI'
 )){
     throw "Unexpected P15D2 preparation status: $status"
 }
@@ -45,9 +46,11 @@ if([string]$contract.guiLifecycleTrayExit.physicalPassClosure.sourceHead -cne 'a
 
 $d=$contract.guiManualVariableLevel
 Assert-True ([bool]$d.preparationImplemented) 'P15D2 preparation contract must be implemented.'
-$isAuthorized=($status -eq 'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
+$isInitialAuthorized=($status -eq 'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
+$isRetryAuthorized=($status -eq 'P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI')
+$isAuthorized=($isInitialAuthorized -or $isRetryAuthorized)
 $isFailedClosed=($status -eq 'P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED')
-$isFormalClosure=($status -in @('P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED'))
+$isFormalClosure=($status -in @('P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED','P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI'))
 if($isFormalClosure){
     Assert-True ([bool]$d.preparationClosure.closed) 'P15D2 formal software closure must close preparation evidence.'
 }else{
@@ -209,26 +212,50 @@ Assert-False ([bool]$d.m9cOrM9dQualificationMayReopen) 'P15D2 must not reopen M9
 
 if($isAuthorized){
     Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15D2 authorization requires the dedicated source gate open.'
-    $a=$d.authorization
-    Assert-True ([bool]$a.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P15D2 authorization must require same-head CI.'
-    if([string]$a.preparationClosureHead -cne '71ec64077b545f19d31f0ecde59169083d1f55ab' -or
-       [int]$a.preparationClosureCiRunNumber -ne 1173 -or
-       [long]$a.preparationClosureCiRunId -ne 36981777611 -or
-       [string]$a.preparationClosureCiResult -cne 'SUCCESS' -or
-       [string]$a.implementationHead -cne 'e28dff8540d6508c074eff5f189ce134e488c6bb' -or
-       [int]$a.implementationCiRunNumber -ne 1172 -or
-       [long]$a.implementationCiRunId -ne 36977648743 -or
-       [string]$a.implementationCiResult -cne 'SUCCESS'){
-        throw 'P15D2 authorization basis identity mismatch.'
+    if($isInitialAuthorized){
+        $a=$d.authorization
+        Assert-True ([bool]$a.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P15D2 authorization must require same-head CI.'
+        if([string]$a.preparationClosureHead -cne '71ec64077b545f19d31f0ecde59169083d1f55ab' -or
+           [int]$a.preparationClosureCiRunNumber -ne 1173 -or
+           [long]$a.preparationClosureCiRunId -ne 36981777611 -or
+           [string]$a.preparationClosureCiResult -cne 'SUCCESS' -or
+           [string]$a.implementationHead -cne 'e28dff8540d6508c074eff5f189ce134e488c6bb' -or
+           [int]$a.implementationCiRunNumber -ne 1172 -or
+           [long]$a.implementationCiRunId -ne 36977648743 -or
+           [string]$a.implementationCiResult -cne 'SUCCESS'){
+            throw 'P15D2 authorization basis identity mismatch.'
+        }
+        if([string]$a.sourceGateScope -cne 'P15D2 variable-Manual qualification only'){
+            throw 'P15D2 authorization scope mismatch.'
+        }
+        foreach($flag in @(
+            'p15aAuthorizationOpened','p15bAuthorizationOpened','p15cAuthorizationOpened','p15d1AuthorizationOpened',
+            'userFacingManualGateOpened','automaticAuthorizationOpened','candidateCurveAuthorizationOpened',
+            'm9cQualificationConstructionOpened','m9dQualificationConstructionOpened','hardwareExecutionAtAuthorizationCommit'
+        )){Assert-False ([bool]$a.$flag) ("P15D2 authorization widened forbidden scope: {0}" -f $flag)}
+    }else{
+        $a=$d.reauthorizationAfterEcTransient
+        Assert-True ([bool]$a.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P15D2 retry authorization must require same-head CI.'
+        if([string]$a.failClosedClosureHead -cne 'ca367dad3be7bb6fbe1a7b9f67e4984548edfff5' -or
+           [int]$a.failClosedClosureCiRunNumber -ne 1175 -or
+           [long]$a.failClosedClosureCiRunId -ne 36986494813 -or
+           [string]$a.failClosedClosureCiResult -cne 'SUCCESS' -or
+           [string]$a.priorAuthorizationHead -cne 'aa5be229d7e1fb4c1c0b260f3354db972e98436b' -or
+           [int]$a.priorAuthorizationCiRunNumber -ne 1174 -or
+           [long]$a.priorAuthorizationCiRunId -ne 36985472454 -or
+           [string]$a.priorAuthorizationCiResult -cne 'SUCCESS' -or
+           [string]$a.priorAttemptResult -cne 'FAIL_CLOSED'){
+            throw 'P15D2 retry authorization basis identity mismatch.'
+        }
+        if([string]$a.sourceGateScope -cne 'P15D2 variable-Manual qualification retry only'){
+            throw 'P15D2 retry authorization scope mismatch.'
+        }
+        foreach($flag in @(
+            'p15aAuthorizationOpened','p15bAuthorizationOpened','p15cAuthorizationOpened','p15d1AuthorizationOpened',
+            'userFacingManualGateOpened','automaticAuthorizationOpened','candidateCurveAuthorizationOpened',
+            'm9cQualificationConstructionOpened','m9dQualificationConstructionOpened','hardwareExecutionAtAuthorizationCommit'
+        )){Assert-False ([bool]$a.$flag) ("P15D2 retry authorization widened forbidden scope: {0}" -f $flag)}
     }
-    if([string]$a.sourceGateScope -cne 'P15D2 variable-Manual qualification only'){
-        throw 'P15D2 authorization scope mismatch.'
-    }
-    foreach($flag in @(
-        'p15aAuthorizationOpened','p15bAuthorizationOpened','p15cAuthorizationOpened','p15d1AuthorizationOpened',
-        'userFacingManualGateOpened','automaticAuthorizationOpened','candidateCurveAuthorizationOpened',
-        'm9cQualificationConstructionOpened','m9dQualificationConstructionOpened','hardwareExecutionAtAuthorizationCommit'
-    )){Assert-False ([bool]$a.$flag) ("P15D2 authorization widened forbidden scope: {0}" -f $flag)}
 }else{
     Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15D2 source gate must be hard-closed.'
 }
