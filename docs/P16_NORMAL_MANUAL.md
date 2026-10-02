@@ -181,3 +181,38 @@ The dedicated P16 physical gate is re-blocked. Permanent user Manual, Automatic,
 Candidate V1 and default control remain closed. A retry requires software-only
 hardening, same-head CI closure and a fresh authorization.
 
+## P16B software-only hardening staged
+
+The two preserved target failures are treated as qualification evidence, not as
+reasons to relax ownership or SafetyGate behavior.
+
+This hardening keeps every P16 physical gate false and makes four narrow changes:
+
+1. The production HP 8C40 setpoint-acknowledgement loop tolerates at most two
+   transient `TimeoutException`/`IOException` EC setpoint read failures.
+   A third failed snapshot remains fail-closed and uses the existing restore
+   path. The 500 ms `Global\Access_EC` mutex timeout itself is not globally
+   increased, and ownership mismatches such as `40/30` remain failures.
+2. The independent P16 parent EC probe retries only the exact
+   `Timed out waiting for Global\Access_EC.` condition, at most three times.
+   Other probe failures are not retried.
+3. Each requested GUI interaction now has a per-action log cursor. A matching
+   `FAILED CLOSED`/blocked line wins immediately over any later success, so a
+   second click or a new Custom session cannot accidentally satisfy the same
+   qualification step.
+4. A durable one-shot attempt fence is atomically created under ProgramData,
+   keyed by the exact authorization HEAD. Re-running a consumed authorization
+   is refused before the failsafe/GUI physical boundary; a fresh authorization
+   commit produces a new key.
+
+Deterministic C# backend tests cover transient setpoint-read recovery and
+bounded repeated failure. A PowerShell helper self-test covers transient-only
+retry classification, first-failure interaction ordering and one-shot attempt
+consumption. The attempt-fence record is included in physical evidence whenever
+a token-bearing attempt claims it.
+
+This commit is software-only. It does not reopen P16, permanent Manual,
+Automatic, Candidate V1 or default control. Full same-head CI SUCCESS and a
+separate formal hardening closure are required before a fresh P16B
+authorization.
+

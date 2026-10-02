@@ -8,6 +8,8 @@ $RepositoryRoot=[IO.Path]::GetFullPath($RepositoryRoot)
 if(-not (Test-Path -LiteralPath $EvidenceRoot -PathType Container)){throw "P16 evidence directory missing: $EvidenceRoot"}
 $summaryPath=Join-Path $EvidenceRoot 'p16-harness-summary.json'
 if(-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)){throw 'P16 harness summary is missing.'}
+$summary=Get-Content -LiteralPath $summaryPath -Raw|ConvertFrom-Json
+$attemptFenceRequired=[bool]$summary.attemptFenceClaimed
 $head=(& git -C $RepositoryRoot rev-parse HEAD 2>&1 | Out-String).Trim()
 if($LASTEXITCODE -ne 0 -or $head -notmatch '^[0-9a-f]{40}$'){throw 'P16 packager could not resolve repository HEAD.'}
 $status=(& git -C $RepositoryRoot status --porcelain=v1 --untracked-files=all 2>&1 | Out-String)
@@ -32,6 +34,7 @@ $files=@(
  [pscustomobject]@{role='service-snapshots';path=(Join-Path $EvidenceRoot 'p16-service-snapshots.json');required=$false},
  [pscustomobject]@{role='watchdog-log-segment';path=(Join-Path $EvidenceRoot 'p16-watchdog-log-segment.txt');required=$false},
  [pscustomobject]@{role='failsafe-log';path=(Join-Path $EvidenceRoot 'p16-failsafe.log');required=$false},
+ [pscustomobject]@{role='attempt-fence';path=(Join-Path $EvidenceRoot 'p16-attempt-fence.json');required=$attemptFenceRequired},
  [pscustomobject]@{role='git-head';path=$headPath;required=$true},
  [pscustomobject]@{role='git-status';path=$statusPath;required=$true},
  [pscustomobject]@{role='p15-contract';path=(Join-Path $RepositoryRoot 'release\p15-target-checkpoint.json');required=$true},
@@ -39,6 +42,8 @@ $files=@(
  [pscustomobject]@{role='profile';path=(Join-Path $RepositoryRoot 'profiles\HP-8C40.json');required=$true},
  [pscustomobject]@{role='p16-doc';path=(Join-Path $RepositoryRoot 'docs\P16_NORMAL_MANUAL.md');required=$true},
  [pscustomobject]@{role='harness';path=(Join-Path $RepositoryRoot 'scripts\test-p16-normal-manual.ps1');required=$true},
+ [pscustomobject]@{role='hardening-helper-source';path=(Join-Path $RepositoryRoot 'scripts\p16-hardening-helpers.ps1');required=$true},
+ [pscustomobject]@{role='hardening-helper-selftest';path=(Join-Path $RepositoryRoot 'scripts\test-p16-hardening-helpers.ps1');required=$true},
  [pscustomobject]@{role='qualification-gate-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\P16NormalManualQualification.cs');required=$true},
  [pscustomobject]@{role='p13-surface-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\P13FanControlSurface.cs');required=$true},
  [pscustomobject]@{role='main-form-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\MainForm.cs');required=$true},

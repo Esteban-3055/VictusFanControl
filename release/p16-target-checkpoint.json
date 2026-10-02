@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED",
+  "status": "P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED",
   "scope": "Prepare and hard-close the ordinary application Manual qualification path before permanent normal-user Manual promotion.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
@@ -216,7 +216,21 @@
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Implement software-only hardening with every physical gate closed, add deterministic regressions, obtain same-head CI SUCCESS, formally close the correction, then create a fresh separate P16B reauthorization."
+      "nextAction": "Obtain full same-head CI SUCCESS for this software-only hardening, formally close it with all gates still false, then create a fresh separate P16B authorization before any target retry.",
+      "implementation": {
+        "staged": true,
+        "ciValidated": false,
+        "productionSetpointAckTransientEcRetry": true,
+        "parentEcProbeTransientMutexRetry": true,
+        "failedInteractionImmediateAbort": true,
+        "oneShotAuthorizationAttemptFence": true,
+        "evidenceIncludesAttemptFence": true,
+        "deterministicHelperSelfTest": true,
+        "backendDeterministicSelfTests": true,
+        "ownershipMismatchRelaxed": false,
+        "ecMutexTimeoutGloballyRelaxed": false,
+        "hardwareExecutionByHardeningCommit": false
+      }
     }
   },
   "promotion": {

@@ -5,7 +5,8 @@ $tempRoot=Join-Path ([IO.Path]::GetTempPath()) ('VFC-P16-PackageTest-'+[Guid]::N
 $evidence=Join-Path $tempRoot 'logs\p16-normal-manual_test'
 try{
  New-Item -ItemType Directory -Force -Path $evidence | Out-Null
- '{"gate":"P16-HARNESS","result":"PASS"}' | Set-Content -LiteralPath (Join-Path $evidence 'p16-harness-summary.json') -Encoding UTF8
+ '{"gate":"P16-HARNESS","result":"PASS","attemptFenceClaimed":true}' | Set-Content -LiteralPath (Join-Path $evidence 'p16-harness-summary.json') -Encoding UTF8
+ '{"gate":"P16","oneShot":true,"authorizationHead":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' | Set-Content -LiteralPath (Join-Path $evidence 'p16-attempt-fence.json') -Encoding UTF8
  'synthetic normal-app log segment' | Set-Content -LiteralPath (Join-Path $evidence 'p16-app-log-segment.txt') -Encoding UTF8
  $p=& $helper -EvidenceRoot $evidence -RepositoryRoot $repoRoot
  if(-not (Test-Path -LiteralPath $p.ZipPath -PathType Leaf) -or -not (Test-Path -LiteralPath $p.Sha256SidecarPath -PathType Leaf)){throw 'P16 package self-test output missing.'}
@@ -14,7 +15,7 @@ try{
  $m=Get-Content -LiteralPath $p.ManifestPath -Raw | ConvertFrom-Json
  if([string]$m.gate -cne 'P16' -or [bool]$m.gitCleanUsed -or -not [bool]$m.sourceEvidencePreserved){throw 'P16 package manifest safety contract mismatch.'}
  $roles=@($m.files | ForEach-Object {[string]$_.role})
- foreach($role in @('p15-contract','p16-contract','qualification-gate-source','main-form-source','program-source','user-gate-source','production-adapter-source','coordinator-source','reused-qualified-failsafe-source')){
+ foreach($role in @('attempt-fence','p15-contract','p16-contract','hardening-helper-source','hardening-helper-selftest','qualification-gate-source','main-form-source','program-source','user-gate-source','production-adapter-source','coordinator-source','reused-qualified-failsafe-source')){
    if($role -notin $roles){throw "P16 package manifest missing critical role '$role'."}
  }
  if(-not (Test-Path -LiteralPath (Join-Path $evidence 'p16-harness-summary.json'))){throw 'P16 packager deleted source evidence.'}

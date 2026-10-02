@@ -17,6 +17,8 @@ public static class Hp8C40FanControlBackendSelfTest
 
         failures += await TestProductionCapabilitiesAsync(output);
         failures += await TestHappyPathAsync(output);
+        failures += await TestTransientSetpointAckReadFailureRecoversAsync(output);
+        failures += await TestRepeatedSetpointAckReadFailureFailsClosedAsync(output);
         failures += await TestSameSetpointSkipsRedundantWmiWriteAsync(output);
         failures += await TestExistingOverrideRefusedAsync(output);
         failures += await TestCancelledAdmissionIsNoWriteAsync(output);
@@ -98,6 +100,74 @@ public static class Hp8C40FanControlBackendSelfTest
             active.CustomModeActive &&
             active.Detail.Contains("both tachometers", StringComparison.OrdinalIgnoreCase) &&
             !restored.CustomModeActive);
+    }
+
+    private static async Task<int> TestTransientSetpointAckReadFailureRecoversAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware
+        {
+            TransientSetpointAckReadFailures = 1
+        };
+
+        await using var backend = NewBackend(hardware);
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(
+            new FanCommand(30, 30, "transient-setpoint-ack-contention"),
+            CancellationToken.None);
+
+        var status = await backend.GetStatusAsync(CancellationToken.None);
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "single transient EC mutex failure during setpoint acknowledgement is retried",
+            hardware.SetCalls == 1 &&
+            hardware.TransientSetpointAckReadFailures == 0 &&
+            status.CustomModeActive &&
+            hardware.RestoreCalls == 1 &&
+            hardware.State.CpuSetpoint == byte.MaxValue &&
+            hardware.State.GpuSetpoint == byte.MaxValue);
+    }
+
+    private static async Task<int> TestRepeatedSetpointAckReadFailureFailsClosedAsync(
+        TextWriter output)
+    {
+        var hardware = new FakeHardware
+        {
+            TransientSetpointAckReadFailures = 3
+        };
+
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+
+        var failedClosed = false;
+        try
+        {
+            await backend.ApplyAsync(
+                new FanCommand(30, 30, "repeated-setpoint-ack-contention"),
+                CancellationToken.None);
+        }
+        catch (IOException ex)
+            when (ex.Message.Contains(
+                "Setpoint acknowledgement lost EC observability",
+                StringComparison.Ordinal))
+        {
+            failedClosed = true;
+        }
+
+        hardware.TransientSetpointAckReadFailures = 0;
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+
+        return Report(
+            output,
+            "repeated EC mutex failures during setpoint acknowledgement remain fail-closed",
+            failedClosed &&
+            hardware.SetCalls == 1 &&
+            hardware.RestoreCalls == 1 &&
+            hardware.State.CpuSetpoint == byte.MaxValue &&
+            hardware.State.GpuSetpoint == byte.MaxValue);
     }
 
     private static async Task<int> TestSameSetpointSkipsRedundantWmiWriteAsync(
@@ -1536,6 +1606,7 @@ public static class Hp8C40FanControlBackendSelfTest
         public bool FreezeGpuTach { get; set; }
         public bool PulseCpuTachOnceThenReturnBaseline { get; set; }
         public int TransientEcReadFailuresDuringTachAck { get; set; }
+        public int TransientSetpointAckReadFailures { get; set; }
         public Action<int>? OnEcRead { get; set; }
         public Action? OnSetFanLevel { get; set; }
         public Queue<(byte MaxFan, byte FanSwitch)> GuardReadOverrides { get; } = new();
@@ -1551,6 +1622,16 @@ public static class Hp8C40FanControlBackendSelfTest
             if (ReadEcStateException is not null)
             {
                 throw ReadEcStateException;
+            }
+
+            if (_targetCpu.HasValue &&
+                _targetGpu.HasValue &&
+                _postSetReadCount == 0 &&
+                TransientSetpointAckReadFailures > 0)
+            {
+                TransientSetpointAckReadFailures--;
+                throw new TimeoutException(
+                    "Timed out waiting for Global\\Access_EC.");
             }
 
             // The first post-SetFanLevel ReadEcState is consumed by the fake's

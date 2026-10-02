@@ -123,6 +123,7 @@ public sealed class Hp8C40FanControlBackend :
     private const int MinimumDirectionalRpmDelta = 150;
     private const int RequiredTachConfirmationSamples = 2;
     private const int MaximumTransientTachSnapshotReadFailures = 2;
+    private const int MaximumTransientSetpointReadFailures = 2;
     private const int RequiredConsecutiveUnexpectedGuardSamples = 2;
     private const int MaximumUnexpectedGuardConfirmationReads = 3;
     private static readonly TimeSpan UnexpectedGuardConfirmationDelay = TimeSpan.FromMilliseconds(25);
@@ -1204,6 +1205,8 @@ public sealed class Hp8C40FanControlBackend :
         CancellationToken cancellationToken)
     {
         var started = _activeTimeClock.Milliseconds;
+        var transientReadFailures = 0;
+        string? lastReadFailure = null;
         (byte CpuSetpoint, byte GpuSetpoint)? last = null;
 
         while (!ActiveTimeClock.HasElapsed(
@@ -1213,20 +1216,53 @@ public sealed class Hp8C40FanControlBackend :
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            last = _hardware!.ReadSetpoint();
+            try
+            {
+                last = _hardware!.ReadSetpoint();
+            }
+            catch (Exception ex) when (
+                ex is TimeoutException ||
+                ex is IOException)
+            {
+                transientReadFailures++;
+                lastReadFailure =
+                    $"{ex.GetType().Name}: {ex.Message}";
+
+                if (transientReadFailures >
+                    MaximumTransientSetpointReadFailures)
+                {
+                    throw new IOException(
+                        $"Setpoint acknowledgement lost EC observability after " +
+                        $"{transientReadFailures} failed setpoint snapshots. " +
+                        $"The real command remains uncommitted and must be restored fail-closed. " +
+                        $"Last failure: {ex.Message}",
+                        ex);
+                }
+
+                // A Global\Access_EC acquisition timeout already consumed a
+                // bounded wait. Retry the complete narrow setpoint snapshot
+                // without relaxing ownership or acknowledgement requirements.
+                continue;
+            }
+
             if (last.Value.CpuSetpoint == cpuLevel &&
                 last.Value.GpuSetpoint == gpuLevel)
             {
                 return last.Value;
             }
 
-            await Task.Delay(_timing.PollInterval, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(
+                    _timing.PollInterval,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         throw new TimeoutException(
             $"EC setpoint acknowledgement timed out after {timeout.TotalSeconds:0.0} s. " +
             $"Expected {cpuLevel}/{gpuLevel}, last " +
-            $"{last?.CpuSetpoint.ToString() ?? "n/a"}/{last?.GpuSetpoint.ToString() ?? "n/a"}.");
+            $"{last?.CpuSetpoint.ToString() ?? "n/a"}/{last?.GpuSetpoint.ToString() ?? "n/a"}, " +
+            $"transient EC setpoint failures={transientReadFailures}, " +
+            $"last EC setpoint failure={lastReadFailure ?? "none"}.");
     }
 
     private void ValidateCommand(FanCommand command)

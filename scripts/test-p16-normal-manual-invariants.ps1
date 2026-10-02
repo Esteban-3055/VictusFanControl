@@ -19,11 +19,17 @@ $packager=Get-Content -LiteralPath (Join-Path $root 'scripts\package-p16-evidenc
 $failsafe=Get-Content -LiteralPath (Join-Path $root 'scripts\watchdog-p15d2-service-failsafe-8c40.ps1') -Raw
 $workflow=Get-Content -LiteralPath (Join-Path $root '.github\workflows\build.yml') -Raw
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P16_NORMAL_MANUAL.md') -Raw
+$hardeningHelper=Get-Content -LiteralPath (Join-Path $root 'scripts\p16-hardening-helpers.ps1') -Raw
+$hardeningSelfTest=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p16-hardening-helpers.ps1') -Raw
+$backend=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs') -Raw
+$backendSelfTest=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackendSelfTest.cs') -Raw
 
 $status=[string]$p16.status
-if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED')){throw "Unexpected P16 status: $status"}
-$isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED'))
+if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED')){throw "Unexpected P16 status: $status"}
+$isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED'))
 $isPhysicalFailClosed=($status -eq 'P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED')
+$isHardened=($status -in @('P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED'))
+$hasPhysicalHistory=($isPhysicalFailClosed -or $isHardened)
 $isAuthorized=($status -eq 'P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
 
 if([string]$p15.status -cne 'P15D2_VARIABLE_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){throw 'P16A requires formally closed P15D2.'}
@@ -69,7 +75,7 @@ if($isAuthorized){
 }
 Assert-False ([bool]$d.physicalPassed) 'P16A cannot pre-claim physical PASS.'
 Assert-False ([bool]$d.evidenceClosed) 'P16A cannot pre-close physical evidence.'
-if($isPhysicalFailClosed){Assert-True ([bool]$d.hardwareExecution) 'P16B fail-closed state must preserve that target hardware execution occurred.'}else{Assert-False ([bool]$d.hardwareExecution) 'Pre-physical P16 state must not claim hardware execution.'}
+if($hasPhysicalHistory){Assert-True ([bool]$d.hardwareExecution) 'Post-attempt P16 state must preserve that target hardware execution occurred.'}else{Assert-False ([bool]$d.hardwareExecution) 'Pre-physical P16 state must not claim hardware execution.'}
 Assert-True ([bool]$d.normalApplicationLaunchRequired) 'P16 must use normal app launch.'
 Assert-False ([bool]$d.specialQualificationStartupModeAllowed) 'P16 must not introduce special app startup mode.'
 Assert-True ([bool]$d.requiresRealP13Surface) 'P16 must reuse P13.'
@@ -107,6 +113,28 @@ if($isPhysicalFailClosed){
  Assert-True ([bool]$d.authorization.freshAuthorizationRequired) 'P16B retry must require a fresh authorization.'
  Assert-True ([bool]$d.hardeningRequired.required) 'P16B fail-closed state must require hardening.'
  Assert-True ([bool]$d.hardeningRequired.physicalGateMustRemainClosed) 'P16B hardening must keep the physical gate closed.'
+}
+if($isHardened){
+ Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B hardening must keep the dedicated source gate closed.'
+ $attempts=@($d.physicalAttemptHistory)
+ if($attempts.Count -ne 2 -or [string]$attempts[0].result -cne 'FAIL_CLOSED' -or [string]$attempts[1].result -cne 'FAIL_CLOSED'){throw 'P16B hardening must preserve both FAIL_CLOSED attempts.'}
+ $hi=$d.hardeningRequired.implementation
+ foreach($flag in @('staged','productionSetpointAckTransientEcRetry','parentEcProbeTransientMutexRetry','failedInteractionImmediateAbort','oneShotAuthorizationAttemptFence','evidenceIncludesAttemptFence','deterministicHelperSelfTest','backendDeterministicSelfTests')){
+  Assert-True ([bool]$hi.$flag) ("P16B hardening implementation flag missing: {0}" -f $flag)
+ }
+ Assert-False ([bool]$hi.ownershipMismatchRelaxed) 'P16B hardening must not relax ownership mismatch detection.'
+ Assert-False ([bool]$hi.ecMutexTimeoutGloballyRelaxed) 'P16B hardening must not globally relax the EC mutex timeout.'
+ Assert-False ([bool]$hi.hardwareExecutionByHardeningCommit) 'P16B hardening commit must remain software-only.'
+ Assert-Contains $backend 'MaximumTransientSetpointReadFailures = 2' 'P16B backend setpoint retry bound missing.'
+ Assert-Contains $backend 'Setpoint acknowledgement lost EC observability' 'P16B backend repeated-contention fail-closed diagnostic missing.'
+ Assert-Contains $backendSelfTest 'TestTransientSetpointAckReadFailureRecoversAsync' 'P16B backend transient setpoint retry self-test missing.'
+ Assert-Contains $backendSelfTest 'TestRepeatedSetpointAckReadFailureFailsClosedAsync' 'P16B backend repeated setpoint failure self-test missing.'
+ foreach($needle in @('Test-P16EcMutexContentionText','Invoke-P16BoundedEcContentionRetry','Resolve-P16InteractionOutcome','New-P16AuthorizationAttemptFence','[IO.FileMode]::CreateNew')){Assert-Contains $hardeningHelper $needle ("P16B hardening helper missing: {0}" -f $needle)}
+ foreach($needle in @('already consumed','failureFirst','non-transient','three transient attempts')){Assert-Contains $hardeningSelfTest $needle ("P16B hardening helper self-test missing: {0}" -f $needle)}
+ foreach($needle in @('Invoke-P16BoundedEcContentionRetry','Wait-P16InteractionOutcome','New-P16AuthorizationAttemptFence','attemptFenceClaimed')){Assert-Contains $harness $needle ("P16B hardened harness missing: {0}" -f $needle)}
+ Assert-Contains $packager 'attempt-fence' 'P16B evidence packager must carry the one-shot attempt fence.'
+ Assert-Contains $workflow 'HP 8C40 P16B hardening helper self-test' 'P16B hardening helper self-test must run in CI.'
+ Assert-Contains $doc 'P16B software-only hardening staged' 'P16B hardening documentation missing.'
 }
 
 if($isAuthorized){

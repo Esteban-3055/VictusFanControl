@@ -305,6 +305,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p16-evidence-packaging.ps1
 
+      - name: HP 8C40 P16B hardening helper self-test
+        shell: pwsh
+        run: .\scripts\test-p16-hardening-helpers.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -373,6 +377,7 @@ jobs:
           .\scripts\test-p15d1-evidence-packaging.ps1
           .\scripts\test-p16-normal-manual-invariants.ps1
           .\scripts\test-p16-evidence-packaging.ps1
+          .\scripts\test-p16-hardening-helpers.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build
