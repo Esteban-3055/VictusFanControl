@@ -171,7 +171,10 @@ if($status -eq 'P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED'){
         'parent-hold40-proof','parent-return30-proof','production-adapter-source','coordinator-source','failsafe-source'
     )){Assert-Contains $packager $needle ("P15D2 packager contract missing: {0}" -f $needle)}
 
-    foreach($needle in @('P15D2 FAILSAFE ARMED:','P15D2 FAILSAFE TAKEOVER:','P15D2 FAILSAFE CONTROLLER-KILL:','P15D2 FAILSAFE RECOVERED:')){
+    foreach($needle in @(
+        'P15D2 FAILSAFE ARMED:','P15D2 FAILSAFE TAKEOVER:','P15D2 FAILSAFE CONTROLLER-KILL:','P15D2 FAILSAFE RECOVERED:',
+        'Test-P15D2QualifiedLevelPair','cpu -in @(30,40)','WRITE_ARMED','OWNED','RESTORING'
+    )){
         Assert-Contains $failsafe $needle ("P15D2 failsafe contract missing: {0}" -f $needle)
     }
 
