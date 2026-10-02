@@ -884,7 +884,19 @@
       "deterministicRefreshRaceSelfTestImplemented": true,
       "deterministicExhaustionRestoreSelfTestImplemented": true,
       "automaticPathChanged": false,
-      "hardwareExecution": false
+      "hardwareExecution": false,
+      "failedCiHistoryPreserved": [
+        {
+          "runNumber": 1124,
+          "runId": 36962046081,
+          "head": "10bf1ca322c18feaf884b44b8c8f38026283aba1",
+          "result": "FAILURE",
+          "failureStep": "HP 8C40 P15C real-GUI Manual preparation invariant",
+          "cause": "The correction invariant referenced $adaptive markers without loading AdaptiveFanProductionController.cs into $adaptive.",
+          "hardwareExecution": false,
+          "physicalGatesOpened": false
+        }
+      ]
     }
   },
   "automatic": {

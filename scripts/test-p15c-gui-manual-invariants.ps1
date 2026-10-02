@@ -10,6 +10,7 @@ $contract=Get-Content -LiteralPath (Join-Path $root 'release\p15-target-checkpoi
 $profile=Get-Content -LiteralPath (Join-Path $root 'profiles\HP-8C40.json') -Raw | ConvertFrom-Json
 $userGate=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Control\Adaptive\Hp8C40PostM9UserControlGate.cs') -Raw
 $candidate=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Control\Adaptive\Hp8C40AdaptiveCandidateV1.cs') -Raw
+$adaptive=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Control\Adaptive\AdaptiveFanProductionController.cs') -Raw
 $qualification=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\P15CGuiManualQualification.cs') -Raw
 $program=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\Program.cs') -Raw
 $main=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\MainForm.cs') -Raw
@@ -184,6 +185,17 @@ if($status -eq 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PENDING_GATE_CLOSED')
     foreach($p in @('mustRefreshSafetyAfterCustomAdmission','boundedStaleRetryRequired','exhaustedRetryMustRestoreFirmware','productionAdapterRefreshOverloadImplemented','realP13SurfaceUsesRefreshProvider','retryIsNoAdditionalOperatorInteraction','exhaustedRetryRestoresFirmwareImplemented','deterministicRefreshRaceSelfTestImplemented','deterministicExhaustionRestoreSelfTestImplemented')){Assert-True ([bool]$corr.$p) ("P15C stale-Safety correction missing implementation: {0}" -f $p)}
     Assert-False ([bool]$corr.automaticPathChanged) 'P15C Manual correction must not widen scope into Automatic.'
     Assert-False ([bool]$corr.hardwareExecution) 'P15C correction implementation must be software-only.'
+    $failedCorrection=@($corr.failedCiHistoryPreserved)
+    if($failedCorrection.Count -ne 1 -or
+       [int]$failedCorrection[0].runNumber -ne 1124 -or
+       [long]$failedCorrection[0].runId -ne 36962046081 -or
+       [string]$failedCorrection[0].head -cne '10bf1ca322c18feaf884b44b8c8f38026283aba1' -or
+       [string]$failedCorrection[0].result -cne 'FAILURE' -or
+       [string]$failedCorrection[0].failureStep -cne 'HP 8C40 P15C real-GUI Manual preparation invariant'){
+        throw 'P15C stale-Safety correction failed-CI history mismatch.'
+    }
+    Assert-False ([bool]$failedCorrection[0].hardwareExecution) 'P15C stale-Safety correction failed CI must record no hardware execution.'
+    Assert-False ([bool]$failedCorrection[0].physicalGatesOpened) 'P15C stale-Safety correction failed CI must keep physical gates closed.'
 }
 
 if($status -eq 'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){
