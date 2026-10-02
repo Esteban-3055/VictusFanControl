@@ -18,15 +18,17 @@ function Assert-False([bool]$Value,[string]$Message){if($Value){throw $Message}}
 function Assert-Contains([string]$Text,[string]$Needle,[string]$Message){if($Text.IndexOf($Needle,[StringComparison]::Ordinal) -lt 0){throw $Message}}
 function Assert-NotContains([string]$Text,[string]$Needle,[string]$Message){if($Text.IndexOf($Needle,[StringComparison]::Ordinal) -ge 0){throw $Message}}
 
-if([string]$contract.status -notin @(
+$status=[string]$contract.status
+$postP15D1State=$status.StartsWith('P15D2_',[StringComparison]::Ordinal)
+if($status -notin @(
     'P15D1_TRAY_EXIT_PREPARATION_CI_PENDING_GATE_CLOSED',
     'P15D1_TRAY_EXIT_IMPLEMENTATION_CI_PENDING_GATE_CLOSED',
     'P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED',
     'P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED',
     'P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI',
     'P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED'
-)){
-    throw "Unexpected P15D1 preparation status: $($contract.status)"
+) -and -not $postP15D1State){
+    throw "Unexpected P15D1 preparation status: $status"
 }
 
 $d=$contract.guiLifecycleTrayExit
@@ -36,7 +38,7 @@ Assert-False ([bool]$contract.guiManual.executionAuthorized) 'P15C execution mus
 Assert-False ([bool]$contract.guiManual.controllerPhysicalExecutionAuthorized) 'P15C controller gate must remain re-blocked.'
 
 Assert-True ([bool]$d.preparationImplemented) 'P15D1 preparation must be implemented.'
-if([string]$contract.status -in @('P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED','P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED','P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED')){
+if($status -in @('P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED','P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED','P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED') -or $postP15D1State){
     Assert-True ([bool]$d.preparationCiValidated) 'P15D1 hardening/closure requires validated software CI.'
 }else{
     Assert-False ([bool]$d.preparationCiValidated) 'Pending P15D1 preparation must not pre-claim CI.'
@@ -62,7 +64,7 @@ if([string]$contract.status -eq 'P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSE
     Assert-False ([bool]$h.hardwareExecution) 'P15D1 hardening must remain software-only.'
     Assert-False ([bool]$h.physicalGatesOpened) 'P15D1 hardening must keep physical gates closed.'
 }
-if([string]$contract.status -in @('P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED','P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED')){
+if($status -in @('P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED','P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED') -or $postP15D1State){
     Assert-True ([bool]$d.runtimeImplementationCiValidated) 'P15D1 formal closure requires final runtime implementation CI.'
     Assert-True ([bool]$d.preparationClosure.closed) 'P15D1 formal closure must be closed.'
     $pc=$d.preparationClosure
@@ -110,7 +112,7 @@ foreach($entry in $failed){
     Assert-False ([bool]$entry.hardwareExecution) 'P15D1 failed CI must record no hardware execution.'
     Assert-False ([bool]$entry.physicalGatesOpened) 'P15D1 failed CI must record physical gates closed.'
 }
-if([string]$contract.status -eq 'P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
+if($status -eq 'P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
     Assert-True ([bool]$d.executionAuthorized) 'P15D1 authorization must open the dedicated parent harness gate.'
     Assert-True ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D1 authorization must open the dedicated GUI gate.'
     Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15D1 authorization requires the dedicated source gate open.'
@@ -137,7 +139,7 @@ if([string]$contract.status -eq 'P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_C
     Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D1 GUI/controller execution must remain closed during preparation/closure.'
     Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15D1 dedicated source gate must be hard-closed.'
 }
-if([string]$contract.status -eq 'P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED'){
+if($status -eq 'P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED' -or $postP15D1State){
     Assert-True ([bool]$d.physicalPassed) 'P15D1 physical closure must set physicalPassed.'
     Assert-True ([bool]$d.evidenceClosed) 'P15D1 physical closure must set evidenceClosed.'
     Assert-False ([bool]$d.executionAuthorized) 'P15D1 physical closure must re-block parent harness.'
@@ -227,7 +229,7 @@ foreach($forbidden in @('SetFanLevel','--restore-hp-auto','git clean')){Assert-N
 Assert-NotContains $harness 'Start-Service' 'P15D1 parent harness must not manually start watchdog.'
 Assert-NotContains $harness 'Stop-Service' 'P15D1 parent harness must not manually stop watchdog.'
 Assert-NotContains $harness 'Restart-Service' 'P15D1 parent harness must not manually restart watchdog.'
-if([string]$contract.status -eq 'P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
+if($status -eq 'P15D1_TRAY_EXIT_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
     Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15D1 authorized state requires source gate open.'
 }else{
     Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15D1 non-authorized state requires source gate closed.'
