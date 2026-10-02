@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED",
+  "status": "P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1324,7 +1324,7 @@
   },
   "guiManualVariableLevel": {
     "preparationImplemented": true,
-    "preparationCiValidated": false,
+    "preparationCiValidated": true,
     "preparationClosure": {
       "closed": false,
       "result": "PENDING",
@@ -1397,10 +1397,10 @@
     "plannedFiles": {
       "qualificationSource": "src/VictusFanControl.App/P15D2VariableManualQualification.cs",
       "invariantScript": "scripts/test-p15d2-variable-manual-invariants.ps1",
-      "futureHarness": "scripts/test-p15d2-variable-manual.ps1",
-      "futureEvidencePackager": "scripts/package-p15d2-evidence.ps1",
-      "futureEvidenceSelfTest": "scripts/test-p15d2-evidence-packaging.ps1",
-      "futureIndependentFailsafe": "scripts/watchdog-p15d2-service-failsafe-8c40.ps1"
+      "futureHarness": "implemented: scripts/test-p15d2-variable-manual.ps1",
+      "futureEvidencePackager": "implemented: scripts/package-p15d2-evidence.ps1",
+      "futureEvidenceSelfTest": "implemented: scripts/test-p15d2-evidence-packaging.ps1",
+      "futureIndependentFailsafe": "implemented: scripts/watchdog-p15d2-service-failsafe-8c40.ps1"
     },
     "preparationBasis": {
       "p15d1ClosureHead": "61542eaad2a66bb92c5e75bbfd07151457cf3127",
@@ -1408,8 +1408,45 @@
       "p15d1ClosureCiRunId": 36971629340,
       "p15d1ClosureCiResult": "SUCCESS"
     },
-    "runtimeImplementationComplete": false,
+    "preparationBaseCi": {
+      "head": "b55742effc1b46112656ef2febdd96275389dbfc",
+      "runNumber": 1146,
+      "runId": 36972919383,
+      "result": "SUCCESS"
+    },
+    "runtimeImplementationComplete": true,
     "runtimeImplementationCiValidated": false,
+    "runtimeImplementation": {
+      "programBoundaryImplemented": true,
+      "exactTargetBoundaryImplemented": true,
+      "realP13VariableManualPathReused": true,
+      "readyRequiresThreeHealthySafetySamples": true,
+      "initial30ParentFenceImplemented": true,
+      "changed40ParentFenceImplemented": true,
+      "duplicate40HoldCustomFenceImplemented": true,
+      "duplicate40NoRetransmitParentAuditImplemented": true,
+      "return30ParentFenceImplemented": true,
+      "realFirmwareStrongRestoreImplemented": true,
+      "sameOwnedSessionAuditImplemented": true,
+      "causalThreeWriteWatchdogAuditImplemented": true,
+      "nativeTrackedGuiProcess": true,
+      "independentFailsafeImplemented": true,
+      "evidencePackagerImplemented": true,
+      "evidencePackagingSelfTestImplemented": true,
+      "physicalExecution": false
+    },
+    "failedCiHistoryPreserved": [
+      {
+        "runNumber": 1148,
+        "runId": 36973216494,
+        "head": "0e39d6c0583a90b135f2bcb1b903b01a822ed3b5",
+        "result": "FAILURE",
+        "failureStep": "Build",
+        "cause": "Sequential staging commit wired the new P15D2 Program constructor arguments before the matching MainForm constructor/runtime commit; the next software-only commit completed that wiring.",
+        "hardwareExecution": false,
+        "physicalGatesOpened": false
+      }
+    ],
     "hardwareExecution": false,
     "physicalGatesOpened": false
   }
