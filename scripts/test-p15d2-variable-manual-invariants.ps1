@@ -276,7 +276,11 @@ if($isAuthorized){
            [int]$a.priorAuthorizationCiRunNumber -ne 1174 -or
            [long]$a.priorAuthorizationCiRunId -ne 36985472454 -or
            [string]$a.priorAuthorizationCiResult -cne 'SUCCESS' -or
-           [string]$a.priorAttemptResult -cne 'FAIL_CLOSED'){
+           [string]$a.priorAttemptResult -cne 'FAIL_CLOSED' -or
+           [string]$a.retryStatusBarrierClosureHead -cne 'abbe464c2921c293923ca0c7670e44ca9f05bccb' -or
+           [int]$a.retryStatusBarrierClosureCiRunNumber -ne 1178 -or
+           [long]$a.retryStatusBarrierClosureCiRunId -ne 37003774275 -or
+           [string]$a.retryStatusBarrierClosureCiResult -cne 'SUCCESS'){
             throw 'P15D2 retry authorization basis identity mismatch.'
         }
         if([string]$a.sourceGateScope -cne 'P15D2 variable-Manual qualification retry only'){
