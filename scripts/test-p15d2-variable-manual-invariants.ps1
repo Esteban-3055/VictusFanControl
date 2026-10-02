@@ -75,15 +75,27 @@ if($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
     )){Assert-True ([bool]$ri.$flag) ("P15D2 runtime implementation flag missing: {0}" -f $flag)}
     Assert-False ([bool]$ri.physicalExecution) 'P15D2 runtime implementation must remain software-only.'
     $failed=@($d.failedCiHistoryPreserved)
-    if($failed.Count -ne 1 -or [int]$failed[0].runNumber -ne 1148 -or
+    if($failed.Count -lt 1 -or $failed.Count -gt 2 -or
+       [int]$failed[0].runNumber -ne 1148 -or
        [long]$failed[0].runId -ne 36973216494 -or
        [string]$failed[0].head -cne '0e39d6c0583a90b135f2bcb1b903b01a822ed3b5' -or
        [string]$failed[0].result -cne 'FAILURE' -or
        [string]$failed[0].failureStep -cne 'Build'){
         throw 'P15D2 failed-CI history mismatch.'
     }
-    Assert-False ([bool]$failed[0].hardwareExecution) 'P15D2 failed CI must record no hardware execution.'
-    Assert-False ([bool]$failed[0].physicalGatesOpened) 'P15D2 failed CI must keep physical gates closed.'
+    if($failed.Count -eq 2){
+        if([int]$failed[1].runNumber -ne 1155 -or
+           [long]$failed[1].runId -ne 36973835321 -or
+           [string]$failed[1].head -cne '7f5cb1d2efa65c1843fffebd5f2c98d76178dbfe' -or
+           [string]$failed[1].result -cne 'FAILURE' -or
+           [string]$failed[1].failureStep -cne 'HP 8C40 P15D2 variable Manual preparation invariant'){
+            throw 'P15D2 transition failed-CI history mismatch.'
+        }
+    }
+    foreach($entry in $failed){
+        Assert-False ([bool]$entry.hardwareExecution) 'P15D2 failed CI must record no hardware execution.'
+        Assert-False ([bool]$entry.physicalGatesOpened) 'P15D2 failed CI must keep physical gates closed.'
+    }
 }
 
 if([string]$d.prerequisite -cne 'P15D1 tray-exit lifecycle physical PASS formally closed'){throw 'P15D2 prerequisite mismatch.'}
