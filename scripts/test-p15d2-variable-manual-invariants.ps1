@@ -30,7 +30,8 @@ if($status -notin @(
     'P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED',
     'P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI',
     'P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED',
-    'P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED'
+    'P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED',
+    'P15D2_VARIABLE_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'
 )){
     throw "Unexpected P15D2 preparation status: $status"
 }
@@ -54,7 +55,8 @@ $isAuthorized=($isInitialAuthorized -or $isRetryAuthorized)
 $isFailedClosed=($status -eq 'P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED')
 $isRetryBarrierCorrection=($status -in @('P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED'))
 $isRetryBarrierCorrectionClosed=($status -eq 'P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED')
-$isFormalClosure=($status -in @('P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED','P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED'))
+$isPhysicalPassClosed=($status -eq 'P15D2_VARIABLE_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED')
+$isFormalClosure=($status -in @('P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED','P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'))
 if($isFormalClosure){
     Assert-True ([bool]$d.preparationClosure.closed) 'P15D2 formal software closure must close preparation evidence.'
 }else{
@@ -97,9 +99,15 @@ if($isRetryBarrierCorrection){
     }
 }
 
-Assert-False ([bool]$d.physicalPassed) 'P15D2 cannot pre-claim physical PASS.'
-Assert-False ([bool]$d.evidenceClosed) 'P15D2 cannot pre-close physical evidence.'
-Assert-False ([bool]$d.hardwareExecution) 'P15D2 authorization commit must record no hardware execution.'
+if($isPhysicalPassClosed){
+    Assert-True ([bool]$d.physicalPassed) 'P15D2 physical closure must set physicalPassed.'
+    Assert-True ([bool]$d.evidenceClosed) 'P15D2 physical closure must set evidenceClosed.'
+    Assert-True ([bool]$d.hardwareExecution) 'P15D2 physical closure must record the qualified hardware execution.'
+}else{
+    Assert-False ([bool]$d.physicalPassed) 'P15D2 cannot pre-claim physical PASS.'
+    Assert-False ([bool]$d.evidenceClosed) 'P15D2 cannot pre-close physical evidence.'
+    Assert-False ([bool]$d.hardwareExecution) 'P15D2 pre-closure state cannot claim completed qualified hardware execution.'
+}
 
 if($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
     Assert-False ([bool]$d.preparationCiValidated) 'Initial P15D2 preparation cannot pre-claim CI.'
@@ -330,6 +338,81 @@ if($isFailedClosed){
     Assert-True ([bool]$fp.hardwareSafetyHandoffSucceeded) 'P15D2 failed attempt must record successful production safety handoff.'
     Assert-True ([bool]$fp.retryRequiresFreshAuthorization) 'P15D2 failed attempt must require fresh authorization before retry.'
 }
+
+if($isPhysicalPassClosed){
+    Assert-False ([bool]$d.executionAuthorized) 'P15D2 physical closure must re-block the parent harness gate.'
+    Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D2 physical closure must re-block the GUI/controller gate.'
+    Assert-False ([bool]$d.physicalGatesOpened) 'P15D2 physical closure must record all dedicated physical gates closed.'
+    Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15D2 physical closure requires the source gate re-blocked.'
+
+    $p=$d.physicalPassClosure
+    Assert-True ([bool]$p.closed) 'P15D2 physical PASS evidence closure must be closed.'
+    if([string]$p.result -cne 'PASS' -or
+       [string]$p.sourceHead -cne '057b431e0baae8ae05d0f1cefe9d49cee289e903' -or
+       [int]$p.sourceCiRunNumber -ne 1179 -or
+       [long]$p.sourceCiRunId -ne 37044607983 -or
+       [string]$p.sourceCiResult -cne 'SUCCESS'){
+        throw 'P15D2 physical PASS source/CI identity mismatch.'
+    }
+    if([string]$p.evidenceZipSha256 -cne 'e3074ae60169fa709c283a926e740435078d6f1eaeb087cdf235dfc3bf712c82' -or
+       [string]$p.evidenceSidecarSha256 -cne '1c0564e5fd34c87d39d79b7702f5587936afcbff2f548b4d72c7c61a2209d3ea' -or
+       [string]$p.packageManifestSha256 -cne '80bc4da4f7fc926512cf2cdd58e49eead6a6b994047bcc4684ed208d5ff3ae5b' -or
+       [string]$p.harnessSummarySha256 -cne 'abbf1df85e7ad384325ad523e8b42a9aa7d2f4f3155cb4cf43568b2517b08abb'){
+        throw 'P15D2 physical PASS package identity mismatch.'
+    }
+    foreach($flag in @(
+        'sidecarReferencesZipSha256','archiveIntegrityVerified','packageManifestEmbeddedHashesVerified',
+        'packageManifestSourceIdentityEntriesVerified','repositoryHeadMatched','upstreamHeadMatchedAtExecution',
+        'trackedSourceClean','onlyPreservedUntrackedLogsObserved','targetMatched','realP13SurfaceUsed',
+        'sameOwnedSessionAcrossSequence','duplicateNoRetransmitVerified',
+        'causalPrepareThreeWriteCommitRestoreReleaseVerified','strongRestoreVerified',
+        'ffReleaseAndLegacyDefaultPathVerified','localFirmwareAckVerified','watchdogReleaseVerified',
+        'finalJournalAbsent','cleanGuiExitVerified','normalExplicitShutdownUsed','watchdogProcessIdentityStable',
+        'failsafeArmed','priorFailClosedEvidencePreserved','evidenceIndependentlyReviewed','physicalPassSupported'
+    )){Assert-True ([bool]$p.$flag) ("P15D2 physical PASS expected true: {0}" -f $flag)}
+    foreach($flag in @(
+        'failsafeTakeover','serviceStartedByHarness','userFacingManualExecutionAuthorized',
+        'automaticExecutionAuthorized','candidateCurvePhysicallyValidated','candidateCurveAuthorizedForProduction',
+        'm9cQualificationConstructionAuthorized','m9dQualificationConstructionAuthorized','nextPhysicalGateOpened'
+    )){Assert-False ([bool]$p.$flag) ("P15D2 physical PASS expected false: {0}" -f $flag)}
+    if([int]$p.packageManifestEmbeddedEvidenceHashCount -ne 29 -or
+       [int]$p.packageManifestSourceIdentityEntryCount -ne 12 -or
+       [int]$p.healthySafetyReadySamples -ne 3 -or [int]$p.exactManualModeRequests -ne 1 -or
+       [int]$p.exactApplyManualCalls -ne 4 -or [int]$p.exactFirmwareModeRequests -ne 1 -or
+       [int]$p.exactAutomaticModeRequests -ne 0 -or [int]$p.ownedJournalSchemaVersion -ne 2 -or
+       [int]$p.initial30Generation -ne 3 -or [int]$p.changed40Generation -ne 5 -or
+       [int]$p.duplicate40Generation -ne 5 -or [int]$p.return30Generation -ne 7 -or
+       [int]$p.parentInitial30SetpointSamples -ne 2 -or [int]$p.parentChanged40SetpointSamples -ne 2 -or
+       [int]$p.parentDuplicate40SetpointSamples -ne 2 -or [int]$p.parentReturn30SetpointSamples -ne 2 -or
+       [int]$p.independentFinalFfFfSamples -ne 2 -or [int]$p.cleanupFfFfSamples -ne 2){
+        throw 'P15D2 physical PASS bounded evidence counts mismatch.'
+    }
+    if([string]$p.initialLevel -cne '30/30' -or [string]$p.changedLevel -cne '40/40' -or
+       [string]$p.duplicateLevel -cne '40/40' -or [string]$p.returnLevel -cne '30/30' -or
+       [int]$p.guiPid -ne 16728 -or [string]$p.guiStartUtcTicks -cne '639265623331622543' -or
+       [string]$p.ownedJournalSessionId -cne '5ac5997d-40c0-4c28-962c-0196951f30b2' -or
+       [int]$p.ownedJournalControllerPid -ne 16728 -or
+       [string]$p.ownedJournalControllerStartUtcTicks -cne '639265623331622543' -or
+       [int]$p.watchdogPid -ne 16080 -or [string]$p.watchdogStartUtcTicks -cne '639265623347186658' -or
+       [string]$p.guiFinalAuthority -cne 'Firmware' -or [string]$p.guiFinalMode -cne 'Firmware' -or
+       [string]$p.initialServiceState -cne 'Manual/Stopped/PID0/LocalSystem' -or
+       [string]$p.runtimeServiceState -cne 'Manual/Running/PID16080/LocalSystem' -or
+       [string]$p.finalServiceState -cne 'Manual/Running/PID16080/LocalSystem'){
+        throw 'P15D2 physical PASS identity/state evidence mismatch.'
+    }
+    $causal=$p.causalEventCounts
+    if([int]$causal.prepare -ne 1 -or [int]$causal.writeIntent -ne 3 -or [int]$causal.commit -ne 3 -or
+       [int]$causal.restoreBegin -ne 1 -or [int]$causal.release -ne 1){
+        throw 'P15D2 physical PASS causal event counts mismatch.'
+    }
+    $fp=$d.failedPhysicalAttempt
+    if([string]$fp.result -cne 'FAIL_CLOSED' -or
+       [string]$fp.evidenceZipSha256 -cne '66951d9887dc663ee3109c2106ae7c88b322462218ebd16c2c4b45659b3bed02' -or
+       [string]$fp.sidecarFileSha256 -cne 'd646dcf0fccf6174c341bb91ac5580988d3d7203ee3d013c822d717c7f88c132'){
+        throw 'P15D2 physical closure must preserve the first EC-transient FAIL_CLOSED evidence.'
+    }
+}
+
 Assert-Contains $gate 'RequiredToken = "8C40-P15D2-MANUAL30-40-40-30"' 'P15D2 source token mismatch.'
 Assert-Contains $gate 'InitialLevel = 30' 'P15D2 initial level mismatch.'
 Assert-Contains $gate 'ChangedLevel = 40' 'P15D2 changed level mismatch.'
@@ -355,7 +438,7 @@ foreach($needle in @(
     'qualification pre-action fence rejected the interaction'
 )){Assert-Contains $surface $needle ("P15D2 real P13 surface prerequisite missing: {0}" -f $needle)}
 
-if($status -in @('P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED')){
+if($status -in @('P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED')){
     foreach($needle in @(
         '--8c40-p15d2-variable-manual-test','--8c40-p15d2-test-token','--8c40-p15d2-marker-root',
         'Hp8C40P15D2VariableManualQualificationGate.PhysicalExecutionAuthorized',
