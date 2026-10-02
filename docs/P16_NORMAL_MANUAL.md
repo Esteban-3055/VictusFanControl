@@ -116,3 +116,34 @@ The next milestone is P16B. It must be opened by a separate authorization
 commit from this closed baseline and that authorization HEAD must itself pass
 full same-head CI before `scripts/test-p16-normal-manual.ps1` may be run on
 the target.
+
+## P16B bounded physical authorization
+
+P16A formal closure HEAD `a5c987ee539235ae8325379edb135790377f55b4`
+passed full same-head CI #1186 / run `37059019922` / SUCCESS.
+
+P16B opens only the dedicated
+`Hp8C40P16NormalManualQualificationGate.PhysicalExecutionAuthorized`
+bridge and the matching versioned parent/source authorization flags. It does
+not promote the permanent user Manual gate.
+
+The following remain false:
+
+- `Hp8C40PostM9UserControlGate.ManualExecutionAuthorized`;
+- `Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized`;
+- `control.enabledByDefault`;
+- Candidate V1 `PhysicallyValidated`;
+- Candidate V1 `AuthorizedForProduction`.
+
+The authorization commit performs no target hardware execution. The physical
+harness remains blocked until the exact P16B authorization HEAD itself has
+completed full same-head CI SUCCESS. Only after that CI result may
+`scripts/test-p16-normal-manual.ps1` be run on the exact HP 8C40 target.
+
+The bounded physical sequence remains:
+
+`Firmware -> Manual -> 30/30 -> 40/40 -> 30/30 -> Firmware -> tray Exit`.
+
+No Automatic request, profile change, Candidate promotion, power-limit work or
+P15 gate reopening is part of P16B.
+

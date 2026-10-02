@@ -21,8 +21,9 @@ $workflow=Get-Content -LiteralPath (Join-Path $root '.github\workflows\build.yml
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P16_NORMAL_MANUAL.md') -Raw
 
 $status=[string]$p16.status
-if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED')){throw "Unexpected P16A status: $status"}
-$isClosed=($status -eq 'P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED')
+if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')){throw "Unexpected P16 status: $status"}
+$isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI'))
+$isAuthorized=($status -eq 'P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
 
 if([string]$p15.status -cne 'P15D2_VARIABLE_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){throw 'P16A requires formally closed P15D2.'}
 $d15=$p15.guiManualVariableLevel
@@ -43,7 +44,7 @@ Assert-True ([bool]$d.architectureCiValidated) 'P16A requires architecture CI PA
 $a=$d.architectureValidation
 if([string]$a.head -cne '8fbe8aba0dc892f0fba988246164a13357325a7c' -or [int]$a.runNumber -ne 1182 -or [long]$a.runId -ne 37057172456 -or [string]$a.result -cne 'SUCCESS'){throw 'P16A architecture CI identity mismatch.'}
 Assert-True ([bool]$d.preparationImplemented) 'P16A full preparation must be implemented.'
-if($isClosed){
+if($isP16APrepared){
  Assert-True ([bool]$d.preparationCiValidated) 'P16A closed state requires preparation CI validation.'
  Assert-True ([bool]$d.preparationClosure.closed) 'P16A closed state requires formal preparation closure.'
  $pv=$d.preparationValidation
@@ -56,9 +57,15 @@ if($isClosed){
  Assert-False ([bool]$d.preparationCiValidated) 'P16A pending implementation cannot pre-claim CI.'
  Assert-False ([bool]$d.preparationClosure.closed) 'P16A pending implementation cannot pre-close.'
 }
-Assert-False ([bool]$d.executionAuthorized) 'P16A parent gate must remain closed.'
-Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P16A source gate must remain closed.'
-Assert-False ([bool]$d.physicalGatesOpened) 'P16A physical gates must remain closed.'
+if($isAuthorized){
+ Assert-True ([bool]$d.executionAuthorized) 'P16B authorization must open the dedicated parent contract gate.'
+ Assert-True ([bool]$d.controllerPhysicalExecutionAuthorized) 'P16B authorization must open the dedicated source gate.'
+ Assert-True ([bool]$d.physicalGatesOpened) 'P16B authorization must record only the dedicated P16 gates open.'
+}else{
+ Assert-False ([bool]$d.executionAuthorized) 'P16A parent gate must remain closed.'
+ Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P16A source gate must remain closed.'
+ Assert-False ([bool]$d.physicalGatesOpened) 'P16A physical gates must remain closed.'
+}
 Assert-False ([bool]$d.physicalPassed) 'P16A cannot pre-claim physical PASS.'
 Assert-False ([bool]$d.evidenceClosed) 'P16A cannot pre-close physical evidence.'
 Assert-False ([bool]$d.hardwareExecution) 'P16A must remain software-only.'
@@ -87,7 +94,26 @@ Assert-Contains $userGate 'ManualExecutionAuthorized = false' 'P16A permanent Ma
 Assert-Contains $userGate 'AutomaticExecutionAuthorized = false' 'P16 Automatic compile gate must remain false.'
 Assert-Contains $candidate 'PhysicallyValidated = false' 'P16 Candidate V1 physical false required.'
 Assert-Contains $candidate 'AuthorizedForProduction = false' 'P16 Candidate V1 production false required.'
-Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16A source gate must remain hard-closed.'
+if($isAuthorized){
+ Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P16B dedicated source gate must be open.'
+ $auth=$d.authorization
+ if($null -eq $auth){throw 'P16B authorization metadata missing.'}
+ if([string]$auth.openedFromClosedP16AHead -cne 'a5c987ee539235ae8325379edb135790377f55b4' -or
+    [int]$auth.basisCiRunNumber -ne 1186 -or
+    [long]$auth.basisCiRunId -ne 37059019922 -or
+    [string]$auth.basisCiResult -cne 'SUCCESS'){
+   throw 'P16B authorization basis mismatch.'
+ }
+ Assert-True ([bool]$auth.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P16B requires same-head CI before target execution.'
+ Assert-False ([bool]$auth.authorizationCommitPerformsHardwareExecution) 'P16B authorization commit itself must perform no hardware execution.'
+ Assert-False ([bool]$auth.permanentUserManualExecutionAuthorized) 'P16B must not promote permanent user Manual.'
+ Assert-False ([bool]$auth.automaticExecutionAuthorized) 'P16B must not open Automatic.'
+ Assert-False ([bool]$auth.candidateCurvePhysicallyValidated) 'P16B must not validate Candidate V1.'
+ Assert-False ([bool]$auth.candidateCurveAuthorizedForProduction) 'P16B must not promote Candidate V1.'
+ Assert-False ([bool]$auth.controlEnabledByDefault) 'P16B must keep default control disabled.'
+}else{
+ Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16A source gate must remain hard-closed.'
+}
 
 foreach($needle in @('p16NormalManualQualificationAuthorized','Hp8C40P16NormalManualQualificationGate.PhysicalExecutionAuthorized','Hp8C40PostM9UserControlGate.ManualExecutionAuthorized ||','Hp8C40TargetProfile.Instance.Id')){Assert-Contains $main $needle ("P16 MainForm bridge missing: {0}" -f $needle)}
 foreach($needle in @('_manualLevel.Minimum = 10;','_manualLevel.Maximum = 50;','await _controller.ApplyManualAsync(','P13 mode request {mode}: action={result.Action};','P13 manual request {level}/{level}: action={result.Action};')){Assert-Contains $surface $needle ("P16 P13 prerequisite missing: {0}" -f $needle)}
@@ -115,4 +141,4 @@ Assert-Contains $workflow 'HP 8C40 P16A normal Manual preparation invariant' 'P1
 Assert-Contains $workflow 'HP 8C40 P16A evidence packaging self-test' 'P16 package self-test must run in CI.'
 Assert-Contains $doc 'P16A implementation staged after architecture CI' 'P16 implementation documentation missing.'
 
-Write-Host 'PASS: P16A full software preparation is hard-closed, normal-app based, and preserves P15/Automatic/Candidate boundaries.' -ForegroundColor Green
+Write-Host ("PASS: P16 normal-Manual state '{0}' preserves the P15/permanent-Manual/Automatic/Candidate boundaries." -f $status) -ForegroundColor Green
