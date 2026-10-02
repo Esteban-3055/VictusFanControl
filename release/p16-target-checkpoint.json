@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
+  "status": "P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED",
   "scope": "Prepare and hard-close the ordinary application Manual qualification path before permanent normal-user Manual promotion.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
@@ -43,9 +43,9 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": true,
-    "controllerPhysicalExecutionAuthorized": true,
-    "physicalGatesOpened": true,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
+    "physicalGatesOpened": false,
     "physicalPassed": false,
     "evidenceClosed": false,
     "hardwareExecution": true,
@@ -153,13 +153,16 @@
       "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
       "authorizationCommitPerformsHardwareExecution": false,
       "oneShotAttemptFenceRequired": true,
-      "authorizationConsumed": false,
-      "freshAuthorizationRequired": false,
+      "authorizationConsumed": true,
+      "freshAuthorizationRequired": true,
       "permanentUserManualExecutionAuthorized": false,
       "automaticExecutionAuthorized": false,
       "candidateCurvePhysicallyValidated": false,
       "candidateCurveAuthorizedForProduction": false,
-      "controlEnabledByDefault": false
+      "controlEnabledByDefault": false,
+      "consumedByAttempt": 4,
+      "attemptFenceClaimed": true,
+      "attemptFenceAuthorizationHead": "fdf08d94cddca82e3d1431bdf95e68c37aae24aa"
     },
     "physicalAttemptHistory": [
       {
@@ -229,18 +232,49 @@
           "Firmware restore was independently proven by two consecutive FF/FF reads; strongRestorePass and finalJournalAbsent are true.",
           "Failure occurred in Assert-AppInteractionAudit before tray Exit, so no P16 PASS, post-exit proof or evidence closure is claimed."
         ]
+      },
+      {
+        "attempt": 4,
+        "sourceHead": "fdf08d94cddca82e3d1431bdf95e68c37aae24aa",
+        "sourceCiRunNumber": 1198,
+        "sourceCiRunId": 37074191886,
+        "sourceCiResult": "SUCCESS",
+        "evidenceDirectory": "logs/p16-normal-manual_2026-10-02_194949",
+        "evidenceZip": "p16-normal-manual_2026-10-02_194949.zip",
+        "evidenceZipSha256": "f95a529b3e0ccbe38ea1ef4a541e08a0030cd10031ea616deef0c710bbb85da6",
+        "sidecarFileSha256": "4ef32668c1389293c986eec215de442a05342bfa2313ca15c212c1b14db7d569",
+        "manifestSha256": "d3fb715d2fff1940a3c128279749ee6f2048c8dbf62b90d14d50323b035ab7c7",
+        "harnessSummarySha256": "b4907576f6fb3e1cf95e964df0a383250fae8afcbc8beaf064ef08321c3f35bf",
+        "appLogSegmentSha256": "ec1b6e8dd2560ec92ed8e94363c9483801dee78d6fc162765e6f0d4c15ef00bf",
+        "attemptFenceSha256": "861d6d170a1e0981be0b818e75ad8cc1866d0a150c5b90af4b38f2acbed06081",
+        "baselineFfSha256": "f241677cb38945537149208c7670cdb3cdf376318c0b6f1f57d3b0f41c9f3356",
+        "serviceSnapshotsSha256": "daa2b4650fe76560b50f5b3c0c705805874781b501774aa79dc5a04d8cfa4aac",
+        "result": "FAIL_CLOSED",
+        "classification": "NO_WRITE_POWER_TRANSITION_INTERRUPTION",
+        "failure": "P16 GUI exited before initial Apply 30/30 after a suspend/resume transition interrupted the qualification.",
+        "evidenceNotes": [
+          "Generation-3 one-shot authorization was consumed by the ProgramData attempt fence bound to HEAD fdf08d94cddca82e3d1431bdf95e68c37aae24aa.",
+          "Initial independent Firmware baseline was stable FF/FF and normal GUI telemetry reached Healthy after three complete snapshots.",
+          "The real Manual mode request logged action=HoldFirmware, authority=Firmware and explicitly stated that no new fan command was issued.",
+          "Approximately eleven seconds after the Manual mode request the app observed WM_POWERBROADCAST/PBT_APMSUSPEND; on resume it observed PBT_APMRESUMESUSPEND/PBT_APMRESUMEAUTOMATIC and recovered Healthy after five complete snapshots.",
+          "No initial Apply 30/30 was observed, no OWNED session was created, and no 30/40 setpoint or journal evidence exists in the package.",
+          "After resume the real Firmware request logged action=HoldFirmware, authority=Firmware and explicitly stated that no new fan command was issued; the GUI then performed explicit application shutdown.",
+          "The M4 watchdog service retained the same PID/start identity before GUI launch, during Healthy runtime and at cleanup; the delayed failsafe remained ARMED and did not take over.",
+          "The evidence proves temporal proximity between Manual selection and the OS power transition, but does not establish that the Manual request caused hibernation/suspend. External Windows power-event evidence would be required to identify the transition trigger.",
+          "No P16 PASS, Custom ownership, fan write, causal watchdog write chain, strong-restore PASS, post-exit proof or evidence closure is claimed."
+        ]
       }
     ],
     "hardeningRequired": {
-      "required": false,
-      "physicalGateMustRemainClosed": false,
+      "required": true,
+      "physicalGateMustRemainClosed": true,
       "findings": [
         "AcpiEcReader retries EC protocol reads only after mutex acquisition; a Global\\\\Access_EC acquisition timeout is currently a single 500 ms terminal failure.",
         "The independent P16 parent setpoint probe treats one transient Global\\\\Access_EC acquisition timeout as terminal instead of using a bounded whole-probe retry.",
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Wait for full same-head CI SUCCESS on this generation-3 authorization HEAD. Only then may one target P16B attempt be run; the durable ProgramData attempt fence must consume that exact authorization HEAD before the failsafe/GUI physical boundary.",
+      "nextAction": "Keep P16B re-blocked. Add a software-only P16 qualification lifecycle interruption fence so any suspend/resume after one-shot authorization invalidates the session immediately on return and cannot continue toward Apply. Preserve the no-write attempt-4 evidence. Independently inspect Windows power-event logs if the transition trigger itself must be identified. Only after hardening CI, formal closure and a fresh one-shot authorization may another target attempt occur.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -376,6 +410,30 @@
           "installedM4WatchdogBinaryMutated": false,
           "installedM4WatchdogCoherenceBehaviorChanged": false
         }
+      },
+      "postAttempt4": {
+        "required": true,
+        "sourceAttempt": 4,
+        "sourceHead": "fdf08d94cddca82e3d1431bdf95e68c37aae24aa",
+        "sourceCiRunNumber": 1198,
+        "sourceCiRunId": 37074191886,
+        "result": "FAIL_CLOSED_NO_WRITE_POWER_TRANSITION_INTERRUPTION",
+        "attemptFenceClaimed": true,
+        "initialFirmwareBaselinePassed": true,
+        "manualModeHoldFirmwareObserved": true,
+        "initialApplyObserved": false,
+        "customOwnershipEstablished": false,
+        "fanWriteObserved": false,
+        "suspendObserved": true,
+        "resumeObserved": true,
+        "resumeHealthyFiveSnapshotsObserved": true,
+        "postResumeFirmwareHoldObserved": true,
+        "explicitGuiShutdownObserved": true,
+        "failsafeTakeover": false,
+        "watchdogIdentityStable": true,
+        "powerTransitionCauseEstablished": false,
+        "lifecycleInterruptionFenceRequired": true,
+        "hardwareExecutionByReblockCommit": false
       }
     },
     "authorizationHistory": [

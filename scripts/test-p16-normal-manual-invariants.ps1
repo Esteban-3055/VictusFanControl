@@ -70,6 +70,53 @@ if($isP16APrepared){
  Assert-False ([bool]$d.preparationCiValidated) 'P16A pending implementation cannot pre-claim CI.'
  Assert-False ([bool]$d.preparationClosure.closed) 'P16A pending implementation cannot pre-close.'
 }
+if($isPhysicalFailClosed){
+ Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B fail-closed state must re-block the dedicated source gate.'
+ $attempts=@($d.physicalAttemptHistory)
+ if($attempts.Count -ne 4){throw 'P16B fail-closed history must preserve exactly four target attempts.'}
+ foreach($attempt in $attempts){if([string]$attempt.result -cne 'FAIL_CLOSED'){throw 'Every preserved P16B target attempt must remain FAIL_CLOSED.'}}
+ if([string]$attempts[0].evidenceZipSha256 -cne '2f164727994683bb7f5c1d49eeff871b017d6a129dc4c6de9ca1e5c51d44a178'){throw 'P16B attempt-1 evidence identity mismatch.'}
+ if([string]$attempts[1].evidenceZipSha256 -cne 'c26eb3afab86a6998c8f52233165b276e4bd1d52a4ec803ef03bc9192978a661'){throw 'P16B attempt-2 evidence identity mismatch.'}
+ if([string]$attempts[2].evidenceZipSha256 -cne '35bfd02daafe126f72af096e57a49c709195e05d563c1fa0666f459bcb2038bd'){throw 'P16B attempt-3 evidence identity mismatch.'}
+ if([int]$attempts[3].attempt -ne 4 -or
+    [string]$attempts[3].sourceHead -cne 'fdf08d94cddca82e3d1431bdf95e68c37aae24aa' -or
+    [int]$attempts[3].sourceCiRunNumber -ne 1198 -or
+    [long]$attempts[3].sourceCiRunId -ne 37074191886 -or
+    [string]$attempts[3].sourceCiResult -cne 'SUCCESS' -or
+    [string]$attempts[3].classification -cne 'NO_WRITE_POWER_TRANSITION_INTERRUPTION' -or
+    [string]$attempts[3].evidenceZipSha256 -cne 'f95a529b3e0ccbe38ea1ef4a541e08a0030cd10031ea616deef0c710bbb85da6' -or
+    [string]$attempts[3].manifestSha256 -cne 'd3fb715d2fff1940a3c128279749ee6f2048c8dbf62b90d14d50323b035ab7c7' -or
+    [string]$attempts[3].harnessSummarySha256 -cne 'b4907576f6fb3e1cf95e964df0a383250fae8afcbc8beaf064ef08321c3f35bf' -or
+    [string]$attempts[3].attemptFenceSha256 -cne '861d6d170a1e0981be0b818e75ad8cc1866d0a150c5b90af4b38f2acbed06081'){
+   throw 'P16B attempt-4 evidence identity mismatch.'
+ }
+ $auth=$d.authorization
+ if([int]$auth.authorizationGeneration -ne 3 -or -not [bool]$auth.authorizationConsumed -or
+    -not [bool]$auth.freshAuthorizationRequired -or [int]$auth.consumedByAttempt -ne 4 -or
+    -not [bool]$auth.attemptFenceClaimed -or
+    [string]$auth.attemptFenceAuthorizationHead -cne 'fdf08d94cddca82e3d1431bdf95e68c37aae24aa'){
+   throw 'P16B generation-3 authorization must be preserved as consumed by attempt 4.'
+ }
+ Assert-True ([bool]$d.hardeningRequired.required) 'P16B attempt-4 re-block must require lifecycle hardening.'
+ Assert-True ([bool]$d.hardeningRequired.physicalGateMustRemainClosed) 'P16B attempt-4 lifecycle hardening must keep the physical gate closed.'
+ $p4=$d.hardeningRequired.postAttempt4
+ if($null -eq $p4 -or -not [bool]$p4.required -or
+    [string]$p4.result -cne 'FAIL_CLOSED_NO_WRITE_POWER_TRANSITION_INTERRUPTION' -or
+    -not [bool]$p4.attemptFenceClaimed -or -not [bool]$p4.initialFirmwareBaselinePassed -or
+    -not [bool]$p4.manualModeHoldFirmwareObserved -or [bool]$p4.initialApplyObserved -or
+    [bool]$p4.customOwnershipEstablished -or [bool]$p4.fanWriteObserved -or
+    -not [bool]$p4.suspendObserved -or -not [bool]$p4.resumeObserved -or
+    -not [bool]$p4.resumeHealthyFiveSnapshotsObserved -or
+    -not [bool]$p4.postResumeFirmwareHoldObserved -or
+    -not [bool]$p4.explicitGuiShutdownObserved -or [bool]$p4.failsafeTakeover -or
+    -not [bool]$p4.watchdogIdentityStable -or [bool]$p4.powerTransitionCauseEstablished -or
+    -not [bool]$p4.lifecycleInterruptionFenceRequired){
+   throw 'P16B attempt-4 no-write power-transition findings are incomplete.'
+ }
+ Assert-False ([bool]$p4.hardwareExecutionByReblockCommit) 'P16B attempt-4 re-block commit must be software-only.'
+ Assert-Contains $doc 'P16B attempt 4 — no-write suspend/resume interruption' 'P16B attempt-4 documentation missing.'
+}
+
 if($isAuthorized){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P16B dedicated source gate must be open.'
  $auth=$d.authorization

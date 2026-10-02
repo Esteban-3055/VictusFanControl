@@ -419,3 +419,49 @@ full same-head CI. After that barrier, the existing ProgramData fence mechanism
 must atomically consume that exact HEAD before the failsafe/GUI physical
 boundary, allowing only one new target invocation.
 
+## P16B attempt 4 — no-write suspend/resume interruption
+
+Generation-3 authorization HEAD
+`fdf08d94cddca82e3d1431bdf95e68c37aae24aa` passed same-head CI
+#1198 / run `37074191886` SUCCESS and was consumed exactly once by the
+ProgramData attempt fence.
+
+Evidence archive `p16-normal-manual_2026-10-02_194949.zip` has SHA-256
+`f95a529b3e0ccbe38ea1ef4a541e08a0030cd10031ea616deef0c710bbb85da6`.
+The ZIP/sidecar identity was independently verified, and every included
+evidence file whose basename is carried in the package manifest matches its
+recorded SHA-256.
+
+This attempt is FAIL_CLOSED but is specifically classified as a
+`NO_WRITE_POWER_TRANSITION_INTERRUPTION`. The initial parent Firmware proof
+was stable `FF/FF`, the normal GUI reached Healthy after three complete
+snapshots, and the real Manual request logged
+`action=HoldFirmware; authority=Firmware` with the explicit statement that no
+new fan command was issued. No initial Apply 30/30 was observed, no OWNED
+session was created, and the package contains no 30/40 setpoint or OWNED journal
+proof.
+
+Approximately eleven seconds after the Manual request, the application observed
+`WM_POWERBROADCAST/PBT_APMSUSPEND`. On return it observed
+`PBT_APMRESUMESUSPEND` plus the coalesced automatic-resume signal and recovered
+Healthy after five complete snapshots. The subsequent real Firmware request
+again logged `HoldFirmware` with no new fan command, followed by explicit GUI
+shutdown. The harness therefore terminated with
+`P16 GUI exited before initial Apply 30/30.`
+
+The same M4 watchdog PID/start identity is preserved in the before,
+normal-GUI-Healthy and cleanup service snapshots. The delayed failsafe remained
+ARMED and did not take over.
+
+The evidence establishes temporal proximity between selecting Manual and the
+system power transition, but it does **not** establish that the Manual request
+caused the suspend/hibernation event. Identifying the OS/firmware power
+transition trigger requires separate Windows power-event evidence.
+
+Generation 3 is consumed and all P16 physical gates are re-blocked. Before any
+new authorization, the P16 qualification harness must gain an explicit
+lifecycle-interruption fence so a suspend/resume after one-shot authorization
+invalidates the session on return rather than allowing the qualification to
+continue toward Apply. Permanent Manual, Automatic, Candidate V1 and default
+control remain closed.
+
