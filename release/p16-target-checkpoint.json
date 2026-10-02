@@ -67,7 +67,11 @@
     "exactApplyManualCalls": 3,
     "exactFirmwareModeRequests": 1,
     "exactAutomaticModeRequests": 0,
-    "expectedOwnedGenerations": [3, 5, 7],
+    "expectedOwnedGenerations": [
+      3,
+      5,
+      7
+    ],
     "requiredSequence": [
       "normal application startup in Firmware after initial three-snapshot telemetry recovery",
       "real P13 Manual mode request exactly once",
@@ -111,7 +115,19 @@
       "evidenceSelfTest": "scripts/test-p16-evidence-packaging.ps1",
       "independentFailsafe": "scripts/watchdog-p15d2-service-failsafe-8c40.ps1",
       "documentation": "docs/P16_NORMAL_MANUAL.md"
-    }
+    },
+    "failedCiHistoryPreserved": [
+      {
+        "runNumber": 1183,
+        "runId": 37058121007,
+        "head": "3ae998ea72acaec2f562e87c6737556a89b41eb6",
+        "result": "FAILURE",
+        "failureStep": "HP 8C40 P16A normal Manual preparation invariant",
+        "cause": "Static invariant used a double-quoted search literal containing $appExe/$modulesDir, so PowerShell expanded the variables before matching the harness source.",
+        "hardwareExecution": false,
+        "physicalGatesOpened": false
+      }
+    ]
   },
   "promotion": {
     "manualExecutionAuthorized": false,

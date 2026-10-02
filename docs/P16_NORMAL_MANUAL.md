@@ -74,3 +74,14 @@ parse, build and statically audit the complete future physical harness while no
 P16 hardware execution is possible.
 
 Formal P16A closure requires full SUCCESS on the exact implementation HEAD.
+
+
+### Preserved software-only CI failure
+
+Implementation HEAD `3ae998ea72acaec2f562e87c6737556a89b41eb6`
+produced CI #1183 / run `37058121007` FAILURE at the P16 static
+preparation invariant. The invariant used a double-quoted source-search
+literal containing PowerShell variable names, so the variables expanded before
+the harness text comparison. The physical gate was still false, no target
+hardware execution occurred, and the failure is preserved rather than removed.
+The follow-up changes only that invariant literal.
