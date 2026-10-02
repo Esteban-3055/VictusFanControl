@@ -21,8 +21,9 @@ $workflow=Get-Content -LiteralPath (Join-Path $root '.github\workflows\build.yml
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P16_NORMAL_MANUAL.md') -Raw
 
 $status=[string]$p16.status
-if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')){throw "Unexpected P16 status: $status"}
-$isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI'))
+if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED')){throw "Unexpected P16 status: $status"}
+$isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED'))
+$isPhysicalFailClosed=($status -eq 'P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED')
 $isAuthorized=($status -eq 'P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
 
 if([string]$p15.status -cne 'P15D2_VARIABLE_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){throw 'P16A requires formally closed P15D2.'}
@@ -68,7 +69,7 @@ if($isAuthorized){
 }
 Assert-False ([bool]$d.physicalPassed) 'P16A cannot pre-claim physical PASS.'
 Assert-False ([bool]$d.evidenceClosed) 'P16A cannot pre-close physical evidence.'
-Assert-False ([bool]$d.hardwareExecution) 'P16A must remain software-only.'
+if($isPhysicalFailClosed){Assert-True ([bool]$d.hardwareExecution) 'P16B fail-closed state must preserve that target hardware execution occurred.'}else{Assert-False ([bool]$d.hardwareExecution) 'Pre-physical P16 state must not claim hardware execution.'}
 Assert-True ([bool]$d.normalApplicationLaunchRequired) 'P16 must use normal app launch.'
 Assert-False ([bool]$d.specialQualificationStartupModeAllowed) 'P16 must not introduce special app startup mode.'
 Assert-True ([bool]$d.requiresRealP13Surface) 'P16 must reuse P13.'
@@ -94,6 +95,20 @@ Assert-Contains $userGate 'ManualExecutionAuthorized = false' 'P16A permanent Ma
 Assert-Contains $userGate 'AutomaticExecutionAuthorized = false' 'P16 Automatic compile gate must remain false.'
 Assert-Contains $candidate 'PhysicallyValidated = false' 'P16 Candidate V1 physical false required.'
 Assert-Contains $candidate 'AuthorizedForProduction = false' 'P16 Candidate V1 production false required.'
+
+if($isPhysicalFailClosed){
+ Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B fail-closed closure must re-block the dedicated source gate.'
+ $attempts=@($d.physicalAttemptHistory)
+ if($attempts.Count -ne 2){throw 'P16B fail-closed history must preserve both target attempts.'}
+ if([string]$attempts[0].result -cne 'FAIL_CLOSED' -or [string]$attempts[1].result -cne 'FAIL_CLOSED'){throw 'P16B target attempts must remain FAIL_CLOSED.'}
+ if([string]$attempts[0].evidenceZipSha256 -cne '2f164727994683bb7f5c1d49eeff871b017d6a129dc4c6de9ca1e5c51d44a178'){throw 'P16B attempt-1 evidence identity mismatch.'}
+ if([string]$attempts[1].evidenceZipSha256 -cne 'c26eb3afab86a6998c8f52233165b276e4bd1d52a4ec803ef03bc9192978a661'){throw 'P16B attempt-2 evidence identity mismatch.'}
+ Assert-True ([bool]$d.authorization.authorizationConsumed) 'P16B physical authorization must be marked consumed.'
+ Assert-True ([bool]$d.authorization.freshAuthorizationRequired) 'P16B retry must require a fresh authorization.'
+ Assert-True ([bool]$d.hardeningRequired.required) 'P16B fail-closed state must require hardening.'
+ Assert-True ([bool]$d.hardeningRequired.physicalGateMustRemainClosed) 'P16B hardening must keep the physical gate closed.'
+}
+
 if($isAuthorized){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P16B dedicated source gate must be open.'
  $auth=$d.authorization

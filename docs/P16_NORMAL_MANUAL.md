@@ -147,3 +147,37 @@ The bounded physical sequence remains:
 No Automatic request, profile change, Candidate promotion, power-limit work or
 P15 gate reopening is part of P16B.
 
+## P16B target attempts — FAIL_CLOSED and gate re-blocked
+
+Authorization HEAD `0eba7426455adcca2594a612abd2c5753a52d235`
+passed same-head CI #1187 / run `37064935429` / SUCCESS.
+
+Two target evidence packages from that authorization are preserved and both are
+FAIL_CLOSED; neither is a P16 PASS.
+
+The first package,
+`p16-normal-manual_2026-10-02_181225.zip`
+(SHA-256 `2f164727994683bb7f5c1d49eeff871b017d6a129dc4c6de9ca1e5c51d44a178`),
+proved the initial 30/30 generation-3 ownership. A later 40 request encountered
+an ownership mismatch (expected 30/30, observed 40/30), restored Firmware, and a
+subsequent new Custom admission made the original generation-5 same-session
+contract invalid.
+
+The second package,
+`p16-normal-manual_2026-10-02_181434.zip`
+(SHA-256 `c26eb3afab86a6998c8f52233165b276e4bd1d52a4ec803ef03bc9192978a661`),
+proved 30/30 generation 3 and 40/40 generation 5 in one session. The real GUI
+then logged the return 30/30 Apply as successful, but the parent independent EC
+probe failed to acquire `Global\Access_EC` within the current single 500 ms
+mutex-acquisition window. Final Firmware/tray evidence was therefore not
+claimed.
+
+Review of both packages exposes software hardening work before any retry:
+bounded handling of transient EC-mutex acquisition contention, immediate harness
+abort on an expected interaction that logs FAILED CLOSED, and a one-shot
+qualification-attempt fence so one authorization cannot silently be reused.
+
+The dedicated P16 physical gate is re-blocked. Permanent user Manual, Automatic,
+Candidate V1 and default control remain closed. A retry requires software-only
+hardening, same-head CI closure and a fresh authorization.
+

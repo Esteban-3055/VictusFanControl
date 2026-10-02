@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
+  "status": "P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED",
   "scope": "Prepare and hard-close the ordinary application Manual qualification path before permanent normal-user Manual promotion.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
@@ -43,12 +43,12 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": true,
-    "controllerPhysicalExecutionAuthorized": true,
-    "physicalGatesOpened": true,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
+    "physicalGatesOpened": false,
     "physicalPassed": false,
     "evidenceClosed": false,
-    "hardwareExecution": false,
+    "hardwareExecution": true,
     "normalApplicationLaunchRequired": true,
     "specialQualificationStartupModeAllowed": false,
     "requiresRealP13Surface": true,
@@ -155,7 +155,68 @@
       "automaticExecutionAuthorized": false,
       "candidateCurvePhysicallyValidated": false,
       "candidateCurveAuthorizedForProduction": false,
-      "controlEnabledByDefault": false
+      "controlEnabledByDefault": false,
+      "authorizationConsumed": true,
+      "authorizationCiRunNumber": 1187,
+      "authorizationCiRunId": 37064935429,
+      "authorizationCiResult": "SUCCESS",
+      "freshAuthorizationRequired": true
+    },
+    "physicalAttemptHistory": [
+      {
+        "attempt": 1,
+        "sourceHead": "0eba7426455adcca2594a612abd2c5753a52d235",
+        "sourceCiRunNumber": 1187,
+        "sourceCiRunId": 37064935429,
+        "sourceCiResult": "SUCCESS",
+        "evidenceDirectory": "logs/p16-normal-manual_2026-10-02_181225",
+        "evidenceZip": "p16-normal-manual_2026-10-02_181225.zip",
+        "evidenceZipSha256": "2f164727994683bb7f5c1d49eeff871b017d6a129dc4c6de9ca1e5c51d44a178",
+        "sidecarFileSha256": "cc846d0b25e66f7f7c1ff348161470d580b88759bd09dcb569799b17acc69dde",
+        "manifestSha256": "3cf87b3cf481b7fe61107c7e1c754c95cde65062c0b3ca3e60ef05542e653dd3",
+        "harnessSummarySha256": "14b28a6011be758c9d688e67874c25e56a90ee155804daaf568d140562ed76e4",
+        "result": "FAIL_CLOSED",
+        "failure": "P16 durable journal is not schema-v2 generation 5 OWNED 40/40 bound to exact GUI identity.",
+        "evidenceNotes": [
+          "Initial real Manual 30/30 reached EC 30/30 and schema-v2 OWNED generation 3.",
+          "A subsequent 40/40 interaction first failed closed after ownership verification read a transient/non-owned 40/30 setpoint and production restore returned to Firmware.",
+          "A later successful 40/40 occurred only after a new Custom admission, so the original same-session generation-5 contract was no longer valid.",
+          "No P16 PASS, strong-restore PASS or evidence closure is claimed."
+        ]
+      },
+      {
+        "attempt": 2,
+        "sourceHead": "0eba7426455adcca2594a612abd2c5753a52d235",
+        "sourceCiRunNumber": 1187,
+        "sourceCiRunId": 37064935429,
+        "sourceCiResult": "SUCCESS",
+        "evidenceDirectory": "logs/p16-normal-manual_2026-10-02_181434",
+        "evidenceZip": "p16-normal-manual_2026-10-02_181434.zip",
+        "evidenceZipSha256": "c26eb3afab86a6998c8f52233165b276e4bd1d52a4ec803ef03bc9192978a661",
+        "sidecarFileSha256": "0b10812d0ac90698e7626726d96eb0d1aef8dedd6a28999cd0e57ad590779f6b",
+        "manifestSha256": "d534cdb966376fdfbcdb3c1f5bdc16fdfb601594d9865d4c0529f23079f7e362",
+        "harnessSummarySha256": "3a9f4742d112e40f290c1e1bad5c947507c79a97fff08a50f6c33112da1463c4",
+        "result": "FAIL_CLOSED",
+        "failure": "8C40 EC-setpoint probe failed: Timed out waiting for Global\\\\Access_EC.",
+        "evidenceNotes": [
+          "The normal GUI started in Firmware with Manual open only through the dedicated P16 gate and Automatic closed.",
+          "Initial 30/30 was independently proven as OWNED generation 3 in session ff46b809-0fb8-4e5a-bf06-93dbb54491ad after an earlier transient EC-mutex failure restored Firmware.",
+          "40/40 was independently proven as OWNED generation 5 in the same session/controller identity.",
+          "The real GUI logged the return 30/30 Apply as successful, but the parent independent EC probe then failed to acquire Global\\\\Access_EC within its single 500 ms acquisition window.",
+          "No return-30 parent proof, Firmware strong-restore proof, tray-exit proof or P16 PASS is claimed."
+        ]
+      }
+    ],
+    "hardeningRequired": {
+      "required": true,
+      "physicalGateMustRemainClosed": true,
+      "findings": [
+        "AcpiEcReader retries EC protocol reads only after mutex acquisition; a Global\\\\Access_EC acquisition timeout is currently a single 500 ms terminal failure.",
+        "The independent P16 parent setpoint probe treats one transient Global\\\\Access_EC acquisition timeout as terminal instead of using a bounded whole-probe retry.",
+        "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
+        "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
+      ],
+      "nextAction": "Implement software-only hardening with every physical gate closed, add deterministic regressions, obtain same-head CI SUCCESS, formally close the correction, then create a fresh separate P16B reauthorization."
     }
   },
   "promotion": {
