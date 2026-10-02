@@ -107,6 +107,11 @@ Assert-True ([bool]$d.requiresRealP13Surface) 'P15D2 must use the real P13 surfa
 Assert-True ([bool]$d.requiresProductionAdapter) 'P15D2 must use AdaptiveFanProductionController.'
 Assert-True ([bool]$d.requiresProductionCoordinator) 'P15D2 must use FanControlCoordinator.'
 Assert-True ([bool]$d.requiresSameOwnershipSessionAcrossChangedLevels) 'P15D2 must preserve one ownership session across changed levels.'
+$generations=@($d.design.expectedOwnedGenerations)
+if($generations.Count -ne 4 -or [long]$generations[0] -ne 3 -or [long]$generations[1] -ne 5 -or [long]$generations[2] -ne 5 -or [long]$generations[3] -ne 7){
+    throw 'P15D2 watchdog generation progression must be exactly 3/5/5/7.'
+}
+Assert-Contains ([string]$d.design.generationSemantics) 'every WRITE_INTENT and COMMIT increments generation' 'P15D2 generation semantics must be explicit.'
 Assert-True ([bool]$d.requiresDuplicate40NoRetransmit) 'P15D2 must physically prove duplicate 40/40 no-retransmit.'
 Assert-True ([bool]$d.requiresStrongRestore) 'P15D2 must end in production strong restore.'
 Assert-False ([bool]$d.candidateCurveMayBePromoted) 'P15D2 must not promote Candidate V1.'
@@ -155,6 +160,7 @@ if($status -eq 'P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED'){
     foreach($needle in @(
         'HARD VERSIONED AUTHORIZATION BARRIER','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI',
         'Assert-StableSetpoint 30 30','Assert-StableSetpoint 40 40','Assert-OwnedJournal',
+        '$ExpectedGeneration','30 3 $null','40 5 $ownedSessionId','30 7 $ownedSessionId',
         'Assert-NoRetransmitAfterBoundary','P15D2-PARENT-30-VERIFIED|','P15D2-PARENT-40-VERIFIED|',
         'P15D2-PARENT-HOLD40-VERIFIED|','P15D2-PARENT-RETURN30-VERIFIED|',
         'WATCHDOG WRITE_INTENT ACK','WATCHDOG COMMIT ACK','Assert-CausalServiceLog',
