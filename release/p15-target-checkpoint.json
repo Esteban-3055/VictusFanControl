@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D1_TRAY_EXIT_PHYSICAL_PASS_FORMALLY_CLOSED",
+  "status": "P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1320,5 +1320,97 @@
       "evidenceIndependentlyReviewed": true,
       "physicalPassSupported": true,
       "nextPhysicalGateOpened": false
-    }  }
+    }
+  },
+  "guiManualVariableLevel": {
+    "preparationImplemented": true,
+    "preparationCiValidated": false,
+    "preparationClosure": {
+      "closed": false,
+      "result": "PENDING",
+      "hardwareExecution": false,
+      "physicalGatesOpened": false
+    },
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
+    "physicalPassed": false,
+    "evidenceClosed": false,
+    "prerequisite": "P15D1 tray-exit lifecycle physical PASS formally closed",
+    "expectedBranch": "feature/victus-8c40-p15-hardware-checkpoint",
+    "requiredToken": "8C40-P15D2-MANUAL30-40-40-30",
+    "scope": "real P13 GUI Manual variable-level qualification: 30/30 -> 40/40 -> duplicate 40/40 no-retransmit -> 30/30 -> real Firmware restore",
+    "initialLevel": 30,
+    "changedLevel": 40,
+    "returnLevel": 30,
+    "exactManualModeRequests": 1,
+    "exactApplyManualCalls": 4,
+    "exactFirmwareModeRequests": 1,
+    "exactAutomaticModeRequests": 0,
+    "requiredHealthyPreWriteSamples": 3,
+    "requiresRealP13Surface": true,
+    "requiresProductionAdapter": true,
+    "requiresProductionCoordinator": true,
+    "requiresSameOwnershipSessionAcrossChangedLevels": true,
+    "requiresDuplicate40NoRetransmit": true,
+    "requiresStrongRestore": true,
+    "requiredGuiSequence": [
+      "Firmware startup and READY after three distinct Healthy/SafetyGate-permitted observations",
+      "real P13 Manual mode request exactly once",
+      "real P13 Apply equal 30/30 exactly once",
+      "parent independently proves EC 30/30 plus schema-v2 generation-3 OWNED journal bound to the GUI identity",
+      "real P13 Apply equal 40/40 exactly once",
+      "parent independently proves EC 40/40 and the same ownership session/generation/controller identity",
+      "real P13 Apply equal 40/40 a second time",
+      "GUI result must be HoldCustom and parent must prove no new watchdog WRITE_INTENT/COMMIT or physical setpoint change",
+      "real P13 Apply equal 30/30 exactly once",
+      "parent independently proves EC 30/30 and the same ownership session/generation/controller identity",
+      "real P13 Firmware request exactly once",
+      "production strong restore requires FF/FF + LegacyDefault + stable FF/FF + watchdog RELEASE + journal absent",
+      "parent independently proves final FF/FF"
+    ],
+    "design": {
+      "cpuGpuAlwaysEqual": true,
+      "customEnvelopeRemains10To50": true,
+      "fanStopForbidden": true,
+      "initial30MustEnterCustomAndApply": true,
+      "changed40MustApplyChangedLevel": true,
+      "duplicate40MustHoldCustomWithoutRetransmit": true,
+      "return30MustApplyChangedLevel": true,
+      "firmwareRequestMustRestore": true,
+      "sameOwnedSessionRequiredAcross30To40To40To30": true,
+      "expectedChangedWriteCount": 3,
+      "expectedPrepareCount": 1,
+      "expectedWriteIntentCount": 3,
+      "expectedCommitCount": 3,
+      "expectedRestoreBeginCount": 1,
+      "expectedReleaseCount": 1,
+      "watchdogProcessIdentityStableRequired": true,
+      "finalJournalAbsentRequired": true,
+      "independentFailsafeRequired": true,
+      "normalUserManualGateRemainsClosed": true,
+      "automaticGateRemainsClosed": true,
+      "candidateCurveMayBePromoted": false,
+      "automaticMayOpen": false,
+      "userFacingManualMayOpen": false,
+      "m9cOrM9dQualificationMayReopen": false
+    },
+    "plannedFiles": {
+      "qualificationSource": "src/VictusFanControl.App/P15D2VariableManualQualification.cs",
+      "invariantScript": "scripts/test-p15d2-variable-manual-invariants.ps1",
+      "futureHarness": "scripts/test-p15d2-variable-manual.ps1",
+      "futureEvidencePackager": "scripts/package-p15d2-evidence.ps1",
+      "futureEvidenceSelfTest": "scripts/test-p15d2-evidence-packaging.ps1",
+      "futureIndependentFailsafe": "scripts/watchdog-p15d2-service-failsafe-8c40.ps1"
+    },
+    "preparationBasis": {
+      "p15d1ClosureHead": "61542eaad2a66bb92c5e75bbfd07151457cf3127",
+      "p15d1ClosureCiRunNumber": 1137,
+      "p15d1ClosureCiRunId": 36971629340,
+      "p15d1ClosureCiResult": "SUCCESS"
+    },
+    "runtimeImplementationComplete": false,
+    "runtimeImplementationCiValidated": false,
+    "hardwareExecution": false,
+    "physicalGatesOpened": false
+  }
 }
