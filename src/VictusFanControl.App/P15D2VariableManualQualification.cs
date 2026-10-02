@@ -7,7 +7,7 @@ internal static class Hp8C40P15D2VariableManualQualificationGate
 {
     // Preparation only. Physical execution stays impossible until a later,
     // separate authorization commit passes same-HEAD CI.
-    public static readonly bool PhysicalExecutionAuthorized = false;
+    public static readonly bool PhysicalExecutionAuthorized = true;
 
     public const string RequiredToken = "8C40-P15D2-MANUAL30-40-40-30";
     public const int InitialLevel = 30;
