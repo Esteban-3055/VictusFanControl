@@ -143,11 +143,19 @@ The corrected hardening HEAD `356275b56bdfe3324b054e2b79f2bbbf3f4e5067` passed t
 
 Formal preparation closure HEAD `a7129f616d955ae22e09ec5ef999bb6a3b64ffc2` passed **#1121 SUCCESS** (run `36950212076`). A fresh authorization now opens only the two dedicated P15C qualification barriers: the parent harness contract gate and `Hp8C40P15CGuiManualQualificationGate.PhysicalExecutionAuthorized`. The normal user-facing Manual gate remains false, Automatic remains false, Candidate V1 remains unvalidated/unauthorized, and M9C/M9D remain closed. Target execution is forbidden until this exact authorization HEAD itself completes full same-HEAD CI successfully.
 
+### P15C first target attempt — stale SafetyGate FAIL_CLOSED
+
+Authorization HEAD `5eb02ca3b50a6d88dc027b97f2dc76fa5b39490e` passed GitHub Actions **#1122 SUCCESS** and reached the real GUI qualification boundary. Evidence `p15c-gui-manual_2026-10-02_003619.zip` (SHA-256 `d89bf8903e593b995f5f4f4c3807bfca94aa2eb21d8bd9a2ea0bd177cb2a96ea`) is preserved and independently reviewed. The real Manual button succeeded once with Firmware authority. The real Apply 30/30 then acquired read-only Custom preparation, but before the first command could reach the backend a newer runtime SafetyGate evaluation superseded the evaluation supplied by the GUI. `FanControlCoordinator.ApplyAsync` rejected the stale evaluation before backend `ApplyAsync`, watchdog WRITE_INTENT or WMI `SetFanLevel`.
+
+Therefore no physical 30/30 fan-level write occurred. The GUI intentionally produced FAIL_CLOSED and exited. Normal shutdown restored Firmware; the parent cleanup observed two consecutive FF/FF samples. The watchdog remained the same Manual/Running PID/start identity and the independent failsafe did not take over. The attempt is not a P15C physical PASS and must not be repeated from this authorization. Both dedicated P15C gates are re-blocked while a software correction is prepared.
+
+The required correction is narrow but production-relevant: refresh SafetyGate after read-only Custom admission, allow only bounded retries when a newer permitted evaluation supersedes the command evaluation, and restore Firmware if those retries cannot obtain a current evaluation. Automatic, the normal user Manual gate, Candidate V1, M9C and M9D remain closed throughout.
+
 ## Current authorization boundary
 
 - P15A startup/no-write execution: **PHYSICAL PASS FORMALLY CLOSED / EXECUTION RE-BLOCKED**
 - P15B Manual 30/30 execution: **PHYSICAL PASS EVIDENCE-CLOSED / EXECUTION RE-BLOCKED / CLOSURE CI #1116 SUCCESS**
-- P15C real-GUI Manual 30/30 execution: **FRESHLY AUTHORIZED ON CLOSED PREPARATION / AWAITING SAME-HEAD CI SUCCESS; normal user Manual and Automatic remain CLOSED**
+- P15C real-GUI Manual 30/30 execution: **TARGET FAIL_CLOSED / BOTH DEDICATED GATES RE-BLOCKED; stale-Safety race correction required; normal user Manual and Automatic remain CLOSED**
 - User-facing Manual execution: **CLOSED**
 - User-facing Automatic execution: **CLOSED**
 - Automatic policy: **OFF**

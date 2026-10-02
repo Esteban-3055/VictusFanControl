@@ -25,7 +25,7 @@ internal sealed record P13ControlInteractionObservation(
 /// </summary>
 internal static class Hp8C40P15CGuiManualQualificationGate
 {
-    public static readonly bool PhysicalExecutionAuthorized = true;
+    public static readonly bool PhysicalExecutionAuthorized = false;
 
     public const string RequiredToken = "8C40-P15C-GUI-MANUAL30";
     public const int QualificationLevel = 30;

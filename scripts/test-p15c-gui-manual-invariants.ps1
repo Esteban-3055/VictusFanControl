@@ -24,7 +24,8 @@ $allowed=@(
  'P15C_GUI_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED',
  'P15C_GUI_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED',
  'P15C_GUI_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI',
- 'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'
+ 'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED',
+ 'P15C_GUI_MANUAL_STALE_SAFETY_FAIL_CLOSED_GATE_CLOSED'
 )
 if($status -notin $allowed){throw 'P15C contract state mismatch.'}
 
@@ -143,6 +144,28 @@ if($status -eq 'P15C_GUI_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
     Assert-False ([bool]$g.physicalPassed) 'P15C authorization must not pre-claim physical PASS.'
     Assert-False ([bool]$g.evidenceClosed) 'P15C authorization must not pre-close physical evidence.'
     Assert-Contains $qualification 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15C authorized state requires qualification source gate open.'
+}
+
+if($status -eq 'P15C_GUI_MANUAL_STALE_SAFETY_FAIL_CLOSED_GATE_CLOSED'){
+    Assert-False ([bool]$g.executionAuthorized) 'P15C must be re-blocked after target FAIL_CLOSED.'
+    Assert-False ([bool]$g.controllerPhysicalExecutionAuthorized) 'P15C GUI qualification gate must be re-blocked after target FAIL_CLOSED.'
+    Assert-False ([bool]$g.physicalPassed) 'P15C FAIL_CLOSED must not claim physical PASS.'
+    Assert-False ([bool]$g.evidenceClosed) 'P15C FAIL_CLOSED must not close PASS evidence.'
+    Assert-Contains $qualification 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15C source gate must be closed after target FAIL_CLOSED.'
+    $f=$g.targetFailClosedAttempt
+    if([string]$f.authorizationHead -cne '5eb02ca3b50a6d88dc027b97f2dc76fa5b39490e' -or [int]$f.authorizationCiRunNumber -ne 1122 -or [long]$f.authorizationCiRunId -ne 36950548313 -or [string]$f.authorizationCiResult -cne 'SUCCESS' -or [string]$f.result -cne 'FAIL_CLOSED'){throw 'P15C target FAIL_CLOSED identity mismatch.'}
+    if([string]$f.evidenceZipSha256 -cne 'd89bf8903e593b995f5f4f4c3807bfca94aa2eb21d8bd9a2ea0bd177cb2a96ea' -or [string]$f.evidenceSidecarSha256 -cne 'dd1e27d58617ad97aa6adfb01f4aac7d07c2db01f0dcd20d54f4e50521d94518' -or [string]$f.packageManifestSha256 -cne '94fd16849eeccd98889e3b2a33c328a7d29c3281321f7997d12b60d9858a5049'){throw 'P15C target FAIL_CLOSED evidence identity mismatch.'}
+    foreach($p in @('archiveIntegrityVerified','embeddedEvidenceHashesVerified','sourceIdentityHashesVerifiedAgainstAuthorizationHead','repositoryHeadMatched','trackedSourceClean','onlyPreservedUntrackedLogsObserved','guiReadyObserved','watchdogProcessIdentityStable','manualModeHeldFirmwareAuthority','customAuthorityPrepared','journalPresentAtGuiFailure','staleSafetyRejectedBeforeCoordinatorBackendApply','shutdownRestoreObserved','cleanupFfFfVerified','failsafeArmed','correctionRequired')){Assert-True ([bool]$f.$p) ("P15C target FAIL_CLOSED expected true: {0}" -f $p)}
+    foreach($p in @('backendApplyReached','writeIntentReached','wmiSetFanLevelReached','physical30FanWriteExecuted','manualAppliedMarkerProduced','ownedSetpointEvidenceProduced','ownedJournalEvidenceProduced','failsafeTakeover','physicalPassClaimed','evidenceClosed')){Assert-False ([bool]$f.$p) ("P15C target FAIL_CLOSED expected false: {0}" -f $p)}
+    if([int]$f.embeddedEvidenceHashCount -ne 11 -or [int]$f.sourceIdentityHashCount -ne 11 -or [int]$f.guiReadyHealthySafetySamples -ne 3 -or [int]$f.manualModeRequests -ne 1 -or [int]$f.manualApplyRequests -ne 1 -or [int]$f.firmwareModeRequests -ne 0 -or [int]$f.automaticModeRequests -ne 0){throw 'P15C target FAIL_CLOSED bounded evidence mismatch.'}
+    $corr=$g.staleSafetyRaceCorrection
+    Assert-True ([bool]$corr.required) 'P15C stale-Safety correction must be required.'
+    Assert-True ([bool]$corr.mustRefreshSafetyAfterCustomAdmission) 'P15C correction must refresh SafetyGate after Custom admission.'
+    Assert-True ([bool]$corr.boundedStaleRetryRequired) 'P15C correction must require bounded stale retry.'
+    Assert-True ([bool]$corr.exhaustedRetryMustRestoreFirmware) 'P15C correction must restore Firmware if stale retries exhaust.'
+    Assert-False ([bool]$corr.implementationComplete) 'P15C stale-Safety correction cannot be pre-claimed in re-block commit.'
+    Assert-False ([bool]$corr.ciValidated) 'P15C stale-Safety correction cannot pre-claim CI.'
+    Assert-False ([bool]$corr.closure.closed) 'P15C stale-Safety correction cannot pre-close.'
 }
 
 if($status -eq 'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){
