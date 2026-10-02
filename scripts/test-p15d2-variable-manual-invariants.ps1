@@ -74,6 +74,19 @@ if($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
         'nativeTrackedGuiProcess','independentFailsafeImplemented','evidencePackagerImplemented','evidencePackagingSelfTestImplemented'
     )){Assert-True ([bool]$ri.$flag) ("P15D2 runtime implementation flag missing: {0}" -f $flag)}
     Assert-False ([bool]$ri.physicalExecution) 'P15D2 runtime implementation must remain software-only.'
+    $hardening=$d.hardeningReview
+    Assert-True ([bool]$hardening.required) 'P15D2 pre-authorization hardening review must remain required.'
+    Assert-True ([bool]$hardening.implementationComplete) 'P15D2 hardening fixes must be implemented before CI closure.'
+    Assert-False ([bool]$hardening.ciValidated) 'P15D2 implementation-pending state cannot pre-claim hardening CI.'
+    Assert-False ([bool]$hardening.hardwareExecution) 'P15D2 hardening must remain software-only.'
+    Assert-False ([bool]$hardening.physicalGatesOpened) 'P15D2 hardening must keep physical gates closed.'
+    $findings=@($hardening.findings)
+    $fixes=@($hardening.fixes)
+    if($findings.Count -ne 2 -or $fixes.Count -ne 2){throw 'P15D2 hardening review must preserve exactly the two pre-authorization findings and fixes.'}
+    Assert-Contains ([string]$findings[0]) '30/30-only lease classifier' 'P15D2 hardening must preserve the variable-level failsafe finding.'
+    Assert-Contains ([string]$findings[1]) 'every WRITE_INTENT and every COMMIT' 'P15D2 hardening must preserve the watchdog-generation finding.'
+    Assert-Contains ([string]$fixes[0]) '30/30 or 40/40' 'P15D2 hardening must cover both qualified failsafe levels.'
+    Assert-Contains ([string]$fixes[1]) '3 -> 5 -> 5 -> 7' 'P15D2 hardening must require exact generation progression.'
     $failed=@($d.failedCiHistoryPreserved)
     if($failed.Count -lt 1 -or $failed.Count -gt 2 -or
        [int]$failed[0].runNumber -ne 1148 -or
