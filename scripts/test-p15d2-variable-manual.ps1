@@ -7,8 +7,11 @@ $contract=Get-Content -LiteralPath $contractPath -Raw | ConvertFrom-Json
 
 # HARD VERSIONED AUTHORIZATION BARRIER. Keep before Administrator checks,
 # service/process control, PawnIO/EC probing, GUI launch or recovery work.
-if([string]$contract.status -cne 'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI'){
-    throw 'P15D2 PHYSICAL BLOCKED: contract is not in the dedicated authorized state.'
+if([string]$contract.status -notin @(
+    'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI',
+    'P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI'
+)){
+    throw 'P15D2 PHYSICAL BLOCKED: contract is not in a dedicated authorized state.'
 }
 if(-not [bool]$contract.startupNoWrite.physicalPassed -or
    -not [bool]$contract.startupNoWrite.evidenceClosed -or
