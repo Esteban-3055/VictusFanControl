@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D1_TRAY_EXIT_IMPLEMENTATION_CI_PENDING_GATE_CLOSED",
+  "status": "P15D1_TRAY_EXIT_PREPARATION_CI_PASS_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1018,11 +1018,24 @@
   },
   "guiLifecycleTrayExit": {
     "preparationImplemented": true,
-    "preparationCiValidated": false,
+    "preparationCiValidated": true,
     "preparationClosure": {
-      "closed": false,
-      "result": "PENDING",
+      "closed": true,
+      "result": "PASS",
+      "implementationHead": "7ac16fbc824fc992ce436ff68cc4ad7cea100c96",
+      "sourceCiRunNumber": 1131,
+      "sourceCiRunId": 36966420676,
+      "sourceCiResult": "SUCCESS",
+      "p15aClosureInvariantValidated": true,
+      "p15bClosureInvariantValidated": true,
+      "p15cClosureInvariantValidated": true,
+      "p15d1InvariantValidated": true,
+      "evidencePackagingSelfTestValidated": true,
+      "powerShell51CompatibilityValidated": true,
+      "warningsAsErrorsBuildValidated": true,
+      "runtimeWiringBuildValidated": true,
       "hardwareExecution": false,
+      "physicalGatesOpened": false,
       "failedCiHistoryPreserved": [
         {
           "runNumber": 1129,
@@ -1102,7 +1115,11 @@
       "auditHead": "3f81c1db083b4d91f1f70c01bfc7ba3660ab1231"
     },
     "authorization": {
-      "sameHeadCiSuccessRequiredBeforeAnyPhysicalAuthorization": true,
+      "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
+      "preparationClosureHead": null,
+      "preparationClosureCiRunNumber": null,
+      "preparationClosureCiRunId": null,
+      "preparationClosureCiResult": null,
       "p15aAuthorizationOpened": false,
       "p15bAuthorizationOpened": false,
       "p15cAuthorizationOpened": false,
@@ -1111,10 +1128,10 @@
       "candidateCurveAuthorizationOpened": false,
       "m9cQualificationConstructionOpened": false,
       "m9dQualificationConstructionOpened": false,
-      "hardwareExecutionAtPreparationCommit": false
+      "hardwareExecutionAtAuthorizationCommit": false
     },
     "runtimeImplementationComplete": true,
-    "runtimeImplementationCiValidated": false,
+    "runtimeImplementationCiValidated": true,
     "runtimeImplementation": {
       "programBoundaryImplemented": true,
       "exactTargetBoundaryImplemented": true,
