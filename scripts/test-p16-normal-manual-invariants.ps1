@@ -30,7 +30,7 @@ $isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOS
 $isPhysicalFailClosed=($status -eq 'P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED')
 $isHardened=($status -in @('P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED'))
 $isHardeningClosed=($status -eq 'P16B_HARDENING_CI_PASS_GATE_CLOSED')
-$hasPhysicalHistory=($isPhysicalFailClosed -or $isHardened)
+$hasPhysicalHistory=(@($d.physicalAttemptHistory).Count -gt 0)
 $isAuthorized=($status -eq 'P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
 
 if([string]$p15.status -cne 'P15D2_VARIABLE_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){throw 'P16A requires formally closed P15D2.'}
@@ -171,19 +171,39 @@ if($isAuthorized){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P16B dedicated source gate must be open.'
  $auth=$d.authorization
  if($null -eq $auth){throw 'P16B authorization metadata missing.'}
- if([string]$auth.openedFromClosedP16AHead -cne 'a5c987ee539235ae8325379edb135790377f55b4' -or
-    [int]$auth.basisCiRunNumber -ne 1186 -or
-    [long]$auth.basisCiRunId -ne 37059019922 -or
+ if([int]$auth.authorizationGeneration -ne 2 -or
+    [string]$auth.openedFromClosedHardeningHead -cne '0b32d210468c4bf4a535566da6d5c6bae3b3f3a9' -or
+    [int]$auth.basisCiRunNumber -ne 1193 -or
+    [long]$auth.basisCiRunId -ne 37069744953 -or
     [string]$auth.basisCiResult -cne 'SUCCESS'){
-   throw 'P16B authorization basis mismatch.'
+   throw 'P16B fresh authorization basis mismatch.'
  }
  Assert-True ([bool]$auth.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P16B requires same-head CI before target execution.'
  Assert-False ([bool]$auth.authorizationCommitPerformsHardwareExecution) 'P16B authorization commit itself must perform no hardware execution.'
+ Assert-True ([bool]$auth.oneShotAttemptFenceRequired) 'P16B fresh authorization must require the durable one-shot attempt fence.'
+ Assert-False ([bool]$auth.authorizationConsumed) 'Fresh P16B authorization must be unconsumed before target execution.'
+ Assert-False ([bool]$auth.freshAuthorizationRequired) 'Current P16B authorization is already the required fresh authorization.'
  Assert-False ([bool]$auth.permanentUserManualExecutionAuthorized) 'P16B must not promote permanent user Manual.'
  Assert-False ([bool]$auth.automaticExecutionAuthorized) 'P16B must not open Automatic.'
  Assert-False ([bool]$auth.candidateCurvePhysicallyValidated) 'P16B must not validate Candidate V1.'
  Assert-False ([bool]$auth.candidateCurveAuthorizedForProduction) 'P16B must not promote Candidate V1.'
  Assert-False ([bool]$auth.controlEnabledByDefault) 'P16B must keep default control disabled.'
+ Assert-False ([bool]$d.hardeningRequired.required) 'Fresh P16B authorization requires the hardening to be formally closed.'
+ Assert-True ([bool]$d.hardeningRequired.implementation.ciValidated) 'Fresh P16B authorization requires CI-validated hardening.'
+ $hc=$d.hardeningRequired.closure
+ if($null -eq $hc -or -not [bool]$hc.closed -or [string]$hc.result -cne 'PASS' -or
+    [string]$hc.implementationHead -cne '6539671204d3e9c548d1d9b5b553920ccd553525' -or
+    [int]$hc.sourceCiRunNumber -ne 1192 -or [long]$hc.sourceCiRunId -ne 37069306742 -or
+    [string]$hc.sourceCiResult -cne 'SUCCESS'){
+   throw 'P16B fresh authorization requires the exact formally closed hardening baseline.'
+ }
+ $history=@($d.authorizationHistory)
+ if($history.Count -lt 1 -or [int]$history[0].authorizationGeneration -ne 1 -or
+    [string]$history[0].authorizationHead -cne '0eba7426455adcca2594a612abd2c5753a52d235' -or
+    -not [bool]$history[0].authorizationConsumed -or [int]$history[0].targetAttemptCount -ne 2){
+   throw 'P16B previous consumed authorization history is missing or altered.'
+ }
+ Assert-Contains $doc 'P16B fresh one-shot reauthorization after closure CI #1193' 'P16B fresh authorization documentation missing.'
 }else{
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16A source gate must remain hard-closed.'
 }

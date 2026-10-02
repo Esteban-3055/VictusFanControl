@@ -288,3 +288,24 @@ itself receives full same-head CI SUCCESS may a fresh one-shot P16B
 authorization be created. The prior authorization is consumed and cannot be
 reused.
 
+## P16B fresh one-shot reauthorization after closure CI #1193
+
+Formal hardening-closure HEAD
+`0b32d210468c4bf4a535566da6d5c6bae3b3f3a9` passed full same-head CI
+#1193 / run `37069744953` SUCCESS.
+
+A fresh P16B authorization now opens only the dedicated normal-application
+Manual qualification gate and matching contract gate. Permanent user Manual,
+Automatic, Candidate V1 and default control remain closed.
+
+This authorization commit performs no hardware execution. The target harness is
+still forbidden until this exact authorization HEAD itself passes full same-head
+CI. After that external barrier is satisfied, the ProgramData one-shot attempt
+fence atomically consumes this exact authorization HEAD before the failsafe/GUI
+physical boundary, preventing reuse of the same authorization for a second
+attempt.
+
+The original authorization `0eba7426455adcca2594a612abd2c5753a52d235`
+remains preserved as consumed with its two FAIL_CLOSED attempts and cannot be
+reused.
+
