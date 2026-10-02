@@ -159,6 +159,8 @@ internal sealed class MainForm : Form
     private readonly string? _m9dProductionLifecycleMarkerRoot;
     private readonly bool _p15cGuiManualHardwareTest;
     private readonly string? _p15cGuiManualMarkerRoot;
+    private readonly bool _p15d1TrayExitHardwareTest;
+    private readonly string? _p15d1TrayExitMarkerRoot;
     private Hp8C40WatchdogBootstrapEvidence? _m9WatchdogBootstrapEvidence;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
@@ -207,6 +209,20 @@ internal sealed class MainForm : Form
     private int _p15cManualApplyRequests;
     private int _p15cFirmwareModeRequests;
     private int _p15cAutomaticModeRequests;
+
+    private int _p15d1ReadyGate;
+    private int _p15d1ReadySafetyStreak;
+    private DateTimeOffset? _p15d1LastReadySafetyTimestamp;
+    private volatile bool _p15d1ReadyPublished;
+    private volatile bool _p15d1Completed;
+    private volatile bool _p15d1WindowHidden;
+    private int _p15d1ManualModeRequests;
+    private int _p15d1ManualApplyRequests;
+    private int _p15d1FirmwareModeRequests;
+    private int _p15d1AutomaticModeRequests;
+    private int _p15d1WindowHideRequests;
+    private int _p15d1TrayExitRequests;
+    private string? _p15d1FailureDetail;
 
     private int _suspendHardwareTestAdvanceGate;
     private int _gateDHardwareTestAdvanceGate;
@@ -330,6 +346,20 @@ internal sealed class MainForm : Form
             "state",
             "lease.json");
 
+    private string P15D1MarkerRoot =>
+        _p15d1TrayExitMarkerRoot ??
+        throw new InvalidOperationException(
+            "P15D1 marker root was not configured.");
+
+    private string P15D1ReadyPath => Path.Combine(P15D1MarkerRoot, Hp8C40P15D1TrayExitQualificationGate.ReadyFileName);
+    private string P15D1ManualAppliedPath => Path.Combine(P15D1MarkerRoot, Hp8C40P15D1TrayExitQualificationGate.ManualAppliedFileName);
+    private string P15D1ParentOwnedVerifiedPath => Path.Combine(P15D1MarkerRoot, Hp8C40P15D1TrayExitQualificationGate.ParentOwnedVerifiedFileName);
+    private string P15D1WindowHiddenPath => Path.Combine(P15D1MarkerRoot, Hp8C40P15D1TrayExitQualificationGate.WindowHiddenFileName);
+    private string P15D1ParentHiddenOwnedVerifiedPath => Path.Combine(P15D1MarkerRoot, Hp8C40P15D1TrayExitQualificationGate.ParentHiddenOwnedVerifiedFileName);
+    private string P15D1TrayExitRequestedPath => Path.Combine(P15D1MarkerRoot, Hp8C40P15D1TrayExitQualificationGate.TrayExitRequestedFileName);
+    private string P15D1ShutdownResultPath => Path.Combine(P15D1MarkerRoot, Hp8C40P15D1TrayExitQualificationGate.ShutdownResultFileName);
+    private string P15D1EventsPath => Path.Combine(P15D1MarkerRoot, Hp8C40P15D1TrayExitQualificationGate.EventsFileName);
+
     private string DisplayAwareReadyPath =>
         _m9dProductionLifecycleHardwareTest
             ? Path.Combine(M9DMarkerRoot, "m9d-production-lifecycle.ready")
@@ -413,7 +443,9 @@ internal sealed class MainForm : Form
         bool m9dProductionLifecycleHardwareTest = false,
         string? m9dProductionLifecycleMarkerRoot = null,
         bool p15cGuiManualHardwareTest = false,
-        string? p15cGuiManualMarkerRoot = null)
+        string? p15cGuiManualMarkerRoot = null,
+        bool p15d1TrayExitHardwareTest = false,
+        string? p15d1TrayExitMarkerRoot = null)
     {
         Text = "VictusFanControl v0.4-dev — P13 software UI complete / hardware gates CLOSED";
         StartPosition = FormStartPosition.CenterScreen;
@@ -440,6 +472,11 @@ internal sealed class MainForm : Form
             string.IsNullOrWhiteSpace(p15cGuiManualMarkerRoot)
                 ? null
                 : Path.GetFullPath(p15cGuiManualMarkerRoot);
+        _p15d1TrayExitHardwareTest = p15d1TrayExitHardwareTest;
+        _p15d1TrayExitMarkerRoot =
+            string.IsNullOrWhiteSpace(p15d1TrayExitMarkerRoot)
+                ? null
+                : Path.GetFullPath(p15d1TrayExitMarkerRoot);
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
         _targetProfile =
             HpHardwareTargetResolver.Resolve(
@@ -528,6 +565,35 @@ internal sealed class MainForm : Form
                 {
                     throw new InvalidOperationException(
                         $"P15C refuses to overwrite existing evidence marker '{path}'.");
+                }
+            }
+        }
+
+        if (_p15d1TrayExitHardwareTest)
+        {
+            if (_p15d1TrayExitMarkerRoot is null)
+            {
+                throw new InvalidOperationException(
+                    "P15D1 requires an isolated marker/evidence root.");
+            }
+
+            Directory.CreateDirectory(P15D1MarkerRoot);
+            foreach (var path in new[]
+                     {
+                         P15D1ReadyPath,
+                         P15D1ManualAppliedPath,
+                         P15D1ParentOwnedVerifiedPath,
+                         P15D1WindowHiddenPath,
+                         P15D1ParentHiddenOwnedVerifiedPath,
+                         P15D1TrayExitRequestedPath,
+                         P15D1ShutdownResultPath,
+                         P15D1EventsPath
+                     })
+            {
+                if (File.Exists(path))
+                {
+                    throw new InvalidOperationException(
+                        $"P15D1 refuses to overwrite existing evidence marker '{path}'.");
                 }
             }
         }
@@ -731,14 +797,19 @@ internal sealed class MainForm : Form
         var p15cManualExecutionAuthorized =
             _p15cGuiManualHardwareTest &&
             Hp8C40P15CGuiManualQualificationGate.PhysicalExecutionAuthorized;
+        var p15d1ManualExecutionAuthorized =
+            _p15d1TrayExitHardwareTest &&
+            Hp8C40P15D1TrayExitQualificationGate.PhysicalExecutionAuthorized;
+        var isolatedManualQualification =
+            _p15cGuiManualHardwareTest || _p15d1TrayExitHardwareTest;
 
         var manualExecutionAuthorized =
-            _p15cGuiManualHardwareTest
-                ? p15cManualExecutionAuthorized
+            isolatedManualQualification
+                ? p15cManualExecutionAuthorized || p15d1ManualExecutionAuthorized
                 : Hp8C40PostM9UserControlGate.ManualExecutionAuthorized;
 
         var automaticExecutionAuthorized =
-            _p15cGuiManualHardwareTest
+            isolatedManualQualification
                 ? false
                 : Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized;
 
@@ -764,19 +835,27 @@ internal sealed class MainForm : Form
                 manualInteractionReadyProvider:
                     _p15cGuiManualHardwareTest
                         ? () => _p15cReadyPublished && !_p15cCompleted
-                        : null,
+                        : _p15d1TrayExitHardwareTest
+                            ? () => _p15d1ReadyPublished && !_p15d1Completed
+                            : null,
                 interactionAuthorizationProvider:
                     _p15cGuiManualHardwareTest
                         ? IsP15CControlInteractionAuthorized
-                        : null,
+                        : _p15d1TrayExitHardwareTest
+                            ? IsP15D1ControlInteractionAuthorized
+                            : null,
                 fixedManualQualificationLevel:
                     _p15cGuiManualHardwareTest
                         ? Hp8C40P15CGuiManualQualificationGate.QualificationLevel
-                        : null,
+                        : _p15d1TrayExitHardwareTest
+                            ? Hp8C40P15D1TrayExitQualificationGate.QualificationLevel
+                            : null,
                 interactionObserver:
                     _p15cGuiManualHardwareTest
                         ? OnP15CControlInteraction
-                        : null);
+                        : _p15d1TrayExitHardwareTest
+                            ? OnP15D1ControlInteraction
+                            : null);
         _p13FanControlSurface.UpdateAuthority(
             _fanCoordinator.Authority);
 
@@ -811,6 +890,12 @@ internal sealed class MainForm : Form
             {
                 AppendEvent(
                     "P15C GUI MANUAL QUALIFICATION: dedicated test mode active. The normal user Manual gate remains CLOSED; Automatic remains CLOSED. Wait for the P15C READY marker before using Manual.");
+            }
+
+            if (_p15d1TrayExitHardwareTest)
+            {
+                AppendEvent(
+                    "P15D1 TRAY-EXIT QUALIFICATION: dedicated test mode active. Wait for READY, use Manual 30/30 once, then follow the parent console for X/hide and tray Exit. Normal user Manual and Automatic remain CLOSED.");
             }
 
             if (_suspendLifecycleHardwareTest)
@@ -2310,6 +2395,46 @@ internal sealed class MainForm : Form
         open.Click += (_, _) => RestoreFromTray();
         exit.Click += (_, _) =>
         {
+            if (_p15d1TrayExitHardwareTest)
+            {
+                try
+                {
+                    if (_p15d1Completed || !_p15d1ReadyPublished || !_p15d1WindowHidden ||
+                        _p15d1ManualModeRequests != 1 || _p15d1ManualApplyRequests != 1 ||
+                        _p15d1FirmwareModeRequests != 0 || _p15d1AutomaticModeRequests != 0 ||
+                        _p15d1WindowHideRequests != 1 || _p15d1TrayExitRequests != 0 ||
+                        _fanCoordinator.Authority != FanAuthority.Custom ||
+                        !HasP15D1ParentHiddenOwnedProofForCurrentProcess())
+                    {
+                        throw new InvalidOperationException("P15D1 real tray Exit was requested before exact hidden OWNED proof.");
+                    }
+
+                    _p15d1TrayExitRequests++;
+                    using var process = Process.GetCurrentProcess();
+                    WriteP15D1Json(P15D1TrayExitRequestedPath, new
+                    {
+                        schemaVersion = 1,
+                        gate = "P15D1-GUI",
+                        result = "TRAY_EXIT_REQUESTED",
+                        timestampUtc = DateTimeOffset.UtcNow,
+                        processId = Environment.ProcessId,
+                        processStartUtcTicks = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+                        authority = _fanCoordinator.Authority.ToString(),
+                        windowHideRequests = _p15d1WindowHideRequests,
+                        trayExitRequests = _p15d1TrayExitRequests,
+                        parentHiddenOwnedProofPresent = HasP15D1ParentHiddenOwnedProofForCurrentProcess()
+                    });
+                    AppendEvent("P15D1 observed one real tray Exit after hidden OWNED proof; normal explicit shutdown now owns strong restore.");
+                }
+                catch (Exception ex)
+                {
+                    _p15d1Completed = true;
+                    _p15d1FailureDetail = $"Tray Exit sequence failed closed: {ex.Message}";
+                    Environment.ExitCode = 161;
+                    AppendEvent($"P15D1 FAIL_CLOSED: {_p15d1FailureDetail}");
+                }
+            }
+
             _allowExit = true;
             Close();
         };
@@ -2593,6 +2718,14 @@ internal sealed class MainForm : Form
             _ = Task.Run(TryPublishP15CGuiReadyAsync);
         }
 
+        if (_p15d1TrayExitHardwareTest &&
+            !_p15d1ReadyPublished &&
+            !_p15d1Completed &&
+            _worker.StateMachine.State == SystemState.Healthy)
+        {
+            _ = Task.Run(TryPublishP15D1ReadyAsync);
+        }
+
         Ui(() =>
         {
             _cpuTemperature.Text =
@@ -2644,6 +2777,13 @@ internal sealed class MainForm : Form
             {
                 _p15cReadySafetyStreak = 0;
                 _p15cLastReadySafetyTimestamp = null;
+            }
+
+            if (_p15d1TrayExitHardwareTest &&
+                !_p15d1ReadyPublished)
+            {
+                _p15d1ReadySafetyStreak = 0;
+                _p15d1LastReadySafetyTimestamp = null;
             }
 
             _ = EnforceLatestFanSafetyAsync($"runtime state changed to {e.Current}");
@@ -2703,6 +2843,12 @@ internal sealed class MainForm : Form
         if (_p15cGuiManualHardwareTest)
         {
             await TryPublishP15CGuiReadyAsync();
+            return;
+        }
+
+        if (_p15d1TrayExitHardwareTest)
+        {
+            await TryPublishP15D1ReadyAsync();
             return;
         }
 
@@ -2904,6 +3050,293 @@ internal sealed class MainForm : Form
                 $"GPU={snapshot.GpuTemperatureC.Value:0.0}C/" +
                 $"{snapshot.GpuPowerW.Value:0.0}W.");
         }
+    }
+
+    private Task TryPublishP15D1ReadyAsync()
+    {
+        if (!_p15d1TrayExitHardwareTest || _p15d1Completed || _p15d1ReadyPublished ||
+            Interlocked.CompareExchange(ref _p15d1ReadyGate, 1, 0) != 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            if (!Hp8C40P15D1TrayExitQualificationGate.PhysicalExecutionAuthorized ||
+                !Hp8C40P15D1TrayExitQualificationGate.NormalUserExecutionGatesClosed())
+            {
+                throw new InvalidOperationException("P15D1 qualification boundary is closed or normal user gates are open.");
+            }
+
+            if (!_fanProductionController.ManualExecutionAuthorized ||
+                _fanProductionController.AutomaticExecutionAuthorized)
+            {
+                throw new InvalidOperationException("P15D1 controller authorization isolation is invalid.");
+            }
+
+            if (_worker.StateMachine.State != SystemState.Healthy ||
+                _fanCoordinator.Authority != FanAuthority.Firmware ||
+                !_fanCoordinator.BackendCanWrite ||
+                _lastSnapshot is null)
+            {
+                _p15d1ReadySafetyStreak = 0;
+                _p15d1LastReadySafetyTimestamp = null;
+                return Task.CompletedTask;
+            }
+
+            EnsureP15D1QualificationEnvelope(_lastSnapshot);
+            var safety = EvaluateControlSafety(
+                _hardwareIdentity,
+                _worker.StateMachine.State,
+                _lastSnapshot,
+                DateTimeOffset.UtcNow,
+                fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+            if (!safety.CustomControlPermitted || !safety.SnapshotTimestamp.HasValue)
+            {
+                _p15d1ReadySafetyStreak = 0;
+                _p15d1LastReadySafetyTimestamp = null;
+                return Task.CompletedTask;
+            }
+
+            var timestamp = safety.SnapshotTimestamp.Value;
+            if (_p15d1LastReadySafetyTimestamp.HasValue &&
+                timestamp <= _p15d1LastReadySafetyTimestamp.Value)
+            {
+                return Task.CompletedTask;
+            }
+
+            _p15d1LastReadySafetyTimestamp = timestamp;
+            if (File.Exists(P15CJournalPath))
+            {
+                throw new InvalidOperationException("P15D1 cannot publish READY while a durable watchdog journal exists.");
+            }
+
+            _p15d1ReadySafetyStreak++;
+            if (_p15d1ReadySafetyStreak < Hp8C40P15D1TrayExitQualificationGate.RequiredHealthyPreWriteSamples)
+            {
+                return Task.CompletedTask;
+            }
+
+            using var process = Process.GetCurrentProcess();
+            WriteP15D1Json(P15D1ReadyPath, new
+            {
+                schemaVersion = 1,
+                gate = "P15D1-GUI",
+                result = "READY",
+                timestampUtc = DateTimeOffset.UtcNow,
+                processId = Environment.ProcessId,
+                processStartUtcTicks = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+                targetProfileId = Hp8C40TargetProfile.Instance.Id,
+                mode = _fanProductionController.Mode.ToString(),
+                authority = _fanCoordinator.Authority.ToString(),
+                manualQualificationAuthorized = _fanProductionController.ManualExecutionAuthorized,
+                userFacingManualAuthorized = Hp8C40PostM9UserControlGate.ManualExecutionAuthorized,
+                automaticAuthorized = _fanProductionController.AutomaticExecutionAuthorized,
+                safetyPermitted = safety.CustomControlPermitted,
+                healthySafetySamples = _p15d1ReadySafetyStreak,
+                appLogPath = AppLog.CurrentLogPath
+            });
+
+            _p15d1ReadyPublished = true;
+            AppendEvent("P15D1 GUI READY: three consecutive Healthy/SafetyGate-permitted observations; Firmware authority; no durable journal.");
+        }
+        catch (Exception ex)
+        {
+            FailP15D1Qualification($"READY failed closed: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _p15d1ReadyGate, 0);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static void EnsureP15D1QualificationEnvelope(TelemetrySnapshot snapshot)
+    {
+        if (!snapshot.IsComplete ||
+            !snapshot.CpuControlTemperatureC.HasValue ||
+            !snapshot.CpuPackagePowerW.HasValue ||
+            !snapshot.GpuTemperatureC.HasValue ||
+            !snapshot.GpuPowerW.HasValue)
+        {
+            throw new InvalidOperationException("P15D1 requires complete CPU/GPU temperature and power telemetry.");
+        }
+
+        if (snapshot.CpuControlTemperatureC.Value > Hp8C40P15D1TrayExitQualificationGate.MaximumCpuPhysicalC ||
+            snapshot.GpuTemperatureC.Value > Hp8C40P15D1TrayExitQualificationGate.MaximumGpuPhysicalC ||
+            snapshot.CpuPackagePowerW.Value > Hp8C40P15D1TrayExitQualificationGate.MaximumCpuPackagePowerW ||
+            snapshot.GpuPowerW.Value > Hp8C40P15D1TrayExitQualificationGate.MaximumGpuPowerW)
+        {
+            throw new InvalidOperationException(
+                $"P15D1 qualification envelope refused readiness: CPU={snapshot.CpuControlTemperatureC.Value:0.0}C/{snapshot.CpuPackagePowerW.Value:0.0}W, GPU={snapshot.GpuTemperatureC.Value:0.0}C/{snapshot.GpuPowerW.Value:0.0}W.");
+        }
+    }
+
+    private bool IsP15D1ControlInteractionAuthorized(
+        P13ControlInteractionKind kind,
+        AdaptiveFanProductionMode? requestedMode,
+        int? equalFanLevel)
+    {
+        if (!_p15d1TrayExitHardwareTest || _p15d1Completed || !_p15d1ReadyPublished || _p15d1WindowHidden)
+        {
+            return false;
+        }
+
+        if (kind == P13ControlInteractionKind.ManualApply)
+        {
+            return requestedMode is null &&
+                   equalFanLevel == Hp8C40P15D1TrayExitQualificationGate.QualificationLevel &&
+                   _p15d1ManualModeRequests == 1 &&
+                   _p15d1ManualApplyRequests == 0 &&
+                   _p15d1FirmwareModeRequests == 0 &&
+                   _p15d1AutomaticModeRequests == 0 &&
+                   !File.Exists(P15D1ParentOwnedVerifiedPath);
+        }
+
+        return kind == P13ControlInteractionKind.ModeRequest &&
+               equalFanLevel is null &&
+               requestedMode == AdaptiveFanProductionMode.Manual &&
+               _p15d1ManualModeRequests == 0 &&
+               _p15d1ManualApplyRequests == 0 &&
+               _p15d1FirmwareModeRequests == 0 &&
+               _p15d1AutomaticModeRequests == 0 &&
+               !File.Exists(P15D1ParentOwnedVerifiedPath);
+    }
+
+    private bool HasP15D1Proof(string path, string prefix)
+    {
+        try
+        {
+            if (!File.Exists(path)) return false;
+            var proof = File.ReadAllText(path).Trim();
+            using var process = Process.GetCurrentProcess();
+            var ticks = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture);
+            var suffix = $"|guiPid={Environment.ProcessId}|guiStartTicks={ticks}";
+            return proof.StartsWith(prefix, StringComparison.Ordinal) &&
+                   proof.EndsWith(suffix, StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool HasP15D1ParentOwnedProofForCurrentProcess() =>
+        HasP15D1Proof(P15D1ParentOwnedVerifiedPath, "P15D1-PARENT-OWNED-VERIFIED|");
+
+    private bool HasP15D1ParentHiddenOwnedProofForCurrentProcess() =>
+        HasP15D1Proof(P15D1ParentHiddenOwnedVerifiedPath, "P15D1-PARENT-HIDDEN-OWNED-VERIFIED|");
+
+    private void OnP15D1ControlInteraction(P13ControlInteractionObservation observation)
+    {
+        if (!_p15d1TrayExitHardwareTest || _p15d1Completed) return;
+
+        try
+        {
+            Directory.CreateDirectory(P15D1MarkerRoot);
+            File.AppendAllText(
+                P15D1EventsPath,
+                JsonSerializer.Serialize(observation, Hp8C40P15D1TrayExitQualificationGate.JsonOptions) + Environment.NewLine);
+
+            if (!string.IsNullOrWhiteSpace(observation.Failure))
+            {
+                throw new InvalidOperationException($"Observed real P13 interaction failed: {observation.Failure}");
+            }
+
+            var result = observation.Result ??
+                throw new InvalidOperationException("Observed real P13 interaction is missing its production result.");
+
+            if (observation.Kind == P13ControlInteractionKind.ModeRequest)
+            {
+                if (observation.RequestedMode == AdaptiveFanProductionMode.Manual)
+                {
+                    _p15d1ManualModeRequests++;
+                    if (!_p15d1ReadyPublished || _p15d1ManualModeRequests != 1 ||
+                        _p15d1ManualApplyRequests != 0 || _p15d1FirmwareModeRequests != 0 ||
+                        _p15d1AutomaticModeRequests != 0 || !result.ExecutionAuthorized ||
+                        result.Mode != AdaptiveFanProductionMode.Manual ||
+                        result.Action != AdaptiveFanProductionActionKind.HoldFirmware ||
+                        result.Authority != FanAuthority.Firmware)
+                    {
+                        throw new InvalidOperationException("P15D1 Manual selection was not one no-write Firmware-authority transition.");
+                    }
+
+                    AppendEvent("P15D1 observed real P13 Manual: mode=Manual, authority=Firmware, no fan command.");
+                    return;
+                }
+
+                if (observation.RequestedMode == AdaptiveFanProductionMode.Firmware) _p15d1FirmwareModeRequests++;
+                if (observation.RequestedMode == AdaptiveFanProductionMode.Automatic) _p15d1AutomaticModeRequests++;
+                throw new InvalidOperationException("P15D1 allows only Manual mode selection; tray Exit owns the restore path.");
+            }
+
+            if (observation.Kind == P13ControlInteractionKind.ManualApply)
+            {
+                _p15d1ManualApplyRequests++;
+                if (!_p15d1ReadyPublished || _p15d1ManualModeRequests != 1 ||
+                    _p15d1ManualApplyRequests != 1 || _p15d1FirmwareModeRequests != 0 ||
+                    _p15d1AutomaticModeRequests != 0 ||
+                    observation.EqualFanLevel != Hp8C40P15D1TrayExitQualificationGate.QualificationLevel ||
+                    !result.ExecutionAuthorized || result.Mode != AdaptiveFanProductionMode.Manual ||
+                    result.Action != AdaptiveFanProductionActionKind.EnterCustomAndApply ||
+                    result.EqualFanLevel != Hp8C40P15D1TrayExitQualificationGate.QualificationLevel ||
+                    result.Authority != FanAuthority.Custom)
+                {
+                    throw new InvalidOperationException("P15D1 Manual Apply did not prove exactly one real-P13 30/30 EnterCustomAndApply.");
+                }
+
+                using var process = Process.GetCurrentProcess();
+                WriteP15D1Json(P15D1ManualAppliedPath, new
+                {
+                    schemaVersion = 1,
+                    gate = "P15D1-GUI",
+                    result = "MANUAL_APPLIED",
+                    timestampUtc = DateTimeOffset.UtcNow,
+                    processId = Environment.ProcessId,
+                    processStartUtcTicks = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+                    equalFanLevel = Hp8C40P15D1TrayExitQualificationGate.QualificationLevel,
+                    action = result.Action.ToString(),
+                    authority = result.Authority.ToString(),
+                    manualModeRequests = _p15d1ManualModeRequests,
+                    manualApplyRequests = _p15d1ManualApplyRequests
+                });
+
+                AppendEvent("P15D1 observed real P13 Apply: one 30/30 command completed; awaiting parent OWNED proof before X.");
+                return;
+            }
+
+            throw new InvalidOperationException("P15D1 observed an unsupported P13 interaction.");
+        }
+        catch (Exception ex)
+        {
+            FailP15D1Qualification($"Interaction sequence failed closed: {ex.Message}");
+        }
+    }
+
+    private void FailP15D1Qualification(string detail)
+    {
+        if (_p15d1Completed) return;
+        _p15d1Completed = true;
+        _p15d1FailureDetail = detail;
+        Environment.ExitCode = 161;
+        AppendEvent($"P15D1 FAIL_CLOSED: {detail}");
+        _allowExit = true;
+
+        if (IsHandleCreated && !IsDisposed)
+        {
+            BeginInvoke(new Action(() => { Enabled = false; Close(); }));
+        }
+    }
+
+    private static void WriteP15D1Json(string path, object value)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+        var temp = path + ".tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(value, Hp8C40P15D1TrayExitQualificationGate.JsonOptions));
+        File.Move(temp, path, overwrite: true);
     }
 
     private bool IsP15CControlInteractionAuthorized(
@@ -5303,6 +5736,54 @@ internal sealed class MainForm : Form
 
     private async void OnFormClosingToTray(object? sender, FormClosingEventArgs e)
     {
+        if (_p15d1TrayExitHardwareTest && !_allowExit && e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true;
+            try
+            {
+                if (_p15d1Completed || !_p15d1ReadyPublished ||
+                    _p15d1ManualModeRequests != 1 || _p15d1ManualApplyRequests != 1 ||
+                    _p15d1FirmwareModeRequests != 0 || _p15d1AutomaticModeRequests != 0 ||
+                    _p15d1WindowHideRequests != 0 || _p15d1TrayExitRequests != 0 ||
+                    _fanCoordinator.Authority != FanAuthority.Custom ||
+                    !HasP15D1ParentOwnedProofForCurrentProcess())
+                {
+                    throw new InvalidOperationException("P15D1 window close requires exact parent OWNED proof after one Manual 30/30 Apply.");
+                }
+
+                _p15d1WindowHideRequests++;
+                HideToTray();
+                _p15d1WindowHidden = true;
+                using var process = Process.GetCurrentProcess();
+                WriteP15D1Json(P15D1WindowHiddenPath, new
+                {
+                    schemaVersion = 1,
+                    gate = "P15D1-GUI",
+                    result = "WINDOW_HIDDEN_TO_TRAY",
+                    timestampUtc = DateTimeOffset.UtcNow,
+                    processId = Environment.ProcessId,
+                    processStartUtcTicks = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+                    authority = _fanCoordinator.Authority.ToString(),
+                    visible = Visible,
+                    showInTaskbar = ShowInTaskbar,
+                    windowHideRequests = _p15d1WindowHideRequests,
+                    parentOwnedProofPresent = HasP15D1ParentOwnedProofForCurrentProcess()
+                });
+                AppendEvent("P15D1 observed one real UserClosing/X: close cancelled, GUI hidden to tray, Custom ownership retained.");
+            }
+            catch (Exception ex)
+            {
+                _p15d1Completed = true;
+                _p15d1FailureDetail = $"Window-close sequence failed closed: {ex.Message}";
+                Environment.ExitCode = 161;
+                AppendEvent($"P15D1 FAIL_CLOSED: {_p15d1FailureDetail}");
+                _allowExit = true;
+                BeginInvoke(new Action(Close));
+            }
+
+            return;
+        }
+
         if (!_allowExit && e.CloseReason == CloseReason.UserClosing)
         {
             e.Cancel = true;
@@ -5371,6 +5852,74 @@ internal sealed class MainForm : Form
         catch (Exception ex)
         {
             AppLog.Write($"Fan coordinator shutdown/restore failed: {ex}");
+            if (_p15d1TrayExitHardwareTest)
+            {
+                _p15d1FailureDetail ??= $"Fan coordinator shutdown/restore failed: {ex.Message}";
+                Environment.ExitCode = 161;
+            }
+        }
+
+        if (_p15d1TrayExitHardwareTest)
+        {
+            try
+            {
+                var restore = _fanCoordinator.LastRestoreEvidence;
+                var success =
+                    string.IsNullOrWhiteSpace(_p15d1FailureDetail) &&
+                    _p15d1ReadyPublished && _p15d1WindowHidden &&
+                    _p15d1ManualModeRequests == 1 && _p15d1ManualApplyRequests == 1 &&
+                    _p15d1FirmwareModeRequests == 0 && _p15d1AutomaticModeRequests == 0 &&
+                    _p15d1WindowHideRequests == 1 && _p15d1TrayExitRequests == 1 &&
+                    HasP15D1ParentOwnedProofForCurrentProcess() &&
+                    HasP15D1ParentHiddenOwnedProofForCurrentProcess() &&
+                    _fanCoordinator.Authority == FanAuthority.Firmware &&
+                    restore.HasValue && restore.Value.LocalFirmwareAckVerified &&
+                    restore.Value.WatchdogLeaseRequired && restore.Value.WatchdogReleaseVerified &&
+                    !File.Exists(P15CJournalPath);
+
+                using var process = Process.GetCurrentProcess();
+                WriteP15D1Json(P15D1ShutdownResultPath, new
+                {
+                    schemaVersion = 1,
+                    gate = "P15D1-GUI",
+                    result = success ? "PASS_TRAY_EXIT_STRONG_RESTORE" : "FAIL_CLOSED",
+                    detail = success
+                        ? "Real window close retained Custom ownership and real tray Exit completed normal production shutdown strong restore."
+                        : _p15d1FailureDetail ?? "P15D1 shutdown evidence did not satisfy the exact tray-exit strong-restore contract.",
+                    timestampUtc = DateTimeOffset.UtcNow,
+                    processId = Environment.ProcessId,
+                    processStartUtcTicks = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+                    manualModeRequests = _p15d1ManualModeRequests,
+                    manualApplyRequests = _p15d1ManualApplyRequests,
+                    firmwareModeRequests = _p15d1FirmwareModeRequests,
+                    automaticModeRequests = _p15d1AutomaticModeRequests,
+                    windowHideRequests = _p15d1WindowHideRequests,
+                    trayExitRequests = _p15d1TrayExitRequests,
+                    localFirmwareAckVerified = restore?.LocalFirmwareAckVerified ?? false,
+                    watchdogLeaseRequired = restore?.WatchdogLeaseRequired ?? false,
+                    watchdogReleaseVerified = restore?.WatchdogReleaseVerified ?? false,
+                    journalPresentAfterRestore = File.Exists(P15CJournalPath),
+                    finalAuthority = _fanCoordinator.Authority.ToString(),
+                    controllerModeAtShutdown = _fanProductionController.Mode.ToString(),
+                    parentOwnedProofPresent = HasP15D1ParentOwnedProofForCurrentProcess(),
+                    parentHiddenOwnedProofPresent = HasP15D1ParentHiddenOwnedProofForCurrentProcess(),
+                    userFacingManualAuthorized = Hp8C40PostM9UserControlGate.ManualExecutionAuthorized,
+                    automaticAuthorized = _fanProductionController.AutomaticExecutionAuthorized
+                });
+
+                _p15d1Completed = true;
+                if (!success) Environment.ExitCode = 161;
+                AppendEvent(success
+                    ? "P15D1 GUI RESULT: PASS tray Exit strong restore."
+                    : "P15D1 GUI RESULT: FAIL_CLOSED during explicit shutdown.");
+            }
+            catch (Exception ex)
+            {
+                _p15d1Completed = true;
+                _p15d1FailureDetail ??= $"P15D1 shutdown evidence write failed: {ex.Message}";
+                Environment.ExitCode = 161;
+                AppLog.Write($"P15D1 shutdown evidence failed: {ex}");
+            }
         }
 
         try

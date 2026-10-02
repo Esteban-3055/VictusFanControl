@@ -164,6 +164,20 @@ internal static class Program
             args,
             "--8c40-p15c-marker-root");
 
+        var p15d1TrayExitHardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--8c40-p15d1-tray-exit-test",
+                StringComparison.OrdinalIgnoreCase));
+
+        var p15d1TrayExitHardwareTestToken = ReadOptionValue(
+            args,
+            "--8c40-p15d1-test-token");
+
+        var p15d1TrayExitMarkerRoot = ReadOptionValue(
+            args,
+            "--8c40-p15d1-marker-root");
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
@@ -175,12 +189,13 @@ internal static class Program
             (m6ModernStandbyHardwareTest ? 1 : 0) +
             (m7HibernationHardwareTest ? 1 : 0) +
             (m9dProductionLifecycleHardwareTest ? 1 : 0) +
-            (p15cGuiManualHardwareTest ? 1 : 0);
+            (p15cGuiManualHardwareTest ? 1 : 0) +
+            (p15d1TrayExitHardwareTest ? 1 : 0);
 
         if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
-                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2, HP 8C40 M6, M7, M9D and P15C hardware-test modes are mutually exclusive.");
+                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2, HP 8C40 M6, M7, M9D, P15C and P15D1 hardware-test modes are mutually exclusive.");
             Environment.ExitCode = 60;
             return;
         }
@@ -473,6 +488,58 @@ internal static class Program
                 Path.GetFullPath(p15cGuiManualMarkerRoot);
         }
 
+        if (p15d1TrayExitHardwareTest)
+        {
+            if (!Hp8C40P15D1TrayExitQualificationGate.PhysicalExecutionAuthorized)
+            {
+                AppLog.Write(
+                    "HP 8C40 P15D1 tray-exit qualification refused: dedicated physical gate remains closed.");
+                Environment.ExitCode = 60;
+                return;
+            }
+
+            if (!string.Equals(
+                    p15d1TrayExitHardwareTestToken,
+                    Hp8C40P15D1TrayExitQualificationGate.RequiredToken,
+                    StringComparison.Ordinal))
+            {
+                AppLog.Write(
+                    $"HP 8C40 P15D1 tray-exit qualification refused: explicit --8c40-p15d1-test-token {Hp8C40P15D1TrayExitQualificationGate.RequiredToken} is required.");
+                Environment.ExitCode = 60;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(p15d1TrayExitMarkerRoot))
+            {
+                AppLog.Write(
+                    "HP 8C40 P15D1 tray-exit qualification requires --8c40-p15d1-marker-root for isolated evidence.");
+                Environment.ExitCode = 60;
+                return;
+            }
+
+            if (!Hp8C40P15D1TrayExitQualificationGate.NormalUserExecutionGatesClosed())
+            {
+                AppLog.Write(
+                    "HP 8C40 P15D1 requires the normal post-M9 user Manual/Automatic gates to remain closed.");
+                Environment.ExitCode = 60;
+                return;
+            }
+        }
+        else if (p15d1TrayExitHardwareTestToken is not null ||
+                 p15d1TrayExitMarkerRoot is not null)
+        {
+            AppLog.Write(
+                "Startup refused: P15D1 token/marker options are valid only with --8c40-p15d1-tray-exit-test.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (p15d1TrayExitMarkerRoot is not null)
+        {
+            p15d1TrayExitMarkerRoot =
+                Path.GetFullPath(p15d1TrayExitMarkerRoot);
+        }
+
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -521,7 +588,8 @@ internal static class Program
         if (m6ModernStandbyHardwareTest ||
             m7HibernationHardwareTest ||
             m9dProductionLifecycleHardwareTest ||
-            p15cGuiManualHardwareTest)
+            p15cGuiManualHardwareTest ||
+            p15d1TrayExitHardwareTest)
         {
             var hardware = HardwareIdentityReader.ReadCurrent();
 
@@ -530,9 +598,11 @@ internal static class Program
                     out var lifecycleTargetReason))
             {
                 var gateLabel =
-                    p15cGuiManualHardwareTest
-                        ? "P15C real-GUI Manual"
-                        : m7HibernationHardwareTest
+                    p15d1TrayExitHardwareTest
+                        ? "P15D1 real-GUI tray Exit"
+                        : p15cGuiManualHardwareTest
+                            ? "P15C real-GUI Manual"
+                            : m7HibernationHardwareTest
                             ? "M7 hibernation"
                             : m9dProductionLifecycleHardwareTest
                                 ? "M9D production-path Modern Standby"
@@ -569,7 +639,9 @@ internal static class Program
             m9dProductionLifecycleHardwareTest,
             m9dProductionLifecycleMarkerRoot,
             p15cGuiManualHardwareTest,
-            p15cGuiManualMarkerRoot);
+            p15cGuiManualMarkerRoot,
+            p15d1TrayExitHardwareTest,
+            p15d1TrayExitMarkerRoot);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");

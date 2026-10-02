@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D1_TRAY_EXIT_PREPARATION_CI_PENDING_GATE_CLOSED",
+  "status": "P15D1_TRAY_EXIT_IMPLEMENTATION_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1085,10 +1085,10 @@
     "plannedFiles": {
       "qualificationSource": "src/VictusFanControl.App/P15D1TrayExitQualification.cs",
       "invariantScript": "scripts/test-p15d1-tray-exit-invariants.ps1",
-      "futureHarness": "scripts/test-p15d1-tray-exit.ps1",
-      "futureEvidencePackager": "scripts/package-p15d1-evidence.ps1",
-      "futureEvidenceSelfTest": "scripts/test-p15d1-evidence-packaging.ps1",
-      "futureIndependentFailsafe": "scripts/watchdog-p15d1-service-failsafe-8c40.ps1"
+      "futureHarness": "implemented: scripts/test-p15d1-tray-exit.ps1",
+      "futureEvidencePackager": "implemented: scripts/package-p15d1-evidence.ps1",
+      "futureEvidenceSelfTest": "implemented: scripts/test-p15d1-evidence-packaging.ps1",
+      "futureIndependentFailsafe": "implemented: scripts/watchdog-p15d1-service-failsafe-8c40.ps1"
     },
     "currentProductionLifecycleAudit": {
       "userWindowCloseHidesToTray": true,
@@ -1112,6 +1112,28 @@
       "m9cQualificationConstructionOpened": false,
       "m9dQualificationConstructionOpened": false,
       "hardwareExecutionAtPreparationCommit": false
+    },
+    "runtimeImplementationComplete": true,
+    "runtimeImplementationCiValidated": false,
+    "runtimeImplementation": {
+      "programBoundaryImplemented": true,
+      "exactTargetBoundaryImplemented": true,
+      "realP13ManualPathReused": true,
+      "freshSafetyRetryPathReused": true,
+      "readyRequiresThreeHealthySafetySamples": true,
+      "parentOwnedProofFenceImplemented": true,
+      "windowCloseToTrayMarkerImplemented": true,
+      "hiddenOwnedProofFenceImplemented": true,
+      "realTrayExitMarkerImplemented": true,
+      "normalExplicitShutdownPathReused": true,
+      "coordinatorDisposeBeforeWorkerPreserved": true,
+      "shutdownStrongRestoreMarkerImplemented": true,
+      "causalWatchdogAuditInHarness": true,
+      "nativeTrackedGuiProcess": true,
+      "independentFailsafeImplemented": true,
+      "evidencePackagerImplemented": true,
+      "evidencePackagingSelfTestImplemented": true,
+      "physicalExecution": false
     }
   }
 }

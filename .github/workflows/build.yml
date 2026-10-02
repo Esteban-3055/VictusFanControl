@@ -285,6 +285,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p15d1-tray-exit-invariants.ps1
 
+      - name: HP 8C40 P15D1 evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-p15d1-evidence-packaging.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
@@ -349,6 +353,8 @@ jobs:
           .\scripts\test-p15b-evidence-packaging.ps1
           .\scripts\test-p15c-gui-manual-invariants.ps1
           .\scripts\test-p15c-evidence-packaging.ps1
+          .\scripts\test-p15d1-tray-exit-invariants.ps1
+          .\scripts\test-p15d1-evidence-packaging.ps1
           .\scripts\test-adaptive-policy-invariants.ps1
 
       - name: Build
