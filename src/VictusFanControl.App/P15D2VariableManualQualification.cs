@@ -5,9 +5,9 @@ namespace VictusFanControl.App;
 
 internal static class Hp8C40P15D2VariableManualQualificationGate
 {
-    // Re-blocked during the P15D2 retry-status barrier correction.
-    // A retry requires a separate fresh authorization and same-HEAD CI.
-    public static readonly bool PhysicalExecutionAuthorized = true;
+    // P15D2 physical PASS is evidence-closed. Keep this qualification gate
+    // re-blocked; no later physical milestone is opened by this closure.
+    public static readonly bool PhysicalExecutionAuthorized = false;
 
     public const string RequiredToken = "8C40-P15D2-MANUAL30-40-40-30";
     public const int InitialLevel = 30;
