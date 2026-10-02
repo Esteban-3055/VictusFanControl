@@ -28,7 +28,8 @@ if($status -notin @(
     'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED',
     'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI',
     'P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED',
-    'P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI'
+    'P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI',
+    'P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED'
 )){
     throw "Unexpected P15D2 preparation status: $status"
 }
@@ -50,7 +51,8 @@ $isInitialAuthorized=($status -eq 'P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAM
 $isRetryAuthorized=($status -eq 'P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI')
 $isAuthorized=($isInitialAuthorized -or $isRetryAuthorized)
 $isFailedClosed=($status -eq 'P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED')
-$isFormalClosure=($status -in @('P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED','P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI'))
+$isRetryBarrierCorrection=($status -eq 'P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED')
+$isFormalClosure=($status -in @('P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_EC_TRANSIENT_FAIL_CLOSED_GATE_CLOSED','P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED'))
 if($isFormalClosure){
     Assert-True ([bool]$d.preparationClosure.closed) 'P15D2 formal software closure must close preparation evidence.'
 }else{
@@ -65,6 +67,23 @@ if($isAuthorized){
     Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D2 GUI physical gate must remain closed.'
     Assert-False ([bool]$d.physicalGatesOpened) 'P15D2 software preparation must keep physical gates closed.'
 }
+if($isRetryBarrierCorrection){
+    $c=$d.retryStatusBarrierCorrection
+    Assert-True ([bool]$c.required) 'P15D2 retry status-barrier correction must be required.'
+    Assert-True ([bool]$c.discoveredBeforeRetryHardwareExecution) 'P15D2 retry status-barrier defect must be recorded as pre-hardware.'
+    Assert-True ([bool]$c.correctionImplemented) 'P15D2 retry status-barrier correction must be implemented.'
+    Assert-False ([bool]$c.correctionCiValidated) 'P15D2 correction-pending state cannot pre-claim correction CI.'
+    Assert-False ([bool]$c.formalClosure) 'P15D2 correction-pending state cannot pre-claim formal closure.'
+    Assert-False ([bool]$c.hardwareExecution) 'P15D2 retry status-barrier correction must remain software-only.'
+    Assert-False ([bool]$c.physicalGatesOpened) 'P15D2 retry status-barrier correction must keep physical gates closed.'
+    if([string]$c.reauthorizationHead -cne 'dc48ae17015a3bf9abf1f3c44c363a9add6d2154' -or
+       [int]$c.reauthorizationCiRunNumber -ne 1176 -or
+       [long]$c.reauthorizationCiRunId -ne 36987541628 -or
+       [string]$c.reauthorizationCiResult -cne 'SUCCESS'){
+        throw 'P15D2 retry status-barrier correction basis mismatch.'
+    }
+}
+
 Assert-False ([bool]$d.physicalPassed) 'P15D2 cannot pre-claim physical PASS.'
 Assert-False ([bool]$d.evidenceClosed) 'P15D2 cannot pre-close physical evidence.'
 Assert-False ([bool]$d.hardwareExecution) 'P15D2 authorization commit must record no hardware execution.'
@@ -319,7 +338,7 @@ foreach($needle in @(
     'qualification pre-action fence rejected the interaction'
 )){Assert-Contains $surface $needle ("P15D2 real P13 surface prerequisite missing: {0}" -f $needle)}
 
-if($status -in @('P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')){
+if($status -in @('P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED')){
     foreach($needle in @(
         '--8c40-p15d2-variable-manual-test','--8c40-p15d2-test-token','--8c40-p15d2-marker-root',
         'Hp8C40P15D2VariableManualQualificationGate.PhysicalExecutionAuthorized',
@@ -336,7 +355,7 @@ if($status -in @('P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','
     )){Assert-Contains $main $needle ("P15D2 MainForm runtime wiring missing: {0}" -f $needle)}
 
     foreach($needle in @(
-        'HARD VERSIONED AUTHORIZATION BARRIER','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI',
+        'HARD VERSIONED AUTHORIZATION BARRIER','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI',
         'Assert-StableSetpoint 30 30','Assert-StableSetpoint 40 40','Assert-OwnedJournal',
         '$ExpectedGeneration','30 3 $null','40 5 $ownedSessionId','30 7 $ownedSessionId',
         'Assert-NoRetransmitAfterBoundary','P15D2-PARENT-30-VERIFIED|','P15D2-PARENT-40-VERIFIED|',
