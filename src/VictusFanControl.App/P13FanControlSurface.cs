@@ -75,7 +75,7 @@ internal sealed class P13FanControlSurface : UserControl
 
         Controls.Add(BuildUi(targetDescription));
         RefreshState(
-            "Startup mode is Firmware. Manual and Automatic remain blocked by the post-M9 execution gates.");
+            "Startup mode is Firmware. Manual/Automatic availability is determined only by the explicit execution gates shown below.");
     }
 
     public AdaptiveFanProductionMode RequestedMode => _controller.Mode;

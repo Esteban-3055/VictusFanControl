@@ -877,10 +877,19 @@ internal sealed class MainForm : Form
             _p15d1TrayExitHardwareTest ||
             _p15d2VariableManualHardwareTest;
 
+        var p16NormalManualQualificationAuthorized =
+            !isolatedManualQualification &&
+            Hp8C40P16NormalManualQualificationGate.PhysicalExecutionAuthorized &&
+            string.Equals(
+                _targetProfile?.Id,
+                Hp8C40TargetProfile.Instance.Id,
+                StringComparison.Ordinal);
+
         var manualExecutionAuthorized =
             isolatedManualQualification
                 ? p15cManualExecutionAuthorized || p15d1ManualExecutionAuthorized || p15d2ManualExecutionAuthorized
-                : Hp8C40PostM9UserControlGate.ManualExecutionAuthorized;
+                : Hp8C40PostM9UserControlGate.ManualExecutionAuthorized ||
+                  p16NormalManualQualificationAuthorized;
 
         var automaticExecutionAuthorized =
             isolatedManualQualification
@@ -964,7 +973,7 @@ internal sealed class MainForm : Form
             AppendEvent($"Fan backend: {_fanCoordinator.BackendName}; CanWrite={_fanCoordinator.BackendCanWrite}; {_fanBackendStartupDetail}");
             AppendEvent(
                 $"P13 UI: startup mode={_fanProductionController.Mode}; manualGate={_fanProductionController.ManualExecutionAuthorized}; automaticGate={_fanProductionController.AutomaticExecutionAuthorized}.");
-            AppendEvent("Automatic fan policy is OFF. P13 mode selection cannot execute Manual/Automatic fan control while the post-M9 execution gates remain closed.");
+            AppendEvent("Automatic fan policy is OFF. Startup remains Firmware; Manual/Automatic availability is controlled only by explicit execution gates.");
 
             if (_p15cGuiManualHardwareTest)
             {

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "milestone": "P16",
+  "status": "P16A_NORMAL_MANUAL_ARCHITECTURE_CI_PENDING_GATE_CLOSED",
+  "scope": "Prepare a separate qualification-only bridge for the ordinary application Manual path before permanent user Manual promotion.",
+  "targetProfileId": "HP-8C40-9D0R1LA-F18",
+  "expectedBranch": "feature/victus-8c40-p16-normal-manual",
+  "p15Baseline": {
+    "closureHead": "c1e04963448e78a87dccc1719f11d9951f2970a7",
+    "closureCiRunNumber": 1180,
+    "closureCiRunId": 37050355620,
+    "closureCiResult": "SUCCESS",
+    "p15Status": "P15D2_VARIABLE_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED"
+  },
+  "safetyBoundary": {
+    "controlEnabledByDefault": false,
+    "automaticPolicyEnabled": false,
+    "permanentUserManualExecutionAuthorized": false,
+    "automaticExecutionAuthorized": false,
+    "candidateCurvePhysicallyValidated": false,
+    "candidateCurveAuthorizedForProduction": false,
+    "m9cQualificationConstructionAuthorized": false,
+    "m9dQualificationConstructionAuthorized": false
+  },
+  "normalManual": {
+    "architectureImplemented": true,
+    "architectureCiValidated": false,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
+    "physicalGatesOpened": false,
+    "physicalPassed": false,
+    "evidenceClosed": false,
+    "hardwareExecution": false,
+    "normalApplicationLaunchRequired": true,
+    "specialQualificationStartupModeAllowed": false,
+    "requiredToken": "8C40-P16-NORMAL-MANUAL-30-40-30",
+    "initialLevel": 30,
+    "changedLevel": 40,
+    "returnLevel": 30,
+    "expectedOwnedGenerations": [3, 5, 7],
+    "harnessImplemented": false,
+    "evidencePackagerImplemented": false,
+    "independentFailsafeImplemented": false
+  },
+  "promotion": {
+    "manualExecutionAuthorized": false,
+    "requiresPhysicalPassEvidenceClosed": true,
+    "requiresSeparatePostPhysicalClosureCommit": true,
+    "automaticMayOpen": false,
+    "candidateCurveMayBePromoted": false,
+    "controlMayEnableByDefault": false
+  }
+}
