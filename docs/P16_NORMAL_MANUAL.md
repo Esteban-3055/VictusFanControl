@@ -44,3 +44,33 @@ P16B physical authorization.
 
 P16C permanent Manual promotion is a later separate commit after a physical
 PASS has been independently audited and evidence-closed.
+
+
+## P16A implementation staged after architecture CI
+
+The architecture commit `8fbe8aba0dc892f0fba988246164a13357325a7c`
+passed full CI #1182 / run `37057172456` with the P16 architecture
+invariant and all historical regressions green.
+
+The next P16A software-only layer now stages:
+
+- `scripts/test-p16-normal-manual.ps1`: parent harness for the normal app;
+- `scripts/package-p16-evidence.ps1`: source/evidence manifest + ZIP;
+- `scripts/test-p16-evidence-packaging.ps1`: deterministic safety-contract self-test;
+- external audit of the normal persistent application log;
+- independent read-only EC setpoint proof;
+- schema-v2 journal PID/start/session/generation proof;
+- watchdog causal PREPARE -> three WRITE_INTENT/COMMIT pairs -> RESTORE_BEGIN -> RELEASE proof;
+- final and post-tray-exit FF/FF proof.
+
+P16A deliberately reuses `scripts/watchdog-p15d2-service-failsafe-8c40.ps1`
+as the delayed independent recovery process. That failsafe is already constrained
+to the exact HP 8C40 target and equal 30/30 or 40/40 retained lease states,
+which exactly covers the bounded P16 sequence. Reusing it avoids creating a
+second recovery implementation with equivalent authority.
+
+The P16 source gate remains false in this implementation. Therefore CI can
+parse, build and statically audit the complete future physical harness while no
+P16 hardware execution is possible.
+
+Formal P16A closure requires full SUCCESS on the exact implementation HEAD.
