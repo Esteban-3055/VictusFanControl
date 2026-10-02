@@ -216,7 +216,7 @@
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Run full same-head CI on the syntax-corrected software-only hardening, then formally close the hardening with all gates still false before any fresh P16B authorization.",
+      "nextAction": "Run full same-head CI on the corrected software-only hardening. If SUCCESS, formally close the hardening with all P16 physical gates still false before any fresh authorization.",
       "implementation": {
         "staged": true,
         "ciValidated": false,
@@ -230,7 +230,8 @@
         "ownershipMismatchRelaxed": false,
         "ecMutexTimeoutGloballyRelaxed": false,
         "hardwareExecutionByHardeningCommit": false,
-        "syntaxCorrectionStaged": true
+        "syntaxCorrectionStaged": true,
+        "variableInterpolationCorrectionStaged": true
       },
       "failedCiHistory": [
         {
@@ -240,6 +241,16 @@
           "result": "FAILURE",
           "failureStep": "PowerShell syntax check",
           "cause": "The generated test-p16-normal-manual.ps1 replacement was truncated at the regex end-anchor because a JavaScript String.replace replacement interpreted the $' sequence specially. The physical P16 gate remained false and no target hardware execution occurred.",
+          "hardwareExecution": false,
+          "physicalGatesOpened": false
+        },
+        {
+          "runNumber": 1190,
+          "runId": 37067717318,
+          "head": "3c299bb0bb9b82fbb13690959adb9d200aec1c31",
+          "result": "FAILURE",
+          "failureStep": "PowerShell syntax check",
+          "cause": "PowerShell parsed the interpolated string fragment '$Label:' as an invalid drive-qualified variable reference. The correction delimits it as '${Label}:'. The P16 physical gate remained false and no target hardware execution occurred.",
           "hardwareExecution": false,
           "physicalGatesOpened": false
         }

@@ -236,3 +236,14 @@ replacement-string expansion and additionally makes the interaction waiter skip
 resolver invocation until at least one new log line exists. The P16 physical
 gate remains closed.
 
+### Preserved CI #1190 interpolation syntax failure
+
+Correction HEAD `3c299bb0bb9b82fbb13690959adb9d200aec1c31` produced
+CI #1190 / run `37067717318` FAILURE at PowerShell syntax check. The
+remaining parse error was the interpolated fragment `$Label:`, which
+PowerShell interprets as a drive-qualified variable reference. It is corrected
+to `${Label}:`.
+
+This was software-only: the dedicated P16 physical gate remained false and no
+target hardware execution occurred.
+

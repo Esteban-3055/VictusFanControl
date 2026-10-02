@@ -219,7 +219,7 @@ function Wait-P16InteractionOutcome([string]$SuccessPattern,[string]$FailurePatt
   $window=if($StartIndex -lt $segment.Count){@($segment|Select-Object -Skip $StartIndex)}else{@()}
   if($window.Count -gt 0){
    $outcome=Resolve-P16InteractionOutcome -Lines $window -SuccessPattern $SuccessPattern -FailurePattern $FailurePattern
-   if([string]$outcome.Kind -ceq 'Failure'){throw "P16 observed FAILED CLOSED/blocked outcome during $Label: $($outcome.Line)"}
+   if([string]$outcome.Kind -ceq 'Failure'){throw "P16 observed FAILED CLOSED/blocked outcome during ${Label}: $($outcome.Line)"}
    if([string]$outcome.Kind -ceq 'Success'){return [string]$outcome.Line}
   }
   if($gui){$gui.Refresh();if($gui.HasExited){throw "P16 GUI exited before $Label."}}
