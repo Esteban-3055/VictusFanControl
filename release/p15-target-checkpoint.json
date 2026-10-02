@@ -1056,6 +1056,16 @@
           "cause": "The formal-closure edit corrupted test-p15d1-tray-exit-invariants.ps1 by inserting an unterminated regex/string and duplicating a large trailing block. CI stopped at PowerShell syntax validation.",
           "hardwareExecution": false,
           "physicalGatesOpened": false
+        },
+        {
+          "runNumber": 1133,
+          "runId": 36967229515,
+          "head": "1abc160f173bd21a967e0a853bd190b04bd6809b",
+          "result": "FAILURE",
+          "failureStep": "HP 8C40 P15D1 tray-exit lifecycle preparation invariant",
+          "cause": "The hardening invariant still had one unconditional preparationCiValidated=false assertion from the pre-CI state, conflicting with the intentionally preserved #1131 SUCCESS baseline.",
+          "hardwareExecution": false,
+          "physicalGatesOpened": false
         }
       ]
     },
@@ -1189,7 +1199,19 @@
       "implementationComplete": true,
       "ciValidated": false,
       "hardwareExecution": false,
-      "physicalGatesOpened": false
+      "physicalGatesOpened": false,
+      "failedCiHistoryPreserved": [
+        {
+          "runNumber": 1133,
+          "runId": 36967229515,
+          "head": "1abc160f173bd21a967e0a853bd190b04bd6809b",
+          "result": "FAILURE",
+          "failureStep": "HP 8C40 P15D1 tray-exit lifecycle preparation invariant",
+          "cause": "Status-aware hardening logic was correct later in the invariant, but an earlier unconditional preparationCiValidated=false assertion rejected the preserved #1131 SUCCESS baseline.",
+          "hardwareExecution": false,
+          "physicalGatesOpened": false
+        }
+      ]
     }
   }
 }

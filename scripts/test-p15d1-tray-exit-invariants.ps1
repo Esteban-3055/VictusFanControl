@@ -33,7 +33,11 @@ Assert-False ([bool]$contract.guiManual.executionAuthorized) 'P15C execution mus
 Assert-False ([bool]$contract.guiManual.controllerPhysicalExecutionAuthorized) 'P15C controller gate must remain re-blocked.'
 
 Assert-True ([bool]$d.preparationImplemented) 'P15D1 preparation must be implemented.'
-Assert-False ([bool]$d.preparationCiValidated) 'P15D1 preparation must not pre-claim CI.'
+if([string]$contract.status -eq 'P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED'){
+    Assert-True ([bool]$d.preparationCiValidated) 'P15D1 hardening requires the #1131 software baseline to remain CI validated.'
+}else{
+    Assert-False ([bool]$d.preparationCiValidated) 'Pending P15D1 preparation must not pre-claim CI.'
+}
 if([string]$contract.status -in @('P15D1_TRAY_EXIT_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSED')){
     Assert-True ([bool]$d.runtimeImplementationComplete) 'P15D1 runtime implementation must be complete.'
     Assert-False ([bool]$d.runtimeImplementationCiValidated) 'P15D1 final runtime implementation must not pre-claim CI.'
@@ -57,7 +61,7 @@ if([string]$contract.status -eq 'P15D1_TRAY_EXIT_HARDENING_CI_PENDING_GATE_CLOSE
 }
 Assert-False ([bool]$d.preparationClosure.closed) 'P15D1 preparation must not pre-close CI.'
 $failed=@($d.preparationClosure.failedCiHistoryPreserved)
-if($failed.Count -ne 2 -or
+if($failed.Count -ne 3 -or
    [int]$failed[0].runNumber -ne 1129 -or
    [long]$failed[0].runId -ne 36964880389 -or
    [string]$failed[0].head -cne 'ff68a44ff5e11a65890005ae281a5ef26d510d53' -or
@@ -67,7 +71,12 @@ if($failed.Count -ne 2 -or
    [long]$failed[1].runId -ne 36966794012 -or
    [string]$failed[1].head -cne 'b5270dd594cca53c58595f89242c267908494eaf' -or
    [string]$failed[1].result -cne 'FAILURE' -or
-   [string]$failed[1].failureStep -cne 'PowerShell syntax check'){
+   [string]$failed[1].failureStep -cne 'PowerShell syntax check' -or
+   [int]$failed[2].runNumber -ne 1133 -or
+   [long]$failed[2].runId -ne 36967229515 -or
+   [string]$failed[2].head -cne '1abc160f173bd21a967e0a853bd190b04bd6809b' -or
+   [string]$failed[2].result -cne 'FAILURE' -or
+   [string]$failed[2].failureStep -cne 'HP 8C40 P15D1 tray-exit lifecycle preparation invariant'){
     throw 'P15D1 failed-CI history mismatch.'
 }
 foreach($entry in $failed){
