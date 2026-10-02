@@ -742,6 +742,39 @@
       "m9cQualificationConstructionOpened": false,
       "m9dQualificationConstructionOpened": false,
       "hardwareExecutionAtAuthorizationCommit": false
+    },
+    "preActionInteractionFenceRequired": true,
+    "wrongManualLevelMustBlockBeforeProductionAdapter": true,
+    "duplicateManualApplyMustBlockBeforeProductionAdapter": true,
+    "outOfOrderFirmwareMustBlockBeforeProductionAdapter": true,
+    "concurrentControlInteractionMustFailClosed": true,
+    "qualificationLevelLockedInUi": true,
+    "parentOwnedMarkerMustBindGuiPidAndStartIdentity": true,
+    "preActionFenceHardening": {
+      "required": true,
+      "discoveredOnHead": "2520cfc67ed416e6497310e31030b31eadc24645",
+      "discoveredHeadCiRunNumber": 1118,
+      "discoveredHeadCiRunId": 36942085290,
+      "discoveredHeadCiResult": "SUCCESS",
+      "finding": "The P13 interaction observer runs after controller calls. Without a pre-action fence, an incorrect Manual level or a second Apply could reach the production adapter before post-action P15C invalidation.",
+      "physicalExecutionOccurred": false,
+      "physicalGatesOpened": false,
+      "implementationComplete": true,
+      "ciValidated": false,
+      "closure": {
+        "closed": false,
+        "result": "PENDING",
+        "implementationHead": null,
+        "sourceCiRunNumber": null,
+        "sourceCiRunId": null,
+        "sourceCiResult": null,
+        "p15cInvariantValidated": false,
+        "p13SurfaceInvariantValidated": false,
+        "evidencePackagingSelfTestValidated": false,
+        "powerShell51CompatibilityValidated": false,
+        "warningsAsErrorsBuildValidated": false,
+        "hardwareExecution": false
+      }
     }
   },
   "automatic": {

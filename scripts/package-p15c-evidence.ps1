@@ -38,7 +38,11 @@ $files=@(
  [pscustomobject]@{role='harness';path=(Join-Path $RepositoryRoot 'scripts\test-p15c-gui-manual.ps1');required=$true},
  [pscustomobject]@{role='gui-qualification-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\P15CGuiManualQualification.cs');required=$true},
  [pscustomobject]@{role='p13-surface-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\P13FanControlSurface.cs');required=$true},
- [pscustomobject]@{role='main-form-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\MainForm.cs');required=$true}
+ [pscustomobject]@{role='main-form-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\MainForm.cs');required=$true},
+ [pscustomobject]@{role='program-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\Program.cs');required=$true},
+ [pscustomobject]@{role='user-gate-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Control\Adaptive\Hp8C40PostM9UserControlGate.cs');required=$true},
+ [pscustomobject]@{role='production-adapter-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Control\Adaptive\AdaptiveFanProductionController.cs');required=$true},
+ [pscustomobject]@{role='failsafe-source';path=(Join-Path $RepositoryRoot 'scripts\watchdog-p15c-service-failsafe-8c40.ps1');required=$true}
 )
 $entries=@()
 foreach($f in $files){

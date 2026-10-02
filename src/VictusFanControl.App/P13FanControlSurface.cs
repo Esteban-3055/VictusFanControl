@@ -23,7 +23,10 @@ internal sealed class P13FanControlSurface : UserControl
     private readonly Func<SafetyGateResult?> _controlSafetyProvider;
     private readonly Action<string> _log;
     private readonly Func<bool>? _manualInteractionReadyProvider;
+    private readonly Func<P13ControlInteractionKind, AdaptiveFanProductionMode?, int?, bool>? _interactionAuthorizationProvider;
+    private readonly int? _fixedManualQualificationLevel;
     private readonly Action<P13ControlInteractionObservation>? _interactionObserver;
+    private int _controlInteractionInFlight;
     private FanAuthority _lastAuthority = FanAuthority.Firmware;
 
     private readonly Label _modeValue = ValueLabel();
@@ -47,6 +50,8 @@ internal sealed class P13FanControlSurface : UserControl
         Func<SafetyGateResult?> controlSafetyProvider,
         Action<string> log,
         Func<bool>? manualInteractionReadyProvider = null,
+        Func<P13ControlInteractionKind, AdaptiveFanProductionMode?, int?, bool>? interactionAuthorizationProvider = null,
+        int? fixedManualQualificationLevel = null,
         Action<P13ControlInteractionObservation>? interactionObserver = null)
     {
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
@@ -61,6 +66,8 @@ internal sealed class P13FanControlSurface : UserControl
             throw new ArgumentNullException(nameof(controlSafetyProvider));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _manualInteractionReadyProvider = manualInteractionReadyProvider;
+        _interactionAuthorizationProvider = interactionAuthorizationProvider;
+        _fixedManualQualificationLevel = fixedManualQualificationLevel;
         _interactionObserver = interactionObserver;
 
         Dock = DockStyle.Fill;
@@ -318,10 +325,27 @@ internal sealed class P13FanControlSurface : UserControl
 
         _manualLevel.Minimum = 10;
         _manualLevel.Maximum = 50;
-        _manualLevel.Value = saved.ManualEqualLevel;
+
+        var initialManualLevel =
+            _fixedManualQualificationLevel ?? saved.ManualEqualLevel;
+
+        if (initialManualLevel < _manualLevel.Minimum ||
+            initialManualLevel > _manualLevel.Maximum)
+        {
+            throw new InvalidOperationException(
+                $"Manual qualification level {initialManualLevel} is outside the 10..50 envelope.");
+        }
+
+        _manualLevel.Value = initialManualLevel;
+        _manualLevel.Enabled = !_fixedManualQualificationLevel.HasValue;
         _manualLevel.Width = 70;
         _manualLevel.ValueChanged += (_, _) =>
         {
+            if (_fixedManualQualificationLevel.HasValue)
+            {
+                return;
+            }
+
             try
             {
                 P13UiSettingsStore.SaveManualEqualLevel(
@@ -341,7 +365,9 @@ internal sealed class P13FanControlSurface : UserControl
 
         manualFlow.Controls.Add(new Label
         {
-            Text = "Level 10..50:",
+            Text = _fixedManualQualificationLevel.HasValue
+                ? $"Qualification level {_fixedManualQualificationLevel.Value} (fixed):"
+                : "Level 10..50:",
             AutoSize = true,
             Margin = new Padding(3, 7, 3, 3)
         });
@@ -483,6 +509,84 @@ internal sealed class P13FanControlSurface : UserControl
             row);
     }
 
+    private bool TryBeginControlInteraction(
+        P13ControlInteractionKind kind,
+        AdaptiveFanProductionMode? requestedMode,
+        int? equalFanLevel)
+    {
+        if (Interlocked.CompareExchange(
+                ref _controlInteractionInFlight,
+                1,
+                0) != 0)
+        {
+            ReportPreActionRejection(
+                kind,
+                requestedMode,
+                equalFanLevel,
+                "another control interaction is already in progress");
+            return false;
+        }
+
+        try
+        {
+            if (_interactionAuthorizationProvider is not null &&
+                !_interactionAuthorizationProvider(
+                    kind,
+                    requestedMode,
+                    equalFanLevel))
+            {
+                Interlocked.Exchange(
+                    ref _controlInteractionInFlight,
+                    0);
+                ReportPreActionRejection(
+                    kind,
+                    requestedMode,
+                    equalFanLevel,
+                    "qualification pre-action fence rejected the interaction");
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Exchange(
+                ref _controlInteractionInFlight,
+                0);
+            ReportPreActionRejection(
+                kind,
+                requestedMode,
+                equalFanLevel,
+                $"qualification pre-action fence failed closed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private void EndControlInteraction() =>
+        Interlocked.Exchange(
+            ref _controlInteractionInFlight,
+            0);
+
+    private void ReportPreActionRejection(
+        P13ControlInteractionKind kind,
+        AdaptiveFanProductionMode? requestedMode,
+        int? equalFanLevel,
+        string reason)
+    {
+        var detail =
+            $"P13 control interaction blocked before production adapter access: {reason}.";
+        RefreshState(detail);
+        _log(detail);
+        _interactionObserver?.Invoke(
+            new P13ControlInteractionObservation(
+                kind,
+                requestedMode,
+                equalFanLevel,
+                null,
+                detail,
+                DateTimeOffset.UtcNow));
+    }
+
     private async Task ApplyManualAsync()
     {
         var level =
@@ -518,18 +622,32 @@ internal sealed class P13FanControlSurface : UserControl
             return;
         }
 
-        var safety =
-            _controlSafetyProvider();
-
-        if (safety is null)
+        if (!TryBeginControlInteraction(
+                P13ControlInteractionKind.ManualApply,
+                null,
+                level))
         {
-            RefreshState(
-                "Manual apply refused because no current control SafetyGate result is available.");
             return;
         }
 
         try
         {
+            var safety =
+                _controlSafetyProvider();
+
+            if (safety is null)
+            {
+                if (_interactionAuthorizationProvider is not null)
+                {
+                    throw new InvalidOperationException(
+                        "qualification lost the current control SafetyGate result before Manual Apply");
+                }
+
+                RefreshState(
+                    "Manual apply refused because no current control SafetyGate result is available.");
+                return;
+            }
+
             var result =
                 await _controller.ApplyManualAsync(
                     level,
@@ -564,6 +682,10 @@ internal sealed class P13FanControlSurface : UserControl
                     ex.ToString(),
                     DateTimeOffset.UtcNow));
         }
+        finally
+        {
+            EndControlInteraction();
+        }
     }
 
     private async Task RequestModeAsync(
@@ -577,6 +699,14 @@ internal sealed class P13FanControlSurface : UserControl
                 "Manual mode request blocked: qualification readiness has not been published.");
             _log(
                 "P13 mode request Manual: BLOCKED before production adapter access; qualification readiness is false.");
+            return;
+        }
+
+        if (!TryBeginControlInteraction(
+                P13ControlInteractionKind.ModeRequest,
+                mode,
+                null))
+        {
             return;
         }
 
@@ -614,6 +744,10 @@ internal sealed class P13FanControlSurface : UserControl
                     null,
                     ex.ToString(),
                     DateTimeOffset.UtcNow));
+        }
+        finally
+        {
+            EndControlInteraction();
         }
     }
 

@@ -765,6 +765,14 @@ internal sealed class MainForm : Form
                     _p15cGuiManualHardwareTest
                         ? () => _p15cReadyPublished && !_p15cCompleted
                         : null,
+                interactionAuthorizationProvider:
+                    _p15cGuiManualHardwareTest
+                        ? IsP15CControlInteractionAuthorized
+                        : null,
+                fixedManualQualificationLevel:
+                    _p15cGuiManualHardwareTest
+                        ? Hp8C40P15CGuiManualQualificationGate.QualificationLevel
+                        : null,
                 interactionObserver:
                     _p15cGuiManualHardwareTest
                         ? OnP15CControlInteraction
@@ -2898,6 +2906,87 @@ internal sealed class MainForm : Form
         }
     }
 
+    private bool IsP15CControlInteractionAuthorized(
+        P13ControlInteractionKind kind,
+        AdaptiveFanProductionMode? requestedMode,
+        int? equalFanLevel)
+    {
+        if (!_p15cGuiManualHardwareTest ||
+            _p15cCompleted ||
+            !_p15cReadyPublished)
+        {
+            return false;
+        }
+
+        if (kind == P13ControlInteractionKind.ManualApply)
+        {
+            return requestedMode is null &&
+                   equalFanLevel == Hp8C40P15CGuiManualQualificationGate.QualificationLevel &&
+                   _p15cManualModeRequests == 1 &&
+                   _p15cManualApplyRequests == 0 &&
+                   _p15cFirmwareModeRequests == 0 &&
+                   _p15cAutomaticModeRequests == 0 &&
+                   !File.Exists(P15CParentOwnedVerifiedPath);
+        }
+
+        if (kind != P13ControlInteractionKind.ModeRequest ||
+            equalFanLevel is not null)
+        {
+            return false;
+        }
+
+        return requestedMode switch
+        {
+            AdaptiveFanProductionMode.Manual =>
+                _p15cManualModeRequests == 0 &&
+                _p15cManualApplyRequests == 0 &&
+                _p15cFirmwareModeRequests == 0 &&
+                _p15cAutomaticModeRequests == 0 &&
+                !File.Exists(P15CParentOwnedVerifiedPath),
+
+            AdaptiveFanProductionMode.Firmware =>
+                _p15cManualModeRequests == 1 &&
+                _p15cManualApplyRequests == 1 &&
+                _p15cFirmwareModeRequests == 0 &&
+                _p15cAutomaticModeRequests == 0 &&
+                HasP15CParentOwnedProofForCurrentProcess(),
+
+            AdaptiveFanProductionMode.Automatic => false,
+            _ => false
+        };
+    }
+
+    private bool HasP15CParentOwnedProofForCurrentProcess()
+    {
+        try
+        {
+            if (!File.Exists(P15CParentOwnedVerifiedPath))
+            {
+                return false;
+            }
+
+            var proof =
+                File.ReadAllText(P15CParentOwnedVerifiedPath).Trim();
+            using var process = Process.GetCurrentProcess();
+            var processStartTicks =
+                process.StartTime.ToUniversalTime().Ticks.ToString(
+                    CultureInfo.InvariantCulture);
+            var suffix =
+                $"|guiPid={Environment.ProcessId}|guiStartTicks={processStartTicks}";
+
+            return proof.StartsWith(
+                       "P15C-PARENT-OWNED-VERIFIED|",
+                       StringComparison.Ordinal) &&
+                   proof.EndsWith(
+                       suffix,
+                       StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private void OnP15CControlInteraction(
         P13ControlInteractionObservation observation)
     {
@@ -2969,10 +3058,10 @@ internal sealed class MainForm : Form
                                 "P15C Firmware click sequence/count is invalid.");
                         }
 
-                        if (!File.Exists(P15CParentOwnedVerifiedPath))
+                        if (!HasP15CParentOwnedProofForCurrentProcess())
                         {
                             throw new InvalidOperationException(
-                                "P15C Firmware was clicked before the parent independently verified OWNED 30/30.");
+                                "P15C Firmware was clicked without an exact parent OWNED proof bound to this GUI PID/start identity.");
                         }
 
                         if (!result.ExecutionAuthorized ||

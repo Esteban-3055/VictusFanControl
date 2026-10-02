@@ -58,6 +58,13 @@ Assert-True ([bool]$g.requiresProductionAdapter) 'P15C must use AdaptiveFanProdu
 Assert-True ([bool]$g.requiresProductionBackendFactory) 'P15C must use the normal production backend factory.'
 Assert-True ([bool]$g.strongRestoreRequired) 'P15C must require strong restore.'
 Assert-True ([bool]$g.parentOwnedProofBeforeFirmwareClick) 'P15C must fence the Firmware click behind parent OWNED proof.'
+foreach($p in @('preActionInteractionFenceRequired','wrongManualLevelMustBlockBeforeProductionAdapter','duplicateManualApplyMustBlockBeforeProductionAdapter','outOfOrderFirmwareMustBlockBeforeProductionAdapter','concurrentControlInteractionMustFailClosed','qualificationLevelLockedInUi','parentOwnedMarkerMustBindGuiPidAndStartIdentity')){Assert-True ([bool]$g.$p) ("P15C pre-action safety contract missing: {0}" -f $p)}
+$hardening=$g.preActionFenceHardening
+Assert-True ([bool]$hardening.required) 'P15C pre-action fence hardening must be required.'
+Assert-True ([bool]$hardening.implementationComplete) 'P15C pre-action fence hardening implementation must be complete.'
+if([string]$hardening.discoveredOnHead -cne '2520cfc67ed416e6497310e31030b31eadc24645' -or [int]$hardening.discoveredHeadCiRunNumber -ne 1118 -or [long]$hardening.discoveredHeadCiRunId -ne 36942085290 -or [string]$hardening.discoveredHeadCiResult -cne 'SUCCESS'){throw 'P15C pre-action fence discovery baseline mismatch.'}
+Assert-False ([bool]$hardening.physicalExecutionOccurred) 'P15C pre-action fence finding must record no hardware execution.'
+Assert-False ([bool]$hardening.physicalGatesOpened) 'P15C pre-action fence finding must record physical gates closed.'
 Assert-False ([bool]$g.userFacingManualGateMayOpen) 'P15C must not globally open user-facing Manual.'
 Assert-False ([bool]$g.automaticGateMayOpen) 'P15C must not open Automatic.'
 Assert-False ([bool]$g.candidateCurveMayBePromoted) 'P15C must not promote Candidate V1.'
@@ -70,6 +77,8 @@ if($status -eq 'P15C_GUI_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
     Assert-False ([bool]$g.controllerPhysicalExecutionAuthorized) 'Pending P15C preparation must keep GUI qualification gate closed.'
     Assert-False ([bool]$g.physicalPassed) 'Pending P15C preparation must not pre-claim physical PASS.'
     Assert-False ([bool]$g.evidenceClosed) 'Pending P15C preparation must not pre-close evidence.'
+    Assert-False ([bool]$hardening.ciValidated) 'Pending P15C pre-action hardening must not pre-claim CI.'
+    Assert-False ([bool]$hardening.closure.closed) 'Pending P15C pre-action hardening must not pre-close.'
     Assert-Contains $qualification 'public static readonly bool PhysicalExecutionAuthorized = false;' 'Pending P15C qualification source gate must remain false.'
 }
 
@@ -145,9 +154,16 @@ foreach($needle in @(
  'Hp8C40P15CGuiManualQualificationGate.PhysicalExecutionAuthorized',
  'Hp8C40P15CGuiManualQualificationGate.NormalUserExecutionGatesClosed()',
  'OnP15CControlInteraction',
+ 'IsP15CControlInteractionAuthorized',
+ 'HasP15CParentOwnedProofForCurrentProcess',
+ 'fixedManualQualificationLevel:',
  'TryPublishP15CGuiReadyAsync',
  'p15cManualExecutionAuthorized',
  'manualInteractionReadyProvider',
+ 'interactionAuthorizationProvider',
+ 'fixedManualQualificationLevel',
+ 'TryBeginControlInteraction(',
+ 'qualification pre-action fence rejected the interaction',
  'interactionObserver',
  'LastRestoreEvidence',
  'ParentOwnedVerifiedFileName'
@@ -164,6 +180,19 @@ foreach($needle in @(
 foreach($forbidden in @('FanCommand(','Hp8C40FanControlBackend','SetFanLevel(','NamedPipeFanControlWatchdogLeaseClient')){
  Assert-NotContains $surface $forbidden ("P15C must not add a hardware bypass to P13 surface: {0}" -f $forbidden)
 }
+
+$applyStart=$surface.IndexOf('private async Task ApplyManualAsync()',[StringComparison]::Ordinal)
+$requestStart=$surface.IndexOf('private async Task RequestModeAsync(',[StringComparison]::Ordinal)
+$refreshStart=$surface.IndexOf('private void RefreshState(',[StringComparison]::Ordinal)
+if($applyStart -lt 0 -or $requestStart -le $applyStart -or $refreshStart -le $requestStart){throw 'P15C could not isolate P13 control methods for pre-action ordering checks.'}
+$applyMethod=$surface.Substring($applyStart,$requestStart-$applyStart)
+$requestMethod=$surface.Substring($requestStart,$refreshStart-$requestStart)
+$applyFence=$applyMethod.IndexOf('TryBeginControlInteraction(',[StringComparison]::Ordinal)
+$applyController=$applyMethod.IndexOf('await _controller.ApplyManualAsync(',[StringComparison]::Ordinal)
+$requestFence=$requestMethod.IndexOf('TryBeginControlInteraction(',[StringComparison]::Ordinal)
+$requestController=$requestMethod.IndexOf('await _controller.SetModeAsync(',[StringComparison]::Ordinal)
+if($applyFence -lt 0 -or $applyController -lt 0 -or $applyFence -gt $applyController){throw 'P15C Manual Apply pre-action fence must execute before the production adapter call.'}
+if($requestFence -lt 0 -or $requestController -lt 0 -or $requestFence -gt $requestController){throw 'P15C mode-request pre-action fence must execute before the production adapter call.'}
 
 foreach($needle in @(
  'HARD VERSIONED AUTHORIZATION BARRIER',
@@ -191,6 +220,7 @@ foreach($forbidden in @('SetFanLevel(','--restore-hp-auto','Start-Service -Name 
 Assert-Contains $failsafe "TargetProfileId -cne 'HP-8C40-9D0R1LA-F18'" 'P15C failsafe must bind exact target.'
 Assert-Contains $failsafe '[int]$Journal.Owned.Cpu -eq 30' 'P15C failsafe must bind exact 30/30 ownership.'
 Assert-Contains $failsafe 'P15C FAILSAFE ARMED:' 'P15C failsafe ARMED marker missing.'
+foreach($needle in @('Program.cs','Hp8C40PostM9UserControlGate.cs','AdaptiveFanProductionController.cs','watchdog-p15c-service-failsafe-8c40.ps1')){Assert-Contains $packager $needle ("P15C packager missing critical source identity: {0}" -f $needle)}
 Assert-Contains $packager 'sourceEvidencePreserved=$true' 'P15C packager preservation marker missing.'
 Assert-Contains $packager 'gitCleanUsed=$false' 'P15C packager must record no git clean.'
 Assert-NotContains $packager 'git clean' 'P15C packager must never invoke git clean.'
