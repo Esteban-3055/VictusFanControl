@@ -256,6 +256,55 @@ if($status -eq 'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){
     Assert-True ([bool]$g.physicalPassed) 'P15C physical closure must set physicalPassed.'
     Assert-True ([bool]$g.evidenceClosed) 'P15C physical closure must set evidenceClosed.'
     Assert-Contains $qualification 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P15C physical closure requires qualification source gate closed.'
+    $p=$g.physicalPassClosure
+    Assert-True ([bool]$p.closed) 'P15C physical PASS closure must be closed.'
+    if([string]$p.result -cne 'PASS' -or
+       [string]$p.sourceHead -cne '5be9615dc79dc97285ba2a790e061e0fabd0c398' -or
+       [int]$p.sourceCiRunNumber -ne 1127 -or
+       [long]$p.sourceCiRunId -ne 36962891511 -or
+       [string]$p.sourceCiResult -cne 'SUCCESS'){
+        throw 'P15C physical PASS source/CI identity mismatch.'
+    }
+    if([string]$p.evidenceZipSha256 -cne '057f2d9d978a9d63b9bde456e485b12e65db5daa6a501d2970e1528f821e29d6' -or
+       [string]$p.evidenceSidecarSha256 -cne '5932729cf366213ea84284b8879761cb4286ada67a96e548fdfad00ab157cdd0' -or
+       [string]$p.packageManifestSha256 -cne '6e7ef70640ed3b1d9923843696dfbe11c089872d5e285d0a6bb077475f358542'){
+        throw 'P15C physical PASS package identity mismatch.'
+    }
+    foreach($flag in @('sidecarReferencesZipSha256','archiveIntegrityVerified','packageManifestEmbeddedHashesVerified','packageManifestSourceIdentityEntriesVerified','repositoryHeadMatched','upstreamHeadMatchedAtExecution','trackedSourceClean','onlyPreservedUntrackedLogsObserved','targetMatched','realP13SurfaceUsed','parentOwnedProofBoundToGuiIdentity','causalPrepareWriteIntentCommitRestoreReleaseVerified','strongRestoreVerified','ffReleaseAndLegacyDefaultPathVerified','localFirmwareAckVerified','watchdogReleaseVerified','finalJournalAbsent','watchdogProcessIdentityStable','initialServiceStatePreserved','failsafeArmed','evidenceIndependentlyReviewed','physicalPassSupported')){
+        Assert-True ([bool]$p.$flag) ("P15C physical PASS expected true: {0}" -f $flag)
+    }
+    foreach($flag in @('failsafeTakeover','userFacingManualExecutionAuthorized','automaticExecutionAuthorized','candidateCurvePhysicallyValidated','candidateCurveAuthorizedForProduction','m9cQualificationConstructionAuthorized','m9dQualificationConstructionAuthorized','nextPhysicalGateOpened','serviceStartedByHarness','serviceRestartedForCleanup')){
+        Assert-False ([bool]$p.$flag) ("P15C physical PASS expected false: {0}" -f $flag)
+    }
+    if([int]$p.packageManifestEmbeddedEvidenceHashCount -ne 16 -or
+       [int]$p.packageManifestSourceIdentityEntryCount -ne 11 -or
+       [int]$p.exactManualModeRequests -ne 1 -or
+       [int]$p.exactApplyManualCalls -ne 1 -or
+       [int]$p.exactFirmwareModeRequests -ne 1 -or
+       [int]$p.exactAutomaticModeRequests -ne 0 -or
+       [int]$p.healthySafetyReadySamples -ne 3 -or
+       [int]$p.parentOwnedSetpointSamples -ne 2 -or
+       [int]$p.ownedJournalSchemaVersion -ne 2 -or
+       [int]$p.ownedJournalGeneration -ne 3 -or
+       [int]$p.independentFinalFfFfSamples -ne 2 -or
+       [int]$p.cleanupFfFfSamples -ne 2){
+        throw 'P15C physical PASS bounded evidence counts mismatch.'
+    }
+    if([string]$p.equalLevel -cne '30/30' -or
+       [int]$p.ownedJournalControllerPid -ne 4376 -or
+       [string]$p.ownedJournalControllerStartUtcTicks -cne '639265111894517136' -or
+       [int]$p.watchdogPid -ne 7980 -or
+       [string]$p.watchdogStartUtcTicks -cne '639264861577277909' -or
+       [string]$p.guiFinalAuthority -cne 'Firmware' -or
+       [string]$p.guiFinalMode -cne 'Firmware' -or
+       [string]$p.initialServiceState -cne 'Manual/Running/PID7980/LocalSystem' -or
+       [string]$p.finalServiceState -cne 'Manual/Running/PID7980/LocalSystem'){
+        throw 'P15C physical PASS identity/state evidence mismatch.'
+    }
+    $c=$p.causalEventCounts
+    if([int]$c.prepare -ne 1 -or [int]$c.writeIntent -ne 1 -or [int]$c.commit -ne 1 -or [int]$c.restoreBegin -ne 1 -or [int]$c.release -ne 1){
+        throw 'P15C physical PASS causal event counts mismatch.'
+    }
 }
 
 Assert-False ([bool]$contract.safetyBoundary.controlEnabledByDefault) 'P15C must keep default control OFF.'
