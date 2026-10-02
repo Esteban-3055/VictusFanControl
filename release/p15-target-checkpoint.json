@@ -1445,6 +1445,16 @@
         "cause": "Sequential staging commit wired the new P15D2 Program constructor arguments before the matching MainForm constructor/runtime commit; the next software-only commit completed that wiring.",
         "hardwareExecution": false,
         "physicalGatesOpened": false
+      },
+      {
+        "runNumber": 1155,
+        "runId": 36973835321,
+        "head": "7f5cb1d2efa65c1843fffebd5f2c98d76178dbfe",
+        "result": "FAILURE",
+        "failureStep": "HP 8C40 P15D2 variable Manual preparation invariant",
+        "cause": "The contract intentionally advanced to the implementation-CI-pending state one sequential staging commit before the P15D2 invariant learned that new state.",
+        "hardwareExecution": false,
+        "physicalGatesOpened": false
       }
     ],
     "hardwareExecution": false,
