@@ -7,6 +7,15 @@ function Test-P16EcMutexContentionText {
         [StringComparison]::OrdinalIgnoreCase) -ge 0
 }
 
+function Test-P16OrdinalContains {
+    param(
+        [string]$Text,
+        [Parameter(Mandatory=$true)][string]$Needle
+    )
+    if($null -eq $Text){ return $false }
+    return $Text.IndexOf($Needle,[StringComparison]::Ordinal) -ge 0
+}
+
 function Invoke-P16BoundedEcContentionRetry {
     param(
         [Parameter(Mandatory=$true)][scriptblock]$Operation,

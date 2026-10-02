@@ -51,6 +51,11 @@ $files=@(
  [pscustomobject]@{role='user-gate-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Control\Adaptive\Hp8C40PostM9UserControlGate.cs');required=$true},
  [pscustomobject]@{role='production-adapter-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Control\Adaptive\AdaptiveFanProductionController.cs');required=$true},
  [pscustomobject]@{role='coordinator-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Control\FanControlCoordinator.cs');required=$true},
+ [pscustomobject]@{role='hp8c40-backend-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs');required=$true},
+ [pscustomobject]@{role='hp8c40-backend-selftest';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackendSelfTest.cs');required=$true},
+ [pscustomobject]@{role='hp8c40-probe-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40EcControlStateProbe.cs');required=$true},
+ [pscustomobject]@{role='ec-reader-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\PawnIo\AcpiEcReader.cs');required=$true},
+ [pscustomobject]@{role='setpoint-stabilizer-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\PawnIo\FanSetpointSnapshotStabilizer.cs');required=$true},
  [pscustomobject]@{role='reused-qualified-failsafe-source';path=(Join-Path $RepositoryRoot 'scripts\watchdog-p15d2-service-failsafe-8c40.ps1');required=$true}
 )
 $entries=@()

@@ -7,11 +7,11 @@ namespace VictusFanControl.App;
 /// path without introducing a P16-specific application startup/test mode.
 ///
 /// P16B attempt 3 consumed the fresh one-shot authorization and failed closed.
-/// Production strong restore completed, but the external app-log audit hit a
-/// Windows PowerShell 5.1 compatibility bug and the return-30 parent EC proof
-/// preserved anomalous intermediate observations requiring review. Re-block
-/// this gate until both findings are resolved and formally closed. Permanent
-/// user Manual and Automatic remain false.
+/// The PowerShell 5.1 app-audit correction and bounded HP 8C40 setpoint-pair
+/// coherence filter are now staged software-only behind this still-false gate.
+/// Do not reauthorize until the correction passes same-head CI, independent
+/// review and a separate formal closure. Permanent user Manual and Automatic
+/// remain false.
 /// </summary>
 internal static class Hp8C40P16NormalManualQualificationGate
 {

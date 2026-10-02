@@ -321,3 +321,53 @@ The return-30 parent proof also preserved intermediate EC observations `144/30` 
 
 The generation-2 authorization is consumed and all dedicated P16 physical gates are re-blocked. Permanent Manual, Automatic, Candidate V1 and default control remain closed. No target rerun is authorized.
 
+## P16B attempt-3 software hardening staged after CI #1195
+
+The immediate re-block HEAD
+`1f8891e07706369c25adc6af34e32c6703c0a82d` passed full same-head CI
+#1195 / run `37071194963` SUCCESS with every physical and permanent control
+gate closed.
+
+Two software-only corrections are now staged.
+
+First, the final normal-app interaction audit no longer calls the
+`String.Contains(string, StringComparison)` overload that is unavailable in
+Windows PowerShell 5.1. Ordinal matching is routed through
+`Test-P16OrdinalContains`, implemented with
+`IndexOf(..., StringComparison.Ordinal)`. Its self-test is now executed in a
+dedicated Windows PowerShell 5.1 CI step, so this is a runtime compatibility
+check rather than only a parser/static check. The final audit also rejects any
+preserved `FAILED CLOSED` or `BLOCKED` P13 interaction, even if later success
+text exists.
+
+Second, the attempt-3 samples `144/30` and `164/17` are handled as a
+read-coherence problem rather than being silently treated as valid ownership
+states. HP 8C40 ownership reads now use a bounded pair stabilizer: two
+consecutive identical complete CPU/GPU setpoint snapshots are required within
+six successful snapshots. The filter does **not** require CPU and GPU values to
+be equal. A stable asymmetric pair such as `40/30` is returned unchanged and
+therefore still triggers the existing ownership-loss/refusal logic. If no pair
+stabilizes, the read fails closed as lost EC observability.
+
+This stable reader is opted into the repo-built HP 8C40 production hardware
+path and the HP 8C40 probe used by the independent parent CLI. The already
+qualified installed M4 watchdog service is deliberately **not** replaced or
+mutated by this software-only correction; its exact installed runtime remains
+the previously qualified one. The legacy 88F8 narrow setpoint path is also
+intentionally unchanged. The parent P16 proof is
+also tightened: after the stable reader returns a coherent pair, any pair other
+than the expected value is an immediate FAIL_CLOSED rather than something the
+proof may wait through.
+
+Deterministic C# coverage reproduces the exact attempt-3 sequence
+`144/30 -> 30/30 -> 164/17 -> 30/30 -> 30/30`, verifies recovery to the stable
+`30/30` pair, verifies that a stable asymmetric overwrite remains visible,
+and verifies fail-closed behavior when no pair stabilizes within six snapshots.
+Future P16 evidence packages now include the production backend, its self-test,
+the HP 8C40 probe, the ACPI EC reader and the setpoint stabilizer source.
+
+This commit performs no target hardware execution and leaves the dedicated P16
+source/contract gates, permanent Manual, Automatic, Candidate V1 and default
+control closed. Full same-head CI, independent review and a separate formal
+closure are required before another authorization can even be considered.
+

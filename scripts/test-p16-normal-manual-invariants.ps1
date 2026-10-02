@@ -23,12 +23,17 @@ $hardeningHelper=Get-Content -LiteralPath (Join-Path $root 'scripts\p16-hardenin
 $hardeningSelfTest=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p16-hardening-helpers.ps1') -Raw
 $backend=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs') -Raw
 $backendSelfTest=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackendSelfTest.cs') -Raw
+$hp8c40Probe=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Hardware\Hp\Hp8C40EcControlStateProbe.cs') -Raw
+$ecReader=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Hardware\PawnIo\AcpiEcReader.cs') -Raw
+$setpointStabilizer=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Hardware\PawnIo\FanSetpointSnapshotStabilizer.cs') -Raw
 
+$d=$p16.normalManual
 $status=[string]$p16.status
-if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED')){throw "Unexpected P16 status: $status"}
-$isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED'))
-$isPhysicalFailClosed=($status -eq 'P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED')
-$isHardened=($status -in @('P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED'))
+if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED')){throw "Unexpected P16 status: $status"}
+$isPostAttempt3Hardening=($status -eq 'P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED')
+$isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED'))
+$isPhysicalFailClosed=($status -in @('P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED'))
+$isHardened=($status -in @('P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED'))
 $isHardeningClosed=($status -eq 'P16B_HARDENING_CI_PASS_GATE_CLOSED')
 $hasPhysicalHistory=(@($d.physicalAttemptHistory).Count -gt 0)
 $isAuthorized=($status -eq 'P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI')
@@ -46,7 +51,6 @@ if([string]$b.closureHead -cne 'c1e04963448e78a87dccc1719f11d9951f2970a7' -or [i
 if([string]$p16.expectedBranch -cne 'feature/victus-8c40-p16-normal-manual'){throw 'P16A branch mismatch.'}
 if([string]$p16.targetProfileId -cne 'HP-8C40-9D0R1LA-F18'){throw 'P16A target mismatch.'}
 
-$d=$p16.normalManual
 Assert-True ([bool]$d.architectureImplemented) 'P16A architecture missing.'
 Assert-True ([bool]$d.architectureCiValidated) 'P16A requires architecture CI PASS.'
 $a=$d.architectureValidation
@@ -123,7 +127,9 @@ if($isPhysicalFailClosed){
 if($isHardened){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B hardening must keep the dedicated source gate closed.'
  $attempts=@($d.physicalAttemptHistory)
- if($attempts.Count -ne 2 -or [string]$attempts[0].result -cne 'FAIL_CLOSED' -or [string]$attempts[1].result -cne 'FAIL_CLOSED'){throw 'P16B hardening must preserve both FAIL_CLOSED attempts.'}
+ $expectedHardeningAttemptCount=$(if($isPostAttempt3Hardening){3}else{2})
+ if($attempts.Count -ne $expectedHardeningAttemptCount){throw ("P16B hardening must preserve exactly {0} target attempts for this state." -f $expectedHardeningAttemptCount)}
+ foreach($a in $attempts){if([string]$a.result -cne 'FAIL_CLOSED'){throw 'P16B hardening must preserve every target attempt as FAIL_CLOSED.'}}
  $hi=$d.hardeningRequired.implementation
  foreach($flag in @('staged','productionSetpointAckTransientEcRetry','parentEcProbeTransientMutexRetry','failedInteractionImmediateAbort','oneShotAuthorizationAttemptFence','evidenceIncludesAttemptFence','deterministicHelperSelfTest','backendDeterministicSelfTests')){
   Assert-True ([bool]$hi.$flag) ("P16B hardening implementation flag missing: {0}" -f $flag)
@@ -170,6 +176,53 @@ if($isHardened){
   Assert-False ([bool]$hc.controlEnabledByDefault) 'P16B hardening closure cannot enable default control.'
   Assert-Contains $doc 'P16B hardening formally closed after CI #1192' 'P16B formal hardening-closure documentation missing.'
  }
+}
+
+if($isPostAttempt3Hardening){
+ Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B attempt-3 hardening must keep the dedicated source gate closed.'
+ $p3=$d.hardeningRequired.postAttempt3
+ if($null -eq $p3){throw 'P16B attempt-3 hardening metadata missing.'}
+ $p3i=$p3.implementation
+ foreach($flag in @('staged','powershell51OrdinalAuditFix','powershell51RuntimeSelfTest','appAuditRejectsFailedClosedOrBlocked','stableSetpointSnapshotFilter','stableSetpointAppliedToProductionHardware','stableSetpointAppliedToRepositoryProbe','parentProofRejectsStableUnexpectedSetpoint','evidencePackagerIncludesCoherenceSources')){
+  Assert-True ([bool]$p3i.$flag) ("P16B attempt-3 hardening flag missing: {0}" -f $flag)
+ }
+ Assert-False ([bool]$p3i.ciValidated) 'P16B attempt-3 implementation commit cannot pre-claim CI validation.'
+ Assert-False ([bool]$p3i.ownershipMismatchRelaxed) 'P16B attempt-3 hardening must not relax stable ownership mismatch detection.'
+ Assert-False ([bool]$p3i.equalPairAssumptionAdded) 'P16B setpoint coherence must not assume CPU/GPU values are equal.'
+ Assert-False ([bool]$p3i.ecWritesAdded) 'P16B setpoint coherence must remain read-only.'
+ Assert-False ([bool]$p3i.installedM4WatchdogBinaryMutated) 'P16B attempt-3 software hardening must not replace the qualified installed M4 service.'
+ Assert-False ([bool]$p3i.installedM4WatchdogCoherenceBehaviorChanged) 'P16B attempt-3 software hardening must not claim runtime changes inside the installed M4 service.'
+ Assert-False ([bool]$p3i.hardwareExecutionByHardeningCommit) 'P16B attempt-3 hardening commit must be software-only.'
+ if([int]$p3i.requiredConsecutiveStableSnapshots -ne 2 -or [int]$p3i.maximumStableSnapshotReads -ne 6){throw 'P16B setpoint coherence bound must remain 2 consecutive within 6 snapshots.'}
+
+ $hc=$d.hardeningRequired.closure
+ if($null -eq $hc -or -not [bool]$hc.closed -or [string]$hc.result -cne 'PASS' -or
+    [string]$hc.implementationHead -cne '6539671204d3e9c548d1d9b5b553920ccd553525' -or
+    [int]$hc.sourceCiRunNumber -ne 1192 -or [long]$hc.sourceCiRunId -ne 37069306742 -or
+    [string]$hc.sourceCiResult -cne 'SUCCESS'){
+   throw 'P16B prior hardening closure must remain preserved while attempt-3 follow-up is staged.'
+ }
+
+ foreach($needle in @('Test-P16OrdinalContains','IndexOf($Needle,[StringComparison]::Ordinal)')){Assert-Contains $hardeningHelper $needle ("P16B PowerShell 5.1 ordinal helper missing: {0}" -f $needle)}
+ foreach($needle in @('exact-case substring','must remain case-sensitive','reported a missing substring')){Assert-Contains $hardeningSelfTest $needle ("P16B Windows PowerShell runtime assertion missing: {0}" -f $needle)}
+ Assert-Contains $harness 'Test-P16OrdinalContains -Text ([string]$segment[$i]) -Needle $pattern' 'P16B app audit must use the PS5.1-compatible ordinal helper.'
+ Assert-NotContains $harness '.Contains($pattern,[StringComparison]::Ordinal)' 'P16B app audit must not use the unavailable Windows PowerShell 5.1 Contains overload.'
+ Assert-Contains $harness '$invalidInteractions=' 'P16B final app audit must explicitly reject FAILED CLOSED/BLOCKED interactions.'
+ Assert-Contains $harness "failure='stableUnexpectedSetpoint'" 'P16B parent proof must fail immediately on a coherent unexpected setpoint.'
+ Assert-Contains $workflow 'HP 8C40 P16B helper Windows PowerShell 5.1 runtime self-test' 'P16B helper must have an explicit Windows PowerShell 5.1 runtime CI step.'
+
+ foreach($needle in @('RequiredConsecutiveMatchingSnapshots = 2','MaximumSnapshots = 6','did not stabilize across','current == previous.Value')){Assert-Contains $setpointStabilizer $needle ("P16B setpoint stabilizer contract missing: {0}" -f $needle)}
+ Assert-Contains $ecReader 'public FanSetpointSample ReadStableFanSetpoint' 'P16B stable setpoint reader missing.'
+ Assert-Contains $ecReader 'FanSetpointSnapshotStabilizer.ReadStable' 'P16B stable setpoint reader must use the bounded stabilizer.'
+ Assert-Contains $ecReader 'var sample = ReadFanSetpoint(FanEcRegisterLayout.HpLegacyDualFan);' 'P16B coherence hardening must not silently change the legacy 88F8 setpoint path.'
+ Assert-Contains $backend '_ec.ReadStableFanSetpoint(layout)' 'P16B production control-state path must use coherent setpoint snapshots.'
+ Assert-Contains $backend '_ec.ReadStableFanSetpoint(' 'P16B production narrow setpoint path must use coherent snapshots.'
+ Assert-Contains $hp8c40Probe 'ec.ReadStableFanSetpoint(Hp8C40TargetProfile.Instance.FanEcLayout)' 'P16B repo-built HP 8C40 narrow probe must use coherent setpoints.'
+ Assert-Contains $hp8c40Probe 'ec.ReadStableFanSetpoint(layout)' 'P16B HP 8C40 control-evidence probe must use coherent setpoints.'
+ foreach($needle in @('144, 30','164, 17','stable asymmetric/external overwrite','no pair stabilizes within six snapshots')){Assert-Contains $backendSelfTest $needle ("P16B deterministic setpoint coherence self-test missing: {0}" -f $needle)}
+
+ foreach($role in @('hp8c40-backend-source','hp8c40-backend-selftest','hp8c40-probe-source','ec-reader-source','setpoint-stabilizer-source')){Assert-Contains $packager $role ("P16B evidence packager missing coherence source role: {0}" -f $role)}
+ Assert-Contains $doc 'P16B attempt-3 software hardening staged after CI #1195' 'P16B attempt-3 hardening documentation missing.'
 }
 
 if($isAuthorized){

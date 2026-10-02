@@ -46,7 +46,7 @@ public sealed class Hp8C40EcControlStateProbe
         EnsureTargetBoard();
 
         using var ec = new AcpiEcReader(_modulePath);
-        var state = ec.ReadFanSetpoint(Hp8C40TargetProfile.Instance.FanEcLayout);
+        var state = ec.ReadStableFanSetpoint(Hp8C40TargetProfile.Instance.FanEcLayout);
 
         return (
             state.CpuSetpoint,
@@ -65,7 +65,7 @@ public sealed class Hp8C40EcControlStateProbe
 
         using var ec = new AcpiEcReader(_modulePath);
         var layout = Hp8C40TargetProfile.Instance.FanEcLayout;
-        var setpoint = ec.ReadFanSetpoint(layout);
+        var setpoint = ec.ReadStableFanSetpoint(layout);
         var guard = ec.ReadFanControlGuard(layout);
         var tachometers = ec.ReadFanTachometers(layout);
 

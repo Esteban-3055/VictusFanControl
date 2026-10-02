@@ -309,6 +309,15 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p16-hardening-helpers.ps1
 
+      - name: HP 8C40 P16B helper Windows PowerShell 5.1 runtime self-test
+        shell: powershell
+        run: |
+          Write-Host ("Windows PowerShell version: {0}" -f $PSVersionTable.PSVersion)
+          if ($PSVersionTable.PSVersion.Major -ne 5) {
+            throw "Expected Windows PowerShell 5.x compatibility shell."
+          }
+          .\scripts\test-p16-hardening-helpers.ps1
+
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1

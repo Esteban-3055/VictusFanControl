@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED",
+  "status": "P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED",
   "scope": "Prepare and hard-close the ordinary application Manual qualification path before permanent normal-user Manual promotion.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
@@ -243,7 +243,7 @@
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Keep P16B re-blocked. Fix the Windows PowerShell 5.1 app-audit compatibility bug and add a runtime regression test. Separately review the preserved 144/30 and 164/17 EC observations before any fresh authorization.",
+      "nextAction": "Run full same-head CI on the software-only attempt-3 hardening. If SUCCESS, independently review the PowerShell 5.1 audit fix, setpoint coherence semantics and unchanged installed M4 boundary, then close the hardening in a separate all-gates-closed commit before considering any fresh one-shot authorization.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -325,7 +325,42 @@
         "strongRestoreProven": true,
         "trayExitProofMissing": true,
         "noPhysicalPassClaimed": true,
-        "hardwareExecutionByReblockCommit": false
+        "hardwareExecutionByReblockCommit": false,
+        "reblockValidation": {
+          "head": "1f8891e07706369c25adc6af34e32c6703c0a82d",
+          "runNumber": 1195,
+          "runId": 37071194963,
+          "result": "SUCCESS"
+        },
+        "implementation": {
+          "staged": true,
+          "ciValidated": false,
+          "powershell51OrdinalAuditFix": true,
+          "powershell51RuntimeSelfTest": true,
+          "appAuditRejectsFailedClosedOrBlocked": true,
+          "stableSetpointSnapshotFilter": true,
+          "requiredConsecutiveStableSnapshots": 2,
+          "maximumStableSnapshotReads": 6,
+          "stableSetpointAppliedToProductionHardware": true,
+          "stableSetpointAppliedToRepositoryProbe": true,
+          "installedM4WatchdogBinaryMutated": false,
+          "installedM4WatchdogCoherenceBehaviorChanged": false,
+          "parentProofRejectsStableUnexpectedSetpoint": true,
+          "evidencePackagerIncludesCoherenceSources": true,
+          "ownershipMismatchRelaxed": false,
+          "equalPairAssumptionAdded": false,
+          "ecWritesAdded": false,
+          "hardwareExecutionByHardeningCommit": false
+        },
+        "designNotes": [
+          "Windows PowerShell 5.1 app-log causal matching now uses ordinal IndexOf through a helper that is executed explicitly under the powershell CI shell.",
+          "HP 8C40 repo-built ownership reads require two consecutive identical complete CPU/GPU setpoint pairs within at most six successful pair snapshots.",
+          "The coherence filter does not require CPU and GPU values to be equal; a stable asymmetric/external pair is returned and therefore still triggers existing ownership mismatch behavior.",
+          "The stable reader is used by the repo-built HP 8C40 production backend and HP 8C40 probe used by the parent CLI. The already-qualified installed M4 watchdog service is not replaced or mutated by this software-only hardening.",
+          "The legacy 88F8 ReadFanSetpoint path remains unchanged.",
+          "The independent parent proof now treats any coherent non-expected pair as immediate FAIL_CLOSED instead of waiting for a later target value.",
+          "No EC register write path is added; ordinary fan commands continue through the qualified HP BIOS/WMI route."
+        ]
       }
     },
     "authorizationHistory": [

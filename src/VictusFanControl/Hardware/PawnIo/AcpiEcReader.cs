@@ -142,6 +142,52 @@ internal sealed class AcpiEcReader : IDisposable
     }
 
     /// <summary>
+    /// Reads the profile-selected fixed-level ownership registers until two
+    /// consecutive complete CPU/GPU pairs agree. This is used by the HP 8C40
+    /// production/watchdog ownership path after physical evidence exposed
+    /// one-off torn/unstable pairs. It does not require CPU == GPU and therefore
+    /// does not hide a stable external/asymmetric overwrite.
+    /// </summary>
+    public FanSetpointSample ReadStableFanSetpoint(FanEcRegisterLayout layout)
+    {
+        var lockTaken = AcquireMutex();
+        try
+        {
+            try
+            {
+                var stable = FanSetpointSnapshotStabilizer.ReadStable(
+                    () =>
+                    {
+                        var sample = RetryLocked(
+                            () => new FanSetpointSnapshotStabilizer.Snapshot(
+                                CpuSetpoint: ReadRegisterLocked(layout.CpuSetpoint),
+                                GpuSetpoint: ReadRegisterLocked(layout.GpuSetpoint)),
+                            $"EC fan setpoint snapshot 0x{layout.CpuSetpoint:X2}/0x{layout.GpuSetpoint:X2}");
+
+                        return sample;
+                    });
+
+                return new FanSetpointSample(
+                    stable.CpuSetpoint,
+                    stable.GpuSetpoint);
+            }
+            catch (InvalidDataException ex)
+            {
+                throw new IOException(
+                    $"EC fan setpoint coherence failed: {ex.Message}",
+                    ex);
+            }
+        }
+        finally
+        {
+            if (lockTaken)
+            {
+                _ecMutex.ReleaseMutex();
+            }
+        }
+    }
+
+    /// <summary>
     /// Reads only the HP 88F8 MaxFan/FanSwitch control guards consumed by the
     /// production fan backend. This keeps those fail-closed checks independent
     /// from the broader diagnostic snapshot.

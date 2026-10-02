@@ -47,7 +47,7 @@ internal sealed class Hp8C40FanHardware : IHp8C40FanHardware
         // two physical tachometers. Keep those as three independently retried
         // narrow EC snapshots instead of reopening the broad diagnostic state.
         var layout = Hp8C40TargetProfile.Instance.FanEcLayout;
-        var setpoint = _ec.ReadFanSetpoint(layout);
+        var setpoint = _ec.ReadStableFanSetpoint(layout);
         var controlGuard = _ec.ReadFanControlGuard(layout);
         var tachometers = _ec.ReadFanTachometers(layout);
 
@@ -69,7 +69,7 @@ internal sealed class Hp8C40FanHardware : IHp8C40FanHardware
 
     public (byte CpuSetpoint, byte GpuSetpoint) ReadSetpoint()
     {
-        var state = _ec.ReadFanSetpoint(
+        var state = _ec.ReadStableFanSetpoint(
             Hp8C40TargetProfile.Instance.FanEcLayout);
         return (state.CpuSetpoint, state.GpuSetpoint);
     }

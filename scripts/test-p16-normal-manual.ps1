@@ -181,12 +181,17 @@ function Assert-StableSetpoint([int]$Cpu,[int]$Gpu,[string]$Context,[string]$Evi
  $samples=@();$consecutive=0
  for($read=1;$read -le 6;$read++){
   $s=Read-8C40Setpoint;$samples+=@($s);Write-Host ("{0} proof {1}/6: {2}" -f $Context,$read,$s.raw)
-  if($s.cpu -eq $Cpu -and $s.gpu -eq $Gpu){$consecutive++;if($consecutive -ge 2){
+  if($s.cpu -ne $Cpu -or $s.gpu -ne $Gpu){
+   [ordered]@{context=$Context;passed=$false;failure='stableUnexpectedSetpoint';expectedCpu=$Cpu;expectedGpu=$Gpu;requiredConsecutive=2;maximumReads=6;samples=$samples}|ConvertTo-Json -Depth 6|Set-Content -LiteralPath $EvidencePath -Encoding UTF8
+   throw ("{0} observed stable unexpected setpoint {1}/{2}; expected {3}/{4}." -f $Context,$s.cpu,$s.gpu,$Cpu,$Gpu)
+  }
+  $consecutive++
+  if($consecutive -ge 2){
    [ordered]@{context=$Context;passed=$true;expectedCpu=$Cpu;expectedGpu=$Gpu;requiredConsecutive=2;maximumReads=6;samples=$samples}|ConvertTo-Json -Depth 6|Set-Content -LiteralPath $EvidencePath -Encoding UTF8;return
-  }}else{$consecutive=0}
+  }
   if($read -lt 6){Start-Sleep -Milliseconds 100}
  }
- [ordered]@{context=$Context;passed=$false;expectedCpu=$Cpu;expectedGpu=$Gpu;requiredConsecutive=2;maximumReads=6;samples=$samples}|ConvertTo-Json -Depth 6|Set-Content -LiteralPath $EvidencePath -Encoding UTF8
+ [ordered]@{context=$Context;passed=$false;failure='insufficientConsecutiveExpected';expectedCpu=$Cpu;expectedGpu=$Gpu;requiredConsecutive=2;maximumReads=6;samples=$samples}|ConvertTo-Json -Depth 6|Set-Content -LiteralPath $EvidencePath -Encoding UTF8
  throw "$Context requires two consecutive $Cpu/$Gpu observations within six reads."
 }
 function Test-OwnedPhase($phase){if($null -eq $phase){return $false};if($phase -is [string]){return ($phase -ceq 'Owned' -or $phase -ceq '2')};try{return ([int]$phase -eq 2)}catch{return $false}}
@@ -233,8 +238,9 @@ function Assert-AppInteractionAudit {
  $firmwareModes=@($segment|Where-Object{([string]$_)-match 'P13 mode request Firmware:'})
  $automaticModes=@($segment|Where-Object{([string]$_)-match 'P13 mode request Automatic:'})
  $manualApplies=@($segment|Where-Object{([string]$_)-match 'P13 manual request [0-9]+/[0-9]+:'})
- if($manualModes.Count -ne 1 -or $firmwareModes.Count -ne 1 -or $automaticModes.Count -ne 0 -or $manualApplies.Count -ne 3){
-  throw "P16 app interaction counts invalid: ManualMode=$($manualModes.Count) FirmwareMode=$($firmwareModes.Count) AutomaticMode=$($automaticModes.Count) ManualApply=$($manualApplies.Count)."
+ $invalidInteractions=@($segment|Where-Object{([string]$_)-match 'P13 (mode|manual) request .*FAILED CLOSED:|P13 (mode|manual) request .*: BLOCKED|P13 control interaction blocked before production adapter access:'})
+ if($manualModes.Count -ne 1 -or $firmwareModes.Count -ne 1 -or $automaticModes.Count -ne 0 -or $manualApplies.Count -ne 3 -or $invalidInteractions.Count -ne 0){
+  throw "P16 app interaction counts invalid: ManualMode=$($manualModes.Count) FirmwareMode=$($firmwareModes.Count) AutomaticMode=$($automaticModes.Count) ManualApply=$($manualApplies.Count) Invalid=$($invalidInteractions.Count)."
  }
  $patterns=@(
   'P13 mode request Manual: action=HoldFirmware; authorized=True; authority=Firmware;',
@@ -244,7 +250,7 @@ function Assert-AppInteractionAudit {
   'P13 mode request Firmware: action=RestoreFirmware; authorized=True; authority=Firmware;'
  )
  $cursor=-1
- foreach($pattern in $patterns){$found=-1;for($i=$cursor+1;$i -lt $segment.Count;$i++){if(([string]$segment[$i]).Contains($pattern,[StringComparison]::Ordinal)){$found=$i;break}};if($found -lt 0){throw "P16 app-log causal interaction missing/out of order: $pattern"};$cursor=$found}
+ foreach($pattern in $patterns){$found=-1;for($i=$cursor+1;$i -lt $segment.Count;$i++){if(Test-P16OrdinalContains -Text ([string]$segment[$i]) -Needle $pattern){$found=$i;break}};if($found -lt 0){throw "P16 app-log causal interaction missing/out of order: $pattern"};$cursor=$found}
 }
 function Start-P16Failsafe {
  $p=Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$failsafeScript,'-DelaySeconds','120','-LogPath',$failsafeLog) -WindowStyle Hidden -PassThru

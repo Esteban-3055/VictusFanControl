@@ -3,6 +3,11 @@ $ErrorActionPreference='Stop'
 
 function Assert-True([bool]$Value,[string]$Message){if(-not $Value){throw $Message}}
 
+Assert-True (Test-P16OrdinalContains -Text 'prefix ABC suffix' -Needle 'ABC') 'P16 ordinal contains helper did not match an exact-case substring.'
+Assert-True (-not (Test-P16OrdinalContains -Text 'prefix ABC suffix' -Needle 'abc')) 'P16 ordinal contains helper must remain case-sensitive.'
+Assert-True (-not (Test-P16OrdinalContains -Text 'prefix ABC suffix' -Needle 'XYZ')) 'P16 ordinal contains helper reported a missing substring.'
+
+
 $state=[pscustomobject]@{Calls=0}
 $result=Invoke-P16BoundedEcContentionRetry -MaximumAttempts 3 -DelayMilliseconds 0 -Operation {
     $state.Calls++

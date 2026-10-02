@@ -1,5 +1,6 @@
 using VictusFanControl.Control;
 using VictusFanControl.Runtime;
+using VictusFanControl.Hardware.PawnIo;
 
 namespace VictusFanControl.Hardware.Hp;
 
@@ -19,6 +20,7 @@ public static class Hp8C40FanControlBackendSelfTest
         failures += await TestHappyPathAsync(output);
         failures += await TestTransientSetpointAckReadFailureRecoversAsync(output);
         failures += await TestRepeatedSetpointAckReadFailureFailsClosedAsync(output);
+        failures += TestSetpointSnapshotStabilizer(output);
         failures += await TestSameSetpointSkipsRedundantWmiWriteAsync(output);
         failures += await TestExistingOverrideRefusedAsync(output);
         failures += await TestCancelledAdmissionIsNoWriteAsync(output);
@@ -1372,6 +1374,84 @@ public static class Hp8C40FanControlBackendSelfTest
             lease.Calls.Contains("intent") &&
             lease.Calls.Contains("abort") &&
             lease.Calls.Contains("cancel-prepared"));
+    }
+
+    private static int TestSetpointSnapshotStabilizer(TextWriter output)
+    {
+        var failures = 0;
+
+        var observedAttempt3 = new Queue<FanSetpointSnapshotStabilizer.Snapshot>(
+            new[]
+            {
+                new FanSetpointSnapshotStabilizer.Snapshot(144, 30),
+                new FanSetpointSnapshotStabilizer.Snapshot(30, 30),
+                new FanSetpointSnapshotStabilizer.Snapshot(164, 17),
+                new FanSetpointSnapshotStabilizer.Snapshot(30, 30),
+                new FanSetpointSnapshotStabilizer.Snapshot(30, 30)
+            });
+        var observedCalls = 0;
+        var recovered = FanSetpointSnapshotStabilizer.ReadStable(
+            () =>
+            {
+                observedCalls++;
+                return observedAttempt3.Dequeue();
+            });
+
+        failures += Report(
+            output,
+            "setpoint coherence filters attempt-3 one-off 144/30 and 164/17 samples",
+            recovered.CpuSetpoint == 30 &&
+            recovered.GpuSetpoint == 30 &&
+            observedCalls == 5);
+
+        var stableExternalOverwrite =
+            new Queue<FanSetpointSnapshotStabilizer.Snapshot>(
+                new[]
+                {
+                    new FanSetpointSnapshotStabilizer.Snapshot(30, 30),
+                    new FanSetpointSnapshotStabilizer.Snapshot(40, 30),
+                    new FanSetpointSnapshotStabilizer.Snapshot(40, 30)
+                });
+        var overwrite = FanSetpointSnapshotStabilizer.ReadStable(
+            () => stableExternalOverwrite.Dequeue());
+
+        failures += Report(
+            output,
+            "setpoint coherence preserves a stable asymmetric/external overwrite",
+            overwrite.CpuSetpoint == 40 &&
+            overwrite.GpuSetpoint == 30);
+
+        var unstable = new Queue<FanSetpointSnapshotStabilizer.Snapshot>(
+            new[]
+            {
+                new FanSetpointSnapshotStabilizer.Snapshot(30, 30),
+                new FanSetpointSnapshotStabilizer.Snapshot(31, 30),
+                new FanSetpointSnapshotStabilizer.Snapshot(30, 31),
+                new FanSetpointSnapshotStabilizer.Snapshot(32, 30),
+                new FanSetpointSnapshotStabilizer.Snapshot(30, 32),
+                new FanSetpointSnapshotStabilizer.Snapshot(33, 30)
+            });
+        var unstableRejected = false;
+        try
+        {
+            _ = FanSetpointSnapshotStabilizer.ReadStable(
+                () => unstable.Dequeue());
+        }
+        catch (InvalidDataException ex)
+            when (ex.Message.Contains(
+                "did not stabilize",
+                StringComparison.Ordinal))
+        {
+            unstableRejected = true;
+        }
+
+        failures += Report(
+            output,
+            "setpoint coherence fails closed when no pair stabilizes within six snapshots",
+            unstableRejected &&
+            unstable.Count == 0);
+
+        return failures;
     }
 
     private static Hp8C40FanControlBackend NewBackend(
