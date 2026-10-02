@@ -17,7 +17,8 @@ $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P15_TARGET_CHECKPOINT.md') 
 if([string]$contract.milestone -cne 'P15A'){throw 'P15A milestone mismatch.'}
 $status=[string]$contract.status
 $postP15AState=$status.StartsWith('P15B_',[StringComparison]::Ordinal) -or
-    $status.StartsWith('P15C_',[StringComparison]::Ordinal)
+    $status.StartsWith('P15C_',[StringComparison]::Ordinal) -or
+    $status.StartsWith('P15D',[StringComparison]::Ordinal)
 if($status -notin @('P15A_STARTUP_NO_WRITE_PREPARATION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PENDING_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PAYLOAD_LAYOUT_CORRECTION_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_OPERATOR_CONFIRMATION_FAIL_CLOSED_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PENDING_GATE_CLOSED','P15A_OPERATOR_CONFIRMATION_HARDENING_CI_PASS_GATE_CLOSED','P15A_STARTUP_NO_WRITE_PHYSICAL_PASS_FORMALLY_CLOSED') -and -not $postP15AState){throw 'P15A state mismatch.'}
 $executionAuthorized=[bool]$contract.startupNoWrite.executionAuthorized
 if($executionAuthorized -and $status -cne 'P15A_STARTUP_NO_WRITE_AUTHORIZED_AWAITING_SAME_HEAD_CI'){throw 'P15A authorized state/status mismatch.'}

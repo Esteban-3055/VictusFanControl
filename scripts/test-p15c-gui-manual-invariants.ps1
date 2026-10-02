@@ -31,7 +31,8 @@ $allowed=@(
  'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PASS_GATE_CLOSED',
  'P15C_GUI_MANUAL_REAUTHORIZED_AFTER_STALE_SAFETY_CORRECTION_AWAITING_SAME_HEAD_CI'
 )
-if($status -notin $allowed){throw 'P15C contract state mismatch.'}
+$postP15CState=$status.StartsWith('P15D',[StringComparison]::Ordinal)
+if($status -notin $allowed -and -not $postP15CState){throw 'P15C contract state mismatch.'}
 
 Assert-True ([bool]$contract.startupNoWrite.physicalPassed) 'P15C requires P15A physical PASS.'
 Assert-True ([bool]$contract.startupNoWrite.evidenceClosed) 'P15C requires P15A evidence closure.'
@@ -250,7 +251,7 @@ if($status -eq 'P15C_GUI_MANUAL_REAUTHORIZED_AFTER_STALE_SAFETY_CORRECTION_AWAIT
     Assert-Contains $qualification 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15C reauthorization requires qualification source gate open.'
 }
 
-if($status -eq 'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){
+if($status -eq 'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED' -or $postP15CState){
     Assert-False ([bool]$g.executionAuthorized) 'P15C physical closure must re-block parent harness.'
     Assert-False ([bool]$g.controllerPhysicalExecutionAuthorized) 'P15C physical closure must re-block GUI qualification gate.'
     Assert-True ([bool]$g.physicalPassed) 'P15C physical closure must set physicalPassed.'

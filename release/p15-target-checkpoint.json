@@ -1022,7 +1022,19 @@
     "preparationClosure": {
       "closed": false,
       "result": "PENDING",
-      "hardwareExecution": false
+      "hardwareExecution": false,
+      "failedCiHistoryPreserved": [
+        {
+          "runNumber": 1129,
+          "runId": 36964880389,
+          "head": "ff68a44ff5e11a65890005ae281a5ef26d510d53",
+          "result": "FAILURE",
+          "failureStep": "HP 8C40 P15A startup no-write preparation invariant",
+          "cause": "P15A/P15B/P15C historical invariants had not yet classified the new P15D1 contract status as a valid post-closure state.",
+          "hardwareExecution": false,
+          "physicalGatesOpened": false
+        }
+      ]
     },
     "executionAuthorized": false,
     "controllerPhysicalExecutionAuthorized": false,

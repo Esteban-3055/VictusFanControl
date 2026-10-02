@@ -26,6 +26,17 @@ Assert-False ([bool]$contract.guiManual.controllerPhysicalExecutionAuthorized) '
 Assert-True ([bool]$d.preparationImplemented) 'P15D1 preparation must be implemented.'
 Assert-False ([bool]$d.preparationCiValidated) 'P15D1 preparation must not pre-claim CI.'
 Assert-False ([bool]$d.preparationClosure.closed) 'P15D1 preparation must not pre-close CI.'
+$failed=@($d.preparationClosure.failedCiHistoryPreserved)
+if($failed.Count -ne 1 -or
+   [int]$failed[0].runNumber -ne 1129 -or
+   [long]$failed[0].runId -ne 36964880389 -or
+   [string]$failed[0].head -cne 'ff68a44ff5e11a65890005ae281a5ef26d510d53' -or
+   [string]$failed[0].result -cne 'FAILURE' -or
+   [string]$failed[0].failureStep -cne 'HP 8C40 P15A startup no-write preparation invariant'){
+    throw 'P15D1 failed-CI history mismatch.'
+}
+Assert-False ([bool]$failed[0].hardwareExecution) 'P15D1 failed preparation CI must record no hardware execution.'
+Assert-False ([bool]$failed[0].physicalGatesOpened) 'P15D1 failed preparation CI must record physical gates closed.'
 Assert-False ([bool]$d.executionAuthorized) 'P15D1 physical execution must remain closed during preparation.'
 Assert-False ([bool]$d.controllerPhysicalExecutionAuthorized) 'P15D1 GUI/controller execution must remain closed during preparation.'
 Assert-False ([bool]$d.physicalPassed) 'P15D1 cannot pre-claim physical PASS.'
