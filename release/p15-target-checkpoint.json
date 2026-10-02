@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED",
+  "status": "P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1344,8 +1344,8 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": false,
-    "controllerPhysicalExecutionAuthorized": false,
+    "executionAuthorized": true,
+    "controllerPhysicalExecutionAuthorized": true,
     "physicalPassed": false,
     "evidenceClosed": false,
     "prerequisite": "P15D1 tray-exit lifecycle physical PASS formally closed",
@@ -1428,6 +1428,28 @@
       "runNumber": 1146,
       "runId": 36972919383,
       "result": "SUCCESS"
+    },
+    "authorization": {
+      "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
+      "preparationClosureHead": "71ec64077b545f19d31f0ecde59169083d1f55ab",
+      "preparationClosureCiRunNumber": 1173,
+      "preparationClosureCiRunId": 36981777611,
+      "preparationClosureCiResult": "SUCCESS",
+      "implementationHead": "e28dff8540d6508c074eff5f189ce134e488c6bb",
+      "implementationCiRunNumber": 1172,
+      "implementationCiRunId": 36977648743,
+      "implementationCiResult": "SUCCESS",
+      "sourceGateScope": "P15D2 variable-Manual qualification only",
+      "p15aAuthorizationOpened": false,
+      "p15bAuthorizationOpened": false,
+      "p15cAuthorizationOpened": false,
+      "p15d1AuthorizationOpened": false,
+      "userFacingManualGateOpened": false,
+      "automaticAuthorizationOpened": false,
+      "candidateCurveAuthorizationOpened": false,
+      "m9cQualificationConstructionOpened": false,
+      "m9dQualificationConstructionOpened": false,
+      "hardwareExecutionAtAuthorizationCommit": false
     },
     "generationSemanticsReview": {
       "required": true,
@@ -1516,6 +1538,6 @@
       "physicalGatesOpened": false
     },
     "hardwareExecution": false,
-    "physicalGatesOpened": false
+    "physicalGatesOpened": true
   }
 }
