@@ -28,7 +28,8 @@ $allowed=@(
  'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED',
  'P15C_GUI_MANUAL_STALE_SAFETY_FAIL_CLOSED_GATE_CLOSED',
  'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PENDING_GATE_CLOSED',
- 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PASS_GATE_CLOSED'
+ 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PASS_GATE_CLOSED',
+ 'P15C_GUI_MANUAL_REAUTHORIZED_AFTER_STALE_SAFETY_CORRECTION_AWAITING_SAME_HEAD_CI'
 )
 if($status -notin $allowed){throw 'P15C contract state mismatch.'}
 
@@ -226,6 +227,27 @@ if($status -eq 'P15C_GUI_MANUAL_STALE_SAFETY_CORRECTION_CI_PASS_GATE_CLOSED'){
     if($failedCorrection.Count -ne 1 -or [int]$failedCorrection[0].runNumber -ne 1124 -or [long]$failedCorrection[0].runId -ne 36962046081 -or [string]$failedCorrection[0].head -cne '10bf1ca322c18feaf884b44b8c8f38026283aba1' -or [string]$failedCorrection[0].result -cne 'FAILURE'){
         throw 'P15C stale-Safety correction closure failed-CI history mismatch.'
     }
+}
+
+if($status -eq 'P15C_GUI_MANUAL_REAUTHORIZED_AFTER_STALE_SAFETY_CORRECTION_AWAITING_SAME_HEAD_CI'){
+    Assert-True ([bool]$g.preparationCiValidated) 'P15C reauthorization requires closed base preparation.'
+    Assert-True ([bool]$g.preparationClosure.closed) 'P15C reauthorization requires formal base preparation closure.'
+    $corr=$g.staleSafetyRaceCorrection
+    Assert-True ([bool]$corr.implementationComplete) 'P15C reauthorization requires stale-Safety correction implementation.'
+    Assert-True ([bool]$corr.ciValidated) 'P15C reauthorization requires stale-Safety correction CI validation.'
+    Assert-True ([bool]$corr.closure.closed) 'P15C reauthorization requires formally closed stale-Safety correction.'
+    if([string]$corr.closure.result -cne 'PASS' -or [string]$corr.closure.implementationHead -cne '550d6372b1e797cc1d7eecf62ee7afb4bb541061' -or [int]$corr.closure.sourceCiRunNumber -ne 1125 -or [long]$corr.closure.sourceCiRunId -ne 36962248019 -or [string]$corr.closure.sourceCiResult -cne 'SUCCESS'){throw 'P15C reauthorization correction-closure basis mismatch.'}
+    $a=$g.authorization
+    if([string]$a.basisHead -cne 'f5921b4ce0d2a3b6fb137e45a424280602c1e9a8' -or [int]$a.basisCiRunNumber -ne 1126 -or [long]$a.basisCiRunId -ne 36962577006 -or [string]$a.basisCiResult -cne 'SUCCESS'){throw 'P15C reauthorization formal-closure basis mismatch.'}
+    if([string]$a.previousAuthorizationHead -cne '5eb02ca3b50a6d88dc027b97f2dc76fa5b39490e' -or [int]$a.previousAuthorizationCiRunNumber -ne 1122 -or [string]$a.previousAuthorizationResult -cne 'TARGET_FAIL_CLOSED_NO_PHYSICAL_FAN_WRITE' -or -not [bool]$a.previousAuthorizationRevoked){throw 'P15C reauthorization prior target-attempt history mismatch.'}
+    Assert-True ([bool]$a.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P15C reauthorization must require same-HEAD CI success.'
+    Assert-True ([bool]$a.staleSafetyCorrectionClosed) 'P15C reauthorization requires closed stale-Safety correction.'
+    foreach($p in @('p15aAuthorizationOpened','p15bAuthorizationOpened','userFacingManualGateOpened','automaticAuthorizationOpened','candidateCurveAuthorizationOpened','m9cQualificationConstructionOpened','m9dQualificationConstructionOpened','hardwareExecutionAtAuthorizationCommit')){Assert-False ([bool]$a.$p) ("P15C reauthorization opened forbidden scope: {0}" -f $p)}
+    Assert-True ([bool]$g.executionAuthorized) 'P15C reauthorization must open dedicated parent harness gate.'
+    Assert-True ([bool]$g.controllerPhysicalExecutionAuthorized) 'P15C reauthorization must open dedicated GUI qualification gate.'
+    Assert-False ([bool]$g.physicalPassed) 'P15C reauthorization must not pre-claim physical PASS.'
+    Assert-False ([bool]$g.evidenceClosed) 'P15C reauthorization must not pre-close physical evidence.'
+    Assert-Contains $qualification 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P15C reauthorization requires qualification source gate open.'
 }
 
 if($status -eq 'P15C_GUI_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED'){
