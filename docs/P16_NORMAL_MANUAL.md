@@ -85,3 +85,14 @@ literal containing PowerShell variable names, so the variables expanded before
 the harness text comparison. The physical gate was still false, no target
 hardware execution occurred, and the failure is preserved rather than removed.
 The follow-up changes only that invariant literal.
+
+
+### Second preserved software-only invariant failure
+
+Correction HEAD `a21bbba6c3bad64d6ce1a0121fc832498806d383`
+produced CI #1184 / run `37058417708` FAILURE in the same static P16
+invariant. The harness regex correctly escapes the final period in the startup
+log pattern, but the source invariant searched for the unescaped full string.
+The runtime/harness behavior was not executed and no physical gate was open.
+The next correction only makes that static source assertion insensitive to the
+regex escape.

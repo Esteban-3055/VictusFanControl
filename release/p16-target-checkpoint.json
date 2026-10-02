@@ -126,6 +126,16 @@
         "cause": "Static invariant used a double-quoted search literal containing $appExe/$modulesDir, so PowerShell expanded the variables before matching the harness source.",
         "hardwareExecution": false,
         "physicalGatesOpened": false
+      },
+      {
+        "runNumber": 1184,
+        "runId": 37058417708,
+        "head": "a21bbba6c3bad64d6ce1a0121fc832498806d383",
+        "result": "FAILURE",
+        "failureStep": "HP 8C40 P16A normal Manual preparation invariant",
+        "cause": "Static invariant searched for the startup log with a literal final period, while the physical harness intentionally stores that period as the escaped regex token \\.; source behavior was correct and only the static needle was too strict.",
+        "hardwareExecution": false,
+        "physicalGatesOpened": false
       }
     ]
   },
