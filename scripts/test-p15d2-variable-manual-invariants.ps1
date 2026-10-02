@@ -15,8 +15,12 @@ $surface=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\P13
 $doc=Get-Content -LiteralPath (Join-Path $root 'docs\P15_TARGET_CHECKPOINT.md') -Raw
 $p15d1Invariant=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p15d1-tray-exit-invariants.ps1') -Raw
 
-if([string]$contract.status -cne 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
-    throw "Unexpected P15D2 preparation status: $($contract.status)"
+$status=[string]$contract.status
+if($status -notin @(
+    'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED',
+    'P15D2_VARIABLE_MANUAL_PREPARATION_HARDENING_CI_PENDING_GATE_CLOSED'
+)){
+    throw "Unexpected P15D2 preparation status: $status"
 }
 
 Assert-True ([bool]$contract.guiLifecycleTrayExit.physicalPassed) 'P15D2 requires P15D1 physical PASS.'
@@ -32,7 +36,23 @@ if([string]$contract.guiLifecycleTrayExit.physicalPassClosure.sourceHead -cne 'a
 
 $d=$contract.guiManualVariableLevel
 Assert-True ([bool]$d.preparationImplemented) 'P15D2 preparation contract must be implemented.'
-Assert-False ([bool]$d.preparationCiValidated) 'P15D2 preparation cannot pre-claim CI.'
+if($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_CI_PENDING_GATE_CLOSED'){
+    Assert-False ([bool]$d.preparationCiValidated) 'Initial P15D2 preparation cannot pre-claim CI.'
+}else{
+    Assert-True ([bool]$d.preparationCiValidated) 'P15D2 generation hardening requires the #1146 preparation CI baseline.'
+    $base=$d.preparationBaseCi
+    if([string]$base.head -cne 'b55742effc1b46112656ef2febdd96275389dbfc' -or
+       [int]$base.runNumber -ne 1146 -or
+       [long]$base.runId -ne 36972919383 -or
+       [string]$base.result -cne 'SUCCESS'){
+        throw 'P15D2 preparation base CI identity mismatch.'
+    }
+    foreach($flag in @('powerShellSyntaxValidated','p15d1ClosureInvariantValidated','p15d2InvariantValidated','warningsAsErrorsBuildValidated')){
+        Assert-True ([bool]$base.$flag) ("P15D2 preparation base CI missing validation: {0}" -f $flag)
+    }
+    Assert-False ([bool]$base.hardwareExecution) 'P15D2 preparation CI must record no hardware execution.'
+    Assert-False ([bool]$base.physicalGatesOpened) 'P15D2 preparation CI must record physical gates closed.'
+}
 Assert-False ([bool]$d.preparationClosure.closed) 'P15D2 preparation cannot pre-close software evidence.'
 Assert-False ([bool]$d.runtimeImplementationComplete) 'Initial P15D2 preparation must not pre-claim runtime implementation.'
 Assert-False ([bool]$d.runtimeImplementationCiValidated) 'Initial P15D2 preparation must not pre-claim runtime CI.'
@@ -50,7 +70,13 @@ Assert-True ([bool]$d.requiresRealP13Surface) 'P15D2 must use the real P13 surfa
 Assert-True ([bool]$d.requiresProductionAdapter) 'P15D2 must use AdaptiveFanProductionController.'
 Assert-True ([bool]$d.requiresProductionCoordinator) 'P15D2 must use FanControlCoordinator.'
 Assert-True ([bool]$d.requiresSameOwnershipSessionAcrossChangedLevels) 'P15D2 must preserve one ownership session across changed levels.'
+Assert-True ([bool]$d.requiresExpectedGenerationProgression) 'P15D2 must enforce watchdog generation progression rather than a false same-generation assumption.'
 Assert-True ([bool]$d.requiresDuplicate40NoRetransmit) 'P15D2 must physically prove duplicate 40/40 no-retransmit.'
+$gens=$d.design.expectedOwnedGenerations
+if([int]$gens.initial30 -ne 3 -or [int]$gens.changed40 -ne 5 -or [int]$gens.duplicateHold40 -ne 5 -or [int]$gens.return30 -ne 7){
+    throw 'P15D2 expected OWNED generation progression must be 3 -> 5 -> 5 -> 7.'
+}
+Assert-True ([bool]$d.design.sameOwnedGenerationAcrossChangedWritesForbidden) 'P15D2 must forbid same-generation claims across actual changed writes.'
 Assert-True ([bool]$d.requiresStrongRestore) 'P15D2 must end in production strong restore.'
 Assert-False ([bool]$d.candidateCurveMayBePromoted) 'P15D2 must not promote Candidate V1.'
 Assert-False ([bool]$d.automaticMayOpen) 'P15D2 must not open Automatic.'
@@ -62,6 +88,10 @@ Assert-Contains $gate 'RequiredToken = "8C40-P15D2-MANUAL30-40-40-30"' 'P15D2 so
 Assert-Contains $gate 'InitialLevel = 30' 'P15D2 initial level mismatch.'
 Assert-Contains $gate 'ChangedLevel = 40' 'P15D2 changed level mismatch.'
 Assert-Contains $gate 'ReturnLevel = 30' 'P15D2 return level mismatch.'
+Assert-Contains $gate 'InitialOwnedGeneration = 3' 'P15D2 initial OWNED generation mismatch.'
+Assert-Contains $gate 'ChangedOwnedGeneration = 5' 'P15D2 changed OWNED generation mismatch.'
+Assert-Contains $gate 'DuplicateHoldOwnedGeneration = 5' 'P15D2 duplicate HoldCustom generation mismatch.'
+Assert-Contains $gate 'ReturnOwnedGeneration = 7' 'P15D2 return OWNED generation mismatch.'
 Assert-Contains $gate 'NormalUserExecutionGatesClosed()' 'P15D2 source gate must assert normal-user isolation.'
 
 foreach($needle in @(
@@ -95,6 +125,22 @@ Assert-Contains $userGate 'ManualExecutionAuthorized = false' 'P15D2 normal user
 Assert-Contains $userGate 'AutomaticExecutionAuthorized = false' 'P15D2 normal user Automatic compile gate must remain false.'
 Assert-Contains $candidate 'PhysicallyValidated = false' 'P15D2 Candidate V1 physical flag must remain false.'
 Assert-Contains $candidate 'AuthorizedForProduction = false' 'P15D2 Candidate V1 production flag must remain false.'
+
+if($status -eq 'P15D2_VARIABLE_MANUAL_PREPARATION_HARDENING_CI_PENDING_GATE_CLOSED'){
+    $review=$d.generationSemanticsReview
+    Assert-True ([bool]$review.required) 'P15D2 generation semantics review must be recorded.'
+    Assert-True ([bool]$review.implementationComplete) 'P15D2 generation hardening must be implemented.'
+    Assert-False ([bool]$review.ciValidated) 'P15D2 generation hardening cannot pre-claim CI.'
+    Assert-False ([bool]$review.hardwareExecution) 'P15D2 generation hardening must remain software-only.'
+    Assert-False ([bool]$review.physicalGatesOpened) 'P15D2 generation hardening must keep physical gates closed.'
+    if([string]$review.reviewedPreparationHead -cne 'b55742effc1b46112656ef2febdd96275389dbfc' -or
+       [int]$review.reviewedPreparationCiRunNumber -ne 1146 -or
+       [long]$review.reviewedPreparationCiRunId -ne 36972919383 -or
+       [string]$review.reviewedPreparationCiResult -cne 'SUCCESS'){
+        throw 'P15D2 generation review source identity mismatch.'
+    }
+    Assert-Contains ([string]$review.correction) '3 -> 5 -> 5 -> 7' 'P15D2 generation correction must explicitly record 3 -> 5 -> 5 -> 7.'
+}
 
 foreach($needle in @(
     'qualificationSource',
