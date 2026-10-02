@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI",
+  "status": "P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1344,8 +1344,8 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": true,
-    "controllerPhysicalExecutionAuthorized": true,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
     "physicalPassed": false,
     "evidenceClosed": false,
     "prerequisite": "P15D1 tray-exit lifecycle physical PASS formally closed",
@@ -1450,6 +1450,17 @@
       "m9cQualificationConstructionOpened": false,
       "m9dQualificationConstructionOpened": false,
       "hardwareExecutionAtAuthorizationCommit": false
+    },
+    "retryStatusBarrierCorrection": {
+      "required": true,
+      "cause": "The target-side harness hard barrier accepted only the initial P15D2 authorization status and would reject the fresh EC-transient retry authorization before Administrator checks or hardware access.",
+      "discoveredBeforeRetryHardwareExecution": true,
+      "reauthorizationHead": "dc48ae17015a3bf9abf1f3c44c363a9add6d2154",
+      "reauthorizationCiRunNumber": 1176,
+      "reauthorizationCiRunId": 36987541628,
+      "reauthorizationCiResult": "SUCCESS",
+      "hardwareExecution": false,
+      "physicalGatesOpened": false
     },
     "failedPhysicalAttempt": {
       "sourceHead": "aa5be229d7e1fb4c1c0b260f3354db972e98436b",
@@ -1598,6 +1609,6 @@
       "physicalGatesOpened": false
     },
     "hardwareExecution": false,
-    "physicalGatesOpened": true
+    "physicalGatesOpened": false
   }
 }
