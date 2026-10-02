@@ -216,7 +216,7 @@
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Run full same-head CI on the corrected software-only hardening. If SUCCESS, formally close the hardening with all P16 physical gates still false before any fresh authorization.",
+      "nextAction": "Run full same-head CI on the reconstructed software-only hardening. If SUCCESS, independently review and formally close the hardening with all gates false before any fresh P16B authorization.",
       "implementation": {
         "staged": true,
         "ciValidated": false,
@@ -231,7 +231,9 @@
         "ecMutexTimeoutGloballyRelaxed": false,
         "hardwareExecutionByHardeningCommit": false,
         "syntaxCorrectionStaged": true,
-        "variableInterpolationCorrectionStaged": true
+        "variableInterpolationCorrectionStaged": true,
+        "harnessReconstructedFromLastKnownGoodBaseline": true,
+        "duplicateTailRemoved": true
       },
       "failedCiHistory": [
         {
@@ -251,6 +253,16 @@
           "result": "FAILURE",
           "failureStep": "PowerShell syntax check",
           "cause": "PowerShell parsed the interpolated string fragment '$Label:' as an invalid drive-qualified variable reference. The correction delimits it as '${Label}:'. The P16 physical gate remained false and no target hardware execution occurred.",
+          "hardwareExecution": false,
+          "physicalGatesOpened": false
+        },
+        {
+          "runNumber": 1191,
+          "runId": 37068264838,
+          "head": "7ed5f4d81c0f116942766e7603304401f90a494d",
+          "result": "FAILURE",
+          "failureStep": "PowerShell syntax check",
+          "cause": "The colon-adjacent Label interpolation was fixed, but the harness still contained a duplicated trailing source fragment left by the earlier replacement-generation corruption. PowerShell parsed the stray closing tokens after the intended final exit as unexpected ')' / '}'. The physical P16 gate remained false and no target hardware execution occurred.",
           "hardwareExecution": false,
           "physicalGatesOpened": false
         }

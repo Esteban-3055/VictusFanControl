@@ -133,6 +133,12 @@ if($isHardened){
  foreach($needle in @('already consumed','failureFirst','non-transient','three transient attempts')){Assert-Contains $hardeningSelfTest $needle ("P16B hardening helper self-test missing: {0}" -f $needle)}
  foreach($needle in @('Invoke-P16BoundedEcContentionRetry','Wait-P16InteractionOutcome','New-P16AuthorizationAttemptFence','attemptFenceClaimed')){Assert-Contains $harness $needle ("P16B hardened harness missing: {0}" -f $needle)}
  foreach($needle in @('P16 could not parse setpoint probe. Raw:','[pscustomobject]@{timestampUtc=','$window.Count -gt 0')){Assert-Contains $harness $needle ("P16B corrected harness source incomplete: {0}" -f $needle)}
+ if(([regex]::Matches($harness,[regex]::Escape('function Read-8C40Setpoint {'))).Count -ne 1){throw 'P16B harness must contain exactly one Read-8C40Setpoint function.'}
+ if(([regex]::Matches($harness,[regex]::Escape('function Assert-StableSetpoint'))).Count -ne 1){throw 'P16B harness must contain exactly one Assert-StableSetpoint function.'}
+ if(([regex]::Matches($harness,[regex]::Escape('function Wait-P16InteractionOutcome'))).Count -ne 1){throw 'P16B harness must contain exactly one interaction waiter.'}
+ Assert-Contains $harness 'during {0}: {1}" -f $Label,$outcome.Line' 'P16B interaction failure diagnostic must avoid colon-adjacent variable interpolation.'
+ Assert-NotContains $harness 'during $Label:' 'P16B harness must not contain invalid colon-adjacent Label interpolation.'
+ if(-not $harness.TrimEnd().EndsWith('exit 1',[StringComparison]::Ordinal)){throw 'P16B harness must terminate at the single final fail-closed exit.'}
  Assert-Contains $packager 'attempt-fence' 'P16B evidence packager must carry the one-shot attempt fence.'
  Assert-Contains $workflow 'HP 8C40 P16B hardening helper self-test' 'P16B hardening helper self-test must run in CI.'
  Assert-Contains $doc 'P16B software-only hardening staged' 'P16B hardening documentation missing.'

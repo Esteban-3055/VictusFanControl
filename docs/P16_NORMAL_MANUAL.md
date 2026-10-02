@@ -247,3 +247,25 @@ to `${Label}:`.
 This was software-only: the dedicated P16 physical gate remained false and no
 target hardware execution occurred.
 
+
+### Preserved CI #1191 and clean harness reconstruction
+
+HEAD `7ed5f4d81c0f116942766e7603304401f90a494d` preserved CI #1191 /
+run `37068264838` as another software-only PowerShell syntax failure.
+
+The colon-adjacent Label interpolation itself was corrected, but review of the
+complete file showed that the prior source-generation corruption had also left a
+duplicated trailing harness fragment after the intended final `exit 1`.
+That fragment produced the remaining unexpected `)` / `}` parser errors.
+
+The follow-up does not patch that corrupted tail incrementally. It reconstructs
+`test-p16-normal-manual.ps1` from the last known-good pre-hardening harness
+(`59df2b5c1edb0d107e7d766960a439dd79c40a60`) and reapplies only the reviewed
+P16B hardening deltas: bounded parent EC contention retry, first-outcome
+interaction fencing, one-shot authorization consumption and evidence tracking.
+
+Static invariants now require exactly one setpoint-probe function, one stable
+setpoint proof function, one interaction waiter, the safe formatted failure
+diagnostic, and a clean final fail-closed `exit 1`. All physical gates remain
+closed.
+
