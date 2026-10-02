@@ -7,7 +7,7 @@ internal static class Hp8C40P15D2VariableManualQualificationGate
 {
     // Re-blocked during the P15D2 retry-status barrier correction.
     // A retry requires a separate fresh authorization and same-HEAD CI.
-    public static readonly bool PhysicalExecutionAuthorized = false;
+    public static readonly bool PhysicalExecutionAuthorized = true;
 
     public const string RequiredToken = "8C40-P15D2-MANUAL30-40-40-30";
     public const int InitialLevel = 30;
