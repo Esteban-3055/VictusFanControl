@@ -161,6 +161,8 @@ internal sealed class MainForm : Form
     private readonly string? _p15cGuiManualMarkerRoot;
     private readonly bool _p15d1TrayExitHardwareTest;
     private readonly string? _p15d1TrayExitMarkerRoot;
+    private readonly bool _p15d2VariableManualHardwareTest;
+    private readonly string? _p15d2VariableManualMarkerRoot;
     private Hp8C40WatchdogBootstrapEvidence? _m9WatchdogBootstrapEvidence;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _uiTimer;
@@ -223,6 +225,17 @@ internal sealed class MainForm : Form
     private int _p15d1WindowHideRequests;
     private int _p15d1TrayExitRequests;
     private string? _p15d1FailureDetail;
+
+    private int _p15d2ReadyGate;
+    private int _p15d2ReadySafetyStreak;
+    private DateTimeOffset? _p15d2LastReadySafetyTimestamp;
+    private volatile bool _p15d2ReadyPublished;
+    private volatile bool _p15d2Completed;
+    private int _p15d2ManualModeRequests;
+    private int _p15d2ManualApplyRequests;
+    private int _p15d2FirmwareModeRequests;
+    private int _p15d2AutomaticModeRequests;
+    private string? _p15d2FailureDetail;
 
     private int _suspendHardwareTestAdvanceGate;
     private int _gateDHardwareTestAdvanceGate;
@@ -360,6 +373,23 @@ internal sealed class MainForm : Form
     private string P15D1ShutdownResultPath => Path.Combine(P15D1MarkerRoot, Hp8C40P15D1TrayExitQualificationGate.ShutdownResultFileName);
     private string P15D1EventsPath => Path.Combine(P15D1MarkerRoot, Hp8C40P15D1TrayExitQualificationGate.EventsFileName);
 
+    private string P15D2MarkerRoot =>
+        _p15d2VariableManualMarkerRoot ??
+        throw new InvalidOperationException(
+            "P15D2 marker root was not configured.");
+
+    private string P15D2ReadyPath => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.ReadyFileName);
+    private string P15D2Step1Apply30Path => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.Step1Apply30FileName);
+    private string P15D2Parent30VerifiedPath => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.Parent30VerifiedFileName);
+    private string P15D2Step2Apply40Path => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.Step2Apply40FileName);
+    private string P15D2Parent40VerifiedPath => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.Parent40VerifiedFileName);
+    private string P15D2Step3Hold40Path => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.Step3Hold40FileName);
+    private string P15D2ParentHold40VerifiedPath => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.ParentHold40VerifiedFileName);
+    private string P15D2Step4Return30Path => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.Step4Return30FileName);
+    private string P15D2ParentReturn30VerifiedPath => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.ParentReturn30VerifiedFileName);
+    private string P15D2FirmwareRestoredPath => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.FirmwareRestoredFileName);
+    private string P15D2EventsPath => Path.Combine(P15D2MarkerRoot, Hp8C40P15D2VariableManualQualificationGate.EventsFileName);
+
     private string DisplayAwareReadyPath =>
         _m9dProductionLifecycleHardwareTest
             ? Path.Combine(M9DMarkerRoot, "m9d-production-lifecycle.ready")
@@ -445,7 +475,9 @@ internal sealed class MainForm : Form
         bool p15cGuiManualHardwareTest = false,
         string? p15cGuiManualMarkerRoot = null,
         bool p15d1TrayExitHardwareTest = false,
-        string? p15d1TrayExitMarkerRoot = null)
+        string? p15d1TrayExitMarkerRoot = null,
+        bool p15d2VariableManualHardwareTest = false,
+        string? p15d2VariableManualMarkerRoot = null)
     {
         Text = "VictusFanControl v0.4-dev — P13 software UI complete / hardware gates CLOSED";
         StartPosition = FormStartPosition.CenterScreen;
@@ -477,6 +509,11 @@ internal sealed class MainForm : Form
             string.IsNullOrWhiteSpace(p15d1TrayExitMarkerRoot)
                 ? null
                 : Path.GetFullPath(p15d1TrayExitMarkerRoot);
+        _p15d2VariableManualHardwareTest = p15d2VariableManualHardwareTest;
+        _p15d2VariableManualMarkerRoot =
+            string.IsNullOrWhiteSpace(p15d2VariableManualMarkerRoot)
+                ? null
+                : Path.GetFullPath(p15d2VariableManualMarkerRoot);
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
         _targetProfile =
             HpHardwareTargetResolver.Resolve(
@@ -594,6 +631,38 @@ internal sealed class MainForm : Form
                 {
                     throw new InvalidOperationException(
                         $"P15D1 refuses to overwrite existing evidence marker '{path}'.");
+                }
+            }
+        }
+
+        if (_p15d2VariableManualHardwareTest)
+        {
+            if (_p15d2VariableManualMarkerRoot is null)
+            {
+                throw new InvalidOperationException(
+                    "P15D2 requires an isolated marker/evidence root.");
+            }
+
+            Directory.CreateDirectory(P15D2MarkerRoot);
+            foreach (var path in new[]
+                     {
+                         P15D2ReadyPath,
+                         P15D2Step1Apply30Path,
+                         P15D2Parent30VerifiedPath,
+                         P15D2Step2Apply40Path,
+                         P15D2Parent40VerifiedPath,
+                         P15D2Step3Hold40Path,
+                         P15D2ParentHold40VerifiedPath,
+                         P15D2Step4Return30Path,
+                         P15D2ParentReturn30VerifiedPath,
+                         P15D2FirmwareRestoredPath,
+                         P15D2EventsPath
+                     })
+            {
+                if (File.Exists(path))
+                {
+                    throw new InvalidOperationException(
+                        $"P15D2 refuses to overwrite existing evidence marker '{path}'.");
                 }
             }
         }
@@ -800,12 +869,17 @@ internal sealed class MainForm : Form
         var p15d1ManualExecutionAuthorized =
             _p15d1TrayExitHardwareTest &&
             Hp8C40P15D1TrayExitQualificationGate.PhysicalExecutionAuthorized;
+        var p15d2ManualExecutionAuthorized =
+            _p15d2VariableManualHardwareTest &&
+            Hp8C40P15D2VariableManualQualificationGate.PhysicalExecutionAuthorized;
         var isolatedManualQualification =
-            _p15cGuiManualHardwareTest || _p15d1TrayExitHardwareTest;
+            _p15cGuiManualHardwareTest ||
+            _p15d1TrayExitHardwareTest ||
+            _p15d2VariableManualHardwareTest;
 
         var manualExecutionAuthorized =
             isolatedManualQualification
-                ? p15cManualExecutionAuthorized || p15d1ManualExecutionAuthorized
+                ? p15cManualExecutionAuthorized || p15d1ManualExecutionAuthorized || p15d2ManualExecutionAuthorized
                 : Hp8C40PostM9UserControlGate.ManualExecutionAuthorized;
 
         var automaticExecutionAuthorized =
@@ -837,13 +911,17 @@ internal sealed class MainForm : Form
                         ? () => _p15cReadyPublished && !_p15cCompleted
                         : _p15d1TrayExitHardwareTest
                             ? () => _p15d1ReadyPublished && !_p15d1Completed
-                            : null,
+                            : _p15d2VariableManualHardwareTest
+                                ? () => _p15d2ReadyPublished && !_p15d2Completed
+                                : null,
                 interactionAuthorizationProvider:
                     _p15cGuiManualHardwareTest
                         ? IsP15CControlInteractionAuthorized
                         : _p15d1TrayExitHardwareTest
                             ? IsP15D1ControlInteractionAuthorized
-                            : null,
+                            : _p15d2VariableManualHardwareTest
+                                ? IsP15D2ControlInteractionAuthorized
+                                : null,
                 fixedManualQualificationLevel:
                     _p15cGuiManualHardwareTest
                         ? Hp8C40P15CGuiManualQualificationGate.QualificationLevel
@@ -855,7 +933,9 @@ internal sealed class MainForm : Form
                         ? OnP15CControlInteraction
                         : _p15d1TrayExitHardwareTest
                             ? OnP15D1ControlInteraction
-                            : null);
+                            : _p15d2VariableManualHardwareTest
+                                ? OnP15D2ControlInteraction
+                                : null);
         _p13FanControlSurface.UpdateAuthority(
             _fanCoordinator.Authority);
 
@@ -896,6 +976,12 @@ internal sealed class MainForm : Form
             {
                 AppendEvent(
                     "P15D1 TRAY-EXIT QUALIFICATION: dedicated test mode active. Wait for READY, use Manual 30/30 once, then follow the parent console for X/hide and tray Exit. Normal user Manual and Automatic remain CLOSED.");
+            }
+
+            if (_p15d2VariableManualHardwareTest)
+            {
+                AppendEvent(
+                    "P15D2 VARIABLE-MANUAL QUALIFICATION: dedicated test mode active. Follow the parent console exactly for Manual -> 30 -> 40 -> duplicate 40 no-retransmit -> 30 -> Firmware. Normal user Manual and Automatic remain CLOSED.");
             }
 
             if (_suspendLifecycleHardwareTest)
@@ -2727,6 +2813,14 @@ internal sealed class MainForm : Form
             _ = Task.Run(TryPublishP15D1ReadyAsync);
         }
 
+        if (_p15d2VariableManualHardwareTest &&
+            !_p15d2ReadyPublished &&
+            !_p15d2Completed &&
+            _worker.StateMachine.State == SystemState.Healthy)
+        {
+            _ = Task.Run(TryPublishP15D2ReadyAsync);
+        }
+
         Ui(() =>
         {
             _cpuTemperature.Text =
@@ -2850,6 +2944,12 @@ internal sealed class MainForm : Form
         if (_p15d1TrayExitHardwareTest)
         {
             await TryPublishP15D1ReadyAsync();
+            return;
+        }
+
+        if (_p15d2VariableManualHardwareTest)
+        {
+            await TryPublishP15D2ReadyAsync();
             return;
         }
 
@@ -3337,6 +3437,436 @@ internal sealed class MainForm : Form
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
         var temp = path + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(value, Hp8C40P15D1TrayExitQualificationGate.JsonOptions));
+        File.Move(temp, path, overwrite: true);
+    }
+
+    private Task TryPublishP15D2ReadyAsync()
+    {
+        if (!_p15d2VariableManualHardwareTest || _p15d2Completed || _p15d2ReadyPublished ||
+            Interlocked.CompareExchange(ref _p15d2ReadyGate, 1, 0) != 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            if (!Hp8C40P15D2VariableManualQualificationGate.PhysicalExecutionAuthorized ||
+                !Hp8C40P15D2VariableManualQualificationGate.NormalUserExecutionGatesClosed())
+            {
+                throw new InvalidOperationException("P15D2 qualification boundary is closed or normal user gates are open.");
+            }
+
+            if (!_fanProductionController.ManualExecutionAuthorized ||
+                _fanProductionController.AutomaticExecutionAuthorized)
+            {
+                throw new InvalidOperationException("P15D2 controller authorization isolation is invalid.");
+            }
+
+            if (_worker.StateMachine.State != SystemState.Healthy ||
+                _fanCoordinator.Authority != FanAuthority.Firmware ||
+                !_fanCoordinator.BackendCanWrite ||
+                _lastSnapshot is null)
+            {
+                _p15d2ReadySafetyStreak = 0;
+                _p15d2LastReadySafetyTimestamp = null;
+                return Task.CompletedTask;
+            }
+
+            EnsureP15D2QualificationEnvelope(_lastSnapshot);
+            var safety = EvaluateControlSafety(
+                _hardwareIdentity,
+                _worker.StateMachine.State,
+                _lastSnapshot,
+                DateTimeOffset.UtcNow,
+                fanWritePathPresent: _fanCoordinator.BackendCanWrite);
+
+            if (!safety.CustomControlPermitted || !safety.SnapshotTimestamp.HasValue)
+            {
+                _p15d2ReadySafetyStreak = 0;
+                _p15d2LastReadySafetyTimestamp = null;
+                return Task.CompletedTask;
+            }
+
+            var timestamp = safety.SnapshotTimestamp.Value;
+            if (_p15d2LastReadySafetyTimestamp.HasValue &&
+                timestamp <= _p15d2LastReadySafetyTimestamp.Value)
+            {
+                return Task.CompletedTask;
+            }
+
+            _p15d2LastReadySafetyTimestamp = timestamp;
+            if (File.Exists(P15CJournalPath))
+            {
+                throw new InvalidOperationException("P15D2 cannot publish READY while a durable watchdog journal exists.");
+            }
+
+            _p15d2ReadySafetyStreak++;
+            if (_p15d2ReadySafetyStreak <
+                Hp8C40P15D2VariableManualQualificationGate.RequiredHealthyPreWriteSamples)
+            {
+                return Task.CompletedTask;
+            }
+
+            using var process = Process.GetCurrentProcess();
+            WriteP15D2Json(P15D2ReadyPath, new
+            {
+                schemaVersion = 1,
+                gate = "P15D2-GUI",
+                result = "READY",
+                timestampUtc = DateTimeOffset.UtcNow,
+                processId = Environment.ProcessId,
+                processStartUtcTicks = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+                targetProfileId = Hp8C40TargetProfile.Instance.Id,
+                mode = _fanProductionController.Mode.ToString(),
+                authority = _fanCoordinator.Authority.ToString(),
+                manualQualificationAuthorized = _fanProductionController.ManualExecutionAuthorized,
+                userFacingManualAuthorized = Hp8C40PostM9UserControlGate.ManualExecutionAuthorized,
+                automaticAuthorized = _fanProductionController.AutomaticExecutionAuthorized,
+                safetyPermitted = safety.CustomControlPermitted,
+                healthySafetySamples = _p15d2ReadySafetyStreak,
+                appLogPath = AppLog.CurrentLogPath
+            });
+
+            _p15d2ReadyPublished = true;
+            AppendEvent("P15D2 GUI READY: three consecutive Healthy/SafetyGate-permitted observations; Firmware authority; no durable journal.");
+        }
+        catch (Exception ex)
+        {
+            FailP15D2Qualification($"READY failed closed: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _p15d2ReadyGate, 0);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static void EnsureP15D2QualificationEnvelope(TelemetrySnapshot snapshot)
+    {
+        if (!snapshot.IsComplete ||
+            !snapshot.CpuControlTemperatureC.HasValue ||
+            !snapshot.CpuPackagePowerW.HasValue ||
+            !snapshot.GpuTemperatureC.HasValue ||
+            !snapshot.GpuPowerW.HasValue)
+        {
+            throw new InvalidOperationException("P15D2 requires complete CPU/GPU temperature and power telemetry.");
+        }
+
+        if (snapshot.CpuControlTemperatureC.Value > Hp8C40P15D2VariableManualQualificationGate.MaximumCpuPhysicalC ||
+            snapshot.GpuTemperatureC.Value > Hp8C40P15D2VariableManualQualificationGate.MaximumGpuPhysicalC ||
+            snapshot.CpuPackagePowerW.Value > Hp8C40P15D2VariableManualQualificationGate.MaximumCpuPackagePowerW ||
+            snapshot.GpuPowerW.Value > Hp8C40P15D2VariableManualQualificationGate.MaximumGpuPowerW)
+        {
+            throw new InvalidOperationException(
+                $"P15D2 qualification envelope refused readiness: CPU={snapshot.CpuControlTemperatureC.Value:0.0}C/{snapshot.CpuPackagePowerW.Value:0.0}W, GPU={snapshot.GpuTemperatureC.Value:0.0}C/{snapshot.GpuPowerW.Value:0.0}W.");
+        }
+    }
+
+    private bool IsP15D2ControlInteractionAuthorized(
+        P13ControlInteractionKind kind,
+        AdaptiveFanProductionMode? requestedMode,
+        int? equalFanLevel)
+    {
+        if (!_p15d2VariableManualHardwareTest ||
+            _p15d2Completed ||
+            !_p15d2ReadyPublished)
+        {
+            return false;
+        }
+
+        if (kind == P13ControlInteractionKind.ManualApply)
+        {
+            if (requestedMode is not null ||
+                _p15d2ManualModeRequests != 1 ||
+                _p15d2FirmwareModeRequests != 0 ||
+                _p15d2AutomaticModeRequests != 0)
+            {
+                return false;
+            }
+
+            return _p15d2ManualApplyRequests switch
+            {
+                0 => equalFanLevel == Hp8C40P15D2VariableManualQualificationGate.InitialLevel &&
+                     !File.Exists(P15D2Parent30VerifiedPath),
+                1 => equalFanLevel == Hp8C40P15D2VariableManualQualificationGate.ChangedLevel &&
+                     HasP15D2Proof(P15D2Parent30VerifiedPath, "P15D2-PARENT-30-VERIFIED|"),
+                2 => equalFanLevel == Hp8C40P15D2VariableManualQualificationGate.ChangedLevel &&
+                     HasP15D2Proof(P15D2Parent40VerifiedPath, "P15D2-PARENT-40-VERIFIED|"),
+                3 => equalFanLevel == Hp8C40P15D2VariableManualQualificationGate.ReturnLevel &&
+                     HasP15D2Proof(P15D2ParentHold40VerifiedPath, "P15D2-PARENT-HOLD40-VERIFIED|"),
+                _ => false
+            };
+        }
+
+        if (kind != P13ControlInteractionKind.ModeRequest ||
+            equalFanLevel is not null)
+        {
+            return false;
+        }
+
+        if (requestedMode == AdaptiveFanProductionMode.Manual)
+        {
+            return _p15d2ManualModeRequests == 0 &&
+                   _p15d2ManualApplyRequests == 0 &&
+                   _p15d2FirmwareModeRequests == 0 &&
+                   _p15d2AutomaticModeRequests == 0;
+        }
+
+        if (requestedMode == AdaptiveFanProductionMode.Firmware)
+        {
+            return _p15d2ManualModeRequests == 1 &&
+                   _p15d2ManualApplyRequests == 4 &&
+                   _p15d2FirmwareModeRequests == 0 &&
+                   _p15d2AutomaticModeRequests == 0 &&
+                   HasP15D2Proof(P15D2ParentReturn30VerifiedPath, "P15D2-PARENT-RETURN30-VERIFIED|");
+        }
+
+        return false;
+    }
+
+    private bool HasP15D2Proof(string path, string prefix)
+    {
+        try
+        {
+            if (!File.Exists(path)) return false;
+            var proof = File.ReadAllText(path).Trim();
+            using var process = Process.GetCurrentProcess();
+            var ticks = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture);
+            var suffix = $"|guiPid={Environment.ProcessId}|guiStartTicks={ticks}";
+            return proof.StartsWith(prefix, StringComparison.Ordinal) &&
+                   proof.EndsWith(suffix, StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void OnP15D2ControlInteraction(P13ControlInteractionObservation observation)
+    {
+        if (!_p15d2VariableManualHardwareTest || _p15d2Completed) return;
+
+        try
+        {
+            Directory.CreateDirectory(P15D2MarkerRoot);
+            File.AppendAllText(
+                P15D2EventsPath,
+                JsonSerializer.Serialize(
+                    observation,
+                    Hp8C40P15D2VariableManualQualificationGate.JsonOptions) +
+                Environment.NewLine);
+
+            if (!string.IsNullOrWhiteSpace(observation.Failure))
+            {
+                throw new InvalidOperationException(
+                    $"Observed real P13 interaction failed: {observation.Failure}");
+            }
+
+            var result = observation.Result ??
+                throw new InvalidOperationException("Observed real P13 interaction is missing its production result.");
+
+            if (observation.Kind == P13ControlInteractionKind.ModeRequest)
+            {
+                if (observation.RequestedMode == AdaptiveFanProductionMode.Manual)
+                {
+                    _p15d2ManualModeRequests++;
+                    if (!_p15d2ReadyPublished ||
+                        _p15d2ManualModeRequests != 1 ||
+                        _p15d2ManualApplyRequests != 0 ||
+                        _p15d2FirmwareModeRequests != 0 ||
+                        _p15d2AutomaticModeRequests != 0 ||
+                        !result.ExecutionAuthorized ||
+                        result.Mode != AdaptiveFanProductionMode.Manual ||
+                        result.Action != AdaptiveFanProductionActionKind.HoldFirmware ||
+                        result.Authority != FanAuthority.Firmware)
+                    {
+                        throw new InvalidOperationException(
+                            "P15D2 Manual selection was not one no-write Firmware-authority transition.");
+                    }
+
+                    AppendEvent("P15D2 observed real P13 Manual: mode=Manual, authority=Firmware, no fan command.");
+                    return;
+                }
+
+                if (observation.RequestedMode == AdaptiveFanProductionMode.Firmware)
+                {
+                    _p15d2FirmwareModeRequests++;
+                    var restore = _fanCoordinator.LastRestoreEvidence;
+                    if (_p15d2ManualModeRequests != 1 ||
+                        _p15d2ManualApplyRequests != 4 ||
+                        _p15d2FirmwareModeRequests != 1 ||
+                        _p15d2AutomaticModeRequests != 0 ||
+                        !HasP15D2Proof(P15D2ParentReturn30VerifiedPath, "P15D2-PARENT-RETURN30-VERIFIED|") ||
+                        !result.ExecutionAuthorized ||
+                        result.Mode != AdaptiveFanProductionMode.Firmware ||
+                        result.Action != AdaptiveFanProductionActionKind.RestoreFirmware ||
+                        result.Authority != FanAuthority.Firmware ||
+                        !restore.HasValue ||
+                        !restore.Value.LocalFirmwareAckVerified ||
+                        !restore.Value.WatchdogLeaseRequired ||
+                        !restore.Value.WatchdogReleaseVerified ||
+                        File.Exists(P15CJournalPath))
+                    {
+                        throw new InvalidOperationException(
+                            "P15D2 Firmware request did not prove the exact production strong-restore path.");
+                    }
+
+                    using var process = Process.GetCurrentProcess();
+                    WriteP15D2Json(P15D2FirmwareRestoredPath, new
+                    {
+                        schemaVersion = 1,
+                        gate = "P15D2-GUI",
+                        result = "FIRMWARE_RESTORED",
+                        timestampUtc = DateTimeOffset.UtcNow,
+                        processId = Environment.ProcessId,
+                        processStartUtcTicks = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+                        manualModeRequests = _p15d2ManualModeRequests,
+                        manualApplyRequests = _p15d2ManualApplyRequests,
+                        firmwareModeRequests = _p15d2FirmwareModeRequests,
+                        automaticModeRequests = _p15d2AutomaticModeRequests,
+                        action = result.Action.ToString(),
+                        finalMode = result.Mode.ToString(),
+                        finalAuthority = result.Authority.ToString(),
+                        localFirmwareAckVerified = restore.Value.LocalFirmwareAckVerified,
+                        watchdogLeaseRequired = restore.Value.WatchdogLeaseRequired,
+                        watchdogReleaseVerified = restore.Value.WatchdogReleaseVerified,
+                        journalPresentAfterRestore = File.Exists(P15CJournalPath)
+                    });
+
+                    _p15d2Completed = true;
+                    AppendEvent("P15D2 GUI RESULT: variable Manual sequence completed and real Firmware request completed production strong restore.");
+                    return;
+                }
+
+                if (observation.RequestedMode == AdaptiveFanProductionMode.Automatic)
+                {
+                    _p15d2AutomaticModeRequests++;
+                }
+
+                throw new InvalidOperationException("P15D2 allows only one Manual request followed by one final Firmware request; Automatic is forbidden.");
+            }
+
+            if (observation.Kind != P13ControlInteractionKind.ManualApply)
+            {
+                throw new InvalidOperationException("P15D2 observed an unsupported P13 interaction.");
+            }
+
+            _p15d2ManualApplyRequests++;
+            var expectedLevel = _p15d2ManualApplyRequests switch
+            {
+                1 => Hp8C40P15D2VariableManualQualificationGate.InitialLevel,
+                2 => Hp8C40P15D2VariableManualQualificationGate.ChangedLevel,
+                3 => Hp8C40P15D2VariableManualQualificationGate.ChangedLevel,
+                4 => Hp8C40P15D2VariableManualQualificationGate.ReturnLevel,
+                _ => -1
+            };
+            var expectedAction = _p15d2ManualApplyRequests switch
+            {
+                1 => AdaptiveFanProductionActionKind.EnterCustomAndApply,
+                2 => AdaptiveFanProductionActionKind.ApplyChangedLevel,
+                3 => AdaptiveFanProductionActionKind.HoldCustom,
+                4 => AdaptiveFanProductionActionKind.ApplyChangedLevel,
+                _ => AdaptiveFanProductionActionKind.Blocked
+            };
+
+            if (!_p15d2ReadyPublished ||
+                _p15d2ManualModeRequests != 1 ||
+                _p15d2FirmwareModeRequests != 0 ||
+                _p15d2AutomaticModeRequests != 0 ||
+                observation.EqualFanLevel != expectedLevel ||
+                !result.ExecutionAuthorized ||
+                result.Mode != AdaptiveFanProductionMode.Manual ||
+                result.Action != expectedAction ||
+                result.EqualFanLevel != expectedLevel ||
+                result.Authority != FanAuthority.Custom)
+            {
+                throw new InvalidOperationException(
+                    $"P15D2 Manual Apply #{_p15d2ManualApplyRequests} did not match the required level/action.");
+            }
+
+            if (_p15d2ManualApplyRequests == 2 &&
+                !HasP15D2Proof(P15D2Parent30VerifiedPath, "P15D2-PARENT-30-VERIFIED|"))
+            {
+                throw new InvalidOperationException("P15D2 40/40 change occurred without the parent 30/30 ownership proof.");
+            }
+            if (_p15d2ManualApplyRequests == 3 &&
+                !HasP15D2Proof(P15D2Parent40VerifiedPath, "P15D2-PARENT-40-VERIFIED|"))
+            {
+                throw new InvalidOperationException("P15D2 duplicate 40/40 occurred without the parent 40/40 ownership proof.");
+            }
+            if (_p15d2ManualApplyRequests == 4 &&
+                !HasP15D2Proof(P15D2ParentHold40VerifiedPath, "P15D2-PARENT-HOLD40-VERIFIED|"))
+            {
+                throw new InvalidOperationException("P15D2 return 30/30 occurred without the parent duplicate-40 no-retransmit proof.");
+            }
+
+            using var applyProcess = Process.GetCurrentProcess();
+            var markerPath = _p15d2ManualApplyRequests switch
+            {
+                1 => P15D2Step1Apply30Path,
+                2 => P15D2Step2Apply40Path,
+                3 => P15D2Step3Hold40Path,
+                4 => P15D2Step4Return30Path,
+                _ => throw new InvalidOperationException("P15D2 unexpected apply count.")
+            };
+
+            WriteP15D2Json(markerPath, new
+            {
+                schemaVersion = 1,
+                gate = "P15D2-GUI",
+                result = _p15d2ManualApplyRequests == 3 ? "HOLD_NO_RETRANSMIT" : "MANUAL_APPLIED",
+                timestampUtc = DateTimeOffset.UtcNow,
+                processId = Environment.ProcessId,
+                processStartUtcTicks = applyProcess.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+                equalFanLevel = expectedLevel,
+                action = result.Action.ToString(),
+                authority = result.Authority.ToString(),
+                manualModeRequests = _p15d2ManualModeRequests,
+                manualApplyRequests = _p15d2ManualApplyRequests,
+                firmwareModeRequests = _p15d2FirmwareModeRequests,
+                automaticModeRequests = _p15d2AutomaticModeRequests
+            });
+
+            AppendEvent(
+                _p15d2ManualApplyRequests switch
+                {
+                    1 => "P15D2 observed real P13 Apply #1: 30/30 EnterCustomAndApply; awaiting parent 30/30 ownership proof.",
+                    2 => "P15D2 observed real P13 Apply #2: changed to 40/40 in existing Custom session; awaiting parent 40/40 proof.",
+                    3 => "P15D2 observed real P13 Apply #3: duplicate 40/40 returned HoldCustom; awaiting parent no-retransmit proof.",
+                    4 => "P15D2 observed real P13 Apply #4: returned to 30/30 in existing Custom session; awaiting parent return-30 proof before Firmware.",
+                    _ => throw new InvalidOperationException("P15D2 unexpected apply count.")
+                });
+        }
+        catch (Exception ex)
+        {
+            FailP15D2Qualification($"Interaction sequence failed closed: {ex.Message}");
+        }
+    }
+
+    private void FailP15D2Qualification(string detail)
+    {
+        if (_p15d2Completed) return;
+        _p15d2Completed = true;
+        _p15d2FailureDetail = detail;
+        Environment.ExitCode = 162;
+        AppendEvent($"P15D2 FAIL_CLOSED: {detail}");
+        _allowExit = true;
+
+        if (IsHandleCreated && !IsDisposed)
+        {
+            BeginInvoke(new Action(() => { Enabled = false; Close(); }));
+        }
+    }
+
+    private static void WriteP15D2Json(string path, object value)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+        var temp = path + ".tmp";
+        File.WriteAllText(
+            temp,
+            JsonSerializer.Serialize(value, Hp8C40P15D2VariableManualQualificationGate.JsonOptions));
         File.Move(temp, path, overwrite: true);
     }
 

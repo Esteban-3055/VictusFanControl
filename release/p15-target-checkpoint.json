@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "P15A",
-  "status": "P15D2_VARIABLE_MANUAL_PREPARATION_HARDENING_CI_PENDING_GATE_CLOSED",
+  "status": "P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED",
   "scope": "first post-P14 target-side checkpoint; ordinary GUI startup with control OFF and zero fan writes",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "p14Baseline": {
@@ -1325,18 +1325,6 @@
   "guiManualVariableLevel": {
     "preparationImplemented": true,
     "preparationCiValidated": true,
-    "preparationBaseCi": {
-      "head": "b55742effc1b46112656ef2febdd96275389dbfc",
-      "runNumber": 1146,
-      "runId": 36972919383,
-      "result": "SUCCESS",
-      "powerShellSyntaxValidated": true,
-      "p15d1ClosureInvariantValidated": true,
-      "p15d2InvariantValidated": true,
-      "warningsAsErrorsBuildValidated": true,
-      "hardwareExecution": false,
-      "physicalGatesOpened": false
-    },
     "preparationClosure": {
       "closed": false,
       "result": "PENDING",
@@ -1363,20 +1351,19 @@
     "requiresProductionAdapter": true,
     "requiresProductionCoordinator": true,
     "requiresSameOwnershipSessionAcrossChangedLevels": true,
-    "requiresExpectedGenerationProgression": true,
     "requiresDuplicate40NoRetransmit": true,
     "requiresStrongRestore": true,
     "requiredGuiSequence": [
       "Firmware startup and READY after three distinct Healthy/SafetyGate-permitted observations",
       "real P13 Manual mode request exactly once",
       "real P13 Apply equal 30/30 exactly once",
-      "parent independently proves EC 30/30 plus schema-v2 OWNED journal generation 3 bound to the GUI identity",
+      "parent independently proves EC 30/30 plus schema-v2 generation-3 OWNED journal bound to the GUI identity",
       "real P13 Apply equal 40/40 exactly once",
-      "parent independently proves EC 40/40 in the same SessionId/controller identity with OWNED generation advanced to 5",
+      "parent independently proves EC 40/40 with the same ownership session/controller identity and the expected watchdog generation progression 3 -> 5",
       "real P13 Apply equal 40/40 a second time",
-      "GUI result must be HoldCustom and parent must prove no new watchdog WRITE_INTENT/COMMIT, unchanged EC 40/40, and unchanged OWNED generation 5",
+      "GUI result must be HoldCustom and parent must prove no new watchdog WRITE_INTENT/COMMIT, no physical setpoint change, and generation remains 5",
       "real P13 Apply equal 30/30 exactly once",
-      "parent independently proves EC 30/30 in the same SessionId/controller identity with OWNED generation advanced to 7",
+      "parent independently proves EC 30/30 with the same ownership session/controller identity and the expected watchdog generation progression 5 -> 7",
       "real P13 Firmware request exactly once",
       "production strong restore requires FF/FF + LegacyDefault + stable FF/FF + watchdog RELEASE + journal absent",
       "parent independently proves final FF/FF"
@@ -1391,13 +1378,8 @@
       "return30MustApplyChangedLevel": true,
       "firmwareRequestMustRestore": true,
       "sameOwnedSessionRequiredAcross30To40To40To30": true,
-      "sameOwnedGenerationAcrossChangedWritesForbidden": true,
-      "expectedOwnedGenerations": {
-        "initial30": 3,
-        "changed40": 5,
-        "duplicateHold40": 5,
-        "return30": 7
-      },
+      "expectedOwnedGenerations": [3, 5, 5, 7],
+      "generationSemantics": "Prepare starts at 1; every WRITE_INTENT and COMMIT increments generation, so committed 30/40/40-hold/30 states must be 3/5/5/7.",
       "expectedChangedWriteCount": 3,
       "expectedPrepareCount": 1,
       "expectedWriteIntentCount": 3,
@@ -1414,26 +1396,13 @@
       "userFacingManualMayOpen": false,
       "m9cOrM9dQualificationMayReopen": false
     },
-    "generationSemanticsReview": {
-      "required": true,
-      "reviewedPreparationHead": "b55742effc1b46112656ef2febdd96275389dbfc",
-      "reviewedPreparationCiRunNumber": 1146,
-      "reviewedPreparationCiRunId": 36972919383,
-      "reviewedPreparationCiResult": "SUCCESS",
-      "finding": "The initial preparation wording required the same watchdog generation across changed writes, but the production lease protocol increments Generation on every durable WriteIntent and Commit.",
-      "correction": "Preserve one SessionId and controller PID/start identity while requiring OWNED generations 3 -> 5 -> 5 -> 7 for 30 -> 40 -> duplicate 40 HoldCustom -> 30.",
-      "implementationComplete": true,
-      "ciValidated": false,
-      "hardwareExecution": false,
-      "physicalGatesOpened": false
-    },
     "plannedFiles": {
       "qualificationSource": "src/VictusFanControl.App/P15D2VariableManualQualification.cs",
       "invariantScript": "scripts/test-p15d2-variable-manual-invariants.ps1",
-      "futureHarness": "scripts/test-p15d2-variable-manual.ps1",
-      "futureEvidencePackager": "scripts/package-p15d2-evidence.ps1",
-      "futureEvidenceSelfTest": "scripts/test-p15d2-evidence-packaging.ps1",
-      "futureIndependentFailsafe": "scripts/watchdog-p15d2-service-failsafe-8c40.ps1"
+      "futureHarness": "implemented: scripts/test-p15d2-variable-manual.ps1",
+      "futureEvidencePackager": "implemented: scripts/package-p15d2-evidence.ps1",
+      "futureEvidenceSelfTest": "implemented: scripts/test-p15d2-evidence-packaging.ps1",
+      "futureIndependentFailsafe": "implemented: scripts/watchdog-p15d2-service-failsafe-8c40.ps1"
     },
     "preparationBasis": {
       "p15d1ClosureHead": "61542eaad2a66bb92c5e75bbfd07151457cf3127",
@@ -1441,8 +1410,94 @@
       "p15d1ClosureCiRunId": 36971629340,
       "p15d1ClosureCiResult": "SUCCESS"
     },
-    "runtimeImplementationComplete": false,
+    "preparationBaseCi": {
+      "head": "b55742effc1b46112656ef2febdd96275389dbfc",
+      "runNumber": 1146,
+      "runId": 36972919383,
+      "result": "SUCCESS"
+    },
+    "generationSemanticsReview": {
+      "required": true,
+      "finding": "The initial preparation wording incorrectly implied one stable watchdog generation across changed setpoints; WatchdogLeaseManager increments Generation on every durable WRITE_INTENT and every COMMIT.",
+      "correction": "Preserve one SessionId and controller PID/start identity while requiring committed OWNED generations 3 -> 5 -> 5 -> 7 for 30 -> 40 -> duplicate 40 HoldCustom -> 30.",
+      "implementationComplete": true,
+      "ciValidated": true,
+      "validationHead": "6899e93ceb07fc62694e48135c99e8b9a5e05517",
+      "validationCiRunNumber": 1171,
+      "validationCiRunId": 36977009716,
+      "validationCiResult": "SUCCESS",
+      "hardwareExecution": false,
+      "physicalGatesOpened": false
+    },
+    "runtimeSourceReview": {
+      "sourceBranch": "feature/p15d2-variable-manual-runtime",
+      "sourceHead": "b5353e789cef099f77ec7c463a1441f7e13ef41e",
+      "sourceCiRunNumber": 1170,
+      "sourceCiRunId": 36974640030,
+      "sourceCiResult": "SUCCESS",
+      "sourceCodeReviewedBeforeIntegration": true,
+      "sameHeadTargetCiStillRequired": true,
+      "hardwareExecution": false,
+      "physicalGatesOpened": false
+    },
+    "runtimeImplementationComplete": true,
     "runtimeImplementationCiValidated": false,
+    "runtimeImplementation": {
+      "programBoundaryImplemented": true,
+      "exactTargetBoundaryImplemented": true,
+      "realP13VariableManualPathReused": true,
+      "readyRequiresThreeHealthySafetySamples": true,
+      "initial30ParentFenceImplemented": true,
+      "changed40ParentFenceImplemented": true,
+      "duplicate40HoldCustomFenceImplemented": true,
+      "duplicate40NoRetransmitParentAuditImplemented": true,
+      "return30ParentFenceImplemented": true,
+      "realFirmwareStrongRestoreImplemented": true,
+      "sameOwnedSessionAuditImplemented": true,
+      "causalThreeWriteWatchdogAuditImplemented": true,
+      "nativeTrackedGuiProcess": true,
+      "independentFailsafeImplemented": true,
+      "evidencePackagerImplemented": true,
+      "evidencePackagingSelfTestImplemented": true,
+      "physicalExecution": false
+    },
+    "failedCiHistoryPreserved": [
+      {
+        "runNumber": 1148,
+        "runId": 36973216494,
+        "head": "0e39d6c0583a90b135f2bcb1b903b01a822ed3b5",
+        "result": "FAILURE",
+        "failureStep": "Build",
+        "cause": "Sequential staging commit wired the new P15D2 Program constructor arguments before the matching MainForm constructor/runtime commit; the next software-only commit completed that wiring.",
+        "hardwareExecution": false,
+        "physicalGatesOpened": false
+      },
+      {
+        "runNumber": 1155,
+        "runId": 36973835321,
+        "head": "7f5cb1d2efa65c1843fffebd5f2c98d76178dbfe",
+        "result": "FAILURE",
+        "failureStep": "HP 8C40 P15D2 variable Manual preparation invariant",
+        "cause": "The contract intentionally advanced to the implementation-CI-pending state one sequential staging commit before the P15D2 invariant learned that new state.",
+        "hardwareExecution": false,
+        "physicalGatesOpened": false
+      }
+    ],
+    "hardeningReview": {
+      "required": true,
+      "findings": [
+        "The first P15D2 failsafe draft inherited P15D1's 30/30-only lease classifier, so a delayed takeover during a qualified 40/40 OWNED or WRITE_ARMED state would have refused recovery.",
+        "The first P15D2 parent-harness draft assumed watchdog generation stayed at 3 across changed levels, but WatchdogLeaseManager increments generation on every WRITE_INTENT and every COMMIT."
+      ],
+      "fixes": [
+        "Accept only exact-target equal 30/30 or 40/40 Pending/Owned/PreviousOwned lease states in the independent P15D2 failsafe while preserving exact controller identity checks and qualified watchdog recovery.",
+        "Require one stable session/controller identity with committed generation progression 3 -> 5 -> 5 -> 7 for initial 30, changed 40, duplicate 40 HoldCustom, and return 30."
+      ],
+      "implementationComplete": true,
+      "ciValidated": false,
+      "hardwareExecution": false,
+      "physicalGatesOpened": false
+    },
     "hardwareExecution": false,
     "physicalGatesOpened": false
   }
