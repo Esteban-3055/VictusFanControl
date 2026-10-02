@@ -5,7 +5,7 @@ namespace VictusFanControl.App;
 
 internal static class Hp8C40P15D1TrayExitQualificationGate
 {
-    public static readonly bool PhysicalExecutionAuthorized = true;
+    public static readonly bool PhysicalExecutionAuthorized = false;
     public const string RequiredToken = "8C40-P15D1-TRAYEXIT30";
     public const int QualificationLevel = 30;
     public const int RequiredHealthyPreWriteSamples = 3;
