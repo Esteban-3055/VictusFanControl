@@ -23,13 +23,14 @@ public sealed record Hp8C40EcControlState(
     public int TachometerResolutionRpm { get; init; } = 1;
     public long FanQuerySequence { get; init; }
     public long FanQueryStartedAtMilliseconds { get; init; }
+    public bool DecodedMaxFanBitSet => Hp8C40MaxFanFlags.DecodeMaxFanBit(MaxFan);
 
     public override string ToString() =>
         $"level CPU={CpuSetpoint} GPU={GpuSetpoint} | " +
         $"rate-target CPU={CpuRateTarget}% GPU={GpuRateTarget}% | " +
         $"rate-read CPU={CpuRate}% GPU={GpuRate}% | " +
         $"reg62=0x{Diagnostic62:X2} reg63=0x{Diagnostic63:X2} mode=0x{Mode:X2} " +
-        $"max=0x{MaxFan:X2} switch=0x{FanSwitch:X2} | " +
+        $"max=0x{MaxFan:X2} decodedMaxFanBit={(DecodedMaxFanBitSet ? 1 : 0)} switch=0x{FanSwitch:X2} | " +
         $"RPM CPU={CpuRpm} GPU={GpuRpm}";
 }
 

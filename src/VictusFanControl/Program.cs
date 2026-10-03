@@ -38,6 +38,10 @@ internal static class Program
             return 0;
         }
 
+        if (options.AnalyzeEcWmiTracePath is { } tracePath)
+            return EcWmiTraceAnalyzer.Run(tracePath, options.TraceAnalysisOutputDirectory ??
+                Path.Combine(Path.GetDirectoryName(tracePath)!, "analysis-" + Path.GetFileNameWithoutExtension(tracePath)), Console.Out);
+
         if (options.WmiOnlyInvestigation)
         {
             WmiOnlyInvestigationPolicy.Enable();
@@ -54,10 +58,11 @@ internal static class Program
             var investigation = EcWmiInvestigationTraceSelfTest.Run(Console.Out);
             var telemetry = await HpWmiFanTelemetryReaderSelfTest.RunAsync(Console.Out);
             var proof = await HpWmiFanProofReaderSelfTest.RunAsync(Console.Out);
+            var traceAnalysis = EcWmiTraceAnalyzerSelfTest.Run(Console.Out);
             var isolation = WmiOnlyInvestigationPolicySelfTest.Run(Console.Out);
             EcWmiInvestigationTrace.Record(0, "selftest.finished", "no hardware I/O");
             if (!EcWmiInvestigationTrace.StopAndFlush()) return 1;
-            return window != 0 ? window : broker != 0 ? broker : diagnostics != 0 ? diagnostics : investigation != 0 ? investigation : telemetry != 0 ? telemetry : proof != 0 ? proof : isolation;
+            return window != 0 ? window : broker != 0 ? broker : diagnostics != 0 ? diagnostics : investigation != 0 ? investigation : telemetry != 0 ? telemetry : proof != 0 ? proof : traceAnalysis != 0 ? traceAnalysis : isolation;
         }
 
         if (options.SafetySelfTest)

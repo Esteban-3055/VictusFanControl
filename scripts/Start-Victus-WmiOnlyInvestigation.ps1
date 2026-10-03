@@ -225,6 +225,12 @@ try{
             Copy-Item -LiteralPath $logs[0].FullName -Destination (Join-Path $state.Evidence 'chronology.log')
             Test-WmiOnlyTrace (Join-Path $state.Evidence 'chronology.log') $state.Child.Id
             $state.ValidIsolation=(-not $state.Fault)
+            Write-Host 'Analisis offline: separar tiempos WMI nativos, preparacion y cierre; no consulta hardware.'
+            try{
+                & $state.Cli --analyze-ec-wmi-trace (Join-Path $state.Evidence 'chronology.log') --analysis-output-dir (Join-Path $state.Evidence 'analysis')
+                if($LASTEXITCODE -ne 0){$state.AnalysisFault='El analizador offline termino con codigo '+$LASTEXITCODE+'. El log original se conserva.'}
+            }catch{$state.AnalysisFault=$_.Exception.Message}
+            if($state.AnalysisFault){Write-Host ('INFORME OFFLINE INCOMPLETO: '+$state.AnalysisFault) -ForegroundColor Yellow}
         }catch{if(-not $state.Fault){$state.Fault=$_.Exception.Message}}
         finally{
             try{Resume-WmiOnlyWatchdog $state}catch{
@@ -234,7 +240,7 @@ try{
             Write-WmiOnlyJson (Join-Path $state.Evidence 'isolation-summary.json') ([pscustomobject]@{
                 Mode='wmi-only-no-direct-ec';ValidIsolation=$state.ValidIsolation;Fault=$state.Fault;StartedUtc=$state.StartedUtc;FinishedUtc=[DateTimeOffset]::UtcNow.ToString('o');
                 CliPid=$(if($state.Child){$state.Child.Id}else{$null});ExitCode=$(if($state.Child -and $state.Child.HasExited){$state.Child.ExitCode}else{$null});
-                WatchdogWasRunning=$state.WasRunning;WatchdogTemporarilyStopped=$state.Paused;WatchdogResumed=$state.Resumed;NoFanCommands=$true;
+                WatchdogWasRunning=$state.WasRunning;WatchdogTemporarilyStopped=$state.Paused;WatchdogResumed=$state.Resumed;NoFanCommands=$true;AnalysisFault=$state.AnalysisFault;
                 Scope='VFC process boundary and sampled process/service isolation; Windows/firmware may still access EC; external tools are not excluded.'
             })
             if($state.Fault){Write-Host ('AISLAMIENTO INCOMPLETO: '+$state.Fault+'. Se conserva el ZIP parcial.') -ForegroundColor Yellow}

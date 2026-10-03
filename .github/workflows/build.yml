@@ -546,6 +546,21 @@ jobs:
           if ($rows[-1].Stage -ne 'selftest.finished') { throw 'Terminal diagnostic record was lost at process shutdown.' }
           Write-Host 'PASS: opt-in JSONL, original clocks, MVID and bounded file; fixtures only.'
 
+      - name: Offline EC WMI analyzer CLI exports without hardware
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:LOCALAPPDATA 'VictusFanControl\logs'
+          $source = Get-ChildItem $folder -Filter 'ec-wmi-*.log' | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+          $before = (Get-FileHash $source.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $out = Join-Path $env:RUNNER_TEMP ('vfc-offline-report-' + [Guid]::NewGuid().ToString('N'))
+          dotnet run --project .\src\VictusFanControl -c Release --no-build -- --analyze-ec-wmi-trace $source.FullName --analysis-output-dir $out
+          if ($LASTEXITCODE -ne 0) { throw 'Offline analyzer CLI failed.' }
+          $summary = Get-Content (Join-Path $out 'summary.json') -Raw | ConvertFrom-Json
+          if (-not $summary.Analysis.ChronologyConsistent -or $summary.SourceSnapshotSha256 -ne $before -or $summary.Analysis.Pid -le 0) { throw 'Offline identity/coverage/hash failed.' }
+          foreach ($name in @('wmi-calls.csv','ec-reads.csv','report.md')) {if (-not (Test-Path (Join-Path $out $name))) {throw "Missing report $name"}}
+          if ((Get-FileHash $source.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $before) {throw 'Offline analyzer changed its source.'}
+          Write-Host 'PASS: offline CLI, original source unchanged, exact snapshot SHA-256, JSON/CSV/Markdown exports.'
+
       - name: Safety gate self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --safety-self-test
 

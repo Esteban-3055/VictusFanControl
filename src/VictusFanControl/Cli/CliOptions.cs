@@ -6,6 +6,8 @@ public sealed class CliOptions
     public bool WmiOnlyInvestigation { get; private set; }
     public string? InvestigationStopPath { get; private set; }
     public string? InvestigationReadyPath { get; private set; }
+    public string? AnalyzeEcWmiTracePath { get; private set; }
+    public string? TraceAnalysisOutputDirectory { get; private set; }
     public bool ProbeBackends { get; private set; }
     public bool FanWmiTelemetrySelfTest { get; private set; }
     public bool SafetySelfTest { get; private set; }
@@ -111,6 +113,14 @@ public sealed class CliOptions
 
                 case "--wmi-only-investigation":
                     options.WmiOnlyInvestigation = true;
+                    break;
+
+                case "--analyze-ec-wmi-trace":
+                    options.AnalyzeEcWmiTracePath = Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--analysis-output-dir":
+                    options.TraceAnalysisOutputDirectory = Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
                 case "--stop-file":
@@ -523,7 +533,20 @@ public sealed class CliOptions
         else if (options.InvestigationStopPath is not null || options.InvestigationReadyPath is not null)
             throw new ArgumentException("--stop-file/--ready-file require --wmi-only-investigation.");
 
+        if (options.AnalyzeEcWmiTracePath is not null)
+        {
+            for (var i = 0; i < args.Length; i++)
+            {
+                if (args[i] is "--help" or "-h") continue;
+                if (args[i] is "--analyze-ec-wmi-trace" or "--analysis-output-dir") { i++; continue; }
+                throw new ArgumentException("Offline trace analysis cannot be combined with hardware or control options.");
+            }
+        }
+        else if (options.TraceAnalysisOutputDirectory is not null)
+            throw new ArgumentException("--analysis-output-dir requires --analyze-ec-wmi-trace.");
+
         var exclusiveActions =
+            (options.AnalyzeEcWmiTracePath is not null ? 1 : 0) +
             (options.ProbeBackends ? 1 : 0) +
             (options.SafetySelfTest ? 1 : 0) +
             (options.FanWmiTelemetrySelfTest ? 1 : 0) +
@@ -826,6 +849,8 @@ public sealed class CliOptions
 
     public static void PrintHelp()
     {
+        Console.WriteLine("  --analyze-ec-wmi-trace <p> Offline JSONL timing report; no hardware initialization.");
+        Console.WriteLine("  --analysis-output-dir <p> Directory for offline JSON/CSV/Markdown reports.");
         Console.WriteLine("  --wmi-only-investigation  Exact 8C40 telemetry only; prohibit direct EC and HP writes in this process.");
         Console.WriteLine("  --stop-file <path>        Graceful stop signal for the WMI-only launcher.");
         Console.WriteLine("  --ready-file <path>       WMI-only CLI readiness metadata (atomic file).");

@@ -20,6 +20,7 @@ public static class Hp8C40FanControlBackendSelfTest
 
         failures += await TestProductionCapabilitiesAsync(output);
         failures += await TestHappyPathAsync(output);
+        failures += await TestMaxFanBitDiagnosticsRemainConservativeAsync(output);
         failures += await TestTransientSetpointAckReadFailureRecoversAsync(output);
         failures += await TestRepeatedSetpointAckReadFailureFailsClosedAsync(output);
         failures += TestSetpointSnapshotStabilizer(output);
@@ -66,6 +67,62 @@ public static class Hp8C40FanControlBackendSelfTest
             : $"Hp8C40FanControlBackend self-test: FAIL ({failures} case(s))");
 
         return failures == 0 ? 0 : 12;
+    }
+
+    private static async Task<int> TestMaxFanBitDiagnosticsRemainConservativeAsync(TextWriter output)
+    {
+        var failures = 0;
+        foreach (var (raw, bitSet) in new (byte, bool)[] { (0x00, false), (0x02, false), (0x04, true), (0x90, false), (0x94, true) })
+        {
+            var state = FakeHardware.AutoState with { MaxFan = raw };
+            failures += Report(output, $"8C40 FFFS bit decoding raw 0x{raw:X2}", state.DecodedMaxFanBitSet == bitSet);
+            if (raw == 0) continue;
+            var hardware = new FakeHardware { State = state };
+            await using var backend = NewBackend(hardware);
+            string? refusal = null;
+            try { await backend.EnterCustomModeAsync(CancellationToken.None); }
+            catch (FanControlOwnershipConflictException ex) { refusal = ex.Message; }
+            failures += Report(output, $"unqualified raw 0x{raw:X2} still prevents Manual admission",
+                refusal is not null && hardware.SetCalls == 0 &&
+                refusal.Contains(bitSet ? "FFFS is set" : "FFFS bit is clear", StringComparison.Ordinal));
+        }
+
+        var runtime = new FakeHardware();
+        var lease = new FakeWatchdogLeaseClient();
+        await using (var backend = NewProtectedBackend(runtime, lease))
+        {
+            await backend.EnterCustomModeAsync(CancellationToken.None);
+            await backend.ApplyAsync(new FanCommand(30, 30, "maxfan-bit-runtime"), CancellationToken.None);
+            runtime.GuardReadOverrides.Enqueue((0x90, 0));
+            runtime.GuardReadOverrides.Enqueue((0x90, 0));
+            var status = await backend.GetStatusAsync(CancellationToken.None);
+            failures += Report(output, "raw 90h is not decoded Max Fan but still blocks heartbeat",
+                !status.FeedbackHealthy && status.Detail.Contains("decodedMaxFanBit=0", StringComparison.Ordinal) &&
+                lease.Calls.Count(call => call == "heartbeat") == 0);
+            await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+        }
+
+        var ack = new FakeHardware();
+        var ackLease = new FakeWatchdogLeaseClient();
+        ack.OnSetFanLevel = () =>
+        {
+            ack.GuardReadOverrides.Enqueue((0x00, 0)); // Setpoint read.
+            ack.GuardReadOverrides.Enqueue((0x90, 0)); // Tachometer ACK state.
+        };
+        await using (var backend = NewProtectedBackend(ack, ackLease))
+        {
+            await backend.EnterCustomModeAsync(CancellationToken.None);
+            string? failure = null;
+            try { await backend.ApplyAsync(new FanCommand(30, 30, "maxfan-bit-ack"), CancellationToken.None); }
+            catch (InvalidOperationException ex) { failure = ex.Message; }
+            // As in production, recovery is a separate operation after Apply fails.
+            await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+            failures += Report(output, "raw 90h during ACK preserves abort and independent restore without false Max Fan claim",
+                failure?.Contains("FFFS bit is clear", StringComparison.Ordinal) == true &&
+                ack.SetCalls == 1 && ack.RestoreCalls >= 1 && ack.State.CpuSetpoint == 255 &&
+                ack.State.GpuSetpoint == 255 && !ackLease.Calls.Contains("commit"));
+        }
+        return failures;
     }
 
     private static async Task<int> TestProductionCapabilitiesAsync(TextWriter output)

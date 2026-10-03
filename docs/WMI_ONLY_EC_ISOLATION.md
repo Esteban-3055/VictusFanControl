@@ -49,4 +49,18 @@ Si no vuelve a iniciar M4, el lanzador lo informa y conserva el fallo. Tras cerr
 
 Si reaparece una demora de unos cinco segundos y ACPI 13 con aislamiento válido, el lector directo VFC no es necesario para ese episodio; habrá que estudiar el camino Windows/BIOS/EC y otros clientes. Si no reaparece, ganamos evidencia a favor de la interacción con el lector directo, pero una sola sesión negativa no demuestra causalidad, especialmente porque el fallo previo fue intermitente. El modo Firmware y la pausa M4 también cambian respecto de Manual: para atribuir el origen harán falta comparaciones adicionales.
 
-La calificación del getter WMI `26h`, la sustitución de verificaciones Manual y la corrección del tratamiento del bit MaxFan son pasos separados. Esta prueba conserva las protecciones actuales de producción.
+El diagnóstico MaxFan ahora decodifica FFFS con máscara `0x04`: `0x90` no implica que ese bit esté activo. Manual sigue rechazando todo byte no nulo hasta calificar otros estados; esta corrección no habilita valores nuevos ni cambia el transporte EC. La calificación del getter WMI `26h` y la sustitución de verificaciones Manual siguen pendientes.
+
+## Informe automático de tiempos
+
+Al finalizar una captura validada, el lanzador analiza offline `chronology.log` y añade `wmi-only/analysis/summary.json`, `wmi-calls.csv`, `ec-reads.csv` y `report.md` antes del ZIP. El análisis no inicializa sensores ni llama a HP WMI. Si falla, `AnalysisFault` lo registra y se conserva la cronología original.
+
+También puede analizarse un log anterior después de compilar:
+
+```powershell
+.\src\VictusFanControl\bin\Release\net8.0-windows\VictusFanControl.exe --analyze-ec-wmi-trace "C:\ruta\ec-wmi-22704.log" --analysis-output-dir "C:\ruta\analisis-wmi"
+```
+
+Los intervalos usan QPC y la frecuencia del encabezado, por operación dentro de un solo proceso. `NativeMs` mide entre `wmi.invoke.begin/end`; `TotalMs` mide `wmi.send.begin/end`; `OutsideInvokeMs` es la diferencia e incluye preparación y finalización, sin medir la cola anterior al inicio de `send`. Los tiempos UTC solo ubican eventos. La mediana y P95 se calculan sobre intervalos disponibles; un timeout o excepción sin final nativo no recibe un tiempo nativo inventado. Los CSV conservan cada llamada y lectura EC. Una llamada `2Eh` se etiqueta escritura o liberación: el log de solicitud no registra payload y no permite distinguirlas por sí solo.
+
+`ChronologyConsistent` evalúa integridad estructural del log, no equivale a `ValidIsolation` ni a ausencia de fallos físicos. Se reportan encabezados ausentes, IDs repetidos, finales sin inicio, operaciones pendientes, JSON inválido, pérdidas y límites. Logs concatenados con varios encabezados se rechazan para evitar mezclar PID/relojes. Las colas perdidas pueden hacer incompletos los recuentos. El resumen contiene el SHA-256 de los bytes exactos analizados; el archivo fuente permanece intacto. El analizador no sustituye la revisión ETL/EVTX ni establece causalidad.

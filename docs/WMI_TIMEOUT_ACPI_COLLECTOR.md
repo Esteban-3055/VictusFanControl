@@ -68,3 +68,5 @@ PowerShell 5.1 and 7 fixture checks cover shared-file copying, bounded reads, ch
 ## WMI-only isolation trial
 
 For the controlled firmware-mode comparison without VFC direct EC access, use [WMI_ONLY_EC_ISOLATION.md](WMI_ONLY_EC_ISOLATION.md) and `scripts/Start-Victus-WmiOnlyInvestigation.ps1`. This separate launcher rejects retained leases, closes its own read-only CLI gracefully, and temporarily pauses only a verified clean M4 service, restoring its prior state after the observation window. The normal GUI investigation launcher above is unchanged.
+
+The isolation launcher now adds an offline QPC timing report to the ZIP. It can also analyze a standalone application JSONL via `--analyze-ec-wmi-trace` and `--analysis-output-dir`; see the isolation guide. Native invoke timing is kept separate from request preparation and finalization, missing ends remain unmeasured, and each report identifies the exact source snapshot SHA-256.

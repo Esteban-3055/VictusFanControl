@@ -100,7 +100,7 @@ internal sealed class Hp8C40FanHardware : IHp8C40FanHardware
         _lastFanSample = sample;
         if (EcWmiInvestigationTrace.Enabled)
             EcWmiInvestigationTrace.Record(0, "control.snapshot",
-                $"query={sample.Sequence};queryStarted={sample.Speeds.StartedAtMilliseconds};rpm={sample.Speeds.CpuNominalRpm}/{sample.Speeds.GpuNominalRpm};setpoint={setpoint.CpuSetpoint}/{setpoint.GpuSetpoint};max=0x{controlGuard.MaxFan:X2};switch=0x{controlGuard.FanSwitch:X2}");
+                $"query={sample.Sequence};queryStarted={sample.Speeds.StartedAtMilliseconds};rpm={sample.Speeds.CpuNominalRpm}/{sample.Speeds.GpuNominalRpm};setpoint={setpoint.CpuSetpoint}/{setpoint.GpuSetpoint};max=0x{controlGuard.MaxFan:X2};switch=0x{controlGuard.FanSwitch:X2};{Hp8C40MaxFanFlags.Describe(controlGuard.MaxFan)}");
         return new Hp8C40EcControlState(
             byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue,
             setpoint.CpuSetpoint, setpoint.GpuSetpoint,
@@ -485,7 +485,7 @@ public sealed class Hp8C40FanControlBackend :
             var detail =
                 $"{_lastDetail} EC setpoint={state.CpuSetpoint}/{state.GpuSetpoint}, " +
                 $"RPM={state.CpuRpm}/{state.GpuRpm}, ownership={ownership}, feedback={feedback}, " +
-                $"max=0x{state.MaxFan:X2}, switch=0x{state.FanSwitch:X2}." +
+                $"max=0x{state.MaxFan:X2}, decodedMaxFanBit={(state.DecodedMaxFanBitSet ? 1 : 0)}, switch=0x{state.FanSwitch:X2}." +
                 guardConfirmationDetail;
 
             if (_watchdogLease is not null &&
@@ -537,7 +537,7 @@ public sealed class Hp8C40FanControlBackend :
             if (state.MaxFan != 0)
             {
                 throw new FanControlOwnershipConflictException(
-                    $"Custom fan authority refused because Max Fan is active (EC 0xEC=0x{state.MaxFan:X2}).");
+                    "Custom fan authority refused: " + Hp8C40MaxFanFlags.Refusal(state.MaxFan));
             }
 
             if (state.FanSwitch != 0)
@@ -1201,7 +1201,7 @@ public sealed class Hp8C40FanControlBackend :
         if (state.MaxFan != 0)
         {
             throw new InvalidOperationException(
-                $"Fan control state changed: Max Fan is active (EC 0xEC=0x{state.MaxFan:X2}).");
+                "Fan control state changed: " + Hp8C40MaxFanFlags.Refusal(state.MaxFan));
         }
 
         if (state.FanSwitch != 0)
