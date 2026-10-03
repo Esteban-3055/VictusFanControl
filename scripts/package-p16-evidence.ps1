@@ -60,6 +60,7 @@ $files=@(
  [pscustomobject]@{role='wmi-fan-telemetry-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Telemetry\HpWmiFanTelemetryReader.cs');required=$true},
  [pscustomobject]@{role='wmi-fan-control-checkpoint';path=(Join-Path $RepositoryRoot 'release\fan-wmi-control-checkpoint.json');required=$true},
  [pscustomobject]@{role='wmi-fan-proof-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Telemetry\HpWmiFanProofReader.cs');required=$true},
+ [pscustomobject]@{role='wmi-fan-publication-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Telemetry\HpWmiFanSamplePublication.cs');required=$true},
  [pscustomobject]@{role='wmi-fan-proof-selftest';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Telemetry\HpWmiFanProofReaderSelfTest.cs');required=$true},
  [pscustomobject]@{role='wmi-fan-telemetry-selftest';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Telemetry\HpWmiFanTelemetryReaderSelfTest.cs');required=$true},
  [pscustomobject]@{role='telemetry-snapshot-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Telemetry\TelemetrySnapshot.cs');required=$true},

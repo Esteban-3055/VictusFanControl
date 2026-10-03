@@ -39,6 +39,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
     private HpWmiFanTelemetrySample? _sample;
     private long _nextAttempt;
     private long _startedAt;
+    private long _latestOutcomeSequence;
     private int _epoch;
     private bool _timedOut;
     private bool _paused;
@@ -72,6 +73,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
                 throw;
             }
         };
+        HpWmiFanSamplePublication.Register(_admission, this);
     }
 
     internal HpWmiFanTelemetryReader(
@@ -84,6 +86,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
         _milliseconds = milliseconds;
         _utcNow = utcNow;
         _admission = admission;
+        HpWmiFanSamplePublication.Register(_admission, this);
     }
 
     public string Diagnostic { get { lock (_gate) return _diagnostic; } }
@@ -166,6 +169,36 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
 
     internal Task PendingQuery { get { lock (_gate) return _pending ?? Task.CompletedTask; } }
 
+    internal Action<HpWmiFanTelemetrySample>? CaptureControlSampleSink(long sequence)
+    {
+        lock (_gate)
+        {
+            if (_disposed || _paused) return null;
+            var epoch = _epoch;
+            return sample => PublishControlSample(sample, epoch, sequence);
+        }
+    }
+
+    private void PublishControlSample(HpWmiFanTelemetrySample sample, int epoch, long sequence)
+    {
+        lock (_gate)
+        {
+            if (_disposed || _paused || _epoch != epoch) return;
+            if (sequence < _latestOutcomeSequence) return;
+            var now = _milliseconds();
+            var age = now - sample.StartedAtMilliseconds;
+            if (age < 0 || age >= MaximumSampleAgeMilliseconds) return;
+            if (_sample is not null && sample.StartedAtMilliseconds < _sample.StartedAtMilliseconds) return;
+
+            _sample = sample;
+            _latestOutcomeSequence = sequence;
+            _diagnostic = "OK (fresh HP WMI 20008h/2Dh control read; original acquisition time, resolution 100 RPM).";
+            _nextAttempt = now + PollIntervalMilliseconds;
+            if (_failed) _recoveries++;
+            _failed = false;
+        }
+    }
+
     internal static HpWmiFanTelemetrySample Decode(
         HpBiosResponse response, DateTimeOffset sampledAt, long startedAt)
     {
@@ -182,6 +215,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
 
     private void Query(int epoch, long startedAt, DateTimeOffset sampledAt)
     {
+        var sequence = HpWmiFanSamplePublication.NextSequence(_admission);
         try
         {
             lock (_gate)
@@ -192,6 +226,8 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             lock (_gate)
             {
                 if (_disposed || _paused || _epoch != epoch) return;
+                if (sequence < _latestOutcomeSequence) return;
+                _latestOutcomeSequence = sequence;
                 var now = _milliseconds();
                 if (_timedOut || now - startedAt >= QueryTimeoutMilliseconds)
                 {
@@ -217,6 +253,8 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             lock (_gate)
             {
                 if (_disposed || _paused || _epoch != epoch) return;
+                if (sequence < _latestOutcomeSequence) return;
+                _latestOutcomeSequence = sequence;
                 Fail($"HP WMI fan read failed: {ex.Message}");
                 _nextAttempt = _milliseconds() + FailureBackoffMilliseconds;
             }

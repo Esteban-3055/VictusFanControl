@@ -331,7 +331,7 @@
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Keep generation 5 consumed and all gates closed. Reproduce simultaneous periodic WMI telemetry and control-proof use of the shared native admission slot, measure acquisition/publication timestamps and prove scheduling/expiry behavior without hardware or threshold relaxation. Preserve fresh uncached command proof, 3-second fan freshness, cancellation, native non-overlap, epoch fences and installed M4.",
+      "nextAction": "Validate the read-publication correction with full same-head Windows CI, then record separate software closure before any fresh target authorization. Preserve generation 5 consumed, unknown provider latency contribution and all physical gates closed.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -608,7 +608,45 @@
         "thermalThresholdsChanged": false,
         "fanFreshnessLimitChanged": false,
         "fanWritesChanged": false,
-        "hardwareExecutionByReblockCommit": false
+        "hardwareExecutionByReblockCommit": false,
+        "wmiCoordinationImplementation": {
+          "status": "IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+          "implemented": true,
+          "ciValidated": false,
+          "baselineHead": "1be1357d41d48f0d5677d0445bd224c475b158b0",
+          "baselineTree": "2eb2082e2809aff8adc37701736a2b11beee75ce",
+          "baselineCiRunNumber": 1213,
+          "baselineCiRunId": 37095445454,
+          "baselineCiResult": "SUCCESS",
+          "softwarePublicationGapReproduced": true,
+          "reproductionBeforeCorrection": "Fresh control query invisible to periodic telemetry while control held the shared native slot and old periodic cache expired.",
+          "queryAndPublicationSelfTestCases": 12,
+          "additionalPublicationCaseGroups": 7,
+          "periodicTelemetrySelfTestCases": 8,
+          "successfulValidatedControlReadsMirroredToPeriodicTelemetry": true,
+          "originalAcquisitionMetadataPreserved": true,
+          "nativeOverlapAllowed": false,
+          "cachedCommandProofAllowed": false,
+          "directEcFallbackAllowed": false,
+          "nativeCancellationClaimed": false,
+          "abandonedOrInvalidResultsPublished": false,
+          "olderResultCanHideNewerFailure": false,
+          "preBoundaryResultsCanReachReplacementReader": false,
+          "fanFreshnessLimitMilliseconds": 3000,
+          "proofMaximumWaitMilliseconds": 3000,
+          "periodicQueryLogicalTimeoutMilliseconds": 5000,
+          "fanWritesChanged": false,
+          "installedM4WatchdogChanged": false,
+          "legacy88F8Changed": false,
+          "thermalThresholdsChanged": false,
+          "hardwareExecution": false,
+          "physicalGatesOpened": false,
+          "physicalAttempt6RootCauseEstablished": false,
+          "softwareClosure": {
+            "closed": false,
+            "separateSameHeadCiClosureRequired": true
+          }
+        }
       }
     },
     "authorizationHistory": [

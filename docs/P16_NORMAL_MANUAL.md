@@ -707,3 +707,48 @@ their coordination. Preserve the 3-second freshness limit, fresh uncached
 command proof, real native non-overlap, pause/epoch fences and all fan writes.
 All gates are re-blocked; generation 5 remains consumed, with no P16 PASS or
 permanent control promotion.
+
+## WMI read-publication correction after attempt 6
+
+Baseline: `1be1357d41d48f0d5677d0445bd224c475b158b0`, tree
+`2eb2082e2809aff8adc37701736a2b11beee75ce`, full Windows CI #1213 /
+run `37095445454` SUCCESS. The reproduction uses both readers with the same
+fake native slot and a controlled monotonic clock; no target access occurs.
+The original code expires a periodic sample begun at t=0 after t=3100 ms,
+while a control query begun at t=1000 ms completes with valid 3000/3100 RPM.
+The control proof is fresh (2100 ms acquisition age), but the periodic reader
+cannot see it. The regression fails before the correction and passes after it.
+
+Successful control reads now publish their validated immutable speed sample
+to live periodic readers using the same semaphore. Publication preserves both
+query-start timestamps and 100-RPM resolution; it does not reset acquisition
+age. Periodic ReadCached remains nonblocking and can reuse this real sample
+until its original 3000-ms expiry. Control ReadFresh still performs a new 2D
+query for every proof, preserving unique proof sequences and post-command
+ordering. No periodic sample can satisfy command-response confirmation.
+
+The publication registry holds weak reader references and no shared RPM cache.
+Recipients and reader epochs are captured before the native read. Pause and
+dispose reject pre-boundary results; a replacement reader cannot receive an
+already-started query. A separate per-slot outcome sequence orders successful
+and failed acquisitions: late old success cannot hide newer RPM or a newer
+periodic failure. Only a genuinely newer valid read can recover that failure.
+Invalid, expired, logically timed-out and abandoned reads never publish late
+results. The native semaphore remains owned until the synchronous call returns.
+
+Seven additional regression groups extend the proof/publication suite from
+five to twelve cases, covering shared-slot expiry/publication, cancellation and
+timeout, lifecycle and recreation, invalid/expired data, out-of-order success,
+slot isolation and newer failure/recovery. The existing eight periodic cases,
+49 backend cases, 30 portable coordinator cases, adaptive suites and P16
+evidence packaging pass locally. The new publication source is hashed in future
+P16 manifests; historical attempt manifests remain unchanged.
+
+This proves and fixes a software gap consistent with attempt 6. It does not
+establish how much provider latency contributed on the Victus or qualify the
+physical 30/40/30 sequence. A genuinely slow provider can still expire data,
+and those safety handoffs remain mandatory. Require full same-head Windows CI
+and separate software closure before new physical authorization. Generation 5
+remains consumed; all target/permanent gates remain closed. Fan writes, restore,
+thermal thresholds, the 3-second fan freshness limit, installed M4 and 88F8
+behavior are unchanged.

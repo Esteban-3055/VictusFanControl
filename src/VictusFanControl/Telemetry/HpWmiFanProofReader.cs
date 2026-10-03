@@ -46,7 +46,7 @@ internal sealed class HpWmiFanProofReader
         if (!await _admission.WaitAsync(_maximumWait, cancellationToken).ConfigureAwait(false))
             throw new TimeoutException("HP WMI proof admission timed out; prior native read still owns the slot.");
 
-        Task<HpWmiFanProofSample> pending;
+        Task<(HpWmiFanProofSample Sample, Action<HpWmiFanTelemetrySample> Publish)> pending;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -54,12 +54,13 @@ internal sealed class HpWmiFanProofReader
             {
                 try
                 {
+                    var publish = HpWmiFanSamplePublication.Capture(_admission);
                     var started = _milliseconds();
                     var utc = DateTimeOffset.UtcNow;
                     var sequence = Interlocked.Increment(ref _sequence);
                     var speeds = HpWmiFanTelemetryReader.Decode(
                         _send(Hp8C40BiosFanControl.BuildGetFanLevelRequest()), utc, started);
-                    return new HpWmiFanProofSample(speeds, sequence);
+                    return (Sample: new HpWmiFanProofSample(speeds, sequence), Publish: publish);
                 }
                 finally { _admission.Release(); }
             });
@@ -71,13 +72,15 @@ internal sealed class HpWmiFanProofReader
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         var remaining = _maximumWait - TimeSpan.FromMilliseconds(_milliseconds() - waitStarted);
         if (remaining <= TimeSpan.Zero) throw new TimeoutException("HP WMI proof acquisition budget expired.");
-        var sample = await pending.WaitAsync(remaining, cancellationToken).ConfigureAwait(false);
+        var completed = await pending.WaitAsync(remaining, cancellationToken).ConfigureAwait(false);
+        var sample = completed.Sample;
         cancellationToken.ThrowIfCancellationRequested();
         var age = _milliseconds() - sample.Speeds.StartedAtMilliseconds;
         if (age < 0 || age >= MaximumWaitMilliseconds)
             throw new InvalidDataException("HP WMI proof sample expired from query start; result discarded.");
         if (sample.Speeds.CpuSpeedLevel >= 100 || sample.Speeds.GpuSpeedLevel >= 100)
             throw new InvalidDataException("WMI control RPM interval exceeds the 10000-RPM plausibility ceiling.");
+        completed.Publish(sample.Speeds);
         return sample;
     }
 }

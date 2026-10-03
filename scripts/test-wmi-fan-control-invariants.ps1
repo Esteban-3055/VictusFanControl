@@ -5,6 +5,7 @@ function Require-Text([string]$Text,[string]$Needle){if($Text.IndexOf($Needle,[S
 $backend=Read-Source 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs'
 $reader=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanProofReader.cs'
 $telemetry=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanTelemetryReader.cs'
+$publication=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSamplePublication.cs'
 $first=$backend.IndexOf('internal sealed class Hp8C40FanHardware', [StringComparison]::Ordinal)
 $last=$backend.IndexOf('internal readonly record struct Hp8C40FanBackendTiming', [StringComparison]::Ordinal)
 $hardware=$backend.Substring($first,$last-$first)
@@ -15,6 +16,9 @@ foreach($forbidden in @('SetFanLevel(', 'RestoreFirmwareAuto(', 'AcpiEcReader', 
 }
 foreach($needle in @('HpWmiFanTelemetryReader.SharedReadAdmission','BuildGetFanLevelRequest()','MaximumWaitMilliseconds = 3000','pending.WaitAsync(remaining, cancellationToken)','finally { _admission.Release(); }')){Require-Text $reader $needle}
 Require-Text $telemetry 'SharedReadAdmission => ProductionAdmission'
+foreach($needle in @('HpWmiFanSamplePublication.Capture(_admission)','completed.Publish(sample.Speeds)')){Require-Text $reader $needle}
+foreach($needle in @('ConditionalWeakTable<SemaphoreSlim, Recipients>','WeakReference<HpWmiFanTelemetryReader>','reader.CaptureControlSampleSink(sequence)')){Require-Text $publication $needle}
+foreach($needle in @('HpWmiFanSamplePublication.Register(_admission, this)','_epoch != epoch','age < 0 || age >= MaximumSampleAgeMilliseconds','sequence < _latestOutcomeSequence')){Require-Text $telemetry $needle}
 foreach($needle in @('ReadTachometerSnapshotWithinDeadlineAsync','commandCompletedAtMilliseconds','IsFreshTachometerProof','sample.FanQuerySequence > Math.Max(baseline.FanQuerySequence, lastAcceptedSequence)','sample.FanQueryStartedAtMilliseconds >= commandCompletedAtMilliseconds','baselineRpm + baselineResolutionRpm - 1 + MinimumDirectionalRpmDelta','currentRpm + currentResolutionRpm - 1 + MinimumDirectionalRpmDelta','RequiredTachConfirmationSamples = 2','MinimumDirectionalRpmDelta = 150','_hardware.ReadAdmissionStateAsync(cancellationToken)','Initial WMI baseline expired before pre-write ownership/guard acquisition.')){Require-Text $backend $needle}
 $p16=Read-Source 'release\p16-target-checkpoint.json'|ConvertFrom-Json
 # Migration closures remain historical; only a separately validated P16 generation 5 may open.

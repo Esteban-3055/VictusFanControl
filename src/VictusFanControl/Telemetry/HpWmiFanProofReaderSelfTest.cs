@@ -85,6 +85,190 @@ internal static class HpWmiFanProofReaderSelfTest
                 Check(!Hp8C40FanControlBackend.IsFreshTachometerProof(valid with { FanQuerySequence = 0 }, baseline, now, 0), "missing identity counted");
                 return Task.CompletedTask;
             });
+            await Test("fresh control query renews periodic telemetry while the shared slot delays polling", async () =>
+            {
+                using var slot = new SemaphoreSlim(1, 1);
+                long clock = 0;
+                using var telemetry = new HpWmiFanTelemetryReader(_ => new(0, [26, 24]),
+                    () => Interlocked.Read(ref clock), () => DateTimeOffset.UtcNow, slot);
+                telemetry.ReadCached(); await telemetry.PendingQuery;
+                Check(telemetry.ReadCached() is { StartedAtMilliseconds: 0 }, "seed sample missing");
+                using var release = new ManualResetEventSlim();
+                var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var proof = new HpWmiFanProofReader(_ =>
+                {
+                    entered.SetResult();
+                    Check(release.Wait(TimeSpan.FromSeconds(5)), "test native release timed out");
+                    return new(0, [30, 31]);
+                }, slot, () => Interlocked.Read(ref clock), TimeSpan.FromSeconds(4));
+                Interlocked.Exchange(ref clock, 1000);
+                var pending = proof.ReadFreshAsync(CancellationToken.None).AsTask();
+                try
+                {
+                    await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+                    Interlocked.Exchange(ref clock, 3100);
+                    Check(telemetry.ReadCached() is null, "in-flight proof renewed an expired periodic sample");
+                }
+                finally { release.Set(); }
+                var actual = await pending;
+                Check(actual.Speeds.StartedAtMilliseconds == 1000, "proof start age was changed");
+                var observed = telemetry.ReadCached();
+                Check(observed is { CpuNominalRpm: 3000, GpuNominalRpm: 3100, StartedAtMilliseconds: 1000 },
+                    "fresh completed control query was invisible to periodic telemetry");
+                Check(ReferenceEquals(observed, actual.Speeds), "publication replaced acquisition metadata");
+                Interlocked.Exchange(ref clock, 4000);
+                Check(telemetry.ReadCached() is null, "mirrored sample survived its original 3-second expiry");
+            });
+            await Test("canceled and logically timed-out control reads never publish late native results", async () =>
+            {
+                foreach (var cancel in new[] { true, false })
+                {
+                    using var slot = new SemaphoreSlim(1, 1);
+                    using var telemetry = new HpWmiFanTelemetryReader(_ => new(0, [26, 24]),
+                        () => 0, () => DateTimeOffset.UtcNow, slot);
+                    telemetry.ReadCached(); await telemetry.PendingQuery;
+                    using var release = new ManualResetEventSlim();
+                    using var cts = new CancellationTokenSource();
+                    var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    var proof = new HpWmiFanProofReader(_ =>
+                    {
+                        entered.SetResult();
+                        Check(release.Wait(TimeSpan.FromSeconds(5)), "test native release timed out");
+                        return new(0, [30, 31]);
+                    }, slot, () => 0, wait);
+                    var pending = proof.ReadFreshAsync(cts.Token).AsTask();
+                    try
+                    {
+                        await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+                        if (cancel) cts.Cancel();
+                        var refused = false;
+                        try { await pending; }
+                        catch (OperationCanceledException) when (cancel) { refused = true; }
+                        catch (TimeoutException) when (!cancel) { refused = true; }
+                        Check(refused && slot.CurrentCount == 0, "abandoned native call released the slot");
+                    }
+                    finally { release.Set(); }
+                    await telemetry.WaitForQuiescenceAsync(CancellationToken.None);
+                    Check(telemetry.ReadCached() is { CpuNominalRpm: 2600 }, "abandoned query published after native completion");
+                }
+            });
+            await Test("control publication cannot cross pause, disposal or reader recreation", async () =>
+            {
+                foreach (var boundary in new[] { "pause", "dispose", "new-reader" })
+                {
+                    using var slot = new SemaphoreSlim(1, 1);
+                    using var telemetry = new HpWmiFanTelemetryReader(_ => new(0, [26, 24]),
+                        () => 0, () => DateTimeOffset.UtcNow, slot);
+                    telemetry.ReadCached(); await telemetry.PendingQuery;
+                    using var release = new ManualResetEventSlim();
+                    var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    var proof = new HpWmiFanProofReader(_ =>
+                    {
+                        entered.SetResult();
+                        Check(release.Wait(TimeSpan.FromSeconds(5)), "test native release timed out");
+                        return new(0, [30, 31]);
+                    }, slot, () => 0, TimeSpan.FromSeconds(4));
+                    var pending = proof.ReadFreshAsync(CancellationToken.None).AsTask();
+                    HpWmiFanTelemetryReader? replacement = null;
+                    try
+                    {
+                        await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+                        if (boundary == "pause") telemetry.Pause();
+                        else if (boundary == "dispose") telemetry.Dispose();
+                        if (boundary != "pause")
+                            replacement = new HpWmiFanTelemetryReader(_ => new(0, [40, 41]),
+                                () => 0, () => DateTimeOffset.UtcNow, slot);
+                        release.Set(); await pending;
+                        Check(boundary == "new-reader"
+                                ? telemetry.ReadCached() is { CpuNominalRpm: 3000 }
+                                : telemetry.ReadCached() is null,
+                            "pre-boundary result crossed a paused/disposed reader epoch");
+                        if (replacement is not null)
+                        {
+                            Check(replacement.ReadCached() is null, "new reader received a query begun before registration");
+                            await replacement.PendingQuery;
+                            Check(replacement.ReadCached() is { CpuNominalRpm: 4000 }, "replacement own query failed");
+                        }
+                    }
+                    finally
+                    {
+                        release.Set(); await pending; replacement?.Dispose();
+                    }
+                }
+            });
+            await Test("invalid and expired control responses cannot renew periodic telemetry", async () =>
+            {
+                foreach (var response in new HpBiosResponse[] { new(1, [30, 31]), new(0, [30]), new(0, [255, 31]), new(0, [100, 31]) })
+                {
+                    using var slot = new SemaphoreSlim(1, 1);
+                    using var telemetry = new HpWmiFanTelemetryReader(_ => new(0, [26, 24]),
+                        () => 0, () => DateTimeOffset.UtcNow, slot);
+                    telemetry.ReadCached(); await telemetry.PendingQuery;
+                    var proof = new HpWmiFanProofReader(_ => response, slot, () => 0, TimeSpan.FromSeconds(1));
+                    var refused = false;
+                    try { await proof.ReadFreshAsync(CancellationToken.None); }
+                    catch (InvalidDataException) { refused = true; }
+                    Check(refused && telemetry.ReadCached() is { CpuNominalRpm: 2600 }, "invalid proof renewed periodic telemetry");
+                }
+                using var slowSlot = new SemaphoreSlim(1, 1);
+                long clock = 0;
+                using var slowTelemetry = new HpWmiFanTelemetryReader(_ => new(0, [26, 24]),
+                    () => Interlocked.Read(ref clock), () => DateTimeOffset.UtcNow, slowSlot);
+                slowTelemetry.ReadCached(); await slowTelemetry.PendingQuery;
+                var slowProof = new HpWmiFanProofReader(_ =>
+                {
+                    Interlocked.Exchange(ref clock, 3000); return new(0, [30, 31]);
+                }, slowSlot, () => Interlocked.Read(ref clock), TimeSpan.FromSeconds(4));
+                try { await slowProof.ReadFreshAsync(CancellationToken.None); throw new Exception("expired proof accepted"); }
+                catch (InvalidDataException) { }
+                Check(slowTelemetry.ReadCached() is null, "expired proof was republished with a renewed timestamp");
+                await slowTelemetry.PendingQuery;
+            });
+            await Test("older control publication cannot overwrite a newer periodic sample", async () =>
+            {
+                using var slot = new SemaphoreSlim(1, 1);
+                long clock = 0;
+                using var telemetry = new HpWmiFanTelemetryReader(_ => new(0, [40, 41]),
+                    () => Interlocked.Read(ref clock), () => DateTimeOffset.UtcNow, slot);
+                var oldSink = HpWmiFanSamplePublication.Capture(slot);
+                Interlocked.Exchange(ref clock, 1000);
+                telemetry.ReadCached(); await telemetry.PendingQuery;
+                oldSink(new(30, 31, DateTimeOffset.UtcNow, 500));
+                Check(telemetry.ReadCached() is { CpuNominalRpm: 4000, StartedAtMilliseconds: 1000 }, "older publication rolled back fresh RPM");
+                oldSink(new(30, 31, DateTimeOffset.UtcNow, 2000));
+                Check(telemetry.ReadCached() is { CpuNominalRpm: 4000 }, "future acquisition accepted after clock regression");
+            });
+            await Test("control publication is isolated by native admission slot", async () =>
+            {
+                using var telemetrySlot = new SemaphoreSlim(1, 1);
+                using var proofSlot = new SemaphoreSlim(1, 1);
+                using var telemetry = new HpWmiFanTelemetryReader(_ => new(0, [26, 24]),
+                    () => 0, () => DateTimeOffset.UtcNow, telemetrySlot);
+                telemetry.ReadCached(); await telemetry.PendingQuery;
+                var proof = new HpWmiFanProofReader(_ => new(0, [30, 31]), proofSlot, () => 0, TimeSpan.FromSeconds(1));
+                await proof.ReadFreshAsync(CancellationToken.None);
+                Check(telemetry.ReadCached() is { CpuNominalRpm: 2600 }, "unrelated slot replaced periodic RPM");
+            });
+            await Test("delayed old publication cannot hide a newer periodic failure; fresh recovery can", async () =>
+            {
+                using var slot = new SemaphoreSlim(1, 1);
+                long clock = 0; var calls = 0;
+                using var telemetry = new HpWmiFanTelemetryReader(_ =>
+                    ++calls == 1 ? new(0, [26, 24]) : new(7, []),
+                    () => Interlocked.Read(ref clock), () => DateTimeOffset.UtcNow, slot);
+                telemetry.ReadCached(); await telemetry.PendingQuery;
+                var oldSink = HpWmiFanSamplePublication.Capture(slot);
+                Interlocked.Exchange(ref clock, 1000);
+                telemetry.ReadCached(); await telemetry.PendingQuery;
+                Check(telemetry.ReadCached() is null, "failed periodic query retained cache");
+                oldSink(new(30, 31, DateTimeOffset.UtcNow, 500));
+                Check(telemetry.ReadCached() is null, "older publication hid a newer failure");
+                var proof = new HpWmiFanProofReader(_ => new(0, [30, 31]), slot,
+                    () => Interlocked.Read(ref clock), TimeSpan.FromSeconds(1));
+                await proof.ReadFreshAsync(CancellationToken.None);
+                Check(telemetry.ReadCached() is { CpuNominalRpm: 3000 } && telemetry.Recoveries == 1 && calls == 2,
+                    "genuinely newer success failed to recover telemetry or caused redundant periodic I/O");
+            });
         }
         catch (Exception ex) { await output.WriteLineAsync($"FAIL: WMI control proof: {ex}"); return 38; }
         await output.WriteLineAsync($"WMI control proof reader self-test: PASS ({passed} cases)");
