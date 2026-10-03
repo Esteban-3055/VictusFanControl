@@ -87,11 +87,12 @@ jobs:
         run: |
           $probeRoot = Join-Path $env:RUNNER_TEMP ('acpi-coverage-rejection-' + [Guid]::NewGuid().ToString('N'))
           $rejected = $false
-          try { .\scripts\Test-Victus-AcpiCoverage.ps1 -FanStatus -OutputRoot $probeRoot } catch { $rejected = $true; Write-Host ($_ | Out-String) }
+          try { .\scripts\Test-Victus-AcpiCoverage.ps1 -Correlation -OutputRoot $probeRoot } catch { $rejected = $true; Write-Host ($_ | Out-String) }
           if (-not $rejected) { throw 'Non-target coverage probe was accepted.' }
           $folder = @(Get-ChildItem $probeRoot -Directory)
           if ($folder.Count -ne 1) { throw 'Coverage evidence missing.' }
           $summary = Get-Content (Join-Path $folder[0].FullName 'summary.json') -Raw | ConvertFrom-Json
+          if (-not $summary.CorrelationRequested -or -not $summary.FanStatusRequested -or $summary.RequestedSamples -ne 18 -or $summary.MaximumRequests -ne 109) { throw 'Correlation parent configuration invalid.' }
           if ($summary.Healthy -or $summary.ProductionReady -or $summary.Samples -ne 0 -or $summary.ChildExitCode -ne 1) { throw 'Rejected child summary invalid.' }
           if (Test-Path (Join-Path $folder[0].FullName 'calls.jsonl')) { throw 'HP request began before target qualification.' }
           if ((Get-Content (Join-Path $folder[0].FullName 'child-error.txt') -Raw) -notmatch 'probe requires HP 8C40') { throw 'Expected target rejection missing.' }

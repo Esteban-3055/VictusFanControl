@@ -1,10 +1,13 @@
 # One bounded, read-only session for existing HP 8C40/F.18 ACPI routes.
 [CmdletBinding()]
-param([string]$OutputRoot='', [switch]$SelfTest, [switch]$Child, [switch]$FanStatus)
+param([string]$OutputRoot='', [switch]$SelfTest, [switch]$Child, [switch]$FanStatus, [switch]$Correlation)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'AcpiProbeCommon.ps1')
 . (Join-Path $PSScriptRoot 'AcpiCoverageContract.ps1')
 if($SelfTest){Test-AcpiCoverageContract;return}
+if($Correlation){$FanStatus=$true}
+$sampleCount=if($Correlation){18}else{3}
+$deadlineSeconds=if($Correlation){600}else{120}
 if($env:OS -ne 'Windows_NT'){throw 'Windows is required.'}
 if($Child){
     try{
@@ -43,8 +46,8 @@ if($Child){
                 $result=$target.InvokeMethod($method,$inputData,$invoke)
                 $watch.Stop();$outData=$result['OutData']
                 if($null -eq $outData -or $null -eq $outData['rwReturnCode'] -or $null -eq $outData['Data']){throw 'Incomplete HP response.'}
-                $response=[pscustomobject]@{Code=[int]$outData['rwReturnCode'];Data=[byte[]]$outData['Data'];NativeDurationMs=$watch.Elapsed.TotalMilliseconds}
-                [pscustomobject]@{phase='response';kind=$kind;round=$round;utc=[DateTimeOffset]::UtcNow.ToString('o');return_code=$response.Code;bytes_hex=[BitConverter]::ToString($response.Data);native_duration_ms=$response.NativeDurationMs} | ConvertTo-Json -Compress | Add-Content (Join-Path $OutputRoot 'calls.jsonl') -Encoding UTF8
+                $response=[pscustomobject]@{Code=[int]$outData['rwReturnCode'];Data=[byte[]]$outData['Data'];NativeDurationMs=$watch.Elapsed.TotalMilliseconds;Utc=[DateTimeOffset]::UtcNow.ToString('o')}
+                [pscustomobject]@{phase='response';kind=$kind;round=$round;utc=$response.Utc;return_code=$response.Code;bytes_hex=[BitConverter]::ToString($response.Data);native_duration_ms=$response.NativeDurationMs} | ConvertTo-Json -Compress | Add-Content (Join-Path $OutputRoot 'calls.jsonl') -Encoding UTF8
                 # Wait between native calls; no retries or parallel hardware operations.
                 for($tick=0;$tick -lt 10;$tick++){
                     if(Test-Path (Join-Path $OutputRoot 'stop.signal')){throw 'Parent requested stop.'}
@@ -55,11 +58,11 @@ if($Child){
         }
         $record={param($row) $row | Export-Csv (Join-Path $OutputRoot 'rounds.csv') -NoTypeInformation -Append -Encoding UTF8}
         $wait={for($tick=0;$tick -lt 50;$tick++){if(Test-Path (Join-Path $OutputRoot 'stop.signal')){throw 'Parent requested stop.'};Start-Sleep -Milliseconds 100}}
-        Invoke-AcpiCoverageSequence $read $record $wait ([bool]$FanStatus)
+        Invoke-AcpiCoverageSequence $read $record $wait ([bool]$FanStatus) ([bool]$Correlation)
         $coverage=Get-Content (Join-Path $OutputRoot 'coverage.json') -Raw | ConvertFrom-Json
         $coverage.Fffs='conditional-read-branch-supported-by-AML-and-bracketed-ECOK-codes; no-transition-tested'
-        if($FanStatus){$coverage.FanStatusGm11='three-raw-responses-per-selector; semantics-and-freshness-unqualified'}
-        $coverage.Rpm='three-valid-dual-fan-responses; nominal-100-rpm-resolution'
+        if($FanStatus){$coverage.FanStatusGm11=($sampleCount.ToString()+'-raw-responses-per-selector; first-two-byte-semantics-and-freshness-unqualified')}
+        $coverage.Rpm=($sampleCount.ToString()+'-valid-dual-fan-responses; nominal-100-rpm-resolution')
         $coverage | ConvertTo-Json | Set-Content (Join-Path $OutputRoot 'coverage.json') -Encoding UTF8
         $dataClass.Dispose();$target.Dispose();$results.Dispose();$searcher.Dispose()
         exit 0
@@ -74,7 +77,7 @@ $folder=Join-Path ([IO.Path]::GetFullPath($OutputRoot)) ('ACPI-Coverage_'+(Get-D
 New-Item $folder -ItemType Directory -Force | Out-Null
 $cursor=0
 $started=[DateTimeOffset]::UtcNow
-$summary=[ordered]@{Mode='ACPI-read-only-coverage';HarnessVersion='2';FanStatusRequested=[bool]$FanStatus;StartedUtc=$started.ToString('o');InitialSystemRecordId=$cursor;RequestedSamples=3;MaximumRequests=$(if($FanStatus){19}else{13});ProductionReady=$false;DirectEcAccess=$false;FanSetters=$false;Healthy=$false;Reason='incomplete';Samples=0;ChildExitCode=$null;AcpiEvents=@()}
+$summary=[ordered]@{Mode='ACPI-read-only-coverage';HarnessVersion='3';CorrelationRequested=[bool]$Correlation;DeadlineSeconds=$deadlineSeconds;FanStatusRequested=[bool]$FanStatus;StartedUtc=$started.ToString('o');InitialSystemRecordId=$cursor;RequestedSamples=$sampleCount;MaximumRequests=(1+$sampleCount*$(if($FanStatus){6}else{4}));ProductionReady=$false;DirectEcAccess=$false;FanSetters=$false;Healthy=$false;Reason='incomplete';Samples=0;ChildExitCode=$null;AcpiEvents=@()}
 $probeProcess=New-Object Diagnostics.Process
 $childStarted=$false
 try{
@@ -86,14 +89,17 @@ try{
     $info.FileName=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $info.Arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -Child -OutputRoot "'+$folder+'"'
     if($FanStatus){$info.Arguments+=' -FanStatus'}
+    if($Correlation){$info.Arguments+=' -Correlation'}
     $info.UseShellExecute=$false;$info.CreateNoWindow=$true
     $probeProcess.StartInfo=$info
     if(-not $probeProcess.Start()){throw 'Child did not start.'}
     $childStarted=$true
-    $deadline=[DateTimeOffset]::UtcNow.AddSeconds(120)
+    $deadline=[DateTimeOffset]::UtcNow.AddSeconds($deadlineSeconds)
     $nextReport=[DateTimeOffset]::MinValue
-    Write-Host 'ACPI: control GBIF + tres rondas ECOK/FFFS/RPM; sin setters ni PawnIO.'
+    Write-Host ('ACPI: control GBIF + '+$sampleCount+' rondas ECOK/FFFS/RPM; sin setters ni PawnIO.')
     if($FanStatus){Write-Host 'GM11: dos selectores por ronda; cuatro bytes crudos, sin interpretar consignas ni guardas.'}
+    $announcedPhase=0
+    if($Correlation){Write-Host 'FASE 1/3: REPOSO. Mantener Firmware; esperar el aviso de carga. Seis muestras por fase.'}
     do{
         $events=@(Get-WinEvent -LogName System -FilterXPath (New-ScenarioAEventQuery $cursor -IncludeUnexpectedData) -ErrorAction SilentlyContinue -ErrorVariable eventErrors)
         if(@($eventErrors | Where-Object {$_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*'}).Count){throw 'System event observation failed.'}
@@ -104,10 +110,20 @@ try{
         }
         if([DateTimeOffset]::UtcNow -ge $nextReport){
             $rows=@(if(Test-Path (Join-Path $folder 'rounds.csv')){Import-Csv (Join-Path $folder 'rounds.csv')})
-            Write-Host ('ACPI: '+$rows.Count+'/3 rondas; UTC '+[DateTimeOffset]::UtcNow.ToString('o'))
+            if($Correlation -and $rows.Count -ge 6 -and $announcedPhase -eq 0){
+                Write-Host 'FASE 2/3: CARGA. Iniciar ahora una carga habitual moderada, sin otros lectores de hardware.'
+                [pscustomobject]@{phase='load-requested';completed_rounds=$rows.Count;utc=[DateTimeOffset]::UtcNow.ToString('o')} | ConvertTo-Json -Compress | Add-Content (Join-Path $folder 'phase-prompts.jsonl') -Encoding UTF8
+                $announcedPhase=1
+            }
+            if($Correlation -and $rows.Count -ge 12 -and $announcedPhase -eq 1){
+                Write-Host 'FASE 3/3: RECUPERACION. Detener ahora la carga y dejar el equipo en reposo.'
+                [pscustomobject]@{phase='recovery-requested';completed_rounds=$rows.Count;utc=[DateTimeOffset]::UtcNow.ToString('o')} | ConvertTo-Json -Compress | Add-Content (Join-Path $folder 'phase-prompts.jsonl') -Encoding UTF8
+                $announcedPhase=2
+            }
+            Write-Host ('ACPI: '+$rows.Count+'/'+$sampleCount+' rondas; UTC '+[DateTimeOffset]::UtcNow.ToString('o'))
             $nextReport=[DateTimeOffset]::UtcNow.AddSeconds(5)
         }
-        if([DateTimeOffset]::UtcNow -ge $deadline){throw 'Deadline 120 s: child termination does not guarantee cancellation of an in-flight firmware call.'}
+        if([DateTimeOffset]::UtcNow -ge $deadline){throw ('Deadline '+$deadlineSeconds+' s: child termination does not guarantee cancellation of an in-flight firmware call.')}
         if(-not $probeProcess.HasExited){Start-Sleep -Milliseconds 200}
     }while(-not $probeProcess.HasExited)
     $probeProcess.WaitForExit();$summary.ChildExitCode=$probeProcess.ExitCode
@@ -121,8 +137,8 @@ try{
     }
     $rows=@(if(Test-Path (Join-Path $folder 'rounds.csv')){Import-Csv (Join-Path $folder 'rounds.csv')})
     $summary.Samples=$rows.Count
-    if($probeProcess.ExitCode -ne 0 -or $rows.Count -ne 3){throw 'Probe incomplete; inspect child-error.txt.'}
-    $summary.Healthy=$true;$summary.Reason='Three rounds conform to supplied AML contracts; no ACPI 13/15 observed. ECOK inference is conditional on provider code fidelity; no complete guard coverage or production qualification.'
+    if($probeProcess.ExitCode -ne 0 -or $rows.Count -ne $sampleCount){throw 'Probe incomplete; inspect child-error.txt.'}
+    $summary.Healthy=$true;$summary.Reason='Requested rounds conform to supplied AML contracts; no ACPI 13/15 observed. ECOK inference is conditional on provider code fidelity; no complete guard coverage or production qualification.'
 }catch{
     $summary.Reason=$_.Exception.Message
     Write-Warning $summary.Reason

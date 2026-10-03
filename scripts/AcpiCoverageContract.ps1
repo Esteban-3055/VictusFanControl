@@ -31,10 +31,12 @@ function Assert-AcpiCoverageResponse([string]$Kind,$Response) {
     }
     if(@($Response.Data | Where-Object {$_ -ne 0}).Count){throw 'Diagnostic response contains unexpected data.'}
 }
-function Invoke-AcpiCoverageSequence([scriptblock]$Read,[scriptblock]$RecordRound,[scriptblock]$WaitRound,[bool]$IncludeFanStatus=$false) {
+function Invoke-AcpiCoverageSequence([scriptblock]$Read,[scriptblock]$RecordRound,[scriptblock]$WaitRound,[bool]$IncludeFanStatus=$false,[bool]$Correlation=$false) {
+    if($Correlation -and -not $IncludeFanStatus){throw 'Correlation requires GM11 reads.'}
+    $sampleCount=if($Correlation){18}else{3}
     $control=& $Read 'gbif-control' 0
     Assert-AcpiCoverageResponse 'gbif-control' $control
-    for($round=1;$round -le 3;$round++){
+    for($round=1;$round -le $sampleCount;$round++){
         $before=& $Read 'ecok' $round
         Assert-AcpiCoverageResponse 'ecok' $before
         $flag=& $Read 'fffs' $round
@@ -43,16 +45,20 @@ function Invoke-AcpiCoverageSequence([scriptblock]$Read,[scriptblock]$RecordRoun
         Assert-AcpiCoverageResponse 'ecok' $after
         $rpm=& $Read 'rpm' $round
         Assert-AcpiCoverageResponse 'rpm' $rpm
-        $cpuStatus='';$gpuStatus=''
+        $cpuStatus='';$gpuStatus='';$cpuCandidate=$null;$gpuCandidate=$null;$cpuUtc='';$gpuUtc=''
+        $phase=if(-not $Correlation){'coverage'}elseif($round -le 6){'rest-planned'}elseif($round -le 12){'load-planned'}else{'recovery-planned'}
         if($IncludeFanStatus){
             $cpu=& $Read 'fan-status-cpu' $round
             Assert-AcpiCoverageResponse 'fan-status-cpu' $cpu
             $gpu=& $Read 'fan-status-gpu' $round
             Assert-AcpiCoverageResponse 'fan-status-gpu' $gpu
+            $cpuCandidate=([int]$cpu.Data[2]*256)+[int]$cpu.Data[3]
+            $gpuCandidate=([int]$gpu.Data[2]*256)+[int]$gpu.Data[3]
+            $cpuUtc=$cpu.Utc;$gpuUtc=$gpu.Utc
             $cpuStatus=[BitConverter]::ToString($cpu.Data);$gpuStatus=[BitConverter]::ToString($gpu.Data)
         }
-        & $RecordRound ([pscustomobject]@{gm11_cpu_raw_hex=$cpuStatus;gm11_gpu_raw_hex=$gpuStatus;gm11_semantics='unqualified';round=$round;utc=[DateTimeOffset]::UtcNow.ToString('o');ecok_before_code=$before.Code;fffs=$flag.Data[0];ecok_after_code=$after.Code;cpu_nominal_rpm=([int]$rpm.Data[0]*100);gpu_nominal_rpm=([int]$rpm.Data[1]*100);fffs_gate_evidence='supported-by-supplied-AML-and-provider-codes';atomic_snapshot=$false})
-        if($round -lt 3){& $WaitRound}
+        & $RecordRound ([pscustomobject]@{phase=$phase;rpm_response_utc=$rpm.Utc;gm11_cpu_response_utc=$cpuUtc;gm11_gpu_response_utc=$gpuUtc;gm11_cpu_candidate_rpm=$cpuCandidate;gm11_gpu_candidate_rpm=$gpuCandidate;gm11_cpu_raw_hex=$cpuStatus;gm11_gpu_raw_hex=$gpuStatus;gm11_semantics='unqualified';round=$round;utc=[DateTimeOffset]::UtcNow.ToString('o');ecok_before_code=$before.Code;fffs=$flag.Data[0];ecok_after_code=$after.Code;cpu_nominal_rpm=([int]$rpm.Data[0]*100);gpu_nominal_rpm=([int]$rpm.Data[1]*100);fffs_gate_evidence='supported-by-supplied-AML-and-provider-codes';atomic_snapshot=$false})
+        if($round -lt $sampleCount){& $WaitRound}
     }
 }
 function Test-AcpiCoverageContract {
@@ -100,6 +106,26 @@ function Test-AcpiCoverageContract {
         try{Invoke-AcpiCoverageSequence $read $record {} $true}catch{$rejected=$true}
         $expected=if($failure -eq 'none'){19}elseif($failure -eq 'cpu-code'){6}else{7}
         if($state.Count -ne $expected -or ($failure -eq 'none' -and ($rejected -or $state.Rounds -ne 3)) -or ($failure -ne 'none' -and (-not $rejected -or $state.Rounds -ne 0))){throw ('GM11 fixture failed: '+$failure)}
+    }
+    foreach($failure in @('none','late-gpu')){
+        $state=@{Count=0;Rows=New-Object 'Collections.Generic.List[object]';Failure=$failure;Waits=0}
+        $read={param($kind,$round)
+            $state.Count++
+            $data=New-Object byte[] (Get-AcpiCoverageRequest $kind).Output
+            $code=if($kind -eq 'gbif-control'){5}elseif($kind -eq 'ecok'){6}else{0}
+            if($kind -like 'fan-status-*'){$data=[byte[]](47,60,10,131)}
+            if($state.Failure -eq 'late-gpu' -and $round -eq 7 -and $kind -eq 'fan-status-gpu'){$code=1}
+            return [pscustomobject]@{Code=$code;Data=$data;NativeDurationMs=1;Utc='2026-10-03T23:00:00Z'}
+        }
+        $rejected=$false
+        try{Invoke-AcpiCoverageSequence $read {param($row) $state.Rows.Add($row)} {$state.Waits++} $true $true}catch{$rejected=$true}
+        if($failure -eq 'none'){
+            if($rejected -or $state.Count -ne 109 -or $state.Rows.Count -ne 18 -or $state.Waits -ne 17){throw 'Correlation sequence fixture failed.'}
+            foreach($phase in @('rest-planned','load-planned','recovery-planned')){
+                if(@($state.Rows | Where-Object {$_.phase -eq $phase}).Count -ne 6){throw 'Correlation phase fixture failed.'}
+            }
+            if(@($state.Rows | Where-Object {$_.gm11_cpu_candidate_rpm -ne 2691 -or $_.gm11_gpu_candidate_rpm -ne 2691 -or $_.rpm_response_utc -ne '2026-10-03T23:00:00Z' -or $_.gm11_cpu_raw_hex -ne '2F-3C-0A-83'}).Count){throw 'Correlation decoding/evidence fixture failed.'}
+        }elseif(-not $rejected -or $state.Count -ne 43 -or $state.Rows.Count -ne 6){throw 'Correlation late-failure fixture failed.'}
     }
     foreach($selector in @(@{Kind='fan-status-cpu';Byte=0},@{Kind='fan-status-gpu';Byte=1})){
         $request=Get-AcpiCoverageRequest $selector.Kind

@@ -85,3 +85,39 @@ git pull --ff-only
 Enviar el ZIP y su SHA256. El progreso se muestra aproximadamente cada cinco segundos; eso no significa una consulta cada cinco segundos. Son tres rondas con seis consultas cada una, espera de un segundo tras cada respuesta y cinco segundos entre rondas; plazo del hijo de 120 s. CPU/GPU quedan en columnas `gm11_cpu_raw_hex` y `gm11_gpu_raw_hex` del CSV y en respuestas completas del JSONL. Semántica y frescura de GM11 permanecen sin calificar incluso si Healthy=true.
 
 CI ejercita ambos modos, transporte simulado y parada al primer fallo de GM11, preservación de bytes FF/80 y selectores exactos, además del rechazo físico del equipo no objetivo. La interpretación del resultado y cualquier transición futura se decidirán con esa evidencia; este ensayo no habilita setters ni relaja guardas de producción.
+
+## Resultado GM11 y sesión de correlación
+
+La captura `ACPI-Coverage_20261003_201128_023bc6.zip` tiene SHA256 `9a3e7a51e858e5aae6d8754dcae55e73104ce9d9f31f73416200e4263c74bfd7`, coincidente con su sidecar y todos los miembros del manifiesto. Duración 50.1809144 s, 19 pares solicitud/respuesta en el orden previsto, tres rondas, Healthy=true, sin ACPI 13/15 observados. GM11: rc=0 en las seis respuestas, llamadas nativas 7.6887–33.6679 ms. Primeros bytes constantes 2F/3C. Últimos bytes CPU: 0A83/0A98/0A79; GPU: 0953/0951/095E.
+
+El controlador primario de Linux `hp-wmi` identifica 11h como consulta de velocidad y combina bytes 2/3 como alto/bajo; para su ruta Victus S 2Dh multiplica el byte por 100. Fuente consultada: https://github.com/torvalds/linux/blob/master/drivers/platform/x86/hp/hp-wmi.c (funciones hp_wmi_get_fan_speed y hp_wmi_get_fan_speed_victus_s, consultado 2026-10-03). Esta implementación respalda la decodificación, pero no califica automáticamente el firmware 8C40. No interpreta los primeros bytes de GM11.
+
+| Ronda | GM11 CPU candidato RPM | GM2D CPU nominal RPM | GM11 GPU candidato RPM | GM2D GPU nominal RPM |
+|---|---:|---:|---:|---:|
+| 1 | 2691 | 2700 | 2387 | 2400 |
+| 2 | 2712 | 2600 | 2385 | 2300 |
+| 3 | 2681 | 2600 | 2398 | 2300 |
+
+La diferencia temporal entre respuestas GM2D y GM11 fue 1.597–2.164 s para CPU y 3.151–3.989 s para GPU. No se deben usar estas parejas como mediciones simultáneas ni inferir exactitud de 1 RPM de la resolución del formato.
+
+### Ejecución ampliada
+
+El switch `-Correlation` activa GM11 y fija 18 rondas: seis en reposo, seis con carga habitual moderada y seis durante recuperación. Máximo 109 solicitudes nativas secuenciales, plazo del hijo de 600 s, sin reintentos ni setters. Mantiene la parada ante primer fallo o nuevos ACPI 13/15. Espera de un segundo tras cada respuesta y cinco segundos entre rondas; duración esperada aproximadamente 5–6 minutos, variable por CIM/WMI. No se cambia la cadencia nativa para perseguir una muestra exacta cada cinco segundos.
+
+Dejar el equipo en Firmware, cerrar VFC y sus servicios/watchdogs/lectores como antes. No variar alimentación, BIOS, límites de CPU/GPU ni modo de rendimiento. Empezar con el equipo en reposo. Desde PowerShell administrador, rama actualizada:
+
+```powershell
+git pull --ff-only
+.\scripts\Test-Victus-AcpiCoverage.ps1 -Correlation
+```
+
+1. FASE 1/3 REPOSO: esperar sin iniciar carga.
+2. Cuando aparezca FASE 2/3 CARGA: iniciar una aplicación habitual de carga moderada, por ejemplo un juego limitado a 30 FPS; mantener la misma escena. No abrir HWiNFO/LHM/otros lectores. No usar una prueba extrema para forzar RPM.
+3. Cuando aparezca FASE 3/3 RECUPERACION: cerrar la aplicación de carga y dejar el equipo en reposo hasta terminar. El recolector no inicia ni detiene esa aplicación.
+4. Enviar ZIP y SHA256 e indicar aplicación/escena utilizada, si ambos ventiladores cambiaron perceptiblemente y cualquier retraso al seguir los avisos. Si la prueba se detiene, cerrar también la carga y enviar la evidencia parcial.
+
+El padre muestra progreso aproximadamente cada cinco segundos y registra los avisos de carga/recuperación en `phase-prompts.jsonl`. El CSV usa fases **planificadas**, no prueba que el usuario aplicó o retiró la carga en ese instante. Conserva bytes crudos, RPM candidatas calculadas y UTC independientes de cada respuesta para estudiar desfase. No mide temperatura ni carga, ni incorpora un corte térmico nuevo; se mantiene la protección normal del firmware. Si el equipo se comporta anormalmente o se calienta excesivamente, detener la carga y la prueba.
+
+Criterios de análisis: integridad/orden/completitud de llamadas, latencias, cambios de GM11 en ambos ventiladores, concordancia de tendencia con GM2D y recuperación. Sin variación suficiente la sesión es inconclusa para seguimiento dinámico. Un salto, valor repetido o discrepancia se investigará con los tiempos y la cuantización antes de atribuirlo a fallo. Healthy sólo valida contratos/observación, no correlación, frescura, precisión, estabilidad prolongada ni control. No reemplaza consignas 34h/35h, ECh, F4h ni pruebas de restauración.
+
+CI verifica las 18 rondas, seis etiquetas por fase, 109 solicitudes, 17 esperas entre rondas, decodificación y conservación de UTC/hex; un fallo en GM11 GPU de la ronda 7 detiene tras 43 solicitudes y conserva seis rondas completas. También verifica el modo corto existente y el rechazo del equipo no objetivo con la configuración de correlación.
