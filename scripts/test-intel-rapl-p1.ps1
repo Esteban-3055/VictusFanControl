@@ -1,6 +1,8 @@
 param(
     [switch]$WriteTest,
     [ValidateRange(10, 120)][int]$DurationSeconds = 60,
+    [double]$PL1Watts = 0,
+    [double]$PL2Watts = 0,
     [string]$ModulesDir = '',
     [switch]$SelfTest
 )
@@ -32,6 +34,15 @@ try {
 
 $mode = '--observe'
 if ($WriteTest) { $mode = '--write-test' }
+$explicitLimits = ($PL1Watts -ne 0 -or $PL2Watts -ne 0)
+if ($explicitLimits) {
+    if (-not $WriteTest) { throw 'PL1Watts/PL2Watts require -WriteTest.' }
+    if (-not [double]::IsFinite($PL1Watts) -or -not [double]::IsFinite($PL2Watts) -or
+        $PL1Watts -lt 10 -or $PL1Watts -gt 200 -or
+        $PL2Watts -lt $PL1Watts -or $PL2Watts -gt 250) {
+        throw 'Explicit limits require PL1 10..200 W and PL2 >= PL1 and <=250 W.'
+    }
+}
 $name = 'rapl-p1_' + (Get-Date -Format 'yyyy-MM-dd_HHmmss') + '_' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
 $directory = Join-Path $root ('logs\' + $name)
 $zip = $directory + '.zip'
@@ -40,7 +51,11 @@ Write-Host ''
 Write-Host '3. Starting a separate CPU experiment. Finish the EC/WMI capture first.'
 Write-Host 'Close VictusFanControl and its fan watchdog; keep firmware fan control and AC connected.'
 if ($WriteTest) {
-    Write-Host 'P1 WRITE TEST: original limits observed for 10 seconds, then both power fields reduced 20%.' -ForegroundColor Yellow
+    if ($explicitLimits) {
+        Write-Host ("P1 EXPLICIT WRITE TEST: original limits observed for 10 seconds, then PL1={0} W / PL2={1} W are requested once." -f $PL1Watts, $PL2Watts) -ForegroundColor Yellow
+    } else {
+        Write-Host 'P1 WRITE TEST: original limits observed for 10 seconds, then both power fields reduced 20%.' -ForegroundColor Yellow
+    }
     Write-Host 'Enable, Clamp, Tau, Lock, reserved bits, GPU and fan settings are preserved.'
     Write-Host 'Start with CPU below 85 C. After IMMEDIATE_READBACK_EXACT_MATCH you may start a repeatable CPU workload.'
     Write-Host ("The reduced limits are observed for {0} seconds, then restoration is checked." -f $DurationSeconds)
@@ -52,7 +67,13 @@ Write-Host ("Evidence directory: {0}" -f $directory)
 
 $exitCode = 2
 try {
-    & $exe $mode --module $module --output-dir $directory --duration-seconds $DurationSeconds 2>&1 |
+    $probeArgs = @($mode, '--module', $module, '--output-dir', $directory, '--duration-seconds',
+        $DurationSeconds.ToString([Globalization.CultureInfo]::InvariantCulture))
+    if ($explicitLimits) {
+        $probeArgs += @('--pl1-watts', $PL1Watts.ToString([Globalization.CultureInfo]::InvariantCulture),
+            '--pl2-watts', $PL2Watts.ToString([Globalization.CultureInfo]::InvariantCulture))
+    }
+    & $exe @probeArgs 2>&1 |
         Tee-Object -FilePath $consoleLog
     $exitCode = $LASTEXITCODE
 } finally {
