@@ -531,6 +531,9 @@ parent/source gates for generation 4. This commit performs no hardware test.
 Its own complete successful same-head CI is mandatory before target execution.
 Permanent user Manual, Automatic, Candidate and default control remain closed.
 
+The following generation-4 execution instructions are historical and consumed
+by attempt 5. Do not execute them again; the current source gate is closed.
+
 Update the expected branch without deleting prior logs. Use administrator
 Windows PowerShell and run the parent harness, not run-gui directly:
 
@@ -552,3 +555,35 @@ actions. Do not repeat a failed interaction or rerun the consumed HEAD.
 Upload the generated `logs/p16-normal-manual_*.zip` and its `.sha256`, including
 any FAIL_CLOSED result. A PASS requires separate source re-block, evidence audit
 and closure before permanent Manual promotion; Automatic is not part of P16.
+
+## P16 generation-4 attempt 5: initial WMI proof, changed command rejected
+
+Attempt on `98fdc73dbf1ac4f81812ae84f45047c9e1845703` / CI #1209
+(run 37092681751) consumed the one-shot fence and failed closed. ZIP SHA-256
+`811fafd002311482e75b21dcfa24528fa05f458f913ba7a9a0afd72c00a3363f`
+matches its sidecar; CRC and present manifest evidence/source identities pass.
+Initial 30/30 has real WMI response proof: nominal RPM 2600/2300 -> 3000/2900,
+resolution 100, two confirmations, query 6 started 2141 ms after dispatch
+completion. Parent verifies stable EC 30/30 and generation-3 OWNED in the
+same GUI/session identity. The later 40/40 is refused inside the coordinator
+before backend dispatch because its current safety/lifecycle predicate denies
+Custom. The generic error does not establish which predicate caused denial.
+
+The supplemental full app log records Firmware return and clean GUI exit,
+but the failure package lacks independent final FF/FF and journal absence.
+This is not P16 PASS or complete strong-restore qualification. No suspend/resume
+is logged in this supplied session. The package only proves the failsafe was
+armed and had not taken over before packaging; its later outcome is not captured.
+
+All dedicated gates are re-blocked. Command rejection now reuses the existing
+safety-denial explanation, including supplied/latest evaluation identities,
+recorded before restore mutates state. This diagnostic change does not change
+the predicate, thermal limits, fan writes or retry policy. Preserve the
+unknown cause; a later correction and fresh authorization are needed.
+
+Local software checks pass the static invariants and the backend fake-I/O
+suite. The portable adaptive self-test reports the existing Manual
+refresh/supersession concurrency case as failing on both unchanged
+`98fdc73dbf1ac4f81812ae84f45047c9e1845703` and this diagnostic change;
+it is not recorded as a local PASS or as the physical root cause.
+The complete Windows workflow must validate the published re-block.

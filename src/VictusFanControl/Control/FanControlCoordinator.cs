@@ -174,9 +174,10 @@ public sealed class FanControlCoordinator : IAsyncDisposable
             {
                 if (!SafetyAllowsCustomLocked(safety))
                 {
+                    var denialDetail = DescribeSafetyDenialLocked(safety);
                     await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
                     throw new InvalidOperationException(
-                        "Fan command refused because custom control is no longer permitted by the current safety/lifecycle gate.");
+                        "Fan command refused because custom control is no longer permitted by the current safety/lifecycle gate. " + denialDetail);
                 }
 
                 var commandError = ValidateCommand(command);
@@ -472,6 +473,9 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         SafetyGateResult safety)
     {
         var details = new List<string>();
+
+        if (!IsLatestSafetyEvaluation(safety))
+            details.Add($"SafetyGate evaluation superseded: supplied={safety.EvaluationSequence}, latest={Interlocked.Read(ref _latestSafetyEvaluationSequence)}");
 
         if (!safety.CustomControlPermitted)
         {

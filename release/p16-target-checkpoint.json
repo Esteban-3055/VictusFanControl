@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
-  "scope": "Generation-4 one-shot ordinary-app Manual 30/40/30 qualification using fresh WMI RPM proof; permanent Manual/Automatic remain closed.",
+  "status": "P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED",
+  "scope": "Preserve generation-4 WMI attempt-5 FAIL_CLOSED evidence; dedicated and permanent gates closed pending precise safety-denial diagnosis.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
   "p15Baseline": {
@@ -43,9 +43,9 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": true,
-    "controllerPhysicalExecutionAuthorized": true,
-    "physicalGatesOpened": true,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
+    "physicalGatesOpened": false,
     "physicalPassed": false,
     "evidenceClosed": false,
     "hardwareExecution": true,
@@ -155,14 +155,17 @@
       "runtimeExactHeadCiBarrierRequired": true,
       "authorizationCommitPerformsHardwareExecution": false,
       "oneShotAttemptFenceRequired": true,
-      "authorizationConsumed": false,
-      "freshAuthorizationRequired": false,
+      "authorizationConsumed": true,
+      "freshAuthorizationRequired": true,
       "permanentUserManualExecutionAuthorized": false,
       "automaticExecutionAuthorized": false,
       "candidateCurvePhysicallyValidated": false,
       "candidateCurveAuthorizedForProduction": false,
       "controlEnabledByDefault": false,
-      "nextAttempt": 5
+      "nextAttempt": 5,
+      "consumedByAttempt": 5,
+      "attemptFenceClaimed": true,
+      "attemptFenceAuthorizationHead": "98fdc73dbf1ac4f81812ae84f45047c9e1845703"
     },
     "physicalAttemptHistory": [
       {
@@ -263,18 +266,43 @@
           "The evidence proves temporal proximity between Manual selection and the OS power transition, but does not establish that the Manual request caused hibernation/suspend. External Windows power-event evidence would be required to identify the transition trigger.",
           "No P16 PASS, Custom ownership, fan write, causal watchdog write chain, strong-restore PASS, post-exit proof or evidence closure is claimed."
         ]
+      },
+      {
+        "attempt": 5,
+        "sourceHead": "98fdc73dbf1ac4f81812ae84f45047c9e1845703",
+        "sourceCiRunNumber": 1209,
+        "sourceCiRunId": 37092681751,
+        "sourceCiResult": "SUCCESS",
+        "evidenceDirectory": "logs/p16-normal-manual_2026-10-03_002132",
+        "evidenceZip": "p16-normal-manual_2026-10-03_002132.zip",
+        "evidenceZipSha256": "811fafd002311482e75b21dcfa24528fa05f458f913ba7a9a0afd72c00a3363f",
+        "manifestSha256": "8c0254eda6a6522fe3ad9d4d3a3ea691c1c578f90be5a1b370ebaa4017f15c99",
+        "harnessSummarySha256": "caeecacc8bb3000b2a4c86397988ba0128ec93c17babfab25891029e71839970",
+        "attemptFenceSha256": "b824016e52ed87128d84b602c97c4900c6ce78a5a5134a82a63c77b4c3c7f339",
+        "result": "FAIL_CLOSED",
+        "classification": "INITIAL_30_WMI_ACK_CHANGED_40_SAFETY_GATE_REJECTED_BEFORE_BACKEND",
+        "failure": "Changed Apply 40/40 rejected by current safety/lifecycle gate inside FanControlCoordinator before backend dispatch. Exact denying predicate was not recorded.",
+        "evidenceNotes": [
+          "ZIP SHA-256 matches sidecar, CRC passes; all 11 packaged manifest entries and 29 present source identities match (source LF/CRLF normalization only).",
+          "One-shot generation-4 HEAD fence claimed. Initial three-snapshot Healthy, stable FF/FF and same inherited watchdog identity established.",
+          "Initial real 30/30 completed WMI proof: baseline 2600/2300, final 3000/2900, resolution 100, two confirmation samples, baseline query 2 and final query 6, final query started 2141 ms after command completion.",
+          "Independent parent proves two coherent EC 30/30 snapshots plus schema-v2 generation-3 OWNED journal bound to GUI PID 27972 and exact start ticks, session 513f49c6-c6f4-48c5-aa85-f423a304965f.",
+          "Changed 40/40 rejected before backend Apply; no WMI 40 proof or generation-5 journal. No suspend/resume logged in supplied session.",
+          "Supplemental events-2026-10-03.log records Restoring -> Firmware at 00:22:26, later Firmware Hold and explicit GUI shutdown/exit at 00:22:46. These are app observations, not independent final FF/FF/journal absence proof.",
+          "Failure package ended before later GUI exit and before delayed failsafe expiry. No complete strong restore, post-exit, causal service-chain PASS or P16 PASS is claimed."
+        ]
       }
     ],
     "hardeningRequired": {
-      "required": false,
-      "physicalGateMustRemainClosed": false,
+      "required": true,
+      "physicalGateMustRemainClosed": true,
       "findings": [
         "AcpiEcReader retries EC protocol reads only after mutex acquisition; a Global\\\\Access_EC acquisition timeout is currently a single 500 ms terminal failure.",
         "The independent P16 parent setpoint probe treats one transient Global\\\\Access_EC acquisition timeout as terminal instead of using a bounded whole-probe retry.",
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Generation-4 controlled WMI qualification only after exact authorization-head full CI SUCCESS; one attempt, causal WMI and watchdog/EC proof, then separate re-block/evidence closure. Preserve the unknown trigger of attempt-4 power transition.",
+      "nextAction": "Keep generation 4 consumed and physical gates closed. Capture the exact SafetyGate reasons, supplied/latest evaluation identities, admission and lifecycle fences on command rejection without changing thresholds or retrying hardware. A later qualified correction and fresh authorization are required before another physical attempt.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -458,6 +486,22 @@
             "deterministicSessionCases": 7
           }
         }
+      },
+      "postAttempt5": {
+        "required": true,
+        "sourceAttempt": 5,
+        "initial30WmiAckProven": true,
+        "initial30IndependentOwnershipProven": true,
+        "changed40BackendDispatchObserved": false,
+        "appFirmwareReturnLogged": true,
+        "supplementalGuiExitLogged": true,
+        "independentFinalFirmwareProof": false,
+        "exactSafetyDenialCauseEstablished": false,
+        "diagnosticDetailAdded": true,
+        "safetyPredicateChanged": false,
+        "thermalLimitsChanged": false,
+        "fanWritesChanged": false,
+        "hardwareExecutionByReblockCommit": false
       }
     },
     "authorizationHistory": [

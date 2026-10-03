@@ -73,7 +73,7 @@ if($isP16APrepared){
 if($isPhysicalFailClosed){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B fail-closed state must re-block the dedicated source gate.'
  $attempts=@($d.physicalAttemptHistory)
- if($attempts.Count -ne 4){throw 'P16B fail-closed history must preserve exactly four target attempts.'}
+ if($attempts.Count -ne 5){throw 'P16B fail-closed history must preserve exactly five target attempts.'}
  foreach($attempt in $attempts){if([string]$attempt.result -cne 'FAIL_CLOSED'){throw 'Every preserved P16B target attempt must remain FAIL_CLOSED.'}}
  if([string]$attempts[0].evidenceZipSha256 -cne '2f164727994683bb7f5c1d49eeff871b017d6a129dc4c6de9ca1e5c51d44a178'){throw 'P16B attempt-1 evidence identity mismatch.'}
  if([string]$attempts[1].evidenceZipSha256 -cne 'c26eb3afab86a6998c8f52233165b276e4bd1d52a4ec803ef03bc9192978a661'){throw 'P16B attempt-2 evidence identity mismatch.'}
@@ -91,12 +91,11 @@ if($isPhysicalFailClosed){
    throw 'P16B attempt-4 evidence identity mismatch.'
  }
  $auth=$d.authorization
- if([int]$auth.authorizationGeneration -ne 3 -or -not [bool]$auth.authorizationConsumed -or
-    -not [bool]$auth.freshAuthorizationRequired -or [int]$auth.consumedByAttempt -ne 4 -or
-    -not [bool]$auth.attemptFenceClaimed -or
-    [string]$auth.attemptFenceAuthorizationHead -cne 'fdf08d94cddca82e3d1431bdf95e68c37aae24aa'){
-   throw 'P16B generation-3 authorization must be preserved as consumed by attempt 4.'
- }
+ if([int]$auth.authorizationGeneration -ne 4 -or -not $auth.authorizationConsumed -or -not $auth.freshAuthorizationRequired -or [int]$auth.consumedByAttempt -ne 5 -or -not $auth.attemptFenceClaimed -or $auth.attemptFenceAuthorizationHead -cne '98fdc73dbf1ac4f81812ae84f45047c9e1845703'){throw 'P16 generation 4 must remain consumed by attempt 5.'}
+ if($attempts[4].sourceHead -cne '98fdc73dbf1ac4f81812ae84f45047c9e1845703' -or $attempts[4].evidenceZipSha256 -cne '811fafd002311482e75b21dcfa24528fa05f458f913ba7a9a0afd72c00a3363f' -or [long]$attempts[4].sourceCiRunId -ne 37092681751){throw 'P16 attempt-5 identity altered.'}
+ $p5=$d.hardeningRequired.postAttempt5
+ if(-not $p5.initial30WmiAckProven -or -not $p5.initial30IndependentOwnershipProven -or $p5.changed40BackendDispatchObserved -or $p5.independentFinalFirmwareProof -or $p5.exactSafetyDenialCauseEstablished -or $p5.safetyPredicateChanged -or $p5.thermalLimitsChanged -or $p5.fanWritesChanged){throw 'P16 attempt-5 scope was overstated.'}
+
  Assert-True ([bool]$d.hardeningRequired.required) 'P16B attempt-4 re-block must require lifecycle hardening.'
  Assert-True ([bool]$d.hardeningRequired.physicalGateMustRemainClosed) 'P16B attempt-4 lifecycle hardening must keep the physical gate closed.'
  $p4=$d.hardeningRequired.postAttempt4
