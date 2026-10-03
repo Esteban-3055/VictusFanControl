@@ -117,6 +117,12 @@ public static class SafetyGate
                 : $"Telemetry is stale ({Math.Max(0, age.TotalSeconds):0.0} s old).");
         }
 
+        if (snapshot is not null && !snapshot.IsFanTelemetryFreshAt(now))
+        {
+            snapshotFresh = false;
+            reasons.Add("HP WMI fan acquisition expired or lacks freshness metadata.");
+        }
+
         var telemetryDeviceIdentityValid =
             snapshot is not null &&
             targetProfile is not null &&

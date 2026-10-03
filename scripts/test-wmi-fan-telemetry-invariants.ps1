@@ -8,6 +8,7 @@ $reader = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanTelemetryReader.cs
 $hardware = Read-Source 'src\VictusFanControl\Telemetry\HardwareTelemetryReader.cs'
 $worker = Read-Source 'src\VictusFanControl.App\TelemetryWorker.cs'
 $snapshot = Read-Source 'src\VictusFanControl\Telemetry\TelemetrySnapshot.cs'
+$safety = Read-Source 'src\VictusFanControl\Safety\SafetyGate.cs'
 $workflow = Read-Source '.github\workflows\build.yml'
 Require-Text $reader 'Hp8C40BiosFanControl.BuildGetFanLevelRequest()'
 Require-Text $reader 'private static readonly SemaphoreSlim ProductionAdmission = new(1, 1);'
@@ -26,6 +27,8 @@ Require-Text $worker '_reader?.PauseFanTelemetry();'
 Require-Text $worker 'await _reader.WaitForFanTelemetryQuiescenceAsync(timeoutCts.Token)'
 Require-Text $snapshot 'FanSampleAgeMilliseconds is >= 0 and < HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds'
 Require-Text $workflow '--fan-wmi-telemetry-self-test'
+Require-Text $snapshot 'IsFanTelemetryFreshAt(DateTimeOffset now)'
+Require-Text $safety '!snapshot.IsFanTelemetryFreshAt(now)'
 $p16 = Read-Source 'release\p16-target-checkpoint.json' | ConvertFrom-Json
 if ($p16.normalManual.executionAuthorized -or $p16.normalManual.controllerPhysicalExecutionAuthorized -or
     $p16.normalManual.physicalGatesOpened -or $p16.normalManual.physicalPassed) {

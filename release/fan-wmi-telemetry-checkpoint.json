@@ -8,7 +8,7 @@
     "runId": 37075117009,
     "result": "SUCCESS"
   },
-  "scope": "Periodic HardwareTelemetryReader fan RPM only; existing control/ownership/guard/diagnostic/watchdog paths unchanged",
+  "scope": "Periodic HardwareTelemetryReader fan RPM and acquisition freshness at SafetyGate decision time; writes, ownership, guards, command-response proof and watchdog unchanged",
   "hardwareExecution": false,
   "physicalGatesOpened": false,
   "p16QualificationLifecycleLatchCompleted": false,
@@ -32,7 +32,7 @@
   "localValidation": {
     "coreCSharpCompilationWarningsAsErrors": "PASS",
     "guiCSharpCompilationWarningsAsErrors": "PASS",
-    "fakeTransportCases": 7,
+    "fakeTransportCases": 8,
     "fakeTransportResult": "PASS",
     "safetyGateSelfTest": "PASS",
     "hpBiosContractSelfTest": "PASS",
@@ -42,8 +42,21 @@
     "legacyAdaptiveRetryTestOnLinux": "INTERMITTENT_IN_BASELINE_AND_MIGRATION; NOT_CLOSED"
   },
   "publication": {
-    "pushed": false,
-    "remoteHead": "5ad0821b0e7a4272abdc31f4a7d0d8fcb716332c",
-    "blockedBy": "Automatic approval review requires explicit user authorization for publication to the public GitHub repository."
+    "pushed": true,
+    "firstPublishedHead": "cc8345c4cb6dc990a4280611deda925f8444097b",
+    "userAuthorization": "Explicit publication and repository modification authorization on 2026-10-02; hardware gates remain closed",
+    "previousAutomaticReviewBlockResolved": true
+  },
+  "initialPublishedValidation": {
+    "head": "cc8345c4cb6dc990a4280611deda925f8444097b",
+    "runId": 37081581529,
+    "runNumber": 1200,
+    "result": "SUCCESS"
+  },
+  "decisionTimeFreshnessAudit": {
+    "implemented": true,
+    "maximumCombinedFanAgeMs": 3000,
+    "thermalThresholdsChanged": false,
+    "validation": "LOCAL_PASS_WINDOWS_CI_PENDING"
   }
 }

@@ -1,4 +1,7 @@
 using VictusFanControl.Hardware.Hp;
+using VictusFanControl.Hardware.Windows;
+using VictusFanControl.Runtime;
+using VictusFanControl.Safety;
 
 namespace VictusFanControl.Telemetry;
 
@@ -106,6 +109,36 @@ public static class HpWmiFanTelemetryReaderSelfTest
                 };
                 Check(snapshot.IsComplete && !(snapshot with { FanSampleAgeMilliseconds = 3000 }).IsComplete,
                     "snapshot freshness boundary incorrect");
+            });
+
+            await Test("SafetyGate rejects fan acquisition that expires while a snapshot is held", () =>
+            {
+                var timestamp = DateTimeOffset.UtcNow;
+                var snapshot = new TelemetrySnapshot(timestamp, "CPU", 40, 10, 5,
+                    Hp8C40TargetProfile.ExpectedGpuName, 40, 10, 5, 2600, 2400)
+                {
+                    CpuCoreTemperatures = Enumerable.Range(0, 14)
+                        .Select(i => new CpuCoreTemperatureSample(i, i, "Performance", 40)).ToArray(),
+                    CpuExpectedPhysicalCoreCount = 14,
+                    FanTelemetrySource = "HP-WMI-ACPI-2D",
+                    FanSampledAtUtc = timestamp - TimeSpan.FromMilliseconds(2500),
+                    FanRpmResolution = 100,
+                    FanSampleAgeMilliseconds = 2500
+                };
+                var hardware = new HardwareIdentity(
+                    Hp8C40TargetProfile.BoardManufacturer, Hp8C40TargetProfile.BoardProduct,
+                    Hp8C40TargetProfile.BoardVersion, Hp8C40TargetProfile.SystemManufacturer,
+                    Hp8C40TargetProfile.SystemProductName, Hp8C40TargetProfile.SystemSkuPrefix,
+                    Hp8C40TargetProfile.ValidatedBiosVersion);
+                var fresh = SafetyGate.Evaluate(hardware, SystemState.Healthy, snapshot,
+                    timestamp + TimeSpan.FromMilliseconds(499), fanWritePathPresent: true);
+                var expired = SafetyGate.Evaluate(hardware, SystemState.Healthy, snapshot,
+                    timestamp + TimeSpan.FromMilliseconds(500), fanWritePathPresent: true);
+                Check(fresh.CustomControlPermitted && snapshot.IsComplete &&
+                    !expired.SnapshotFresh && !expired.CustomControlPermitted &&
+                    expired.Reasons.Any(r => r.Contains("fan acquisition expired", StringComparison.Ordinal)),
+                    "fresh CPU/GPU snapshot renewed expired fan acquisition");
+                return Task.CompletedTask;
             });
 
             await Test("slow completion is discarded even without a foreground timeout check", async () =>

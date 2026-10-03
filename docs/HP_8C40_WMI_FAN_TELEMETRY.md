@@ -67,8 +67,10 @@ are appended. Consumers needing precision should use these fields.
 `TelemetrySnapshot.IsComplete` also requires fan acquisition metadata and an
 age below 3000 ms for this WMI source. Initial/no-data, expired, failed and
 timeout reads have null fan RPM and cannot contribute to healthy recovery.
-The existing SafetyGate, thermal thresholds and controller fail-closed behavior
-are unchanged.
+SafetyGate also checks the acquisition age at decision time: a retained snapshot
+adds its elapsed time to the captured fan age and expires at 3000 ms. A fresh
+CPU/GPU snapshot cannot renew an older cached fan sample. Thermal thresholds
+and controller fail-closed behavior are unchanged.
 
 ## Lifecycle
 
@@ -94,7 +96,7 @@ session interruption latch. That separate hardening requirement remains in
 `--fan-wmi-telemetry-self-test` uses fake transport, fake monotonic time and
 explicit worker barriers. It covers the exact read-only envelope, quantization,
 asymmetric speed, cadence, payload validation, zero/high/FF values, cache
-invalidation, retry/recovery, age boundaries, completion latency, logical timeout,
+invalidation, retry/recovery, age boundaries, decision-time SafetyGate expiry, completion latency, logical timeout,
 single-flight across recreation, disposal, pause and cancellable quiescence.
 
 `test-wmi-fan-telemetry-invariants.ps1` protects read-only scope, exact-profile
@@ -111,7 +113,9 @@ https://learn.microsoft.com/en-us/dotnet/api/system.management.invokemethodoptio
 
 ## Local verification record (Windows CI pending)
 
-Implementation commit: `5b151f9` (full identity in the telemetry checkpoint).
+Original local implementation: `5b151f9` (full identity in the telemetry checkpoint).
+First published identical source tree: `cc8345c4cb6dc990a4280611deda925f8444097b`,
+full Windows CI #1200 / run 37081581529 SUCCESS.
 C# compilation of core and GUI passed with warnings treated as errors using
 .NET 8.0.419 Roslyn and official .NET/WindowsDesktop reference assemblies.
 The container's normal dotnet CLI/MSBuild entry points cannot inspect process
@@ -119,16 +123,26 @@ metadata, so this is compiler verification, not a completed SDK build/publish.
 The GUI compiler check used temporary equivalents of SDK-generated global
 usings/ApplicationConfiguration; actual SDK generation remains a Windows CI check.
 
-All seven new fake-transport cases passed. SafetyGate and both HP BIOS request
+The original seven fake-transport cases passed locally and in CI #1200.
+The decision-time expiry audit adds an eighth case, which also passed locally. SafetyGate and both HP BIOS request
 contracts passed locally. The existing backend self-test requires the Windows
 active-time clock and is not executable in this Linux environment. The inherited
 adaptive Manual retry test was intermittent in **both** a detached unmodified
 baseline and this migration (one PASS/two FAIL in each three-run diagnostic
 comparison); it remains an unresolved CI check, not a claimed regression fix.
 
-Automatic approval review blocked the public GitHub push pending explicit user
-publication authorization. The remote branch remains at `5ad0821`; no migration
-CI run exists yet, implementationValidation remains null, and softwareClosure
-is false. Full Windows build, PowerShell runtime/invariant tests, backend and
-watchdog regressions, deterministic packaging, and a separate same-head software
-closure still need to finish after an authorized push. No physical gate was opened.
+Automatic approval review initially blocked publication. The user then explicitly
+approved publishing and repository modifications on 2026-10-02. The authenticated
+GitHub connection published an identical source tree; full Windows CI #1200
+passed PowerShell syntax/invariants (including Windows PowerShell 5.1), warnings-
+as-errors SDK build, all safety/backend/watchdog/adaptive tests, publish layout,
+reproducible RC packaging and retained audit artifacts. The legacy adaptive
+Manual retry test passed in this Windows run; its local Linux intermit remains
+recorded as diagnostic history rather than a production change.
+
+Post-CI review found and fixed the independent fan-age decision boundary:
+2500-ms cached fan age plus 499-ms snapshot retention is accepted; plus 500 ms
+is expired, even though the fast snapshot itself is younger than 3 seconds.
+This audit correction requires its own complete same-head CI before software
+closure. No physical gate was opened; the P16 qualification-session lifecycle
+latch and remaining direct EC proof reads are outside this migration.

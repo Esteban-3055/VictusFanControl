@@ -84,4 +84,20 @@ public sealed record TelemetrySnapshot(
         GpuLoadPercent.HasValue &&
         CpuFanRpm.HasValue &&
         GpuFanRpm.HasValue;
+
+    /// <summary>
+    /// A cached fan sample can expire after this immutable snapshot was built.
+    /// Add time spent holding the snapshot to its captured monotonic fan age;
+    /// a fresh CPU/GPU timestamp must not renew older fan acquisition data.
+    /// The snapshot timestamp starts before hardware sampling, so this is
+    /// conservatively older by at most that sampling duration.
+    /// </summary>
+    public bool IsFanTelemetryFreshAt(DateTimeOffset now) =>
+        FanTelemetrySource != "HP-WMI-ACPI-2D" ||
+        (FanSampleAgeMilliseconds is >= 0 &&
+         FanSampledAtUtc.HasValue &&
+         FanRpmResolution == HpWmiFanTelemetrySample.ResolutionRpm &&
+         now >= Timestamp &&
+         FanSampleAgeMilliseconds.Value + (now - Timestamp).TotalMilliseconds <
+             HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds);
 }
