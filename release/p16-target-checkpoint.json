@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED",
-  "scope": "Preserve generation-5 attempt-6 FAIL_CLOSED: initial WMI/EC 30 proof followed by expired WMI telemetry handoff, then 40 backend tach-wait cancellation during missing fan telemetry. All physical and permanent gates closed.",
+  "status": "P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
+  "scope": "Generation-6 one-shot attempt-7 normal Manual qualification after WMI publication software closure CI #1215. Exact authorization-head CI required before target access; no permanent promotion.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
   "p15Baseline": {
@@ -43,9 +43,9 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": false,
-    "controllerPhysicalExecutionAuthorized": false,
-    "physicalGatesOpened": false,
+    "executionAuthorized": true,
+    "controllerPhysicalExecutionAuthorized": true,
+    "physicalGatesOpened": true,
     "physicalPassed": false,
     "evidenceClosed": false,
     "hardwareExecution": true,
@@ -145,28 +145,27 @@
       "result": "SUCCESS"
     },
     "authorization": {
-      "authorizationGeneration": 5,
-      "openedFromSafetySupersessionCorrectionHead": "fedad87a9dbcc8d50adf3615fade90945712cc4d",
-      "basisTree": "7bf78e369cfb80ea740acb0af4b7ac908f7c8cd3",
-      "basisCiRunNumber": 1211,
-      "basisCiRunId": 37094404222,
+      "authorizationGeneration": 6,
+      "basisTree": "952e0c9fe166b76e7bb7c6fd7d54427a55413bc9",
+      "basisCiRunNumber": 1215,
+      "basisCiRunId": 37097259714,
       "basisCiResult": "SUCCESS",
       "wmiMigrationClosureHead": "572ab08c63cdeb0a0ad3acc59076ca43b9acd758",
       "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
       "runtimeExactHeadCiBarrierRequired": true,
       "authorizationCommitPerformsHardwareExecution": false,
       "oneShotAttemptFenceRequired": true,
-      "authorizationConsumed": true,
-      "freshAuthorizationRequired": true,
+      "authorizationConsumed": false,
+      "freshAuthorizationRequired": false,
       "permanentUserManualExecutionAuthorized": false,
       "automaticExecutionAuthorized": false,
       "candidateCurvePhysicallyValidated": false,
       "candidateCurveAuthorizedForProduction": false,
       "controlEnabledByDefault": false,
-      "nextAttempt": 6,
-      "consumedByAttempt": 6,
-      "attemptFenceClaimed": true,
-      "attemptFenceAuthorizationHead": "41e030e1ce386b647590a4dfefcee32ef7f4d5b5"
+      "nextAttempt": 7,
+      "attemptFenceClaimed": false,
+      "openedFromWmiCoordinationClosureHead": "c2b80dbf3b23bd0e44dc84ba8f7e65d94d701fa6",
+      "safetySupersessionCorrectionHead": "fedad87a9dbcc8d50adf3615fade90945712cc4d"
     },
     "physicalAttemptHistory": [
       {
@@ -323,15 +322,15 @@
       }
     ],
     "hardeningRequired": {
-      "required": true,
-      "physicalGateMustRemainClosed": true,
+      "required": false,
+      "physicalGateMustRemainClosed": false,
       "findings": [
         "AcpiEcReader retries EC protocol reads only after mutex acquisition; a Global\\\\Access_EC acquisition timeout is currently a single 500 ms terminal failure.",
         "The independent P16 parent setpoint probe treats one transient Global\\\\Access_EC acquisition timeout as terminal instead of using a bounded whole-probe retry.",
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Software publication correction is formally closed on implementation 529f3f1 / full Windows CI #1214 SUCCESS. Keep generation 5 consumed and all gates closed; a separate fresh authorization and its own exact-head CI are required before any target qualification. Preserve unproven provider latency contribution and mandatory expiry handoffs.",
+      "nextAction": "One bounded attempt 7 after this exact authorization HEAD passes CI; preserve all six FAIL_CLOSED attempts. Physical qualification and final restore remain unproven.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -757,6 +756,35 @@
         "authorizationCiResult": "SUCCESS",
         "targetAttemptCount": 1,
         "result": "CONSUMED_AFTER_PRESERVED_ATTEMPT5_FAIL_CLOSED"
+      },
+      {
+        "authorizationGeneration": 5,
+        "openedFromSafetySupersessionCorrectionHead": "fedad87a9dbcc8d50adf3615fade90945712cc4d",
+        "basisTree": "7bf78e369cfb80ea740acb0af4b7ac908f7c8cd3",
+        "basisCiRunNumber": 1211,
+        "basisCiRunId": 37094404222,
+        "basisCiResult": "SUCCESS",
+        "wmiMigrationClosureHead": "572ab08c63cdeb0a0ad3acc59076ca43b9acd758",
+        "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
+        "runtimeExactHeadCiBarrierRequired": true,
+        "authorizationCommitPerformsHardwareExecution": false,
+        "oneShotAttemptFenceRequired": true,
+        "authorizationConsumed": true,
+        "freshAuthorizationRequired": true,
+        "permanentUserManualExecutionAuthorized": false,
+        "automaticExecutionAuthorized": false,
+        "candidateCurvePhysicallyValidated": false,
+        "candidateCurveAuthorizedForProduction": false,
+        "controlEnabledByDefault": false,
+        "nextAttempt": 6,
+        "consumedByAttempt": 6,
+        "attemptFenceClaimed": true,
+        "attemptFenceAuthorizationHead": "41e030e1ce386b647590a4dfefcee32ef7f4d5b5",
+        "authorizationHead": "41e030e1ce386b647590a4dfefcee32ef7f4d5b5",
+        "authorizationCiRunNumber": 1212,
+        "authorizationCiRunId": 37094815538,
+        "authorizationCiResult": "SUCCESS",
+        "targetAttemptCount": 1
       }
     ],
     "controlledWmiPreparation": {

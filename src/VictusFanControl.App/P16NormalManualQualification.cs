@@ -6,15 +6,14 @@ namespace VictusFanControl.App;
 /// P16 qualification-only bridge for proving the ordinary user-facing Manual
 /// path without introducing a P16-specific application startup/test mode.
 ///
-/// Generation 5 was consumed by attempt 6: initial 30/30 WMI/EC proof passed,
-/// then expired periodic fan telemetry caused a Firmware handoff; changed 40/40
-/// reached backend tach wait and was canceled during fan telemetry loss.
-/// Re-block pending read coordination diagnosis and fresh one-shot authorization.
+/// Generation 6 authorizes one attempt 7 after the exact authorization HEAD
+/// passes CI. WMI publication software closure passed CI #1214/#1215.
+/// All six previous attempts remain FAIL_CLOSED; no physical PASS is claimed.
 /// Permanent user Manual and Automatic remain false.
 /// </summary>
 internal static class Hp8C40P16NormalManualQualificationGate
 {
-    public static readonly bool PhysicalExecutionAuthorized = false;
+    public static readonly bool PhysicalExecutionAuthorized = true;
 
     public const string RequiredToken = "8C40-P16-NORMAL-MANUAL-30-40-30";
     public const int InitialLevel = 30;

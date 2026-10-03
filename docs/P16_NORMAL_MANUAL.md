@@ -761,3 +761,34 @@ passes all twelve query/publication cases and eight periodic cases, including
 the reproduced failure, lifecycle fences and newer-failure ordering. This
 separate closure changes records/invariants only and requires its own CI.
 It does not open a new physical generation or close the failed target evidence.
+
+## P16 generation-6 controlled attempt 7
+
+Generation 6 permits exactly one attempt 7 after WMI publication closure
+`c2b80dbf3b23bd0e44dc84ba8f7e65d94d701fa6`, tree
+`952e0c9fe166b76e7bb7c6fd7d54427a55413bc9`, CI #1215 / run
+`37097259714` SUCCESS. Implementation CI #1214 also passed. This authorizes
+only the bounded normal-app Manual 30/40/30 qualification. All six prior
+FAIL_CLOSED attempts and consumed authorizations 1-5 remain preserved.
+No hardware is executed by this commit and no physical root cause or PASS is
+claimed. Permanent Manual, Automatic, Candidate and default control stay closed.
+
+The authorization HEAD itself must pass full Windows CI. Update with
+`git pull --ff-only`, then run Windows PowerShell as administrator:
+
+```powershell
+.\scripts\test-p16-normal-manual.ps1 -ExpectedSourceHead <generation-6-head> -ExpectedCiRunId <generation-6-ci-run>
+```
+
+Keep AC connected, light load and no competing fan controller. Enter exactly
+`8C40-P16-NORMAL-MANUAL-30-40-30` when requested. Follow the parent prompts:
+Manual once, Apply 30 once, Apply 40 once, Apply 30 once, Firmware once, tray
+Exit once. Wait for each independent proof; do not press Enter to advance.
+The recovery failsafe is armed for 120 seconds from arming; act promptly.
+A rejected action, suspend/resume or lost ownership invalidates the attempt.
+Do not repeat the action or rerun the consumed HEAD. Preserve the delayed
+failsafe and upload the generated ZIP, SHA-256 sidecar and full app events log.
+PASS requires three fresh committed WMI proofs, same-session independent
+EC/journal generations 3/5/7, causal watchdog audit, strong FF/FF firmware
+restore, journal absence and clean tray exit with independent post-exit proof.
+Separate source re-block and evidence review remain mandatory afterward.
