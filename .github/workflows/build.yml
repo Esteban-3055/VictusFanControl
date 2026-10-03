@@ -45,6 +45,12 @@ jobs:
             exit 1
           }
 
+      - name: HP WMI fan broker and reader invariants PowerShell 7
+        shell: pwsh
+        run: |
+          .\scripts\test-wmi-fan-telemetry-invariants.ps1
+          .\scripts\test-wmi-fan-control-invariants.ps1
+
       - name: Gate E contention and causality invariant self-test
         shell: pwsh
         run: .\scripts\test-watchdog-gate-e-invariants.ps1

@@ -1,6 +1,6 @@
 # WMI broker / 5-sample work — Step 3 native acquisition ownership
 
-Status: implemented, validation pending. No hardware qualification claimed.
+Status: implementation software-validated and audited. No hardware qualification claimed.
 
 Baseline: `05fa77c1fee05650246d68bd529bfb7149b36bad`.
 Step 2 input: `0ddf8af069028e6d7fcc32f28cf31e3172bc4f30`, tree
@@ -73,8 +73,38 @@ The two WMI source invariant scripts now follow the relocated ownership:
 broker single-lane admission, atomic lease states and worker-finally release.
 They additionally forbid direct semaphore admission/release or Task.Run in
 the adapters and require the broker tests to run. Historical checkpoint checks
-are unchanged. Both scripts must pass in PowerShell 7 and Windows PowerShell
-5.1; full Windows build, self-tests, deterministic packaging and CI are required.
+are unchanged. CI explicitly runs both scripts in PowerShell 7 and Windows
+PowerShell 5.1; full Windows build, self-tests, deterministic packaging and CI
+are required.
+
+## Implementation audit evidence
+
+Implementation commit: `7f83bc7a7b294ae2168e3b3b36ccbfaf51d8060d`.
+Implementation tree: `893b68a9f1ce4c94a5ecbdaa0356570fa30476b2`.
+Full Windows CI #1228, run `37109531983`: **SUCCESS**, 106 completed steps.
+Run: https://github.com/Esteban-3055/VictusFanControl/actions/runs/37109531983
+
+The exact implementation build reported zero warnings and zero errors. Its
+WMI executable self-test passed 29 named cases: broker 5, diagnostics 4,
+telemetry 8 and proof 12. Safety, coordinator/authority and HP backend suites
+also passed, including restoration with a still-running native RPM read.
+The WMI source invariants passed in Windows PowerShell 5.1. PowerShell 7
+syntax validation passed; explicit PowerShell 7 execution of both WMI invariant
+scripts is added by this audit follow-up and requires its own same-head CI.
+The follow-up changes only this document and the CI execution entry; production
+code and executable tests remain identical to the validated implementation.
+
+The implementation's independently built RC ZIPs matched SHA-256
+`e73866c1eeb8d327f3de44346a09f67b49624085f54069c1ef95bfd3e2124a14`.
+This identifies the implementation package only, not a later documentation
+commit's package. The full run retains its RC and final audit artifacts.
+
+All eight implementation files were reviewed: broker, broker self-test, both
+reader adapters, CLI test dispatch, both invariant scripts and this document.
+The accumulated changes from `05fa77c` also include Step 1 baseline and Step 2
+diagnostics; those diagnostics/publication and all historical qualification
+checkpoints are unchanged by Step 3. No local Windows build is claimed: the
+evidence above comes from the exact-head Windows Actions job.
 
 ## Remaining risks and next boundary
 
