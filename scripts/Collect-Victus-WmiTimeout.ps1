@@ -9,6 +9,11 @@ param(
     [ValidateRange(100,20000)][int]$MaximumEvents = 10000,
     [switch]$SkipAcpiTrace,
     [string]$IaslPath = '',
+    [scriptblock]$ObservationStarted,
+    [scriptblock]$ObservationGuard,
+    [scriptblock]$ObservationFinished,
+    [object]$ObservationContext,
+    [ValidateSet('passive','wmi-only-no-direct-ec')][string]$InvestigationMode = 'passive',
     [switch]$SelfTest
 )
 
@@ -265,7 +270,7 @@ $script:Root=Join-Path $OutputRoot ('VFC-WMI-Diagnostico_'+(Get-Date -Format 'yy
 $script:ConsoleLog=Join-Path $script:Root 'collector.log'
 $started=[DateTimeOffset]::Now
 $admin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-Say 'INICIO: recoleccion diagnostica de diagnostico Manual/WMI. No cambia ventiladores, servicios, energia ni registro.'
+Say ('INICIO: recoleccion diagnostica Manual/WMI; modo='+$InvestigationMode+'. El recolector no escribe ventiladores; el lanzador opcional controla su propio CLI y pausa el watchdog limpio.')
 Say ('Destino: '+$script:Root)
 Say ('Administrador='+$admin+'; captura='+$CaptureMinutes+' min; Q termina la observacion y genera ZIP.')
 if(-not $admin){Warn 'Sin administrador: algunos eventos, procesos o logs pueden quedar inaccesibles.'}
@@ -303,6 +308,20 @@ se observa Manual. Si falla, no repetir Apply; esperar restauracion y conservar
 Solo recopilar una sesion anterior: -CaptureMinutes 0. No hace falta reproducir.
 Este paquete documenta observaciones, no aprueba control fisico ni estabilidad.
 '@
+if($InvestigationMode -eq 'wmi-only-no-direct-ec'){
+    Save-Text (Join-Path $script:Root 'LEEME.txt') @'
+PRUEBA VFC WMI-ONLY: ver wmi-only/isolation-summary.json y chronology.log.
+El lanzador ejecuta telemetria RPM HP WMI 20008h/2Dh, CPU Intel MSR y GPU NVML.
+El CLI rechaza EC directo y toda otra llamada HP WMI antes de I/O.
+La GUI permanece cerrada. Se pausa M4 solo con lease ausente y se restaura su
+estado previo al finalizar. El estado AC/bateria de Windows se muestrea cada
+dos segundos mediante GetSystemPowerStatus; no identifica el instante electrico.
+ETW y tablas ACPI estaticas siguen las mismas reglas del recolector pasivo.
+Las prohibiciones cubren este CLI; Windows, firmware y herramientas externas
+pueden acceder a EC. No prueba estabilidad de Manual ni autorizacion WMI 26h.
+Q cierra el CLI, vacia su log y empaqueta. No cerrar la consola a la fuerza.
+'@
+}
 
 try {
     Stage '1/8 Contexto de sistema y reloj (registro local, sin consultas HP WMI).' {
@@ -341,12 +360,14 @@ try {
     }
     Stage '5/8 ACPI estatico, eventos con mensajes/EVTX y trazas ETW propias.' {Capture-AcpiTables;Export-Events 'before';Start-AcpiTrace}
     Stage '6/8 Observacion pasiva: procesos, cambios del journal y nuevos avisos de VFC.' {
+        if($ObservationStarted){[void](& $ObservationStarted $script:Root $ObservationContext)}
         $journal=Join-Path $env:ProgramData 'VictusFanControl\WatchdogM4\state\lease.json'
         $lastJournal='';$snapshots=0;$iterations=0;$lastReport=-30
         $cursor=@{};$timer=[Diagnostics.Stopwatch]::StartNew();$duration=$CaptureMinutes*60
         $appDir=Join-Path $env:LOCALAPPDATA 'VictusFanControl\logs'
         foreach($file in @(Get-ChildItem -LiteralPath $appDir -File -Filter 'events-*.log' -ErrorAction SilentlyContinue)){$cursor[$file.FullName]=$file.Length}
         do {
+            if($ObservationGuard){[void](& $ObservationGuard $script:Root $ObservationContext)}
             $iterations++
             try {[void](Process-Snapshot ('sample-'+$iterations.ToString('D4')))}catch{Warn ('Snapshot procesos: '+$_.Exception.Message)}
             if(Test-Path -LiteralPath $journal){
@@ -387,10 +408,12 @@ try {
     }
 } catch { Warn ('Error general; se conservara evidencia parcial: '+$_.Exception.ToString()) }
 finally {
+    # Stop/flush the optional isolated child before ETW/log snapshots and ZIP.
+    if($ObservationFinished){Stage 'Finalizar el proceso de investigacion aislado.' {[void](& $ObservationFinished $script:Root $ObservationContext)}}
     Stage 'ETW finalizar y vaciar solo las sesiones propias.' {Stop-AcpiTrace}
     Stage '7/8 Logs y procesos finales; eventos Windows actualizados.' {
         Capture-Logs 'after';[void](Process-Snapshot 'after');Export-Events 'after'
-        Save-Json (Join-Path $script:Root 'capture-summary.json') ([pscustomobject]@{StartedLocal=$started.ToString('o');EndedLocal=[DateTimeOffset]::Now.ToString('o');Warnings=$script:Warnings.Count;HardwareReads=$false;StaticFirmwareApi=$true;EtwRequested=(-not $SkipAcpiTrace);MaximumEvents=$MaximumEvents;CollectorVersion='2-acpi';FanWrites=$false;EventChannelsEnabled=$false;SourceLogsPreserved=$true;RepoRoot=$RepoRoot})
+        Save-Json (Join-Path $script:Root 'capture-summary.json') ([pscustomobject]@{StartedLocal=$started.ToString('o');EndedLocal=[DateTimeOffset]::Now.ToString('o');Warnings=$script:Warnings.Count;HardwareReads=($InvestigationMode -eq 'wmi-only-no-direct-ec');InvestigationMode=$InvestigationMode;StaticFirmwareApi=$true;EtwRequested=(-not $SkipAcpiTrace);MaximumEvents=$MaximumEvents;CollectorVersion='3-isolation';FanWrites=$false;EventChannelsEnabled=$false;SourceLogsPreserved=$true;RepoRoot=$RepoRoot})
     }
     Say '8/8 Generar manifiesto SHA-256 y ZIP. No se borran los logs originales.'
     try {[void](Package)}catch{Write-Host ('No se pudo crear ZIP: '+$_.Exception.Message) -ForegroundColor Red;Write-Host ('Adjunta manualmente la carpeta: '+$script:Root)}

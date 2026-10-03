@@ -29,6 +29,7 @@ internal sealed class AcpiEcReader : IDisposable
 
     public AcpiEcReader(string modulePath)
     {
+        WmiOnlyInvestigationPolicy.EnsureDirectEcAllowed();
         EcWmiInvestigationTrace.Initialize();
         _session = new PawnIoModuleSession(modulePath);
     }
@@ -450,6 +451,7 @@ internal sealed class AcpiEcReader : IDisposable
 
     private byte ReadPort(byte port)
     {
+        WmiOnlyInvestigationPolicy.EnsureDirectEcAllowed();
         var values = _session.Execute("ioctl_pio_read", new ulong[] { port }, 1);
         if (values.Length != 1)
         {
@@ -466,6 +468,7 @@ internal sealed class AcpiEcReader : IDisposable
 
     private void WritePort(byte port, byte value)
     {
+        WmiOnlyInvestigationPolicy.EnsureDirectEcAllowed();
         _session.Execute("ioctl_pio_write", new ulong[] { port, value }, 0);
     }
 

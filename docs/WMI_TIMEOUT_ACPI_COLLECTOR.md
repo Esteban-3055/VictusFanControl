@@ -64,3 +64,7 @@ PowerShell 5.1 and 7 fixture checks cover shared-file copying, bounded reads, ch
 - https://www.intel.com/content/www/us/en/developer/topic-technology/open/acpica/download.html
 
 - https://www.microsoft.com/en-us/msrc/blog/2022/03/exploring-a-new-class-of-kernel-exploit-primitive
+
+## WMI-only isolation trial
+
+For the controlled firmware-mode comparison without VFC direct EC access, use [WMI_ONLY_EC_ISOLATION.md](WMI_ONLY_EC_ISOLATION.md) and `scripts/Start-Victus-WmiOnlyInvestigation.ps1`. This separate launcher rejects retained leases, closes its own read-only CLI gracefully, and temporarily pauses only a verified clean M4 service, restoring its prior state after the observation window. The normal GUI investigation launcher above is unchanged.

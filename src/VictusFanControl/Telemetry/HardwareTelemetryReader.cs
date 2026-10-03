@@ -2,6 +2,7 @@ using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Nvidia;
 using VictusFanControl.Hardware.PawnIo;
 using VictusFanControl.Hardware.Windows;
+using VictusFanControl.Runtime;
 
 namespace VictusFanControl.Telemetry;
 
@@ -49,6 +50,8 @@ public sealed class HardwareTelemetryReader : IDisposable
         _targetProfile = HpHardwareTargetResolver.Resolve(
             hardware,
             out _targetResolutionDetail);
+
+        WmiOnlyInvestigationPolicy.EnsureTargetAllowed(_targetProfile);
 
         if (_targetProfile == Hp8C40TargetProfile.Instance)
         {

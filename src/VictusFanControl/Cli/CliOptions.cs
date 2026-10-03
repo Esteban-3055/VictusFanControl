@@ -3,6 +3,9 @@ namespace VictusFanControl.Cli;
 public sealed class CliOptions
 {
     public bool ShowHelp { get; private set; }
+    public bool WmiOnlyInvestigation { get; private set; }
+    public string? InvestigationStopPath { get; private set; }
+    public string? InvestigationReadyPath { get; private set; }
     public bool ProbeBackends { get; private set; }
     public bool FanWmiTelemetrySelfTest { get; private set; }
     public bool SafetySelfTest { get; private set; }
@@ -104,6 +107,18 @@ public sealed class CliOptions
                 case "--probe-backends":
                 case "--list-sensors":
                     options.ProbeBackends = true;
+                    break;
+
+                case "--wmi-only-investigation":
+                    options.WmiOnlyInvestigation = true;
+                    break;
+
+                case "--stop-file":
+                    options.InvestigationStopPath = Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--ready-file":
+                    options.InvestigationReadyPath = Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
                 case "--fan-wmi-telemetry-self-test":
@@ -494,6 +509,20 @@ public sealed class CliOptions
             }
         }
 
+        if (options.WmiOnlyInvestigation)
+        {
+            // Allow-list the entire invocation, including value-taking options.
+            for (var i = 0; i < args.Length; i++)
+            {
+                if (args[i] is "--wmi-only-investigation" or "--help" or "-h") continue;
+                if (args[i] is "--modules-dir" or "--interval-ms" or "--duration-seconds" or "--output" or "--stop-file" or "--ready-file")
+                { i++; continue; }
+                throw new ArgumentException("WMI-only investigation cannot be combined with another probe, test or control operation.");
+            }
+        }
+        else if (options.InvestigationStopPath is not null || options.InvestigationReadyPath is not null)
+            throw new ArgumentException("--stop-file/--ready-file require --wmi-only-investigation.");
+
         var exclusiveActions =
             (options.ProbeBackends ? 1 : 0) +
             (options.SafetySelfTest ? 1 : 0) +
@@ -797,6 +826,9 @@ public sealed class CliOptions
 
     public static void PrintHelp()
     {
+        Console.WriteLine("  --wmi-only-investigation  Exact 8C40 telemetry only; prohibit direct EC and HP writes in this process.");
+        Console.WriteLine("  --stop-file <path>        Graceful stop signal for the WMI-only launcher.");
+        Console.WriteLine("  --ready-file <path>       WMI-only CLI readiness metadata (atomic file).");
         Console.WriteLine("Usage:");
         Console.WriteLine("  VictusFanControl [options]");
         Console.WriteLine();

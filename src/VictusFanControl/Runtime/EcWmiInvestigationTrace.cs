@@ -18,15 +18,31 @@ internal static class EcWmiInvestigationTrace
     private static readonly InvestigationTraceBuffer Buffer = new(4096);
     private static int _started;
     private static int _stopped;
+    private static int _finishRequested;
+    private static int _drained;
+    private static Thread? _writerThread;
     private static long _operation;
 
-    internal static bool Enabled => Requested && Volatile.Read(ref _stopped) == 0;
+    internal static bool Enabled => Requested && Volatile.Read(ref _stopped) == 0 && Volatile.Read(ref _finishRequested) == 0;
 
     internal static void Initialize()
     {
         if (!Enabled || Interlocked.CompareExchange(ref _started, 1, 0) != 0) return;
-        try { new Thread(WriteLoop) { IsBackground = true, Name = "VFC investigation log" }.Start(); }
+        try
+        {
+            _writerThread = new Thread(WriteLoop) { IsBackground = true, Name = "VFC investigation log" };
+            _writerThread.Start();
+        }
         catch { Volatile.Write(ref _stopped, 1); }
+    }
+
+    // Explicit opt-in CLI shutdown only; never delay a fan command or restore.
+    internal static bool StopAndFlush()
+    {
+        if (!Requested) return true;
+        Volatile.Write(ref _finishRequested, 1);
+        return _writerThread is { } writer && writer.Join(2000) &&
+            Volatile.Read(ref _drained) != 0 && Buffer.Dropped == 0;
     }
 
     internal static long Begin(string stage, string detail)
@@ -69,7 +85,7 @@ internal static class EcWmiInvestigationTrace
             writer.Flush();
             var writtenBytes = file.Position;
             long observedDrops = 0;
-            while (Enabled)
+            while (Volatile.Read(ref _stopped) == 0)
             {
                 for (var batch = 0; batch < 256 && Buffer.TryTake(out var record); batch++)
                 {
@@ -92,6 +108,11 @@ internal static class EcWmiInvestigationTrace
                     observedDrops = drops;
                 }
                 writer.Flush();
+                if (Volatile.Read(ref _finishRequested) != 0 && !Buffer.HasPending && Volatile.Read(ref _stopped) == 0)
+                {
+                    Volatile.Write(ref _drained, 1);
+                    break;
+                }
                 Thread.Sleep(200);
             }
         }
@@ -110,6 +131,7 @@ internal sealed class InvestigationTraceBuffer(int capacity)
     private long _dropped;
     internal int Capacity { get; } = capacity > 0 ? capacity : throw new ArgumentOutOfRangeException(nameof(capacity));
     internal long Dropped => Interlocked.Read(ref _dropped);
+    internal bool HasPending => Volatile.Read(ref _pending) != 0;
 
     internal bool TryAdd(InvestigationTraceRecord record)
     {

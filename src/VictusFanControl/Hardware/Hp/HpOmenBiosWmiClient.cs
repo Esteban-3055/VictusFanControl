@@ -79,6 +79,7 @@ public sealed class HpOmenBiosWmiClient
 
     public HpBiosResponse SendWithResponse(HpBiosRequest request)
     {
+        WmiOnlyInvestigationPolicy.EnsureWmiRequestAllowed(request);
         if (request.OutputSize is not (0 or 4 or 128 or 1024 or 4096))
         {
             throw new ArgumentOutOfRangeException(

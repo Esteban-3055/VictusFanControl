@@ -52,13 +52,24 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Collect-Victus-WmiTimeout.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Collector PowerShell 5.1 self-test failed.' }
 
-      - name: ACPI collector Windows smoke and ETW session cleanup
+      - name: WMI-only isolation launcher fixtures PowerShell 7 and 5.1
         shell: pwsh
+        run: |
+          .\scripts\Start-Victus-WmiOnlyInvestigation.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-WmiOnlyInvestigation.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Isolation PowerShell 5.1 self-test failed.' }
+
+      - name: ACPI collector Windows smoke and ETW session cleanup
+        shell: powershell
         run: |
           $captureRoot = Join-Path $env:RUNNER_TEMP ('vfc-acpi-smoke-' + [Guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Path $captureRoot | Out-Null
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Collect-Victus-WmiTimeout.ps1 -RepoRoot $env:GITHUB_WORKSPACE -OutputRoot $captureRoot -CaptureMinutes 0 -EventHours 1 -MaximumEvents 100
-          if ($LASTEXITCODE -ne 0) { throw 'Windows collector smoke failed.' }
+          $context = @{Started=$false;Guarded=$false;Finished=$false}
+          $start = {param($path,$state) $state.Started=$true; $state.Path=$path}
+          $guard = {param($path,$state) if (-not $state.Started -or $state.Finished -or $path -ne $state.Path) {throw 'Hook order invalid.'}; $state.Guarded=$true}
+          $finish = {param($path,$state) if (-not $state.Started -or -not $state.Guarded) {throw 'Hook order invalid.'}; $state.Finished=$true; Set-Content (Join-Path $path 'hook-finished.txt') 'finished-before-zip'}
+          .\scripts\Collect-Victus-WmiTimeout.ps1 -RepoRoot $env:GITHUB_WORKSPACE -OutputRoot $captureRoot -CaptureMinutes 0 -EventHours 1 -MaximumEvents 100 -ObservationStarted $start -ObservationGuard $guard -ObservationFinished $finish -ObservationContext $context
+          if (-not $context.Finished) { throw 'Collector observation hooks failed.' }
           $result = @(Get-ChildItem $captureRoot -Directory)
           if ($result.Count -ne 1) { throw 'Collector result missing.' }
           $summary = Get-Content (Join-Path $result[0].FullName 'capture-summary.json') -Raw | ConvertFrom-Json
@@ -82,6 +93,8 @@ jobs:
           if ($xml -notmatch 'MESSAGE_JSON') { throw 'Rendered Windows messages missing.' }
           if (-not (Test-Path (Join-Path $result[0].FullName 'windows-events\before\System.evtx'))) { throw 'EVTX export missing.' }
           if (-not (Test-Path ($result[0].FullName + '.zip'))) { throw 'Collector ZIP missing.' }
+          $archive = [IO.Compression.ZipFile]::OpenRead($result[0].FullName + '.zip')
+          try {if (@($archive.Entries | Where-Object {$_.FullName -match 'hook-finished.txt$'}).Count -ne 1) {throw 'Observation finished after ZIP.'}} finally {$archive.Dispose()}
           Write-Host ('PASS: Windows firmware/messages/EVTX, ZIP and cleanup; ETW sessions=' + $sessions.Count)
           # The negative logman query above is expected; do not propagate its exit code.
           exit 0
@@ -530,6 +543,7 @@ jobs:
           if ($rows[0].kind -ne 'session' -or $rows[0].hardwareReadsAdded -or $rows[0].qpcFrequency -le 0 -or -not $rows[0].coreMvid) { throw 'Diagnostic session identity/clock missing.' }
           if (@($rows | Where-Object { $_.Stage -eq 'selftest.fixture' -and $_.Detail -eq 'no hardware I/O' -and $_.TickMs -gt 0 -and $_.Qpc -gt 0 }).Count -ne 1) { throw 'Diagnostic original chronology missing.' }
           if ($files[0].Length -gt 8388608) { throw 'Diagnostic log over file limit.' }
+          if ($rows[-1].Stage -ne 'selftest.finished') { throw 'Terminal diagnostic record was lost at process shutdown.' }
           Write-Host 'PASS: opt-in JSONL, original clocks, MVID and bounded file; fixtures only.'
 
       - name: Safety gate self-test

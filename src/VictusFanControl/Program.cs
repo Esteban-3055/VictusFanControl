@@ -38,6 +38,13 @@ internal static class Program
             return 0;
         }
 
+        if (options.WmiOnlyInvestigation)
+        {
+            WmiOnlyInvestigationPolicy.Enable();
+            Console.WriteLine("WMI-ONLY ISOLATION: fan RPM via HP WMI; direct EC and HP writes prohibited.");
+            Console.WriteLine("Firmware controls fans. CPU uses Intel MSR and GPU uses NVML as usual.");
+        }
+
         if (options.FanWmiTelemetrySelfTest)
         {
             EcWmiInvestigationTrace.Record(0, "selftest.fixture", "no hardware I/O");
@@ -47,7 +54,10 @@ internal static class Program
             var investigation = EcWmiInvestigationTraceSelfTest.Run(Console.Out);
             var telemetry = await HpWmiFanTelemetryReaderSelfTest.RunAsync(Console.Out);
             var proof = await HpWmiFanProofReaderSelfTest.RunAsync(Console.Out);
-            return window != 0 ? window : broker != 0 ? broker : diagnostics != 0 ? diagnostics : investigation != 0 ? investigation : telemetry != 0 ? telemetry : proof;
+            var isolation = WmiOnlyInvestigationPolicySelfTest.Run(Console.Out);
+            EcWmiInvestigationTrace.Record(0, "selftest.finished", "no hardware I/O");
+            if (!EcWmiInvestigationTrace.StopAndFlush()) return 1;
+            return window != 0 ? window : broker != 0 ? broker : diagnostics != 0 ? diagnostics : investigation != 0 ? investigation : telemetry != 0 ? telemetry : proof != 0 ? proof : isolation;
         }
 
         if (options.SafetySelfTest)
@@ -856,7 +866,11 @@ internal static class Program
             }
         }
 
-        using var reader = new HardwareTelemetryReader(options.ModulesDirectory);
+        HardwareTelemetryReader initializedReader;
+        try { initializedReader = new HardwareTelemetryReader(options.ModulesDirectory); }
+        catch (InvalidOperationException ex) when (options.WmiOnlyInvestigation)
+        { Console.Error.WriteLine(ex.Message); return 3; }
+        using var reader = initializedReader;
 
         if (options.CoreThermalCharacterization)
         {
@@ -963,10 +977,29 @@ internal static class Program
 
         var started = DateTimeOffset.UtcNow;
 
+        if (options.WmiOnlyInvestigation)
+        {
+            foreach (var line in reader.GetBackendDiagnostics()) Console.WriteLine(line);
+            if (options.InvestigationReadyPath is { } readyPath)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(readyPath)!);
+                var temporary = readyPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                File.WriteAllText(temporary, System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    Mode = "wmi-only-no-direct-ec", Pid = Environment.ProcessId,
+                    Utc = DateTimeOffset.UtcNow, DirectEcProhibited = WmiOnlyInvestigationPolicy.Enabled,
+                    HpWritesProhibited = true, Target = reader.TargetProfile?.Id, OutputPath = Path.GetFullPath(outputPath)
+                }));
+                File.Move(temporary, readyPath, overwrite: true);
+            }
+            EcWmiInvestigationTrace.Record(0, "isolation.ready", $"pid={Environment.ProcessId};target={reader.TargetProfile?.Id}");
+        }
+
         try
         {
             while (!cts.Token.IsCancellationRequested)
             {
+                if (options.InvestigationStopPath is { } stopPath && File.Exists(stopPath)) break;
                 var snapshot = reader.ReadSnapshot();
                 await logger.WriteAsync(snapshot, cts.Token);
                 ConsoleTelemetryPrinter.Print(snapshot);
@@ -994,6 +1027,15 @@ internal static class Program
         foreach (var line in reader.GetHealthSummary())
         {
             Console.WriteLine(line);
+        }
+
+        if (options.WmiOnlyInvestigation)
+        {
+            EcWmiInvestigationTrace.Record(0, "isolation.finished",
+                $"deniedEc={WmiOnlyInvestigationPolicy.DeniedEcAccesses};deniedWmi={WmiOnlyInvestigationPolicy.DeniedWmiRequests}");
+            if (!EcWmiInvestigationTrace.StopAndFlush())
+            { Console.Error.WriteLine("Investigation chronology could not be fully flushed."); return 3; }
+            if (WmiOnlyInvestigationPolicy.DeniedEcAccesses != 0 || WmiOnlyInvestigationPolicy.DeniedWmiRequests != 0) return 3;
         }
 
         return 0;
