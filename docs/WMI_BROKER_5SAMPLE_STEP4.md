@@ -1,6 +1,7 @@
 # WMI broker / 5-sample work — Step 4 bounded telemetry history
 
-Status: implemented; exact-head Windows CI required before software closure.
+Status: implementation software-validated and audited. The documentation-only
+closure commit additionally requires its own exact-head Windows CI.
 No hardware qualification or new physical test authorization.
 
 Input: `5723eb2620aca990223884402e213d4fc94774b6`, tree
@@ -96,6 +97,31 @@ must pass in the normal Windows executable self-test. Full strict Windows build,
 other safety/backend/coordinator/watchdog/adaptive/profile/UI suites, WMI
 invariants in PowerShell 7 and 5.1, and reproducible packaging remain required.
 No local executable build is claimed if .NET/PowerShell are unavailable.
+
+## Exact implementation audit evidence
+
+Implementation HEAD: `f176de1728b38e3849e684c37edecf1ee22270dc`.
+Implementation tree: `fa183926feb900bb1d5f67bbeb25e5727df4ecb4`.
+Windows CI #1230, run `37110508800`: **SUCCESS**, 107 successful steps.
+Run: https://github.com/Esteban-3055/VictusFanControl/actions/runs/37110508800
+
+Decoded Windows job logs confirm all ten new window cases, five broker cases,
+four diagnostics cases, eight telemetry cases and twelve proof cases passed.
+Strict build reported zero warnings and zero errors. WMI source checks passed
+in PowerShell 7 and in the Windows PowerShell 5.1 invariant sweep. Existing
+safety, coordinator, backend, watchdog, adaptive, profile and graph suites passed.
+The two independently built implementation RC ZIPs matched SHA-256
+`47b32664cf6ee920b92cc81d2135c11963866b4814f54e0e7acb2e1e408ee431`.
+This hash identifies this implementation's payload, not later audit commits.
+
+Local review confirmed whitespace integrity and exact unchanged Git blobs for
+broker, proof reader, publication, HardwareTelemetryReader, TelemetrySnapshot,
+SafetyGate, coordinator, HP backend and workflow. All release checkpoints are
+unchanged. Eight changed files were reviewed. No local .NET/PowerShell execution
+is claimed; executable evidence is from this exact Windows Actions job.
+The audit follow-up changes this document only: executable source and tests
+remain identical to the validated implementation. Its separate final-head CI
+must also pass before reporting Step 4 fully closed.
 
 ## Residual risks and next step
 
