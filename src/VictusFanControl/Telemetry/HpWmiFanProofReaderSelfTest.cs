@@ -15,6 +15,63 @@ internal static class HpWmiFanProofReaderSelfTest
         var wait = TimeSpan.FromMilliseconds(250);
         try
         {
+            await Test("five historical acquisitions never replace a new raw proof query", async () =>
+            {
+                using var slot = new SemaphoreSlim(1, 1);
+                long clock = 0;
+                var calls = 0;
+                using var telemetry = new HpWmiFanTelemetryReader(_ => throw new Exception("unexpected periodic query"),
+                    () => Interlocked.Read(ref clock), () => DateTimeOffset.UnixEpoch, slot);
+                var reader = new HpWmiFanProofReader(_ =>
+                    Interlocked.Increment(ref calls) <= 5 ? new(0, [22, 24]) : new(0, [40, 41]),
+                    slot, () => Interlocked.Read(ref clock), TimeSpan.FromSeconds(2));
+                HpWmiFanProofSample? previous = null;
+                for (var i = 0; i < 5; i++) previous = await reader.ReadFreshAsync(CancellationToken.None);
+                Check(telemetry.ReadWindowCached() is { WindowCount: 5, StableCpuRpm: 2200 }, "history not filled");
+                Interlocked.Exchange(ref clock, 1000);
+                var fresh = await reader.ReadFreshAsync(CancellationToken.None);
+                Check(calls == 6 && fresh.Sequence > previous!.Sequence &&
+                    fresh.Speeds is { CpuNominalRpm: 4000, GpuNominalRpm: 4100, StartedAtMilliseconds: 1000 } &&
+                    telemetry.ReadWindowCached() is { WindowCount: 5, StableCpuRpm: 2200, RawLatest.CpuNominalRpm: 4000 },
+                    "proof reused history or median instead of the new raw acquisition");
+            });
+            await Test("full fresh window cannot satisfy failed, invalid, expired or canceled Control reads", async () =>
+            {
+                foreach (var outcome in new[] { "native failure", "invalid", "expired", "admission timeout", "canceled" })
+                {
+                    using var slot = new SemaphoreSlim(1, 1);
+                    long clock = 0;
+                    var calls = 0;
+                    using var telemetry = new HpWmiFanTelemetryReader(_ => throw new Exception("unexpected periodic query"),
+                        () => Interlocked.Read(ref clock), () => DateTimeOffset.UnixEpoch, slot);
+                    var seed = new HpWmiFanProofReader(_ => { calls++; return new(0, [40, 41]); },
+                        slot, () => Interlocked.Read(ref clock), TimeSpan.FromSeconds(2));
+                    for (var i = 0; i < 5; i++) await seed.ReadFreshAsync(CancellationToken.None);
+                    Check(telemetry.ReadWindowCached()?.WindowCount == 5, "history not filled");
+                    var candidate = new HpWmiFanProofReader(_ =>
+                    {
+                        calls++;
+                        if (outcome == "native failure") throw new IOException("synthetic native failure");
+                        if (outcome == "invalid") return new(0, [255, 41]);
+                        if (outcome == "expired") Interlocked.Exchange(ref clock, 3000);
+                        return new(0, [40, 41]);
+                    }, slot, () => Interlocked.Read(ref clock), outcome == "admission timeout" ? wait : TimeSpan.FromSeconds(4));
+                    using var cancel = new CancellationTokenSource();
+                    var held = outcome == "admission timeout";
+                    if (held) Check(slot.Wait(0), "test lane not idle");
+                    if (outcome == "canceled") cancel.Cancel();
+                    var rejected = false;
+                    try { await candidate.ReadFreshAsync(cancel.Token); }
+                    catch (InvalidDataException) when (outcome is "invalid" or "expired") { rejected = true; }
+                    catch (IOException) when (outcome == "native failure") { rejected = true; }
+                    catch (TimeoutException) when (held) { rejected = true; }
+                    catch (OperationCanceledException) when (outcome == "canceled") { rejected = true; }
+                    finally { if (held) slot.Release(); }
+                    Check(rejected && calls == (held || outcome == "canceled" ? 5 : 6), "history supplied proof after a failed new acquisition");
+                    Check(outcome == "expired" ? telemetry.ReadWindowCached() is null : telemetry.ReadWindowCached()?.WindowCount == 5,
+                        "failed query entered history or expired history appeared fresh");
+                }
+            });
             await Test("fresh WMI proof uses only 2D and invokes again instead of reusing a sample", async () =>
             {
                 using var slot = new SemaphoreSlim(1, 1); var calls = 0;

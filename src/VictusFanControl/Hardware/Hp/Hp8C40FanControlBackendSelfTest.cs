@@ -56,6 +56,7 @@ public static class Hp8C40FanControlBackendSelfTest
         failures += await TestWatchdogRestoreIpcFailureDoesNotBlockLocalRestoreAsync(output);
         failures += await TestWatchdogCancellationAfterIntentAbortsAsync(output);
         failures += await TestWmiControlProofAsync(output);
+        failures += await TestWindowCannotReplaceCommandProofAsync(output);
         failures += await TestHungWmiProofRestoresThroughCoordinatorAsync(output);
         failures += await TestExpiredAdmissionBaselineIsNoWriteAsync(output);
 
@@ -1499,6 +1500,84 @@ public static class Hp8C40FanControlBackendSelfTest
             failures += Report(output, $"WMI backend proof {variant}: {(expectedPass ? "acknowledges" : "restores without accepting")}",
                 completed == expectedPass && proofs.Count == (expectedPass ? 1 : 0) && hardware.SetCalls == 1 &&
                 (expectedPass || (hardware.RestoreCalls == 1 && hardware.State.CpuSetpoint == 255)));
+        }
+        return failures;
+    }
+
+    private static async Task<int> TestWindowCannotReplaceCommandProofAsync(TextWriter output)
+    {
+        var failures = 0;
+        foreach (var variant in new[] { "favorable history native failure", "one new sample then native failure", "two raw confirmations with lagging median" })
+        {
+            using var slot = new SemaphoreSlim(1, 1);
+            var hardware = new FakeHardware { UseWmiTachometerBins = true };
+            var seed = false;
+            var postCommandQueries = 0;
+            var allQueries = 0;
+            var expectedPass = variant == "two raw confirmations with lagging median";
+            HpBiosResponse Send(HpBiosRequest _)
+            {
+                Interlocked.Increment(ref allQueries);
+                if (hardware.SetCalls == 0)
+                    return seed && !expectedPass ? new(0, [40, 40]) : new(0, [22, 24]);
+                var index = Interlocked.Increment(ref postCommandQueries);
+                if (!expectedPass && (variant == "favorable history native failure" || index > 1))
+                    throw new TimeoutException("synthetic native WMI failure despite populated history");
+                return new(0, [40, 40]);
+            }
+            using var telemetry = new HpWmiFanTelemetryReader(Send,
+                () => Environment.TickCount64, () => DateTimeOffset.UtcNow, slot);
+            var reader = new HpWmiFanProofReader(Send, slot, () => Environment.TickCount64, TimeSpan.FromSeconds(2));
+            hardware.AsyncControlRead = async token =>
+            {
+                var sample = await reader.ReadFreshAsync(token);
+                var state = hardware.ReadEcState();
+                return state with
+                {
+                    CpuRpm = checked((ushort)sample.Speeds.CpuNominalRpm),
+                    GpuRpm = checked((ushort)sample.Speeds.GpuNominalRpm),
+                    TachometerResolutionRpm = 100,
+                    FanQuerySequence = sample.Sequence,
+                    FanQueryStartedAtMilliseconds = sample.Speeds.StartedAtMilliseconds
+                };
+            };
+            await using var backend = NewBackend(hardware);
+            var proofs = new List<string>();
+            backend.WmiCommandAcknowledged += (_, proof) => proofs.Add(proof);
+            await backend.EnterCustomModeAsync(CancellationToken.None);
+            seed = true;
+            for (var i = 0; i < 5; i++) await reader.ReadFreshAsync(CancellationToken.None);
+            seed = false;
+            var preWriteWindowCorrect = false;
+            hardware.OnSetFanLevel = () =>
+            {
+                var view = telemetry.ReadWindowCached();
+                preWriteWindowCorrect = view is { WindowCount: 5 } &&
+                    view.StableCpuRpm == (expectedPass ? 2200 : 4000) && view.RawLatest.CpuNominalRpm == 2200;
+            };
+            var beforeApply = allQueries;
+            var completed = false;
+            var failedWindowCorrect = false;
+            try
+            {
+                await backend.ApplyAsync(new FanCommand(40, 40, "Step 5 history/proof separation"), CancellationToken.None);
+                completed = true;
+            }
+            catch (TimeoutException)
+            {
+                // Capture before independent FF/FF restore. The fresh historical
+                // median is favorable but must not mask native proof failure.
+                failedWindowCorrect = telemetry.ReadWindowCached() is { WindowCount: 5, StableCpuRpm: 4000 };
+                await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+            }
+            var viewAfter = telemetry.ReadWindowCached();
+            failures += Report(output, $"WMI history cannot replace command proof: {variant}",
+                preWriteWindowCorrect && completed == expectedPass && hardware.SetCalls == 1 &&
+                proofs.Count == (expectedPass ? 1 : 0) && allQueries > beforeApply &&
+                postCommandQueries == (variant == "favorable history native failure" ? 1 : 2) &&
+                (expectedPass
+                    ? viewAfter is { WindowCount: 5, StableCpuRpm: 2200, RawLatest.CpuNominalRpm: 4000 } && proofs[0].Contains("samples=2", StringComparison.Ordinal)
+                    : failedWindowCorrect && hardware.RestoreCalls == 1 && hardware.State.CpuSetpoint == 255 && hardware.State.GpuSetpoint == 255));
         }
         return failures;
     }

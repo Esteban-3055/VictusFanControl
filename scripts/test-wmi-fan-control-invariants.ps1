@@ -9,6 +9,18 @@ $publication=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSamplePublicati
 $broker=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSampleBroker.cs'
 $brokerTests=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSampleBrokerSelfTest.cs'
 $program=Read-Source 'src\VictusFanControl\Program.cs'
+$proofTests=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanProofReaderSelfTest.cs'
+$backendTests=Read-Source 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackendSelfTest.cs'
+# Step 5: descriptive history can never become a control/ACK data source.
+foreach($source in @($reader,$backend)){
+ foreach($forbidden in @('HpWmiFanSampleWindow','HpWmiFanWindowSnapshot','ReadWindowCached(', 'ReadCached(', 'StableCpuRpm','StableGpuRpm')){
+  if($source.IndexOf($forbidden,[StringComparison]::Ordinal)-ge 0){throw "WMI command proof cannot consume cache/history: $forbidden"}
+ }
+}
+foreach($needle in @('five historical acquisitions never replace a new raw proof query','full fresh window cannot satisfy failed, invalid, expired or canceled Control reads')){Require-Text $proofTests $needle}
+foreach($needle in @('TestWindowCannotReplaceCommandProofAsync(output)','favorable history native failure','one new sample then native failure','two raw confirmations with lagging median','postCommandQueries ==','proofs[0].Contains("samples=2"')){Require-Text $backendTests $needle}
+Require-Text $backend 'TachometerAckTimeout: TimeSpan.FromSeconds(8)'
+Require-Text $backend 'PollInterval: TimeSpan.FromMilliseconds(250)'
 $first=$backend.IndexOf('internal sealed class Hp8C40FanHardware', [StringComparison]::Ordinal)
 $last=$backend.IndexOf('internal readonly record struct Hp8C40FanBackendTiming', [StringComparison]::Ordinal)
 $hardware=$backend.Substring($first,$last-$first)
