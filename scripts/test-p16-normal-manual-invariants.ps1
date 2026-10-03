@@ -210,4 +210,26 @@ Assert-Contains $workflow 'HP 8C40 P16A normal Manual preparation invariant' 'P1
 Assert-Contains $workflow 'HP 8C40 P16A evidence packaging self-test' 'P16 package self-test must run in CI.'
 Assert-Contains $doc 'P16A implementation staged after architecture CI' 'P16 implementation documentation missing.'
 
+# Post-attempt-4 session hardening is software-only and cannot erase history.
+$lifecycle=$d.hardeningRequired.postAttempt4.lifecycleImplementation
+if($null -eq $lifecycle -or -not $lifecycle.softwareOnly -or $lifecycle.physicalGatesOpened){throw 'P16 lifecycle implementation scope missing.'}
+foreach($flag in @('irreversibleSessionLatch','interruptBeforeTelemetryRecovery','resumeWithoutSuspendRejected','inFlightManualCancellation','firmwareReleaseRemainsAvailable','parentCausalAbort')){Assert-True ([bool]$lifecycle.$flag) ("P16 lifecycle guarantee missing: $flag")}
+$latch=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Control\Adaptive\Hp8C40P16QualificationSession.cs') -Raw
+$adapter=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Control\Adaptive\AdaptiveFanProductionController.cs') -Raw
+Assert-Contains $latch 'Interlocked.CompareExchange' 'P16 latch must preserve first interruption.'
+Assert-NotContains $latch 'Reset(' 'P16 latch cannot reset within the session.'
+Assert-Contains $main 'InterruptP16QualificationSession' 'P16 ordinary app must observe power signals.'
+Assert-Contains $main 'P16 QUALIFICATION INTERRUPTED:' 'P16 causal interruption log missing.'
+Assert-Contains $adapter '_qualificationSession.InterruptionToken' 'P16 adapter must cancel queued/in-flight admission.'
+Assert-Contains $hardeningHelper 'Assert-P16QualificationSessionUninterrupted' 'P16 parent causal abort missing.'
+Assert-Contains $harness 'Assert-P16QualificationSessionUninterrupted -Lines $segment' 'P16 parent must inspect the entire current app-log session.'
+if($lifecycle.status -ceq 'IMPLEMENTED_CI_PENDING_GATE_CLOSED'){
+ Assert-False ([bool]$lifecycle.ciValidated) 'P16 lifecycle pending state cannot pre-claim CI.'
+ Assert-False ([bool]$lifecycle.closure.closed) 'P16 lifecycle pending state cannot pre-claim closure.'
+}elseif($lifecycle.status -ceq 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED'){
+ Assert-True ([bool]$lifecycle.ciValidated) 'P16 lifecycle closure requires CI validation.'
+ Assert-True ([bool]$lifecycle.closure.closed) 'P16 lifecycle formal closure missing.'
+ if($lifecycle.closure.sourceCiResult -cne 'SUCCESS' -or $lifecycle.closure.implementationHead -notmatch '^[0-9a-f]{40}$'){throw 'P16 lifecycle closure CI identity missing.'}
+}else{throw 'Unexpected P16 lifecycle implementation status.'}
+
 Write-Host ("PASS: P16 normal-Manual state '{0}' preserves the P15/permanent-Manual/Automatic/Candidate boundaries." -f $status) -ForegroundColor Green

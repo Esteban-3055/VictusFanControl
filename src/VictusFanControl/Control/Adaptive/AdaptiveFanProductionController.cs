@@ -41,6 +41,7 @@ public sealed class AdaptiveFanProductionController
     private readonly AdaptiveFanPolicyEngine _engine;
     private readonly AdaptiveFanControlIntentPlanner _planner = new();
     private readonly SemaphoreSlim _operationGate = new(1, 1);
+    private readonly Hp8C40P16QualificationSession? _qualificationSession;
     private readonly bool _manualExecutionAuthorized;
     private readonly bool _automaticExecutionAuthorized;
     private readonly int _minimumLevel;
@@ -53,11 +54,13 @@ public sealed class AdaptiveFanProductionController
         FanControlCoordinator coordinator,
         AdaptiveFanPolicyConfig config,
         bool manualExecutionAuthorized,
-        bool automaticExecutionAuthorized)
+        bool automaticExecutionAuthorized,
+        Hp8C40P16QualificationSession? qualificationSession = null)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _engine = new AdaptiveFanPolicyEngine(
             config ?? throw new ArgumentNullException(nameof(config)));
+        _qualificationSession = qualificationSession;
         _manualExecutionAuthorized = manualExecutionAuthorized;
         _automaticExecutionAuthorized = automaticExecutionAuthorized;
         _minimumLevel = config.MinimumLevel;
@@ -65,7 +68,8 @@ public sealed class AdaptiveFanProductionController
     }
 
     public AdaptiveFanProductionMode Mode => _mode;
-    public bool ManualExecutionAuthorized => _manualExecutionAuthorized;
+    public bool ManualExecutionAuthorized =>
+        _manualExecutionAuthorized && !(_qualificationSession?.IsInterrupted ?? false);
     public bool AutomaticExecutionAuthorized => _automaticExecutionAuthorized;
 
     public async ValueTask<AdaptiveFanProductionResult> SetModeAsync(
@@ -77,11 +81,22 @@ public sealed class AdaptiveFanProductionController
             throw new ArgumentOutOfRangeException(nameof(requestedMode));
         }
 
+        if (requestedMode != AdaptiveFanProductionMode.Firmware && (_qualificationSession?.IsInterrupted ?? false))
+        {
+            return Result(AdaptiveFanProductionActionKind.Blocked, false, null, null,
+                "Qualification session was permanently interrupted; Firmware release remains available.");
+        }
+
+        // Firmware release stays available after an interrupted qualification.
+        using var sessionCancellation = requestedMode == AdaptiveFanProductionMode.Firmware || _qualificationSession is null
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _qualificationSession.InterruptionToken);
+        cancellationToken = sessionCancellation?.Token ?? cancellationToken;
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (requestedMode == AdaptiveFanProductionMode.Manual &&
-                !_manualExecutionAuthorized)
+                !ManualExecutionAuthorized)
             {
                 return Result(
                     AdaptiveFanProductionActionKind.Blocked,
@@ -182,7 +197,7 @@ public sealed class AdaptiveFanProductionController
                 $"Manual equal fan level must remain inside {_minimumLevel}..{_maximumLevel}.");
         }
 
-        if (!_manualExecutionAuthorized)
+        if (!ManualExecutionAuthorized)
         {
             return Result(
                 AdaptiveFanProductionActionKind.Blocked,
@@ -192,9 +207,14 @@ public sealed class AdaptiveFanProductionController
                 "Manual fan execution remains blocked by the post-M9 hardware gate.");
         }
 
+        using var sessionCancellation = _qualificationSession is null
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _qualificationSession.InterruptionToken);
+        cancellationToken = sessionCancellation?.Token ?? cancellationToken;
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (_mode != AdaptiveFanProductionMode.Manual)
             {
                 return Result(
@@ -224,6 +244,7 @@ public sealed class AdaptiveFanProductionController
 
             for (var attempt = 1; attempt <= maximumAttempts; attempt++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (attempt > 1)
                 {
                     safety =
@@ -294,6 +315,7 @@ public sealed class AdaptiveFanProductionController
                     }
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 if (_lastManualAppliedLevel == equalFanLevel)
                 {
                     return Result(
@@ -350,6 +372,14 @@ public sealed class AdaptiveFanProductionController
                 "Manual command exhausted its bounded fresh-Safety attempts.",
                 true,
                 cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_qualificationSession?.IsInterrupted == true)
+        {
+            _lastManualAppliedLevel = null;
+            await RestoreIfOwnedLockedAsync(
+                "Qualification session interrupted during Manual preparation/execution.",
+                true, CancellationToken.None).ConfigureAwait(false);
+            throw;
         }
         finally
         {

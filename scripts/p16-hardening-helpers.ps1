@@ -43,6 +43,15 @@ function Invoke-P16BoundedEcContentionRetry {
     throw 'P16 bounded EC contention retry exhausted unexpectedly.'
 }
 
+function Assert-P16QualificationSessionUninterrupted {
+    param([AllowEmptyCollection()][string[]]$Lines)
+    foreach($line in $Lines){
+        if(Test-P16OrdinalContains -Text ([string]$line) -Needle 'P16 QUALIFICATION INTERRUPTED:'){
+            throw ("P16 qualification session was permanently interrupted: {0}" -f $line)
+        }
+    }
+}
+
 function Resolve-P16InteractionOutcome {
     param(
         [Parameter(Mandatory=$true)][string[]]$Lines,
@@ -50,6 +59,8 @@ function Resolve-P16InteractionOutcome {
         [Parameter(Mandatory=$true)][string]$FailurePattern
     )
 
+    # A success followed by interruption cannot qualify this session.
+    Assert-P16QualificationSessionUninterrupted -Lines $Lines
     foreach($line in $Lines){
         $text=[string]$line
         if($text -match $FailurePattern){

@@ -17,6 +17,7 @@ public static class AdaptiveFanProductionControllerSelfTest
         failures += await TestManualRangeGuardAsync(output);
         failures += await TestManualFreshSafetyRefreshAndRetryAsync(output);
         failures += await TestManualFreshSafetyExhaustionRestoresAsync(output);
+        failures += await TestQualificationInterruptionAsync(output);
 
         output.WriteLine();
         output.WriteLine(
@@ -318,6 +319,92 @@ public static class AdaptiveFanProductionControllerSelfTest
             coordinator.Authority == FanAuthority.Firmware);
     }
 
+    private static async Task<int> TestQualificationInterruptionAsync(TextWriter output)
+    {
+        var failures = 0;
+        // Includes a missed suspend notification: the first resume still closes
+        // the session; later signals cannot replace its first causal evidence.
+        foreach (var source in new[] { "suspend", "resume automatic", "resume suspend", "resume critical" })
+        {
+            var session = new Hp8C40P16QualificationSession();
+            var backend = new RecordingBackend();
+            await using var coordinator = new FanControlCoordinator(backend);
+            var controller = new AdaptiveFanProductionController(coordinator, BuildConfig(), true, false, session);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Manual, CancellationToken.None);
+            var firstUtc = DateTimeOffset.UtcNow;
+            var first = session.Interrupt(source, firstUtc);
+            var duplicate = session.Interrupt("later resume", firstUtc.AddSeconds(1));
+            var refreshedHealthy = BuildSafety(BuildSnapshot(firstUtc.AddSeconds(1), 45, 40));
+            var apply = await controller.ApplyManualAsync(30, refreshedHealthy, CancellationToken.None);
+            var firmware = await controller.SetModeAsync(AdaptiveFanProductionMode.Firmware, CancellationToken.None);
+            var reselect = await controller.SetModeAsync(AdaptiveFanProductionMode.Manual, CancellationToken.None);
+            failures += Report(output, $"P16 {source} permanently blocks Apply/reselection through healthy recovery and Firmware",
+                first && !duplicate && session.IsInterrupted && session.InterruptionToken.IsCancellationRequested &&
+                session.InterruptionSource == source && session.InterruptedUtc == firstUtc &&
+                !controller.ManualExecutionAuthorized && apply.Action == AdaptiveFanProductionActionKind.Blocked &&
+                firmware.Action == AdaptiveFanProductionActionKind.HoldFirmware &&
+                reselect.Action == AdaptiveFanProductionActionKind.Blocked &&
+                backend.EnterCalls == 0 && backend.ApplyCalls == 0 && backend.RestoreCalls == 0);
+        }
+
+        var duringEntry = new Hp8C40P16QualificationSession();
+        var enteringBackend = new RecordingBackend { AfterEnter = () => duringEntry.Interrupt("during read-only entry", DateTimeOffset.UtcNow) };
+        await using (var coordinator = new FanControlCoordinator(enteringBackend))
+        {
+            var controller = new AdaptiveFanProductionController(coordinator, BuildConfig(), true, false, duringEntry);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Manual, CancellationToken.None);
+            var canceled = false;
+            try { await controller.ApplyManualAsync(30, BuildSafety(BuildSnapshot(DateTimeOffset.UtcNow, 45, 40)), CancellationToken.None); }
+            catch (OperationCanceledException) { canceled = true; }
+            failures += Report(output, "P16 interruption during read-only admission cancels before fan dispatch and releases preparation",
+                canceled && enteringBackend.EnterCalls == 1 && enteringBackend.ApplyCalls == 0 &&
+                enteringBackend.RestoreCalls == 1 && coordinator.Authority == FanAuthority.Firmware);
+        }
+
+        var ownedSession = new Hp8C40P16QualificationSession();
+        var ownedBackend = new RecordingBackend();
+        await using (var coordinator = new FanControlCoordinator(ownedBackend))
+        {
+            var controller = new AdaptiveFanProductionController(coordinator, BuildConfig(), true, false, ownedSession);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Manual, CancellationToken.None);
+            await controller.ApplyManualAsync(30, BuildSafety(BuildSnapshot(DateTimeOffset.UtcNow, 45, 40)), CancellationToken.None);
+            ownedSession.Interrupt("owned suspend", DateTimeOffset.UtcNow);
+            var blocked = await controller.ApplyManualAsync(40, BuildSafety(BuildSnapshot(DateTimeOffset.UtcNow, 45, 40)), CancellationToken.None);
+            var firmware = await controller.SetModeAsync(AdaptiveFanProductionMode.Firmware, CancellationToken.None);
+            failures += Report(output, "P16 interrupted owned session preserves Firmware restoration and blocks changed level",
+                blocked.Action == AdaptiveFanProductionActionKind.Blocked &&
+                firmware.Action == AdaptiveFanProductionActionKind.RestoreFirmware &&
+                ownedBackend.ApplyCalls == 1 && ownedBackend.RestoreCalls == 1 &&
+                coordinator.Authority == FanAuthority.Firmware && ownedSession.IsInterrupted);
+        }
+        var queuedSession = new Hp8C40P16QualificationSession();
+        var entryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseEntry = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var queuedBackend = new RecordingBackend
+        {
+            DuringEnter = async _ => { entryStarted.SetResult(); await releaseEntry.Task; }
+        };
+        await using (var coordinator = new FanControlCoordinator(queuedBackend))
+        {
+            var controller = new AdaptiveFanProductionController(coordinator, BuildConfig(), true, false, queuedSession);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Manual, CancellationToken.None);
+            var safety = BuildSafety(BuildSnapshot(DateTimeOffset.UtcNow, 45, 40));
+            var preparing = controller.ApplyManualAsync(30, safety, CancellationToken.None).AsTask();
+            await entryStarted.Task;
+            var queued = controller.ApplyManualAsync(40, safety, CancellationToken.None).AsTask();
+            queuedSession.Interrupt("suspend while requests queued", DateTimeOffset.UtcNow);
+            var queuedCanceled = false;
+            try { await queued; } catch (OperationCanceledException) { queuedCanceled = true; }
+            releaseEntry.SetResult();
+            var preparingCanceled = false;
+            try { await preparing; } catch (OperationCanceledException) { preparingCanceled = true; }
+            failures += Report(output, "P16 queued Apply is canceled while earlier native preparation is still pending",
+                queuedCanceled && preparingCanceled && queuedBackend.EnterCalls == 1 &&
+                queuedBackend.ApplyCalls == 0 && queuedBackend.RestoreCalls == 1 && coordinator.Authority == FanAuthority.Firmware);
+        }
+        return failures;
+    }
+
     private static AdaptiveFanPolicyConfig BuildConfig()
     {
         static IReadOnlyList<AdaptiveFanCurvePoint> Curve(double lo, double hi) =>
@@ -399,6 +486,7 @@ public static class AdaptiveFanProductionControllerSelfTest
         public int RestoreCalls { get; private set; }
         public bool Active { get; private set; }
         public Action? AfterEnter { get; set; }
+        public Func<CancellationToken, ValueTask>? DuringEnter { get; set; }
         public List<FanCommand> Commands { get; } = [];
 
         public ValueTask ProbeControlDependencyAsync(CancellationToken cancellationToken)
@@ -414,13 +502,13 @@ public static class AdaptiveFanProductionControllerSelfTest
                 Name, CanWrite, Active, true, true, "synthetic"));
         }
 
-        public ValueTask EnterCustomModeAsync(CancellationToken cancellationToken)
+        public async ValueTask EnterCustomModeAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             EnterCalls++;
             Active = true;
+            if (DuringEnter is not null) await DuringEnter(cancellationToken);
             AfterEnter?.Invoke();
-            return ValueTask.CompletedTask;
         }
 
         public ValueTask ApplyAsync(FanCommand command, CancellationToken cancellationToken)

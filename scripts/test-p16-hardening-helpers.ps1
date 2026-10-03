@@ -75,3 +75,17 @@ try{
 }
 
 Write-Host 'HP 8C40 P16B hardening helper self-test: PASS' -ForegroundColor Green
+
+foreach($lines in @(
+    @('P16 QUALIFICATION INTERRUPTED: suspend'),
+    @('P13 manual request 30/30: action=EnterCustomAndApply;', 'P16 QUALIFICATION INTERRUPTED: resume'),
+    @('P16 QUALIFICATION INTERRUPTED: suspend', 'Recovery completed; telemetry is healthy after 3 complete snapshots.')
+)){
+    $blocked=$false
+    try{Resolve-P16InteractionOutcome -Lines $lines -SuccessPattern 'action=EnterCustomAndApply;' -FailurePattern 'FAILED CLOSED:' | Out-Null}
+    catch{$blocked=$_.Exception.Message -match 'permanently interrupted'}
+    Assert-True $blocked 'P16 interruption must invalidate the entire session, including success before interruption or healthy recovery afterward.'
+}
+Assert-P16QualificationSessionUninterrupted -Lines @()
+Assert-P16QualificationSessionUninterrupted -Lines @('unrelated older power event')
+Write-Host 'P16 causal interruption audit self-test: PASS' -ForegroundColor Green

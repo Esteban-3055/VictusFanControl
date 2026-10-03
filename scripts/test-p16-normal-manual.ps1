@@ -206,7 +206,15 @@ function Assert-OwnedJournal($journal,[int]$ExpectedPid,[long]$ExpectedTicks,[in
  return $session
 }
 function Wait-JournalGone([int]$Seconds){$deadline=(Get-Date).AddSeconds($Seconds);while((Get-Date)-lt $deadline){if(-not(Test-Path -LiteralPath $journalPath)){return $true};Start-Sleep -Milliseconds 200};return(-not(Test-Path -LiteralPath $journalPath))}
-function Get-AppLogSegment {if(-not(Test-Path -LiteralPath $appLogPath -PathType Leaf)){return @()};return @(Get-Content -LiteralPath $appLogPath|Select-Object -Skip $appLogBoundary)}
+function Get-RawAppLogSegment {
+ if(-not(Test-Path -LiteralPath $appLogPath -PathType Leaf)){return @()}
+ return @(Get-Content -LiteralPath $appLogPath|Select-Object -Skip $appLogBoundary)
+}
+function Get-AppLogSegment {
+ $segment=@(Get-RawAppLogSegment)
+ Assert-P16QualificationSessionUninterrupted -Lines $segment
+ return $segment
+}
 function Wait-AppLogMatch([string]$Pattern,[int]$Seconds,[string]$Label){
  $deadline=(Get-Date).AddSeconds($Seconds)
  while((Get-Date)-lt $deadline){
@@ -376,6 +384,7 @@ try{
  [void](Wait-M4Ready $watchdogPid);$serviceAfter=Snapshot-Service 'after-clean-tray-exit'
  @($serviceBefore,$serviceDuring,$serviceAfter)|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $serviceSnapshotsPath -Encoding UTF8;$finalServiceBaselinePass=$true
  if(Test-FailsafeTakeover){$failsafeTakeover=$true;throw 'P16 independent failsafe took over; safe but invalid for normal-path qualification.'}
+ Assert-P16QualificationSessionUninterrupted -Lines @(Get-RawAppLogSegment)
  $pass=$true
  Write-Host 'PASS: P16 normal app Manual 30 -> 40 -> 30 -> Firmware -> tray Exit completed.' -ForegroundColor Green
 }catch{
@@ -384,7 +393,7 @@ try{
 }finally{
  # Do not terminate an in-flight normal GUI from the parent. If a durable lease
  # remains, the already-armed qualified failsafe owns bounded recovery.
- try{if(Test-Path -LiteralPath $appLogPath -PathType Leaf){@(Get-AppLogSegment)|Set-Content -LiteralPath $appLogSegmentPath -Encoding UTF8}}catch{}
+ try{if(Test-Path -LiteralPath $appLogPath -PathType Leaf){@(Get-RawAppLogSegment)|Set-Content -LiteralPath $appLogSegmentPath -Encoding UTF8}}catch{}
  if($pass){
   try{if(-not $postExitFfPass){Assert-StableSetpoint 255 255 'P16 cleanup FF/FF' $cleanupFfPath;$cleanupFirmwareProofPass=$true}else{$cleanupFirmwareProofPass=$true}}catch{Write-Warning ("P16 cleanup firmware proof failed: {0}" -f $_.Exception.Message)}
  }else{

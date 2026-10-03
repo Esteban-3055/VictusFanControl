@@ -49,6 +49,7 @@ $files=@(
  [pscustomobject]@{role='main-form-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\MainForm.cs');required=$true},
  [pscustomobject]@{role='program-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\Program.cs');required=$true},
  [pscustomobject]@{role='user-gate-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Control\Adaptive\Hp8C40PostM9UserControlGate.cs');required=$true},
+ [pscustomobject]@{role='p16-session-latch-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Control\Adaptive\Hp8C40P16QualificationSession.cs');required=$true},
  [pscustomobject]@{role='production-adapter-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Control\Adaptive\AdaptiveFanProductionController.cs');required=$true},
  [pscustomobject]@{role='coordinator-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Control\FanControlCoordinator.cs');required=$true},
  [pscustomobject]@{role='hp8c40-backend-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs');required=$true},

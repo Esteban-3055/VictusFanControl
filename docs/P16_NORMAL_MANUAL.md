@@ -465,3 +465,22 @@ invalidates the session on return rather than allowing the qualification to
 continue toward Apply. Permanent Manual, Automatic, Candidate V1 and default
 control remain closed.
 
+
+## P16 qualification session interruption hardening (software only)
+
+After attempt 4, the ordinary app creates an `Hp8C40P16QualificationSession`
+only for the exact-target P16 gate bridge. The first suspend or any resume
+notification irreversibly invalidates it before existing lifecycle handling.
+Healthy recovery, Firmware selection, repeated notifications and new telemetry
+do not renew it. Manual mode/Apply are fenced at the UI and production adapter;
+a linked token cancels queued/in-flight preparation before command dispatch.
+Already-dispatched native work is handled by existing coordinator lifecycle
+release and durable watchdog; cancellation is not proof of native cancellation.
+Firmware release and explicit shutdown remain available. The parent scans its
+whole app-log segment for `P16 QUALIFICATION INTERRUPTED:` on each observation,
+including startup and final audit, and aborts rather than waiting for Apply.
+The durable per-authorization-HEAD attempt fence is unchanged.
+
+Implementation and regression CI must pass before a separate software closure.
+All physical/permanent Manual/Automatic gates remain closed; a fresh hardware
+authorization is still a separate future change.

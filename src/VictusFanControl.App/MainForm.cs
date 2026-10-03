@@ -15,6 +15,8 @@ namespace VictusFanControl.App;
 
 internal sealed class MainForm : Form
 {
+    private Hp8C40P16QualificationSession? _p16QualificationSession;
+
     private const int WmPowerBroadcast = 0x0218;
     private const int PbtApmSuspend = 0x0004;
     private const int PbtApmResumeCritical = 0x0006;
@@ -896,12 +898,17 @@ internal sealed class MainForm : Form
                 ? false
                 : Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized;
 
+        _p16QualificationSession = p16NormalManualQualificationAuthorized
+            ? new Hp8C40P16QualificationSession()
+            : null;
+
         _fanProductionController =
             new AdaptiveFanProductionController(
                 _fanCoordinator,
                 Hp8C40AdaptiveCandidateV1.Create(),
                 manualExecutionAuthorized,
-                automaticExecutionAuthorized);
+                automaticExecutionAuthorized,
+                _p16QualificationSession);
 
         var p13TargetDescription =
             _targetProfile is null
@@ -930,7 +937,9 @@ internal sealed class MainForm : Form
                             ? IsP15D1ControlInteractionAuthorized
                             : _p15d2VariableManualHardwareTest
                                 ? IsP15D2ControlInteractionAuthorized
-                                : null,
+                                : _p16QualificationSession is not null
+                                    ? (_, mode, _) => mode == AdaptiveFanProductionMode.Firmware || !_p16QualificationSession.IsInterrupted
+                                    : null,
                 fixedManualQualificationLevel:
                     _p15cGuiManualHardwareTest
                         ? Hp8C40P15CGuiManualQualificationGate.QualificationLevel
@@ -1075,6 +1084,13 @@ internal sealed class MainForm : Form
         {
             var code = m.WParam.ToInt32();
 
+            // Invalidate before any restore IO or telemetry recovery. A resume
+            // without a delivered suspend is also an interrupted session.
+            if (code is PbtApmSuspend or PbtApmResumeAutomatic or PbtApmResumeSuspend or PbtApmResumeCritical)
+            {
+                InterruptP16QualificationSession($"WM_POWERBROADCAST/0x{code:X4}");
+            }
+
             if (DisplayAware8C40LifecycleHardwareTest)
             {
                 if (code == PbtPowerSettingChange)
@@ -1110,6 +1126,14 @@ internal sealed class MainForm : Form
         }
 
         base.WndProc(ref m);
+    }
+
+    private void InterruptP16QualificationSession(string source)
+    {
+        if (_p16QualificationSession?.Interrupt(source, DateTimeOffset.UtcNow) == true)
+        {
+            AppendEvent($"P16 QUALIFICATION INTERRUPTED: source={source}; utc={_p16QualificationSession.InterruptedUtc:O}; session invalidated permanently; further Manual/Apply blocked; Firmware release remains available.");
+        }
     }
 
     private void RegisterM6PowerNotifications()

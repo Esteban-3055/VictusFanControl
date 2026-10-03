@@ -433,7 +433,22 @@
         "watchdogIdentityStable": true,
         "powerTransitionCauseEstablished": false,
         "lifecycleInterruptionFenceRequired": true,
-        "hardwareExecutionByReblockCommit": false
+        "hardwareExecutionByReblockCommit": false,
+        "lifecycleImplementation": {
+          "status": "IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+          "softwareOnly": true,
+          "physicalGatesOpened": false,
+          "irreversibleSessionLatch": true,
+          "interruptBeforeTelemetryRecovery": true,
+          "resumeWithoutSuspendRejected": true,
+          "inFlightManualCancellation": true,
+          "firmwareReleaseRemainsAvailable": true,
+          "parentCausalAbort": true,
+          "ciValidated": false,
+          "closure": {
+            "closed": false
+          }
+        }
       }
     },
     "authorizationHistory": [
