@@ -6,15 +6,14 @@ namespace VictusFanControl.App;
 /// P16 qualification-only bridge for proving the ordinary user-facing Manual
 /// path without introducing a P16-specific application startup/test mode.
 ///
-/// P16B attempt 4 consumed generation-3 authorization but was interrupted
-/// before the first Apply by a suspend/resume transition while authority remained
-/// Firmware and no fan command was issued. Re-block this gate and require a
-/// qualification lifecycle-interruption fence before any fresh authorization.
+/// Generation 4 is a one-shot WMI response qualification based on successful
+/// closed preparation CI #1208. The parent requires successful CI on this exact
+/// authorization HEAD before physical execution. Prior attempts remain consumed.
 /// Permanent user Manual and Automatic remain false.
 /// </summary>
 internal static class Hp8C40P16NormalManualQualificationGate
 {
-    public static readonly bool PhysicalExecutionAuthorized = false;
+    public static readonly bool PhysicalExecutionAuthorized = true;
 
     public const string RequiredToken = "8C40-P16-NORMAL-MANUAL-30-40-30";
     public const int InitialLevel = 30;

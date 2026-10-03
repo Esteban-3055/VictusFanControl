@@ -17,7 +17,14 @@ foreach($needle in @('HpWmiFanTelemetryReader.SharedReadAdmission','BuildGetFanL
 Require-Text $telemetry 'SharedReadAdmission => ProductionAdmission'
 foreach($needle in @('ReadTachometerSnapshotWithinDeadlineAsync','commandCompletedAtMilliseconds','IsFreshTachometerProof','sample.FanQuerySequence > Math.Max(baseline.FanQuerySequence, lastAcceptedSequence)','sample.FanQueryStartedAtMilliseconds >= commandCompletedAtMilliseconds','baselineRpm + baselineResolutionRpm - 1 + MinimumDirectionalRpmDelta','currentRpm + currentResolutionRpm - 1 + MinimumDirectionalRpmDelta','RequiredTachConfirmationSamples = 2','MinimumDirectionalRpmDelta = 150','_hardware.ReadAdmissionStateAsync(cancellationToken)','Initial WMI baseline expired before pre-write ownership/guard acquisition.')){Require-Text $backend $needle}
 $p16=Read-Source 'release\p16-target-checkpoint.json'|ConvertFrom-Json
-if($p16.normalManual.executionAuthorized -or $p16.normalManual.controllerPhysicalExecutionAuthorized -or $p16.normalManual.physicalGatesOpened -or $p16.promotion.manualExecutionAuthorized -or $p16.promotion.automaticMayOpen){throw 'WMI control implementation cannot open physical/permanent gates.'}
+# Migration closures remain historical; only a separately validated P16 generation 4 may open.
+$dedicatedP16=($p16.status -ceq 'P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI' -and
+ [int]$p16.normalManual.authorization.authorizationGeneration -eq 4 -and
+ $p16.normalManual.controlledWmiPreparation.status -ceq 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED' -and
+ $p16.normalManual.controlledWmiPreparation.validation.result -ceq 'SUCCESS')
+if($p16.promotion.manualExecutionAuthorized -or $p16.promotion.automaticMayOpen -or $p16.normalManual.physicalPassed){throw 'WMI migration cannot preclaim physical PASS or promote permanent control.'}
+if(-not $dedicatedP16 -and ($p16.normalManual.executionAuthorized -or $p16.normalManual.controllerPhysicalExecutionAuthorized -or $p16.normalManual.physicalGatesOpened)){throw 'WMI migration permits only separately validated generation-4 P16 authorization.'}
+
 $lifecycle=$p16.normalManual.hardeningRequired.postAttempt4.lifecycleImplementation
 if($lifecycle.status -cne 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED' -or -not $lifecycle.ciValidated -or -not $lifecycle.closure.closed){throw 'WMI control requires formally closed P16 lifecycle session hardening.'}
 $cp=Read-Source 'release\fan-wmi-control-checkpoint.json'|ConvertFrom-Json

@@ -519,3 +519,36 @@ independent narrow EC ownership, generation 3/5/7 journal identity, causal
 watchdog chain, strong FF/FF restore and tray exit proof remain mandatory.
 Suspension or any resume consumes/invalidates the session; do not retry that
 authorization HEAD. Existing M4, fan writes and thermal limits remain unchanged.
+
+## P16 generation-4 controlled WMI authorization
+
+Preparation `b2d3040a1fa58b489327e93738da316d9521fd14`, tree
+`bff3114bebe4313246d9b753c7204c8a98a4cdf1`, passed full Windows CI #1208
+(run 37092356506), including the new PowerShell 5.1 CI/proof helper tests,
+backend diagnostic observer failure test and evidence packaging. This record
+formally closes the software preparation and opens only the dedicated P16
+parent/source gates for generation 4. This commit performs no hardware test.
+Its own complete successful same-head CI is mandatory before target execution.
+Permanent user Manual, Automatic, Candidate and default control remain closed.
+
+Update the expected branch without deleting prior logs. Use administrator
+Windows PowerShell and run the parent harness, not run-gui directly:
+
+```powershell
+.\scripts\test-p16-normal-manual.ps1 -ExpectedSourceHead <authorization-head> -ExpectedCiRunId <authorization-run-id>
+```
+
+The completed run identities are supplied alongside the execution instructions.
+Network/CI/source mismatch blocks before PawnIO/EC access or GUI launch.
+Keep AC connected and the computer under light load. The harness rebuilds
+and checks the software, establishes independent FF/FF, then requests exactly
+`8C40-P16-NORMAL-MANUAL-30-40-30`. After that token, follow only the next
+printed GUI action: Manual once; Apply 30 once; Apply 40 once; Apply 30 once;
+Firmware once; tray Exit once. Wait for each parent proof before advancing.
+The reused recovery failsafe is armed for 120 seconds after the active boundary;
+complete the GUI sequence promptly. There is no Enter-to-advance between GUI
+actions. Do not repeat a failed interaction or rerun the consumed HEAD.
+
+Upload the generated `logs/p16-normal-manual_*.zip` and its `.sha256`, including
+any FAIL_CLOSED result. A PASS requires separate source re-block, evidence audit
+and closure before permanent Manual promotion; Automatic is not part of P16.

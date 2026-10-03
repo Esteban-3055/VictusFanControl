@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED",
-  "scope": "Prepare and hard-close the ordinary application Manual qualification path before permanent normal-user Manual promotion.",
+  "status": "P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
+  "scope": "Generation-4 one-shot ordinary-app Manual 30/40/30 qualification using fresh WMI RPM proof; permanent Manual/Automatic remain closed.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
   "p15Baseline": {
@@ -43,9 +43,9 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": false,
-    "controllerPhysicalExecutionAuthorized": false,
-    "physicalGatesOpened": false,
+    "executionAuthorized": true,
+    "controllerPhysicalExecutionAuthorized": true,
+    "physicalGatesOpened": true,
     "physicalPassed": false,
     "evidenceClosed": false,
     "hardwareExecution": true,
@@ -145,24 +145,24 @@
       "result": "SUCCESS"
     },
     "authorization": {
-      "authorizationGeneration": 3,
-      "openedFromClosedAttempt3HardeningHead": "04bd301b5693d8a471ffb556b3ba5dd4ebe122da",
-      "basisCiRunNumber": 1197,
-      "basisCiRunId": 37073553766,
+      "authorizationGeneration": 4,
+      "openedFromControlledWmiPreparationHead": "b2d3040a1fa58b489327e93738da316d9521fd14",
+      "basisCiRunNumber": 1208,
+      "basisCiRunId": 37092356506,
       "basisCiResult": "SUCCESS",
+      "wmiMigrationClosureHead": "572ab08c63cdeb0a0ad3acc59076ca43b9acd758",
       "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
+      "runtimeExactHeadCiBarrierRequired": true,
       "authorizationCommitPerformsHardwareExecution": false,
       "oneShotAttemptFenceRequired": true,
-      "authorizationConsumed": true,
-      "freshAuthorizationRequired": true,
+      "authorizationConsumed": false,
+      "freshAuthorizationRequired": false,
       "permanentUserManualExecutionAuthorized": false,
       "automaticExecutionAuthorized": false,
       "candidateCurvePhysicallyValidated": false,
       "candidateCurveAuthorizedForProduction": false,
       "controlEnabledByDefault": false,
-      "consumedByAttempt": 4,
-      "attemptFenceClaimed": true,
-      "attemptFenceAuthorizationHead": "fdf08d94cddca82e3d1431bdf95e68c37aae24aa"
+      "nextAttempt": 5
     },
     "physicalAttemptHistory": [
       {
@@ -266,15 +266,15 @@
       }
     ],
     "hardeningRequired": {
-      "required": true,
-      "physicalGateMustRemainClosed": true,
+      "required": false,
+      "physicalGateMustRemainClosed": false,
       "findings": [
         "AcpiEcReader retries EC protocol reads only after mutex acquisition; a Global\\\\Access_EC acquisition timeout is currently a single 500 ms terminal failure.",
         "The independent P16 parent setpoint probe treats one transient Global\\\\Access_EC acquisition timeout as terminal instead of using a bounded whole-probe retry.",
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Keep P16B re-blocked. Add a software-only P16 qualification lifecycle interruption fence so any suspend/resume after one-shot authorization invalidates the session immediately on return and cannot continue toward Apply. Preserve the no-write attempt-4 evidence. Independently inspect Windows power-event logs if the transition trigger itself must be identified. Only after hardening CI, formal closure and a fresh one-shot authorization may another target attempt occur.",
+      "nextAction": "Generation-4 controlled WMI qualification only after exact authorization-head full CI SUCCESS; one attempt, causal WMI and watchdog/EC proof, then separate re-block/evidence closure. Preserve the unknown trigger of attempt-4 power transition.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -490,10 +490,36 @@
         "consumedByAttempt": 3,
         "attemptFenceClaimed": true,
         "result": "CONSUMED_AFTER_PRESERVED_ATTEMPT3_FAIL_CLOSED"
+      },
+      {
+        "authorizationGeneration": 3,
+        "openedFromClosedAttempt3HardeningHead": "04bd301b5693d8a471ffb556b3ba5dd4ebe122da",
+        "basisCiRunNumber": 1197,
+        "basisCiRunId": 37073553766,
+        "basisCiResult": "SUCCESS",
+        "sameHeadCiSuccessRequiredBeforePhysicalExecution": true,
+        "authorizationCommitPerformsHardwareExecution": false,
+        "oneShotAttemptFenceRequired": true,
+        "authorizationConsumed": true,
+        "freshAuthorizationRequired": true,
+        "permanentUserManualExecutionAuthorized": false,
+        "automaticExecutionAuthorized": false,
+        "candidateCurvePhysicallyValidated": false,
+        "candidateCurveAuthorizedForProduction": false,
+        "controlEnabledByDefault": false,
+        "consumedByAttempt": 4,
+        "attemptFenceClaimed": true,
+        "attemptFenceAuthorizationHead": "fdf08d94cddca82e3d1431bdf95e68c37aae24aa",
+        "authorizationHead": "fdf08d94cddca82e3d1431bdf95e68c37aae24aa",
+        "authorizationCiRunNumber": 1198,
+        "authorizationCiRunId": 37074191886,
+        "authorizationCiResult": "SUCCESS",
+        "targetAttemptCount": 1,
+        "result": "CONSUMED_AFTER_PRESERVED_ATTEMPT4_NO_WRITE_INTERRUPTION"
       }
     ],
     "controlledWmiPreparation": {
-      "status": "IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+      "status": "SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED",
       "baselineHead": "572ab08c63cdeb0a0ad3acc59076ca43b9acd758",
       "baselineCiRunNumber": 1207,
       "baselineCiRunId": 37090835006,
@@ -527,7 +553,23 @@
         },
         "physicalCommandResponseQualified": false
       },
-      "validation": null
+      "validation": {
+        "head": "b2d3040a1fa58b489327e93738da316d9521fd14",
+        "tree": "bff3114bebe4313246d9b753c7204c8a98a4cdf1",
+        "runNumber": 1208,
+        "runId": 37092356506,
+        "result": "SUCCESS",
+        "fullWindowsCi": true,
+        "hardwareExecution": false
+      },
+      "closure": {
+        "closed": true,
+        "result": "PASS",
+        "sourceCiHead": "b2d3040a1fa58b489327e93738da316d9521fd14",
+        "sourceCiRunId": 37092356506,
+        "sourceCiResult": "SUCCESS",
+        "hardwareExecution": false
+      }
     }
   },
   "promotion": {

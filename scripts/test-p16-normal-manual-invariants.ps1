@@ -121,12 +121,11 @@ if($isAuthorized){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P16B dedicated source gate must be open.'
  $auth=$d.authorization
  if($null -eq $auth){throw 'P16B authorization metadata missing.'}
- if([int]$auth.authorizationGeneration -ne 3 -or
-    [string]$auth.openedFromClosedAttempt3HardeningHead -cne '04bd301b5693d8a471ffb556b3ba5dd4ebe122da' -or
-    [int]$auth.basisCiRunNumber -ne 1197 -or
-    [long]$auth.basisCiRunId -ne 37073553766 -or
+ if([int]$auth.authorizationGeneration -ne 4 -or
+    [string]$auth.openedFromControlledWmiPreparationHead -cne 'b2d3040a1fa58b489327e93738da316d9521fd14' -or
+    [int]$auth.basisCiRunNumber -ne 1208 -or [long]$auth.basisCiRunId -ne 37092356506 -or
     [string]$auth.basisCiResult -cne 'SUCCESS'){
-   throw 'P16B generation-3 authorization basis mismatch.'
+   throw 'P16B generation-4 WMI authorization basis mismatch.'
  }
  Assert-True ([bool]$auth.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P16B requires same-head CI before target execution.'
  Assert-False ([bool]$auth.authorizationCommitPerformsHardwareExecution) 'P16B authorization commit itself must perform no hardware execution.'
@@ -179,7 +178,10 @@ if($isAuthorized){
     -not [bool]$history[1].attemptFenceClaimed){
    throw 'P16B generation-2 consumed authorization history is missing or altered.'
  }
- Assert-Contains $doc 'P16B generation-3 one-shot reauthorization after attempt-3 closure CI #1197' 'P16B generation-3 authorization documentation missing.'
+ $g3=@($d.authorizationHistory|Where-Object{[int]$_.authorizationGeneration -eq 3})
+ if($g3.Count -ne 1 -or -not $g3[0].authorizationConsumed -or [int]$g3[0].consumedByAttempt -ne 4 -or $g3[0].attemptFenceAuthorizationHead -cne 'fdf08d94cddca82e3d1431bdf95e68c37aae24aa'){throw 'P16 generation-3 consumed history missing.'}
+ if(@($d.physicalAttemptHistory).Count -ne 4 -or @($d.physicalAttemptHistory|Where-Object{$_.result -cne 'FAIL_CLOSED'}).Count -ne 0){throw 'P16 authorization must preserve four failed-closed attempts.'}
+ Assert-Contains $doc 'P16 generation-4 controlled WMI authorization' 'P16 generation-4 documentation missing.'
 }else{
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16A source gate must remain hard-closed.'
 }
@@ -245,7 +247,7 @@ if($null -eq $prep -or $prep.baselineHead -cne '572ab08c63cdeb0a0ad3acc59076ca43
 if($prep.status -ceq 'IMPLEMENTED_CI_PENDING_GATE_CLOSED'){
  if($null -ne $prep.validation -or $isAuthorized){throw 'P16 WMI preparation cannot preclaim CI or open a pending gate.'}
 }elseif($prep.status -ceq 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED'){
- if($prep.validation.result -cne 'SUCCESS' -or -not $prep.validation.fullWindowsCi){throw 'P16 WMI preparation requires full successful Windows CI.'}
+ if($prep.validation.result -cne 'SUCCESS' -or -not $prep.validation.fullWindowsCi -or $prep.validation.head -cne 'b2d3040a1fa58b489327e93738da316d9521fd14' -or [long]$prep.validation.runId -ne 37092356506 -or [int]$prep.validation.runNumber -ne 1208){throw 'P16 WMI preparation requires exact full successful Windows CI.'}
 }else{throw 'Unexpected P16 WMI preparation state.'}
 
 Write-Host ("PASS: P16 normal-Manual state '{0}' preserves the P15/permanent-Manual/Automatic/Candidate boundaries." -f $status) -ForegroundColor Green
