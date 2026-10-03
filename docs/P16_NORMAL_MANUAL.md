@@ -792,3 +792,28 @@ PASS requires three fresh committed WMI proofs, same-session independent
 EC/journal generations 3/5/7, causal watchdog audit, strong FF/FF firmware
 restore, journal absence and clean tray exit with independent post-exit proof.
 Separate source re-block and evidence review remain mandatory afterward.
+
+## Attempt 7 physical PASS and evidence closure
+
+Generation-6 HEAD `70bffae6f9688fd2e770b13672841402821f3d24` / CI #1217
+run `37099934922` SUCCESS completed the bounded normal-app sequence on HP 8C40.
+ZIP SHA-256: `f9ddcf052474d37270726ab429c6a9a0ac49438d45aad7573ea38924350416be`.
+CRC and sidecar match; all 18 packaged files and 30 present source identities
+were verified, allowing source LF/CRLF normalization. One manifest file is absent.
+
+Three fresh two-sample WMI proofs (100 RPM resolution) acknowledged 30/40/30.
+Independent EC and schema-v2 journal generations 3/5/7 stayed in session
+`830a528d-5c69-4382-a07c-525568561db3`, GUI PID 9324 / start ticks
+639266024116192267. The watchdog causal chain includes PREPARE, three
+WRITE_INTENT/COMMIT pairs, RESTORE_BEGIN and RELEASE. Firmware FF/FF and
+post-tray-exit FF/FF were independently proven and the journal was absent.
+The inherited M4 PID 16080 / start ticks 639265623347186658 remained stable;
+no failsafe takeover occurred. No failed-closed interaction or power interruption
+appears in the qualification segment.
+
+This closes only the bounded physical evidence. Generation 6 is consumed and
+the dedicated source/parent gates are re-blocked. This closure commit must pass
+its own CI. Permanent Manual, Automatic, Candidate and default control remain
+closed; promotion is separate. The six historical failures remain preserved.
+A single physical PASS does not establish long-duration WMI reliability or the
+exclusive root cause of earlier failures. Do not rerun the consumed HEAD.

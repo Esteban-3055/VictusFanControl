@@ -29,10 +29,10 @@ $setpointStabilizer=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanCont
 
 $d=$p16.normalManual
 $status=[string]$p16.status
-if($status -notin @('P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED')){throw "Unexpected P16 status: $status"}
+if($status -notin @('P16B_PHYSICAL_PASS_EVIDENCE_CLOSED_GATE_CLOSED','P16A_NORMAL_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED')){throw "Unexpected P16 status: $status"}
 $isPostAttempt3Hardening=($status -in @('P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED'))
 $isPostAttempt3HardeningClosed=($status -eq 'P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED')
-$isP16APrepared=($status -in @('P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED'))
+$isP16APrepared=($status -in @('P16B_PHYSICAL_PASS_EVIDENCE_CLOSED_GATE_CLOSED','P16A_NORMAL_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED'))
 $isPhysicalFailClosed=($status -in @('P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED'))
 $isHardened=($status -in @('P16B_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_HARDENING_CI_PASS_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_IMPLEMENTED_CI_PENDING_GATE_CLOSED','P16B_ATTEMPT3_HARDENING_CI_PASS_GATE_CLOSED'))
 $isHardeningClosed=($status -eq 'P16B_HARDENING_CI_PASS_GATE_CLOSED')
@@ -137,6 +137,17 @@ if($isPhysicalFailClosed){
  }
  Assert-False ([bool]$p4.hardwareExecutionByReblockCommit) 'P16B attempt-4 re-block commit must be software-only.'
  Assert-Contains $doc 'P16B attempt 4 — no-write suspend/resume interruption' 'P16B attempt-4 documentation missing.'
+}
+
+if($status -ceq 'P16B_PHYSICAL_PASS_EVIDENCE_CLOSED_GATE_CLOSED'){
+ foreach($flag in @('executionAuthorized','controllerPhysicalExecutionAuthorized','physicalGatesOpened')){Assert-False ([bool]$d.$flag) ("P16 closure gate open: $flag")}
+ Assert-True ([bool]$d.physicalPassed) 'P16 physical PASS missing.'
+ Assert-True ([bool]$d.evidenceClosed) 'P16 evidence audit missing.'
+ $a=$d.authorization; $e=$d.physicalAttemptHistory[6]; $c=$d.physicalClosure
+ if(@($d.physicalAttemptHistory).Count -ne 7 -or @($d.physicalAttemptHistory|Where-Object{$_.result -ceq 'FAIL_CLOSED'}).Count -ne 6 -or $e.result -cne 'PASS' -or [int]$e.attempt -ne 7 -or $e.sourceHead -cne '70bffae6f9688fd2e770b13672841402821f3d24' -or [long]$e.sourceCiRunId -ne 37099934922 -or $e.evidenceZipSha256 -cne 'f9ddcf052474d37270726ab429c6a9a0ac49438d45aad7573ea38924350416be'){throw 'P16 attempt-7 evidence/history mismatch.'}
+ if([int]$a.authorizationGeneration -ne 6 -or -not $a.authorizationConsumed -or [int]$a.consumedByAttempt -ne 7 -or -not $a.attemptFenceClaimed -or $a.attemptFenceAuthorizationHead -cne $e.sourceHead -or -not $c.closed -or $c.result -cne 'PASS' -or -not $c.closureCommitCiRequired -or $c.permanentManualPromotion -or $c.automaticPromotion){throw 'P16 closure must consume authorization without permanent promotion.'}
+ foreach($flag in @('independentSetpointProofs','strongRestorePass','finalJournalAbsent','postExitFfPass','cleanTrayExit','causalWatchdogChainPass','watchdogIdentityStable','zipCrcPass')){Assert-True ([bool]$e.$flag) ("P16 physical proof missing: $flag")}
+ if([int]$e.freshWmiCommandProofs -ne 3 -or $e.failsafeTakeover -or [int]$e.manifestSourceFilesVerified -ne 30 -or [int]$e.manifestPackagedFilesVerified -ne 18){throw 'P16 proof and integrity audit incomplete.'}
 }
 
 if($isAuthorized){

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
-  "scope": "Generation-6 one-shot attempt-7 normal Manual qualification after WMI publication software closure CI #1215. Exact authorization-head CI required before target access; no permanent promotion.",
+  "status": "P16B_PHYSICAL_PASS_EVIDENCE_CLOSED_GATE_CLOSED",
+  "scope": "Attempt 7 physical PASS independently audited; dedicated qualification gates re-blocked, generation 6 consumed. Closure commit requires its own CI; permanent promotion remains separate.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
   "p15Baseline": {
@@ -43,11 +43,11 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": true,
-    "controllerPhysicalExecutionAuthorized": true,
-    "physicalGatesOpened": true,
-    "physicalPassed": false,
-    "evidenceClosed": false,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
+    "physicalGatesOpened": false,
+    "physicalPassed": true,
+    "evidenceClosed": true,
     "hardwareExecution": true,
     "normalApplicationLaunchRequired": true,
     "specialQualificationStartupModeAllowed": false,
@@ -155,17 +155,19 @@
       "runtimeExactHeadCiBarrierRequired": true,
       "authorizationCommitPerformsHardwareExecution": false,
       "oneShotAttemptFenceRequired": true,
-      "authorizationConsumed": false,
-      "freshAuthorizationRequired": false,
+      "authorizationConsumed": true,
+      "freshAuthorizationRequired": true,
       "permanentUserManualExecutionAuthorized": false,
       "automaticExecutionAuthorized": false,
       "candidateCurvePhysicallyValidated": false,
       "candidateCurveAuthorizedForProduction": false,
       "controlEnabledByDefault": false,
       "nextAttempt": 7,
-      "attemptFenceClaimed": false,
+      "attemptFenceClaimed": true,
       "openedFromWmiCoordinationClosureHead": "c2b80dbf3b23bd0e44dc84ba8f7e65d94d701fa6",
-      "safetySupersessionCorrectionHead": "fedad87a9dbcc8d50adf3615fade90945712cc4d"
+      "safetySupersessionCorrectionHead": "fedad87a9dbcc8d50adf3615fade90945712cc4d",
+      "consumedByAttempt": 7,
+      "attemptFenceAuthorizationHead": "70bffae6f9688fd2e770b13672841402821f3d24"
     },
     "physicalAttemptHistory": [
       {
@@ -319,6 +321,41 @@
           "Inherited M4 PID 16080/start ticks 639265623347186658 is stable in before/normal-GUI-healthy/cleanup-final snapshots. Failsafe PID 22120 is armed for 120 s; outcome after package closure is not captured.",
           "No suspend/resume is observed. The safety cancellation domain is identified, but shared-slot contention versus provider latency/publication gap is not resolved by the supplied logs. No strong final restore, post-exit, three-write causal chain or P16 PASS is claimed."
         ]
+      },
+      {
+        "attempt": 7,
+        "sourceHead": "70bffae6f9688fd2e770b13672841402821f3d24",
+        "sourceCiRunNumber": 1217,
+        "sourceCiRunId": 37099934922,
+        "sourceCiResult": "SUCCESS",
+        "result": "PASS",
+        "evidenceZip": "p16-normal-manual_2026-10-03_023310.zip",
+        "evidenceZipSha256": "f9ddcf052474d37270726ab429c6a9a0ac49438d45aad7573ea38924350416be",
+        "manifestSha256": "bd7787be0e5297465a0f5008d4dc04851dd2608529f4fbebd17d3e2a044c1483",
+        "harnessSummarySha256": "197486c9bf720f03d5a0f8b55e0869bf1278252f4e7e4b35f512e9cae89844b4",
+        "attemptFenceSha256": "9486e00cccf47dc146aa7f12ab3fce35f9b506d4038c07d31b6a8aab217a042f",
+        "appLogSegmentSha256": "1826c2598ff10a3bf46b63b20b59cb454daf80ea984ed2e4232461a06b6fb97f",
+        "sessionId": "830a528d-5c69-4382-a07c-525568561db3",
+        "guiPid": 9324,
+        "guiStartUtcTicks": "639266024116192267",
+        "ownedGenerations": [
+          3,
+          5,
+          7
+        ],
+        "freshWmiCommandProofs": 3,
+        "independentSetpointProofs": true,
+        "strongRestorePass": true,
+        "finalJournalAbsent": true,
+        "postExitFfPass": true,
+        "cleanTrayExit": true,
+        "causalWatchdogChainPass": true,
+        "watchdogIdentityStable": true,
+        "failsafeTakeover": false,
+        "manifestPackagedFilesVerified": 18,
+        "manifestSourceFilesVerified": 30,
+        "manifestAbsentFiles": 1,
+        "zipCrcPass": true
       }
     ],
     "hardeningRequired": {
@@ -330,7 +367,7 @@
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "One bounded attempt 7 after this exact authorization HEAD passes CI; preserve all six FAIL_CLOSED attempts. Physical qualification and final restore remain unproven.",
+      "nextAction": "Validate this re-block/evidence closure commit in CI; permanent Manual promotion is a separate subsequent decision. Do not rerun consumed attempt 7.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -849,7 +886,19 @@
         "cause": "WMI migration invariants still required generation 5; generation 6 was correctly blocked before physical execution.",
         "hardwareExecution": false
       }
-    ]
+    ],
+    "physicalClosure": {
+      "closed": true,
+      "result": "PASS",
+      "attempt": 7,
+      "evidenceAudited": true,
+      "sourceHead": "70bffae6f9688fd2e770b13672841402821f3d24",
+      "sourceCiRunId": 37099934922,
+      "dedicatedGatesReblocked": true,
+      "closureCommitCiRequired": true,
+      "permanentManualPromotion": false,
+      "automaticPromotion": false
+    }
   },
   "promotion": {
     "manualExecutionAuthorized": false,
