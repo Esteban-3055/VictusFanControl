@@ -6,6 +6,10 @@ internal static class CpuPowerLimiterSelfTest
     {
         try
         {
+            Require(
+                CpuPowerConflictPolicySelfTest.Run(output) == 0,
+                "bounded external-writer conflict policy");
+
             var backend = new FakeBackend();
             using (var limiter = new CpuPowerLimiter(backend))
             {
