@@ -1,4 +1,5 @@
 using System.Management;
+using VictusFanControl.Runtime;
 
 namespace VictusFanControl.Hardware.Hp;
 
@@ -46,6 +47,7 @@ public sealed class HpOmenBiosWmiClient
 
     public HpOmenBiosWmiClient()
     {
+        EcWmiInvestigationTrace.Initialize();
         if (!OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException("HP BIOS/WMI access requires Windows.");
@@ -54,11 +56,15 @@ public sealed class HpOmenBiosWmiClient
         // Establish the WMI connection before any fan write is attempted and
         // reuse it for readback and fail-safe restoration.
         _scope = new ManagementScope(NamespacePath);
+        var discovery = EcWmiInvestigationTrace.Begin("wmi.connect.begin", NamespacePath);
         _scope.Connect();
+        EcWmiInvestigationTrace.Record(discovery, "wmi.connect.end", NamespacePath);
 
         // Resolve the method instance before any write. Later readback/restore
         // calls do not need to rediscover the provider object.
+        var lookup = EcWmiInvestigationTrace.Begin("wmi.discovery.begin", MethodClassName);
         using var method = FindMethodInstance(_scope);
+        EcWmiInvestigationTrace.Record(lookup, "wmi.discovery.end", MethodClassName);
         var relativePath = method.Path?.RelativePath;
         if (string.IsNullOrWhiteSpace(relativePath))
         {
@@ -80,63 +86,81 @@ public sealed class HpOmenBiosWmiClient
                 "Unsupported HP BIOS output size.");
         }
 
-        using var dataClass = new ManagementClass(
-            _scope,
-            new ManagementPath(DataClassName),
-            options: null);
-
-        using var data = dataClass.CreateInstance()
-            ?? throw new HpBiosCallException("Could not create hpqBDataIn.");
-
-        data["Sign"] = Signature.ToArray();
-        data["Command"] = request.Command;
-        data["CommandType"] = request.CommandType;
-        data["Size"] = (uint)request.Payload.Length;
-        data[DataFieldName] = request.Payload.ToArray();
-
-        using var target = new ManagementObject(
-            _scope,
-            _methodPath,
-            options: null);
-        var methodName = $"hpqBIOSInt{request.OutputSize}";
-
-        using var methodInput = target.GetMethodParameters(methodName)
-            ?? throw new HpBiosCallException(
-                $"HP WMI method {methodName} does not expose input parameters.");
-
-        methodInput["InData"] = data;
-
-        var invokeOptions = new InvokeMethodOptions
+        var trace = EcWmiInvestigationTrace.Enabled
+            ? EcWmiInvestigationTrace.Begin("wmi.send.begin",
+                $"command=0x{request.Command:X};type=0x{request.CommandType:X};output={request.OutputSize}") : 0;
+        try
         {
-            Timeout = InvokeTimeout
-        };
+            using var dataClass = new ManagementClass(
+                _scope,
+                new ManagementPath(DataClassName),
+                options: null);
 
-        using var methodOutput = target.InvokeMethod(methodName, methodInput, invokeOptions)
-            ?? throw new HpBiosCallException(
-                $"HP WMI method {methodName} returned no output.");
+            using var data = dataClass.CreateInstance()
+                ?? throw new HpBiosCallException("Could not create hpqBDataIn.");
 
-        var resultData = methodOutput["OutData"] as ManagementBaseObject
-            ?? throw new HpBiosCallException(
-                $"HP WMI method {methodName} returned no OutData object.");
+            data["Sign"] = Signature.ToArray();
+            data["Command"] = request.Command;
+            data["CommandType"] = request.CommandType;
+            data["Size"] = (uint)request.Payload.Length;
+            data[DataFieldName] = request.Payload.ToArray();
 
-        using (resultData)
-        {
-            var rawCode = resultData[ReturnCodeFieldName];
-            if (rawCode is null)
+            using var target = new ManagementObject(
+                _scope,
+                _methodPath,
+                options: null);
+            var methodName = $"hpqBIOSInt{request.OutputSize}";
+
+            EcWmiInvestigationTrace.Record(trace, "wmi.parameters.begin", methodName);
+            using var methodInput = target.GetMethodParameters(methodName)
+                ?? throw new HpBiosCallException(
+                    $"HP WMI method {methodName} does not expose input parameters.");
+
+            EcWmiInvestigationTrace.Record(trace, "wmi.parameters.end", methodName);
+            methodInput["InData"] = data;
+
+            var invokeOptions = new InvokeMethodOptions
             {
-                throw new HpBiosCallException(
-                    "HP WMI response did not contain rwReturnCode.");
+                Timeout = InvokeTimeout
+            };
+
+            EcWmiInvestigationTrace.Record(trace, "wmi.invoke.begin", methodName);
+            using var methodOutput = target.InvokeMethod(methodName, methodInput, invokeOptions)
+                ?? throw new HpBiosCallException(
+                    $"HP WMI method {methodName} returned no output.");
+
+            EcWmiInvestigationTrace.Record(trace, "wmi.invoke.end", methodName);
+            var resultData = methodOutput["OutData"] as ManagementBaseObject
+                ?? throw new HpBiosCallException(
+                    $"HP WMI method {methodName} returned no OutData object.");
+
+            using (resultData)
+            {
+                var rawCode = resultData[ReturnCodeFieldName];
+                if (rawCode is null)
+                {
+                    throw new HpBiosCallException(
+                        "HP WMI response did not contain rwReturnCode.");
+                }
+
+                var responseData =
+                    request.OutputSize == 0
+                        ? Array.Empty<byte>()
+                        : (resultData["Data"] as byte[] ?? Array.Empty<byte>()).ToArray();
+
+                var response = new HpBiosResponse(Convert.ToInt32(rawCode), responseData);
+                if (EcWmiInvestigationTrace.Enabled)
+                    EcWmiInvestigationTrace.Record(trace, "wmi.response", $"rc={response.ReturnCode};bytes={response.Data.Length}");
+                return response;
             }
-
-            var responseData =
-                request.OutputSize == 0
-                    ? Array.Empty<byte>()
-                    : (resultData["Data"] as byte[] ?? Array.Empty<byte>()).ToArray();
-
-            return new HpBiosResponse(
-                Convert.ToInt32(rawCode),
-                responseData);
         }
+        catch (Exception ex)
+        {
+            if (EcWmiInvestigationTrace.Enabled)
+                EcWmiInvestigationTrace.Record(trace, "wmi.failure", $"{ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
+        finally { EcWmiInvestigationTrace.Record(trace, "wmi.send.end", ""); }
     }
 
     private static ManagementObject FindMethodInstance(ManagementScope scope)

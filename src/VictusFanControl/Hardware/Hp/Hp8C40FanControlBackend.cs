@@ -63,8 +63,19 @@ internal sealed class Hp8C40FanHardware : IHp8C40FanHardware
     {
         // WMI RPM first, then narrow EC ownership/guards. No EC mutex is held
         // while awaiting WMI, and restoration never needs the RPM reader.
-        var sample = await _fans.ReadFreshAsync(cancellationToken).ConfigureAwait(false);
-        return ReadControlStateWithSample(sample, cancellationToken);
+        var trace = EcWmiInvestigationTrace.Begin("control.read.begin", "fresh-WMI-then-EC");
+        try
+        {
+            var sample = await _fans.ReadFreshAsync(cancellationToken).ConfigureAwait(false);
+            return ReadControlStateWithSample(sample, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            if (EcWmiInvestigationTrace.Enabled)
+                EcWmiInvestigationTrace.Record(trace, "control.read.failure", $"{ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
+        finally { EcWmiInvestigationTrace.Record(trace, "control.read.end", ""); }
     }
 
     public ValueTask<Hp8C40EcControlState> ReadAdmissionStateAsync(CancellationToken cancellationToken)
@@ -87,6 +98,9 @@ internal sealed class Hp8C40FanHardware : IHp8C40FanHardware
         if (Environment.TickCount64 - sample.Speeds.StartedAtMilliseconds >= HpWmiFanProofReader.MaximumWaitMilliseconds)
             throw new InvalidDataException("WMI fan sample expired during EC ownership/guard acquisition.");
         _lastFanSample = sample;
+        if (EcWmiInvestigationTrace.Enabled)
+            EcWmiInvestigationTrace.Record(0, "control.snapshot",
+                $"query={sample.Sequence};queryStarted={sample.Speeds.StartedAtMilliseconds};rpm={sample.Speeds.CpuNominalRpm}/{sample.Speeds.GpuNominalRpm};setpoint={setpoint.CpuSetpoint}/{setpoint.GpuSetpoint};max=0x{controlGuard.MaxFan:X2};switch=0x{controlGuard.FanSwitch:X2}");
         return new Hp8C40EcControlState(
             byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue,
             setpoint.CpuSetpoint, setpoint.GpuSetpoint,
@@ -398,6 +412,9 @@ public sealed class Hp8C40FanControlBackend :
                     initialUnexpectedGuard =
                         $"max=0x{state.MaxFan:X2}, switch=0x{state.FanSwitch:X2}";
 
+                    if (EcWmiInvestigationTrace.Enabled)
+                        EcWmiInvestigationTrace.Record(0, "guard.unexpected",
+                            $"{initialUnexpectedGuard};query={state.FanQuerySequence};setpoint={state.CpuSetpoint}/{state.GpuSetpoint}");
                     state =
                         await ConfirmUnexpectedControlGuardAsync(
                                 state,
@@ -912,6 +929,9 @@ public sealed class Hp8C40FanControlBackend :
         var gpuExpectation = DetermineExpectation(gpuTarget, currentLevels.GpuLevel);
 
         var started = _activeTimeClock.Milliseconds;
+        var acknowledgement = EcWmiInvestigationTrace.Enabled
+            ? EcWmiInvestigationTrace.Begin("ack.begin",
+                $"target={cpuTarget}/{gpuTarget};baselineQuery={baseline.FanQuerySequence};baselineRpm={baseline.CpuRpm}/{baseline.GpuRpm};expect={cpuExpectation}/{gpuExpectation};commandCompleted={commandCompletedAtMilliseconds};activeStarted={started}") : 0;
         var cpuEverAcknowledged = false;
         var gpuEverAcknowledged = false;
         var confirmationSamples = 0;
@@ -935,6 +955,8 @@ public sealed class Hp8C40FanControlBackend :
                 transientSnapshotReadFailures++;
                 lastSnapshotReadFailure =
                     $"{ex.GetType().Name}: {ex.Message}";
+                if (EcWmiInvestigationTrace.Enabled)
+                    EcWmiInvestigationTrace.Record(acknowledgement, "ack.snapshot.failure", lastSnapshotReadFailure);
                 confirmationSamples = 0;
 
                 if (transientSnapshotReadFailures >
@@ -955,10 +977,14 @@ public sealed class Hp8C40FanControlBackend :
                 continue;
             }
 
+            if (EcWmiInvestigationTrace.Enabled)
+                EcWmiInvestigationTrace.Record(acknowledgement, "ack.snapshot",
+                    $"query={last.FanQuerySequence};queryStarted={last.FanQueryStartedAtMilliseconds};rpm={last.CpuRpm}/{last.GpuRpm};setpoint={last.CpuSetpoint}/{last.GpuSetpoint};max=0x{last.MaxFan:X2};switch=0x{last.FanSwitch:X2};activeElapsed={ActiveTimeClock.ElapsedMilliseconds(_activeTimeClock, started)}");
             if (ActiveTimeClock.HasElapsed(_activeTimeClock, started, _timing.TachometerAckTimeout))
                 break;
             if (!IsFreshTachometerProof(last, baseline, commandCompletedAtMilliseconds, lastAcceptedSequence))
             {
+                EcWmiInvestigationTrace.Record(acknowledgement, "ack.stale-rejected", "");
                 confirmationSamples = 0;
                 await Task.Delay(_timing.PollInterval, cancellationToken).ConfigureAwait(false);
                 continue;
@@ -1008,6 +1034,8 @@ public sealed class Hp8C40FanControlBackend :
                 confirmationSamples++;
                 if (confirmationSamples >= RequiredTachConfirmationSamples)
                 {
+                    if (EcWmiInvestigationTrace.Enabled)
+                        EcWmiInvestigationTrace.Record(acknowledgement, "ack.accepted", $"query={last.FanQuerySequence};samples={confirmationSamples}");
                     return last;
                 }
             }
@@ -1015,6 +1043,9 @@ public sealed class Hp8C40FanControlBackend :
             {
                 confirmationSamples = 0;
             }
+            if (EcWmiInvestigationTrace.Enabled)
+                EcWmiInvestigationTrace.Record(acknowledgement, "ack.decision",
+                    $"cpu={cpuSampleAcknowledged};gpu={gpuSampleAcknowledged};consecutive={confirmationSamples}");
 
             await Task.Delay(_timing.PollInterval, cancellationToken).ConfigureAwait(false);
         }
@@ -1046,6 +1077,9 @@ public sealed class Hp8C40FanControlBackend :
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
         {
+            if (EcWmiInvestigationTrace.Enabled)
+                EcWmiInvestigationTrace.Record(0, "ack.active-deadline",
+                    $"activeElapsed={ActiveTimeClock.ElapsedMilliseconds(_activeTimeClock, acknowledgementStarted)}");
             throw new TimeoutException("Tachometer acknowledgement active-time deadline expired during the WMI/control snapshot.");
         }
         finally
@@ -1118,7 +1152,11 @@ public sealed class Hp8C40FanControlBackend :
                     cancellationToken)
                 .ConfigureAwait(false);
 
+            if (EcWmiInvestigationTrace.Enabled)
+                EcWmiInvestigationTrace.Record(0, "guard.confirmation.begin", $"read={read};previousMax=0x{previousMaxFan:X2};previousSwitch=0x{previousFanSwitch:X2}");
             var next = await _hardware!.ReadEcStateAsync(cancellationToken).ConfigureAwait(false);
+            if (EcWmiInvestigationTrace.Enabled)
+                EcWmiInvestigationTrace.Record(0, "guard.confirmation.end", $"read={read};max=0x{next.MaxFan:X2};switch=0x{next.FanSwitch:X2};query={next.FanQuerySequence}");
 
             if (ControlGuardsAreSane(next))
             {

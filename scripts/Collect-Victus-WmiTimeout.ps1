@@ -162,7 +162,7 @@ function Capture-AcpiTables {
         if(-not(Test-Path -LiteralPath $IaslPath -PathType Leaf)){Warn 'IaslPath no existe; tablas binarias conservadas.';return}
         $tool=Get-Item -LiteralPath $IaslPath
         Save-Json (Join-Path $script:Root 'acpi\iasl-identity.json') ([pscustomobject]@{Path=$tool.FullName;SHA256=(Get-FileHash -LiteralPath $tool.FullName -Algorithm SHA256).Hash})
-        foreach($table in @(Get-ChildItem -LiteralPath $destination -File -ErrorAction SilentlyContinue|Where-Object {$_.Name -match '^(DSDT|SSDT)\.dat$'})){
+        foreach($table in @(Get-ChildItem -LiteralPath $destination -File -Recurse -ErrorAction SilentlyContinue|Where-Object {$_.Name -match '^(DSDT|SSDT)(-\d+)?\.dat$'})){
             # -d disassembles a file only. No compile/load/evaluate commands.
             Invoke-Bounded $tool.FullName ('-d "'+$table.FullName+'"') (Join-Path $script:Root ('acpi\iasl-'+$table.BaseName+'.txt')) 30 $destination
         }

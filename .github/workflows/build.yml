@@ -67,6 +67,7 @@ jobs:
           $firmware = @($commands | Where-Object { $_.Destination -match 'acpi[\\/]capture.txt$' })
           if ($firmware.Count -ne 1 -or $firmware[0].Status -ne 'ok') { throw 'Static firmware helper failed in Windows.' }
           $tables = @(Get-Content (Join-Path $result[0].FullName 'acpi\tables\tables.json') -Raw | ConvertFrom-Json)
+          if (-not (Test-Path (Join-Path $result[0].FullName 'acpi\tables\registry-tables.json'))) { throw 'Registry ACPI coverage metadata missing.' }
           $tables | ConvertTo-Json -Depth 8 | Write-Host
           if (@($tables | Where-Object { $_.Status -eq 'exported-first-instance' }).Count -eq 0) { throw 'Windows firmware API exported no tables.' }
           $enumeration = @(Get-Content (Join-Path $result[0].FullName 'acpi\tables\enumeration.json') -Raw | ConvertFrom-Json)
@@ -511,6 +512,25 @@ jobs:
 
       - name: HP WMI fan telemetry deterministic self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --fan-wmi-telemetry-self-test
+
+      - name: Opt-in investigation JSONL smoke without hardware
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:LOCALAPPDATA 'VictusFanControl\logs'
+          $before = @(Get-ChildItem $folder -Filter 'ec-wmi-*.log' -ErrorAction SilentlyContinue | ForEach-Object FullName)
+          $previous = $env:VFC_EC_WMI_DIAGNOSTICS
+          try {
+            $env:VFC_EC_WMI_DIAGNOSTICS = '1'
+            dotnet run --project .\src\VictusFanControl -c Release --no-build -- --fan-wmi-telemetry-self-test
+            if ($LASTEXITCODE -ne 0) { throw 'Instrumented software fixtures failed.' }
+          } finally { $env:VFC_EC_WMI_DIAGNOSTICS = $previous }
+          $files = @(Get-ChildItem $folder -Filter 'ec-wmi-*.log' | Where-Object { $_.FullName -notin $before })
+          if ($files.Count -ne 1) { throw 'Opt-in diagnostic session log missing.' }
+          $rows = @(Get-Content $files[0].FullName | ForEach-Object { $_ | ConvertFrom-Json })
+          if ($rows[0].kind -ne 'session' -or $rows[0].hardwareReadsAdded -or $rows[0].qpcFrequency -le 0 -or -not $rows[0].coreMvid) { throw 'Diagnostic session identity/clock missing.' }
+          if (@($rows | Where-Object { $_.Stage -eq 'selftest.fixture' -and $_.Detail -eq 'no hardware I/O' -and $_.TickMs -gt 0 -and $_.Qpc -gt 0 }).Count -ne 1) { throw 'Diagnostic original chronology missing.' }
+          if ($files[0].Length -gt 8388608) { throw 'Diagnostic log over file limit.' }
+          Write-Host 'PASS: opt-in JSONL, original clocks, MVID and bounded file; fixtures only.'
 
       - name: Safety gate self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --safety-self-test

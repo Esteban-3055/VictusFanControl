@@ -1,3 +1,5 @@
+using VictusFanControl.Runtime;
+
 namespace VictusFanControl.Hardware.PawnIo;
 
 /// <summary>
@@ -27,6 +29,7 @@ internal sealed class AcpiEcReader : IDisposable
 
     public AcpiEcReader(string modulePath)
     {
+        EcWmiInvestigationTrace.Initialize();
         _session = new PawnIoModuleSession(modulePath);
     }
 
@@ -46,6 +49,7 @@ internal sealed class AcpiEcReader : IDisposable
             if (lockTaken)
             {
                 _ecMutex.ReleaseMutex();
+                EcWmiInvestigationTrace.Record(0, "ec.mutex.released", "");
             }
         }
     }
@@ -69,6 +73,7 @@ internal sealed class AcpiEcReader : IDisposable
             if (lockTaken)
             {
                 _ecMutex.ReleaseMutex();
+                EcWmiInvestigationTrace.Record(0, "ec.mutex.released", "");
             }
         }
     }
@@ -101,6 +106,7 @@ internal sealed class AcpiEcReader : IDisposable
             if (lockTaken)
             {
                 _ecMutex.ReleaseMutex();
+                EcWmiInvestigationTrace.Record(0, "ec.mutex.released", "");
             }
         }
     }
@@ -137,6 +143,7 @@ internal sealed class AcpiEcReader : IDisposable
             if (lockTaken)
             {
                 _ecMutex.ReleaseMutex();
+                EcWmiInvestigationTrace.Record(0, "ec.mutex.released", "");
             }
         }
     }
@@ -183,6 +190,7 @@ internal sealed class AcpiEcReader : IDisposable
             if (lockTaken)
             {
                 _ecMutex.ReleaseMutex();
+                EcWmiInvestigationTrace.Record(0, "ec.mutex.released", "");
             }
         }
     }
@@ -217,6 +225,7 @@ internal sealed class AcpiEcReader : IDisposable
             if (lockTaken)
             {
                 _ecMutex.ReleaseMutex();
+                EcWmiInvestigationTrace.Record(0, "ec.mutex.released", "");
             }
         }
     }
@@ -271,6 +280,7 @@ internal sealed class AcpiEcReader : IDisposable
             if (lockTaken)
             {
                 _ecMutex.ReleaseMutex();
+                EcWmiInvestigationTrace.Record(0, "ec.mutex.released", "");
             }
         }
     }
@@ -313,17 +323,21 @@ internal sealed class AcpiEcReader : IDisposable
 
     private bool AcquireMutex()
     {
+        var trace = EcWmiInvestigationTrace.Begin("ec.mutex.wait.begin", @"Global\Access_EC");
         try
         {
             if (!_ecMutex.WaitOne(MutexTimeout))
             {
+                EcWmiInvestigationTrace.Record(trace, "ec.mutex.timeout", "500 ms");
                 throw new TimeoutException("Timed out waiting for Global\\Access_EC.");
             }
 
+            EcWmiInvestigationTrace.Record(trace, "ec.mutex.acquired", "");
             return true;
         }
         catch (AbandonedMutexException)
         {
+            EcWmiInvestigationTrace.Record(trace, "ec.mutex.abandoned-acquired", "");
             // WaitOne grants ownership when reporting an abandoned mutex.
             return true;
         }
@@ -355,18 +369,28 @@ internal sealed class AcpiEcReader : IDisposable
 
     private byte ReadRegisterLocked(byte register)
     {
-        // Standard ACPI RD_EC handshake:
-        // idle -> READ command -> IBF clear -> address -> IBF clear -> OBF set -> data.
-        WaitForIdle();
-        WritePort(CommandStatusPort, CommandReadEc);
-
-        WaitForInputBufferEmpty();
-        WritePort(DataPort, register);
-
-        WaitForInputBufferEmpty();
-        WaitForOutputBufferFull();
-
-        return ReadPort(DataPort);
+        var trace = EcWmiInvestigationTrace.Enabled
+            ? EcWmiInvestigationTrace.Begin("ec.read.begin", $"register=0x{register:X2}") : 0;
+        try
+        {
+            // Preserve the existing RD_EC handshake and retries exactly.
+            WaitForIdle();
+            WritePort(CommandStatusPort, CommandReadEc);
+            WaitForInputBufferEmpty();
+            WritePort(DataPort, register);
+            WaitForInputBufferEmpty();
+            WaitForOutputBufferFull();
+            var value = ReadPort(DataPort);
+            if (EcWmiInvestigationTrace.Enabled)
+                EcWmiInvestigationTrace.Record(trace, "ec.read.end", $"register=0x{register:X2};value=0x{value:X2}");
+            return value;
+        }
+        catch (Exception ex)
+        {
+            if (EcWmiInvestigationTrace.Enabled)
+                EcWmiInvestigationTrace.Record(trace, "ec.read.failure", $"register=0x{register:X2};{ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
     }
 
     private void WaitForIdle()

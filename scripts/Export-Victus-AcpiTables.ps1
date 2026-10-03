@@ -54,4 +54,43 @@ foreach($group in @($list|Group-Object Id)){
  }catch{$rows+=[pscustomobject]@{Signature=$signature;Occurrences=$group.Count;Status='unavailable';Error=$_.Exception.Message};Write-Warning ($signature+': '+$_.Exception.Message)}
 }
 [IO.File]::WriteAllText((Join-Path $Destination 'tables.json'),(ConvertTo-Json -InputObject @($rows) -Depth 8),$utf8)
-[IO.File]::WriteAllText((Join-Path $Destination 'LIMITES.txt'),'Static OS firmware API capture. No AML evaluation, EC reads, physical-memory access, driver installation or BIOS changes. GetSystemFirmwareTable exposes only the first table of each signature, even when enumeration lists multiple SSDTs. Missing instances are explicitly counted; this is not a complete ACPI namespace dump. MSDM excluded because it contains an OEM product key. Table checksum/header metadata is descriptive; it does not prove EC hardware health.',$utf8)
+# Some Windows builds expose DSDT in this boot-time registry snapshot even
+# though EnumSystemFirmwareTables omits it. Never read other registry trees.
+$registryRows=New-Object 'System.Collections.Generic.List[object]'
+$seen=New-Object 'System.Collections.Generic.HashSet[string]'
+$visited=0;$exported=0;$registryTotal=0L
+foreach($signature in @('DSDT','SSDT')){
+ $queue=New-Object 'System.Collections.Generic.Queue[object]'
+ $queue.Enqueue(@{Path=('HARDWARE\ACPI\'+$signature);Depth=0})
+ while($queue.Count -gt 0 -and $visited -lt 512){
+  $item=$queue.Dequeue();$visited++;$key=$null
+  try{
+   $key=[Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($item.Path,$false)
+   if(-not $key){$registryRows.Add([pscustomobject]@{Key=$item.Path;Status='not-exposed'});continue}
+   foreach($name in @($key.GetValueNames()|Select-Object -First 128)){
+    if($key.GetValueKind($name) -ne [Microsoft.Win32.RegistryValueKind]::Binary){continue}
+    $bytes=$key.GetValue($name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+    if($bytes -isnot [byte[]] -or $bytes.Length -gt 4194304 -or $registryTotal+$bytes.Length -gt 33554432){$registryRows.Add([pscustomobject]@{Key=$item.Path;Value=$name;Status='over-limit-or-invalid'});continue}
+    try{
+     $h=Table-Header $bytes
+     if($h.Signature -ne $signature){throw 'Registry branch/header signature mismatch.'}
+     # Export exactly the declared table, without unrelated trailing bytes.
+     $table=New-Object byte[] ([int]$h.DeclaredBytes);[Array]::Copy($bytes,$table,$table.Length)
+     $sha=[Security.Cryptography.SHA256]::Create()
+     try{$hash=[BitConverter]::ToString($sha.ComputeHash($table)).Replace('-','')}finally{$sha.Dispose()}
+     if(-not $seen.Add($hash)){$registryRows.Add([pscustomobject]@{Key=$item.Path;Value=$name;Signature=$signature;Status='duplicate';SHA256=$hash});continue}
+     $exported++;$file='registry\'+$signature+'-'+$exported.ToString('D4')+'.dat'
+     [IO.Directory]::CreateDirectory((Join-Path $Destination 'registry'))|Out-Null
+     [IO.File]::WriteAllBytes((Join-Path $Destination $file),$table);$registryTotal+=$table.Length
+     $registryRows.Add([pscustomobject]@{Key=$item.Path;Value=$name;Signature=$signature;Status='exported-registry-snapshot';File=$file;SHA256=$hash;Header=$h})
+     Write-Host ('Registry ACPI '+$signature+': '+$table.Length+' bytes; checksum='+$h.ChecksumValid)
+    }catch{$registryRows.Add([pscustomobject]@{Key=$item.Path;Value=$name;Status='invalid-table';Error=$_.Exception.Message})}
+   }
+   if($item.Depth -lt 8){foreach($child in @($key.GetSubKeyNames()|Select-Object -First ([Math]::Max(0,512-$visited-$queue.Count)))){$queue.Enqueue(@{Path=($item.Path+'\'+$child);Depth=($item.Depth+1)})}}
+  }catch{$registryRows.Add([pscustomobject]@{Key=$item.Path;Status='read-unavailable';Error=$_.Exception.Message})}
+  finally{if($key){$key.Dispose()}}
+ }
+ if($queue.Count -gt 0){$registryRows.Add([pscustomobject]@{Signature=$signature;Status='key-limit-reached';Complete=$false})}
+}
+[IO.File]::WriteAllText((Join-Path $Destination 'registry-tables.json'),(ConvertTo-Json -InputObject @($registryRows.ToArray()) -Depth 8),$utf8)
+[IO.File]::WriteAllText((Join-Path $Destination 'LIMITES.txt'),'Static firmware API plus read-only HKLM\HARDWARE\ACPI\DSDT and SSDT boot registry snapshots. No AML evaluation, EC reads, physical-memory access, driver installation or BIOS changes. The API exposes only the first table per signature; registry exports can supplement DSDT/SSDT when present but completeness is not guaranteed. API and registry each capped at 32 MiB, 4 MiB per value, registry scan 512 keys/depth 8. MSDM excluded. Checksums do not establish EC hardware health.',$utf8)

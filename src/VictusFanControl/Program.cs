@@ -4,6 +4,7 @@ using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Safety;
+using VictusFanControl.Runtime;
 using VictusFanControl.Telemetry;
 
 namespace VictusFanControl;
@@ -12,6 +13,7 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        EcWmiInvestigationTrace.Initialize();
         Console.WriteLine("VictusFanControl v0.4.0-dev / 8C40 port");
         Console.WriteLine("Telemetry: PawnIO Intel MSR (package + physical cores) + HP WMI/ACPI fan RPM (8C40) or EC (88F8) + NVIDIA NVML.");
         Console.WriteLine("Exact HP 88F8/8C40 targets are resolved fail-closed; automatic fan policy remains OFF.");
@@ -38,12 +40,14 @@ internal static class Program
 
         if (options.FanWmiTelemetrySelfTest)
         {
+            EcWmiInvestigationTrace.Record(0, "selftest.fixture", "no hardware I/O");
             var window = await HpWmiFanSampleWindowSelfTest.RunAsync(Console.Out);
             var broker = await HpWmiFanSampleBrokerSelfTest.RunAsync(Console.Out);
             var diagnostics = await HpWmiFanAcquisitionDiagnosticsSelfTest.RunAsync(Console.Out);
+            var investigation = EcWmiInvestigationTraceSelfTest.Run(Console.Out);
             var telemetry = await HpWmiFanTelemetryReaderSelfTest.RunAsync(Console.Out);
             var proof = await HpWmiFanProofReaderSelfTest.RunAsync(Console.Out);
-            return window != 0 ? window : broker != 0 ? broker : diagnostics != 0 ? diagnostics : telemetry != 0 ? telemetry : proof;
+            return window != 0 ? window : broker != 0 ? broker : diagnostics != 0 ? diagnostics : investigation != 0 ? investigation : telemetry != 0 ? telemetry : proof;
         }
 
         if (options.SafetySelfTest)
