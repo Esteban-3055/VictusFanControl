@@ -560,4 +560,3 @@ jobs:
           name: curve-editor-ui
           path: curve-editor-ui.png
           if-no-files-found: error
-

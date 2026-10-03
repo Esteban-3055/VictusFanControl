@@ -32,6 +32,14 @@
       "result": "FAILURE",
       "cause": "P14.4 invariant checks the first upload in the workflow; new UI render upload preceded RC verification. UI upload moved after final RC audit, preserving the invariant.",
       "hardwareExecution": false
+    },
+    {
+      "head": "e46e681accf4b7443bd71773ebcdba67b3fcdc2d",
+      "runNumber": 1221,
+      "runId": 37102733848,
+      "result": "FAILURE",
+      "cause": "Warnings-as-errors build found nullable ComboBox item casts in profile selection. Replaced with checked nullable access.",
+      "hardwareExecution": false
     }
   ]
 }

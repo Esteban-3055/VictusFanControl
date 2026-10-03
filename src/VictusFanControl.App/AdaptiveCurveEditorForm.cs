@@ -103,7 +103,7 @@ internal sealed class AdaptiveCurveEditorForm : Form
             var custom = _store.LoadCustom(out var rejected);
             foreach(var p in custom) _profiles.Items.Add(p);
             _loadNotice=rejected>0 ? $" Se omitieron {rejected} archivos inválidos." : "";
-            _profiles.SelectedIndex=Enumerable.Range(0,_profiles.Items.Count).FirstOrDefault(i=>((AdaptiveCurveProfile)_profiles.Items[i]).Id==selected,1);
+            _profiles.SelectedIndex=Enumerable.Range(0,_profiles.Items.Count).FirstOrDefault(i=>(_profiles.Items[i] as AdaptiveCurveProfile)?.Id==selected,1);
             LoadDraft((AdaptiveCurveProfile)_profiles.SelectedItem!);
         }
         finally { _refreshing=false; }
@@ -112,7 +112,7 @@ internal sealed class AdaptiveCurveEditorForm : Form
     private void SelectProfile()
     {
         if(_refreshing || _profiles.SelectedItem is not AdaptiveCurveProfile p) return;
-        if(!AllowDiscard()) { _refreshing=true; _profiles.SelectedIndex=Enumerable.Range(0,_profiles.Items.Count).FirstOrDefault(i=>((AdaptiveCurveProfile)_profiles.Items[i]).Id==_draft.Id,1); _refreshing=false; return; }
+        if(!AllowDiscard()) { _refreshing=true; _profiles.SelectedIndex=Enumerable.Range(0,_profiles.Items.Count).FirstOrDefault(i=>(_profiles.Items[i] as AdaptiveCurveProfile)?.Id==_draft.Id,1); _refreshing=false; return; }
         LoadDraft(p); RefreshDraft();
     }
     private void LoadDraft(AdaptiveCurveProfile p)
