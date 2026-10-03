@@ -18,6 +18,8 @@ internal interface IRaplProbeHardware : IDisposable
     CpuObservation Sample();
 }
 
+internal readonly record struct RequestedPowerLimits(double Pl1Watts, double Pl2Watts);
+
 internal sealed record ProbeTiming(int BaselineSamples, int LimitedSamples, int RestoredSamples, int IntervalMs)
 {
     internal static ProbeTiming Physical(int seconds) => new(10, seconds, 10, 1000);
@@ -102,7 +104,8 @@ internal static class RaplProbeEngine
 {
     internal static async Task<ProbeResult> RunAsync(
         IRaplProbeHardware hardware, ProbeEvidence evidence, bool writeTest,
-        ProbeTiming timing, Func<bool> keepRunning, CancellationToken cancellationToken)
+        ProbeTiming timing, Func<bool> keepRunning, CancellationToken cancellationToken,
+        RequestedPowerLimits? explicitLimits = null)
     {
         ulong? baseline = null;
         ulong? requested = null;
@@ -177,7 +180,11 @@ internal static class RaplProbeEngine
                     throw new InvalidOperationException("WRITE_REFUSED_DYNAMIC_BASELINE");
                 if (baselineSamples.Any(s => s.TemperatureC >= 85))
                     throw new InvalidOperationException("WRITE_REFUSED_BASELINE_TEMPERATURE_85C_OR_MORE");
-                requested = RaplWritePolicy.BuildReducedLimit(baseline.Value, units);
+                requested = explicitLimits.HasValue
+                    ? RaplWritePolicy.BuildRequestedLimit(
+                        baseline.Value, units,
+                        explicitLimits.Value.Pl1Watts, explicitLimits.Value.Pl2Watts)
+                    : RaplWritePolicy.BuildReducedLimit(baseline.Value, units);
                 var info = IntelRaplCodec.DecodePackagePowerInfo(hardware.PowerInfoRaw, units);
                 var target = IntelRaplCodec.DecodePackagePowerLimit(requested.Value, units);
                 if (info.MinimumWatts > 0 && target.Pl1.PowerWatts < info.MinimumWatts)
