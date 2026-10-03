@@ -1,4 +1,5 @@
 using VictusFanControl.Hardware.Intel;
+using VictusFanControl.Performance;
 
 namespace VictusFanControl.CpuProbe;
 
@@ -33,6 +34,24 @@ internal static class RaplProbeSelfTest
             var observed2040 = RaplWritePolicy.BuildRequestedLimit(observed8C40Baseline, observedUnits, 20, 40);
             Require(observed2040 == expected8C402040,
                 "observed HP 8C40 45/115 baseline encodes exact 20/40 raw value");
+
+            var highThenLow = new List<CpuObservation>();
+            for (var i = 0; i < 8; i++)
+                highThenLow.Add(new(expected8C402040, 39.5 + (i % 2), 68, 99.8, true));
+            highThenLow.Add(new(expected8C402040, 12, 58, 8, true));
+            highThenLow.Add(new(expected8C402040, 11, 57, 6, true));
+            for (var i = 0; i < 6; i++)
+                highThenLow.Add(new(expected8C402040, 19.4 + ((i % 3) * 0.2), 58, 99.9, true));
+            var enforcement = RaplEnforcementClassifier.Assess(
+                Array.Empty<CpuObservation>(),
+                highThenLow,
+                IntelRaplCodec.DecodePackagePowerLimit(expected8C402040, observedUnits));
+            Require(enforcement.Classification ==
+                RaplEnforcementClassifier.OrderedHighLoadPhases,
+                "ordered internal high-load PL2-to-PL1 enforcement classification");
+            Require(enforcement.HighWindowPowerW is >= 39 and <= 41 &&
+                enforcement.LowWindowPowerW is >= 19 and <= 21,
+                "ordered enforcement window averages");
             RequireThrows(() => RaplWritePolicy.BuildRequestedLimit(Baseline, units, 9, 40),
                 "explicit PL1 below safe floor rejected");
             RequireThrows(() => RaplWritePolicy.BuildRequestedLimit(Baseline, units, 30, 20),
@@ -100,7 +119,9 @@ internal static class RaplProbeSelfTest
             await Check("cancel-after-write", new() { AfterApply = () => cts.Cancel() }, true,
                 "ABORTED", "BASELINE_VERIFIED", 2, token: cts.Token);
             await GuardianProcessFixture.RunAsync(root);
-            Console.WriteLine("Intel RAPL P1 fixture suite: PASS (no hardware I/O).");
+            Require(CpuPowerLimiterSelfTest.Run(Console.Out) == 0,
+                "production CPU power limiter foundation");
+            Console.WriteLine("Intel RAPL P1/P2 fixture suite: PASS (no hardware I/O).");
             return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine("RAPL fixture FAIL: " + ex); return 1; }

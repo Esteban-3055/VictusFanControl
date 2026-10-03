@@ -76,6 +76,15 @@ internal sealed class ProbeEvidence : IDisposable
         Event("WRITE_ARMED: baseline and request persisted before the write attempt.");
     }
 
+    internal void Enforcement(RaplEnforcementResult result)
+    {
+        DurableJson(Path.Combine(_directory, "enforcement.json"), result);
+        Event($"ENFORCEMENT_WINDOW method={result.Method}; classification={result.Classification}; " +
+            $"highStart={result.HighWindowStartSample}; highPower={result.HighWindowPowerW:0.###}; " +
+            $"highLoad={result.HighWindowLoadPercent:0.###}; lowStart={result.LowWindowStartSample}; " +
+            $"lowPower={result.LowWindowPowerW:0.###}; lowLoad={result.LowWindowLoadPercent:0.###}");
+    }
+
     internal void Complete(ProbeResult result)
     {
         DurableJson(Path.Combine(_directory, "summary.json"), result);
@@ -293,12 +302,17 @@ internal static class RaplProbeEngine
         var lp = Average(limitedSamples.TakeLast(Math.Min(10, limitedSamples.Count)).Select(s => s.PowerW));
         var bl = Average(baselineSamples.Select(s => s.LoadPercent));
         var ll = Average(limitedSamples.TakeLast(Math.Min(10, limitedSamples.Count)).Select(s => s.LoadPercent));
-        // A drop is observational evidence, not proof of MSR-only enforcement:
-        // thermal throttling, OEM/MMIO limits and workload changes can coexist.
-        var assessment = attempted && bp.HasValue && lp.HasValue && bl >= 60 && ll >= 60 &&
-            Math.Abs(bl.Value - ll.Value) <= 10 && lp < bp * 0.9
-                ? "POWER_DROP_OBSERVED_UNDER_COMPARABLE_LOAD__CAUSAL_REVIEW_REQUIRED"
-                : "INCONCLUSIVE__REVIEW_SAMPLES_WORKLOAD_AND_TAU";
+        // Prefer ordered high-load windows inside the limited phase. This catches
+        // a PL2-like high-power interval followed later by a PL1-like interval
+        // even when the 10-second pre-write baseline was idle.
+        var enforcement = attempted && requested.HasValue
+            ? RaplEnforcementClassifier.Assess(
+                baselineSamples,
+                limitedSamples,
+                IntelRaplCodec.DecodePackagePowerLimit(requested.Value, units))
+            : RaplEnforcementResult.Inconclusive();
+        evidence.Enforcement(enforcement);
+        var assessment = enforcement.Classification;
         var summary = new ProbeResult(result, restoreResult, attempted,
             baseline.HasValue ? $"0x{baseline:X16}" : null,
             requested.HasValue ? $"0x{requested:X16}" : null,
