@@ -839,7 +839,17 @@
         "sourceCiResult": "SUCCESS",
         "hardwareExecution": false
       }
-    }
+    },
+    "authorizationPreparationCiHistory": [
+      {
+        "head": "cb0457b233b455705f132ee295994bddafbfeffc",
+        "runNumber": 1216,
+        "runId": 37099787455,
+        "result": "FAILURE",
+        "cause": "WMI migration invariants still required generation 5; generation 6 was correctly blocked before physical execution.",
+        "hardwareExecution": false
+      }
+    ]
   },
   "promotion": {
     "manualExecutionAuthorized": false,
