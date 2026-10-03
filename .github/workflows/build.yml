@@ -73,6 +73,13 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-ScenarioB.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Scenario B PowerShell 5.1 self-test failed.' }
 
+      - name: Scenario C residual EC launcher fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Start-Victus-ScenarioC.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-ScenarioC.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Scenario C PowerShell 5.1 self-test failed.' }
+
       - name: ACPI collector Windows smoke and ETW session cleanup
         shell: powershell
         run: |
@@ -536,6 +543,9 @@ jobs:
 
       - name: HP 8C40 watchdog M4 lease preparation self-test
         run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --m4-8c40-self-test
+
+      - name: Scenario C residual EC policy and sampler self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --residual-ec-investigation-self-test
 
       - name: HP WMI fan telemetry deterministic self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --fan-wmi-telemetry-self-test

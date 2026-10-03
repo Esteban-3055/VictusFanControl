@@ -6,6 +6,7 @@ namespace VictusFanControl.Runtime;
 internal static class WmiOnlyInvestigationPolicy
 {
     private static int _enabled;
+    private static int _residualEc;
     private static int _deniedEc;
     private static int _deniedWmi;
 
@@ -13,19 +14,53 @@ internal static class WmiOnlyInvestigationPolicy
     internal static int DeniedEcAccesses => Volatile.Read(ref _deniedEc);
     internal static int DeniedWmiRequests => Volatile.Read(ref _deniedWmi);
 
-    internal static void Enable()
+    internal static bool ResidualEcAllowed => Volatile.Read(ref _residualEc) != 0;
+    internal static bool IsResidualRegister(byte register) => register is 0x34 or 0x35 or 0xEC or 0xF4;
+
+    internal static void Enable(bool residualEc = false)
     {
+        if (Enabled)
+        {
+            if (ResidualEcAllowed != residualEc)
+                throw new InvalidOperationException("An installed isolation policy cannot change mode.");
+            return;
+        }
+        if (residualEc) Volatile.Write(ref _residualEc, 1);
         Interlocked.Exchange(ref _enabled, 1);
         EcWmiInvestigationTrace.Record(0, "isolation.enabled",
-            "HP 8C40 fan RPM via WMI only; direct EC and HP writes prohibited; firmware retains control");
+            residualEc
+                ? "Scenario C: HP RPM WMI + EC 0x34/0x35/0xEC/0xF4 reads; HP writes prohibited; firmware retains control"
+                : "HP 8C40 fan RPM via WMI only; direct EC and HP writes prohibited; firmware retains control");
     }
 
     internal static void EnsureDirectEcAllowed()
     {
-        if (!Enabled) return;
+        if (!Enabled || ResidualEcAllowed) return;
         Interlocked.Increment(ref _deniedEc);
         EcWmiInvestigationTrace.Record(0, "isolation.ec-access.denied", "before module load or port I/O");
         throw new InvalidOperationException("Direct EC access is prohibited during the WMI-only investigation.");
+    }
+
+    internal static void EnsureRegisterReadAllowed(byte register)
+    {
+        EnsureDirectEcAllowed();
+        if (!Enabled || IsResidualRegister(register)) return;
+        DenyEc($"EC register 0x{register:X2} is outside scenario C.");
+    }
+
+    internal static void EnsureProtocolWriteAllowed(byte port, byte value)
+    {
+        EnsureDirectEcAllowed();
+        if (!Enabled || (port == 0x66 && value == 0x80) ||
+            (port == 0x62 && IsResidualRegister(value))) return;
+        DenyEc("Only the RD_EC command and qualified register address may be sent during C.");
+    }
+
+    private static void DenyEc(string reason)
+    {
+        Interlocked.Increment(ref _deniedEc);
+        EcWmiInvestigationTrace.Record(0, "isolation.ec-access.denied", reason);
+        throw new InvalidOperationException(reason);
     }
 
     internal static void EnsureWmiRequestAllowed(HpBiosRequest request)

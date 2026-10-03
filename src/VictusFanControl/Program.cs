@@ -42,12 +42,17 @@ internal static class Program
             return EcWmiTraceAnalyzer.Run(tracePath, options.TraceAnalysisOutputDirectory ??
                 Path.Combine(Path.GetDirectoryName(tracePath)!, "analysis-" + Path.GetFileNameWithoutExtension(tracePath)), Console.Out);
 
-        if (options.WmiOnlyInvestigation)
+        if (options.ReadOnlyInvestigation)
         {
-            WmiOnlyInvestigationPolicy.Enable();
-            Console.WriteLine("WMI-ONLY ISOLATION: fan RPM via HP WMI; direct EC and HP writes prohibited.");
+            WmiOnlyInvestigationPolicy.Enable(options.ResidualEcInvestigation);
+            Console.WriteLine(options.ResidualEcInvestigation
+                ? "SCENARIO C: RPM via HP WMI + residual EC 34/35/EC/F4 reads; HP writes prohibited."
+                : "WMI-ONLY ISOLATION: fan RPM via HP WMI; direct EC and HP writes prohibited.");
             Console.WriteLine("Firmware controls fans. CPU uses Intel MSR and GPU uses NVML as usual.");
         }
+
+        if (options.ResidualEcInvestigationSelfTest)
+            return ResidualEcInvestigationSelfTest.Run(Console.Out);
 
         if (options.FanWmiTelemetrySelfTest)
         {
@@ -873,7 +878,7 @@ internal static class Program
 
         HardwareTelemetryReader initializedReader;
         try { initializedReader = new HardwareTelemetryReader(options.ModulesDirectory); }
-        catch (InvalidOperationException ex) when (options.WmiOnlyInvestigation)
+        catch (InvalidOperationException ex) when (options.ReadOnlyInvestigation)
         { Console.Error.WriteLine(ex.Message); return 3; }
         using var reader = initializedReader;
 
@@ -981,8 +986,27 @@ internal static class Program
         Console.WriteLine();
 
         var started = DateTimeOffset.UtcNow;
+        ResidualEcInvestigationSampler? initializedSampler = null;
+        if (options.ResidualEcInvestigation)
+        {
+            try
+            {
+                initializedSampler = ResidualEcInvestigationSampler.Create(options.ModulesDirectory,
+                    Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, "ec-control.csv"),
+                    options.InvestigationEcIntervalMs, reader.TargetProfile);
+            }
+            catch (Exception ex)
+            {
+                EcWmiInvestigationTrace.Record(0, "isolation.ec-init.failure", ex.ToString());
+                _ = EcWmiInvestigationTrace.StopAndFlush();
+                Console.Error.WriteLine("Scenario C EC initialization failed: " + ex.Message);
+                return 3;
+            }
+        }
+        using var ecSampler = initializedSampler;
+        var ecClock = System.Diagnostics.Stopwatch.StartNew();
 
-        if (options.WmiOnlyInvestigation)
+        if (options.ReadOnlyInvestigation)
         {
             foreach (var line in reader.GetBackendDiagnostics()) Console.WriteLine(line);
             if (options.InvestigationReadyPath is { } readyPath)
@@ -991,8 +1015,11 @@ internal static class Program
                 var temporary = readyPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 File.WriteAllText(temporary, System.Text.Json.JsonSerializer.Serialize(new
                 {
-                    Mode = "wmi-only-no-direct-ec", Pid = Environment.ProcessId,
-                    Utc = DateTimeOffset.UtcNow, DirectEcProhibited = WmiOnlyInvestigationPolicy.Enabled,
+                    Mode = options.ResidualEcInvestigation ? "scenario-c-residual-ec" : "wmi-only-no-direct-ec", Pid = Environment.ProcessId,
+                    Utc = DateTimeOffset.UtcNow, DirectEcProhibited = !WmiOnlyInvestigationPolicy.ResidualEcAllowed,
+                    ResidualEcOnly = WmiOnlyInvestigationPolicy.ResidualEcAllowed,
+                    EcRegisters = options.ResidualEcInvestigation ? new[] { "0x34", "0x35", "0xEC", "0xF4" } : [],
+                    EcIntervalMs = options.ResidualEcInvestigation ? options.InvestigationEcIntervalMs : 0,
                     HpWritesProhibited = true, Target = reader.TargetProfile?.Id, OutputPath = Path.GetFullPath(outputPath)
                 }));
                 File.Move(temporary, readyPath, overwrite: true);
@@ -1008,6 +1035,11 @@ internal static class Program
                 var snapshot = reader.ReadSnapshot();
                 await logger.WriteAsync(snapshot, cts.Token);
                 ConsoleTelemetryPrinter.Print(snapshot);
+                if (ecSampler is not null && !ecSampler.ReadIfDue(ecClock.Elapsed))
+                {
+                    Console.Error.WriteLine("Scenario C stopped after EC sample failure: " + ecSampler.Fault);
+                    break;
+                }
 
                 if (options.DurationSeconds > 0 &&
                     (DateTimeOffset.UtcNow - started).TotalSeconds >= options.DurationSeconds)
@@ -1034,7 +1066,7 @@ internal static class Program
             Console.WriteLine(line);
         }
 
-        if (options.WmiOnlyInvestigation)
+        if (options.ReadOnlyInvestigation)
         {
             // Keep the chronology alive until an already admitted native read returns.
             // Waiting here does not cancel WMI or alter the production broker's slot.
@@ -1051,7 +1083,8 @@ internal static class Program
                 $"deniedEc={WmiOnlyInvestigationPolicy.DeniedEcAccesses};deniedWmi={WmiOnlyInvestigationPolicy.DeniedWmiRequests}");
             if (!EcWmiInvestigationTrace.StopAndFlush())
             { Console.Error.WriteLine("Investigation chronology could not be fully flushed."); return 3; }
-            if (WmiOnlyInvestigationPolicy.DeniedEcAccesses != 0 || WmiOnlyInvestigationPolicy.DeniedWmiRequests != 0) return 3;
+            if (WmiOnlyInvestigationPolicy.DeniedEcAccesses != 0 || WmiOnlyInvestigationPolicy.DeniedWmiRequests != 0 ||
+                ecSampler?.Fault is not null || (ecSampler is not null && ecSampler.Samples == 0)) return 3;
         }
 
         return 0;

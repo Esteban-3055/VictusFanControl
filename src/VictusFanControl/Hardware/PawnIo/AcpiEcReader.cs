@@ -370,6 +370,7 @@ internal sealed class AcpiEcReader : IDisposable
 
     private byte ReadRegisterLocked(byte register)
     {
+        WmiOnlyInvestigationPolicy.EnsureRegisterReadAllowed(register);
         var trace = EcWmiInvestigationTrace.Enabled
             ? EcWmiInvestigationTrace.Begin("ec.read.begin", $"register=0x{register:X2}") : 0;
         try
@@ -468,7 +469,7 @@ internal sealed class AcpiEcReader : IDisposable
 
     private void WritePort(byte port, byte value)
     {
-        WmiOnlyInvestigationPolicy.EnsureDirectEcAllowed();
+        WmiOnlyInvestigationPolicy.EnsureProtocolWriteAllowed(port, value);
         _session.Execute("ioctl_pio_write", new ulong[] { port, value }, 0);
     }
 

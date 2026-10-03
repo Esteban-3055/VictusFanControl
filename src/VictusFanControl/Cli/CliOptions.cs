@@ -4,6 +4,10 @@ public sealed class CliOptions
 {
     public bool ShowHelp { get; private set; }
     public bool WmiOnlyInvestigation { get; private set; }
+    public bool ResidualEcInvestigation { get; private set; }
+    public bool ResidualEcInvestigationSelfTest { get; private set; }
+    public bool ReadOnlyInvestigation => WmiOnlyInvestigation || ResidualEcInvestigation;
+    public int InvestigationEcIntervalMs { get; private set; } = 5000;
     public string? InvestigationStopPath { get; private set; }
     public string? InvestigationReadyPath { get; private set; }
     public string? AnalyzeEcWmiTracePath { get; private set; }
@@ -113,6 +117,20 @@ public sealed class CliOptions
 
                 case "--wmi-only-investigation":
                     options.WmiOnlyInvestigation = true;
+                    break;
+
+                case "--residual-ec-investigation":
+                    options.ResidualEcInvestigation = true;
+                    break;
+                case "--residual-ec-investigation-self-test":
+                    options.ResidualEcInvestigationSelfTest = true;
+                    break;
+                case "--ec-interval-ms":
+                    if (!int.TryParse(ReadValue(args, ref i), out var ecIntervalMs))
+                        throw new ArgumentException("EC investigation interval must be an integer.");
+                    options.InvestigationEcIntervalMs = ecIntervalMs;
+                    if (options.InvestigationEcIntervalMs is < 2000 or > 60000)
+                        throw new ArgumentException("EC investigation interval must be 2000..60000 ms.");
                     break;
 
                 case "--analyze-ec-wmi-trace":
@@ -519,19 +537,26 @@ public sealed class CliOptions
             }
         }
 
-        if (options.WmiOnlyInvestigation)
+        if (options.WmiOnlyInvestigation && options.ResidualEcInvestigation)
+            throw new ArgumentException("B and C investigation modes are mutually exclusive.");
+        if (!options.ResidualEcInvestigation && args.Contains("--ec-interval-ms"))
+            throw new ArgumentException("--ec-interval-ms requires --residual-ec-investigation.");
+        if (options.ResidualEcInvestigationSelfTest && args.Any(a => a is not "--residual-ec-investigation-self-test" and not "--help" and not "-h"))
+            throw new ArgumentException("Residual EC self-test cannot be combined with other options.");
+        if (options.ReadOnlyInvestigation)
         {
             // Allow-list the entire invocation, including value-taking options.
             for (var i = 0; i < args.Length; i++)
             {
-                if (args[i] is "--wmi-only-investigation" or "--help" or "-h") continue;
+                if (args[i] is "--wmi-only-investigation" or "--residual-ec-investigation" or "--help" or "-h") continue;
+                if (options.ResidualEcInvestigation && args[i] == "--ec-interval-ms") { i++; continue; }
                 if (args[i] is "--modules-dir" or "--interval-ms" or "--duration-seconds" or "--output" or "--stop-file" or "--ready-file")
                 { i++; continue; }
                 throw new ArgumentException("WMI-only investigation cannot be combined with another probe, test or control operation.");
             }
         }
         else if (options.InvestigationStopPath is not null || options.InvestigationReadyPath is not null)
-            throw new ArgumentException("--stop-file/--ready-file require --wmi-only-investigation.");
+            throw new ArgumentException("--stop-file/--ready-file require a read-only investigation mode.");
 
         if (options.AnalyzeEcWmiTracePath is not null)
         {
@@ -851,6 +876,9 @@ public sealed class CliOptions
     {
         Console.WriteLine("  --analyze-ec-wmi-trace <p> Offline JSONL timing report; no hardware initialization.");
         Console.WriteLine("  --analysis-output-dir <p> Directory for offline JSON/CSV/Markdown reports.");
+        Console.WriteLine("  --residual-ec-investigation  Scenario C: B telemetry plus residual EC registers only, no HP writes.");
+        Console.WriteLine("  --ec-interval-ms <ms>        C batch interval 2000..60000 (default 5000), no catch-up polling.");
+        Console.WriteLine("  --residual-ec-investigation-self-test  Hardware-free C policy and sampler fixtures.");
         Console.WriteLine("  --wmi-only-investigation  Exact 8C40 telemetry only; prohibit direct EC and HP writes in this process.");
         Console.WriteLine("  --stop-file <path>        Graceful stop signal for the WMI-only launcher.");
         Console.WriteLine("  --ready-file <path>       WMI-only CLI readiness metadata (atomic file).");

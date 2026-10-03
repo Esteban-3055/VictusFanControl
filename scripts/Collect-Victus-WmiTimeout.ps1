@@ -14,7 +14,7 @@ param(
     [scriptblock]$ObservationGuard,
     [scriptblock]$ObservationFinished,
     [object]$ObservationContext,
-    [ValidateSet('passive','wmi-only-no-direct-ec','scenario-a-no-vfc')][string]$InvestigationMode = 'passive',
+    [ValidateSet('passive','wmi-only-no-direct-ec','scenario-a-no-vfc','scenario-c-residual-ec')][string]$InvestigationMode = 'passive',
     [switch]$SelfTest
 )
 
@@ -309,6 +309,17 @@ se observa Manual. Si falla, no repetir Apply; esperar restauracion y conservar
 Solo recopilar una sesion anterior: -CaptureMinutes 0. No hace falta reproducir.
 Este paquete documenta observaciones, no aprueba control fisico ni estabilidad.
 '@
+if($InvestigationMode -eq 'scenario-c-residual-ec'){
+    Save-Text (Join-Path $script:Root 'LEEME.txt') @'
+ESCENARIO C: ver scenario-c/isolation-summary.json, chronology.log,
+telemetry.csv, ec-control.csv y analysis/summary.json.
+B + solo lecturas EC 0x34/0x35/0xEC/0xF4; nunca tacometros directos ni HP writes.
+Firmware conserva los ventiladores. El handshake RD_EC envia comando/direccion
+por los puertos 0x66/0x62; no modifica valores de registros. Sigue usando la EC.
+Q cierra y empaqueta. ACPI 13 nuevo detiene automaticamente. Adjuntar tambien
+capturas parciales con fallo; no borrar journals. Sin prueba de causalidad.
+'@
+}
 if($InvestigationMode -eq 'wmi-only-no-direct-ec'){
     Save-Text (Join-Path $script:Root 'LEEME.txt') @'
 PRUEBA VFC WMI-ONLY: ver wmi-only/isolation-summary.json y chronology.log.
@@ -416,7 +427,7 @@ finally {
     Stage 'ETW finalizar y vaciar solo las sesiones propias.' {Stop-AcpiTrace}
     Stage '7/8 Logs y procesos finales; eventos Windows actualizados.' {
         Capture-Logs 'after';[void](Process-Snapshot 'after');Export-Events 'after'
-        Save-Json (Join-Path $script:Root 'capture-summary.json') ([pscustomobject]@{StartedLocal=$started.ToString('o');EndedLocal=[DateTimeOffset]::Now.ToString('o');Warnings=$script:Warnings.Count;HardwareReads=($InvestigationMode -eq 'wmi-only-no-direct-ec');InvestigationMode=$InvestigationMode;StaticFirmwareApi=(-not $MinimalPreparation);MinimalPreparation=[bool]$MinimalPreparation;EtwRequested=(-not $SkipAcpiTrace);MaximumEvents=$MaximumEvents;CollectorVersion='3-isolation';FanWrites=$false;EventChannelsEnabled=$false;SourceLogsPreserved=$true;RepoRoot=$RepoRoot})
+        Save-Json (Join-Path $script:Root 'capture-summary.json') ([pscustomobject]@{StartedLocal=$started.ToString('o');EndedLocal=[DateTimeOffset]::Now.ToString('o');Warnings=$script:Warnings.Count;HardwareReads=($InvestigationMode -in @('wmi-only-no-direct-ec','scenario-c-residual-ec'));InvestigationMode=$InvestigationMode;StaticFirmwareApi=(-not $MinimalPreparation);MinimalPreparation=[bool]$MinimalPreparation;EtwRequested=(-not $SkipAcpiTrace);MaximumEvents=$MaximumEvents;CollectorVersion='3-isolation';FanWrites=$false;EventChannelsEnabled=$false;SourceLogsPreserved=$true;RepoRoot=$RepoRoot})
     }
     Say '8/8 Generar manifiesto SHA-256 y ZIP. No se borran los logs originales.'
     try {[void](Package)}catch{Write-Host ('No se pudo crear ZIP: '+$_.Exception.Message) -ForegroundColor Red;Write-Host ('Adjunta manualmente la carpeta: '+$script:Root)}
