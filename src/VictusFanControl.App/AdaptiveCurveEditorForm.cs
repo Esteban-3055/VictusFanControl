@@ -217,7 +217,7 @@ internal sealed class AdaptiveCurveEditorForm : Form
     public void UpdateTelemetry(SystemState state,TelemetrySnapshot snapshot,AdaptiveFanPolicyShadowEvaluation? result)
     {
         var now=DateTimeOffset.UtcNow;var age=now-snapshot.Timestamp;
-        if(state!=SystemState.Healthy || age<TimeSpan.Zero || age>=TimeSpan.FromSeconds(3) || result?.SafetyPreconditionsReady!=true)
+        if(state!=SystemState.Healthy || age<TimeSpan.Zero || age>=TimeSpan.FromSeconds(3) || result?.SafetyPreconditionsReady!=true || !result.PolicyAccepted)
         { ClearTelemetry();return; }
         if(_lastSample.HasValue && (snapshot.Timestamp<_lastSample || snapshot.Timestamp-_lastSample>TimeSpan.FromSeconds(3)))_cpuHistory.Clear();
         if(snapshot.Timestamp!=_lastSample && snapshot.CpuControlTemperatureC is double cpu && double.IsFinite(cpu))

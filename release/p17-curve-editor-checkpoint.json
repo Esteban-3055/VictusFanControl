@@ -23,5 +23,15 @@
   "safetyThresholdsChanged": false,
   "cpuMedianMarkerVisualOnly": true,
   "profileSelfTestGroups": 10,
-  "uiSelfTestGroups": 2
+  "uiSelfTestGroups": 2,
+  "failedCiHistory": [
+    {
+      "head": "ab05fea345899738e9437191a1dd42799f39d1d8",
+      "runNumber": 1220,
+      "runId": 37102500410,
+      "result": "FAILURE",
+      "cause": "P14.4 invariant checks the first upload in the workflow; new UI render upload preceded RC verification. UI upload moved after final RC audit, preserving the invariant.",
+      "hardwareExecution": false
+    }
+  ]
 }

@@ -481,13 +481,6 @@ jobs:
       - name: HP 8C40 P17 WinForms curve editor self-test
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --curve-editor-self-test
 
-      - name: HP 8C40 P17 upload curve editor render
-        uses: actions/upload-artifact@v4
-        with:
-          name: curve-editor-ui
-          path: curve-editor-ui.png
-          if-no-files-found: error
-
       - name: HP BIOS contract self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --bios-contract-self-test
 
@@ -560,3 +553,11 @@ jobs:
           Write-Host "P14.5 audit artifact ID: $env:P14_AUDIT_ARTIFACT_ID"
           Write-Host "P14.5 audit artifact digest: $env:P14_AUDIT_ARTIFACT_DIGEST"
           Write-Host "P14.5 audit artifact URL: $env:P14_AUDIT_ARTIFACT_URL"
+
+      - name: HP 8C40 P17 upload curve editor render
+        uses: actions/upload-artifact@v4
+        with:
+          name: curve-editor-ui
+          path: curve-editor-ui.png
+          if-no-files-found: error
+
