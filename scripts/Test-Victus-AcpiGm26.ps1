@@ -110,7 +110,7 @@ New-Item $folder -ItemType Directory -Force | Out-Null
 $cursor=0
 $started=[DateTimeOffset]::UtcNow
 $summary=[ordered]@{Mode='GM26-only';StartedUtc=$started.ToString('o');InitialSystemRecordId=$cursor;RequestedSamples=3;Command='0x20008';CommandType='0x26';PayloadSize=0;OutputSize=4;DirectEcAccess=$false;FanSetters=$false;Healthy=$false;Reason='incomplete';Samples=0;ChildExitCode=$null;AcpiEvents=@()}
-$child=New-Object Diagnostics.Process
+$probeProcess=New-Object Diagnostics.Process
 $childStarted=$false
 try{
     $initial=@(Get-WinEvent -LogName System -MaxEvents 1 -ErrorAction SilentlyContinue -ErrorVariable cursorErrors)
@@ -121,8 +121,8 @@ try{
     $info.FileName=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $info.Arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -Child -OutputRoot "'+$folder+'"'
     $info.UseShellExecute=$false;$info.CreateNoWindow=$true
-    $child.StartInfo=$info
-    if(-not $child.Start()){throw 'Child did not start.'}
+    $probeProcess.StartInfo=$info
+    if(-not $probeProcess.Start()){throw 'Child did not start.'}
     $childStarted=$true
     $deadline=[DateTimeOffset]::UtcNow.AddSeconds(45)
     $nextReport=[DateTimeOffset]::MinValue
@@ -141,9 +141,9 @@ try{
             $nextReport=[DateTimeOffset]::UtcNow.AddSeconds(5)
         }
         if([DateTimeOffset]::UtcNow -ge $deadline){throw 'Deadline 45 s: child termination does not guarantee cancellation of an in-flight firmware call.'}
-        if(-not $child.HasExited){Start-Sleep -Milliseconds 200}
-    }while(-not $child.HasExited)
-    $child.WaitForExit();$summary.ChildExitCode=$child.ExitCode
+        if(-not $probeProcess.HasExited){Start-Sleep -Milliseconds 200}
+    }while(-not $probeProcess.HasExited)
+    $probeProcess.WaitForExit();$summary.ChildExitCode=$probeProcess.ExitCode
     Start-Sleep -Seconds 2
     $events=@(Get-WinEvent -LogName System -FilterXPath (New-ScenarioAEventQuery $cursor -IncludeUnexpectedData) -ErrorAction SilentlyContinue -ErrorVariable eventErrors)
     if(@($eventErrors | Where-Object {$_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*'}).Count){throw 'Final System event observation failed.'}
@@ -154,18 +154,18 @@ try{
     }
     $rows=@(if(Test-Path (Join-Path $folder 'gm26.csv')){Import-Csv (Join-Path $folder 'gm26.csv')})
     $summary.Samples=$rows.Count
-    if($child.ExitCode -ne 0 -or $rows.Count -ne 3){throw 'Probe incomplete; inspect child-error.txt.'}
+    if($probeProcess.ExitCode -ne 0 -or $rows.Count -ne 3){throw 'Probe incomplete; inspect child-error.txt.'}
     $summary.Healthy=$true;$summary.Reason='Three responses conform to AML; no ACPI 13/15 observed in this short window. Zero remains ambiguous; no production qualification.'
 }catch{
     $summary.Reason=$_.Exception.Message
     Write-Warning $summary.Reason
 }finally{
     Set-Content (Join-Path $folder 'stop.signal') 'stop'
-    if($childStarted -and -not $child.HasExited){
-        if(-not $child.WaitForExit(2000)){$child.Kill();$child.WaitForExit()}
+    if($childStarted -and -not $probeProcess.HasExited){
+        if(-not $probeProcess.WaitForExit(2000)){$probeProcess.Kill();$probeProcess.WaitForExit()}
     }
-    if($childStarted){$summary.ChildExitCode=$child.ExitCode}
-    $child.Dispose()
+    if($childStarted){$summary.ChildExitCode=$probeProcess.ExitCode}
+    $probeProcess.Dispose()
     $summary.Samples=@(if(Test-Path (Join-Path $folder 'gm26.csv')){Import-Csv (Join-Path $folder 'gm26.csv')}).Count
     $summary.EndedUtc=[DateTimeOffset]::UtcNow.ToString('o')
     $summary | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $folder 'summary.json') -Encoding UTF8
