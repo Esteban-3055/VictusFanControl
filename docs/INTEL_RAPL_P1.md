@@ -15,8 +15,11 @@ during a run; this probe does not disable HP services or Intel DTT.
 # Default is read-only: inventory, units, decoded PL1/PL2/Tau/lock and stability.
 .\scripts\test-intel-rapl-p1.ps1 -DurationSeconds 90
 
-# Separate explicitly requested WRITE test, after reviewing the read-only ZIP.
+# Default bounded WRITE test: reduce both original fields by 20%.
 .\scripts\test-intel-rapl-p1.ps1 -WriteTest -DurationSeconds 60
+
+# Explicit downward-only WRITE test, after reviewing read-only/default-write evidence.
+.\scripts\test-intel-rapl-p1.ps1 -WriteTest -PL1Watts 20 -PL2Watts 40 -DurationSeconds 90
 ```
 
 Both runs display their actions and create a ZIP and SHA-256 under `logs`.
@@ -33,9 +36,12 @@ the physical backend. Software fixtures alone: `-SelfTest`.
    session and a global single-probe mutex. The launcher never writes MSRs.
 3. Observe 10 baseline samples. Reject changing raw 0x610 values, lock,
    disabled limits, invalid power ordering/ranges and temperature >=85 C.
-4. Compute PL1 and PL2 as 80% of their respective original raw power fields,
-   rounded down. Neither limit can increase; PL1 must stay >=10 W and not
-   below a nonzero minimum reported by 0x614. Preserve all other fields.
+4. By default compute PL1 and PL2 as 80% of their respective original raw
+   power fields. An explicit test may instead request both values with
+   -PL1Watts/-PL2Watts. Explicit limits are encoded downward to the hardware
+   power unit and must remain downward-only, PL1 >=10 W, PL2 >= PL1, and PL1
+   must not be below a nonzero minimum reported by 0x614. Preserve all other
+   fields.
 5. Persist the baseline/request journal before the ioctl, read the baseline
    again and write **only MSR 0x610**, once. Require exact immediate readback.
 6. Observe for 10–120 seconds; default 60. Stop on changed limits, AC loss,
@@ -45,8 +51,10 @@ the physical backend. Software fixtures alone: `-SelfTest`.
    another 10 seconds without further writes. Cancellation never skips the
    restore attempt. An ioctl error is treated as possibly having written.
 
-The first P1 can start at idle, below 85 C. After the console prints
-`IMMEDIATE_READBACK_EXACT_MATCH`, a repeatable CPU workload may be started.
+The first P1 can start at idle, below 85 C. Explicit 20/40 testing is intended
+only after the read-only and default 20% write/restore paths have been reviewed.
+After the console prints `IMMEDIATE_READBACK_EXACT_MATCH`, a repeatable CPU
+workload may be started.
 This can establish write acceptance/persistence. A causal effectiveness
 comparison needs comparable baseline and limited workloads; idle-to-load
 results are explicitly inconclusive. There is no automatic stress workload.
