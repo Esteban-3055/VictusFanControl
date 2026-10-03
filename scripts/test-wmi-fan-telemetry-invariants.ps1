@@ -6,6 +6,7 @@ function Require-Text([string]$Text, [string]$Needle) {
 }
 $reader = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanTelemetryReader.cs'
 $proof = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanProofReader.cs'
+$broker = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSampleBroker.cs'
 $acquisitionDiagnostics = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanAcquisitionDiagnostics.cs'
 $backend = Read-Source 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs'
 $hardware = Read-Source 'src\VictusFanControl\Telemetry\HardwareTelemetryReader.cs'
@@ -14,11 +15,15 @@ $snapshot = Read-Source 'src\VictusFanControl\Telemetry\TelemetrySnapshot.cs'
 $safety = Read-Source 'src\VictusFanControl\Safety\SafetyGate.cs'
 $workflow = Read-Source '.github\workflows\build.yml'
 Require-Text $reader 'Hp8C40BiosFanControl.BuildGetFanLevelRequest()'
-Require-Text $reader 'private static readonly SemaphoreSlim ProductionAdmission = new(1, 1);'
+Require-Text $broker 'For(new SemaphoreSlim(1, 1))'
 Require-Text $reader 'QueryTimeoutMilliseconds = 5000'
 Require-Text $reader 'MaximumSampleAgeMilliseconds = 3000'
 Require-Text $reader '_epoch != epoch'
-Require-Text $reader '_admission.Wait(0)'
+Require-Text $reader '_broker.TryAcquirePeriodic()'
+Require-Text $reader '_broker.RunNative(lease'
+Require-Text $broker 'Admission.Wait(0)'
+Require-Text $broker 'await Admission.WaitAsync(maximumWait, cancellationToken)'
+Require-Text $broker 'finally { lease.ReleaseAfterNative(); }'
 Require-Text $reader 'HpWmiFanAcquisitionPurpose.Periodic'
 Require-Text $proof 'HpWmiFanAcquisitionPurpose.Control'
 Require-Text $proof 'MaximumWaitMilliseconds = 3000'
@@ -31,6 +36,7 @@ Require-Text $hardware 'HP WMI acquire  :'
 Require-Text $worker 'DrainFanWmiAcquisitionNotices()'
 foreach ($forbidden in @('SetFanLevel(', 'RestoreFirmwareAuto(', 'AcpiEcReader', 'PawnIo', 'BuildReleaseFanLevelRequest(')) {
     if ($reader.IndexOf($forbidden, [StringComparison]::Ordinal) -ge 0) { throw "WMI reader must be read-only: $forbidden" }
+    if ($broker.IndexOf($forbidden, [StringComparison]::Ordinal) -ge 0) { throw "WMI broker must coordinate reads only: $forbidden" }
 }
 Require-Text $hardware '_targetProfile == Hp8C40TargetProfile.Instance'
 Require-Text $hardware 'if (_wmiFans is null && _targetProfile is not null) InitializeEc();'

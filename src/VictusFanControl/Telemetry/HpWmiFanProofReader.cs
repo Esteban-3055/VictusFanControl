@@ -15,6 +15,7 @@ internal sealed class HpWmiFanProofReader
     private static long _sequence;
     private readonly Func<HpBiosRequest, HpBiosResponse> _send;
     private readonly SemaphoreSlim _admission;
+    private readonly HpWmiFanSampleBroker _broker;
     private readonly Func<long> _milliseconds;
     private readonly TimeSpan _maximumWait;
     private readonly HpWmiFanAcquisitionDiagnostics _acquisitionDiagnostics;
@@ -22,7 +23,8 @@ internal sealed class HpWmiFanProofReader
     public HpWmiFanProofReader()
     {
         _admission = HpWmiFanTelemetryReader.SharedReadAdmission;
-        _acquisitionDiagnostics = HpWmiFanAcquisitionDiagnostics.For(_admission);
+        _broker = HpWmiFanSampleBroker.For(_admission);
+        _acquisitionDiagnostics = _broker.Diagnostics;
         _milliseconds = () => Environment.TickCount64;
         _maximumWait = TimeSpan.FromMilliseconds(MaximumWaitMilliseconds);
         HpOmenBiosWmiClient? client = null;
@@ -37,8 +39,9 @@ internal sealed class HpWmiFanProofReader
         SemaphoreSlim admission, Func<long> milliseconds, TimeSpan maximumWait)
     {
         _send = send;
-        _admission = admission;
-        _acquisitionDiagnostics = HpWmiFanAcquisitionDiagnostics.For(_admission);
+        _broker = HpWmiFanSampleBroker.For(admission);
+        _admission = _broker.Admission;
+        _acquisitionDiagnostics = _broker.Diagnostics;
         _milliseconds = milliseconds;
         _maximumWait = maximumWait;
     }
@@ -48,10 +51,10 @@ internal sealed class HpWmiFanProofReader
         var waitStarted = _milliseconds();
         var acquisition = _acquisitionDiagnostics.Begin(HpWmiFanAcquisitionPurpose.Control, waitStarted);
 
-        bool admitted;
+        HpWmiFanSampleBroker.NativeReadLease? lease;
         try
         {
-            admitted = await _admission.WaitAsync(_maximumWait, cancellationToken).ConfigureAwait(false);
+            lease = await _broker.AcquireControlAsync(_maximumWait, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -63,7 +66,7 @@ internal sealed class HpWmiFanProofReader
             throw;
         }
 
-        if (!admitted)
+        if (lease is null)
         {
             _acquisitionDiagnostics.Complete(
                 acquisition,
@@ -79,7 +82,7 @@ internal sealed class HpWmiFanProofReader
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            pending = Task.Run(() =>
+            pending = _broker.RunNative(lease, () =>
             {
                 try
                 {
@@ -128,7 +131,6 @@ internal sealed class HpWmiFanProofReader
                         ex.Message);
                     throw;
                 }
-                finally { _admission.Release(); }
             });
         }
         catch (OperationCanceledException)
@@ -138,7 +140,7 @@ internal sealed class HpWmiFanProofReader
                 "canceled-before-native",
                 _milliseconds(),
                 "Control caller was canceled after admission but before the native worker was started.");
-            _admission.Release();
+            lease.CancelBeforeNative();
             throw;
         }
         catch
@@ -148,7 +150,7 @@ internal sealed class HpWmiFanProofReader
                 "unexpected-failure",
                 _milliseconds(),
                 "Control proof worker could not be scheduled after admission.");
-            _admission.Release();
+            lease.CancelBeforeNative();
             throw;
         }
 

@@ -6,6 +6,9 @@ $backend=Read-Source 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.c
 $reader=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanProofReader.cs'
 $telemetry=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanTelemetryReader.cs'
 $publication=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSamplePublication.cs'
+$broker=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSampleBroker.cs'
+$brokerTests=Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSampleBrokerSelfTest.cs'
+$program=Read-Source 'src\VictusFanControl\Program.cs'
 $first=$backend.IndexOf('internal sealed class Hp8C40FanHardware', [StringComparison]::Ordinal)
 $last=$backend.IndexOf('internal readonly record struct Hp8C40FanBackendTiming', [StringComparison]::Ordinal)
 $hardware=$backend.Substring($first,$last-$first)
@@ -14,8 +17,19 @@ foreach($needle in @('_fans.ReadFreshAsync(cancellationToken)','ReadStableFanSet
 foreach($forbidden in @('SetFanLevel(', 'RestoreFirmwareAuto(', 'AcpiEcReader', 'BuildReleaseFanLevelRequest(')){
  if($reader.IndexOf($forbidden,[StringComparison]::Ordinal)-ge 0){throw "WMI proof reader must be read-only: $forbidden"}
 }
-foreach($needle in @('HpWmiFanTelemetryReader.SharedReadAdmission','BuildGetFanLevelRequest()','MaximumWaitMilliseconds = 3000','pending.WaitAsync(remaining, cancellationToken)','finally { _admission.Release(); }')){Require-Text $reader $needle}
-Require-Text $telemetry 'SharedReadAdmission => ProductionAdmission'
+foreach($needle in @('HpWmiFanTelemetryReader.SharedReadAdmission','BuildGetFanLevelRequest()','MaximumWaitMilliseconds = 3000','pending.WaitAsync(remaining, cancellationToken)','_broker.AcquireControlAsync(_maximumWait, cancellationToken)','_broker.RunNative(lease','lease.CancelBeforeNative()')){Require-Text $reader $needle}
+Require-Text $telemetry 'SharedReadAdmission => HpWmiFanSampleBroker.Production.Admission'
+# Step 3 moves the old reader finally-release into one broker-owned worker.
+# Check the equivalent ownership boundary, plus executable race tests, rather
+# than requiring the old source spelling in each adapter.
+foreach($needle in @('ConditionalWeakTable<SemaphoreSlim, HpWmiFanSampleBroker>','For(new SemaphoreSlim(1, 1))','lease.TransferToNative(this)','finally { lease.ReleaseAfterNative(); }','Interlocked.CompareExchange(ref _state, 2, 0)','Interlocked.CompareExchange(ref _state, 2, 1)')){Require-Text $broker $needle}
+foreach($adapter in @($reader,$telemetry)){
+ foreach($forbidden in @('_admission.Release(', '_admission.Wait(', '_admission.WaitAsync(', 'Task.Run(')){
+  if($adapter.IndexOf($forbidden,[StringComparison]::Ordinal)-ge 0){throw "WMI adapters must delegate native admission/lifetime to the broker: $forbidden"}
+ }
+}
+Require-Text $program 'HpWmiFanSampleBrokerSelfTest.RunAsync(Console.Out)'
+foreach($needle in @('lease cannot be reused, cross brokers, or release native through cancellation','Control waits behind Periodic','sustained Control pressure exposes freshness loss','peak == 1')){Require-Text $brokerTests $needle}
 foreach($needle in @('HpWmiFanSamplePublication.Capture(_admission)','completed.Publish(sample.Speeds)')){Require-Text $reader $needle}
 foreach($needle in @('ConditionalWeakTable<SemaphoreSlim, Recipients>','WeakReference<HpWmiFanTelemetryReader>','reader.CaptureControlSampleSink(sequence)')){Require-Text $publication $needle}
 foreach($needle in @('HpWmiFanSamplePublication.Register(_admission, this)','_epoch != epoch','age < 0 || age >= MaximumSampleAgeMilliseconds','sequence < _latestOutcomeSequence')){Require-Text $telemetry $needle}

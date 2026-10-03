@@ -26,10 +26,8 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
     public const int QueryTimeoutMilliseconds = 5000;
     private const int FailureBackoffMilliseconds = 5000;
 
-    // Shared across reader recreation by TelemetryWorker recovery. An abandoned
-    // synchronous WMI call must not create an unbounded series of worker tasks.
-    private static readonly SemaphoreSlim ProductionAdmission = new(1, 1);
-    internal static SemaphoreSlim SharedReadAdmission => ProductionAdmission;
+    internal static SemaphoreSlim SharedReadAdmission => HpWmiFanSampleBroker.Production.Admission;
+    private readonly HpWmiFanSampleBroker _broker;
     private readonly SemaphoreSlim _admission;
     private readonly object _gate = new();
     private readonly Func<HpBiosRequest, HpBiosResponse> _send;
@@ -57,8 +55,9 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             throw new ArgumentException("Fan WMI telemetry is qualified only for exact HP 8C40/F.18.", nameof(target));
         }
 
-        _admission = ProductionAdmission;
-        _acquisitionDiagnostics = HpWmiFanAcquisitionDiagnostics.For(_admission);
+        _broker = HpWmiFanSampleBroker.Production;
+        _admission = _broker.Admission;
+        _acquisitionDiagnostics = _broker.Diagnostics;
         _milliseconds = () => Environment.TickCount64;
         _utcNow = () => DateTimeOffset.UtcNow;
         HpOmenBiosWmiClient? client = null;
@@ -88,8 +87,9 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
         _send = send;
         _milliseconds = milliseconds;
         _utcNow = utcNow;
-        _admission = admission;
-        _acquisitionDiagnostics = HpWmiFanAcquisitionDiagnostics.For(_admission);
+        _broker = HpWmiFanSampleBroker.For(admission);
+        _admission = _broker.Admission;
+        _acquisitionDiagnostics = _broker.Diagnostics;
         HpWmiFanSamplePublication.Register(_admission, this);
     }
 
@@ -122,15 +122,24 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             if ((_pending is null || _pending.IsCompleted) && now >= _nextAttempt)
             {
                 var acquisition = _acquisitionDiagnostics.Begin(HpWmiFanAcquisitionPurpose.Periodic, now);
-                if (_admission.Wait(0))
+                var lease = _broker.TryAcquirePeriodic();
+                if (lease is not null)
                 {
                     _acquisitionDiagnostics.MarkAdmitted(acquisition, now);
                     _pendingAcquisition = acquisition;
                     _startedAt = now;
                     _timedOut = false;
                     var epoch = _epoch;
-                    var sampledAt = _utcNow();
-                    _pending = Task.Run(() => Query(epoch, now, sampledAt, acquisition));
+                    try
+                    {
+                        var sampledAt = _utcNow();
+                        _pending = _broker.RunNative(lease, () => Query(epoch, now, sampledAt, acquisition));
+                    }
+                    catch
+                    {
+                        lease.CancelBeforeNative();
+                        throw;
+                    }
                 }
                 else
                 {
@@ -159,17 +168,11 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
         }
     }
 
-    public async Task WaitForQuiescenceAsync(CancellationToken cancellationToken)
-    {
-        await _admission.WaitAsync(cancellationToken).ConfigureAwait(false);
-        _admission.Release();
-    }
+    public Task WaitForQuiescenceAsync(CancellationToken cancellationToken) =>
+        _broker.WaitForQuiescenceAsync(cancellationToken);
 
-    public static async Task WaitForProductionQuiescenceAsync(CancellationToken cancellationToken)
-    {
-        await ProductionAdmission.WaitAsync(cancellationToken).ConfigureAwait(false);
-        ProductionAdmission.Release();
-    }
+    public static Task WaitForProductionQuiescenceAsync(CancellationToken cancellationToken) =>
+        HpWmiFanSampleBroker.Production.WaitForQuiescenceAsync(cancellationToken);
 
     public void Dispose()
     {
@@ -179,8 +182,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             _epoch++;
             _sample = null;
         }
-        // Do not wait indefinitely for a synchronous WMI provider. Query owns
-        // the shared slot until its finally block, even after reader disposal.
+        // The broker's native worker retains the slot after reader disposal.
     }
 
     internal Task PendingQuery { get { lock (_gate) return _pending ?? Task.CompletedTask; } }
@@ -354,10 +356,6 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
                 Fail($"HP WMI fan read failed: {ex.Message}");
                 _nextAttempt = _milliseconds() + FailureBackoffMilliseconds;
             }
-        }
-        finally
-        {
-            _admission.Release();
         }
     }
 
