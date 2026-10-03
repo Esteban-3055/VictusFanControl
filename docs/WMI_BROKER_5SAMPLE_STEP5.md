@@ -1,7 +1,8 @@
 # WMI broker / 5-sample work — Step 5 command-proof separation
 
-Status: audit and executable regression additions implemented; exact-head
-Windows CI pending. No production runtime behavior change or hardware claim.
+Status: implementation software-validated and audited. Documentation-only
+closure additionally requires its own exact-head CI. No production runtime
+behavior change or hardware claim.
 
 Input HEAD: `57b0a82f34dba62f01c187d18e19930b6f6f5ebb`, tree
 `a532ca422101d32fa8060b3f078d0296b244a5b3`. Input CI #1231, run
@@ -77,6 +78,29 @@ the extended suites: **41 WMI cases** (window 10, broker 5, diagnostics 4,
 telemetry 8, proof 14), plus three extra HP backend cases. Full strict Windows
 build, invariants in PowerShell 7/5.1, other regressions and reproducible RC
 packaging must pass. Local source review is not a substitute for executable CI.
+
+## Exact implementation validation
+
+Implementation HEAD: `e907a5da809e547f4ed4f16e1e861a6a40f1607f`.
+Implementation tree: `51ca218488d2e3246dd81e9775abd011b9b4819f`.
+Full Windows CI #1232, run `37111264693`: **SUCCESS**, 107 successful steps.
+Run: https://github.com/Esteban-3055/VictusFanControl/actions/runs/37111264693
+
+Decoded job logs confirm both new proof-reader groups and all three new backend
+history/ACK cases passed. Total WMI cases: 41, including 14 proof-reader cases.
+Strict build reported zero warnings and zero errors. WMI invariants passed in
+PowerShell 7 and the Windows PowerShell 5.1 sweep. Safety, coordinator, watchdog,
+backend, adaptive/profile/graph and existing packaging regressions passed.
+Independent RC ZIP builds matched SHA-256
+`6c4f61b9a38f251e3bb6028cc0593592b715b80040fd0f879b11721cc3938189`.
+This hash identifies the implementation payload only.
+
+Local diff/whitespace audit confirms exactly four changed files, restricted to
+two self-test files, one invariant script and this document. Production runtime,
+workflow and release checkpoints match the Step 4 input byte-for-byte. No local
+.NET/PowerShell executable validation is claimed; executable evidence comes
+from exact-head Windows Actions. The audit follow-up changes this document only
+and requires a separate final-head CI before Step 5 is reported fully closed.
 
 ## Risks and next boundary
 
