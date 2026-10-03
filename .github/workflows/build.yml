@@ -26,6 +26,8 @@ jobs:
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw "CPU probe PowerShell 5.1 build/fixtures failed." }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest -WriteTest -PL1Watts 20 -PL2Watts 40
+          if ($LASTEXITCODE -ne 0) { throw "CPU probe explicit 20/40 PowerShell 5.1 validation failed." }
 
       - name: PowerShell syntax check
         shell: pwsh
