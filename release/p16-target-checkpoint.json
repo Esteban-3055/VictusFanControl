@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "milestone": "P16",
-  "status": "P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI",
-  "scope": "Generation-5 one-shot ordinary-app 30/40/30 qualification after SafetyGate supersession correction; require exact authorization-head Windows CI before hardware access; preserve five FAIL_CLOSED attempts and consumed generations 1-4.",
+  "status": "P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED",
+  "scope": "Preserve generation-5 attempt-6 FAIL_CLOSED: initial WMI/EC 30 proof followed by expired WMI telemetry handoff, then 40 backend tach-wait cancellation during missing fan telemetry. All physical and permanent gates closed.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
   "p15Baseline": {
@@ -43,9 +43,9 @@
       "hardwareExecution": false,
       "physicalGatesOpened": false
     },
-    "executionAuthorized": true,
-    "controllerPhysicalExecutionAuthorized": true,
-    "physicalGatesOpened": true,
+    "executionAuthorized": false,
+    "controllerPhysicalExecutionAuthorized": false,
+    "physicalGatesOpened": false,
     "physicalPassed": false,
     "evidenceClosed": false,
     "hardwareExecution": true,
@@ -156,14 +156,17 @@
       "runtimeExactHeadCiBarrierRequired": true,
       "authorizationCommitPerformsHardwareExecution": false,
       "oneShotAttemptFenceRequired": true,
-      "authorizationConsumed": false,
-      "freshAuthorizationRequired": false,
+      "authorizationConsumed": true,
+      "freshAuthorizationRequired": true,
       "permanentUserManualExecutionAuthorized": false,
       "automaticExecutionAuthorized": false,
       "candidateCurvePhysicallyValidated": false,
       "candidateCurveAuthorizedForProduction": false,
       "controlEnabledByDefault": false,
-      "nextAttempt": 6
+      "nextAttempt": 6,
+      "consumedByAttempt": 6,
+      "attemptFenceClaimed": true,
+      "attemptFenceAuthorizationHead": "41e030e1ce386b647590a4dfefcee32ef7f4d5b5"
     },
     "physicalAttemptHistory": [
       {
@@ -289,18 +292,46 @@
           "Supplemental events-2026-10-03.log records Restoring -> Firmware at 00:22:26, later Firmware Hold and explicit GUI shutdown/exit at 00:22:46. These are app observations, not independent final FF/FF/journal absence proof.",
           "Failure package ended before later GUI exit and before delayed failsafe expiry. No complete strong restore, post-exit, causal service-chain PASS or P16 PASS is claimed."
         ]
+      },
+      {
+        "attempt": 6,
+        "sourceHead": "41e030e1ce386b647590a4dfefcee32ef7f4d5b5",
+        "sourceCiRunNumber": 1212,
+        "sourceCiRunId": 37094815538,
+        "sourceCiResult": "SUCCESS",
+        "evidenceDirectory": "logs/p16-normal-manual_2026-10-03_005849",
+        "evidenceZip": "p16-normal-manual_2026-10-03_005849.zip",
+        "evidenceZipSha256": "281386b48e867fac4efa498b2e2436560f7344a1edad5775b5d309f1247d01e3",
+        "manifestSha256": "1041a8072dc810831ba1fcc046c9ce29357d23e2de4c2dbb1d5cce643091e8a7",
+        "harnessSummarySha256": "0405865171cdf7a944e5dc1323e83207eabf38508a2abc66175add3facf838be",
+        "attemptFenceSha256": "f853c562f5afe7f7dc3784bd1b84d39f93e9ed5e8be58c49d1d9010e93a8ec3b",
+        "appLogSegmentSha256": "f182e17372bc824b5402f6b1cb45db2edea95fae278f4db151e52c5d9c7e65d8",
+        "supplementalAppLogSha256": "de371ffe4ad6764a1578111c58122aeb60e835982b1c99a63684b9fa04e9c5ab",
+        "result": "FAIL_CLOSED",
+        "classification": "INITIAL_30_WMI_ACK_THEN_FRESHNESS_HANDOFF_AND_40_TACH_WAIT_CANCELED",
+        "failure": "WMI fan acquisition expired after initial 30 acknowledgement. Changed 40 reached backend tach response wait, then was canceled during cpu_fan/gpu_fan telemetry loss.",
+        "evidenceNotes": [
+          "ZIP SHA-256 matches sidecar and CRC passes. All 11 packaged entries and 29 present source identities match HEAD 41e030e (LF/CRLF normalization only); eight declared entries are absent.",
+          "Initial 30/30 fresh WMI proof: baseline 2600/2400 -> nominal 2900/3000 RPM, resolution 100, samples 2, baseline query 4, final query 8, query start 2281 ms after command completion.",
+          "Parent confirms two coherent EC 30/30 samples at 03:59:37.304/37.479Z and schema-v2 generation-3 OWNED journal for session ff50c43f-fcf9-4428-b19c-a37e27a955d1, GUI PID 28328/start ticks 639265967528949820.",
+          "At 00:59:37.759 local, Custom -> Restoring explicitly cites HP WMI fan acquisition expired or lacks freshness metadata; Firmware return at 00:59:38.896 breaks the required continuous owned session.",
+          "Changed 40 re-enters Custom at 00:59:49.364; 00:59:51.102 runtime telemetry degrades with missing cpu_fan,gpu_fan. The command stack reaches WaitForTachometerResponseAsync/Task.Delay (line 1019), downstream of dispatch/setpoint acknowledgement, before TaskCanceledException at 00:59:52.201. This is not a pre-backend stale-safety refusal; no WMI 40 response/Commit proof is captured.",
+          "App records Firmware return 00:59:52.173, telemetry recovery 00:59:54.899, Firmware Hold 00:59:56.638. Supplied logs lack explicit GUI exit and independent final FF/FF/journal absence proof.",
+          "Inherited M4 PID 16080/start ticks 639265623347186658 is stable in before/normal-GUI-healthy/cleanup-final snapshots. Failsafe PID 22120 is armed for 120 s; outcome after package closure is not captured.",
+          "No suspend/resume is observed. The safety cancellation domain is identified, but shared-slot contention versus provider latency/publication gap is not resolved by the supplied logs. No strong final restore, post-exit, three-write causal chain or P16 PASS is claimed."
+        ]
       }
     ],
     "hardeningRequired": {
-      "required": false,
-      "physicalGateMustRemainClosed": false,
+      "required": true,
+      "physicalGateMustRemainClosed": true,
       "findings": [
         "AcpiEcReader retries EC protocol reads only after mutex acquisition; a Global\\\\Access_EC acquisition timeout is currently a single 500 ms terminal failure.",
         "The independent P16 parent setpoint probe treats one transient Global\\\\Access_EC acquisition timeout as terminal instead of using a bounded whole-probe retry.",
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "One generation-5 controlled attempt only after full exact authorization-head CI SUCCESS. Require all three WMI response proofs, independent EC/watchdog ownership, causal write chain, strong firmware restore and post-exit proof; then re-block and audit. Preserve the unknown exact physical predicate of attempt 5.",
+      "nextAction": "Keep generation 5 consumed and all gates closed. Reproduce simultaneous periodic WMI telemetry and control-proof use of the shared native admission slot, measure acquisition/publication timestamps and prove scheduling/expiry behavior without hardware or threshold relaxation. Preserve fresh uncached command proof, 3-second fan freshness, cancellation, native non-overlap, epoch fences and installed M4.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -554,6 +585,30 @@
           "installedM4WatchdogChanged": false,
           "separateAuthorizationHeadCiRequired": true
         }
+      },
+      "postAttempt6": {
+        "required": true,
+        "sourceAttempt": 6,
+        "initial30WmiAckProven": true,
+        "initial30IndependentOwnershipProven": true,
+        "initialOwnedSessionContinuityBroken": true,
+        "expiredWmiSafetyHandoffObserved": true,
+        "changed40BackendTachWaitObserved": true,
+        "changed40WmiAckProven": false,
+        "missingFanTelemetryObserved": true,
+        "taskCancellationObserved": true,
+        "appFirmwareReturnLogged": true,
+        "explicitGuiExitLogged": false,
+        "independentFinalFirmwareProof": false,
+        "safetyCancellationDomainEstablished": true,
+        "querySchedulingRootCauseEstablished": false,
+        "wmiSlotContentionHypothesisOnly": true,
+        "suspendResumeObserved": false,
+        "failsafeLaterOutcomeCaptured": false,
+        "thermalThresholdsChanged": false,
+        "fanFreshnessLimitChanged": false,
+        "fanWritesChanged": false,
+        "hardwareExecutionByReblockCommit": false
       }
     },
     "authorizationHistory": [

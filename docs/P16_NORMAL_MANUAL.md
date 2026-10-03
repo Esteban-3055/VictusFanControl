@@ -628,6 +628,9 @@ physical qualification requires a separately reviewed fresh authorization.
 
 ## P16 generation-5 controlled authorization after supersession correction
 
+These generation-5 instructions are historical and consumed by attempt 6.
+Do not rerun this HEAD; the current source gate is closed.
+
 The software correction is formally closed on
 `fedad87a9dbcc8d50adf3615fade90945712cc4d`, tree
 `7bf78e369cfb80ea740acb0af4b7ac908f7c8cd3`, full Windows CI #1211 /
@@ -659,3 +662,48 @@ failed interaction invalidates the session. Upload the generated ZIP and
 `.sha256` even on FAIL_CLOSED. PASS still requires all three fresh WMI proofs,
 independent EC/journal ownership, causal watchdog chain, strong FF/FF firmware
 restore and post-exit proof, followed by separate source re-block and audit.
+
+## P16 generation-5 attempt 6: WMI freshness handoff and tach-wait cancellation
+
+Attempt 6 used `41e030e1ce386b647590a4dfefcee32ef7f4d5b5` / full Windows
+CI #1212, run `37094815538` SUCCESS. ZIP SHA-256
+`281386b48e867fac4efa498b2e2436560f7344a1edad5775b5d309f1247d01e3`
+matches the sidecar; CRC and all 11 packaged/29 present source manifest
+identities pass. Generation 5's one-shot fence was claimed.
+
+Initial 30/30 again passes real WMI proof: nominal baseline 2600/2400 to
+2900/3000 RPM, resolution 100, two confirmations, query 4 to query 8 with
+final query start 2281 ms after command completion. The parent confirms two
+EC 30/30 samples and generation-3 OWNED for GUI PID 28328 / start ticks
+639265967528949820, session `ff50c43f-fcf9-4428-b19c-a37e27a955d1`.
+
+The local app timeline identifies a different failure domain than attempt 5:
+
+| Time (America/Santiago) | Observation |
+| --- | --- |
+| 00:59:37.198 | Initial 30/30 Apply succeeds. |
+| 00:59:37.759 | Supervisor restores: `HP WMI fan acquisition expired or lacks freshness metadata.` |
+| 00:59:38.896 | App returns to Firmware; the required continuous owned session is broken. |
+| 00:59:49.364 | Apply 40/40 reacquires Custom. |
+| 00:59:51.102 | Runtime degrades with `missing=cpu_fan,gpu_fan`. |
+| 00:59:52.201 | TaskCanceledException in backend tach-response poll delay, after the setpoint-ack stage. |
+
+The 40 command reached the backend; it was not rejected before dispatch by
+stale safety. No completed 40 WMI-response proof, independent parent 40
+journal/setpoint proof or three-command causal chain is captured. The app
+reports Firmware return at 00:59:52.173, telemetry recovery and later Firmware
+Hold. Neither supplied log captures explicit GUI exit or independent final
+FF/FF/journal absence. Inherited M4 PID/start identity remains stable in all
+three captured service snapshots. The failsafe was armed for 120 seconds;
+its outcome after package closure is unknown. No suspend/resume is logged.
+
+The evidence establishes WMI fan freshness loss and subsequent cancellation,
+but not the underlying scheduling/provider cause. Periodic telemetry and fresh
+control-proof readers share one native admission semaphore, while only the
+periodic reader publishes its own cache. Sustained control reads can prevent
+periodic refresh; provider delay/publication gaps also remain possible.
+Reproduce and instrument both readers together in software before changing
+their coordination. Preserve the 3-second freshness limit, fresh uncached
+command proof, real native non-overlap, pause/epoch fences and all fan writes.
+All gates are re-blocked; generation 5 remains consumed, with no P16 PASS or
+permanent control promotion.

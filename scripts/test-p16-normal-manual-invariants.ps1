@@ -73,7 +73,7 @@ if($isP16APrepared){
 if($isPhysicalFailClosed){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16B fail-closed state must re-block the dedicated source gate.'
  $attempts=@($d.physicalAttemptHistory)
- if($attempts.Count -ne 5){throw 'P16B fail-closed history must preserve exactly five target attempts.'}
+ if($attempts.Count -ne 6){throw 'P16B fail-closed history must preserve exactly six target attempts.'}
  foreach($attempt in $attempts){if([string]$attempt.result -cne 'FAIL_CLOSED'){throw 'Every preserved P16B target attempt must remain FAIL_CLOSED.'}}
  if([string]$attempts[0].evidenceZipSha256 -cne '2f164727994683bb7f5c1d49eeff871b017d6a129dc4c6de9ca1e5c51d44a178'){throw 'P16B attempt-1 evidence identity mismatch.'}
  if([string]$attempts[1].evidenceZipSha256 -cne 'c26eb3afab86a6998c8f52233165b276e4bd1d52a4ec803ef03bc9192978a661'){throw 'P16B attempt-2 evidence identity mismatch.'}
@@ -91,8 +91,11 @@ if($isPhysicalFailClosed){
    throw 'P16B attempt-4 evidence identity mismatch.'
  }
  $auth=$d.authorization
- if([int]$auth.authorizationGeneration -ne 4 -or -not $auth.authorizationConsumed -or -not $auth.freshAuthorizationRequired -or [int]$auth.consumedByAttempt -ne 5 -or -not $auth.attemptFenceClaimed -or $auth.attemptFenceAuthorizationHead -cne '98fdc73dbf1ac4f81812ae84f45047c9e1845703'){throw 'P16 generation 4 must remain consumed by attempt 5.'}
+ if([int]$auth.authorizationGeneration -ne 5 -or -not $auth.authorizationConsumed -or -not $auth.freshAuthorizationRequired -or [int]$auth.consumedByAttempt -ne 6 -or -not $auth.attemptFenceClaimed -or $auth.attemptFenceAuthorizationHead -cne '41e030e1ce386b647590a4dfefcee32ef7f4d5b5'){throw 'P16 generation 5 must remain consumed by attempt 6.'}
  if($attempts[4].sourceHead -cne '98fdc73dbf1ac4f81812ae84f45047c9e1845703' -or $attempts[4].evidenceZipSha256 -cne '811fafd002311482e75b21dcfa24528fa05f458f913ba7a9a0afd72c00a3363f' -or [long]$attempts[4].sourceCiRunId -ne 37092681751){throw 'P16 attempt-5 identity altered.'}
+ if([int]$attempts[5].attempt -ne 6 -or $attempts[5].sourceHead -cne '41e030e1ce386b647590a4dfefcee32ef7f4d5b5' -or $attempts[5].evidenceZipSha256 -cne '281386b48e867fac4efa498b2e2436560f7344a1edad5775b5d309f1247d01e3' -or [long]$attempts[5].sourceCiRunId -ne 37094815538 -or $attempts[5].manifestSha256 -cne '1041a8072dc810831ba1fcc046c9ce29357d23e2de4c2dbb1d5cce643091e8a7'){throw 'P16 attempt-6 evidence identity altered.'}
+ $p6=$d.hardeningRequired.postAttempt6
+ if(-not $p6.initial30WmiAckProven -or -not $p6.initial30IndependentOwnershipProven -or -not $p6.initialOwnedSessionContinuityBroken -or -not $p6.expiredWmiSafetyHandoffObserved -or -not $p6.changed40BackendTachWaitObserved -or -not $p6.missingFanTelemetryObserved -or -not $p6.taskCancellationObserved -or -not $p6.safetyCancellationDomainEstablished -or $p6.changed40WmiAckProven -or $p6.querySchedulingRootCauseEstablished -or $p6.independentFinalFirmwareProof -or $p6.explicitGuiExitLogged -or $p6.suspendResumeObserved -or $p6.failsafeLaterOutcomeCaptured -or $p6.thermalThresholdsChanged -or $p6.fanFreshnessLimitChanged -or $p6.fanWritesChanged -or $p6.hardwareExecutionByReblockCommit){throw 'P16 attempt-6 evidence/safety scope overstated.'}
  $p5=$d.hardeningRequired.postAttempt5
  if(-not $p5.initial30WmiAckProven -or -not $p5.initial30IndependentOwnershipProven -or $p5.changed40BackendDispatchObserved -or $p5.independentFinalFirmwareProof -or $p5.exactSafetyDenialCauseEstablished -or $p5.safetyPredicateChanged -or $p5.thermalLimitsChanged -or $p5.fanWritesChanged){throw 'P16 attempt-5 scope was overstated.'}
  $investigation=$d.hardeningRequired.softwareConcurrencyInvestigation
