@@ -20,7 +20,7 @@ This file cannot reconstruct `MaxFan`, `FanSwitch`, setpoints or individual WMI 
 
 ## Validation
 
-PowerShell 5.1 and 7 fixture checks cover shared-file copying, bounded reads, child timeout, packaging/checksum and ACPI header validation. Windows CI also runs a zero-duration real OS capture, checks DSDT export, rendered System messages, EVTX, ZIP and cleanup of every attempted ETW session. This is a Windows VM software check, not HP EC qualification.
+PowerShell 5.1 and 7 fixture checks cover shared-file copying, bounded reads, child timeout, packaging/checksum and ACPI header validation. Windows CI also runs a zero-duration real OS capture, checks actual firmware table export (DSDT when enumerated), rendered System messages, EVTX, ZIP and cleanup of every attempted ETW session. This is a Windows VM software check, not HP EC qualification.
 
 ## References
 

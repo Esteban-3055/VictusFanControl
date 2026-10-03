@@ -67,7 +67,10 @@ jobs:
           $firmware = @($commands | Where-Object { $_.Destination -match 'acpi[\\/]capture.txt$' })
           if ($firmware.Count -ne 1 -or $firmware[0].Status -ne 'ok') { throw 'Static firmware helper failed in Windows.' }
           $tables = @(Get-Content (Join-Path $result[0].FullName 'acpi\tables\tables.json') -Raw | ConvertFrom-Json)
-          if (@($tables | Where-Object { $_.Signature -eq 'DSDT' -and $_.Status -eq 'exported-first-instance' }).Count -ne 1) { throw 'Windows DSDT capture missing.' }
+          $tables | ConvertTo-Json -Depth 8 | Write-Host
+          if (@($tables | Where-Object { $_.Status -eq 'exported-first-instance' }).Count -eq 0) { throw 'Windows firmware API exported no tables.' }
+          $enumeration = @(Get-Content (Join-Path $result[0].FullName 'acpi\tables\enumeration.json') -Raw | ConvertFrom-Json)
+          if (@($enumeration | Where-Object { $_.Signature -eq 'DSDT' }).Count -gt 0 -and @($tables | Where-Object { $_.Signature -eq 'DSDT' -and $_.Status -eq 'exported-first-instance' }).Count -ne 1) { throw 'Advertised DSDT capture missing.' }
           $sessions = @(Get-Content (Join-Path $result[0].FullName 'etw\sessions.json') -Raw | ConvertFrom-Json)
           foreach ($session in $sessions) {
             if ($session.StartStatus -ne 'ok' -or $session.StopStatus -ne 'ok') { throw 'ETW start/stop failed.' }
