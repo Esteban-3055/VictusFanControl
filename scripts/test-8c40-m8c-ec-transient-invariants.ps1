@@ -26,9 +26,9 @@ function Assert-False([bool]$Value,[string]$Message){
 foreach($needle in @(
     'MaximumTransientTachSnapshotReadFailures = 2',
     'catch (IOException ex)',
-    'lost EC observability after',
+    'lost control-state observability after',
     'The real command remains uncommitted and must be restored fail-closed',
-    'transient EC snapshot failures='
+    'transient control snapshot failures='
 )){
     Assert-Contains $backend $needle ("M8C EC transient backend invariant missing: {0}" -f $needle)
 }
