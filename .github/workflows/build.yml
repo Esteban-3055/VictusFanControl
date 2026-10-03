@@ -52,6 +52,29 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Collect-Victus-WmiTimeout.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Collector PowerShell 5.1 self-test failed.' }
 
+      - name: GM26 response contract fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Test-Victus-AcpiGm26.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-Victus-AcpiGm26.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'GM26 PowerShell 5.1 self-test failed.' }
+
+      - name: GM26 parent child rejection on non-target Windows runner
+        shell: pwsh
+        run: |
+          $probeRoot = Join-Path $env:RUNNER_TEMP ('gm26-rejection-' + [Guid]::NewGuid().ToString('N'))
+          $rejected = $false
+          try { .\scripts\Test-Victus-AcpiGm26.ps1 -OutputRoot $probeRoot } catch { $rejected = $true }
+          if (-not $rejected) { throw 'Non-target probe was accepted.' }
+          $folder = @(Get-ChildItem $probeRoot -Directory)
+          if ($folder.Count -ne 1) { throw 'Probe evidence missing.' }
+          $summary = Get-Content (Join-Path $folder[0].FullName 'summary.json') -Raw | ConvertFrom-Json
+          if ($summary.Healthy -or $summary.Samples -ne 0 -or $summary.ChildExitCode -ne 1) { throw 'Rejected child summary invalid.' }
+          if (Test-Path (Join-Path $folder[0].FullName 'calls.jsonl')) { throw 'HP request began before target qualification.' }
+          $errorText = Get-Content (Join-Path $folder[0].FullName 'child-error.txt') -Raw
+          if ($errorText -notmatch 'probe requires HP 8C40') { throw 'Expected target rejection missing.' }
+          if (-not (Test-Path ($folder[0].FullName + '.zip'))) { throw 'Rejected evidence ZIP missing.' }
+
       - name: Scenario A passive isolation fixtures PowerShell 7 and 5.1
         shell: pwsh
         run: |
