@@ -587,3 +587,41 @@ refresh/supersession concurrency case as failing on both unchanged
 `98fdc73dbf1ac4f81812ae84f45047c9e1845703` and this diagnostic change;
 it is not recorded as a local PASS or as the physical root cause.
 The complete Windows workflow must validate the published re-block.
+
+## SafetyGate concurrency investigation after attempt 5
+
+The diagnostic/re-block baseline is `7a324a5345a6a05661aca8e481da23b8eb0fb78b`
+(tree `18c90aeb5d0f0ea8fe78d4b533a76866fd8a3557`), Windows CI #1210 /
+run `37093653211` SUCCESS. This investigation uses fake I/O only and leaves
+generation 4 consumed and all physical/permanent gates closed.
+
+Safety results are accepted before waiting for the coordinator semaphore.
+A newer evaluation can therefore become authoritative while an Apply or
+already-Custom admission request waits. Previously, a failed combined
+safety predicate treated this supersession as a reason to restore Firmware;
+the queued Apply received the generic safety/lifecycle error instead of the
+typed no-write stale-safety refusal handled by Manual's existing bounded refresh.
+The supervisor also checked its evaluation before an awaited watchdog probe,
+then used the combined predicate after the probe without separating supersession.
+Four deterministic reproductions failed before the correction.
+
+The coordinator now rechecks the sequence after acquiring the semaphore and
+distinguishes supersession at the failed-predicate boundary. Admission returns
+false without restoring a newer owner; Apply raises the existing typed stale
+exception before backend dispatch. The supervisor leaves a superseded result
+to the newer evaluator after the dependency probe. Factual dependency failures
+still restore and propagate even if safety was superseded. Stale exceptions
+from a dispatched backend remain in the restore path.
+
+Eight new deterministic cases cover healthy/unsafe supersession during the
+probe, dependency failure, queued Apply/admission, and queued unsafe/lifecycle
+handoffs. The 30 portable coordinator cases pass; ten runs of the adaptive
+suites pass, including the formerly failing Manual refresh case. The real
+Windows/backend integration remains part of the complete Windows workflow.
+No thermal threshold, telemetry age limit, refresh-attempt limit, WMI query,
+fan write, restore mechanism or target authorization is changed.
+
+These software interleavings explain how the observed generic rejection can
+occur, but do not identify which predicate rejected physical attempt 5.
+The evidence remains FAIL_CLOSED with incomplete independent final restore;
+physical qualification requires a separately reviewed fresh authorization.

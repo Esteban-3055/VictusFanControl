@@ -37,6 +37,14 @@ public static class FanControlCoordinatorSelfTest
         failures += await TestStaleSafetyEvaluationCannotTearDownNewerSessionAsync(output, safety, now);
         failures += await TestSupersededAdmissionIsNoWriteAndFreshRetrySucceedsAsync(output, now);
         failures += await TestStaleCommandSafetyCannotTearDownNewerSessionAsync(output, safety, now);
+        failures += await TestSupersededSupervisorProbeAsync(output, now, latestUnsafe: false, dependencyFailure: false);
+        failures += await TestSupersededSupervisorProbeAsync(output, now, latestUnsafe: true, dependencyFailure: false);
+        failures += await TestSupersededSupervisorProbeAsync(output, now, latestUnsafe: false, dependencyFailure: true);
+        failures += await TestSupersededSupervisorProbeAsync(output, now, latestUnsafe: false, dependencyFailure: false, olderUnsafe: true);
+        failures += await TestSupersededRequestWhileWaitingAsync(output, now, admission: false);
+        failures += await TestSupersededRequestWhileWaitingAsync(output, now, admission: true);
+        failures += await TestQueuedCommandSafetyHandoffAsync(output, now, lifecycle: false);
+        failures += await TestQueuedCommandSafetyHandoffAsync(output, now, lifecycle: true);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -1005,6 +1013,151 @@ public static class FanControlCoordinatorSelfTest
         return pass ? 0 : 1;
     }
 
+    private static async Task<int> TestSupersededSupervisorProbeAsync(
+        TextWriter output, DateTimeOffset now, bool latestUnsafe, bool dependencyFailure, bool olderUnsafe = false)
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probes = 0;
+        var backend = new RecordingBackend
+        {
+            ThrowOnControlDependencyProbe = dependencyFailure,
+            DuringControlDependencyProbe = async _ =>
+            {
+                if (++probes == 1)
+                {
+                    started.SetResult();
+                    await release.Task;
+                }
+            }
+        };
+        await using var coordinator = new FanControlCoordinator(backend);
+        var initial = BuildReadySafety(now);
+        var older = olderUnsafe
+            ? BuildReadySafety(now - TimeSpan.FromSeconds(10), now)
+            : BuildReadySafety(now);
+        var newer = latestUnsafe
+            ? BuildReadySafety(now - TimeSpan.FromSeconds(10), now)
+            : BuildReadySafety(now);
+        await coordinator.TryEnterCustomAsync(initial, CancellationToken.None);
+        var oldTask = coordinator.EnforceSafetyAsync(older, "blocked dependency probe", CancellationToken.None).AsTask();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var newTask = coordinator.EnforceSafetyAsync(newer, "latest safety", CancellationToken.None).AsTask();
+        release.SetResult();
+        var threwDependency = false;
+        var oldResult = false;
+        try { oldResult = await oldTask; }
+        catch (IOException) { threwDependency = true; }
+        var newResult = await newTask;
+        var mustRestore = latestUnsafe || dependencyFailure;
+        return Report(output,
+            dependencyFailure
+                ? "dependency failure after supersession still restores and propagates"
+                : latestUnsafe
+                    ? "superseded supervisor yields to latest unsafe evaluation after dependency probe"
+                    : olderUnsafe
+                    ? "old unsafe evaluation superseded during probe cannot restore latest healthy authority"
+                    : "superseded supervisor cannot restore newer healthy authority after dependency probe",
+            threwDependency == dependencyFailure &&
+            (dependencyFailure || oldResult) &&
+            newResult == !latestUnsafe &&
+            backend.ApplyCalls == 0 &&
+            backend.RestoreCalls == (mustRestore ? 1 : 0) &&
+            backend.StatusCalls == (mustRestore ? 0 : 1) &&
+            coordinator.Authority == (mustRestore ? FanAuthority.Firmware : FanAuthority.Custom));
+    }
+
+    private static async Task<int> TestSupersededRequestWhileWaitingAsync(
+        TextWriter output, DateTimeOffset now, bool admission)
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probes = 0;
+        var backend = new RecordingBackend
+        {
+            DuringControlDependencyProbe = async _ =>
+            {
+                if (++probes == 1)
+                {
+                    started.SetResult();
+                    await release.Task;
+                }
+            }
+        };
+        await using var coordinator = new FanControlCoordinator(backend);
+        var initial = BuildReadySafety(now);
+        var supervisor = BuildReadySafety(now);
+        var request = BuildReadySafety(now);
+        var newer = BuildReadySafety(now);
+        await coordinator.TryEnterCustomAsync(initial, CancellationToken.None);
+        var held = coordinator.EnforceSafetyAsync(supervisor, "hold coordinator gate", CancellationToken.None).AsTask();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Task<bool>? enter = null;
+        Task? apply = null;
+        if (admission) enter = coordinator.TryEnterCustomAsync(request, CancellationToken.None).AsTask();
+        else apply = coordinator.ApplyAsync(new FanCommand(30, 30, "superseded queued command"), request, CancellationToken.None).AsTask();
+        var latest = coordinator.EnforceSafetyAsync(newer, "supersede queued request", CancellationToken.None).AsTask();
+        release.SetResult();
+        await held;
+        var refusedWithoutRestore = false;
+        if (enter is not null) refusedWithoutRestore = !await enter;
+        else
+        {
+            try { await apply!; }
+            catch (FanControlStaleSafetyException) { refusedWithoutRestore = true; }
+            catch (InvalidOperationException) { /* Report the wrong classification below. */ }
+        }
+        await latest;
+        var preserved = backend.ApplyCalls == 0 && backend.RestoreCalls == 0 && coordinator.Authority == FanAuthority.Custom;
+        if (preserved)
+            await coordinator.ApplyAsync(new FanCommand(30, 30, "fresh queued-command retry"), BuildReadySafety(now), CancellationToken.None);
+        return Report(output,
+            admission
+                ? "admission superseded while waiting leaves newer Custom authority intact"
+                : "command superseded while waiting is typed no-write refusal and fresh retry writes once",
+            refusedWithoutRestore && preserved && backend.EnterCalls == 1 && backend.ApplyCalls == 1 && backend.RestoreCalls == 0);
+    }
+
+    private static async Task<int> TestQueuedCommandSafetyHandoffAsync(
+        TextWriter output, DateTimeOffset now, bool lifecycle)
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var backend = new RecordingBackend
+        {
+            DuringControlDependencyProbe = async _ =>
+            {
+                started.TrySetResult();
+                await release.Task;
+            }
+        };
+        await using var coordinator = new FanControlCoordinator(backend);
+        var initial = BuildReadySafety(now);
+        var supervisor = BuildReadySafety(now);
+        var commandSafety = BuildReadySafety(now);
+        var unsafeSafety = BuildReadySafety(now - TimeSpan.FromSeconds(10), now);
+        await coordinator.TryEnterCustomAsync(initial, CancellationToken.None);
+        var held = coordinator.EnforceSafetyAsync(supervisor, "hold gate before handoff", CancellationToken.None).AsTask();
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var command = coordinator.ApplyAsync(new FanCommand(40, 40, "queued command before handoff"), commandSafety, CancellationToken.None).AsTask();
+        Task handoff = lifecycle
+            ? coordinator.BlockCustomAdmissionAndRestoreAsync("queued lifecycle boundary", now, CancellationToken.None).AsTask()
+            : coordinator.EnforceSafetyAsync(unsafeSafety, "queued unsafe safety", CancellationToken.None).AsTask();
+        release.SetResult();
+        await held;
+        var refused = false;
+        try { await command; }
+        catch (InvalidOperationException) { refused = true; }
+        await handoff;
+        var reentered = await coordinator.TryEnterCustomAsync(lifecycle ? commandSafety : unsafeSafety, CancellationToken.None);
+        return Report(output,
+            lifecycle
+                ? "lifecycle fence still refuses queued command and reentry with one restore"
+                : "latest unsafe safety still refuses queued command and reentry with one restore",
+            refused && !reentered && backend.ApplyCalls == 0 && backend.EnterCalls == 1 &&
+            backend.RestoreCalls == 1 && coordinator.Authority == FanAuthority.Firmware);
+    }
+
     private sealed class RecordingBackend : IFanControlBackend
     {
         public string Name => "self-test backend";
@@ -1033,19 +1186,20 @@ public static class FanControlCoordinatorSelfTest
         public TaskCompletionSource<bool> ApplyRelease { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Active { get; private set; }
+        public Func<CancellationToken, ValueTask>? DuringControlDependencyProbe { get; init; }
 
-        public ValueTask ProbeControlDependencyAsync(CancellationToken cancellationToken)
+        public async ValueTask ProbeControlDependencyAsync(CancellationToken cancellationToken)
         {
             ControlDependencyProbeCalls++;
             cancellationToken.ThrowIfCancellationRequested();
+            if (DuringControlDependencyProbe is not null)
+                await DuringControlDependencyProbe(cancellationToken);
 
             if (ThrowOnControlDependencyProbe)
             {
-                return ValueTask.FromException(
-                    new IOException("synthetic watchdog dependency loss"));
+                throw new IOException("synthetic watchdog dependency loss");
             }
 
-            return ValueTask.CompletedTask;
         }
 
         public ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken cancellationToken)

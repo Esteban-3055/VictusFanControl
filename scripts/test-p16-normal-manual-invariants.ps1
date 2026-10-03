@@ -95,6 +95,13 @@ if($isPhysicalFailClosed){
  if($attempts[4].sourceHead -cne '98fdc73dbf1ac4f81812ae84f45047c9e1845703' -or $attempts[4].evidenceZipSha256 -cne '811fafd002311482e75b21dcfa24528fa05f458f913ba7a9a0afd72c00a3363f' -or [long]$attempts[4].sourceCiRunId -ne 37092681751){throw 'P16 attempt-5 identity altered.'}
  $p5=$d.hardeningRequired.postAttempt5
  if(-not $p5.initial30WmiAckProven -or -not $p5.initial30IndependentOwnershipProven -or $p5.changed40BackendDispatchObserved -or $p5.independentFinalFirmwareProof -or $p5.exactSafetyDenialCauseEstablished -or $p5.safetyPredicateChanged -or $p5.thermalLimitsChanged -or $p5.fanWritesChanged){throw 'P16 attempt-5 scope was overstated.'}
+ $investigation=$d.hardeningRequired.softwareConcurrencyInvestigation
+ if($null -ne $investigation){
+   if(-not $investigation.softwareFixImplemented -or [int]$investigation.deterministicCases -ne 8 -or $investigation.physicalGatesOpened -or $investigation.physicalRootCauseEstablished -or $investigation.hardwareExecution -or -not $investigation.freshAuthorizationRequired){throw 'P16 software concurrency correction must not claim physical qualification.'}
+   foreach($unchanged in @('freshSafetyRetryMaximumAttemptsChanged','thermalThresholdsChanged','telemetryAgeLimitChanged','wmiQueriesChanged','fanWriteOrRestoreMechanismsChanged')){
+     if([bool]$investigation.$unchanged){throw "P16 supersession correction changed $unchanged."}
+   }
+ }
 
  Assert-True ([bool]$d.hardeningRequired.required) 'P16B attempt-4 re-block must require lifecycle hardening.'
  Assert-True ([bool]$d.hardeningRequired.physicalGateMustRemainClosed) 'P16B attempt-4 lifecycle hardening must keep the physical gate closed.'

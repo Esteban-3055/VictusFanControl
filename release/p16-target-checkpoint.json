@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "milestone": "P16",
   "status": "P16B_PHYSICAL_ATTEMPTS_FAIL_CLOSED_GATE_CLOSED",
-  "scope": "Preserve generation-4 WMI attempt-5 FAIL_CLOSED evidence; dedicated and permanent gates closed pending precise safety-denial diagnosis.",
+  "scope": "Preserve generation-4 attempt-5 FAIL_CLOSED; software supersession races corrected with deterministic fake I/O; physical and permanent gates remain closed.",
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
   "expectedBranch": "feature/victus-8c40-p16-normal-manual",
   "p15Baseline": {
@@ -302,7 +302,7 @@
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Keep generation 4 consumed and physical gates closed. Capture the exact SafetyGate reasons, supplied/latest evaluation identities, admission and lifecycle fences on command rejection without changing thresholds or retrying hardware. A later qualified correction and fresh authorization are required before another physical attempt.",
+      "nextAction": "Validate the software supersession correction with complete same-head Windows CI. Preserve attempt-5 unknown physical predicate and incomplete independent final restore. Generation 4 remains consumed; any hardware qualification requires separate fresh authorization.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -502,6 +502,33 @@
         "thermalLimitsChanged": false,
         "fanWritesChanged": false,
         "hardwareExecutionByReblockCommit": false
+      },
+      "softwareConcurrencyInvestigation": {
+        "reblockBaseline": {
+          "head": "7a324a5345a6a05661aca8e481da23b8eb0fb78b",
+          "tree": "18c90aeb5d0f0ea8fe78d4b533a76866fd8a3557",
+          "ciRunNumber": 1210,
+          "ciRunId": 37093653211,
+          "ciResult": "SUCCESS"
+        },
+        "softwareFixImplemented": true,
+        "deterministicCases": 8,
+        "preCorrectionFailuresObserved": 4,
+        "portableCoordinatorCasesPassed": 30,
+        "adaptiveSuiteRunsPassed": 10,
+        "racesConfirmed": [
+          "Accepted Apply/admission evaluation superseded while waiting for coordinator gate.",
+          "Supervisor evaluation superseded during awaited control-dependency probe."
+        ],
+        "freshSafetyRetryMaximumAttemptsChanged": false,
+        "thermalThresholdsChanged": false,
+        "telemetryAgeLimitChanged": false,
+        "wmiQueriesChanged": false,
+        "fanWriteOrRestoreMechanismsChanged": false,
+        "physicalGatesOpened": false,
+        "physicalRootCauseEstablished": false,
+        "hardwareExecution": false,
+        "freshAuthorizationRequired": true
       }
     },
     "authorizationHistory": [

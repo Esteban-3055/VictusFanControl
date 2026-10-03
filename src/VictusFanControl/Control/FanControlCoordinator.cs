@@ -83,11 +83,23 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         {
             ThrowIfDisposed();
 
+            // Acceptance happens before waiting for the gate. A superseding
+            // evaluation is not evidence that the current owner is unsafe.
+            if (!IsLatestSafetyEvaluation(safety))
+            {
+                return false;
+            }
+
             if (_authority == FanAuthority.Custom)
             {
                 if (SafetyAllowsCustomLocked(safety))
                 {
                     return true;
+                }
+
+                if (!IsLatestSafetyEvaluation(safety))
+                {
+                    return false;
                 }
 
                 await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
@@ -156,6 +168,11 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         {
             ThrowIfDisposed();
 
+            if (!IsLatestSafetyEvaluation(safety))
+            {
+                throw new FanControlStaleSafetyException();
+            }
+
             if (_authority != FanAuthority.Custom)
             {
                 throw new InvalidOperationException(
@@ -170,10 +187,16 @@ public sealed class FanControlCoordinator : IAsyncDisposable
             // can now always either cancel this CTS or make its admission fence
             // visible before any backend write is dispatched.
             SetActiveCommand(commandCts);
+            var backendDispatchStarted = false;
             try
             {
                 if (!SafetyAllowsCustomLocked(safety))
                 {
+                    if (!IsLatestSafetyEvaluation(safety))
+                    {
+                        throw new FanControlStaleSafetyException();
+                    }
+
                     var denialDetail = DescribeSafetyDenialLocked(safety);
                     await BestEffortRestoreLockedAsync(CancellationToken.None).ConfigureAwait(false);
                     throw new InvalidOperationException(
@@ -194,7 +217,15 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 // before backend dispatch.
                 commandCts.Token.ThrowIfCancellationRequested();
 
+                backendDispatchStarted = true;
                 await _backend.ApplyAsync(command, commandCts.Token).ConfigureAwait(false);
+            }
+            catch (FanControlStaleSafetyException) when (!backendDispatchStarted)
+            {
+                // No backend call occurred. The existing bounded Manual
+                // refresh path can obtain current safety without releasing
+                // newer authority; unsafe/lifecycle callers retain their fences.
+                throw;
             }
             catch (FanControlAdmissionException)
             {
@@ -373,6 +404,14 @@ public sealed class FanControlCoordinator : IAsyncDisposable
 
             if (!SafetyAllowsCustomLocked(safety))
             {
+                // The dependency probe can await IPC. Supersession is a
+                // no-action result, including when it races with the predicate
+                // itself. A factual probe failure above still restores.
+                if (!IsLatestSafetyEvaluation(safety))
+                {
+                    return true;
+                }
+
                 var denialDetail =
                     DescribeSafetyDenialLocked(safety);
 
