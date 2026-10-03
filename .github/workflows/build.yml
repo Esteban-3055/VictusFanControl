@@ -52,6 +52,36 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Collect-Victus-WmiTimeout.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Collector PowerShell 5.1 self-test failed.' }
 
+      - name: ACPI collector Windows smoke and ETW session cleanup
+        shell: pwsh
+        run: |
+          $captureRoot = Join-Path $env:RUNNER_TEMP ('vfc-acpi-smoke-' + [Guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $captureRoot | Out-Null
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Collect-Victus-WmiTimeout.ps1 -RepoRoot $env:GITHUB_WORKSPACE -OutputRoot $captureRoot -CaptureMinutes 0 -EventHours 1 -MaximumEvents 100
+          if ($LASTEXITCODE -ne 0) { throw 'Windows collector smoke failed.' }
+          $result = @(Get-ChildItem $captureRoot -Directory)
+          if ($result.Count -ne 1) { throw 'Collector result missing.' }
+          $summary = Get-Content (Join-Path $result[0].FullName 'capture-summary.json') -Raw | ConvertFrom-Json
+          if ($summary.HardwareReads -or $summary.FanWrites -or $summary.EventChannelsEnabled) { throw 'Collector altered collection scope.' }
+          $commands = @(Get-Content (Join-Path $result[0].FullName 'commands.json') -Raw | ConvertFrom-Json)
+          $firmware = @($commands | Where-Object { $_.Destination -match 'acpi[\\/]capture.txt$' })
+          if ($firmware.Count -ne 1 -or $firmware[0].Status -ne 'ok') { throw 'Static firmware helper failed in Windows.' }
+          $tables = @(Get-Content (Join-Path $result[0].FullName 'acpi\tables\tables.json') -Raw | ConvertFrom-Json)
+          if (@($tables | Where-Object { $_.Signature -eq 'DSDT' -and $_.Status -eq 'exported-first-instance' }).Count -ne 1) { throw 'Windows DSDT capture missing.' }
+          $sessions = @(Get-Content (Join-Path $result[0].FullName 'etw\sessions.json') -Raw | ConvertFrom-Json)
+          foreach ($session in $sessions) {
+            if ($session.StartStatus -ne 'ok' -or $session.StopStatus -ne 'ok') { throw 'ETW start/stop failed.' }
+            logman.exe query $session.Name -ets 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { throw 'Collector ETW session leaked.' }
+          }
+          $xml = Get-Content (Join-Path $result[0].FullName 'windows-events\before\System.txt') -Raw
+          if ($xml -notmatch 'MESSAGE_JSON') { throw 'Rendered Windows messages missing.' }
+          if (-not (Test-Path (Join-Path $result[0].FullName 'windows-events\before\System.evtx'))) { throw 'EVTX export missing.' }
+          if (-not (Test-Path ($result[0].FullName + '.zip'))) { throw 'Collector ZIP missing.' }
+          Write-Host ('PASS: Windows firmware/messages/EVTX, ZIP and cleanup; ETW sessions=' + $sessions.Count)
+          # The negative logman query above is expected; do not propagate its exit code.
+          exit 0
+
       - name: HP WMI fan broker and reader invariants PowerShell 7
         shell: pwsh
         run: |

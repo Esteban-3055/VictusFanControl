@@ -1,0 +1,30 @@
+# Manual timeout: collector with ACPI evidence
+
+This diagnostic package extends `scripts/Collect-Victus-WmiTimeout.ps1` and requires the adjacent `Export-Victus-AcpiTables.ps1`. The CMD launcher starts a 15-minute capture; right-click and run as administrator. It displays each stage, creates a desktop directory plus ZIP/SHA-256, and finishes early with Q. Keep the console open; after a failure allow approximately one minute for recovery. Open the normal app separately once the collector prints `Observando`.
+
+## Included evidence
+
+- Live app/watchdog logs (16 most recent per source/stage, bounded tails of 8 MiB); journal changes; processes at two-second intervals with UTC and a collector-relative monotonic clock.
+- Existing System, Application, WMI Activity, Kernel Power Thermal and Kernel PnP channels: XML plus rendered message/PID/record ID; up to 10,000 text events per channel/stage. EVTX is exported for the selected period without that text row limit. Missing/disabled channels remain unchanged.
+- Static firmware ACPI tables via Windows EnumSystemFirmwareTables/GetSystemFirmwareTable. Headers, declared sizes, checksums and multiplicity are recorded. MSDM is excluded because it contains an OEM Windows key. The API returns only the first instance for each signature; additional SSDTs are explicitly counted as unavailable. No physical-memory reader or kernel driver is installed. Limits: 4 MiB per table and 32 MiB total.
+- Temporary ETW sessions for the available Microsoft-Windows-Kernel-Acpi and Microsoft-Windows-WMI-Activity providers. Each has a unique name, 128 MiB circular output, bounded buffers and a finally cleanup. No existing sessions are stopped or event channels enabled. `-SkipAcpiTrace` disables this extra measurement; tracing can affect timing and provider coverage varies by Windows build. If the console is forcibly closed, the generated `etw/STOP-IF-CONSOLE-WAS-CLOSED.cmd` contains only this capture's session names.
+- ACPI PnP device/driver properties, service status, driver versions, power configuration, Git identity and binary/module hashes (including core and App DLLs). No generic process command lines or memory dumps.
+
+## Optional iASL
+
+`-IaslPath C:\Tools\ACPICA\iasl.exe` disassembles only exported DSDT/SSDT files using `-d`. No methods are evaluated, no tables loaded or patched. The tool is optional and not downloaded automatically. Missing duplicate SSDTs may prevent complete disassembly. Existing ACPI tools may provide a fuller static dump, but the command depends on that specific tool/version.
+
+## Limits of the investigation
+
+This file cannot reconstruct `MaxFan`, `FanSwitch`, setpoints or individual WMI method stage timestamps absent from the application logs. Those require the separately planned application instrumentation. ETW/table data supplements it and does not establish a physical cause by itself. Event metadata may contain machine/user/path information and unrelated provider operations. The original application behavior, timeouts, command confirmation and restore protections are unchanged.
+
+## Validation
+
+PowerShell 5.1 and 7 fixture checks cover shared-file copying, bounded reads, child timeout, packaging/checksum and ACPI header validation. Windows CI also runs a zero-duration real OS capture, checks DSDT export, rendered System messages, EVTX, ZIP and cleanup of every attempted ETW session. This is a Windows VM software check, not HP EC qualification.
+
+## References
+
+- https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-enumsystemfirmwaretables
+- https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemfirmwaretable
+- https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/logman-create-trace
+- https://www.intel.com/content/www/us/en/developer/topic-technology/open/acpica/download.html
