@@ -11,6 +11,7 @@ public static class AdaptiveFanProductionControllerSelfTest
     public static async Task<int> RunAsync(TextWriter output)
     {
         var failures = 0;
+        failures += await TestPromotedManualTargetAndStartupAsync(output);
         failures += await TestClosedGatesNeverTouchBackendAsync(output);
         failures += await TestManualEqualOnlyAndNoRetransmitAsync(output);
         failures += await TestAutomaticNoRetransmitAndSafetyReleaseAsync(output);
@@ -25,6 +26,34 @@ public static class AdaptiveFanProductionControllerSelfTest
                 ? "Adaptive production controller self-test: PASS"
                 : $"Adaptive production controller self-test: FAIL ({failures} case(s))");
         return failures == 0 ? 0 : 34;
+    }
+
+    private static async Task<int> TestPromotedManualTargetAndStartupAsync(TextWriter output)
+    {
+        var failures = Report(output, "P16C Manual authorization is exact-target only",
+            Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(Hp8C40TargetProfile.Instance.Id) &&
+            !Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(null) &&
+            !Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget("HP-88F8") &&
+            !Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(Hp8C40TargetProfile.Instance.Id.ToLowerInvariant()) &&
+            !Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized);
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+        var controller = new AdaptiveFanProductionController(coordinator, BuildConfig(),
+            Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(Hp8C40TargetProfile.Instance.Id),
+            Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized);
+        var startupIsFirmware = controller.Mode == AdaptiveFanProductionMode.Firmware;
+        var snapshot = BuildSnapshot(DateTimeOffset.UtcNow, 45, 40);
+        var beforeManual = await controller.ApplyManualAsync(30, BuildSafety(snapshot), CancellationToken.None);
+        var mode = await controller.SetModeAsync(AdaptiveFanProductionMode.Manual, CancellationToken.None);
+        var automatic = await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic, CancellationToken.None);
+        failures += Report(output, "promoted Manual still needs explicit Apply and Automatic stays blocked",
+            startupIsFirmware && beforeManual.Action == AdaptiveFanProductionActionKind.Blocked &&
+            mode.Action == AdaptiveFanProductionActionKind.HoldFirmware &&
+            automatic.Action == AdaptiveFanProductionActionKind.Blocked &&
+            controller.Mode == AdaptiveFanProductionMode.Manual &&
+            coordinator.Authority == FanAuthority.Firmware &&
+            backend.EnterCalls == 0 && backend.ApplyCalls == 0 && backend.RestoreCalls == 0);
+        return failures;
     }
 
     private static async Task<int> TestClosedGatesNeverTouchBackendAsync(TextWriter output)

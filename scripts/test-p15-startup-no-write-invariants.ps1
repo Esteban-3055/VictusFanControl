@@ -184,7 +184,8 @@ Assert-False ([bool]$contract.safetyBoundary.controlEnabledByDefault) 'P15A defa
 Assert-False ([bool]$contract.safetyBoundary.automaticPolicyEnabled) 'P15A automatic policy must remain OFF.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'Profile default control must remain OFF.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'Profile automatic policy must remain OFF.'
-Assert-Contains $gate 'ManualExecutionAuthorized = false' 'Manual GUI gate must remain CLOSED.'
+. (Join-Path $PSScriptRoot 'p16c-promotion-boundary.ps1')
+Assert-CurrentManualAuthorizationBoundary $gate
 Assert-Contains $gate 'AutomaticExecutionAuthorized = false' 'Automatic GUI gate must remain CLOSED.'
 Assert-Contains $watchdogGate 'public static readonly bool ProductionConstructionAuthorized = true;' 'P15A ordinary startup requires already-promoted M9 production construction.'
 Assert-Contains $watchdogGate 'M9CPhysicalQualificationConstructionAuthorized = false' 'P15A must not reopen M9C.'

@@ -201,7 +201,8 @@ Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 
 Assert-Contains $prodGate 'public static readonly bool ProductionConstructionAuthorized = true;' 'P15B requires already-promoted production watchdog construction.'
 Assert-Contains $prodGate 'M9CPhysicalQualificationConstructionAuthorized = false' 'P15B must not reopen M9C qualification.'
 Assert-Contains $prodGate 'M9DPhysicalQualificationConstructionAuthorized = false' 'P15B must not reopen M9D qualification.'
-Assert-Contains $userGate 'ManualExecutionAuthorized = false' 'P15B must not open user-facing Manual.'
+. (Join-Path $PSScriptRoot 'p16c-promotion-boundary.ps1')
+Assert-CurrentManualAuthorizationBoundary $userGate
 Assert-Contains $userGate 'AutomaticExecutionAuthorized = false' 'P15B must not open user-facing Automatic.'
 foreach($n in @('Hp8C40ProductionWatchdogGate.CreateLeaseIfAuthorized','HpFanControlBackendFactory.Create','new AdaptiveFanProductionController','manualExecutionAuthorized: true','automaticExecutionAuthorized: false','AdaptiveFanProductionMode.Manual','ApplyManualAsync(','QualificationLevel','ReleaseToFirmwareAsync(','LastRestoreEvidence','WatchdogReleaseVerified','ReadStableFirmwareOwnedAsync','SupervisionSamples = 3')){Assert-Contains $controller $n ("P15B controller route invariant missing: {0}" -f $n)}
 Assert-NotContains $controller 'EnterM9CPhysicalQualificationConstructionScope' 'P15B must not reopen M9C construction scope.'

@@ -42,7 +42,8 @@ Assert-True ([bool]$profile.control.adaptivePolicyPreparation.p13SoftwareComplet
 Assert-True ([bool]$profile.control.adaptivePolicyPreparation.p13SoftwareClosure.closed) 'P14.1 requires formal P13 closure.'
 if ([string]$profile.control.adaptivePolicyPreparation.p13SoftwareClosure.result -ne 'PASS') { throw 'P14.1 requires P13 PASS.' }
 
-Assert-Contains $gate 'ManualExecutionAuthorized = false' 'Manual execution gate must remain closed.'
+. (Join-Path $PSScriptRoot 'p16c-promotion-boundary.ps1')
+Assert-CurrentManualAuthorizationBoundary $gate
 Assert-Contains $gate 'AutomaticExecutionAuthorized = false' 'Automatic execution gate must remain closed.'
 Assert-Contains $candidate 'PhysicallyValidated = false' 'Candidate V1 must remain physically unvalidated.'
 Assert-Contains $candidate 'AuthorizedForProduction = false' 'Candidate V1 must remain unauthorized for production.'

@@ -890,7 +890,7 @@ internal sealed class MainForm : Form
         var manualExecutionAuthorized =
             isolatedManualQualification
                 ? p15cManualExecutionAuthorized || p15d1ManualExecutionAuthorized || p15d2ManualExecutionAuthorized
-                : Hp8C40PostM9UserControlGate.ManualExecutionAuthorized ||
+                : Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(_targetProfile?.Id) ||
                   p16NormalManualQualificationAuthorized;
 
         var automaticExecutionAuthorized =
@@ -904,6 +904,11 @@ internal sealed class MainForm : Form
         if (p16NormalManualQualificationAuthorized && backend is Hp8C40FanControlBackend p16Backend)
             p16Backend.WmiCommandAcknowledged += (_, proof) =>
                 AppLog.Write($"P16 WMI COMMAND PROOF: {proof}");
+
+        if (!isolatedManualQualification && !p16NormalManualQualificationAuthorized &&
+            manualExecutionAuthorized && backend is Hp8C40FanControlBackend manualBackend)
+            manualBackend.WmiCommandAcknowledged += (_, proof) =>
+                AppLog.Write($"Manual WMI COMMAND PROOF: {proof}");
 
         _fanProductionController =
             new AdaptiveFanProductionController(

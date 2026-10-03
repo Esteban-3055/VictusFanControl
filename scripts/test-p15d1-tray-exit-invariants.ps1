@@ -207,7 +207,8 @@ Assert-False ([bool]$contract.safetyBoundary.candidateCurvePhysicallyValidated) 
 Assert-False ([bool]$contract.safetyBoundary.candidateCurveAuthorizedForProduction) 'P15D1 must not authorize Candidate V1.'
 Assert-False ([bool]$contract.safetyBoundary.m9cQualificationConstructionAuthorized) 'P15D1 must not reopen M9C.'
 Assert-False ([bool]$contract.safetyBoundary.m9dQualificationConstructionAuthorized) 'P15D1 must not reopen M9D.'
-Assert-Contains $userGate 'ManualExecutionAuthorized = false' 'P15D1 normal user Manual compile gate must remain false.'
+. (Join-Path $PSScriptRoot 'p16c-promotion-boundary.ps1')
+Assert-CurrentManualAuthorizationBoundary $userGate
 Assert-Contains $userGate 'AutomaticExecutionAuthorized = false' 'P15D1 user Automatic compile gate must remain false.'
 Assert-Contains $candidate 'PhysicallyValidated = false' 'P15D1 Candidate V1 physical flag must remain false.'
 Assert-Contains $candidate 'AuthorizedForProduction = false' 'P15D1 Candidate V1 production flag must remain false.'

@@ -23,7 +23,8 @@ Assert-True ([bool]$release.safetyBoundary.softwareOnly) 'P14.5 must remain soft
 foreach ($v in @('controlEnabledByDefault','automaticPolicyEnabled','manualExecutionAuthorized','automaticExecutionAuthorized','candidateCurvePhysicallyValidated','candidateCurveAuthorizedForProduction','m9cQualificationConstructionAuthorized','m9dQualificationConstructionAuthorized')) { if ([bool]$release.safetyBoundary.$v) { throw "P14.5 safety boundary unexpectedly open: $v" } }
 Assert-True (-not [bool]$profile.control.enabledByDefault) 'Profile default control must remain OFF.'
 Assert-True (-not [bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'Profile automatic policy must remain OFF.'
-Assert-Contains $gate 'ManualExecutionAuthorized = false' 'Manual execution gate must remain false.'
+. (Join-Path $PSScriptRoot 'p16c-promotion-boundary.ps1')
+Assert-CurrentManualAuthorizationBoundary $gate
 Assert-Contains $gate 'AutomaticExecutionAuthorized = false' 'Automatic execution gate must remain false.'
 Assert-Contains $candidate 'PhysicallyValidated = false' 'Candidate must remain unvalidated.'
 Assert-Contains $candidate 'AuthorizedForProduction = false' 'Candidate must remain unauthorized.'

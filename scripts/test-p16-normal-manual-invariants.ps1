@@ -229,7 +229,7 @@ if($isAuthorized){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16A source gate must remain hard-closed.'
 }
 
-foreach($needle in @('p16NormalManualQualificationAuthorized','Hp8C40P16NormalManualQualificationGate.PhysicalExecutionAuthorized','Hp8C40PostM9UserControlGate.ManualExecutionAuthorized ||','Hp8C40TargetProfile.Instance.Id')){Assert-Contains $main $needle ("P16 MainForm bridge missing: {0}" -f $needle)}
+foreach($needle in @('p16NormalManualQualificationAuthorized','Hp8C40P16NormalManualQualificationGate.PhysicalExecutionAuthorized','Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(_targetProfile?.Id) ||','Hp8C40TargetProfile.Instance.Id')){Assert-Contains $main $needle ("P16 MainForm bridge missing: {0}" -f $needle)}
 foreach($needle in @('_manualLevel.Minimum = 10;','_manualLevel.Maximum = 50;','await _controller.ApplyManualAsync(','P13 mode request {mode}: action={result.Action};','P13 manual request {level}/{level}: action={result.Action};')){Assert-Contains $surface $needle ("P16 P13 prerequisite missing: {0}" -f $needle)}
 Assert-NotContains $program '--8c40-p16' 'P16 must not add special command-line mode.'
 Assert-NotContains $program 'P16NormalManual' 'P16 must not add P16 Program hardware-test state.'
@@ -246,7 +246,8 @@ Assert-False ([bool]$ri.specialP16StartupModeIntroduced) 'P16 cannot introduce s
 Assert-False ([bool]$ri.physicalExecution) 'P16A implementation must remain software-only.'
 if([string]$ri.independentFailsafeSource -cne 'scripts/watchdog-p15d2-service-failsafe-8c40.ps1'){throw 'P16 reused failsafe source mismatch.'}
 
-Assert-False ([bool]$p16.promotion.manualExecutionAuthorized) 'P16A must not promote permanent Manual.'
+. (Join-Path $PSScriptRoot 'p16c-promotion-boundary.ps1')
+if([bool]$p16.promotion.manualExecutionAuthorized -ne (Test-P16CManualPromotion)){throw 'P16 current Manual promotion must match P16C evidence boundary.'}
 Assert-False ([bool]$p16.promotion.automaticMayOpen) 'P16 cannot open Automatic.'
 Assert-False ([bool]$p16.promotion.candidateCurveMayBePromoted) 'P16 cannot promote Candidate V1.'
 Assert-False ([bool]$p16.promotion.controlMayEnableByDefault) 'P16 cannot enable default control.'

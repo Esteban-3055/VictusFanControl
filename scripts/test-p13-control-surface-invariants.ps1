@@ -79,9 +79,10 @@ foreach ($forbidden in @(
 Assert-Contains $settings 'ManualEqualLevel is < 10 or > 50' 'Persisted manual preference must reject values outside 10..50.'
 Assert-Contains $candidate 'PhysicallyValidated = false' 'Candidate curve must remain physically unvalidated.'
 Assert-Contains $candidate 'AuthorizedForProduction = false' 'Candidate curve must remain production-unauthorized.'
-Assert-Contains $gate 'ManualExecutionAuthorized = false' 'P13 Manual execution gate must remain CLOSED.'
+. (Join-Path $PSScriptRoot 'p16c-promotion-boundary.ps1')
+Assert-CurrentManualAuthorizationBoundary $gate
 Assert-Contains $gate 'AutomaticExecutionAuthorized = false' 'P13 Automatic execution gate must remain CLOSED.'
-Assert-Contains $gate 'P13_SOFTWARE_PASS_FORMALLY_CLOSED_MANUAL_AUTOMATIC_GATES_CLOSED' 'P13 gate status must match formal software closure.'
+Assert-Contains $gate 'P16C_MANUAL_PROMOTED_AUTOMATIC_CLOSED' 'Current gate status must match P16C Manual promotion.'
 
 $prep = $profile.control.adaptivePolicyPreparation
 if ([string]$profile.status -ne 'production-range-10-50-m9-watchdog-promoted-p13-software-pass-hardware-gates-closed-policy-off') { throw 'Top-level profile status must record final P13 software closure.' }

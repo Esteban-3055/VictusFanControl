@@ -319,7 +319,8 @@ Assert-False ([bool]$contract.safetyBoundary.m9dQualificationConstructionAuthori
 Assert-False ([bool]$contract.automatic.executionAuthorized) 'P15C must keep Automatic execution closed.'
 Assert-False ([bool]$profile.control.enabledByDefault) 'P15C must keep profile default control OFF.'
 Assert-False ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) 'P15C must keep profile automatic policy OFF.'
-Assert-Contains $userGate 'ManualExecutionAuthorized = false' 'P15C must leave normal user Manual compile gate false.'
+. (Join-Path $PSScriptRoot 'p16c-promotion-boundary.ps1')
+Assert-CurrentManualAuthorizationBoundary $userGate
 Assert-Contains $userGate 'AutomaticExecutionAuthorized = false' 'P15C must leave user Automatic compile gate false.'
 Assert-Contains $candidate 'PhysicallyValidated = false' 'P15C must leave Candidate V1 physically unvalidated.'
 Assert-Contains $candidate 'AuthorizedForProduction = false' 'P15C must leave Candidate V1 production-unauthorized.'

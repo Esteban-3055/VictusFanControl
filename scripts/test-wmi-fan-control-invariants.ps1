@@ -33,7 +33,8 @@ $dedicatedP16=($p16.status -ceq 'P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEA
  $p16.normalManual.hardeningRequired.softwareConcurrencyInvestigation.status -ceq 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED' -and
  $p16.normalManual.hardeningRequired.softwareConcurrencyInvestigation.validation.result -ceq 'SUCCESS')
 $auditedP16Pass=($p16.status -ceq 'P16B_PHYSICAL_PASS_EVIDENCE_CLOSED_GATE_CLOSED' -and $p16.normalManual.evidenceClosed -and $p16.normalManual.physicalClosure.closed -and $p16.normalManual.physicalClosure.result -ceq 'PASS' -and [int]$p16.normalManual.physicalClosure.attempt -eq 7 -and $p16.normalManual.authorization.authorizationConsumed -and -not $p16.normalManual.executionAuthorized -and -not $p16.normalManual.physicalGatesOpened)
-if($p16.promotion.manualExecutionAuthorized -or $p16.promotion.automaticMayOpen -or ($p16.normalManual.physicalPassed -and -not $auditedP16Pass)){throw 'WMI migration cannot preclaim physical PASS or promote permanent control.'}
+. (Join-Path $PSScriptRoot 'p16c-promotion-boundary.ps1')
+if(($p16.promotion.manualExecutionAuthorized -and -not (Test-P16CManualPromotion)) -or $p16.promotion.automaticMayOpen -or ($p16.normalManual.physicalPassed -and -not $auditedP16Pass)){throw 'WMI migration cannot preclaim physical PASS or promote permanent control.'}
 if(-not $dedicatedP16 -and ($p16.normalManual.executionAuthorized -or $p16.normalManual.controllerPhysicalExecutionAuthorized -or $p16.normalManual.physicalGatesOpened)){throw 'WMI migration permits only separately validated generation-6 P16 authorization.'}
 
 $lifecycle=$p16.normalManual.hardeningRequired.postAttempt4.lifecycleImplementation
