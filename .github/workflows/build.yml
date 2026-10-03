@@ -45,6 +45,13 @@ jobs:
             exit 1
           }
 
+      - name: Passive Manual WMI timeout collector fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Collect-Victus-WmiTimeout.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Collect-Victus-WmiTimeout.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Collector PowerShell 5.1 self-test failed.' }
+
       - name: HP WMI fan broker and reader invariants PowerShell 7
         shell: pwsh
         run: |
