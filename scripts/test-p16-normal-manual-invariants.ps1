@@ -229,7 +229,12 @@ if($lifecycle.status -ceq 'IMPLEMENTED_CI_PENDING_GATE_CLOSED'){
 }elseif($lifecycle.status -ceq 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED'){
  Assert-True ([bool]$lifecycle.ciValidated) 'P16 lifecycle closure requires CI validation.'
  Assert-True ([bool]$lifecycle.closure.closed) 'P16 lifecycle formal closure missing.'
- if($lifecycle.closure.sourceCiResult -cne 'SUCCESS' -or $lifecycle.closure.implementationHead -notmatch '^[0-9a-f]{40}$'){throw 'P16 lifecycle closure CI identity missing.'}
+ $lc=$lifecycle.closure
+ if($lc.result -cne 'PASS' -or $lc.sourceCiResult -cne 'SUCCESS' -or
+    $lc.implementationHead -cne '86d6509bf4a71946067f0c34f53fdda976eec7c7' -or
+    $lc.implementationTree -cne 'd6de39a35b591ef7eae1adbd50cab5159648127c' -or
+    [int]$lc.sourceCiRunNumber -ne 1203 -or [long]$lc.sourceCiRunId -ne 37088402551 -or
+    [int]$lc.deterministicSessionCases -ne 7 -or $lc.hardwareExecution -or $lc.physicalGatesOpened){throw 'P16 lifecycle closure CI identity missing.'}
 }else{throw 'Unexpected P16 lifecycle implementation status.'}
 
 Write-Host ("PASS: P16 normal-Manual state '{0}' preserves the P15/permanent-Manual/Automatic/Candidate boundaries." -f $status) -ForegroundColor Green

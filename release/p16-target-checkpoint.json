@@ -435,7 +435,7 @@
         "lifecycleInterruptionFenceRequired": true,
         "hardwareExecutionByReblockCommit": false,
         "lifecycleImplementation": {
-          "status": "IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+          "status": "SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED",
           "softwareOnly": true,
           "physicalGatesOpened": false,
           "irreversibleSessionLatch": true,
@@ -444,9 +444,18 @@
           "inFlightManualCancellation": true,
           "firmwareReleaseRemainsAvailable": true,
           "parentCausalAbort": true,
-          "ciValidated": false,
+          "ciValidated": true,
           "closure": {
-            "closed": false
+            "closed": true,
+            "result": "PASS",
+            "implementationHead": "86d6509bf4a71946067f0c34f53fdda976eec7c7",
+            "implementationTree": "d6de39a35b591ef7eae1adbd50cab5159648127c",
+            "sourceCiRunNumber": 1203,
+            "sourceCiRunId": 37088402551,
+            "sourceCiResult": "SUCCESS",
+            "hardwareExecution": false,
+            "physicalGatesOpened": false,
+            "deterministicSessionCases": 7
           }
         }
       }

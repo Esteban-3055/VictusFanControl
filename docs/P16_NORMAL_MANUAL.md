@@ -484,3 +484,11 @@ The durable per-authorization-HEAD attempt fence is unchanged.
 Implementation and regression CI must pass before a separate software closure.
 All physical/permanent Manual/Automatic gates remain closed; a fresh hardware
 authorization is still a separate future change.
+
+The lifecycle session implementation is formally software-closed after HEAD
+`86d6509bf4a71946067f0c34f53fdda976eec7c7`, full Windows CI #1203
+(run 37088402551) SUCCESS. Seven deterministic session cases, PowerShell 5.1
+helper runtime, SDK build/publish, packaging and regression checks passed.
+This separate closure needs its own same-head CI. The original attempt-4
+FAIL_CLOSED history remains unchanged; residual control tachometer migration
+and separate fresh physical authorization/evidence still remain.
