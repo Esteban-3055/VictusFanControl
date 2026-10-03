@@ -52,6 +52,13 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Collect-Victus-WmiTimeout.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Collector PowerShell 5.1 self-test failed.' }
 
+      - name: Scenario A passive isolation fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Start-Victus-ScenarioA.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-ScenarioA.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Scenario A PowerShell 5.1 self-test failed.' }
+
       - name: WMI-only isolation launcher fixtures PowerShell 7 and 5.1
         shell: pwsh
         run: |

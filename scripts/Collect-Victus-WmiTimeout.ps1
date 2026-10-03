@@ -1,4 +1,4 @@
-﻿# Compatible with Windows PowerShell 5.1 and PowerShell 7.
+# Compatible with Windows PowerShell 5.1 and PowerShell 7.
 [CmdletBinding()]
 param(
     [string]$RepoRoot = '',
@@ -8,12 +8,13 @@ param(
     [ValidateRange(1,48)][int]$EventHours = 12,
     [ValidateRange(100,20000)][int]$MaximumEvents = 10000,
     [switch]$SkipAcpiTrace,
+    [switch]$MinimalPreparation,
     [string]$IaslPath = '',
     [scriptblock]$ObservationStarted,
     [scriptblock]$ObservationGuard,
     [scriptblock]$ObservationFinished,
     [object]$ObservationContext,
-    [ValidateSet('passive','wmi-only-no-direct-ec')][string]$InvestigationMode = 'passive',
+    [ValidateSet('passive','wmi-only-no-direct-ec','scenario-a-no-vfc')][string]$InvestigationMode = 'passive',
     [switch]$SelfTest
 )
 
@@ -355,10 +356,12 @@ try {
         Invoke-Bounded 'driverquery.exe' '/fo csv' (Join-Path $script:Root 'drivers.csv')
         Invoke-Bounded 'powercfg.exe' '/getactivescheme' (Join-Path $script:Root 'power-active.txt')
         Invoke-Bounded 'powercfg.exe' '/a' (Join-Path $script:Root 'power-capabilities.txt')
+        if(-not $MinimalPreparation){
         Invoke-ReadScript "Get-PnpDevice -PresentOnly | Where-Object { `$_.InstanceId -like 'ACPI*' -or `$_.FriendlyName -match 'Pawn|Embedded|integrado|integrada|OMEN|HP.*(System|Firmware)' } | ForEach-Object { `$d=`$_; [pscustomobject]@{Device=`$d;Properties=@(Get-PnpDeviceProperty -InstanceId `$d.InstanceId -ErrorAction SilentlyContinue | Where-Object { `$_.KeyName -match 'DriverVersion|DriverDate|DriverProvider|Service|HardwareIds|LocationPaths|ProblemCode|Parent|DriverInfPath' })} } | ConvertTo-Json -Depth 8" (Join-Path $script:Root 'acpi\pnp-devices.txt') 40
+        }else{Say 'Escenario minimo: omitir enumeracion PnP y propiedades de dispositivos.'}
         foreach($file in @((Join-Path $env:SystemRoot 'System32\drivers\acpi.sys'),(Join-Path $env:SystemRoot 'System32\wbem\wmiprov.dll'))){if(Test-Path -LiteralPath $file){ $item=Get-Item -LiteralPath $file;Save-Json (Join-Path $script:Root ('driver-'+$item.Name+'.json')) ([pscustomobject]@{Path=$file;Version=$item.VersionInfo.FileVersion;SHA256=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash})}}
     }
-    Stage '5/8 ACPI estatico, eventos con mensajes/EVTX y trazas ETW propias.' {Capture-AcpiTables;Export-Events 'before';Start-AcpiTrace}
+    Stage '5/8 ACPI estatico, eventos con mensajes/EVTX y trazas ETW propias.' {if(-not $MinimalPreparation){Capture-AcpiTables};Export-Events 'before';Start-AcpiTrace}
     Stage '6/8 Observacion pasiva: procesos, cambios del journal y nuevos avisos de VFC.' {
         if($ObservationStarted){[void](& $ObservationStarted $script:Root $ObservationContext)}
         $journal=Join-Path $env:ProgramData 'VictusFanControl\WatchdogM4\state\lease.json'
@@ -413,7 +416,7 @@ finally {
     Stage 'ETW finalizar y vaciar solo las sesiones propias.' {Stop-AcpiTrace}
     Stage '7/8 Logs y procesos finales; eventos Windows actualizados.' {
         Capture-Logs 'after';[void](Process-Snapshot 'after');Export-Events 'after'
-        Save-Json (Join-Path $script:Root 'capture-summary.json') ([pscustomobject]@{StartedLocal=$started.ToString('o');EndedLocal=[DateTimeOffset]::Now.ToString('o');Warnings=$script:Warnings.Count;HardwareReads=($InvestigationMode -eq 'wmi-only-no-direct-ec');InvestigationMode=$InvestigationMode;StaticFirmwareApi=$true;EtwRequested=(-not $SkipAcpiTrace);MaximumEvents=$MaximumEvents;CollectorVersion='3-isolation';FanWrites=$false;EventChannelsEnabled=$false;SourceLogsPreserved=$true;RepoRoot=$RepoRoot})
+        Save-Json (Join-Path $script:Root 'capture-summary.json') ([pscustomobject]@{StartedLocal=$started.ToString('o');EndedLocal=[DateTimeOffset]::Now.ToString('o');Warnings=$script:Warnings.Count;HardwareReads=($InvestigationMode -eq 'wmi-only-no-direct-ec');InvestigationMode=$InvestigationMode;StaticFirmwareApi=(-not $MinimalPreparation);MinimalPreparation=[bool]$MinimalPreparation;EtwRequested=(-not $SkipAcpiTrace);MaximumEvents=$MaximumEvents;CollectorVersion='3-isolation';FanWrites=$false;EventChannelsEnabled=$false;SourceLogsPreserved=$true;RepoRoot=$RepoRoot})
     }
     Say '8/8 Generar manifiesto SHA-256 y ZIP. No se borran los logs originales.'
     try {[void](Package)}catch{Write-Host ('No se pudo crear ZIP: '+$_.Exception.Message) -ForegroundColor Red;Write-Host ('Adjunta manualmente la carpeta: '+$script:Root)}
