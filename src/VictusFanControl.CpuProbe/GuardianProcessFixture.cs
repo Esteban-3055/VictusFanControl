@@ -43,7 +43,7 @@ internal static class GuardianProcessFixture
     {
         using var parent = Process.GetCurrentProcess();
         var request = new ProbeRequest("--fixture", "NEVER_OPENED", directory, 10,
-            parent.Id, parent.StartTime.ToUniversalTime().Ticks, DateTimeOffset.UtcNow);
+            parent.Id, parent.StartTime.ToUniversalTime().Ticks, null, null, DateTimeOffset.UtcNow);
         var requestPath = Path.Combine(directory, "request.json");
         ProbeEvidence.DurableJson(requestPath, request);
         var start = new ProcessStartInfo(Executable) { UseShellExecute = false, CreateNoWindow = true,
