@@ -23,3 +23,9 @@ Fixtures sin hardware:
 ```powershell
 .\scripts\Start-Victus-ScenarioA.ps1 -SelfTest
 ```
+
+## Correccion del detector v2
+
+La captura `170707_4061c7` del 03-10-2026 se detuvo tras una sola muestra: el detector v1 acepto registros historicos 4536/4540/4544/4550 como nuevos. System antes y despues conserva el mismo ultimo RecordId 4826; no hubo reproduccion ni observacion de 30 minutos. Conservar el ZIP original sin editarlo.
+
+El detector v2 consulta XPath con RecordId superior al cursor inicial y verifica independientemente proveedor, ID, RecordId y timestamp UTC del XML de cada evento. Invalida la sesion si detecta retroceso del cursor System. El resumen registra `DetectorVersion=2`, cursor y tiempos ISO UTC. Los fixtures de PS5.1/7 incluyen los cuatro eventos historicos reales, un evento nuevo, combinaciones de tiempo/cursor incorrectas, otros proveedor/ID, timestamp invalido y validacion read-only del motor XPath Windows.

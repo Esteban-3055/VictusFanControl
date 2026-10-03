@@ -8,7 +8,24 @@ param(
 )
 $ErrorActionPreference='Stop'
 $repo=Split-Path -Parent $PSScriptRoot
-$state=@{StartedUtc=$null;Evidence=$null;Fault=$null;Samples=0;Events=@();Paused=$false;Resumed=$false;Finished=$false;NextReport=[DateTimeOffset]::MinValue;StopReason='duration-or-Q'}
+$state=@{StartedUtc=$null;InitialSystemRecordId=$null;Evidence=$null;Fault=$null;Samples=0;Events=@();Paused=$false;Resumed=$false;Finished=$false;NextReport=[DateTimeOffset]::MinValue;StopReason='duration-or-Q'}
+
+function New-ScenarioAEventQuery([long]$InitialRecordId) {
+    if($InitialRecordId -lt 0){throw 'Cursor de eventos invalido.'}
+    # Record IDs avoid localized date conversion in FilterHashtable. A second
+    # independent check below uses the original XML timestamp, always UTC.
+    return "*[System[Provider[@Name='ACPI'] and EventID=13 and EventRecordID > $InitialRecordId]]"
+}
+function Select-ScenarioANewEvents($Events,[long]$InitialRecordId,[DateTimeOffset]$StartedUtc) {
+    foreach($event in @($Events)){
+        [xml]$xml=$event.ToXml()
+        $system=$xml.Event.System
+        if(-not $system -or -not $system.TimeCreated.SystemTime -or -not $system.EventRecordID){throw 'Evento sin identidad o tiempo XML verificable.'}
+        $record=[long]$system.EventRecordID
+        $utc=[DateTimeOffset]::Parse([string]$system.TimeCreated.SystemTime,[Globalization.CultureInfo]::InvariantCulture)
+        if($system.Provider.Name -eq 'ACPI' -and [int]$system.EventID -eq 13 -and $record -gt $InitialRecordId -and $utc -ge $StartedUtc){$event}
+    }
+}
 
 function Assert-ScenarioAFacts($Facts,[switch]$AllowCleanM4) {
     if(@($Facts.Journals).Count){throw 'Existe un lease pendiente. Vuelve a Firmware y espera la restauracion; no borres el journal.'}
@@ -59,6 +76,29 @@ function Resume-ScenarioAM4($Context) {
     }
 }
 if($SelfTest){
+    # Deliberately feed historical records even when a provider-side filter
+    # misbehaves, as it did in the uploaded 17:07 capture on PowerShell 5.1.
+    function New-ScenarioAFixtureEvent([long]$RecordId,[string]$Utc,[string]$Provider='ACPI',[int]$Id=13) {
+        $e=[pscustomobject]@{Xml="<Event><System><Provider Name='$Provider'/><EventID>$Id</EventID><TimeCreated SystemTime='$Utc'/><EventRecordID>$RecordId</EventRecordID></System></Event>"}
+        $e | Add-Member -MemberType ScriptMethod -Name ToXml -Value {return $this.Xml}
+        return $e
+    }
+    $cutoff=[DateTimeOffset]::Parse('2026-10-03T20:07:26.9400119Z')
+    $old=@(New-ScenarioAFixtureEvent 4550 '2026-10-03T11:32:55.6175801Z';New-ScenarioAFixtureEvent 4544 '2026-10-03T10:33:16.2377509Z';New-ScenarioAFixtureEvent 4540 '2026-10-03T09:53:30.2726863Z';New-ScenarioAFixtureEvent 4536 '2026-10-03T09:33:46.7724884Z')
+    if(@(Select-ScenarioANewEvents $old 4826 $cutoff).Count){throw 'Regresion: ACPI historico contado como nuevo.'}
+    $cases=@($old)+(New-ScenarioAFixtureEvent 4827 '2026-10-03T20:07:27Z')+(New-ScenarioAFixtureEvent 4828 '2026-10-03T20:07:25Z')+(New-ScenarioAFixtureEvent 4826 '2026-10-03T20:07:28Z')+(New-ScenarioAFixtureEvent 4829 '2026-10-03T20:07:29Z' 'Other')+(New-ScenarioAFixtureEvent 4830 '2026-10-03T20:07:30Z' 'ACPI' 12)
+    $accepted=@(Select-ScenarioANewEvents $cases 4826 $cutoff)
+    if($accepted.Count -ne 1 -or $accepted[0].ToXml() -notmatch '4827'){throw 'Clasificacion de evento nuevo incorrecta.'}
+    if(@(Select-ScenarioANewEvents @() 4826 $cutoff).Count){throw 'Consulta vacia produjo evento.'}
+    $rejected=$false;try{Select-ScenarioANewEvents @(New-ScenarioAFixtureEvent 4831 'invalid') 4826 $cutoff}catch{$rejected=$true}
+    if(-not $rejected){throw 'Timestamp XML invalido no rechazo la evidencia.'}
+    if((New-ScenarioAEventQuery 4826) -notmatch 'EventRecordID > 4826'){throw 'Falta cursor en consulta XPath.'}
+    # Read-only Windows smoke: validate the actual Event Log XPath engine.
+    if([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT){
+        try{[void](Get-WinEvent -LogName System -FilterXPath (New-ScenarioAEventQuery 9223372036854775806) -MaxEvents 1 -ErrorAction Stop)}catch{
+            if($_.FullyQualifiedErrorId -notmatch '^NoMatchingEventsFound'){throw}
+        }
+    }
     $empty=[pscustomobject]@{Journals=@();Services=@();Processes=@();M4PathVerified=$false;M4Executable=$null}
     Assert-ScenarioAFacts $empty
     foreach($kind in @('lease','service','process','unverified-m4')){
@@ -79,7 +119,7 @@ if($SelfTest){
     $clean.Processes[0].Path='C:\other.exe'
     $rejected=$false;try{Assert-ScenarioAFacts $clean -AllowCleanM4}catch{$rejected=$true}
     if(-not $rejected){throw 'Se admitio un ejecutable M4 diferente.'}
-    Write-Host 'PASS: escenario A; fixtures sin servicios, procesos ni hardware reales.'
+    Write-Host 'PASS: escenario A; aislamiento, eventos historicos/nuevos y XPath Windows; sin cambios de servicios ni acceso hardware.'
     return
 }
 if([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT){throw 'Esta prueba requiere Windows.'}
@@ -98,6 +138,10 @@ try{
     $start={param($captureRoot,$context)
         $context.Evidence=Join-Path $captureRoot 'scenario-a';[IO.Directory]::CreateDirectory($context.Evidence)|Out-Null
         Assert-ScenarioAFacts (Get-ScenarioAFacts)
+        # Capture the cursor before the start instant; both conditions must
+        # hold, so no event written before this observation is called new.
+        $latest=Get-WinEvent -LogName System -MaxEvents 1 -ErrorAction Stop
+        $context.InitialSystemRecordId=[long]$latest.RecordId
         $context.StartedUtc=[DateTimeOffset]::UtcNow.ToString('o')
         Save-ScenarioAJson (Join-Path $context.Evidence 'start.json') (Get-ScenarioAFacts)
         Write-Host 'ESCENARIO A ACTIVO: VFC cerrado, watchdog detenido. Usa el equipo normalmente; Q termina y genera ZIP.' -ForegroundColor Green
@@ -108,13 +152,16 @@ try{
             $context.Samples++
             $row=[pscustomobject]@{Utc=[DateTimeOffset]::UtcNow.ToString('o');Sample=$context.Samples;Facts=$facts}
             [IO.File]::AppendAllText((Join-Path $context.Evidence 'isolation-timeline.ndjson'),(ConvertTo-Json $row -Compress -Depth 8)+[Environment]::NewLine,(New-Object Text.UTF8Encoding($false)))
-            $events=@(Get-WinEvent -FilterHashtable @{LogName='System';ProviderName='ACPI';Id=13;StartTime=[DateTimeOffset]::Parse($context.StartedUtc).LocalDateTime} -MaxEvents 20 -ErrorAction Stop)
+            $latest=Get-WinEvent -LogName System -MaxEvents 1 -ErrorAction Stop
+            if([long]$latest.RecordId -lt $context.InitialSystemRecordId){throw 'El registro System se reinicio durante la prueba; comparacion invalidada.'}
+            $raw=@(Get-WinEvent -LogName System -FilterXPath (New-ScenarioAEventQuery $context.InitialSystemRecordId) -MaxEvents 20 -ErrorAction Stop)
+            $events=@(Select-ScenarioANewEvents $raw $context.InitialSystemRecordId ([DateTimeOffset]::Parse($context.StartedUtc)))
         }catch{
             if($_.FullyQualifiedErrorId -notmatch '^NoMatchingEventsFound'){$context.Fault=$_.Exception.Message;$context.StopReason='isolation-or-event-query-failure';throw}
             $events=@()
         }
         if($events.Count){
-            $context.Events=@($events | Select-Object TimeCreated,RecordId,ProviderName,Id,Message)
+            $context.Events=@($events | Select-Object @{Name='TimeCreatedUtc';Expression={([DateTimeOffset]::Parse(([xml]$_.ToXml()).Event.System.TimeCreated.SystemTime)).ToUniversalTime().ToString('o')}},RecordId,ProviderName,Id,Message)
             Save-ScenarioAJson (Join-Path $context.Evidence 'acpi13-detected.json') $context.Events
             [IO.File]::WriteAllText((Join-Path $context.Evidence 'acpi13-detected.xml'),($events | ForEach-Object {$_.ToXml()}) -join [Environment]::NewLine,(New-Object Text.UTF8Encoding($false)))
             $context.StopReason='new-acpi13';Write-Host 'ACPI 13 NUEVO: terminar observacion y conservar evidencia.' -ForegroundColor Yellow
@@ -128,7 +175,7 @@ try{
         try{Resume-ScenarioAM4 $context}catch{$context.Fault='No se pudo reanudar M4: '+$_.Exception.Message}
         if(-not $context.Evidence){$context.Evidence=Join-Path $captureRoot 'scenario-a';[IO.Directory]::CreateDirectory($context.Evidence)|Out-Null}
         Save-ScenarioAJson (Join-Path $context.Evidence 'summary.json') ([pscustomobject]@{
-            Scenario='A';StartedUtc=$context.StartedUtc;EndedUtc=$ended;SampledIsolationValid=([bool]$context.StartedUtc -and $context.Samples -gt 0 -and -not $context.Fault);Fault=$context.Fault;Samples=$context.Samples;StopReason=$context.StopReason;Acpi13Count=$context.Events.Count;Acpi13=$context.Events;M4TemporarilyPaused=$context.Paused;M4Resumed=$context.Resumed;DirectEcReads=$false;HpWmiCalls=$false;FanWrites=$false;Scope='Sampled VFC isolation. Windows/firmware and other applications remain possible EC users. No raw fan ownership proof is performed.'
+            Scenario='A';DetectorVersion=2;InitialSystemRecordId=$context.InitialSystemRecordId;StartedUtc=$context.StartedUtc;EndedUtc=$ended;SampledIsolationValid=([bool]$context.StartedUtc -and $context.Samples -gt 0 -and -not $context.Fault);Fault=$context.Fault;Samples=$context.Samples;StopReason=$context.StopReason;Acpi13Count=$context.Events.Count;Acpi13=$context.Events;M4TemporarilyPaused=$context.Paused;M4Resumed=$context.Resumed;DirectEcReads=$false;HpWmiCalls=$false;FanWrites=$false;Scope='Sampled VFC isolation. Windows/firmware and other applications remain possible EC users. No raw fan ownership proof is performed.'
         })
         $context.Finished=$true
     }
