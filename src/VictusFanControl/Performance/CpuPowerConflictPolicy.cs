@@ -59,12 +59,6 @@ internal sealed class CpuPowerConflictPolicy
     internal ulong? FirstDetectedActiveMilliseconds { get; private set; }
     internal ulong? LastDetectedActiveMilliseconds { get; private set; }
 
-    /// <summary>
-    /// Records an observed external change. Repeated observations while already
-    /// Contested never postpone the current retry deadline. If all five attempts
-    /// have already been consumed and a previously reacquired value is changed
-    /// again before the stability window closes, authority is yielded immediately.
-    /// </summary>
     internal void ObserveExternalChange()
     {
         if (_attemptInFlight)
@@ -85,7 +79,7 @@ internal sealed class CpuPowerConflictPolicy
 
             case CpuPowerConflictState.Contested:
                 // Keep the original retry start. Continuous observations from an
-                // external writer must not defer the first bounded reacquisition.
+                // external writer must not defer the bounded reacquisition.
                 break;
 
             case CpuPowerConflictState.ReacquiredPendingStability:
@@ -111,10 +105,24 @@ internal sealed class CpuPowerConflictPolicy
     }
 
     /// <summary>
-    /// Atomically consumes one reacquisition attempt when the 30-second active
-    /// time interval has elapsed. The caller must immediately follow a true
-    /// result with CompleteReacquire().
+    /// Records that the requested owned fields are present again while the
+    /// policy is Contested, without spending a write attempt. A full stability
+    /// window is still required before the conflict episode is closed.
     /// </summary>
+    internal void ObserveRequestedValuePresent()
+    {
+        if (_attemptInFlight)
+            throw new InvalidOperationException(
+                "Cannot observe a returned requested value while an attempt is in flight.");
+
+        if (State != CpuPowerConflictState.Contested)
+            throw new InvalidOperationException(
+                "Requested value can return automatically only from Contested.");
+
+        _stabilityStartedMilliseconds = _clock.Milliseconds;
+        State = CpuPowerConflictState.ReacquiredPendingStability;
+    }
+
     internal bool TryBeginReacquire()
     {
         if (_attemptInFlight || State != CpuPowerConflictState.Contested)
@@ -139,11 +147,6 @@ internal sealed class CpuPowerConflictPolicy
         return true;
     }
 
-    /// <summary>
-    /// Completes the attempt after the guardian performs at most one write and
-    /// exact readback. Success starts the 60-second stability window. Failure
-    /// schedules the next bounded retry or yields after the fifth attempt.
-    /// </summary>
     internal void CompleteReacquire(bool exactReadback)
     {
         if (!_attemptInFlight)
@@ -170,11 +173,6 @@ internal sealed class CpuPowerConflictPolicy
         State = CpuPowerConflictState.Contested;
     }
 
-    /// <summary>
-    /// Closes the conflict episode only after the reacquired setting survives
-    /// the full active-time stability window. At that point a future conflict
-    /// receives a fresh five-attempt budget.
-    /// </summary>
     internal bool TryCompleteStableWindow()
     {
         if (_attemptInFlight ||
@@ -195,20 +193,12 @@ internal sealed class CpuPowerConflictPolicy
         return true;
     }
 
-    /// <summary>
-    /// Used when target/safety/lifecycle validation says reacquisition is no
-    /// longer allowed. This never grants another automatic attempt.
-    /// </summary>
     internal void ForceYield()
     {
         _attemptInFlight = false;
         State = CpuPowerConflictState.Yielded;
     }
 
-    /// <summary>
-    /// Explicit user action may start a new authority episode after Yielded.
-    /// Calling this method performs no hardware I/O.
-    /// </summary>
     internal void ResetByUser()
     {
         ResetCore();

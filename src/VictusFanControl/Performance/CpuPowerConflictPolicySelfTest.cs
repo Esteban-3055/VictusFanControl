@@ -10,6 +10,7 @@ internal static class CpuPowerConflictPolicySelfTest
         {
             FirstAttemptWaitsThirtySeconds(output);
             RepeatedObservationDoesNotPostponeRetry(output);
+            RequestedValueCanReturnWithoutWrite(output);
             SuccessfulReacquireNeedsSixtyStableSeconds(output);
             ConflictDuringStabilityKeepsBudget(output);
             FiveFailedAttemptsYield(output);
@@ -64,6 +65,29 @@ internal static class CpuPowerConflictPolicySelfTest
         policy.CompleteReacquire(exactReadback: false);
 
         output.WriteLine("PASS repeated external observations do not starve the retry deadline");
+    }
+
+    private static void RequestedValueCanReturnWithoutWrite(TextWriter output)
+    {
+        var clock = new FakeActiveTimeClock();
+        var policy = new CpuPowerConflictPolicy(clock);
+
+        policy.ObserveExternalChange();
+        clock.Advance(TimeSpan.FromSeconds(10));
+        policy.ObserveRequestedValuePresent();
+
+        Require(policy.State == CpuPowerConflictState.ReacquiredPendingStability,
+            "returned requested value starts stability without a write");
+        Require(policy.AttemptsUsed == 0,
+            "returned requested value does not consume an attempt");
+
+        clock.Advance(TimeSpan.FromSeconds(60));
+        Require(policy.TryCompleteStableWindow(),
+            "returned requested value can become stable");
+        Require(policy.State == CpuPowerConflictState.Inactive,
+            "stable return closes episode");
+
+        output.WriteLine("PASS requested value may return without consuming a write attempt");
     }
 
     private static void SuccessfulReacquireNeedsSixtyStableSeconds(TextWriter output)

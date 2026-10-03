@@ -1,3 +1,5 @@
+using VictusFanControl.Runtime;
+
 namespace VictusFanControl.Performance;
 
 internal enum CpuPowerLimiterState
@@ -6,6 +8,9 @@ internal enum CpuPowerLimiterState
     Disabled,
     Applying,
     Active,
+    Contested,
+    ReacquiredPendingStability,
+    Yielded,
     Recovering,
     Failed
 }
@@ -33,26 +38,47 @@ internal interface ICpuPowerLimitBackend
 {
     bool IsSupported { get; }
     CpuPowerLimitSnapshot Read();
+
     CpuPowerLimitApplyPlan BuildApplyPlan(
         CpuPowerLimitSnapshot baseline,
         CpuPowerLimitRequest request);
+
+    bool OwnedFieldsMatch(
+        ulong expectedRaw,
+        CpuPowerLimitSnapshot current);
+
+    CpuPowerLimitApplyPlan BuildReacquirePlan(
+        CpuPowerLimitSnapshot originalBaseline,
+        CpuPowerLimitRequest request,
+        CpuPowerLimitSnapshot current);
+
     CpuPowerLimitRestorePlan PlanRestore(
-        CpuPowerLimitSnapshot baseline,
+        CpuPowerLimitSnapshot restoreTarget,
         ulong appliedRaw,
         CpuPowerLimitSnapshot current);
+
     void Write(ulong raw);
 }
 
 internal sealed class CpuPowerLimiter : IDisposable
 {
     private readonly ICpuPowerLimitBackend _backend;
+    private readonly CpuPowerConflictPolicy _conflictPolicy;
+
     private CpuPowerLimitSnapshot? _baseline;
+    private CpuPowerLimitSnapshot? _externalHandoff;
+    private CpuPowerLimitRequest? _request;
     private ulong? _appliedRaw;
     private bool _disposed;
 
-    internal CpuPowerLimiter(ICpuPowerLimitBackend backend)
+    internal CpuPowerLimiter(
+        ICpuPowerLimitBackend backend,
+        IActiveTimeClock? conflictClock = null)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
+        _conflictPolicy = new CpuPowerConflictPolicy(
+            conflictClock ?? new WindowsActiveTimeClock());
+
         State = backend.IsSupported
             ? CpuPowerLimiterState.Disabled
             : CpuPowerLimiterState.Unsupported;
@@ -61,12 +87,15 @@ internal sealed class CpuPowerLimiter : IDisposable
     internal CpuPowerLimiterState State { get; private set; }
     internal string? LastError { get; private set; }
     internal CpuPowerLimitSnapshot? Baseline => _baseline;
+    internal CpuPowerLimitSnapshot? ExternalHandoff => _externalHandoff;
     internal ulong? AppliedRaw => _appliedRaw;
+    internal int ReacquireAttemptsUsed => _conflictPolicy.AttemptsUsed;
 
     internal bool Apply(CpuPowerLimitRequest request)
     {
         ThrowIfDisposed();
         LastError = null;
+
         if (State == CpuPowerLimiterState.Unsupported)
             return Fail("CPU_POWER_LIMIT_UNSUPPORTED");
         if (State != CpuPowerLimiterState.Disabled)
@@ -79,16 +108,13 @@ internal sealed class CpuPowerLimiter : IDisposable
             return Fail("CPU_POWER_LIMIT_LOCKED");
 
         var plan = _backend.BuildApplyPlan(baseline, request);
-        if (plan.RequestedRaw == baseline.Raw ||
-            plan.AppliedPl1Watts < 10 ||
-            plan.AppliedPl2Watts < plan.AppliedPl1Watts ||
-            plan.AppliedPl1Watts >= baseline.Pl1Watts ||
-            plan.AppliedPl2Watts >= baseline.Pl2Watts)
-        {
+        if (!ValidPlanAgainstOriginalBaseline(plan, baseline))
             return Fail("CPU_POWER_LIMIT_BACKEND_PLAN_REJECTED");
-        }
 
+        _conflictPolicy.ResetByUser();
         _baseline = baseline;
+        _externalHandoff = null;
+        _request = request;
         _appliedRaw = plan.RequestedRaw;
         State = CpuPowerLimiterState.Applying;
 
@@ -112,21 +138,75 @@ internal sealed class CpuPowerLimiter : IDisposable
         }
     }
 
+    /// <summary>
+    /// Verifies the requested PL1/PL2 ownership and advances the bounded
+    /// external-writer policy. This method performs at most one reacquisition
+    /// write per call, and only after the conflict policy grants an attempt.
+    /// </summary>
     internal bool VerifyActive()
     {
         ThrowIfDisposed();
-        if (State != CpuPowerLimiterState.Active ||
-            !_appliedRaw.HasValue)
-            return false;
 
+        if (!_baseline.HasValue ||
+            !_request.HasValue ||
+            !_appliedRaw.HasValue)
+        {
+            return false;
+        }
+
+        return State switch
+        {
+            CpuPowerLimiterState.Active => VerifyOwnedActive(),
+            CpuPowerLimiterState.Contested => VerifyContested(),
+            CpuPowerLimiterState.ReacquiredPendingStability =>
+                VerifyPendingStability(),
+            CpuPowerLimiterState.Yielded => false,
+            _ => false
+        };
+    }
+
+    internal bool Release()
+    {
+        ThrowIfDisposed();
+
+        if (!_baseline.HasValue || !_appliedRaw.HasValue)
+        {
+            if (State != CpuPowerLimiterState.Unsupported)
+                State = CpuPowerLimiterState.Disabled;
+
+            LastError = null;
+            return true;
+        }
+
+        return RecoverOwnedState();
+    }
+
+    private bool VerifyOwnedActive()
+    {
         try
         {
             var current = _backend.Read();
-            if (current.Raw == _appliedRaw.Value)
+
+            if (current.Raw == _appliedRaw!.Value)
                 return true;
 
-            State = CpuPowerLimiterState.Failed;
-            LastError = "CPU_POWER_LIMIT_CHANGED_EXTERNALLY__NO_REAPPLY";
+            if (current.Locked)
+                return HandleLockWhileSessionActive(current);
+
+            if (_backend.OwnedFieldsMatch(_appliedRaw.Value, current))
+            {
+                // Another agent changed only fields VictusFanControl does not
+                // own. Adopt the exact raw value so later compare/readback logic
+                // preserves that external metadata without starting a conflict.
+                _appliedRaw = current.Raw;
+                LastError = null;
+                return true;
+            }
+
+            RecordExternalHandoff(current);
+            _conflictPolicy.ObserveExternalChange();
+            State = CpuPowerLimiterState.Contested;
+            LastError = "CPU_POWER_LIMIT_CHANGED_EXTERNALLY__CONTESTED";
             return false;
         }
         catch (Exception ex)
@@ -137,28 +217,287 @@ internal sealed class CpuPowerLimiter : IDisposable
         }
     }
 
-    internal bool Release()
+    private bool VerifyContested()
     {
-        ThrowIfDisposed();
-        if (!_baseline.HasValue || !_appliedRaw.HasValue)
+        CpuPowerLimitSnapshot current;
+        try
         {
-            if (State != CpuPowerLimiterState.Unsupported)
-                State = CpuPowerLimiterState.Disabled;
-            LastError = null;
+            current = _backend.Read();
+        }
+        catch (Exception ex)
+        {
+            State = CpuPowerLimiterState.Failed;
+            LastError = "CPU_POWER_LIMIT_CONTESTED_READ_ERROR: " + ex.Message;
+            return false;
+        }
+
+        if (current.Locked)
+            return HandleLockWhileSessionActive(current);
+
+        if (_backend.OwnedFieldsMatch(_appliedRaw!.Value, current))
+        {
+            _appliedRaw = current.Raw;
+            _conflictPolicy.ObserveRequestedValuePresent();
+            State = CpuPowerLimiterState.ReacquiredPendingStability;
+            LastError = "CPU_POWER_LIMIT_REQUESTED_VALUE_RETURNED__STABILITY_PENDING";
             return true;
         }
 
-        return RecoverOwnedState();
+        RecordExternalHandoff(current);
+        _conflictPolicy.ObserveExternalChange();
+
+        if (_conflictPolicy.State == CpuPowerConflictState.Yielded)
+        {
+            State = CpuPowerLimiterState.Yielded;
+            LastError = "CPU_POWER_LIMIT_EXTERNAL_CONTROL_YIELDED";
+            return false;
+        }
+
+        if (!_conflictPolicy.TryBeginReacquire())
+        {
+            State = CpuPowerLimiterState.Contested;
+            LastError =
+                $"CPU_POWER_LIMIT_CHANGED_EXTERNALLY__CONTESTED_ATTEMPTS_{_conflictPolicy.AttemptsUsed}_OF_{_conflictPolicy.MaxReacquireAttempts}";
+            return false;
+        }
+
+        return AttemptBoundedReacquire(current);
+    }
+
+    private bool AttemptBoundedReacquire(
+        CpuPowerLimitSnapshot observedExternal)
+    {
+        var attemptNumber = _conflictPolicy.AttemptsUsed;
+
+        CpuPowerLimitSnapshot preWrite;
+        try
+        {
+            preWrite = _backend.Read();
+        }
+        catch (Exception ex)
+        {
+            CompleteFailedReacquire(
+                "CPU_POWER_LIMIT_REACQUIRE_PREREAD_ERROR: " + ex.Message);
+            return false;
+        }
+
+        if (preWrite.Locked)
+        {
+            _conflictPolicy.CompleteReacquire(exactReadback: false);
+            return HandleLockWhileSessionActive(preWrite);
+        }
+
+        if (_backend.OwnedFieldsMatch(_appliedRaw!.Value, preWrite))
+        {
+            _appliedRaw = preWrite.Raw;
+            _conflictPolicy.CompleteReacquire(exactReadback: true);
+            State = CpuPowerLimiterState.ReacquiredPendingStability;
+            LastError =
+                $"CPU_POWER_LIMIT_REACQUIRED_WITHOUT_WRITE_ATTEMPT_{attemptNumber}_OF_{_conflictPolicy.MaxReacquireAttempts}";
+            return true;
+        }
+
+        if (preWrite.Raw != observedExternal.Raw)
+            RecordExternalHandoff(preWrite);
+
+        CpuPowerLimitApplyPlan plan;
+        try
+        {
+            plan = _backend.BuildReacquirePlan(
+                _baseline!.Value,
+                _request!.Value,
+                preWrite);
+
+            if (!ValidPlanAgainstOriginalBaseline(plan, _baseline.Value) ||
+                plan.RequestedRaw == preWrite.Raw)
+            {
+                throw new InvalidOperationException(
+                    "Backend returned an invalid reacquisition plan.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _conflictPolicy.CompleteReacquire(exactReadback: false);
+            _conflictPolicy.ForceYield();
+            State = CpuPowerLimiterState.Yielded;
+            LastError =
+                "CPU_POWER_LIMIT_REACQUIRE_PLAN_REJECTED__YIELDED: " + ex.Message;
+            return false;
+        }
+
+        try
+        {
+            _backend.Write(plan.RequestedRaw);
+            var readback = _backend.Read();
+
+            if (readback.Raw == plan.RequestedRaw)
+            {
+                _appliedRaw = plan.RequestedRaw;
+                _conflictPolicy.CompleteReacquire(exactReadback: true);
+                State = CpuPowerLimiterState.ReacquiredPendingStability;
+                LastError =
+                    $"CPU_POWER_LIMIT_REACQUIRED_ATTEMPT_{attemptNumber}_OF_{_conflictPolicy.MaxReacquireAttempts}__STABILITY_PENDING";
+                return true;
+            }
+
+            if (readback.Locked)
+            {
+                _conflictPolicy.CompleteReacquire(exactReadback: false);
+                return HandleLockWhileSessionActive(readback);
+            }
+
+            if (!_backend.OwnedFieldsMatch(plan.RequestedRaw, readback))
+                RecordExternalHandoff(readback);
+
+            CompleteFailedReacquire(
+                $"CPU_POWER_LIMIT_REACQUIRE_READBACK_MISMATCH_ATTEMPT_{attemptNumber}_OF_{_conflictPolicy.MaxReacquireAttempts}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                var afterError = _backend.Read();
+
+                if (afterError.Raw == plan.RequestedRaw)
+                {
+                    _appliedRaw = plan.RequestedRaw;
+                    _conflictPolicy.CompleteReacquire(exactReadback: true);
+                    State = CpuPowerLimiterState.ReacquiredPendingStability;
+                    LastError =
+                        $"CPU_POWER_LIMIT_REACQUIRE_WRITE_ERROR_BUT_EXACT_READBACK_ATTEMPT_{attemptNumber}_OF_{_conflictPolicy.MaxReacquireAttempts}: {ex.Message}";
+                    return true;
+                }
+
+                if (afterError.Locked)
+                {
+                    _conflictPolicy.CompleteReacquire(exactReadback: false);
+                    return HandleLockWhileSessionActive(afterError);
+                }
+
+                if (!_backend.OwnedFieldsMatch(plan.RequestedRaw, afterError))
+                    RecordExternalHandoff(afterError);
+            }
+            catch
+            {
+                // The attempt still consumes one slot. No second write is ever
+                // issued when post-error state cannot be read safely.
+            }
+
+            CompleteFailedReacquire(
+                $"CPU_POWER_LIMIT_REACQUIRE_WRITE_ERROR_ATTEMPT_{attemptNumber}_OF_{_conflictPolicy.MaxReacquireAttempts}: {ex.Message}");
+            return false;
+        }
+    }
+
+    private bool VerifyPendingStability()
+    {
+        try
+        {
+            var current = _backend.Read();
+
+            if (current.Locked)
+                return HandleLockWhileSessionActive(current);
+
+            if (_backend.OwnedFieldsMatch(_appliedRaw!.Value, current))
+            {
+                if (current.Raw != _appliedRaw.Value)
+                    _appliedRaw = current.Raw;
+
+                if (_conflictPolicy.TryCompleteStableWindow())
+                {
+                    State = CpuPowerLimiterState.Active;
+                    LastError = null;
+                }
+                else
+                {
+                    State = CpuPowerLimiterState.ReacquiredPendingStability;
+                }
+
+                return true;
+            }
+
+            RecordExternalHandoff(current);
+            _conflictPolicy.ObserveExternalChange();
+
+            if (_conflictPolicy.State == CpuPowerConflictState.Yielded)
+            {
+                State = CpuPowerLimiterState.Yielded;
+                LastError = "CPU_POWER_LIMIT_EXTERNAL_CONTROL_YIELDED_AFTER_REACQUIRE";
+            }
+            else
+            {
+                State = CpuPowerLimiterState.Contested;
+                LastError =
+                    $"CPU_POWER_LIMIT_RECONTESTED_ATTEMPTS_{_conflictPolicy.AttemptsUsed}_OF_{_conflictPolicy.MaxReacquireAttempts}";
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            State = CpuPowerLimiterState.Failed;
+            LastError = "CPU_POWER_LIMIT_STABILITY_VERIFY_ERROR: " + ex.Message;
+            return false;
+        }
+    }
+
+    private void CompleteFailedReacquire(string error)
+    {
+        _conflictPolicy.CompleteReacquire(exactReadback: false);
+
+        if (_conflictPolicy.State == CpuPowerConflictState.Yielded)
+        {
+            State = CpuPowerLimiterState.Yielded;
+            LastError = error + " | CPU_POWER_LIMIT_EXTERNAL_CONTROL_YIELDED";
+        }
+        else
+        {
+            State = CpuPowerLimiterState.Contested;
+            LastError = error;
+        }
+    }
+
+    private bool HandleLockWhileSessionActive(
+        CpuPowerLimitSnapshot current)
+    {
+        var stillOwnsRequestedPower =
+            _appliedRaw.HasValue &&
+            _backend.OwnedFieldsMatch(_appliedRaw.Value, current);
+
+        _conflictPolicy.ForceYield();
+
+        if (stillOwnsRequestedPower)
+        {
+            State = CpuPowerLimiterState.Failed;
+            LastError =
+                "CPU_POWER_LIMIT_LOCK_APPEARED_WHILE_REQUESTED_POWER_STILL_PRESENT__NO_WRITE";
+            return false;
+        }
+
+        RecordExternalHandoff(current);
+        State = CpuPowerLimiterState.Yielded;
+        LastError =
+            "CPU_POWER_LIMIT_EXTERNAL_LOCKED_VALUE__YIELDED_NO_WRITE";
+        return false;
+    }
+
+    private void RecordExternalHandoff(
+        CpuPowerLimitSnapshot snapshot)
+    {
+        _externalHandoff = snapshot;
     }
 
     private bool RecoverAfterFailedApply()
     {
         var previousError = LastError;
         var restored = RecoverOwnedState();
+
         if (!restored && previousError is not null)
             LastError = previousError + " | " + LastError;
         else if (restored)
             LastError = previousError;
+
         return false;
     }
 
@@ -168,37 +507,76 @@ internal sealed class CpuPowerLimiter : IDisposable
             return false;
 
         State = CpuPowerLimiterState.Recovering;
+
         try
         {
-            var baseline = _baseline.Value;
+            var restoreTarget = _externalHandoff ?? _baseline.Value;
             var current = _backend.Read();
+
+            if (current.Raw == restoreTarget.Raw)
+            {
+                ClearSession();
+                return true;
+            }
+
+            var stillOwnsRequestedPower =
+                _backend.OwnedFieldsMatch(_appliedRaw.Value, current);
+
             var plan = _backend.PlanRestore(
-                baseline,
+                restoreTarget,
                 _appliedRaw.Value,
                 current);
 
-            if (plan.Value != current.Raw)
+            if (plan.Value == current.Raw)
             {
-                var secondRead = _backend.Read();
-                if (secondRead.Raw != current.Raw)
-                    return FailRecovery("CPU_POWER_LIMIT_RESTORE_CONCURRENT_CHANGE");
-                _backend.Write(plan.Value);
+                if (!stillOwnsRequestedPower)
+                {
+                    // The external writer already owns the power fields. Yield
+                    // without rewriting either the stale original baseline or a
+                    // stale handoff value.
+                    ClearSession();
+                    return true;
+                }
+
+                return FailRecovery(
+                    "CPU_POWER_LIMIT_RESTORE_BLOCKED_WHILE_OWNED: " +
+                    plan.Status);
             }
 
-            var final = _backend.Read();
-            if (final.Raw != baseline.Raw)
+            var secondRead = _backend.Read();
+            if (secondRead.Raw != current.Raw)
                 return FailRecovery(
-                    "CPU_POWER_LIMIT_RESTORE_NOT_BASELINE: " + plan.Status);
+                    "CPU_POWER_LIMIT_RESTORE_CONCURRENT_CHANGE");
 
-            _baseline = null;
-            _appliedRaw = null;
-            State = CpuPowerLimiterState.Disabled;
+            _backend.Write(plan.Value);
+
+            var final = _backend.Read();
+            if (final.Raw != restoreTarget.Raw)
+            {
+                return FailRecovery(
+                    "CPU_POWER_LIMIT_RESTORE_NOT_TARGET: " +
+                    plan.Status);
+            }
+
+            ClearSession();
             return true;
         }
         catch (Exception ex)
         {
-            return FailRecovery("CPU_POWER_LIMIT_RESTORE_ERROR: " + ex.Message);
+            return FailRecovery(
+                "CPU_POWER_LIMIT_RESTORE_ERROR: " + ex.Message);
         }
+    }
+
+    private void ClearSession()
+    {
+        _baseline = null;
+        _externalHandoff = null;
+        _request = null;
+        _appliedRaw = null;
+        _conflictPolicy.ResetByUser();
+        LastError = null;
+        State = CpuPowerLimiterState.Disabled;
     }
 
     private bool Fail(string error)
@@ -222,6 +600,15 @@ internal sealed class CpuPowerLimiter : IDisposable
         request.Pl1Watts >= 10 &&
         request.Pl2Watts >= request.Pl1Watts;
 
+    private static bool ValidPlanAgainstOriginalBaseline(
+        CpuPowerLimitApplyPlan plan,
+        CpuPowerLimitSnapshot baseline) =>
+        plan.RequestedRaw != baseline.Raw &&
+        plan.AppliedPl1Watts >= 10 &&
+        plan.AppliedPl2Watts >= plan.AppliedPl1Watts &&
+        plan.AppliedPl1Watts < baseline.Pl1Watts &&
+        plan.AppliedPl2Watts < baseline.Pl2Watts;
+
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -234,8 +621,14 @@ internal sealed class CpuPowerLimiter : IDisposable
 
         if (_baseline.HasValue && _appliedRaw.HasValue)
         {
-            try { _ = RecoverOwnedState(); }
-            catch { State = CpuPowerLimiterState.Failed; }
+            try
+            {
+                _ = RecoverOwnedState();
+            }
+            catch
+            {
+                State = CpuPowerLimiterState.Failed;
+            }
         }
 
         _disposed = true;
