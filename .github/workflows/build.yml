@@ -318,6 +318,7 @@ jobs:
           }
           .\scripts\test-p16-hardening-helpers.ps1
           .\scripts\test-wmi-fan-telemetry-invariants.ps1
+          .\scripts\test-wmi-fan-control-invariants.ps1
 
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh

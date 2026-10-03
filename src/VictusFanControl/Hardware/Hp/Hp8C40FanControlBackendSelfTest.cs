@@ -1,6 +1,8 @@
 using VictusFanControl.Control;
 using VictusFanControl.Runtime;
 using VictusFanControl.Hardware.PawnIo;
+using VictusFanControl.Safety;
+using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.Hardware.Hp;
 
@@ -53,6 +55,9 @@ public static class Hp8C40FanControlBackendSelfTest
         failures += await TestWatchdogCommitFailureRestoresAsync(output);
         failures += await TestWatchdogRestoreIpcFailureDoesNotBlockLocalRestoreAsync(output);
         failures += await TestWatchdogCancellationAfterIntentAbortsAsync(output);
+        failures += await TestWmiControlProofAsync(output);
+        failures += await TestHungWmiProofRestoresThroughCoordinatorAsync(output);
+        failures += await TestExpiredAdmissionBaselineIsNoWriteAsync(output);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -829,7 +834,7 @@ public static class Hp8C40FanControlBackendSelfTest
         }
         catch (IOException ex)
             when (ex.Message.Contains(
-                "lost EC observability after 3 failed control-state snapshots",
+                "lost control-state observability after 3 failed control-state snapshots",
                 StringComparison.Ordinal))
         {
             failedClosed = true;
@@ -1454,6 +1459,95 @@ public static class Hp8C40FanControlBackendSelfTest
         return failures;
     }
 
+    private static async Task<int> TestWmiControlProofAsync(TextWriter output)
+    {
+        var failures = 0;
+        foreach (var variant in new[] { "fresh", "duplicate", "pre-command", "timeout", "coarse increase 200", "coarse increase 300", "coarse decrease 200", "coarse decrease 300" })
+        {
+            var hardware = new FakeHardware { UseWmiTachometerBins = true };
+            hardware.RepeatWmiQueryIdentityAfterWrite = variant == "duplicate";
+            hardware.PreCommandWmiQueryAfterWrite = variant == "pre-command";
+            hardware.WmiProofFailureAfterWrite = variant == "timeout";
+            var target = 30;
+            if (variant.StartsWith("coarse increase", StringComparison.Ordinal))
+            {
+                hardware.FreezeCpuTach = true;
+                hardware.OnSetFanLevel = () => hardware.State = hardware.State with
+                    { CpuRpm = (ushort)(FakeHardware.AutoState.CpuRpm + (variant.EndsWith("300", StringComparison.Ordinal) ? 300 : 200)) };
+            }
+            if (variant.StartsWith("coarse decrease", StringComparison.Ordinal))
+            {
+                target = 20; hardware.FreezeCpuTach = true;
+                hardware.State = hardware.State with { CpuRpm = 3200, GpuRpm = 3400 };
+                hardware.OnSetFanLevel = () => hardware.State = hardware.State with
+                    { CpuRpm = (ushort)(variant.EndsWith("300", StringComparison.Ordinal) ? 2900 : 3000) };
+            }
+            await using var backend = NewBackend(hardware);
+            await backend.EnterCustomModeAsync(CancellationToken.None);
+            var completed = false;
+            try { await backend.ApplyAsync(new FanCommand(target, target, "WMI proof self-test"), CancellationToken.None); completed = true; }
+            catch (TimeoutException)
+            {
+                // The coordinator owns failure restoration; exercise that
+                // separate backend release path without requiring RPM proof.
+                await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+            }
+            var expectedPass = variant is "fresh" or "coarse increase 300" or "coarse decrease 300";
+            failures += Report(output, $"WMI backend proof {variant}: {(expectedPass ? "acknowledges" : "restores without accepting")}",
+                completed == expectedPass && hardware.SetCalls == 1 &&
+                (expectedPass || (hardware.RestoreCalls == 1 && hardware.State.CpuSetpoint == 255)));
+        }
+        return failures;
+    }
+
+    private static async Task<int> TestHungWmiProofRestoresThroughCoordinatorAsync(TextWriter output)
+    {
+        using var slot = new SemaphoreSlim(1, 1);
+        using var releaseNative = new ManualResetEventSlim();
+        var reader = new HpWmiFanProofReader(_ => { releaseNative.Wait(); return new(0, [30, 30]); },
+            slot, () => Environment.TickCount64, TimeSpan.FromMilliseconds(60));
+        var hardware = new FakeHardware { UseWmiTachometerBins = true };
+        hardware.AsyncControlRead = async token =>
+        {
+            if (hardware.SetCalls > 0 && hardware.State.CpuSetpoint != 255)
+                await reader.ReadFreshAsync(token);
+            return hardware.ReadEcState();
+        };
+        var backend = NewBackend(hardware);
+        await using var coordinator = new FanControlCoordinator(backend);
+        var now = DateTimeOffset.UtcNow;
+        var safety = new SafetyGateResult(true, true, true, true, true, true, false,
+            true, true, true, now, now, 1, Array.Empty<string>());
+        var failed = false;
+        try
+        {
+            await coordinator.TryEnterCustomAsync(safety, CancellationToken.None);
+            try { await coordinator.ApplyAsync(new FanCommand(30, 30, "hung WMI proof"), safety, CancellationToken.None); }
+            catch (TimeoutException) { failed = true; }
+            return Report(output, "real coordinator restores FF/FF while timed-out native RPM read still owns its slot",
+                failed && hardware.SetCalls == 1 && hardware.RestoreCalls == 1 &&
+                hardware.State.CpuSetpoint == 255 && coordinator.Authority == FanAuthority.Firmware && slot.CurrentCount == 0);
+        }
+        finally
+        {
+            releaseNative.Set();
+            if (!await slot.WaitAsync(TimeSpan.FromSeconds(1))) throw new InvalidOperationException("Synthetic native read did not drain.");
+            slot.Release();
+        }
+    }
+
+    private static async Task<int> TestExpiredAdmissionBaselineIsNoWriteAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware { UseWmiTachometerBins = true, ExpireAdmissionBaseline = true };
+        await using var backend = NewBackend(hardware);
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        var refused = false;
+        try { await backend.ApplyAsync(new FanCommand(30,30,"expired WMI admission"), CancellationToken.None); }
+        catch (FanControlAdmissionException ex) { refused = ex.InnerException is InvalidDataException; }
+        return Report(output, "expired WMI admission baseline refuses dispatch without issuing FF/FF",
+            refused && hardware.SetCalls == 0 && hardware.RestoreCalls == 0 && hardware.State.CpuSetpoint == 255);
+    }
+
     private static Hp8C40FanControlBackend NewBackend(
         FakeHardware hardware,
         IActiveTimeClock? activeTimeClock = null) =>
@@ -1462,7 +1556,7 @@ public static class Hp8C40FanControlBackendSelfTest
             targetSupported: true,
             supportDetail: "synthetic validated target",
             timing: FastTiming,
-            activeTimeClock: activeTimeClock);
+            activeTimeClock: activeTimeClock ?? new SyntheticActiveTimeClock());
 
     private static Hp8C40FanControlBackend NewProtectedBackend(
         FakeHardware hardware,
@@ -1474,12 +1568,18 @@ public static class Hp8C40FanControlBackendSelfTest
             supportDetail: "synthetic validated target",
             timing: FastTiming,
             watchdogLease: lease,
+            activeTimeClock: new SyntheticActiveTimeClock(),
             qualificationHook: qualificationHook);
 
     private static int Report(TextWriter output, string name, bool pass)
     {
         output.WriteLine($"{(pass ? "PASS" : "FAIL")}  {name}");
         return pass ? 0 : 1;
+    }
+
+    private sealed class SyntheticActiveTimeClock : IActiveTimeClock
+    {
+        public ulong Milliseconds => checked((ulong)Environment.TickCount64);
     }
 
     private sealed class FrozenActiveTimeClock : IActiveTimeClock
@@ -1693,6 +1793,22 @@ public static class Hp8C40FanControlBackendSelfTest
         public Exception? ReadEcStateException { get; set; }
         public Exception? GetCurrentFanLevelsException { get; set; }
         public int EcReadCalls { get; private set; }
+        public Func<CancellationToken, ValueTask<Hp8C40EcControlState>>? AsyncControlRead { get; set; }
+        public ValueTask<Hp8C40EcControlState> ReadEcStateAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return AsyncControlRead is not null ? AsyncControlRead(cancellationToken) : ValueTask.FromResult(ReadEcState());
+        }
+        public bool ExpireAdmissionBaseline { get; set; }
+        public async ValueTask<Hp8C40EcControlState> ReadAdmissionStateAsync(CancellationToken cancellationToken)
+        {
+            var state = await ReadEcStateAsync(cancellationToken);
+            return ExpireAdmissionBaseline ? state with { FanQueryStartedAtMilliseconds = Environment.TickCount64 - 3000 } : state;
+        }
+        public bool UseWmiTachometerBins { get; set; }
+        public bool RepeatWmiQueryIdentityAfterWrite { get; set; }
+        public bool PreCommandWmiQueryAfterWrite { get; set; }
+        public bool WmiProofFailureAfterWrite { get; set; }
 
         public Hp8C40EcControlState ReadEcState()
         {
@@ -1768,6 +1884,19 @@ public static class Hp8C40FanControlBackendSelfTest
                 };
             }
 
+            if (UseWmiTachometerBins)
+            {
+                if (_targetCpu.HasValue && _postSetReadCount > 1 && WmiProofFailureAfterWrite)
+                    throw new TimeoutException("synthetic native WMI proof timeout");
+                return State with
+                {
+                    CpuRpm = (ushort)(State.CpuRpm / 100 * 100), GpuRpm = (ushort)(State.GpuRpm / 100 * 100),
+                    TachometerResolutionRpm = 100,
+                    FanQuerySequence = RepeatWmiQueryIdentityAfterWrite ? 1 : EcReadCalls,
+                    FanQueryStartedAtMilliseconds = Environment.TickCount64 -
+                        (_targetCpu.HasValue && PreCommandWmiQueryAfterWrite ? 5000 : 0)
+                };
+            }
             return State;
         }
 

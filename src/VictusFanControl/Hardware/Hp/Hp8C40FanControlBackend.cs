@@ -2,12 +2,25 @@ using VictusFanControl.Control;
 using VictusFanControl.Hardware.PawnIo;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
+using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.Hardware.Hp;
 
 internal interface IHp8C40FanHardware : IDisposable
 {
     Hp8C40EcControlState ReadEcState();
+    ValueTask<Hp8C40EcControlState> ReadEcStateAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(ReadEcState());
+    }
+    ValueTask<Hp8C40EcControlState> ReadAdmissionStateAsync(CancellationToken cancellationToken) =>
+        ReadEcStateAsync(cancellationToken);
+    ValueTask<(byte CpuLevel, byte GpuLevel)> ReadCurrentFanLevelsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(GetCurrentFanLevels());
+    }
 
     (byte CpuSetpoint, byte GpuSetpoint) ReadSetpoint()
     {
@@ -34,6 +47,8 @@ internal sealed class Hp8C40FanHardware : IHp8C40FanHardware
 {
     private readonly Hp8C40BiosFanControl _bios;
     private readonly AcpiEcReader _ec;
+    private readonly HpWmiFanProofReader _fans = new();
+    private HpWmiFanProofSample? _lastFanSample;
 
     public Hp8C40FanHardware(string modulesDirectory)
     {
@@ -41,30 +56,57 @@ internal sealed class Hp8C40FanHardware : IHp8C40FanHardware
         _ec = new AcpiEcReader(Path.Combine(modulesDirectory, "LpcACPIEC.bin"));
     }
 
-    public Hp8C40EcControlState ReadEcState()
+    public Hp8C40EcControlState ReadEcState() =>
+        throw new NotSupportedException("Production WMI control feedback requires the bounded async read path.");
+
+    public async ValueTask<Hp8C40EcControlState> ReadEcStateAsync(CancellationToken cancellationToken)
     {
-        // The control path consumes only ownership, MaxFan/FanSwitch and the
-        // two physical tachometers. Keep those as three independently retried
-        // narrow EC snapshots instead of reopening the broad diagnostic state.
+        // WMI RPM first, then narrow EC ownership/guards. No EC mutex is held
+        // while awaiting WMI, and restoration never needs the RPM reader.
+        var sample = await _fans.ReadFreshAsync(cancellationToken).ConfigureAwait(false);
+        return ReadControlStateWithSample(sample, cancellationToken);
+    }
+
+    public ValueTask<Hp8C40EcControlState> ReadAdmissionStateAsync(CancellationToken cancellationToken)
+    {
+        // Only the pre-write guard rechecks reuse the fresh baseline. These
+        // reads can never count as command-response confirmation samples.
+        var sample = _lastFanSample ?? throw new InvalidOperationException("A fresh initial control snapshot is required.");
+        return ValueTask.FromResult(ReadControlStateWithSample(sample, cancellationToken));
+    }
+
+    private Hp8C40EcControlState ReadControlStateWithSample(HpWmiFanProofSample sample, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (Environment.TickCount64 - sample.Speeds.StartedAtMilliseconds >= HpWmiFanProofReader.MaximumWaitMilliseconds)
+            throw new InvalidDataException("Initial WMI baseline expired before pre-write ownership/guard acquisition.");
         var layout = Hp8C40TargetProfile.Instance.FanEcLayout;
         var setpoint = _ec.ReadStableFanSetpoint(layout);
         var controlGuard = _ec.ReadFanControlGuard(layout);
-        var tachometers = _ec.ReadFanTachometers(layout);
-
+        cancellationToken.ThrowIfCancellationRequested();
+        if (Environment.TickCount64 - sample.Speeds.StartedAtMilliseconds >= HpWmiFanProofReader.MaximumWaitMilliseconds)
+            throw new InvalidDataException("WMI fan sample expired during EC ownership/guard acquisition.");
+        _lastFanSample = sample;
         return new Hp8C40EcControlState(
-            CpuRateTarget: byte.MaxValue,
-            GpuRateTarget: byte.MaxValue,
-            CpuRate: byte.MaxValue,
-            GpuRate: byte.MaxValue,
-            CpuSetpoint: setpoint.CpuSetpoint,
-            GpuSetpoint: setpoint.GpuSetpoint,
-            Diagnostic62: byte.MaxValue,
-            Diagnostic63: byte.MaxValue,
-            Mode: byte.MaxValue,
-            MaxFan: controlGuard.MaxFan,
-            FanSwitch: controlGuard.FanSwitch,
-            CpuRpm: tachometers.CpuRpm,
-            GpuRpm: tachometers.GpuRpm);
+            byte.MaxValue, byte.MaxValue, byte.MaxValue, byte.MaxValue,
+            setpoint.CpuSetpoint, setpoint.GpuSetpoint,
+            byte.MaxValue, byte.MaxValue, byte.MaxValue,
+            controlGuard.MaxFan, controlGuard.FanSwitch,
+            checked((ushort)sample.Speeds.CpuNominalRpm), checked((ushort)sample.Speeds.GpuNominalRpm))
+        {
+            TachometerResolutionRpm = HpWmiFanTelemetrySample.ResolutionRpm,
+            FanQuerySequence = sample.Sequence,
+            FanQueryStartedAtMilliseconds = sample.Speeds.StartedAtMilliseconds
+        };
+    }
+
+    public ValueTask<(byte CpuLevel, byte GpuLevel)> ReadCurrentFanLevelsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var sample = _lastFanSample ?? throw new InvalidOperationException("A fresh initial control snapshot is required.");
+        if (Environment.TickCount64 - sample.Speeds.StartedAtMilliseconds >= HpWmiFanProofReader.MaximumWaitMilliseconds)
+            throw new InvalidDataException("Initial WMI control snapshot expired before speed-level admission.");
+        return ValueTask.FromResult((sample.Speeds.CpuSpeedLevel, sample.Speeds.GpuSpeedLevel));
     }
 
     public (byte CpuSetpoint, byte GpuSetpoint) ReadSetpoint()
@@ -75,7 +117,7 @@ internal sealed class Hp8C40FanHardware : IHp8C40FanHardware
     }
 
     public (byte CpuLevel, byte GpuLevel) GetCurrentFanLevels() =>
-        _bios.GetCurrentFanLevels();
+        throw new NotSupportedException("Production speed levels require a fresh async control snapshot.");
 
     public void SetFanLevel(byte cpuLevel, byte gpuLevel) =>
         _bios.SetFanLevel(cpuLevel, gpuLevel);
@@ -107,7 +149,7 @@ internal readonly record struct Hp8C40FanBackendTiming(
 /// - ordinary commands restricted to the validated equal 10-50 range;
 /// - no arbitrary EC writes;
 /// - fixed-level ownership is acknowledged through EC 0x34/0x35;
-/// - both physical tachometers must acknowledge every new command;
+/// - both fresh WMI tachometer intervals must acknowledge every new command;
 /// - firmware restore uses the hardware-validated FF,FF -> LegacyDefault path;
 /// - production watchdog-backed construction is separately M9-gated even
 ///   after the M4-M8 qualification chain; automatic policy remains outside
@@ -346,7 +388,7 @@ public sealed class Hp8C40FanControlBackend :
 
             try
             {
-                state = _hardware!.ReadEcState();
+                state = await _hardware!.ReadEcStateAsync(cancellationToken).ConfigureAwait(false);
 
                 if (_customModeActive &&
                     !ControlGuardsAreSane(state))
@@ -471,7 +513,7 @@ public sealed class Hp8C40FanControlBackend :
                 return;
             }
 
-            var state = _hardware!.ReadEcState();
+            var state = await _hardware!.ReadEcStateAsync(cancellationToken).ConfigureAwait(false);
 
             if (state.MaxFan != 0)
             {
@@ -564,7 +606,7 @@ public sealed class Hp8C40FanControlBackend :
                 var gpuTarget = checked((byte)command.GpuLevel);
 
                 admissionStage = "read initial EC control state";
-                var before = _hardware!.ReadEcState();
+                var before = await _hardware!.ReadEcStateAsync(cancellationToken).ConfigureAwait(false);
 
                 admissionStage = "validate initial EC ownership";
                 VerifyExistingOwnership(before);
@@ -575,14 +617,14 @@ public sealed class Hp8C40FanControlBackend :
                     requireRunningTachometers: _ownedSetpoint.HasValue);
 
                 admissionStage = "read BIOS current-speed telemetry";
-                var currentLevels = _hardware.GetCurrentFanLevels();
+                var currentLevels = await _hardware.ReadCurrentFanLevelsAsync(cancellationToken).ConfigureAwait(false);
 
                 admissionStage = "validate BIOS current-speed telemetry";
                 ValidateCurrentSpeedLevel(currentLevels.CpuLevel, "CPU");
                 ValidateCurrentSpeedLevel(currentLevels.GpuLevel, "GPU");
 
                 admissionStage = "read pre-dispatch EC control state";
-                var preDispatch = _hardware.ReadEcState();
+                var preDispatch = await _hardware.ReadAdmissionStateAsync(cancellationToken).ConfigureAwait(false);
 
                 admissionStage = "validate pre-dispatch EC ownership";
                 VerifyExistingOwnership(preDispatch);
@@ -591,6 +633,8 @@ public sealed class Hp8C40FanControlBackend :
                 ValidateActiveControlState(
                     preDispatch,
                     requireRunningTachometers: _ownedSetpoint.HasValue);
+
+                var responseBaseline = preDispatch;
 
                 admissionStage = "validate caller cancellation before watchdog/write";
                 cancellationToken.ThrowIfCancellationRequested();
@@ -614,7 +658,7 @@ public sealed class Hp8C40FanControlBackend :
                         // EC after WriteIntent ACK so an external controller that
                         // appeared during that interval is still preserved.
                         admissionStage = "read EC after watchdog WRITE_INTENT";
-                        var postIntent = _hardware.ReadEcState();
+                        var postIntent = await _hardware.ReadAdmissionStateAsync(cancellationToken).ConfigureAwait(false);
 
                         admissionStage = "validate EC ownership after watchdog WRITE_INTENT";
                         VerifyExistingOwnership(postIntent);
@@ -623,6 +667,8 @@ public sealed class Hp8C40FanControlBackend :
                         ValidateActiveControlState(
                             postIntent,
                             requireRunningTachometers: _ownedSetpoint.HasValue);
+
+                        responseBaseline = postIntent;
 
                         admissionStage = "validate caller cancellation before WMI fan write";
                         cancellationToken.ThrowIfCancellationRequested();
@@ -635,6 +681,8 @@ public sealed class Hp8C40FanControlBackend :
                     _hardware.SetFanLevel(cpuTarget, gpuTarget);
                 }
 
+                var commandCompletedAtMilliseconds = Environment.TickCount64;
+
                 var setpointAck = await WaitForSetpointAsync(
                     cpuTarget,
                     gpuTarget,
@@ -645,7 +693,8 @@ public sealed class Hp8C40FanControlBackend :
                     cpuTarget,
                     gpuTarget,
                     currentLevels,
-                    preDispatch,
+                    responseBaseline,
+                    commandCompletedAtMilliseconds,
                     cancellationToken).ConfigureAwait(false);
 
                 if (leaseWriteArmed &&
@@ -682,7 +731,8 @@ public sealed class Hp8C40FanControlBackend :
                 _lastDetail =
                     $"Command {command.CpuLevel}/{command.GpuLevel} acknowledged by EC setpoints " +
                     $"and both tachometers; RPM={tachAck.CpuRpm}/{tachAck.GpuRpm}, " +
-                    $"initial RPM={preDispatch.CpuRpm}/{preDispatch.GpuRpm}, " +
+                    $"resolution={tachAck.TachometerResolutionRpm} RPM; query={tachAck.FanQuerySequence}; " +
+                    $"initial RPM={responseBaseline.CpuRpm}/{responseBaseline.GpuRpm}, " +
                     $"setpoint={setpointAck.CpuSetpoint}/{setpointAck.GpuSetpoint}.";
             }
             catch (FanControlAdmissionException)
@@ -837,8 +887,12 @@ public sealed class Hp8C40FanControlBackend :
         byte gpuTarget,
         (byte CpuLevel, byte GpuLevel) currentLevels,
         Hp8C40EcControlState baseline,
+        long commandCompletedAtMilliseconds,
         CancellationToken cancellationToken)
     {
+        if (baseline.FanQuerySequence > 0)
+            currentLevels = (checked((byte)(baseline.CpuRpm / 100)), checked((byte)(baseline.GpuRpm / 100)));
+        var lastAcceptedSequence = baseline.FanQuerySequence;
         var cpuExpectation = DetermineExpectation(cpuTarget, currentLevels.CpuLevel);
         var gpuExpectation = DetermineExpectation(gpuTarget, currentLevels.GpuLevel);
 
@@ -859,7 +913,7 @@ public sealed class Hp8C40FanControlBackend :
 
             try
             {
-                last = _hardware!.ReadEcState();
+                last = await ReadTachometerSnapshotWithinDeadlineAsync(started, cancellationToken).ConfigureAwait(false);
             }
             catch (IOException ex)
             {
@@ -872,7 +926,7 @@ public sealed class Hp8C40FanControlBackend :
                     MaximumTransientTachSnapshotReadFailures)
                 {
                     throw new IOException(
-                        $"Tachometer acknowledgement lost EC observability after " +
+                        $"Tachometer acknowledgement lost control-state observability after " +
                         $"{transientSnapshotReadFailures} failed control-state snapshots. " +
                         $"The real command remains uncommitted and must be restored fail-closed. " +
                         $"Last failure: {ex.Message}",
@@ -886,6 +940,17 @@ public sealed class Hp8C40FanControlBackend :
                 continue;
             }
 
+            if (ActiveTimeClock.HasElapsed(_activeTimeClock, started, _timing.TachometerAckTimeout))
+                break;
+            if (!IsFreshTachometerProof(last, baseline, commandCompletedAtMilliseconds, lastAcceptedSequence))
+            {
+                confirmationSamples = 0;
+                await Task.Delay(_timing.PollInterval, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+            lastAcceptedSequence = last.FanQuerySequence;
+            ValidateActiveControlState(last, requireRunningTachometers: false);
+
             if (last.CpuSetpoint != cpuTarget ||
                 last.GpuSetpoint != gpuTarget)
             {
@@ -895,8 +960,8 @@ public sealed class Hp8C40FanControlBackend :
                     $"{last.CpuSetpoint}/{last.GpuSetpoint}.");
             }
 
-            ValidateTachometerRange(last.CpuRpm, "CPU");
-            ValidateTachometerRange(last.GpuRpm, "GPU");
+            ValidateTachometerRange(last.CpuRpm, "CPU", last.TachometerResolutionRpm);
+            ValidateTachometerRange(last.GpuRpm, "GPU", last.TachometerResolutionRpm);
 
             var cpuCurrentlyRunning = last.CpuRpm > 0;
             var gpuCurrentlyRunning = last.GpuRpm > 0;
@@ -906,14 +971,16 @@ public sealed class Hp8C40FanControlBackend :
                     cpuExpectation,
                     baseline.CpuRpm,
                     last.CpuRpm,
-                    int.MaxValue);
+                    baseline.TachometerResolutionRpm,
+                    last.TachometerResolutionRpm);
 
             var gpuSampleAcknowledged = gpuCurrentlyRunning &&
                 HasTachometerResponded(
                     gpuExpectation,
                     baseline.GpuRpm,
                     last.GpuRpm,
-                    int.MaxValue);
+                    baseline.TachometerResolutionRpm,
+                    last.TachometerResolutionRpm);
 
             cpuEverAcknowledged |= cpuSampleAcknowledged;
             gpuEverAcknowledged |= gpuSampleAcknowledged;
@@ -944,8 +1011,33 @@ public sealed class Hp8C40FanControlBackend :
             $"baseline RPM={baseline.CpuRpm}/{baseline.GpuRpm}, " +
             $"last RPM={last?.CpuRpm.ToString() ?? "n/a"}/{last?.GpuRpm.ToString() ?? "n/a"}, " +
             $"baseline current-level={currentLevels.CpuLevel}/{currentLevels.GpuLevel}, " +
-            $"transient EC snapshot failures={transientSnapshotReadFailures}, " +
-            $"last EC snapshot failure={lastSnapshotReadFailure ?? "none"}.");
+            $"transient control snapshot failures={transientSnapshotReadFailures}, " +
+            $"last control snapshot failure={lastSnapshotReadFailure ?? "none"}.");
+    }
+
+    private async ValueTask<Hp8C40EcControlState> ReadTachometerSnapshotWithinDeadlineAsync(
+        ulong acknowledgementStarted, CancellationToken cancellationToken)
+    {
+        var elapsed = ActiveTimeClock.ElapsedMilliseconds(_activeTimeClock, acknowledgementStarted);
+        var total = ActiveTimeClock.TimeoutMilliseconds(_timing.TachometerAckTimeout);
+        if (elapsed >= total) throw new TimeoutException("Tachometer acknowledgement deadline expired before query admission.");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var stopMonitoring = new CancellationTokenSource();
+        var monitor = ActiveTimeClock.CancelAfterActiveTimeAsync(deadline, _activeTimeClock,
+            TimeSpan.FromMilliseconds(total - elapsed), stopMonitoring.Token);
+        try
+        {
+            return await _hardware!.ReadEcStateAsync(deadline.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+        {
+            throw new TimeoutException("Tachometer acknowledgement active-time deadline expired during the WMI/control snapshot.");
+        }
+        finally
+        {
+            stopMonitoring.Cancel();
+            try { await monitor.ConfigureAwait(false); } catch (OperationCanceledException) { }
+        }
     }
 
     private static TachExpectation DetermineExpectation(
@@ -969,7 +1061,8 @@ public sealed class Hp8C40FanControlBackend :
         TachExpectation expectation,
         ushort baselineRpm,
         ushort currentRpm,
-        int observedMaximumRpm)
+        int baselineResolutionRpm,
+        int currentResolutionRpm)
     {
         if (currentRpm == 0)
         {
@@ -979,12 +1072,11 @@ public sealed class Hp8C40FanControlBackend :
         return expectation switch
         {
             TachExpectation.Increase =>
-                baselineRpm >= observedMaximumRpm - 100 ||
-                currentRpm >= baselineRpm + MinimumDirectionalRpmDelta,
+                currentRpm >= baselineRpm + baselineResolutionRpm - 1 + MinimumDirectionalRpmDelta,
 
             TachExpectation.Decrease =>
-                baselineRpm <= 1500 ||
-                currentRpm + MinimumDirectionalRpmDelta <= baselineRpm,
+                baselineRpm + baselineResolutionRpm - 1 <= 1500 ||
+                currentRpm + currentResolutionRpm - 1 + MinimumDirectionalRpmDelta <= baselineRpm,
 
             TachExpectation.Steady => true,
             _ => false
@@ -1011,7 +1103,7 @@ public sealed class Hp8C40FanControlBackend :
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            var next = _hardware!.ReadEcState();
+            var next = await _hardware!.ReadEcStateAsync(cancellationToken).ConfigureAwait(false);
 
             if (ControlGuardsAreSane(next))
             {
@@ -1065,6 +1157,16 @@ public sealed class Hp8C40FanControlBackend :
                 $"Fan control state changed: fan switch is not ON (EC 0xF4=0x{state.FanSwitch:X2}).");
         }
 
+        ValidateTachometerRange(state.CpuRpm, "CPU", state.TachometerResolutionRpm);
+        ValidateTachometerRange(state.GpuRpm, "GPU", state.TachometerResolutionRpm);
+        if (state.TachometerResolutionRpm == 100)
+        {
+            var age = Environment.TickCount64 - state.FanQueryStartedAtMilliseconds;
+            if (state.FanQuerySequence <= 0 || age is < 0 or >= HpWmiFanProofReader.MaximumWaitMilliseconds ||
+                state.CpuRpm % 100 != 0 || state.GpuRpm % 100 != 0)
+                throw new InvalidDataException("WMI control feedback requires a fresh, aligned RPM interval and real query identity.");
+        }
+
         if (requireRunningTachometers &&
             (!IsRunningTachometerValid(state.CpuRpm) ||
              !IsRunningTachometerValid(state.GpuRpm)))
@@ -1075,12 +1177,24 @@ public sealed class Hp8C40FanControlBackend :
         }
     }
 
+    internal static bool IsFreshTachometerProof(Hp8C40EcControlState sample, Hp8C40EcControlState baseline,
+        long commandCompletedAtMilliseconds, long lastAcceptedSequence)
+    {
+        if (sample.TachometerResolutionRpm == 1 && baseline.TachometerResolutionRpm == 1)
+            return true; // Exact EC diagnostic/fake paths retain existing semantics.
+        var age = Environment.TickCount64 - sample.FanQueryStartedAtMilliseconds;
+        return sample.TachometerResolutionRpm == 100 && baseline.TachometerResolutionRpm == 100 &&
+            sample.FanQuerySequence > Math.Max(baseline.FanQuerySequence, lastAcceptedSequence) &&
+            sample.FanQueryStartedAtMilliseconds >= commandCompletedAtMilliseconds &&
+            age is >= 0 and < HpWmiFanProofReader.MaximumWaitMilliseconds;
+    }
+
     private static bool IsRunningTachometerValid(ushort rpm) =>
         rpm is > 0 and <= 10_000;
 
     private static void ValidateCurrentSpeedLevel(byte level, string fanName)
     {
-        // OmenMon's GetFanLevel is current-speed telemetry on this platform.
+        // Actual 8C40/F.18 GM2D firmware and target captures identify current-speed telemetry.
         // Values around the normal fan range are expected; FF is a setpoint
         // sentinel and is not a valid current-speed reading here.
         if (level > 100)
@@ -1090,9 +1204,9 @@ public sealed class Hp8C40FanControlBackend :
         }
     }
 
-    private static void ValidateTachometerRange(ushort rpm, string fanName)
+    private static void ValidateTachometerRange(ushort rpm, string fanName, int resolutionRpm = 1)
     {
-        if (rpm > 10_000)
+        if (resolutionRpm is not (1 or 100) || rpm + resolutionRpm - 1 > 10_000)
         {
             throw new InvalidDataException(
                 $"{fanName} tachometer is implausible during command acknowledgement: {rpm} RPM.");

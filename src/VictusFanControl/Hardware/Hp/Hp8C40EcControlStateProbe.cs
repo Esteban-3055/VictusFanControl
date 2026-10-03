@@ -18,6 +18,12 @@ public sealed record Hp8C40EcControlState(
     ushort CpuRpm,
     ushort GpuRpm)
 {
+    // Diagnostic EC records retain exact 1-RPM resolution and sequence zero.
+    // Production control attaches fresh WMI query identity and 100-RPM bins.
+    public int TachometerResolutionRpm { get; init; } = 1;
+    public long FanQuerySequence { get; init; }
+    public long FanQueryStartedAtMilliseconds { get; init; }
+
     public override string ToString() =>
         $"level CPU={CpuSetpoint} GPU={GpuSetpoint} | " +
         $"rate-target CPU={CpuRateTarget}% GPU={GpuRateTarget}% | " +

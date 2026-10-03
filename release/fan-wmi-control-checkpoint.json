@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "targetProfileId": "HP-8C40-9D0R1LA-F18",
+  "status": "IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+  "baselineHead": "b3dde435f7579bf8e2d25831af36e7297254527c",
+  "baselineCi": {
+    "runNumber": 1204,
+    "runId": 37088750108,
+    "result": "SUCCESS"
+  },
+  "scope": "HP 8C40 production control-state RPM and command-response proof; retain EC ownership/guards and all fan write/restore/watchdog paths",
+  "hardwareExecution": false,
+  "physicalGatesOpened": false,
+  "physicalMigrationQualified": false,
+  "query": {
+    "command": "0x00020008",
+    "commandType": "0x2D",
+    "resolutionRpm": 100,
+    "maximumWaitMilliseconds": 3000,
+    "sharedWithPeriodicTelemetry": true,
+    "cachedProofAllowed": false,
+    "directEcFallback": false,
+    "nativeCancellationClaimed": false
+  },
+  "proof": {
+    "requiredConsecutiveSamples": 2,
+    "minimumGuaranteedDirectionalDeltaRpm": 150,
+    "postCommandQueryStartRequired": true,
+    "distinctIncreasingQuerySequenceRequired": true,
+    "activeTimeAckBudgetMilliseconds": 8000,
+    "restoreRequiresRpm": false,
+    "admissionReusesOnlyFreshBaseline": true
+  },
+  "retainedDirectEcControlRegisters": [
+    "34",
+    "35",
+    "EC",
+    "F4"
+  ],
+  "diagnosticEcTachometersRetained": true,
+  "writesChanged": false,
+  "installedM4WatchdogChanged": false,
+  "thermalThresholdsChanged": false,
+  "legacy88F8Changed": false,
+  "readonlyTargetCapture": {
+    "filename": "Victus-WMI-Evidencia_2026-10-02_224321_d57ef7.zip",
+    "sha256": "3fba1c4a4df7b35648256c922b1e22980dbf56512642f91a9732d9c6f14425f4",
+    "collectorVersion": "1.1",
+    "wmiRpmCalls": 130,
+    "wmiMaxBitCalls": 39,
+    "ecComparisons": 10,
+    "cpuBracketMatches": 8,
+    "gpuBracketMatches": 8,
+    "simultaneous": false,
+    "controlResponseQualified": false
+  },
+  "implementationValidation": null,
+  "softwareClosure": {
+    "closed": false
+  },
+  "remainingWork": "Same-head implementation CI, separate closure CI, ordinary-app read-only telemetry validation and a separately prepared fresh P16 one-shot physical qualification; no authorization generation is opened by this migration."
+}

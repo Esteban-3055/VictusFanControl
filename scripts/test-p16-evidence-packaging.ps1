@@ -15,7 +15,7 @@ try{
  $m=Get-Content -LiteralPath $p.ManifestPath -Raw | ConvertFrom-Json
  if([string]$m.gate -cne 'P16' -or [bool]$m.gitCleanUsed -or -not [bool]$m.sourceEvidencePreserved){throw 'P16 package manifest safety contract mismatch.'}
  $roles=@($m.files | ForEach-Object {[string]$_.role})
- foreach($role in @('attempt-fence','p15-contract','p16-contract','hardening-helper-source','hardening-helper-selftest','qualification-gate-source','main-form-source','program-source','user-gate-source','production-adapter-source','p16-session-latch-source','coordinator-source','hp8c40-backend-source','hp8c40-backend-selftest','hp8c40-probe-source','ec-reader-source','setpoint-stabilizer-source','reused-qualified-failsafe-source')){
+ foreach($role in @('attempt-fence','p15-contract','p16-contract','hardening-helper-source','hardening-helper-selftest','qualification-gate-source','main-form-source','program-source','user-gate-source','production-adapter-source','p16-session-latch-source','wmi-fan-control-checkpoint','wmi-fan-proof-source','wmi-fan-proof-selftest','coordinator-source','hp8c40-backend-source','hp8c40-backend-selftest','hp8c40-probe-source','ec-reader-source','setpoint-stabilizer-source','reused-qualified-failsafe-source')){
    if($role -notin $roles){throw "P16 package manifest missing critical role '$role'."}
  }
  if(-not (Test-Path -LiteralPath (Join-Path $evidence 'p16-harness-summary.json'))){throw 'P16 packager deleted source evidence.'}

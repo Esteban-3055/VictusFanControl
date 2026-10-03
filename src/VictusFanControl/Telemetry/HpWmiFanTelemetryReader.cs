@@ -29,6 +29,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
     // Shared across reader recreation by TelemetryWorker recovery. An abandoned
     // synchronous WMI call must not create an unbounded series of worker tasks.
     private static readonly SemaphoreSlim ProductionAdmission = new(1, 1);
+    internal static SemaphoreSlim SharedReadAdmission => ProductionAdmission;
     private readonly SemaphoreSlim _admission;
     private readonly object _gate = new();
     private readonly Func<HpBiosRequest, HpBiosResponse> _send;

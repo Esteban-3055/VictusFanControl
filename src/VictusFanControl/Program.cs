@@ -37,7 +37,11 @@ internal static class Program
         }
 
         if (options.FanWmiTelemetrySelfTest)
-            return await HpWmiFanTelemetryReaderSelfTest.RunAsync(Console.Out);
+        {
+            var telemetry = await HpWmiFanTelemetryReaderSelfTest.RunAsync(Console.Out);
+            var proof = await HpWmiFanProofReaderSelfTest.RunAsync(Console.Out);
+            return telemetry != 0 ? telemetry : proof;
+        }
 
         if (options.SafetySelfTest)
         {
