@@ -30,13 +30,15 @@ Require-Text $workflow '--fan-wmi-telemetry-self-test'
 Require-Text $snapshot 'IsFanTelemetryFreshAt(DateTimeOffset now)'
 Require-Text $safety '!snapshot.IsFanTelemetryFreshAt(now)'
 $p16 = Read-Source 'release\p16-target-checkpoint.json' | ConvertFrom-Json
-# Migration closures remain historical; only a separately validated P16 generation 4 may open.
+# Migration closures remain historical; only a separately validated P16 generation 5 may open.
 $dedicatedP16=($p16.status -ceq 'P16B_NORMAL_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI' -and
- [int]$p16.normalManual.authorization.authorizationGeneration -eq 4 -and
+ [int]$p16.normalManual.authorization.authorizationGeneration -eq 5 -and
  $p16.normalManual.controlledWmiPreparation.status -ceq 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED' -and
- $p16.normalManual.controlledWmiPreparation.validation.result -ceq 'SUCCESS')
+ $p16.normalManual.controlledWmiPreparation.validation.result -ceq 'SUCCESS' -and
+ $p16.normalManual.hardeningRequired.softwareConcurrencyInvestigation.status -ceq 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED' -and
+ $p16.normalManual.hardeningRequired.softwareConcurrencyInvestigation.validation.result -ceq 'SUCCESS')
 if($p16.promotion.manualExecutionAuthorized -or $p16.promotion.automaticMayOpen -or $p16.normalManual.physicalPassed){throw 'WMI migration cannot preclaim physical PASS or promote permanent control.'}
-if(-not $dedicatedP16 -and ($p16.normalManual.executionAuthorized -or $p16.normalManual.controllerPhysicalExecutionAuthorized -or $p16.normalManual.physicalGatesOpened)){throw 'WMI migration permits only separately validated generation-4 P16 authorization.'}
+if(-not $dedicatedP16 -and ($p16.normalManual.executionAuthorized -or $p16.normalManual.controllerPhysicalExecutionAuthorized -or $p16.normalManual.physicalGatesOpened)){throw 'WMI migration permits only separately validated generation-5 P16 authorization.'}
 
 $checkpoint = Read-Source 'release\fan-wmi-telemetry-checkpoint.json' | ConvertFrom-Json
 if ($checkpoint.targetProfileId -cne 'HP-8C40-9D0R1LA-F18' -or

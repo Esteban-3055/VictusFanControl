@@ -625,3 +625,37 @@ These software interleavings explain how the observed generic rejection can
 occur, but do not identify which predicate rejected physical attempt 5.
 The evidence remains FAIL_CLOSED with incomplete independent final restore;
 physical qualification requires a separately reviewed fresh authorization.
+
+## P16 generation-5 controlled authorization after supersession correction
+
+The software correction is formally closed on
+`fedad87a9dbcc8d50adf3615fade90945712cc4d`, tree
+`7bf78e369cfb80ea740acb0af4b7ac908f7c8cd3`, full Windows CI #1211 /
+run `37094404222` SUCCESS (102 steps). The closure claims software validation
+only; the exact physical denial in attempt 5 remains unknown.
+
+Generation 5 permits one ordinary-app Manual 30/40/30 session (attempt 6).
+Consumed generations 1-4 and all five FAIL_CLOSED attempts remain preserved.
+This authorization commit executes no hardware. Its own full successful
+same-head CI is mandatory and is checked by the parent harness before target
+access. Permanent Manual, Automatic, Candidate and default control stay closed.
+
+Update the branch with `git pull --ff-only` without deleting prior evidence.
+Run Windows PowerShell as administrator in the repository. Use only:
+
+```powershell
+.\scripts\test-p16-normal-manual.ps1 -ExpectedSourceHead <generation-5-authorization-head> -ExpectedCiRunId <generation-5-authorization-run-id>
+```
+
+Keep AC connected, light load, and no competing fan controller. After preflight,
+type exactly `8C40-P16-NORMAL-MANUAL-30-40-30`. Follow each parent prompt:
+Manual once; Apply 30 once; Apply 40 once; Apply 30 once; Firmware once; tray
+Exit once. Wait for independent proof before the next action. There is no
+Enter-to-advance between GUI actions. The independent recovery failsafe remains
+armed for 120 seconds; complete the prompted sequence promptly.
+
+Do not repeat a rejected action or rerun a consumed HEAD. Suspend/resume or a
+failed interaction invalidates the session. Upload the generated ZIP and
+`.sha256` even on FAIL_CLOSED. PASS still requires all three fresh WMI proofs,
+independent EC/journal ownership, causal watchdog chain, strong FF/FF firmware
+restore and post-exit proof, followed by separate source re-block and audit.

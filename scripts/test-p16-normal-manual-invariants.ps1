@@ -127,13 +127,23 @@ if($isAuthorized){
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = true;' 'P16B dedicated source gate must be open.'
  $auth=$d.authorization
  if($null -eq $auth){throw 'P16B authorization metadata missing.'}
- if([int]$auth.authorizationGeneration -ne 4 -or
-    [string]$auth.openedFromControlledWmiPreparationHead -cne 'b2d3040a1fa58b489327e93738da316d9521fd14' -or
-    [int]$auth.basisCiRunNumber -ne 1208 -or [long]$auth.basisCiRunId -ne 37092356506 -or
-    [string]$auth.basisCiResult -cne 'SUCCESS'){
-   throw 'P16B generation-4 WMI authorization basis mismatch.'
+ if([int]$auth.authorizationGeneration -ne 5 -or
+    [string]$auth.openedFromSafetySupersessionCorrectionHead -cne 'fedad87a9dbcc8d50adf3615fade90945712cc4d' -or
+    [string]$auth.basisTree -cne '7bf78e369cfb80ea740acb0af4b7ac908f7c8cd3' -or
+    [int]$auth.basisCiRunNumber -ne 1211 -or [long]$auth.basisCiRunId -ne 37094404222 -or
+    [string]$auth.basisCiResult -cne 'SUCCESS' -or [int]$auth.nextAttempt -ne 6){
+   throw 'P16B generation-5 supersession correction authorization basis mismatch.'
+ }
+ $investigation=$d.hardeningRequired.softwareConcurrencyInvestigation
+ $iv=$investigation.validation; $ic=$investigation.closure
+ if($investigation.status -cne 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED' -or -not $investigation.ciValidated -or -not $ic.closed -or $ic.result -cne 'PASS' -or
+    $iv.head -cne $auth.openedFromSafetySupersessionCorrectionHead -or $iv.tree -cne $auth.basisTree -or [int]$iv.runNumber -ne 1211 -or [long]$iv.runId -ne 37094404222 -or $iv.result -cne 'SUCCESS' -or -not $iv.fullWindowsCi -or [int]$iv.completedSteps -ne 102 -or
+    $ic.implementationHead -cne $iv.head -or $ic.implementationTree -cne $iv.tree -or [long]$ic.sourceCiRunId -ne [long]$iv.runId -or $ic.sourceCiResult -cne 'SUCCESS' -or
+    $ic.hardwareExecution -or $ic.physicalRootCauseEstablished -or $ic.physicalGatesOpened -or $ic.installedM4WatchdogChanged -or -not $ic.separateAuthorizationHeadCiRequired){
+   throw 'P16B generation-5 requires exact software-only supersession correction closure.'
  }
  Assert-True ([bool]$auth.sameHeadCiSuccessRequiredBeforePhysicalExecution) 'P16B requires same-head CI before target execution.'
+ Assert-True ([bool]$auth.runtimeExactHeadCiBarrierRequired) 'P16 generation-5 requires runtime exact-head CI validation before target access.'
  Assert-False ([bool]$auth.authorizationCommitPerformsHardwareExecution) 'P16B authorization commit itself must perform no hardware execution.'
  Assert-True ([bool]$auth.oneShotAttemptFenceRequired) 'P16B generation-3 authorization must require the durable one-shot attempt fence.'
  Assert-False ([bool]$auth.authorizationConsumed) 'Fresh P16B authorization must be unconsumed before target execution.'
@@ -186,7 +196,11 @@ if($isAuthorized){
  }
  $g3=@($d.authorizationHistory|Where-Object{[int]$_.authorizationGeneration -eq 3})
  if($g3.Count -ne 1 -or -not $g3[0].authorizationConsumed -or [int]$g3[0].consumedByAttempt -ne 4 -or $g3[0].attemptFenceAuthorizationHead -cne 'fdf08d94cddca82e3d1431bdf95e68c37aae24aa'){throw 'P16 generation-3 consumed history missing.'}
- if(@($d.physicalAttemptHistory).Count -ne 4 -or @($d.physicalAttemptHistory|Where-Object{$_.result -cne 'FAIL_CLOSED'}).Count -ne 0){throw 'P16 authorization must preserve four failed-closed attempts.'}
+  $g4=@($d.authorizationHistory|Where-Object{[int]$_.authorizationGeneration -eq 4})
+ if($g4.Count -ne 1 -or -not $g4[0].authorizationConsumed -or [int]$g4[0].consumedByAttempt -ne 5 -or $g4[0].authorizationHead -cne '98fdc73dbf1ac4f81812ae84f45047c9e1845703' -or [long]$g4[0].authorizationCiRunId -ne 37092681751 -or -not $g4[0].attemptFenceClaimed){throw 'P16 generation-4 consumed history missing.'}
+ if($history.Count -ne 4 -or @($d.physicalAttemptHistory).Count -ne 5 -or @($d.physicalAttemptHistory|Where-Object{$_.result -cne 'FAIL_CLOSED'}).Count -ne 0){throw 'P16 generation-5 must preserve five failed-closed attempts and four consumed authorizations.'}
+ if($d.physicalAttemptHistory[4].evidenceZipSha256 -cne '811fafd002311482e75b21dcfa24528fa05f458f913ba7a9a0afd72c00a3363f'){throw 'P16 attempt-5 evidence identity altered.'}
+ Assert-Contains $doc 'P16 generation-5 controlled authorization after supersession correction' 'P16 generation-5 documentation missing.'
  Assert-Contains $doc 'P16 generation-4 controlled WMI authorization' 'P16 generation-4 documentation missing.'
 }else{
  Assert-Contains $gate 'public static readonly bool PhysicalExecutionAuthorized = false;' 'P16A source gate must remain hard-closed.'
