@@ -68,6 +68,7 @@ internal static class RaplProbeSelfTest
             using var cts = new CancellationTokenSource();
             await Check("cancel-after-write", new() { AfterApply = () => cts.Cancel() }, true,
                 "ABORTED", "BASELINE_VERIFIED", 2, token: cts.Token);
+            await GuardianProcessFixture.RunAsync(root);
             Console.WriteLine("Intel RAPL P1 fixture suite: PASS (no hardware I/O).");
             return 0;
         }

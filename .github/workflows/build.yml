@@ -21,6 +21,12 @@ jobs:
       - name: Restore
         run: dotnet restore VictusFanControl.sln
 
+      - name: Intel RAPL bounded P1 build and recovery fixtures (no hardware IO)
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "CPU probe PowerShell 5.1 build/fixtures failed." }
+
       - name: PowerShell syntax check
         shell: pwsh
         run: |
@@ -462,12 +468,6 @@ jobs:
 
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
-
-      - name: Intel RAPL bounded P1 fixtures (no hardware IO)
-        shell: pwsh
-        run: |
-          .\src\VictusFanControl.CpuProbe\bin\Release\net8.0-windows\VictusFanControl.CpuProbe.exe --self-test
-          if ($LASTEXITCODE -ne 0) { throw "CPU probe fixtures failed." }
 
       - name: HP 8C40 P14.2 build and verify win-x64 publish layout
         shell: pwsh

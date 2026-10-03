@@ -13,6 +13,8 @@ internal static class Program
         try
         {
             if (args.SequenceEqual(new[] { "--self-test" })) return await RaplProbeSelfTest.RunAsync();
+            if (args.Length == 2 && args[0] == "--fixture-supervisor")
+                return GuardianProcessFixture.Supervisor(args[1]);
             if (args.Length == 2 && args[0] == "--worker") return Worker(args[1]);
             if (args.Length == 0 || args.SequenceEqual(new[] { "--help" }))
             {
@@ -86,7 +88,7 @@ internal static class Program
     {
         var request = JsonSerializer.Deserialize<ProbeRequest>(File.ReadAllText(requestPath))
             ?? throw new InvalidDataException("Missing request.");
-        if (request.Mode is not ("--observe" or "--write-test") || request.DurationSeconds is < 10 or > 120 ||
+        if (request.Mode is not ("--observe" or "--write-test" or "--fixture") || request.DurationSeconds is < 10 or > 120 ||
             Path.GetFullPath(requestPath) != Path.Combine(request.Directory, "request.json") ||
             DateTimeOffset.UtcNow - request.CreatedUtc > TimeSpan.FromSeconds(30) ||
             request.CreatedUtc > DateTimeOffset.UtcNow.AddSeconds(2))
@@ -106,14 +108,18 @@ internal static class Program
             catch (System.ComponentModel.Win32Exception) { return false; }
         }
         if (!KeepRunning()) throw new InvalidDataException("Request owner is not alive or does not match this executable.");
-        using var guard = new Mutex(false, @"Global\VictusFanControl.IntelRaplCpuProbe.8C40");
+        var fixture = request.Mode == "--fixture";
+        using var guard = new Mutex(false, fixture
+            ? @"Global\VictusFanControl.IntelRaplCpuProbe.Fixtures"
+            : @"Global\VictusFanControl.IntelRaplCpuProbe.8C40");
         bool acquired;
         try { acquired = guard.WaitOne(0); }
         catch (AbandonedMutexException) { acquired = true; }
         if (!acquired) throw new InvalidOperationException("Another CPU probe is running.");
         var journal = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             "VictusFanControl", "CpuProbe", "active-write.json");
-        var writeTest = request.Mode == "--write-test";
+        if (fixture) journal = Path.Combine(request.Directory, "fixture-active.json");
+        var writeTest = request.Mode != "--observe";
         try
         {
             using var evidence = new ProbeEvidence(request.Directory, writeTest ? journal : null);
@@ -121,10 +127,13 @@ internal static class Program
             {
                 if (writeTest && File.Exists(journal))
                     throw new InvalidOperationException("Previous write test has an unresolved journal. Read-only diagnosis only; preserve " + journal);
-                using var hardware = new PhysicalRaplHardware(request.ModulePath, request.Directory, writeTest);
+                using IRaplProbeHardware hardware = fixture
+                    ? new GuardianProcessFixture.FixtureHardware(request.Directory)
+                    : new PhysicalRaplHardware(request.ModulePath, request.Directory, writeTest);
                 evidence.Event("CPU-only experiment; firmware fans; no direct EC, HP WMI fan calls or GPU writes.");
                 evidence.Event(writeTest ? "P1: baseline 10 s, reduce PL1/PL2 once, observe, restore, verify." : "P0/P0.5: read-only observation.");
-                var timing = writeTest ? ProbeTiming.Physical(request.DurationSeconds)
+                var timing = fixture ? new ProbeTiming(2, 500, 1, 10)
+                    : writeTest ? ProbeTiming.Physical(request.DurationSeconds)
                     : new ProbeTiming(request.DurationSeconds, 0, 0, 1000);
                 // Keep the named mutex on its owning OS thread while the engine
                 // performs sequential asynchronous sampling on pool threads.
