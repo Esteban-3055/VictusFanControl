@@ -752,3 +752,12 @@ and separate software closure before new physical authorization. Generation 5
 remains consumed; all target/permanent gates remain closed. Fan writes, restore,
 thermal thresholds, the 3-second fan freshness limit, installed M4 and 88F8
 behavior are unchanged.
+
+The correction is now formally closed on implementation
+`529f3f17c9cddba9df8e5ffe89e64a58e849f5fd`, tree
+`a5f8eaf6dba7eefabcc6d592e7ad081d9ef52238`, full Windows CI #1214 /
+run `37096823991` SUCCESS (102 completed steps). The complete Windows workflow
+passes all twelve query/publication cases and eight periodic cases, including
+the reproduced failure, lifecycle fences and newer-failure ordering. This
+separate closure changes records/invariants only and requires its own CI.
+It does not open a new physical generation or close the failed target evidence.

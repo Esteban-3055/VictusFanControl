@@ -331,7 +331,7 @@
         "The P16 harness waits only for a later successful expected interaction and does not immediately abort when the same requested P13 Manual interaction logs FAILED CLOSED, allowing an invalid retry/new Custom session to satisfy a later success pattern.",
         "The P16 authorization state was reusable for more than one physical harness invocation; the next design must make authorization operationally one-shot or otherwise explicitly fence a consumed attempt."
       ],
-      "nextAction": "Validate the read-publication correction with full same-head Windows CI, then record separate software closure before any fresh target authorization. Preserve generation 5 consumed, unknown provider latency contribution and all physical gates closed.",
+      "nextAction": "Software publication correction is formally closed on implementation 529f3f1 / full Windows CI #1214 SUCCESS. Keep generation 5 consumed and all gates closed; a separate fresh authorization and its own exact-head CI are required before any target qualification. Preserve unproven provider latency contribution and mandatory expiry handoffs.",
       "implementation": {
         "staged": true,
         "ciValidated": true,
@@ -610,9 +610,9 @@
         "fanWritesChanged": false,
         "hardwareExecutionByReblockCommit": false,
         "wmiCoordinationImplementation": {
-          "status": "IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+          "status": "SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED",
           "implemented": true,
-          "ciValidated": false,
+          "ciValidated": true,
           "baselineHead": "1be1357d41d48f0d5677d0445bd224c475b158b0",
           "baselineTree": "2eb2082e2809aff8adc37701736a2b11beee75ce",
           "baselineCiRunNumber": 1213,
@@ -643,8 +643,31 @@
           "physicalGatesOpened": false,
           "physicalAttempt6RootCauseEstablished": false,
           "softwareClosure": {
-            "closed": false,
-            "separateSameHeadCiClosureRequired": true
+            "closed": true,
+            "separateSameHeadCiClosureRequired": true,
+            "result": "PASS",
+            "implementationHead": "529f3f17c9cddba9df8e5ffe89e64a58e849f5fd",
+            "implementationTree": "a5f8eaf6dba7eefabcc6d592e7ad081d9ef52238",
+            "sourceCiRunNumber": 1214,
+            "sourceCiRunId": 37096823991,
+            "sourceCiResult": "SUCCESS",
+            "hardwareExecution": false,
+            "physicalGatesOpened": false,
+            "physicalAttempt6RootCauseEstablished": false,
+            "separateClosureCommitCiRequired": true
+          },
+          "validation": {
+            "head": "529f3f17c9cddba9df8e5ffe89e64a58e849f5fd",
+            "tree": "a5f8eaf6dba7eefabcc6d592e7ad081d9ef52238",
+            "runNumber": 1214,
+            "runId": 37096823991,
+            "result": "SUCCESS",
+            "fullWindowsCi": true,
+            "completedSteps": 102,
+            "windowsPowerShell51Validated": true,
+            "deterministicRcPackageValidated": true,
+            "queryAndPublicationCases": 12,
+            "periodicTelemetryCases": 8
           }
         }
       }

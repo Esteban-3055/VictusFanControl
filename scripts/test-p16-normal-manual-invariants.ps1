@@ -103,6 +103,11 @@ if($isPhysicalFailClosed){
      if([bool]$coordination.$flag){throw "P16 WMI coordination scope changed: $flag."}
    }
    if($coordination.status -ceq 'IMPLEMENTED_CI_PENDING_GATE_CLOSED' -and ($coordination.ciValidated -or $coordination.softwareClosure.closed)){throw 'P16 WMI coordination implementation cannot preclaim CI or closure.'}
+   if($coordination.status -ceq 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED'){
+     $cv=$coordination.validation; $cc=$coordination.softwareClosure
+     if(-not $coordination.ciValidated -or -not $cc.closed -or $cc.result -cne 'PASS' -or $cv.head -cne '529f3f17c9cddba9df8e5ffe89e64a58e849f5fd' -or $cv.tree -cne 'a5f8eaf6dba7eefabcc6d592e7ad081d9ef52238' -or [long]$cv.runId -ne 37096823991 -or [int]$cv.runNumber -ne 1214 -or $cv.result -cne 'SUCCESS' -or -not $cv.fullWindowsCi -or [int]$cv.completedSteps -ne 102 -or [int]$cv.queryAndPublicationCases -ne 12 -or [int]$cv.periodicTelemetryCases -ne 8 -or
+        $cc.implementationHead -cne $cv.head -or $cc.implementationTree -cne $cv.tree -or [long]$cc.sourceCiRunId -ne [long]$cv.runId -or $cc.sourceCiResult -cne 'SUCCESS' -or $cc.hardwareExecution -or $cc.physicalGatesOpened -or $cc.physicalAttempt6RootCauseEstablished -or -not $cc.separateClosureCommitCiRequired){throw 'P16 WMI coordination closure lacks exact software-only implementation CI.'}
+   }elseif($coordination.status -cne 'IMPLEMENTED_CI_PENDING_GATE_CLOSED'){throw 'Unexpected P16 WMI coordination software status.'}
  }
  $p5=$d.hardeningRequired.postAttempt5
  if(-not $p5.initial30WmiAckProven -or -not $p5.initial30IndependentOwnershipProven -or $p5.changed40BackendDispatchObserved -or $p5.independentFinalFirmwareProof -or $p5.exactSafetyDenialCauseEstablished -or $p5.safetyPredicateChanged -or $p5.thermalLimitsChanged -or $p5.fanWritesChanged){throw 'P16 attempt-5 scope was overstated.'}
