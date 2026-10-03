@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
-  "status": "IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+  "status": "SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED",
   "baselineHead": "5ad0821b0e7a4272abdc31f4a7d0d8fcb716332c",
   "baselineCi": {
     "runNumber": 1199,
@@ -23,12 +23,39 @@
     "failureBackoffMs": 5000,
     "directEcFallback": false
   },
-  "implementationValidation": null,
+  "implementationValidation": {
+    "head": "f41f390c682994af08807b28abcfa256b967722f",
+    "tree": "1cfbfcccf9270f747ef4a91ec21f4e7e105df23a",
+    "runId": 37081921838,
+    "runNumber": 1201,
+    "result": "SUCCESS",
+    "fakeTransportCases": 8,
+    "hardwareExecution": false
+  },
   "softwareClosure": {
-    "closed": false
+    "closed": true,
+    "result": "PASS",
+    "implementationHead": "f41f390c682994af08807b28abcfa256b967722f",
+    "sourceCiRunId": 37081921838,
+    "sourceCiRunNumber": 1201,
+    "sourceCiResult": "SUCCESS",
+    "hardwareExecution": false,
+    "physicalGatesOpened": false,
+    "p16Promoted": false,
+    "audit": {
+      "exactTargetOnly": true,
+      "periodicDirectEcFallbackAbsent": true,
+      "readOnlyWmiRequestOnly": true,
+      "independentAcquisitionAgeAndDecisionExpiry": true,
+      "lateResultAndSuspendEpochFences": true,
+      "singleFlightAcrossReaderRecreation": true,
+      "fanWritesOwnershipGuardsAndResponseProofUnchanged": true,
+      "qualifiedWatchdogUnchanged": true,
+      "thermalThresholdsUnchanged": true
+    }
   },
   "remainingHardwareWork": "P16 qualification-session lifecycle interruption latch and separate fresh one-shot authorization/CI/physical evidence remain required; this migration does not eliminate all direct EC tach proof reads.",
-  "implementationHead": "5b151f965b321807aa73cb970e1196dbde087e0f",
+  "implementationHead": "f41f390c682994af08807b28abcfa256b967722f",
   "localValidation": {
     "coreCSharpCompilationWarningsAsErrors": "PASS",
     "guiCSharpCompilationWarningsAsErrors": "PASS",
@@ -36,8 +63,8 @@
     "fakeTransportResult": "PASS",
     "safetyGateSelfTest": "PASS",
     "hpBiosContractSelfTest": "PASS",
-    "fullWindowsBuildAndCi": "PENDING",
-    "powerShellRuntimeChecks": "PENDING_WINDOWS_CI",
+    "fullWindowsBuildAndCi": "PASS_CI_1201",
+    "powerShellRuntimeChecks": "PASS_CI_1201_INCLUDING_WINDOWS_POWERSHELL_5_1",
     "legacyBackendSelfTestOnLinux": "UNSUPPORTED_WINDOWS_ACTIVE_TIME_CLOCK",
     "legacyAdaptiveRetryTestOnLinux": "INTERMITTENT_IN_BASELINE_AND_MIGRATION; NOT_CLOSED"
   },
@@ -57,6 +84,18 @@
     "implemented": true,
     "maximumCombinedFanAgeMs": 3000,
     "thermalThresholdsChanged": false,
-    "validation": "LOCAL_PASS_WINDOWS_CI_PENDING"
+    "validation": "WINDOWS_CI_PASS"
+  },
+  "originalLocalImplementationHead": "5b151f965b321807aa73cb970e1196dbde087e0f",
+  "windowsRegressionValidation": {
+    "safetyGate": "PASS",
+    "fanAuthority": "PASS",
+    "watchdogLease": "PASS",
+    "hpBiosContracts": "PASS",
+    "hp88F8And8C40Backends": "PASS",
+    "adaptivePolicy": "PASS",
+    "publishLayout": "PASS",
+    "reproduciblePackage": "PASS",
+    "retainedArtifacts": "PASS"
   }
 }

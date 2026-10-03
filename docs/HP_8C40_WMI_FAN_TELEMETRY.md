@@ -111,7 +111,7 @@ and concurrency are bounded independently rather than assuming cancellation
 of a synchronous native provider call:
 https://learn.microsoft.com/en-us/dotnet/api/system.management.invokemethodoptions
 
-## Local verification record (Windows CI pending)
+## Verification history and software closure
 
 Original local implementation: `5b151f9` (full identity in the telemetry checkpoint).
 First published identical source tree: `cc8345c4cb6dc990a4280611deda925f8444097b`,
@@ -121,7 +121,7 @@ C# compilation of core and GUI passed with warnings treated as errors using
 The container's normal dotnet CLI/MSBuild entry points cannot inspect process
 metadata, so this is compiler verification, not a completed SDK build/publish.
 The GUI compiler check used temporary equivalents of SDK-generated global
-usings/ApplicationConfiguration; actual SDK generation remains a Windows CI check.
+usings/ApplicationConfiguration; actual SDK generation and publish were subsequently verified in Windows CI.
 
 The original seven fake-transport cases passed locally and in CI #1200.
 The decision-time expiry audit adds an eighth case, which also passed locally. SafetyGate and both HP BIOS request
@@ -143,6 +143,21 @@ recorded as diagnostic history rather than a production change.
 Post-CI review found and fixed the independent fan-age decision boundary:
 2500-ms cached fan age plus 499-ms snapshot retention is accepted; plus 500 ms
 is expired, even though the fast snapshot itself is younger than 3 seconds.
-This audit correction requires its own complete same-head CI before software
-closure. No physical gate was opened; the P16 qualification-session lifecycle
+This audit correction passed its own complete same-head Windows CI #1201
+(run 37081921838), HEAD `f41f390c682994af08807b28abcfa256b967722f`. No physical gate was opened; the P16 qualification-session lifecycle
 latch and remaining direct EC proof reads are outside this migration.
+
+
+The migration is now formally software-closed in a separate source/contract
+commit based on CI #1201 SUCCESS. That closure changes only documentation,
+the telemetry checkpoint and its CI invariant, and requires its own full
+same-head CI before this snapshot is used as the next software baseline.
+All eight fan telemetry cases, SafetyGate, fan authority, lease protocol,
+HP BIOS contracts, both HP backend tests, adaptive policy, watchdog tests,
+PowerShell invariants, SDK build/publish and deterministic packaging passed
+in #1201. No new physical run was performed or authorized.
+
+This closure applies to periodic RPM telemetry and its acquisition freshness.
+P16 normal Manual is still physically fail-closed, permanent Manual/Automatic
+remain blocked, and the qualification-session interruption latch remains pending.
+Do not interpret this telemetry closure as permission to rerun the P16 harness.
