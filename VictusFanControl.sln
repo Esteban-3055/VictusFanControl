@@ -10,12 +10,18 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.Watchdog",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.ModernStandbyProbe", "src\VictusFanControl.ModernStandbyProbe\VictusFanControl.ModernStandbyProbe.csproj", "{6F0DBA38-7E08-4B4C-9027-1A57A8B187B2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.CpuProbe", "src\VictusFanControl.CpuProbe\VictusFanControl.CpuProbe.csproj", "{80F09D9B-734F-47C1-A54B-3A635FEF5BD3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{80F09D9B-734F-47C1-A54B-3A635FEF5BD3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80F09D9B-734F-47C1-A54B-3A635FEF5BD3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80F09D9B-734F-47C1-A54B-3A635FEF5BD3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80F09D9B-734F-47C1-A54B-3A635FEF5BD3}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0D90A473-A3F8-4B55-8A87-4F5411EC2B97}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0D90A473-A3F8-4B55-8A87-4F5411EC2B97}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0D90A473-A3F8-4B55-8A87-4F5411EC2B97}.Release|Any CPU.ActiveCfg = Release|Any CPU
