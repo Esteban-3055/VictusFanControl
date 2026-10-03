@@ -19,6 +19,22 @@ internal static class RaplProbeSelfTest
             Require((applied & ~RaplWritePolicy.OwnedMask) == (Baseline & ~RaplWritePolicy.OwnedMask), "all non-owned bits preserved");
             var decoded = IntelRaplCodec.DecodePackagePowerLimit(applied, units);
             Require(decoded.Pl1.PowerWatts == 36 && decoded.Pl2.PowerWatts == 48, "20 percent downward encoding");
+
+            var explicit2040 = RaplWritePolicy.BuildRequestedLimit(Baseline, units, 20, 40);
+            Require((explicit2040 & ~RaplWritePolicy.OwnedMask) == (Baseline & ~RaplWritePolicy.OwnedMask),
+                "explicit limits preserve all non-owned bits");
+            var explicitDecoded = IntelRaplCodec.DecodePackagePowerLimit(explicit2040, units);
+            Require(explicitDecoded.Pl1.PowerWatts == 20 && explicitDecoded.Pl2.PowerWatts == 40,
+                "explicit 20/40 encoding");
+            RequireThrows(() => RaplWritePolicy.BuildRequestedLimit(Baseline, units, 9, 40),
+                "explicit PL1 below safe floor rejected");
+            RequireThrows(() => RaplWritePolicy.BuildRequestedLimit(Baseline, units, 30, 20),
+                "explicit PL2 below PL1 rejected");
+            RequireThrows(() => RaplWritePolicy.BuildRequestedLimit(Baseline, units, 45, 50),
+                "explicit PL1 must be downward");
+            RequireThrows(() => RaplWritePolicy.BuildRequestedLimit(Baseline, units, 20, 60),
+                "explicit PL2 must be downward");
+
             var changed = (applied & ~RaplWritePolicy.Pl1Mask) | 200UL;
             var plan = RaplWritePolicy.PlanRestore(Baseline, applied, changed);
             Require((plan.Value & RaplWritePolicy.Pl1Mask) == 200 &&
@@ -28,7 +44,8 @@ internal static class RaplProbeSelfTest
             Require(RaplWritePolicy.PlanRestore(Baseline, applied, applied ^ (1UL << 16)).Value == (applied ^ (1UL << 16)), "changed clamp blocks restoration");
 
             async Task Check(string name, FakeHardware fake, bool writes, string expected,
-                string restore, int count, Func<bool>? owner = null, CancellationToken token = default)
+                string restore, int count, Func<bool>? owner = null, CancellationToken token = default,
+                RequestedPowerLimits? explicitLimits = null)
             {
                 var directory = Path.Combine(root, name);
                 Directory.CreateDirectory(directory);
@@ -36,7 +53,7 @@ internal static class RaplProbeSelfTest
                 using var evidence = new ProbeEvidence(directory, journal);
                 fake.Journal = journal;
                 var result = await RaplProbeEngine.RunAsync(fake, evidence, writes,
-                    new ProbeTiming(2, 3, 1, 1), owner ?? (() => true), token);
+                    new ProbeTiming(2, 3, 1, 1), owner ?? (() => true), token, explicitLimits);
                 Require(result.Result == expected, name + " result: " + result.Result);
                 Require(result.RestoreResult == restore, name + " restore: " + result.RestoreResult);
                 Require(fake.WriteCount == count, name + " write count");
@@ -47,6 +64,13 @@ internal static class RaplProbeSelfTest
 
             await Check("readonly", new(), false, "READ_ONLY_STABLE", "NOT_NEEDED", 0);
             await Check("accepted-restored", new(), true, "WRITE_ACCEPTED_AND_PERSISTED", "BASELINE_VERIFIED", 2);
+            var explicitFake = new FakeHardware();
+            await Check("explicit-20-40", explicitFake, true, "WRITE_ACCEPTED_AND_PERSISTED",
+                "BASELINE_VERIFIED", 2, explicitLimits: new RequestedPowerLimits(20, 40));
+            Require(explicitFake.FirstApplied.HasValue, "explicit write captured");
+            var explicitApplied = IntelRaplCodec.DecodePackagePowerLimit(explicitFake.FirstApplied!.Value, units);
+            Require(explicitApplied.Pl1.PowerWatts == 20 && explicitApplied.Pl2.PowerWatts == 40,
+                "engine applies explicit 20/40");
             await Check("locked", new() { Raw = Baseline | (1UL << 63) }, true, "WRITE_REFUSED_OR_READ_FAILED", "NOT_NEEDED", 0);
             await Check("disabled", new() { Raw = Baseline & ~(1UL << 15) }, true, "WRITE_REFUSED_OR_READ_FAILED", "NOT_NEEDED", 0);
             await Check("dynamic-baseline", new() { BeforeSample = h => { if (h.SampleCount == 3) h.Raw ^= 1; } }, true, "WRITE_REFUSED_OR_READ_FAILED", "NOT_NEEDED", 0);
@@ -81,10 +105,23 @@ internal static class RaplProbeSelfTest
         if (!condition) throw new InvalidOperationException(label);
     }
 
+    private static void RequireThrows(Action action, string label)
+    {
+        try
+        {
+            action();
+            throw new InvalidOperationException(label);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("WRITE_REFUSED_", StringComparison.Ordinal))
+        {
+        }
+    }
+
     private sealed class FakeHardware : IRaplProbeHardware
     {
         internal const ulong Units = 3UL | (14UL << 8) | (10UL << 16);
         internal ulong Raw = Baseline;
+        internal ulong? FirstApplied;
         internal int WriteCount, SampleCount;
         internal bool Ac = true, IgnoreApply, ThrowAfterApply, ThrowOnRestore;
         internal double Temperature = 50;
@@ -99,6 +136,7 @@ internal static class RaplProbeSelfTest
             Require(File.Exists(Journal), "durable journal exists before EVERY physical write");
             Require((value & ~RaplWritePolicy.OwnedMask) == (Raw & ~RaplWritePolicy.OwnedMask), "write preserves non-owned fields");
             WriteCount++;
+            if (WriteCount == 1) FirstApplied = value;
             if (WriteCount == 2 && ThrowOnRestore) throw new IOException("restore ioctl failed");
             if (WriteCount != 1 || !IgnoreApply) Raw = value;
             if (WriteCount == 1)
