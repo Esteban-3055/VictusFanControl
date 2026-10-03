@@ -10,22 +10,7 @@ $ErrorActionPreference='Stop'
 $repo=Split-Path -Parent $PSScriptRoot
 $state=@{StartedUtc=$null;InitialSystemRecordId=$null;Evidence=$null;Fault=$null;Samples=0;Events=@();Paused=$false;Resumed=$false;Finished=$false;NextReport=[DateTimeOffset]::MinValue;StopReason='duration-or-Q'}
 
-function New-ScenarioAEventQuery([long]$InitialRecordId) {
-    if($InitialRecordId -lt 0){throw 'Cursor de eventos invalido.'}
-    # Record IDs avoid localized date conversion in FilterHashtable. A second
-    # independent check below uses the original XML timestamp, always UTC.
-    return "*[System[Provider[@Name='ACPI'] and EventID=13 and EventRecordID > $InitialRecordId]]"
-}
-function Select-ScenarioANewEvents($Events,[long]$InitialRecordId,[DateTimeOffset]$StartedUtc) {
-    foreach($event in @($Events)){
-        [xml]$xml=$event.ToXml()
-        $system=$xml.Event.System
-        if(-not $system -or -not $system.TimeCreated.SystemTime -or -not $system.EventRecordID){throw 'Evento sin identidad o tiempo XML verificable.'}
-        $record=[long]$system.EventRecordID
-        $utc=[DateTimeOffset]::Parse([string]$system.TimeCreated.SystemTime,[Globalization.CultureInfo]::InvariantCulture)
-        if($system.Provider.Name -eq 'ACPI' -and [int]$system.EventID -eq 13 -and $record -gt $InitialRecordId -and $utc -ge $StartedUtc){$event}
-    }
-}
+. (Join-Path $PSScriptRoot 'ScenarioAcpiEventFilter.ps1')
 
 function Assert-ScenarioAFacts($Facts,[switch]$AllowCleanM4) {
     if(@($Facts.Journals).Count){throw 'Existe un lease pendiente. Vuelve a Firmware y espera la restauracion; no borres el journal.'}

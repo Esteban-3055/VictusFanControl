@@ -4,11 +4,13 @@ param(
     [ValidateRange(1,60)][int]$CaptureMinutes=30,
     [string]$OutputRoot='',
     [switch]$SkipAcpiTrace,
+    [switch]$ScenarioB,
     [switch]$SelfTest
 )
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
-$script:WmiOnlyState=@{Child=$null;Fault=$null;CaptureRoot=$null;Evidence=$null;WasRunning=$false;Paused=$false;ValidIsolation=$false;NextReport=[DateTimeOffset]::MinValue;Root=$root;Resumed=$false}
+. (Join-Path $PSScriptRoot 'ScenarioAcpiEventFilter.ps1')
+$script:WmiOnlyState=@{Child=$null;ExitCode=$null;ExitCaptured=$false;OutTask=$null;ErrTask=$null;OutStream=$null;ErrStream=$null;ScenarioB=[bool]$ScenarioB;InitialSystemRecordId=$null;Acpi13=@();StopReason='duration-or-Q';Fault=$null;CaptureRoot=$null;Evidence=$null;WasRunning=$false;Paused=$false;ValidIsolation=$false;NextReport=[DateTimeOffset]::MinValue;Root=$root;Resumed=$false}
 
 function Assert-WmiOnlyFacts($Facts,[int]$AllowedCliPid=0,[switch]$AllowRunningM4) {
     # Presence alone blocks: never parse/delete a retained or malformed lease.
@@ -51,16 +53,47 @@ function Get-WmiOnlyFacts {
 function Write-WmiOnlyJson([string]$Path,$Value) {
     [IO.File]::WriteAllText($Path,(ConvertTo-Json -InputObject $Value -Depth 8),(New-Object Text.UTF8Encoding($false)))
 }
+function Start-WmiOnlyChild($state,[string]$File,[string]$Arguments,[string]$WorkingDirectory) {
+    # Own the Process instance that starts the child: Start-Process -PassThru
+    # yielded a null ExitCode on the user's PS5.1 captures. Keep its handle.
+    $child=New-Object Diagnostics.Process
+    try{
+        $info=New-Object Diagnostics.ProcessStartInfo
+        $info.FileName=$File;$info.Arguments=$Arguments;$info.WorkingDirectory=$WorkingDirectory
+        $info.UseShellExecute=$false;$info.CreateNoWindow=$true
+        $info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
+        $state.OutStream=[IO.File]::Open((Join-Path $state.Evidence 'cli-stdout.txt'),[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite)
+        $state.ErrStream=[IO.File]::Open((Join-Path $state.Evidence 'cli-stderr.txt'),[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite)
+        $child.StartInfo=$info
+        if(-not $child.Start()){throw 'No se pudo iniciar el CLI.'}
+        $state.Child=$child
+        $state.OutTask=$child.StandardOutput.BaseStream.CopyToAsync($state.OutStream)
+        $state.ErrTask=$child.StandardError.BaseStream.CopyToAsync($state.ErrStream)
+    }catch{
+        if(-not $state.Child){$child.Dispose();if($state.OutStream){$state.OutStream.Dispose()};if($state.ErrStream){$state.ErrStream.Dispose()}}
+        throw
+    }
+}
 function Stop-WmiOnlyChild($state) {
-    if(-not $state.Child){return}
+    if(-not $state.Child -or $state.ExitCaptured){return}
     [IO.File]::WriteAllText((Join-Path $state.Evidence 'stop.signal'),'stop',(New-Object Text.UTF8Encoding($false)))
     if(-not $state.Child.WaitForExit(15000)){
         $state.Fault='El CLI no termino con la senal de cierre; captura incompleta.'
         # Only our own strictly read-only child may be terminated.
         $state.Child.Kill();[void]$state.Child.WaitForExit(5000)
     }
-    $state.Child.Refresh()
-    if($state.Child.ExitCode -ne 0 -and -not $state.Fault){$state.Fault='El CLI termino con codigo '+$state.Child.ExitCode+'. Revisa wmi-only/cli-stderr.txt.'}
+    if(-not $state.Child.HasExited){throw 'No se confirmo la salida del CLI; codigo de salida desconocido.'}
+    $state.ExitCode=$state.Child.ExitCode
+    if($null -eq $state.ExitCode){throw 'Codigo de salida desconocido; no se puede validar la captura.'}
+    foreach($name in @('Out','Err')){
+        $task=$state[$name+'Task'];$stream=$state[$name+'Stream']
+        try{
+            if($task -and -not $task.Wait(5000)){throw ('Salida '+$name+' no se completo.')}
+            if($stream){$stream.Flush()}
+        }catch{if(-not $state.Fault){$state.Fault=$_.Exception.Message}}finally{if($stream){$stream.Dispose();$state[$name+'Stream']=$null}}
+    }
+    $state.ExitCaptured=$true
+    if($state.ExitCode -ne 0 -and -not $state.Fault){$state.Fault='El CLI termino con codigo '+$state.ExitCode+'. Revisa wmi-only/cli-stderr.txt.'}
 }
 function Resume-WmiOnlyWatchdog($state) {
     if(-not $state.Paused -or $state.Resumed){return}
@@ -93,6 +126,22 @@ function Test-WmiOnlyTrace([string]$Path,[int]$ExpectedPid) {
 }
 
 if($SelfTest){
+    $nativeRoot=Join-Path ([IO.Path]::GetTempPath()) ('vfc-wmi-native-'+[Guid]::NewGuid().ToString('N'))
+    [IO.Directory]::CreateDirectory($nativeRoot)|Out-Null
+    try{
+        foreach($code in @(0,37)){
+            $native=@{Child=$null;Evidence=$nativeRoot;ExitCaptured=$false;ExitCode=$null;Fault=$null;OutTask=$null;ErrTask=$null;OutStream=$null;ErrStream=$null}
+            try{
+                $shell=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+                Start-WmiOnlyChild $native $shell ('-NoProfile -NonInteractive -Command "[Console]::Out.WriteLine(''fixture-out'');[Console]::Error.WriteLine(''fixture-err'');exit '+$code+'"') $nativeRoot
+                Stop-WmiOnlyChild $native
+                if($native.ExitCode -ne $code -or -not $native.ExitCaptured){throw 'Codigo nativo de salida incorrecto.'}
+                if(($code -eq 0 -and $native.Fault) -or ($code -ne 0 -and -not $native.Fault)){throw 'Clasificacion de salida incorrecta.'}
+                Stop-WmiOnlyChild $native
+                if((Get-Content (Join-Path $nativeRoot 'cli-stdout.txt') -Raw) -notmatch 'fixture-out' -or (Get-Content (Join-Path $nativeRoot 'cli-stderr.txt') -Raw) -notmatch 'fixture-err'){throw 'Streams no vaciados antes de empaquetar.'}
+            }finally{if($native.Child){$native.Child.Dispose()}}
+        }
+    }finally{Remove-Item -LiteralPath $nativeRoot -Recurse -Force}
     $empty=[pscustomobject]@{Journals=@();Services=@();Processes=@()}
     Assert-WmiOnlyFacts $empty
     $m4=[pscustomobject]@{Name='VictusFanControlWatchdogM4';State='Running';ProcessId=7}
@@ -178,6 +227,7 @@ try{
         [IO.Directory]::CreateDirectory($state.Evidence)|Out-Null
         try{
             Assert-WmiOnlyFacts (Get-WmiOnlyFacts)
+            if($state.ScenarioB){$state.InitialSystemRecordId=[long](Get-WinEvent -LogName System -MaxEvents 1 -ErrorAction Stop).RecordId}
             $state.StartedUtc=[DateTimeOffset]::UtcNow.ToString('o')
             $cliArgs=@('--wmi-only-investigation','--modules-dir',('"'+$state.Modules+'"'),'--interval-ms','1000',
                 '--output',('"'+(Join-Path $state.Evidence 'telemetry.csv')+'"'),
@@ -186,8 +236,7 @@ try{
             $previous=$env:VFC_EC_WMI_DIAGNOSTICS
             try{
                 $env:VFC_EC_WMI_DIAGNOSTICS='1'
-                $state.Child=Start-Process -FilePath $state.Cli -ArgumentList $cliArgs -WorkingDirectory $state.Root -PassThru -NoNewWindow `
-                    -RedirectStandardOutput (Join-Path $state.Evidence 'cli-stdout.txt') -RedirectStandardError (Join-Path $state.Evidence 'cli-stderr.txt')
+                Start-WmiOnlyChild $state $state.Cli ($cliArgs -join ' ') $state.Root
             }finally{$env:VFC_EC_WMI_DIAGNOSTICS=$previous}
             $timer=[Diagnostics.Stopwatch]::StartNew()
             while(-not(Test-Path -LiteralPath (Join-Path $state.Evidence 'ready.json'))){
@@ -197,7 +246,7 @@ try{
             }
             $ready=Get-Content -LiteralPath (Join-Path $state.Evidence 'ready.json') -Raw | ConvertFrom-Json
             if($ready.Pid -ne $state.Child.Id -or -not $ready.DirectEcProhibited -or -not $ready.HpWritesProhibited -or $ready.Mode -ne 'wmi-only-no-direct-ec'){throw 'Frontera de aislamiento no confirmada.'}
-            Write-Host ('WMI-ONLY ACTIVO: PID='+$state.Child.Id+'. Comienza ahora la comparacion; no usa Manual ni lectura EC directa.') -ForegroundColor Green
+            Write-Host ('ESCENARIO B / WMI-ONLY ACTIVO: PID='+$state.Child.Id+'. Comienza ahora la comparacion; no usa Manual ni lectura EC directa.') -ForegroundColor Green
         }catch{$state.Fault=$_.Exception.Message;throw}
     }
     $guard={param($captureRoot,$state)
@@ -208,11 +257,24 @@ try{
             $powerAvailable=[VictusWmiOnly.PowerSnapshot]::GetSystemPowerStatus([ref]$power)
             $row=[pscustomobject]@{Utc=[DateTimeOffset]::UtcNow.ToString('o');CliPid=$state.Child.Id;WatchdogStates=@($facts.Services | Select-Object Name,State,ProcessId);RelevantProcesses=$facts.Processes;JournalPresent=($facts.Journals.Count -gt 0);WindowsPowerAvailable=$powerAvailable;WindowsPower=$(if($powerAvailable){$power}else{$null})}
             [IO.File]::AppendAllText((Join-Path $state.Evidence 'isolation-timeline.ndjson'),(ConvertTo-Json -Compress -InputObject $row -Depth 6)+[Environment]::NewLine,(New-Object Text.UTF8Encoding($false)))
+            if($state.ScenarioB){
+                $latest=Get-WinEvent -LogName System -MaxEvents 1 -ErrorAction Stop
+                if([long]$latest.RecordId -lt $state.InitialSystemRecordId){throw 'System se reinicio durante B; comparacion invalidada.'}
+                $raw=@()
+                try{$raw=@(Get-WinEvent -LogName System -FilterXPath (New-ScenarioAEventQuery $state.InitialSystemRecordId) -MaxEvents 20 -ErrorAction Stop)}catch{if($_.FullyQualifiedErrorId -notmatch '^NoMatchingEventsFound'){throw}}
+                $events=@(Select-ScenarioANewEvents $raw $state.InitialSystemRecordId ([DateTimeOffset]::Parse($state.StartedUtc)))
+                if($events.Count){
+                    $state.Acpi13=@($events | Select-Object @{Name='TimeCreatedUtc';Expression={([DateTimeOffset]::Parse(([xml]$_.ToXml()).Event.System.TimeCreated.SystemTime)).ToUniversalTime().ToString('o')}},RecordId,Id,ProviderName,Message)
+                    Write-WmiOnlyJson (Join-Path $state.Evidence 'acpi13-detected.json') $state.Acpi13
+                    $state.StopReason='new-acpi13'
+                    throw 'ACPI 13 nuevo durante B: terminar y preservar cronologia.'
+                }
+            }
             if([DateTimeOffset]::UtcNow -ge $state.NextReport){
                 $state.NextReport=[DateTimeOffset]::UtcNow.AddSeconds(30)
                 Write-Host ('WMI-ONLY activo: '+(Get-Content -LiteralPath (Join-Path $state.Evidence 'cli-stdout.txt') -Tail 1 -ErrorAction SilentlyContinue))
             }
-        }catch{$state.Fault=$_.Exception.Message;throw}
+        }catch{if($state.StopReason -ne 'new-acpi13'){$state.Fault=$_.Exception.Message};throw}
     }
     $finish={param($captureRoot,$state)
         if(-not $state.Evidence){$state.Evidence=Join-Path $captureRoot 'wmi-only';[IO.Directory]::CreateDirectory($state.Evidence)|Out-Null}
@@ -239,7 +301,8 @@ try{
             }
             Write-WmiOnlyJson (Join-Path $state.Evidence 'isolation-summary.json') ([pscustomobject]@{
                 Mode='wmi-only-no-direct-ec';ValidIsolation=$state.ValidIsolation;Fault=$state.Fault;StartedUtc=$state.StartedUtc;FinishedUtc=[DateTimeOffset]::UtcNow.ToString('o');
-                CliPid=$(if($state.Child){$state.Child.Id}else{$null});ExitCode=$(if($state.Child -and $state.Child.HasExited){$state.Child.ExitCode}else{$null});
+                Scenario=$(if($state.ScenarioB){'B'}else{'WMI-only'});DetectorVersion=2;InitialSystemRecordId=$state.InitialSystemRecordId;StopReason=$state.StopReason;Acpi13=$state.Acpi13;
+                CliPid=$(if($state.Child){$state.Child.Id}else{$null});ExitCode=$state.ExitCode;ExitCodeCaptured=$state.ExitCaptured;
                 WatchdogWasRunning=$state.WasRunning;WatchdogTemporarilyStopped=$state.Paused;WatchdogResumed=$state.Resumed;NoFanCommands=$true;AnalysisFault=$state.AnalysisFault;
                 Scope='VFC process boundary and sampled process/service isolation; Windows/firmware may still access EC; external tools are not excluded.'
             })
@@ -247,11 +310,11 @@ try{
         }
     }
     & (Join-Path $PSScriptRoot 'Collect-Victus-WmiTimeout.ps1') -RepoRoot $root -OutputRoot $OutputRoot -CaptureMinutes $CaptureMinutes `
-        -SkipAcpiTrace:$SkipAcpiTrace -InvestigationMode 'wmi-only-no-direct-ec' -ObservationStarted $start -ObservationGuard $guard -ObservationFinished $finish -ObservationContext $script:WmiOnlyState
+        -MinimalPreparation:$ScenarioB -SkipAcpiTrace:$SkipAcpiTrace -InvestigationMode 'wmi-only-no-direct-ec' -ObservationStarted $start -ObservationGuard $guard -ObservationFinished $finish -ObservationContext $script:WmiOnlyState
     if(-not $script:WmiOnlyState.ValidIsolation){throw ('La comparacion no quedo validada: '+$script:WmiOnlyState.Fault+'. Adjunta igualmente el ZIP para revisar la evidencia.')}
     Write-Host 'AISLAMIENTO VERIFICADO: sin intentos EC directos ni comandos de ventiladores en este CLI.' -ForegroundColor Green
 }finally{
     try{Stop-WmiOnlyChild $script:WmiOnlyState}finally{
-        try{Resume-WmiOnlyWatchdog $script:WmiOnlyState}finally{Pop-Location}
+        try{Resume-WmiOnlyWatchdog $script:WmiOnlyState}finally{if($script:WmiOnlyState.Child){$script:WmiOnlyState.Child.Dispose()};Pop-Location}
     }
 }

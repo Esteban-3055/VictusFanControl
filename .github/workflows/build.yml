@@ -66,6 +66,13 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-WmiOnlyInvestigation.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Isolation PowerShell 5.1 self-test failed.' }
 
+      - name: Scenario B native child fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Start-Victus-ScenarioB.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-ScenarioB.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Scenario B PowerShell 5.1 self-test failed.' }
+
       - name: ACPI collector Windows smoke and ETW session cleanup
         shell: powershell
         run: |
