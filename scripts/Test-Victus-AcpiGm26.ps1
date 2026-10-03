@@ -107,12 +107,16 @@ Assert-Gm26Isolation
 if(-not $OutputRoot){$OutputRoot=Join-Path (Split-Path -Parent $PSScriptRoot) 'diagnostics'}
 $folder=Join-Path ([IO.Path]::GetFullPath($OutputRoot)) ('ACPI-GM26_'+(Get-Date -Format 'yyyyMMdd_HHmmss')+'_'+[Guid]::NewGuid().ToString('N').Substring(0,6))
 New-Item $folder -ItemType Directory -Force | Out-Null
-$cursor=[long](Get-WinEvent -LogName System -MaxEvents 1).RecordId
+$cursor=0
 $started=[DateTimeOffset]::UtcNow
 $summary=[ordered]@{Mode='GM26-only';StartedUtc=$started.ToString('o');InitialSystemRecordId=$cursor;RequestedSamples=3;Command='0x20008';CommandType='0x26';PayloadSize=0;OutputSize=4;DirectEcAccess=$false;FanSetters=$false;Healthy=$false;Reason='incomplete';Samples=0;ChildExitCode=$null;AcpiEvents=@()}
 $child=New-Object Diagnostics.Process
 $childStarted=$false
 try{
+    $initial=@(Get-WinEvent -LogName System -MaxEvents 1 -ErrorAction SilentlyContinue -ErrorVariable cursorErrors)
+    if(@($cursorErrors | Where-Object {$_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*'}).Count){throw 'Initial System event observation failed.'}
+    if($initial.Count){$cursor=[long]$initial[0].RecordId}
+    $summary.InitialSystemRecordId=$cursor
     $info=New-Object Diagnostics.ProcessStartInfo
     $info.FileName=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $info.Arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -Child -OutputRoot "'+$folder+'"'

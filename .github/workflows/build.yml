@@ -64,7 +64,7 @@ jobs:
         run: |
           $probeRoot = Join-Path $env:RUNNER_TEMP ('gm26-rejection-' + [Guid]::NewGuid().ToString('N'))
           $rejected = $false
-          try { .\scripts\Test-Victus-AcpiGm26.ps1 -OutputRoot $probeRoot } catch { $rejected = $true }
+          try { .\scripts\Test-Victus-AcpiGm26.ps1 -OutputRoot $probeRoot } catch { $rejected = $true; Write-Host ($_ | Out-String) }
           if (-not $rejected) { throw 'Non-target probe was accepted.' }
           $folder = @(Get-ChildItem $probeRoot -Directory)
           if ($folder.Count -ne 1) { throw 'Probe evidence missing.' }
