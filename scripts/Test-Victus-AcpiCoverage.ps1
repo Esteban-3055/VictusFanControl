@@ -1,6 +1,6 @@
 # One bounded, read-only session for existing HP 8C40/F.18 ACPI routes.
 [CmdletBinding()]
-param([string]$OutputRoot='', [switch]$SelfTest, [switch]$Child)
+param([string]$OutputRoot='', [switch]$SelfTest, [switch]$Child, [switch]$FanStatus)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'AcpiProbeCommon.ps1')
 . (Join-Path $PSScriptRoot 'AcpiCoverageContract.ps1')
@@ -11,7 +11,7 @@ if($Child){
         Assert-Gm26Isolation
         $identity=Assert-Gm26Hardware
         $identity | ConvertTo-Json | Set-Content (Join-Path $OutputRoot 'hardware.json') -Encoding UTF8
-        [ordered]@{Fffs='pending';Rpm='pending';CpuGpuSetpoints='not-exposed-by-reviewed-getters';CompleteEcGuard='not-exposed-by-GM26';FanSwitchF4='not-exposed-by-reviewed-getters';Gm27Transition='not-executed';FirmwareRestore='not-exercised-no-setters';ProductionReady=$false} | ConvertTo-Json | Set-Content (Join-Path $OutputRoot 'coverage.json') -Encoding UTF8
+        [ordered]@{FanStatusGm11=$(if($FanStatus){'pending-raw-only'}else{'not-requested'});Fffs='pending';Rpm='pending';CpuGpuSetpoints='not-exposed-by-reviewed-getters';CompleteEcGuard='not-exposed-by-GM26';FanSwitchF4='not-exposed-by-reviewed-getters';Gm27Transition='not-executed';FirmwareRestore='not-exercised-no-setters';ProductionReady=$false} | ConvertTo-Json | Set-Content (Join-Path $OutputRoot 'coverage.json') -Encoding UTF8
         Add-Type -AssemblyName System.Management
         $scope=[System.Management.ManagementScope]::new('\\.\root\wmi')
         $scope.Connect()
@@ -55,9 +55,10 @@ if($Child){
         }
         $record={param($row) $row | Export-Csv (Join-Path $OutputRoot 'rounds.csv') -NoTypeInformation -Append -Encoding UTF8}
         $wait={for($tick=0;$tick -lt 50;$tick++){if(Test-Path (Join-Path $OutputRoot 'stop.signal')){throw 'Parent requested stop.'};Start-Sleep -Milliseconds 100}}
-        Invoke-AcpiCoverageSequence $read $record $wait
+        Invoke-AcpiCoverageSequence $read $record $wait ([bool]$FanStatus)
         $coverage=Get-Content (Join-Path $OutputRoot 'coverage.json') -Raw | ConvertFrom-Json
         $coverage.Fffs='conditional-read-branch-supported-by-AML-and-bracketed-ECOK-codes; no-transition-tested'
+        if($FanStatus){$coverage.FanStatusGm11='three-raw-responses-per-selector; semantics-and-freshness-unqualified'}
         $coverage.Rpm='three-valid-dual-fan-responses; nominal-100-rpm-resolution'
         $coverage | ConvertTo-Json | Set-Content (Join-Path $OutputRoot 'coverage.json') -Encoding UTF8
         $dataClass.Dispose();$target.Dispose();$results.Dispose();$searcher.Dispose()
@@ -73,7 +74,7 @@ $folder=Join-Path ([IO.Path]::GetFullPath($OutputRoot)) ('ACPI-Coverage_'+(Get-D
 New-Item $folder -ItemType Directory -Force | Out-Null
 $cursor=0
 $started=[DateTimeOffset]::UtcNow
-$summary=[ordered]@{Mode='ACPI-read-only-coverage';HarnessVersion='1';StartedUtc=$started.ToString('o');InitialSystemRecordId=$cursor;RequestedSamples=3;MaximumRequests=13;ProductionReady=$false;DirectEcAccess=$false;FanSetters=$false;Healthy=$false;Reason='incomplete';Samples=0;ChildExitCode=$null;AcpiEvents=@()}
+$summary=[ordered]@{Mode='ACPI-read-only-coverage';HarnessVersion='2';FanStatusRequested=[bool]$FanStatus;StartedUtc=$started.ToString('o');InitialSystemRecordId=$cursor;RequestedSamples=3;MaximumRequests=$(if($FanStatus){19}else{13});ProductionReady=$false;DirectEcAccess=$false;FanSetters=$false;Healthy=$false;Reason='incomplete';Samples=0;ChildExitCode=$null;AcpiEvents=@()}
 $probeProcess=New-Object Diagnostics.Process
 $childStarted=$false
 try{
@@ -84,6 +85,7 @@ try{
     $info=New-Object Diagnostics.ProcessStartInfo
     $info.FileName=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $info.Arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -Child -OutputRoot "'+$folder+'"'
+    if($FanStatus){$info.Arguments+=' -FanStatus'}
     $info.UseShellExecute=$false;$info.CreateNoWindow=$true
     $probeProcess.StartInfo=$info
     if(-not $probeProcess.Start()){throw 'Child did not start.'}
@@ -91,6 +93,7 @@ try{
     $deadline=[DateTimeOffset]::UtcNow.AddSeconds(120)
     $nextReport=[DateTimeOffset]::MinValue
     Write-Host 'ACPI: control GBIF + tres rondas ECOK/FFFS/RPM; sin setters ni PawnIO.'
+    if($FanStatus){Write-Host 'GM11: dos selectores por ronda; cuatro bytes crudos, sin interpretar consignas ni guardas.'}
     do{
         $events=@(Get-WinEvent -LogName System -FilterXPath (New-ScenarioAEventQuery $cursor -IncludeUnexpectedData) -ErrorAction SilentlyContinue -ErrorVariable eventErrors)
         if(@($eventErrors | Where-Object {$_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound*'}).Count){throw 'System event observation failed.'}

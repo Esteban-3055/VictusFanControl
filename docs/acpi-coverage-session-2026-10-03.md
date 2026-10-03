@@ -58,3 +58,30 @@ git pull --ff-only
 Enviar `diagnostics\ACPI-Coverage_*.zip` y su `.zip.sha256`. Incluye identidad, llamadas crudas, rondas válidas, cobertura, resumen, eventos detectados, error si lo hubo y manifiesto de hashes. Healthy=true sólo significa que esta sesión cumple sus contratos y observación; ProductionReady permanece false.
 
 CI verifica sintaxis, secuencia exitosa y parada al primer fallo, respuestas diagnósticas y RPM inválidas/lentas, exclusión de setters, compatibilidad PowerShell 7/5.1, rechazo del equipo no objetivo antes de acceder a HP y hashes de evidencia. La ejecución física requiere el equipo del usuario.
+
+## Resultado físico recibido: 3 de octubre
+
+Captura `ACPI-Coverage_20261003_195540_9cb7be.zip`, SHA256 `3306a449499c4447f28e9a941d6db67c84cc9a343483f4d0f5d5c79ec1c6e180`. Los seis miembros del manifiesto coinciden en tamaño y hash. Identidad: Victus 15-fa1013la, 8C40/63.43, F.18, SKU 9D0R1LA#AKH.
+
+Entre 22:55:40.663894 y 22:56:20.2853855 UTC se completaron las 13 solicitudes y tres rondas, sin reintentos ni eventos ACPI 13/15 observados. Control GBIF: rc=5. Los seis diagnósticos ECOK: rc=6, duración nativa 157.966–170.4125 ms, compatible con el Sleep(150) del AML. FFFS=0 en las tres rondas. RPM nominales CPU/GPU: 2600/2300, 2600/2300 y 2600/2400; llamadas nativas 359.95–368.96 ms.
+
+El resultado respalda la ejecución de la rama condicional de lectura bajo las hipótesis de AML/proveedor descritas arriba. No verifica transiciones, consignas, guarda completa, F4, restauración ni estabilidad prolongada. ProductionReady continúa false.
+
+## Siguiente lectura: GM11 opcional
+
+`-FanStatus` agrega dos solicitudes por ronda; máximo 19 consultas. Usa exclusivamente Command=20008h, type=11h, hpqBIOSInt4 y payload 00-00-00-00 (CPU) o 01-00-00-00 (GPU). Requiere rc=0 y exactamente cuatro bytes; conserva todos los valores como hex sin asignarles semántica de control. La ruta base sin el switch sigue realizando 13 solicitudes.
+
+En el DSDT suministrado, GM11 (128234–128264) devuelve FMR1/FSUS/FS1H/FS1L para selector cero y FMR2/FSUS/FS2H/FS2L para el otro selector. Esos campos pertenecen a H2RA, una región SystemMemory en FE400000h de tamaño 1000h (134480). Offsets: FSUS=1B7h, FMR1=527h, FMR2=52Fh, FS1H/L=530h/531h, FS2H/L=532h/533h. El cuerpo del getter no llama WSMI ni escribe los campos de ventilador. Se mantiene la infraestructura WMI compartida descrita arriba.
+
+SystemMemory no demuestra que sea RAM ordinaria, una copia reciente del EC ni una instantánea atómica. Los nombres de campos no prueban unidades o significado. No hay equivalencia demostrada con SRP1/SRP2 en EC 34h/35h, el byte ECh o SFAN en F4h. Las vistas adicionales SMW0/SMB0/FLD0..3 del ERAM sólo abarcan desde 04h hasta 23h; no cubren esos registros pendientes. GM13/GM2F devuelven buffers constantes en el AML revisado y no resuelven esa cobertura.
+
+Para esta sesión mantener Firmware, cerrar VFC y lectores, detener sus servicios/watchdogs y dejar alimentación/carga estables como en la prueba anterior. No instalar Omen Gaming Hub para esta lectura. Ejecutar como administrador en la rama actualizada:
+
+```powershell
+git pull --ff-only
+.\scripts\Test-Victus-AcpiCoverage.ps1 -FanStatus
+```
+
+Enviar el ZIP y su SHA256. El progreso se muestra aproximadamente cada cinco segundos; eso no significa una consulta cada cinco segundos. Son tres rondas con seis consultas cada una, espera de un segundo tras cada respuesta y cinco segundos entre rondas; plazo del hijo de 120 s. CPU/GPU quedan en columnas `gm11_cpu_raw_hex` y `gm11_gpu_raw_hex` del CSV y en respuestas completas del JSONL. Semántica y frescura de GM11 permanecen sin calificar incluso si Healthy=true.
+
+CI ejercita ambos modos, transporte simulado y parada al primer fallo de GM11, preservación de bytes FF/80 y selectores exactos, además del rechazo físico del equipo no objetivo. La interpretación del resultado y cualquier transición futura se decidirán con esa evidencia; este ensayo no habilita setters ni relaja guardas de producción.

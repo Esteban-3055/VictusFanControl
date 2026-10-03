@@ -5,6 +5,8 @@ function Get-AcpiCoverageRequest([string]$Kind) {
         'ecok' { return @{Command=[uint32]1;Type=[uint32]7;Payload=[byte[]](1,0,0,0);Output=4} }
         'fffs' { return @{Command=[uint32]0x20008;Type=[uint32]0x26;Payload=[byte[]]@();Output=4} }
         'rpm' { return @{Command=[uint32]0x20008;Type=[uint32]0x2D;Payload=[byte[]](0,0,0,0);Output=128} }
+        'fan-status-cpu' { return @{Command=[uint32]0x20008;Type=[uint32]0x11;Payload=[byte[]](0,0,0,0);Output=4} }
+        'fan-status-gpu' { return @{Command=[uint32]0x20008;Type=[uint32]0x11;Payload=[byte[]](1,0,0,0);Output=4} }
         default { throw 'Request is outside the read-only ACPI coverage whitelist.' }
     }
 }
@@ -18,6 +20,10 @@ function Assert-AcpiCoverageResponse([string]$Kind,$Response) {
         if($null -eq $Response.NativeDurationMs -or $Response.NativeDurationMs -lt 0 -or $Response.NativeDurationMs -ge 3000){throw 'RPM response exceeded the existing 3 s freshness boundary.'}
         return
     }
+    if($Kind -in @('fan-status-cpu','fan-status-gpu')){
+        if($Response.Code -ne 0){throw ('Unexpected GM11 return code for '+$Kind)}
+        return # Raw bytes only: no inferred ownership, setpoint or RPM semantics.
+    }
     $expected=if($Kind -eq 'gbif-control'){5}else{6}
     if($Response.Code -ne $expected){
         if($Kind -eq 'ecok' -and $Response.Code -eq 13){throw 'GBIF reports ECOK false (0x0D); stop before further reads.'}
@@ -25,7 +31,7 @@ function Assert-AcpiCoverageResponse([string]$Kind,$Response) {
     }
     if(@($Response.Data | Where-Object {$_ -ne 0}).Count){throw 'Diagnostic response contains unexpected data.'}
 }
-function Invoke-AcpiCoverageSequence([scriptblock]$Read,[scriptblock]$RecordRound,[scriptblock]$WaitRound) {
+function Invoke-AcpiCoverageSequence([scriptblock]$Read,[scriptblock]$RecordRound,[scriptblock]$WaitRound,[bool]$IncludeFanStatus=$false) {
     $control=& $Read 'gbif-control' 0
     Assert-AcpiCoverageResponse 'gbif-control' $control
     for($round=1;$round -le 3;$round++){
@@ -37,7 +43,15 @@ function Invoke-AcpiCoverageSequence([scriptblock]$Read,[scriptblock]$RecordRoun
         Assert-AcpiCoverageResponse 'ecok' $after
         $rpm=& $Read 'rpm' $round
         Assert-AcpiCoverageResponse 'rpm' $rpm
-        & $RecordRound ([pscustomobject]@{round=$round;utc=[DateTimeOffset]::UtcNow.ToString('o');ecok_before_code=$before.Code;fffs=$flag.Data[0];ecok_after_code=$after.Code;cpu_nominal_rpm=([int]$rpm.Data[0]*100);gpu_nominal_rpm=([int]$rpm.Data[1]*100);fffs_gate_evidence='supported-by-supplied-AML-and-provider-codes';atomic_snapshot=$false})
+        $cpuStatus='';$gpuStatus=''
+        if($IncludeFanStatus){
+            $cpu=& $Read 'fan-status-cpu' $round
+            Assert-AcpiCoverageResponse 'fan-status-cpu' $cpu
+            $gpu=& $Read 'fan-status-gpu' $round
+            Assert-AcpiCoverageResponse 'fan-status-gpu' $gpu
+            $cpuStatus=[BitConverter]::ToString($cpu.Data);$gpuStatus=[BitConverter]::ToString($gpu.Data)
+        }
+        & $RecordRound ([pscustomobject]@{gm11_cpu_raw_hex=$cpuStatus;gm11_gpu_raw_hex=$gpuStatus;gm11_semantics='unqualified';round=$round;utc=[DateTimeOffset]::UtcNow.ToString('o');ecok_before_code=$before.Code;fffs=$flag.Data[0];ecok_after_code=$after.Code;cpu_nominal_rpm=([int]$rpm.Data[0]*100);gpu_nominal_rpm=([int]$rpm.Data[1]*100);fffs_gate_evidence='supported-by-supplied-AML-and-provider-codes';atomic_snapshot=$false})
         if($round -lt 3){& $WaitRound}
     }
 }
@@ -65,6 +79,31 @@ function Test-AcpiCoverageContract {
             $expected=if($failure -eq 'control'){1}elseif($failure -eq 'ecok'){2}elseif($failure -eq 'fffs'){3}else{5}
             if(-not $rejected -or $state.Rounds -ne 0 -or $state.Kinds.Count -ne $expected){throw ('First-failure stop fixture failed: '+$failure)}
         }
+    }
+    foreach($failure in @('none','cpu-code','gpu-length')){
+        $state=@{Count=0;Rounds=0;Failure=$failure}
+        $read={param($kind,$round)
+            $state.Count++
+            $request=Get-AcpiCoverageRequest $kind
+            $data=New-Object byte[] $request.Output
+            $code=if($kind -eq 'gbif-control'){5}elseif($kind -eq 'ecok'){6}else{0}
+            if($kind -like 'fan-status-*'){$data=[byte[]](255,128,1,0)}
+            if($state.Failure -eq 'cpu-code' -and $kind -eq 'fan-status-cpu'){$code=1}
+            if($state.Failure -eq 'gpu-length' -and $kind -eq 'fan-status-gpu'){$data=[byte[]](0,0,0)}
+            return [pscustomobject]@{Code=$code;Data=$data;NativeDurationMs=1}
+        }
+        $record={param($row)
+            if($row.gm11_cpu_raw_hex -ne 'FF-80-01-00' -or $row.gm11_gpu_raw_hex -ne 'FF-80-01-00'){throw 'GM11 raw bytes changed.'}
+            $state.Rounds++
+        }
+        $rejected=$false
+        try{Invoke-AcpiCoverageSequence $read $record {} $true}catch{$rejected=$true}
+        $expected=if($failure -eq 'none'){19}elseif($failure -eq 'cpu-code'){6}else{7}
+        if($state.Count -ne $expected -or ($failure -eq 'none' -and ($rejected -or $state.Rounds -ne 3)) -or ($failure -ne 'none' -and (-not $rejected -or $state.Rounds -ne 0))){throw ('GM11 fixture failed: '+$failure)}
+    }
+    foreach($selector in @(@{Kind='fan-status-cpu';Byte=0},@{Kind='fan-status-gpu';Byte=1})){
+        $request=Get-AcpiCoverageRequest $selector.Kind
+        if($request.Command -ne 0x20008 -or $request.Type -ne 0x11 -or $request.Output -ne 4 -or [BitConverter]::ToString($request.Payload) -ne ($selector.Byte.ToString('00')+'-00-00-00')){throw 'GM11 request contract changed.'}
     }
     foreach($kind in @('gm27','restore','set-fan','arbitrary')){
         $rejected=$false;try{$null=Get-AcpiCoverageRequest $kind}catch{$rejected=$true}

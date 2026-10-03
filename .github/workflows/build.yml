@@ -87,7 +87,7 @@ jobs:
         run: |
           $probeRoot = Join-Path $env:RUNNER_TEMP ('acpi-coverage-rejection-' + [Guid]::NewGuid().ToString('N'))
           $rejected = $false
-          try { .\scripts\Test-Victus-AcpiCoverage.ps1 -OutputRoot $probeRoot } catch { $rejected = $true; Write-Host ($_ | Out-String) }
+          try { .\scripts\Test-Victus-AcpiCoverage.ps1 -FanStatus -OutputRoot $probeRoot } catch { $rejected = $true; Write-Host ($_ | Out-String) }
           if (-not $rejected) { throw 'Non-target coverage probe was accepted.' }
           $folder = @(Get-ChildItem $probeRoot -Directory)
           if ($folder.Count -ne 1) { throw 'Coverage evidence missing.' }
