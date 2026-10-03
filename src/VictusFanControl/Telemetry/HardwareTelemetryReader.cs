@@ -14,6 +14,7 @@ public sealed class HardwareTelemetryReader : IDisposable
 
     private IntelMsrReader? _intel;
     private AcpiEcReader? _ec;
+    private readonly HpWmiFanTelemetryReader? _wmiFans;
     private NvmlClient? _nvml;
     private readonly WindowsCpuLoadReader _cpuLoad = new();
 
@@ -49,8 +50,14 @@ public sealed class HardwareTelemetryReader : IDisposable
             hardware,
             out _targetResolutionDetail);
 
+        if (_targetProfile == Hp8C40TargetProfile.Instance)
+        {
+            _wmiFans = new HpWmiFanTelemetryReader(_targetProfile);
+            _ecStatus = "Not used for periodic 8C40 RPM telemetry (HP WMI/ACPI).";
+        }
+
         InitializeIntel();
-        InitializeEc();
+        if (_wmiFans is null && _targetProfile is not null) InitializeEc();
         InitializeNvml();
     }
 
@@ -59,7 +66,7 @@ public sealed class HardwareTelemetryReader : IDisposable
     public bool BackendsInitialized =>
         _targetProfile is not null &&
         _intel is not null &&
-        _ec is not null &&
+        (_wmiFans is not null || _ec is not null) &&
         _nvml is not null;
 
     public bool IsReadyForBaseline =>
@@ -69,6 +76,7 @@ public sealed class HardwareTelemetryReader : IDisposable
 
     public int IntelRecoveries { get; private set; }
     public int EcRecoveries { get; private set; }
+    public int FanWmiRecoveries => _wmiFans?.Recoveries ?? 0;
     public int NvmlRecoveries { get; private set; }
 
     public long TotalSnapshots { get; private set; }
@@ -192,7 +200,15 @@ public sealed class HardwareTelemetryReader : IDisposable
         double? cpuFanRpm = null;
         double? gpuFanRpm = null;
 
-        if (_ec is not null && _targetProfile is not null)
+        HpWmiFanTelemetrySample? wmiFanSample = null;
+        if (_wmiFans is not null)
+        {
+            wmiFanSample = _wmiFans.ReadCached();
+            cpuFanRpm = wmiFanSample?.CpuNominalRpm;
+            gpuFanRpm = wmiFanSample?.GpuNominalRpm;
+            _lastEcReadError = null;
+        }
+        else if (_ec is not null && _targetProfile is not null)
         {
             try
             {
@@ -240,7 +256,15 @@ public sealed class HardwareTelemetryReader : IDisposable
             GpuFanRpm: gpuFanRpm)
         {
             CpuCoreTemperatures = coreTemperatures,
-            CpuExpectedPhysicalCoreCount = expectedCoreCount
+            CpuExpectedPhysicalCoreCount = expectedCoreCount,
+            FanTelemetrySource = _wmiFans is not null ? "HP-WMI-ACPI-2D" : "PawnIO-EC",
+            FanRpmResolution = _wmiFans is not null ? HpWmiFanTelemetrySample.ResolutionRpm : 1,
+            FanSampledAtUtc = wmiFanSample?.SampledAtUtc,
+            FanSampleAgeMilliseconds = wmiFanSample is null
+                ? null
+                : Math.Max(0, Environment.TickCount64 - wmiFanSample.StartedAtMilliseconds),
+            CpuFanSpeedLevel = wmiFanSample?.CpuSpeedLevel,
+            GpuFanSpeedLevel = wmiFanSample?.GpuSpeedLevel
         };
 
         RecordHealth(snapshot);
@@ -266,6 +290,7 @@ public sealed class HardwareTelemetryReader : IDisposable
             : $"Hardware target   : {_targetProfile.Id} ({_targetProfile.DisplayName})";
         yield return $"PawnIO Intel MSR : {_intelStatus}";
         yield return $"PawnIO ACPI EC   : {_ecStatus}";
+        if (_wmiFans is not null) yield return $"HP WMI fan RPM  : {_wmiFans.Diagnostic}";
         yield return $"NVIDIA NVML     : {_nvmlStatus}";
         yield return $"Backends init   : {BackendsInitialized}";
     }
@@ -322,11 +347,17 @@ public sealed class HardwareTelemetryReader : IDisposable
         yield return $"Incomplete      : {IncompleteSnapshots}";
         yield return $"Max miss streak : {MaxConsecutiveIncompleteSnapshots}";
         yield return $"Core temps last : {_lastCoreTemperatureCount}/{_lastExpectedCoreCount}";
-        yield return $"Recoveries      : Intel={IntelRecoveries}, EC={EcRecoveries}, NVML={NvmlRecoveries}";
+        yield return $"Recoveries      : Intel={IntelRecoveries}, EC={EcRecoveries}, FanWMI={FanWmiRecoveries}, NVML={NvmlRecoveries}";
     }
+
+    public void PauseFanTelemetry() => _wmiFans?.Pause();
+
+    public Task WaitForFanTelemetryQuiescenceAsync(CancellationToken cancellationToken) =>
+        _wmiFans?.WaitForQuiescenceAsync(cancellationToken) ?? Task.CompletedTask;
 
     public void Dispose()
     {
+        _wmiFans?.Dispose();
         _intel?.Dispose();
         _ec?.Dispose();
         _nvml?.Dispose();
@@ -440,7 +471,7 @@ public sealed class HardwareTelemetryReader : IDisposable
             }
         }
 
-        if (_ec is null && now >= _nextEcInitAttempt)
+        if (_wmiFans is null && _targetProfile is not null && _ec is null && now >= _nextEcInitAttempt)
         {
             InitializeEc();
             if (_ec is not null && TotalSnapshots > 0)

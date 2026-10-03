@@ -54,6 +54,11 @@ $files=@(
  [pscustomobject]@{role='hp8c40-backend-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs');required=$true},
  [pscustomobject]@{role='hp8c40-backend-selftest';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackendSelfTest.cs');required=$true},
  [pscustomobject]@{role='hp8c40-probe-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\Hp\Hp8C40EcControlStateProbe.cs');required=$true},
+ [pscustomobject]@{role='hardware-telemetry-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Telemetry\HardwareTelemetryReader.cs');required=$true},
+ [pscustomobject]@{role='wmi-fan-telemetry-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Telemetry\HpWmiFanTelemetryReader.cs');required=$true},
+ [pscustomobject]@{role='wmi-fan-telemetry-selftest';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Telemetry\HpWmiFanTelemetryReaderSelfTest.cs');required=$true},
+ [pscustomobject]@{role='telemetry-snapshot-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Telemetry\TelemetrySnapshot.cs');required=$true},
+ [pscustomobject]@{role='telemetry-worker-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl.App\TelemetryWorker.cs');required=$true},
  [pscustomobject]@{role='ec-reader-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\PawnIo\AcpiEcReader.cs');required=$true},
  [pscustomobject]@{role='setpoint-stabilizer-source';path=(Join-Path $RepositoryRoot 'src\VictusFanControl\Hardware\PawnIo\FanSetpointSnapshotStabilizer.cs');required=$true},
  [pscustomobject]@{role='reused-qualified-failsafe-source';path=(Join-Path $RepositoryRoot 'scripts\watchdog-p15d2-service-failsafe-8c40.ps1');required=$true}

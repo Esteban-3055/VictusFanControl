@@ -16,7 +16,7 @@ public sealed class CsvTelemetryLogger : IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         await _writer.WriteLineAsync(
-            "timestamp_utc,cpu_name,cpu_package_temp_c,cpu_core_max_temp_c,cpu_core_avg_temp_c,cpu_core_temps_c,cpu_package_power_w,cpu_load_pct,gpu_name,gpu_temp_c,gpu_power_w,gpu_load_pct,cpu_fan_rpm,gpu_fan_rpm");
+            "timestamp_utc,cpu_name,cpu_package_temp_c,cpu_core_max_temp_c,cpu_core_avg_temp_c,cpu_core_temps_c,cpu_package_power_w,cpu_load_pct,gpu_name,gpu_temp_c,gpu_power_w,gpu_load_pct,cpu_fan_rpm,gpu_fan_rpm,fan_telemetry_source,fan_rpm_resolution,fan_sampled_at_utc,fan_sample_age_ms,cpu_fan_speed_level,gpu_fan_speed_level");
     }
 
     public Task WriteAsync(TelemetrySnapshot s, CancellationToken cancellationToken)
@@ -36,7 +36,13 @@ public sealed class CsvTelemetryLogger : IAsyncDisposable
             Number(s.GpuPowerW),
             Number(s.GpuLoadPercent),
             Number(s.CpuFanRpm),
-            Number(s.GpuFanRpm)
+            Number(s.GpuFanRpm),
+            Escape(s.FanTelemetrySource),
+            Number(s.FanRpmResolution),
+            Escape(s.FanSampledAtUtc?.ToString("O")),
+            Number(s.FanSampleAgeMilliseconds),
+            Number(s.CpuFanSpeedLevel),
+            Number(s.GpuFanSpeedLevel)
         });
 
         cancellationToken.ThrowIfCancellationRequested();

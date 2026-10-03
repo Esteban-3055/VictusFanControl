@@ -2836,12 +2836,12 @@ internal sealed class MainForm : Form
                 $"{Format(snapshot.CpuTemperatureC, "°C")} / {Format(snapshot.CpuCoreMaxTemperatureC, "°C")}";
             _cpuPower.Text = Format(snapshot.CpuPackagePowerW, "W");
             _cpuLoad.Text = Format(snapshot.CpuLoadPercent, "%");
-            _cpuFan.Text = Format(snapshot.CpuFanRpm, "RPM", 0);
+            _cpuFan.Text = FormatFanRpm(snapshot, snapshot.CpuFanRpm);
 
             _gpuTemperature.Text = Format(snapshot.GpuTemperatureC, "°C");
             _gpuPower.Text = Format(snapshot.GpuPowerW, "W");
             _gpuLoad.Text = Format(snapshot.GpuLoadPercent, "%");
-            _gpuFan.Text = Format(snapshot.GpuFanRpm, "RPM", 0);
+            _gpuFan.Text = FormatFanRpm(snapshot, snapshot.GpuFanRpm);
 
             _p13FanControlSurface.UpdateTelemetry(
                 _worker.StateMachine.State,
@@ -2850,6 +2850,10 @@ internal sealed class MainForm : Form
             UpdateTray();
         });
     }
+
+    private static string FormatFanRpm(TelemetrySnapshot snapshot, double? rpm) =>
+        (snapshot.FanRpmResolution == 100 && rpm.HasValue ? "~" : "") +
+        Format(rpm, "RPM", 0);
 
     private void WorkerOnDiagnosticsAvailable(object? sender, string text) =>
         Ui(() => _diagnostics.Text = text);
@@ -6257,9 +6261,9 @@ internal sealed class MainForm : Form
         else
         {
             _trayCpuItem.Text =
-                $"CPU: {FormatCompact(_lastSnapshot.CpuControlTemperatureC, "C")} | {FormatCompact(_lastSnapshot.CpuFanRpm, "RPM", 0)}";
+                $"CPU: {FormatCompact(_lastSnapshot.CpuControlTemperatureC, "C")} | {FormatFanRpm(_lastSnapshot, _lastSnapshot.CpuFanRpm)}";
             _trayGpuItem.Text =
-                $"GPU: {FormatCompact(_lastSnapshot.GpuTemperatureC, "C")} | {FormatCompact(_lastSnapshot.GpuFanRpm, "RPM", 0)}";
+                $"GPU: {FormatCompact(_lastSnapshot.GpuTemperatureC, "C")} | {FormatFanRpm(_lastSnapshot, _lastSnapshot.GpuFanRpm)}";
         }
 
         _trayAuthorityItem.Text = $"Fan authority: {_fanCoordinator.Authority}";

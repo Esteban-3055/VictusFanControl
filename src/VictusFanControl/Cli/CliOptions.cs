@@ -4,6 +4,7 @@ public sealed class CliOptions
 {
     public bool ShowHelp { get; private set; }
     public bool ProbeBackends { get; private set; }
+    public bool FanWmiTelemetrySelfTest { get; private set; }
     public bool SafetySelfTest { get; private set; }
     public bool Probe88F8EcState { get; private set; }
     public bool Probe88F8Setpoint { get; private set; }
@@ -103,6 +104,10 @@ public sealed class CliOptions
                 case "--probe-backends":
                 case "--list-sensors":
                     options.ProbeBackends = true;
+                    break;
+
+                case "--fan-wmi-telemetry-self-test":
+                    options.FanWmiTelemetrySelfTest = true;
                     break;
 
                 case "--safety-self-test":
@@ -492,6 +497,7 @@ public sealed class CliOptions
         var exclusiveActions =
             (options.ProbeBackends ? 1 : 0) +
             (options.SafetySelfTest ? 1 : 0) +
+            (options.FanWmiTelemetrySelfTest ? 1 : 0) +
             (options.Probe88F8EcState ? 1 : 0) +
             (options.Probe88F8Setpoint ? 1 : 0) +
             (options.Probe8C40Setpoint ? 1 : 0) +
@@ -797,6 +803,7 @@ public sealed class CliOptions
         Console.WriteLine("Options:");
         Console.WriteLine("  --probe-backends           Probe PawnIO, Intel MSR/EC and NVIDIA NVML.");
         Console.WriteLine("  --list-sensors             Compatibility alias for --probe-backends.");
+        Console.WriteLine("  --fan-wmi-telemetry-self-test  Test quantized WMI fan cache, timeout and lifecycle; no hardware access.");
         Console.WriteLine("  --safety-self-test         Run synthetic SafetyGate fail-closed tests.");
         Console.WriteLine("  --probe-88f8-ec-state     Read known 88F8 fan-control EC state (read-only).");
         Console.WriteLine("  --probe-88f8-setpoint     Read only 88F8 ownership setpoints 0x34/0x35 (read-only).");

@@ -70,6 +70,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         lock (_commandGate)
         {
             _suspended = true;
+            _reader?.PauseFanTelemetry();
             _powerEpoch++;
             _recoveryRequested = false;
             _resumeValidationActive = false;
@@ -105,8 +106,18 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                     timeoutCts.Token)
                 .ConfigureAwait(false);
 
-            _hardwareReadGate.Release();
-            return true;
+            try
+            {
+                if (_reader is not null)
+                    await _reader.WaitForFanTelemetryQuiescenceAsync(timeoutCts.Token).ConfigureAwait(false);
+                else
+                    await HpWmiFanTelemetryReader.WaitForProductionQuiescenceAsync(timeoutCts.Token).ConfigureAwait(false);
+                return true;
+            }
+            finally
+            {
+                _hardwareReadGate.Release();
+            }
         }
         catch (OperationCanceledException)
             when (!cancellationToken.IsCancellationRequested)
@@ -480,6 +491,17 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             }
 
             EnsureReader();
+            // Initialization can take time: never hold the lifecycle lock
+            // across native backend construction. Fence a newly created reader
+            // too if Suspend occurred before it became visible to NotifySuspend.
+            lock (_commandGate)
+            {
+                if (_suspended || _powerEpoch != expectedPowerEpoch)
+                {
+                    _reader!.PauseFanTelemetry();
+                    return null;
+                }
+            }
 
             var snapshot =
                 _reader!.ReadSnapshot();

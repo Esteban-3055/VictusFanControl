@@ -13,7 +13,7 @@ internal static class Program
     public static async Task<int> Main(string[] args)
     {
         Console.WriteLine("VictusFanControl v0.4.0-dev / 8C40 port");
-        Console.WriteLine("Telemetry: PawnIO Intel MSR (package + physical cores) + ACPI EC + NVIDIA NVML.");
+        Console.WriteLine("Telemetry: PawnIO Intel MSR (package + physical cores) + HP WMI/ACPI fan RPM (8C40) or EC (88F8) + NVIDIA NVML.");
         Console.WriteLine("Exact HP 88F8/8C40 targets are resolved fail-closed; automatic fan policy remains OFF.");
         Console.WriteLine();
 
@@ -35,6 +35,9 @@ internal static class Program
             CliOptions.PrintHelp();
             return 0;
         }
+
+        if (options.FanWmiTelemetrySelfTest)
+            return await HpWmiFanTelemetryReaderSelfTest.RunAsync(Console.Out);
 
         if (options.SafetySelfTest)
         {

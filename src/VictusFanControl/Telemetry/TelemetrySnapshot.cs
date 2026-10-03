@@ -27,6 +27,15 @@ public sealed record TelemetrySnapshot(
     public IReadOnlyList<CpuCoreTemperatureSample> CpuCoreTemperatures { get; init; } =
         Array.Empty<CpuCoreTemperatureSample>();
 
+    // Fan acquisition metadata stays separate from the fast CPU/GPU timestamp.
+    // WMI level L denotes [100L, 100L+99] RPM, not an exact tachometer count.
+    public string? FanTelemetrySource { get; init; }
+    public int? FanRpmResolution { get; init; }
+    public DateTimeOffset? FanSampledAtUtc { get; init; }
+    public long? FanSampleAgeMilliseconds { get; init; }
+    public byte? CpuFanSpeedLevel { get; init; }
+    public byte? GpuFanSpeedLevel { get; init; }
+
     public int? CpuExpectedPhysicalCoreCount { get; init; }
 
     public bool CpuCoreTelemetryComplete =>
@@ -63,6 +72,9 @@ public sealed record TelemetrySnapshot(
     }
 
     public bool IsComplete =>
+        (FanTelemetrySource != "HP-WMI-ACPI-2D" ||
+         (FanSampleAgeMilliseconds is >= 0 and < HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds &&
+          FanSampledAtUtc.HasValue && FanRpmResolution == HpWmiFanTelemetrySample.ResolutionRpm)) &&
         CpuTemperatureC.HasValue &&
         CpuCoreTelemetryComplete &&
         CpuPackagePowerW.HasValue &&

@@ -317,6 +317,7 @@ jobs:
             throw "Expected Windows PowerShell 5.x compatibility shell."
           }
           .\scripts\test-p16-hardening-helpers.ps1
+          .\scripts\test-wmi-fan-telemetry-invariants.ps1
 
       - name: Adaptive fan policy isolation/invariant self-test
         shell: pwsh
@@ -451,6 +452,9 @@ jobs:
 
       - name: HP 8C40 watchdog M4 lease preparation self-test
         run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --m4-8c40-self-test
+
+      - name: HP WMI fan telemetry deterministic self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --fan-wmi-telemetry-self-test
 
       - name: Safety gate self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --safety-self-test
