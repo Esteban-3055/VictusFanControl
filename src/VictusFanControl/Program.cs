@@ -1031,6 +1031,17 @@ internal static class Program
 
         if (options.WmiOnlyInvestigation)
         {
+            // Keep the chronology alive until an already admitted native read returns.
+            // Waiting here does not cancel WMI or alter the production broker's slot.
+            using var closing = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            try { await HpWmiFanTelemetryReader.WaitForProductionQuiescenceAsync(closing.Token); }
+            catch (OperationCanceledException) when (closing.IsCancellationRequested)
+            {
+                EcWmiInvestigationTrace.Record(0, "isolation.native-pending", "native WMI did not finish during graceful shutdown");
+                _ = EcWmiInvestigationTrace.StopAndFlush();
+                Console.Error.WriteLine("Native WMI is still pending; investigation capture is incomplete.");
+                return 3;
+            }
             EcWmiInvestigationTrace.Record(0, "isolation.finished",
                 $"deniedEc={WmiOnlyInvestigationPolicy.DeniedEcAccesses};deniedWmi={WmiOnlyInvestigationPolicy.DeniedWmiRequests}");
             if (!EcWmiInvestigationTrace.StopAndFlush())

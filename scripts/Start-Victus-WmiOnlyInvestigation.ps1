@@ -72,10 +72,19 @@ function Resume-WmiOnlyWatchdog($state) {
 function Test-WmiOnlyTrace([string]$Path,[int]$ExpectedPid) {
     $rows=@(Get-Content -LiteralPath $Path | ForEach-Object {$_ | ConvertFrom-Json})
     if($rows.Count -eq 0 -or $rows[0].kind -ne 'session' -or $rows[0].pid -ne $ExpectedPid){throw 'Identidad del log de aislamiento ausente o incorrecta.'}
+    $begins=@{};$ends=@{}
     foreach($row in $rows){
         if($row.Stage -like 'ec.*' -or $row.Stage -like 'isolation.*.denied' -or $row.kind -in @('capture-limit-reached','records-dropped')){throw 'El log contiene intentos EC, operaciones rechazadas o evidencia truncada.'}
         if($row.Stage -eq 'wmi.send.begin' -and $row.Detail -ne 'command=0x20008;type=0x2D;output=128'){throw 'El log contiene una llamada HP distinta de la lectura RPM permitida.'}
+        if($row.Stage -eq 'wmi.send.begin'){
+            $key=[string]$row.Operation
+            if(-not $key -or $begins.ContainsKey($key)){throw 'Identidad WMI ausente o repetida.'}
+            $begins[$key]=$true
+        }
+        if($row.Stage -eq 'wmi.send.end'){$key=[string]$row.Operation;$ends[$key]=1+[int]$ends[$key]}
     }
+    foreach($key in $begins.Keys){if($ends[$key] -ne 1){throw 'Una consulta WMI no tiene cierre nativo registrado.'}}
+    foreach($key in $ends.Keys){if(-not $begins.ContainsKey($key)){throw 'Un cierre WMI no tiene inicio registrado.'}}
     foreach($stage in @('isolation.enabled','isolation.ready','isolation.finished','wmi.fan-levels')){
         if(@($rows | Where-Object {$_.Stage -eq $stage}).Count -eq 0){throw ('Falta evidencia '+$stage+'.')}
     }
@@ -109,10 +118,11 @@ if($SelfTest){
     $temp=Join-Path ([IO.Path]::GetTempPath()) ('vfc-wmi-only-fixture-'+[Guid]::NewGuid().ToString('N')+'.log')
     try{
         $rows=@([pscustomobject]@{kind='session';pid=42})
+        $rows+=@([pscustomobject]@{Stage='wmi.send.begin';Operation=1;Detail='command=0x20008;type=0x2D;output=128'},[pscustomobject]@{Stage='wmi.send.end';Operation=1})
         foreach($s in @('isolation.enabled','isolation.ready','wmi.fan-levels','isolation.finished')){$rows+=@([pscustomobject]@{Stage=$s;Detail=$(if($s -eq 'isolation.finished'){'deniedEc=0;deniedWmi=0'}else{''})})}
         [IO.File]::WriteAllLines($temp,@($rows | ForEach-Object {ConvertTo-Json -Compress -InputObject $_}),(New-Object Text.UTF8Encoding($false)))
         Test-WmiOnlyTrace $temp 42
-        foreach($bad in @([pscustomobject]@{Stage='ec.read.begin'},[pscustomobject]@{Stage='isolation.wmi-request.denied'},[pscustomobject]@{kind='records-dropped'},[pscustomobject]@{Stage='wmi.send.begin';Detail='command=0x20008;type=0x2E;output=0'})){
+        foreach($bad in @([pscustomobject]@{Stage='ec.read.begin'},[pscustomobject]@{Stage='isolation.wmi-request.denied'},[pscustomobject]@{kind='records-dropped'},[pscustomobject]@{Stage='wmi.send.begin';Detail='command=0x20008;type=0x2E;output=0'},[pscustomobject]@{Stage='wmi.send.begin';Operation=2;Detail='command=0x20008;type=0x2D;output=128'})){
             [IO.File]::WriteAllLines($temp,@(($rows+@($bad)) | ForEach-Object {ConvertTo-Json -Compress -InputObject $_}),(New-Object Text.UTF8Encoding($false)))
             $rejected=$false;try{Test-WmiOnlyTrace $temp 42}catch{$rejected=$true};if(-not $rejected){throw 'Evidencia de aislamiento contaminada fue aceptada.'}
         }

@@ -41,6 +41,8 @@ El ZIP contiene las tablas ACPI estáticas, ETL, EVTX, mensajes de Windows, iden
 
 `ValidIsolation=true` exige una cronología con marcadores completos, al menos una respuesta RPM, sin intentos EC ni llamadas HP distintas de `2Dh`, sin pérdidas/truncamiento registrados, y comprobaciones de procesos/servicios durante la ventana. El watchdog se reinicia después del fin de esa ventana y antes de empaquetar, de modo que las trazas finales pueden incluir su arranque. La frontera cubre el CLI VFC; el muestreo no excluye procesos externos o transitorios entre muestras. Una captura circular ETW también puede perder eventos; su contenido se revisará aparte.
 
+Al cerrar, el CLI espera hasta diez segundos por una consulta WMI ya admitida antes de vaciar la cronología. Cada inicio WMI debe tener un cierre con la misma operación. Si la llamada sigue pendiente, la captura se marca incompleta; no se afirma haber cancelado la llamada nativa.
+
 Si no vuelve a iniciar M4, el lanzador lo informa y conserva el fallo. Tras cerrar la prueba, revisar su estado con `Get-Service VictusFanControlWatchdogM4`; si estaba activo previamente y quedó detenido, ejecutar `Start-Service VictusFanControlWatchdogM4` desde la misma consola elevada.
 
 ## Interpretación
