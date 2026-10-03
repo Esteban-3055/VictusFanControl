@@ -78,9 +78,24 @@ if($SelfTest){
     $rejected=$false;try{Select-ScenarioANewEvents @(New-ScenarioAFixtureEvent 4831 'invalid') 4826 $cutoff}catch{$rejected=$true}
     if(-not $rejected){throw 'Timestamp XML invalido no rechazo la evidencia.'}
     if((New-ScenarioAEventQuery 4826) -notmatch 'EventRecordID > 4826'){throw 'Falta cursor en consulta XPath.'}
+    # Regression from scenario C 18:33:47: five new ACPI 15 records, not 13.
+    $unexpected=@(New-ScenarioAFixtureEvent 4850 '2026-10-03T21:34:15.469817Z' 'ACPI' 15;
+        New-ScenarioAFixtureEvent 4851 '2026-10-03T21:34:21.231174Z' 'ACPI' 15;
+        New-ScenarioAFixtureEvent 4854 '2026-10-03T21:34:37.608158Z' 'ACPI' 15;
+        New-ScenarioAFixtureEvent 4855 '2026-10-03T21:34:58.503161Z' 'ACPI' 15;
+        New-ScenarioAFixtureEvent 4856 '2026-10-03T21:35:31.284461Z' 'ACPI' 15)
+    $cStart=[DateTimeOffset]::Parse('2026-10-03T21:34:06.8245597Z')
+    if(@(Select-ScenarioANewEvents $unexpected 4849 $cStart -IncludeUnexpectedData).Count -ne 5){throw 'ACPI 15 de C no detectados.'}
+    if(@(Select-ScenarioANewEvents $unexpected 4849 $cStart).Count){throw 'Filtro ACPI 13 cambio sin seleccion explicita.'}
+    if(@(Select-ScenarioANewEvents $unexpected 4856 $cStart -IncludeUnexpectedData).Count -or
+        @(Select-ScenarioANewEvents $unexpected 4849 ([DateTimeOffset]::Parse('2026-10-03T22:00:00Z')) -IncludeUnexpectedData).Count){throw 'ACPI 15 historico contado como nuevo.'}
+    if((New-ScenarioAEventQuery 4849 -IncludeUnexpectedData) -notmatch '\(EventID=13 or EventID=15\)'){throw 'XPath omite ACPI 15.'}
     # Read-only Windows smoke: validate the actual Event Log XPath engine.
     if([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT){
         try{[void](Get-WinEvent -LogName System -FilterXPath (New-ScenarioAEventQuery 9223372036854775806) -MaxEvents 1 -ErrorAction Stop)}catch{
+            if($_.FullyQualifiedErrorId -notmatch '^NoMatchingEventsFound'){throw}
+        }
+        try{[void](Get-WinEvent -LogName System -FilterXPath (New-ScenarioAEventQuery 9223372036854775806 -IncludeUnexpectedData) -MaxEvents 1 -ErrorAction Stop)}catch{
             if($_.FullyQualifiedErrorId -notmatch '^NoMatchingEventsFound'){throw}
         }
     }

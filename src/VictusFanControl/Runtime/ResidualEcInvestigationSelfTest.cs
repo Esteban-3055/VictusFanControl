@@ -1,5 +1,6 @@
 using VictusFanControl.Cli;
 using VictusFanControl.Hardware.Hp;
+using VictusFanControl.Hardware.PawnIo;
 
 namespace VictusFanControl.Runtime;
 
@@ -19,7 +20,28 @@ internal static class ResidualEcInvestigationSelfTest
             Reject(() => CliOptions.Parse(["--wmi-only-investigation", "--ec-interval-ms", "5000"]));
             Reject(() => CliOptions.Parse(["--ec-interval-ms", "5000"]));
 
+            var attempts = 0;
+            var recovered = AcpiEcReader.RetryLocked(() =>
+            {
+                if (++attempts == 1) throw new TimeoutException("production fixture");
+                return 42;
+            }, "fixture");
+            if (recovered != 42 || attempts != 2)
+                throw new Exception("Production bounded retry behavior changed.");
+
             WmiOnlyInvestigationPolicy.Enable(residualEc: true);
+            attempts = 0;
+            try
+            {
+                AcpiEcReader.RetryLocked<int>(() =>
+                {
+                    attempts++;
+                    throw new TimeoutException("first C transaction failure");
+                }, "fixture");
+                throw new Exception("C accepted a failed protocol transaction.");
+            }
+            catch (TimeoutException) { }
+            if (attempts != 1) throw new Exception("C retried after its first protocol failure.");
             WmiOnlyInvestigationPolicy.EnsureDirectEcAllowed();
             WmiOnlyInvestigationPolicy.EnsureTargetAllowed(Hp8C40TargetProfile.Instance);
             Reject(() => WmiOnlyInvestigationPolicy.EnsureTargetAllowed(Hp88F8TargetProfile.Instance));

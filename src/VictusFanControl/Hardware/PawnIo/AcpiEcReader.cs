@@ -292,8 +292,11 @@ internal sealed class AcpiEcReader : IDisposable
         _ecMutex.Dispose();
     }
 
-    private T RetryLocked<T>(Func<T> action, string operation)
+    internal static T RetryLocked<T>(Func<T> action, string operation)
     {
+        // C preserves the first protocol failure rather than hiding it behind
+        // a successful retry. Production retains its existing bounded retries.
+        if (WmiOnlyInvestigationPolicy.ResidualEcAllowed) return action();
         Exception? lastError = null;
 
         for (var attempt = 1; attempt <= ReadAttempts; attempt++)

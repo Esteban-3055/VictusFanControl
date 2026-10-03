@@ -77,7 +77,7 @@ internal sealed class ResidualEcInvestigationSampler : IDisposable
                 watch.Elapsed.TotalMilliseconds.ToString("F3", CultureInfo.InvariantCulture),
                 "", "", "", "", "failed", '"' + Fault.Replace("\"", "\"\"") + '"'));
             _output.Flush();
-            return false; // Existing per-transaction retries already ran. No reinitialization loop.
+            return false; // C never retries a failed protocol transaction.
         }
     }
 

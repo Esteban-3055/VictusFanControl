@@ -15,6 +15,21 @@ $root=Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'ScenarioAcpiEventFilter.ps1')
 $script:WmiOnlyState=@{Child=$null;ExitCode=$null;ExitCaptured=$false;OutTask=$null;ErrTask=$null;OutStream=$null;ErrStream=$null;ScenarioB=[bool]($ScenarioB -or $ScenarioC);ScenarioC=[bool]$ScenarioC;EcIntervalSeconds=$EcIntervalSeconds;Mode=$(if($ScenarioC){'scenario-c-residual-ec'}else{'wmi-only-no-direct-ec'});EvidenceName=$(if($ScenarioC){'scenario-c'}else{'wmi-only'});InitialSystemRecordId=$null;Acpi13=@();StopReason='duration-or-Q';Fault=$null;CaptureRoot=$null;Evidence=$null;WasRunning=$false;Paused=$false;ValidIsolation=$false;NextReport=[DateTimeOffset]::MinValue;Root=$root;Resumed=$false}
 
+$script:WmiOnlyState.AcpiEvents=@()
+
+function Get-WmiOnlyProgress($state) {
+    if($state.ScenarioC){
+        $path=Join-Path $state.Evidence 'ec-control.csv'
+        $samples=@(if(Test-Path -LiteralPath $path){Import-Csv -LiteralPath $path})
+        if($samples.Count){
+            $last=$samples[-1]
+            return ('C: lotes EC='+$samples.Count+'; ultimo UTC='+$last.timestamp_utc+'; estado='+$last.status+'; duracion='+$last.duration_ms+' ms; consignas='+$last.cpu_setpoint_hex+'/'+$last.gpu_setpoint_hex+'; guardas='+$last.max_fan_hex+'/'+$last.fan_switch_hex)
+        }
+        return 'C: esperando la primera muestra EC; consulta ec-control.csv y cli-stderr.txt.'
+    }
+    return ($state.Mode+' activo: '+(Get-Content -LiteralPath (Join-Path $state.Evidence 'cli-stdout.txt') -Tail 1 -ErrorAction SilentlyContinue))
+}
+
 function Assert-WmiOnlyFacts($Facts,[int]$AllowedCliPid=0,[switch]$AllowRunningM4) {
     # Presence alone blocks: never parse/delete a retained or malformed lease.
     if(@($Facts.Journals).Count -gt 0){throw ('Hay evidencia de lease pendiente: '+($Facts.Journals -join ', ')+'. Vuelve a Firmware y cierra la app; no borres esos archivos.')}
@@ -112,6 +127,7 @@ function Test-WmiOnlyTrace([string]$Path,[int]$ExpectedPid,[switch]$AllowResidua
     foreach($row in $rows){
         if(($row.Stage -like 'ec.*' -and -not $AllowResidualEc) -or $row.Stage -like 'isolation.*.denied' -or $row.kind -in @('capture-limit-reached','records-dropped')){throw 'El log contiene intentos EC no permitidos, operaciones rechazadas o evidencia truncada.'}
         if($AllowResidualEc -and $row.Stage -like 'ec.*'){
+            if($row.Stage -in @('ec.read.failure','ec.mutex.timeout')){throw 'C contiene un fallo de transaccion EC; no es una observacion saludable aunque un lote se completara.'}
             if($row.Stage -notin @('ec.read.begin','ec.read.end','ec.read.failure','ec.command.sent','ec.address.sent','ec.mutex.wait.begin','ec.mutex.acquired','ec.mutex.abandoned-acquired','ec.mutex.released','ec.mutex.timeout')){throw 'Operacion EC desconocida durante C.'}
             if($row.Stage -eq 'ec.command.sent' -and $row.Detail -ne 'RD_EC=0x80'){throw 'Comando EC no permitido.'}
             if($row.Stage -eq 'ec.read.begin'){
@@ -152,6 +168,11 @@ if($SelfTest){
     $nativeRoot=Join-Path ([IO.Path]::GetTempPath()) ('vfc-wmi-native-'+[Guid]::NewGuid().ToString('N'))
     [IO.Directory]::CreateDirectory($nativeRoot)|Out-Null
     try{
+        $progressState=@{ScenarioC=$true;Evidence=$nativeRoot}
+        if((Get-WmiOnlyProgress $progressState) -notmatch 'esperando'){throw 'Progreso EC inventado antes de la primera muestra.'}
+        [IO.File]::WriteAllText((Join-Path $nativeRoot 'ec-control.csv'),"timestamp_utc,elapsed_ms,duration_ms,cpu_setpoint_hex,gpu_setpoint_hex,max_fan_hex,fan_switch_hex,status,error`n2026-10-03T21:34:15Z,5395,1.054,0xFF,0xFF,0x00,0x00,complete,`n")
+        $progress=Get-WmiOnlyProgress $progressState
+        if($progress -notmatch 'lotes EC=1' -or $progress -notmatch '1.054 ms' -or $progress -notmatch '21:34:15Z'){throw 'No se muestra la ultima muestra EC real.'}
         foreach($code in @(0,37)){
             $native=@{Child=$null;Evidence=$nativeRoot;ExitCaptured=$false;ExitCode=$null;Fault=$null;OutTask=$null;ErrTask=$null;OutStream=$null;ErrStream=$null}
             try{
@@ -214,6 +235,7 @@ if($SelfTest){
             [pscustomobject]@{Stage='ec.command.sent';Operation=20;Detail='WR_EC=0x81'},
             [pscustomobject]@{Stage='ec.read.begin';Operation=20;Detail='register=0x34'},
             [pscustomobject]@{Stage='ec.read.end';Operation=20;Detail='register=0x34;value=0xFF'},
+            [pscustomobject]@{Stage='ec.read.failure';Operation=10;Detail='register=0x34;TimeoutException: fixture'},
             [pscustomobject]@{Stage='isolation.ec-sample.failure';Detail='fixture'})){
             [IO.File]::WriteAllLines($temp,@(($cRows+@($bad)) | ForEach-Object {ConvertTo-Json -Compress -InputObject $_}),(New-Object Text.UTF8Encoding($false)))
             $rejected=$false;try{Test-WmiOnlyTrace $temp 42 -AllowResidualEc}catch{$rejected=$true}
@@ -311,20 +333,22 @@ try{
                 $latest=Get-WinEvent -LogName System -MaxEvents 1 -ErrorAction Stop
                 if([long]$latest.RecordId -lt $state.InitialSystemRecordId){throw 'System se reinicio durante B/C; comparacion invalidada.'}
                 $raw=@()
-                try{$raw=@(Get-WinEvent -LogName System -FilterXPath (New-ScenarioAEventQuery $state.InitialSystemRecordId) -MaxEvents 20 -ErrorAction Stop)}catch{if($_.FullyQualifiedErrorId -notmatch '^NoMatchingEventsFound'){throw}}
-                $events=@(Select-ScenarioANewEvents $raw $state.InitialSystemRecordId ([DateTimeOffset]::Parse($state.StartedUtc)))
+                try{$raw=@(Get-WinEvent -LogName System -FilterXPath (New-ScenarioAEventQuery $state.InitialSystemRecordId -IncludeUnexpectedData) -MaxEvents 20 -ErrorAction Stop)}catch{if($_.FullyQualifiedErrorId -notmatch '^NoMatchingEventsFound'){throw}}
+                $events=@(Select-ScenarioANewEvents $raw $state.InitialSystemRecordId ([DateTimeOffset]::Parse($state.StartedUtc)) -IncludeUnexpectedData)
                 if($events.Count){
-                    $state.Acpi13=@($events | Select-Object @{Name='TimeCreatedUtc';Expression={([DateTimeOffset]::Parse(([xml]$_.ToXml()).Event.System.TimeCreated.SystemTime)).ToUniversalTime().ToString('o')}},RecordId,Id,ProviderName,Message)
-                    Write-WmiOnlyJson (Join-Path $state.Evidence 'acpi13-detected.json') $state.Acpi13
-                    $state.StopReason='new-acpi13'
-                    throw 'ACPI 13 nuevo durante B/C: terminar y preservar cronologia.'
+                    $state.AcpiEvents=@($events | Select-Object @{Name='TimeCreatedUtc';Expression={([DateTimeOffset]::Parse(([xml]$_.ToXml()).Event.System.TimeCreated.SystemTime)).ToUniversalTime().ToString('o')}},RecordId,Id,ProviderName,Message)
+                    $state.Acpi13=@($state.AcpiEvents | Where-Object {$_.Id -eq 13})
+                    Write-WmiOnlyJson (Join-Path $state.Evidence 'acpi-events-detected.json') $state.AcpiEvents
+                    if($state.Acpi13.Count){Write-WmiOnlyJson (Join-Path $state.Evidence 'acpi13-detected.json') $state.Acpi13}
+                    $state.StopReason=if($state.Acpi13.Count){'new-acpi13'}else{'new-acpi15'}
+                    throw 'ACPI 13/15 nuevo durante B/C: terminar y preservar cronologia.'
                 }
             }
             if([DateTimeOffset]::UtcNow -ge $state.NextReport){
-                $state.NextReport=[DateTimeOffset]::UtcNow.AddSeconds(30)
-                Write-Host ($state.Mode+' activo: '+(Get-Content -LiteralPath (Join-Path $state.Evidence 'cli-stdout.txt') -Tail 1 -ErrorAction SilentlyContinue))
+                $state.NextReport=[DateTimeOffset]::UtcNow.AddSeconds($(if($state.ScenarioC){5}else{30}))
+                Write-Host (Get-WmiOnlyProgress $state)
             }
-        }catch{if($state.StopReason -ne 'new-acpi13'){$state.Fault=$_.Exception.Message};throw}
+        }catch{if($state.StopReason -notin @('new-acpi13','new-acpi15')){$state.Fault=$_.Exception.Message};throw}
     }
     $finish={param($captureRoot,$state)
         if(-not $state.Evidence){$state.Evidence=Join-Path $captureRoot $state.EvidenceName;[IO.Directory]::CreateDirectory($state.Evidence)|Out-Null}
@@ -351,7 +375,8 @@ try{
             }
             Write-WmiOnlyJson (Join-Path $state.Evidence 'isolation-summary.json') ([pscustomobject]@{
                 Mode=$state.Mode;ValidIsolation=$state.ValidIsolation;Fault=$state.Fault;StartedUtc=$state.StartedUtc;FinishedUtc=[DateTimeOffset]::UtcNow.ToString('o');
-                Scenario=$(if($state.ScenarioC){'C'}elseif($state.ScenarioB){'B'}else{'WMI-only'});EcIntervalSeconds=$(if($state.ScenarioC){$state.EcIntervalSeconds}else{$null});DetectorVersion=2;InitialSystemRecordId=$state.InitialSystemRecordId;StopReason=$state.StopReason;Acpi13=$state.Acpi13;
+                Scenario=$(if($state.ScenarioC){'C'}elseif($state.ScenarioB){'B'}else{'WMI-only'});EcIntervalSeconds=$(if($state.ScenarioC){$state.EcIntervalSeconds}else{$null});DetectorVersion=3;InitialSystemRecordId=$state.InitialSystemRecordId;StopReason=$state.StopReason;Acpi13=$state.Acpi13;AcpiEvents=$state.AcpiEvents;
+                ObservationHealthy=($state.ValidIsolation -and $state.AcpiEvents.Count -eq 0);EcProtocolRetries=$(if($state.ScenarioC){0}else{$null});
                 CliPid=$(if($state.Child){$state.Child.Id}else{$null});ExitCode=$state.ExitCode;ExitCodeCaptured=$state.ExitCaptured;
                 WatchdogWasRunning=$state.WasRunning;WatchdogTemporarilyStopped=$state.Paused;WatchdogResumed=$state.Resumed;NoFanCommands=$true;AnalysisFault=$state.AnalysisFault;
                 Scope='VFC process boundary and sampled process/service isolation; Windows/firmware may still access EC; external tools are not excluded.'
