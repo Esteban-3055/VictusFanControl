@@ -151,6 +151,7 @@ public static class HpWmiFanTelemetryReaderSelfTest
                     reader.ReadCached();
                     await Drain(reader);
                     Check(reader.ReadCached() is null, "late completion published");
+                    Check(reader.ReadWindowCached() is null, "late completion entered history");
                 }
             });
 
@@ -215,6 +216,7 @@ public static class HpWmiFanTelemetryReaderSelfTest
                     release.Set();
                     await Drain(reader);
                     Check(reader.ReadCached() is null, "pre-suspend result crossed epoch");
+                    Check(reader.ReadWindowCached() is null, "pre-suspend history crossed epoch");
                     await reader.WaitForQuiescenceAsync(CancellationToken.None);
                 }
                 finally { release.Set(); await Drain(reader); }

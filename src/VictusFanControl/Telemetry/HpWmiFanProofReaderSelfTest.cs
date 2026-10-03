@@ -150,6 +150,8 @@ internal static class HpWmiFanProofReaderSelfTest
                     finally { release.Set(); }
                     await telemetry.WaitForQuiescenceAsync(CancellationToken.None);
                     Check(telemetry.ReadCached() is { CpuNominalRpm: 2600 }, "abandoned query published after native completion");
+                    Check(telemetry.ReadWindowCached() is { WindowCount: 1, RawLatest.CpuNominalRpm: 2600 },
+                        "abandoned native result entered the rolling window");
                 }
             });
             await Test("control publication cannot cross pause, disposal or reader recreation", async () =>
@@ -237,6 +239,8 @@ internal static class HpWmiFanProofReaderSelfTest
                 Check(telemetry.ReadCached() is { CpuNominalRpm: 4000, StartedAtMilliseconds: 1000 }, "older publication rolled back fresh RPM");
                 oldSink(new(30, 31, DateTimeOffset.UtcNow, 2000));
                 Check(telemetry.ReadCached() is { CpuNominalRpm: 4000 }, "future acquisition accepted after clock regression");
+                Check(telemetry.ReadWindowCached() is { WindowCount: 1, RawLatest.CpuNominalRpm: 4000 },
+                    "old/future publication entered rolling history");
             });
             await Test("control publication is isolated by native admission slot", async () =>
             {
@@ -248,6 +252,8 @@ internal static class HpWmiFanProofReaderSelfTest
                 var proof = new HpWmiFanProofReader(_ => new(0, [30, 31]), proofSlot, () => 0, TimeSpan.FromSeconds(1));
                 await proof.ReadFreshAsync(CancellationToken.None);
                 Check(telemetry.ReadCached() is { CpuNominalRpm: 2600 }, "unrelated slot replaced periodic RPM");
+                Check(telemetry.ReadWindowCached() is { WindowCount: 1, RawLatest.CpuNominalRpm: 2600 },
+                    "unrelated slot contaminated history");
             });
             await Test("delayed old publication cannot hide a newer periodic failure; fresh recovery can", async () =>
             {
@@ -263,11 +269,13 @@ internal static class HpWmiFanProofReaderSelfTest
                 Check(telemetry.ReadCached() is null, "failed periodic query retained cache");
                 oldSink(new(30, 31, DateTimeOffset.UtcNow, 500));
                 Check(telemetry.ReadCached() is null, "older publication hid a newer failure");
+                Check(telemetry.ReadWindowCached() is null, "old publication resurrected failed window");
                 var proof = new HpWmiFanProofReader(_ => new(0, [30, 31]), slot,
                     () => Interlocked.Read(ref clock), TimeSpan.FromSeconds(1));
                 await proof.ReadFreshAsync(CancellationToken.None);
                 Check(telemetry.ReadCached() is { CpuNominalRpm: 3000 } && telemetry.Recoveries == 1 && calls == 2,
                     "genuinely newer success failed to recover telemetry or caused redundant periodic I/O");
+                Check(telemetry.ReadWindowCached()?.WindowCount == 1, "recovery reused pre-failure history");
             });
         }
         catch (Exception ex) { await output.WriteLineAsync($"FAIL: WMI control proof: {ex}"); return 38; }

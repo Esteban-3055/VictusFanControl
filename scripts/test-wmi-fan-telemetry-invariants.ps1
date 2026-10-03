@@ -7,6 +7,9 @@ function Require-Text([string]$Text, [string]$Needle) {
 $reader = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanTelemetryReader.cs'
 $proof = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanProofReader.cs'
 $broker = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSampleBroker.cs'
+$window = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSampleWindow.cs'
+$windowTests = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanSampleWindowSelfTest.cs'
+$program = Read-Source 'src\VictusFanControl\Program.cs'
 $acquisitionDiagnostics = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanAcquisitionDiagnostics.cs'
 $backend = Read-Source 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs'
 $hardware = Read-Source 'src\VictusFanControl\Telemetry\HardwareTelemetryReader.cs'
@@ -21,6 +24,22 @@ Require-Text $reader 'MaximumSampleAgeMilliseconds = 3000'
 Require-Text $reader '_epoch != epoch'
 Require-Text $reader '_broker.TryAcquirePeriodic()'
 Require-Text $reader '_broker.RunNative(lease'
+# Step 4 history is descriptive; raw telemetry/proof contracts remain active.
+foreach ($needle in @('Capacity = 5', 'sequence <= _lastSequence', 'age < 0 || age >= HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds', 'Array.AsReadOnly(_entries.ToArray())', '_entries.Dequeue()', 'Median(entries.Select(entry => entry.Sample.CpuNominalRpm))')) {
+    Require-Text $window $needle
+}
+Require-Text $reader '_window.TryAppend(sample, sequence, HpWmiFanAcquisitionPurpose.Control, now)'
+Require-Text $reader '_window.TryAppend(sample, sequence, HpWmiFanAcquisitionPurpose.Periodic, now)'
+Require-Text $reader 'return _disposed || _paused ? null : _window.ReadSnapshot(_milliseconds())'
+Require-Text $program 'HpWmiFanSampleWindowSelfTest.RunAsync(Console.Out)'
+foreach ($needle in @('bounded rollover', '3000 ms', 'cached reads add no samples or I/O', 'replacement reject pre-boundary publication')) {
+    Require-Text $windowTests $needle
+}
+foreach ($source in @($proof, $backend, $hardware, $snapshot, $safety)) {
+    foreach ($forbidden in @('HpWmiFanSampleWindow', 'ReadWindowCached(', 'StableCpuRpm', 'StableGpuRpm')) {
+        if ($source.IndexOf($forbidden, [StringComparison]::Ordinal) -ge 0) { throw "Step 4 cannot feed filtered history to production policy/proof: $forbidden" }
+    }
+}
 Require-Text $broker 'Admission.Wait(0)'
 Require-Text $broker 'await Admission.WaitAsync(maximumWait, cancellationToken)'
 Require-Text $broker 'finally { lease.ReleaseAfterNative(); }'

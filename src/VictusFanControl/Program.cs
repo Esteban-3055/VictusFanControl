@@ -38,11 +38,12 @@ internal static class Program
 
         if (options.FanWmiTelemetrySelfTest)
         {
+            var window = await HpWmiFanSampleWindowSelfTest.RunAsync(Console.Out);
             var broker = await HpWmiFanSampleBrokerSelfTest.RunAsync(Console.Out);
             var diagnostics = await HpWmiFanAcquisitionDiagnosticsSelfTest.RunAsync(Console.Out);
             var telemetry = await HpWmiFanTelemetryReaderSelfTest.RunAsync(Console.Out);
             var proof = await HpWmiFanProofReaderSelfTest.RunAsync(Console.Out);
-            return broker != 0 ? broker : diagnostics != 0 ? diagnostics : telemetry != 0 ? telemetry : proof;
+            return window != 0 ? window : broker != 0 ? broker : diagnostics != 0 ? diagnostics : telemetry != 0 ? telemetry : proof;
         }
 
         if (options.SafetySelfTest)

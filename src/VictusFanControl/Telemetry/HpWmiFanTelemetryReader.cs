@@ -37,6 +37,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
     private Task? _pending;
     private HpWmiFanAcquisitionDiagnostics.Operation? _pendingAcquisition;
     private HpWmiFanTelemetrySample? _sample;
+    private readonly HpWmiFanSampleWindow _window = new();
     private long _nextAttempt;
     private long _startedAt;
     private long _latestOutcomeSequence;
@@ -98,6 +99,14 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
     internal string AcquisitionDiagnostic => _acquisitionDiagnostics.Describe();
     internal IReadOnlyList<string> DrainAcquisitionNotices() => _acquisitionDiagnostics.DrainNotices();
 
+    // Descriptive only for now. Does not schedule I/O, renew age or replace
+    // ReadCached's raw sample in HardwareTelemetryReader / SafetyGate.
+    internal HpWmiFanWindowSnapshot? ReadWindowCached()
+    {
+        lock (_gate)
+            return _disposed || _paused ? null : _window.ReadSnapshot(_milliseconds());
+    }
+
     public HpWmiFanTelemetrySample? ReadCached()
     {
         lock (_gate)
@@ -116,6 +125,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
                 now - _sample.StartedAtMilliseconds >= MaximumSampleAgeMilliseconds)
             {
                 _sample = null;
+                _window.Clear();
                 _diagnostic = "HP WMI fan sample expired (age >= 3000 ms).";
             }
 
@@ -164,6 +174,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             _paused = true;
             _epoch++;
             _sample = null;
+            _window.Clear();
             _diagnostic = "HP WMI fan telemetry paused; pre-boundary results invalidated.";
         }
     }
@@ -181,6 +192,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             _disposed = true;
             _epoch++;
             _sample = null;
+            _window.Clear();
         }
         // The broker's native worker retains the slot after reader disposal.
     }
@@ -209,6 +221,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             if (_sample is not null && sample.StartedAtMilliseconds < _sample.StartedAtMilliseconds) return;
 
             _sample = sample;
+            _window.TryAppend(sample, sequence, HpWmiFanAcquisitionPurpose.Control, now);
             _latestOutcomeSequence = sequence;
             _diagnostic = "OK (fresh HP WMI 20008h/2Dh control read; original acquisition time, resolution 100 RPM).";
             _nextAttempt = now + PollIntervalMilliseconds;
@@ -334,6 +347,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
                 }
 
                 _sample = sample;
+                _window.TryAppend(sample, sequence, HpWmiFanAcquisitionPurpose.Periodic, now);
                 _diagnostic = "OK (HP WMI 20008h/2Dh -> ACPI; nominal RPM, resolution 100 RPM).";
                 _nextAttempt = now + PollIntervalMilliseconds;
                 if (_failed) _recoveries++;
@@ -362,6 +376,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
     private void Fail(string diagnostic)
     {
         _sample = null;
+        _window.Clear();
         _failed = true;
         _diagnostic = diagnostic;
     }
