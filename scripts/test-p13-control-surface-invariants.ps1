@@ -37,7 +37,7 @@ foreach ($needle in @(
     '_shadowEvaluator.Evaluate(',
     'Automatic candidate preview — NO WRITE',
     'Manual equal fan level',
-    'Candidate V1 curves — shadow-only',
+    'Curvas y perfiles — referencia Equilibrado',
     'P13UiSettingsStore.Load()',
     '_lastAuthority',
     'GateStatusText'

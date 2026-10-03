@@ -8,6 +8,13 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--curve-editor-self-test")
+        {
+            ApplicationConfiguration.Initialize();
+            Environment.ExitCode = AdaptiveCurveEditorSelfTest.Run();
+            return;
+        }
+
         AppLog.Initialize();
 
         AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>

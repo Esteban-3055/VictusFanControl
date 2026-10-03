@@ -1,6 +1,7 @@
 # Part 2 — editable Automatic curves
 
-This part is planned, not implemented by the P16C Manual promotion.
+Implemented in the subsequent P17 editor change; see P17_CURVE_EDITOR.md for
+actual behavior, preset provenance, scope and remaining P18 work.
 Use the existing WinForms app and policy interpolation; no additional chart
 framework or native hardware access belongs in the editor.
 

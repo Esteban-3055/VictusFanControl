@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "milestone": "P17",
+  "status": "EDITOR_IMPLEMENTED_AWAITING_SAME_HEAD_CI",
+  "manualBasisHead": "363fe167a3107ff3080e8183e06e9c5e7a344f73",
+  "manualBasisCiRunId": 37101160230,
+  "manualBasisCiResult": "SUCCESS",
+  "presets": [
+    "Silencio",
+    "Equilibrado",
+    "Performance"
+  ],
+  "sixCurves": true,
+  "dragAndNumericEditing": true,
+  "draftOnlyEditing": true,
+  "previewOnlyApply": true,
+  "strictJsonProfiles": true,
+  "atomicProfileSave": true,
+  "hardwareExecution": false,
+  "automaticExecutionAuthorized": false,
+  "candidatePhysicallyValidated": false,
+  "presetsPhysicallyValidated": false,
+  "safetyThresholdsChanged": false,
+  "cpuMedianMarkerVisualOnly": true,
+  "profileSelfTestGroups": 10,
+  "uiSelfTestGroups": 2
+}

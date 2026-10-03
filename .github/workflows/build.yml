@@ -297,6 +297,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-p15d2-evidence-packaging.ps1
 
+      - name: HP 8C40 P17 curve editor isolation invariant
+        shell: pwsh
+        run: .\scripts\test-p17-curve-editor-invariants.ps1
+
       - name: HP 8C40 P16C Manual promotion invariant
         shell: pwsh
         run: .\scripts\test-p16c-manual-promotion-invariants.ps1
@@ -473,6 +477,16 @@ jobs:
 
       - name: Adaptive fan policy deterministic self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --adaptive-policy-self-test
+
+      - name: HP 8C40 P17 WinForms curve editor self-test
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --curve-editor-self-test
+
+      - name: HP 8C40 P17 upload curve editor render
+        uses: actions/upload-artifact@v4
+        with:
+          name: curve-editor-ui
+          path: curve-editor-ui.png
+          if-no-files-found: error
 
       - name: HP BIOS contract self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --bios-contract-self-test

@@ -18,7 +18,10 @@ namespace VictusFanControl.App;
 internal sealed class P13FanControlSurface : UserControl
 {
     private readonly AdaptiveFanProductionController _controller;
-    private readonly AdaptiveFanPolicyShadowEvaluator _shadowEvaluator;
+    private AdaptiveFanPolicyShadowEvaluator _shadowEvaluator;
+    private readonly HardwareIdentity _hardware;
+    private AdaptiveCurveProfile _previewProfile = AdaptiveCurveProfiles.Presets()[1];
+    private AdaptiveCurveEditorForm? _curveEditor;
     private readonly AdaptiveFanPolicyConfig _candidateConfig;
     private readonly Func<SafetyGateResult?> _controlSafetyProvider;
     private readonly Action<string> _log;
@@ -54,6 +57,7 @@ internal sealed class P13FanControlSurface : UserControl
         int? fixedManualQualificationLevel = null,
         Action<P13ControlInteractionObservation>? interactionObserver = null)
     {
+        _hardware = hardware;
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _candidateConfig =
             Hp8C40AdaptiveCandidateV1.Create();
@@ -123,11 +127,13 @@ internal sealed class P13FanControlSurface : UserControl
                 result.Intent.Kind.ToString();
 
             _previewDetailValue.Text =
-                result.Detail;
+                $"{_previewProfile.Name}: {result.Detail}";
+            if (_curveEditor is { IsDisposed: false }) _curveEditor.UpdateTelemetry(state, snapshot, result);
         }
         catch (Exception ex)
         {
             _shadowEvaluator.Reset();
+            _curveEditor?.ClearTelemetry();
             _previewSafetyValue.Text = "ERROR / RESET";
             _previewLevelValue.Text = "—";
             _previewRawDemandValue.Text = "—";
@@ -147,6 +153,7 @@ internal sealed class P13FanControlSurface : UserControl
         }
 
         _shadowEvaluator.Reset();
+        _curveEditor?.ClearTelemetry();
         _previewSafetyValue.Text =
             $"BLOCKED ({state})";
         _previewLevelValue.Text = "—";
@@ -429,7 +436,7 @@ internal sealed class P13FanControlSurface : UserControl
 
         var curveGroup = new GroupBox
         {
-            Text = "Candidate V1 curves — shadow-only",
+            Text = "Curvas y perfiles — referencia Equilibrado",
             Dock = DockStyle.Top,
             AutoSize = true,
             Padding = new Padding(12),
@@ -452,7 +459,10 @@ internal sealed class P13FanControlSurface : UserControl
         AddCurveRow(curves, 3, "GPU power", _candidateConfig.GpuPowerCurve);
         AddCurveRow(curves, 4, "CPU load", _candidateConfig.CpuLoadCurve);
         AddCurveRow(curves, 5, "GPU load", _candidateConfig.GpuLoadCurve);
+        var editor = new Button { Text = "Editar curvas y perfiles…", AutoSize = true, Dock = DockStyle.Top };
+        editor.Click += (_, _) => OpenCurveEditor();
         curveGroup.Controls.Add(curves);
+        curveGroup.Controls.Add(editor);
 
         _statusValue.AutoSize = true;
         _statusValue.MaximumSize = new Size(760, 0);
@@ -475,6 +485,43 @@ internal sealed class P13FanControlSurface : UserControl
         root.Controls.Add(_statusValue, 0, 5);
         root.Controls.Add(safetyBoundary, 0, 6);
         return root;
+    }
+
+    private void OpenCurveEditor()
+    {
+        try
+        {
+            if (_curveEditor is null || _curveEditor.IsDisposed)
+            {
+                _curveEditor = new AdaptiveCurveEditorForm(profile =>
+                {
+                    // Validate and construct completely before swapping; no production object changes.
+                    var copy = AdaptiveCurveProfiles.Copy(profile);
+                    var evaluator = new AdaptiveFanPolicyShadowEvaluator(_hardware, AdaptiveCurveProfiles.Validate(copy));
+                    _shadowEvaluator = evaluator;
+                    _previewProfile = copy;
+                    _candidateValue.Text = $"{copy.Name} — previsualización, sin autorización automática";
+                    _previewLevelValue.Text = "—";
+                    _previewRawDemandValue.Text = "—";
+                    _previewIntentValue.Text = "HoldFirmware";
+                    _previewDetailValue.Text = "Perfil aplicado a la vista previa; esperando telemetría fresca.";
+                    _log($"Curve profile applied to shadow preview: {copy.Name}; no hardware command.");
+                }, _previewProfile);
+                _curveEditor.Show(FindForm());
+            }
+            else { _curveEditor.Show(); _curveEditor.Activate(); }
+        }
+        catch (Exception ex)
+        {
+            _log($"Curve editor could not open: {ex.Message}");
+            MessageBox.Show(this, ex.Message, "Editor de curvas", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _curveEditor?.Dispose();
+        base.Dispose(disposing);
     }
 
     private static void AddCurveRow(

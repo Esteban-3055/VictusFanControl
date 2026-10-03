@@ -72,6 +72,8 @@ internal static class Program
                 await AdaptiveFanProductionControllerSelfTest.RunAsync(
                     Console.Out);
 
+            var profileResult = AdaptiveCurveProfilesSelfTest.Run(Console.Out);
+
             var candidateResult =
                 Hp8C40AdaptiveCandidateV1SelfTest.Run(
                     Console.Out);
@@ -79,7 +81,8 @@ internal static class Program
             return engineResult == 0 &&
                    shadowResult == 0 &&
                    productionResult == 0 &&
-                   candidateResult == 0
+                   candidateResult == 0 &&
+                   profileResult == 0
                 ? 0
                 : 35;
         }
