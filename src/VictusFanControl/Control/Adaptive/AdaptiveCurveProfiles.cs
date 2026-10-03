@@ -158,7 +158,7 @@ public sealed class AdaptiveCurveProfileStore
                 if (p.IsBuiltIn || Path.GetFileName(file) != p.Id + ".json") throw new InvalidDataException("ID de archivo inválido.");
                 profiles.Add(p);
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or JsonException)
+            catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException or JsonException)
             { rejected++; }
         }
         return profiles;

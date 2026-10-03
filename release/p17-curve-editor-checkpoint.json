@@ -40,6 +40,14 @@
       "result": "FAILURE",
       "cause": "Warnings-as-errors build found nullable ComboBox item casts in profile selection. Replaced with checked nullable access.",
       "hardwareExecution": false
+    },
+    {
+      "head": "cc1f61e336d4f42a8a55302839e91de08543ed5b",
+      "runNumber": 1222,
+      "runId": 37102930745,
+      "result": "FAILURE",
+      "cause": "Invalid profiles correctly threw InvalidDataException, which the rejection test helper omitted. Added explicit handling to tests and profile loading, plus a valid-JSON invalid-authorization regression case.",
+      "hardwareExecution": false
     }
   ]
 }

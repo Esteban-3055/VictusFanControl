@@ -12,7 +12,7 @@ public static class AdaptiveCurveProfilesSelfTest
             try { if(!test())throw new InvalidOperationException("assertion");output.WriteLine($"PASS: curve profiles — {name}"); }
             catch(Exception e){failures++;output.WriteLine($"FAIL: curve profiles — {name}: {e.Message}");}
         }
-        bool Reject(Action a){try{a();return false;}catch(Exception e) when(e is ArgumentException or IOException or JsonException){return true;}}
+        bool Reject(Action a){try{a();return false;}catch(Exception e) when(e is InvalidDataException or ArgumentException or IOException or JsonException){return true;}}
         var presets=AdaptiveCurveProfiles.Presets();var balanced=presets[1];
         Check("Equilibrado exactly preserves Candidate V1",()=>
             AdaptiveCurveProfiles.Serialize(balanced)==AdaptiveCurveProfiles.Serialize(AdaptiveCurveProfiles.Create("equilibrado","Equilibrado",Hp8C40AdaptiveCandidateV1.Create())));
@@ -63,7 +63,10 @@ public static class AdaptiveCurveProfilesSelfTest
             Check("corruption fallback preserves valid profiles and builtins",()=>
             {
                 File.WriteAllText(Path.Combine(dir,Guid.NewGuid().ToString("N")+".json"),"{");
-                var loaded=store.LoadCustom(out var rejected);return rejected==1 && loaded.Count==1 && AdaptiveCurveProfiles.Presets().Count==3;
+                var invalid=custom with{Id=Guid.NewGuid().ToString("N")};
+                var invalidJson=AdaptiveCurveProfiles.Serialize(invalid).Replace("\"authorizedForProduction\": false","\"authorizedForProduction\": true");
+                File.WriteAllText(Path.Combine(dir,invalid.Id+".json"),invalidJson);
+                var loaded=store.LoadCustom(out var rejected);return rejected==2 && loaded.Count==1 && AdaptiveCurveProfiles.Presets().Count==3;
             });
             Check("custom delete, builtin and traversal protection",()=>
             {
