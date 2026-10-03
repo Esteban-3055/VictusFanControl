@@ -901,6 +901,9 @@ internal sealed class MainForm : Form
         _p16QualificationSession = p16NormalManualQualificationAuthorized
             ? new Hp8C40P16QualificationSession()
             : null;
+        if (p16NormalManualQualificationAuthorized && backend is Hp8C40FanControlBackend p16Backend)
+            p16Backend.WmiCommandAcknowledged += (_, proof) =>
+                AppLog.Write($"P16 WMI COMMAND PROOF: {proof}");
 
         _fanProductionController =
             new AdaptiveFanProductionController(

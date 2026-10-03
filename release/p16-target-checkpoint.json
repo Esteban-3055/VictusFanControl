@@ -491,7 +491,44 @@
         "attemptFenceClaimed": true,
         "result": "CONSUMED_AFTER_PRESERVED_ATTEMPT3_FAIL_CLOSED"
       }
-    ]
+    ],
+    "controlledWmiPreparation": {
+      "status": "IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+      "baselineHead": "572ab08c63cdeb0a0ad3acc59076ca43b9acd758",
+      "baselineCiRunNumber": 1207,
+      "baselineCiRunId": 37090835006,
+      "baselineCiResult": "SUCCESS",
+      "plannedAuthorizationGeneration": 4,
+      "hardwareExecution": false,
+      "physicalGatesOpened": false,
+      "exactHeadCiRuntimeBarrier": true,
+      "committedWmiCommandProofAudit": true,
+      "readonlyTargetValidation": {
+        "sourceHead": "572ab08c63cdeb0a0ad3acc59076ca43b9acd758",
+        "userReportedTrackedSourceClean": true,
+        "capture": {
+          "filename": "2026-10-02_235753_idle_hp-auto.csv",
+          "sha256": "8bae10379d887e9c3ee4365d5155fe28fe499007950c8690e70a10b24db46f75",
+          "samples": 109,
+          "durationSeconds": 120.253242,
+          "maximumAgeMilliseconds": 2469,
+          "cpuMaximumTemperatureC": 56,
+          "gpuMaximumTemperatureC": 46,
+          "missingValues": 0,
+          "expiredSamples": 0
+        },
+        "guiLog": {
+          "filename": "events-2026-10-02(1).log",
+          "sha256": "ad582f9c3f940cfea72adffbb618c69466d3592b97c99e6ebb81b4fd3ea74498",
+          "initialHealthy": true,
+          "firmwareOnly": true,
+          "explicitShutdownLogged": true,
+          "guiExitLogged": true
+        },
+        "physicalCommandResponseQualified": false
+      },
+      "validation": null
+    }
   },
   "promotion": {
     "manualExecutionAuthorized": false,

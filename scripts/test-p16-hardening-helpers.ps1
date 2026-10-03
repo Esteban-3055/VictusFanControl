@@ -89,3 +89,24 @@ foreach($lines in @(
 Assert-P16QualificationSessionUninterrupted -Lines @()
 Assert-P16QualificationSessionUninterrupted -Lines @('unrelated older power event')
 Write-Host 'P16 causal interruption audit self-test: PASS' -ForegroundColor Green
+
+$ci=[pscustomobject]@{id=123;head_sha=('a'*40);status='completed';conclusion='success';path='.github/workflows/build.yml';head_branch='feature/victus-8c40-p16-normal-manual';event='push';repository=[pscustomobject]@{full_name='Esteban-3055/VictusFanControl'}}
+Assert-P16AuthorizationCiRun -Run $ci -ExpectedHead ('a'*40) -ExpectedRunId 123
+foreach($property in @('head_sha','status','conclusion','path','head_branch','event','id')){
+ $original=$ci.$property;$ci.$property=$(if($property -ceq 'id'){124}else{'wrong'})
+ $blocked=$false;try{Assert-P16AuthorizationCiRun -Run $ci -ExpectedHead ('a'*40) -ExpectedRunId 123}catch{$blocked=$true}
+ $ci.$property=$original;Assert-True $blocked ("P16 CI barrier must reject $property mismatch.")
+}
+$proofs=@(
+ 'P16 WMI COMMAND PROOF: target=30/30;resolution=100;samples=2;baselineQuery=1;query=3;queryStarted=101;commandCompleted=100;baselineRpm=2600/2400;rpm=3000/3000',
+ 'P16 WMI COMMAND PROOF: target=40/40;resolution=100;samples=2;baselineQuery=4;query=6;queryStarted=201;commandCompleted=200;baselineRpm=3000/3000;rpm=4000/4000',
+ 'P16 WMI COMMAND PROOF: target=30/30;resolution=100;samples=2;baselineQuery=7;query=9;queryStarted=301;commandCompleted=300;baselineRpm=4000/4000;rpm=3000/3000'
+)
+Assert-P16WmiCommandProof -Lines $proofs
+foreach($replacement in @('samples=1','query=1','queryStarted=99')){
+ $bad=@($proofs);$needle=$(if($replacement.StartsWith('samples')){'samples=2'}elseif($replacement.StartsWith('query=')){'query=3'}else{'queryStarted=101'})
+ $bad[0]=$bad[0].Replace($needle,$replacement);$blocked=$false
+ try{Assert-P16WmiCommandProof -Lines $bad}catch{$blocked=$true}
+ Assert-True $blocked ("P16 WMI proof must reject $replacement.")
+}
+Write-Host 'P16 exact-head CI and WMI proof audit self-test: PASS' -ForegroundColor Green

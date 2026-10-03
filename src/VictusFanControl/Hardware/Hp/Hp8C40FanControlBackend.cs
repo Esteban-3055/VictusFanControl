@@ -312,6 +312,8 @@ public sealed class Hp8C40FanControlBackend :
             watchdogLease: watchdogLease);
     }
 
+    public event EventHandler<string>? WmiCommandAcknowledged;
+
     public string Name => "HP 8C40 BIOS/WMI + EC/tach verification";
 
     public FanFirmwareRestoreEvidence LastRestoreEvidence =>
@@ -734,6 +736,19 @@ public sealed class Hp8C40FanControlBackend :
                     $"resolution={tachAck.TachometerResolutionRpm} RPM; query={tachAck.FanQuerySequence}; " +
                     $"initial RPM={responseBaseline.CpuRpm}/{responseBaseline.GpuRpm}, " +
                     $"setpoint={setpointAck.CpuSetpoint}/{setpointAck.GpuSetpoint}.";
+                if (tachAck.TachometerResolutionRpm == 100 && tachAck.FanQuerySequence > 0)
+                {
+                    // Diagnostic observers must never change command/restore behavior.
+                    try
+                    {
+                        WmiCommandAcknowledged?.Invoke(this,
+                            $"target={cpuTarget}/{gpuTarget};resolution=100;samples=2;" +
+                            $"baselineQuery={responseBaseline.FanQuerySequence};query={tachAck.FanQuerySequence};" +
+                            $"queryStarted={tachAck.FanQueryStartedAtMilliseconds};commandCompleted={commandCompletedAtMilliseconds};" +
+                            $"baselineRpm={responseBaseline.CpuRpm}/{responseBaseline.GpuRpm};rpm={tachAck.CpuRpm}/{tachAck.GpuRpm}");
+                    }
+                    catch { /* Read-only evidence sink failure cannot affect fan control. */ }
+                }
             }
             catch (FanControlAdmissionException)
             {

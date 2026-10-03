@@ -492,3 +492,30 @@ helper runtime, SDK build/publish, packaging and regression checks passed.
 This separate closure needs its own same-head CI. The original attempt-4
 FAIL_CLOSED history remains unchanged; residual control tachometer migration
 and separate fresh physical authorization/evidence still remain.
+
+## P16 controlled WMI preparation after CI #1207
+
+Baseline `572ab08c63cdeb0a0ad3acc59076ca43b9acd758` / Windows CI #1207
+(run 37090835006) passed. The user reports this exact HEAD with no tracked
+source changes. The 23:57 read-only capture contains 109 complete samples
+over 120 seconds, WMI resolution 100 RPM, maximum acquisition age 2469 ms,
+CPU maximum 56 C and GPU maximum 46 C. The updated normal-app log proves
+initial Healthy and explicit GUI exit. Hashes are in the checkpoint.
+This qualifies periodic availability and normal Firmware shutdown only.
+
+The next attempt requires generation 4, preserving the consumed generation 3
+and all four FAIL_CLOSED attempts. Preparation remains gate-closed until its
+Windows CI passes. The parent now requires explicit ExpectedSourceHead and
+ExpectedCiRunId, checks the public repository build workflow for successful
+completed push CI on the exact branch/HEAD before hardware access, and saves
+the returned run metadata in the evidence ZIP. No API token is required;
+network failure blocks execution.
+
+Three P16 WMI COMMAND PROOF log entries must correspond to committed 30/40/30
+commands, resolution 100, two confirming queries, increasing query identity
+and final acquisition started after each command. Diagnostics cannot alter
+control behavior; a missing record invalidates the parent proof. Existing
+independent narrow EC ownership, generation 3/5/7 journal identity, causal
+watchdog chain, strong FF/FF restore and tray exit proof remain mandatory.
+Suspension or any resume consumes/invalidates the session; do not retry that
+authorization HEAD. Existing M4, fan writes and thermal limits remain unchanged.

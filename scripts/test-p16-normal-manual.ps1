@@ -1,3 +1,4 @@
+param([string]$ExpectedSourceHead,[long]$ExpectedCiRunId)
 $ErrorActionPreference='Stop'
 
 $repoRoot=Split-Path -Parent $PSScriptRoot
@@ -285,6 +286,9 @@ function Write-Summary([string]$Result,[string]$Failure){
 
 Assert-Administrator
 $head=Assert-RepositoryProvenance
+if($head -cne $ExpectedSourceHead -or $ExpectedCiRunId -le 0){throw 'P16 PHYSICAL BLOCKED: provide the exact published source HEAD and its successful CI run ID.'}
+$authorizationCi=Invoke-RestMethod -Uri ("https://api.github.com/repos/Esteban-3055/VictusFanControl/actions/runs/{0}" -f $ExpectedCiRunId) -Headers @{'User-Agent'='VictusFanControl-P16';'Accept'='application/vnd.github+json'} -TimeoutSec 20
+Assert-P16AuthorizationCiRun -Run $authorizationCi -ExpectedHead $head -ExpectedRunId $ExpectedCiRunId
 Assert-ExactTarget
 Assert-PowerSane
 Assert-NoConflictingController
@@ -292,6 +296,7 @@ $serviceBefore=Snapshot-Service 'before'
 $initialBaseline=Get-ValidatedServiceBaseline
 $initialServiceMode=[string]$initialBaseline.Mode;$initialServicePid=[int]$initialBaseline.ProcessId;$initialServiceStartTicks=[long]$initialBaseline.ProcessStartUtcTicks
 New-Item -ItemType Directory -Force -Path $evidenceRoot|Out-Null
+$authorizationCi|ConvertTo-Json -Depth 12|Set-Content -LiteralPath (Join-Path $evidenceRoot 'p16-authorization-ci.json') -Encoding UTF8
 
 Write-Host 'VictusFanControl - HP 8C40 P16 NORMAL USER MANUAL QUALIFICATION' -ForegroundColor Cyan
 Write-Host 'Normal app only: Firmware -> Manual -> 30 -> 40 -> 30 -> Firmware -> tray Exit. Automatic is forbidden.' -ForegroundColor Yellow
@@ -370,7 +375,9 @@ try{
  if(-not(Wait-JournalGone 20)){throw 'P16 Firmware request returned but durable journal remains.'}
  Assert-StableSetpoint 255 255 'P16 FF/FF after real Firmware request' $firmwareFfPath;$firmwareFfPass=$true
  Assert-CausalServiceLog $guiPid;$causalChainPass=$true;$strongRestorePass=$true;$finalJournalAbsent=$true
- Assert-AppInteractionAudit;$appInteractionAuditPass=$true
+ Assert-AppInteractionAudit
+ Assert-P16WmiCommandProof -Lines @(Get-AppLogSegment)
+ $appInteractionAuditPass=$true
 
  Write-Host '';Write-Host 'P16 CONTROL PROOF COMPLETE. Right-click the VictusFanControl tray icon and choose Exit ONCE.' -ForegroundColor Green
  $guiExit=Wait-P15BTrackedChildExitCode -Process $gui -Seconds 90

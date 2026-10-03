@@ -237,4 +237,15 @@ if($lifecycle.status -ceq 'IMPLEMENTED_CI_PENDING_GATE_CLOSED'){
     [int]$lc.deterministicSessionCases -ne 7 -or $lc.hardwareExecution -or $lc.physicalGatesOpened){throw 'P16 lifecycle closure CI identity missing.'}
 }else{throw 'Unexpected P16 lifecycle implementation status.'}
 
+foreach($needle in @('Assert-P16AuthorizationCiRun','Assert-P16WmiCommandProof','ExpectedSourceHead','ExpectedCiRunId','p16-authorization-ci.json')){Assert-Contains $harness $needle ("P16 WMI preparation barrier missing: $needle")}
+Assert-Contains $main 'P16 WMI COMMAND PROOF:' 'P16 must preserve committed WMI proof in the ordinary app log.'
+Assert-Contains $backend 'WmiCommandAcknowledged?.Invoke' 'P16 diagnostic command proof missing.'
+$prep=$d.controlledWmiPreparation
+if($null -eq $prep -or $prep.baselineHead -cne '572ab08c63cdeb0a0ad3acc59076ca43b9acd758' -or [long]$prep.baselineCiRunId -ne 37090835006 -or $prep.baselineCiResult -cne 'SUCCESS' -or $prep.hardwareExecution -or $prep.physicalGatesOpened -or -not $prep.exactHeadCiRuntimeBarrier -or -not $prep.committedWmiCommandProofAudit){throw 'P16 controlled WMI preparation scope mismatch.'}
+if($prep.status -ceq 'IMPLEMENTED_CI_PENDING_GATE_CLOSED'){
+ if($null -ne $prep.validation -or $isAuthorized){throw 'P16 WMI preparation cannot preclaim CI or open a pending gate.'}
+}elseif($prep.status -ceq 'SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED'){
+ if($prep.validation.result -cne 'SUCCESS' -or -not $prep.validation.fullWindowsCi){throw 'P16 WMI preparation requires full successful Windows CI.'}
+}else{throw 'Unexpected P16 WMI preparation state.'}
+
 Write-Host ("PASS: P16 normal-Manual state '{0}' preserves the P15/permanent-Manual/Automatic/Candidate boundaries." -f $status) -ForegroundColor Green

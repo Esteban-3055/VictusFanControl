@@ -1483,6 +1483,9 @@ public static class Hp8C40FanControlBackendSelfTest
                     { CpuRpm = (ushort)(variant.EndsWith("300", StringComparison.Ordinal) ? 2900 : 3000) };
             }
             await using var backend = NewBackend(hardware);
+            var proofs = new List<string>();
+            backend.WmiCommandAcknowledged += (_, proof) => proofs.Add(proof);
+            backend.WmiCommandAcknowledged += (_, _) => throw new IOException("Synthetic diagnostic sink failure.");
             await backend.EnterCustomModeAsync(CancellationToken.None);
             var completed = false;
             try { await backend.ApplyAsync(new FanCommand(target, target, "WMI proof self-test"), CancellationToken.None); completed = true; }
@@ -1494,7 +1497,7 @@ public static class Hp8C40FanControlBackendSelfTest
             }
             var expectedPass = variant is "fresh" or "coarse increase 300" or "coarse decrease 300";
             failures += Report(output, $"WMI backend proof {variant}: {(expectedPass ? "acknowledges" : "restores without accepting")}",
-                completed == expectedPass && hardware.SetCalls == 1 &&
+                completed == expectedPass && proofs.Count == (expectedPass ? 1 : 0) && hardware.SetCalls == 1 &&
                 (expectedPass || (hardware.RestoreCalls == 1 && hardware.State.CpuSetpoint == 255)));
         }
         return failures;

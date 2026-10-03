@@ -20,6 +20,7 @@ $status | Set-Content -LiteralPath $statusPath -Encoding UTF8
 $manifestPath=Join-Path $EvidenceRoot 'p16-package-manifest.json'
 $files=@(
  [pscustomobject]@{role='harness-summary';path=$summaryPath;required=$true},
+ [pscustomobject]@{role='authorization-ci';path=(Join-Path $EvidenceRoot 'p16-authorization-ci.json');required=$attemptFenceRequired},
  [pscustomobject]@{role='app-log-segment';path=(Join-Path $EvidenceRoot 'p16-app-log-segment.txt');required=$false},
  [pscustomobject]@{role='baseline-ff';path=(Join-Path $EvidenceRoot 'p16-baseline-ff.json');required=$false},
  [pscustomobject]@{role='setpoint-30-initial';path=(Join-Path $EvidenceRoot 'p16-setpoint-30-initial.json');required=$false},

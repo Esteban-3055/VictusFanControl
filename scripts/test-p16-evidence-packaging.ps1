@@ -8,6 +8,7 @@ try{
  '{"gate":"P16-HARNESS","result":"PASS","attemptFenceClaimed":true}' | Set-Content -LiteralPath (Join-Path $evidence 'p16-harness-summary.json') -Encoding UTF8
  '{"gate":"P16","oneShot":true,"authorizationHead":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' | Set-Content -LiteralPath (Join-Path $evidence 'p16-attempt-fence.json') -Encoding UTF8
  'synthetic normal-app log segment' | Set-Content -LiteralPath (Join-Path $evidence 'p16-app-log-segment.txt') -Encoding UTF8
+ '{"id":1,"conclusion":"success"}' | Set-Content -LiteralPath (Join-Path $evidence 'p16-authorization-ci.json') -Encoding UTF8
  $p=& $helper -EvidenceRoot $evidence -RepositoryRoot $repoRoot
  if(-not (Test-Path -LiteralPath $p.ZipPath -PathType Leaf) -or -not (Test-Path -LiteralPath $p.Sha256SidecarPath -PathType Leaf)){throw 'P16 package self-test output missing.'}
  $actual=(Get-FileHash -LiteralPath $p.ZipPath -Algorithm SHA256).Hash.ToLowerInvariant()

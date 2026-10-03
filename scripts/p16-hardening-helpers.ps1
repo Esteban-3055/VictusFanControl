@@ -130,3 +130,32 @@ function New-P16AuthorizationAttemptFence {
         Claimed=$true
     }
 }
+function Assert-P16AuthorizationCiRun {
+    param($Run,[string]$ExpectedHead,[long]$ExpectedRunId)
+    if($ExpectedHead -notmatch '^[0-9a-f]{40}$' -or $ExpectedRunId -le 0 -or
+       [string]$Run.head_sha -cne $ExpectedHead -or [long]$Run.id -ne $ExpectedRunId -or
+       [string]$Run.status -cne 'completed' -or [string]$Run.conclusion -cne 'success' -or
+       [string]$Run.path -cne '.github/workflows/build.yml' -or
+       [string]$Run.head_branch -cne 'feature/victus-8c40-p16-normal-manual' -or
+       [string]$Run.event -cne 'push' -or
+       [string]$Run.repository.full_name -cne 'Esteban-3055/VictusFanControl'){
+        throw 'P16 PHYSICAL BLOCKED: exact authorization HEAD must have completed successful repository build CI.'
+    }
+}
+
+function Assert-P16WmiCommandProof {
+    param([string[]]$Lines)
+    $proofs=@($Lines|Where-Object{Test-P16OrdinalContains -Text ([string]$_) -Needle 'P16 WMI COMMAND PROOF:'})
+    if($proofs.Count -ne 3){throw 'P16 requires exactly three committed WMI command proofs.'}
+    $levels=@(30,40,30);$previous=0L
+    for($i=0;$i -lt 3;$i++){
+        $pattern='P16 WMI COMMAND PROOF: target=(\d+)/(\d+);resolution=100;samples=2;baselineQuery=(\d+);query=(\d+);queryStarted=(\d+);commandCompleted=(\d+);baselineRpm=(\d+)/(\d+);rpm=(\d+)/(\d+)$'
+        $m=[regex]::Match([string]$proofs[$i],$pattern)
+        if(-not $m.Success){throw 'P16 malformed WMI command proof.'}
+        $v=@(1..10|ForEach-Object{[long]$m.Groups[$_].Value})
+        if($v[0] -ne $levels[$i] -or $v[1] -ne $levels[$i] -or $v[2] -le 0 -or
+           $v[3] -le $v[2] -or $v[3] -le $previous -or $v[4] -lt $v[5] -or
+           $v[8] -le 0 -or $v[9] -le 0){throw 'P16 stale, duplicate, pre-command or wrong-target WMI proof.'}
+        $previous=$v[3]
+    }
+}
