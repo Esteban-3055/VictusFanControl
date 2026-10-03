@@ -128,10 +128,7 @@ internal sealed class HpWmiFanProofReader
                         ex.Message);
                     throw;
                 }
-                finally
-                {
-                    _admission.Release();
-                }
+                finally { _admission.Release(); }
             });
         }
         catch (OperationCanceledException)
