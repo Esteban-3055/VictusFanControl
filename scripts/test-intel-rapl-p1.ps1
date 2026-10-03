@@ -21,6 +21,20 @@ if ($LASTEXITCODE -ne 0) { throw 'Build failed; no CPU hardware test was started
 Write-Host '2. Running the simulated RAPL policy/recovery fixtures (no hardware I/O).'
 & $exe --self-test
 if ($LASTEXITCODE -ne 0) { throw 'Fixtures failed; no CPU hardware test was started.' }
+
+$mode = '--observe'
+if ($WriteTest) { $mode = '--write-test' }
+$explicitLimits = ($PL1Watts -ne 0 -or $PL2Watts -ne 0)
+if ($explicitLimits) {
+    if (-not $WriteTest) { throw 'PL1Watts/PL2Watts require -WriteTest.' }
+    $pl1Invalid = [double]::IsNaN($PL1Watts) -or [double]::IsInfinity($PL1Watts)
+    $pl2Invalid = [double]::IsNaN($PL2Watts) -or [double]::IsInfinity($PL2Watts)
+    if ($pl1Invalid -or $pl2Invalid -or
+        $PL1Watts -lt 10 -or $PL1Watts -gt 200 -or
+        $PL2Watts -lt $PL1Watts -or $PL2Watts -gt 250) {
+        throw 'Explicit limits require PL1 10..200 W and PL2 >= PL1 and <=250 W.'
+    }
+}
 if ($SelfTest) { return }
 
 if (-not (Test-Path -LiteralPath $module)) { throw "Missing signed IntelMSR.bin: $module. Run scripts\setup-pawnio-modules.ps1." }
@@ -32,17 +46,6 @@ try {
     }
 } finally { $identity.Dispose() }
 
-$mode = '--observe'
-if ($WriteTest) { $mode = '--write-test' }
-$explicitLimits = ($PL1Watts -ne 0 -or $PL2Watts -ne 0)
-if ($explicitLimits) {
-    if (-not $WriteTest) { throw 'PL1Watts/PL2Watts require -WriteTest.' }
-    if (-not [double]::IsFinite($PL1Watts) -or -not [double]::IsFinite($PL2Watts) -or
-        $PL1Watts -lt 10 -or $PL1Watts -gt 200 -or
-        $PL2Watts -lt $PL1Watts -or $PL2Watts -gt 250) {
-        throw 'Explicit limits require PL1 10..200 W and PL2 >= PL1 and <=250 W.'
-    }
-}
 $name = 'rapl-p1_' + (Get-Date -Format 'yyyy-MM-dd_HHmmss') + '_' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
 $directory = Join-Path $root ('logs\' + $name)
 $zip = $directory + '.zip'
