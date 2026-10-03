@@ -376,8 +376,10 @@ internal sealed class AcpiEcReader : IDisposable
             // Preserve the existing RD_EC handshake and retries exactly.
             WaitForIdle();
             WritePort(CommandStatusPort, CommandReadEc);
+            EcWmiInvestigationTrace.Record(trace, "ec.command.sent", "RD_EC=0x80");
             WaitForInputBufferEmpty();
             WritePort(DataPort, register);
+            EcWmiInvestigationTrace.Record(trace, "ec.address.sent", "");
             WaitForInputBufferEmpty();
             WaitForOutputBufferFull();
             var value = ReadPort(DataPort);

@@ -150,7 +150,11 @@ public sealed class HpOmenBiosWmiClient
 
                 var response = new HpBiosResponse(Convert.ToInt32(rawCode), responseData);
                 if (EcWmiInvestigationTrace.Enabled)
+                {
                     EcWmiInvestigationTrace.Record(trace, "wmi.response", $"rc={response.ReturnCode};bytes={response.Data.Length}");
+                    if (request.Command == 0x20008 && request.CommandType == 0x2D && response.Data.Length >= 2)
+                        EcWmiInvestigationTrace.Record(trace, "wmi.fan-levels", $"raw={response.Data[0]}/{response.Data[1]}");
+                }
                 return response;
             }
         }
