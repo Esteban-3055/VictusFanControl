@@ -26,6 +26,13 @@ internal static class RaplProbeSelfTest
             var explicitDecoded = IntelRaplCodec.DecodePackagePowerLimit(explicit2040, units);
             Require(explicitDecoded.Pl1.PowerWatts == 20 && explicitDecoded.Pl2.PowerWatts == 40,
                 "explicit 20/40 encoding");
+
+            const ulong observed8C40Baseline = 0x0042839800DF8168UL;
+            const ulong expected8C402040 = 0x0042814000DF80A0UL;
+            var observedUnits = IntelRaplCodec.DecodeUnits(0x00000000000A0E03UL);
+            var observed2040 = RaplWritePolicy.BuildRequestedLimit(observed8C40Baseline, observedUnits, 20, 40);
+            Require(observed2040 == expected8C402040,
+                "observed HP 8C40 45/115 baseline encodes exact 20/40 raw value");
             RequireThrows(() => RaplWritePolicy.BuildRequestedLimit(Baseline, units, 9, 40),
                 "explicit PL1 below safe floor rejected");
             RequireThrows(() => RaplWritePolicy.BuildRequestedLimit(Baseline, units, 30, 20),
