@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "targetProfileId": "HP-8C40-9D0R1LA-F18",
-  "status": "IMPLEMENTED_CI_PENDING_GATE_CLOSED",
+  "status": "SOFTWARE_CLOSED_CI_VALIDATED_GATE_CLOSED",
   "baselineHead": "b3dde435f7579bf8e2d25831af36e7297254527c",
   "baselineCi": {
     "runNumber": 1204,
@@ -54,9 +54,40 @@
     "simultaneous": false,
     "controlResponseQualified": false
   },
-  "implementationValidation": null,
-  "softwareClosure": {
-    "closed": false
+  "implementationValidation": {
+    "head": "d3df9d9b2aeef3fa9364e89e30688e5117360bcc",
+    "tree": "e169413472735adf2723c6622eebaf7e89c402b7",
+    "runNumber": 1206,
+    "runId": 37090519386,
+    "result": "SUCCESS",
+    "fullWindowsCi": true,
+    "querySelfTestCases": 5,
+    "additionalBackendSelfTestCases": 10,
+    "localInvariantScriptsPassed": 51,
+    "windowsPowerShell51Validated": true,
+    "deterministicRcPackageValidated": true
   },
-  "remainingWork": "Same-head implementation CI, separate closure CI, ordinary-app read-only telemetry validation and a separately prepared fresh P16 one-shot physical qualification; no authorization generation is opened by this migration."
+  "softwareClosure": {
+    "closed": true,
+    "result": "PASS",
+    "implementationHead": "d3df9d9b2aeef3fa9364e89e30688e5117360bcc",
+    "implementationTree": "e169413472735adf2723c6622eebaf7e89c402b7",
+    "sourceCiRunNumber": 1206,
+    "sourceCiRunId": 37090519386,
+    "sourceCiResult": "SUCCESS",
+    "hardwareExecution": false,
+    "separateSameHeadClosureCiRequired": true
+  },
+  "remainingWork": "Validate ordinary-app read-only telemetry on the closure build, review acquisition ages/quiescence, then separately prepare a fresh exact-head/CI one-shot P16 physical qualification. The prior generation remains consumed; no physical or permanent gate opens here.",
+  "failedImplementationValidation": [
+    {
+      "head": "8a2871beece6094d29eb7b6da5415b7f6b94eabb",
+      "tree": "56b97a9d526c141ac9b3e6420c085498d6010b7a",
+      "runNumber": 1205,
+      "runId": 37090373528,
+      "result": "FAILURE",
+      "hardwareExecution": false,
+      "cause": "Historical M8C static invariant required the obsolete transient EC snapshot diagnostic; corrected to control-state wording without changing runtime behavior."
+    }
+  ]
 }

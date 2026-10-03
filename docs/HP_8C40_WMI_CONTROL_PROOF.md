@@ -80,8 +80,14 @@ proofs, timeout, coarse increases/decrease and real-coordinator restoration
 with a blocked native read. Existing ownership, WRITE_INTENT/Commit, lease,
 transient, spin-up and cancellation regressions remain in the backend suite.
 Only test constructors inject a portable clock; production keeps Windows
-active-time accounting. Full same-head Windows CI and a separate closure CI
-are required before this becomes a software baseline.
+active-time accounting. Implementation d3df9d9b2aeef3fa9364e89e30688e5117360bcc,
+tree e169413472735adf2723c6622eebaf7e89c402b7, passed full Windows CI #1206 /
+run 37090519386 SUCCESS, including PowerShell 5.1, warnings-as-errors build,
+all backend regressions and deterministic RC packaging. The preceding CI
+#1205 failed software-only because the historical M8C invariant required the
+old EC-only diagnostic wording; the correction changes only that invariant.
+All 51 local invariant scripts passed. The separate software closure records
+these exact identities and still requires its own same-head Windows CI.
 
 Before physical P16: first validate ordinary-app read-only telemetry on the
 new build, review acquisition ages/quiescence, then prepare a fresh one-shot
@@ -90,3 +96,28 @@ The final physical sequence remains Firmware -> Manual -> Apply 30 -> Apply 40
 -> Apply 30 -> Firmware -> tray Exit. Response and restore evidence require
 an audit and a separate re-block/closure before any permanent Manual promotion.
 Automatic remains closed. No physical test is performed by this implementation.
+
+## First target check: read-only, before any Manual attempt
+
+Use the exact closure build after its CI succeeds. From the repository root,
+with the existing PawnIO modules and Windows administrator PowerShell:
+
+```powershell
+.\scripts\run-baseline.ps1 -Scenario idle -Minutes 2
+.\scripts\run-gui.ps1
+```
+
+Run them sequentially. The first command ends automatically and writes
+`logs/*_idle_hp-auto.csv`; keep the console output as well. Inspect its
+`fan_telemetry_source`, `fan_rpm_resolution`, `fan_sample_age_ms` and speed
+columns for WMI source, 100-RPM resolution, valid fresh ages and gaps/errors.
+This samples periodic telemetry, not the command-response proof reader.
+
+In the ordinary GUI leave Firmware selected, observe two minutes and exit
+from the tray. Collect the new session in
+`%LOCALAPPDATA%\VictusFanControl\logs\events-YYYY-MM-DD.log` plus the CSV
+and exact `git rev-parse HEAD`. Review initial Healthy validation, errors and
+shutdown/quiescence before preparing the later physical command test. This
+check does not qualify Manual response or restore during a native WMI hang.
+The previous read-only standalone collector is pinned to its earlier source;
+do not reuse it on this updated checkout without updating its source identity.
