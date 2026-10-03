@@ -1,10 +1,12 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 
 namespace VictusFanControl.CpuProbe;
 
 internal sealed record ProbeRequest(string Mode, string ModulePath, string Directory,
-    int DurationSeconds, int ParentId, long ParentStartTicks, DateTimeOffset CreatedUtc);
+    int DurationSeconds, int ParentId, long ParentStartTicks,
+    double? Pl1Watts, double? Pl2Watts, DateTimeOffset CreatedUtc);
 
 internal static class Program
 {
@@ -19,20 +21,34 @@ internal static class Program
             if (args.Length == 0 || args.SequenceEqual(new[] { "--help" }))
             {
                 Console.WriteLine("CPU-only RAPL diagnostic. No fan, EC or NVIDIA control.");
-                Console.WriteLine("--observe|--write-test --module <IntelMSR.bin> --output-dir <new-dir> --duration-seconds <10..120>");
-                Console.WriteLine("Writes are a bounded downward-only 20% test with restore, never a persistent limiter.");
+                Console.WriteLine("--observe|--write-test --module <IntelMSR.bin> --output-dir <new-dir> --duration-seconds <10..120> [--pl1-watts <W> --pl2-watts <W>]");
+                Console.WriteLine("Default writes reduce both limits 20%. Explicit limits remain downward-only, validated, restored and non-persistent.");
                 return 0;
             }
-            if (args.Length != 7 || args[0] is not ("--observe" or "--write-test") ||
+            if (args.Length is not (7 or 11) || args[0] is not ("--observe" or "--write-test") ||
                 args[1] != "--module" || args[3] != "--output-dir" || args[5] != "--duration-seconds" ||
                 !int.TryParse(args[6], out var seconds) || seconds is < 10 or > 120)
                 throw new ArgumentException("Invalid arguments. Use --help. Maximum duration is 120 seconds.");
+            double? pl1Watts = null;
+            double? pl2Watts = null;
+            if (args.Length == 11)
+            {
+                if (args[0] != "--write-test" || args[7] != "--pl1-watts" || args[9] != "--pl2-watts" ||
+                    !double.TryParse(args[8], NumberStyles.Float, CultureInfo.InvariantCulture, out var pl1) ||
+                    !double.TryParse(args[10], NumberStyles.Float, CultureInfo.InvariantCulture, out var pl2) ||
+                    !double.IsFinite(pl1) || !double.IsFinite(pl2) || pl1 < 10 || pl1 > 200 ||
+                    pl2 < pl1 || pl2 > 250)
+                    throw new ArgumentException("Explicit limits require --write-test, PL1 10..200 W and PL2 >= PL1 and <=250 W.");
+                pl1Watts = pl1;
+                pl2Watts = pl2;
+            }
             var directory = Path.GetFullPath(args[4]);
             if (Directory.Exists(directory)) throw new IOException("Output directory must be new.");
             Directory.CreateDirectory(directory);
             using var parent = Process.GetCurrentProcess();
             var request = new ProbeRequest(args[0], Path.GetFullPath(args[2]), directory,
-                seconds, parent.Id, parent.StartTime.ToUniversalTime().Ticks, DateTimeOffset.UtcNow);
+                seconds, parent.Id, parent.StartTime.ToUniversalTime().Ticks,
+                pl1Watts, pl2Watts, DateTimeOffset.UtcNow);
             var requestPath = Path.Combine(directory, "request.json");
             ProbeEvidence.DurableJson(requestPath, request);
             // Start the apphost executable directly. The PowerShell launcher does
@@ -88,10 +104,17 @@ internal static class Program
     {
         var request = JsonSerializer.Deserialize<ProbeRequest>(File.ReadAllText(requestPath))
             ?? throw new InvalidDataException("Missing request.");
+        var hasExplicitPl1 = request.Pl1Watts.HasValue;
+        var hasExplicitPl2 = request.Pl2Watts.HasValue;
         if (request.Mode is not ("--observe" or "--write-test" or "--fixture") || request.DurationSeconds is < 10 or > 120 ||
             Path.GetFullPath(requestPath) != Path.Combine(request.Directory, "request.json") ||
             DateTimeOffset.UtcNow - request.CreatedUtc > TimeSpan.FromSeconds(30) ||
-            request.CreatedUtc > DateTimeOffset.UtcNow.AddSeconds(2))
+            request.CreatedUtc > DateTimeOffset.UtcNow.AddSeconds(2) ||
+            hasExplicitPl1 != hasExplicitPl2 ||
+            (hasExplicitPl1 && (request.Mode != "--write-test" ||
+                !double.IsFinite(request.Pl1Watts!.Value) || !double.IsFinite(request.Pl2Watts!.Value) ||
+                request.Pl1Watts.Value < 10 || request.Pl1Watts.Value > 200 ||
+                request.Pl2Watts.Value < request.Pl1Watts.Value || request.Pl2Watts.Value > 250)))
             throw new InvalidDataException("Invalid or stale guardian request.");
         var stopPath = Path.Combine(request.Directory, "STOP");
         bool KeepRunning()
@@ -131,14 +154,21 @@ internal static class Program
                     ? new GuardianProcessFixture.FixtureHardware(request.Directory)
                     : new PhysicalRaplHardware(request.ModulePath, request.Directory, writeTest);
                 evidence.Event("CPU-only experiment; firmware fans; no direct EC, HP WMI fan calls or GPU writes.");
-                evidence.Event(writeTest ? "P1: baseline 10 s, reduce PL1/PL2 once, observe, restore, verify." : "P0/P0.5: read-only observation.");
+                evidence.Event(writeTest
+                    ? request.Pl1Watts.HasValue
+                        ? $"P1: baseline 10 s, apply explicit downward limits PL1={request.Pl1Watts.Value:0.###} W / PL2={request.Pl2Watts!.Value:0.###} W once, observe, restore, verify."
+                        : "P1: baseline 10 s, reduce PL1/PL2 by 20% once, observe, restore, verify."
+                    : "P0/P0.5: read-only observation.");
                 var timing = fixture ? new ProbeTiming(2, 500, 1, 10)
                     : writeTest ? ProbeTiming.Physical(request.DurationSeconds)
                     : new ProbeTiming(request.DurationSeconds, 0, 0, 1000);
                 // Keep the named mutex on its owning OS thread while the engine
                 // performs sequential asynchronous sampling on pool threads.
+                var explicitLimits = request.Pl1Watts.HasValue
+                    ? new RequestedPowerLimits(request.Pl1Watts.Value, request.Pl2Watts!.Value)
+                    : (RequestedPowerLimits?)null;
                 var result = RaplProbeEngine.RunAsync(hardware, evidence, writeTest, timing,
-                    KeepRunning, CancellationToken.None).GetAwaiter().GetResult();
+                    KeepRunning, CancellationToken.None, explicitLimits).GetAwaiter().GetResult();
                 if (result.WriteAttempted && result.RestoreResult != "BASELINE_VERIFIED") return 3;
                 return result.Error is null ? 0 : 2;
             }
