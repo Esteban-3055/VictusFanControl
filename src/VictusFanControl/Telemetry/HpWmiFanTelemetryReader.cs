@@ -35,7 +35,9 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
     private readonly Func<HpBiosRequest, HpBiosResponse> _send;
     private readonly Func<long> _milliseconds;
     private readonly Func<DateTimeOffset> _utcNow;
+    private readonly HpWmiFanAcquisitionDiagnostics _acquisitionDiagnostics;
     private Task? _pending;
+    private HpWmiFanAcquisitionDiagnostics.Operation? _pendingAcquisition;
     private HpWmiFanTelemetrySample? _sample;
     private long _nextAttempt;
     private long _startedAt;
@@ -56,6 +58,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
         }
 
         _admission = ProductionAdmission;
+        _acquisitionDiagnostics = HpWmiFanAcquisitionDiagnostics.For(_admission);
         _milliseconds = () => Environment.TickCount64;
         _utcNow = () => DateTimeOffset.UtcNow;
         HpOmenBiosWmiClient? client = null;
@@ -86,11 +89,14 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
         _milliseconds = milliseconds;
         _utcNow = utcNow;
         _admission = admission;
+        _acquisitionDiagnostics = HpWmiFanAcquisitionDiagnostics.For(_admission);
         HpWmiFanSamplePublication.Register(_admission, this);
     }
 
     public string Diagnostic { get { lock (_gate) return _diagnostic; } }
     public int Recoveries { get { lock (_gate) return _recoveries; } }
+    internal string AcquisitionDiagnostic => _acquisitionDiagnostics.Describe();
+    internal IReadOnlyList<string> DrainAcquisitionNotices() => _acquisitionDiagnostics.DrainNotices();
 
     public HpWmiFanTelemetrySample? ReadCached()
     {
@@ -100,6 +106,8 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             var now = _milliseconds();
             if (_pending is { IsCompleted: false } && now - _startedAt >= QueryTimeoutMilliseconds)
             {
+                if (!_timedOut && _pendingAcquisition is not null)
+                    _acquisitionDiagnostics.MarkLogicalTimeout(_pendingAcquisition, now);
                 _timedOut = true;
                 Fail("HP WMI fan query timed out; awaiting provider completion without overlapping retries.");
             }
@@ -113,16 +121,24 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
 
             if ((_pending is null || _pending.IsCompleted) && now >= _nextAttempt)
             {
+                var acquisition = _acquisitionDiagnostics.Begin(HpWmiFanAcquisitionPurpose.Periodic, now);
                 if (_admission.Wait(0))
                 {
+                    _acquisitionDiagnostics.MarkAdmitted(acquisition, now);
+                    _pendingAcquisition = acquisition;
                     _startedAt = now;
                     _timedOut = false;
                     var epoch = _epoch;
                     var sampledAt = _utcNow();
-                    _pending = Task.Run(() => Query(epoch, now, sampledAt));
+                    _pending = Task.Run(() => Query(epoch, now, sampledAt, acquisition));
                 }
                 else
                 {
+                    _acquisitionDiagnostics.Complete(
+                        acquisition,
+                        "admission-busy",
+                        now,
+                        "Periodic poll skipped because another native HP WMI read owns the slot.");
                     _nextAttempt = now + PollIntervalMilliseconds;
                     _diagnostic = "Previous HP WMI fan reader still in flight; no overlapping query admitted.";
                 }
@@ -213,43 +229,123 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
         return new(response.Data[0], response.Data[1], sampledAt, startedAt);
     }
 
-    private void Query(int epoch, long startedAt, DateTimeOffset sampledAt)
+    private void Query(
+        int epoch,
+        long startedAt,
+        DateTimeOffset sampledAt,
+        HpWmiFanAcquisitionDiagnostics.Operation acquisition)
     {
         var sequence = HpWmiFanSamplePublication.NextSequence(_admission);
         try
         {
             lock (_gate)
             {
-                if (_disposed || _paused || _epoch != epoch) return;
+                if (_disposed || _paused || _epoch != epoch)
+                {
+                    _acquisitionDiagnostics.Complete(
+                        acquisition,
+                        "lifecycle-discarded",
+                        _milliseconds(),
+                        "Periodic acquisition was invalidated before native WMI execution.");
+                    return;
+                }
             }
-            var sample = Decode(_send(Hp8C40BiosFanControl.BuildGetFanLevelRequest()), sampledAt, startedAt);
+
+            var nativeStarted = _milliseconds();
+            _acquisitionDiagnostics.MarkNativeStarted(acquisition, nativeStarted);
+
+            HpBiosResponse response;
+            try
+            {
+                response = _send(Hp8C40BiosFanControl.BuildGetFanLevelRequest());
+            }
+            catch (Exception ex)
+            {
+                var nativeCompleted = _milliseconds();
+                _acquisitionDiagnostics.MarkNativeCompleted(acquisition, nativeCompleted);
+                _acquisitionDiagnostics.Complete(acquisition, "native-failed", nativeCompleted, ex.Message);
+                throw;
+            }
+
+            var completedAt = _milliseconds();
+            _acquisitionDiagnostics.MarkNativeCompleted(acquisition, completedAt);
+
+            HpWmiFanTelemetrySample sample;
+            try
+            {
+                sample = Decode(response, sampledAt, startedAt);
+            }
+            catch (Exception ex)
+            {
+                _acquisitionDiagnostics.Complete(acquisition, "response-rejected", completedAt, ex.Message);
+                throw;
+            }
+
+            _acquisitionDiagnostics.MarkNativeDecoded(acquisition, completedAt);
+
             lock (_gate)
             {
-                if (_disposed || _paused || _epoch != epoch) return;
-                if (sequence < _latestOutcomeSequence) return;
+                if (_disposed || _paused || _epoch != epoch)
+                {
+                    _acquisitionDiagnostics.Complete(
+                        acquisition,
+                        "lifecycle-discarded",
+                        _milliseconds(),
+                        "Periodic native result crossed a pause/dispose epoch and was discarded.");
+                    return;
+                }
+
+                if (sequence < _latestOutcomeSequence)
+                {
+                    _acquisitionDiagnostics.Complete(
+                        acquisition,
+                        "older-outcome-discarded",
+                        _milliseconds(),
+                        "A newer shared-slot outcome already owns the periodic cache ordering.");
+                    return;
+                }
+
                 _latestOutcomeSequence = sequence;
                 var now = _milliseconds();
                 if (_timedOut || now - startedAt >= QueryTimeoutMilliseconds)
                 {
                     Fail("Late HP WMI fan query discarded after timeout.");
                     _nextAttempt = now + FailureBackoffMilliseconds;
+                    _acquisitionDiagnostics.Complete(
+                        acquisition,
+                        "late-after-logical-timeout",
+                        now,
+                        "Native WMI returned after the periodic logical timeout.");
                     return;
                 }
+
                 if (now - startedAt >= MaximumSampleAgeMilliseconds)
                 {
                     Fail("HP WMI fan query completed with an expired sample; discarded.");
                     _nextAttempt = now + FailureBackoffMilliseconds;
+                    _acquisitionDiagnostics.Complete(
+                        acquisition,
+                        "expired",
+                        now,
+                        "Periodic sample exceeded the 3000-ms freshness boundary from query start.");
                     return;
                 }
+
                 _sample = sample;
                 _diagnostic = "OK (HP WMI 20008h/2Dh -> ACPI; nominal RPM, resolution 100 RPM).";
                 _nextAttempt = now + PollIntervalMilliseconds;
                 if (_failed) _recoveries++;
                 _failed = false;
+                _acquisitionDiagnostics.Complete(acquisition, "accepted", now);
             }
         }
         catch (Exception ex)
         {
+            _acquisitionDiagnostics.Complete(
+                acquisition,
+                "unexpected-failure",
+                _milliseconds(),
+                ex.Message);
             lock (_gate)
             {
                 if (_disposed || _paused || _epoch != epoch) return;

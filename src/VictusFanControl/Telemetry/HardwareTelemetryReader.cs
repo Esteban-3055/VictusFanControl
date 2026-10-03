@@ -290,7 +290,11 @@ public sealed class HardwareTelemetryReader : IDisposable
             : $"Hardware target   : {_targetProfile.Id} ({_targetProfile.DisplayName})";
         yield return $"PawnIO Intel MSR : {_intelStatus}";
         yield return $"PawnIO ACPI EC   : {_ecStatus}";
-        if (_wmiFans is not null) yield return $"HP WMI fan RPM  : {_wmiFans.Diagnostic}";
+        if (_wmiFans is not null)
+        {
+            yield return $"HP WMI fan RPM  : {_wmiFans.Diagnostic}";
+            yield return $"HP WMI acquire  : {_wmiFans.AcquisitionDiagnostic}";
+        }
         yield return $"NVIDIA NVML     : {_nvmlStatus}";
         yield return $"Backends init   : {BackendsInitialized}";
     }
@@ -354,6 +358,9 @@ public sealed class HardwareTelemetryReader : IDisposable
 
     public Task WaitForFanTelemetryQuiescenceAsync(CancellationToken cancellationToken) =>
         _wmiFans?.WaitForQuiescenceAsync(cancellationToken) ?? Task.CompletedTask;
+
+    public IReadOnlyList<string> DrainFanWmiAcquisitionNotices() =>
+        _wmiFans?.DrainAcquisitionNotices() ?? Array.Empty<string>();
 
     public void Dispose()
     {

@@ -645,6 +645,11 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             .Concat(_reader.GetHealthSummary());
 
         DiagnosticsAvailable?.Invoke(this, string.Join(Environment.NewLine, lines));
+
+        foreach (var notice in _reader.DrainFanWmiAcquisitionNotices())
+        {
+            Log(notice);
+        }
     }
 
     private void Log(string text)

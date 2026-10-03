@@ -5,6 +5,9 @@ function Require-Text([string]$Text, [string]$Needle) {
     if ($Text.IndexOf($Needle, [StringComparison]::Ordinal) -lt 0) { throw "WMI telemetry invariant missing: $Needle" }
 }
 $reader = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanTelemetryReader.cs'
+$proof = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanProofReader.cs'
+$acquisitionDiagnostics = Read-Source 'src\VictusFanControl\Telemetry\HpWmiFanAcquisitionDiagnostics.cs'
+$backend = Read-Source 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs'
 $hardware = Read-Source 'src\VictusFanControl\Telemetry\HardwareTelemetryReader.cs'
 $worker = Read-Source 'src\VictusFanControl.App\TelemetryWorker.cs'
 $snapshot = Read-Source 'src\VictusFanControl\Telemetry\TelemetrySnapshot.cs'
@@ -16,6 +19,16 @@ Require-Text $reader 'QueryTimeoutMilliseconds = 5000'
 Require-Text $reader 'MaximumSampleAgeMilliseconds = 3000'
 Require-Text $reader '_epoch != epoch'
 Require-Text $reader '_admission.Wait(0)'
+Require-Text $reader 'HpWmiFanAcquisitionPurpose.Periodic'
+Require-Text $proof 'HpWmiFanAcquisitionPurpose.Control'
+Require-Text $proof 'MaximumWaitMilliseconds = 3000'
+Require-Text $backend 'RequiredTachConfirmationSamples = 2'
+Require-Text $acquisitionDiagnostics 'SlowNativeThresholdMilliseconds = 1000'
+Require-Text $acquisitionDiagnostics 'ConditionalWeakTable<SemaphoreSlim, HpWmiFanAcquisitionDiagnostics>'
+Require-Text $acquisitionDiagnostics 'PeriodicAdmissionBusy'
+Require-Text $acquisitionDiagnostics 'WaiterTimeouts'
+Require-Text $hardware 'HP WMI acquire  :'
+Require-Text $worker 'DrainFanWmiAcquisitionNotices()'
 foreach ($forbidden in @('SetFanLevel(', 'RestoreFirmwareAuto(', 'AcpiEcReader', 'PawnIo', 'BuildReleaseFanLevelRequest(')) {
     if ($reader.IndexOf($forbidden, [StringComparison]::Ordinal) -ge 0) { throw "WMI reader must be read-only: $forbidden" }
 }
