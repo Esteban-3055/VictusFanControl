@@ -2354,3 +2354,78 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+## Step 6H — combined CPU + GPU Guardian qualification
+
+CPU-only Step 6G and GPU-only Step 6F are physically qualified. Step 6H now
+composes those exact domain controllers under one detached Guardian. This
+stage does not change either domain's ownership model and does not touch the
+fan-control path.
+
+The combined lifecycle adds explicit composition safety:
+
+- combined enable requires CPU=true and GPU=true and starts only from confirmed AC;
+- CPU initial enable runs first; if GPU initial enable fails, CPU rollback is attempted immediately;
+- normal release always attempts CPU restore and GPU Reset independently, even
+  if the first domain throws;
+- source transitions continue to use PerformanceSourceTransitionCoordinator,
+  which attempts CPU and GPU independently and records partial failure instead
+  of suppressing the second domain;
+- CPU retains exact owned-field journal/readback/conflict semantics;
+- GPU remains ActiveUnverified after Set because public NVML still cannot prove
+  the exact locked range or writer;
+- the human exclusive-GPU-controller contract remains mandatory.
+
+The bounded physical sequence is:
+
+    AC:
+      CPU 35/60 W
+      GPU 210..1850 MHz
+
+    disconnect:
+      Battery confirmed
+      CPU 8/15 W
+      GPU 210..1200 MHz
+
+    reconnect:
+      AC confirmed
+      CPU 35/60 W
+      GPU 210..1850 MHz
+
+    DISABLE_SESSION:
+      source listener fenced/stopped
+      CPU conditional owned-field restore -> 45/115 W baseline
+      GPU one normal Reset
+      both persistent journals removed
+
+    SHUTDOWN:
+      Stopped
+      target mutex released
+
+A clean PASS requires exactly four CPU and four GPU hardware-write attempts,
+two CPU and two GPU source dispatches, one lifecycle enable/release, no
+rejected IPC requests, one reconciliation, at least two source notifications,
+same-session/increasing-generation evidence independently inside each journal,
+immutable CPU OriginalBaseline, final CPU owned fields restored, both domains
+Disabled, both journals absent, CLIENT_SHUTDOWN/Stopped, and no source/Guardian
+failure.
+
+Run only after confirming no concurrent GPU locked-clock controller:
+
+    .\scripts\test-performance-guardian-6h-combined.ps1
+      -ConfirmTargetProfile HP-8C40-9D0R1LA-F18
+      -ConfirmCpuHardwareWrites
+      -ConfirmExclusiveGpuController
+
+The harness defaults to a 120-second unplug/replug timeout because the earlier
+CPU qualification demonstrated that Windows AC/DC confirmation can
+occasionally arrive later than the first 60-second window.
+
+Step 6H is a qualification gate only. GUI integration remains delegated to the
+separate application-integration work.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
