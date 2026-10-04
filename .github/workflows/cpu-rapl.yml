@@ -8,9 +8,12 @@ on:
     paths:
       - 'src/VictusFanControl/Performance/**'
       - 'src/VictusFanControl.CpuProbe/**'
+      - 'src/VictusFanControl.GpuProbe/**'
       - 'src/VictusFanControl/Hardware/Intel/**'
+      - 'src/VictusFanControl/Hardware/Nvidia/**'
       - 'src/VictusFanControl/Hardware/PawnIo/**'
       - 'scripts/test-intel-rapl-p1.ps1'
+      - 'scripts/test-gpu-nvml-observability.ps1'
       - 'docs/INTEL_RAPL_P1.md'
       - 'docs/INTEL_RAPL_P2*.md'
       - 'release/intel-rapl-p1-qualification.json'
@@ -40,6 +43,9 @@ jobs:
 
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest -WriteTest -PL1Watts 20 -PL2Watts 40
           if ($LASTEXITCODE -ne 0) { throw "CPU RAPL explicit 20/40 validation failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-gpu-nvml-observability.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "GPU NVML observability fixture failed." }
 
       - name: Build solution
         run: dotnet build VictusFanControl.sln --configuration Release --no-restore

@@ -779,3 +779,27 @@ heuristic into exact ownership.
 
 productionHardwareWritesAuthorized remains false.
 
+## Step 5.8B — read-only exact-target observability probe
+
+A separate VictusFanControl.GpuProbe executable now captures candidate NVML
+signals on the exact RTX 4060 Laptop target without any GPU write:
+
+- current graphics clock;
+- deprecated application graphics-clock target;
+- current clock event reasons;
+- export availability;
+- the ownership qualification result for both 210..1850 and 210..1200.
+
+The probe never calls nvmlDeviceSetGpuLockedClocks,
+nvmlDeviceResetGpuLockedClocks or nvidia-smi. Its --self-test path does not
+load NVML at all, so CI remains hardware-free.
+
+scripts/test-gpu-nvml-observability.ps1 builds and invokes the read-only probe.
+The intended physical characterization is to capture separate labeled reports
+while the operator independently establishes baseline, AC-lock, Battery-lock
+and reset states. Those reports may establish useful target-specific
+diagnostics, but Step 5.8A still forbids treating them as exact min/max
+ownership unless an exact getter is found.
+
+No GPU hardware qualification PASS is claimed by this commit.
+

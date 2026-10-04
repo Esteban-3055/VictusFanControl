@@ -12,12 +12,18 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.ModernStan
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.CpuProbe", "src\VictusFanControl.CpuProbe\VictusFanControl.CpuProbe.csproj", "{80F09D9B-734F-47C1-A54B-3A635FEF5BD3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.GpuProbe", "src\VictusFanControl.GpuProbe\VictusFanControl.GpuProbe.csproj", "{A3D3B5A1-4B40-4A49-8C71-8B6A5F7D54E2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A3D3B5A1-4B40-4A49-8C71-8B6A5F7D54E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A3D3B5A1-4B40-4A49-8C71-8B6A5F7D54E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A3D3B5A1-4B40-4A49-8C71-8B6A5F7D54E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A3D3B5A1-4B40-4A49-8C71-8B6A5F7D54E2}.Release|Any CPU.Build.0 = Release|Any CPU
 		{80F09D9B-734F-47C1-A54B-3A635FEF5BD3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{80F09D9B-734F-47C1-A54B-3A635FEF5BD3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{80F09D9B-734F-47C1-A54B-3A635FEF5BD3}.Release|Any CPU.ActiveCfg = Release|Any CPU
