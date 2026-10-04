@@ -18,6 +18,7 @@ internal sealed class QualifiedCpuGuardianDomainLifecycle :
     private readonly CpuPowerLimiter _limiter;
     private readonly CpuPowerPresetPolicy _policy;
     private readonly CpuPowerPresetTransitionController _transition;
+    private readonly PerformancePowerSourceKind? _requiredInitialSource;
 
     private int _enableCalls;
     private int _releaseCalls;
@@ -31,7 +32,8 @@ internal sealed class QualifiedCpuGuardianDomainLifecycle :
     internal QualifiedCpuGuardianDomainLifecycle(
         ICpuPowerLimitBackend backend,
         ICpuPowerSessionJournal journal,
-        CpuPowerPresetSet presets)
+        CpuPowerPresetSet presets,
+        PerformancePowerSourceKind? requiredInitialSource = null)
     {
         _backend =
             new CountingCpuPowerLimitBackend(
@@ -54,6 +56,9 @@ internal sealed class QualifiedCpuGuardianDomainLifecycle :
             new CpuPowerPresetTransitionController(
                 _policy,
                 _limiter);
+
+        _requiredInitialSource =
+            requiredInitialSource;
     }
 
     public GuardianDomainLifecycleSnapshot Snapshot =>
@@ -115,6 +120,18 @@ internal sealed class QualifiedCpuGuardianDomainLifecycle :
             throw new InvalidOperationException(
                 "CPU Guardian session is not Disabled before explicit enable: " +
                 _limiter.State);
+        }
+
+        if (_requiredInitialSource.HasValue &&
+            initialSource !=
+                _requiredInitialSource.Value)
+        {
+            throw new InvalidOperationException(
+                "Step 6G qualification initial source must be " +
+                _requiredInitialSource.Value +
+                "; observed " +
+                initialSource +
+                ".");
         }
 
         var selection =
@@ -368,6 +385,10 @@ internal static class QualifiedCpuGuardianDomainLifecycleSelfTest
                 root,
                 output);
 
+            RequiredInitialAcRejectsBatteryBeforeWrite(
+                root,
+                output);
+
             output.WriteLine(
                 "Step 6G CPU Guardian domain self-test: PASS (journaled AC 35/60 -> Battery 8/15 -> AC 35/60 -> baseline restore; fake backend only).");
 
@@ -576,6 +597,51 @@ internal static class QualifiedCpuGuardianDomainLifecycleSelfTest
 
         output.WriteLine(
             "PASS Step 6G CPU initial Unknown is fail-closed with zero writes");
+    }
+
+    private static void RequiredInitialAcRejectsBatteryBeforeWrite(
+        string root,
+        TextWriter output)
+    {
+        var journal =
+            new JsonCpuPowerSessionJournal(
+                Path.Combine(
+                    root,
+                    "initial-source-constraint-cpu-journal.json"),
+                TargetProfileId);
+
+        var backend =
+            new FakeCpuBackend(
+                journal);
+
+        using var lifecycle =
+            new QualifiedCpuGuardianDomainLifecycle(
+                backend,
+                journal,
+                CpuPowerProductDefaults.CreateDefaultPresetSet(),
+                requiredInitialSource:
+                    PerformancePowerSourceKind.Ac);
+
+        RequireThrows<InvalidOperationException>(
+            () =>
+                lifecycle.EnableAsync(
+                        cpuEnabled: true,
+                        gpuEnabled: false,
+                        PerformancePowerSourceKind.Battery,
+                        CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult(),
+            "qualification-only AC startup constraint must reject Battery");
+
+        Require(
+            lifecycle.Snapshot.CpuHardwareWriteAttempts ==
+                0 &&
+            !File.Exists(
+                journal.Path),
+            "initial-source constraint rejects before CPU writes/journal");
+
+        output.WriteLine(
+            "PASS Step 6G qualification-only initial AC constraint rejects Battery before writes");
     }
 
     private static void Require(
