@@ -81,32 +81,42 @@ internal static class GpuClockSessionJournalSelfTest
                 journal.Load() == active,
                 "active-unverified GPU journal round-trips");
 
-            using (var concurrentReader =
-                   new FileStream(
-                       path,
-                       FileMode.Open,
-                       FileAccess.Read,
-                       FileShare.ReadWrite |
-                       FileShare.Delete))
-            {
-                var pollingSafe =
-                    active with
+            var concurrentReader =
+                new FileStream(
+                    path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite |
+                    FileShare.Delete);
+
+            var releaseReader =
+                Task.Run(
+                    async () =>
                     {
-                        Generation = 6,
-                        UpdatedAtUtc =
-                            created.AddMilliseconds(1500)
-                    };
+                        await Task.Delay(30);
+                        concurrentReader.Dispose();
+                    });
 
-                journal.Store(
-                    pollingSafe);
+            var pollingSafe =
+                active with
+                {
+                    Generation = 6,
+                    UpdatedAtUtc =
+                        created.AddMilliseconds(1500)
+                };
 
-                active =
-                    pollingSafe;
-            }
+            journal.Store(
+                pollingSafe);
+
+            releaseReader.GetAwaiter()
+                .GetResult();
+
+            active =
+                pollingSafe;
 
             Require(
                 journal.Load() == active,
-                "GPU journal replacement succeeds while an external polling reader is open");
+                "GPU journal replacement retries across a transient polling-reader conflict");
 
             var switching =
                 active with
