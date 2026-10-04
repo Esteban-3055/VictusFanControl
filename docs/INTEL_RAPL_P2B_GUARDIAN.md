@@ -2288,3 +2288,69 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+### Step 6G.2 physical qualification evidence — 2026-10-04
+
+The bounded CPU-only Guardian gate is now **physically qualified PASS** on the
+exact HP-8C40-9D0R1LA-F18 target.
+
+Accepted evidence is retained under release/ as:
+
+    performance-guardian-6g-cpu-preflight-pass-8c40-2026-10-04.json
+    performance-guardian-6g-cpu-qualification-pass-8c40-2026-10-04.json
+    performance-guardian-6g-cpu-guardian-report-pass-8c40-2026-10-04.json
+
+The accepted run proved the complete intended sequence in one session:
+
+    direct AC confirmed
+      -> CPU 35/60 W
+      -> Battery confirmed
+      -> CPU 8/15 W
+      -> AC confirmed
+      -> CPU 35/60 W
+      -> normal DISABLE_SESSION
+      -> one conditional restore
+      -> final baseline 45/115 W
+      -> SHUTDOWN -> Stopped
+
+All three owned journal snapshots carried the same SessionId with generations
+2 -> 4 -> 6 and an immutable OriginalBaseline. No conflict, reacquire,
+ExternalHandoff or unresolved state occurred.
+
+Final invariants:
+
+    Guardian exit code             0
+    accepted / rejected requests   4 / 0
+    enable / release calls         1 / 1
+    CPU hardware write attempts    4
+    GPU hardware write attempts    0
+    CPU source dispatch attempts   2
+    GPU source dispatch attempts   0
+    source notifications           3
+    reconciliation signals         1
+    duplicate signals              2
+    initial / final source         AC / AC
+    final CPU state                Disabled
+    final owned fields restored    true
+    final snapshot                 45/115 W
+    remaining CPU journal          false
+    ExitReason                     CLIENT_SHUTDOWN
+    FinalPhase                     Stopped
+    SourceFailure / Failure        null / null
+    qualification Result           PASS
+
+This closes the **CPU-only Step 6G physical qualification** for the selected
+product defaults:
+
+    AC      PL1 35 W / PL2 60 W
+    Battery PL1  8 W / PL2 15 W
+
+The next engineering gate is combined CPU+GPU Guardian qualification. This
+physical PASS does not itself enable general production writes, GUI-triggered
+live hardware control, startup persistence or automatic profile integration.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
