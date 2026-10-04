@@ -1532,3 +1532,86 @@ qualified should the native listener be bound to real CPU/GPU controllers.
 
 productionHardwareWritesAuthorized remains false.
 
+## Step 6D — detached PerformanceGuardian lifecycle and semantic IPC
+
+A new VictusFanControl.PerformanceGuardian executable is introduced as a
+software-only lifecycle/IPC gate. This step deliberately does not expose a
+production run mode and does not bind real CPU RAPL or GPU NVML hardware.
+
+### Launch identity and single instance
+
+The guardian launch tuple is fixed by the launcher:
+
+- exact target profile id;
+- owner PID;
+- owner process start UTC ticks;
+- random session nonce;
+- named-pipe name.
+
+The guardian opens and retains a real Process handle for the owner and waits on
+that handle for liveness. PID polling is not used.
+
+A target-scoped named mutex prevents two guardians from becoming the
+performance writer at the same time. The native process fixture uses a
+fixture-specific mutex name to avoid unrelated CI collisions while preserving
+the same duplicate-guardian behavior.
+
+### Semantic IPC only
+
+The bounded length-prefixed JSON protocol exposes only:
+
+- HELLO;
+- ENABLE_SESSION;
+- DISABLE_SESSION;
+- STATUS;
+- SHUTDOWN.
+
+There is no raw MSR value, arbitrary PL1/PL2 value, arbitrary GPU clock range,
+WMI method id, EC offset or generic hardware-write command on the wire.
+
+Every transport connection must perform HELLO. HELLO must match the exact
+target, launch nonce, owner PID and owner start time. Reconnect with the same
+launch tuple is allowed and preserves the live session.
+
+### Startup/apply authority
+
+Merely starting PerformanceGuardian, observing AC/Battery or receiving a power
+notification grants zero startup Apply authority.
+
+ENABLE_SESSION is the only semantic command that grants live startup/apply
+authority, and it can enable CPU, GPU or both domains. An active domain
+selection cannot silently mutate; it must be disabled before a different
+selection is enabled.
+
+Recovery authority remains separate. This gate does not convert a stale CPU or
+GPU journal into startup authority.
+
+### Parent death and cleanup
+
+If the owner process handle signals exit, the detached guardian remains alive
+long enough to release the live session through its domain-lifecycle interface,
+revokes authority, records ParentLost and exits.
+
+For Step 6D the domain lifecycle is a recording implementation only. It counts
+enable/release operations and performs zero hardware I/O.
+
+The native Windows process fixture proves:
+
+- wrong nonce is rejected;
+- explicit CPU+GPU session enable succeeds;
+- pipe reconnect with the same launch tuple preserves the session;
+- a second guardian sharing the same mutex is rejected;
+- the guardian survives abrupt launcher exit;
+- owner-handle death is detected without PID polling;
+- exactly one simulated release occurs on parent death;
+- the guardian exits and releases its named mutex;
+- zero hardware writes occur.
+
+Production run mode, real power-source listener binding, real RAPL/NVML domain
+construction, GUI client integration and startup persistence remain closed.
+
+productionHardwareWritesAuthorized remains false.
+guiIntegrationAuthorized remains false.
+startupPersistenceAuthorized remains false.
+automaticProfileIntegrationAuthorized remains false.
+

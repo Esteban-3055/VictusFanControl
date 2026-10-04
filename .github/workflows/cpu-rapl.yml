@@ -10,6 +10,7 @@ on:
       - 'src/VictusFanControl.CpuProbe/**'
       - 'src/VictusFanControl.GpuProbe/**'
       - 'src/VictusFanControl.PerformanceProbe/**'
+      - 'src/VictusFanControl.PerformanceGuardian/**'
       - 'src/VictusFanControl/Hardware/Intel/**'
       - 'src/VictusFanControl/Hardware/Nvidia/**'
       - 'src/VictusFanControl/Hardware/PawnIo/**'
@@ -20,6 +21,7 @@ on:
       - 'scripts/test-performance-power-source.ps1'
       - 'scripts/test-performance-power-source-notification.ps1'
       - 'scripts/test-performance-source-coordinator.ps1'
+      - 'scripts/test-performance-guardian.ps1'
       - 'docs/INTEL_RAPL_P1.md'
       - 'docs/INTEL_RAPL_P2*.md'
       - 'release/intel-rapl-p1-qualification.json'
@@ -67,6 +69,9 @@ jobs:
 
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-source-coordinator.ps1 -Expect battery -SelfTest
           if ($LASTEXITCODE -ne 0) { throw "Performance source coordinator harness fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance Guardian software-only fixture failed." }
 
       - name: Build solution
         run: dotnet build VictusFanControl.sln --configuration Release --no-restore

@@ -41,6 +41,10 @@ internal static class CpuPowerLimiterSelfTest
                 "Performance source transition coordinator");
 
             Require(
+                PerformanceGuardianAuthoritySelfTest.Run(output) == 0,
+                "Performance Guardian explicit session authority gate");
+
+            Require(
                 GpuClockPresetPolicySelfTest.Run(output) == 0,
                 "GPU clock AC/battery preset selector");
 
