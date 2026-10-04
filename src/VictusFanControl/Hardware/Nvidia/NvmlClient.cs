@@ -3,10 +3,13 @@ using System.Text;
 
 namespace VictusFanControl.Hardware.Nvidia;
 
-internal sealed class NvmlClient : IDisposable
+internal sealed class NvmlClient :
+    IDisposable,
+    INvmlGpuClockControlTransport
 {
     private const int NvmlSuccess = 0;
     private const uint NvmlTemperatureGpu = 0;
+    private const uint NvmlClockGraphics = 0;
     private const int ReadAttempts = 3;
     private const int RetryDelayMs = 2;
 
@@ -19,6 +22,17 @@ internal sealed class NvmlClient : IDisposable
     private readonly NvmlDeviceGetPowerUsageDelegate _getPowerUsage;
     private readonly NvmlDeviceGetUtilizationRatesDelegate _getUtilizationRates;
     private readonly NvmlDeviceGetTemperatureDelegate _getTemperature;
+
+    // Clock-control exports are optional. Telemetry must continue to work on a
+    // driver that does not expose the locked-clock command surface.
+    private readonly NvmlDeviceSetGpuLockedClocksDelegate?
+        _setGpuLockedClocks;
+
+    private readonly NvmlDeviceResetGpuLockedClocksDelegate?
+        _resetGpuLockedClocks;
+
+    private readonly NvmlDeviceGetClockInfoDelegate?
+        _getClockInfo;
 
     private readonly string? _preferredDeviceName;
     private readonly bool _requirePreferredDevice;
@@ -44,6 +58,18 @@ internal sealed class NvmlClient : IDisposable
             _getPowerUsage = GetDelegate<NvmlDeviceGetPowerUsageDelegate>("nvmlDeviceGetPowerUsage");
             _getUtilizationRates = GetDelegate<NvmlDeviceGetUtilizationRatesDelegate>("nvmlDeviceGetUtilizationRates");
             _getTemperature = GetDelegate<NvmlDeviceGetTemperatureDelegate>("nvmlDeviceGetTemperature");
+
+            _setGpuLockedClocks =
+                TryGetDelegate<NvmlDeviceSetGpuLockedClocksDelegate>(
+                    "nvmlDeviceSetGpuLockedClocks");
+
+            _resetGpuLockedClocks =
+                TryGetDelegate<NvmlDeviceResetGpuLockedClocksDelegate>(
+                    "nvmlDeviceResetGpuLockedClocks");
+
+            _getClockInfo =
+                TryGetDelegate<NvmlDeviceGetClockInfoDelegate>(
+                    "nvmlDeviceGetClockInfo");
 
             InitializeDevice();
         }
@@ -76,6 +102,108 @@ internal sealed class NvmlClient : IDisposable
             ReinitializeDevice();
             return ReadSampleWithRetries();
         }
+    }
+
+
+    public NvmlGpuClockControlAvailability
+        GpuClockControlAvailability =>
+        new(
+            SetLockedGraphicsClocksExportAvailable:
+                _setGpuLockedClocks is not null,
+
+            ResetLockedGraphicsClocksExportAvailable:
+                _resetGpuLockedClocks is not null,
+
+            CurrentGraphicsClockExportAvailable:
+                _getClockInfo is not null,
+
+            // NVML exposes set/reset for GPU locked clocks, but the public API
+            // does not expose a getter for the exact requested min/max locked
+            // range. Current clock is an observation, not ownership proof.
+            ExactLockedRangeReadbackAvailable:
+                false);
+
+    /// <summary>
+    /// Performs exactly one NVML set call and never retries/reinitializes.
+    /// A future owner must durably journal authorization before invoking this
+    /// method. This class does not itself grant hardware-write authority.
+    /// </summary>
+    public NvmlControlCallResult SetGpuLockedClocksOnce(
+        uint minGraphicsClockMHz,
+        uint maxGraphicsClockMHz)
+    {
+        ObjectDisposedException.ThrowIf(
+            _disposed,
+            this);
+
+        if (_setGpuLockedClocks is null)
+        {
+            return new NvmlControlCallResult(
+                ExportAvailable: false,
+                Result: null);
+        }
+
+        return new NvmlControlCallResult(
+            ExportAvailable: true,
+            Result:
+                _setGpuLockedClocks(
+                    _device,
+                    minGraphicsClockMHz,
+                    maxGraphicsClockMHz));
+    }
+
+    /// <summary>
+    /// Performs exactly one NVML reset call and never retries/reinitializes.
+    /// </summary>
+    public NvmlControlCallResult ResetGpuLockedClocksOnce()
+    {
+        ObjectDisposedException.ThrowIf(
+            _disposed,
+            this);
+
+        if (_resetGpuLockedClocks is null)
+        {
+            return new NvmlControlCallResult(
+                ExportAvailable: false,
+                Result: null);
+        }
+
+        return new NvmlControlCallResult(
+            ExportAvailable: true,
+            Result:
+                _resetGpuLockedClocks(
+                    _device));
+    }
+
+    /// <summary>
+    /// Reads the current graphics clock once. This is deliberately not named
+    /// "locked-clock readback": current frequency cannot prove the requested
+    /// min/max locked range or VFC ownership.
+    /// </summary>
+    public NvmlUIntCallResult ReadCurrentGraphicsClockOnce()
+    {
+        ObjectDisposedException.ThrowIf(
+            _disposed,
+            this);
+
+        if (_getClockInfo is null)
+        {
+            return new NvmlUIntCallResult(
+                ExportAvailable: false,
+                Result: null,
+                Value: 0);
+        }
+
+        var result =
+            _getClockInfo(
+                _device,
+                NvmlClockGraphics,
+                out var clockMHz);
+
+        return new NvmlUIntCallResult(
+            ExportAvailable: true,
+            Result: result,
+            Value: clockMHz);
     }
 
     public void Dispose()
@@ -267,15 +395,28 @@ internal sealed class NvmlClient : IDisposable
 
     private T GetDelegate<T>(params string[] exports) where T : Delegate
     {
+        return TryGetDelegate<T>(exports) ??
+            throw new EntryPointNotFoundException(
+                $"NVML export not found: {string.Join(" or ", exports)}");
+    }
+
+    private T? TryGetDelegate<T>(
+        params string[] exports)
+        where T : Delegate
+    {
         foreach (var export in exports)
         {
-            if (NativeLibrary.TryGetExport(_library, export, out var address))
+            if (NativeLibrary.TryGetExport(
+                    _library,
+                    export,
+                    out var address))
             {
-                return Marshal.GetDelegateForFunctionPointer<T>(address);
+                return Marshal.GetDelegateForFunctionPointer<T>(
+                    address);
             }
         }
 
-        throw new EntryPointNotFoundException($"NVML export not found: {string.Join(" or ", exports)}");
+        return null;
     }
 
     private static void ThrowIfError(int result, string operation)
@@ -326,7 +467,29 @@ internal sealed class NvmlClient : IDisposable
     private delegate int NvmlDeviceGetUtilizationRatesDelegate(IntPtr device, out NvmlUtilization utilization);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    private delegate int NvmlDeviceGetTemperatureDelegate(IntPtr device, uint sensorType, out uint temperature);
+    private delegate int NvmlDeviceGetTemperatureDelegate(
+        IntPtr device,
+        uint sensorType,
+        out uint temperature);
 
-    internal readonly record struct GpuSample(double TemperatureC, double PowerW, double LoadPercent);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceSetGpuLockedClocksDelegate(
+        IntPtr device,
+        uint minGpuClockMHz,
+        uint maxGpuClockMHz);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceResetGpuLockedClocksDelegate(
+        IntPtr device);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceGetClockInfoDelegate(
+        IntPtr device,
+        uint clockType,
+        out uint clockMHz);
+
+    internal readonly record struct GpuSample(
+        double TemperatureC,
+        double PowerW,
+        double LoadPercent);
 }
