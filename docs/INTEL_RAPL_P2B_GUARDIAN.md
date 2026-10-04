@@ -281,3 +281,55 @@ The next gate is the **recovery planner**. It will consume a journal found after
 guardian death and classify the observed 0x610 state. It will be recovery-only:
 a restarted guardian will not resume retry timers or continue automatic
 reacquisition merely because a journal says attempt 3/5.
+
+
+## Step 4 — guardian-death recovery planner
+
+A hardware-free recovery planner now classifies a durable session together with
+the currently observed CPU power-limit snapshot. It has one strict rule:
+
+> a restarted guardian is release-only; it never resumes the 30-second retry
+> timer and never spends the remaining 5-attempt reacquisition budget.
+
+The planner exposes only four dispositions:
+
+- `ClearAlreadyReleased` — baseline/handoff/armed restore is already present;
+  delete the resolved journal without a write.
+- `PreserveExternalAndClear` — requested PL1/PL2 ownership is no longer
+  attributable to VictusFanControl; preserve the current external value and
+  delete the stale session journal.
+- `RestoreOwnedThenClear` — requested PL1/PL2 fields still match the durable
+  VFC-owned value; one conditional **release** restore may be attempted to the
+  captured ExternalHandoff or, if none exists, the OriginalBaseline.
+- `BlockedByLockRetainJournal` — requested PL1/PL2 fields still appear owned
+  but the register is locked; retain the journal and perform zero writes.
+
+There is intentionally no `ResumeReacquire`, `RetryContested` or equivalent
+action.
+
+Phase semantics after guardian death:
+
+- `WriteArmed`: if baseline is still present, clear; if requested PL fields
+  are present, release them; otherwise preserve the external owner.
+- `Owned`: release still-owned PL fields to ExternalHandoff/baseline.
+- `Contested`: preserve current state and clear. Never restart the retry
+  episode, even if the current watts happen to equal the old requested values.
+- `ReacquireWriteArmed`: if the reacquire write appears to have happened,
+  release to ExternalHandoff; if handoff/external values are present, clear
+  without retrying.
+- `Stability`: release a still-present provisional reacquire; never resume the
+  60-second stability timer.
+- `Yielded`: preserve current state and clear; a restart does not regain
+  authority.
+- `Restoring`: if the restore target/pending restore is already present,
+  clear; if requested PL fields are still present and unlocked, permit one
+  conditional recovery restore; otherwise preserve the external owner.
+- `Unresolved`: if the obstacle disappeared and requested PL fields still
+  match, permit release-only restore; if locked, retain; if another writer owns
+  the fields, preserve it and clear.
+
+The planner is pure and performs no I/O. The next gate will be a recovery
+executor that consumes only `RestoreOwnedThenClear` plans, persists/updates a
+`Restoring` journal before any recovery write, performs a compare-read,
+writes at most once, requires exact/equivalent release readback, and never
+converts recovery into reacquisition.

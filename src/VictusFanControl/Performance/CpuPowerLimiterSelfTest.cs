@@ -20,6 +20,10 @@ internal static class CpuPowerLimiterSelfTest
                 CpuPowerSessionJournalSelfTest.Run(output) == 0,
                 "durable CPU power session journal");
 
+            Require(
+                CpuPowerRecoveryPlannerSelfTest.Run(output) == 0,
+                "CPU power recovery-only planner");
+
             NormalApplyVerifyRelease(output);
             NonOwnedMutationIsPreservedWithoutConflict(output);
             SuccessfulReacquireRestoresExternalHandoff(output);

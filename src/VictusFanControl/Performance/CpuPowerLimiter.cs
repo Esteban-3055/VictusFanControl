@@ -34,7 +34,15 @@ internal readonly record struct CpuPowerLimitRestorePlan(
     ulong Value,
     string Status);
 
-internal interface ICpuPowerLimitBackend
+internal interface ICpuPowerOwnershipComparer
+{
+    bool OwnedFieldsMatch(
+        ulong expectedRaw,
+        CpuPowerLimitSnapshot current);
+}
+
+internal interface ICpuPowerLimitBackend :
+    ICpuPowerOwnershipComparer
 {
     bool IsSupported { get; }
 
@@ -43,10 +51,6 @@ internal interface ICpuPowerLimitBackend
     CpuPowerLimitApplyPlan BuildApplyPlan(
         CpuPowerLimitSnapshot baseline,
         CpuPowerLimitRequest request);
-
-    bool OwnedFieldsMatch(
-        ulong expectedRaw,
-        CpuPowerLimitSnapshot current);
 
     CpuPowerLimitApplyPlan BuildReacquirePlan(
         CpuPowerLimitSnapshot originalBaseline,
