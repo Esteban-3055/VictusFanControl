@@ -774,6 +774,16 @@ internal static class PerformanceGuardianCombinedGate6HQualification
             var baseline =
                 cpuBackend.Read();
 
+            var pl1Enabled =
+                (baseline.Raw &
+                 (1UL << 15)) !=
+                0;
+
+            var pl2Enabled =
+                (baseline.Raw &
+                 (1UL << 47)) !=
+                0;
+
             if (cpuBackend.PawnIoVersion <
                     new Version(
                         2,
@@ -782,6 +792,8 @@ internal static class PerformanceGuardianCombinedGate6HQualification
                 cpuBackend.PhysicalCoreCount !=
                     14 ||
                 baseline.Locked ||
+                !pl1Enabled ||
+                !pl2Enabled ||
                 Math.Abs(
                     baseline.Pl1Watts -
                     45) >
@@ -820,6 +832,16 @@ internal static class PerformanceGuardianCombinedGate6HQualification
             {
                 throw new InvalidOperationException(
                     "Step 6H child NVML locked-clock command surface is incomplete.");
+            }
+
+            var gpuObservation =
+                gpuBackend.ReadObservation();
+
+            if (!gpuObservation.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "Step 6H child GPU observation failed before write authority: " +
+                    gpuObservation.Status);
             }
 
             var cpuDomain =
@@ -1043,6 +1065,16 @@ internal static class PerformanceGuardianCombinedGate6HQualification
         var baseline =
             cpuSamples[0];
 
+        var pl1Enabled =
+            (baseline.Raw &
+             (1UL << 15)) !=
+            0;
+
+        var pl2Enabled =
+            (baseline.Raw &
+             (1UL << 47)) !=
+            0;
+
         if (cpu.PawnIoVersion <
                 new Version(
                     2,
@@ -1051,6 +1083,8 @@ internal static class PerformanceGuardianCombinedGate6HQualification
             cpu.PhysicalCoreCount !=
                 14 ||
             baseline.Locked ||
+            !pl1Enabled ||
+            !pl2Enabled ||
             Math.Abs(
                 baseline.Pl1Watts -
                 45) >
@@ -1341,7 +1375,7 @@ internal static class PerformanceGuardianCombinedGate6HQualification
                 CpuPowerJournalPhase.Owned &&
             record.ExternalHandoff is null &&
             record.Conflict.State ==
-                CpuPowerConflictState.Clear &&
+                CpuPowerConflictState.Inactive &&
             Math.Abs(
                 applied.Pl1Watts -
                 pl1) <
