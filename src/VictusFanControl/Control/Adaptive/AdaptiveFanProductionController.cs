@@ -548,6 +548,13 @@ public sealed class AdaptiveFanProductionController
             if (_coordinator.Authority != FanAuthority.Custom &&
                 _planner.NotionalCustom)
             {
+                if (_automaticAdmission is not null)
+                {
+                    _automaticAdmission.Close("Automatic session unexpectedly lost Custom authority.");
+                    ResetPolicyStateLocked();
+                    return await RestoreIfOwnedLockedAsync("Automatic authority was lost; explicit mode restart required.",
+                        true, cancellationToken).ConfigureAwait(false);
+                }
                 _engine.Reset();
                 _preparedEngine?.Reset();
                 _planner.Reset();

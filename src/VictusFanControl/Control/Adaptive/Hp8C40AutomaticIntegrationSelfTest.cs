@@ -93,16 +93,32 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             var controller = Create(coordinator);
             await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic, CancellationToken.None);
             var cold = Sample(Now(), 71);
-            await controller.ProcessAutomaticAsync(cold, Raw(cold), CancellationToken.None);
-            await coordinator.RestoreFirmwareAsync("synthetic authority loss", CancellationToken.None);
+            controller.EvaluateAutomaticSafety(cold, Raw(cold), observe: true);
             clock = 100;
             backend.AfterEnter = () => clock += 2000;
             var high = Sample(Now(), 98);
             var denied = false;
             try { await controller.ProcessAutomaticAsync(high, Raw(high), CancellationToken.None); }
             catch (InvalidOperationException) { denied = true; }
-            Check(denied && backend.Levels.SequenceEqual(new[] { 31 }) && coordinator.Authority == FanAuthority.Firmware,
-                "deadline after queued/preparation work blocks the backend command");
+            Check(denied && backend.Levels.Count == 0 && coordinator.Authority == FanAuthority.Firmware,
+                "deadline after queued/preparation work blocks the first backend command");
+        }
+
+        clock = 0;
+        backend = new Backend();
+        await using (var coordinator = new FanControlCoordinator(backend))
+        {
+            var controller = Create(coordinator);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic, CancellationToken.None);
+            var cold = Sample(Now(), 71);
+            await controller.ProcessAutomaticAsync(cold, Raw(cold), CancellationToken.None);
+            await coordinator.RestoreFirmwareAsync("synthetic authority loss", CancellationToken.None);
+            clock = 100;
+            var next = Sample(Now(), 72);
+            var lost = await controller.ProcessAutomaticAsync(next, Raw(next), CancellationToken.None);
+            Check(lost.Action == AdaptiveFanProductionActionKind.HoldFirmware && backend.Levels.Count == 1 &&
+                !controller.AutomaticFreshAcquisitionRequired,
+                "unexpected authority loss cannot silently reacquire Automatic control");
         }
 
         // Backend/native preparation can outlive the coordinator's initial check.

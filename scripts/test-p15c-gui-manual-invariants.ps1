@@ -359,7 +359,19 @@ foreach($needle in @(
 )){Assert-Contains $surface $needle ("P15C real-P13 fresh-Safety wiring missing: {0}" -f $needle)}
 
 Assert-NotContains $main 'ApplyManualAsync(' 'P15C MainForm must not bypass the real P13 Manual Apply handler.'
-Assert-NotContains $main 'ProcessAutomaticAsync(' 'P15C MainForm must not execute Automatic policy.'
+# Shared Automatic preparation may exist, but P15C still cannot execute it.
+$automaticStart=$main.IndexOf('private async Task ProcessAutomaticSnapshotAsync(',[StringComparison]::Ordinal)
+$automaticEnd=$main.IndexOf('private void WorkerOnSnapshotAvailable(',[StringComparison]::Ordinal)
+Assert-True ($automaticStart -ge 0 -and $automaticEnd -gt $automaticStart) 'Prepared Automatic worker method is missing.'
+$automaticMethod=$main.Substring($automaticStart,$automaticEnd-$automaticStart)
+$authorizationCheck=$automaticMethod.IndexOf('!_fanProductionController.AutomaticExecutionAuthorized',[StringComparison]::Ordinal)
+$modeCheck=$automaticMethod.IndexOf('_fanProductionController.Mode != AdaptiveFanProductionMode.Automatic',[StringComparison]::Ordinal)
+$blockedReturn=$automaticMethod.IndexOf('return;',[StringComparison]::Ordinal)
+$automaticCall=$automaticMethod.IndexOf('_fanProductionController.ProcessAutomaticAsync(',[StringComparison]::Ordinal)
+Assert-True ($authorizationCheck -ge 0 -and $modeCheck -gt $authorizationCheck -and
+    $blockedReturn -gt $modeCheck -and $automaticCall -gt $blockedReturn) 'Automatic must return before the controller call when authorization/mode is unavailable.'
+Assert-True ([regex]::Matches($main,'\.ProcessAutomaticAsync\(').Count -eq 1) 'Every MainForm Automatic call must use that guarded method.'
+Assert-True ([regex]::IsMatch($main,'var automaticExecutionAuthorized\s*=\s*isolatedManualQualification\s*\?\s*false\s*:\s*Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized')) 'Isolated Manual qualification must force Automatic authorization false.'
 
 foreach($needle in @(
  '_p15cGuiManualHardwareTest',

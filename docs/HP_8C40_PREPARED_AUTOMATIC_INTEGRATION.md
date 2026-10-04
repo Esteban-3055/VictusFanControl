@@ -16,7 +16,7 @@ El worker espera cada procesamiento Automatic en su propio bucle; no se lanza un
 
 El supervisor, las comprobaciones de pantalla y el controlador usan la misma admisión de la sesión Automatic. Sólo observar una adquisición nueva puede avanzar la confirmación. La pantalla de Automatic muestra el resultado del controlador; los perfiles de vista previa no sustituyen su política activa.
 
-Cada comando Automatic lleva una comprobación que fluye por la preparación asincrónica: el coordinador la aplica después de esperar su exclusión, el backend antes del setter y el cliente HP inmediatamente antes de `InvokeMethod`. Se vuelve a comprobar estado/frescura y el plazo sin consumir otra secuencia de control. Las lecturas y `FF/FF → LegacyDefault` permanecen disponibles tras el cierre. Ningún resultado frío tardío ni reinicio de la política reabre la admisión: hace falta una transición explícita Firmware → Automatic y un nuevo inicio sano.
+Cada comando Automatic lleva una comprobación que fluye por la preparación asincrónica: el coordinador la aplica después de esperar su exclusión, el backend antes del setter y el cliente HP inmediatamente antes de `InvokeMethod`. Se vuelve a comprobar estado/frescura y el plazo sin consumir otra secuencia de control. Las lecturas y `FF/FF → LegacyDefault` permanecen disponibles tras el cierre. Una pérdida inesperada de autoridad también cierra la sesión. Ningún resultado frío tardío ni reinicio de la política reabre la admisión: hace falta una transición explícita Firmware → Automatic y un nuevo inicio sano.
 
 El backend final conserva sus verificaciones EC de propiedad, ACK y watchdog. Compartir política/admisión con el experimento no transfiere automáticamente la evidencia de su transporte sin EC a esa ruta final.
 
