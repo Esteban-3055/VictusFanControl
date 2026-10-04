@@ -2579,3 +2579,103 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+## Step 6I — combined Modern Standby lifecycle qualification
+
+Step 6H physically closed the awake combined CPU+GPU path. Step 6I qualifies
+the exact-target Modern Standby lifecycle without changing the CPU/GPU
+ownership models and without touching fan control.
+
+The lifecycle policy intentionally follows the already physically qualified
+HP 8C40 Modern Standby M6 signal ordering:
+
+    GUID_SESSION_DISPLAY_STATUS Off
+      -> fence/stop AC/DC source dispatch
+      -> normal CPU release
+      -> normal GPU release
+      -> CPU must be back at pre-session 45/115 W
+      -> GPU Reset must be accepted
+      -> both performance journals must be absent
+
+    PBT_APMSUSPEND
+      -> observation/safety fallback only
+      -> if display-Off release already completed, no second release
+
+    PBT_APMRESUMEAUTOMATIC / PBT_APMRESUMESUSPEND /
+    PBT_APMRESUMECRITICAL while display remains Off
+      -> record only
+      -> never reacquire CPU/GPU authority
+
+    GUID_SESSION_DISPLAY_STATUS On
+      -> fresh GetSystemPowerStatus prime
+      -> create fresh CPU/GPU ownership sessions for the current source
+      -> restart AC/DC listener
+
+For the first physical qualification the charger remains connected across the
+whole sleep cycle, so resume must reacquire AC 35/60 W plus GPU 210..1850 MHz.
+The pre-sleep CPU restore and GPU Reset use the same already-qualified normal
+release paths as Step 6H; no blind restart recovery is introduced.
+
+The standby runtime is a wrapper around the existing source runtime. It keeps
+the Guardian IPC authority session alive across Modern Standby while physical
+CPU/GPU authority is explicitly released during the display-Off interval.
+After display-On, fresh domain sessions are required; the pre-sleep CPU/GPU
+SessionIds must not be reused.
+
+The synthetic gate proves:
+
+- display Off releases once;
+- maintenance resume broadcasts while display Off never reacquire;
+- display On performs one fresh source prime and one domain reacquire;
+- PBT_APMSUSPEND is a single-shot fallback if the primary display-Off signal
+  was not observed.
+
+Physical Step 6I additionally requires:
+
+- exact HP-8C40-9D0R1LA-F18 target and i7-13700H;
+- qualified IntelMSR.bin hash;
+- directly confirmed AC;
+- unlocked 45/115 W CPU baseline;
+- RTX 4060 Laptop GPU and complete NVML Set/Reset command surface;
+- absent CPU/GPU journals and free production target mutex;
+- at least 15 seconds between the display-Off release and display-On reacquire;
+- primary display-Off release success;
+- no suspend-fallback release in the accepted run;
+- at least one registered PBT_APMSUSPEND;
+- at least one resume notification suppressed while display remained Off;
+- fresh CPU and GPU SessionIds after display-On;
+- final client disable restores CPU and resets GPU again;
+- final CPU 45/115 W, both domains Disabled, both journals absent,
+  CLIENT_SHUTDOWN/Stopped and no Guardian/source/lifecycle failure.
+
+The expected hardware mutation count for one clean cycle is four per domain:
+
+    CPU:
+      initial AC apply
+      display-Off restore
+      display-On AC apply
+      final restore
+
+    GPU:
+      initial AC Set
+      display-Off Reset
+      display-On AC Set
+      final Reset
+
+Run from elevated PowerShell, keep the charger connected, and initiate Windows
+Sleep manually when the harness reports READY:
+
+    .\scripts\test-performance-guardian-6i-standby.ps1
+      -ConfirmTargetProfile HP-8C40-9D0R1LA-F18
+      -ConfirmCpuHardwareWrites
+      -ConfirmExclusiveGpuController
+      -ConfirmModernStandby
+
+The harness never calls SetSuspendState. GUI integration remains out of scope
+for this gate.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
