@@ -147,7 +147,7 @@ internal sealed partial class MainForm
             new
             {
                 kind = "ui-interaction",
-                observation.TimestampUtc,
+                timestampUtc = DateTimeOffset.UtcNow,
                 interactionKind = observation.Kind.ToString(),
                 requestedMode = observation.RequestedMode?.ToString(),
                 observation.EqualFanLevel,
