@@ -1004,6 +1004,233 @@ internal static class PerformanceGuardianCombinedGate6HQualification
         }
     }
 
+    private static void RecoverStaleGpuQualificationJournal(
+        string evidenceRoot)
+    {
+        using var mutex =
+            new Mutex(
+                initiallyOwned: true,
+                PerformanceGuardianHost.ProductionMutexName(
+                    TargetProfileId),
+                out var createdNew);
+
+        if (!createdNew)
+        {
+            throw new InvalidOperationException(
+                "Step 6H stale GPU recovery refused because another target Guardian currently owns the production mutex.");
+        }
+
+        try
+        {
+            var source =
+                new WindowsPerformancePowerSourceReader()
+                    .Read();
+
+            if (!source.Succeeded ||
+                source.Source !=
+                    PerformancePowerSourceKind.Ac)
+            {
+                throw new InvalidOperationException(
+                    "Step 6H stale GPU qualification recovery requires directly confirmed AC.");
+            }
+
+            var journal =
+                new JsonGpuClockSessionJournal(
+                    GpuJournalPath,
+                    TargetProfileId);
+
+            var stale =
+                journal.Load() ??
+                throw new InvalidOperationException(
+                    "GPU journal disappeared before qualification recovery.");
+
+            if (!GpuJournalContainsOnlyQualifiedRequests(
+                    stale))
+            {
+                throw new InvalidOperationException(
+                    "Step 6H refuses to recover a GPU journal containing requests outside the physically qualified 210..1850 / 210..1200 MHz presets.");
+            }
+
+            using var nvml =
+                new NvmlClient(
+                    ExpectedGpuName,
+                    requirePreferredDevice: true);
+
+            var backend =
+                new NvmlGpuClockLimitBackend(
+                    nvml,
+                    hardwareWritesAuthorized: true);
+
+            if (!backend.Capabilities.HasCompleteCommandSurface)
+            {
+                throw new InvalidOperationException(
+                    "Step 6H stale GPU recovery requires the complete NVML Set/Reset command surface.");
+            }
+
+            var observationBefore =
+                backend.ReadObservation();
+
+            if (!observationBefore.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "Step 6H stale GPU recovery could not observe the target before Reset: " +
+                    observationBefore.Status);
+            }
+
+            var before =
+                new StaleGpuRecoveryReport(
+                    SchemaVersion: 1,
+                    CapturedAtUtc:
+                        DateTimeOffset.UtcNow,
+                    TargetProfileId,
+                    QualificationRecoveryOnly: true,
+                    ExclusiveControllerConfirmed: true,
+                    Source:
+                        source,
+                    StaleJournal:
+                        stale,
+                    ObservationBefore:
+                        observationBefore,
+                    ResetResult:
+                        null,
+                    JournalDeleted:
+                        false,
+                    HardwareWritePerformed:
+                        false,
+                    Result:
+                        "ARMED_BEFORE_RESET",
+                    Failure:
+                        null);
+
+            DurableJson(
+                Path.Combine(
+                    evidenceRoot,
+                    "stale-gpu-recovery-before.json"),
+                before);
+
+            var reset =
+                backend.ResetLockedGraphicsClocks();
+
+            if (!reset.Succeeded)
+            {
+                var failed =
+                    before with
+                    {
+                        CapturedAtUtc =
+                            DateTimeOffset.UtcNow,
+                        ResetResult =
+                            reset,
+                        HardwareWritePerformed =
+                            true,
+                        Result =
+                            "FAIL",
+                        Failure =
+                            "NVML Reset was not accepted. The stale GPU journal is intentionally preserved."
+                    };
+
+                DurableJson(
+                    Path.Combine(
+                        evidenceRoot,
+                        "stale-gpu-recovery.json"),
+                    failed);
+
+                throw new InvalidOperationException(
+                    "Step 6H explicit stale GPU Reset failed: " +
+                    reset.Status);
+            }
+
+            journal.Delete();
+
+            var deleted =
+                !File.Exists(
+                    GpuJournalPath);
+
+            var completed =
+                before with
+                {
+                    CapturedAtUtc =
+                        DateTimeOffset.UtcNow,
+                    ResetResult =
+                        reset,
+                    JournalDeleted =
+                        deleted,
+                    HardwareWritePerformed =
+                        true,
+                    Result =
+                        deleted
+                            ? "PASS"
+                            : "FAIL",
+                    Failure =
+                        deleted
+                            ? null
+                            : "NVML Reset succeeded but the stale GPU journal could not be deleted."
+                };
+
+            DurableJson(
+                Path.Combine(
+                    evidenceRoot,
+                    "stale-gpu-recovery.json"),
+                completed);
+
+            if (!deleted)
+            {
+                throw new InvalidOperationException(
+                    "Step 6H stale GPU Reset succeeded but journal deletion failed.");
+            }
+
+            Console.WriteLine(
+                "Step 6H: stale GPU qualification journal recovered with exactly one explicit NVML Reset; journal deleted.");
+        }
+        finally
+        {
+            mutex.ReleaseMutex();
+        }
+    }
+
+    private static bool GpuJournalContainsOnlyQualifiedRequests(
+        GpuClockSessionJournalRecord record)
+    {
+        static bool Qualified(
+            GpuClockLimitRequest request) =>
+            request ==
+                new GpuClockLimitRequest(
+                    210,
+                    1850) ||
+            request ==
+                new GpuClockLimitRequest(
+                    210,
+                    1200);
+
+        var hasRequest =
+            false;
+
+        if (record.CommittedRequest.HasValue)
+        {
+            hasRequest =
+                true;
+
+            if (!Qualified(
+                    record.CommittedRequest.Value))
+            {
+                return false;
+            }
+        }
+
+        if (record.PendingRequest.HasValue)
+        {
+            hasRequest =
+                true;
+
+            if (!Qualified(
+                    record.PendingRequest.Value))
+            {
+                return false;
+            }
+        }
+
+        return hasRequest;
+    }
+
     private static CombinedPreflight CaptureReadOnlyPreflight(
         string modulePath)
     {
@@ -2276,6 +2503,21 @@ internal static class PerformanceGuardianCombinedGate6HQualification
         bool CpuHardwareWritesConfirmed,
         bool ExclusiveGpuControllerConfirmed,
         bool RecoverStaleGpuQualificationJournal);
+
+    private sealed record StaleGpuRecoveryReport(
+        int SchemaVersion,
+        DateTimeOffset CapturedAtUtc,
+        string TargetProfileId,
+        bool QualificationRecoveryOnly,
+        bool ExclusiveControllerConfirmed,
+        PerformancePowerSourceObservation Source,
+        GpuClockSessionJournalRecord StaleJournal,
+        GpuClockBackendObservation ObservationBefore,
+        GpuClockBackendWriteResult? ResetResult,
+        bool JournalDeleted,
+        bool HardwareWritePerformed,
+        string Result,
+        string? Failure);
 
     private sealed record CombinedPreflight(
         DateTimeOffset CapturedAtUtc,
