@@ -28,7 +28,9 @@ internal static class WmiOnlyInvestigationPolicy
         if (residualEc) Volatile.Write(ref _residualEc, 1);
         Interlocked.Exchange(ref _enabled, 1);
         EcWmiInvestigationTrace.Record(0, "isolation.enabled",
-            residualEc
+            WmiFanExperimentBoundary.Enabled
+                ? $"Experimental WMI fan session; control={WmiFanExperimentBoundary.Control}; direct EC prohibited"
+                : residualEc
                 ? "Scenario C: HP RPM WMI + EC 0x34/0x35/0xEC/0xF4 reads; HP writes prohibited; firmware retains control"
                 : "HP 8C40 fan RPM via WMI only; direct EC and HP writes prohibited; firmware retains control");
     }
@@ -66,6 +68,16 @@ internal static class WmiOnlyInvestigationPolicy
     internal static void EnsureWmiRequestAllowed(HpBiosRequest request)
     {
         if (!Enabled) return;
+        if (WmiFanExperimentBoundary.Enabled)
+        {
+            try { WmiFanExperimentBoundary.EnsureRequestAllowed(request); return; }
+            catch
+            {
+                Interlocked.Increment(ref _deniedWmi);
+                EcWmiInvestigationTrace.Record(0, "isolation.wmi-request.denied", "WMI experiment whitelist/lifecycle");
+                throw;
+            }
+        }
         if (request.Command == Hp8C40BiosFanControl.DefaultCommand &&
             request.CommandType == Hp8C40BiosFanControl.GetFanLevelCommandType &&
             request.OutputSize == 128 && request.Payload is { Length: 4 } &&

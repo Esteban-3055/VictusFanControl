@@ -14,7 +14,7 @@ param(
     [scriptblock]$ObservationGuard,
     [scriptblock]$ObservationFinished,
     [object]$ObservationContext,
-    [ValidateSet('passive','wmi-only-no-direct-ec','scenario-a-no-vfc','scenario-c-residual-ec')][string]$InvestigationMode = 'passive',
+    [ValidateSet('passive','wmi-only-no-direct-ec','scenario-a-no-vfc','scenario-c-residual-ec','wmi-fan-normal-recovery-no-ec')][string]$InvestigationMode = 'passive',
     [switch]$SelfTest
 )
 
@@ -334,6 +334,19 @@ pueden acceder a EC. No prueba estabilidad de Manual ni autorizacion WMI 26h.
 Q cierra el CLI, vacia su log y empaqueta. No cerrar la consola a la fuerza.
 '@
 }
+if($InvestigationMode -eq 'wmi-fan-normal-recovery-no-ec'){
+    Save-Text (Join-Path $script:Root 'LEEME.txt') @'
+EXPERIMENTO WMI: ver wmi-fan-experiment/summary.json y launcher-summary.json.
+El recolector es pasivo; el lanzador puede ejecutar control fisico si Control=true.
+El worker calcula la curva y solo usa HP WMI para ventiladores; EC directo bloqueado.
+CPU usa MSR/PawnIO; GPU usa NVML. M4 se pausa durante la ventana de comparacion.
+Las RPM y las solicitudes aceptadas no prueban la propiedad del firmware.
+FirmwareRestorationVerified=false es una limitacion explicita, no un valor omitido.
+Q solicita cierre y recuperacion. No matar procesos ni borrar leases pendientes.
+Si hay native-inflight.json o lease retenido, no repetir pruebas antes de revisar.
+Una captura sin nuevos eventos no demuestra ausencia definitiva del fallo.
+'@
+}
 
 try {
     Stage '1/8 Contexto de sistema y reloj (registro local, sin consultas HP WMI).' {
@@ -427,7 +440,7 @@ finally {
     Stage 'ETW finalizar y vaciar solo las sesiones propias.' {Stop-AcpiTrace}
     Stage '7/8 Logs y procesos finales; eventos Windows actualizados.' {
         Capture-Logs 'after';[void](Process-Snapshot 'after');Export-Events 'after'
-        Save-Json (Join-Path $script:Root 'capture-summary.json') ([pscustomobject]@{StartedLocal=$started.ToString('o');EndedLocal=[DateTimeOffset]::Now.ToString('o');Warnings=$script:Warnings.Count;HardwareReads=($InvestigationMode -in @('wmi-only-no-direct-ec','scenario-c-residual-ec'));InvestigationMode=$InvestigationMode;StaticFirmwareApi=(-not $MinimalPreparation);MinimalPreparation=[bool]$MinimalPreparation;EtwRequested=(-not $SkipAcpiTrace);MaximumEvents=$MaximumEvents;CollectorVersion='3-isolation';FanWrites=$false;EventChannelsEnabled=$false;SourceLogsPreserved=$true;RepoRoot=$RepoRoot})
+        Save-Json (Join-Path $script:Root 'capture-summary.json') ([pscustomobject]@{StartedLocal=$started.ToString('o');EndedLocal=[DateTimeOffset]::Now.ToString('o');Warnings=$script:Warnings.Count;HardwareReads=($InvestigationMode -in @('wmi-only-no-direct-ec','scenario-c-residual-ec','wmi-fan-normal-recovery-no-ec'));InvestigationMode=$InvestigationMode;StaticFirmwareApi=(-not $MinimalPreparation);MinimalPreparation=[bool]$MinimalPreparation;EtwRequested=(-not $SkipAcpiTrace);MaximumEvents=$MaximumEvents;CollectorVersion='4-wmi-experiment';FanWrites=($InvestigationMode -eq 'wmi-fan-normal-recovery-no-ec' -and [bool]$ObservationContext.Control);CollectorFanWrites=$false;EventChannelsEnabled=$false;SourceLogsPreserved=$true;RepoRoot=$RepoRoot})
     }
     Say '8/8 Generar manifiesto SHA-256 y ZIP. No se borran los logs originales.'
     try {[void](Package)}catch{Write-Host ('No se pudo crear ZIP: '+$_.Exception.Message) -ForegroundColor Red;Write-Host ('Adjunta manualmente la carpeta: '+$script:Root)}

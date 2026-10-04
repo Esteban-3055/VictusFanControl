@@ -79,6 +79,13 @@ public sealed class HpOmenBiosWmiClient
 
     public HpBiosResponse SendWithResponse(HpBiosRequest request)
     {
+        return WmiFanExperimentBoundary.Enabled
+            ? WmiFanExperimentBoundary.Serialize(request, () => SendWithResponseCore(request))
+            : SendWithResponseCore(request);
+    }
+
+    private HpBiosResponse SendWithResponseCore(HpBiosRequest request)
+    {
         WmiOnlyInvestigationPolicy.EnsureWmiRequestAllowed(request);
         if (request.OutputSize is not (0 or 4 or 128 or 1024 or 4096))
         {
@@ -126,10 +133,13 @@ public sealed class HpOmenBiosWmiClient
             };
 
             EcWmiInvestigationTrace.Record(trace, "wmi.invoke.begin", methodName);
+            if (WmiFanExperimentBoundary.Enabled) WmiFanExperimentBoundary.EnsureRequestAllowed(request);
+            WmiFanExperimentBoundary.MarkNativeStart(request);
             using var methodOutput = target.InvokeMethod(methodName, methodInput, invokeOptions)
                 ?? throw new HpBiosCallException(
                     $"HP WMI method {methodName} returned no output.");
 
+            WmiFanExperimentBoundary.MarkNativeReturned();
             EcWmiInvestigationTrace.Record(trace, "wmi.invoke.end", methodName);
             var resultData = methodOutput["OutData"] as ManagementBaseObject
                 ?? throw new HpBiosCallException(

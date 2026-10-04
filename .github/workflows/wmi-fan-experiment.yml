@@ -1,0 +1,46 @@
+name: wmi-fan-experiment
+on:
+  push:
+    branches: ['feature/**']
+  pull_request:
+    branches: [main]
+jobs:
+  experiment:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build CLI and GUI
+        run: dotnet build VictusFanControl.sln -c Release
+      - name: WMI lifecycle and direct EC prohibition fault fixtures
+        run: dotnet run --project src/VictusFanControl -c Release --no-build -- --wmi-fan-experiment-self-test
+      - name: Existing WMI telemetry and safety regressions
+        shell: pwsh
+        run: |
+          dotnet run --project src/VictusFanControl -c Release --no-build -- --fan-wmi-telemetry-self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Existing WMI telemetry fixtures failed.' }
+          dotnet run --project src/VictusFanControl -c Release --no-build -- --safety-self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Existing SafetyGate fixtures failed.' }
+          dotnet run --project src/VictusFanControl -c Release --no-build -- --adaptive-policy-self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Existing adaptive policy fixtures failed.' }
+      - name: Launcher parsing and isolation fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          $tokens=$null; $errors=$null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/Start-Victus-WmiFanExperiment.ps1'),[ref]$tokens,[ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
+          .\scripts\Start-Victus-WmiFanExperiment.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-WmiFanExperiment.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'PS5.1 experiment fixtures failed.' }
+          .\scripts\Collect-Victus-WmiTimeout.ps1 -SelfTest
+      - name: Foreign Windows machine rejects before HP WMI
+        shell: pwsh
+        run: |
+          $folder=Join-Path $env:RUNNER_TEMP 'foreign-wmi-experiment'
+          dotnet run --project src/VictusFanControl -c Release --no-build -- --wmi-fan-experiment --session-dir $folder --duration-seconds 30
+          if ($LASTEXITCODE -eq 0) { throw 'Foreign target accepted.' }
+          if (Test-Path (Join-Path $folder 'write-intent.json')) { throw 'Write intent occurred on foreign target.' }
+          if (Test-Path (Join-Path $folder 'native-inflight.json')) { throw 'Native call occurred on foreign target.' }
+          exit 0

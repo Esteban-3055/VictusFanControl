@@ -14,6 +14,10 @@ internal static class Program
     public static async Task<int> Main(string[] args)
     {
         EcWmiInvestigationTrace.Initialize();
+        if (args.Length > 0 && args[0] == "--wmi-fan-experiment-self-test")
+            return args.Length == 1 ? WmiFanExperimentSelfTest.Run(Console.Out) : 2;
+        if (args.Length > 0 && args[0] == "--wmi-fan-experiment")
+            return await WmiFanExperiment.RunAsync(args);
         Console.WriteLine("VictusFanControl v0.4.0-dev / 8C40 port");
         Console.WriteLine("Telemetry: PawnIO Intel MSR (package + physical cores) + HP WMI/ACPI fan RPM (8C40) or EC (88F8) + NVIDIA NVML.");
         Console.WriteLine("Exact HP 88F8/8C40 targets are resolved fail-closed; automatic fan policy remains OFF.");
