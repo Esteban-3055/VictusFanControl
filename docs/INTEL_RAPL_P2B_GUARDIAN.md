@@ -1484,3 +1484,51 @@ Only after this composition gate passes should the detached PerformanceGuardian
 process be allowed to bind the native listener to the real per-domain
 controllers under explicit runtime/startup authority rules.
 
+## Step 6C physical result — notification/query/dedup/dispatch composition
+
+The read-only composition harness has now passed physically in both directions
+on HP-8C40-9D0R1LA-F18.
+
+AC -> Battery:
+
+- prime direct query: Ac, RawAcLineStatus=1;
+- initial same-source notification: suppressed;
+- suppressed event performed zero CPU and zero GPU dispatches;
+- charger removal direct query: Battery, RawAcLineStatus=0;
+- exactly one CPU recording dispatch;
+- exactly one GPU recording dispatch;
+- both recording domains returned success;
+- listener error: none;
+- hardware writes: none.
+
+Battery -> AC:
+
+- prime direct query: Battery, RawAcLineStatus=0;
+- initial same-source notification: suppressed;
+- suppressed event performed zero CPU and zero GPU dispatches;
+- charger insertion direct query: Ac, RawAcLineStatus=1;
+- exactly one CPU recording dispatch;
+- exactly one GPU recording dispatch;
+- both recording domains returned success;
+- listener error: none;
+- hardware writes: none.
+
+This physically qualifies the complete read-only composition:
+
+    GUID_ACDC_POWER_SOURCE
+    -> fresh GetSystemPowerStatus query
+    -> source comparison / duplicate suppression
+    -> independent CPU and GPU dispatch
+
+It does not yet bind the dispatcher to physical RAPL/NVML controllers.
+
+Consolidated evidence:
+
+    release/performance-source-coordinator-qualification-8c40-2026-10-04.json
+
+The next gate is the detached PerformanceGuardian process/lifecycle and its
+explicit session/startup authority. Only after that lifecycle contract is
+qualified should the native listener be bound to real CPU/GPU controllers.
+
+productionHardwareWritesAuthorized remains false.
+
