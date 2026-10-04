@@ -9,6 +9,7 @@ internal static class Program
     private const string TargetProfileId =
         "HP-8C40-9D0R1LA-F18";
 
+    [STAThread]
     public static int Main(
         string[] args)
     {
@@ -19,6 +20,20 @@ internal static class Program
             {
                 return PerformancePowerSourceQuerySelfTest.Run(
                     Console.Out);
+            }
+
+            if (args.Length == 1 &&
+                args[0] == "--notification-self-test")
+            {
+                return PowerSourceNotificationQualification.SelfTest(
+                    Console.Out);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--watch-power-source")
+            {
+                return PowerSourceNotificationQualification.Run(
+                    args);
             }
 
             if (!TryParse(
@@ -176,7 +191,13 @@ internal static class Program
             "VictusFanControl.PerformanceProbe --self-test");
 
         Console.WriteLine(
-            "The probe is read-only and queries Windows GetSystemPowerStatus once.");
+            "VictusFanControl.PerformanceProbe --notification-self-test");
+
+        Console.WriteLine(
+            "VictusFanControl.PerformanceProbe --watch-power-source --expect <ac|battery> --timeout-seconds <5..120> --output <json-path>");
+
+        Console.WriteLine(
+            "Both probe modes are read-only. Notifications are triggers only; GetSystemPowerStatus confirms the source.");
     }
 
     private readonly record struct PowerSourceReport(

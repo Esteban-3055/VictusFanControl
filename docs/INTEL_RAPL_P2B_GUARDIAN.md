@@ -1303,3 +1303,71 @@ to the CPU/GPU transition controllers.
 No notification listener, guardian IPC, startup Apply authority, GUI authority
 or automatic profile integration is enabled by Step 6A.
 
+## Step 6A physical result — direct Windows AC/DC query
+
+The direct Windows source query has now passed physically on the exact target.
+
+Connected AC capture:
+
+- GetSystemPowerStatus succeeded;
+- RawAcLineStatus = 1;
+- mapped source = Ac;
+- status = WINDOWS_POWER_SOURCE_CONFIRMED_AC;
+- no hardware writes.
+
+Battery capture after physically disconnecting the charger:
+
+- GetSystemPowerStatus succeeded;
+- RawAcLineStatus = 0;
+- mapped source = Battery;
+- status = WINDOWS_POWER_SOURCE_CONFIRMED_BATTERY;
+- no hardware writes.
+
+This qualifies the direct confirmation source that PerformanceGuardian will use
+after a Windows power notification. Notification payloads themselves will not
+be trusted as preset authority.
+
+Consolidated evidence:
+
+    release/performance-power-source-query-8c40-2026-10-04.json
+
+## Step 6B — Windows power-source notification trigger qualification
+
+Microsoft documents RegisterPowerSettingNotification for applications using a
+window handle. GUID_ACDC_POWER_SOURCE notifications arrive as
+WM_POWERBROADCAST / PBT_POWERSETTINGCHANGE events.
+
+A new read-only PerformanceProbe qualification harness registers specifically
+for GUID_ACDC_POWER_SOURCE:
+
+    5D3E9A59-E9D5-4B00-A6BD-FF34FF516548
+
+The native POWERBROADCAST_SETTING data is deliberately not used to select a
+preset. The notification is only a trigger. On each matching notification the
+harness performs a fresh WindowsPerformancePowerSourceReader.Read(), which in
+turn calls GetSystemPowerStatus. Only that direct query may confirm Ac or
+Battery.
+
+The physical harness is:
+
+    .\scripts\test-performance-power-source-notification.ps1 -Expect battery
+
+or:
+
+    .\scripts\test-performance-power-source-notification.ps1 -Expect ac
+
+It requires the initial direct source to differ from the expected destination,
+then waits up to 60 seconds by default for a GUID_ACDC_POWER_SOURCE signal.
+The destination is PASS only when the post-notification direct query matches the
+requested source.
+
+The harness uses a hidden WinForms NativeWindow solely to host the registered
+Windows power-setting notification. It performs no RAPL, NVML, WMI or EC
+hardware write.
+
+CI runs only --notification-self-test, which validates argument/timeout gates
+without registering a native listener.
+
+No CPU/GPU transition controller is connected to the native listener yet.
+That dispatch remains the next gate after physical notification qualification.
+

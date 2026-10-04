@@ -4,6 +4,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <AssemblyName>VictusFanControl.PerformanceProbe</AssemblyName>
     <RootNamespace>VictusFanControl.PerformanceProbe</RootNamespace>
+    <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\VictusFanControl\VictusFanControl.csproj" />
