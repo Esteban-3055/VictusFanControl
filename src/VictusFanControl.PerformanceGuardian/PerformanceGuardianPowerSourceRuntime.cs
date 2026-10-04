@@ -13,6 +13,7 @@ internal readonly record struct GuardianPowerSourceRuntimeSnapshot(
     int StopCalls,
     int ListenerRegistrations,
     int NotificationSignals,
+    int ReconciliationSignals,
     int DuplicateSignals,
     int CpuDispatchAttempts,
     int GpuDispatchAttempts,
@@ -81,6 +82,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
     private int _stopCalls;
     private int _listenerRegistrations;
     private int _notificationSignals;
+    private int _reconciliationSignals;
     private int _duplicateSignals;
     private int _cpuDispatchAttempts;
     private int _gpuDispatchAttempts;
@@ -226,6 +228,16 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
                         HandleNotificationSignal);
 
                 _listenerRegistrations++;
+
+                // Close the prime -> initial domain Apply -> listener-register
+                // race with one fresh direct query while the callback fence is
+                // still held. If the source changed before registration, this
+                // performs the missed transition exactly once. A native event
+                // queued by registration then observes the new last source and
+                // is suppressed as a duplicate.
+                _reconciliationSignals++;
+
+                ProcessSourceSignalLocked();
             }
             catch (Exception ex)
             {
@@ -326,63 +338,74 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
 
             _notificationSignals++;
 
-            try
+            ProcessSourceSignalLocked();
+        }
+    }
+
+    private void ProcessSourceSignalLocked()
+    {
+        if (!_active ||
+            _coordinator is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var result =
+                _coordinator.HandleNotificationSignal(
+                    _cpuEnabled,
+                    _gpuEnabled);
+
+            _lastSource =
+                result.Observation.Source;
+
+            _lastStatus =
+                result.Status;
+
+            if (result.DuplicateSuppressed)
+                _duplicateSignals++;
+
+            if (result.CpuAttempted)
+                _cpuDispatchAttempts++;
+
+            if (result.GpuAttempted)
+                _gpuDispatchAttempts++;
+
+            if (result.CpuException is not null ||
+                result.GpuException is not null)
             {
-                var result =
-                    _coordinator.HandleNotificationSignal(
-                        _cpuEnabled,
-                        _gpuEnabled);
-
-                _lastSource =
-                    result.Observation.Source;
-
-                _lastStatus =
-                    result.Status;
-
-                if (result.DuplicateSuppressed)
-                    _duplicateSignals++;
-
-                if (result.CpuAttempted)
-                    _cpuDispatchAttempts++;
-
-                if (result.GpuAttempted)
-                    _gpuDispatchAttempts++;
-
-                if (result.CpuException is not null ||
-                    result.GpuException is not null)
-                {
-                    _failure =
-                        result.CpuException ??
-                        result.GpuException;
-                }
-                else if (result.CpuAttempted &&
-                         result.CpuResult.HasValue &&
-                         !result.CpuResult.Value.Succeeded)
-                {
-                    _failure =
-                        "CPU_SOURCE_TRANSITION_FAILED: " +
-                        result.CpuResult.Value.Status;
-                }
-                else if (result.GpuAttempted &&
-                         result.GpuResult.HasValue &&
-                         !result.GpuResult.Value.Succeeded)
-                {
-                    _failure =
-                        "GPU_SOURCE_TRANSITION_FAILED: " +
-                        result.GpuResult.Value.Status;
-                }
-            }
-            catch (Exception ex)
-            {
-                // A listener callback must never unwind through WndProc. Keep
-                // the runtime active so a later notification can still be
-                // observed, but retain explicit diagnostic evidence.
                 _failure =
-                    ex.ToString();
-
-                _lastStatus =
-                    "PERFORMANCE_GUARDIAN_SOURCE_SIGNAL_FAILED";
+                    result.CpuException ??
+                    result.GpuException;
             }
+            else if (result.CpuAttempted &&
+                     result.CpuResult.HasValue &&
+                     !result.CpuResult.Value.Succeeded)
+            {
+                _failure =
+                    "CPU_SOURCE_TRANSITION_FAILED: " +
+                    result.CpuResult.Value.Status;
+            }
+            else if (result.GpuAttempted &&
+                     result.GpuResult.HasValue &&
+                     !result.GpuResult.Value.Succeeded)
+            {
+                _failure =
+                    "GPU_SOURCE_TRANSITION_FAILED: " +
+                    result.GpuResult.Value.Status;
+            }
+        }
+        catch (Exception ex)
+        {
+            // A source signal must never unwind through WndProc. Keep the
+            // runtime active so a later notification can still be observed,
+            // but retain explicit diagnostic evidence.
+            _failure =
+                ex.ToString();
+
+            _lastStatus =
+                "PERFORMANCE_GUARDIAN_SOURCE_SIGNAL_FAILED";
         }
     }
 
@@ -402,6 +425,8 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
                 _listenerRegistrations,
             NotificationSignals:
                 _notificationSignals,
+            ReconciliationSignals:
+                _reconciliationSignals,
             DuplicateSignals:
                 _duplicateSignals,
             CpuDispatchAttempts:
@@ -879,6 +904,9 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
                     PerformancePowerSourceKind.Ac,
                     1),
                 Observation(
+                    PerformancePowerSourceKind.Ac,
+                    1),
+                Observation(
                     PerformancePowerSourceKind.Battery,
                     0),
                 Observation(
@@ -933,7 +961,7 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
             runtime.Snapshot;
 
         Require(
-            duplicate.DuplicateSignals == 1 &&
+            duplicate.DuplicateSignals == 2 &&
             duplicate.CpuDispatchAttempts == 0 &&
             duplicate.GpuDispatchAttempts == 0 &&
             cpu.Calls == 0 &&
@@ -986,6 +1014,9 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
                 Observation(
                     PerformancePowerSourceKind.Ac,
                     1),
+                Observation(
+                    PerformancePowerSourceKind.Ac,
+                    1),
                 QueryFailure(
                     "synthetic query failure 1"),
                 QueryFailure(
@@ -1024,7 +1055,7 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
                 PerformancePowerSourceKind.Unknown &&
             gpu.LastSource ==
                 PerformancePowerSourceKind.Unknown &&
-            snapshot.DuplicateSignals == 1,
+            snapshot.DuplicateSignals == 2,
             "query failure must dispatch Unknown once and suppress repeated Unknown");
 
         output.WriteLine(
@@ -1036,6 +1067,9 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
     {
         var reader =
             new QueuePowerSourceReader(
+                Observation(
+                    PerformancePowerSourceKind.Ac,
+                    1),
                 Observation(
                     PerformancePowerSourceKind.Ac,
                     1),
@@ -1093,6 +1127,9 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
                     PerformancePowerSourceKind.Battery,
                     0),
                 Observation(
+                    PerformancePowerSourceKind.Battery,
+                    0),
+                Observation(
                     PerformancePowerSourceKind.Ac,
                     1));
 
@@ -1139,6 +1176,9 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
     {
         var reader =
             new QueuePowerSourceReader(
+                Observation(
+                    PerformancePowerSourceKind.Ac,
+                    1),
                 Observation(
                     PerformancePowerSourceKind.Ac,
                     1),
