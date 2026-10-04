@@ -333,3 +333,110 @@ executor that consumes only `RestoreOwnedThenClear` plans, persists/updates a
 `Restoring` journal before any recovery write, performs a compare-read,
 writes at most once, requires exact/equivalent release readback, and never
 converts recovery into reacquisition.
+
+
+## Step 5 — recovery executor
+
+The recovery-only planner is now paired with a hardware-abstraction executor.
+There is still no production PawnIO RAPL backend; all executor writes in CI are
+performed by a fake backend.
+
+The executor contract is:
+
+```
+load durable journal
+  -> read current package power limit
+  -> recovery-only planner
+  -> clear / preserve / blocked
+     OR
+  -> build release restore
+  -> confirm journal generation still matches
+  -> Restoring durable with exact PendingRaw
+  -> compare-read hardware
+  -> confirm durable Restoring generation still matches
+  -> at most ONE release write
+  -> readback
+  -> clear journal only when resolved
+```
+
+### No reacquisition authority
+
+The executor never calls `BuildApplyPlan()` or `BuildReacquirePlan()`. Its
+only possible write comes from `PlanRestore()` after the planner returned
+`RestoreOwnedThenClear`.
+
+The executor therefore cannot resume a prior 3/5 retry episode or write the
+requested 20/40 W value merely because the old journal contains that request.
+
+### Journal-before-write remains mandatory
+
+Before the single permitted recovery write, the executor persists:
+
+- the same session id;
+- generation + 1;
+- phase `Restoring`;
+- recovery-normalized conflict state with no in-flight attempt;
+- exact `PendingRaw` returned by the backend release plan.
+
+A failed `Restoring` store produces zero hardware writes.
+
+The fake recovery backend enforces this at the instant of `Write()`: phase
+must be `Restoring` and `PendingRaw` must exactly equal the raw value being
+written.
+
+### Compare-read and concurrent writers
+
+After `Restoring` is durable, the executor reads the hardware again.
+
+If raw 0x610 changed since planning, it performs zero writes and reclassifies
+the new state:
+
+- release/handoff already present -> clear journal;
+- external owner present -> preserve it and clear journal;
+- lock while still owned -> retain journal;
+- requested ownership still appears present but raw changed -> retain
+  `Restoring` and defer. The executor does not chase the race.
+
+The executor also rechecks journal session/generation/phase/PendingRaw before
+the hardware write. A concurrent journal mutation causes zero writes.
+
+### Post-write ambiguity
+
+Only one recovery write is permitted per `Execute()`.
+
+If write throws or readback differs, the executor reads/reclassifies once:
+
+- release target/equivalent owned fields present -> resolved and clear;
+- external writer now owns PL1/PL2 -> preserve external and clear;
+- lock -> retain;
+- requested fields still require release -> mark `Unresolved` best-effort and
+  retain the journal.
+
+There is no second corrective write in the same recovery execution.
+
+### Step 5 fixtures
+
+The hardware-free recovery executor fixtures prove:
+
+- no journal -> zero hardware I/O;
+- already released -> delete journal, zero writes;
+- external owner -> preserve and delete, zero writes;
+- still-owned value -> exactly one journaled release restore;
+- Contested restart -> zero reacquire writes and session closes;
+- failed `Restoring` persistence -> zero writes;
+- hardware changes to external value during compare-read -> preserve external,
+  zero writes;
+- hardware changes only while still matching requested ownership -> defer,
+  zero writes;
+- write exception after the release actually took effect -> readback resolves,
+  no second write;
+- external takeover after the one recovery write -> preserve external and issue
+  no second write;
+- locked still-owned value -> retain journal, zero writes;
+- journal deletion failure is explicit: resolved hardware does not falsely
+  imply the durable journal disappeared.
+
+The next P2B gate is process/lifecycle containment: a detached CPU guardian
+host, global single-writer mutex, parent-liveness/lease semantics and IPC
+surface. Production RAPL hardware writes remain closed until those pieces and
+their death/restart fixtures are qualified.

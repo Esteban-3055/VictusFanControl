@@ -24,6 +24,10 @@ internal static class CpuPowerLimiterSelfTest
                 CpuPowerRecoveryPlannerSelfTest.Run(output) == 0,
                 "CPU power recovery-only planner");
 
+            Require(
+                CpuPowerRecoveryExecutorSelfTest.Run(output) == 0,
+                "CPU power recovery executor");
+
             NormalApplyVerifyRelease(output);
             NonOwnedMutationIsPreservedWithoutConflict(output);
             SuccessfulReacquireRestoresExternalHandoff(output);
