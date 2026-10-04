@@ -1,4 +1,5 @@
 using VictusFanControl.Control;
+using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.PawnIo;
 
@@ -12,6 +13,12 @@ internal static class WmiFanExperimentSelfTest
         Directory.CreateDirectory(directory);
         try
         {
+            var policy = new AdaptiveFanPolicyEngine(WmiFanExperiment.CreatePolicy());
+            var t = DateTimeOffset.UtcNow;
+            var idle = policy.Evaluate(new(t, 40, 10, 0, 35, 10, 0));
+            var hot = policy.Evaluate(new(t.AddSeconds(1), 90, 115, 100, 84, 140, 100));
+            Check(idle.Accepted && idle.EqualFanLevel == 30 && hot.Accepted && hot.EqualFanLevel == 34 && hot.RawDemandLevel == 50,
+                "Real experiment policy must initialize and retain the 30..50 floor and slew limit.");
             var calls = new List<HpBiosRequest>();
             var intents = 0;
             var session = new WmiFanSession(r => { calls.Add(r); return 0; }, _ => intents++);

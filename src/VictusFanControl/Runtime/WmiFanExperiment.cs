@@ -46,6 +46,16 @@ internal sealed record WmiFanExperimentOptions(string Directory, string Modules,
 internal static class WmiFanExperiment
 {
     private sealed record AcpiEvent(long RecordId, int Id, DateTime Utc, string Xml);
+    internal static AdaptiveFanPolicyConfig CreatePolicy()
+    {
+        var candidate = Hp8C40AdaptiveCandidateV1.Create();
+        IReadOnlyList<AdaptiveFanCurvePoint> Clamp(IReadOnlyList<AdaptiveFanCurvePoint> points) =>
+            points.Select(p => p with { Level = Math.Clamp(p.Level, 30, 50) }).ToArray();
+        return candidate with { MinimumLevel = 30,
+            CpuTemperatureCurve = Clamp(candidate.CpuTemperatureCurve), GpuTemperatureCurve = Clamp(candidate.GpuTemperatureCurve),
+            CpuPowerCurve = Clamp(candidate.CpuPowerCurve), GpuPowerCurve = Clamp(candidate.GpuPowerCurve),
+            CpuLoadCurve = Clamp(candidate.CpuLoadCurve), GpuLoadCurve = Clamp(candidate.GpuLoadCurve) };
+    }
     internal static string LeasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "VictusFanControl", "WmiFanExperiment", "lease.json");
 
@@ -106,7 +116,8 @@ internal static class WmiFanExperiment
         var session = client is null ? null : new WmiFanSession(client.Send, level =>
             WriteJson(Path.Combine(o.Directory, "write-intent.json"), new { Level = level,
                 Pid = Environment.ProcessId, Utc = DateTimeOffset.UtcNow, RestoreRequired = true }));
-        var config = Hp8C40AdaptiveCandidateV1.Create() with { MinimumLevel = 30 };
+        var config = CreatePolicy();
+        WriteJson(Path.Combine(o.Directory, "policy.json"), config);
         var engine = new AdaptiveFanPolicyEngine(config);
         await using var csv = new CsvTelemetryLogger(Path.Combine(o.Directory, "telemetry.csv"));
         await csv.WriteHeaderAsync(CancellationToken.None);
