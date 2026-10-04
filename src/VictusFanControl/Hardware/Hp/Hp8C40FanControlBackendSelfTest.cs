@@ -67,6 +67,7 @@ public static class Hp8C40FanControlBackendSelfTest
         failures += await TestAcknowledgementTelemetryFailureRestoresAsync(output);
         failures += await TestAcknowledgementTelemetryCannotExtendDeadlineAsync(output);
         failures += await TestAutomaticRefreshPreservesAdmissionAsync(output);
+        failures += TestActuationObservationsDoNotAdvanceTargets(output);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -1855,7 +1856,7 @@ public static class Hp8C40FanControlBackendSelfTest
         var supervision = new List<Task>();
         backend.RefreshActuationTelemetryAsync = ct =>
         {
-            clock += 100;
+            clock += 1000;
             latest = Sample();
             var raw = SafetyGate.Evaluate(identity, SystemState.Healthy, latest, Now(), true);
             var effective = controller.EvaluateAutomaticSafety(latest, raw, observe: true);
@@ -1866,6 +1867,7 @@ public static class Hp8C40FanControlBackendSelfTest
             if (!controller.EvaluateAutomaticSafety(latest,
                     SafetyGate.EvaluateForDisplay(identity, SystemState.Healthy, latest, Now(), true), observe: false).CustomControlPermitted)
                 throw new InvalidOperationException("ACK acquisition lost Automatic admission.");
+            controller.ObserveAutomaticActuationTelemetry(latest, effective);
             return ValueTask.CompletedTask;
         };
         var result = await controller.ProcessAutomaticAsync(original,
@@ -1875,15 +1877,49 @@ public static class Hp8C40FanControlBackendSelfTest
                 : null);
         await Task.WhenAll(supervision);
         var sessionStillOpen = controller.AutomaticFreshAcquisitionRequired && coordinator.Authority == FanAuthority.Custom;
-        clock += 100;
+        clock += 1000;
         var next = Sample();
         var hold = await controller.ProcessAutomaticAsync(next,
             SafetyGate.Evaluate(identity, SystemState.Healthy, next, Now(), true), CancellationToken.None);
+        clock += 4000;
+        var missing = Sample();
+        var lostContinuity = await controller.ProcessAutomaticAsync(missing,
+            SafetyGate.Evaluate(identity, SystemState.Healthy, missing, Now(), true), CancellationToken.None);
         await controller.SetModeAsync(AdaptiveFanProductionMode.Firmware, CancellationToken.None);
-        return Report(output, "real Automatic controller accepts newer post-dispatch safety without relaxing native epoch admission or deadlocking",
+        return Report(output, "Automatic decisions more than 3 s apart retain continuity only through real ACK acquisitions without extra writes",
             result.Action == AdaptiveFanProductionActionKind.EnterCustomAndApply && sessionStillOpen &&
-            !ReferenceEquals(latest, original) && hold.Action == AdaptiveFanProductionActionKind.HoldCustom &&
+            (next.Timestamp - original.Timestamp).TotalSeconds > 3 && !ReferenceEquals(latest, original) &&
+            hold.Action == AdaptiveFanProductionActionKind.HoldCustom &&
+            lostContinuity.Action == AdaptiveFanProductionActionKind.RestoreFirmware &&
             hardware.SetCalls == 1 && hardware.RestoreCalls == 1 && coordinator.Authority == FanAuthority.Firmware);
+    }
+
+    private static int TestActuationObservationsDoNotAdvanceTargets(TextWriter output)
+    {
+        var tuning = new AdaptiveFanTuning { MinimumLevel = 30, IncreaseConfirmationSeconds = 3 };
+        var policy = new AdaptiveFanInertiaPolicy(Hp8C40AutomaticPolicy.Create(), tuning);
+        var origin = DateTimeOffset.UtcNow;
+        AdaptiveFanPolicyInput Sample(int second, double cpu = 45) => new(origin.AddSeconds(second), cpu, 5, 17, 47, 14, 0);
+        var initial = policy.Evaluate(Sample(0));
+        var observationsAccepted = true;
+        for (var i = 1; i <= 7; i++)
+            observationsAccepted &= policy.ObserveDuringActuation(Sample(i, 80), out _);
+        var next = policy.Evaluate(Sample(8, 80));
+        var rise = policy.Evaluate(Sample(11, 80));
+        var failures = Report(output, "ACK observations update EMA/load continuity without multiplying fan steps or confirmation counts",
+            initial.EqualFanLevel == 30 && observationsAccepted && next.Accepted && next.EqualFanLevel == 30 &&
+            rise.Accepted && rise.EqualFanLevel == 31);
+
+        policy.Reset();
+        policy.Evaluate(Sample(0));
+        var missingRejected = !policy.ObserveDuringActuation(Sample(4), out var missingReason);
+        policy.Reset();
+        policy.Evaluate(Sample(0));
+        var duplicateRejected = !policy.ObserveDuringActuation(Sample(0), out _);
+        var invalidRejected = !policy.ObserveDuringActuation(Sample(1) with { CpuPackagePowerW = double.NaN }, out _);
+        failures += Report(output, "ACK observations preserve real-gap, duplicate and invalid-sensor rejection",
+            missingRejected && missingReason.Contains("continuity gap", StringComparison.Ordinal) && duplicateRejected && invalidRejected);
+        return failures;
     }
 
     private sealed class AdvancingActiveTimeClock : IActiveTimeClock

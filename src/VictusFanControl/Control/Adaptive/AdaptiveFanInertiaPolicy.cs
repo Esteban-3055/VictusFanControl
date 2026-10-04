@@ -140,6 +140,32 @@ public class AdaptiveFanInertiaPolicy
         return Accepted($"Holding {current}; requested={requested}.");
     }
 
+    /// <summary>Consume real ACK acquisitions without changing the selected fan target.</summary>
+    public bool ObserveDuringActuation(AdaptiveFanPolicyInput input, out string failure)
+    {
+        if (!_current.HasValue)
+        {
+            failure = "Actuation observation requires an existing policy target.";
+            return false;
+        }
+        var demand = _demand.Evaluate(input);
+        if (!demand.Accepted || !demand.RawDemandLevel.HasValue)
+        {
+            failure = demand.Detail;
+            return false;
+        }
+        _loadHistory.Observe(input, _tuning);
+        var thermalOverride = input.CpuEffectiveTemperatureC >= (_tuning?.CpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.CpuThermalOverrideC) ||
+            input.GpuTemperatureC >= (_tuning?.GpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.GpuThermalOverrideC);
+        _ = _finalFilter.Evaluate(input.Timestamp, demand.RawDemandLevel.Value,
+            _config.MinimumLevel, _config.MaximumLevel, _config.MaximumSampleGap, thermalOverride, _loadHistory.SustainedLoadCooling);
+        // Observations update demand/load history, never actuation or step counts.
+        // Start the next confirmation window from a normal policy decision.
+        ClearConfirmation();
+        failure = string.Empty;
+        return true;
+    }
+
     public static double RoundNormalDemandToTenth(double demand)
     {
         if (!double.IsFinite(demand) || demand < 0 || demand > 255)

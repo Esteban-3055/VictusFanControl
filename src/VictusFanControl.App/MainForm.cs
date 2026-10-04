@@ -2932,6 +2932,11 @@ internal sealed partial class MainForm : Form
             DateTimeOffset.UtcNow, _fanCoordinator.BackendCanWrite);
         if (!safety.CustomControlPermitted)
             throw new InvalidOperationException("Actuation telemetry safety admission lost: " + string.Join("; ", safety.Reasons));
+        _fanProductionController.ObserveAutomaticActuationTelemetry(snapshot, safety);
+        if (_automaticFinalQualificationHardwareTest)
+            AppendAutomaticFinalEvent(new { kind = "automatic-actuation-observation", timestampUtc = DateTimeOffset.UtcNow,
+                snapshotUtc = snapshot.Timestamp, snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC,
+                snapshot.FanSampleAgeMilliseconds, authority = _fanCoordinator.Authority.ToString() });
     }
 
     private void WorkerOnSnapshotAvailable(object? sender, TelemetrySnapshot snapshot)

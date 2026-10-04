@@ -138,6 +138,31 @@ dotnet run --project .\src\VictusFanControl.App -c Release -- --dashboard-self-t
 
 Physical A1 is still required to qualify these changes on HP 8C40/F.18.
 
+### A1 evidence: first command confirmed, policy continuity rejected
+
+The physical run `automatic-final-normal_2026-10-04_202116.zip` used source
+`93b220233769b31a9b360c1a8d4b92a51eb0ebfc`. Its SHA-256 is
+`c1ac58e10a4c531f6c58939da580a425149a3b9e296be78d6f745c0deadb59d8`.
+The result remains FAIL_CLOSED, with two decisions and one completed command.
+
+The first acquisition was at 23:21:29.5998932 UTC. Its 30/30 command completed
+at 23:21:33.693577 UTC with two fresh WMI confirmations: baseline 2200/1900 RPM,
+confirmed nominal 2700/2500 RPM. No telemetry watchdog expiry was logged in this
+run. The next decision acquisition at 23:21:35.0618799 UTC was 5.462 seconds after
+the first decision's acquisition. Policy continuity had not consumed the real
+acquisitions made during acknowledgement, so it refused that interval. Firmware
+restore completed and the result reported no remaining journal.
+
+Acknowledgement acquisitions now also update validated policy demand/EMA and
+workload history. They keep the selected fan target and planner unchanged, clear
+normal increase/decrease confirmation windows, and issue no additional command.
+The next normal decision resumes from the last real acquisition. Missing samples,
+duplicates and invalid sensors retain their rejection behavior and the original
+3-second continuity limit. Observation is permitted only inside an active Automatic
+actuation with matching current thermal admission, without reacquiring the
+controller operation semaphore. Evidence records these samples as
+`automatic-actuation-observation`, separately from completed decisions.
+
 ## PASS meaning
 
 A1 PASS means only:

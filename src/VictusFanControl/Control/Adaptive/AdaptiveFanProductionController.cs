@@ -65,6 +65,7 @@ public sealed class AdaptiveFanProductionController
     private AdaptiveFanProductionMode _mode = AdaptiveFanProductionMode.Firmware;
     private int? _lastManualAppliedLevel;
     private AdaptiveFanProductionResult? _lastAutomaticResult;
+    private volatile bool _automaticActuationInFlight;
     public AdaptiveFanProductionResult? LastAutomaticResult => Volatile.Read(ref _lastAutomaticResult);
 
     public AdaptiveFanProductionController(
@@ -480,6 +481,20 @@ public sealed class AdaptiveFanProductionController
         return (observe ? admission.ObserveOrPreview(snapshot, raw) : admission.Preview(snapshot, raw)).EffectiveSafety;
     }
 
+    public void ObserveAutomaticActuationTelemetry(TelemetrySnapshot snapshot, SafetyGateResult safety)
+    {
+        // Invoked inline by this operation's backend continuation. Acquiring
+        // _operationGate here would deadlock the operation that already owns it.
+        if (!_automaticActuationInFlight || _mode != AdaptiveFanProductionMode.Automatic ||
+            _automaticAdmission is null || _preparedEngine is null ||
+            !ReferenceEquals(snapshot, _automaticAdmission.LastObservedSnapshot) ||
+            safety.SnapshotTimestamp != snapshot.Timestamp || !safety.CustomControlPermitted)
+            throw new InvalidOperationException("Automatic actuation observation lacks current operation/safety admission.");
+        if (!TryBuildPolicyInput(snapshot, out var input, out var failure) ||
+            !_preparedEngine.ObserveDuringActuation(input, out failure))
+            throw new InvalidOperationException("Automatic actuation observation refused: " + failure);
+    }
+
     public async ValueTask<AdaptiveFanProductionResult> ProcessAutomaticAsync(
         TelemetrySnapshot snapshot,
         SafetyGateResult effectiveSafety,
@@ -642,6 +657,7 @@ public sealed class AdaptiveFanProductionController
                 {
                     using var dispatchAdmission = new FanDispatchAdmissionScope(EnsureAutomaticDispatchAllowed);
                     var level = decision.EqualFanLevel.Value;
+                    _automaticActuationInFlight = true;
                     await _coordinator.ApplyAsync(
                         new FanCommand(
                             level,
@@ -659,6 +675,10 @@ public sealed class AdaptiveFanProductionController
                         decision.EqualFanLevel,
                         decision.RawDemandLevel,
                         "Automatic command was superseded by a newer SafetyGate evaluation.");
+                }
+                finally
+                {
+                    _automaticActuationInFlight = false;
                 }
             }
 
