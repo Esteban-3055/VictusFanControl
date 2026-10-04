@@ -38,6 +38,11 @@ internal static class CpuPowerLimiterSelfTest
 
             NormalApplyVerifyRelease(output);
             OwnedPresetSwitchIsOneJournaledWrite(output);
+            ConfirmedSourceChangeUsesOwnedSwitchOnly(output);
+            DisabledTargetConditionallyReleases(output);
+            UnknownSourceReleasesPresetAuthority(output);
+            SourceChangeCannotBypassContested(output);
+            EnabledSourceCannotApplyFromDisabled(output);
             PresetSwitchPreservesExternalHandoff(output);
             PresetSwitchJournalArmFailurePreventsWrite(output);
             PresetSwitchReadbackMismatchRetainsArmedJournal(output);
@@ -219,6 +224,256 @@ internal static class CpuPowerLimiterSelfTest
 
         output.WriteLine(
             "PASS AC<->Battery owned preset switch is journaled and uses one write per transition");
+    }
+
+
+    private static void ConfirmedSourceChangeUsesOwnedSwitchOnly(
+        TextWriter output)
+    {
+        var journal = new FakeJournal();
+        var backend = new FakeBackend(journal);
+        var clock = new FakeActiveTimeClock();
+
+        using var limiter =
+            new CpuPowerLimiter(
+                backend,
+                journal,
+                clock);
+
+        Require(
+            limiter.Apply(
+                new CpuPowerLimitRequest(20, 40)),
+            "source switch fixture starts with explicit AC ownership");
+
+        var controller =
+            new CpuPowerPresetTransitionController(
+                new CpuPowerPresetPolicy(
+                    new CpuPowerPresetSet(
+                        new CpuPowerPreset(true, 20, 40),
+                        new CpuPowerPreset(true, 15, 30))),
+                limiter);
+
+        var result =
+            controller.HandleConfirmedSourceChange(
+                PerformancePowerSourceKind.Battery);
+
+        Require(
+            result.Succeeded &&
+            result.Disposition ==
+                CpuPowerPresetTransitionDisposition.EnabledPresetSwitched,
+            "confirmed Battery source performs owned switch");
+
+        Require(
+            backend.WriteCount == 2 &&
+            backend.Raw == FakeBackend.BatteryRaw,
+            "source transition performs exactly one additional write");
+
+        Require(
+            journal.Current?.Phase ==
+                CpuPowerJournalPhase.Owned &&
+            journal.Current.Request ==
+                new CpuPowerLimitRequest(15, 30),
+            "Battery request is durable Owned after exact readback");
+
+        output.WriteLine(
+            "PASS confirmed AC->Battery source change maps to one owned-to-owned write");
+    }
+
+    private static void DisabledTargetConditionallyReleases(
+        TextWriter output)
+    {
+        var journal = new FakeJournal();
+        var backend = new FakeBackend(journal);
+        var clock = new FakeActiveTimeClock();
+
+        using var limiter =
+            new CpuPowerLimiter(
+                backend,
+                journal,
+                clock);
+
+        Require(
+            limiter.Apply(
+                new CpuPowerLimitRequest(20, 40)),
+            "disabled target fixture starts owned");
+
+        var controller =
+            new CpuPowerPresetTransitionController(
+                new CpuPowerPresetPolicy(
+                    new CpuPowerPresetSet(
+                        new CpuPowerPreset(true, 20, 40),
+                        new CpuPowerPreset(false, 15, 30))),
+                limiter);
+
+        var result =
+            controller.HandleConfirmedSourceChange(
+                PerformancePowerSourceKind.Battery);
+
+        Require(
+            result.Succeeded &&
+            result.Disposition ==
+                CpuPowerPresetTransitionDisposition.DisabledPresetReleased,
+            "disabled Battery preset requests conditional release");
+
+        Require(
+            limiter.State ==
+                CpuPowerLimiterState.Disabled &&
+            backend.WriteCount == 2 &&
+            backend.Raw == FakeBackend.BaselineRaw &&
+            journal.Current is null,
+            "disabled target releases once to baseline and closes session");
+
+        output.WriteLine(
+            "PASS disabled destination preset performs conditional release instead of inventing a cap");
+    }
+
+    private static void UnknownSourceReleasesPresetAuthority(
+        TextWriter output)
+    {
+        var journal = new FakeJournal();
+        var backend = new FakeBackend(journal);
+        var clock = new FakeActiveTimeClock();
+
+        using var limiter =
+            new CpuPowerLimiter(
+                backend,
+                journal,
+                clock);
+
+        Require(
+            limiter.Apply(
+                new CpuPowerLimitRequest(20, 40)),
+            "unknown source fixture starts owned");
+
+        var controller =
+            new CpuPowerPresetTransitionController(
+                new CpuPowerPresetPolicy(
+                    new CpuPowerPresetSet(
+                        new CpuPowerPreset(true, 20, 40),
+                        new CpuPowerPreset(true, 15, 30))),
+                limiter);
+
+        var result =
+            controller.HandleConfirmedSourceChange(
+                PerformancePowerSourceKind.Unknown);
+
+        Require(
+            result.Succeeded &&
+            result.Disposition ==
+                CpuPowerPresetTransitionDisposition.SourceUnknownReleased,
+            "unknown source gives up preset authority");
+
+        Require(
+            backend.WriteCount == 2 &&
+            backend.Raw == FakeBackend.BaselineRaw &&
+            limiter.State == CpuPowerLimiterState.Disabled,
+            "unknown source uses release, never an AC/Battery preset switch");
+
+        output.WriteLine(
+            "PASS unknown power source fails closed by releasing existing CPU preset authority");
+    }
+
+    private static void SourceChangeCannotBypassContested(
+        TextWriter output)
+    {
+        var journal = new FakeJournal();
+        var backend = new FakeBackend(journal);
+        var clock = new FakeActiveTimeClock();
+
+        using var limiter =
+            new CpuPowerLimiter(
+                backend,
+                journal,
+                clock);
+
+        Require(
+            limiter.Apply(
+                new CpuPowerLimitRequest(20, 40)),
+            "contested source fixture starts owned");
+
+        backend.Raw =
+            FakeBackend.ExternalRaw;
+
+        Require(
+            !limiter.VerifyActive() &&
+            limiter.State ==
+                CpuPowerLimiterState.Contested,
+            "external writer establishes Contested");
+
+        var controller =
+            new CpuPowerPresetTransitionController(
+                new CpuPowerPresetPolicy(
+                    new CpuPowerPresetSet(
+                        new CpuPowerPreset(true, 20, 40),
+                        new CpuPowerPreset(true, 15, 30))),
+                limiter);
+
+        var writesBefore =
+            backend.WriteCount;
+
+        var result =
+            controller.HandleConfirmedSourceChange(
+                PerformancePowerSourceKind.Battery);
+
+        Require(
+            !result.Succeeded &&
+            result.Disposition ==
+                CpuPowerPresetTransitionDisposition.BlockedByLimiterState &&
+            limiter.State ==
+                CpuPowerLimiterState.Contested,
+            "Battery source cannot bypass Contested");
+
+        Require(
+            backend.WriteCount ==
+                writesBefore &&
+            backend.Raw ==
+                FakeBackend.ExternalRaw,
+            "blocked source change preserves external owner with zero writes");
+
+        output.WriteLine(
+            "PASS enabled source change cannot bypass Contested external ownership");
+    }
+
+    private static void EnabledSourceCannotApplyFromDisabled(
+        TextWriter output)
+    {
+        var journal = new FakeJournal();
+        var backend = new FakeBackend(journal);
+        var clock = new FakeActiveTimeClock();
+
+        using var limiter =
+            new CpuPowerLimiter(
+                backend,
+                journal,
+                clock);
+
+        var controller =
+            new CpuPowerPresetTransitionController(
+                new CpuPowerPresetPolicy(
+                    new CpuPowerPresetSet(
+                        new CpuPowerPreset(true, 20, 40),
+                        new CpuPowerPreset(true, 15, 30))),
+                limiter);
+
+        var result =
+            controller.HandleConfirmedSourceChange(
+                PerformancePowerSourceKind.Ac);
+
+        Require(
+            !result.Succeeded &&
+            result.Disposition ==
+                CpuPowerPresetTransitionDisposition.NoActiveOwnership,
+            "source detection alone cannot start a limiter session");
+
+        Require(
+            limiter.State ==
+                CpuPowerLimiterState.Disabled &&
+            backend.WriteCount == 0 &&
+            journal.Current is null,
+            "startup/source detection remains no-write without explicit authority");
+
+        output.WriteLine(
+            "PASS enabled AC preset cannot self-apply from Disabled/startup state");
     }
 
     private static void PresetSwitchPreservesExternalHandoff(

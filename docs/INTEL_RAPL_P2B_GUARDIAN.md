@@ -167,6 +167,7 @@ Defined phases are:
 - `Owned`
 - `Contested`
 - `ReacquireWriteArmed`
+- `PresetSwitchWriteArmed`
 - `Stability`
 - `Yielded`
 - `Restoring`
@@ -442,6 +443,146 @@ surface. Production RAPL hardware writes remain closed until those pieces and
 their death/restart fixtures are qualified.
 
 
+## Step 5.5 — AC and Battery CPU preset foundation
+
+P2B now defines two independent CPU power preset slots:
+
+- `AC`
+- `Battery`
+
+Each slot carries:
+
+- Enabled/Disabled;
+- PL1 watts;
+- PL2 watts.
+
+No production wattage is hard-coded. The default preset set is
+`Disabled/Disabled`; the qualified 20/40 W value remains test evidence, not a
+product default.
+
+`CpuPowerPresetPolicy` is pure selection logic:
+
+```
+power source = AC      -> AC slot
+power source = Battery -> Battery slot
+power source = Unknown -> no preset authority
+```
+
+An enabled preset requires finite values, PL1 >= 10 W and PL2 >= PL1. The
+physical backend will later apply the stricter qualified hardware envelope.
+
+A disabled slot may retain configured wattage for UI convenience, but resolves
+to no active request. At runtime that will mean: if VFC currently owns CPU
+limits and the newly selected source slot is Disabled, release ownership to the
+captured ExternalHandoff/original baseline instead of inventing a new cap.
+
+### Runtime semantics implemented at the domain boundary
+
+Power-source switching must be owned by the detached guardian, not by the GUI.
+The intended production source signal is Windows AC/DC power notification,
+confirmed against a direct power-source query before a transition.
+
+The domain transition helper now enforces:
+
+- Active AC -> Battery with Battery Enabled: perform one journaled owned-to-owned
+  preset transition; do **not** restore OEM baseline and then apply again.
+- Active Battery -> AC with AC Enabled: same one-write transition in reverse.
+- Newly selected slot Disabled: perform a normal conditional release.
+- Unknown source: no preset-switch write.
+- `Yielded`: a power-source change does not silently reacquire authority.
+  Explicit user action is still required.
+- `Contested`: do not use source change to bypass an external writer; the
+  conflict/yield semantics must be resolved first.
+- A successful owned-to-owned source switch starts a fresh conflict budget for
+  the newly active preset.
+- OriginalBaseline remains immutable across AC/Battery switching.
+- ExternalHandoff, if one exists from a prior external-writer episode, remains
+  the release target across later AC/Battery switches.
+
+The journal now has the explicit PresetSwitchWriteArmed phase so crash
+recovery can distinguish the old VFC-owned raw value from the pending new
+VFC-owned raw value. A restarted guardian remains recovery-only: if a
+source-transition write was interrupted, it may release whichever VFC-owned
+value is observed, but it will not finish/retry the source switch.
+
+CpuPowerPresetTransitionController connects confirmed source selection to the
+existing limiter without owning Windows notifications. Enabled AC/Battery
+selection can switch only an already Active VFC-owned session. A disabled
+destination performs conditional Release. Unknown source performs no preset
+switch and fails closed by releasing existing preset authority when a normal
+conditional release is safe. Contested/Yielded cannot use an enabled source
+change to reacquire authority.
+
+Startup persistence remains closed. Merely detecting AC or Battery at process
+startup does not authorize Apply; an enabled selection observed while the
+limiter is Disabled performs zero writes.
+
+
+## Step 5.5B — shared AC/Battery source with GPU clock presets
+
+The AC/Battery source abstraction is now shared between CPU and GPU preset
+selection. CPU RAPL ownership/recovery remains a separate subsystem; this
+change does not connect GPU writes to the CPU journal.
+
+The requested GPU preset values are recorded exactly as:
+
+```
+AC:
+  nvidia-smi -lgc 210,1850
+
+Battery:
+  nvidia-smi -lgc 210,1200
+```
+
+The corresponding pure preset requests are:
+
+- AC: graphics clock range 210..1850 MHz.
+- Battery: graphics clock range 210..1200 MHz.
+
+These values are configuration intent only. The commit does not spawn
+`nvidia-smi`, does not call a new NVML setter and does not grant startup
+authority.
+
+### Production GPU direction
+
+The repository already has an NVML client for NVIDIA telemetry. The production
+GPU controller should extend the NVML path for locked graphics clocks instead
+of periodically spawning `nvidia-smi`. The command-line tests remain useful
+as physical feasibility evidence and as an operator fallback.
+
+GPU control must have its own ownership/journal/recovery domain. A combined
+AC/Battery performance profile may select both CPU and GPU targets, but a
+partial failure in one subsystem must not make the other subsystem claim a
+false atomic transaction.
+
+The intended source profile is therefore conceptually:
+
+```
+AC:
+  CPU: configurable PL1 / PL2
+  GPU: 210..1850 MHz
+
+Battery:
+  CPU: configurable PL1 / PL2
+  GPU: 210..1200 MHz
+```
+
+Source = Unknown grants neither CPU preset-switch authority nor GPU clock
+preset-switch authority.
+
+For GPU runtime work, the same ownership principle should be retained: if
+another application repeatedly changes the locked-clock range, a bounded
+reacquisition policy may be used and then yield instead of fighting forever.
+That GPU policy must be implemented and qualified independently rather than
+reusing the CPU RAPL journal.
+
+The GPU path should also avoid a design that continuously invokes
+`nvidia-smi` merely to enforce a cap while the discrete GPU would otherwise be
+idle. Source selection records desired intent; the future GPU controller will
+decide when NVML authority is available without turning source detection into a
+high-frequency polling loop.
+
+
 ## Step 5.6A — journaled CPU AC/Battery owned-to-owned transition
 
 The limiter now has an explicit owned preset transition path. It is available
@@ -509,133 +650,26 @@ mistaking the other VFC candidate for an external owner.
 Fixtures cover old raw, new raw and external raw at guardian restart. These are
 synthetic recovery tests only; no physical PASS is claimed.
 
+## Step 5.6C — confirmed-source transition dispatcher
 
-## Step 5.5 — AC and Battery CPU preset foundation
+The source-to-preset selector is now connected to the limiter through
+CpuPowerPresetTransitionController, still without Windows notification wiring.
 
-P2B now defines two independent CPU power preset slots:
+The dispatcher is deliberately authority-limited:
 
-- `AC`
-- `Battery`
+- enabled AC/Battery can call SwitchOwnedPreset only from Active;
+- Disabled cannot be turned into an Apply by source detection;
+- a disabled destination performs the existing conditional Release;
+- Unknown never selects AC or Battery; if a normal owned session exists, it
+  gives up preset authority through conditional Release;
+- Contested/Yielded cannot use an enabled source change to regain authority;
+- Failed/Applying/Recovering states are not bypassed.
 
-Each slot carries:
+Fixtures exercise the confirmed AC->Battery path, disabled destination,
+Unknown source, Contested blocking and the no-startup-Apply invariant.
 
-- Enabled/Disabled;
-- PL1 watts;
-- PL2 watts.
+Windows AC/DC notifications plus direct-query confirmation are intentionally
+left for the detached guardian/process-lifecycle gate. No production source
+listener, startup persistence, GUI authority or physical write authorization
+is added here.
 
-No production wattage is hard-coded. The default preset set is
-`Disabled/Disabled`; the qualified 20/40 W value remains test evidence, not a
-product default.
-
-`CpuPowerPresetPolicy` is pure selection logic:
-
-```
-power source = AC      -> AC slot
-power source = Battery -> Battery slot
-power source = Unknown -> no preset authority
-```
-
-An enabled preset requires finite values, PL1 >= 10 W and PL2 >= PL1. The
-physical backend will later apply the stricter qualified hardware envelope.
-
-A disabled slot may retain configured wattage for UI convenience, but resolves
-to no active request. At runtime that will mean: if VFC currently owns CPU
-limits and the newly selected source slot is Disabled, release ownership to the
-captured ExternalHandoff/original baseline instead of inventing a new cap.
-
-### Runtime semantics reserved for the guardian integration
-
-Power-source switching must be owned by the detached guardian, not by the GUI.
-The intended production source signal is Windows AC/DC power notification,
-confirmed against a direct power-source query before a transition.
-
-The runtime policy to implement in the next gates is:
-
-- Active AC -> Battery with Battery Enabled: perform one journaled owned-to-owned
-  preset transition; do **not** restore OEM baseline and then apply again.
-- Active Battery -> AC with AC Enabled: same one-write transition in reverse.
-- Newly selected slot Disabled: perform a normal conditional release.
-- Unknown source: no preset-switch write.
-- `Yielded`: a power-source change does not silently reacquire authority.
-  Explicit user action is still required.
-- `Contested`: do not use source change to bypass an external writer; the
-  conflict/yield semantics must be resolved first.
-- A successful owned-to-owned source switch starts a fresh conflict budget for
-  the newly active preset.
-- OriginalBaseline remains immutable across AC/Battery switching.
-- ExternalHandoff, if one exists from a prior external-writer episode, remains
-  the release target across later AC/Battery switches.
-
-The journal will need an explicit preset-transition write-armed phase so crash
-recovery can distinguish the old VFC-owned raw value from the pending new
-VFC-owned raw value. A restarted guardian will remain recovery-only: if a
-source-transition write was interrupted, it may release whichever VFC-owned
-value is observed, but it will not finish/retry the source switch.
-
-Startup persistence remains closed. Merely detecting AC or Battery at process
-startup does not yet authorize applying the corresponding preset.
-
-
-## Step 5.5B — shared AC/Battery source with GPU clock presets
-
-The AC/Battery source abstraction is now shared between CPU and GPU preset
-selection. CPU RAPL ownership/recovery remains a separate subsystem; this
-change does not connect GPU writes to the CPU journal.
-
-The requested GPU preset values are recorded exactly as:
-
-```
-AC:
-  nvidia-smi -lgc 210,1850
-
-Battery:
-  nvidia-smi -lgc 210,1200
-```
-
-The corresponding pure preset requests are:
-
-- AC: graphics clock range 210..1850 MHz.
-- Battery: graphics clock range 210..1200 MHz.
-
-These values are configuration intent only. The commit does not spawn
-`nvidia-smi`, does not call a new NVML setter and does not grant startup
-authority.
-
-### Production GPU direction
-
-The repository already has an NVML client for NVIDIA telemetry. The production
-GPU controller should extend the NVML path for locked graphics clocks instead
-of periodically spawning `nvidia-smi`. The command-line tests remain useful
-as physical feasibility evidence and as an operator fallback.
-
-GPU control must have its own ownership/journal/recovery domain. A combined
-AC/Battery performance profile may select both CPU and GPU targets, but a
-partial failure in one subsystem must not make the other subsystem claim a
-false atomic transaction.
-
-The intended source profile is therefore conceptually:
-
-```
-AC:
-  CPU: configurable PL1 / PL2
-  GPU: 210..1850 MHz
-
-Battery:
-  CPU: configurable PL1 / PL2
-  GPU: 210..1200 MHz
-```
-
-Source = Unknown grants neither CPU preset-switch authority nor GPU clock
-preset-switch authority.
-
-For GPU runtime work, the same ownership principle should be retained: if
-another application repeatedly changes the locked-clock range, a bounded
-reacquisition policy may be used and then yield instead of fighting forever.
-That GPU policy must be implemented and qualified independently rather than
-reusing the CPU RAPL journal.
-
-The GPU path should also avoid a design that continuously invokes
-`nvidia-smi` merely to enforce a cap while the discrete GPU would otherwise be
-idle. Source selection records desired intent; the future GPU controller will
-decide when NVML authority is available without turning source detection into a
-high-frequency polling loop.
