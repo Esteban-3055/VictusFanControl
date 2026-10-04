@@ -32,6 +32,10 @@ internal static class CpuPowerLimiterSelfTest
                 CpuPowerPresetPolicySelfTest.Run(output) == 0,
                 "CPU power AC/battery preset selector");
 
+            Require(
+                GpuClockPresetPolicySelfTest.Run(output) == 0,
+                "GPU clock AC/battery preset selector");
+
             NormalApplyVerifyRelease(output);
             NonOwnedMutationIsPreservedWithoutConflict(output);
             SuccessfulReacquireRestoresExternalHandoff(output);

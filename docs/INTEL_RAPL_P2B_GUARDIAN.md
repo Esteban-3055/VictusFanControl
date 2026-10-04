@@ -506,3 +506,68 @@ value is observed, but it will not finish/retry the source switch.
 
 Startup persistence remains closed. Merely detecting AC or Battery at process
 startup does not yet authorize applying the corresponding preset.
+
+
+## Step 5.5B — shared AC/Battery source with GPU clock presets
+
+The AC/Battery source abstraction is now shared between CPU and GPU preset
+selection. CPU RAPL ownership/recovery remains a separate subsystem; this
+change does not connect GPU writes to the CPU journal.
+
+The requested GPU preset values are recorded exactly as:
+
+```
+AC:
+  nvidia-smi -lgc 210,1850
+
+Battery:
+  nvidia-smi -lgc 210,1200
+```
+
+The corresponding pure preset requests are:
+
+- AC: graphics clock range 210..1850 MHz.
+- Battery: graphics clock range 210..1200 MHz.
+
+These values are configuration intent only. The commit does not spawn
+`nvidia-smi`, does not call a new NVML setter and does not grant startup
+authority.
+
+### Production GPU direction
+
+The repository already has an NVML client for NVIDIA telemetry. The production
+GPU controller should extend the NVML path for locked graphics clocks instead
+of periodically spawning `nvidia-smi`. The command-line tests remain useful
+as physical feasibility evidence and as an operator fallback.
+
+GPU control must have its own ownership/journal/recovery domain. A combined
+AC/Battery performance profile may select both CPU and GPU targets, but a
+partial failure in one subsystem must not make the other subsystem claim a
+false atomic transaction.
+
+The intended source profile is therefore conceptually:
+
+```
+AC:
+  CPU: configurable PL1 / PL2
+  GPU: 210..1850 MHz
+
+Battery:
+  CPU: configurable PL1 / PL2
+  GPU: 210..1200 MHz
+```
+
+Source = Unknown grants neither CPU preset-switch authority nor GPU clock
+preset-switch authority.
+
+For GPU runtime work, the same ownership principle should be retained: if
+another application repeatedly changes the locked-clock range, a bounded
+reacquisition policy may be used and then yield instead of fighting forever.
+That GPU policy must be implemented and qualified independently rather than
+reusing the CPU RAPL journal.
+
+The GPU path should also avoid a design that continuously invokes
+`nvidia-smi` merely to enforce a cap while the discrete GPU would otherwise be
+idle. Source selection records desired intent; the future GPU controller will
+decide when NVML authority is available without turning source detection into a
+high-frequency polling loop.

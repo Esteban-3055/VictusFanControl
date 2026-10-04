@@ -1,18 +1,5 @@
 namespace VictusFanControl.Performance;
 
-internal enum CpuPowerSourceKind
-{
-    Unknown,
-    Ac,
-    Battery
-}
-
-internal enum CpuPowerPresetSlot
-{
-    Ac,
-    Battery
-}
-
 internal readonly record struct CpuPowerPreset(
     bool Enabled,
     double Pl1Watts,
@@ -49,8 +36,8 @@ internal readonly record struct CpuPowerPresetSet(
 }
 
 internal readonly record struct CpuPowerPresetSelection(
-    CpuPowerSourceKind Source,
-    CpuPowerPresetSlot? Slot,
+    PerformancePowerSourceKind Source,
+    PerformancePresetSlot? Slot,
     bool SourceKnown,
     bool Enabled,
     CpuPowerLimitRequest? Request,
@@ -72,11 +59,11 @@ internal sealed class CpuPowerPresetPolicy
         CpuPowerPresetSet presets)
     {
         ValidatePreset(
-            CpuPowerPresetSlot.Ac,
+            PerformancePresetSlot.Ac,
             presets.Ac);
 
         ValidatePreset(
-            CpuPowerPresetSlot.Battery,
+            PerformancePresetSlot.Battery,
             presets.Battery);
 
         _presets = presets;
@@ -86,22 +73,22 @@ internal sealed class CpuPowerPresetPolicy
         _presets;
 
     internal CpuPowerPresetSelection Resolve(
-        CpuPowerSourceKind source) =>
+        PerformancePowerSourceKind source) =>
         source switch
         {
-            CpuPowerSourceKind.Ac =>
+            PerformancePowerSourceKind.Ac =>
                 ResolveKnown(
                     source,
-                    CpuPowerPresetSlot.Ac,
+                    PerformancePresetSlot.Ac,
                     _presets.Ac),
 
-            CpuPowerSourceKind.Battery =>
+            PerformancePowerSourceKind.Battery =>
                 ResolveKnown(
                     source,
-                    CpuPowerPresetSlot.Battery,
+                    PerformancePresetSlot.Battery,
                     _presets.Battery),
 
-            CpuPowerSourceKind.Unknown =>
+            PerformancePowerSourceKind.Unknown =>
                 new CpuPowerPresetSelection(
                     Source: source,
                     Slot: null,
@@ -119,8 +106,8 @@ internal sealed class CpuPowerPresetPolicy
         };
 
     private static CpuPowerPresetSelection ResolveKnown(
-        CpuPowerSourceKind source,
-        CpuPowerPresetSlot slot,
+        PerformancePowerSourceKind source,
+        PerformancePresetSlot slot,
         CpuPowerPreset preset)
     {
         if (!preset.Enabled)
@@ -146,7 +133,7 @@ internal sealed class CpuPowerPresetPolicy
     }
 
     private static void ValidatePreset(
-        CpuPowerPresetSlot slot,
+        PerformancePresetSlot slot,
         CpuPowerPreset preset)
     {
         if (!preset.Enabled)

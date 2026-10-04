@@ -48,17 +48,17 @@ internal static class CpuPowerPresetPolicySelfTest
 
         var ac =
             policy.Resolve(
-                CpuPowerSourceKind.Ac);
+                PerformancePowerSourceKind.Ac);
 
         var battery =
             policy.Resolve(
-                CpuPowerSourceKind.Battery);
+                PerformancePowerSourceKind.Battery);
 
         Require(
             ac.SourceKnown &&
             ac.Enabled &&
             ac.Slot ==
-                CpuPowerPresetSlot.Ac &&
+                PerformancePresetSlot.Ac &&
             ac.Request ==
                 new CpuPowerLimitRequest(30, 60),
             "AC preset resolves independently");
@@ -67,7 +67,7 @@ internal static class CpuPowerPresetPolicySelfTest
             battery.SourceKnown &&
             battery.Enabled &&
             battery.Slot ==
-                CpuPowerPresetSlot.Battery &&
+                PerformancePresetSlot.Battery &&
             battery.Request ==
                 new CpuPowerLimitRequest(15, 30),
             "Battery preset resolves independently");
@@ -87,7 +87,7 @@ internal static class CpuPowerPresetPolicySelfTest
 
         var selection =
             policy.Resolve(
-                CpuPowerSourceKind.Unknown);
+                PerformancePowerSourceKind.Unknown);
 
         Require(
             !selection.SourceKnown &&
@@ -120,12 +120,12 @@ internal static class CpuPowerPresetPolicySelfTest
 
         var battery =
             policy.Resolve(
-                CpuPowerSourceKind.Battery);
+                PerformancePowerSourceKind.Battery);
 
         Require(
             battery.SourceKnown &&
             battery.Slot ==
-                CpuPowerPresetSlot.Battery &&
+                PerformancePresetSlot.Battery &&
             !battery.Enabled &&
             battery.Request is null,
             "disabled battery preset exposes no request");
@@ -143,11 +143,11 @@ internal static class CpuPowerPresetPolicySelfTest
 
         var ac =
             policy.Resolve(
-                CpuPowerSourceKind.Ac);
+                PerformancePowerSourceKind.Ac);
 
         var battery =
             policy.Resolve(
-                CpuPowerSourceKind.Battery);
+                PerformancePowerSourceKind.Battery);
 
         Require(
             !ac.Enabled &&
