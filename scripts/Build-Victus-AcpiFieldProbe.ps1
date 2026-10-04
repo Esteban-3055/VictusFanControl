@@ -30,7 +30,7 @@ $source=Join-Path $repo 'drivers\AcpiFieldProbe'
 Push-Location $OutputRoot
 try {
     $minor=([version]$wdfVersion).Minor
-    & cl.exe /nologo /c /TC /kernel /W4 /WX /GS /guard:cf /D_AMD64_ /DAMD64 /D_WIN64 /D_WIN32_WINNT=0x0A00 /DNTDDI_VERSION=0x0A000000 /DKMDF_VERSION_MAJOR=1 "/DKMDF_VERSION_MINOR=$minor" "/I$km" "/I$shared" "/I$acpi" "/I$wdf" /Fodriver.obj (Join-Path $source 'driver.c')
+    & cl.exe /nologo /c /TC /kernel /W4 /WX /GS /guard:cf /D_AMD64_ /DAMD64 /D_WIN64 /D_WIN32_WINNT=0x0A00 /DNTDDI_VERSION=0x0A000008 /DKMDF_VERSION_MAJOR=1 "/DKMDF_VERSION_MINOR=$minor" "/I$km" "/I$shared" "/I$acpi" "/I$wdf" /Fodriver.obj (Join-Path $source 'driver.c')
     if($LASTEXITCODE -ne 0){throw 'Kernel source compilation failed.'}
     & link.exe /nologo /driver /subsystem:native /entry:FxDriverEntry /nodefaultlib /machine:x64 /guard:cf /out:AcpiFieldProbe.sys driver.obj "/libpath:$kmLib" "/libpath:$wdfLib" ntoskrnl.lib hal.lib BufferOverflowFastFailK.lib WdfLdr.lib WdfDriverEntry.lib Aux_Klib.lib
     if($LASTEXITCODE -ne 0){throw 'Kernel link failed.'}
