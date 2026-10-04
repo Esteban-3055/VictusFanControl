@@ -16,8 +16,24 @@ internal readonly record struct GuardianHostOptions(
     string ReportPath,
     string? ReadyPath);
 
+internal readonly record struct GuardianDomainLifecycleSnapshot(
+    int EnableCalls,
+    int ReleaseCalls,
+    bool LastCpuEnabled,
+    bool LastGpuEnabled,
+    PerformancePowerSourceKind? LastInitialSource,
+    string? LastReleaseReason,
+    int CpuHardwareWriteAttempts,
+    int GpuHardwareWriteAttempts,
+    string? CpuState,
+    string? GpuState,
+    string? CpuStatus,
+    string? GpuStatus);
+
 internal interface IGuardianDomainLifecycle
 {
+    GuardianDomainLifecycleSnapshot Snapshot { get; }
+
     ValueTask EnableAsync(
         bool cpuEnabled,
         bool gpuEnabled,
@@ -40,6 +56,21 @@ internal sealed class RecordingGuardianDomainLifecycle :
     internal bool LastGpuEnabled { get; private set; }
     internal string? LastReleaseReason { get; private set; }
     internal PerformancePowerSourceKind? LastInitialSource { get; private set; }
+
+    public GuardianDomainLifecycleSnapshot Snapshot =>
+        new(
+            EnableCalls,
+            ReleaseCalls,
+            LastCpuEnabled,
+            LastGpuEnabled,
+            LastInitialSource,
+            LastReleaseReason,
+            CpuHardwareWriteAttempts: 0,
+            GpuHardwareWriteAttempts: 0,
+            CpuState: null,
+            GpuState: null,
+            CpuStatus: null,
+            GpuStatus: null);
 
     public ValueTask EnableAsync(
         bool cpuEnabled,
@@ -867,8 +898,8 @@ internal sealed class PerformanceGuardianHost
         PerformanceGuardianAuthority? authority,
         Exception? failure)
     {
-        var recording =
-            _domains as RecordingGuardianDomainLifecycle;
+        var domains =
+            _domains.Snapshot;
 
         var source =
             _sourceRuntime.Snapshot;
@@ -895,13 +926,25 @@ internal sealed class PerformanceGuardianHost
                 RejectedRequests:
                     _rejectedRequests,
                 EnableCalls:
-                    recording?.EnableCalls,
+                    domains.EnableCalls,
                 ReleaseCalls:
-                    recording?.ReleaseCalls,
+                    domains.ReleaseCalls,
                 LastReleaseReason:
-                    recording?.LastReleaseReason,
+                    domains.LastReleaseReason,
                 InitialSource:
-                    recording?.LastInitialSource.ToString(),
+                    domains.LastInitialSource?.ToString(),
+                CpuHardwareWriteAttempts:
+                    domains.CpuHardwareWriteAttempts,
+                GpuHardwareWriteAttempts:
+                    domains.GpuHardwareWriteAttempts,
+                CpuDomainState:
+                    domains.CpuState,
+                GpuDomainState:
+                    domains.GpuState,
+                CpuDomainStatus:
+                    domains.CpuStatus,
+                GpuDomainStatus:
+                    domains.GpuStatus,
                 SourceRuntimeActive:
                     source.Active,
                 SourceRuntimeStartCalls:
@@ -927,7 +970,8 @@ internal sealed class PerformanceGuardianHost
                 SourceFailure:
                     source.Failure,
                 HardwareWritesPerformed:
-                    false,
+                    domains.CpuHardwareWriteAttempts > 0 ||
+                    domains.GpuHardwareWriteAttempts > 0,
                 Failure:
                     failure?.ToString());
 
@@ -1005,10 +1049,16 @@ internal sealed class PerformanceGuardianHost
         int Connections,
         int AcceptedRequests,
         int RejectedRequests,
-        int? EnableCalls,
-        int? ReleaseCalls,
+        int EnableCalls,
+        int ReleaseCalls,
         string? LastReleaseReason,
         string? InitialSource,
+        int CpuHardwareWriteAttempts,
+        int GpuHardwareWriteAttempts,
+        string? CpuDomainState,
+        string? GpuDomainState,
+        string? CpuDomainStatus,
+        string? GpuDomainStatus,
         bool SourceRuntimeActive,
         int SourceRuntimeStartCalls,
         int SourceRuntimeStopCalls,

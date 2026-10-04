@@ -20,8 +20,13 @@ internal static class Program
                     PerformanceGuardianPowerSourceRuntimeSelfTest.Run(
                         Console.Out);
 
+                var gpuDomainResult =
+                    QualifiedGpuGuardianDomainLifecycleSelfTest.Run(
+                        Console.Out);
+
                 return authorityResult == 0 &&
-                    sourceRuntimeResult == 0
+                    sourceRuntimeResult == 0 &&
+                    gpuDomainResult == 0
                     ? 0
                     : 1;
             }
