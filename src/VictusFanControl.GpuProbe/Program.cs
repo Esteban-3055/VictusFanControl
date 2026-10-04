@@ -23,6 +23,20 @@ internal static class Program
                 return SelfTest();
             }
 
+            if (args.Length == 1 &&
+                args[0] == "--clock-write-self-test")
+            {
+                return GpuClockWriteQualification.SelfTest(
+                    Console.Out);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--clock-write-test")
+            {
+                return GpuClockWriteQualification.Run(
+                    args);
+            }
+
             if (!TryParseObserveArgs(
                     args,
                     out var label,
@@ -421,7 +435,13 @@ internal static class Program
             "VictusFanControl.GpuProbe --self-test");
 
         Console.WriteLine(
-            "This probe is read-only and never calls GPU clock or power-limit setters.");
+            "VictusFanControl.GpuProbe --clock-write-self-test");
+
+        Console.WriteLine(
+            "VictusFanControl.GpuProbe --clock-write-test --confirm-target HP-8C40-9D0R1LA-F18 --preset <ac|battery> [--hold-seconds 1..30]");
+
+        Console.WriteLine(
+            "--observe is read-only. --clock-write-test is an explicit qualification-only NVML Set/Reset path.");
     }
 
     private static readonly JsonSerializerOptions

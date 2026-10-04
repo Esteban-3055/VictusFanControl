@@ -14,6 +14,7 @@ on:
       - 'src/VictusFanControl/Hardware/PawnIo/**'
       - 'scripts/test-intel-rapl-p1.ps1'
       - 'scripts/test-gpu-nvml-observability.ps1'
+      - 'scripts/test-gpu-nvml-clock-write.ps1'
       - 'docs/INTEL_RAPL_P1.md'
       - 'docs/INTEL_RAPL_P2*.md'
       - 'release/intel-rapl-p1-qualification.json'
@@ -46,6 +47,9 @@ jobs:
 
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-gpu-nvml-observability.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw "GPU NVML observability fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-gpu-nvml-clock-write.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "GPU NVML clock write harness fixture failed." }
 
       - name: Build solution
         run: dotnet build VictusFanControl.sln --configuration Release --no-restore

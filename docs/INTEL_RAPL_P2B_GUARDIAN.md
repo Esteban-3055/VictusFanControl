@@ -1086,3 +1086,53 @@ confirm AC/DC with a real OS query before invoking it.
 No production GPU write gate, GUI authority, startup persistence or automatic
 profile integration is enabled by this step.
 
+## Step 5.10C — qualification-only direct NVML clock write harness
+
+A dedicated qualification harness now exercises the direct C# -> NVML
+locked-clock command path without enabling product/runtime authority.
+
+The harness accepts only the two fixed product presets:
+
+- ac -> 210..1850 MHz;
+- battery -> 210..1200 MHz.
+
+It rejects arbitrary clock ranges and requires the exact target confirmation
+token HP-8C40-9D0R1LA-F18 before loading NVML or authorizing a write.
+
+The transaction uses the same GPU session controller and journal semantics:
+
+    exact target token
+    -> durable ApplyWriteArmed
+    -> one nvmlDeviceSetGpuLockedClocks
+    -> ActiveUnverified
+    -> short bounded hold
+    -> durable ReleaseWriteArmed
+    -> one nvmlDeviceResetGpuLockedClocks
+    -> journal delete
+
+If Apply does not complete normally, or the session reaches RecoveryRequired,
+the journal is retained and a second write test is blocked until that evidence
+is reviewed. The harness never retries a Set/Reset implicitly and never uses
+nvidia-smi.
+
+A successful harness run qualifies only the direct NVML command path and normal
+in-process release. It does NOT claim exact locked-range readback or exact
+ownership because public NVML still lacks that getter.
+
+CI runs only --clock-write-self-test through
+scripts/test-gpu-nvml-clock-write.ps1 -SelfTest. That path validates the exact
+target token, fixed-preset restriction and bounded hold arguments without
+loading NVML or performing hardware I/O.
+
+The explicit physical commands are:
+
+    .\scripts\test-gpu-nvml-clock-write.ps1 -Preset ac -ConfirmTargetProfile HP-8C40-9D0R1LA-F18
+
+and:
+
+    .\scripts\test-gpu-nvml-clock-write.ps1 -Preset battery -ConfirmTargetProfile HP-8C40-9D0R1LA-F18
+
+productionHardwareWritesAuthorized remains false. The qualification harness has
+its own explicit, one-shot authorization path and is not wired to GUI, startup,
+power-source notifications or automatic profile integration.
+
