@@ -1754,3 +1754,232 @@ the same explicit ENABLE_SESSION, source-prime, journal and cleanup rules. Step
 6F must be introduced as a separate bounded hardware gate; no such hardware
 binding is authorized by Step 6E.
 
+## Step 6F — staged real-domain Guardian qualification
+
+Step 6F is intentionally split instead of enabling CPU and GPU hardware
+together in the first live Guardian run.
+
+The reason is evidence, not convenience. GPU already has physically qualified
+fixed product requests for both sources:
+
+    AC      210..1850 MHz
+    Battery 210..1200 MHz
+
+CPU RAPL has physical write evidence, including the historical 20/40 W
+qualification, but that value is qualification evidence rather than an agreed
+product AC/Battery default. Therefore the first Step 6F hardware gate binds
+only the already-qualified GPU clock domain. CPU remains explicitly disabled
+and a CPU+GPU enable request is rejected by this gate before any GPU write.
+
+productionHardwareWritesAuthorized remains false. The hardware-write permission
+introduced here exists only inside the explicit bounded qualification mode.
+
+### Step 6F.1 — source prime before initial real-domain Apply
+
+The Step 6E source runtime has been split into two authority phases:
+
+    ENABLE_SESSION accepted
+      -> Prime()
+         -> fresh GetSystemPowerStatus
+      -> domain EnableAsync(initial confirmed source)
+         -> journal-before-write initial Apply
+      -> ActivateListener()
+         -> RegisterPowerSettingNotification
+      -> one post-registration direct reconciliation query
+      -> normal notification/query/dedup transitions
+
+This ordering is required once the initial source selection can cause a real
+hardware mutation.
+
+A listener is never registered before explicit ENABLE_SESSION. The initial
+hardware Apply never occurs before a direct source query. Listener registration
+occurs only after the initial Apply succeeds.
+
+There is an unavoidable small interval between the source prime and listener
+registration. Step 6F closes that race with one fresh direct reconciliation
+query immediately after registration while callback dispatch is fenced. If the
+source changed in that interval, the reconciliation performs the missed
+transition. If it did not change, the result is a normal same-source duplicate.
+A Windows notification queued by registration then sees the reconciled source
+and is also deduplicated if appropriate.
+
+### Step 6F.2 — GPU real-domain lifecycle
+
+QualifiedGpuGuardianDomainLifecycle is the first non-recording Guardian domain
+adapter.
+
+It is deliberately constrained to:
+
+    CpuEnabled = false
+    GpuEnabled = true
+
+The adapter uses the existing components rather than a second write path:
+
+    GpuClockPresetPolicy
+      -> GpuClockSessionController
+      -> JsonGpuClockSessionJournal
+      -> NvmlGpuClockLimitBackend
+      -> NvmlClient
+
+Initial explicit enable:
+
+    confirmed source
+      -> fixed qualified preset
+      -> durable ApplyWriteArmed
+      -> one nvmlDeviceSetGpuLockedClocks
+      -> ActiveUnverified
+
+Enabled AC/Battery transition:
+
+    ActiveUnverified old preset
+      -> durable PresetSwitchWriteArmed
+      -> one nvmlDeviceSetGpuLockedClocks
+      -> ActiveUnverified new preset
+
+Normal release:
+
+    ActiveUnverified
+      -> durable ReleaseWriteArmed
+      -> one nvmlDeviceResetGpuLockedClocks
+      -> journal deleted
+      -> Disabled
+
+There is no implicit Reset from Dispose and no restart recovery Reset. A
+RecoveryRequired state is not converted into normal release authority.
+
+The Guardian report now records domain state/status and CPU/GPU hardware-write
+attempt counts. This lets a bounded physical run prove that CPU performed zero
+writes while the GPU followed the expected Set/Set/Set/Reset sequence.
+
+### Step 6F.3 — persistent crash journal
+
+The physical Step 6F journal is target-scoped and stable across qualification
+runs:
+
+    %LOCALAPPDATA%\VictusFanControl\Performance\
+      HP-8C40-9D0R1LA-F18\gpu-clock-session.json
+
+It is intentionally not stored only inside a new timestamped evidence folder.
+Otherwise a crash could leave a stale journal in the old folder while a later
+run starts with an apparently clean new directory.
+
+The detached child also rejects an arbitrary journal path. Its --journal
+argument must resolve exactly to the target-scoped active journal location.
+
+If that journal exists at preflight, the new qualification performs zero
+writes. It must be reviewed rather than deleted or overwritten blindly.
+
+### Step 6F.4 — read-only preflight
+
+Before physical qualification, the harness performs a read-only preflight:
+
+- exact HP-8C40-9D0R1LA-F18 target;
+- elevated Windows x64 process;
+- production target mutex available;
+- no stale target-scoped GPU journal;
+- source directly confirmed as AC;
+- exact NVIDIA GeForce RTX 4060 Laptop GPU found through NVML;
+- locked-clock Set and Reset exports available;
+- current graphics-clock observation succeeds;
+- an NvmlGpuClockLimitBackend constructed with HardwareWritesAuthorized=false
+  rejects a Set request at its software gate before a native mutation.
+
+The preflight records HardwareWritesPerformed=false.
+
+### Step 6F.5 — bounded physical GPU-only sequence
+
+The explicit physical entry point is:
+
+    .\scripts\test-performance-guardian-6f-gpu.ps1 \
+      -ConfirmTargetProfile HP-8C40-9D0R1LA-F18
+
+The operator starts with AC connected. The harness builds, executes the
+read-only preflight and only then launches the detached Guardian qualification.
+
+Expected sequence:
+
+    direct AC confirmed
+      -> HELLO
+      -> ENABLE_SESSION CPU=false GPU=true
+      -> prime AC
+      -> durable GPU ApplyWriteArmed
+      -> Set 210..1850
+      -> listener + reconciliation active
+
+    disconnect charger
+      -> Windows notification
+      -> fresh direct Battery query
+      -> durable PresetSwitchWriteArmed
+      -> Set 210..1200
+
+    reconnect charger
+      -> Windows notification
+      -> fresh direct AC query
+      -> durable PresetSwitchWriteArmed
+      -> Set 210..1850
+
+    DISABLE_SESSION
+      -> listener fenced/unregistered
+      -> durable ReleaseWriteArmed
+      -> one final Reset
+      -> GPU Disabled
+      -> journal absent
+
+    SHUTDOWN
+      -> Guardian exit
+      -> mutex released
+
+PASS requires, among other invariants:
+
+- exactly one lifecycle enable and one normal release;
+- zero CPU hardware-write attempts;
+- exactly four GPU hardware-write attempts: three Sets plus one Reset;
+- zero CPU source dispatch attempts;
+- exactly two GPU source-transition dispatch attempts;
+- at least two real Windows notification signals;
+- exactly one post-registration reconciliation query;
+- at least one same-source duplicate/reconciliation suppression;
+- initial Guardian source Ac and final source Ac;
+- final GPU session Disabled;
+- no source-domain failure recorded;
+- target-scoped GPU journal absent after normal release.
+
+Current graphics clock remains observation only. Even a physical PASS of this
+gate must not be described as exact locked-range ownership.
+
+### Step 6F software fixtures and current boundary
+
+Hardware-free fixtures now prove:
+
+- journaled initial AC Apply through the real GPU session/controller graph;
+- AC -> Battery -> AC direct preset transitions with no intermediate Reset;
+- one final normal Reset;
+- combined CPU+GPU enable is rejected by the first hardware gate before writes;
+- Unknown initial source is rejected before writes;
+- stale target journal and arbitrary child journal paths are fail-closed;
+- source transition failures are retained in Guardian diagnostics;
+- the prime/apply/register race is closed by post-registration reconciliation.
+
+The CI path invokes only fake backends / argument gates for Step 6F. It does
+not load NVML for a write and does not perform physical hardware I/O.
+
+The physical GPU-only Guardian gate is therefore **prepared, not yet physically
+qualified**. A PASS must come from the exact HP-8C40-9D0R1LA-F18 target using
+the bounded command above and its generated evidence.
+
+CPU real-domain binding, combined CPU+GPU qualification, destructive
+Guardian-death tests, suspend/resume, GPU driver-reset handling, GUI
+integration and startup persistence all remain closed.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
+
+After a physical GPU-only Step 6F PASS, the next gate is to define the intended
+CPU AC/Battery product values explicitly, bind the existing
+CpuPowerLimiter/CpuPowerPresetTransitionController to the Guardian under the
+same journal/recovery rules, qualify CPU alone, and only then run the combined
+CPU+GPU source-transition sequence. The historical 20/40 W test value must not
+be promoted to a product default implicitly.
+
