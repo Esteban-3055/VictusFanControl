@@ -142,6 +142,9 @@ function Assert-QualificationConfiguration {
     if ([int]$t.cpuTemperatureSource -ne 3) { $errors += 'CPU source must be HottestPerformanceCoresAverage (3).' }
     if ([int]$t.hottestPerformanceCoreCount -ne 3) { $errors += 'Hottest P-Core count must be 3.' }
     if ([int]$t.minimumLevel -ne 30 -or [int]$t.maximumLevel -ne 50) { $errors += 'Fan envelope must be 30..50.' }
+    if ([int]$t.normalMaximumUpStepLevels -ne 1 -or [int]$t.maximumDownStepLevels -ne 1) { $errors += 'Normal fan step must be +1/-1.' }
+    if ([int]$t.normalPollingDelayMilliseconds -ne 1000) { $errors += 'Normal polling delay must be 1000 ms.' }
+    if ([bool]$t.rememberThermalDemand) { $errors += 'Thermal-demand memory must be disabled for A1.' }
     if (-not [bool]$t.adaptiveDescentEnabled) { $errors += 'Adaptive descent must be enabled.' }
 
     $expected = @{
