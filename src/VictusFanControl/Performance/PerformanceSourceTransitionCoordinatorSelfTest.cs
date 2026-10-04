@@ -11,6 +11,8 @@ internal static class PerformanceSourceTransitionCoordinatorSelfTest
             DuplicateNotificationIsSuppressed(output);
             ConfirmedChangeDispatchesBothDomains(output);
             CpuFailureDoesNotBlockGpu(output);
+            GpuFailureDoesNotRevertCpu(output);
+            SelectedDomainMaskSkipsDisabledSink(output);
             QueryFailureDispatchesUnknownOnce(output);
             UnprimedNotificationOnlyPrimes(output);
 
@@ -194,6 +196,95 @@ internal static class PerformanceSourceTransitionCoordinatorSelfTest
 
         output.WriteLine(
             "PASS CPU transition failure does not block independent GPU transition attempt");
+    }
+
+    private static void GpuFailureDoesNotRevertCpu(
+        TextWriter output)
+    {
+        var reader =
+            new FakeReader(
+                Observation(
+                    PerformancePowerSourceKind.Ac,
+                    1),
+                Observation(
+                    PerformancePowerSourceKind.Battery,
+                    0));
+
+        var cpu =
+            new FakeCpuSink();
+
+        var gpu =
+            new FakeGpuSink
+            {
+                ThrowOnCall = true
+            };
+
+        var coordinator =
+            new PerformanceSourceTransitionCoordinator(
+                reader,
+                cpu,
+                gpu);
+
+        _ =
+            coordinator.Prime();
+
+        var result =
+            coordinator.HandleNotificationSignal();
+
+        Require(
+            !result.Succeeded &&
+            result.CpuResult?.Succeeded == true &&
+            result.GpuException is not null &&
+            cpu.Calls == 1 &&
+            gpu.Calls == 1,
+            "GPU exception must not revert or suppress CPU dispatch");
+
+        output.WriteLine(
+            "PASS GPU transition failure does not revert successful independent CPU dispatch");
+    }
+
+    private static void SelectedDomainMaskSkipsDisabledSink(
+        TextWriter output)
+    {
+        var reader =
+            new FakeReader(
+                Observation(
+                    PerformancePowerSourceKind.Ac,
+                    1),
+                Observation(
+                    PerformancePowerSourceKind.Battery,
+                    0));
+
+        var cpu =
+            new FakeCpuSink();
+
+        var gpu =
+            new FakeGpuSink();
+
+        var coordinator =
+            new PerformanceSourceTransitionCoordinator(
+                reader,
+                cpu,
+                gpu);
+
+        _ =
+            coordinator.Prime();
+
+        var result =
+            coordinator.HandleNotificationSignal(
+                dispatchCpu: true,
+                dispatchGpu: false);
+
+        Require(
+            result.Succeeded &&
+            result.CpuAttempted &&
+            !result.GpuAttempted &&
+            cpu.Calls == 1 &&
+            gpu.Calls == 0,
+            "selected-domain dispatch must not invoke a disabled sink");
+
+        output.WriteLine(
+            "PASS source coordinator dispatch mask invokes only explicitly enabled domains");
     }
 
     private static void QueryFailureDispatchesUnknownOnce(
@@ -385,12 +476,19 @@ internal static class PerformanceSourceTransitionCoordinatorSelfTest
     {
         internal int Calls;
         internal PerformancePowerSourceKind? LastSource;
+        internal bool ThrowOnCall;
 
         public GpuClockPresetTransitionResult HandleConfirmedSourceChange(
             PerformancePowerSourceKind source)
         {
             Calls++;
             LastSource = source;
+
+            if (ThrowOnCall)
+            {
+                throw new IOException(
+                    "synthetic GPU transition failure");
+            }
 
             return new GpuClockPresetTransitionResult(
                 GpuClockPresetTransitionDisposition.EnabledPresetSwitched,

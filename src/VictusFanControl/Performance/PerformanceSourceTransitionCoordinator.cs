@@ -117,7 +117,14 @@ internal sealed class PerformanceSourceTransitionCoordinator
                     : "PERFORMANCE_SOURCE_PRIMED_UNKNOWN_AFTER_QUERY_FAILURE_NO_DISPATCH");
     }
 
-    internal PerformanceSourceDispatchResult HandleNotificationSignal()
+    internal PerformanceSourceDispatchResult HandleNotificationSignal() =>
+        HandleNotificationSignal(
+            dispatchCpu: true,
+            dispatchGpu: true);
+
+    internal PerformanceSourceDispatchResult HandleNotificationSignal(
+        bool dispatchCpu,
+        bool dispatchGpu)
     {
         if (!_primed)
         {
@@ -174,39 +181,47 @@ internal sealed class PerformanceSourceTransitionCoordinator
         string? gpuException =
             null;
 
-        try
+        if (dispatchCpu)
         {
-            cpuResult =
-                _cpu.HandleConfirmedSourceChange(
-                    source);
-        }
-        catch (Exception ex)
-        {
-            cpuException =
-                ex.ToString();
+            try
+            {
+                cpuResult =
+                    _cpu.HandleConfirmedSourceChange(
+                        source);
+            }
+            catch (Exception ex)
+            {
+                cpuException =
+                    ex.ToString();
+            }
         }
 
-        try
+        if (dispatchGpu)
         {
-            gpuResult =
-                _gpu.HandleConfirmedSourceChange(
-                    source);
-        }
-        catch (Exception ex)
-        {
-            gpuException =
-                ex.ToString();
+            try
+            {
+                gpuResult =
+                    _gpu.HandleConfirmedSourceChange(
+                        source);
+            }
+            catch (Exception ex)
+            {
+                gpuException =
+                    ex.ToString();
+            }
         }
 
         var cpuSucceeded =
-            cpuException is null &&
-            cpuResult.HasValue &&
-            cpuResult.Value.Succeeded;
+            !dispatchCpu ||
+            (cpuException is null &&
+             cpuResult.HasValue &&
+             cpuResult.Value.Succeeded);
 
         var gpuSucceeded =
-            gpuException is null &&
-            gpuResult.HasValue &&
-            gpuResult.Value.Succeeded;
+            !dispatchGpu ||
+            (gpuException is null &&
+             gpuResult.HasValue &&
+             gpuResult.Value.Succeeded);
 
         var succeeded =
             observation.Succeeded &&
@@ -228,10 +243,10 @@ internal sealed class PerformanceSourceTransitionCoordinator
             previous,
             Primed: true,
             DuplicateSuppressed: false,
-            CpuAttempted: true,
+            CpuAttempted: dispatchCpu,
             CpuResult: cpuResult,
             CpuException: cpuException,
-            GpuAttempted: true,
+            GpuAttempted: dispatchGpu,
             GpuResult: gpuResult,
             GpuException: gpuException,
             Succeeded: succeeded,
