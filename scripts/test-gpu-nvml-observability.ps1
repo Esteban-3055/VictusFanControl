@@ -11,7 +11,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root 'src\VictusFanControl.GpuProbe\VictusFanControl.GpuProbe.csproj'
 $exe = Join-Path $root 'src\VictusFanControl.GpuProbe\bin\Release\net8.0-windows\VictusFanControl.GpuProbe.exe'
 
-Write-Host '1. Building read-only GPU NVML observability probe.'
+Write-Host '1. Building read-only GPU NVML clock + power-limit observability probe.'
 & dotnet build $project -c Release -warnaserror
 if ($LASTEXITCODE -ne 0) {
     throw 'GPU observability probe build failed.'
@@ -36,7 +36,7 @@ $OutputPath = [IO.Path]::GetFullPath($OutputPath)
 
 Write-Host ''
 Write-Host '2. READ-ONLY observation.' -ForegroundColor Cyan
-Write-Host 'No NVML Set/Reset call and no nvidia-smi command is issued by this script.'
+Write-Host 'No NVML clock Set/Reset, power-limit setter, or nvidia-smi command is issued by this script.'
 Write-Host ("Label : {0}" -f $Label)
 Write-Host ("Output: {0}" -f $OutputPath)
 

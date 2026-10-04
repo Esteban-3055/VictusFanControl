@@ -887,3 +887,32 @@ missing setter-export and configured-vs-enforced cases.
 No GPU power-limit write path exists in this step.
 productionHardwareWritesAuthorized remains false.
 
+## Step 5.9B — exact-target GPU power-limit read-only probe
+
+VictusFanControl.GpuProbe schema v2 now captures the public NVML
+power-management surface in the same read-only artifact used for clock
+observability:
+
+- power-management mode;
+- configured power-management limit;
+- default power-management limit;
+- min/max power-limit constraints;
+- enforced power limit;
+- presence of the nvmlDeviceSetPowerManagementLimit export;
+- the pure GpuPowerLimitQualification result.
+
+The probe still exposes no write command. It never invokes
+nvmlDeviceSetPowerManagementLimit, GPU clock Set/Reset, or nvidia-smi.
+
+The physical gate is intentionally two-stage. First, run this read-only probe
+on HP-8C40-9D0R1LA-F18 and inspect whether the RTX 4060 Laptop reports an
+enabled, adjustable, internally consistent power range. Only if that succeeds
+will a later commit add a separately token-gated one-write/readback/restore
+qualification harness.
+
+A readable adjustable range plus setter-export presence is not itself proof
+that the laptop permits the setter. It authorizes only the design of the
+controlled write qualification; ProductionWriteAuthorized remains false.
+
+No GPU power-limit hardware PASS is claimed by this step.
+

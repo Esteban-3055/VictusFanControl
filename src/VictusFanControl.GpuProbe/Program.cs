@@ -13,8 +13,7 @@ internal static class Program
     private const string TargetDeviceName =
         "NVIDIA GeForce RTX 4060 Laptop GPU";
 
-    public static int Main(
-        string[] args)
+    public static int Main(string[] args)
     {
         try
         {
@@ -47,94 +46,80 @@ internal static class Program
             var eventReasons =
                 client.ReadCurrentClocksEventReasonsOnce();
 
-            var availability =
+            var clockAvailability =
                 client.GpuClockControlAvailability;
 
-            var capabilities =
+            var clockCapabilities =
                 new GpuClockBackendCapabilities(
-                    availability
-                        .SetLockedGraphicsClocksExportAvailable,
-                    availability
-                        .ResetLockedGraphicsClocksExportAvailable,
-                    availability
-                        .CurrentGraphicsClockExportAvailable,
-                    availability
-                        .ApplicationGraphicsClockTargetExportAvailable,
-                    availability
-                        .CurrentClocksEventReasonsExportAvailable,
-                    availability
-                        .ExactLockedRangeReadbackAvailable,
+                    clockAvailability.SetLockedGraphicsClocksExportAvailable,
+                    clockAvailability.ResetLockedGraphicsClocksExportAvailable,
+                    clockAvailability.CurrentGraphicsClockExportAvailable,
+                    clockAvailability.ApplicationGraphicsClockTargetExportAvailable,
+                    clockAvailability.CurrentClocksEventReasonsExportAvailable,
+                    clockAvailability.ExactLockedRangeReadbackAvailable,
                     HardwareWritesAuthorized: false);
 
-            var observation =
+            var clockObservation =
                 new GpuClockBackendObservation(
-                    Succeeded:
-                        current.IsSuccess,
+                    Succeeded: current.IsSuccess,
                     CurrentGraphicsClockMHz:
-                        current.IsSuccess
-                            ? current.Value
-                            : null,
+                        current.IsSuccess ? current.Value : null,
                     ApplicationGraphicsClockTargetMHz:
-                        appTarget.IsSuccess
-                            ? appTarget.Value
-                            : null,
+                        appTarget.IsSuccess ? appTarget.Value : null,
                     CurrentClocksEventReasons:
-                        eventReasons.IsSuccess
-                            ? eventReasons.Value
-                            : null,
+                        eventReasons.IsSuccess ? eventReasons.Value : null,
                     ExactLockedRange: null,
-                    ProvesExactLockedRangeOwnership:
-                        false,
+                    ProvesExactLockedRangeOwnership: false,
                     FailureKind:
                         current.IsSuccess
                             ? GpuClockBackendFailureKind.None
                             : GpuClockBackendFailureKind.Unknown,
-                    NvmlResult:
-                        current.Result,
+                    NvmlResult: current.Result,
                     Status:
                         "READ_ONLY_GPU_CLOCK_OBSERVABILITY_PROBE");
 
             var ac =
                 GpuClockOwnershipQualification.Assess(
-                    new GpuClockLimitRequest(
-                        210,
-                        1850),
-                    capabilities,
-                    observation);
+                    new GpuClockLimitRequest(210, 1850),
+                    clockCapabilities,
+                    clockObservation);
 
             var battery =
                 GpuClockOwnershipQualification.Assess(
-                    new GpuClockLimitRequest(
-                        210,
-                        1200),
-                    capabilities,
-                    observation);
+                    new GpuClockLimitRequest(210, 1200),
+                    clockCapabilities,
+                    clockObservation);
+
+            var powerSnapshot =
+                ReadPowerLimitSnapshot(client);
+
+            var powerQualification =
+                GpuPowerLimitQualification.Assess(
+                    powerSnapshot);
 
             var report =
                 new GpuObservabilityReport(
-                    SchemaVersion: 1,
-                    CapturedAtUtc:
-                        DateTimeOffset.UtcNow,
+                    SchemaVersion: 2,
+                    CapturedAtUtc: DateTimeOffset.UtcNow,
                     TargetProfileId,
                     Label: label,
-                    DeviceName:
-                        client.DeviceName,
-                    Availability:
-                        availability,
-                    CurrentGraphicsClock:
-                        current,
-                    ApplicationGraphicsClockTarget:
-                        appTarget,
-                    CurrentClocksEventReasons:
-                        eventReasons,
-                    AcOwnershipQualification:
-                        ac,
-                    BatteryOwnershipQualification:
-                        battery,
-                    HardwareWritesPerformed:
-                        false,
+                    DeviceName: client.DeviceName,
+                    Availability: clockAvailability,
+                    CurrentGraphicsClock: current,
+                    ApplicationGraphicsClockTarget: appTarget,
+                    CurrentClocksEventReasons: eventReasons,
+                    AcOwnershipQualification: ac,
+                    BatteryOwnershipQualification: battery,
+                    PowerAvailability: powerSnapshot.Availability,
+                    PowerManagementMode: powerSnapshot.PowerManagementMode,
+                    PowerManagementLimit: powerSnapshot.CurrentLimit,
+                    DefaultPowerManagementLimit: powerSnapshot.DefaultLimit,
+                    PowerManagementLimitConstraints: powerSnapshot.Constraints,
+                    EnforcedPowerLimit: powerSnapshot.EnforcedLimit,
+                    PowerLimitQualification: powerQualification,
+                    HardwareWritesPerformed: false,
                     Notes:
-                        "Read-only. APP_CLOCK_TARGET and event reasons are diagnostic only; exact locked min/max is not exposed by public NVML.");
+                        "Read-only. Clock lock exact min/max remains unavailable; GPU power-management configured/default/constraints/enforced fields are queried without invoking the setter.");
 
             var json =
                 JsonSerializer.Serialize(
@@ -143,8 +128,7 @@ internal static class Program
 
             Console.WriteLine(json);
 
-            if (!string.IsNullOrWhiteSpace(
-                    outputPath))
+            if (!string.IsNullOrWhiteSpace(outputPath))
             {
                 DurableWrite(
                     outputPath!,
@@ -163,9 +147,19 @@ internal static class Program
         }
     }
 
+    private static GpuPowerLimitReadSnapshot ReadPowerLimitSnapshot(
+        INvmlGpuPowerLimitReadTransport client) =>
+        new(
+            client.GpuPowerLimitAvailability,
+            client.ReadPowerManagementModeOnce(),
+            client.ReadPowerManagementLimitOnce(),
+            client.ReadDefaultPowerManagementLimitOnce(),
+            client.ReadPowerManagementLimitConstraintsOnce(),
+            client.ReadEnforcedPowerLimitOnce());
+
     private static int SelfTest()
     {
-        var availability =
+        var clockAvailability =
             new NvmlGpuClockControlAvailability(
                 true,
                 true,
@@ -174,64 +168,79 @@ internal static class Program
                 true,
                 false);
 
+        var powerAvailability =
+            new NvmlGpuPowerLimitAvailability(
+                true,
+                true,
+                true,
+                true,
+                true,
+                true);
+
+        var powerSnapshot =
+            new GpuPowerLimitReadSnapshot(
+                powerAvailability,
+                new NvmlUIntCallResult(true, 0, 1),
+                new NvmlUIntCallResult(true, 0, 115000),
+                new NvmlUIntCallResult(true, 0, 115000),
+                new NvmlPowerLimitConstraintsCallResult(
+                    true,
+                    0,
+                    60000,
+                    115000),
+                new NvmlUIntCallResult(true, 0, 110000));
+
+        var powerQualification =
+            GpuPowerLimitQualification.Assess(
+                powerSnapshot);
+
         var report =
             new GpuObservabilityReport(
-                SchemaVersion: 1,
-                CapturedAtUtc:
-                    DateTimeOffset.UnixEpoch,
+                SchemaVersion: 2,
+                CapturedAtUtc: DateTimeOffset.UnixEpoch,
                 TargetProfileId,
                 Label: "fixture",
-                DeviceName:
-                    TargetDeviceName,
-                Availability:
-                    availability,
+                DeviceName: TargetDeviceName,
+                Availability: clockAvailability,
                 CurrentGraphicsClock:
-                    new NvmlUIntCallResult(
-                        true,
-                        0,
-                        210),
+                    new NvmlUIntCallResult(true, 0, 210),
                 ApplicationGraphicsClockTarget:
-                    new NvmlUIntCallResult(
-                        true,
-                        3,
-                        0),
+                    new NvmlUIntCallResult(true, 3, 0),
                 CurrentClocksEventReasons:
-                    new NvmlULongCallResult(
-                        true,
-                        3,
-                        0),
+                    new NvmlULongCallResult(true, 3, 0),
                 AcOwnershipQualification:
-                    BlockedFixtureAssessment(
-                        210,
-                        1850),
+                    BlockedFixtureAssessment(210, 1850),
                 BatteryOwnershipQualification:
-                    BlockedFixtureAssessment(
-                        210,
-                        1200),
-                HardwareWritesPerformed:
-                    false,
-                Notes:
-                    "fixture");
+                    BlockedFixtureAssessment(210, 1200),
+                PowerAvailability: powerAvailability,
+                PowerManagementMode: powerSnapshot.PowerManagementMode,
+                PowerManagementLimit: powerSnapshot.CurrentLimit,
+                DefaultPowerManagementLimit: powerSnapshot.DefaultLimit,
+                PowerManagementLimitConstraints: powerSnapshot.Constraints,
+                EnforcedPowerLimit: powerSnapshot.EnforcedLimit,
+                PowerLimitQualification: powerQualification,
+                HardwareWritesPerformed: false,
+                Notes: "fixture");
 
         var json =
             JsonSerializer.Serialize(
                 report,
                 JsonOptions);
 
-        if (string.IsNullOrWhiteSpace(
-                json) ||
+        if (string.IsNullOrWhiteSpace(json) ||
             report.HardwareWritesPerformed ||
-            report.AcOwnershipQualification
-                .ManagedOwnershipAllowed ||
-            report.BatteryOwnershipQualification
-                .ManagedOwnershipAllowed)
+            report.AcOwnershipQualification.ManagedOwnershipAllowed ||
+            report.BatteryOwnershipQualification.ManagedOwnershipAllowed ||
+            !report.PowerLimitQualification.ExactConfiguredLimitReadbackAvailable ||
+            !report.PowerLimitQualification.ControlledWriteQualificationRecommended ||
+            report.PowerLimitQualification.ProductionWriteAuthorized)
         {
             throw new InvalidOperationException(
                 "read-only probe fixture invariant failed");
         }
 
         Console.WriteLine(
-            "GPU NVML observability probe self-test: PASS (no NVML load, no hardware I/O).");
+            "GPU NVML observability probe self-test: PASS (clock + power read surfaces, no NVML load, no hardware I/O).");
 
         return 0;
     }
@@ -292,15 +301,12 @@ internal static class Program
             switch (args[index])
             {
                 case "--label"
-                    when index + 1 <
-                         args.Length:
-                    label =
-                        args[++index];
+                    when index + 1 < args.Length:
+                    label = args[++index];
                     break;
 
                 case "--output"
-                    when index + 1 <
-                         args.Length:
+                    when index + 1 < args.Length:
                     outputPath =
                         Path.GetFullPath(
                             args[++index]);
@@ -311,8 +317,7 @@ internal static class Program
             }
         }
 
-        return !string.IsNullOrWhiteSpace(
-            label);
+        return !string.IsNullOrWhiteSpace(label);
     }
 
     private static void DurableWrite(
@@ -320,14 +325,11 @@ internal static class Program
         string content)
     {
         var directory =
-            Path.GetDirectoryName(
-                path);
+            Path.GetDirectoryName(path);
 
-        if (!string.IsNullOrWhiteSpace(
-                directory))
+        if (!string.IsNullOrWhiteSpace(directory))
         {
-            Directory.CreateDirectory(
-                directory);
+            Directory.CreateDirectory(directory);
         }
 
         using var stream =
@@ -343,17 +345,13 @@ internal static class Program
             new StreamWriter(
                 stream,
                 new UTF8Encoding(
-                    encoderShouldEmitUTF8Identifier:
-                        false),
+                    encoderShouldEmitUTF8Identifier: false),
                 4096,
                 leaveOpen: true);
 
-        writer.Write(
-            content);
-
+        writer.Write(content);
         writer.Flush();
-        stream.Flush(
-            flushToDisk: true);
+        stream.Flush(flushToDisk: true);
     }
 
     private static void PrintHelp()
@@ -365,7 +363,7 @@ internal static class Program
             "VictusFanControl.GpuProbe --self-test");
 
         Console.WriteLine(
-            "This probe is read-only and never calls GPU clock Set/Reset.");
+            "This probe is read-only and never calls GPU clock or power-limit setters.");
     }
 
     private static readonly JsonSerializerOptions
@@ -385,10 +383,15 @@ internal static class Program
         NvmlUIntCallResult CurrentGraphicsClock,
         NvmlUIntCallResult ApplicationGraphicsClockTarget,
         NvmlULongCallResult CurrentClocksEventReasons,
-        GpuClockOwnershipQualificationResult
-            AcOwnershipQualification,
-        GpuClockOwnershipQualificationResult
-            BatteryOwnershipQualification,
+        GpuClockOwnershipQualificationResult AcOwnershipQualification,
+        GpuClockOwnershipQualificationResult BatteryOwnershipQualification,
+        NvmlGpuPowerLimitAvailability PowerAvailability,
+        NvmlUIntCallResult PowerManagementMode,
+        NvmlUIntCallResult PowerManagementLimit,
+        NvmlUIntCallResult DefaultPowerManagementLimit,
+        NvmlPowerLimitConstraintsCallResult PowerManagementLimitConstraints,
+        NvmlUIntCallResult EnforcedPowerLimit,
+        GpuPowerLimitQualificationResult PowerLimitQualification,
         bool HardwareWritesPerformed,
         string Notes);
 }
