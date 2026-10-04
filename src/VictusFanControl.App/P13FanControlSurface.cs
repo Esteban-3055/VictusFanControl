@@ -97,6 +97,8 @@ internal sealed class P13FanControlSurface : UserControl
         _candidateValue.Text = $"{_previewProfile.Name} · {configuration.Tuning.MinimumLevel}–{configuration.Tuning.MaximumLevel}";
         _previewLevelValue.Text = "—";
         _previewDetailValue.Text = "Ajustes aplicados; esperando una muestra nueva.";
+        if (_curveEditor is { IsDisposed: false })
+            _curveEditor.SetCpuTemperatureSource(configuration.Tuning.CpuTemperatureSource);
     }
 
     public AdaptiveFanProductionMode RequestedMode => _controller.Mode;

@@ -7,7 +7,7 @@ namespace VictusFanControl.App;
 internal sealed class AdaptiveCurveEditorForm : Form
 {
     private readonly AdaptiveCurveProfileStore _store;
-    private readonly CpuDemandTemperatureSource _cpuSource;
+    private CpuDemandTemperatureSource _cpuSource;
     private readonly ComboBox _profiles = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly ComboBox _axes = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 235 };
     private readonly AdaptiveCurveChart _chart = new();
@@ -216,6 +216,12 @@ internal sealed class AdaptiveCurveEditorForm : Form
     {
         var candidate=AdaptiveCurveProfiles.Copy(_draft);_=AdaptiveCurveProfiles.Validate(candidate);
         _applyPreview(candidate);_applied=candidate;ClearTelemetry();RefreshDraft();
+    }
+    internal void SetCpuTemperatureSource(CpuDemandTemperatureSource source)
+    {
+        if (_cpuSource == source) return;
+        _cpuSource = source;
+        ClearTelemetry();
     }
     public void UpdateTelemetry(SystemState state,TelemetrySnapshot snapshot,AdaptiveFanPolicyShadowEvaluation? result)
     {
