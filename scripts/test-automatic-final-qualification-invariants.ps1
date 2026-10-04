@@ -58,6 +58,8 @@ Require ($qualification.Contains('tuning.SustainedLoadSeconds, 1200')) 'qualific
 Require ($qualification.Contains('fail-cleanup')) 'qualification failure must schedule a production-controller Firmware cleanup'
 Require ($qualification.Contains('_automaticFinalReadyConfigurationJson')) 'READY must bind the exact saved configuration used by the run'
 Require ($qualification.Contains('Fan configuration changed after READY')) 'post-READY configuration mutation must fail closed'
+Require ($qualification.Contains('EnsureAutomaticFinalReadyEnvelope')) 'READY must enforce a bounded thermal/power envelope'
+Require ($qualification.Contains('CpuDemandTemperature.Select')) 'READY must prove the hottest-3-P-Core source is actually available'
 Require ($qualification.Contains('AdaptiveFanProductionActionKind.RestoreFirmware')) 'real Firmware transition must be verified'
 Require ($qualification.Contains('LocalFirmwareAckVerified')) 'strong local firmware ACK proof required'
 Require ($qualification.Contains('WatchdogReleaseVerified')) 'watchdog release proof required'
