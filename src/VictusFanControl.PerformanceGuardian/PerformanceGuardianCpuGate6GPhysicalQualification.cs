@@ -483,6 +483,14 @@ internal static class PerformanceGuardianCpuGate6GPhysicalQualification
                 enableResponse?.Ok == true &&
                 disableResponse?.Ok == true &&
                 shutdownResponse?.Ok == true &&
+                string.Equals(
+                    shutdownResponse.Code,
+                    "SHUTDOWN_ACCEPTED",
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    shutdownResponse.Phase,
+                    PerformanceGuardianAuthorityPhase.Stopped.ToString(),
+                    StringComparison.Ordinal) &&
                 sameSession &&
                 increasingGenerations &&
                 immutableBaseline &&

@@ -156,15 +156,29 @@ internal sealed class PerformanceGuardianAuthority
                     "Performance Guardian status returned."),
 
             PerformanceGuardianProtocol.Shutdown =>
-                Accept(
-                    "SHUTDOWN_ACCEPTED",
-                    "Performance Guardian shutdown requested."),
+                HandleShutdown(),
 
             _ =>
                 Reject(
                     "UNKNOWN_COMMAND",
                     "Unknown Performance Guardian command.")
         };
+    }
+
+    private PerformanceGuardianAuthorityResult HandleShutdown()
+    {
+        CpuEnabled =
+            false;
+
+        GpuEnabled =
+            false;
+
+        Phase =
+            PerformanceGuardianAuthorityPhase.Stopped;
+
+        return Accept(
+            "SHUTDOWN_ACCEPTED",
+            "Performance Guardian shutdown requested.");
     }
 
     internal PerformanceGuardianAuthorityResult MarkParentLost()

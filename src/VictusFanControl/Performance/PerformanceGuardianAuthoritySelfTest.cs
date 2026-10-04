@@ -118,8 +118,55 @@ internal static class PerformanceGuardianAuthoritySelfTest
                 !gate.GpuEnabled,
                 "disable revokes authority");
 
-            _ =
+            var shutdownAfterDisable =
                 gate.Handle(
+                    Request(
+                        nonce,
+                        PerformanceGuardianProtocol.Shutdown));
+
+            Require(
+                shutdownAfterDisable.Accepted &&
+                shutdownAfterDisable.Code ==
+                    "SHUTDOWN_ACCEPTED" &&
+                shutdownAfterDisable.Phase ==
+                    PerformanceGuardianAuthorityPhase.Stopped &&
+                gate.Phase ==
+                    PerformanceGuardianAuthorityPhase.Stopped &&
+                !gate.SessionEnabled &&
+                !gate.CpuEnabled &&
+                !gate.GpuEnabled,
+                "shutdown after DISABLE_SESSION must transition Idle to Stopped");
+
+            var statusAfterShutdown =
+                gate.Handle(
+                    Request(
+                        nonce,
+                        PerformanceGuardianProtocol.Status));
+
+            Require(
+                !statusAfterShutdown.Accepted &&
+                statusAfterShutdown.Code ==
+                    "GUARDIAN_STOPPING",
+                "stopped guardian rejects later client authority");
+
+            var parentGate =
+                new PerformanceGuardianAuthority(
+                    "HP-8C40-9D0R1LA-F18",
+                    ownerPid: 4242,
+                    ownerStartUtcTicks: 638951234567890000,
+                    sessionNonce: nonce);
+
+            _ =
+                parentGate.Handle(
+                    Request(
+                        nonce,
+                        PerformanceGuardianProtocol.Hello,
+                        ownerPid: 4242,
+                        ownerTicks:
+                            638951234567890000));
+
+            _ =
+                parentGate.Handle(
                     Request(
                         nonce,
                         PerformanceGuardianProtocol.EnableSession,
@@ -127,19 +174,19 @@ internal static class PerformanceGuardianAuthoritySelfTest
                         gpu: false));
 
             var parentLost =
-                gate.MarkParentLost();
+                parentGate.MarkParentLost();
 
             Require(
                 parentLost.Accepted &&
-                gate.Phase ==
+                parentGate.Phase ==
                     PerformanceGuardianAuthorityPhase.ParentLost &&
-                !gate.SessionEnabled &&
-                !gate.CpuEnabled &&
-                !gate.GpuEnabled,
+                !parentGate.SessionEnabled &&
+                !parentGate.CpuEnabled &&
+                !parentGate.GpuEnabled,
                 "parent loss revokes startup/apply authority");
 
             var statusAfterParentLoss =
-                gate.Handle(
+                parentGate.Handle(
                     Request(
                         nonce,
                         PerformanceGuardianProtocol.Status));
@@ -151,7 +198,7 @@ internal static class PerformanceGuardianAuthoritySelfTest
                 "parent-lost guardian rejects later client authority");
 
             output.WriteLine(
-                "Performance Guardian authority self-test: PASS (nonce/owner binding, explicit session authority, reconnect, parent-loss revoke, no hardware I/O).");
+                "Performance Guardian authority self-test: PASS (nonce/owner binding, explicit session authority, reconnect, disable-then-shutdown Stopped transition, parent-loss revoke, no hardware I/O).");
 
             return 0;
         }

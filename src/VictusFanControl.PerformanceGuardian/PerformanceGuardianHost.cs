@@ -593,23 +593,9 @@ internal sealed class PerformanceGuardianHost
                 }
             }
 
-            if (request.Type ==
-                    PerformanceGuardianProtocol.Shutdown &&
-                wasEnabled)
-            {
-                _ =
-                    authority.Handle(
-                        request);
-
-                result =
-                    authority.MarkStopped();
-            }
-            else
-            {
-                result =
-                    authority.Handle(
-                        request);
-            }
+            result =
+                authority.Handle(
+                    request);
 
             if (result.Accepted)
                 _acceptedRequests++;

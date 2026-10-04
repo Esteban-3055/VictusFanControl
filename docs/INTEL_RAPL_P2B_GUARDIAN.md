@@ -2223,3 +2223,68 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+### Step 6G.2 first physical execution — hardware path clean, shutdown-state false negative
+
+The first exact-target Step 6G.2 physical execution on 2026-10-04 completed
+the complete CPU hardware sequence correctly, but the qualification report
+finished Result=FAIL because of an independent Guardian shutdown bookkeeping
+bug.
+
+The hardware evidence itself is clean:
+
+    initial direct source          AC
+    pre-session baseline           PL1 45 W / PL2 115 W
+    initial owned request          AC 35/60 W
+    source transition             Battery confirmed
+    battery owned request          8/15 W
+    source transition             AC confirmed
+    AC-return owned request        35/60 W
+    CPU hardware write attempts    4
+    GPU hardware write attempts    0
+    CPU source dispatches          2
+    GPU source dispatches          0
+    source reconciliation          1
+    source notifications           3
+    duplicate signals              2
+    enable/release calls           1 / 1
+    same SessionId                 true
+    increasing generations         true
+    immutable OriginalBaseline     true
+    final owned fields restored    true
+    final snapshot                 PL1 45 W / PL2 115 W
+    final CPU state                Disabled
+    active CPU journal present     false
+    Guardian exit code             0
+    source/Guardian failure        null / null
+
+The only failed qualification predicates were:
+
+    GuardianReport.ExitReason == "CANCELLED" (expected "CLIENT_SHUTDOWN")
+    GuardianReport.FinalPhase == "Idle"       (expected "Stopped")
+
+The accepted SHUTDOWN response was emitted after DISABLE_SESSION while the
+authority was already Idle. PerformanceGuardianHost only called MarkStopped()
+when SHUTDOWN arrived while a session was still enabled. Therefore a normal
+DISABLE_SESSION -> SHUTDOWN path cancelled the host with authority still Idle.
+
+This is a protocol-state defect, not a RAPL write/restore failure. The exact
+first-run evidence is retained under release/ with the suffix
+step6g-cpu-physical-attempt1-false-negative.
+
+The fix moves the Stopped transition into the semantic SHUTDOWN authority
+handler so every accepted SHUTDOWN transitions to Stopped, including after a
+successful DISABLE_SESSION. The host no longer has a wasEnabled-only stopping
+branch. A regression fixture now requires Disable -> Shutdown to produce
+SHUTDOWN_ACCEPTED with Phase=Stopped, and the physical qualification requires
+the same response phase in addition to its existing final-report invariants.
+
+Because the recorded qualification JSON itself is Result=FAIL, Step 6G.2 is
+not yet declared physically PASS. One final bounded rerun on the fixed build is
+required to close the gate. No stale journal remains from the first run.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
