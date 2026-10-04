@@ -4,20 +4,33 @@ using System.Text.Json.Serialization;
 
 namespace VictusFanControl.Control.Adaptive;
 
-public enum CpuDemandTemperatureSource { PackageOrHottestCore, CoreAverage }
+public enum CpuDemandTemperatureSource { PackageOrHottestCore, CoreAverage, PerformanceCoreAverage, HottestPerformanceCoresAverage }
 
 /// <summary>Demand only. Raw Package/core safety readings remain on the snapshot.</summary>
 public static class CpuDemandTemperature
 {
-    public static double? Select(TelemetrySnapshot snapshot, CpuDemandTemperatureSource source)
+    public static double? Select(TelemetrySnapshot snapshot, CpuDemandTemperatureSource source, int hottestPerformanceCoreCount = 3)
     {
         if (source == CpuDemandTemperatureSource.PackageOrHottestCore)
             return snapshot.CpuControlTemperatureC;
-        if (source != CpuDemandTemperatureSource.CoreAverage || !snapshot.CpuCoreTelemetryComplete ||
+        if (!Enum.IsDefined(source) || !snapshot.CpuCoreTelemetryComplete ||
             snapshot.CpuCoreTemperatures.Select(c => c.CoreIndex).Distinct().Count() != snapshot.CpuCoreTemperatures.Count ||
             snapshot.CpuCoreTemperatures.Any(c => !double.IsFinite(c.TemperatureC) || c.TemperatureC < 0 || c.TemperatureC > 125))
             return null;
-        return snapshot.CpuCoreAverageTemperatureC;
+        if (source == CpuDemandTemperatureSource.CoreAverage)
+            return snapshot.CpuCoreAverageTemperatureC;
+        // Do not infer core type from array order, temperature or SMT presence.
+        if (snapshot.CpuCoreTemperatures.Any(c => c.CoreType is not ("Performance" or "Efficiency")))
+            return null;
+        var performance = snapshot.CpuCoreTemperatures.Where(c => c.CoreType == "Performance").ToArray();
+        if (performance.Length == 0) return null;
+        if (source == CpuDemandTemperatureSource.PerformanceCoreAverage)
+            return performance.Average(c => c.TemperatureC);
+        if (source != CpuDemandTemperatureSource.HottestPerformanceCoresAverage ||
+            hottestPerformanceCoreCount < 1 || hottestPerformanceCoreCount > performance.Length)
+            return null;
+        return performance.OrderByDescending(c => c.TemperatureC)
+            .Take(hottestPerformanceCoreCount).Average(c => c.TemperatureC);
     }
 }
 
@@ -26,6 +39,7 @@ public sealed record AdaptiveFanTuning
 {
     // Missing fields in archived v1 settings retain the original source.
     public CpuDemandTemperatureSource CpuTemperatureSource { get; init; } = CpuDemandTemperatureSource.PackageOrHottestCore;
+    public int HottestPerformanceCoreCount { get; init; } = 3;
     public int MinimumLevel { get; init; } = 26;
     public int MaximumLevel { get; init; } = 50;
     public double RiseTimeConstantSeconds { get; init; } = 4;
@@ -49,6 +63,7 @@ public sealed record AdaptiveFanTuning
         }
         if (!Enum.IsDefined(CpuTemperatureSource))
             throw new InvalidDataException("Fuente de temperatura CPU desconocida.");
+        Range(HottestPerformanceCoreCount, 1, 64, "P-Cores más calientes (N)");
         Range(MinimumLevel, 10, 50, "Nivel mínimo");
         Range(MaximumLevel, MinimumLevel, 50, "Nivel máximo");
         Range(RiseTimeConstantSeconds, 0.5, 10, "Filtro de subida (s)");

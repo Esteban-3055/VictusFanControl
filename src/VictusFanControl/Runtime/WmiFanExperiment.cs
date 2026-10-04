@@ -265,7 +265,7 @@ internal static class WmiFanExperiment
                 }
                 admitted = true;
                 var cpuSource = preferences?.Tuning.CpuTemperatureSource ?? CpuDemandTemperatureSource.PackageOrHottestCore;
-                var cpuDemand = CpuDemandTemperature.Select(snapshot, cpuSource);
+                var cpuDemand = CpuDemandTemperature.Select(snapshot, cpuSource, preferences?.Tuning.HottestPerformanceCoreCount ?? 3);
                 var decision = engine.Evaluate(new(snapshot.Timestamp, cpuDemand ?? double.NaN,
                     snapshot.CpuPackagePowerW!.Value, snapshot.CpuLoadPercent!.Value, snapshot.GpuTemperatureC!.Value,
                     snapshot.GpuPowerW!.Value, snapshot.GpuLoadPercent!.Value));
@@ -289,6 +289,7 @@ internal static class WmiFanExperiment
                     thermalDecision.ConfirmationElapsedMilliseconds, thermalDecision.RemainingConfirmationMilliseconds,
                     decision.Detail, Sent = sent, o.Control,
                     CpuTemperatureSource = cpuSource.ToString(), CpuDemandTemperatureC = cpuDemand,
+                    HottestPerformanceCoreCount = preferences?.Tuning.HottestPerformanceCoreCount ?? 3,
                     snapshot.CpuCoreAverageTemperatureC,
                     WindowsPower = SystemPowerStatusReader.Read(),
                     snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC,

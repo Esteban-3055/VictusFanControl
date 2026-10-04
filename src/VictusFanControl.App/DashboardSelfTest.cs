@@ -43,11 +43,15 @@ internal static class DashboardSelfTest
             navigation.Single(b=>b.Text=="Ajustes").PerformClick();Application.DoEvents();
             var numbers = (Dictionary<string,NumericUpDown>)typeof(FanSettingsPanel)
                 .GetField("_numbers",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(settings)!;
-            Require(numbers.Count==11 && controller.Mode==AdaptiveFanProductionMode.Firmware && applies==0);
+            Require(numbers.Count==12 && controller.Mode==AdaptiveFanProductionMode.Firmware && applies==0);
             var axis = Descendants(settings).OfType<ComboBox>().Single(c=>c.Items.Count==6);
             Require(axis.Items.Count==6);
             var source = Descendants(settings).OfType<ComboBox>().Single(c=>c.AccessibleName=="Fuente de temperatura CPU");
             Require(source.SelectedIndex==(int)CpuDemandTemperatureSource.CoreAverage);
+            Require(source.Items.Count==4 && !numbers[nameof(AdaptiveFanTuning.HottestPerformanceCoreCount)].Enabled);
+            source.SelectedIndex=(int)CpuDemandTemperatureSource.HottestPerformanceCoresAverage;
+            Require(numbers[nameof(AdaptiveFanTuning.HottestPerformanceCoreCount)].Enabled);
+            numbers[nameof(AdaptiveFanTuning.HottestPerformanceCoreCount)].Value=2;
             source.SelectedIndex=(int)CpuDemandTemperatureSource.PackageOrHottestCore;
             for(var i=0;i<6;i++){axis.SelectedIndex=i;Application.DoEvents();}
             axis.SelectedIndex=0;
@@ -62,7 +66,9 @@ internal static class DashboardSelfTest
             Require(settings.Enabled && controller.AutomaticConfiguration!.Tuning.MinimumLevel==28 && backend.Commands==0 && !controller.AutomaticExecutionAuthorized);
             Require(controller.AutomaticConfiguration!.Tuning.CpuTemperatureSource==CpuDemandTemperatureSource.PackageOrHottestCore);
             Console.WriteLine("PASS: dashboard staged settings, six axes, async edit lock, Firmware-only apply and closed Automatic gate.");
-            source.SelectedIndex=(int)CpuDemandTemperatureSource.CoreAverage;
+            Require(controller.AutomaticConfiguration!.Tuning.HottestPerformanceCoreCount==2);
+            source.SelectedIndex=(int)CpuDemandTemperatureSource.HottestPerformanceCoresAverage;
+            numbers[nameof(AdaptiveFanTuning.HottestPerformanceCoreCount)].Value=3;
             numbers[nameof(AdaptiveFanTuning.MinimumLevel)].Value=26;
             var reset=(Task)typeof(FanSettingsPanel).GetMethod("ApplyAsync",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(settings,null)!;
             while(!reset.IsCompleted){Application.DoEvents();Thread.Yield();}

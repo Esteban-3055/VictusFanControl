@@ -10,7 +10,7 @@ internal sealed class FanSettingsPanel : UserControl
     private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(850,0) };
     private readonly Label _profileName = new() { AutoSize = true };
     private readonly AdaptiveCurveChart _chart = new() { MinimumSize = new Size(350,250) };
-    private readonly ComboBox _cpuSource = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, AccessibleName = "Fuente de temperatura CPU" };
+    private readonly ComboBox _cpuSource = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 330, AccessibleName = "Fuente de temperatura CPU" };
     private readonly ComboBox _axis = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 250 };
     private readonly Func<FanConfiguration,Task> _apply;
     private FanConfiguration _applied;
@@ -26,7 +26,7 @@ internal sealed class FanSettingsPanel : UserControl
         root.Controls.Add(title,0,0);root.SetColumnSpan(title,2);
         var fields=new TableLayoutPanel { Dock=DockStyle.Top, AutoSize=true, ColumnCount=2, Padding=new Padding(0,0,22,0) };
         fields.ColumnStyles.Add(new(SizeType.Percent,75));fields.ColumnStyles.Add(new(SizeType.Percent,25));
-        _cpuSource.Items.AddRange(new object[] { "Package / núcleo más caliente", "CPU Average (núcleos físicos)" });
+        _cpuSource.Items.AddRange(new object[] { "Package / núcleo más caliente", "CPU Average (núcleos físicos)", "CPU Average — sólo P-Cores", "Promedio de los N P-Cores más calientes" });
         fields.Controls.Add(new Label { Text = "Temperatura CPU para demanda", AutoSize = true },0,fields.RowCount++);
         fields.Controls.Add(_cpuSource,0,fields.RowCount++);fields.SetColumnSpan(_cpuSource,2);
         void Number(string key,string label,decimal minimum,decimal maximum,decimal increment=1,int decimals=0)
@@ -36,6 +36,9 @@ internal sealed class FanSettingsPanel : UserControl
             _numbers.Add(key,n);
             var row=fields.RowCount++;fields.Controls.Add(new Label {Text=label,AutoSize=true,Margin=new Padding(3,8,3,8)},0,row);fields.Controls.Add(n,1,row);
         }
+        Number(nameof(AdaptiveFanTuning.HottestPerformanceCoreCount),"P-Cores más calientes (N)",1,64);
+        _cpuSource.SelectedIndexChanged+=(_,_)=> _numbers[nameof(AdaptiveFanTuning.HottestPerformanceCoreCount)].Enabled=
+            _cpuSource.SelectedIndex==(int)CpuDemandTemperatureSource.HottestPerformanceCoresAverage;
         Number(nameof(AdaptiveFanTuning.MinimumLevel),"Nivel mínimo · 100 RPM nominales/nivel",10,50);
         Number(nameof(AdaptiveFanTuning.MaximumLevel),"Nivel máximo",10,50);
         Number(nameof(AdaptiveFanTuning.RiseTimeConstantSeconds),"Filtro de subida (s)",.5m,10,.5m,1);
@@ -58,11 +61,12 @@ internal sealed class FanSettingsPanel : UserControl
         edit.Click+=(_,_)=>
         {
             using var editor=new AdaptiveCurveEditorForm(p=>{_profile=AdaptiveCurveProfiles.Copy(p);RefreshCurve();
-                _status.Text="Curvas en borrador. Aplica los ajustes para guardarlas en la configuración.";},_profile,cpuSource:(CpuDemandTemperatureSource)_cpuSource.SelectedIndex);
+                _status.Text="Curvas en borrador. Aplica los ajustes para guardarlas en la configuración.";},_profile,cpuSource:(CpuDemandTemperatureSource)_cpuSource.SelectedIndex,
+                hottestPerformanceCoreCount:decimal.ToInt32(_numbers[nameof(AdaptiveFanTuning.HottestPerformanceCoreCount)].Value));
             editor.ShowDialog(FindForm());
         };
         curves.Controls.Add(edit);
-        curves.Controls.Add(new Label { Text="El nivel final respeta el mínimo y máximo configurados.", AutoSize=true, MaximumSize=new Size(390,0) });
+        curves.Controls.Add(new Label { Text="N debe ser ≤ al número de P-Cores detectados. Lecturas incompletas o tipos desconocidos impiden el control. El nivel final respeta el mínimo y máximo configurados.", AutoSize=true, MaximumSize=new Size(390,0) });
         curves.Controls.Add(new Label { Text="PROTECCIONES", AutoSize=true, Font=new Font("Segoe UI",12,FontStyle.Bold) });
         curves.Controls.Add(new Label { AutoSize=true,MaximumSize=new Size(390,0),Text=
             "CPU: confirmar desde 95 °C; entrega inmediata a 99 °C.\nGPU: entrega inmediata a 87 °C.\nMáximo: 5 muestras únicas o 2 segundos.\nSubida térmica: hasta 4 niveles por muestra.\nFrescura: hasta 3 segundos.\nDemanda CPU: fuente seleccionada.\nEmergencia CPU: Package / núcleo más caliente.\n\nLos ajustes no autorizan Automatic. El inicio siempre es Firmware.\nEl piso 26 es una propuesta; el experimento activo conserva 30–50." });

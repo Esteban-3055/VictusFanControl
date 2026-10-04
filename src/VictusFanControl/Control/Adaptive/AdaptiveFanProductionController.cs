@@ -765,7 +765,8 @@ public sealed class AdaptiveFanProductionController
         out string failure)
     {
         var cpuDemand = CpuDemandTemperature.Select(snapshot,
-            _automaticConfiguration?.Tuning.CpuTemperatureSource ?? CpuDemandTemperatureSource.PackageOrHottestCore);
+            _automaticConfiguration?.Tuning.CpuTemperatureSource ?? CpuDemandTemperatureSource.PackageOrHottestCore,
+            _automaticConfiguration?.Tuning.HottestPerformanceCoreCount ?? 3);
         if (!snapshot.IsComplete ||
             !cpuDemand.HasValue ||
             !snapshot.CpuPackagePowerW.HasValue ||

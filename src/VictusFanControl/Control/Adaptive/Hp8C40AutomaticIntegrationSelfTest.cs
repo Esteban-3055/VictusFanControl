@@ -114,6 +114,32 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
                 "raw core at 99 C restores Firmware immediately despite Average below 50 C");
         }
 
+        foreach (var source in new[]{CpuDemandTemperatureSource.PerformanceCoreAverage, CpuDemandTemperatureSource.HottestPerformanceCoresAverage})
+        {
+            clock=0;
+            var pBackend=new Backend();
+            await using var pCoordinator=new FanControlCoordinator(pBackend);
+            var settings=new FanConfiguration {Tuning=new AdaptiveFanTuning {CpuTemperatureSource=source,HottestPerformanceCoreCount=2}};
+            var pController=new AdaptiveFanProductionController(pCoordinator,settings.BuildPolicy(),true,true,
+                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,automaticConfiguration:settings);
+            await pController.SetModeAsync(AdaptiveFanProductionMode.Automatic,CancellationToken.None);
+            var snapshot=Sample(Now()) with {GpuTemperatureC=35,
+                CpuCoreTemperatures=Sample(Now()).CpuCoreTemperatures.Select((c,i)=>c with {TemperatureC=i==0?90:45}).ToArray()};
+            var pShadow=new AdaptiveFanPolicyShadowEvaluator(Hardware,settings.BuildPolicy(),true,settings);
+            var shadow=pShadow.Evaluate(SystemState.Healthy,snapshot,Now());
+            var actual=await pController.ProcessAutomaticAsync(snapshot,Raw(snapshot),CancellationToken.None);
+            Check(actual.EqualFanLevel==(source==CpuDemandTemperatureSource.PerformanceCoreAverage?26:28) &&
+                shadow.RecommendedEqualLevel==actual.EqualFanLevel,
+                $"{source}: configured N=2 reaches preview and controller consistently");
+            clock=100;
+            var emergency=snapshot with {Timestamp=Now(),CpuCoreTemperatures=snapshot.CpuCoreTemperatures
+                .Select((c,i)=>i==13?c with {TemperatureC=99}:c).ToArray()};
+            var stopped=await pController.ProcessAutomaticAsync(emergency,Raw(emergency),CancellationToken.None);
+            Check(stopped.Action==AdaptiveFanProductionActionKind.RestoreFirmware && pBackend.Restores==1 &&
+                pShadow.Evaluate(SystemState.Healthy,emergency,Now()).EffectiveThermalEmergency,
+                $"{source}: excluded E-Core at 99 C still restores Firmware immediately");
+        }
+
         // Expiry after read-only EnterCustom preparation must prevent Apply dispatch.
         clock = 0;
         backend = new Backend();

@@ -98,7 +98,7 @@ internal sealed class P13FanControlSurface : UserControl
         _previewLevelValue.Text = "—";
         _previewDetailValue.Text = "Ajustes aplicados; esperando una muestra nueva.";
         if (_curveEditor is { IsDisposed: false })
-            _curveEditor.SetCpuTemperatureSource(configuration.Tuning.CpuTemperatureSource);
+            _curveEditor.SetCpuTemperatureSource(configuration.Tuning.CpuTemperatureSource, configuration.Tuning.HottestPerformanceCoreCount);
     }
 
     public AdaptiveFanProductionMode RequestedMode => _controller.Mode;
@@ -544,7 +544,8 @@ internal sealed class P13FanControlSurface : UserControl
                     _previewIntentValue.Text = "HoldFirmware";
                     _previewDetailValue.Text = "Perfil aplicado a la vista previa; esperando telemetría fresca.";
                     _log($"Curve profile applied to shadow preview: {copy.Name}; no hardware command.");
-                }, _previewProfile, cpuSource: _controller.AutomaticConfiguration?.Tuning.CpuTemperatureSource ?? CpuDemandTemperatureSource.PackageOrHottestCore);
+                }, _previewProfile, cpuSource: _controller.AutomaticConfiguration?.Tuning.CpuTemperatureSource ?? CpuDemandTemperatureSource.PackageOrHottestCore,
+                    hottestPerformanceCoreCount: _controller.AutomaticConfiguration?.Tuning.HottestPerformanceCoreCount ?? 3);
                 _curveEditor.Show(FindForm());
             }
             else { _curveEditor.Show(); _curveEditor.Activate(); }

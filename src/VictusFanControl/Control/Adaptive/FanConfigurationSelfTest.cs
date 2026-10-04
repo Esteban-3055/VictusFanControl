@@ -55,6 +55,40 @@ internal static class FanConfigurationSelfTest
             Require(archived != text && FanConfigurationStore.Parse(archived).Tuning.CpuTemperatureSource == CpuDemandTemperatureSource.PackageOrHottestCore);
             Reject(() => (configuration with { Tuning=configuration.Tuning with { CpuTemperatureSource=(CpuDemandTemperatureSource)99 } }).BuildPolicy());
         });
+        Check("P-core aggregation selects physical cores, top N is configurable, safety stays raw", () =>
+        {
+            var sample = new TelemetrySnapshot(DateTimeOffset.UtcNow,"CPU",80,5,10,"GPU",35,0,0,3000,3000)
+            {
+                CpuExpectedPhysicalCoreCount=8,
+                // Deliberately interleave types; do not rely on array indices.
+                CpuCoreTemperatures=[new(9,18,"Efficiency",99), new(5,10,"Performance",90),
+                    new(3,6,"Performance",58), new(8,16,"Efficiency",40), new(1,2,"Performance",56),
+                    new(4,8,"Performance",80), new(0,0,"Performance",55), new(2,4,"Performance",57)]
+            };
+            Require(CpuDemandTemperature.Select(sample,CpuDemandTemperatureSource.PerformanceCoreAverage)==66);
+            Require(CpuDemandTemperature.Select(sample,CpuDemandTemperatureSource.HottestPerformanceCoresAverage)==76);
+            Require(CpuDemandTemperature.Select(sample,CpuDemandTemperatureSource.HottestPerformanceCoresAverage,1)==90);
+            Require(CpuDemandTemperature.Select(sample,CpuDemandTemperatureSource.HottestPerformanceCoresAverage,2)==85);
+            Require(CpuDemandTemperature.Select(sample,CpuDemandTemperatureSource.HottestPerformanceCoresAverage,6)==66);
+            Require(sample.CpuControlTemperatureC==99); // Even an excluded E-Core still protects safety.
+            Require(CpuDemandTemperature.Select(sample,CpuDemandTemperatureSource.HottestPerformanceCoresAverage,7) is null);
+            Require(CpuDemandTemperature.Select(sample,CpuDemandTemperatureSource.HottestPerformanceCoresAverage,0) is null);
+            foreach(var source in new[]{CpuDemandTemperatureSource.PerformanceCoreAverage,CpuDemandTemperatureSource.HottestPerformanceCoresAverage})
+            {
+                Require(CpuDemandTemperature.Select(sample with { CpuExpectedPhysicalCoreCount=9 },source) is null);
+                Require(CpuDemandTemperature.Select(sample with { CpuCoreTemperatures=sample.CpuCoreTemperatures.Select(c=>c with {CoreType="Unknown"}).ToArray() },source) is null);
+                Require(CpuDemandTemperature.Select(sample with { CpuCoreTemperatures=sample.CpuCoreTemperatures.Select(c=>c with {CoreType="Efficiency"}).ToArray() },source) is null);
+                Require(CpuDemandTemperature.Select(sample with { CpuCoreTemperatures=sample.CpuCoreTemperatures.Select(c=>c with {CoreIndex=0}).ToArray() },source) is null);
+                Require(CpuDemandTemperature.Select(sample with { CpuCoreTemperatures=sample.CpuCoreTemperatures.Select(c=>c.CoreIndex==9? c with {TemperatureC=double.NaN}:c).ToArray() },source) is null);
+                var copy=FanConfigurationStore.Copy(configuration with {Tuning=configuration.Tuning with {CpuTemperatureSource=source,HottestPerformanceCoreCount=2}});
+                Require(copy.Tuning.CpuTemperatureSource==source && copy.Tuning.HottestPerformanceCoreCount==2);
+            }
+            Reject(()=>(configuration with {Tuning=configuration.Tuning with {HottestPerformanceCoreCount=0}}).BuildPolicy());
+            Reject(()=>(configuration with {Tuning=configuration.Tuning with {HottestPerformanceCoreCount=65}}).BuildPolicy());
+            var archived=System.Text.Json.Nodes.JsonNode.Parse(FanConfigurationStore.Serialize(configuration))!;
+            archived["tuning"]!.AsObject().Remove("hottestPerformanceCoreCount");
+            Require(FanConfigurationStore.Parse(archived.ToJsonString()).Tuning.HottestPerformanceCoreCount==3);
+        });
         Check("raw heat acts immediately without phantom normal rises; descent waits 16 seconds", () =>
         {
             var origin = DateTimeOffset.UtcNow;

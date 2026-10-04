@@ -8,6 +8,7 @@ internal sealed class AdaptiveCurveEditorForm : Form
 {
     private readonly AdaptiveCurveProfileStore _store;
     private CpuDemandTemperatureSource _cpuSource;
+    private int _hottestPerformanceCoreCount;
     private readonly ComboBox _profiles = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly ComboBox _axes = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 235 };
     private readonly AdaptiveCurveChart _chart = new();
@@ -33,9 +34,10 @@ internal sealed class AdaptiveCurveEditorForm : Form
     private AdaptiveCurveAxis Axis => ((AxisChoice)_axes.SelectedItem!).Axis;
     private bool Dirty => AdaptiveCurveProfiles.Serialize(_draft) != _baseline;
 
-    public AdaptiveCurveEditorForm(Action<AdaptiveCurveProfile> applyPreview, AdaptiveCurveProfile applied, string? profileDirectory = null, CpuDemandTemperatureSource cpuSource = CpuDemandTemperatureSource.PackageOrHottestCore)
+    public AdaptiveCurveEditorForm(Action<AdaptiveCurveProfile> applyPreview, AdaptiveCurveProfile applied, string? profileDirectory = null, CpuDemandTemperatureSource cpuSource = CpuDemandTemperatureSource.PackageOrHottestCore, int hottestPerformanceCoreCount = 3)
     {
         _cpuSource = cpuSource;
+        _hottestPerformanceCoreCount = hottestPerformanceCoreCount;
         _store = new(profileDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VictusFanControl", "profiles"));
         _freshnessTimer.Tick += (_,_) => { if (_snapshot is not null && DateTimeOffset.UtcNow - _snapshot.Timestamp >= TimeSpan.FromSeconds(3)) ClearTelemetry(); };
         _freshnessTimer.Start();
@@ -217,10 +219,11 @@ internal sealed class AdaptiveCurveEditorForm : Form
         var candidate=AdaptiveCurveProfiles.Copy(_draft);_=AdaptiveCurveProfiles.Validate(candidate);
         _applyPreview(candidate);_applied=candidate;ClearTelemetry();RefreshDraft();
     }
-    internal void SetCpuTemperatureSource(CpuDemandTemperatureSource source)
+    internal void SetCpuTemperatureSource(CpuDemandTemperatureSource source, int hottestPerformanceCoreCount = 3)
     {
-        if (_cpuSource == source) return;
+        if (_cpuSource == source && _hottestPerformanceCoreCount == hottestPerformanceCoreCount) return;
         _cpuSource = source;
+        _hottestPerformanceCoreCount = hottestPerformanceCoreCount;
         ClearTelemetry();
     }
     public void UpdateTelemetry(SystemState state,TelemetrySnapshot snapshot,AdaptiveFanPolicyShadowEvaluation? result)
@@ -229,7 +232,7 @@ internal sealed class AdaptiveCurveEditorForm : Form
         if(state!=SystemState.Healthy || age<TimeSpan.Zero || age>=TimeSpan.FromSeconds(3) || result?.SafetyPreconditionsReady!=true || !result.PolicyAccepted)
         { ClearTelemetry();return; }
         if(_lastSample.HasValue && (snapshot.Timestamp<_lastSample || snapshot.Timestamp-_lastSample>TimeSpan.FromSeconds(3)))_cpuHistory.Clear();
-        if(snapshot.Timestamp!=_lastSample && CpuDemandTemperature.Select(snapshot,_cpuSource) is double cpu && double.IsFinite(cpu))
+        if(snapshot.Timestamp!=_lastSample && CpuDemandTemperature.Select(snapshot,_cpuSource,_hottestPerformanceCoreCount) is double cpu && double.IsFinite(cpu))
         { _cpuHistory.Enqueue(cpu);while(_cpuHistory.Count>5)_cpuHistory.Dequeue(); }
         _lastSample=snapshot.Timestamp;_snapshot=snapshot;RefreshMarkers();
         var c=AdaptiveCurveProfiles.Validate(_applied);var axes=Enum.GetValues<AdaptiveCurveAxis>();
@@ -249,7 +252,7 @@ internal sealed class AdaptiveCurveEditorForm : Form
     }
     private double? Value(TelemetrySnapshot s,AdaptiveCurveAxis a)=>a switch
     {
-        AdaptiveCurveAxis.CpuTemperature=>CpuDemandTemperature.Select(s,_cpuSource),AdaptiveCurveAxis.GpuTemperature=>s.GpuTemperatureC,
+        AdaptiveCurveAxis.CpuTemperature=>CpuDemandTemperature.Select(s,_cpuSource,_hottestPerformanceCoreCount),AdaptiveCurveAxis.GpuTemperature=>s.GpuTemperatureC,
         AdaptiveCurveAxis.CpuPower=>s.CpuPackagePowerW,AdaptiveCurveAxis.GpuPower=>s.GpuPowerW,
         AdaptiveCurveAxis.CpuLoad=>s.CpuLoadPercent,AdaptiveCurveAxis.GpuLoad=>s.GpuLoadPercent,_=>null
     };
