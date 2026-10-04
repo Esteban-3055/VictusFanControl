@@ -47,6 +47,31 @@ internal static class Program
             }
 
             if (args.Length == 1 &&
+                args[0] == "--cpu-gate-6g-physical-self-test")
+            {
+                return PerformanceGuardianCpuGate6GPhysicalQualification.SelfTest(
+                    Console.Out);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--cpu-gate-6g")
+            {
+                return await PerformanceGuardianCpuGate6GPhysicalQualification
+                    .RunOuterAsync(
+                        args)
+                    .ConfigureAwait(false);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--run-cpu-gate-6g")
+            {
+                return await PerformanceGuardianCpuGate6GPhysicalQualification
+                    .RunGuardianAsync(
+                        args)
+                    .ConfigureAwait(false);
+            }
+
+            if (args.Length == 1 &&
                 args[0] == "--cpu-gate-6g-self-test")
             {
                 return PerformanceGuardianCpuGate6GQualification.SelfTest(
@@ -334,6 +359,12 @@ internal static class Program
 
         Console.WriteLine(
             "VictusFanControl.PerformanceGuardian --process-fixture <directory>");
+
+        Console.WriteLine(
+            "VictusFanControl.PerformanceGuardian --cpu-gate-6g-physical-self-test");
+
+        Console.WriteLine(
+            "VictusFanControl.PerformanceGuardian --cpu-gate-6g --confirm-target HP-8C40-9D0R1LA-F18 --confirm-cpu-hardware-writes --module <IntelMSR.bin> [--timeout-seconds 15..300] [--output-directory <path>]");
 
         Console.WriteLine(
             "VictusFanControl.PerformanceGuardian --cpu-gate-6g-self-test");

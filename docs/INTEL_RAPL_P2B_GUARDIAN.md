@@ -2170,3 +2170,56 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+## Step 6G.2 — bounded physical CPU-only Guardian gate
+
+The physical CPU-only qualification harness is now prepared, but it is not a
+physical PASS until run on the exact target.
+
+The hardware-writing entry point is deliberately separate from the read-only
+preflight and requires an explicit operator acknowledgement:
+
+    .\scripts\test-performance-guardian-6g-cpu-physical.ps1
+      -ConfirmTargetProfile HP-8C40-9D0R1LA-F18
+      -ConfirmCpuHardwareWrites
+
+Before granting bounded write authority, the script rebuilds the Guardian and
+reruns the read-only Step 6G preflight. The detached child additionally
+requires the exact IntelMSR.bin SHA-256 physically observed in Step 6G.1:
+
+    d6ed85d65ab17a22f813ef98207d6d537155ee2ded5976a21cb48413c9b92e5f
+
+The target-scoped CPU journal remains:
+
+    %LOCALAPPDATA%\VictusFanControl\Performance\
+      HP-8C40-9D0R1LA-F18\cpu-power-session.json
+
+The bounded sequence is AC 35/60 W -> Battery 8/15 W -> AC 35/60 W -> one
+conditional restore. Initial hardware authority is qualification-constrained
+to a freshly confirmed AC source. Each initial/switch write requires its
+durable WriteArmed or PresetSwitchWriteArmed journal phase and exact 0x610
+readback before the journal can return to Owned. DISABLE_SESSION uses the
+existing durable Restoring path and conditional owned-field restore.
+
+A clean PASS requires exactly four CPU hardware-write attempts and zero GPU
+hardware writes, one enable/one release, two CPU source-transition dispatches,
+zero GPU dispatches, one reconciliation query, at least two Windows source
+notifications, one SessionId across AC/Battery/AC journal snapshots, strictly
+increasing journal generations, immutable OriginalBaseline, final CPU state
+Disabled, no source/Guardian failure, no remaining CPU journal, and a final
+read-only 0x610 verification that the original owned PL1/PL2 fields were
+restored.
+
+The final raw 0x610 is not required to equal the original raw bit-for-bit:
+non-owned metadata may legitimately change externally. PASS requires the
+owned PL1/PL2 fields to match the immutable pre-session baseline.
+
+This gate does not enable production operation, GUI-triggered writes, combined
+CPU+GPU authority, startup persistence or automatic profiles. It is only a
+bounded physical qualification of the CPU domain.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
