@@ -913,11 +913,16 @@ internal sealed partial class MainForm : Form
                       p16NormalManualQualificationAuthorized;
 
         var automaticExecutionAuthorized =
-            _automaticFinalQualificationHardwareTest
-                ? Hp8C40AutomaticFinalQualificationGate.IsAuthorizedForTarget(_targetProfile?.Id)
-                : isolatedManualQualification
-                    ? false
-                    : Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized;
+            isolatedManualQualification
+                ? false
+                : Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized;
+
+        if (_automaticFinalQualificationHardwareTest)
+        {
+            automaticExecutionAuthorized =
+                Hp8C40AutomaticFinalQualificationGate.IsAuthorizedForTarget(
+                    _targetProfile?.Id);
+        }
 
         _p16QualificationSession = p16NormalManualQualificationAuthorized
             ? new Hp8C40P16QualificationSession()
