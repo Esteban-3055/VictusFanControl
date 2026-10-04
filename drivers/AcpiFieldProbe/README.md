@@ -17,13 +17,13 @@ Target investigado: HP 8C40/63.43/9D0R1LA/F.18, Windows 11 x64 build 26200. La c
 
 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Victus-AcpiFieldProbe.ps1`
 
-Solo en Windows con Visual Studio C++ x64 y NuGet. Restaura paquetes oficiales WDK/SDK 10.0.26100.1, compila/enlaza KMDF x64, ejecuta contratos nativos y verifica el rechazo del cliente sin interfaz instalada. El script exige un entorno limpio sin este prototipo desplegado. Registra versión KMDF y hashes. CI produce `acpi-field-probe-review-only`: SYS **sin firma**, cliente, fixtures y manifiesto. No incluye INF, CAT, comandos de instalación ni cambios de seguridad. Este trabajo está separado del backend y de la solución C# vigente.
+Solo en Windows con Visual Studio C++ x64 y NuGet. Restaura paquetes oficiales WDK/SDK 10.0.26100.1, compila/enlaza KMDF x64, ejecuta contratos nativos y verifica el rechazo del cliente sin interfaz instalada. El script exige un entorno limpio sin este prototipo desplegado. Registra versión KMDF y hashes. CI produce `acpi-field-probe-review-only`: SYS **sin firma**, cliente, fixtures y manifiesto. Incluye ahora INF de extensión y CAT sin firma en review-package; no incluye comandos de instalación ni cambios de seguridad. Este trabajo está separado del backend y de la solución C# vigente.
 
 ## Gates pendientes antes de instalar o habilitar campos
 
 1. Diseño de instalación como filtro específico, sin sustituir machine.inf/Acpi.sys y sin filtros globales de clase; rollback, PnP/power/remove/cancel/ACL revisados y probados. Falta validación con Driver Verifier y hardware/VM apropiado. La compilación no valida comportamiento PnP.
 2. Calificar físicamente el gate de identidad implementado y verificar namespace/correspondencia EC0. El gate comprueba SMBIOS HP/8C40/63.43/modelo/SKU exacto/F.18 e instancia PnP exacta; eso no prueba el namespace ni soporte FieldUnit.
-3. Firma/despliegue compatible con seguridad del equipo; no instrucciones para desactivar Secure Boot, HVCI ni firma. No existe paquete firmado en esta etapa.
+3. Firma/despliegue compatible con seguridad del equipo; no instrucciones para desactivar Secure Boot, HVCI ni firma. No existe paquete firmado en esta etapa. INF/CAT de revisión no autorizan instalación.
 4. Harness físico acotado con observación de eventos ACPI 13/15, salida cruda/tiempos, captura ZIP y validación independiente. Solo entonces habilitar candidatos mediante un cambio revisado y su CI.
 5. El byte ECh completo carece de campo nombrado en la revisión: FFFF/FFFS no cubren bits restantes. El prototipo **no** puede calificar ownership/restauración del backend aunque SRP1/SRP2/SFAN se lean. No setters, restauración, Manual ni Automatic.
 
@@ -45,7 +45,7 @@ La identidad se verifica antes de publicar interfaz y antes de abrir target en P
 
 `probe-client.exe --identity` ejecuta **el mismo parser de SMBIOS en modo usuario**, sin instalar/cargar el driver ni evaluar ACPI. Es la siguiente comprobación física disponible: debe imprimir identity_match:true en este equipo. No verifica el callback kernel, el PDO ni FieldUnit. En CI debe rechazar el SMBIOS del runner ajeno al target; los fixtures sintéticos verifican límites y perfiles erróneos.
 
-Despliegue propuesto: extensión específica de dispositivo mediante AddFilter, conservando machine.inf/Acpi.sys; posición, INF/CAT y rollback aún pendientes de validación. La ruta de firma de Microsoft requiere cuenta Hardware Dev Center y certificado EV asociado; no existe esa firma en este proyecto. No se sustituye por un certificado local ni se solicita cambiar la seguridad del Victus. **No instalar el SYS de este artifact.**
+Despliegue propuesto: extensión específica de dispositivo mediante AddFilter, conservando machine.inf/Acpi.sys; INF/CAT de revisión preparados con posición Upper; efecto real, orden relativo y rollback aún pendientes de validación. La ruta de firma de Microsoft requiere cuenta Hardware Dev Center y certificado EV asociado; no existe esa firma en este proyecto. No se sustituye por un certificado local ni se solicita cambiar la seguridad del Victus. **No instalar el SYS de este artifact.**
 
 Fuentes adicionales:
 - https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/aux_klib/nf-aux_klib-auxklibgetsystemfirmwaretable
@@ -53,3 +53,15 @@ Fuentes adicionales:
 - https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_3.7.0.pdf
 - https://learn.microsoft.com/en-us/windows-hardware/drivers/install/inf-addfilter-directive
 - https://learn.microsoft.com/en-us/windows-hardware/drivers/install/kernel-mode-code-signing-policy--windows-vista-and-later-
+
+## Paquete PnP de revisión y evidencia física
+
+El usuario ejecutó `probe-client --identity` del build 8336552 en su Victus: identity_match=true, table_bytes=3783, driver_loaded=false, acpi_evaluated=false, production_ready=false. Se acepta el parser SMBIOS sobre datos reales; no se califica el callback kernel/PDO ni los campos. Resultado comunicado por consola; no es una nueva captura ZIP ni hay hash de la tabla real.
+
+`AcpiFieldProbe.inf` es una extensión Class=Extension con ExtensionId propio. Usa AddFilter=VfcAcpiFieldProbe, FilterPosition=Upper y AddService con flags 0 (no sustituye el servicio de función asociado). Copia el SYS a DIRID13; sin coinstallers, AddReg de filtros globales, reemplazo de machine.inf ni servicio boot/system-start. Se vincula a KMDF 1.33 y x64 desde build 26100. El ID de modelo PNP0C09 es **genérico**: la selección de INF no filtra por placa/BIOS/instancia; la aplicación final debe validar identidad antes de staging/instalación. El gate kernel no hace específica una selección INF genérica ni demuestra que instalarla en equipos ajenos sea seguro.
+
+La CI ejecuta InfVerif /w y genera CAT mediante Inf2Cat /os:10_GE_X64. Son validación de estructura/aislamiento y posibilidad de catalogar para 24H2, **no firma**, certificación WHCP, prueba de compatibilidad real del Windows build26200 ni test PnP/Verifier. El manifiesto declara InstallationReady=false y hashes de INF/SYS/CAT. Los binarios se publican solo para revisión; no se instala el driver en CI.
+
+Gate de firma: se requiere una vía de Microsoft para este nuevo driver kernel, con cuenta Hardware Dev Center y certificado EV asociado según la política consultada. No disponemos de firma emitida ni se ha enviado una solicitud. El archivo CAT generado vincula miembros, pero todavía no está firmado. Un certificado local/autofirmado no satisface la ruta propuesta conservando la seguridad del equipo. No se compra un certificado ni se cambia seguridad como parte de esta tarea.
+
+Antes de un primer despliegue siguen pendientes: revisión/prueba de upper filter sobre EC sin function driver, preservación de PnP/power/remove y cancelaciones con Verifier en entorno adecuado; firma efectiva, rollback de extensión por identidad del paquete preservando filtros existentes, prueba de ACL y observación de eventos ACPI. Aun con todo ello la primera prueba sería `_STA` únicamente; FieldProbesEnabled=false permanece fijo. No hay installer listo para ejecutar.

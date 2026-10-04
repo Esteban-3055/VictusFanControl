@@ -50,8 +50,22 @@ try {
     if($LASTEXITCODE -ne 12){throw 'Foreign CI SMBIOS profile must be rejected.'}
     & .\probe-client.exe --control
     if($LASTEXITCODE -ne 4){throw 'CI must have no installed probe; absence was not preserved as a separate error.'}
-    $binaries=@('AcpiFieldProbe.sys','contract-test.exe','identity-test.exe','probe-client.exe')
-    [ordered]@{WdkPackage=$version;Kmdf=$wdfVersion;FieldProbesEnabled=$false;DriverInstalled=$false;DriverSigned=$false;ProductionReady=$false;Binaries=@($binaries | ForEach-Object {[ordered]@{file=$_;sha256=(Get-FileHash $_ -Algorithm SHA256).Hash}})} | ConvertTo-Json -Depth 6 | Set-Content build-manifest.json -Encoding UTF8
+    if($wdfVersion -ne '1.33'){throw 'INF and linked KMDF library versions must agree.'}
+    $reviewPackage=Join-Path $OutputRoot 'review-package'
+    if(Test-Path $reviewPackage){Remove-Item $reviewPackage -Recurse -Force}
+    New-Item $reviewPackage -ItemType Directory | Out-Null
+    Copy-Item (Join-Path $source 'AcpiFieldProbe.inf') $reviewPackage
+    Copy-Item AcpiFieldProbe.sys $reviewPackage
+    $infverif=(Get-ChildItem $PackageRoot -Filter infverif.exe -Recurse | Where-Object {$_.DirectoryName -match '[\\/]x64$'} | Select-Object -First 1).FullName
+    $inf2cat=(Get-ChildItem $PackageRoot -Filter inf2cat.exe -Recurse | Where-Object {$_.DirectoryName -match '[\\/]x64$'} | Select-Object -First 1).FullName
+    if(-not $infverif -or -not $inf2cat){throw 'WDK INF validation/catalog tools unavailable.'}
+    & $infverif /w (Join-Path $reviewPackage 'AcpiFieldProbe.inf')
+    if($LASTEXITCODE -ne 0){throw 'Extension INF Windows Driver validation failed.'}
+    & $inf2cat (('/driver:')+$reviewPackage) /os:10_GE_X64 /uselocaltime
+    if($LASTEXITCODE -ne 0){throw 'Unsigned catalog generation failed.'}
+    if(-not (Test-Path (Join-Path $reviewPackage 'AcpiFieldProbe.cat'))){throw 'Catalog missing after validation.'}
+    $binaries=@('AcpiFieldProbe.sys','contract-test.exe','identity-test.exe','probe-client.exe','review-package\AcpiFieldProbe.inf','review-package\AcpiFieldProbe.sys','review-package\AcpiFieldProbe.cat')
+    [ordered]@{WdkPackage=$version;Kmdf=$wdfVersion;FieldProbesEnabled=$false;DriverInstalled=$false;DriverSigned=$false;CatalogSigned=$false;InfValidated=$true;CatalogPlatform='10_GE_X64';InstallationReady=$false;ProductionReady=$false;Binaries=@($binaries | ForEach-Object {[ordered]@{file=$_;sha256=(Get-FileHash $_ -Algorithm SHA256).Hash}})} | ConvertTo-Json -Depth 6 | Set-Content build-manifest.json -Encoding UTF8
 } finally {Pop-Location}
 # The last native call intentionally returned 4 (no installed interface).
 # Its expected negative fixture must not become the build process exit code.

@@ -1,0 +1,60 @@
+; REVIEW ONLY: catalog and driver are unsigned. No installation authorization.
+; Extension augments the existing device package; no associated function service.
+[Version]
+Signature="$WINDOWS NT$"
+Class=Extension
+ClassGuid={e2f84ce7-8efa-411c-aa69-97454ca4cb57}
+ExtensionId={34fa772b-014e-45bf-a81c-1578dcaab46f}
+Provider=%Provider%
+DriverVer=10/04/2026,0.1.0.0
+CatalogFile=AcpiFieldProbe.cat
+PnpLockdown=1
+
+[Manufacturer]
+%Provider%=Models,NTamd64.10.0...26100
+
+[Models.NTamd64.10.0...26100]
+%Description%=Probe,ACPI\PNP0C09
+
+[Probe.NT]
+CopyFiles=Probe.Copy
+
+[Probe.NT.Services]
+AddService=VfcAcpiFieldProbe,0,Probe.Service
+
+[Probe.Service]
+DisplayName=%ServiceDescription%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%13%\AcpiFieldProbe.sys
+
+[Probe.NT.Filters]
+AddFilter=VfcAcpiFieldProbe,0,Probe.Filter
+
+[Probe.Filter]
+FilterPosition=Upper
+
+[Probe.NT.Wdf]
+KmdfService=VfcAcpiFieldProbe,Probe.Wdf
+
+[Probe.Wdf]
+KmdfLibraryVersion=1.33
+
+[DestinationDirs]
+Probe.Copy=13
+
+[Probe.Copy]
+AcpiFieldProbe.sys
+
+[SourceDisksNames]
+1=%Disk%,,,
+
+[SourceDisksFiles]
+AcpiFieldProbe.sys=1
+
+[Strings]
+Provider="VictusFanControl Project"
+Description="Victus ACPI read probe - review package"
+ServiceDescription="Victus ACPI read probe filter"
+Disk="Victus ACPI probe review package"
