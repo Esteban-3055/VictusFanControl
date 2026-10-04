@@ -323,6 +323,13 @@ internal static class PerformanceGuardianCombinedGate6HQualification
                         options.TimeoutSeconds,
                         timeout.Token).ConfigureAwait(false);
 
+                Console.WriteLine(
+                    "Step 6H: Battery source confirmed by GetSystemPowerStatus (RawAcLineStatus=" +
+                    batterySeen.Value.RawAcLineStatus +
+                    ", BatteryPercent=" +
+                    batterySeen.Value.BatteryPercent +
+                    "). Waiting for CPU 8/15 W journal commit...");
+
                 batteryCpu =
                     await WaitForCpuJournalAsync(
                         new CpuPowerLimitRequest(
@@ -331,6 +338,9 @@ internal static class PerformanceGuardianCombinedGate6HQualification
                         options.TimeoutSeconds,
                         timeout.Token,
                         initialCpu.Generation).ConfigureAwait(false);
+
+                Console.WriteLine(
+                    "Step 6H: CPU Battery transition committed. Waiting for GPU 210..1200 MHz journal commit...");
 
                 batteryGpu =
                     await WaitForGpuJournalAsync(
@@ -367,6 +377,13 @@ internal static class PerformanceGuardianCombinedGate6HQualification
                         options.TimeoutSeconds,
                         timeout.Token).ConfigureAwait(false);
 
+                Console.WriteLine(
+                    "Step 6H: AC source confirmed by GetSystemPowerStatus (RawAcLineStatus=" +
+                    acReturnSeen.Value.RawAcLineStatus +
+                    ", BatteryPercent=" +
+                    acReturnSeen.Value.BatteryPercent +
+                    "). Waiting for CPU 35/60 W journal commit...");
+
                 acReturnCpu =
                     await WaitForCpuJournalAsync(
                         new CpuPowerLimitRequest(
@@ -375,6 +392,9 @@ internal static class PerformanceGuardianCombinedGate6HQualification
                         options.TimeoutSeconds,
                         timeout.Token,
                         batteryCpu.Generation).ConfigureAwait(false);
+
+                Console.WriteLine(
+                    "Step 6H: CPU AC-return transition committed. Waiting for GPU 210..1850 MHz journal commit...");
 
                 acReturnGpu =
                     await WaitForGpuJournalAsync(
@@ -1493,6 +1513,9 @@ internal static class PerformanceGuardianCombinedGate6HQualification
         CpuPowerSessionJournalRecord? last =
             null;
 
+        long lastPrintedGeneration =
+            -1;
+
         while (DateTimeOffset.UtcNow <
             deadline)
         {
@@ -1505,6 +1528,25 @@ internal static class PerformanceGuardianCombinedGate6HQualification
             }
             catch (IOException)
             {
+            }
+
+            if (last is not null &&
+                last.Generation !=
+                    lastPrintedGeneration)
+            {
+                lastPrintedGeneration =
+                    last.Generation;
+
+                Console.WriteLine(
+                    "Step 6H CPU journal: gen=" +
+                    last.Generation +
+                    ", phase=" +
+                    last.Phase +
+                    ", request=" +
+                    last.Request.Pl1Watts +
+                    "/" +
+                    last.Request.Pl2Watts +
+                    " W.");
             }
 
             if (last is not null &&
@@ -1561,6 +1603,9 @@ internal static class PerformanceGuardianCombinedGate6HQualification
         GpuClockSessionJournalRecord? last =
             null;
 
+        long lastPrintedGeneration =
+            -1;
+
         while (DateTimeOffset.UtcNow <
             deadline)
         {
@@ -1573,6 +1618,29 @@ internal static class PerformanceGuardianCombinedGate6HQualification
             }
             catch (IOException)
             {
+            }
+
+            if (last is not null &&
+                last.Generation !=
+                    lastPrintedGeneration)
+            {
+                lastPrintedGeneration =
+                    last.Generation;
+
+                Console.WriteLine(
+                    "Step 6H GPU journal: gen=" +
+                    last.Generation +
+                    ", phase=" +
+                    last.Phase +
+                    ", committed=" +
+                    (last.CommittedRequest?.MinGraphicsClockMHz.ToString() ?? "-") +
+                    ".." +
+                    (last.CommittedRequest?.MaxGraphicsClockMHz.ToString() ?? "-") +
+                    ", pending=" +
+                    (last.PendingRequest?.MinGraphicsClockMHz.ToString() ?? "-") +
+                    ".." +
+                    (last.PendingRequest?.MaxGraphicsClockMHz.ToString() ?? "-") +
+                    " MHz.");
             }
 
             if (last is not null &&
