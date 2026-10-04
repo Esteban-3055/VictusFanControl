@@ -205,3 +205,79 @@ diagnostic smoke tests that are outside this branch's CPU scope; the CPU
 workflow gives a same-head signal for RAPL fixtures and compilation without
 weakening the later requirement to rebase onto the final fan/WMI base before
 production integration.
+
+
+## Step 3B — journal-before-write integration
+
+The durable journal is now connected to `CpuPowerLimiter` itself. The backend
+remains abstract and there is still no production PawnIO write path.
+
+Every limiter write is now guarded by a durable phase:
+
+```
+initial Apply:
+WriteArmed durable
+  -> backend write
+  -> exact readback
+  -> Owned durable
+
+bounded reacquire:
+Contested durable
+  -> ReacquireWriteArmed durable
+  -> backend write
+  -> exact readback
+  -> Stability durable
+  -> 60 active seconds
+  -> Owned durable
+
+release/restore:
+Restoring durable
+  -> compare-read unchanged
+  -> backend write
+  -> exact readback
+  -> journal delete
+```
+
+If the required journal transition cannot be persisted **before** a write, the
+write does not occur.
+
+A new Apply also refuses to start when any unresolved journal already exists.
+That journal must be handled by the future recovery planner first.
+
+Important failure semantics are intentionally conservative:
+
+- If `WriteArmed` persists and the hardware write succeeds but persisting
+  `Owned` fails, the old `WriteArmed` record is retained. The limiter reports
+  failure and does not issue an unjournaled restore from Dispose.
+- If `ReacquireWriteArmed` cannot be persisted, the external value is left
+  untouched and no reacquisition write occurs.
+- If `Restoring` cannot be persisted, no restore write occurs.
+- If a write may have happened but its post-write state cannot be read, the
+  last write-armed journal is intentionally retained for recovery.
+- A lock while VictusFanControl still appears to own the requested PL fields is
+  stored as `Unresolved`; no unlock/bypass write exists.
+- Once an external writer already owns PL1/PL2, release may close the session
+  without a hardware write and delete the resolved journal.
+
+The fake backend used by the self-test now refuses any write unless the
+corresponding durable phase exists and its `PendingRaw` exactly equals the raw
+value being written. This makes journal-before-write an executable invariant,
+not only documentation.
+
+Step 3B fixtures additionally cover:
+
+- unresolved journal blocks a fresh Apply with zero writes;
+- failed initial WriteArmed persistence -> zero writes;
+- failed Owned persistence after a confirmed write leaves the conservative
+  WriteArmed record and forbids an unjournaled Dispose restore;
+- failed ReacquireWriteArmed persistence -> external value preserved, zero
+  retry writes;
+- failed Restoring persistence -> current owned limit remains untouched, zero
+  restore writes;
+- normal apply/reacquire/restore prove their required journal phase existed at
+  the instant the fake hardware write was invoked.
+
+The next gate is the **recovery planner**. It will consume a journal found after
+guardian death and classify the observed 0x610 state. It will be recovery-only:
+a restarted guardian will not resume retry timers or continue automatic
+reacquisition merely because a journal says attempt 3/5.

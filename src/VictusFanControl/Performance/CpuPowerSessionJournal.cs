@@ -38,6 +38,8 @@ internal interface ICpuPowerSessionJournal
 {
     string Path { get; }
 
+    string TargetProfileId { get; }
+
     CpuPowerSessionJournalRecord? Load();
 
     void Store(CpuPowerSessionJournalRecord record);
@@ -68,6 +70,8 @@ internal sealed class JsonCpuPowerSessionJournal : ICpuPowerSessionJournal
     }
 
     public string Path { get; }
+
+    public string TargetProfileId => _expectedTargetProfileId;
 
     public CpuPowerSessionJournalRecord? Load()
     {
