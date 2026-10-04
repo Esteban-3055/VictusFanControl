@@ -714,8 +714,8 @@ internal static class CombinedGuardianDomainLifecycleSelfTest
         internal int EnableCalls;
         internal int ReleaseCalls;
         internal int TransitionCalls;
-        internal bool ThrowOnEnable;
-        internal bool ThrowOnRelease;
+        internal bool ThrowOnEnable { get; set; }
+        internal bool ThrowOnRelease { get; set; }
 
         public GuardianDomainLifecycleSnapshot Snapshot =>
             new(
