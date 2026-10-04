@@ -44,6 +44,10 @@ internal static class CpuPowerLimiterSelfTest
                 GpuPowerLimitQualificationSelfTest.Run(output) == 0,
                 "GPU NVML power-limit read qualification");
 
+            Require(
+                GpuPowerFieldQualificationSelfTest.Run(output) == 0,
+                "GPU NVML requested power-limit field qualification");
+
             NormalApplyVerifyRelease(output);
             OwnedPresetSwitchIsOneJournaledWrite(output);
             ConfirmedSourceChangeUsesOwnedSwitchOnly(output);

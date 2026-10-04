@@ -6,12 +6,26 @@ namespace VictusFanControl.Hardware.Nvidia;
 internal sealed class NvmlClient :
     IDisposable,
     INvmlGpuClockControlTransport,
-    INvmlGpuPowerLimitReadTransport
+    INvmlGpuPowerLimitReadTransport,
+    INvmlGpuPowerFieldReadTransport
 {
     private const int NvmlSuccess = 0;
     private const uint NvmlTemperatureGpu = 0;
     private const uint NvmlClockGraphics = 0;
     private const uint NvmlClockIdApplicationTarget = 1;
+
+    // Public NVML field IDs from nvml.h / NVML API reference.
+    private const uint NvmlFieldPowerMinLimit = 187;
+    private const uint NvmlFieldPowerMaxLimit = 188;
+    private const uint NvmlFieldPowerDefaultLimit = 189;
+    private const uint NvmlFieldPowerCurrentLimit = 190;
+    private const uint NvmlFieldPowerRequestedLimit = 192;
+
+    private const int NvmlValueTypeUnsignedInt = 1;
+    private const int NvmlValueTypeUnsignedLong = 2;
+    private const int NvmlValueTypeUnsignedLongLong = 3;
+    private const int NvmlValueTypeUnsignedShort = 6;
+
     private const int ReadAttempts = 3;
     private const int RetryDelayMs = 2;
 
@@ -59,6 +73,9 @@ internal sealed class NvmlClient :
 
     private readonly NvmlDeviceGetEnforcedPowerLimitDelegate?
         _getEnforcedPowerLimit;
+
+    private readonly NvmlDeviceGetFieldValuesDelegate?
+        _getFieldValues;
 
     private readonly string? _preferredDeviceName;
     private readonly bool _requirePreferredDevice;
@@ -128,6 +145,10 @@ internal sealed class NvmlClient :
             _getEnforcedPowerLimit =
                 TryGetDelegate<NvmlDeviceGetEnforcedPowerLimitDelegate>(
                     "nvmlDeviceGetEnforcedPowerLimit");
+
+            _getFieldValues =
+                TryGetDelegate<NvmlDeviceGetFieldValuesDelegate>(
+                    "nvmlDeviceGetFieldValues");
 
             InitializeDevice();
         }
@@ -417,6 +438,141 @@ internal sealed class NvmlClient :
         return new NvmlUIntCallResult(true, result, limitMilliwatts);
     }
 
+
+    public bool PowerFieldValuesExportAvailable =>
+        _getFieldValues is not null;
+
+    /// <summary>
+    /// Reads the official NVML power field-value set once, including
+    /// NVML_FI_DEV_POWER_REQUESTED_LIMIT. No retry or mutation occurs here.
+    /// </summary>
+    public NvmlGpuPowerFieldSnapshot ReadPowerFieldSnapshotOnce()
+    {
+        ObjectDisposedException.ThrowIf(
+            _disposed,
+            this);
+
+        if (_getFieldValues is null)
+        {
+            var unavailable =
+                new NvmlFieldUnsignedCallResult(
+                    ExportAvailable: false,
+                    QueryResult: null,
+                    FieldResult: 0,
+                    FieldId: 0,
+                    ValueType: 0,
+                    UnsignedValueDecoded: false,
+                    Value: 0);
+
+            return new NvmlGpuPowerFieldSnapshot(
+                ExportAvailable: false,
+                QueryResult: null,
+                MinLimit: unavailable,
+                MaxLimit: unavailable,
+                DefaultLimit: unavailable,
+                CurrentLimit: unavailable,
+                RequestedLimit: unavailable);
+        }
+
+        var values =
+            new[]
+            {
+                Field(NvmlFieldPowerMinLimit),
+                Field(NvmlFieldPowerMaxLimit),
+                Field(NvmlFieldPowerDefaultLimit),
+                Field(NvmlFieldPowerCurrentLimit),
+                Field(NvmlFieldPowerRequestedLimit)
+            };
+
+        var queryResult =
+            _getFieldValues(
+                _device,
+                values.Length,
+                values);
+
+        return new NvmlGpuPowerFieldSnapshot(
+            ExportAvailable: true,
+            QueryResult: queryResult,
+            MinLimit:
+                DecodePowerField(
+                    queryResult,
+                    values[0]),
+            MaxLimit:
+                DecodePowerField(
+                    queryResult,
+                    values[1]),
+            DefaultLimit:
+                DecodePowerField(
+                    queryResult,
+                    values[2]),
+            CurrentLimit:
+                DecodePowerField(
+                    queryResult,
+                    values[3]),
+            RequestedLimit:
+                DecodePowerField(
+                    queryResult,
+                    values[4]));
+    }
+
+    private static NvmlFieldValue Field(
+        uint fieldId) =>
+        new()
+        {
+            FieldId = fieldId,
+            ScopeId = 0
+        };
+
+    private static NvmlFieldUnsignedCallResult DecodePowerField(
+        int queryResult,
+        NvmlFieldValue field)
+    {
+        var decoded = false;
+        ulong value = 0;
+
+        if (queryResult == NvmlSuccess &&
+            field.NvmlReturn == NvmlSuccess)
+        {
+            switch (field.ValueType)
+            {
+                case NvmlValueTypeUnsignedInt:
+                    value =
+                        field.Value.UnsignedInt;
+                    decoded = true;
+                    break;
+
+                case NvmlValueTypeUnsignedLong:
+                    // Windows NVML uses the Win32 C ABI where unsigned long is
+                    // 32-bit even in a 64-bit process.
+                    value =
+                        field.Value.UnsignedLong;
+                    decoded = true;
+                    break;
+
+                case NvmlValueTypeUnsignedLongLong:
+                    value =
+                        field.Value.UnsignedLongLong;
+                    decoded = true;
+                    break;
+
+                case NvmlValueTypeUnsignedShort:
+                    value =
+                        field.Value.UnsignedShort;
+                    decoded = true;
+                    break;
+            }
+        }
+
+        return new NvmlFieldUnsignedCallResult(
+            ExportAvailable: true,
+            QueryResult: queryResult,
+            FieldResult: field.NvmlReturn,
+            FieldId: field.FieldId,
+            ValueType: field.ValueType,
+            UnsignedValueDecoded: decoded,
+            Value: value);
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -649,6 +805,44 @@ internal sealed class NvmlClient :
         return Encoding.UTF8.GetString(buffer, 0, length);
     }
 
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct NvmlValue
+    {
+        [FieldOffset(0)]
+        public double Double;
+
+        [FieldOffset(0)]
+        public uint UnsignedInt;
+
+        [FieldOffset(0)]
+        public uint UnsignedLong;
+
+        [FieldOffset(0)]
+        public ulong UnsignedLongLong;
+
+        [FieldOffset(0)]
+        public long SignedLongLong;
+
+        [FieldOffset(0)]
+        public int SignedInt;
+
+        [FieldOffset(0)]
+        public ushort UnsignedShort;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NvmlFieldValue
+    {
+        public uint FieldId;
+        public uint ScopeId;
+        public long Timestamp;
+        public long LatencyUsec;
+        public int ValueType;
+        public int NvmlReturn;
+        public NvmlValue Value;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct NvmlUtilization
     {
@@ -741,6 +935,13 @@ internal sealed class NvmlClient :
     private delegate int NvmlDeviceGetEnforcedPowerLimitDelegate(
         IntPtr device,
         out uint limitMilliwatts);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceGetFieldValuesDelegate(
+        IntPtr device,
+        int valuesCount,
+        [In, Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)]
+        NvmlFieldValue[] values);
 
     internal readonly record struct GpuSample(
         double TemperatureC,
