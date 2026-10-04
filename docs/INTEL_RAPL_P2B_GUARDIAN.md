@@ -1136,3 +1136,52 @@ productionHardwareWritesAuthorized remains false. The qualification harness has
 its own explicit, one-shot authorization path and is not wired to GUI, startup,
 power-source notifications or automatic profile integration.
 
+## Step 5.10C physical result — direct NVML preset Set/Reset
+
+The qualification-only C# -> NVML path has now been exercised physically on
+HP-8C40-9D0R1LA-F18 / NVIDIA GeForce RTX 4060 Laptop GPU for both product
+presets.
+
+AC qualification:
+
+- request: 210..1850 MHz;
+- Apply succeeded;
+- observation before: 1800 MHz;
+- observation during: 1845 MHz;
+- normal Release/Reset succeeded;
+- final session state: Disabled;
+- exception: none.
+
+Battery qualification:
+
+- request: 210..1200 MHz;
+- Apply succeeded;
+- observation before: 1890 MHz;
+- observation during: 1200 MHz;
+- normal Release/Reset succeeded;
+- final session state: Disabled;
+- exception: none.
+
+This physically qualifies the direct nvmlDeviceSetGpuLockedClocks command path
+for both fixed presets and the normal in-process
+nvmlDeviceResetGpuLockedClocks release path.
+
+It still does NOT provide exact installed min/max readback. The observed
+graphics clock remains telemetry only, ActiveUnverified remains the correct
+session state, and exact ownership is not claimed.
+
+The consolidated evidence record is:
+
+    release/gpu-clock-nvml-preset-write-qualification-8c40-2026-10-04.json
+
+The next physical gate is a single live session:
+
+    AC 210..1850
+    -> Battery 210..1200
+    -> AC 210..1850
+    -> Reset
+
+with no intermediate Reset between enabled presets.
+
+productionHardwareWritesAuthorized remains false.
+
