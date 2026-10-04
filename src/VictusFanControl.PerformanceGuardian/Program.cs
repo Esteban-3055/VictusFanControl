@@ -40,13 +40,18 @@ internal static class Program
                     CombinedGuardianDomainLifecycleSelfTest.Run(
                         Console.Out);
 
+                var standbyRuntimeResult =
+                    GuardianModernStandbyLifecycleRuntimeSelfTest.Run(
+                        Console.Out);
+
                 return authorityResult == 0 &&
                     sourceRuntimeResult == 0 &&
                     gpuDomainResult == 0 &&
                     cleanupResult == 0 &&
                     cpuBackendResult == 0 &&
                     cpuDomainResult == 0 &&
-                    combinedDomainResult == 0
+                    combinedDomainResult == 0 &&
+                    standbyRuntimeResult == 0
                     ? 0
                     : 1;
             }
