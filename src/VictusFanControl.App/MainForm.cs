@@ -13,7 +13,7 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
     private Hp8C40P16QualificationSession? _p16QualificationSession;
 
@@ -482,7 +482,9 @@ internal sealed class MainForm : Form
         bool p15d1TrayExitHardwareTest = false,
         string? p15d1TrayExitMarkerRoot = null,
         bool p15d2VariableManualHardwareTest = false,
-        string? p15d2VariableManualMarkerRoot = null)
+        string? p15d2VariableManualMarkerRoot = null,
+        bool automaticFinalQualificationHardwareTest = false,
+        string? automaticFinalQualificationMarkerRoot = null)
     {
         _loadedFanConfiguration = FanConfigurationStore.Load(null, out _fanConfigurationNotice);
         Text = "Victus Fan Control";
@@ -520,6 +522,11 @@ internal sealed class MainForm : Form
             string.IsNullOrWhiteSpace(p15d2VariableManualMarkerRoot)
                 ? null
                 : Path.GetFullPath(p15d2VariableManualMarkerRoot);
+        _automaticFinalQualificationHardwareTest = automaticFinalQualificationHardwareTest;
+        _automaticFinalQualificationMarkerRoot =
+            string.IsNullOrWhiteSpace(automaticFinalQualificationMarkerRoot)
+                ? null
+                : Path.GetFullPath(automaticFinalQualificationMarkerRoot);
         _hardwareIdentity = HardwareIdentityReader.ReadCurrent();
         _targetProfile =
             HpHardwareTargetResolver.Resolve(
@@ -671,6 +678,11 @@ internal sealed class MainForm : Form
                         $"P15D2 refuses to overwrite existing evidence marker '{path}'.");
                 }
             }
+        }
+
+        if (_automaticFinalQualificationHardwareTest)
+        {
+            InitializeAutomaticFinalQualificationEvidence();
         }
 
         if (_m9dProductionLifecycleHardwareTest)
@@ -892,15 +904,19 @@ internal sealed class MainForm : Form
                 StringComparison.Ordinal);
 
         var manualExecutionAuthorized =
-            isolatedManualQualification
-                ? p15cManualExecutionAuthorized || p15d1ManualExecutionAuthorized || p15d2ManualExecutionAuthorized
-                : Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(_targetProfile?.Id) ||
-                  p16NormalManualQualificationAuthorized;
+            _automaticFinalQualificationHardwareTest
+                ? false
+                : isolatedManualQualification
+                    ? p15cManualExecutionAuthorized || p15d1ManualExecutionAuthorized || p15d2ManualExecutionAuthorized
+                    : Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(_targetProfile?.Id) ||
+                      p16NormalManualQualificationAuthorized;
 
         var automaticExecutionAuthorized =
-            isolatedManualQualification
-                ? false
-                : Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized;
+            _automaticFinalQualificationHardwareTest
+                ? Hp8C40AutomaticFinalQualificationGate.IsAuthorizedForTarget(_targetProfile?.Id)
+                : isolatedManualQualification
+                    ? false
+                    : Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized;
 
         _p16QualificationSession = p16NormalManualQualificationAuthorized
             ? new Hp8C40P16QualificationSession()
@@ -913,6 +929,13 @@ internal sealed class MainForm : Form
             manualExecutionAuthorized && backend is Hp8C40FanControlBackend manualBackend)
             manualBackend.WmiCommandAcknowledged += (_, proof) =>
                 AppLog.Write($"Manual WMI COMMAND PROOF: {proof}");
+
+        if (_automaticFinalQualificationHardwareTest &&
+            backend is Hp8C40FanControlBackend automaticQualificationBackend)
+        {
+            automaticQualificationBackend.WmiCommandAcknowledged += (_, proof) =>
+                AppLog.Write($"AUTOMATIC FINAL WMI COMMAND PROOF: {proof}");
+        }
 
         _fanProductionController =
             new AdaptiveFanProductionController(
@@ -945,7 +968,9 @@ internal sealed class MainForm : Form
                                 ? () => _p15d2ReadyPublished && !_p15d2Completed
                                 : null,
                 interactionAuthorizationProvider:
-                    _p15cGuiManualHardwareTest
+                    _automaticFinalQualificationHardwareTest
+                        ? IsAutomaticFinalControlInteractionAuthorized
+                        : _p15cGuiManualHardwareTest
                         ? IsP15CControlInteractionAuthorized
                         : _p15d1TrayExitHardwareTest
                             ? IsP15D1ControlInteractionAuthorized
@@ -961,7 +986,9 @@ internal sealed class MainForm : Form
                             ? Hp8C40P15D1TrayExitQualificationGate.QualificationLevel
                             : null,
                 interactionObserver:
-                    _p15cGuiManualHardwareTest
+                    _automaticFinalQualificationHardwareTest
+                        ? OnAutomaticFinalControlInteraction
+                        : _p15cGuiManualHardwareTest
                         ? OnP15CControlInteraction
                         : _p15d1TrayExitHardwareTest
                             ? OnP15D1ControlInteraction
@@ -1004,6 +1031,12 @@ internal sealed class MainForm : Form
             AppendEvent(
                 $"P13 UI: startup mode={_fanProductionController.Mode}; manualGate={_fanProductionController.ManualExecutionAuthorized}; automaticGate={_fanProductionController.AutomaticExecutionAuthorized}.");
             AppendEvent("Automatic fan policy is OFF. Startup remains Firmware; Manual/Automatic availability is controlled only by explicit execution gates.");
+
+            if (_automaticFinalQualificationHardwareTest)
+            {
+                AppendEvent(
+                    "AUTOMATIC FINAL QUALIFICATION: dedicated exact-target gate active. Normal user Automatic remains CLOSED. Wait for READY, then use the real P13 Automatic button; after the supervised run, return with the real Firmware button.");
+            }
 
             if (_p15cGuiManualHardwareTest)
             {
@@ -2851,11 +2884,16 @@ internal sealed class MainForm : Form
         {
             var safety = EvaluateControlSafety(_hardwareIdentity, _worker.StateMachine.State,
                 snapshot, DateTimeOffset.UtcNow, _fanCoordinator.BackendCanWrite);
-            await _fanProductionController.ProcessAutomaticAsync(snapshot, safety, cancellationToken,
+            var result = await _fanProductionController.ProcessAutomaticAsync(snapshot, safety, cancellationToken,
                 refreshRawSafetyProvider: () => ReferenceEquals(_lastSnapshot, snapshot)
                     ? SafetyGate.EvaluateForDisplay(_hardwareIdentity, _worker.StateMachine.State,
                         snapshot, DateTimeOffset.UtcNow, _fanCoordinator.BackendCanWrite)
                     : null).ConfigureAwait(false);
+
+            if (_automaticFinalQualificationHardwareTest)
+            {
+                RecordAutomaticFinalDecision(snapshot, result);
+            }
         }
         catch (Exception ex)
         {
@@ -2867,6 +2905,14 @@ internal sealed class MainForm : Form
     {
         _lastSnapshot = snapshot;
         _ = EnforceLatestFanSafetyAsync("latest telemetry snapshot");
+
+        if (_automaticFinalQualificationHardwareTest &&
+            !_automaticFinalReadyPublished &&
+            !_automaticFinalCompleted &&
+            _worker.StateMachine.State == SystemState.Healthy)
+        {
+            _ = Task.Run(TryPublishAutomaticFinalReadyAsync);
+        }
 
         if (_p15cGuiManualHardwareTest &&
             !_p15cReadyPublished &&
@@ -2943,6 +2989,21 @@ internal sealed class MainForm : Form
         }
         else
         {
+            if (_automaticFinalQualificationHardwareTest &&
+                !_automaticFinalReadyPublished)
+            {
+                _automaticFinalReadySafetyStreak = 0;
+                _automaticFinalLastReadySafetyTimestamp = null;
+            }
+
+            if (_automaticFinalQualificationHardwareTest &&
+                _automaticFinalEverActive &&
+                !_automaticFinalCompleted)
+            {
+                FailAutomaticFinalQualification(
+                    $"Runtime left Healthy during normal Automatic qualification: {e.Current}. {e.Reason}");
+            }
+
             if (_p15cGuiManualHardwareTest &&
                 !_p15cReadyPublished)
             {
@@ -3008,6 +3069,12 @@ internal sealed class MainForm : Form
         // stale Healthy notification.
         if (_worker.StateMachine.State != SystemState.Healthy)
         {
+            return;
+        }
+
+        if (_automaticFinalQualificationHardwareTest)
+        {
+            await TryPublishAutomaticFinalReadyAsync();
             return;
         }
 
