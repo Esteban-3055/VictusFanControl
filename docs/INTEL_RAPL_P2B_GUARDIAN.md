@@ -2130,3 +2130,43 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+### Step 6G.1 physical preflight evidence — 2026-10-04
+
+The exact target read-only preflight is now physically PASS and the accepted
+JSON is retained under release/ as:
+
+    performance-guardian-6g-cpu-preflight-8c40-2026-10-04.json
+
+Observed target evidence:
+
+    CPU                  13th Gen Intel Core i7-13700H
+    PawnIO               2.2.0
+    Physical cores       14
+    Source               AC confirmed
+    MSR 0x606            0x00000000000A0E03
+    Power unit           0.125 W
+    MSR 0x614            0x0000000000000168
+    Thermal spec         45 W
+    Reported minimum     0 W (no nonzero minimum advertised)
+    Reported maximum     0 W (no nonzero maximum advertised)
+    MSR 0x610 baseline   0x0042839800DF8168
+    Baseline fields      PL1 45 W / PL2 115 W
+    Lock                 clear
+    PL1/PL2 enable       both enabled
+
+Three consecutive 0x610 reads were identical. The production-shaped backend
+successfully planned AC 35/60 W and Battery 8/15 W. The target journal was
+absent, the production mutex was available, the software write gate was proven
+closed and HardwareWritesPerformed=false.
+
+A reported minimum of 0 W is interpreted only as "no nonzero minimum reported
+by 0x614"; it is not evidence that a literal 0 W package limit is supported.
+The Battery 8/15 W preset therefore still requires the bounded physical
+Guardian qualification before production authority can be considered.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
