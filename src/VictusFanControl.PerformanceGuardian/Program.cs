@@ -24,9 +24,14 @@ internal static class Program
                     QualifiedGpuGuardianDomainLifecycleSelfTest.Run(
                         Console.Out);
 
+                var cleanupResult =
+                    PerformanceGuardianCleanupSelfTest.Run(
+                        Console.Out);
+
                 return authorityResult == 0 &&
                     sourceRuntimeResult == 0 &&
-                    gpuDomainResult == 0
+                    gpuDomainResult == 0 &&
+                    cleanupResult == 0
                     ? 0
                     : 1;
             }

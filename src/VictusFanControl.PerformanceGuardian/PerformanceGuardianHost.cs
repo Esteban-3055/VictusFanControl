@@ -285,34 +285,17 @@ internal sealed class PerformanceGuardianHost
 
                 if (authority.SessionEnabled)
                 {
-                    try
-                    {
-                        _sourceRuntime.Stop(
-                            "PARENT_PROCESS_EXIT");
-                    }
-                    catch (Exception ex)
-                    {
-                        failure =
-                            ex;
-                    }
-
-                    try
-                    {
-                        await _domains.ReleaseAsync(
+                    var cleanup =
+                        await AttemptSessionCleanupAsync(
+                            _sourceRuntime,
+                            _domains,
                             cpu,
                             gpu,
                             "PARENT_PROCESS_EXIT",
                             CancellationToken.None).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        failure =
-                            failure is null
-                                ? ex
-                                : new AggregateException(
-                                    failure,
-                                    ex);
-                    }
+
+                    failure =
+                        cleanup.Failure;
                 }
 
                 _ =
@@ -387,6 +370,80 @@ internal sealed class PerformanceGuardianHost
                 mutex.Dispose();
             }
         }
+    }
+
+    internal readonly record struct SessionCleanupResult(
+        bool SourceStopAttempted,
+        bool ReleaseAttempted,
+        Exception? Failure)
+    {
+        internal bool Succeeded =>
+            Failure is null;
+    }
+
+    internal static async ValueTask<SessionCleanupResult>
+        AttemptSessionCleanupAsync(
+            IGuardianPowerSourceRuntime sourceRuntime,
+            IGuardianDomainLifecycle domains,
+            bool cpuEnabled,
+            bool gpuEnabled,
+            string reason,
+            CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(
+            sourceRuntime);
+
+        ArgumentNullException.ThrowIfNull(
+            domains);
+
+        Exception? failure =
+            null;
+
+        var sourceStopAttempted =
+            false;
+
+        var releaseAttempted =
+            false;
+
+        try
+        {
+            sourceStopAttempted =
+                true;
+
+            sourceRuntime.Stop(
+                reason);
+        }
+        catch (Exception ex)
+        {
+            failure =
+                ex;
+        }
+
+        try
+        {
+            releaseAttempted =
+                true;
+
+            await domains.ReleaseAsync(
+                cpuEnabled,
+                gpuEnabled,
+                reason,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            failure =
+                failure is null
+                    ? ex
+                    : new AggregateException(
+                        failure,
+                        ex);
+        }
+
+        return new SessionCleanupResult(
+            sourceStopAttempted,
+            releaseAttempted,
+            failure);
     }
 
     private async Task ProcessConnectionAsync(
@@ -486,50 +543,27 @@ internal sealed class PerformanceGuardianHost
                 }
             }
 
-            if (request.Type ==
-                    PerformanceGuardianProtocol.DisableSession &&
+            if (request.Type is
+                    PerformanceGuardianProtocol.DisableSession or
+                    PerformanceGuardianProtocol.Shutdown &&
                 wasEnabled)
             {
-                try
-                {
-                    _sourceRuntime.Stop(
-                        "CLIENT_DISABLE_SESSION");
-                }
-                catch (Exception ex)
-                {
-                    _rejectedRequests++;
+                var cleanupReason =
+                    request.Type ==
+                        PerformanceGuardianProtocol.DisableSession
+                        ? "CLIENT_DISABLE_SESSION"
+                        : "CLIENT_SHUTDOWN";
 
-                    await SendResponseAsync(
-                        pipe,
-                        request,
-                        new PerformanceGuardianAuthorityResult(
-                            Accepted: false,
-                            Code:
-                                "SOURCE_RUNTIME_STOP_FAILED",
-                            Message:
-                                ex.Message,
-                            Phase:
-                                authority.Phase,
-                            SessionEnabled:
-                                authority.SessionEnabled,
-                            CpuEnabled:
-                                authority.CpuEnabled,
-                            GpuEnabled:
-                                authority.GpuEnabled),
-                        stop.Token).ConfigureAwait(false);
-
-                    continue;
-                }
-
-                try
-                {
-                    await _domains.ReleaseAsync(
+                var cleanup =
+                    await AttemptSessionCleanupAsync(
+                        _sourceRuntime,
+                        _domains,
                         previousCpu,
                         previousGpu,
-                        "CLIENT_DISABLE_SESSION",
+                        cleanupReason,
                         stop.Token).ConfigureAwait(false);
-                }
-                catch (Exception ex)
+
+                if (!cleanup.Succeeded)
                 {
                     _rejectedRequests++;
 
@@ -539,9 +573,12 @@ internal sealed class PerformanceGuardianHost
                         new PerformanceGuardianAuthorityResult(
                             Accepted: false,
                             Code:
-                                "DOMAIN_RELEASE_FAILED",
+                                cleanup.ReleaseAttempted
+                                    ? "SESSION_CLEANUP_FAILED"
+                                    : "SESSION_CLEANUP_RELEASE_NOT_ATTEMPTED",
                             Message:
-                                ex.Message,
+                                cleanup.Failure?.Message ??
+                                "Performance Guardian cleanup failed.",
                             Phase:
                                 authority.Phase,
                             SessionEnabled:
@@ -560,71 +597,6 @@ internal sealed class PerformanceGuardianHost
                     PerformanceGuardianProtocol.Shutdown &&
                 wasEnabled)
             {
-                try
-                {
-                    _sourceRuntime.Stop(
-                        "CLIENT_SHUTDOWN");
-                }
-                catch (Exception ex)
-                {
-                    _rejectedRequests++;
-
-                    await SendResponseAsync(
-                        pipe,
-                        request,
-                        new PerformanceGuardianAuthorityResult(
-                            Accepted: false,
-                            Code:
-                                "SOURCE_RUNTIME_STOP_FAILED",
-                            Message:
-                                ex.Message,
-                            Phase:
-                                authority.Phase,
-                            SessionEnabled:
-                                authority.SessionEnabled,
-                            CpuEnabled:
-                                authority.CpuEnabled,
-                            GpuEnabled:
-                                authority.GpuEnabled),
-                        stop.Token).ConfigureAwait(false);
-
-                    continue;
-                }
-
-                try
-                {
-                    await _domains.ReleaseAsync(
-                        previousCpu,
-                        previousGpu,
-                        "CLIENT_SHUTDOWN",
-                        stop.Token).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    _rejectedRequests++;
-
-                    await SendResponseAsync(
-                        pipe,
-                        request,
-                        new PerformanceGuardianAuthorityResult(
-                            Accepted: false,
-                            Code:
-                                "DOMAIN_RELEASE_FAILED",
-                            Message:
-                                ex.Message,
-                            Phase:
-                                authority.Phase,
-                            SessionEnabled:
-                                authority.SessionEnabled,
-                            CpuEnabled:
-                                authority.CpuEnabled,
-                            GpuEnabled:
-                                authority.GpuEnabled),
-                        stop.Token).ConfigureAwait(false);
-
-                    continue;
-                }
-
                 _ =
                     authority.Handle(
                         request);
