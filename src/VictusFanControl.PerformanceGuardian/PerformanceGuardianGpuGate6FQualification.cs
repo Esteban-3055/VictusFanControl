@@ -1331,6 +1331,12 @@ internal static class PerformanceGuardianGpuGate6FQualification
             string.IsNullOrWhiteSpace(
                 journal) ||
             !string.Equals(
+                Path.GetFullPath(
+                    journal!),
+                Path.GetFullPath(
+                    ActiveJournalPath),
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(
                 confirm,
                 TargetProfileId,
                 StringComparison.Ordinal))

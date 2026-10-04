@@ -355,6 +355,22 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
                         result.CpuException ??
                         result.GpuException;
                 }
+                else if (result.CpuAttempted &&
+                         result.CpuResult.HasValue &&
+                         !result.CpuResult.Value.Succeeded)
+                {
+                    _failure =
+                        "CPU_SOURCE_TRANSITION_FAILED: " +
+                        result.CpuResult.Value.Status;
+                }
+                else if (result.GpuAttempted &&
+                         result.GpuResult.HasValue &&
+                         !result.GpuResult.Value.Succeeded)
+                {
+                    _failure =
+                        "GPU_SOURCE_TRANSITION_FAILED: " +
+                        result.GpuResult.Value.Status;
+                }
             }
             catch (Exception ex)
             {
