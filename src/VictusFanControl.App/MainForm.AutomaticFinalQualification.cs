@@ -5,6 +5,7 @@ using System.Text.Json;
 using VictusFanControl.Control;
 using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Hp;
+using VictusFanControl.Runtime;
 using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
 
@@ -637,11 +638,11 @@ internal sealed partial class MainForm
                         _automaticFinalHoldDecisions,
                     minObservedLevel =
                         _automaticFinalMinObservedLevel == int.MaxValue
-                            ? null
+                            ? (int?)null
                             : _automaticFinalMinObservedLevel,
                     maxObservedLevel =
                         _automaticFinalMaxObservedLevel == int.MinValue
-                            ? null
+                            ? (int?)null
                             : _automaticFinalMaxObservedLevel,
                     automaticSelectedUtc =
                         _automaticFinalAutomaticSelectedUtc,
