@@ -210,7 +210,10 @@ public sealed class HardwareTelemetryReader : IDisposable
         HpWmiFanTelemetrySample? wmiFanSample = null;
         if (_wmiFans is not null)
         {
-            wmiFanSample = _wmiFans.ReadCached(_schedulePeriodicFanReads);
+            if (_schedulePeriodicFanReads)
+                wmiFanSample = _wmiFans.ReadCached();
+            else
+                wmiFanSample = _wmiFans.ReadCached(scheduleQuery: false);
             cpuFanRpm = wmiFanSample?.CpuNominalRpm;
             gpuFanRpm = wmiFanSample?.GpuNominalRpm;
             _lastEcReadError = null;
