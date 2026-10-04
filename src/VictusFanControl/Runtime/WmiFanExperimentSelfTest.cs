@@ -18,6 +18,7 @@ internal static class WmiFanExperimentSelfTest
         {
             TestHeartbeats(directory);
             TestFreshAcquisitionAsync().GetAwaiter().GetResult();
+            TestDemandQuantization();
             TestInertia();
             TestFinalDemandFilter();
             var result = "{\"Pid\":31920,\"ExitCode\":1,\"StopReason\":\"Telemetry admission lost\",\"SamplesAdmitted\":true,\"NormalPhaseEnded\":true}";
@@ -119,7 +120,7 @@ internal static class WmiFanExperimentSelfTest
             Reject(() => WmiFanExperimentBoundary.EnsureRequestAllowed(level));
             WmiFanExperimentBoundary.BeginRecovery();
             WmiFanExperimentBoundary.EnsureRequestAllowed(release);
-            output.WriteLine("PASS: atomic heartbeat replacement, transient sharing conflicts without deadline renewal, stalled/invalid heartbeat rejection, final demand EMA on all six sources, normal slow actuation, raw thermal override/handoff, time-based inertia, sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
+            output.WriteLine("PASS: atomic heartbeat replacement, transient sharing conflicts without deadline renewal, stalled/invalid heartbeat rejection, final demand EMA on all six sources, midpoint-down tenth rounding and stable floor recovery, normal slow actuation, raw thermal override/handoff, time-based inertia, sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
             return 0;
         }
         catch (Exception ex) { output.WriteLine("FAIL: " + ex); return 1; }
@@ -238,10 +239,10 @@ internal static class WmiFanExperimentSelfTest
 
         policy = new(config);
         policy.Evaluate(Input(0, 40));
-        for (var s = 1; s < 17; s++)
+        for (var s = 1; s < 14; s++)
             Check(policy.Evaluate(Input(s)).EqualFanLevel == 40, "Filtered decrease bypassed its continuous 12-second confirmation.");
-        Check(policy.Evaluate(Input(17)).EqualFanLevel == 39, "Sustained filtered decrease never completed.");
-        Check(policy.Evaluate(Input(18)).EqualFanLevel == 39, "Second down-step bypassed confirmation.");
+        Check(policy.Evaluate(Input(14)).EqualFanLevel == 39, "Sustained filtered decrease never completed.");
+        Check(policy.Evaluate(Input(15)).EqualFanLevel == 39, "Second down-step bypassed confirmation.");
 
         foreach (var invalid in new[] { "input", "duplicate", "backwards", "gap" })
         {
@@ -270,18 +271,74 @@ internal static class WmiFanExperimentSelfTest
         var newWrites = 0;
         var oldSession = new WmiFanSession(_ => { oldWrites++; return 0; }, _ => { });
         var newSession = new WmiFanSession(_ => { newWrites++; return 0; }, _ => { });
+        var previousNewLevel = 34;
         for (var s = 0; s <= 39; s++)
         {
             var input = Input(s, s % 13 == 0 || s % 13 >= 10 ? 34 : 30);
             oldSession.Apply(original.Evaluate(input).EqualFanLevel!.Value, true);
-            newSession.Apply(policy.Evaluate(input).EqualFanLevel!.Value, true);
+            var newLevel = policy.Evaluate(input).EqualFanLevel!.Value;
+            Check(newLevel <= previousNewLevel, "Recurring short bursts generated an alternating down/up cycle.");
+            previousNewLevel = newLevel;
+            newSession.Apply(newLevel, true);
         }
-        Check(oldWrites > newWrites && newWrites == 1,
-            "Short cooling fluctuations should no longer generate repeated down/up orders.");
+        Check(oldWrites > newWrites && newWrites <= 2,
+            $"Short cooling fluctuations should settle with at most one decrease instead of repeated down/up orders; old={oldWrites}, new={newWrites}.");
+        var writesBeforeRecovery = newWrites;
         Reject(() => newSession.Apply(34, false));
         newSession.Recover();
-        Check(newWrites == 3 && newSession.Phase == WmiFanSessionPhase.ReleaseAccepted,
+        Check(newWrites == writesBeforeRecovery + 2 && newSession.Phase == WmiFanSessionPhase.ReleaseAccepted,
             "Inertia must not delay admission refusal or the two recovery requests.");
+    }
+
+    private static void TestDemandQuantization()
+    {
+        foreach (var (input, expected) in new[] { (3.04, 3.0), (3.05, 3.0), (3.06, 3.1),
+            (3.15, 3.1), (3.16, 3.2), (30.05, 30.0), (30.050001, 30.1),
+            (30.049999, 30.0), (30.06, 30.1), (30.00000651003845, 30.0), (50.0, 50.0) })
+            Check(WmiFanInertiaPolicy.RoundNormalDemandToTenth(input) == expected,
+                $"Normal demand rounding failed: {input:R} -> {expected:R}.");
+        foreach (var invalid in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity, -1, 256 })
+            Reject(() => WmiFanInertiaPolicy.RoundNormalDemandToTenth(invalid));
+
+        var config = WmiFanExperiment.CreatePolicy() with { CpuPowerCurve = [new(0, 30), new(100, 50)] };
+        var origin = DateTimeOffset.UnixEpoch;
+        AdaptiveFanPolicyInput Input(double seconds, double demand) =>
+            new(origin.AddSeconds(seconds), 40, (demand - 30) * 5, 0, 35, 0, 0);
+        foreach (var (demand, target) in new[] { (30.05, 30), (30.06, 31) })
+        {
+            var result = new WmiFanInertiaPolicy(config).Evaluate(Input(0, demand));
+            Check(result.EqualFanLevel == target && result.ActuationDemandLevel == (target == 30 ? 30.0 : 30.1),
+                "Normal target must use decimal rounding before integer ceiling.");
+        }
+
+        foreach (var (stableDemand, expectedTarget) in new[] { (30.0, 30), (33.2, 34) })
+        {
+            var policy = new WmiFanInertiaPolicy(config);
+            var previous = policy.Evaluate(Input(0, 40));
+            var lastDecrease = 0;
+            for (var s = 1; s <= 1200; s++)
+            {
+                var decision = policy.Evaluate(Input(s, stableDemand));
+                if (decision.EqualFanLevel < previous.EqualFanLevel)
+                {
+                    Check(previous.EqualFanLevel - decision.EqualFanLevel == 1 && s - lastDecrease >= 12,
+                        "Quantization bypassed the one-level/twelve-second decrease limits.");
+                    lastDecrease = s;
+                }
+                previous = decision;
+            }
+            Check(previous.EqualFanLevel == expectedTarget,
+                "EMA residual or full-level deadband retained excess ventilation at stable demand.");
+            Check(previous.SmoothedDemandLevel > stableDemand,
+                "Actuation rounding must not overwrite EMA history.");
+        }
+
+        // A small fractional demand still rounds upward during raw high heat.
+        var thermalPolicy = new WmiFanInertiaPolicy(config with { CpuTemperatureCurve = [new(0, 30), new(100, 30.04)] });
+        thermalPolicy.Evaluate(Input(0, 30));
+        var hot = thermalPolicy.Evaluate(Input(1, 30) with { CpuEffectiveTemperatureC = 85 });
+        Check(hot.ThermalOverride && hot.EqualFanLevel == 31 && hot.ActuationDemandLevel == hot.RawDemandLevel,
+            "Normal rounding must not understate raw thermal-override demand.");
     }
 
     private static void TestFinalDemandFilter()

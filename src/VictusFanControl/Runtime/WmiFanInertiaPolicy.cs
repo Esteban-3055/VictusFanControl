@@ -6,6 +6,7 @@ internal sealed record WmiFanInertiaSettings(
     double IncreaseConfirmationSeconds = 2,
     int NormalMaximumUpStepLevels = 1,
     double DecreaseConfirmationSeconds = 12,
+    string NormalDemandQuantization = "nearest-tenth;midpoint-down;integer-ceiling;no-extra-deadband",
     string ThermalIncrease = "raw-CPU85-or-GPU78;immediate-with-existing-up-step-limit");
 
 internal sealed record WmiFanPolicyDecision(
@@ -13,6 +14,7 @@ internal sealed record WmiFanPolicyDecision(
     int? EqualFanLevel,
     double? RawDemandLevel,
     double? SmoothedDemandLevel,
+    double? ActuationDemandLevel,
     bool ThermalOverride,
     string Detail);
 
@@ -54,7 +56,7 @@ internal sealed class WmiFanInertiaPolicy
         {
             ClearConfirmation();
             _finalFilter.Reset();
-            return new(false, null, demand.RawDemandLevel, null, false, demand.Detail);
+            return new(false, null, demand.RawDemandLevel, null, null, false, demand.Detail);
         }
 
         // Every normal route (CPU/GPU heat, power, load) passes through the
@@ -64,9 +66,12 @@ internal sealed class WmiFanInertiaPolicy
             input.GpuTemperatureC >= WmiFinalDemandFilter.Settings.GpuThermalOverrideC;
         var smoothed = _finalFilter.Evaluate(input.Timestamp, demand.RawDemandLevel!.Value,
             _config.MinimumLevel, _config.MaximumLevel, _config.MaximumSampleGap, thermalOverride);
-        var requested = Math.Clamp((int)Math.Ceiling(smoothed), _config.MinimumLevel, _config.MaximumLevel);
+        // Keep EMA history at full precision. Quantize only normal actuation;
+        // raw thermal override must retain its existing conservative ceiling.
+        var actuationDemand = thermalOverride ? smoothed : RoundNormalDemandToTenth(smoothed);
+        var requested = Math.Clamp((int)Math.Ceiling(actuationDemand), _config.MinimumLevel, _config.MaximumLevel);
         WmiFanPolicyDecision Accepted(string detail) =>
-            new(true, _current, demand.RawDemandLevel, smoothed, thermalOverride, detail);
+            new(true, _current, demand.RawDemandLevel, smoothed, actuationDemand, thermalOverride, detail);
         if (!_current.HasValue)
         {
             _current = requested;
@@ -102,7 +107,9 @@ internal sealed class WmiFanInertiaPolicy
         }
 
         _increaseSince = null;
-        if (requested < current - _config.DecreaseDeadbandLevels)
+        // Tenth-level quantization replaces the experimental full-level
+        // deadband, which retained an extra level even at the exact floor.
+        if (requested < current)
         {
             _decreaseSince ??= input.Timestamp;
             var elapsed = (input.Timestamp - _decreaseSince.Value).TotalSeconds;
@@ -117,7 +124,16 @@ internal sealed class WmiFanInertiaPolicy
         }
 
         _decreaseSince = null;
-        return Accepted($"Holding {current} inside deadband; requested={requested}.");
+        return Accepted($"Holding {current}; requested={requested}.");
+    }
+
+    internal static double RoundNormalDemandToTenth(double demand)
+    {
+        if (!double.IsFinite(demand) || demand < 0 || demand > 255)
+            throw new ArgumentOutOfRangeException(nameof(demand));
+        // Decimal arithmetic expresses decimal ties exactly: 3.05 -> 3.0,
+        // 3.06 -> 3.1, and 3.15 -> 3.1 (rather than midpoint-to-even).
+        return (double)(Math.Ceiling((decimal)demand * 10m - 0.5m) / 10m);
     }
 
     private void ClearConfirmation()

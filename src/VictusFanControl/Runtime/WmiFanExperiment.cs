@@ -223,7 +223,8 @@ internal static class WmiFanExperiment
                 EnsureNormal();
                 var sent = session?.Apply(decision.EqualFanLevel.Value, safety.CustomControlPermitted) ?? false;
                 decisions.WriteLine(JsonSerializer.Serialize(new { Utc = DateTimeOffset.UtcNow,
-                    decision.EqualFanLevel, decision.RawDemandLevel, decision.SmoothedDemandLevel, decision.ThermalOverride,
+                    decision.EqualFanLevel, decision.RawDemandLevel, decision.SmoothedDemandLevel,
+                    decision.ActuationDemandLevel, decision.ThermalOverride,
                     decision.Detail, Sent = sent, o.Control,
                     WindowsPower = SystemPowerStatusReader.Read(),
                     snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC,
@@ -231,7 +232,7 @@ internal static class WmiFanExperiment
                     snapshot.FanSampleAgeMilliseconds, snapshot.FanAgeCapturedAtUtc, SetpointReadback = false }));
                 WriteJson(Path.Combine(o.Directory, "heartbeat.json"), new { Pid = Environment.ProcessId,
                     Utc = DateTimeOffset.UtcNow, ElapsedMs = clock.ElapsedMilliseconds, Level = decision.EqualFanLevel });
-                Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; demand={decision.RawDemandLevel:0.0} smooth={decision.SmoothedDemandLevel:0.0} thermalOverride={decision.ThermalOverride}; CPU={snapshot.CpuControlTemperatureC:0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}");
+                Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; demand={decision.RawDemandLevel:0.0} smooth={decision.SmoothedDemandLevel:0.000} actuationDemand={decision.ActuationDemandLevel:0.0} thermalOverride={decision.ThermalOverride}; CPU={snapshot.CpuControlTemperatureC:0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}");
                 await Task.Delay(1000, cts.Token);
             }
         }
