@@ -37,6 +37,10 @@ internal static class CpuPowerLimiterSelfTest
                 "GPU clock AC/battery preset selector");
 
             NormalApplyVerifyRelease(output);
+            OwnedPresetSwitchIsOneJournaledWrite(output);
+            PresetSwitchPreservesExternalHandoff(output);
+            PresetSwitchJournalArmFailurePreventsWrite(output);
+            PresetSwitchReadbackMismatchRetainsArmedJournal(output);
             NonOwnedMutationIsPreservedWithoutConflict(output);
             SuccessfulReacquireRestoresExternalHandoff(output);
             EvolvingExternalValueBecomesLatestHandoff(output);
@@ -138,6 +142,241 @@ internal static class CpuPowerLimiterSelfTest
 
         output.WriteLine(
             "PASS journal precedes normal apply and restore writes");
+    }
+
+
+    private static void OwnedPresetSwitchIsOneJournaledWrite(
+        TextWriter output)
+    {
+        var journal = new FakeJournal();
+        var backend = new FakeBackend(journal);
+        var clock = new FakeActiveTimeClock();
+
+        using var limiter =
+            new CpuPowerLimiter(
+                backend,
+                journal,
+                clock);
+
+        Require(
+            limiter.Apply(
+                new CpuPowerLimitRequest(20, 40)),
+            "preset switch fixture apply");
+
+        var baseline =
+            limiter.Baseline;
+
+        Require(
+            limiter.SwitchOwnedPreset(
+                new CpuPowerLimitRequest(15, 30)),
+            "AC -> Battery owned switch");
+
+        Require(
+            backend.WriteCount == 2 &&
+            backend.Raw == FakeBackend.BatteryRaw,
+            "AC -> Battery adds exactly one write");
+
+        Require(
+            journal.StoredPhases.Contains(
+                CpuPowerJournalPhase.PresetSwitchWriteArmed),
+            "preset transition was durably armed");
+
+        Require(
+            journal.Current?.Phase ==
+                CpuPowerJournalPhase.Owned &&
+            journal.Current.Request ==
+                new CpuPowerLimitRequest(15, 30) &&
+            journal.Current.AppliedRaw ==
+                FakeBackend.BatteryRaw,
+            "new Battery preset becomes durable Owned only after readback");
+
+        Require(
+            limiter.Baseline == baseline,
+            "OriginalBaseline remains immutable across switch");
+
+        Require(
+            limiter.ReacquireAttemptsUsed == 0,
+            "successful source switch starts a fresh conflict budget");
+
+        Require(
+            limiter.SwitchOwnedPreset(
+                new CpuPowerLimitRequest(20, 40)),
+            "Battery -> AC owned switch");
+
+        Require(
+            backend.WriteCount == 3 &&
+            backend.Raw == FakeBackend.AppliedRaw,
+            "Battery -> AC also adds exactly one write");
+
+        Require(
+            limiter.Release(),
+            "release after two preset switches");
+
+        Require(
+            backend.WriteCount == 4 &&
+            backend.Raw == FakeBackend.BaselineRaw,
+            "release occurs only after switches, never between them");
+
+        output.WriteLine(
+            "PASS AC<->Battery owned preset switch is journaled and uses one write per transition");
+    }
+
+    private static void PresetSwitchPreservesExternalHandoff(
+        TextWriter output)
+    {
+        var journal = new FakeJournal();
+        var backend = new FakeBackend(journal);
+        var clock = new FakeActiveTimeClock();
+
+        using var limiter =
+            new CpuPowerLimiter(
+                backend,
+                journal,
+                clock);
+
+        Require(
+            limiter.Apply(
+                new CpuPowerLimitRequest(20, 40)),
+            "handoff switch fixture apply");
+
+        backend.Raw =
+            FakeBackend.ExternalRaw;
+
+        Require(
+            !limiter.VerifyActive(),
+            "external handoff detected");
+
+        clock.Advance(
+            TimeSpan.FromSeconds(30));
+
+        Require(
+            limiter.VerifyActive(),
+            "bounded reacquire succeeds");
+
+        clock.Advance(
+            TimeSpan.FromSeconds(60));
+
+        Require(
+            limiter.VerifyActive() &&
+            limiter.State == CpuPowerLimiterState.Active,
+            "reacquire stabilizes before preset switch");
+
+        Require(
+            limiter.ExternalHandoff?.Raw ==
+            FakeBackend.ExternalRaw,
+            "external handoff captured before switch");
+
+        Require(
+            limiter.SwitchOwnedPreset(
+                new CpuPowerLimitRequest(15, 30)),
+            "switch after stable reacquire");
+
+        Require(
+            limiter.ExternalHandoff?.Raw ==
+                FakeBackend.ExternalRaw &&
+            journal.Current?.ExternalHandoff?.Raw ==
+                FakeBackend.ExternalRaw,
+            "ExternalHandoff survives owned-to-owned switch");
+
+        Require(
+            limiter.Release(),
+            "release after handoff-preserving switch");
+
+        Require(
+            backend.Raw ==
+            FakeBackend.ExternalRaw,
+            "final release returns to external handoff, not stale baseline");
+
+        output.WriteLine(
+            "PASS preset switch preserves ExternalHandoff as final release target");
+    }
+
+    private static void PresetSwitchJournalArmFailurePreventsWrite(
+        TextWriter output)
+    {
+        var journal = new FakeJournal();
+        var backend = new FakeBackend(journal);
+        var clock = new FakeActiveTimeClock();
+        var limiter =
+            new CpuPowerLimiter(
+                backend,
+                journal,
+                clock);
+
+        Require(
+            limiter.Apply(
+                new CpuPowerLimitRequest(20, 40)),
+            "switch arm failure fixture apply");
+
+        journal.FailStoreFromAttempt =
+            journal.StoreAttempts + 1;
+
+        Require(
+            !limiter.SwitchOwnedPreset(
+                new CpuPowerLimitRequest(15, 30)),
+            "failed PresetSwitchWriteArmed is surfaced");
+
+        Require(
+            backend.WriteCount == 1 &&
+            backend.Raw == FakeBackend.AppliedRaw,
+            "failed switch journal arm causes zero transition writes");
+
+        limiter.Dispose();
+
+        Require(
+            backend.WriteCount == 1,
+            "Dispose cannot bypass persistent journal failure");
+
+        output.WriteLine(
+            "PASS failed PresetSwitchWriteArmed persistence blocks the switch write");
+    }
+
+    private static void PresetSwitchReadbackMismatchRetainsArmedJournal(
+        TextWriter output)
+    {
+        var journal = new FakeJournal();
+        var backend =
+            new FakeBackend(journal)
+            {
+                RejectPresetSwitch = true
+            };
+
+        var clock = new FakeActiveTimeClock();
+        var limiter =
+            new CpuPowerLimiter(
+                backend,
+                journal,
+                clock);
+
+        Require(
+            limiter.Apply(
+                new CpuPowerLimitRequest(20, 40)),
+            "switch mismatch fixture apply");
+
+        Require(
+            !limiter.SwitchOwnedPreset(
+                new CpuPowerLimitRequest(15, 30)),
+            "switch readback mismatch fails closed");
+
+        Require(
+            backend.WriteCount == 2,
+            "failed switch makes only its single armed write attempt");
+
+        Require(
+            backend.Raw == FakeBackend.AppliedRaw,
+            "old VFC-owned preset remains physically present");
+
+        Require(
+            journal.Current?.Phase ==
+                CpuPowerJournalPhase.PresetSwitchWriteArmed &&
+            journal.Current.AppliedRaw ==
+                FakeBackend.AppliedRaw &&
+            journal.Current.PendingRaw ==
+                FakeBackend.BatteryRaw,
+            "ambiguous switch preserves old+new raw in durable journal");
+
+        output.WriteLine(
+            "PASS switch mismatch retains PresetSwitchWriteArmed for recovery-only classification");
     }
 
     private static void NonOwnedMutationIsPreservedWithoutConflict(
@@ -432,6 +671,17 @@ internal static class CpuPowerLimiterSelfTest
         Require(
             backend.WriteCount == 6,
             "there is no automatic sixth write");
+
+        Require(
+            !limiter.SwitchOwnedPreset(
+                new CpuPowerLimitRequest(15, 30)),
+            "Yielded source switch cannot reacquire authority");
+
+        Require(
+            limiter.State ==
+                CpuPowerLimiterState.Yielded &&
+            backend.WriteCount == 6,
+            "Yielded source switch preserves state and performs zero writes");
 
         Require(
             limiter.Release(),
@@ -922,6 +1172,7 @@ internal static class CpuPowerLimiterSelfTest
         internal const ulong External2Raw = 0x3100;
         internal const ulong ReacquiredRaw = 0x4000;
         internal const ulong Reacquired2Raw = 0x4100;
+        internal const ulong BatteryRaw = 0x5000;
         internal const ulong LockedAppliedRaw = 0xA000;
 
         private readonly FakeJournal _journal;
@@ -936,6 +1187,7 @@ internal static class CpuPowerLimiterSelfTest
         internal int WriteCount;
         internal bool RejectApply;
         internal bool RejectReacquire;
+        internal bool RejectPresetSwitch;
 
         public bool IsSupported { get; set; } = true;
 
@@ -1000,6 +1252,41 @@ internal static class CpuPowerLimiterSelfTest
                 40);
         }
 
+        public CpuPowerLimitApplyPlan BuildOwnedTransitionPlan(
+            CpuPowerLimitSnapshot originalBaseline,
+            CpuPowerLimitRequest request,
+            CpuPowerLimitSnapshot current)
+        {
+            if (originalBaseline.Raw !=
+                    BaselineRaw ||
+                current.Locked)
+            {
+                throw new InvalidOperationException(
+                    "unexpected fake owned transition plan request");
+            }
+
+            if (request ==
+                new CpuPowerLimitRequest(15, 30))
+            {
+                return new CpuPowerLimitApplyPlan(
+                    BatteryRaw,
+                    15,
+                    30);
+            }
+
+            if (request ==
+                new CpuPowerLimitRequest(20, 40))
+            {
+                return new CpuPowerLimitApplyPlan(
+                    AppliedRaw,
+                    20,
+                    40);
+            }
+
+            throw new InvalidOperationException(
+                "unsupported fake preset transition request");
+        }
+
         public CpuPowerLimitRestorePlan PlanRestore(
             CpuPowerLimitSnapshot restoreTarget,
             ulong appliedRaw,
@@ -1040,6 +1327,14 @@ internal static class CpuPowerLimiterSelfTest
             var expectedPhase =
                 raw switch
                 {
+                    BatteryRaw =>
+                        CpuPowerJournalPhase.PresetSwitchWriteArmed,
+
+                    AppliedRaw
+                        when _journal.Current?.Phase ==
+                             CpuPowerJournalPhase.PresetSwitchWriteArmed =>
+                        CpuPowerJournalPhase.PresetSwitchWriteArmed,
+
                     AppliedRaw =>
                         CpuPowerJournalPhase.WriteArmed,
 
@@ -1077,6 +1372,12 @@ internal static class CpuPowerLimiterSelfTest
                 raw is
                     ReacquiredRaw or
                     Reacquired2Raw)
+            {
+                return;
+            }
+
+            if (RejectPresetSwitch &&
+                raw == BatteryRaw)
             {
                 return;
             }
@@ -1136,6 +1437,13 @@ internal static class CpuPowerLimiterSelfTest
                         raw,
                         20,
                         40,
+                        false),
+
+                BatteryRaw =>
+                    new CpuPowerLimitSnapshot(
+                        raw,
+                        15,
+                        30,
                         false),
 
                 LockedAppliedRaw =>

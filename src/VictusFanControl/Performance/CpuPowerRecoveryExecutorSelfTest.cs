@@ -750,6 +750,13 @@ internal static class CpuPowerRecoveryExecutorSelfTest
             throw new InvalidOperationException(
                 "recovery executor must never build a reacquire plan");
 
+        public CpuPowerLimitApplyPlan BuildOwnedTransitionPlan(
+            CpuPowerLimitSnapshot originalBaseline,
+            CpuPowerLimitRequest request,
+            CpuPowerLimitSnapshot current) =>
+            throw new InvalidOperationException(
+                "recovery executor must never build an owned preset transition plan");
+
         public CpuPowerLimitRestorePlan PlanRestore(
             CpuPowerLimitSnapshot restoreTarget,
             ulong appliedRaw,

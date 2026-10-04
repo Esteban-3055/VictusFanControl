@@ -89,6 +89,39 @@ internal static class CpuPowerSessionJournalSelfTest
                 Directory.GetFiles(root, "*.tmp").Length == 0,
                 "no temporary journal files remain after replace");
 
+            var presetSwitch =
+                owned with
+                {
+                    Generation = 20,
+                    Phase =
+                        CpuPowerJournalPhase.PresetSwitchWriteArmed,
+                    PendingRaw =
+                        0x004280F000DF8078UL,
+                    UpdatedAtUtc =
+                        created.AddMilliseconds(1500)
+                };
+
+            journal.Store(presetSwitch);
+
+            Require(
+                journal.Load() == presetSwitch,
+                "preset-switch armed record round-trips old AppliedRaw plus new PendingRaw");
+
+            RequireThrows<InvalidDataException>(
+                () =>
+                    journal.Store(
+                        presetSwitch with
+                        {
+                            Generation = 21,
+                            PendingRaw =
+                                presetSwitch.AppliedRaw
+                        }),
+                "preset-switch phase rejects identical old/new raw");
+
+            Require(
+                journal.Load() == presetSwitch,
+                "invalid preset-switch replacement leaves previous durable generation intact");
+
             var contestedConflict =
                 new CpuPowerConflictSnapshot(
                     CpuPowerConflictState.Contested,

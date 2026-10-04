@@ -57,6 +57,11 @@ internal interface ICpuPowerLimitBackend :
         CpuPowerLimitRequest request,
         CpuPowerLimitSnapshot current);
 
+    CpuPowerLimitApplyPlan BuildOwnedTransitionPlan(
+        CpuPowerLimitSnapshot originalBaseline,
+        CpuPowerLimitRequest request,
+        CpuPowerLimitSnapshot current);
+
     CpuPowerLimitRestorePlan PlanRestore(
         CpuPowerLimitSnapshot restoreTarget,
         ulong appliedRaw,
@@ -229,6 +234,216 @@ internal sealed class CpuPowerLimiter : IDisposable
 
             return RecoverAfterFailedApply();
         }
+    }
+
+
+    /// <summary>
+    /// Changes one active VFC-owned CPU preset directly to another.
+    ///
+    /// The transition is deliberately single-write:
+    /// old owned raw -> durable PresetSwitchWriteArmed -> one write ->
+    /// exact readback -> new durable Owned.
+    ///
+    /// It never restores OriginalBaseline/ExternalHandoff between presets and
+    /// it has no authority from Contested, Stability or Yielded states.
+    /// </summary>
+    internal bool SwitchOwnedPreset(
+        CpuPowerLimitRequest request)
+    {
+        ThrowIfDisposed();
+        LastError = null;
+
+        if (State != CpuPowerLimiterState.Active)
+        {
+            LastError =
+                $"CPU_POWER_PRESET_SWITCH_REQUIRES_ACTIVE_OWNERSHIP__STATE_{State}";
+            return false;
+        }
+
+        if (!_baseline.HasValue ||
+            !_request.HasValue ||
+            !_appliedRaw.HasValue ||
+            _sessionId == Guid.Empty)
+        {
+            State = CpuPowerLimiterState.Failed;
+            LastError =
+                "CPU_POWER_PRESET_SWITCH_SESSION_INCOMPLETE";
+            return false;
+        }
+
+        if (!ValidRequest(request))
+        {
+            LastError =
+                "CPU_POWER_PRESET_SWITCH_INVALID_REQUEST";
+            return false;
+        }
+
+        CpuPowerLimitSnapshot current;
+
+        try
+        {
+            current = _backend.Read();
+        }
+        catch (Exception ex)
+        {
+            State = CpuPowerLimiterState.Failed;
+            LastError =
+                "CPU_POWER_PRESET_SWITCH_PREREAD_ERROR: " +
+                ex.Message;
+            return false;
+        }
+
+        if (current.Locked)
+        {
+            return HandleLockWhileSessionActive(
+                current);
+        }
+
+        if (!_backend.OwnedFieldsMatch(
+                _appliedRaw.Value,
+                current))
+        {
+            RecordExternalHandoff(current);
+            _conflictPolicy.ObserveExternalChange();
+            State = CpuPowerLimiterState.Contested;
+
+            if (!TryStoreJournal(
+                    CpuPowerJournalPhase.Contested,
+                    pendingRaw: null,
+                    "CPU_POWER_PRESET_SWITCH_CONTESTED_JOURNAL_ERROR"))
+            {
+                State = CpuPowerLimiterState.Failed;
+                return false;
+            }
+
+            LastError =
+                "CPU_POWER_PRESET_SWITCH_EXTERNAL_OWNER__CONTESTED";
+            return false;
+        }
+
+        if (current.Raw !=
+            _appliedRaw.Value)
+        {
+            // Adopt non-owned metadata before building the transition so the
+            // new plan is based on the exact current raw image.
+            _appliedRaw = current.Raw;
+
+            if (!TryStoreJournal(
+                    CpuPowerJournalPhase.Owned,
+                    pendingRaw: null,
+                    "CPU_POWER_PRESET_SWITCH_OWNED_METADATA_JOURNAL_ERROR"))
+            {
+                State = CpuPowerLimiterState.Failed;
+                return false;
+            }
+        }
+
+        if (_request.Value == request)
+            return true;
+
+        CpuPowerLimitApplyPlan plan;
+
+        try
+        {
+            plan =
+                _backend.BuildOwnedTransitionPlan(
+                    _baseline.Value,
+                    request,
+                    current);
+
+            if (!ValidPlanAgainstOriginalBaseline(
+                    plan,
+                    _baseline.Value) ||
+                plan.RequestedRaw ==
+                    current.Raw)
+            {
+                LastError =
+                    "CPU_POWER_PRESET_SWITCH_BACKEND_PLAN_REJECTED";
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            LastError =
+                "CPU_POWER_PRESET_SWITCH_PLAN_ERROR: " +
+                ex.Message;
+            return false;
+        }
+
+        // At this point _request/_appliedRaw still describe the old owned
+        // preset. PendingRaw is the only durable representation of the new
+        // preset until exact readback succeeds.
+        if (!TryStoreJournal(
+                CpuPowerJournalPhase.PresetSwitchWriteArmed,
+                plan.RequestedRaw,
+                "CPU_POWER_PRESET_SWITCH_WRITE_ARM_JOURNAL_ERROR"))
+        {
+            State = CpuPowerLimiterState.Failed;
+            return false;
+        }
+
+        Exception? writeError = null;
+
+        try
+        {
+            _backend.Write(
+                plan.RequestedRaw);
+        }
+        catch (Exception ex)
+        {
+            writeError = ex;
+        }
+
+        CpuPowerLimitSnapshot readback;
+
+        try
+        {
+            readback = _backend.Read();
+        }
+        catch (Exception ex)
+        {
+            State = CpuPowerLimiterState.Failed;
+            LastError =
+                "CPU_POWER_PRESET_SWITCH_RESULT_UNCONFIRMED: " +
+                (writeError?.Message ?? "write returned") +
+                " | readback: " +
+                ex.Message;
+            return false;
+        }
+
+        if (readback.Raw !=
+            plan.RequestedRaw)
+        {
+            State = CpuPowerLimiterState.Failed;
+            LastError =
+                "CPU_POWER_PRESET_SWITCH_READBACK_MISMATCH" +
+                (writeError is null
+                    ? string.Empty
+                    : ": " + writeError.Message);
+            return false;
+        }
+
+        _request = request;
+        _appliedRaw = readback.Raw;
+        _conflictPolicy.ResetForOwnedPresetTransition();
+
+        if (!TryStoreJournal(
+                CpuPowerJournalPhase.Owned,
+                pendingRaw: null,
+                "CPU_POWER_PRESET_SWITCH_OWNED_JOURNAL_ERROR"))
+        {
+            State = CpuPowerLimiterState.Failed;
+            return false;
+        }
+
+        State = CpuPowerLimiterState.Active;
+        LastError =
+            writeError is null
+                ? null
+                : "CPU_POWER_PRESET_SWITCH_WRITE_ERROR_BUT_EXACT_READBACK: " +
+                  writeError.Message;
+
+        return true;
     }
 
     /// <summary>

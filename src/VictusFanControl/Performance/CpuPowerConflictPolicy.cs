@@ -225,6 +225,16 @@ internal sealed class CpuPowerConflictPolicy
         ResetCore();
     }
 
+    /// <summary>
+    /// Starts a fresh conflict budget after a successful VFC-owned
+    /// AC/Battery preset transition. This is not external-writer
+    /// reacquisition authority; the caller must already own the PL fields.
+    /// </summary>
+    internal void ResetForOwnedPresetTransition()
+    {
+        ResetCore();
+    }
+
     private void ResetCore()
     {
         State = CpuPowerConflictState.Inactive;

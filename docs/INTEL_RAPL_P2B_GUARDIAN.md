@@ -442,6 +442,38 @@ surface. Production RAPL hardware writes remain closed until those pieces and
 their death/restart fixtures are qualified.
 
 
+## Step 5.6A — journaled CPU AC/Battery owned-to-owned transition
+
+The limiter now has an explicit owned preset transition path. It is available
+only while the current CPU session is Active; Contested, provisional Stability,
+Yielded, Failed and recovery states cannot use a power-source change to gain
+authority.
+
+The transaction is:
+
+    old VFC-owned raw
+      -> durable PresetSwitchWriteArmed
+         (AppliedRaw = old VFC raw, PendingRaw = new VFC raw)
+      -> exactly one backend write
+      -> exact raw readback
+      -> Request/AppliedRaw become the new preset
+      -> conflict budget resets
+      -> durable Owned
+
+No OriginalBaseline/ExternalHandoff restore occurs between enabled AC and
+Battery presets. OriginalBaseline remains immutable, and an existing
+ExternalHandoff remains the final release target.
+
+If PresetSwitchWriteArmed cannot be persisted, there is no hardware write. If
+the one write does not produce exact readback, the limiter fails closed and
+retains the armed journal with both old and new VFC raw values for the
+recovery-only gate. No second corrective write is issued by the switch method.
+
+This is still software/fixture qualification only. It does not authorize a
+physical RAPL backend, GUI integration, startup persistence or automatic
+profile authority.
+
+
 ## Step 5.5 — AC and Battery CPU preset foundation
 
 P2B now defines two independent CPU power preset slots:

@@ -10,6 +10,7 @@ internal enum CpuPowerJournalPhase
     Owned,
     Contested,
     ReacquireWriteArmed,
+    PresetSwitchWriteArmed,
     Stability,
     Yielded,
     Restoring,
@@ -228,6 +229,12 @@ internal sealed class JsonCpuPowerSessionJournal : ICpuPowerSessionJournal
                 record.Conflict.AttemptInFlight &&
                 record.Conflict.AttemptsUsed is >= 1 and <=
                     CpuPowerConflictPolicy.DefaultMaxReacquireAttempts,
+
+            CpuPowerJournalPhase.PresetSwitchWriteArmed =>
+                record.PendingRaw.HasValue &&
+                record.PendingRaw.Value != record.AppliedRaw &&
+                record.Conflict.State == CpuPowerConflictState.Inactive &&
+                !record.Conflict.AttemptInFlight,
 
             CpuPowerJournalPhase.Stability =>
                 record.ExternalHandoff.HasValue &&
