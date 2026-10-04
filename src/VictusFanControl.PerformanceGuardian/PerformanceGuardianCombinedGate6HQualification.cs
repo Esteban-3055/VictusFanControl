@@ -76,15 +76,6 @@ internal static class PerformanceGuardianCombinedGate6HQualification
             RequireQualifiedModule(
                 options.ModulePath);
 
-            if (File.Exists(
-                    CpuJournalPath) ||
-                File.Exists(
-                    GpuJournalPath))
-            {
-                throw new InvalidOperationException(
-                    "Step 6H refuses to start while either persistent CPU/GPU journal exists. Preserve and review stale evidence before any rerun.");
-            }
-
             var root =
                 options.OutputDirectory ??
                 Path.Combine(
@@ -100,6 +91,36 @@ internal static class PerformanceGuardianCombinedGate6HQualification
 
             Directory.CreateDirectory(
                 root);
+
+            if (File.Exists(
+                    CpuJournalPath))
+            {
+                throw new InvalidOperationException(
+                    "Step 6H refuses automatic recovery when a CPU journal exists. Preserve it for the exact CPU recovery planner.");
+            }
+
+            if (File.Exists(
+                    GpuJournalPath))
+            {
+                if (!options.RecoverStaleGpuQualificationJournal)
+                {
+                    throw new InvalidOperationException(
+                        "Step 6H found a stale GPU qualification journal and explicit qualification-recovery intent was not provided.");
+                }
+
+                Console.WriteLine(
+                    "Step 6H: stale GPU qualification journal detected. Running one explicit qualification-only NVML Reset before a new session.");
+
+                RecoverStaleGpuQualificationJournal(
+                    root);
+
+                if (File.Exists(
+                        GpuJournalPath))
+                {
+                    throw new InvalidOperationException(
+                        "Step 6H stale GPU qualification recovery did not clear the journal; no new session is permitted.");
+                }
+            }
 
             var preflightPath =
                 Path.Combine(
