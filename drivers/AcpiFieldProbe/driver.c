@@ -116,7 +116,8 @@ VOID ReadObject(WDFQUEUE queue,WDFREQUEST request,size_t outLength,size_t inLeng
     WDF_REQUEST_SEND_OPTIONS options;
     LARGE_INTEGER begin,end,frequency;
     ULONG_PTR returned=0;
-    ULONG selector,maximum,value=0;
+    ULONG selector,maximum;
+    uint32_t value=0;
     NTSTATUS status;
     if(code!=VFC_IOCTL_READ){
         if(WdfRequestGetRequestorMode(request)==KernelMode){
