@@ -510,8 +510,8 @@ internal sealed class P13FanControlSurface : UserControl
             MaximumSize = new Size(760, 0),
             Margin = new Padding(3, 12, 3, 3),
             Text =
-                "P13.4 boundary: Automatic remains execution-gated CLOSED. The live recommendation shown above " +
-                "uses the shared prepared policy in read-only preview and cannot acquire Custom authority."
+                "Safety boundary: stored profiles never grant fan authority. The Automatic execution state is shown above; " +
+                "a dedicated physical-qualification process may temporarily expose it as OPEN while normal product Automatic remains closed."
         };
 
         root.Controls.Add(group, 0, 1);
