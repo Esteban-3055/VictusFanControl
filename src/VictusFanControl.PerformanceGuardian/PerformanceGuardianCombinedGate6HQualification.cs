@@ -1009,8 +1009,46 @@ internal static class PerformanceGuardianCombinedGate6HQualification
                     out _),
                 "CPU hardware-write confirmation is mandatory");
 
+            var now =
+                DateTimeOffset.UtcNow;
+
+            var recoverable =
+                new GpuClockSessionJournalRecord(
+                    GpuClockSessionJournalRecord.CurrentSchemaVersion,
+                    TargetProfileId,
+                    Guid.NewGuid(),
+                    3,
+                    GpuClockJournalPhase.PresetSwitchWriteArmed,
+                    new GpuClockLimitRequest(
+                        210,
+                        1850),
+                    new GpuClockLimitRequest(
+                        210,
+                        1200),
+                    RecoveryReason: null,
+                    CreatedAtUtc:
+                        now.AddSeconds(-1),
+                    UpdatedAtUtc:
+                        now);
+
+            Require(
+                GpuJournalContainsOnlyQualifiedRequests(
+                    recoverable),
+                "qualified AC->Battery stale GPU journal is eligible for explicit qualification recovery");
+
+            Require(
+                !GpuJournalContainsOnlyQualifiedRequests(
+                    recoverable with
+                    {
+                        PendingRequest =
+                            new GpuClockLimitRequest(
+                                210,
+                                999)
+                    }),
+                "out-of-contract stale GPU journal is never auto-recovered");
+
             output.WriteLine(
-                "Step 6H combined physical harness self-test: PASS (argument/target/dual-confirmation gates only, zero PawnIO/NVML load and zero hardware I/O).");
+                "Step 6H combined physical harness self-test: PASS (argument/target/dual-confirmation gates plus stale-journal recovery shape validation, zero PawnIO/NVML load and zero hardware I/O).");
 
             return 0;
         }
