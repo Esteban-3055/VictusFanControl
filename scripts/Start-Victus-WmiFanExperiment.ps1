@@ -3,6 +3,7 @@
 param(
     [ValidateRange(1,10)][int]$CaptureMinutes=5,
     [string]$OutputRoot='',
+    [string]$FanConfigurationPath='',
     [switch]$Control,
     [switch]$SkipAcpiTrace,
     [switch]$SelfTest
@@ -88,11 +89,16 @@ if($SelfTest){
     return
 }
 if($env:OS -ne 'Windows_NT'){throw 'Esta prueba requiere Windows.'}
+if($FanConfigurationPath){
+    $FanConfigurationPath=(Resolve-Path -LiteralPath $FanConfigurationPath).Path
+    if($FanConfigurationPath.Contains('"')){throw 'Ruta de configuracion no valida.'}
+}
 $principal=New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'Abre PowerShell como administrador.'}
 Assert-WmiFanExperimentIsolation (Get-WmiFanExperimentFacts) -AllowM4
 $state=@{Control=[bool]$Control;Root=$root;Minutes=$CaptureMinutes;Directory=$null;Guardian=$null;OutStream=$null;ErrStream=$null;OutTask=$null;ErrTask=$null;M4Paused=$false;M4Resumed=$false;Fault=$null;Valid=$false;WorkerPid=0;StartedUtc=[DateTimeOffset]::UtcNow.ToString('o');Cli=$null}
 Push-Location $root
+$state.FanConfigurationPath=$FanConfigurationPath
 try{
     & dotnet build .\VictusFanControl.sln -c Release
     if($LASTEXITCODE -ne 0){throw 'Build fallo; no se inicia la prueba.'}
@@ -112,6 +118,7 @@ try{
         [IO.Directory]::CreateDirectory($s.Directory)|Out-Null
         $arguments='--wmi-fan-experiment --session-dir "'+$s.Directory+'" --modules-dir "'+(Join-Path $s.Root 'modules')+'" --duration-seconds '+($s.Minutes*60)
         if($s.Control){$arguments+=' --control'}
+        if($s.FanConfigurationPath){$arguments+=' --fan-config "'+$s.FanConfigurationPath+'"'}
         $p=New-Object Diagnostics.Process
         $info=New-Object Diagnostics.ProcessStartInfo
         $info.FileName=$s.Cli;$info.Arguments=$arguments;$info.WorkingDirectory=$s.Root

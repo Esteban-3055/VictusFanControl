@@ -26,7 +26,11 @@ El backend final conserva sus verificaciones EC de propiedad, ACK y watchdog. Co
 
 La captura 5712/856146 del 2026-10-04 completó cinco minutos en simulación, pero CPU llegó sólo a 87 °C. No ejercitó físicamente la confirmación CPU ≥95 °C. La captura activa anterior tampoco demuestra la combinación de esta versión y el backend final.
 
-La siguiente captura autorizada es el experimento supervisado actual con `-Control`, cinco minutos de uso habitual y sin provocar deliberadamente temperaturas altas. Volver a Firmware, cerrar la GUI y abrir PowerShell como administrador desde el repositorio:
+La captura activa d01746 del 2026-10-04, sobre `8a331f2e`, completa la revisión de operación normal: 24 cambios con retorno 0, CPU control máximo 91 °C y recuperación solicitada sin llamada pendiente. No ejercita CPU ≥95 °C ni verifica independientemente la propiedad del firmware. Los detalles, nuevo perfil candidato y ajustes GUI están en [HP_8C40_CONFIGURABLE_DASHBOARD.md](HP_8C40_CONFIGURABLE_DASHBOARD.md).
+
+La nueva GUI usa configuración explícita editable, con valores candidato 26–50, EMA subida 4 s, confirmación normal 1 s, bajada 16 s y sin memoria térmica en la EMA normal. Las constantes originales descritas arriba se conservan para el experimento sin archivo y consumidores sin configuración. La activación Automatic sigue cerrada. El nuevo perfil requiere su propia captura antes de promoverlo.
+
+Para repetir el experimento previo sin cambiar parámetros, volver a Firmware, cerrar la GUI y abrir PowerShell como administrador desde el repositorio:
 
 ```powershell
 git switch feature/victus-8c40-wmi-broker-5sample

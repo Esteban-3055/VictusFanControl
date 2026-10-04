@@ -46,7 +46,10 @@ public sealed class AdaptiveFanProductionController
 {
     private readonly FanControlCoordinator _coordinator;
     private readonly AdaptiveFanPolicyEngine _engine;
-    private readonly AdaptiveFanInertiaPolicy? _preparedEngine;
+    private AdaptiveFanInertiaPolicy? _preparedEngine;
+    private FanConfiguration? _automaticConfiguration;
+    public FanConfiguration? AutomaticConfiguration => _automaticConfiguration is null ? null : FanConfigurationStore.Copy(_automaticConfiguration);
+    public int AutomaticNormalPollingDelayMilliseconds => _automaticConfiguration?.Tuning.NormalPollingDelayMilliseconds ?? 1000;
     private readonly HardwareIdentity? _automaticHardware;
     private readonly Func<long>? _automaticMilliseconds;
     private readonly Func<DateTimeOffset> _utcNow;
@@ -72,7 +75,8 @@ public sealed class AdaptiveFanProductionController
         Hp8C40P16QualificationSession? qualificationSession = null,
         HardwareIdentity? automaticHardware = null,
         Func<long>? automaticMilliseconds = null,
-        Func<DateTimeOffset>? utcNow = null)
+        Func<DateTimeOffset>? utcNow = null,
+        FanConfiguration? automaticConfiguration = null)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _engine = new AdaptiveFanPolicyEngine(
@@ -84,7 +88,10 @@ public sealed class AdaptiveFanProductionController
         {
             // Validate the exact target even while execution remains gated off.
             _ = new Hp8C40AutomaticThermalAdmission(automaticHardware, automaticMilliseconds);
-            _preparedEngine = new AdaptiveFanInertiaPolicy(Hp8C40AutomaticPolicy.Create(config));
+            _automaticConfiguration = automaticConfiguration is null ? null : FanConfigurationStore.Copy(automaticConfiguration);
+            _preparedEngine = _automaticConfiguration is null
+                ? new AdaptiveFanInertiaPolicy(Hp8C40AutomaticPolicy.Create(config))
+                : new AdaptiveFanInertiaPolicy(_automaticConfiguration.BuildPolicy(), _automaticConfiguration.Tuning);
         }
         _qualificationSession = qualificationSession;
         _manualExecutionAuthorized = manualExecutionAuthorized;
@@ -429,6 +436,26 @@ public sealed class AdaptiveFanProductionController
         {
             _operationGate.Release();
         }
+    }
+
+    public async ValueTask ConfigureAutomaticAsync(FanConfiguration configuration, CancellationToken cancellationToken,
+        Action<FanConfiguration>? persist = null)
+    {
+        var copy = FanConfigurationStore.Copy(configuration);
+        var engine = new AdaptiveFanInertiaPolicy(copy.BuildPolicy(), copy.Tuning);
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_mode != AdaptiveFanProductionMode.Firmware || _coordinator.Authority != FanAuthority.Firmware)
+                throw new InvalidOperationException("Vuelve a Firmware antes de aplicar ajustes de Automatic.");
+            if (_automaticHardware is null)
+                throw new InvalidOperationException("Los ajustes requieren el destino HP 8C40/F.18.");
+            persist?.Invoke(FanConfigurationStore.Copy(copy)); // A failed save leaves the current configuration intact.
+            _automaticConfiguration = copy;
+            _preparedEngine = engine;
+            ResetPolicyStateLocked();
+        }
+        finally { _operationGate.Release(); }
     }
 
     /// <summary>All Automatic consumers use this session; display/dispatch never count a sample.</summary>

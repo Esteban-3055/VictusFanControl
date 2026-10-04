@@ -11,6 +11,12 @@ public sealed record AdaptiveFinalDemandFilterSettings(
 public class AdaptiveFinalDemandFilter
 {
     public static AdaptiveFinalDemandFilterSettings Settings { get; } = new();
+    private readonly AdaptiveFanTuning? _tuning;
+    public AdaptiveFinalDemandFilter(AdaptiveFanTuning? tuning = null)
+    {
+        tuning?.Validate();
+        _tuning = tuning;
+    }
     private DateTimeOffset? _lastTimestamp;
     private double? _level;
 
@@ -26,11 +32,20 @@ public class AdaptiveFinalDemandFilter
             Reset();
             throw new InvalidOperationException("Final demand filter refused invalid or discontinuous telemetry.");
         }
+        if (thermalOverride && _tuning is { RememberThermalDemand: false })
+        {
+            // Act on raw heat immediately without seeding normal EMA history
+            // with the spike. Normal demand resumes from its own history.
+            _lastTimestamp = timestamp;
+            return rawDemand;
+        }
         if (!_level.HasValue || thermalOverride)
             _level = rawDemand; // Initial demand is known; never assume a cold machine.
         else
         {
-            var tau = rawDemand > _level.Value ? Settings.RiseTimeConstantSeconds : Settings.FallTimeConstantSeconds;
+            var tau = rawDemand > _level.Value
+                ? _tuning?.RiseTimeConstantSeconds ?? Settings.RiseTimeConstantSeconds
+                : _tuning?.FallTimeConstantSeconds ?? Settings.FallTimeConstantSeconds;
             var alpha = 1 - Math.Exp(-elapsed.TotalSeconds / tau);
             _level += alpha * (rawDemand - _level.Value);
         }

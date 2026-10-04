@@ -75,6 +75,7 @@ internal sealed class AdaptiveCurveEditorForm : Form
         KeyDown += (_,e) => { if(e.Control && e.KeyCode==Keys.Z){Execute(Undo);e.Handled=true;} else if(e.Control && e.KeyCode==Keys.Y){Execute(Redo);e.Handled=true;} else if(e.Control && e.KeyCode==Keys.S){Execute(Save);e.Handled=true;} };
         FormClosing += (_,e) => { if(e.CloseReason == CloseReason.UserClosing && !AllowDiscard()) e.Cancel=true; };
         ReloadProfiles(_applied.Id);
+        DashboardTheme.Apply(this);
     }
     protected override void Dispose(bool disposing)
     {

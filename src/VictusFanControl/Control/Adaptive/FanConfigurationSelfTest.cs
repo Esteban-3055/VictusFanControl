@@ -1,0 +1,91 @@
+using VictusFanControl.Runtime;
+
+namespace VictusFanControl.Control.Adaptive;
+
+internal static class FanConfigurationSelfTest
+{
+    internal static int Run(TextWriter output)
+    {
+        var failures = 0;
+        void Check(string name, Action test)
+        {
+            try { test(); output.WriteLine("PASS: fan settings — " + name); }
+            catch (Exception ex) { failures++; output.WriteLine("FAIL: fan settings — " + name + ": " + ex); }
+        }
+        static void Require(bool value) { if (!value) throw new InvalidOperationException("Assertion failed."); }
+        static void Reject(Action action)
+        {
+            try { action(); } catch (Exception ex) when (ex is InvalidDataException or System.Text.Json.JsonException or ArgumentException) { return; }
+            throw new InvalidOperationException("Unsafe configuration was accepted.");
+        }
+        var configuration = new FanConfiguration();
+        Check("strict persistence, six curves, defensive copy and protected limits", () =>
+        {
+            var text = FanConfigurationStore.Serialize(configuration);
+            var copy = FanConfigurationStore.Parse(text);
+            Require(copy.Tuning == configuration.Tuning && copy.Profile.Name == "Firmware suave");
+            Require(!ReferenceEquals(copy.Profile.Config.CpuTemperatureCurve, configuration.Profile.Config.CpuTemperatureCurve));
+            Reject(() => FanConfigurationStore.Parse(text.Replace("\"schemaVersion\": 1", "\"automaticExecutionAuthorized\": true, \"schemaVersion\": 1")));
+            foreach (var tuning in new[] { configuration.Tuning with { MinimumLevel = 51 },
+                configuration.Tuning with { MaximumLevel = 25 }, configuration.Tuning with { ThermalMaximumUpStepLevels = 5 },
+                configuration.Tuning with { CpuThermalOverrideC = 86 }, configuration.Tuning with { NormalPollingDelayMilliseconds = 1600 },
+                configuration.Tuning with { FallTimeConstantSeconds = double.NaN } })
+                Reject(() => (configuration with { Tuning = tuning }).BuildPolicy());
+            Reject(() => (configuration with { SchemaVersion = 2 }).BuildPolicy());
+            Require(copy.BuildPolicy().MinimumLevel == 26 && copy.BuildPolicy().MaximumUpStepPerSample == 4);
+        });
+        Check("raw heat acts immediately without phantom normal rises; descent waits 16 seconds", () =>
+        {
+            var origin = DateTimeOffset.UtcNow;
+            AdaptiveFanPolicyInput Input(int second, double cpu) => new(origin.AddSeconds(second), cpu, 0, 0, 35, 0, 0);
+            var policy = new AdaptiveFanInertiaPolicy(configuration.BuildPolicy(), configuration.Tuning);
+            Require(policy.Evaluate(Input(0, 45)).EqualFanLevel == 26);
+            var hot = policy.Evaluate(Input(1, 89));
+            Require(hot.ThermalOverride && hot.EqualFanLevel == 30 && hot.SmoothedDemandLevel == hot.RawDemandLevel);
+            for (var second = 2; second < 18; second++)
+            {
+                var cold = policy.Evaluate(Input(second, 45));
+                Require(cold.EqualFanLevel == 30 && cold.SmoothedDemandLevel == 26);
+            }
+            Require(policy.Evaluate(Input(18, 45)).EqualFanLevel == 29);
+            policy.Reset();
+            Require(policy.Evaluate(Input(0, 89)).EqualFanLevel >= 48); // No assumed cold startup.
+            Require(AdaptiveFanInertiaPolicy.RoundNormalDemandToTenth(3.05) == 3.0 &&
+                AdaptiveFanInertiaPolicy.RoundNormalDemandToTenth(3.06) == 3.1);
+        });
+        Check("normal rise is faster, EMA retains precision, invalid input resets", () =>
+        {
+            var origin = DateTimeOffset.UtcNow;
+            var tuned = new AdaptiveFinalDemandFilter(configuration.Tuning);
+            var legacy = new AdaptiveFinalDemandFilter();
+            double Read(AdaptiveFinalDemandFilter f, int sec, double raw) => f.Evaluate(origin.AddSeconds(sec),raw,26,50,TimeSpan.FromSeconds(3),false);
+            Read(tuned,0,26); Read(legacy,0,26);
+            var a = Read(tuned,1,40); var b = Read(legacy,1,40);
+            Require(a > b && a != Math.Round(a,1));
+            try { Read(tuned,2,double.NaN); throw new ArgumentException("Invalid accepted."); }
+            catch (InvalidOperationException) { }
+            Require(Read(tuned,3,40) == 40);
+        });
+        var directory = Path.Combine(Path.GetTempPath(),"vfc-settings-"+Guid.NewGuid().ToString("N"));
+        try
+        {
+            Check("save failure preserves prior file; corrupt load falls back; experiment clamps only explicitly", () =>
+            {
+                Directory.CreateDirectory(directory);
+                var path = Path.Combine(directory,"settings.json");
+                FanConfigurationStore.Save(configuration,path);
+                var original = File.ReadAllText(path);
+                Reject(() => FanConfigurationStore.Save(configuration with { Tuning = configuration.Tuning with { MinimumLevel = 51 } },path));
+                Require(File.ReadAllText(path) == original && Directory.GetFiles(directory,"*.tmp").Length == 0);
+                Require(new WmiFanExperimentOptions(directory,directory,30,false,null,path).ReadConfiguration()!.Tuning.MinimumLevel == 26);
+                Reject(() => new WmiFanExperimentOptions(directory,directory,30,true,null,path).ReadConfiguration());
+                FanConfigurationStore.Save(configuration with { Tuning = configuration.Tuning with { MinimumLevel = 30 } },path);
+                Require(new WmiFanExperimentOptions(directory,directory,30,true,null,path).ReadConfiguration()!.Tuning.MinimumLevel == 30);
+                File.WriteAllText(path,"invalid");
+                Require(FanConfigurationStore.Load(path,out var notice).Tuning.MinimumLevel == 26 && notice is not null);
+            });
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory,true); }
+        return failures;
+    }
+}

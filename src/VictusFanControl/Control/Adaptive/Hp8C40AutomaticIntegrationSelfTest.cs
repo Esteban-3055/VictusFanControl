@@ -214,6 +214,31 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             Check(mismatch.Action == AdaptiveFanProductionActionKind.RestoreFirmware && backend.Levels.Count == 1,
                 "mismatched original SafetyGate cannot be repaired into write permission");
         }
+        backend = new Backend();
+        await using (var coordinator = new FanControlCoordinator(backend))
+        {
+            var settings = new FanConfiguration();
+            var controller = new AdaptiveFanProductionController(coordinator, Hp8C40AdaptiveCandidateV1.Create(),
+                true, false, automaticHardware: Hardware, automaticConfiguration: settings);
+            var replacement = settings with { Tuning = settings.Tuning with { MinimumLevel = 28 } };
+            var persisted = 0;
+            await controller.ConfigureAutomaticAsync(replacement, CancellationToken.None, _ => persisted++);
+            Check(persisted == 1 && controller.AutomaticConfiguration!.Tuning.MinimumLevel == 28 &&
+                controller.Mode == AdaptiveFanProductionMode.Firmware && !controller.AutomaticExecutionAuthorized &&
+                backend.Levels.Count == 0 && backend.Restores == 0,
+                "settings save in Firmware has no fan command and cannot authorize Automatic");
+            var failed = false;
+            try { await controller.ConfigureAutomaticAsync(settings, CancellationToken.None, _ => throw new IOException("fake save failure")); }
+            catch (IOException) { failed = true; }
+            Check(failed && controller.AutomaticConfiguration!.Tuning.MinimumLevel == 28,
+                "failed persistence leaves live configuration intact");
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Manual, CancellationToken.None);
+            failed = false;
+            try { await controller.ConfigureAutomaticAsync(settings, CancellationToken.None, _ => persisted++); }
+            catch (InvalidOperationException) { failed = true; }
+            Check(failed && persisted == 1 && backend.Levels.Count == 0,
+                "Manual mode blocks settings before persistence even without a fan write");
+        }
         return failures;
     }
 

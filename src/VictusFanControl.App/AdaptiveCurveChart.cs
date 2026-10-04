@@ -36,9 +36,9 @@ internal sealed class AdaptiveCurveChart : System.Windows.Forms.Control
         base.OnPaint(e);
         var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
         var plot = Plot;
-        using var grid = new Pen(Color.FromArgb(228, 233, 239));
+        using var grid = new Pen(BackColor.GetBrightness() < .5 ? Color.FromArgb(63,63,73) : Color.FromArgb(228,233,239));
         using var line = new Pen(Color.FromArgb(37, 116, 184), 2.5f);
-        using var gray = new SolidBrush(Color.DimGray);
+        using var gray = new SolidBrush(BackColor.GetBrightness() < .5 ? DashboardTheme.Muted : Color.DimGray);
         g.DrawString("Nivel común CPU/GPU", Font, gray, 5, 3);
         for (var level = 10; level <= 50; level += 10)
         {

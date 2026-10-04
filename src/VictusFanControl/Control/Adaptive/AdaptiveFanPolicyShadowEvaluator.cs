@@ -41,14 +41,17 @@ public sealed class AdaptiveFanPolicyShadowEvaluator
     public AdaptiveFanPolicyShadowEvaluator(
         HardwareIdentity hardware,
         AdaptiveFanPolicyConfig config,
-        bool preparedAutomatic = false)
+        bool preparedAutomatic = false,
+        FanConfiguration? configuration = null)
     {
         _hardware = hardware;
         _engine = new AdaptiveFanPolicyEngine(config);
         _preparedAutomatic = preparedAutomatic;
         if (preparedAutomatic)
         {
-            _preparedEngine = new AdaptiveFanInertiaPolicy(Hp8C40AutomaticPolicy.Create(config));
+            _preparedEngine = configuration is null
+                ? new AdaptiveFanInertiaPolicy(Hp8C40AutomaticPolicy.Create(config))
+                : new AdaptiveFanInertiaPolicy(configuration.BuildPolicy(), configuration.Tuning);
             _admission = new Hp8C40AutomaticThermalAdmission(hardware);
         }
     }

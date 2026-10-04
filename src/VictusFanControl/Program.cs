@@ -104,6 +104,7 @@ internal static class Program
                     Console.Out);
 
             var profileResult = AdaptiveCurveProfilesSelfTest.Run(Console.Out);
+            var configurationResult = FanConfigurationSelfTest.Run(Console.Out);
 
             var candidateResult =
                 Hp8C40AdaptiveCandidateV1SelfTest.Run(
@@ -113,7 +114,7 @@ internal static class Program
                    shadowResult == 0 &&
                    productionResult == 0 &&
                    candidateResult == 0 &&
-                   profileResult == 0
+                   profileResult == 0 && configurationResult == 0
                 ? 0
                 : 35;
         }

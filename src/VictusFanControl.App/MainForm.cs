@@ -460,6 +460,9 @@ internal sealed class MainForm : Form
             : GateG1HardwareTestResultPath;
 
     private volatile TelemetrySnapshot? _lastSnapshot;
+    private readonly TelemetryHistoryChart _historyChart = new();
+    private readonly FanConfiguration _loadedFanConfiguration;
+    private readonly string? _fanConfigurationNotice;
 
     public MainForm(
         string modulesDirectory,
@@ -481,10 +484,11 @@ internal sealed class MainForm : Form
         bool p15d2VariableManualHardwareTest = false,
         string? p15d2VariableManualMarkerRoot = null)
     {
-        Text = "VictusFanControl v0.4-dev — P13 software UI complete / hardware gates CLOSED";
+        _loadedFanConfiguration = FanConfigurationStore.Load(null, out _fanConfigurationNotice);
+        Text = "Victus Fan Control";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(780, 560);
-        Size = new Size(900, 680);
+        MinimumSize = new Size(1040, 700);
+        Size = new Size(1240, 880);
 
         _modulesDirectory = modulesDirectory;
         _suspendLifecycleHardwareTest = suspendLifecycleHardwareTest;
@@ -917,7 +921,8 @@ internal sealed class MainForm : Form
                 manualExecutionAuthorized,
                 automaticExecutionAuthorized,
                 _p16QualificationSession,
-                automaticHardware: _targetProfile == Hp8C40TargetProfile.Instance ? _hardwareIdentity : null);
+                automaticHardware: _targetProfile == Hp8C40TargetProfile.Instance ? _hardwareIdentity : null,
+                automaticConfiguration: _loadedFanConfiguration);
 
         var p13TargetDescription =
             _targetProfile is null
@@ -970,6 +975,8 @@ internal sealed class MainForm : Form
         {
             FreshFanAcquisitionRequired = () => _fanProductionController.AutomaticFreshAcquisitionRequired,
             AcquisitionBudgetMilliseconds = () => _fanProductionController.AutomaticAcquisitionBudgetMilliseconds,
+            NormalPollingDelayMilliseconds = () => _fanProductionController.AutomaticFreshAcquisitionRequired
+                ? _fanProductionController.AutomaticNormalPollingDelayMilliseconds : 1000,
             SnapshotProcessor = ProcessAutomaticSnapshotAsync
         };
         _worker.SnapshotAvailable += WorkerOnSnapshotAvailable;
@@ -2218,21 +2225,19 @@ internal sealed class MainForm : Form
 
     private System.Windows.Forms.Control BuildUi()
     {
-        var tabs = new TabControl { Dock = DockStyle.Fill };
-
-        var overview = new TabPage("Overview");
-        overview.Controls.Add(BuildOverview());
-
-        var diagnostics = new TabPage("Diagnostics");
-        diagnostics.Controls.Add(BuildDiagnostics());
-
-        var fanCurve = new TabPage("Fan Control");
-        fanCurve.Controls.Add(BuildP13FanControlSurface());
-
-        tabs.TabPages.Add(overview);
-        tabs.TabPages.Add(fanCurve);
-        tabs.TabPages.Add(diagnostics);
-        return tabs;
+        var settings = new FanSettingsPanel(_loadedFanConfiguration, async configuration =>
+        {
+            await _fanProductionController.ConfigureAutomaticAsync(configuration, CancellationToken.None,
+                c => FanConfigurationStore.Save(c));
+            _p13FanControlSurface.ApplyConfiguration(configuration);
+            AppendEvent("Ajustes guardados. El inicio y las autorizaciones de control se conservan.");
+        }, _fanConfigurationNotice);
+        var shell = new DashboardShell(
+            ("Monitor", BuildOverview()), ("Ventilación", BuildP13FanControlSurface()),
+            ("Ajustes", settings), ("Diagnósticos", BuildDiagnostics()));
+        DashboardTheme.Apply(this);
+        DashboardTheme.Apply(shell);
+        return shell;
     }
 
     private System.Windows.Forms.Control BuildP13FanControlSurface() =>
@@ -2244,12 +2249,12 @@ internal sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(18),
-            ColumnCount = 1,
-            RowCount = 5,
+            ColumnCount = 2,
+            RowCount = 4,
             AutoScroll = true
         };
-
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -2279,27 +2284,26 @@ internal sealed class MainForm : Form
         statePanel.Controls.Add(new Label { Text = "Reason:", AutoSize = true }, 0, 1);
         statePanel.Controls.Add(_stateReason, 1, 1);
 
-        root.Controls.Add(statePanel);
-        root.Controls.Add(BuildSafetyGroup());
+        root.Controls.Add(statePanel, 0, 0);
+        root.SetColumnSpan(statePanel, 2);
+        var safetyGroup = BuildSafetyGroup();
+        root.Controls.Add(safetyGroup, 0, 1);
+        root.SetColumnSpan(safetyGroup, 2);
         root.Controls.Add(BuildSensorGroup(
             "CPU",
             ("Package / hottest core", _cpuTemperature),
             ("Package power", _cpuPower),
             ("Load", _cpuLoad),
-            ("Fan", _cpuFan)));
+            ("Fan", _cpuFan)), 0, 2);
         root.Controls.Add(BuildSensorGroup(
             "GPU",
             ("Temperature", _gpuTemperature),
             ("Power", _gpuPower),
             ("Load", _gpuLoad),
-            ("Fan", _gpuFan)));
+            ("Fan", _gpuFan)), 1, 2);
 
-        root.Controls.Add(new Label
-        {
-            AutoSize = true,
-            Margin = new Padding(3, 16, 3, 3),
-            Text = "Backend integrated: HP firmware remains authoritative until a future explicit controller acquires custom authority through FanControlCoordinator."
-        });
+        root.Controls.Add(_historyChart, 0, 3);
+        root.SetColumnSpan(_historyChart, 2);
 
         return root;
     }
@@ -2890,6 +2894,7 @@ internal sealed class MainForm : Form
 
         Ui(() =>
         {
+            _historyChart.Add(snapshot);
             _cpuTemperature.Text =
                 $"{Format(snapshot.CpuTemperatureC, "°C")} / {Format(snapshot.CpuCoreMaxTemperatureC, "°C")}";
             _cpuPower.Text = Format(snapshot.CpuPackagePowerW, "W");
@@ -6261,8 +6266,8 @@ internal sealed class MainForm : Form
             _ => _fanCoordinator.Authority.ToString()
         };
         _authorityValue.ForeColor = _fanCoordinator.Authority == FanAuthority.Faulted
-            ? Color.DarkRed
-            : SystemColors.ControlText;
+            ? Color.OrangeRed
+            : DashboardTheme.Text;
 
         _readinessValue.Text = result.CustomControlPermitted
             ? "READY — backend available; automatic policy OFF"
@@ -6270,8 +6275,8 @@ internal sealed class MainForm : Form
                 ? "PRECONDITIONS READY — backend unavailable"
                 : "BLOCKED";
         _readinessValue.ForeColor = result.CustomControlPermitted
-            ? Color.DarkGreen
-            : Color.DarkGoldenrod;
+            ? Color.LightGreen
+            : Color.Gold;
 
         if (_lastSnapshot is null)
         {

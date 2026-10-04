@@ -25,14 +25,18 @@ public class AdaptiveFanInertiaPolicy
     public static AdaptiveFanInertiaSettings Settings { get; } = new();
     private readonly AdaptiveFanPolicyConfig _config;
     private readonly AdaptiveFanPolicyEngine _demand;
-    private readonly AdaptiveFinalDemandFilter _finalFilter = new();
+    private readonly AdaptiveFinalDemandFilter _finalFilter;
+    private readonly AdaptiveFanTuning? _tuning;
     private int? _current;
     private DateTimeOffset? _increaseSince;
     private int _increaseFloor;
     private DateTimeOffset? _decreaseSince;
 
-    public AdaptiveFanInertiaPolicy(AdaptiveFanPolicyConfig config)
+    public AdaptiveFanInertiaPolicy(AdaptiveFanPolicyConfig config, AdaptiveFanTuning? tuning = null)
     {
+        tuning?.Validate();
+        _tuning = tuning;
+        _finalFilter = new(tuning);
         _config = config;
         // Reuse curve interpolation and input/continuity validation, but obtain
         // instantaneous demand. Apply inertia exactly once, below.
@@ -60,8 +64,8 @@ public class AdaptiveFanInertiaPolicy
         // Every normal route (CPU/GPU heat, power, load) passes through the
         // same final-demand filter. Raw sensors are used only for validation,
         // demand calculation and the separately identified thermal override.
-        var thermalOverride = input.CpuEffectiveTemperatureC >= AdaptiveFinalDemandFilter.Settings.CpuThermalOverrideC ||
-            input.GpuTemperatureC >= AdaptiveFinalDemandFilter.Settings.GpuThermalOverrideC;
+        var thermalOverride = input.CpuEffectiveTemperatureC >= (_tuning?.CpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.CpuThermalOverrideC) ||
+            input.GpuTemperatureC >= (_tuning?.GpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.GpuThermalOverrideC);
         var smoothed = _finalFilter.Evaluate(input.Timestamp, demand.RawDemandLevel!.Value,
             _config.MinimumLevel, _config.MaximumLevel, _config.MaximumSampleGap, thermalOverride);
         // Keep EMA history at full precision. Quantize only normal actuation;
@@ -94,14 +98,14 @@ public class AdaptiveFanInertiaPolicy
             }
             _increaseFloor = Math.Min(_increaseFloor, requested);
             var elapsed = (input.Timestamp - _increaseSince.Value).TotalSeconds;
-            if (elapsed >= Settings.IncreaseConfirmationSeconds)
+            if (elapsed >= (_tuning?.IncreaseConfirmationSeconds ?? Settings.IncreaseConfirmationSeconds))
             {
                 // Raise only to the demand sustained throughout the window.
-                _current = Math.Min(_increaseFloor, current + Settings.NormalMaximumUpStepLevels);
+                _current = Math.Min(_increaseFloor, current + (_tuning?.NormalMaximumUpStepLevels ?? Settings.NormalMaximumUpStepLevels));
                 ClearConfirmation();
                 return Accepted($"Confirmed normal increase to {_current}; sustained={elapsed:0.00}s; requested={requested}.");
             }
-            return Accepted($"Holding {current}; confirming normal increase {elapsed:0.00}/{Settings.IncreaseConfirmationSeconds}s.");
+            return Accepted($"Holding {current}; confirming normal increase {elapsed:0.00}/{_tuning?.IncreaseConfirmationSeconds ?? Settings.IncreaseConfirmationSeconds}s.");
         }
 
         _increaseSince = null;
@@ -111,14 +115,14 @@ public class AdaptiveFanInertiaPolicy
         {
             _decreaseSince ??= input.Timestamp;
             var elapsed = (input.Timestamp - _decreaseSince.Value).TotalSeconds;
-            if (elapsed >= Settings.DecreaseConfirmationSeconds)
+            if (elapsed >= (_tuning?.DecreaseConfirmationSeconds ?? Settings.DecreaseConfirmationSeconds))
             {
                 _current = Math.Max(requested, current - _config.MaximumDownStepPerSample);
                 // Every subsequent step requires a new continuous window.
                 ClearConfirmation();
                 return Accepted($"Confirmed decrease to {_current}; sustained={elapsed:0.00}s; requested={requested}.");
             }
-            return Accepted($"Holding {current}; confirming decrease {elapsed:0.00}/{Settings.DecreaseConfirmationSeconds}s.");
+            return Accepted($"Holding {current}; confirming decrease {elapsed:0.00}/{_tuning?.DecreaseConfirmationSeconds ?? Settings.DecreaseConfirmationSeconds}s.");
         }
 
         _decreaseSince = null;

@@ -11,7 +11,7 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.Runtime;
 
-internal sealed record WmiFanExperimentOptions(string Directory, string Modules, int Seconds, bool Control, int? GuardianPid)
+internal sealed record WmiFanExperimentOptions(string Directory, string Modules, int Seconds, bool Control, int? GuardianPid, string? FanConfigurationPath = null)
 {
     internal static WmiFanExperimentOptions Parse(string[] args)
     {
@@ -20,6 +20,7 @@ internal sealed record WmiFanExperimentOptions(string Directory, string Modules,
         var seconds = 300;
         var control = false;
         int? guardian = null;
+        string? configuration = null;
         for (var i = 1; i < args.Length; i++)
         {
             string Value() => ++i < args.Length ? args[i] : throw new ArgumentException("Missing experiment argument value.");
@@ -30,12 +31,23 @@ internal sealed record WmiFanExperimentOptions(string Directory, string Modules,
                 case "--duration-seconds": seconds = int.Parse(Value()); break;
                 case "--control": control = true; break;
                 case "--guardian-pid": guardian = int.Parse(Value()); break;
+                case "--fan-config": configuration = Path.GetFullPath(Value()); break;
                 default: throw new ArgumentException("Unsupported/mixed experiment argument: " + args[i]);
             }
         }
         if (directory is null || seconds is < 30 or > 600 || guardian is <= 0)
             throw new ArgumentException("Experiment requires --session-dir and duration 30..600 seconds.");
-        return new(directory, modules, seconds, control, guardian);
+        var options = new WmiFanExperimentOptions(directory, modules, seconds, control, guardian, configuration);
+        _ = options.ReadConfiguration();
+        return options;
+    }
+    internal FanConfiguration? ReadConfiguration()
+    {
+        if (FanConfigurationPath is null) return null;
+        var c = FanConfigurationStore.Parse(File.ReadAllText(FanConfigurationPath));
+        if (Control && c.Tuning.MinimumLevel < 30)
+            throw new InvalidDataException("El experimento activo conserva 30–50. Exporta una prueba 30–50 desde Ajustes.");
+        return c;
     }
 }
 
@@ -138,6 +150,12 @@ internal static class WmiFanExperiment
         {
             var options = WmiFanExperimentOptions.Parse(args);
             Directory.CreateDirectory(options.Directory);
+            if (!options.GuardianPid.HasValue && options.ReadConfiguration() is { } preferences)
+            {
+                var frozen = Path.Combine(options.Directory, "fan-configuration.session.json");
+                FanConfigurationStore.Save(preferences, frozen);
+                options = options with { FanConfigurationPath = frozen };
+            }
             // Identity check occurs before WMI connection or telemetry initialization.
             var identity = HardwareIdentityReader.ReadCurrent();
             if (HpHardwareTargetResolver.Resolve(identity, out var reason) != Hp8C40TargetProfile.Instance)
@@ -174,12 +192,19 @@ internal static class WmiFanExperiment
         var session = client is null ? null : new WmiFanSession(client.Send, level =>
             WriteJson(Path.Combine(o.Directory, "write-intent.json"), new { Level = level,
                 Pid = Environment.ProcessId, Utc = DateTimeOffset.UtcNow, RestoreRequired = true }));
-        var config = CreatePolicy();
+        var preferences = o.ReadConfiguration();
+        var config = preferences?.BuildPolicy() ?? CreatePolicy();
         WriteJson(Path.Combine(o.Directory, "policy.json"), config);
-        WriteJson(Path.Combine(o.Directory, "inertia.json"), WmiFanInertiaPolicy.Settings);
-        WriteJson(Path.Combine(o.Directory, "final-demand-filter.json"), WmiFinalDemandFilter.Settings);
+        if (preferences is not null)
+            FanConfigurationStore.Save(preferences, Path.Combine(o.Directory, "fan-configuration.json"));
+        WriteJson(Path.Combine(o.Directory, "inertia.json"), preferences is null ? WmiFanInertiaPolicy.Settings : new AdaptiveFanInertiaSettings(
+            preferences.Tuning.IncreaseConfirmationSeconds, preferences.Tuning.NormalMaximumUpStepLevels,
+            preferences.Tuning.DecreaseConfirmationSeconds));
+        WriteJson(Path.Combine(o.Directory, "final-demand-filter.json"), preferences is null ? WmiFinalDemandFilter.Settings : new AdaptiveFinalDemandFilterSettings(
+            preferences.Tuning.RiseTimeConstantSeconds, preferences.Tuning.FallTimeConstantSeconds,
+            preferences.Tuning.CpuThermalOverrideC, preferences.Tuning.GpuThermalOverrideC));
         WriteJson(Path.Combine(o.Directory, "thermal-admission.json"), WmiFanThermalAdmission.Settings);
-        var engine = new WmiFanInertiaPolicy(config);
+        var engine = new WmiFanInertiaPolicy(config, preferences?.Tuning);
         var thermal = new WmiFanThermalAdmission(identity);
         await using var csv = new CsvTelemetryLogger(Path.Combine(o.Directory, "telemetry.csv"));
         await csv.WriteHeaderAsync(CancellationToken.None);
@@ -204,7 +229,7 @@ internal static class WmiFanExperiment
             thermal.EnsureOpen();
         }
         WriteJson(Path.Combine(o.Directory, "ready.json"), new { Pid = Environment.ProcessId,
-            DirectEcProhibited = true, o.Control, ProductionAuthorized = false, MinimumLevel = 30, MaximumLevel = 50,
+            DirectEcProhibited = true, o.Control, ProductionAuthorized = false, config.MinimumLevel, config.MaximumLevel,
             FanAcquisition = "fresh-2D-before-snapshot;no-periodic-query-on-snapshot" });
         EcWmiInvestigationTrace.Record(0, "experiment.ready", $"control={o.Control};no-direct-EC");
         try
@@ -271,7 +296,7 @@ internal static class WmiFanExperiment
                 // Remove only the artificial pause while a CPU spike is pending.
                 // No periodic reads, parallel workers or accelerated retry of setters.
                 if (!thermal.RemainingConfirmationMilliseconds.HasValue)
-                    await Task.Delay(WmiFanThermalAdmission.Settings.NormalDelayMilliseconds, cts.Token);
+                    await Task.Delay(preferences?.Tuning.NormalPollingDelayMilliseconds ?? WmiFanThermalAdmission.Settings.NormalDelayMilliseconds, cts.Token);
             }
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
@@ -354,6 +379,11 @@ internal static class WmiFanExperiment
                 "--modules-dir", o.Modules, "--duration-seconds", o.Seconds.ToString(), "--guardian-pid", current.Id.ToString() })
                 start.ArgumentList.Add(a);
             if (o.Control) start.ArgumentList.Add("--control");
+            if (o.FanConfigurationPath is not null)
+            {
+                start.ArgumentList.Add("--fan-config");
+                start.ArgumentList.Add(o.FanConfigurationPath);
+            }
             worker = Process.Start(start) ?? throw new InvalidOperationException("Worker did not start.");
             stdout = PumpAsync(worker.StandardOutput, Path.Combine(o.Directory, "worker-stdout.txt"), Console.Out);
             stderr = PumpAsync(worker.StandardError, Path.Combine(o.Directory, "worker-stderr.txt"), Console.Error);

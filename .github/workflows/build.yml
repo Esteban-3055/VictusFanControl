@@ -681,6 +681,9 @@ jobs:
       - name: HP 8C40 P17 WinForms curve editor self-test
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --curve-editor-self-test
 
+      - name: Configurable dashboard WinForms self-test and renders
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --dashboard-self-test
+
       - name: HP BIOS contract self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --bios-contract-self-test
 
@@ -759,6 +762,13 @@ jobs:
         with:
           name: curve-editor-ui
           path: curve-editor-ui.png
+          if-no-files-found: error
+
+      - name: Upload configurable dashboard renders
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-ui
+          path: dashboard-*-ui.png
           if-no-files-found: error
 
   acpi-field-probe:

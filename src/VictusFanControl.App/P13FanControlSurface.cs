@@ -23,7 +23,8 @@ internal sealed class P13FanControlSurface : UserControl
     private readonly HardwareIdentity _hardware;
     private AdaptiveCurveProfile _previewProfile = AdaptiveCurveProfiles.Presets()[1];
     private AdaptiveCurveEditorForm? _curveEditor;
-    private readonly AdaptiveFanPolicyConfig _candidateConfig;
+    private AdaptiveFanPolicyConfig _candidateConfig;
+    private readonly Dictionary<int,Label> _curveValues = [];
     private readonly Func<SafetyGateResult?> _controlSafetyProvider;
     private readonly Action<string> _log;
     private readonly Func<bool>? _manualInteractionReadyProvider;
@@ -60,13 +61,14 @@ internal sealed class P13FanControlSurface : UserControl
     {
         _hardware = hardware;
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
-        _candidateConfig =
-            Hp8C40AdaptiveCandidateV1.Create();
+        var configuration = controller.AutomaticConfiguration;
+        if (configuration is not null) _previewProfile = AdaptiveCurveProfiles.Copy(configuration.Profile);
+        _candidateConfig = configuration is null ? Hp8C40AdaptiveCandidateV1.Create() : AdaptiveCurveProfiles.Validate(configuration.Profile);
         _shadowEvaluator =
             new AdaptiveFanPolicyShadowEvaluator(
                 hardware,
                 _candidateConfig,
-                preparedAutomatic: Hp8C40TargetProfile.Matches(hardware, out _));
+                preparedAutomatic: Hp8C40TargetProfile.Matches(hardware, out _), configuration: configuration);
         _controlSafetyProvider =
             controlSafetyProvider ??
             throw new ArgumentNullException(nameof(controlSafetyProvider));
@@ -82,6 +84,19 @@ internal sealed class P13FanControlSurface : UserControl
         Controls.Add(BuildUi(targetDescription));
         RefreshState(
             "Startup mode is Firmware. Manual/Automatic availability is determined only by the explicit execution gates shown below.");
+    }
+
+    public void ApplyConfiguration(FanConfiguration configuration)
+    {
+        _previewProfile = AdaptiveCurveProfiles.Copy(configuration.Profile);
+        _candidateConfig = configuration.BuildPolicy();
+        var curves = new[] {_candidateConfig.CpuTemperatureCurve, _candidateConfig.GpuTemperatureCurve, _candidateConfig.CpuPowerCurve, _candidateConfig.GpuPowerCurve, _candidateConfig.CpuLoadCurve, _candidateConfig.GpuLoadCurve};
+        foreach (var pair in _curveValues) pair.Value.Text = string.Join("  ",curves[pair.Key].Select(p=>$"{p.Input:0.#}→{p.Level}"));
+        _shadowEvaluator = new AdaptiveFanPolicyShadowEvaluator(_hardware,
+            AdaptiveCurveProfiles.Validate(_previewProfile), preparedAutomatic: true, configuration: configuration);
+        _candidateValue.Text = $"{_previewProfile.Name} · {configuration.Tuning.MinimumLevel}–{configuration.Tuning.MaximumLevel}";
+        _previewLevelValue.Text = "—";
+        _previewDetailValue.Text = "Ajustes aplicados; esperando una muestra nueva.";
     }
 
     public AdaptiveFanProductionMode RequestedMode => _controller.Mode;
@@ -211,7 +226,7 @@ internal sealed class P13FanControlSurface : UserControl
                 MaximumSize = new Size(760, 0),
                 Font = new Font(Font, FontStyle.Bold),
                 Text =
-                    "P13 user-control surface\r\n" +
+                    "CONTROL DE VENTILADORES\r\n" +
                     targetDescription
             },
             0,
@@ -309,9 +324,9 @@ internal sealed class P13FanControlSurface : UserControl
             _controller.AutomaticExecutionAuthorized
                 ? "OPEN"
                 : "CLOSED";
-        _candidateValue.Text =
-            $"{Hp8C40AdaptiveCandidateV1.Id} — shadow-only / unvalidated" +
-            (Hp8C40TargetProfile.Matches(_hardware, out _) ? "; prepared envelope 30–50" : "");
+        var configured = _controller.AutomaticConfiguration;
+        _candidateValue.Text = configured is null ? $"{Hp8C40AdaptiveCandidateV1.Id} — shadow-only / unvalidated"
+            : $"{configured.Profile.Name} · {configured.Tuning.MinimumLevel}–{configured.Tuning.MaximumLevel} · vista previa";
 
         state.Controls.Add(new Label { Text = "Requested mode:", AutoSize = true }, 0, 0);
         state.Controls.Add(_modeValue, 1, 0);
@@ -515,8 +530,9 @@ internal sealed class P13FanControlSurface : UserControl
                 {
                     // Validate and construct completely before swapping; no production object changes.
                     var copy = AdaptiveCurveProfiles.Copy(profile);
+                    var configuration = (_controller.AutomaticConfiguration ?? new FanConfiguration()) with { Profile = copy };
                     var evaluator = new AdaptiveFanPolicyShadowEvaluator(_hardware, AdaptiveCurveProfiles.Validate(copy),
-                        preparedAutomatic: Hp8C40TargetProfile.Matches(_hardware, out _));
+                        preparedAutomatic: Hp8C40TargetProfile.Matches(_hardware, out _), configuration: configuration);
                     _shadowEvaluator = evaluator;
                     _previewProfile = copy;
                     _candidateValue.Text = $"{copy.Name} — previsualización, sin autorización automática";
@@ -543,7 +559,7 @@ internal sealed class P13FanControlSurface : UserControl
         base.Dispose(disposing);
     }
 
-    private static void AddCurveRow(
+    private void AddCurveRow(
         TableLayoutPanel table,
         int row,
         string name,
@@ -564,15 +580,9 @@ internal sealed class P13FanControlSurface : UserControl
             0,
             row);
 
-        table.Controls.Add(
-            new Label
-            {
-                Text = value,
-                AutoSize = true,
-                MaximumSize = new Size(590, 0)
-            },
-            1,
-            row);
+        var label = new Label { Text = value, AutoSize = true, MaximumSize = new Size(590,0) };
+        _curveValues[row] = label;
+        table.Controls.Add(label,1,row);
     }
 
     private bool TryBeginControlInteraction(

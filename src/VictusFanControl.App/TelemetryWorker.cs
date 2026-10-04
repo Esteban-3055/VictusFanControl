@@ -52,6 +52,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     // Prepared Automatic uses the same sequential worker, never a second polling loop.
     public Func<bool>? FreshFanAcquisitionRequired { get; set; }
     public Func<int?>? AcquisitionBudgetMilliseconds { get; set; }
+    public Func<int>? NormalPollingDelayMilliseconds { get; set; }
     public Func<TelemetrySnapshot, CancellationToken, Task>? SnapshotProcessor { get; set; }
 
     public event EventHandler<TelemetrySnapshot>? SnapshotAvailable;
@@ -288,7 +289,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             }
 
             var pending = AcquisitionBudgetMilliseconds?.Invoke().HasValue == true;
-            await WaitOrWakeAsync(pending ? 0 : NormalIntervalMs, cancellationToken).ConfigureAwait(false);
+            await WaitOrWakeAsync(pending ? 0 : Math.Clamp(NormalPollingDelayMilliseconds?.Invoke() ?? NormalIntervalMs, 500, 1500), cancellationToken).ConfigureAwait(false);
         }
     }
 
