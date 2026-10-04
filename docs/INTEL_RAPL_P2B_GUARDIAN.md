@@ -1185,3 +1185,46 @@ with no intermediate Reset between enabled presets.
 
 productionHardwareWritesAuthorized remains false.
 
+## Step 5.10D — direct AC -> Battery -> AC transition qualification harness
+
+The next qualification harness exercises the exact product transition sequence
+inside one live GPU clock session:
+
+    Apply AC 210..1850
+    -> direct SwitchPreset to Battery 210..1200
+    -> direct SwitchPreset back to AC 210..1850
+    -> one final normal Reset
+
+There is no ResetGpuLockedClocks call between enabled presets.
+
+The harness uses the production-domain GpuClockSessionController and
+GpuClockPresetTransitionController rather than issuing raw NVML calls directly.
+That means the same durable ordering is exercised:
+
+- ApplyWriteArmed before the first Set;
+- PresetSwitchWriteArmed before AC -> Battery Set;
+- PresetSwitchWriteArmed before Battery -> AC Set;
+- ReleaseWriteArmed before the single final Reset.
+
+The physical entry point requires the exact target token and accepts no custom
+clock range or custom sequence:
+
+    .\scripts\test-gpu-nvml-clock-transition.ps1 -ConfirmTargetProfile HP-8C40-9D0R1LA-F18
+
+The default hold is 3 seconds per enabled preset and is bounded to 1..30
+seconds.
+
+If a transition enters RecoveryRequired, the harness retains the durable
+journal and performs no blind Reset. If an exception occurs while the original
+live session is still ActiveUnverified, the harness may use the ordinary
+journaled Release path as same-session safety cleanup.
+
+CI executes only the argument/token self-test. The CI path never loads NVML and
+never performs hardware I/O.
+
+A successful physical run will qualify the direct enabled-preset switching
+path, but it still cannot prove exact locked min/max ownership because the
+public NVML getter does not exist.
+
+productionHardwareWritesAuthorized remains false.
+

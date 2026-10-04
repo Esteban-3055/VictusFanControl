@@ -37,6 +37,20 @@ internal static class Program
                     args);
             }
 
+            if (args.Length == 1 &&
+                args[0] == "--clock-transition-self-test")
+            {
+                return GpuClockTransitionQualification.SelfTest(
+                    Console.Out);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--clock-transition-test")
+            {
+                return GpuClockTransitionQualification.Run(
+                    args);
+            }
+
             if (!TryParseObserveArgs(
                     args,
                     out var label,
@@ -441,7 +455,13 @@ internal static class Program
             "VictusFanControl.GpuProbe --clock-write-test --confirm-target HP-8C40-9D0R1LA-F18 --preset <ac|battery> [--hold-seconds 1..30]");
 
         Console.WriteLine(
-            "--observe is read-only. --clock-write-test is an explicit qualification-only NVML Set/Reset path.");
+            "VictusFanControl.GpuProbe --clock-transition-self-test");
+
+        Console.WriteLine(
+            "VictusFanControl.GpuProbe --clock-transition-test --confirm-target HP-8C40-9D0R1LA-F18 [--hold-seconds 1..30]");
+
+        Console.WriteLine(
+            "--observe is read-only. --clock-write-test and --clock-transition-test are explicit qualification-only NVML write paths.");
     }
 
     private static readonly JsonSerializerOptions
