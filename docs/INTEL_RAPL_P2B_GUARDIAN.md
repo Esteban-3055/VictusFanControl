@@ -2679,3 +2679,72 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+### Step 6I physical qualification evidence — 2026-10-04
+
+Step 6I is now **PHYSICAL PASS** on the exact
+`HP-8C40-9D0R1LA-F18` target.
+
+Retained evidence summary:
+
+    release/performance-guardian-6i-standby-qualification-pass-8c40-2026-10-04.json
+
+The accepted run proved the display-aware Modern Standby sequence end-to-end.
+
+At the proactive `GUID_SESSION_DISPLAY_STATUS Off` boundary:
+
+- primary display release completed successfully;
+- CPU and GPU each had exactly one release attempt for the sleep boundary;
+- no suspend fallback release was used;
+- CPU was physically back at the pre-session unlocked 45/115 W baseline;
+- GPU was released to NVIDIA default through the normal live-session Reset;
+- CPU and GPU domains were Disabled;
+- both persistent journals were absent before the actual standby interval.
+
+The accepted Off -> On interval was approximately 45.48 seconds.
+
+While the display remained Off, Windows delivered both
+`PBT_APMRESUMEAUTOMATIC` and `PBT_APMRESUMESUSPEND`. Both were suppressed
+as maintenance wakes and neither reopened CPU/GPU authority.
+
+At `GUID_SESSION_DISPLAY_STATUS On`:
+
+- exactly one resume reacquire attempt succeeded;
+- a fresh direct AC source prime was used;
+- CPU reacquired the AC 35/60 W preset;
+- GPU reacquired the AC 210..1850 MHz preset;
+- fresh CPU and GPU SessionIds were created rather than reusing the pre-sleep
+  sessions;
+- both new journals were present during the resumed live session.
+
+Final normal client cleanup then proved:
+
+    AcceptedRequests / RejectedRequests  4 / 0
+    EnableCalls / ReleaseCalls           2 / 2
+    CPU hardware-write attempts          4
+    GPU hardware-write attempts          4
+    CPU source runtime starts/stops      2 / 2
+    source listener registrations        2
+    final CPU domain                     Disabled
+    final GPU domain                     Disabled
+    final CPU snapshot                   45/115 W, unlocked
+    CPU journal present                  false
+    GPU journal present                  false
+    Guardian exit                        CLIENT_SHUTDOWN / Stopped
+    SourceFailure / Failure              null / null
+
+The retained evidence also records SHA-256 identities for the original
+qualification, guardian, preflight, lifecycle, pre-sleep and resume JSON files.
+
+This closes the **combined Modern Standby lifecycle qualification** for the
+performance-control subsystem. The next independent backend gate is destructive
+owner/parent-loss qualification while CPU+GPU authority is live.
+
+This PASS does not authorize GUI binding, startup persistence, automatic
+profile integration or general production writes.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
