@@ -860,7 +860,7 @@ internal static class CpuPowerLimiterSelfTest
             "fake://cpu-power-session";
 
         public string TargetProfileId =>
-            TargetProfileId;
+            CpuPowerLimiterSelfTest.TargetProfileId;
 
         public CpuPowerSessionJournalRecord? Load() =>
             Current;
