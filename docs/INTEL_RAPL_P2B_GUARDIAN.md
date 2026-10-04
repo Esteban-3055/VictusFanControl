@@ -1228,3 +1228,78 @@ public NVML getter does not exist.
 
 productionHardwareWritesAuthorized remains false.
 
+## Step 5.10D physical result — direct enabled-preset switching
+
+The direct in-session transition harness has now passed physically on
+HP-8C40-9D0R1LA-F18 / NVIDIA GeForce RTX 4060 Laptop GPU.
+
+Observed sequence:
+
+    baseline observation: 810 MHz
+    -> AC request 210..1850, observed 1845 MHz
+    -> direct Battery switch 210..1200, observed 1200 MHz
+    -> direct AC switch 210..1850, observed 1845 MHz
+    -> one final normal Reset, final session state Disabled
+
+Both preset-transition results were successful and reported
+GPU_CLOCK_PRESET_SWITCHED. The final Release succeeded, ExitCode was 0,
+no safety cleanup was required and no exception was recorded.
+
+The harness was constructed so enabled AC/Battery transitions use
+PresetSwitchWriteArmed + one SetGpuLockedClocks and do not issue an
+intermediate Reset. The final Reset is only the normal end-of-session release.
+
+This physically qualifies:
+
+- direct C# -> NVML initial AC apply;
+- AC -> Battery enabled-preset switch;
+- Battery -> AC enabled-preset switch;
+- one final normal release/reset.
+
+It still does not qualify exact ownership. CurrentGraphicsClockMHz is
+observation-only and public NVML still cannot return the installed arbitrary
+min/max locked range. ActiveUnverified remains the correct GPU session state.
+
+Consolidated evidence:
+
+    release/gpu-clock-nvml-transition-qualification-8c40-2026-10-04.json
+
+productionHardwareWritesAuthorized remains false.
+
+## Step 6A — direct Windows AC/DC confirmation query
+
+With CPU preset switching and GPU locked-clock preset switching independently
+qualified, the next integration gate starts with source confirmation only.
+
+A future Windows power notification is treated only as a trigger. Before any
+CPU or GPU preset transition, PerformanceGuardian must query the current source
+directly from GetSystemPowerStatus.
+
+SystemPowerStatusReader now preserves the raw ACLineStatus byte in addition to
+the existing AcOnline compatibility property. The performance mapper uses the
+documented values:
+
+- ACLineStatus 1 -> PerformancePowerSourceKind.Ac;
+- ACLineStatus 0 -> PerformancePowerSourceKind.Battery;
+- ACLineStatus 255 or any unexpected value -> Unknown.
+
+Unknown is fail-closed and must never be coerced to Battery.
+
+WindowsPerformancePowerSourceReader exposes a typed read-only observation with
+the mapped source, raw AC line status, battery percentage and battery flags.
+Query failure also maps to Unknown with no preset authority.
+
+A separate VictusFanControl.PerformanceProbe and
+scripts/test-performance-power-source.ps1 provide a read-only exact-target
+characterization path. The probe performs one GetSystemPowerStatus query and
+no CPU/GPU hardware write.
+
+CI exercises only the source-mapping self-test. The next physical gate is to
+capture one report while the charger is connected and one while physically
+running on battery. Only after both direct-query states are confirmed will a
+Windows notification listener be allowed to dispatch confirmed source changes
+to the CPU/GPU transition controllers.
+
+No notification listener, guardian IPC, startup Apply authority, GUI authority
+or automatic profile integration is enabled by Step 6A.
+

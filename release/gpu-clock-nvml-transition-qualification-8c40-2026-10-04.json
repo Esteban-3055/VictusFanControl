@@ -1,0 +1,57 @@
+{
+  "SchemaVersion": 1,
+  "CapturedDateUtc": "2026-10-04",
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "DeviceName": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "Qualification": "Direct in-session GPU clock AC -> Battery -> AC transition",
+  "Sequence": "AC_210_1850__BATTERY_210_1200__AC_210_1850__RESET",
+  "HoldSeconds": 3,
+  "StartedAtUtc": "2026-10-04T06:44:00.8406507+00:00",
+  "CompletedAtUtc": "2026-10-04T06:44:10.077324+00:00",
+  "Observations": {
+    "BeforeCurrentGraphicsClockMHz": 810,
+    "AfterAcApplyCurrentGraphicsClockMHz": 1845,
+    "AfterBatterySwitchCurrentGraphicsClockMHz": 1200,
+    "AfterAcReturnCurrentGraphicsClockMHz": 1845,
+    "AfterReleaseCurrentGraphicsClockMHz": 1845
+  },
+  "Transitions": {
+    "Battery": {
+      "Succeeded": true,
+      "Disposition": "EnabledPresetSwitched",
+      "SessionState": "ActiveUnverified",
+      "Status": "GPU_CLOCK_PRESET_SWITCHED"
+    },
+    "AcReturn": {
+      "Succeeded": true,
+      "Disposition": "EnabledPresetSwitched",
+      "SessionState": "ActiveUnverified",
+      "Status": "GPU_CLOCK_PRESET_SWITCHED"
+    }
+  },
+  "Release": {
+    "Attempted": true,
+    "Succeeded": true,
+    "FinalSessionState": "Disabled",
+    "Status": "GPU_CLOCK_RELEASED_TO_NVIDIA_DEFAULT"
+  },
+  "ExactLockedRangeVerified": false,
+  "NoIntermediateResetExpected": true,
+  "ExitCode": 0,
+  "Exception": null,
+  "Interpretation": {
+    "DirectEnabledPresetSwitchPathPhysicallyQualified": true,
+    "AcToBatteryDirectSwitchQualified": true,
+    "BatteryToAcDirectSwitchQualified": true,
+    "FinalNormalResetQualified": true,
+    "ExactOwnershipClaimed": false,
+    "CurrentClockIsObservationOnly": true,
+    "NextGate": "Read-only Windows AC/DC source query before wiring notification-driven PerformanceGuardian transitions."
+  },
+  "ProductGates": {
+    "ProductionHardwareWritesAuthorized": false,
+    "GuiIntegrationAuthorized": false,
+    "StartupPersistenceAuthorized": false,
+    "AutomaticProfileIntegrationAuthorized": false
+  }
+}

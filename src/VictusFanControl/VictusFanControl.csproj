@@ -9,6 +9,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="VictusFanControl.CpuProbe" />
     <InternalsVisibleTo Include="VictusFanControl.GpuProbe" />
+    <InternalsVisibleTo Include="VictusFanControl.PerformanceProbe" />
     <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 </Project>

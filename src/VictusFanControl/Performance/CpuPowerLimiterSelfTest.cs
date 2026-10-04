@@ -33,6 +33,10 @@ internal static class CpuPowerLimiterSelfTest
                 "CPU power AC/battery preset selector");
 
             Require(
+                PerformancePowerSourceQuerySelfTest.Run(output) == 0,
+                "Windows performance power-source query mapping");
+
+            Require(
                 GpuClockPresetPolicySelfTest.Run(output) == 0,
                 "GPU clock AC/battery preset selector");
 
