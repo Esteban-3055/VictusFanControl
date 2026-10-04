@@ -2832,3 +2832,81 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+### Step 6J physical qualification evidence — 2026-10-04
+
+Step 6J is now **PHYSICAL PASS** on the exact
+`HP-8C40-9D0R1LA-F18` target.
+
+Retained evidence summary:
+
+    release/performance-guardian-6j-parent-death-qualification-pass-8c40-2026-10-04.json
+
+The accepted run proved the intended three-process topology:
+
+    controller
+      -> disposable owner
+           -> detached PerformanceGuardian
+
+The disposable owner established HELLO + ENABLE_SESSION while directly
+confirmed on AC. Before the destructive owner kill, durable evidence showed:
+
+    CPU 35/60 W, unlocked
+    CPU journal Owned, generation 2
+    GPU journal ActiveUnverified, 210..1850 MHz, generation 2
+    no pending CPU/GPU mutation
+    controller hardware writes = false
+
+The controller then killed only the disposable owner. No DISABLE_SESSION or
+SHUTDOWN request was sent. The detached Guardian detected the real parent
+Process handle loss and completed its parent-loss cleanup path.
+
+Accepted Guardian evidence:
+
+    ParentLostDetected              true
+    ExitReason                      PARENT_LOST_RELEASED
+    FinalPhase                      ParentLost
+    Connections                     1
+    AcceptedRequests                2
+    RejectedRequests                0
+    EnableCalls / ReleaseCalls      1 / 1
+    LastReleaseReason               PARENT_PROCESS_EXIT
+    CPU hardware-write attempts     2
+    GPU hardware-write attempts     2
+    source starts / stops           1 / 1
+    source listener registrations   1
+    source CPU/GPU dispatches       0 / 0
+    final CPU domain                Disabled
+    final GPU domain                Disabled
+    SourceFailure / Failure         null / null
+
+Final independent readback confirmed CPU back at the unlocked 45/115 W
+pre-session baseline. Both CPU/GPU journals were absent, the Guardian process
+had exited, and the target production mutex was available again.
+
+This closes the **owner/application parent-death qualification** while the
+detached Guardian itself remains alive long enough to clean both domains.
+
+Important boundary: this PASS does not prove or authorize blind automatic GPU
+recovery after the Guardian process itself is destroyed. A stale GPU journal
+after Guardian death remains fail-closed because public NVML does not provide
+exact locked-range ownership proof after process loss. Qualification-only
+explicit recovery remains separate from production behavior.
+
+At this point the performance-control backend has physical PASS evidence for:
+
+- CPU-only RAPL ownership and restoration;
+- GPU-only locked-clock ownership lifecycle;
+- combined CPU+GPU AC/Battery transitions;
+- Modern Standby display-Off release and display-On fresh reacquire;
+- disposable owner/application death with live detached Guardian cleanup.
+
+The backend is therefore ready for the separate GUI/application-integration
+work, while the production authorization gates remain closed until that
+integration explicitly binds the already-qualified Guardian contract.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
