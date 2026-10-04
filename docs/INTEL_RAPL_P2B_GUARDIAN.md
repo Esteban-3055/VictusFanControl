@@ -1972,9 +1972,50 @@ Hardware-free fixtures now prove:
 The CI path invokes only fake backends / argument gates for Step 6F. It does
 not load NVML for a write and does not perform physical hardware I/O.
 
-The physical GPU-only Guardian gate is therefore **prepared, not yet physically
-qualified**. A PASS must come from the exact HP-8C40-9D0R1LA-F18 target using
-the bounded command above and its generated evidence.
+The physical GPU-only Guardian gate is **physically qualified on the exact
+HP-8C40-9D0R1LA-F18 target as of 2026-10-04**. The bounded qualification run
+completed with Result=PASS and GuardianExitCode=0.
+
+### Step 6F physical qualification evidence — 2026-10-04
+
+The accepted target evidence is committed under release/:
+
+    performance-guardian-6f-gpu-preflight-8c40-2026-10-04.json
+    performance-guardian-6f-gpu-qualification-8c40-2026-10-04.json
+    performance-guardian-6f-gpu-guardian-report-8c40-2026-10-04.json
+
+The read-only preflight confirmed the exact target, AC source, production mutex,
+absence of a stale active journal, the exact NVIDIA GeForce RTX 4060 Laptop
+GPU, the required NVML command surface and a closed hardware-write gate.
+Preflight performed zero hardware writes.
+
+The physical run then proved, in one Guardian session:
+
+    initial AC      -> committed 210..1850 MHz
+    Battery         -> committed 210..1200 MHz
+    AC return       -> committed 210..1850 MHz
+    normal release  -> one final Reset -> Disabled
+
+The durable journal snapshots use one SessionId across the three committed
+requests. ENABLE_SESSION, DISABLE_SESSION and SHUTDOWN all returned Ok=true.
+The Guardian exited with code 0, with one lifecycle enable and one release,
+zero rejected requests, zero CPU hardware writes, exactly four GPU hardware
+write attempts, zero CPU source dispatches and exactly two GPU source
+dispatches. Windows delivered three source notifications; the runtime recorded
+exactly one post-registration reconciliation and two duplicate suppressions.
+InitialSource and final SourceLastSource were both Ac. SourceFailure and Failure
+were null. Normal release left the GPU domain Disabled and the target-scoped
+journal absent.
+
+This evidence qualifies the bounded GPU-only Guardian AC/Battery/AC transition
+and normal-release path. It does **not** establish exact locked-range ownership:
+public NVML still cannot read back the arbitrary locked range or identify its
+writer. The explicit exclusive-controller contract therefore remains required
+for this qualification model.
+
+productionHardwareWritesAuthorized remains false. This physical PASS does not
+open production, GUI, startup-persistence or automatic-profile hardware-write
+authority.
 
 CPU real-domain binding, combined CPU+GPU qualification, destructive
 Guardian-death tests, suspend/resume, GPU driver-reset handling, GUI
@@ -1985,8 +2026,8 @@ guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
 
-After a physical GPU-only Step 6F PASS, the next gate is to define the intended
-CPU AC/Battery product values explicitly, bind the existing
+With the physical GPU-only Step 6F PASS complete, the next gate is to define
+the intended CPU AC/Battery product values explicitly, bind the existing
 CpuPowerLimiter/CpuPowerPresetTransitionController to the Guardian under the
 same journal/recovery rules, qualify CPU alone, and only then run the combined
 CPU+GPU source-transition sequence. The historical 20/40 W test value must not
