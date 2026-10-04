@@ -1221,7 +1221,10 @@ internal sealed class CpuPowerLimiter : IDisposable
                 _backend.Read();
 
             if (final.Raw !=
-                restoreTarget.Raw)
+                    plan.Value ||
+                !_backend.OwnedFieldsMatch(
+                    restoreTarget.Raw,
+                    final))
             {
                 TryStoreUnresolvedBestEffort(
                     "RESTORE_NOT_TARGET");

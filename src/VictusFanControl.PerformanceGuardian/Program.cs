@@ -28,10 +28,20 @@ internal static class Program
                     PerformanceGuardianCleanupSelfTest.Run(
                         Console.Out);
 
+                var cpuBackendResult =
+                    PawnIoCpuPowerLimitBackendSelfTest.Run(
+                        Console.Out);
+
+                var cpuDomainResult =
+                    QualifiedCpuGuardianDomainLifecycleSelfTest.Run(
+                        Console.Out);
+
                 return authorityResult == 0 &&
                     sourceRuntimeResult == 0 &&
                     gpuDomainResult == 0 &&
-                    cleanupResult == 0
+                    cleanupResult == 0 &&
+                    cpuBackendResult == 0 &&
+                    cpuDomainResult == 0
                     ? 0
                     : 1;
             }
