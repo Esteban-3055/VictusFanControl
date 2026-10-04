@@ -48,6 +48,7 @@ internal sealed class DashboardShell : UserControl
         Dock = DockStyle.Fill;
         Font = new Font("Segoe UI", 10);
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        root.ColumnStyles.Add(new(SizeType.Percent,100));
         root.RowStyles.Add(new(SizeType.Absolute,72));
         root.RowStyles.Add(new(SizeType.Absolute,60));
         root.RowStyles.Add(new(SizeType.Percent,100));

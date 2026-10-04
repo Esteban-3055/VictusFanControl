@@ -63,7 +63,7 @@ internal sealed class P13FanControlSurface : UserControl
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         var configuration = controller.AutomaticConfiguration;
         if (configuration is not null) _previewProfile = AdaptiveCurveProfiles.Copy(configuration.Profile);
-        _candidateConfig = configuration is null ? Hp8C40AdaptiveCandidateV1.Create() : AdaptiveCurveProfiles.Validate(configuration.Profile);
+        _candidateConfig = configuration is null ? Hp8C40AdaptiveCandidateV1.Create() : configuration.BuildPolicy();
         _shadowEvaluator =
             new AdaptiveFanPolicyShadowEvaluator(
                 hardware,
@@ -211,6 +211,7 @@ internal sealed class P13FanControlSurface : UserControl
             RowCount = 7,
             AutoScroll = true
         };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));

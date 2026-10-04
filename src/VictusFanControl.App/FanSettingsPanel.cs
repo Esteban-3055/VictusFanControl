@@ -73,9 +73,13 @@ internal sealed class FanSettingsPanel : UserControl
         var export=new Button { Text="Exportar prueba 30–50…",AutoSize=true };
         export.Click+=(_,_)=>Export();
         buttons.Controls.AddRange(new System.Windows.Forms.Control[]{reset,cancel,save,export});
-        root.Controls.Add(buttons,0,2);root.SetColumnSpan(buttons,2);
-        root.Controls.Add(_status,0,3);root.SetColumnSpan(_status,2);
-        Controls.Add(root);Set(configuration.Tuning);_status.Text=notice ?? "Edita en borrador. Aplicar requiere modo Firmware y no envía órdenes de ventilación.";
+        var footer=new TableLayoutPanel { Dock=DockStyle.Bottom,AutoSize=true,ColumnCount=1,RowCount=2,Padding=new Padding(16,0,16,12) };
+        footer.ColumnStyles.Add(new(SizeType.Percent,100));
+        footer.Controls.Add(buttons,0,0);footer.Controls.Add(_status,0,1);
+        var viewport=new Panel { Dock=DockStyle.Fill,AutoScroll=true };
+        viewport.Controls.Add(root);
+        Controls.Add(viewport);Controls.Add(footer);
+        Set(configuration.Tuning);_status.Text=notice ?? "Edita en borrador. Aplicar requiere modo Firmware y no envía órdenes de ventilación.";
         DashboardTheme.Apply(this);
     }
     private void Set(AdaptiveFanTuning tuning)

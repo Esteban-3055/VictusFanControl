@@ -58,6 +58,11 @@ internal static class DashboardSelfTest
             apply.GetAwaiter().GetResult();
             Require(settings.Enabled && controller.AutomaticConfiguration!.Tuning.MinimumLevel==28 && backend.Commands==0 && !controller.AutomaticExecutionAuthorized);
             Console.WriteLine("PASS: dashboard staged settings, six axes, async edit lock, Firmware-only apply and closed Automatic gate.");
+            numbers[nameof(AdaptiveFanTuning.MinimumLevel)].Value=26;
+            var reset=(Task)typeof(FanSettingsPanel).GetMethod("ApplyAsync",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(settings,null)!;
+            while(!reset.IsCompleted){Application.DoEvents();Thread.Yield();}
+            reset.GetAwaiter().GetResult();
+            ventilation.ApplyConfiguration(controller.AutomaticConfiguration!);
             void Render(string file)
             {
                 host.PerformLayout();Application.DoEvents();
@@ -67,9 +72,14 @@ internal static class DashboardSelfTest
             Render("dashboard-settings-ui.png");
             host.ClientSize=new Size(1040,700);Render("dashboard-settings-small-ui.png");
             Require(settings.AutoScroll && Descendants(settings).OfType<NumericUpDown>().All(n=>n.Width>=60));
+            var save=Descendants(settings).OfType<Button>().Single(b=>b.Text=="Aplicar y guardar");
+            var saveBounds=settings.RectangleToClient(save.RectangleToScreen(save.ClientRectangle));
+            Require(settings.ClientRectangle.Contains(saveBounds));
             host.ClientSize=new Size(1240,880);
             navigation.Single(b=>b.Text=="Ventilación").PerformClick();Application.DoEvents();Render("dashboard-ventilation-ui.png");
             Require(controller.Mode==AdaptiveFanProductionMode.Firmware && backend.Commands==0);
+            var badge=Descendants(shell).OfType<Label>().Single(l=>l.Text=="CPU + GPU  ·  TELEMETRÍA EN VIVO");
+            Require(shell.ClientRectangle.Contains(shell.RectangleToClient(badge.RectangleToScreen(badge.ClientRectangle))));
             host.Close();coordinator.DisposeAsync().AsTask().GetAwaiter().GetResult();
             Require(settings.IsDisposed && ventilation.IsDisposed && monitor.IsDisposed);
             Console.WriteLine("PASS: dashboard navigation does not change fan mode; all detached pages dispose; large/small Windows renders saved.");

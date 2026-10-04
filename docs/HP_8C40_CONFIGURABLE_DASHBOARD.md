@@ -12,6 +12,8 @@ Esta captura cierra la evidencia de operación normal de esa versión del experi
 
 Las capturas del firmware muestran RPM distintas a igual temperatura según el estado previo y la carga; no son un ensayo comparable de ruido/temperatura. El perfil busca aproximar demanda moderada y eliminar subidas normales causadas sólo por la memoria de un pico. Las RPM físicas pueden diferir de las nominales y entre CPU/GPU, aunque la consigna sea igual.
 
+Al reproducir las 176 adquisiciones completas de d01746 con el algoritmo compartido, el modo anterior produce los mismos 24 cambios registrados, consigna media 37,801 y máximo 45. El candidato exportado con piso 30 produce 19 cambios, media 35,392 y máximo 42. El candidato GUI con piso 26 produce 19 cambios, media 32,392 y máximo 39. Se usan tiempos originales y máximo Package/núcleo; no se reproduce transporte ni se predice la temperatura o el ruido que habría causado otra velocidad física.
+
 | Parámetro | Experimento previo, sin configuración | Nuevo candidato GUI |
 |---|---:|---:|
 | Piso | 30 | 26 (2600 RPM nominales) |
