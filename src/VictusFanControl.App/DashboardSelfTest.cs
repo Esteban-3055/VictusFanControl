@@ -75,11 +75,15 @@ internal static class DashboardSelfTest
             var save=Descendants(settings).OfType<Button>().Single(b=>b.Text=="Aplicar y guardar");
             var saveBounds=settings.RectangleToClient(save.RectangleToScreen(save.ClientRectangle));
             Require(settings.ClientRectangle.Contains(saveBounds));
-            host.ClientSize=new Size(1240,880);
+            // Hosted Windows desktops can constrain the native window to 1024 px.
+            // Keep the already-rendered smaller viewport instead of requesting
+            // an off-screen expansion whose cached client bounds differ from it.
             navigation.Single(b=>b.Text=="Ventilación").PerformClick();Application.DoEvents();Render("dashboard-ventilation-ui.png");
             Require(controller.Mode==AdaptiveFanProductionMode.Firmware && backend.Commands==0);
             var badge=Descendants(shell).OfType<Label>().Single(l=>l.Text=="CPU + GPU  ·  TELEMETRÍA EN VIVO");
             Require(shell.ClientRectangle.Contains(shell.RectangleToClient(badge.RectangleToScreen(badge.ClientRectangle))));
+            var badgeBounds=host.RectangleToClient(badge.RectangleToScreen(badge.ClientRectangle));
+            Require(badgeBounds.Right<=host.Width-8);
             host.Close();coordinator.DisposeAsync().AsTask().GetAwaiter().GetResult();
             Require(settings.IsDisposed && ventilation.IsDisposed && monitor.IsDisposed);
             Console.WriteLine("PASS: dashboard navigation does not change fan mode; all detached pages dispose; large/small Windows renders saved.");
