@@ -542,7 +542,7 @@ internal sealed class P13FanControlSurface : UserControl
                     _previewIntentValue.Text = "HoldFirmware";
                     _previewDetailValue.Text = "Perfil aplicado a la vista previa; esperando telemetría fresca.";
                     _log($"Curve profile applied to shadow preview: {copy.Name}; no hardware command.");
-                }, _previewProfile);
+                }, _previewProfile, cpuSource: _controller.AutomaticConfiguration?.Tuning.CpuTemperatureSource ?? CpuDemandTemperatureSource.PackageOrHottestCore);
                 _curveEditor.Show(FindForm());
             }
             else { _curveEditor.Show(); _curveEditor.Activate(); }

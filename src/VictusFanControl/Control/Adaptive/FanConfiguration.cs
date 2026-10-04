@@ -1,11 +1,31 @@
+using VictusFanControl.Telemetry;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace VictusFanControl.Control.Adaptive;
 
+public enum CpuDemandTemperatureSource { PackageOrHottestCore, CoreAverage }
+
+/// <summary>Demand only. Raw Package/core safety readings remain on the snapshot.</summary>
+public static class CpuDemandTemperature
+{
+    public static double? Select(TelemetrySnapshot snapshot, CpuDemandTemperatureSource source)
+    {
+        if (source == CpuDemandTemperatureSource.PackageOrHottestCore)
+            return snapshot.CpuControlTemperatureC;
+        if (source != CpuDemandTemperatureSource.CoreAverage || !snapshot.CpuCoreTelemetryComplete ||
+            snapshot.CpuCoreTemperatures.Select(c => c.CoreIndex).Distinct().Count() != snapshot.CpuCoreTemperatures.Count ||
+            snapshot.CpuCoreTemperatures.Any(c => !double.IsFinite(c.TemperatureC) || c.TemperatureC < 0 || c.TemperatureC > 125))
+            return null;
+        return snapshot.CpuCoreAverageTemperatureC;
+    }
+}
+
 /// <summary>Operating preferences only. Safety, ownership and execution gates are not settings.</summary>
 public sealed record AdaptiveFanTuning
 {
+    // Missing fields in archived v1 settings retain the original source.
+    public CpuDemandTemperatureSource CpuTemperatureSource { get; init; } = CpuDemandTemperatureSource.PackageOrHottestCore;
     public int MinimumLevel { get; init; } = 26;
     public int MaximumLevel { get; init; } = 50;
     public double RiseTimeConstantSeconds { get; init; } = 4;
@@ -27,6 +47,8 @@ public sealed record AdaptiveFanTuning
             if (!double.IsFinite(value) || value < lo || value > hi)
                 throw new InvalidDataException($"{name}: rango permitido {lo}–{hi}.");
         }
+        if (!Enum.IsDefined(CpuTemperatureSource))
+            throw new InvalidDataException("Fuente de temperatura CPU desconocida.");
         Range(MinimumLevel, 10, 50, "Nivel mínimo");
         Range(MaximumLevel, MinimumLevel, 50, "Nivel máximo");
         Range(RiseTimeConstantSeconds, 0.5, 10, "Filtro de subida (s)");
@@ -45,7 +67,7 @@ public sealed record AdaptiveFanTuning
 public sealed record FanConfiguration
 {
     public int SchemaVersion { get; init; } = 1;
-    public AdaptiveFanTuning Tuning { get; init; } = new();
+    public AdaptiveFanTuning Tuning { get; init; } = new() { CpuTemperatureSource = CpuDemandTemperatureSource.CoreAverage };
     public AdaptiveCurveProfile Profile { get; init; } = QuietProfile();
 
     public static AdaptiveCurveProfile QuietProfile()

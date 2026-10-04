@@ -759,13 +759,15 @@ public sealed class AdaptiveFanProductionController
         _lastManualAppliedLevel = null;
     }
 
-    private static bool TryBuildPolicyInput(
+    private bool TryBuildPolicyInput(
         TelemetrySnapshot snapshot,
         out AdaptiveFanPolicyInput input,
         out string failure)
     {
+        var cpuDemand = CpuDemandTemperature.Select(snapshot,
+            _automaticConfiguration?.Tuning.CpuTemperatureSource ?? CpuDemandTemperatureSource.PackageOrHottestCore);
         if (!snapshot.IsComplete ||
-            !snapshot.CpuControlTemperatureC.HasValue ||
+            !cpuDemand.HasValue ||
             !snapshot.CpuPackagePowerW.HasValue ||
             !snapshot.CpuLoadPercent.HasValue ||
             !snapshot.GpuTemperatureC.HasValue ||
@@ -779,7 +781,7 @@ public sealed class AdaptiveFanProductionController
 
         input = new AdaptiveFanPolicyInput(
             snapshot.Timestamp,
-            snapshot.CpuControlTemperatureC.Value,
+            cpuDemand.Value,
             snapshot.CpuPackagePowerW.Value,
             snapshot.CpuLoadPercent.Value,
             snapshot.GpuTemperatureC.Value,

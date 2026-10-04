@@ -264,7 +264,9 @@ internal static class WmiFanExperiment
                     continue;
                 }
                 admitted = true;
-                var decision = engine.Evaluate(new(snapshot.Timestamp, snapshot.CpuControlTemperatureC!.Value,
+                var cpuSource = preferences?.Tuning.CpuTemperatureSource ?? CpuDemandTemperatureSource.PackageOrHottestCore;
+                var cpuDemand = CpuDemandTemperature.Select(snapshot, cpuSource);
+                var decision = engine.Evaluate(new(snapshot.Timestamp, cpuDemand ?? double.NaN,
                     snapshot.CpuPackagePowerW!.Value, snapshot.CpuLoadPercent!.Value, snapshot.GpuTemperatureC!.Value,
                     snapshot.GpuPowerW!.Value, snapshot.GpuLoadPercent!.Value));
                 if (!decision.Accepted || !decision.EqualFanLevel.HasValue)
@@ -286,13 +288,15 @@ internal static class WmiFanExperiment
                     thermalDecision.CpuHighSamples, thermalDecision.CpuConfirmationPending,
                     thermalDecision.ConfirmationElapsedMilliseconds, thermalDecision.RemainingConfirmationMilliseconds,
                     decision.Detail, Sent = sent, o.Control,
+                    CpuTemperatureSource = cpuSource.ToString(), CpuDemandTemperatureC = cpuDemand,
+                    snapshot.CpuCoreAverageTemperatureC,
                     WindowsPower = SystemPowerStatusReader.Read(),
                     snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC,
                     snapshot.CpuFanRpm, snapshot.GpuFanRpm, snapshot.FanSampledAtUtc,
                     snapshot.FanSampleAgeMilliseconds, snapshot.FanAgeCapturedAtUtc, SetpointReadback = false }));
                 WriteJson(Path.Combine(o.Directory, "heartbeat.json"), new { Pid = Environment.ProcessId,
                     Utc = DateTimeOffset.UtcNow, ElapsedMs = clock.ElapsedMilliseconds, Level = decision.EqualFanLevel });
-                Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; demand={decision.RawDemandLevel:0.0} smooth={decision.SmoothedDemandLevel:0.000} actuationDemand={decision.ActuationDemandLevel:0.0} thermalOverride={decision.ThermalOverride}; CPU={snapshot.CpuControlTemperatureC:0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}; CPU95-confirm={thermalDecision.CpuHighSamples}/5 pending={thermalDecision.CpuConfirmationPending}");
+                Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; demand={decision.RawDemandLevel:0.0} smooth={decision.SmoothedDemandLevel:0.000} actuationDemand={decision.ActuationDemandLevel:0.0} thermalOverride={decision.ThermalOverride}; CPU-demand={cpuDemand:0.0}C source={cpuSource} CPU-safety={snapshot.CpuControlTemperatureC:0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}; CPU95-confirm={thermalDecision.CpuHighSamples}/5 pending={thermalDecision.CpuConfirmationPending}");
                 // Remove only the artificial pause while a CPU spike is pending.
                 // No periodic reads, parallel workers or accelerated retry of setters.
                 if (!thermal.RemainingConfirmationMilliseconds.HasValue)

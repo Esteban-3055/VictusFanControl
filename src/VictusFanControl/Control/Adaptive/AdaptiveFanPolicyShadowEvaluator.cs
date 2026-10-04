@@ -33,6 +33,7 @@ public sealed class AdaptiveFanPolicyShadowEvaluator
     private readonly AdaptiveFanPolicyEngine _engine;
     private readonly AdaptiveFanInertiaPolicy? _preparedEngine;
     private readonly bool _preparedAutomatic;
+    private readonly CpuDemandTemperatureSource _cpuSource;
     private Hp8C40AutomaticThermalAdmission? _admission;
     private readonly AdaptiveFanControlIntentPlanner _planner = new();
     private readonly Hp8C40ThermalEmergencyConfirmation _thermalConfirmation =
@@ -45,6 +46,7 @@ public sealed class AdaptiveFanPolicyShadowEvaluator
         FanConfiguration? configuration = null)
     {
         _hardware = hardware;
+        _cpuSource = configuration?.Tuning.CpuTemperatureSource ?? CpuDemandTemperatureSource.PackageOrHottestCore;
         _engine = new AdaptiveFanPolicyEngine(config);
         _preparedAutomatic = preparedAutomatic;
         if (preparedAutomatic)
@@ -112,7 +114,7 @@ public sealed class AdaptiveFanPolicyShadowEvaluator
             new AdaptiveFanPolicyInput(
                 Timestamp: snapshot.Timestamp,
                 CpuEffectiveTemperatureC:
-                    snapshot.CpuControlTemperatureC!.Value,
+                    CpuDemandTemperature.Select(snapshot, _cpuSource) ?? double.NaN,
                 CpuPackagePowerW:
                     snapshot.CpuPackagePowerW!.Value,
                 CpuLoadPercent:

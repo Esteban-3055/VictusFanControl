@@ -1,4 +1,5 @@
 using VictusFanControl.Runtime;
+using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.Control.Adaptive;
 
@@ -33,6 +34,24 @@ internal static class FanConfigurationSelfTest
                 Reject(() => (configuration with { Tuning = tuning }).BuildPolicy());
             Reject(() => (configuration with { SchemaVersion = 2 }).BuildPolicy());
             Require(copy.BuildPolicy().MinimumLevel == 26 && copy.BuildPolicy().MaximumUpStepPerSample == 4);
+        });
+        Check("average ignores hottest demand; invalid/missing cores fail closed; archived source stays original", () =>
+        {
+            var sample = new TelemetrySnapshot(DateTimeOffset.UtcNow, "CPU", 90, 5, 10, "GPU", 35, 0, 0, 3000, 3000)
+            {
+                CpuExpectedPhysicalCoreCount = 2,
+                CpuCoreTemperatures = [new(0,0,"Performance",90), new(1,1,"Efficiency",40)]
+            };
+            Require(configuration.Tuning.CpuTemperatureSource == CpuDemandTemperatureSource.CoreAverage);
+            Require(CpuDemandTemperature.Select(sample,configuration.Tuning.CpuTemperatureSource) == 65);
+            Require(CpuDemandTemperature.Select(sample,CpuDemandTemperatureSource.PackageOrHottestCore) == 90);
+            Require(CpuDemandTemperature.Select(sample with { CpuExpectedPhysicalCoreCount=3 },CpuDemandTemperatureSource.CoreAverage) is null);
+            Require(CpuDemandTemperature.Select(sample with { CpuCoreTemperatures=[new(0,0,"P",double.NaN),new(1,1,"E",40)] },CpuDemandTemperatureSource.CoreAverage) is null);
+            Require(CpuDemandTemperature.Select(sample with { CpuCoreTemperatures=[new(0,0,"P",90),new(0,1,"E",40)] },CpuDemandTemperatureSource.CoreAverage) is null);
+            var text = FanConfigurationStore.Serialize(configuration);
+            var archived = text.Replace("    \"cpuTemperatureSource\": 1,\n", "");
+            Require(archived != text && FanConfigurationStore.Parse(archived).Tuning.CpuTemperatureSource == CpuDemandTemperatureSource.PackageOrHottestCore);
+            Reject(() => (configuration with { Tuning=configuration.Tuning with { CpuTemperatureSource=(CpuDemandTemperatureSource)99 } }).BuildPolicy());
         });
         Check("raw heat acts immediately without phantom normal rises; descent waits 16 seconds", () =>
         {

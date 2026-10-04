@@ -53,3 +53,26 @@ El supervisor congela el JSON de la sesión y el worker guarda configuración, p
 ## Verificación de software
 
 Las suites deterministas verifican serialización/copia, rechazo de parámetros inválidos y campos de autorización, conservación tras fallo de persistencia, rechazo de aplicar en Manual, ausencia de órdenes al guardar, subida térmica sin subidas normales artificiales, bajada de 16 s, inicio caliente, EMA de precisión completa y redondeo 3,05→3,0 / 3,06→3,1. `--dashboard-self-test` usa controles WinForms reales con backend sintético y renderiza Ajustes a dos tamaños y Ventilación; verifica borrador, seis ejes, bloqueo durante guardado y liberación de todas las páginas. No constituye una prueba física del portátil.
+
+
+## CPU Average como fuente de demanda
+
+Las configuraciones nuevas usan `CoreAverage`: promedio aritmético de todos los
+núcleos físicos de una misma muestra (6 P + 8 E en el objetivo validado). No es
+un promedio temporal ni una lectura externa de CPU Package. Ajustes permite
+seleccionar «CPU Average (núcleos físicos)» y guardar/exportar la elección.
+Los JSON v1 anteriores sin `cpuTemperatureSource` conservan Package/núcleo más
+caliente; para migrarlos se selecciona Average y se aplica en modo Firmware.
+
+La selección se comparte entre experimento, Automatic preparado, vista previa
+y marcadores del editor. Solo cambia la entrada térmica CPU y su respuesta
+rápida configurable; potencia/carga CPU y las tres entradas GPU siguen
+participando en MAX. Los registros del experimento separan fuente, temperatura
+de demanda, promedio y temperatura de seguridad. Un promedio incompleto o
+inválido rechaza la demanda sin sustituirla silenciosamente por Package.
+
+La emergencia sigue usando MAX(Package, núcleo más caliente), con confirmación
+95 °C y entrega inmediata 99 °C. La GPU conserva 87 °C. Average puede ser mucho
+menor que el núcleo más caliente; las curvas existentes requieren validación
+física con la nueva fuente antes de afirmar una mejora térmica o acústica.
+La selección no abre la autorización de Automatic ni altera Manual.

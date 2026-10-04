@@ -85,6 +85,35 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             Check(restarted.EqualFanLevel == 30, "explicit Firmware -> Automatic starts a new cold session at floor 30");
         }
 
+        // Average is a demand source; emergency admission still observes raw cores.
+        clock = 0;
+        var averageBackend = new Backend();
+        await using (var coordinator = new FanControlCoordinator(averageBackend))
+        {
+            var configuration = new FanConfiguration();
+            var controller = new AdaptiveFanProductionController(coordinator, Hp8C40AdaptiveCandidateV1.Create(), true, true,
+                automaticHardware: Hardware, automaticMilliseconds: () => clock, utcNow: Now, automaticConfiguration: configuration);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic, CancellationToken.None);
+            var isolatedHot = Sample(Now()) with
+            {
+                GpuTemperatureC = 35,
+                CpuCoreTemperatures = Sample(Now()).CpuCoreTemperatures.Select((c,i)=>c with { TemperatureC=i==0 ? 90 : 45 }).ToArray()
+            };
+            var preview = new AdaptiveFanPolicyShadowEvaluator(Hardware, configuration.BuildPolicy(), true, configuration);
+            var shadow = preview.Evaluate(SystemState.Healthy, isolatedHot, Now());
+            var normal = await controller.ProcessAutomaticAsync(isolatedHot, Raw(isolatedHot), CancellationToken.None);
+            Check(normal.EqualFanLevel==26 && !normal.ThermalOverride && shadow.RecommendedEqualLevel==26,
+                "isolated 90 C core does not drive Average demand; preview and prepared controller agree");
+            clock = 100;
+            var emergency = isolatedHot with { Timestamp=Now(),
+                CpuCoreTemperatures=isolatedHot.CpuCoreTemperatures.Select((c,i)=>c with { TemperatureC=i==0 ? 99 : 45 }).ToArray() };
+            var stopped = await controller.ProcessAutomaticAsync(emergency, Raw(emergency), CancellationToken.None);
+            var shadowStopped = preview.Evaluate(SystemState.Healthy, emergency, Now());
+            Check(stopped.Action==AdaptiveFanProductionActionKind.RestoreFirmware && averageBackend.Restores==1 &&
+                averageBackend.Levels.SequenceEqual(new[]{26}) && shadowStopped.EffectiveThermalEmergency && !shadowStopped.PolicyAccepted,
+                "raw core at 99 C restores Firmware immediately despite Average below 50 C");
+        }
+
         // Expiry after read-only EnterCustom preparation must prevent Apply dispatch.
         clock = 0;
         backend = new Backend();
