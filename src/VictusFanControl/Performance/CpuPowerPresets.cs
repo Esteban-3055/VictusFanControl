@@ -1,5 +1,65 @@
 namespace VictusFanControl.Performance;
 
+public static class CpuPowerProductDefaults
+{
+    public const string TargetProfileId =
+        "HP-8C40-9D0R1LA-F18";
+
+    // Current product sliders remain strictly below the physically observed
+    // 45 W / 115 W baseline so every configured value preserves the
+    // downward-only product contract on the qualified target.
+    public const int MinimumPl1Watts = 8;
+    public const int MaximumConfigurablePl1Watts = 44;
+    public const int MinimumPl2Watts = 8;
+    public const int MaximumConfigurablePl2Watts = 114;
+
+    public const int DefaultAcPl1Watts = 35;
+    public const int DefaultAcPl2Watts = 60;
+    public const int DefaultBatteryPl1Watts = 8;
+    public const int DefaultBatteryPl2Watts = 15;
+
+    public static bool IsConfigurable(
+        int pl1Watts,
+        int pl2Watts) =>
+        pl1Watts is >= MinimumPl1Watts and <= MaximumConfigurablePl1Watts &&
+        pl2Watts is >= MinimumPl2Watts and <= MaximumConfigurablePl2Watts &&
+        pl2Watts >= pl1Watts;
+
+    internal static CpuPowerPresetSet CreateDefaultPresetSet() =>
+        CreatePresetSet(
+            DefaultAcPl1Watts,
+            DefaultAcPl2Watts,
+            DefaultBatteryPl1Watts,
+            DefaultBatteryPl2Watts);
+
+    internal static CpuPowerPresetSet CreatePresetSet(
+        int acPl1Watts,
+        int acPl2Watts,
+        int batteryPl1Watts,
+        int batteryPl2Watts)
+    {
+        if (!IsConfigurable(acPl1Watts, acPl2Watts) ||
+            !IsConfigurable(batteryPl1Watts, batteryPl2Watts))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(acPl1Watts),
+                "CPU product presets must remain inside the target-specific configurable ranges with PL2 >= PL1.");
+        }
+
+        return new CpuPowerPresetSet(
+            Ac:
+                new CpuPowerPreset(
+                    Enabled: true,
+                    Pl1Watts: acPl1Watts,
+                    Pl2Watts: acPl2Watts),
+            Battery:
+                new CpuPowerPreset(
+                    Enabled: true,
+                    Pl1Watts: batteryPl1Watts,
+                    Pl2Watts: batteryPl2Watts));
+    }
+}
+
 internal readonly record struct CpuPowerPreset(
     bool Enabled,
     double Pl1Watts,
@@ -141,13 +201,13 @@ internal sealed class CpuPowerPresetPolicy
 
         if (!double.IsFinite(preset.Pl1Watts) ||
             !double.IsFinite(preset.Pl2Watts) ||
-            preset.Pl1Watts < 10 ||
+            preset.Pl1Watts < CpuPowerProductDefaults.MinimumPl1Watts ||
             preset.Pl2Watts <
                 preset.Pl1Watts)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(preset),
-                $"Enabled {slot} CPU power preset must have finite PL1/PL2, PL1 >= 10 W and PL2 >= PL1.");
+                $"Enabled {slot} CPU power preset must have finite PL1/PL2, PL1 >= 8 W and PL2 >= PL1.");
         }
     }
 }

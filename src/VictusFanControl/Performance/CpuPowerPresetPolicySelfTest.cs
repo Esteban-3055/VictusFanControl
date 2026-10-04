@@ -7,6 +7,7 @@ internal static class CpuPowerPresetPolicySelfTest
     {
         try
         {
+            ProductDefaultsAreExplicit(output);
             BothPresetsAreIndependent(output);
             UnknownSourceHasNoAuthority(output);
             DisabledBatteryPresetSelectsReleaseIntentOnly(output);
@@ -26,6 +27,43 @@ internal static class CpuPowerPresetPolicySelfTest
 
             return 1;
         }
+    }
+
+    private static void ProductDefaultsAreExplicit(
+        TextWriter output)
+    {
+        var presets =
+            CpuPowerProductDefaults.CreateDefaultPresetSet();
+
+        var policy =
+            new CpuPowerPresetPolicy(
+                presets);
+
+        var ac =
+            policy.Resolve(
+                PerformancePowerSourceKind.Ac);
+
+        var battery =
+            policy.Resolve(
+                PerformancePowerSourceKind.Battery);
+
+        Require(
+            ac.Request ==
+                new CpuPowerLimitRequest(35, 60),
+            "product AC default is 35/60 W");
+
+        Require(
+            battery.Request ==
+                new CpuPowerLimitRequest(8, 15),
+            "product Battery default is 8/15 W");
+
+        Require(
+            CpuPowerProductDefaults.IsConfigurable(35, 60) &&
+            CpuPowerProductDefaults.IsConfigurable(8, 15),
+            "product defaults remain inside target-specific configurable ranges");
+
+        output.WriteLine(
+            "PASS product CPU defaults are AC 35/60 W and Battery 8/15 W");
     }
 
     private static void BothPresetsAreIndependent(
@@ -169,10 +207,10 @@ internal static class CpuPowerPresetPolicySelfTest
                     new CpuPowerPresetSet(
                         new CpuPowerPreset(
                             true,
-                            9,
+                            7,
                             40),
                         CpuPowerPreset.Disabled)),
-            "PL1 below minimum is rejected");
+            "PL1 below 8 W product floor is rejected");
 
         RequireThrows<ArgumentOutOfRangeException>(
             () =>

@@ -1408,7 +1408,7 @@ internal sealed class CpuPowerLimiter : IDisposable
         CpuPowerLimitRequest request) =>
         double.IsFinite(request.Pl1Watts) &&
         double.IsFinite(request.Pl2Watts) &&
-        request.Pl1Watts >= 10 &&
+        request.Pl1Watts >= CpuPowerProductDefaults.MinimumPl1Watts &&
         request.Pl2Watts >=
             request.Pl1Watts;
 
@@ -1416,7 +1416,7 @@ internal sealed class CpuPowerLimiter : IDisposable
         CpuPowerLimitApplyPlan plan,
         CpuPowerLimitSnapshot baseline) =>
         plan.RequestedRaw != baseline.Raw &&
-        plan.AppliedPl1Watts >= 10 &&
+        plan.AppliedPl1Watts >= CpuPowerProductDefaults.MinimumPl1Watts &&
         plan.AppliedPl2Watts >=
             plan.AppliedPl1Watts &&
         plan.AppliedPl1Watts <

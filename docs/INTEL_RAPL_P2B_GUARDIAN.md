@@ -2026,10 +2026,43 @@ guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
 
-With the physical GPU-only Step 6F PASS complete, the next gate is to define
-the intended CPU AC/Battery product values explicitly, bind the existing
-CpuPowerLimiter/CpuPowerPresetTransitionController to the Guardian under the
-same journal/recovery rules, qualify CPU alone, and only then run the combined
-CPU+GPU source-transition sequence. The historical 20/40 W test value must not
-be promoted to a product default implicitly.
+With the physical GPU-only Step 6F PASS complete, the CPU product values are
+now explicitly defined below. The next hardware gate is CPU-only Guardian
+qualification, followed only after PASS by the combined CPU+GPU source-transition
+sequence.
+
+## Step 6G.0 — explicit CPU product defaults
+
+The operator selected the target CPU defaults for HP-8C40-9D0R1LA-F18:
+
+    AC      PL1 35 W / PL2 60 W
+    Battery PL1  8 W / PL2 15 W
+
+These values replace the previous "undefined product default" state. The
+historical 20/40 W result remains qualification evidence only and is not a
+product preset.
+
+Supporting software validation now accepts a minimum PL1 of 8 W so the Battery
+preset can be represented by CpuPowerPresetPolicy/CpuPowerLimiter. This is a
+software-policy change only. The existing P1 diagnostic harness keeps its own
+previously-qualified 10 W explicit-write floor; it is not silently widened by
+this product decision.
+
+For user-adjustable persisted configuration on the qualified target, the
+product configuration envelope is deliberately bounded below the observed
+45/115 W baseline:
+
+    PL1 8..44 W
+    PL2 8..114 W
+    PL2 >= PL1
+
+The selected 35/60 and 8/15 values are the defaults inside that envelope.
+Runtime Apply must still validate the current physical baseline and all existing
+journal/ownership/lock conditions before any future write.
+
+CPU Guardian hardware binding and physical CPU-only qualification remain
+closed at this point. productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
 

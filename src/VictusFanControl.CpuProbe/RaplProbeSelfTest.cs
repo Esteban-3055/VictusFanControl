@@ -121,6 +121,8 @@ internal static class RaplProbeSelfTest
             await GuardianProcessFixture.RunAsync(root);
             Require(CpuPowerLimiterSelfTest.Run(Console.Out) == 0,
                 "production CPU power limiter foundation");
+            Require(CpuPowerPresetPolicySelfTest.Run(Console.Out) == 0,
+                "production CPU AC/battery product preset policy");
             Console.WriteLine("Intel RAPL P1/P2 fixture suite: PASS (no hardware I/O).");
             return 0;
         }
