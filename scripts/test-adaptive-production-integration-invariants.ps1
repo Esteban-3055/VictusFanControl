@@ -58,4 +58,22 @@ if ([bool]$profile.control.adaptivePolicyPreparation.productionAdapterHardwareAu
 if ([bool]$profile.control.enabledByDefault) { throw 'P11 must not enable control by default.' }
 if ([bool]$profile.loadThermalM8Qualification.automaticPolicyEnabled) { throw 'P11 must not enable automatic policy.' }
 
+# The prepared path must reach the real native boundary while remaining gated.
+$main = Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\MainForm.cs') -Raw
+$worker = Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\TelemetryWorker.cs') -Raw
+$client = Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Hardware\Hp\HpOmenBiosWmiClient.cs') -Raw
+$backend = Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Hardware\Hp\Hp8C40FanControlBackend.cs') -Raw
+$gate = Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Control\Adaptive\Hp8C40PostM9UserControlGate.cs') -Raw
+Assert-Contains $main 'automaticHardware:' 'GUI must opt into the shared exact-target Automatic path.'
+Assert-Contains $main 'EvaluateAutomaticSafety(snapshot, raw, observe: false)' 'GUI must preview the same Automatic admission without counting.'
+Assert-Contains $worker 'await SnapshotProcessor(snapshot, cancellationToken)' 'Automatic processing must be awaited by the worker.'
+Assert-Contains $controller 'new FanDispatchAdmissionScope(EnsureAutomaticDispatchAllowed)' 'Automatic must carry admission through asynchronous backend preparation.'
+Assert-Contains $backend 'FanDispatchAdmissionScope.EnsureAllowed();' 'Production backend must recheck admission before its setter.'
+Assert-Contains $gate 'AutomaticExecutionAuthorized = false' 'Prepared integration must not promote Automatic.'
+$guardIndex = $client.IndexOf('FanDispatchAdmissionScope.EnsureNativeRequestAllowed(request);', [StringComparison]::Ordinal)
+$invokeIndex = $client.IndexOf('target.InvokeMethod(', [StringComparison]::Ordinal)
+if ($guardIndex -lt 0 -or $invokeIndex -lt 0 -or $guardIndex -ge $invokeIndex) {
+    throw 'The actual HP native invocation must be preceded by scoped Automatic admission.'
+}
+
 Write-Host 'HP 8C40 P11 adaptive production adapter invariant: PASS'

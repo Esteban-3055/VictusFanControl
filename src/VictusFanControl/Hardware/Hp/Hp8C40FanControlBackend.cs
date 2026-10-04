@@ -696,6 +696,7 @@ public sealed class Hp8C40FanControlBackend :
                     // Set this before WMI dispatch: on HP hardware the command
                     // may take effect even if WMI subsequently reports failure.
                     admissionStage = "dispatch WMI SetFanLevel";
+                    FanDispatchAdmissionScope.EnsureAllowed();
                     writeAttempted = true;
                     _hardware.SetFanLevel(cpuTarget, gpuTarget);
                 }

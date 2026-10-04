@@ -83,16 +83,7 @@ internal static class WmiFanExperiment
         ensureNormal();
         return snapshot;
     }
-    internal static AdaptiveFanPolicyConfig CreatePolicy()
-    {
-        var candidate = Hp8C40AdaptiveCandidateV1.Create();
-        IReadOnlyList<AdaptiveFanCurvePoint> Clamp(IReadOnlyList<AdaptiveFanCurvePoint> points) =>
-            points.Select(p => p with { Level = Math.Clamp(p.Level, 30, 50) }).ToArray();
-        return candidate with { MinimumLevel = 30,
-            CpuTemperatureCurve = Clamp(candidate.CpuTemperatureCurve), GpuTemperatureCurve = Clamp(candidate.GpuTemperatureCurve),
-            CpuPowerCurve = Clamp(candidate.CpuPowerCurve), GpuPowerCurve = Clamp(candidate.GpuPowerCurve),
-            CpuLoadCurve = Clamp(candidate.CpuLoadCurve), GpuLoadCurve = Clamp(candidate.GpuLoadCurve) };
-    }
+    internal static AdaptiveFanPolicyConfig CreatePolicy() => Hp8C40AutomaticPolicy.Create();
 
     internal static async Task<TelemetrySnapshot> AcquireThermalSnapshotAsync(
         HpWmiFanProofReader fans, Func<TelemetrySnapshot> readSnapshot, Action ensureNormal,

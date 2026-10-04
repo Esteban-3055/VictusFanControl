@@ -1,3 +1,5 @@
+using VictusFanControl.Hardware.Windows;
+using VictusFanControl.Runtime;
 using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
 
@@ -27,7 +29,12 @@ public sealed record AdaptiveFanProductionResult(
     int? EqualFanLevel,
     double? RawDemandLevel,
     FanAuthority Authority,
-    string Detail);
+    string Detail)
+{
+    public double? SmoothedDemandLevel { get; init; }
+    public double? ActuationDemandLevel { get; init; }
+    public bool ThermalOverride { get; init; }
+}
 
 /// <summary>
 /// Narrow production-facing adapter between the pure adaptive policy and
@@ -39,6 +46,11 @@ public sealed class AdaptiveFanProductionController
 {
     private readonly FanControlCoordinator _coordinator;
     private readonly AdaptiveFanPolicyEngine _engine;
+    private readonly AdaptiveFanInertiaPolicy? _preparedEngine;
+    private readonly HardwareIdentity? _automaticHardware;
+    private readonly Func<long>? _automaticMilliseconds;
+    private readonly Func<DateTimeOffset> _utcNow;
+    private Hp8C40AutomaticThermalAdmission? _automaticAdmission;
     private readonly AdaptiveFanControlIntentPlanner _planner = new();
     private readonly SemaphoreSlim _operationGate = new(1, 1);
     private readonly Hp8C40P16QualificationSession? _qualificationSession;
@@ -49,17 +61,31 @@ public sealed class AdaptiveFanProductionController
 
     private AdaptiveFanProductionMode _mode = AdaptiveFanProductionMode.Firmware;
     private int? _lastManualAppliedLevel;
+    private AdaptiveFanProductionResult? _lastAutomaticResult;
+    public AdaptiveFanProductionResult? LastAutomaticResult => Volatile.Read(ref _lastAutomaticResult);
 
     public AdaptiveFanProductionController(
         FanControlCoordinator coordinator,
         AdaptiveFanPolicyConfig config,
         bool manualExecutionAuthorized,
         bool automaticExecutionAuthorized,
-        Hp8C40P16QualificationSession? qualificationSession = null)
+        Hp8C40P16QualificationSession? qualificationSession = null,
+        HardwareIdentity? automaticHardware = null,
+        Func<long>? automaticMilliseconds = null,
+        Func<DateTimeOffset>? utcNow = null)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _engine = new AdaptiveFanPolicyEngine(
             config ?? throw new ArgumentNullException(nameof(config)));
+        _automaticHardware = automaticHardware;
+        _automaticMilliseconds = automaticMilliseconds;
+        _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+        if (automaticHardware is not null)
+        {
+            // Validate the exact target even while execution remains gated off.
+            _ = new Hp8C40AutomaticThermalAdmission(automaticHardware, automaticMilliseconds);
+            _preparedEngine = new AdaptiveFanInertiaPolicy(Hp8C40AutomaticPolicy.Create(config));
+        }
         _qualificationSession = qualificationSession;
         _manualExecutionAuthorized = manualExecutionAuthorized;
         _automaticExecutionAuthorized = automaticExecutionAuthorized;
@@ -71,6 +97,21 @@ public sealed class AdaptiveFanProductionController
     public bool ManualExecutionAuthorized =>
         _manualExecutionAuthorized && !(_qualificationSession?.IsInterrupted ?? false);
     public bool AutomaticExecutionAuthorized => _automaticExecutionAuthorized;
+    public bool AutomaticFreshAcquisitionRequired => _automaticExecutionAuthorized &&
+        _mode == AdaptiveFanProductionMode.Automatic && _automaticAdmission is { IsClosed: false };
+    public int? AutomaticAcquisitionBudgetMilliseconds
+    {
+        get
+        {
+            var admission = _automaticAdmission;
+            if (!_automaticExecutionAuthorized || _mode != AdaptiveFanProductionMode.Automatic ||
+                admission is null || admission.IsClosed) return null;
+            // Expiry can race this getter. A closed session uses ordinary read-only
+            // telemetry; it cannot terminate the worker or reopen write admission.
+            try { return admission.RemainingConfirmationMilliseconds; }
+            catch (InvalidOperationException) { return null; }
+        }
+    }
 
     public async ValueTask<AdaptiveFanProductionResult> SetModeAsync(
         AdaptiveFanProductionMode requestedMode,
@@ -140,6 +181,9 @@ public sealed class AdaptiveFanProductionController
 
             ResetPolicyStateLocked();
             _mode = requestedMode;
+            _automaticAdmission = requestedMode == AdaptiveFanProductionMode.Automatic && _automaticHardware is not null
+                ? new Hp8C40AutomaticThermalAdmission(_automaticHardware, _automaticMilliseconds)
+                : null;
 
             return Result(
                 restored
@@ -387,10 +431,33 @@ public sealed class AdaptiveFanProductionController
         }
     }
 
+    /// <summary>All Automatic consumers use this session; display/dispatch never count a sample.</summary>
+    public SafetyGateResult EvaluateAutomaticSafety(
+        TelemetrySnapshot? snapshot, SafetyGateResult raw, bool observe)
+    {
+        var admission = _automaticAdmission;
+        if (admission is null) return raw;
+        if (!observe && snapshot is not null && !ReferenceEquals(snapshot, admission.LastObservedSnapshot))
+        {
+            // A queued UI frame may hold either side of the worker's publication.
+            // It cannot count, authorize or poison that acquisition. Native
+            // dispatch uses strict Preview below, not this presentation branch.
+            _ = admission.IsClosed; // Still advance the monotonic expiry check.
+            return raw with { PreconditionsReady = false, CustomControlPermitted = false };
+        }
+        if (snapshot is null)
+        {
+            admission.Close("Automatic telemetry is missing.");
+            return raw with { PreconditionsReady = false, CustomControlPermitted = false };
+        }
+        return (observe ? admission.ObserveOrPreview(snapshot, raw) : admission.Preview(snapshot, raw)).EffectiveSafety;
+    }
+
     public async ValueTask<AdaptiveFanProductionResult> ProcessAutomaticAsync(
         TelemetrySnapshot snapshot,
         SafetyGateResult effectiveSafety,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<SafetyGateResult?>? refreshRawSafetyProvider = null)
     {
         if (!_automaticExecutionAuthorized)
         {
@@ -413,6 +480,39 @@ public sealed class AdaptiveFanProductionController
                     null,
                     null,
                     "Automatic policy is not the selected production fan mode.");
+            }
+
+            if (_automaticAdmission is not null)
+            {
+                // Rebuild stateless thermal/freshness checks even if the caller
+                // already supplied the effective confirmation decision.
+                if (effectiveSafety.SnapshotTimestamp != snapshot.Timestamp)
+                    _automaticAdmission.Close("Automatic policy refused a SafetyGate/telemetry epoch mismatch.");
+                var raw = SafetyGate.EvaluateForDisplay(_automaticHardware!,
+                    effectiveSafety.RuntimeHealthy ? SystemState.Healthy : SystemState.Degraded,
+                    snapshot, _utcNow(), effectiveSafety.FanWritePathPresent && _coordinator.BackendCanWrite)
+                    with { EvaluationSequence = effectiveSafety.EvaluationSequence };
+                effectiveSafety = EvaluateAutomaticSafety(snapshot, raw, observe: true);
+            }
+
+            void EnsureAutomaticDispatchAllowed()
+            {
+                if (_automaticAdmission is null) return;
+                var raw = refreshRawSafetyProvider is not null ? refreshRawSafetyProvider() :
+                    SafetyGate.EvaluateForDisplay(_automaticHardware!,
+                        effectiveSafety.RuntimeHealthy ? SystemState.Healthy : SystemState.Degraded,
+                        snapshot, _utcNow(), _coordinator.BackendCanWrite);
+                if (raw is null)
+                {
+                    _automaticAdmission.Close("Automatic dispatch raw SafetyGate is unavailable.");
+                    throw new InvalidOperationException("Automatic raw dispatch safety is unavailable.");
+                }
+                if (raw.SnapshotTimestamp != snapshot.Timestamp)
+                    _automaticAdmission.Close("Automatic dispatch was superseded by another telemetry epoch.");
+                var checkedSafety = _automaticAdmission.Preview(snapshot, raw).EffectiveSafety;
+                if (!checkedSafety.CustomControlPermitted)
+                    throw new InvalidOperationException("Automatic dispatch admission lost: " +
+                        string.Join("; ", checkedSafety.Reasons));
             }
 
             if (!effectiveSafety.SnapshotTimestamp.HasValue ||
@@ -449,12 +549,17 @@ public sealed class AdaptiveFanProductionController
                 _planner.NotionalCustom)
             {
                 _engine.Reset();
+                _preparedEngine?.Reset();
                 _planner.Reset();
             }
 
-            var decision = _engine.Evaluate(input);
+            var preparedDecision = _preparedEngine?.Evaluate(input);
+            var decision = preparedDecision is null ? _engine.Evaluate(input) :
+                new AdaptiveFanPolicyDecision(preparedDecision.Accepted, preparedDecision.EqualFanLevel,
+                    preparedDecision.RawDemandLevel, preparedDecision.Detail);
             if (!decision.Accepted || !decision.EqualFanLevel.HasValue)
             {
+                _automaticAdmission?.Close("Automatic policy refused the acquisition: " + decision.Detail);
                 ResetPolicyStateLocked();
                 return await RestoreIfOwnedLockedAsync(
                     $"Automatic policy refused the telemetry epoch: {decision.Detail}",
@@ -501,6 +606,7 @@ public sealed class AdaptiveFanProductionController
             {
                 try
                 {
+                    using var dispatchAdmission = new FanDispatchAdmissionScope(EnsureAutomaticDispatchAllowed);
                     var level = decision.EqualFanLevel.Value;
                     await _coordinator.ApplyAsync(
                         new FanCommand(
@@ -533,12 +639,27 @@ public sealed class AdaptiveFanProductionController
                 _ => AdaptiveFanProductionActionKind.Blocked
             };
 
-            return Result(
+            var result = Result(
                 action,
                 true,
                 decision.EqualFanLevel,
                 decision.RawDemandLevel,
-                $"{decision.Detail} {intent.Detail}");
+                $"{decision.Detail} {intent.Detail}") with
+            {
+                SmoothedDemandLevel = preparedDecision?.SmoothedDemandLevel,
+                ActuationDemandLevel = preparedDecision?.ActuationDemandLevel,
+                ThermalOverride = preparedDecision?.ThermalOverride ?? false
+            };
+            Volatile.Write(ref _lastAutomaticResult, result);
+            return result;
+        }
+        catch (Exception ex) when (_automaticAdmission is not null)
+        {
+            _automaticAdmission.Close("Automatic operation failed: " + ex.Message);
+            ResetPolicyStateLocked();
+            await RestoreIfOwnedLockedAsync("Automatic operation failed; session admission is closed.",
+                true, CancellationToken.None).ConfigureAwait(false);
+            throw;
         }
         finally
         {
@@ -555,6 +676,7 @@ public sealed class AdaptiveFanProductionController
         {
             ResetPolicyStateLocked();
             _mode = AdaptiveFanProductionMode.Firmware;
+            _automaticAdmission = null;
             return await RestoreIfOwnedLockedAsync(
                 reason,
                 true,
@@ -598,6 +720,7 @@ public sealed class AdaptiveFanProductionController
     private void ResetPolicyStateLocked()
     {
         _engine.Reset();
+        _preparedEngine?.Reset();
         _planner.Reset();
         _lastManualAppliedLevel = null;
     }
@@ -638,13 +761,12 @@ public sealed class AdaptiveFanProductionController
         bool executionAuthorized,
         int? equalFanLevel,
         double? rawDemandLevel,
-        string detail) =>
-        new(
-            _mode,
-            action,
-            executionAuthorized,
-            equalFanLevel,
-            rawDemandLevel,
-            _coordinator.Authority,
-            detail);
+        string detail)
+    {
+        var result = new AdaptiveFanProductionResult(_mode, action, executionAuthorized,
+            equalFanLevel, rawDemandLevel, _coordinator.Authority, detail);
+        if (_mode == AdaptiveFanProductionMode.Automatic)
+            Volatile.Write(ref _lastAutomaticResult, result);
+        return result;
+    }
 }

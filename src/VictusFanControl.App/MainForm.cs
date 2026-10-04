@@ -916,7 +916,8 @@ internal sealed class MainForm : Form
                 Hp8C40AdaptiveCandidateV1.Create(),
                 manualExecutionAuthorized,
                 automaticExecutionAuthorized,
-                _p16QualificationSession);
+                _p16QualificationSession,
+                automaticHardware: _targetProfile == Hp8C40TargetProfile.Instance ? _hardwareIdentity : null);
 
         var p13TargetDescription =
             _targetProfile is null
@@ -965,7 +966,12 @@ internal sealed class MainForm : Form
         _p13FanControlSurface.UpdateAuthority(
             _fanCoordinator.Authority);
 
-        _worker = new TelemetryWorker(modulesDirectory);
+        _worker = new TelemetryWorker(modulesDirectory)
+        {
+            FreshFanAcquisitionRequired = () => _fanProductionController.AutomaticFreshAcquisitionRequired,
+            AcquisitionBudgetMilliseconds = () => _fanProductionController.AutomaticAcquisitionBudgetMilliseconds,
+            SnapshotProcessor = ProcessAutomaticSnapshotAsync
+        };
         _worker.SnapshotAvailable += WorkerOnSnapshotAvailable;
         _worker.DiagnosticsAvailable += WorkerOnDiagnosticsAvailable;
         _worker.EventLogged += WorkerOnEventLogged;
@@ -2634,10 +2640,9 @@ internal sealed class MainForm : Form
             now,
             fanWritePathPresent);
 
-        return _thermalEmergencyConfirmation.Apply(
-            hardware,
-            snapshot,
-            raw);
+        if (_fanProductionController.Mode == AdaptiveFanProductionMode.Automatic)
+            return _fanProductionController.EvaluateAutomaticSafety(snapshot, raw, observe: true);
+        return _thermalEmergencyConfirmation.Apply(hardware, snapshot, raw);
     }
 
     private SafetyGateResult EvaluateDisplaySafety(
@@ -2654,10 +2659,9 @@ internal sealed class MainForm : Form
             now,
             fanWritePathPresent);
 
-        return _thermalEmergencyConfirmation.Preview(
-            hardware,
-            snapshot,
-            raw);
+        if (_fanProductionController.Mode == AdaptiveFanProductionMode.Automatic)
+            return _fanProductionController.EvaluateAutomaticSafety(snapshot, raw, observe: false);
+        return _thermalEmergencyConfirmation.Preview(hardware, snapshot, raw);
     }
 
     private async Task EnforceLatestFanSafetyAsync(string reason)
@@ -2831,6 +2835,28 @@ internal sealed class MainForm : Form
             UpdateSafetyStatus();
             UpdateTray();
         });
+    }
+
+    private async Task ProcessAutomaticSnapshotAsync(TelemetrySnapshot snapshot, CancellationToken cancellationToken)
+    {
+        _lastSnapshot = snapshot;
+        if (!_fanProductionController.AutomaticExecutionAuthorized ||
+            _fanProductionController.Mode != AdaptiveFanProductionMode.Automatic)
+            return;
+        try
+        {
+            var safety = EvaluateControlSafety(_hardwareIdentity, _worker.StateMachine.State,
+                snapshot, DateTimeOffset.UtcNow, _fanCoordinator.BackendCanWrite);
+            await _fanProductionController.ProcessAutomaticAsync(snapshot, safety, cancellationToken,
+                refreshRawSafetyProvider: () => ReferenceEquals(_lastSnapshot, snapshot)
+                    ? SafetyGate.EvaluateForDisplay(_hardwareIdentity, _worker.StateMachine.State,
+                        snapshot, DateTimeOffset.UtcNow, _fanCoordinator.BackendCanWrite)
+                    : null).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"Automatic session failed closed: {ex}");
+        }
     }
 
     private void WorkerOnSnapshotAvailable(object? sender, TelemetrySnapshot snapshot)

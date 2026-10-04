@@ -217,6 +217,7 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 // before backend dispatch.
                 commandCts.Token.ThrowIfCancellationRequested();
 
+                FanDispatchAdmissionScope.EnsureAllowed();
                 backendDispatchStarted = true;
                 await _backend.ApplyAsync(command, commandCts.Token).ConfigureAwait(false);
             }

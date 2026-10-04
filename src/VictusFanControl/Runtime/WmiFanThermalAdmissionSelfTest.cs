@@ -103,8 +103,8 @@ internal static class WmiFanThermalAdmissionSelfTest
             };
             Check(decision.Closed && !decision.EffectiveSafety.CustomControlPermitted,
                 "Epoch/clock discontinuity admitted: " + kind);
-            WmiFanThermalAdmissionDecision Regress() { clock--; return guard.Preview(high, Now()); }
-            WmiFanThermalAdmissionDecision Gap()
+            Hp8C40AutomaticThermalAdmissionDecision Regress() { clock--; return guard.Preview(high, Now()); }
+            Hp8C40AutomaticThermalAdmissionDecision Gap()
             {
                 // Below-threshold gap tests continuity independently of the hot deadline.
                 guard = Ready();

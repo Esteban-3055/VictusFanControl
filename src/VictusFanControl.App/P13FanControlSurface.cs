@@ -1,6 +1,7 @@
 using VictusFanControl.Control;
 using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Windows;
+using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Runtime;
 using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
@@ -64,7 +65,8 @@ internal sealed class P13FanControlSurface : UserControl
         _shadowEvaluator =
             new AdaptiveFanPolicyShadowEvaluator(
                 hardware,
-                _candidateConfig);
+                _candidateConfig,
+                preparedAutomatic: Hp8C40TargetProfile.Matches(hardware, out _));
         _controlSafetyProvider =
             controlSafetyProvider ??
             throw new ArgumentNullException(nameof(controlSafetyProvider));
@@ -100,6 +102,21 @@ internal sealed class P13FanControlSurface : UserControl
     {
         try
         {
+            if (_controller.Mode == AdaptiveFanProductionMode.Automatic)
+            {
+                // Display the actual controller decision, never advance a second
+                // policy/confirmation session while Automatic owns this epoch.
+                var active = _controller.LastAutomaticResult;
+                var admitted = active is { ExecutionAuthorized: true, Authority: FanAuthority.Custom } &&
+                    active.Action is AdaptiveFanProductionActionKind.EnterCustomAndApply or
+                        AdaptiveFanProductionActionKind.ApplyChangedLevel or AdaptiveFanProductionActionKind.HoldCustom;
+                _previewSafetyValue.Text = admitted ? "ACTIVE" : "BLOCKED / FIRMWARE";
+                _previewLevelValue.Text = active?.EqualFanLevel is int level ? $"{level}/{level}" : "—";
+                _previewRawDemandValue.Text = active?.RawDemandLevel?.ToString("0.00") ?? "—";
+                _previewIntentValue.Text = active?.Action.ToString() ?? "HoldFirmware";
+                _previewDetailValue.Text = active?.Detail ?? "Waiting for the first fresh Automatic epoch.";
+                return;
+            }
             var result =
                 _shadowEvaluator.Evaluate(
                     state,
@@ -293,7 +310,8 @@ internal sealed class P13FanControlSurface : UserControl
                 ? "OPEN"
                 : "CLOSED";
         _candidateValue.Text =
-            $"{Hp8C40AdaptiveCandidateV1.Id} — shadow-only / unvalidated";
+            $"{Hp8C40AdaptiveCandidateV1.Id} — shadow-only / unvalidated" +
+            (Hp8C40TargetProfile.Matches(_hardware, out _) ? "; prepared envelope 30–50" : "");
 
         state.Controls.Add(new Label { Text = "Requested mode:", AutoSize = true }, 0, 0);
         state.Controls.Add(_modeValue, 1, 0);
@@ -475,7 +493,7 @@ internal sealed class P13FanControlSurface : UserControl
             Margin = new Padding(3, 12, 3, 3),
             Text =
                 "P13.4 boundary: Automatic remains execution-gated CLOSED. The live recommendation shown above " +
-                "comes only from AdaptiveFanPolicyShadowEvaluator and cannot acquire Custom authority."
+                "uses the shared prepared policy in read-only preview and cannot acquire Custom authority."
         };
 
         root.Controls.Add(group, 0, 1);
@@ -497,7 +515,8 @@ internal sealed class P13FanControlSurface : UserControl
                 {
                     // Validate and construct completely before swapping; no production object changes.
                     var copy = AdaptiveCurveProfiles.Copy(profile);
-                    var evaluator = new AdaptiveFanPolicyShadowEvaluator(_hardware, AdaptiveCurveProfiles.Validate(copy));
+                    var evaluator = new AdaptiveFanPolicyShadowEvaluator(_hardware, AdaptiveCurveProfiles.Validate(copy),
+                        preparedAutomatic: Hp8C40TargetProfile.Matches(_hardware, out _));
                     _shadowEvaluator = evaluator;
                     _previewProfile = copy;
                     _candidateValue.Text = $"{copy.Name} — previsualización, sin autorización automática";

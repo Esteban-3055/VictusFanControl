@@ -31,22 +31,35 @@ public sealed class AdaptiveFanPolicyShadowEvaluator
 {
     private readonly HardwareIdentity _hardware;
     private readonly AdaptiveFanPolicyEngine _engine;
+    private readonly AdaptiveFanInertiaPolicy? _preparedEngine;
+    private readonly bool _preparedAutomatic;
+    private Hp8C40AutomaticThermalAdmission? _admission;
     private readonly AdaptiveFanControlIntentPlanner _planner = new();
     private readonly Hp8C40ThermalEmergencyConfirmation _thermalConfirmation =
         new();
 
     public AdaptiveFanPolicyShadowEvaluator(
         HardwareIdentity hardware,
-        AdaptiveFanPolicyConfig config)
+        AdaptiveFanPolicyConfig config,
+        bool preparedAutomatic = false)
     {
         _hardware = hardware;
         _engine = new AdaptiveFanPolicyEngine(config);
+        _preparedAutomatic = preparedAutomatic;
+        if (preparedAutomatic)
+        {
+            _preparedEngine = new AdaptiveFanInertiaPolicy(Hp8C40AutomaticPolicy.Create(config));
+            _admission = new Hp8C40AutomaticThermalAdmission(hardware);
+        }
     }
 
     public void Reset()
     {
         _thermalConfirmation.Reset();
         _engine.Reset();
+        _preparedEngine?.Reset();
+        // Reset is an explicit preview/profile/lifecycle restart, never a write authorization.
+        if (_preparedAutomatic) _admission = new Hp8C40AutomaticThermalAdmission(_hardware);
         _planner.Reset();
     }
 
@@ -63,15 +76,14 @@ public sealed class AdaptiveFanPolicyShadowEvaluator
                 evaluatedAt,
                 fanWritePathPresent: false);
 
-        var effective =
-            _thermalConfirmation.Apply(
-                _hardware,
-                snapshot,
-                raw);
+        var effective = _admission is not null
+            ? _admission.ObserveOrPreview(snapshot, raw).EffectiveSafety
+            : _thermalConfirmation.Apply(_hardware, snapshot, raw);
 
         if (!effective.PreconditionsReady)
         {
             _engine.Reset();
+            _preparedEngine?.Reset();
 
             var intent =
                 _planner.Plan(
@@ -109,14 +121,16 @@ public sealed class AdaptiveFanPolicyShadowEvaluator
                 GpuLoadPercent:
                     snapshot.GpuLoadPercent!.Value);
 
-        var decision =
-            _engine.Evaluate(
-                input);
+        var preparedDecision = _preparedEngine?.Evaluate(input);
+        var decision = preparedDecision is null ? _engine.Evaluate(input) :
+            new AdaptiveFanPolicyDecision(preparedDecision.Accepted, preparedDecision.EqualFanLevel,
+                preparedDecision.RawDemandLevel, preparedDecision.Detail);
 
         if (!decision.Accepted ||
             !decision.EqualFanLevel.HasValue)
         {
             _engine.Reset();
+            _preparedEngine?.Reset();
 
             var release =
                 _planner.Plan(

@@ -1,3 +1,4 @@
+using VictusFanControl.Control;
 using System.Management;
 using VictusFanControl.Runtime;
 
@@ -134,6 +135,7 @@ public sealed class HpOmenBiosWmiClient
 
             EcWmiInvestigationTrace.Record(trace, "wmi.invoke.begin", methodName);
             if (WmiFanExperimentBoundary.Enabled) WmiFanExperimentBoundary.EnsureRequestAllowed(request);
+            FanDispatchAdmissionScope.EnsureNativeRequestAllowed(request);
             WmiFanExperimentBoundary.MarkNativeStart(request);
             using var methodOutput = target.InvokeMethod(methodName, methodInput, invokeOptions)
                 ?? throw new HpBiosCallException(

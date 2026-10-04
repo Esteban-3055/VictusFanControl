@@ -17,6 +17,7 @@ public sealed class HardwareTelemetryReader : IDisposable
     private AcpiEcReader? _ec;
     private readonly HpWmiFanTelemetryReader? _wmiFans;
     private readonly bool _schedulePeriodicFanReads;
+    private HpWmiFanProofReader? _freshFans;
     private NvmlClient? _nvml;
     private readonly WindowsCpuLoadReader _cpuLoad = new();
 
@@ -92,7 +93,22 @@ public sealed class HardwareTelemetryReader : IDisposable
     public int ConsecutiveIncompleteSnapshots { get; private set; }
     public int MaxConsecutiveIncompleteSnapshots { get; private set; }
 
-    public TelemetrySnapshot ReadSnapshot()
+    public TelemetrySnapshot ReadSnapshot() => ReadSnapshot(_schedulePeriodicFanReads);
+
+    /// <summary>Prepared Automatic acquisition: fresh serialized RPM, then CPU/GPU, without scheduling a periodic poll.</summary>
+    public async ValueTask<TelemetrySnapshot> ReadFreshSnapshotAsync(CancellationToken cancellationToken)
+    {
+        if (_wmiFans is null)
+            throw new InvalidOperationException("Fresh Automatic acquisition requires exact HP 8C40/F.18.");
+        _freshFans ??= new HpWmiFanProofReader();
+        await _freshFans.ReadFreshAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var snapshot = ReadSnapshot(schedulePeriodicFanReads: false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return snapshot;
+    }
+
+    private TelemetrySnapshot ReadSnapshot(bool schedulePeriodicFanReads)
     {
         var timestamp = DateTimeOffset.UtcNow;
 
@@ -210,7 +226,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         HpWmiFanTelemetrySample? wmiFanSample = null;
         if (_wmiFans is not null)
         {
-            if (_schedulePeriodicFanReads)
+            if (schedulePeriodicFanReads)
                 wmiFanSample = _wmiFans.ReadCached();
             else
                 wmiFanSample = _wmiFans.ReadCached(scheduleQuery: false);

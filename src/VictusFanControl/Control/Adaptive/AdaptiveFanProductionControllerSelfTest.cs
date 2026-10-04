@@ -19,6 +19,7 @@ public static class AdaptiveFanProductionControllerSelfTest
         failures += await TestManualFreshSafetyRefreshAndRetryAsync(output);
         failures += await TestManualFreshSafetyExhaustionRestoresAsync(output);
         failures += await TestQualificationInterruptionAsync(output);
+        failures += await Hp8C40AutomaticIntegrationSelfTest.RunAsync(output);
 
         output.WriteLine();
         output.WriteLine(

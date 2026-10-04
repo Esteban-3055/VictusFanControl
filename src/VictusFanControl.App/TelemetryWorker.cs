@@ -49,6 +49,11 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     public RuntimeStateMachine StateMachine { get; }
 
+    // Prepared Automatic uses the same sequential worker, never a second polling loop.
+    public Func<bool>? FreshFanAcquisitionRequired { get; set; }
+    public Func<int?>? AcquisitionBudgetMilliseconds { get; set; }
+    public Func<TelemetrySnapshot, CancellationToken, Task>? SnapshotProcessor { get; set; }
+
     public event EventHandler<TelemetrySnapshot>? SnapshotAvailable;
     public event EventHandler<string>? DiagnosticsAvailable;
     public event EventHandler<string>? EventLogged;
@@ -253,6 +258,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                     continue;
                 }
 
+                if (SnapshotProcessor is not null)
+                    await SnapshotProcessor(snapshot, cancellationToken).ConfigureAwait(false);
                 SnapshotAvailable?.Invoke(this, snapshot);
                 PublishDiagnostics();
 
@@ -280,7 +287,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 RequestRecovery("Telemetry read threw an exception.");
             }
 
-            await WaitOrWakeAsync(NormalIntervalMs, cancellationToken).ConfigureAwait(false);
+            var pending = AcquisitionBudgetMilliseconds?.Invoke().HasValue == true;
+            await WaitOrWakeAsync(pending ? 0 : NormalIntervalMs, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -426,6 +434,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                     return;
                 }
 
+                if (SnapshotProcessor is not null)
+                    await SnapshotProcessor(snapshot, cancellationToken).ConfigureAwait(false);
                 SnapshotAvailable?.Invoke(this, snapshot);
                 PublishDiagnostics();
 
@@ -503,8 +513,16 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 }
             }
 
-            var snapshot =
-                _reader!.ReadSnapshot();
+            TelemetrySnapshot snapshot;
+            if (FreshFanAcquisitionRequired?.Invoke() == true)
+            {
+                using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var remaining = AcquisitionBudgetMilliseconds?.Invoke();
+                if (remaining.HasValue) budget.CancelAfter(Math.Max(0, remaining.Value));
+                snapshot = await _reader!.ReadFreshSnapshotAsync(budget.Token).ConfigureAwait(false);
+            }
+            else
+                snapshot = _reader!.ReadSnapshot();
 
             TouchCompletedRead();
             return snapshot;
