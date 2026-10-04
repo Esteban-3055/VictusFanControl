@@ -1891,10 +1891,19 @@ The preflight records HardwareWritesPerformed=false.
 The explicit physical entry point is:
 
     .\scripts\test-performance-guardian-6f-gpu.ps1 \
-      -ConfirmTargetProfile HP-8C40-9D0R1LA-F18
+      -ConfirmTargetProfile HP-8C40-9D0R1LA-F18 \
+      -ConfirmExclusiveGpuController
 
-The operator starts with AC connected. The harness builds, executes the
-read-only preflight and only then launches the detached Guardian qualification.
+The operator starts with AC connected. Because public NVML cannot query the
+exact installed arbitrary locked range or identify its writer, the physical
+entry point also requires an explicit -ConfirmExclusiveGpuController
+acknowledgement. That acknowledgement means the operator has verified that no
+pre-existing or concurrent nvidia-smi -lgc, MSI Afterburner or other
+locked-clock controller owns the GPU. The harness cannot infer this safely from
+current clock telemetry.
+
+The harness builds, executes the read-only preflight and only then launches the
+detached Guardian qualification.
 
 Expected sequence:
 

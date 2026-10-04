@@ -1,6 +1,7 @@
 param(
     [switch]$SelfTest,
     [string]$ConfirmTargetProfile,
+    [switch]$ConfirmExclusiveGpuController,
     [ValidateRange(15,300)]
     [int]$TimeoutSeconds = 60,
     [string]$OutputDirectory
@@ -35,6 +36,10 @@ if ($ConfirmTargetProfile -ne $expected) {
     throw "Physical Step 6F requires -ConfirmTargetProfile $expected"
 }
 
+if (-not $ConfirmExclusiveGpuController) {
+    throw 'Physical Step 6F requires -ConfirmExclusiveGpuController. Public NVML cannot prove that another locked-clock owner is absent.'
+}
+
 $args = @(
     '--gpu-gate-6f',
     '--confirm-target', $expected,
@@ -60,6 +65,7 @@ Write-Host 'STEP 6F GPU PHYSICAL QUALIFICATION' -ForegroundColor Yellow
 Write-Host 'Requirements:' -ForegroundColor Yellow
 Write-Host ' - Run PowerShell as Administrator.'
 Write-Host ' - Start with the charger CONNECTED.'
+Write-Host ' - -ConfirmExclusiveGpuController means YOU verified there is no pre-existing or concurrent locked-clock controller.'
 Write-Host ' - Do not run nvidia-smi -lgc, MSI Afterburner or another GPU clock controller during the test.'
 Write-Host ' - CPU RAPL is NOT enabled by this gate.'
 Write-Host ' - The harness will ask you to disconnect and reconnect the charger.'

@@ -748,6 +748,7 @@ internal static class PerformanceGuardianGpuGate6FQualification
                         "--gpu-gate-6f",
                         "--confirm-target",
                         TargetProfileId,
+                        "--confirm-exclusive-controller",
                         "--timeout-seconds",
                         "45",
                         "--output-directory",
@@ -771,7 +772,8 @@ internal static class PerformanceGuardianGpuGate6FQualification
                     {
                         "--gpu-gate-6f",
                         "--confirm-target",
-                        "WRONG"
+                        "WRONG",
+                        "--confirm-exclusive-controller"
                     },
                     out _,
                     out _),
@@ -784,6 +786,7 @@ internal static class PerformanceGuardianGpuGate6FQualification
                         "--gpu-gate-6f",
                         "--confirm-target",
                         TargetProfileId,
+                        "--confirm-exclusive-controller",
                         "--timeout-seconds",
                         "301"
                     },
@@ -851,6 +854,11 @@ internal static class PerformanceGuardianGpuGate6FQualification
             start,
             "--confirm-target",
             TargetProfileId);
+
+        Add(
+            start,
+            "--confirm-exclusive-controller",
+            "true");
 
         Add(
             start,
@@ -1124,6 +1132,9 @@ internal static class PerformanceGuardianGpuGate6FQualification
         string? confirm =
             null;
 
+        var exclusiveControllerConfirmed =
+            false;
+
         var timeoutSeconds =
             60;
 
@@ -1141,6 +1152,11 @@ internal static class PerformanceGuardianGpuGate6FQualification
                          args.Length:
                     confirm =
                         args[++index];
+                    break;
+
+                case "--confirm-exclusive-controller":
+                    exclusiveControllerConfirmed =
+                        true;
                     break;
 
                 case "--timeout-seconds"
@@ -1183,6 +1199,14 @@ internal static class PerformanceGuardianGpuGate6FQualification
             return false;
         }
 
+        if (!exclusiveControllerConfirmed)
+        {
+            error =
+                "--confirm-exclusive-controller is required because public NVML cannot prove that no external locked-clock owner is active.";
+
+            return false;
+        }
+
         if (timeoutSeconds is < 15 or > 300)
         {
             error =
@@ -1194,7 +1218,8 @@ internal static class PerformanceGuardianGpuGate6FQualification
         options =
             new OuterOptions(
                 timeoutSeconds,
-                outputDirectory);
+                outputDirectory,
+                ExclusiveControllerConfirmed: true);
 
         return true;
     }
@@ -1219,6 +1244,9 @@ internal static class PerformanceGuardianGpuGate6FQualification
 
         string? confirm =
             null;
+
+        var exclusiveControllerConfirmed =
+            false;
 
         for (var index = 1;
              index < args.Length;
@@ -1340,6 +1368,15 @@ internal static class PerformanceGuardianGpuGate6FQualification
                         value;
                     break;
 
+                case "--confirm-exclusive-controller":
+                    if (!bool.TryParse(
+                            value,
+                            out exclusiveControllerConfirmed))
+                    {
+                        return false;
+                    }
+                    break;
+
                 case "--target":
                     target =
                         value;
@@ -1435,7 +1472,8 @@ internal static class PerformanceGuardianGpuGate6FQualification
             !string.Equals(
                 confirm,
                 TargetProfileId,
-                StringComparison.Ordinal))
+                StringComparison.Ordinal) ||
+            !exclusiveControllerConfirmed)
         {
             return false;
         }
@@ -1510,7 +1548,7 @@ internal static class PerformanceGuardianGpuGate6FQualification
     private static void PrintUsage()
     {
         Console.WriteLine(
-            "VictusFanControl.PerformanceGuardian --gpu-gate-6f --confirm-target HP-8C40-9D0R1LA-F18 [--timeout-seconds 15..300] [--output-directory <path>]");
+            "VictusFanControl.PerformanceGuardian --gpu-gate-6f --confirm-target HP-8C40-9D0R1LA-F18 --confirm-exclusive-controller [--timeout-seconds 15..300] [--output-directory <path>]");
     }
 
     private static void Require(
@@ -1526,7 +1564,8 @@ internal static class PerformanceGuardianGpuGate6FQualification
 
     private readonly record struct OuterOptions(
         int TimeoutSeconds,
-        string? OutputDirectory);
+        string? OutputDirectory,
+        bool ExclusiveControllerConfirmed);
 
     private sealed record PreflightReport(
         int SchemaVersion,
