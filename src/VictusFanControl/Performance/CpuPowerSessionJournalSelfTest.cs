@@ -89,6 +89,33 @@ internal static class CpuPowerSessionJournalSelfTest
                 Directory.GetFiles(root, "*.tmp").Length == 0,
                 "no temporary journal files remain after replace");
 
+            using (var concurrentReader =
+                   new FileStream(
+                       path,
+                       FileMode.Open,
+                       FileAccess.Read,
+                       FileShare.ReadWrite |
+                       FileShare.Delete))
+            {
+                var pollingSafe =
+                    owned with
+                    {
+                        Generation = 6,
+                        UpdatedAtUtc =
+                            created.AddMilliseconds(1250)
+                    };
+
+                journal.Store(
+                    pollingSafe);
+
+                owned =
+                    pollingSafe;
+            }
+
+            Require(
+                journal.Load() == owned,
+                "journal replacement succeeds while an external polling reader is open");
+
             var presetSwitch =
                 owned with
                 {
@@ -192,7 +219,7 @@ internal static class CpuPowerSessionJournalSelfTest
             Require(!File.Exists(path), "journal delete removes resolved session");
 
             output.WriteLine(
-                "CPU power durable session journal self-test: PASS (atomic replace, target gate, phase invariants).");
+                "CPU power durable session journal self-test: PASS (atomic replace, concurrent poller sharing, target gate, phase invariants).");
             return 0;
         }
         catch (Exception ex)
