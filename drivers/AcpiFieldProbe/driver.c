@@ -1,5 +1,8 @@
 #include <ntddk.h>
+#pragma warning(push)
+#pragma warning(disable:4324) /* WDK headers intentionally pad aligned structures. */
 #include <wdf.h>
+#pragma warning(pop)
 #include <acpiioct.h>
 #include <initguid.h>
 #include "contract.h"

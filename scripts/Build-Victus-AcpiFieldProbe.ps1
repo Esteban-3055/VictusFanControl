@@ -21,15 +21,16 @@ if(-not $headers.Count){throw 'KMDF headers unavailable.'}
 $wdf=$headers[0].DirectoryName
 $wdfVersion=$headers[0].Directory.Name
 $km=(Get-ChildItem $PackageRoot -Filter ntddk.h -Recurse | Select-Object -First 1).DirectoryName
+$acpi=(Get-ChildItem $PackageRoot -Filter acpiioct.h -Recurse | Select-Object -First 1).DirectoryName
 $shared=(Get-ChildItem $PackageRoot -Filter ntdef.h -Recurse | Select-Object -First 1).DirectoryName
 $kmLib=(Get-ChildItem $PackageRoot -Filter ntoskrnl.lib -Recurse | Where-Object {$_.DirectoryName -match '[\\/]x64$'} | Select-Object -First 1).DirectoryName
 $wdfLib=(Get-ChildItem $PackageRoot -Filter WdfDriverEntry.lib -Recurse | Where-Object {$_.Directory.Name -eq $wdfVersion -and $_.DirectoryName -match '[\\/]x64[\\/]'} | Select-Object -First 1).DirectoryName
-if(-not $km -or -not $shared -or -not $kmLib -or -not $wdfLib){throw 'WDK include/library layout incomplete.'}
+if(-not $acpi -or -not $km -or -not $shared -or -not $kmLib -or -not $wdfLib){throw 'WDK include/library layout incomplete.'}
 $source=Join-Path $repo 'drivers\AcpiFieldProbe'
 Push-Location $OutputRoot
 try {
     $minor=([version]$wdfVersion).Minor
-    & cl.exe /nologo /c /TC /kernel /W4 /WX /GS /guard:cf /D_AMD64_ /DAMD64 /D_WIN64 /D_WIN32_WINNT=0x0A00 /DNTDDI_VERSION=0x0A000000 /DKMDF_VERSION_MAJOR=1 "/DKMDF_VERSION_MINOR=$minor" "/I$km" "/I$shared" "/I$wdf" /Fodriver.obj (Join-Path $source 'driver.c')
+    & cl.exe /nologo /c /TC /kernel /W4 /WX /GS /guard:cf /D_AMD64_ /DAMD64 /D_WIN64 /D_WIN32_WINNT=0x0A00 /DNTDDI_VERSION=0x0A000000 /DKMDF_VERSION_MAJOR=1 "/DKMDF_VERSION_MINOR=$minor" "/I$km" "/I$shared" "/I$acpi" "/I$wdf" /Fodriver.obj (Join-Path $source 'driver.c')
     if($LASTEXITCODE -ne 0){throw 'Kernel source compilation failed.'}
     & link.exe /nologo /driver /subsystem:native /entry:FxDriverEntry /nodefaultlib /machine:x64 /guard:cf /out:AcpiFieldProbe.sys driver.obj "/libpath:$kmLib" "/libpath:$wdfLib" ntoskrnl.lib hal.lib BufferOverflowFastFailK.lib WdfLdr.lib WdfDriverEntry.lib
     if($LASTEXITCODE -ne 0){throw 'Kernel link failed.'}
