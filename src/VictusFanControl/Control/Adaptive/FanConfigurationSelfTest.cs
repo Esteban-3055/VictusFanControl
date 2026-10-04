@@ -93,7 +93,7 @@ internal static class FanConfigurationSelfTest
         {
             var origin = DateTimeOffset.UtcNow;
             AdaptiveFanPolicyInput Input(int second, double cpu) => new(origin.AddSeconds(second), cpu, 0, 0, 35, 0, 0);
-            var policy = new AdaptiveFanInertiaPolicy(configuration.BuildPolicy(), configuration.Tuning);
+            var policy = new AdaptiveFanInertiaPolicy(configuration.BuildPolicy(), new AdaptiveFanTuning());
             Require(policy.Evaluate(Input(0, 45)).EqualFanLevel == 26);
             var hot = policy.Evaluate(Input(1, 89));
             Require(hot.ThermalOverride && hot.EqualFanLevel == 30 && hot.SmoothedDemandLevel == hot.RawDemandLevel);
@@ -111,7 +111,7 @@ internal static class FanConfigurationSelfTest
         Check("normal rise is faster, EMA retains precision, invalid input resets", () =>
         {
             var origin = DateTimeOffset.UtcNow;
-            var tuned = new AdaptiveFinalDemandFilter(configuration.Tuning);
+            var tuned = new AdaptiveFinalDemandFilter(new AdaptiveFanTuning());
             var legacy = new AdaptiveFinalDemandFilter();
             double Read(AdaptiveFinalDemandFilter f, int sec, double raw) => f.Evaluate(origin.AddSeconds(sec),raw,26,50,TimeSpan.FromSeconds(3),false);
             Read(tuned,0,26); Read(legacy,0,26);
@@ -120,6 +120,72 @@ internal static class FanConfigurationSelfTest
             try { Read(tuned,2,double.NaN); throw new ArgumentException("Invalid accepted."); }
             catch (InvalidOperationException) { }
             Require(Read(tuned,3,40) == 40);
+        });
+        Check("adaptive response survives storage; archived settings retain fixed descent", () =>
+        {
+            var copy = FanConfigurationStore.Copy(configuration);
+            Require(copy.Tuning.AdaptiveDescentEnabled && copy.Tuning.RiseTimeConstantSeconds == 8 &&
+                copy.Tuning.IncreaseConfirmationSeconds == 3);
+            var archived = System.Text.Json.Nodes.JsonNode.Parse(FanConfigurationStore.Serialize(configuration))!;
+            archived["tuning"]!.AsObject().Remove("adaptiveDescentEnabled");
+            Require(!FanConfigurationStore.Parse(archived.ToJsonString()).Tuning.AdaptiveDescentEnabled);
+            Reject(() => (configuration with { Tuning = configuration.Tuning with { SustainedLoadSeconds = double.NaN } }).BuildPolicy());
+            Reject(() => (configuration with { Tuning = configuration.Tuning with { ShortLoadDecreaseConfirmationSeconds = 20 } }).BuildPolicy());
+        });
+        Check("brief heat descends quickly; normal rise has inertia; sustained heat bypasses it", () =>
+        {
+            var origin = DateTimeOffset.UtcNow;
+            AdaptiveFanPolicyInput Input(int s, double cpu) => new(origin.AddSeconds(s),cpu,0,0,35,0,0);
+            var p = new AdaptiveFanInertiaPolicy(configuration.BuildPolicy(),configuration.Tuning);
+            Require(p.Evaluate(Input(0,45)).EqualFanLevel == 26);
+            Require(p.Evaluate(Input(1,89)).EqualFanLevel == 30);
+            for(var s=2;s<6;s++) Require(p.Evaluate(Input(s,45)).EqualFanLevel == 30);
+            Require(p.Evaluate(Input(6,45)).EqualFanLevel == 29);
+            p.Reset();
+            p.Evaluate(Input(0,45));
+            for(var s=1;s<4;s++) Require(p.Evaluate(Input(s,78)).EqualFanLevel == 26);
+            Require(p.Evaluate(Input(4,78)).EqualFanLevel == 27);
+            Require(p.Evaluate(Input(5,89)).ThermalOverride);
+        });
+        Check("20 minutes counts loaded intervals; idle gaps do not fabricate thermal history", () =>
+        {
+            var origin = DateTimeOffset.UtcNow;
+            var t = configuration.Tuning;
+            AdaptiveFanPolicyInput Input(int s, bool loaded) => new(origin.AddSeconds(s),60,loaded?30:0,0,45,0,0);
+            var h = new AdaptiveLoadHistory();
+            for(var s=0;s<1200;s++) h.Observe(Input(s,true),t);
+            Require(!h.SustainedLoadCooling && h.ObservedLoadSeconds == 1199);
+            h.Observe(Input(1200,true),t);
+            Require(h.SustainedLoadCooling);
+            h.BreakContinuity();
+            for(var s=1201;s<1321;s++) h.Observe(Input(s,false),t);
+            Require(h.SustainedLoadCooling); // First fresh sample starts, not completes, the idle interval.
+            h.Observe(Input(1321,false),t);
+            Require(!h.SustainedLoadCooling);
+            h.Reset();
+            for(var s=0;s<=50;s++) h.Observe(Input(s,true),t);
+            for(var s=51;s<=60;s++) h.Observe(Input(s,false),t);
+            h.Observe(Input(61,true),t);h.Observe(Input(62,true),t);
+            Require(h.ObservedLoadSeconds == 51);
+            for(var s=63;s<=94;s++) h.Observe(Input(s,false),t);
+            Require(h.ObservedLoadSeconds == 0);
+            h.Observe(Input(95,true) with { CpuPackagePowerW=0,GpuLoadPercent=60 },t);
+            h.Observe(Input(96,true) with { CpuPackagePowerW=0,GpuLoadPercent=60 },t);
+            Require(h.ObservedLoadSeconds == 1);
+        });
+        Check("qualified load selects slow descent; invalid samples cannot clear its history", () =>
+        {
+            var origin = DateTimeOffset.UtcNow;
+            AdaptiveFanPolicyInput Input(int s,bool loaded) => new(origin.AddSeconds(s),45,loaded?30:0,0,35,0,0);
+            var p = new AdaptiveFanInertiaPolicy(configuration.BuildPolicy(),configuration.Tuning);
+            for(var s=0;s<=1200;s++) p.Evaluate(Input(s,true));
+            Require(p.Evaluate(Input(1201,true) with {CpuEffectiveTemperatureC=89}).SustainedLoadCooling);
+            for(var s=1202;s<1218;s++) Require(p.Evaluate(Input(s,false)).EqualFanLevel == 30);
+            Require(p.Evaluate(Input(1218,false)).EqualFanLevel == 29);
+            Require(!p.Evaluate(Input(1219,false) with {CpuEffectiveTemperatureC=double.NaN}).Accepted);
+            Require(p.Evaluate(Input(1220,false)).SustainedLoadCooling);
+            p.Reset();
+            Require(!p.Evaluate(Input(1221,false)).SustainedLoadCooling);
         });
         var directory = Path.Combine(Path.GetTempPath(),"vfc-settings-"+Guid.NewGuid().ToString("N"));
         try

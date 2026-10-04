@@ -54,6 +54,25 @@ public sealed record AdaptiveFanTuning
     public bool RememberThermalDemand { get; init; } = false;
     public int NormalPollingDelayMilliseconds { get; init; } = 1000;
 
+    // Missing fields in archived settings preserve the prior fixed descent.
+    public bool AdaptiveDescentEnabled { get; init; } = false;
+    public double ShortLoadFallTimeConstantSeconds { get; init; } = 6;
+    public double ShortLoadDecreaseConfirmationSeconds { get; init; } = 4;
+    public double SustainedLoadSeconds { get; init; } = 1200;
+    public double LoadThresholdPercent { get; init; } = 50;
+    public double CpuLoadPowerThresholdW { get; init; } = 25;
+    public double GpuLoadPowerThresholdW { get; init; } = 40;
+    public double LoadPauseToleranceSeconds { get; init; } = 30;
+    public double SustainedLoadCooldownSeconds { get; init; } = 120;
+
+    public static AdaptiveFanTuning WithSmoothAdaptiveResponse(AdaptiveFanTuning tuning) => tuning with
+    {
+        RiseTimeConstantSeconds = 8, IncreaseConfirmationSeconds = 3,
+        AdaptiveDescentEnabled = true, ShortLoadFallTimeConstantSeconds = 6,
+        ShortLoadDecreaseConfirmationSeconds = 4,
+        FallTimeConstantSeconds = 20, DecreaseConfirmationSeconds = 16
+    };
+
     public void Validate()
     {
         static void Range(double value, double lo, double hi, string name)
@@ -66,6 +85,17 @@ public sealed record AdaptiveFanTuning
         Range(HottestPerformanceCoreCount, 1, 64, "P-Cores más calientes (N)");
         Range(MinimumLevel, 10, 50, "Nivel mínimo");
         Range(MaximumLevel, MinimumLevel, 50, "Nivel máximo");
+        Range(ShortLoadFallTimeConstantSeconds, 1, 60, "Filtro de bajada tras carga breve (s)");
+        Range(ShortLoadDecreaseConfirmationSeconds, 2, 60, "Confirmación de bajada tras carga breve (s)");
+        Range(SustainedLoadSeconds, 60, 3600, "Carga prolongada (s)");
+        Range(LoadThresholdPercent, 1, 100, "Umbral de carga (%)");
+        Range(CpuLoadPowerThresholdW, 1, 200, "Umbral de potencia CPU (W)");
+        Range(GpuLoadPowerThresholdW, 1, 250, "Umbral de potencia GPU (W)");
+        Range(LoadPauseToleranceSeconds, 0, 120, "Tolerancia a pausas de carga (s)");
+        Range(SustainedLoadCooldownSeconds, 10, 600, "Reposo tras carga prolongada (s)");
+        if (AdaptiveDescentEnabled && (ShortLoadFallTimeConstantSeconds > FallTimeConstantSeconds ||
+            ShortLoadDecreaseConfirmationSeconds > DecreaseConfirmationSeconds))
+            throw new InvalidDataException("La bajada tras carga breve debe ser al menos tan rápida como la prolongada.");
         Range(RiseTimeConstantSeconds, 0.5, 10, "Filtro de subida (s)");
         Range(FallTimeConstantSeconds, 1, 60, "Filtro de bajada (s)");
         Range(IncreaseConfirmationSeconds, 0, 5, "Confirmación de subida (s)");
@@ -82,7 +112,7 @@ public sealed record AdaptiveFanTuning
 public sealed record FanConfiguration
 {
     public int SchemaVersion { get; init; } = 1;
-    public AdaptiveFanTuning Tuning { get; init; } = new() { CpuTemperatureSource = CpuDemandTemperatureSource.CoreAverage };
+    public AdaptiveFanTuning Tuning { get; init; } = AdaptiveFanTuning.WithSmoothAdaptiveResponse(new() { CpuTemperatureSource = CpuDemandTemperatureSource.CoreAverage });
     public AdaptiveCurveProfile Profile { get; init; } = QuietProfile();
 
     public static AdaptiveCurveProfile QuietProfile()

@@ -6,6 +6,7 @@ namespace VictusFanControl.App;
 internal sealed class FanSettingsPanel : UserControl
 {
     private readonly Dictionary<string,NumericUpDown> _numbers = [];
+    private readonly CheckBox _adaptiveDescent = new() { Text = "Bajada según historial de carga", AutoSize = true };
     private readonly CheckBox _remember = new() { Text = "Conservar el pico térmico en el filtro normal", AutoSize = true };
     private readonly Label _status = new() { AutoSize = true, MaximumSize = new Size(850,0) };
     private readonly Label _profileName = new() { AutoSize = true };
@@ -42,14 +43,23 @@ internal sealed class FanSettingsPanel : UserControl
         Number(nameof(AdaptiveFanTuning.MinimumLevel),"Nivel mínimo · 100 RPM nominales/nivel",10,50);
         Number(nameof(AdaptiveFanTuning.MaximumLevel),"Nivel máximo",10,50);
         Number(nameof(AdaptiveFanTuning.RiseTimeConstantSeconds),"Filtro de subida (s)",.5m,10,.5m,1);
-        Number(nameof(AdaptiveFanTuning.FallTimeConstantSeconds),"Filtro de bajada (s)",1,60,.5m,1);
+        Number(nameof(AdaptiveFanTuning.FallTimeConstantSeconds),"Filtro de bajada prolongada / fija (s)",1,60,.5m,1);
         Number(nameof(AdaptiveFanTuning.IncreaseConfirmationSeconds),"Confirmar subida durante (s)",0,5,.5m,1);
-        Number(nameof(AdaptiveFanTuning.DecreaseConfirmationSeconds),"Confirmar bajada durante (s)",2,60,.5m,1);
+        Number(nameof(AdaptiveFanTuning.DecreaseConfirmationSeconds),"Confirmar bajada prolongada / fija (s)",2,60,.5m,1);
         Number(nameof(AdaptiveFanTuning.NormalMaximumUpStepLevels),"Paso normal de subida (niveles)",1,4);
         Number(nameof(AdaptiveFanTuning.MaximumDownStepLevels),"Paso de bajada (niveles)",1,2);
         Number(nameof(AdaptiveFanTuning.CpuThermalOverrideC),"Respuesta térmica CPU desde (°C)",75,85);
         Number(nameof(AdaptiveFanTuning.GpuThermalOverrideC),"Respuesta térmica GPU desde (°C)",68,78);
         Number(nameof(AdaptiveFanTuning.NormalPollingDelayMilliseconds),"Pausa entre lecturas normales (ms)",500,1500,100);
+        fields.Controls.Add(_adaptiveDescent,0,fields.RowCount++);fields.SetColumnSpan(_adaptiveDescent,2);
+        Number(nameof(AdaptiveFanTuning.ShortLoadFallTimeConstantSeconds),"Filtro de bajada tras carga breve (s)",1,60,.5m,1);
+        Number(nameof(AdaptiveFanTuning.ShortLoadDecreaseConfirmationSeconds),"Confirmar bajada tras carga breve (s)",2,60,.5m,1);
+        Number(nameof(AdaptiveFanTuning.SustainedLoadSeconds),"Tiempo bajo carga para bajada lenta (s)",60,3600,60);
+        Number(nameof(AdaptiveFanTuning.LoadThresholdPercent),"Umbral de utilización CPU o GPU (%)",1,100);
+        Number(nameof(AdaptiveFanTuning.CpuLoadPowerThresholdW),"Umbral de potencia CPU (W)",1,200);
+        Number(nameof(AdaptiveFanTuning.GpuLoadPowerThresholdW),"Umbral de potencia GPU (W)",1,250);
+        Number(nameof(AdaptiveFanTuning.LoadPauseToleranceSeconds),"Pausas toleradas entre cargas (s)",0,120);
+        Number(nameof(AdaptiveFanTuning.SustainedLoadCooldownSeconds),"Reposo para volver a bajada rápida (s)",10,600,10);
         fields.Controls.Add(_remember,0,fields.RowCount++);fields.SetColumnSpan(_remember,2);
         root.Controls.Add(fields,0,1);
         var curves=new TableLayoutPanel { Dock=DockStyle.Top,AutoSize=true,ColumnCount=1,Padding=new Padding(18,0,0,0) };
@@ -74,13 +84,20 @@ internal sealed class FanSettingsPanel : UserControl
         var buttons=new FlowLayoutPanel { Dock=DockStyle.Fill,AutoSize=true,Margin=new Padding(0,22,0,8) };
         var reset=new Button { Text="Restablecer",AutoSize=true };
         reset.Click+=(_,_)=>{_profile=FanConfiguration.QuietProfile();Set(new FanConfiguration().Tuning);_status.Text="Valores recomendados en borrador; aún no se guardaron.";};
+        var response=new Button { Text="Respuesta suave adaptativa",AutoSize=true };
+        response.Click+=(_,_)=>
+        {
+            try { Set(AdaptiveFanTuning.WithSmoothAdaptiveResponse(Draft().Tuning));
+                _status.Text="Respuesta adaptativa en borrador. Conserva curvas y fuente CPU; aplica y guarda para usarla."; }
+            catch(Exception ex) { _status.Text="Corrige el borrador antes de cambiar la respuesta: "+ex.Message; }
+        };
         var cancel=new Button { Text="Descartar",AutoSize=true };
         cancel.Click+=(_,_)=>{_profile=AdaptiveCurveProfiles.Copy(_applied.Profile);Set(_applied.Tuning);_status.Text="Borrador descartado.";};
         var save=new Button { Text="Aplicar y guardar",AutoSize=true };
         save.Click+=async(_,_)=>await ApplyAsync();
         var export=new Button { Text="Exportar prueba 30–50…",AutoSize=true };
         export.Click+=(_,_)=>Export();
-        buttons.Controls.AddRange(new System.Windows.Forms.Control[]{reset,cancel,save,export});
+        buttons.Controls.AddRange(new System.Windows.Forms.Control[]{reset,response,cancel,save,export});
         var footer=new TableLayoutPanel { Dock=DockStyle.Bottom,AutoSize=true,ColumnCount=1,RowCount=2,Padding=new Padding(16,0,16,12) };
         footer.ColumnStyles.Add(new(SizeType.Percent,100));
         footer.Controls.Add(buttons,0,0);footer.Controls.Add(_status,0,1);
@@ -94,6 +111,7 @@ internal sealed class FanSettingsPanel : UserControl
     {
         foreach(var field in _numbers)field.Value.Value=Convert.ToDecimal(typeof(AdaptiveFanTuning).GetProperty(field.Key)!.GetValue(tuning));
         _cpuSource.SelectedIndex=(int)tuning.CpuTemperatureSource;
+        _adaptiveDescent.Checked=tuning.AdaptiveDescentEnabled;
         _remember.Checked=tuning.RememberThermalDemand;RefreshCurve();
     }
     private FanConfiguration Draft()
@@ -104,7 +122,7 @@ internal sealed class FanSettingsPanel : UserControl
             var property=typeof(AdaptiveFanTuning).GetProperty(field.Key)!;
             property.SetValue(tuning,property.PropertyType==typeof(int)? (object)decimal.ToInt32(field.Value.Value):(object)decimal.ToDouble(field.Value.Value));
         }
-        tuning=tuning with {RememberThermalDemand=_remember.Checked,CpuTemperatureSource=(CpuDemandTemperatureSource)_cpuSource.SelectedIndex};
+        tuning=tuning with {AdaptiveDescentEnabled=_adaptiveDescent.Checked,RememberThermalDemand=_remember.Checked,CpuTemperatureSource=(CpuDemandTemperatureSource)_cpuSource.SelectedIndex};
         var c=new FanConfiguration {Tuning=tuning,Profile=AdaptiveCurveProfiles.Copy(_profile)};
         _=c.BuildPolicy();return c;
     }

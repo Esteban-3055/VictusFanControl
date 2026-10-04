@@ -14,7 +14,11 @@ public sealed record AdaptiveFanInertiaDecision(
     double? SmoothedDemandLevel,
     double? ActuationDemandLevel,
     bool ThermalOverride,
-    string Detail);
+    string Detail)
+{
+    public bool SustainedLoadCooling { get; init; }
+    public double ObservedLoadSeconds { get; init; }
+}
 
 /// <summary>
 /// Shared final-demand inertia for the experiment and prepared Automatic path.
@@ -27,6 +31,7 @@ public class AdaptiveFanInertiaPolicy
     private readonly AdaptiveFanPolicyEngine _demand;
     private readonly AdaptiveFinalDemandFilter _finalFilter;
     private readonly AdaptiveFanTuning? _tuning;
+    private readonly AdaptiveLoadHistory _loadHistory = new();
     private int? _current;
     private DateTimeOffset? _increaseSince;
     private int _increaseFloor;
@@ -58,22 +63,28 @@ public class AdaptiveFanInertiaPolicy
         {
             ClearConfirmation();
             _finalFilter.Reset();
+            _loadHistory.BreakContinuity();
             return new(false, null, demand.RawDemandLevel, null, null, false, demand.Detail);
         }
 
         // Every normal route (CPU/GPU heat, power, load) passes through the
         // same final-demand filter. Raw sensors are used only for validation,
         // demand calculation and the separately identified thermal override.
+        _loadHistory.Observe(input, _tuning);
+        var decreaseSeconds = _tuning is { AdaptiveDescentEnabled: true } && !_loadHistory.SustainedLoadCooling
+            ? _tuning.ShortLoadDecreaseConfirmationSeconds
+            : _tuning?.DecreaseConfirmationSeconds ?? Settings.DecreaseConfirmationSeconds;
         var thermalOverride = input.CpuEffectiveTemperatureC >= (_tuning?.CpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.CpuThermalOverrideC) ||
             input.GpuTemperatureC >= (_tuning?.GpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.GpuThermalOverrideC);
         var smoothed = _finalFilter.Evaluate(input.Timestamp, demand.RawDemandLevel!.Value,
-            _config.MinimumLevel, _config.MaximumLevel, _config.MaximumSampleGap, thermalOverride);
+            _config.MinimumLevel, _config.MaximumLevel, _config.MaximumSampleGap, thermalOverride, _loadHistory.SustainedLoadCooling);
         // Keep EMA history at full precision. Quantize only normal actuation;
         // raw thermal override must retain its existing conservative ceiling.
         var actuationDemand = thermalOverride ? smoothed : RoundNormalDemandToTenth(smoothed);
         var requested = Math.Clamp((int)Math.Ceiling(actuationDemand), _config.MinimumLevel, _config.MaximumLevel);
         AdaptiveFanInertiaDecision Accepted(string detail) =>
-            new(true, _current, demand.RawDemandLevel, smoothed, actuationDemand, thermalOverride, detail);
+            new(true, _current, demand.RawDemandLevel, smoothed, actuationDemand, thermalOverride, detail)
+            { SustainedLoadCooling = _loadHistory.SustainedLoadCooling, ObservedLoadSeconds = _loadHistory.ObservedLoadSeconds };
         if (!_current.HasValue)
         {
             _current = requested;
@@ -115,14 +126,14 @@ public class AdaptiveFanInertiaPolicy
         {
             _decreaseSince ??= input.Timestamp;
             var elapsed = (input.Timestamp - _decreaseSince.Value).TotalSeconds;
-            if (elapsed >= (_tuning?.DecreaseConfirmationSeconds ?? Settings.DecreaseConfirmationSeconds))
+            if (elapsed >= decreaseSeconds)
             {
                 _current = Math.Max(requested, current - _config.MaximumDownStepPerSample);
                 // Every subsequent step requires a new continuous window.
                 ClearConfirmation();
                 return Accepted($"Confirmed decrease to {_current}; sustained={elapsed:0.00}s; requested={requested}.");
             }
-            return Accepted($"Holding {current}; confirming decrease {elapsed:0.00}/{_tuning?.DecreaseConfirmationSeconds ?? Settings.DecreaseConfirmationSeconds}s.");
+            return Accepted($"Holding {current}; confirming decrease {elapsed:0.00}/{decreaseSeconds}s.");
         }
 
         _decreaseSince = null;
@@ -142,6 +153,7 @@ public class AdaptiveFanInertiaPolicy
     {
         _demand.Reset();
         _finalFilter.Reset();
+        _loadHistory.Reset();
         _current = null;
         ClearConfirmation();
     }

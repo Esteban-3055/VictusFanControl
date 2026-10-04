@@ -283,6 +283,7 @@ internal static class WmiFanExperiment
                 decisions.WriteLine(JsonSerializer.Serialize(new { Utc = DateTimeOffset.UtcNow,
                     decision.EqualFanLevel, decision.RawDemandLevel, decision.SmoothedDemandLevel,
                     decision.ActuationDemandLevel, decision.ThermalOverride,
+                    decision.SustainedLoadCooling, decision.ObservedLoadSeconds,
                     RawThermalEmergency = thermalDecision.RawSafety.ThermalEmergency,
                     EffectiveThermalEmergency = safety.ThermalEmergency,
                     thermalDecision.CpuHighSamples, thermalDecision.CpuConfirmationPending,

@@ -23,7 +23,7 @@ public class AdaptiveFinalDemandFilter
     public void Reset() { _lastTimestamp = null; _level = null; }
 
     public double Evaluate(DateTimeOffset timestamp, double rawDemand,
-        int minimum, int maximum, TimeSpan maximumGap, bool thermalOverride)
+        int minimum, int maximum, TimeSpan maximumGap, bool thermalOverride, bool sustainedLoadCooling = false)
     {
         var elapsed = _lastTimestamp.HasValue ? timestamp - _lastTimestamp.Value : TimeSpan.Zero;
         if (!double.IsFinite(rawDemand) || rawDemand < minimum || rawDemand > maximum ||
@@ -45,7 +45,9 @@ public class AdaptiveFinalDemandFilter
         {
             var tau = rawDemand > _level.Value
                 ? _tuning?.RiseTimeConstantSeconds ?? Settings.RiseTimeConstantSeconds
-                : _tuning?.FallTimeConstantSeconds ?? Settings.FallTimeConstantSeconds;
+                : _tuning is { AdaptiveDescentEnabled: true } && !sustainedLoadCooling
+                    ? _tuning.ShortLoadFallTimeConstantSeconds
+                    : _tuning?.FallTimeConstantSeconds ?? Settings.FallTimeConstantSeconds;
             var alpha = 1 - Math.Exp(-elapsed.TotalSeconds / tau);
             _level += alpha * (rawDemand - _level.Value);
         }

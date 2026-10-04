@@ -43,7 +43,7 @@ internal static class DashboardSelfTest
             navigation.Single(b=>b.Text=="Ajustes").PerformClick();Application.DoEvents();
             var numbers = (Dictionary<string,NumericUpDown>)typeof(FanSettingsPanel)
                 .GetField("_numbers",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(settings)!;
-            Require(numbers.Count==12 && controller.Mode==AdaptiveFanProductionMode.Firmware && applies==0);
+            Require(numbers.Count==20 && controller.Mode==AdaptiveFanProductionMode.Firmware && applies==0);
             var axis = Descendants(settings).OfType<ComboBox>().Single(c=>c.Items.Count==6);
             Require(axis.Items.Count==6);
             var source = Descendants(settings).OfType<ComboBox>().Single(c=>c.AccessibleName=="Fuente de temperatura CPU");
@@ -55,6 +55,12 @@ internal static class DashboardSelfTest
             source.SelectedIndex=(int)CpuDemandTemperatureSource.PackageOrHottestCore;
             for(var i=0;i<6;i++){axis.SelectedIndex=i;Application.DoEvents();}
             axis.SelectedIndex=0;
+            numbers[nameof(AdaptiveFanTuning.RiseTimeConstantSeconds)].Value=4;
+            Descendants(settings).OfType<Button>().Single(b=>b.Text=="Respuesta suave adaptativa").PerformClick();
+            Require(numbers[nameof(AdaptiveFanTuning.RiseTimeConstantSeconds)].Value==8 &&
+                numbers[nameof(AdaptiveFanTuning.IncreaseConfirmationSeconds)].Value==3 && applies==0);
+            numbers[nameof(AdaptiveFanTuning.SustainedLoadSeconds)].Value=1260;
+            numbers[nameof(AdaptiveFanTuning.ShortLoadDecreaseConfirmationSeconds)].Value=5;
             numbers[nameof(AdaptiveFanTuning.MinimumLevel)].Value=28;
             Require(controller.AutomaticConfiguration!.Tuning.MinimumLevel==26 && applies==0);
             var apply = (Task)typeof(FanSettingsPanel).GetMethod("ApplyAsync",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(settings,null)!;
@@ -67,6 +73,11 @@ internal static class DashboardSelfTest
             Require(controller.AutomaticConfiguration!.Tuning.CpuTemperatureSource==CpuDemandTemperatureSource.PackageOrHottestCore);
             Console.WriteLine("PASS: dashboard staged settings, six axes, async edit lock, Firmware-only apply and closed Automatic gate.");
             Require(controller.AutomaticConfiguration!.Tuning.HottestPerformanceCoreCount==2);
+            Require(controller.AutomaticConfiguration!.Tuning.AdaptiveDescentEnabled &&
+                controller.AutomaticConfiguration!.Tuning.SustainedLoadSeconds==1260 &&
+                controller.AutomaticConfiguration!.Tuning.ShortLoadDecreaseConfirmationSeconds==5);
+            numbers[nameof(AdaptiveFanTuning.SustainedLoadSeconds)].Value=1200;
+            numbers[nameof(AdaptiveFanTuning.ShortLoadDecreaseConfirmationSeconds)].Value=4;
             source.SelectedIndex=(int)CpuDemandTemperatureSource.HottestPerformanceCoresAverage;
             numbers[nameof(AdaptiveFanTuning.HottestPerformanceCoreCount)].Value=3;
             numbers[nameof(AdaptiveFanTuning.MinimumLevel)].Value=26;
