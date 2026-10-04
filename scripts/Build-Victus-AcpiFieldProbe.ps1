@@ -47,3 +47,6 @@ try {
     $binaries=@('AcpiFieldProbe.sys','contract-test.exe','probe-client.exe')
     [ordered]@{WdkPackage=$version;Kmdf=$wdfVersion;FieldProbesEnabled=$false;DriverInstalled=$false;DriverSigned=$false;ProductionReady=$false;Binaries=@($binaries | ForEach-Object {[ordered]@{file=$_;sha256=(Get-FileHash $_ -Algorithm SHA256).Hash}})} | ConvertTo-Json -Depth 6 | Set-Content build-manifest.json -Encoding UTF8
 } finally {Pop-Location}
+# The last native call intentionally returned 4 (no installed interface).
+# Its expected negative fixture must not become the build process exit code.
+$global:LASTEXITCODE=0
