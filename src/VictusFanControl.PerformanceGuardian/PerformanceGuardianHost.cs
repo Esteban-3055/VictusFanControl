@@ -955,6 +955,8 @@ internal sealed class PerformanceGuardianHost
                     source.ListenerRegistrations,
                 SourceNotificationSignals:
                     source.NotificationSignals,
+                SourceReconciliationSignals:
+                    source.ReconciliationSignals,
                 SourceDuplicateSignals:
                     source.DuplicateSignals,
                 SourceCpuDispatchAttempts:
@@ -1064,6 +1066,7 @@ internal sealed class PerformanceGuardianHost
         int SourceRuntimeStopCalls,
         int SourceListenerRegistrations,
         int SourceNotificationSignals,
+        int SourceReconciliationSignals,
         int SourceDuplicateSignals,
         int SourceCpuDispatchAttempts,
         int SourceGpuDispatchAttempts,

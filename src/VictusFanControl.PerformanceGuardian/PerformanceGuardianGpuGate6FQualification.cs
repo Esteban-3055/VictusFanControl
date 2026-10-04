@@ -383,6 +383,13 @@ internal static class PerformanceGuardianGpuGate6FQualification
                 guardianReport.GpuHardwareWriteAttempts == 4 &&
                 guardianReport.SourceCpuDispatchAttempts == 0 &&
                 guardianReport.SourceGpuDispatchAttempts == 2 &&
+                guardianReport.SourceNotificationSignals >= 2 &&
+                guardianReport.SourceReconciliationSignals == 1 &&
+                guardianReport.SourceDuplicateSignals >= 1 &&
+                string.Equals(
+                    guardianReport.InitialSource,
+                    PerformancePowerSourceKind.Ac.ToString(),
+                    StringComparison.Ordinal) &&
                 guardianReport.SourceLastSource ==
                     PerformancePowerSourceKind.Ac.ToString() &&
                 string.Equals(
@@ -1493,6 +1500,7 @@ internal static class PerformanceGuardianGpuGate6FQualification
         int SourceRuntimeStopCalls,
         int SourceListenerRegistrations,
         int SourceNotificationSignals,
+        int SourceReconciliationSignals,
         int SourceDuplicateSignals,
         int SourceCpuDispatchAttempts,
         int SourceGpuDispatchAttempts,
