@@ -1,0 +1,81 @@
+{
+  "SchemaVersion": 1,
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "Gate": "Step 6I combined Modern Standby lifecycle",
+  "Result": "PASS",
+  "StartedAtUtc": "2026-10-04T19:38:39.2108984+00:00",
+  "CompletedAtUtc": "2026-10-04T19:39:48.3661318+00:00",
+  "SourceStart": "AC",
+  "PreSleep": {
+    "Boundary": "SESSION_DISPLAY_STATUS_OFF",
+    "CapturedAtUtc": "2026-10-04T19:39:02.7033226+00:00",
+    "PrimaryDisplayReleaseCompleted": true,
+    "SuspendReleaseAttempts": 1,
+    "SuspendReleaseSuccesses": 1,
+    "SuspendFallbackReleaseAttempts": 0,
+    "CpuState": "Disabled",
+    "GpuState": "Disabled",
+    "CpuSnapshot": {
+      "Pl1Watts": 45,
+      "Pl2Watts": 115,
+      "Locked": false
+    },
+    "CpuJournalPresent": false,
+    "GpuJournalPresent": false
+  },
+  "Resume": {
+    "Boundary": "SESSION_DISPLAY_STATUS_ON",
+    "CapturedAtUtc": "2026-10-04T19:39:48.1795029+00:00",
+    "SuspendSignals": 1,
+    "ResumeAutomaticSignals": 1,
+    "ResumeSuspendSignals": 1,
+    "MaintenanceResumeSignalsSuppressed": 2,
+    "ResumeReacquireAttempts": 1,
+    "ResumeReacquireSuccesses": 1,
+    "CpuState": "Active",
+    "GpuState": "ActiveUnverified",
+    "CpuSnapshot": {
+      "Pl1Watts": 35,
+      "Pl2Watts": 60,
+      "Locked": false
+    },
+    "CpuJournalPresent": true,
+    "GpuJournalPresent": true
+  },
+  "FreshCpuSessionAfterResume": true,
+  "FreshGpuSessionAfterResume": true,
+  "Final": {
+    "GuardianExitCode": 0,
+    "ExitReason": "CLIENT_SHUTDOWN",
+    "FinalPhase": "Stopped",
+    "AcceptedRequests": 4,
+    "RejectedRequests": 0,
+    "EnableCalls": 2,
+    "ReleaseCalls": 2,
+    "CpuHardwareWriteAttempts": 4,
+    "GpuHardwareWriteAttempts": 4,
+    "CpuDomainState": "Disabled",
+    "GpuDomainState": "Disabled",
+    "CpuSnapshot": {
+      "Pl1Watts": 45,
+      "Pl2Watts": 115,
+      "Locked": false
+    },
+    "CpuJournalPresent": false,
+    "GpuJournalPresent": false,
+    "SourceFailure": null,
+    "Failure": null
+  },
+  "RawEvidenceSha256": {
+    "GuardianReport": "341282971274e041485b5363b44b004af7bcc5d4293ff7c8915878b95633d5c2",
+    "Preflight": "c578e338644a2e7c24c855b1d676670a48fca9b09391f6c0d503919be5caf25e",
+    "Qualification": "649950c532d091f981735a1803d6026e9a2d4f86447eaed42bb4bf840f600dae",
+    "StandbyLifecycleReport": "0adb4009f90b11d5b8b39555e7bd9d7fc4eee519b1065e811c76f332266ab616",
+    "StandbyPresleep": "34a711b1c5724553f820967e4bdf7b2f0eaea784703df3187bc6cbc829224b82",
+    "StandbyResume": "f4f6f9728b1cf8f124def9d7c287d0ebb7416f0650ca7be02f07c7ad33ae121b"
+  },
+  "ProductionHardwareWritesAuthorized": false,
+  "GuiIntegrationAuthorized": false,
+  "StartupPersistenceAuthorized": false,
+  "AutomaticProfileIntegrationAuthorized": false
+}
