@@ -140,3 +140,68 @@ Production gates remain closed:
 - `guiIntegrationAuthorized=false`
 - `startupPersistenceAuthorized=false`
 - `automaticProfileIntegrationAuthorized=false`
+
+
+## Step 3A — durable journal contract and store
+
+A production guardian cannot rely on in-memory ownership state. Step 3A adds a
+durable session journal contract without connecting it to physical RAPL writes
+yet.
+
+The journal schema records:
+
+- exact target profile id;
+- session id and monotonic generation;
+- phase;
+- immutable original baseline snapshot;
+- original user PL1/PL2 request;
+- latest exact applied raw value;
+- latest external handoff snapshot, when one exists;
+- conflict state, attempt count and active-time timestamps;
+- pending raw value for write-armed/reacquire/restoring phases;
+- creation/update UTC timestamps.
+
+Defined phases are:
+
+- `WriteArmed`
+- `Owned`
+- `Contested`
+- `ReacquireWriteArmed`
+- `Stability`
+- `Yielded`
+- `Restoring`
+- `Unresolved`
+
+The JSON store uses a new temporary file, `FileOptions.WriteThrough`,
+`Flush(flushToDisk: true)`, and on Windows a `MoveFileEx` replacement with
+`MOVEFILE_WRITE_THROUGH`. Invalid records are rejected before the current
+journal is replaced.
+
+The loader is exact-target gated. A journal created for another hardware
+profile is invalid and cannot be used to infer ownership or authorize a
+restore.
+
+Phase validation rejects impossible combinations such as:
+
+- Contested without an external handoff;
+- ReacquireWriteArmed without an in-flight consumed attempt;
+- Inactive conflict state carrying an attempt budget/history;
+- WriteArmed with a pending raw different from the intended applied raw.
+
+Step 3A intentionally does **not** resume automatic reacquisition after a
+guardian process crash. Durable state is being introduced first. Recovery
+semantics for a restarted guardian remain fail-closed and will be implemented
+as a separate gate: inspect current 0x610, restore only still-owned fields or
+preserve an external writer, never blindly resume the retry timer.
+
+Normal GUI/controller death is different: the future detached guardian is
+expected to remain alive and continue the already-running conflict policy.
+The journal exists for crash evidence and guardian recovery, not as permission
+for an arbitrary new process to continue writes.
+
+A focused `cpu-rapl` GitHub Actions workflow is also added for the isolated
+CPU branch. The repository-wide build can currently fail in fan/ACPI
+diagnostic smoke tests that are outside this branch's CPU scope; the CPU
+workflow gives a same-head signal for RAPL fixtures and compilation without
+weakening the later requirement to rebase onto the final fan/WMI base before
+production integration.

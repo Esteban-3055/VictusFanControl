@@ -10,6 +10,16 @@ internal enum CpuPowerConflictState
     Yielded
 }
 
+internal readonly record struct CpuPowerConflictSnapshot(
+    CpuPowerConflictState State,
+    int AttemptsUsed,
+    int MaxAttempts,
+    bool AttemptInFlight,
+    ulong? FirstDetectedActiveMilliseconds,
+    ulong? LastDetectedActiveMilliseconds,
+    ulong RetryStartedActiveMilliseconds,
+    ulong StabilityStartedActiveMilliseconds);
+
 /// <summary>
 /// Pure, hardware-free policy for bounded reacquisition after an external
 /// writer changes an owned CPU package power limit.
@@ -58,6 +68,17 @@ internal sealed class CpuPowerConflictPolicy
     internal bool AttemptInFlight => _attemptInFlight;
     internal ulong? FirstDetectedActiveMilliseconds { get; private set; }
     internal ulong? LastDetectedActiveMilliseconds { get; private set; }
+
+    internal CpuPowerConflictSnapshot CaptureSnapshot() =>
+        new(
+            State,
+            AttemptsUsed,
+            MaxReacquireAttempts,
+            _attemptInFlight,
+            FirstDetectedActiveMilliseconds,
+            LastDetectedActiveMilliseconds,
+            _retryStartedMilliseconds,
+            _stabilityStartedMilliseconds);
 
     internal void ObserveExternalChange()
     {

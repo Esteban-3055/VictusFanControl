@@ -1,0 +1,45 @@
+name: cpu-rapl
+
+on:
+  push:
+    branches: [ 'feature/intel-rapl-*' ]
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/VictusFanControl/Performance/**'
+      - 'src/VictusFanControl.CpuProbe/**'
+      - 'src/VictusFanControl/Hardware/Intel/**'
+      - 'src/VictusFanControl/Hardware/PawnIo/**'
+      - 'scripts/test-intel-rapl-p1.ps1'
+      - 'docs/INTEL_RAPL_P1.md'
+      - 'docs/INTEL_RAPL_P2*.md'
+      - 'release/intel-rapl-p1-qualification.json'
+      - '.github/workflows/cpu-rapl.yml'
+
+jobs:
+  cpu-rapl:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore VictusFanControl.sln
+
+      - name: CPU RAPL P1/P2/P2B fixtures (no hardware IO)
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "CPU RAPL fixture suite failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest -WriteTest -PL1Watts 20 -PL2Watts 40
+          if ($LASTEXITCODE -ne 0) { throw "CPU RAPL explicit 20/40 validation failed." }
+
+      - name: Build solution
+        run: dotnet build VictusFanControl.sln --configuration Release --no-restore

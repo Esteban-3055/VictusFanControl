@@ -12,6 +12,10 @@ internal static class CpuPowerLimiterSelfTest
                 CpuPowerConflictPolicySelfTest.Run(output) == 0,
                 "bounded external-writer conflict policy");
 
+            Require(
+                CpuPowerSessionJournalSelfTest.Run(output) == 0,
+                "durable CPU power session journal");
+
             NormalApplyVerifyRelease(output);
             NonOwnedMutationIsPreservedWithoutConflict(output);
             SuccessfulReacquireRestoresExternalHandoff(output);
