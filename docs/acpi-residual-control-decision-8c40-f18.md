@@ -60,3 +60,5 @@ Si el primer gate falla, la solución completa con este firmware y las interface
 - Microsoft: https://microsoft.github.io/windows-docs-rs/doc/windows/Wdk/System/SystemServices/struct.ACPI_INTERFACE_STANDARD2.html
 
 Estado: revisión estática completada, candidato GM11 aceptado para la sesión; broker no implementado/instalado ni calificado físicamente. Backend y whitelist de hardware permanecen en su alcance existente.
+
+Seguimiento: `acpi-broker-preflight-8c40-f18.md` documenta la investigación de interfaces y una captura de metadatos Windows/PnP para concretar el dispositivo del futuro broker. El inventario no evalúa FieldUnit ni cierra la guarda ECh completa.

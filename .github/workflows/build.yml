@@ -66,6 +66,34 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-Victus-AcpiCoverage.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'ACPI coverage PowerShell 5.1 self-test failed.' }
 
+      - name: ACPI broker metadata fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Export-Victus-AcpiBrokerPreflight.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Export-Victus-AcpiBrokerPreflight.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Broker preflight PowerShell 5.1 self-test failed.' }
+
+      - name: ACPI broker metadata rejection evidence on non-target Windows runner
+        shell: powershell
+        run: |
+          $probeRoot = Join-Path $env:RUNNER_TEMP ('broker-preflight-' + [Guid]::NewGuid().ToString('N'))
+          $rejected = $false
+          try { .\scripts\Export-Victus-AcpiBrokerPreflight.ps1 -OutputRoot $probeRoot } catch { $rejected = $true }
+          if (-not $rejected) { throw 'Non-target preflight accepted.' }
+          $folder = @(Get-ChildItem $probeRoot -Directory)
+          if ($folder.Count -ne 1) { throw 'Preflight evidence missing.' }
+          $summary = Get-Content (Join-Path $folder[0].FullName 'summary.json') -Raw | ConvertFrom-Json
+          if ($summary.MetadataCollected -or $summary.ProductionReady -or $summary.AcpiEvaluationPerformed -or $summary.DirectEcAccess -or $summary.FanSetters -or $summary.DriverInstalled) { throw 'Invalid rejected preflight summary.' }
+          if ($summary.Reason -notmatch 'probe requires HP 8C40') { throw 'Expected identity rejection missing.' }
+          if (Test-Path (Join-Path $folder[0].FullName 'pnputil.json')) { throw 'PnP listing ran before target qualification.' }
+          $zip = $folder[0].FullName + '.zip'
+          if ((Get-Content ($zip + '.sha256') -Raw).Trim() -ne (Get-FileHash $zip -Algorithm SHA256).Hash) { throw 'ZIP hash mismatch.' }
+          $manifest = Get-Content (Join-Path $folder[0].FullName 'manifest.json') -Raw | ConvertFrom-Json
+          foreach ($item in $manifest) {
+            $file = Get-Item (Join-Path $folder[0].FullName $item.file)
+            if ($item.bytes -ne $file.Length -or $item.sha256 -ne (Get-FileHash $file.FullName -Algorithm SHA256).Hash) { throw 'Manifest mismatch.' }
+          }
+
       - name: GM26 parent child rejection on non-target Windows runner
         shell: pwsh
         run: |
