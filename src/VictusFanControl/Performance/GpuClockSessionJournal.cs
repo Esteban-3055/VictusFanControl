@@ -300,9 +300,10 @@ internal sealed class JsonGpuClockSessionJournal :
             return;
         }
 
+        const int ErrorAccessDenied = 5;
         const int ErrorSharingViolation = 32;
         const int ErrorLockViolation = 33;
-        const int MaxReplaceAttempts = 5;
+        const int MaxReplaceAttempts = 8;
 
         for (var attempt = 1;
              attempt <= MaxReplaceAttempts;
@@ -321,6 +322,7 @@ internal sealed class JsonGpuClockSessionJournal :
                 Marshal.GetLastWin32Error();
 
             var transientShareFailure =
+                error == ErrorAccessDenied ||
                 error == ErrorSharingViolation ||
                 error == ErrorLockViolation;
 
@@ -329,7 +331,7 @@ internal sealed class JsonGpuClockSessionJournal :
             {
                 throw new Win32Exception(
                     error,
-                    "Durable GPU clock journal replace failed.");
+                    "Durable GPU clock journal replace failed (Win32 " + error + ").");
             }
 
             Thread.Sleep(
