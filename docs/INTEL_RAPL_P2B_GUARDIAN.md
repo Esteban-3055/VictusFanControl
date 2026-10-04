@@ -973,3 +973,82 @@ The legacy physical capture is consolidated in:
 No GPU power-limit setter is called by Step 5.9C.
 productionHardwareWritesAuthorized remains false.
 
+## Step 5.10A — GPU locked-clock ActiveUnverified session controller
+
+The product path returns to the originally selected GPU strategy:
+
+- AC: 210..1850 MHz;
+- Battery: 210..1200 MHz;
+- direct NVML locked-graphics-clock control;
+- no periodic nvidia-smi enforcement;
+- no GPU power-limit product path.
+
+The clock controller deliberately does NOT reuse CPU RAPL ownership semantics.
+Public NVML cannot read back the exact installed min/max locked range on this
+target, so a successful Set enters ActiveUnverified rather than Owned.
+
+A dedicated GPU journal is introduced with these phases:
+
+- ApplyWriteArmed;
+- ActiveUnverified;
+- PresetSwitchWriteArmed;
+- ReleaseWriteArmed;
+- RecoveryRequired.
+
+The GPU journal is physically and semantically independent from the CPU RAPL
+journal.
+
+### Normal in-process contract
+
+The session controller follows an exclusive-controller contract while active:
+VFC is the only application expected to modify locked graphics clocks during a
+managed session.
+
+Apply:
+    durable ApplyWriteArmed
+    -> exactly one SetGpuLockedClocks
+    -> durable ActiveUnverified
+
+AC <-> Battery switch:
+    durable PresetSwitchWriteArmed with old+pending request
+    -> exactly one SetGpuLockedClocks
+    -> durable ActiveUnverified
+
+Normal release:
+    durable ReleaseWriteArmed
+    -> exactly one ResetGpuLockedClocks
+    -> delete journal
+    -> Disabled
+
+No baseline reset occurs between enabled AC/Battery presets.
+
+### Explicit limitations
+
+Because exact range readback is unavailable:
+
+- there is no automatic external-writer detection;
+- there is no GPU 5x/30s reacquire loop;
+- there is no polling/re-enforcement loop;
+- ActiveUnverified must never be reported as exact ownership.
+
+### Crash, suspend and driver-reset behavior
+
+Any persisted GPU session journal found after process restart causes
+RecoveryRequired with zero automatic GPU writes. The restarted process does
+not reapply the preset and does not issue a blind ResetGpuLockedClocks.
+
+Suspend/resume, GPU_IS_LOST, driver reload or another event that invalidates
+the NVML session may call MarkAuthorityUnknown. That persists
+RecoveryRequired and performs zero Set/Reset calls.
+
+Dispose also performs zero implicit reset writes. A normal controlled shutdown
+must explicitly call Release while the original active process still owns the
+exclusive-controller contract.
+
+Fixtures prove journal-before-write ordering, one-write apply/switch/release,
+zero-write journal failures, stale-journal recovery blocking, authority-loss
+invalidation and zero-write Dispose behavior.
+
+This step remains software/fixture qualification only. The production NVML
+write gate is still closed and no new physical GPU write is authorized here.
+

@@ -41,6 +41,14 @@ internal static class CpuPowerLimiterSelfTest
                 "GPU NVML locked-clock backend contract");
 
             Require(
+                GpuClockSessionJournalSelfTest.Run(output) == 0,
+                "GPU clock durable session journal");
+
+            Require(
+                GpuClockSessionControllerSelfTest.Run(output) == 0,
+                "GPU clock ActiveUnverified session controller");
+
+            Require(
                 GpuPowerLimitQualificationSelfTest.Run(output) == 0,
                 "GPU NVML power-limit read qualification");
 
