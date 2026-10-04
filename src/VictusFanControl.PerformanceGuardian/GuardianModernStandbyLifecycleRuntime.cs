@@ -1422,20 +1422,26 @@ internal static class GuardianModernStandbyLifecycleRuntimeSelfTest
                         BatteryFlags: 1,
                         Status:
                             "FAKE_AC"),
+                PreviousSource:
+                    PerformancePowerSourceKind.Unknown,
+                Primed:
+                    true,
                 DuplicateSuppressed:
                     false,
                 CpuAttempted:
                     false,
-                GpuAttempted:
-                    false,
                 CpuResult:
-                    null,
-                GpuResult:
                     null,
                 CpuException:
                     null,
+                GpuAttempted:
+                    false,
+                GpuResult:
+                    null,
                 GpuException:
                     null,
+                Succeeded:
+                    true,
                 Status:
                     "FAKE_PRIME");
         }
