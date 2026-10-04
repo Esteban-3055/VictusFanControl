@@ -101,7 +101,13 @@ internal static class WmiFanExperiment
                 JsonSerializer.Serialize(file, value);
                 file.Flush(flushToDisk: true);
             }
-            File.Move(temp, path, overwrite: true);
+            // Windows MoveFileEx overwrite can fail with an open destination
+            // even when its reader shares deletion. ReplaceFile preserves the
+            // open old publication and atomically installs the new one.
+            // Each experiment pathname has one publisher; unexpected races
+            // or journal failures still reject before any dependent dispatch.
+            if (File.Exists(path)) File.Replace(temp, path, destinationBackupFileName: null);
+            else File.Move(temp, path);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }

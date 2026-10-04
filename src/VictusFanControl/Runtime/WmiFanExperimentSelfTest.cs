@@ -164,7 +164,16 @@ internal static class WmiFanExperimentSelfTest
                 var startup = new WmiFanHeartbeatMonitor(17752);
                 Check(!startup.Observe(path, At(29)) && startup.TimedOut(At(30.001)),
                     "Locked first heartbeat bypassed startup expiry.");
+                var rejected = false;
+                try { Publish(9999); }
+                catch (IOException) { rejected = true; }
+                catch (UnauthorizedAccessException) { rejected = true; }
+                Check(rejected && Directory.GetFiles(directory, "heartbeat.json.*.tmp").Length == 0,
+                    "Failed atomic publication used a fallback or left a temporary file.");
             }
+            using (var previous = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path)))
+                Check(previous.RootElement.GetProperty("ElapsedMs").GetInt64() == 2000,
+                    "Failed replacement erased or modified the previous durable publication.");
             Publish(2100);
             Check(monitor.Observe(path, At(20)), "Released sharing lock prevented the next observation.");
         }
