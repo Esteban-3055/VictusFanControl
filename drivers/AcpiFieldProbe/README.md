@@ -65,3 +65,12 @@ La CI ejecuta InfVerif /w y genera CAT mediante Inf2Cat /os:10_GE_X64. Son valid
 Gate de firma: se requiere una vía de Microsoft para este nuevo driver kernel, con cuenta Hardware Dev Center y certificado EV asociado según la política consultada. No disponemos de firma emitida ni se ha enviado una solicitud. El archivo CAT generado vincula miembros, pero todavía no está firmado. Un certificado local/autofirmado no satisface la ruta propuesta conservando la seguridad del equipo. No se compra un certificado ni se cambia seguridad como parte de esta tarea.
 
 Antes de un primer despliegue siguen pendientes: revisión/prueba de upper filter sobre EC sin function driver, preservación de PnP/power/remove y cancelaciones con Verifier en entorno adecuado; firma efectiva, rollback de extensión por identidad del paquete preservando filtros existentes, prueba de ACL y observación de eventos ACPI. Aun con todo ello la primera prueba sería `_STA` únicamente; FieldProbesEnabled=false permanece fijo. No hay installer listo para ejecutar.
+
+
+## Revisión PnP posterior al paquete eaf4528
+
+Se detectó que los errores al crear/abrir el target diagnóstico se propagaban desde PrepareHardware al arranque del EC. Ahora esas ramas eliminan el target parcial, enclavan Faulted y retornan éxito para el ciclo PnP; la sonda rechaza lecturas y no vuelve a abrir el target en posteriores Prepare. Los fallos de cola/interfaz después de crear el filtro también dejan la sonda inactiva. Caller bloquea el IOCTL privado cuando la identidad no está cualificada o hay un fallo, incluso si no se creó cola; evita que ese IOCTL llegue por passthrough a la pila base. No se cambia el passthrough de IOCTLs ajenos originados en kernel.
+
+Esto corrige las rutas opcionales identificadas en fuente; **no demuestra preservación del EC en runtime**. Los fallos de DriverEntry, recursos de identificación inicial, SDDL o WdfDeviceCreate siguen siendo posibles fallos de carga/adjunción. No afirmar inmunidad del dispositivo base ante cualquier fallo del filtro.
+
+La matriz de pruebas, retirada y alternativas de firma está en [acpi-probe-pnp-signing-review.md](../../docs/acpi-probe-pnp-signing-review.md). Sus casos PnP/Verifier aún no se ejecutaron. UMDF permanece como alternativa por investigar, sin DLL, INF ni prueba física UMDF implementados.

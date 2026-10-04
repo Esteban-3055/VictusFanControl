@@ -6,7 +6,7 @@ Class=Extension
 ClassGuid={e2f84ce7-8efa-411c-aa69-97454ca4cb57}
 ExtensionId={34fa772b-014e-45bf-a81c-1578dcaab46f}
 Provider=%Provider%
-DriverVer=10/04/2026,0.1.0.0
+DriverVer=10/04/2026,0.1.0.1
 CatalogFile=AcpiFieldProbe.cat
 PnpLockdown=1
 
