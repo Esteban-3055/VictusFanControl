@@ -177,6 +177,15 @@ internal static class PerformanceGuardianGpuGate6FQualification
             PerformancePowerSourceObservation? acReturnSeen =
                 null;
 
+            GpuClockSessionJournalRecord? initialGpuJournal =
+                null;
+
+            GpuClockSessionJournalRecord? batteryGpuJournal =
+                null;
+
+            GpuClockSessionJournalRecord? acReturnGpuJournal =
+                null;
+
             Exception? failure =
                 null;
 
@@ -232,6 +241,15 @@ internal static class PerformanceGuardianGpuGate6FQualification
                     enableResponse.GpuEnabled,
                     "Step 6F GPU-only ENABLE_SESSION failed.");
 
+                initialGpuJournal =
+                    await WaitForGpuJournalRequestAsync(
+                        journalPath,
+                        new GpuClockLimitRequest(
+                            210,
+                            1850),
+                        options.TimeoutSeconds,
+                        timeout.Token).ConfigureAwait(false);
+
                 Console.WriteLine();
                 Console.WriteLine(
                     "Step 6F GPU: AC preset 210..1850 MHz has been journaled/applied by the detached Guardian.");
@@ -244,16 +262,17 @@ internal static class PerformanceGuardianGpuGate6FQualification
                         options.TimeoutSeconds,
                         timeout.Token).ConfigureAwait(false);
 
-                // Keep a bounded dwell after direct Battery confirmation so
-                // the detached Guardian has time to consume the Windows
-                // notification and complete its journaled preset switch before
-                // the operator reconnects AC.
-                await Task.Delay(
-                    1500,
-                    timeout.Token).ConfigureAwait(false);
+                batteryGpuJournal =
+                    await WaitForGpuJournalRequestAsync(
+                        journalPath,
+                        new GpuClockLimitRequest(
+                            210,
+                            1200),
+                        options.TimeoutSeconds,
+                        timeout.Token).ConfigureAwait(false);
 
                 Console.WriteLine(
-                    "Battery confirmed by direct GetSystemPowerStatus. Guardian should now have selected 210..1200 MHz.");
+                    "Battery confirmed and Guardian journal reached ActiveUnverified 210..1200 MHz.");
                 Console.WriteLine(
                     $"Reconnect the charger now. Waiting up to {options.TimeoutSeconds} seconds for AC confirmation...");
 
@@ -263,12 +282,14 @@ internal static class PerformanceGuardianGpuGate6FQualification
                         options.TimeoutSeconds,
                         timeout.Token).ConfigureAwait(false);
 
-                // Give the Guardian message loop a bounded moment to process
-                // the same source transition observed by the qualification
-                // process before issuing cleanup.
-                await Task.Delay(
-                    1000,
-                    timeout.Token).ConfigureAwait(false);
+                acReturnGpuJournal =
+                    await WaitForGpuJournalRequestAsync(
+                        journalPath,
+                        new GpuClockLimitRequest(
+                            210,
+                            1850),
+                        options.TimeoutSeconds,
+                        timeout.Token).ConfigureAwait(false);
 
                 disableResponse =
                     await RoundTripAsync(
@@ -414,6 +435,12 @@ internal static class PerformanceGuardianGpuGate6FQualification
                         batterySeen,
                     AcReturnSeen:
                         acReturnSeen,
+                    InitialGpuJournal:
+                        initialGpuJournal,
+                    BatteryGpuJournal:
+                        batteryGpuJournal,
+                    AcReturnGpuJournal:
+                        acReturnGpuJournal,
                     EnableResponse:
                         enableResponse,
                     DisableResponse:
@@ -908,6 +935,68 @@ internal static class PerformanceGuardianGpuGate6FQualification
         throw new TimeoutException(
             "Timed out waiting for directly confirmed source " +
             expected +
+            ".");
+    }
+
+    private static async Task<GpuClockSessionJournalRecord> WaitForGpuJournalRequestAsync(
+        string journalPath,
+        GpuClockLimitRequest expected,
+        int timeoutSeconds,
+        CancellationToken cancellationToken)
+    {
+        var journal =
+            new JsonGpuClockSessionJournal(
+                journalPath,
+                TargetProfileId);
+
+        var deadline =
+            DateTimeOffset.UtcNow.AddSeconds(
+                timeoutSeconds);
+
+        GpuClockSessionJournalRecord? last =
+            null;
+
+        while (DateTimeOffset.UtcNow <
+            deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                last =
+                    journal.Load();
+            }
+            catch (IOException)
+            {
+                // Atomic durable replacement can briefly race a read. A
+                // qualification observer may retry reads, but never writes.
+            }
+
+            if (last is not null &&
+                last.Phase ==
+                    GpuClockJournalPhase.ActiveUnverified &&
+                last.CommittedRequest.HasValue &&
+                last.CommittedRequest.Value ==
+                    expected &&
+                !last.PendingRequest.HasValue)
+            {
+                return last;
+            }
+
+            await Task.Delay(
+                50,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        throw new TimeoutException(
+            "Timed out waiting for Guardian GPU durable ActiveUnverified request " +
+            expected.MinGraphicsClockMHz +
+            ".." +
+            expected.MaxGraphicsClockMHz +
+            " MHz. Last phase=" +
+            (last?.Phase.ToString() ?? "none") +
+            ", committed=" +
+            (last?.CommittedRequest?.ToString() ?? "none") +
             ".");
     }
 
@@ -1462,6 +1551,9 @@ internal static class PerformanceGuardianGpuGate6FQualification
         PerformancePowerSourceObservation Initial,
         PerformancePowerSourceObservation? BatterySeen,
         PerformancePowerSourceObservation? AcReturnSeen,
+        GpuClockSessionJournalRecord? InitialGpuJournal,
+        GpuClockSessionJournalRecord? BatteryGpuJournal,
+        GpuClockSessionJournalRecord? AcReturnGpuJournal,
         PerformanceGuardianResponse? EnableResponse,
         PerformanceGuardianResponse? DisableResponse,
         PerformanceGuardianResponse? ShutdownResponse,
