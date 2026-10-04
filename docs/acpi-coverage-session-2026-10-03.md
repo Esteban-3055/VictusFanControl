@@ -121,3 +121,19 @@ El padre muestra progreso aproximadamente cada cinco segundos y registra los avi
 Criterios de análisis: integridad/orden/completitud de llamadas, latencias, cambios de GM11 en ambos ventiladores, concordancia de tendencia con GM2D y recuperación. Sin variación suficiente la sesión es inconclusa para seguimiento dinámico. Un salto, valor repetido o discrepancia se investigará con los tiempos y la cuantización antes de atribuirlo a fallo. Healthy sólo valida contratos/observación, no correlación, frescura, precisión, estabilidad prolongada ni control. No reemplaza consignas 34h/35h, ECh, F4h ni pruebas de restauración.
 
 CI verifica las 18 rondas, seis etiquetas por fase, 109 solicitudes, 17 esperas entre rondas, decodificación y conservación de UTC/hex; un fallo en GM11 GPU de la ronda 7 detiene tras 43 solicitudes y conserva seis rondas completas. También verifica el modo corto existente y el rechazo del equipo no objetivo con la configuración de correlación.
+
+## Cierre de correlación física GM11
+
+Captura `ACPI-Coverage_20261003_202747_ead139.zip`, SHA256 `530ae010ab29bbaeb40395ff80e5ca2e04be61e65b7a95dd12127351efce3b53`; sidecar y siete miembros del manifiesto coinciden en tamaño/hash. 304.127208 s, 109 pares begin/response en el orden previsto, 18 rondas completas, child exit 0, sin ACPI 13/15 observados. Diagnósticos ECOK rc=6 (36), FFFS rc=0 y bit cero (18), RPM rc=0 (18), GM11 CPU/GPU rc=0 (36). GM11 CPU 7.0516–43.5978 ms; GPU 8.4152–25.2415 ms; GM2D 316.1005–377.8503 ms.
+
+| Fase planificada | GM11 CPU RPM | GM11 GPU RPM |
+|---|---:|---:|
+| Reposo, rondas 1–6 | 2685–2712 | 2361–2450 |
+| Carga, rondas 7–12 | 2702–3385 | 2385–2863 |
+| Recuperación, rondas 13–18 | 3395–3438 | 2867–2937 |
+
+Pearson entre las parejas secuenciales GM11/GM2D: CPU 0.989273, GPU 0.980090; diferencias medias absolutas 59.56/36.56 RPM. No son estimadores de precisión ni latencia: GM11 llegó 1.455566–1.972642 s después para CPU y 3.360480–3.946869 s para GPU; hay cuantización y posible distinta actualización. Los bytes iniciales permanecen 2F/3C.
+
+El usuario confirmó que abrió un juego, lo cerró al retirar la carga y atribuye las RPM elevadas restantes al calor. Se acepta la comprobación de respuestas válidas y seguimiento de subida de GM11 en esta sesión exacta. El cierre del juego y su explicación térmica son información del usuario; no se midieron temperatura/carga ni se observó la bajada. GM11 sigue como candidato de telemetría, sin promoción productiva, precisión absoluta, frescura garantizada, estabilidad prolongada ni cobertura de ownership/restore.
+
+La auditoría de requisitos residuales y decisión de arquitectura se registra en `acpi-residual-control-decision-8c40-f18.md`, con inventario estático reproducible por offsets en `acpi-residual-field-inventory-8c40-f18.json`.
