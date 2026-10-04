@@ -26,6 +26,12 @@ internal interface IGuardianPowerSourceRuntime :
 {
     GuardianPowerSourceRuntimeSnapshot Snapshot { get; }
 
+    PerformanceSourceDispatchResult Prime(
+        bool cpuEnabled,
+        bool gpuEnabled);
+
+    void ActivateListener();
+
     void Start(
         bool cpuEnabled,
         bool gpuEnabled);
@@ -67,6 +73,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
     private PerformanceSourceTransitionCoordinator? _coordinator;
     private IDisposable? _listener;
 
+    private bool _primed;
     private bool _active;
     private bool _cpuEnabled;
     private bool _gpuEnabled;
@@ -122,7 +129,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         }
     }
 
-    public void Start(
+    public PerformanceSourceDispatchResult Prime(
         bool cpuEnabled,
         bool gpuEnabled)
     {
@@ -137,12 +144,13 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
 
         lock (_sync)
         {
-            if (_active ||
+            if (_primed ||
+                _active ||
                 _listener is not null ||
                 _coordinator is not null)
             {
                 throw new InvalidOperationException(
-                    "Performance Guardian source runtime is already active.");
+                    "Performance Guardian source runtime is already primed or active.");
             }
 
             _startCalls++;
@@ -153,7 +161,8 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
                     _cpu,
                     _gpu);
 
-            // Direct query must happen before RegisterPowerSettingNotification.
+            // Direct query always precedes both initial hardware Apply and
+            // RegisterPowerSettingNotification.
             var prime =
                 coordinator.Prime();
 
@@ -177,10 +186,36 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
                     ? null
                     : prime.Observation.Status;
 
-            // Mark the session active only after the explicit Start call has
-            // primed source authority. If Windows delivers the current source
-            // immediately during registration, it is now a normal duplicate
-            // signal and can never become startup Apply authority.
+            _primed =
+                true;
+
+            return prime;
+        }
+    }
+
+    public void ActivateListener()
+    {
+        ThrowIfDisposed();
+
+        lock (_sync)
+        {
+            if (!_primed ||
+                _coordinator is null)
+            {
+                throw new InvalidOperationException(
+                    "Performance Guardian source runtime must be primed before listener activation.");
+            }
+
+            if (_active ||
+                _listener is not null)
+            {
+                throw new InvalidOperationException(
+                    "Performance Guardian source listener is already active.");
+            }
+
+            // Domain Apply has already completed before this point. Mark active
+            // before registration so an immediate Windows notification cannot
+            // be lost between registration and return from the listener factory.
             _active =
                 true;
 
@@ -197,15 +232,6 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
                 _active =
                     false;
 
-                _cpuEnabled =
-                    false;
-
-                _gpuEnabled =
-                    false;
-
-                _coordinator =
-                    null;
-
                 _failure =
                     ex.ToString();
 
@@ -215,6 +241,18 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
                 throw;
             }
         }
+    }
+
+    public void Start(
+        bool cpuEnabled,
+        bool gpuEnabled)
+    {
+        _ =
+            Prime(
+                cpuEnabled,
+                gpuEnabled);
+
+        ActivateListener();
     }
 
     public void Stop(
@@ -234,7 +272,8 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
 
         lock (_sync)
         {
-            if (!_active &&
+            if (!_primed &&
+                !_active &&
                 _listener is null &&
                 _coordinator is null)
             {
@@ -245,6 +284,9 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
 
             // Fence notification dispatch before unregistering the window.
             _active =
+                false;
+
+            _primed =
                 false;
 
             listener =

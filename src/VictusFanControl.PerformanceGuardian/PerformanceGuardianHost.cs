@@ -21,6 +21,7 @@ internal interface IGuardianDomainLifecycle
     ValueTask EnableAsync(
         bool cpuEnabled,
         bool gpuEnabled,
+        PerformancePowerSourceKind initialSource,
         CancellationToken cancellationToken);
 
     ValueTask ReleaseAsync(
@@ -38,10 +39,12 @@ internal sealed class RecordingGuardianDomainLifecycle :
     internal bool LastCpuEnabled { get; private set; }
     internal bool LastGpuEnabled { get; private set; }
     internal string? LastReleaseReason { get; private set; }
+    internal PerformancePowerSourceKind? LastInitialSource { get; private set; }
 
     public ValueTask EnableAsync(
         bool cpuEnabled,
         bool gpuEnabled,
+        PerformancePowerSourceKind initialSource,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -51,6 +54,8 @@ internal sealed class RecordingGuardianDomainLifecycle :
             cpuEnabled;
         LastGpuEnabled =
             gpuEnabled;
+        LastInitialSource =
+            initialSource;
 
         return ValueTask.CompletedTask;
     }
@@ -625,26 +630,39 @@ internal sealed class PerformanceGuardianHost
                 var domainsEnabled =
                     false;
 
+                var sourcePrimed =
+                    false;
+
                 try
                 {
+                    var prime =
+                        _sourceRuntime.Prime(
+                            result.CpuEnabled,
+                            result.GpuEnabled);
+
+                    sourcePrimed =
+                        true;
+
                     await _domains.EnableAsync(
                         result.CpuEnabled,
                         result.GpuEnabled,
+                        prime.Observation.Source,
                         stop.Token).ConfigureAwait(false);
 
                     domainsEnabled =
                         true;
 
-                    _sourceRuntime.Start(
-                        result.CpuEnabled,
-                        result.GpuEnabled);
+                    _sourceRuntime.ActivateListener();
                 }
                 catch (Exception ex)
                 {
                     try
                     {
-                        _sourceRuntime.Stop(
-                            "ENABLE_SESSION_ROLLBACK");
+                        if (sourcePrimed)
+                        {
+                            _sourceRuntime.Stop(
+                                "ENABLE_SESSION_ROLLBACK");
+                        }
                     }
                     catch
                     {
@@ -882,6 +900,8 @@ internal sealed class PerformanceGuardianHost
                     recording?.ReleaseCalls,
                 LastReleaseReason:
                     recording?.LastReleaseReason,
+                InitialSource:
+                    recording?.LastInitialSource.ToString(),
                 SourceRuntimeActive:
                     source.Active,
                 SourceRuntimeStartCalls:
@@ -988,6 +1008,7 @@ internal sealed class PerformanceGuardianHost
         int? EnableCalls,
         int? ReleaseCalls,
         string? LastReleaseReason,
+        string? InitialSource,
         bool SourceRuntimeActive,
         int SourceRuntimeStartCalls,
         int SourceRuntimeStopCalls,
