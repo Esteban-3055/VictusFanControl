@@ -474,6 +474,42 @@ physical RAPL backend, GUI integration, startup persistence or automatic
 profile authority.
 
 
+## Step 5.6B — guardian-restart recovery during preset switch
+
+RecoveryPlanner and RecoveryExecutor now understand PresetSwitchWriteArmed.
+A restarted guardian remains release-only and never completes, retries or
+resumes the old AC/DC source transition.
+
+The durable switch record intentionally carries:
+
+- AppliedRaw = old VFC-owned preset raw;
+- PendingRaw = new VFC-owned preset raw;
+- OriginalBaseline unchanged;
+- ExternalHandoff unchanged.
+
+Recovery classification is therefore:
+
+- old VFC raw present -> one conditional release-only restore;
+- new VFC raw present -> one conditional release-only restore;
+- release target already present -> clear journal, zero writes;
+- neither old nor new VFC-owned PL fields present -> preserve external owner
+  and clear journal;
+- VFC-owned old/new fields locked -> retain journal, zero writes.
+
+Before the recovery write the executor still persists Restoring, performs the
+compare-read and rechecks journal generation. It selects the old or new owned
+raw only to build the release plan; it never calls BuildApplyPlan,
+BuildReacquirePlan or BuildOwnedTransitionPlan.
+
+If hardware flips between the old and new VFC candidates during the recovery
+compare/readback race, the executor issues no second write. It restores the
+PresetSwitchWriteArmed evidence for a later release-only execution instead of
+mistaking the other VFC candidate for an external owner.
+
+Fixtures cover old raw, new raw and external raw at guardian restart. These are
+synthetic recovery tests only; no physical PASS is claimed.
+
+
 ## Step 5.5 — AC and Battery CPU preset foundation
 
 P2B now defines two independent CPU power preset slots:

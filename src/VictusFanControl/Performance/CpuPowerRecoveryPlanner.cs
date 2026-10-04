@@ -88,6 +88,14 @@ internal static class CpuPowerRecoveryPlanner
                     restoreTargetPresent,
                     "bounded reacquire may have completed before guardian death"),
 
+            CpuPowerJournalPhase.PresetSwitchWriteArmed =>
+                PlanPresetSwitchWriteArmed(
+                    journal,
+                    current,
+                    restoreTarget,
+                    restoreTargetPresent,
+                    ownership),
+
             CpuPowerJournalPhase.Stability =>
                 PlanPotentiallyOwned(
                     current,
@@ -122,6 +130,65 @@ internal static class CpuPowerRecoveryPlanner
                 throw new InvalidOperationException(
                     $"Unknown CPU power journal phase {journal.Phase}.")
         };
+    }
+
+
+    private static CpuPowerRecoveryPlan PlanPresetSwitchWriteArmed(
+        CpuPowerSessionJournalRecord journal,
+        CpuPowerLimitSnapshot current,
+        CpuPowerLimitSnapshot restoreTarget,
+        bool restoreTargetPresent,
+        ICpuPowerOwnershipComparer ownership)
+    {
+        if (!journal.PendingRaw.HasValue)
+        {
+            throw new InvalidOperationException(
+                "PresetSwitchWriteArmed journal is missing PendingRaw.");
+        }
+
+        if (restoreTargetPresent)
+        {
+            return new CpuPowerRecoveryPlan(
+                CpuPowerRecoveryDisposition.ClearAlreadyReleased,
+                current,
+                null,
+                "preset switch recovery found the release target already present");
+        }
+
+        var oldPresetOwned =
+            ownership.OwnedFieldsMatch(
+                journal.AppliedRaw,
+                current);
+
+        var newPresetOwned =
+            ownership.OwnedFieldsMatch(
+                journal.PendingRaw.Value,
+                current);
+
+        if (!oldPresetOwned &&
+            !newPresetOwned)
+        {
+            return PreserveExternal(
+                current,
+                "preset switch recovery found neither old nor new VFC-owned PL fields; preserve external owner");
+        }
+
+        if (current.Locked)
+        {
+            return new CpuPowerRecoveryPlan(
+                CpuPowerRecoveryDisposition.BlockedByLockRetainJournal,
+                current,
+                restoreTarget,
+                "preset switch recovery found VFC-owned PL fields locked; no unlock/bypass write is permitted");
+        }
+
+        return new CpuPowerRecoveryPlan(
+            CpuPowerRecoveryDisposition.RestoreOwnedThenClear,
+            current,
+            restoreTarget,
+            oldPresetOwned
+                ? "preset switch crashed with old VFC-owned PL fields still present; release-only recovery is allowed"
+                : "preset switch crashed after new VFC-owned PL fields appeared; release-only recovery is allowed");
     }
 
     private static CpuPowerRecoveryPlan PlanPotentiallyOwned(

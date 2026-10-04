@@ -12,6 +12,7 @@ internal static class CpuPowerRecoveryPlannerSelfTest
     private const ulong External2Raw = 0x3100;
     private const ulong ReacquiredRaw = 0x4000;
     private const ulong RestorePendingRaw = 0x5000;
+    private const ulong PresetSwitchNewRaw = 0x6000;
     private const ulong LockedAppliedRaw = 0xA000;
     private const ulong LockedExternalRaw = 0xB000;
 
@@ -31,6 +32,9 @@ internal static class CpuPowerRecoveryPlannerSelfTest
             ContestedNeverResumesReacquisition(ownership, output);
             ReacquireWriteArmedReleasesIfWriteHappened(ownership, output);
             ReacquireWriteArmedPreservesExternalIfWriteDidNotHappen(ownership, output);
+            PresetSwitchOldRawIsReleased(ownership, output);
+            PresetSwitchNewRawIsReleased(ownership, output);
+            PresetSwitchExternalRawIsPreserved(ownership, output);
             StabilityDoesNotResumeAfterGuardianDeath(ownership, output);
             YieldedNeverReacquiresEvenIfRequestedValueIsPresent(ownership, output);
             RestoringAlreadyCompletedClears(ownership, output);
@@ -279,6 +283,87 @@ internal static class CpuPowerRecoveryPlannerSelfTest
 
         output.WriteLine(
             "PASS armed reacquire that did not take effect is cleared without retry");
+    }
+
+
+    private static void PresetSwitchOldRawIsReleased(
+        ICpuPowerOwnershipComparer ownership,
+        TextWriter output)
+    {
+        var journal =
+            Record(
+                CpuPowerJournalPhase.PresetSwitchWriteArmed,
+                external: null,
+                conflict: Inactive(),
+                pendingRaw: PresetSwitchNewRaw,
+                appliedRaw: AppliedRaw);
+
+        var plan =
+            CpuPowerRecoveryPlanner.Plan(
+                journal,
+                Snapshot(AppliedRaw),
+                ownership);
+
+        RequireRestore(
+            plan,
+            BaselineRaw,
+            "preset switch old raw");
+
+        output.WriteLine(
+            "PASS recovery releases the old VFC preset after crash during source switch");
+    }
+
+    private static void PresetSwitchNewRawIsReleased(
+        ICpuPowerOwnershipComparer ownership,
+        TextWriter output)
+    {
+        var journal =
+            Record(
+                CpuPowerJournalPhase.PresetSwitchWriteArmed,
+                external: Snapshot(ExternalRaw),
+                conflict: Inactive(),
+                pendingRaw: PresetSwitchNewRaw,
+                appliedRaw: AppliedRaw);
+
+        var plan =
+            CpuPowerRecoveryPlanner.Plan(
+                journal,
+                Snapshot(PresetSwitchNewRaw),
+                ownership);
+
+        RequireRestore(
+            plan,
+            ExternalRaw,
+            "preset switch new raw");
+
+        output.WriteLine(
+            "PASS recovery releases the new VFC preset to ExternalHandoff after crash");
+    }
+
+    private static void PresetSwitchExternalRawIsPreserved(
+        ICpuPowerOwnershipComparer ownership,
+        TextWriter output)
+    {
+        var journal =
+            Record(
+                CpuPowerJournalPhase.PresetSwitchWriteArmed,
+                external: null,
+                conflict: Inactive(),
+                pendingRaw: PresetSwitchNewRaw,
+                appliedRaw: AppliedRaw);
+
+        var plan =
+            CpuPowerRecoveryPlanner.Plan(
+                journal,
+                Snapshot(External2Raw),
+                ownership);
+
+        RequirePreserve(
+            plan,
+            "external raw during preset switch recovery");
+
+        output.WriteLine(
+            "PASS recovery preserves an external owner instead of finishing an old preset switch");
     }
 
     private static void StabilityDoesNotResumeAfterGuardianDeath(
@@ -611,6 +696,13 @@ internal static class CpuPowerRecoveryPlannerSelfTest
                     raw,
                     35,
                     70,
+                    false),
+
+            PresetSwitchNewRaw =>
+                new(
+                    raw,
+                    15,
+                    30,
                     false),
 
             LockedAppliedRaw =>

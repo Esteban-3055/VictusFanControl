@@ -183,6 +183,19 @@ internal sealed class CpuPowerRecoveryExecutor
                 "CPU_POWER_RECOVERY_LOCKED_RESTORE_TARGET_REJECTED");
         }
 
+        var ownedRaw =
+            ResolveOwnedRawForRelease(
+                record,
+                initialCurrent);
+
+        if (!ownedRaw.HasValue)
+        {
+            return Retained(
+                CpuPowerRecoveryExecutionDisposition.UnresolvedJournalRetained,
+                writeAttempted: false,
+                "CPU_POWER_RECOVERY_OWNED_RAW_NOT_IDENTIFIABLE");
+        }
+
         CpuPowerLimitRestorePlan backendPlan;
 
         try
@@ -190,7 +203,7 @@ internal sealed class CpuPowerRecoveryExecutor
             backendPlan =
                 _backend.PlanRestore(
                     restoreTarget,
-                    record.AppliedRaw,
+                    ownedRaw.Value,
                     initialCurrent);
         }
         catch (Exception ex)
@@ -230,6 +243,9 @@ internal sealed class CpuPowerRecoveryExecutor
 
                 Phase =
                     CpuPowerJournalPhase.Restoring,
+
+                AppliedRaw =
+                    ownedRaw.Value,
 
                 Conflict =
                     NormalizeConflictForRecovery(
@@ -275,6 +291,7 @@ internal sealed class CpuPowerRecoveryExecutor
             initialCurrent.Raw)
         {
             return ResolveConcurrentHardwareChange(
+                record,
                 restoring,
                 compareCurrent);
         }
@@ -297,6 +314,7 @@ internal sealed class CpuPowerRecoveryExecutor
         catch (Exception ex)
         {
             return ResolveAfterWriteProblem(
+                record,
                 restoring,
                 writeAttempted: true,
                 "CPU_POWER_RECOVERY_WRITE_ERROR: " +
@@ -329,6 +347,7 @@ internal sealed class CpuPowerRecoveryExecutor
         }
 
         return ResolveObservedPostWriteState(
+            record,
             restoring,
             final,
             writeAttempted: true,
@@ -336,9 +355,22 @@ internal sealed class CpuPowerRecoveryExecutor
     }
 
     private CpuPowerRecoveryExecutionResult ResolveConcurrentHardwareChange(
+        CpuPowerSessionJournalRecord originalRecord,
         CpuPowerSessionJournalRecord restoring,
         CpuPowerLimitSnapshot current)
     {
+        if (IsPresetSwitchOwnedCandidate(
+                originalRecord,
+                current))
+        {
+            return RetainPresetSwitchRecoveryEvidence(
+                originalRecord,
+                restoring,
+                current,
+                writeAttempted: false,
+                "Hardware changed between recovery planning and compare-read to the other VFC preset candidate; no write was issued.");
+        }
+
         CpuPowerRecoveryPlan replanned;
 
         try
@@ -387,6 +419,7 @@ internal sealed class CpuPowerRecoveryExecutor
     }
 
     private CpuPowerRecoveryExecutionResult ResolveAfterWriteProblem(
+        CpuPowerSessionJournalRecord originalRecord,
         CpuPowerSessionJournalRecord restoring,
         bool writeAttempted,
         string error)
@@ -409,6 +442,7 @@ internal sealed class CpuPowerRecoveryExecutor
         }
 
         return ResolveObservedPostWriteState(
+            originalRecord,
             restoring,
             observed,
             writeAttempted,
@@ -416,11 +450,25 @@ internal sealed class CpuPowerRecoveryExecutor
     }
 
     private CpuPowerRecoveryExecutionResult ResolveObservedPostWriteState(
+        CpuPowerSessionJournalRecord originalRecord,
         CpuPowerSessionJournalRecord restoring,
         CpuPowerLimitSnapshot observed,
         bool writeAttempted,
         string prefix)
     {
+        if (IsPresetSwitchOwnedCandidate(
+                originalRecord,
+                observed))
+        {
+            return RetainPresetSwitchRecoveryEvidence(
+                originalRecord,
+                restoring,
+                observed,
+                writeAttempted,
+                prefix +
+                " | old/new VFC preset candidate is still present; no second recovery write is permitted.");
+        }
+
         CpuPowerRecoveryPlan replanned;
 
         try
@@ -476,6 +524,96 @@ internal sealed class CpuPowerRecoveryExecutor
                     writeAttempted,
                     prefix +
                     " | requested PL fields still require release; executor will not issue a second write.");
+        }
+    }
+
+
+    private ulong? ResolveOwnedRawForRelease(
+        CpuPowerSessionJournalRecord record,
+        CpuPowerLimitSnapshot current)
+    {
+        if (record.Phase !=
+            CpuPowerJournalPhase.PresetSwitchWriteArmed)
+        {
+            return record.AppliedRaw;
+        }
+
+        if (!record.PendingRaw.HasValue)
+            return null;
+
+        if (_backend.OwnedFieldsMatch(
+                record.PendingRaw.Value,
+                current))
+        {
+            return record.PendingRaw.Value;
+        }
+
+        if (_backend.OwnedFieldsMatch(
+                record.AppliedRaw,
+                current))
+        {
+            return record.AppliedRaw;
+        }
+
+        return null;
+    }
+
+    private bool IsPresetSwitchOwnedCandidate(
+        CpuPowerSessionJournalRecord originalRecord,
+        CpuPowerLimitSnapshot current)
+    {
+        if (originalRecord.Phase !=
+                CpuPowerJournalPhase.PresetSwitchWriteArmed ||
+            !originalRecord.PendingRaw.HasValue)
+        {
+            return false;
+        }
+
+        return
+            _backend.OwnedFieldsMatch(
+                originalRecord.AppliedRaw,
+                current) ||
+            _backend.OwnedFieldsMatch(
+                originalRecord.PendingRaw.Value,
+                current);
+    }
+
+    private CpuPowerRecoveryExecutionResult RetainPresetSwitchRecoveryEvidence(
+        CpuPowerSessionJournalRecord originalRecord,
+        CpuPowerSessionJournalRecord restoring,
+        CpuPowerLimitSnapshot current,
+        bool writeAttempted,
+        string detail)
+    {
+        try
+        {
+            var retained =
+                originalRecord with
+                {
+                    Generation =
+                        checked(restoring.Generation + 1),
+
+                    UpdatedAtUtc =
+                        DateTimeOffset.UtcNow
+                };
+
+            _journal.Store(
+                retained);
+
+            return Retained(
+                CpuPowerRecoveryExecutionDisposition.DeferredConcurrentHardwareChange,
+                writeAttempted,
+                detail +
+                $" Observed raw 0x{current.Raw:X}; PresetSwitchWriteArmed retained for release-only retry.");
+        }
+        catch (Exception ex)
+        {
+            return Retained(
+                CpuPowerRecoveryExecutionDisposition.UnresolvedJournalRetained,
+                writeAttempted,
+                detail +
+                " | CPU_POWER_RECOVERY_PRESET_SWITCH_EVIDENCE_RETAIN_ERROR: " +
+                ex.Message);
         }
     }
 

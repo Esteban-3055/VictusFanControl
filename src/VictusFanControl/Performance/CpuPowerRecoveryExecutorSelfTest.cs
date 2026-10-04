@@ -10,6 +10,7 @@ internal static class CpuPowerRecoveryExecutorSelfTest
     private const ulong ExternalRaw = 0x3000;
     private const ulong External2Raw = 0x3100;
     private const ulong ReacquiredRaw = 0x4000;
+    private const ulong PresetSwitchNewRaw = 0x5000;
     private const ulong LockedAppliedRaw = 0xA000;
 
     internal static int Run(
@@ -21,6 +22,9 @@ internal static class CpuPowerRecoveryExecutorSelfTest
             AlreadyReleasedClearsWithoutWrite(output);
             ExternalOwnerIsPreserved(output);
             OwnedValueIsRestoredOnce(output);
+            PresetSwitchOldRawIsRestoredOnce(output);
+            PresetSwitchNewRawIsRestoredOnce(output);
+            PresetSwitchExternalRawIsPreserved(output);
             ContestedNeverReacquires(output);
             RestoringStoreFailurePreventsWrite(output);
             ConcurrentExternalChangePreventsWriteAndClears(output);
@@ -197,6 +201,115 @@ internal static class CpuPowerRecoveryExecutorSelfTest
 
         output.WriteLine(
             "PASS still-owned value gets one journaled release restore");
+    }
+
+
+    private static void PresetSwitchOldRawIsRestoredOnce(
+        TextWriter output)
+    {
+        var journal =
+            new FakeJournal(
+                Record(
+                    CpuPowerJournalPhase.PresetSwitchWriteArmed,
+                    external: null,
+                    conflict: Inactive(),
+                    pendingRaw: PresetSwitchNewRaw,
+                    appliedRaw: AppliedRaw));
+
+        var backend =
+            new FakeBackend(journal)
+            {
+                Raw = AppliedRaw
+            };
+
+        var result =
+            new CpuPowerRecoveryExecutor(
+                backend,
+                journal)
+            .Execute();
+
+        Require(
+            result.Disposition ==
+                CpuPowerRecoveryExecutionDisposition.RestoredAndCleared &&
+            backend.WriteCount == 1 &&
+            backend.Raw == BaselineRaw &&
+            journal.Current is null,
+            "old preset raw is released exactly once to baseline");
+
+        output.WriteLine(
+            "PASS recovery-only executor releases old VFC raw after preset-switch crash");
+    }
+
+    private static void PresetSwitchNewRawIsRestoredOnce(
+        TextWriter output)
+    {
+        var journal =
+            new FakeJournal(
+                Record(
+                    CpuPowerJournalPhase.PresetSwitchWriteArmed,
+                    external: Snapshot(ExternalRaw),
+                    conflict: Inactive(),
+                    pendingRaw: PresetSwitchNewRaw,
+                    appliedRaw: AppliedRaw));
+
+        var backend =
+            new FakeBackend(journal)
+            {
+                Raw = PresetSwitchNewRaw
+            };
+
+        var result =
+            new CpuPowerRecoveryExecutor(
+                backend,
+                journal)
+            .Execute();
+
+        Require(
+            result.Disposition ==
+                CpuPowerRecoveryExecutionDisposition.RestoredAndCleared &&
+            backend.WriteCount == 1 &&
+            backend.Raw == ExternalRaw &&
+            journal.Current is null,
+            "new preset raw is released exactly once to ExternalHandoff");
+
+        output.WriteLine(
+            "PASS recovery-only executor releases new VFC raw and preserves ExternalHandoff target");
+    }
+
+    private static void PresetSwitchExternalRawIsPreserved(
+        TextWriter output)
+    {
+        var journal =
+            new FakeJournal(
+                Record(
+                    CpuPowerJournalPhase.PresetSwitchWriteArmed,
+                    external: null,
+                    conflict: Inactive(),
+                    pendingRaw: PresetSwitchNewRaw,
+                    appliedRaw: AppliedRaw));
+
+        var backend =
+            new FakeBackend(journal)
+            {
+                Raw = External2Raw
+            };
+
+        var result =
+            new CpuPowerRecoveryExecutor(
+                backend,
+                journal)
+            .Execute();
+
+        Require(
+            result.Disposition ==
+                CpuPowerRecoveryExecutionDisposition.ClearedExternalPreserved &&
+            backend.WriteCount == 0 &&
+            backend.Raw == External2Raw &&
+            journal.Current is null,
+            "external raw during old switch is preserved with zero writes");
+
+        output.WriteLine(
+            "PASS recovery-only executor preserves external owner and never finishes the old source switch");
     }
 
     private static void ContestedNeverReacquires(
@@ -606,6 +719,13 @@ internal static class CpuPowerRecoveryExecutorSelfTest
                     40,
                     false),
 
+            PresetSwitchNewRaw =>
+                new(
+                    raw,
+                    15,
+                    30,
+                    false),
+
             ExternalRaw =>
                 new(
                     raw,
@@ -801,7 +921,8 @@ internal static class CpuPowerRecoveryExecutorSelfTest
 
             if (raw is
                 AppliedRaw or
-                ReacquiredRaw)
+                ReacquiredRaw or
+                PresetSwitchNewRaw)
             {
                 throw new InvalidOperationException(
                     "recovery executor attempted a forbidden apply/reacquire write");
