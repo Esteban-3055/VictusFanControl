@@ -39,6 +39,14 @@ internal static class Program
             }
 
             if (args.Length > 0 &&
+                args[0] == "--gpu-gate-6f-preflight")
+            {
+                return PerformanceGuardianGpuGate6FQualification
+                    .RunPreflight(
+                        args);
+            }
+
+            if (args.Length > 0 &&
                 args[0] == "--gpu-gate-6f")
             {
                 return await PerformanceGuardianGpuGate6FQualification
@@ -299,6 +307,9 @@ internal static class Program
 
         Console.WriteLine(
             "VictusFanControl.PerformanceGuardian --gpu-gate-6f-self-test");
+
+        Console.WriteLine(
+            "VictusFanControl.PerformanceGuardian --gpu-gate-6f-preflight --confirm-target HP-8C40-9D0R1LA-F18 [--output <json-path>]");
 
         Console.WriteLine(
             "VictusFanControl.PerformanceGuardian --gpu-gate-6f --confirm-target HP-8C40-9D0R1LA-F18 [--timeout-seconds 60] [--output-directory <path>]");

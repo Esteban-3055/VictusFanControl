@@ -39,6 +39,15 @@ internal static class PerformanceGuardianGpuGate6FQualification
             AppContext.BaseDirectory,
             "VictusFanControl.PerformanceGuardian.exe");
 
+    private static string ActiveJournalPath =>
+        Path.Combine(
+            Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData),
+            "VictusFanControl",
+            "Performance",
+            TargetProfileId,
+            "gpu-clock-session.json");
+
     internal static async Task<int> RunOuterAsync(
         string[] args)
     {
@@ -103,10 +112,11 @@ internal static class PerformanceGuardianGpuGate6FQualification
                     root,
                     "guardian-ready.txt");
 
+            // The active journal is deliberately outside the timestamped
+            // evidence directory. A crash must block every later qualification
+            // run until the stale durable record is reviewed.
             var journalPath =
-                Path.Combine(
-                    root,
-                    "gpu-clock-session.json");
+                ActiveJournalPath;
 
             if (File.Exists(
                     journalPath))
@@ -234,6 +244,14 @@ internal static class PerformanceGuardianGpuGate6FQualification
                         options.TimeoutSeconds,
                         timeout.Token).ConfigureAwait(false);
 
+                // Keep a bounded dwell after direct Battery confirmation so
+                // the detached Guardian has time to consume the Windows
+                // notification and complete its journaled preset switch before
+                // the operator reconnects AC.
+                await Task.Delay(
+                    1500,
+                    timeout.Token).ConfigureAwait(false);
+
                 Console.WriteLine(
                     "Battery confirmed by direct GetSystemPowerStatus. Guardian should now have selected 210..1200 MHz.");
                 Console.WriteLine(
@@ -356,6 +374,7 @@ internal static class PerformanceGuardianGpuGate6FQualification
 
             var passed =
                 failure is null &&
+                guardian.HasExited &&
                 guardian.ExitCode == 0 &&
                 guardianReport is not null &&
                 guardianReport.EnableCalls == 1 &&
@@ -400,6 +419,8 @@ internal static class PerformanceGuardianGpuGate6FQualification
                             : null,
                     GuardianReport:
                         guardianReport,
+                    ActiveJournalPath:
+                        journalPath,
                     JournalPresent:
                         journalPresent,
                     ProductionHardwareWritesAuthorized:
@@ -439,6 +460,166 @@ internal static class PerformanceGuardianGpuGate6FQualification
         {
             Console.Error.WriteLine(
                 "Step 6F GPU qualification: FAIL - " +
+                ex);
+
+            return 5;
+        }
+    }
+
+    internal static int RunPreflight(
+        string[] args)
+    {
+        if (!TryParsePreflight(
+                args,
+                out var outputPath,
+                out var error))
+        {
+            Console.Error.WriteLine(
+                error);
+
+            return 2;
+        }
+
+        try
+        {
+            RequireExactTargetAndElevation();
+
+            if (File.Exists(
+                    ActiveJournalPath))
+            {
+                throw new InvalidOperationException(
+                    "A stale Step 6F GPU journal exists. No hardware write is authorized until it is reviewed: " +
+                    ActiveJournalPath);
+            }
+
+            using var mutex =
+                new Mutex(
+                    initiallyOwned: true,
+                    PerformanceGuardianHost.ProductionMutexName(
+                        TargetProfileId),
+                    out var createdNew);
+
+            if (!createdNew)
+            {
+                throw new InvalidOperationException(
+                    "Another PerformanceGuardian target writer already owns the production mutex.");
+            }
+
+            mutex.ReleaseMutex();
+
+            var source =
+                new WindowsPerformancePowerSourceReader()
+                    .Read();
+
+            if (!source.Succeeded ||
+                source.Source !=
+                    PerformancePowerSourceKind.Ac)
+            {
+                throw new InvalidOperationException(
+                    "Step 6F preflight requires directly confirmed AC before the physical sequence.");
+            }
+
+            using var nvml =
+                new NvmlClient(
+                    ExpectedGpuName,
+                    requirePreferredDevice: true);
+
+            var backend =
+                new NvmlGpuClockLimitBackend(
+                    nvml,
+                    hardwareWritesAuthorized: false);
+
+            var capabilities =
+                backend.Capabilities;
+
+            if (!capabilities.HasCompleteCommandSurface)
+            {
+                throw new InvalidOperationException(
+                    "NVML locked-clock Set/Reset command surface is incomplete.");
+            }
+
+            var observation =
+                backend.ReadObservation();
+
+            if (!observation.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "Read-only NVML graphics-clock observation failed: " +
+                    observation.Status);
+            }
+
+            var closedGateProbe =
+                backend.SetLockedGraphicsClocks(
+                    new GpuClockLimitRequest(
+                        210,
+                        1850));
+
+            if (closedGateProbe.Succeeded ||
+                closedGateProbe.FailureKind !=
+                    GpuClockBackendFailureKind.WriteGateClosed)
+            {
+                throw new InvalidOperationException(
+                    "Step 6F preflight could not prove that its NVML write gate is closed.");
+            }
+
+            var report =
+                new PreflightReport(
+                    SchemaVersion: 1,
+                    TargetProfileId,
+                    CapturedAtUtc:
+                        DateTimeOffset.UtcNow,
+                    Source:
+                        source,
+                    DeviceName:
+                        nvml.DeviceName,
+                    Capabilities:
+                        capabilities,
+                    Observation:
+                        observation,
+                    ClosedGateProbe:
+                        closedGateProbe,
+                    ActiveJournalPath,
+                    ActiveJournalPresent:
+                        false,
+                    ProductionMutexAvailable:
+                        true,
+                    HardwareWritesPerformed:
+                        false,
+                    Result:
+                        "PASS");
+
+            if (!string.IsNullOrWhiteSpace(
+                    outputPath))
+            {
+                var directory =
+                    Path.GetDirectoryName(
+                        outputPath);
+
+                if (!string.IsNullOrWhiteSpace(
+                        directory))
+                {
+                    Directory.CreateDirectory(
+                        directory);
+                }
+
+                DurableJson(
+                    outputPath!,
+                    report);
+
+                Console.WriteLine(
+                    "Step 6F GPU read-only preflight report: " +
+                    outputPath);
+            }
+
+            Console.WriteLine(
+                "Step 6F GPU read-only preflight: PASS. Exact target, AC source, mutex, persistent-journal absence and NVML command surface verified; hardware write gate remained closed.");
+
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                "Step 6F GPU read-only preflight: FAIL - " +
                 ex);
 
             return 5;
@@ -575,6 +756,24 @@ internal static class PerformanceGuardianGpuGate6FQualification
                     out _,
                     out _),
                 "excessive timeout rejected");
+
+            Require(
+                TryParsePreflight(
+                    new[]
+                    {
+                        "--gpu-gate-6f-preflight",
+                        "--confirm-target",
+                        TargetProfileId,
+                        "--output",
+                        Path.Combine(
+                            temp,
+                            "preflight.json")
+                    },
+                    out var preflightOutput,
+                    out _)
+                &&
+                preflightOutput is not null,
+                "Step 6F preflight arguments parse");
 
             output.WriteLine(
                 "Step 6F GPU qualification harness self-test: PASS (argument/target gates only, zero NVML load, zero hardware I/O).");
@@ -904,6 +1103,68 @@ internal static class PerformanceGuardianGpuGate6FQualification
         return true;
     }
 
+    private static bool TryParsePreflight(
+        string[] args,
+        out string? outputPath,
+        out string error)
+    {
+        outputPath =
+            null;
+
+        error =
+            "Invalid Step 6F GPU preflight arguments.";
+
+        if (args.Length < 3 ||
+            args[0] !=
+                "--gpu-gate-6f-preflight")
+        {
+            return false;
+        }
+
+        string? confirm =
+            null;
+
+        for (var index = 1;
+             index < args.Length;
+             index++)
+        {
+            switch (args[index])
+            {
+                case "--confirm-target"
+                    when index + 1 <
+                         args.Length:
+                    confirm =
+                        args[++index];
+                    break;
+
+                case "--output"
+                    when index + 1 <
+                         args.Length:
+                    outputPath =
+                        Path.GetFullPath(
+                            args[++index]);
+                    break;
+
+                default:
+                    return false;
+            }
+        }
+
+        if (!string.Equals(
+                confirm,
+                TargetProfileId,
+                StringComparison.Ordinal))
+        {
+            error =
+                "Exact target confirmation is required: " +
+                TargetProfileId;
+
+            return false;
+        }
+
+        return true;
+    }
+
     private static bool TryParseGuardian(
         string[] args,
         out GuardianHostOptions options,
@@ -1165,6 +1426,21 @@ internal static class PerformanceGuardianGpuGate6FQualification
         int TimeoutSeconds,
         string? OutputDirectory);
 
+    private sealed record PreflightReport(
+        int SchemaVersion,
+        string TargetProfileId,
+        DateTimeOffset CapturedAtUtc,
+        PerformancePowerSourceObservation Source,
+        string DeviceName,
+        GpuClockBackendCapabilities Capabilities,
+        GpuClockBackendObservation Observation,
+        GpuClockBackendWriteResult ClosedGateProbe,
+        string ActiveJournalPath,
+        bool ActiveJournalPresent,
+        bool ProductionMutexAvailable,
+        bool HardwareWritesPerformed,
+        string Result);
+
     private sealed record QualificationReport(
         int SchemaVersion,
         string TargetProfileId,
@@ -1178,6 +1454,7 @@ internal static class PerformanceGuardianGpuGate6FQualification
         PerformanceGuardianResponse? ShutdownResponse,
         int? GuardianExitCode,
         GuardianReportView? GuardianReport,
+        string ActiveJournalPath,
         bool JournalPresent,
         bool ProductionHardwareWritesAuthorized,
         bool QualificationHardwareWritesAuthorized,

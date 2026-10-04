@@ -45,6 +45,16 @@ if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $args += @('--output-directory', (Join-Path (Get-Location) $OutputDirectory))
 }
 
+$preflightRoot = Join-Path $root 'logs'
+New-Item -ItemType Directory -Force -Path $preflightRoot | Out-Null
+$preflightPath = Join-Path $preflightRoot ('performance-guardian-6f-gpu-preflight_' + (Get-Date -Format 'yyyy-MM-dd_HHmmss') + '.json')
+
+Write-Host '2. Running read-only exact-target/NVML/mutex/journal preflight. Hardware write gate is CLOSED.'
+& $exe --gpu-gate-6f-preflight --confirm-target $expected --output $preflightPath
+if ($LASTEXITCODE -ne 0) {
+    throw "Step 6F read-only preflight failed with exit code $LASTEXITCODE. No hardware qualification was started."
+}
+
 Write-Host ''
 Write-Host 'STEP 6F GPU PHYSICAL QUALIFICATION' -ForegroundColor Yellow
 Write-Host 'Requirements:' -ForegroundColor Yellow
