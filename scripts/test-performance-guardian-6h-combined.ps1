@@ -73,10 +73,12 @@ Write-Host ' - GPU sequence: 210..1850 -> 210..1200 -> 210..1850 -> Reset.'
 Write-Host ' - Expected writes: CPU exactly 4; GPU exactly 4.'
 Write-Host ' - Do not use ThrottleStop, Intel XTU, nvidia-smi -lgc, MSI Afterburner or another power/clock controller.'
 Write-Host ' - Do not change OMEN performance mode during the sequence.'
+Write-Host ' - A stale GPU qualification journal may be recovered once with an explicit NVML Reset because this launcher already requires the exclusive-controller confirmation.'
+Write-Host ' - CPU journals are NEVER auto-recovered here; a stale CPU journal remains fail-closed.'
 Write-Host ' - On failure preserve the evidence directory and any remaining CPU/GPU journal. Do not rerun blindly.'
 Write-Host ''
 
-& $exe --combined-gate-6h --confirm-target $expected --confirm-cpu-hardware-writes --confirm-exclusive-gpu-controller --module $module --timeout-seconds $TimeoutSeconds --output-directory $OutputDirectory
+& $exe --combined-gate-6h --confirm-target $expected --confirm-cpu-hardware-writes --confirm-exclusive-gpu-controller --recover-stale-gpu-qualification-journal --module $module --timeout-seconds $TimeoutSeconds --output-directory $OutputDirectory
 
 $exitCode = $LASTEXITCODE
 
