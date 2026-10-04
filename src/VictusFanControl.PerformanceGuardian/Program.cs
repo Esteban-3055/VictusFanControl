@@ -12,8 +12,18 @@ internal static class Program
             if (args.Length == 1 &&
                 args[0] == "--self-test")
             {
-                return PerformanceGuardianAuthoritySelfTest.Run(
-                    Console.Out);
+                var authorityResult =
+                    PerformanceGuardianAuthoritySelfTest.Run(
+                        Console.Out);
+
+                var sourceRuntimeResult =
+                    PerformanceGuardianPowerSourceRuntimeSelfTest.Run(
+                        Console.Out);
+
+                return authorityResult == 0 &&
+                    sourceRuntimeResult == 0
+                    ? 0
+                    : 1;
             }
 
             if (args.Length == 2 &&
