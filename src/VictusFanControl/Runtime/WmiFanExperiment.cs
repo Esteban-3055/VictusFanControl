@@ -45,6 +45,12 @@ internal sealed record WmiFanExperimentOptions(string Directory, string Modules,
 /// </summary>
 internal static class WmiFanExperiment
 {
+    // Diagnostic evidence must also retain rejected NaN/Infinity sensors.
+    // This option never participates in admission or command journals.
+    internal static JsonSerializerOptions ThermalDiagnosticJson { get; } = new()
+    {
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals
+    };
     private sealed record AcpiEvent(long RecordId, int Id, DateTime Utc, string Xml);
     internal static bool CanRetireLease(bool noWriteIntent, bool releaseAccepted, bool nativeUnknown, bool workerExited) =>
         workerExited && !nativeUnknown && (noWriteIntent || releaseAccepted);
@@ -87,10 +93,33 @@ internal static class WmiFanExperiment
             CpuPowerCurve = Clamp(candidate.CpuPowerCurve), GpuPowerCurve = Clamp(candidate.GpuPowerCurve),
             CpuLoadCurve = Clamp(candidate.CpuLoadCurve), GpuLoadCurve = Clamp(candidate.GpuLoadCurve) };
     }
+
+    internal static async Task<TelemetrySnapshot> AcquireThermalSnapshotAsync(
+        HpWmiFanProofReader fans, Func<TelemetrySnapshot> readSnapshot, Action ensureNormal,
+        WmiFanThermalAdmission thermal, CancellationToken cancellationToken)
+    {
+        void CheckNormal() { ensureNormal(); thermal.EnsureOpen(); }
+        CheckNormal();
+        var remaining = thermal.RemainingConfirmationMilliseconds;
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (remaining.HasValue) budget.CancelAfter(remaining.Value);
+        try
+        {
+            // Sequential fresh reads; a logical budget expiry cannot cancel an
+            // in-flight native method or free its serialization/broker lease.
+            return await AcquireSnapshotAsync(fans, readSnapshot, CheckNormal, budget.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && remaining.HasValue)
+        {
+            thermal.Close("CPU thermal confirmation acquisition budget expired; normal admission closed.", true);
+            thermal.EnsureOpen();
+            throw;
+        }
+    }
     internal static string LeasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "VictusFanControl", "WmiFanExperiment", "lease.json");
 
-    internal static void WriteJson(string path, object value)
+    internal static void WriteJson(string path, object value, JsonSerializerOptions? options = null)
     {
         // Atomic publication, durable intent before dispatch; no partially-written heartbeat.
         var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -98,7 +127,7 @@ internal static class WmiFanExperiment
         {
             using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                JsonSerializer.Serialize(file, value);
+                JsonSerializer.Serialize(file, value, options);
                 file.Flush(flushToDisk: true);
             }
             // Windows MoveFileEx overwrite can fail with an open destination
@@ -158,10 +187,13 @@ internal static class WmiFanExperiment
         WriteJson(Path.Combine(o.Directory, "policy.json"), config);
         WriteJson(Path.Combine(o.Directory, "inertia.json"), WmiFanInertiaPolicy.Settings);
         WriteJson(Path.Combine(o.Directory, "final-demand-filter.json"), WmiFinalDemandFilter.Settings);
+        WriteJson(Path.Combine(o.Directory, "thermal-admission.json"), WmiFanThermalAdmission.Settings);
         var engine = new WmiFanInertiaPolicy(config);
+        var thermal = new WmiFanThermalAdmission(identity);
         await using var csv = new CsvTelemetryLogger(Path.Combine(o.Directory, "telemetry.csv"));
         await csv.WriteHeaderAsync(CancellationToken.None);
         using var decisions = new StreamWriter(Path.Combine(o.Directory, "decisions.ndjson")) { AutoFlush = true };
+        using var thermalDecisions = new StreamWriter(Path.Combine(o.Directory, "thermal-admission.ndjson")) { AutoFlush = true };
         var clock = Stopwatch.StartNew();
         var previous = clock.Elapsed;
         var admitted = false;
@@ -178,6 +210,7 @@ internal static class WmiFanExperiment
             }
             cts.Token.ThrowIfCancellationRequested();
             if (guardian.HasExited) throw new InvalidOperationException("Experiment guardian exited.");
+            thermal.EnsureOpen();
         }
         WriteJson(Path.Combine(o.Directory, "ready.json"), new { Pid = Environment.ProcessId,
             DirectEcProhibited = true, o.Control, ProductionAuthorized = false, MinimumLevel = 30, MaximumLevel = 50,
@@ -192,20 +225,23 @@ internal static class WmiFanExperiment
                 var gap = clock.Elapsed - previous;
                 previous = clock.Elapsed;
                 if (gap > TimeSpan.FromSeconds(3)) throw new InvalidOperationException("Timing/suspend gap; normal control stopped.");
-                var snapshot = await AcquireSnapshotAsync(fans, reader.ReadSnapshot, EnsureNormal, cts.Token);
-                await csv.WriteAsync(snapshot, CancellationToken.None);
+                var snapshot = await AcquireThermalSnapshotAsync(fans, reader.ReadSnapshot, EnsureNormal, thermal, cts.Token);
                 var evaluatedAt = DateTimeOffset.UtcNow;
-                var safety = SafetyGate.Evaluate(identity, SystemState.Healthy, snapshot, evaluatedAt, fanWritePathPresent: true);
+                var thermalDecision = thermal.Observe(snapshot, evaluatedAt);
+                var safety = thermalDecision.EffectiveSafety;
+                thermalDecisions.WriteLine(JsonSerializer.Serialize(new { Stage = "observe", Utc = evaluatedAt,
+                    snapshot.Timestamp, snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC, Decision = thermalDecision }, ThermalDiagnosticJson));
+                await csv.WriteAsync(snapshot, CancellationToken.None);
                 // CPU power/load counters may initially lack a baseline. No writes during warmup.
                 if (!safety.CustomControlPermitted)
                 {
-                    if (admitted || clock.Elapsed > TimeSpan.FromSeconds(15))
+                    if (admitted || thermalDecision.Closed || clock.Elapsed > TimeSpan.FromSeconds(15))
                     {
                         WriteJson(Path.Combine(o.Directory, "telemetry-fault.json"), new { EvaluatedAtUtc = evaluatedAt,
                             snapshot.Timestamp, snapshot.FanSampledAtUtc, snapshot.FanSampleAgeMilliseconds,
                             snapshot.FanAgeCapturedAtUtc, snapshot.FanTelemetrySource,
                             snapshot.CpuTemperatureC, snapshot.CpuCoreMaxTemperatureC,
-                            snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC, safety.Reasons });
+                            snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC, safety.Reasons, ThermalAdmission = thermalDecision }, ThermalDiagnosticJson);
                         throw new InvalidOperationException("Telemetry admission lost: " + string.Join("; ", safety.Reasons));
                     }
                     await Task.Delay(1000, cts.Token);
@@ -218,13 +254,21 @@ internal static class WmiFanExperiment
                 if (!decision.Accepted || !decision.EqualFanLevel.HasValue)
                     throw new InvalidOperationException("Adaptive policy rejected telemetry: " + decision.Detail);
                 // Re-evaluate freshness immediately before dispatch (after logger/policy work).
-                safety = SafetyGate.Evaluate(identity, SystemState.Healthy, snapshot, DateTimeOffset.UtcNow, true);
-                WmiFanExperimentBoundary.SetAdmission(snapshot);
+                thermalDecision = thermal.Preview(snapshot, DateTimeOffset.UtcNow);
+                safety = thermalDecision.EffectiveSafety;
+                if (!safety.CustomControlPermitted)
+                    throw new InvalidOperationException("Pre-dispatch admission lost: " + string.Join("; ", safety.Reasons));
+                WmiFanExperimentBoundary.SetAdmission(snapshot,
+                    () => thermal.EnsureDispatchAllowed(snapshot, DateTimeOffset.UtcNow));
                 EnsureNormal();
                 var sent = session?.Apply(decision.EqualFanLevel.Value, safety.CustomControlPermitted) ?? false;
                 decisions.WriteLine(JsonSerializer.Serialize(new { Utc = DateTimeOffset.UtcNow,
                     decision.EqualFanLevel, decision.RawDemandLevel, decision.SmoothedDemandLevel,
                     decision.ActuationDemandLevel, decision.ThermalOverride,
+                    RawThermalEmergency = thermalDecision.RawSafety.ThermalEmergency,
+                    EffectiveThermalEmergency = safety.ThermalEmergency,
+                    thermalDecision.CpuHighSamples, thermalDecision.CpuConfirmationPending,
+                    thermalDecision.ConfirmationElapsedMilliseconds, thermalDecision.RemainingConfirmationMilliseconds,
                     decision.Detail, Sent = sent, o.Control,
                     WindowsPower = SystemPowerStatusReader.Read(),
                     snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC,
@@ -232,16 +276,29 @@ internal static class WmiFanExperiment
                     snapshot.FanSampleAgeMilliseconds, snapshot.FanAgeCapturedAtUtc, SetpointReadback = false }));
                 WriteJson(Path.Combine(o.Directory, "heartbeat.json"), new { Pid = Environment.ProcessId,
                     Utc = DateTimeOffset.UtcNow, ElapsedMs = clock.ElapsedMilliseconds, Level = decision.EqualFanLevel });
-                Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; demand={decision.RawDemandLevel:0.0} smooth={decision.SmoothedDemandLevel:0.000} actuationDemand={decision.ActuationDemandLevel:0.0} thermalOverride={decision.ThermalOverride}; CPU={snapshot.CpuControlTemperatureC:0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}");
-                await Task.Delay(1000, cts.Token);
+                Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; demand={decision.RawDemandLevel:0.0} smooth={decision.SmoothedDemandLevel:0.000} actuationDemand={decision.ActuationDemandLevel:0.0} thermalOverride={decision.ThermalOverride}; CPU={snapshot.CpuControlTemperatureC:0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}; CPU95-confirm={thermalDecision.CpuHighSamples}/5 pending={thermalDecision.CpuConfirmationPending}");
+                // Remove only the artificial pause while a CPU spike is pending.
+                // No periodic reads, parallel workers or accelerated retry of setters.
+                if (!thermal.RemainingConfirmationMilliseconds.HasValue)
+                    await Task.Delay(WmiFanThermalAdmission.Settings.NormalDelayMilliseconds, cts.Token);
             }
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         { if (stopReason == "duration") stopReason = "cancel"; }
-        catch (Exception ex) { code = 1; stopReason = ex.Message; Console.Error.WriteLine(ex); }
+        catch (Exception ex)
+        {
+            code = 1; stopReason = ex.Message;
+            thermal.Close(stopReason);
+            var lastSnapshot = thermal.LastObservedSnapshot;
+            WriteJson(Path.Combine(o.Directory, "thermal-admission-fault.json"), new
+                { Utc = DateTimeOffset.UtcNow, StopReason = stopReason, LastSnapshot = lastSnapshot,
+                    ThermalAdmission = lastSnapshot is null ? null : thermal.Preview(lastSnapshot, DateTimeOffset.UtcNow) }, ThermalDiagnosticJson);
+            Console.Error.WriteLine(ex);
+        }
         finally
         {
             // Parent performs recovery after worker exit. No re-entry to normal control.
+            thermal.Close("Normal phase ended.");
             WmiFanExperimentBoundary.BeginRecovery();
             await csv.FlushAsync(CancellationToken.None);
             using var drain = new CancellationTokenSource(TimeSpan.FromSeconds(10));

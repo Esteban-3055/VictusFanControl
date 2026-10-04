@@ -10,7 +10,8 @@ internal static class WmiFanExperimentBoundary
     internal static string? SessionDirectory { get; private set; }
     internal static bool Control { get; private set; }
     private static int _recovering;
-    private static TelemetrySnapshot? _admission;
+    private sealed record Admission(TelemetrySnapshot Snapshot, Action EnsureThermalAllowed);
+    private static Admission? _admission;
     internal static bool Enabled => SessionDirectory is not null;
     internal static bool Recovering => Volatile.Read(ref _recovering) != 0;
     internal static string StopPath => Path.Combine(SessionDirectory!, "stop.signal");
@@ -27,7 +28,8 @@ internal static class WmiFanExperimentBoundary
     }
 
     internal static void BeginRecovery() => Interlocked.Exchange(ref _recovering, 1);
-    internal static void SetAdmission(TelemetrySnapshot snapshot) => Volatile.Write(ref _admission, snapshot);
+    internal static void SetAdmission(TelemetrySnapshot snapshot, Action ensureThermalAllowed) =>
+        Volatile.Write(ref _admission, new(snapshot, ensureThermalAllowed));
 
     internal static bool IsAllowed(HpBiosRequest r, bool control, bool recovering, bool stopped)
     {
@@ -47,11 +49,15 @@ internal static class WmiFanExperimentBoundary
             throw new InvalidOperationException("Request is outside the WMI fan experiment lifecycle/whitelist.");
         if (request.CommandType == 0x2E && request.Payload[0] != 255)
         {
-            var snapshot = Volatile.Read(ref _admission);
+            var admission = Volatile.Read(ref _admission);
+            var snapshot = admission?.Snapshot;
             var now = DateTimeOffset.UtcNow;
             if (snapshot is null || now < snapshot.Timestamp || now - snapshot.Timestamp > SafetyGate.MaximumTelemetryAge ||
                 !snapshot.IsFanTelemetryFreshAt(now))
                 throw new InvalidOperationException("Telemetry admission expired before native WMI fan dispatch.");
+            // Shared preview, without counting this epoch again. Invoked after
+            // mutex admission and again immediately before the native method.
+            admission!.EnsureThermalAllowed();
         }
     }
 

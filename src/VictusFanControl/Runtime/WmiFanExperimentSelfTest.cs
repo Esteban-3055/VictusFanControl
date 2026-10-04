@@ -21,6 +21,7 @@ internal static class WmiFanExperimentSelfTest
             TestDemandQuantization();
             TestInertia();
             TestFinalDemandFilter();
+            WmiFanThermalAdmissionSelfTest.RunAsync().GetAwaiter().GetResult();
             var result = "{\"Pid\":31920,\"ExitCode\":1,\"StopReason\":\"Telemetry admission lost\",\"SamplesAdmitted\":true,\"NormalPhaseEnded\":true}";
             Check(WmiFanExperiment.ReadWorkerStopReason(result, 31920, 1) == "Telemetry admission lost",
                 "Worker fault must be reported instead of the guardian's duration default.");
@@ -107,6 +108,7 @@ internal static class WmiFanExperimentSelfTest
 
             // Real low-level constructor refusal, before any module I/O.
             WmiFanExperimentBoundary.Enable(directory, true);
+            WmiFanThermalAdmissionSelfTest.TestBoundary();
             Reject(() => { using var ec = new AcpiEcReader("missing-experiment-fixture.bin"); });
             Check(WmiOnlyInvestigationPolicy.DeniedEcAccesses == 1, "EC boundary did not record rejection.");
             WmiFanExperiment.WriteJson(Path.Combine(directory, "intent.json"), new { Level = 30 });
@@ -120,7 +122,8 @@ internal static class WmiFanExperimentSelfTest
             Reject(() => WmiFanExperimentBoundary.EnsureRequestAllowed(level));
             WmiFanExperimentBoundary.BeginRecovery();
             WmiFanExperimentBoundary.EnsureRequestAllowed(release);
-            output.WriteLine("PASS: atomic heartbeat replacement, transient sharing conflicts without deadline renewal, stalled/invalid heartbeat rejection, final demand EMA on all six sources, midpoint-down tenth rounding and stable floor recovery, normal slow actuation, raw thermal override/handoff, time-based inertia, sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
+            WmiFanExperimentBoundary.EnsureRequestAllowed(Hp8C40BiosFanControl.BuildLegacyDefaultRequest());
+            output.WriteLine("PASS: bounded experiment-only CPU confirmation (five unique epochs or two monotonic seconds), healthy startup, no duplicate counting or late reopening, CPU99/GPU87 immediate handoff, raw thermal override, acquisition/mutex/pre-native expiry, retained blocked native slot, recovery after thermal closure, atomic heartbeat replacement, final demand EMA and midpoint-down rounding, time-based inertia, sequential fresh acquisition, failed/canceled reads, normal/recovery lifecycle, failed intent, whitelist, shadow default and EC prohibition.");
             return 0;
         }
         catch (Exception ex) { output.WriteLine("FAIL: " + ex); return 1; }
@@ -448,7 +451,7 @@ internal static class WmiFanExperimentSelfTest
         var rawSafety = SafetyGate.Evaluate(hardware, SystemState.Healthy, snapshot,
             DateTimeOffset.Parse("2026-10-04T07:23:17.5922222+00:00"), true);
         Check(rawSafety.SnapshotFresh && rawSafety.ThermalEmergency && !rawSafety.CustomControlPermitted,
-            "Filtering may not suppress the captured 97 C thermal handoff.");
+            "Filtering may not suppress the shared raw 97 C thermal detector.");
         var calls = new List<HpBiosRequest>();
         var session = new WmiFanSession(r => { calls.Add(r); return 0; }, _ => { });
         session.Apply(31, true);
