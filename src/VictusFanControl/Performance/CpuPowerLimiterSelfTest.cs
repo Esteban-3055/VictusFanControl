@@ -28,6 +28,10 @@ internal static class CpuPowerLimiterSelfTest
                 CpuPowerRecoveryExecutorSelfTest.Run(output) == 0,
                 "CPU power recovery executor");
 
+            Require(
+                CpuPowerPresetPolicySelfTest.Run(output) == 0,
+                "CPU power AC/battery preset selector");
+
             NormalApplyVerifyRelease(output);
             NonOwnedMutationIsPreservedWithoutConflict(output);
             SuccessfulReacquireRestoresExternalHandoff(output);

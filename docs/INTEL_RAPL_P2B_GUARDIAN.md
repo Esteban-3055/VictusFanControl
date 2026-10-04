@@ -440,3 +440,69 @@ The next P2B gate is process/lifecycle containment: a detached CPU guardian
 host, global single-writer mutex, parent-liveness/lease semantics and IPC
 surface. Production RAPL hardware writes remain closed until those pieces and
 their death/restart fixtures are qualified.
+
+
+## Step 5.5 — AC and Battery CPU preset foundation
+
+P2B now defines two independent CPU power preset slots:
+
+- `AC`
+- `Battery`
+
+Each slot carries:
+
+- Enabled/Disabled;
+- PL1 watts;
+- PL2 watts.
+
+No production wattage is hard-coded. The default preset set is
+`Disabled/Disabled`; the qualified 20/40 W value remains test evidence, not a
+product default.
+
+`CpuPowerPresetPolicy` is pure selection logic:
+
+```
+power source = AC      -> AC slot
+power source = Battery -> Battery slot
+power source = Unknown -> no preset authority
+```
+
+An enabled preset requires finite values, PL1 >= 10 W and PL2 >= PL1. The
+physical backend will later apply the stricter qualified hardware envelope.
+
+A disabled slot may retain configured wattage for UI convenience, but resolves
+to no active request. At runtime that will mean: if VFC currently owns CPU
+limits and the newly selected source slot is Disabled, release ownership to the
+captured ExternalHandoff/original baseline instead of inventing a new cap.
+
+### Runtime semantics reserved for the guardian integration
+
+Power-source switching must be owned by the detached guardian, not by the GUI.
+The intended production source signal is Windows AC/DC power notification,
+confirmed against a direct power-source query before a transition.
+
+The runtime policy to implement in the next gates is:
+
+- Active AC -> Battery with Battery Enabled: perform one journaled owned-to-owned
+  preset transition; do **not** restore OEM baseline and then apply again.
+- Active Battery -> AC with AC Enabled: same one-write transition in reverse.
+- Newly selected slot Disabled: perform a normal conditional release.
+- Unknown source: no preset-switch write.
+- `Yielded`: a power-source change does not silently reacquire authority.
+  Explicit user action is still required.
+- `Contested`: do not use source change to bypass an external writer; the
+  conflict/yield semantics must be resolved first.
+- A successful owned-to-owned source switch starts a fresh conflict budget for
+  the newly active preset.
+- OriginalBaseline remains immutable across AC/Battery switching.
+- ExternalHandoff, if one exists from a prior external-writer episode, remains
+  the release target across later AC/Battery switches.
+
+The journal will need an explicit preset-transition write-armed phase so crash
+recovery can distinguish the old VFC-owned raw value from the pending new
+VFC-owned raw value. A restarted guardian will remain recovery-only: if a
+source-transition write was interrupted, it may release whichever VFC-owned
+value is observed, but it will not finish/retry the source switch.
+
+Startup persistence remains closed. Merely detecting AC or Battery at process
+startup does not yet authorize applying the corresponding preset.
