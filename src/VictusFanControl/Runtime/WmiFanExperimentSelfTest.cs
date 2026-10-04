@@ -18,7 +18,7 @@ internal static class WmiFanExperimentSelfTest
         {
             TestFreshAcquisitionAsync().GetAwaiter().GetResult();
             TestInertia();
-            TestCpuTemperatureFilter();
+            TestFinalDemandFilter();
             var result = "{\"Pid\":31920,\"ExitCode\":1,\"StopReason\":\"Telemetry admission lost\",\"SamplesAdmitted\":true,\"NormalPhaseEnded\":true}";
             Check(WmiFanExperiment.ReadWorkerStopReason(result, 31920, 1) == "Telemetry admission lost",
                 "Worker fault must be reported instead of the guardian's duration default.");
@@ -118,7 +118,7 @@ internal static class WmiFanExperimentSelfTest
             Reject(() => WmiFanExperimentBoundary.EnsureRequestAllowed(level));
             WmiFanExperimentBoundary.BeginRecovery();
             WmiFanExperimentBoundary.EnsureRequestAllowed(release);
-            output.WriteLine("PASS: CPU asymmetric curve filter, raw thermal handoff, time-based inertia, immediate high-temperature/GPU increases, sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
+            output.WriteLine("PASS: final demand EMA on all six sources, normal slow actuation, raw thermal override/handoff, time-based inertia, sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
             return 0;
         }
         catch (Exception ex) { output.WriteLine("FAIL: " + ex); return 1; }
@@ -139,39 +139,26 @@ internal static class WmiFanExperimentSelfTest
         Check(policy.Evaluate(Input(1, 32)).EqualFanLevel == 30, "Small power spike was sent immediately.");
         Check(policy.Evaluate(Input(2, 31)).EqualFanLevel == 30, "Small increase confirmed too early.");
         Check(policy.Evaluate(Input(3, 32)).EqualFanLevel == 31, "Increase must use the lowest sustained demand.");
-        Check(policy.Evaluate(Input(4, 32)).EqualFanLevel == 31, "Each small step needs its own window.");
-        Check(policy.Evaluate(Input(5)).EqualFanLevel == 31, "One-level hysteresis was lost.");
-        Check(policy.Evaluate(Input(6, 32)).EqualFanLevel == 31, "Interrupted increase confirmation survived.");
-        Check(policy.Evaluate(Input(7, 40)).EqualFanLevel == 35, "Large demand must bypass delay and preserve up-step limit.");
+        var larger = policy.Evaluate(Input(4, 40));
+        Check(larger.EqualFanLevel == 31 && larger.SmoothedDemandLevel < 40 && !larger.ThermalOverride,
+            "Large normal demand bypassed final smoothing/confirmation.");
 
         foreach (var gpu in new[] { false, true })
         {
             policy = new(config);
             policy.Evaluate(Input(0));
             policy.Evaluate(Input(1, 31)); // A small power increase is still pending.
-            var hot = Input(1.5) with { CpuEffectiveTemperatureC = gpu ? 40 : 85, GpuTemperatureC = gpu ? 72 : 35 };
+            var hot = Input(1.5) with { CpuEffectiveTemperatureC = gpu ? 40 : 85, GpuTemperatureC = gpu ? 78 : 35 };
             Check(policy.Evaluate(hot).EqualFanLevel == 34,
                 "High CPU/GPU temperature-driven increases must bypass confirmation and preserve slew.");
         }
 
-        foreach (var cadence in new[] { 0.5, 2.5 })
-        {
-            policy = new(config);
-            policy.Evaluate(Input(0, 40));
-            var start = cadence;
-            for (var s = start; s < start + 12; s += cadence)
-                Check(policy.Evaluate(Input(s)).EqualFanLevel == 40, "Decrease counted samples instead of 12 real seconds.");
-            Check(policy.Evaluate(Input(start + 12)).EqualFanLevel == 39, "Sustained decrease did not occur at 12 seconds.");
-            Check(policy.Evaluate(Input(start + 12 + cadence)).EqualFanLevel == 39, "Second down-step bypassed confirmation.");
-        }
-
         policy = new(config);
         policy.Evaluate(Input(0, 40));
-        for (var s = 1; s <= 10; s++) policy.Evaluate(Input(s));
-        policy.Evaluate(Input(11, 39)); // Inside the one-level decrease deadband.
-        for (var s = 12; s < 24; s++)
-            Check(policy.Evaluate(Input(s)).EqualFanLevel == 40, "Deadband did not reset the decrease window.");
-        Check(policy.Evaluate(Input(24)).EqualFanLevel == 39, "Restarted decrease window never completed.");
+        for (var s = 1; s < 17; s++)
+            Check(policy.Evaluate(Input(s)).EqualFanLevel == 40, "Filtered decrease bypassed its continuous 12-second confirmation.");
+        Check(policy.Evaluate(Input(17)).EqualFanLevel == 39, "Sustained filtered decrease never completed.");
+        Check(policy.Evaluate(Input(18)).EqualFanLevel == 39, "Second down-step bypassed confirmation.");
 
         foreach (var invalid in new[] { "input", "duplicate", "backwards", "gap" })
         {
@@ -214,67 +201,91 @@ internal static class WmiFanExperimentSelfTest
             "Inertia must not delay admission refusal or the two recovery requests.");
     }
 
-    private static void TestCpuTemperatureFilter()
+    private static void TestFinalDemandFilter()
     {
         var origin = new DateTimeOffset(2026, 10, 4, 7, 23, 16, TimeSpan.Zero);
         var gap = TimeSpan.FromSeconds(3);
-        var filter = new WmiCpuTemperatureFilter();
-        Check(filter.Evaluate(origin, 80, gap).TemperatureC == 80, "Filter cold start understated heat.");
-        var cooling = filter.Evaluate(origin.AddSeconds(1), 40, gap);
-        Check(cooling.TemperatureC is > 72 and < 73 && !cooling.Bypassed, "Cooling EMA is not slow/bounded.");
+        var filter = new WmiFinalDemandFilter();
+        double Filter(double seconds, double demand, bool thermalOverride = false) =>
+            filter.Evaluate(origin.AddSeconds(seconds), demand, 30, 50, gap, thermalOverride);
+        Check(Filter(0, 50) == 50, "Filter cold start understated known demand.");
+        var cooling = Filter(1, 30);
+        Check(cooling is > 49 and < 49.1, "Falling final EMA is not slow/bounded.");
         filter.Reset();
-        filter.Evaluate(origin, 40, gap);
-        var heating = filter.Evaluate(origin.AddSeconds(1), 80, gap);
-        Check(heating.TemperatureC is > 65 and < 66, "Heating EMA is not fast/bounded.");
-        var high = filter.Evaluate(origin.AddSeconds(2), 85, gap);
-        Check(high.TemperatureC == 85 && high.Bypassed, "85 C bypass retained cool history.");
+        Filter(0, 30);
+        var heating = Filter(1, 50);
+        Check(heating is > 33 and < 33.1, "Rising final EMA is not slow/bounded.");
+        Check(Filter(2, 50, true) == 50, "Thermal override retained low-demand history.");
 
         // Equivalent sustained step response despite changing sample cadence.
         double EndAt(double cadence)
         {
-            var f = new WmiCpuTemperatureFilter();
-            f.Evaluate(origin, 40, gap);
-            var value = 40.0;
-            for (var s = cadence; s <= 4; s += cadence)
-                value = f.Evaluate(origin.AddSeconds(s), 80, gap).TemperatureC;
+            var f = new WmiFinalDemandFilter();
+            f.Evaluate(origin, 30, 30, 50, gap, false);
+            var value = 30.0;
+            for (var s = cadence; s <= 12; s += cadence)
+                value = f.Evaluate(origin.AddSeconds(s), 50, 30, 50, gap, false);
             return value;
         }
-        Check(Math.Abs(EndAt(0.5) - EndAt(2)) < 1e-9 && EndAt(2) > 79,
-            "CPU filter counts samples instead of elapsed time or suppresses sustained heating.");
+        Check(Math.Abs(EndAt(0.5) - EndAt(2)) < 1e-9 && EndAt(2) is > 47 and < 48,
+            "Final filter counts samples instead of elapsed time or suppresses sustained demand.");
         foreach (var invalid in new[] { "nan", "range", "duplicate", "backwards", "gap" })
         {
             filter = new();
-            filter.Evaluate(origin, 80, gap);
-            Reject(() => filter.Evaluate(origin.AddSeconds(invalid switch
-            { "duplicate" => 0, "backwards" => -1, "gap" => 3.01, _ => 1 }),
-                invalid switch { "nan" => double.NaN, "range" => 126, _ => 50 }, gap));
-            Check(filter.Evaluate(origin.AddSeconds(5), 50, gap).TemperatureC == 50,
+            Filter(0, 50);
+            Reject(() => Filter(invalid switch
+            { "duplicate" => 0, "backwards" => -1, "gap" => 3.01, _ => 1 },
+                invalid switch { "nan" => double.NaN, "range" => 51, _ => 30 }));
+            Check(Filter(5, 30) == 30,
                 "Rejected filter sample retained pre-gap history.");
         }
 
         AdaptiveFanPolicyInput Input(double seconds, double cpu = 40, double power = 10, double gpu = 35) =>
             new(origin.AddSeconds(seconds), cpu, power, 0, gpu, 0, 0);
-        var config = WmiFanExperiment.CreatePolicy();
-        var policy = new WmiFanInertiaPolicy(config);
+        var config = WmiFanExperiment.CreatePolicy() with
+        {
+            CpuTemperatureCurve = [new(40, 30), new(80, 50)],
+            GpuTemperatureCurve = [new(35, 30), new(75, 50)],
+            CpuPowerCurve = [new(0, 30), new(100, 50)],
+            GpuPowerCurve = [new(0, 30), new(100, 50)],
+            CpuLoadCurve = [new(0, 30), new(100, 50)],
+            GpuLoadCurve = [new(0, 30), new(100, 50)]
+        };
+        foreach (var source in Enumerable.Range(0, 6))
+        {
+            var normal = new WmiFanInertiaPolicy(config);
+            var baseline = Input(0, power: 0);
+            normal.Evaluate(baseline);
+            AdaptiveFanPolicyInput Peak(double seconds) => (baseline with { Timestamp = origin.AddSeconds(seconds) }) with
+            {
+                CpuEffectiveTemperatureC = source == 0 ? 80 : 40,
+                GpuTemperatureC = source == 1 ? 75 : 35,
+                CpuPackagePowerW = source == 2 ? 100 : 0,
+                GpuPowerW = source == 3 ? 100 : 0,
+                CpuLoadPercent = source == 4 ? 100 : 0,
+                GpuLoadPercent = source == 5 ? 100 : 0
+            };
+            var first = normal.Evaluate(Peak(1));
+            Check(first.RawDemandLevel == 50 && first.SmoothedDemandLevel is > 33 and < 34 && first.EqualFanLevel == 30 && !first.ThermalOverride,
+                $"Source {source} bypassed final smoothing or normal confirmation.");
+            var previousLevel = 30;
+            for (var s = 2; s <= 90; s++)
+            {
+                var d = normal.Evaluate(Peak(s));
+                Check(d.Accepted && d.EqualFanLevel - previousLevel is >= 0 and <= 1 && !d.ThermalOverride,
+                    $"Source {source} produced a normal multi-level jump.");
+                previousLevel = d.EqualFanLevel!.Value;
+            }
+            Check(previousLevel == 50, $"Source {source} sustained demand never reached its target.");
+        }
+        var policy = new WmiFanInertiaPolicy(WmiFanExperiment.CreatePolicy());
         policy.Evaluate(Input(0));
-        var smallPeak = policy.Evaluate(Input(0.5, cpu: 72));
-        Check(smallPeak.RawDemandLevel == 31.5 && smallPeak.CurveDemandLevel == 30 && smallPeak.EqualFanLevel == 30,
-            "Moderate short CPU peak is not smoothed in curve-only demand.");
-        Check(smallPeak.CpuCurveTemperatureC is > 52 and < 53 && !smallPeak.CpuTemperatureFilterBypassed,
-            "Policy did not expose filtered CPU temperature separately from raw demand.");
-        var predictedLoad = policy.Evaluate(Input(1, power: 115));
-        Check(predictedLoad.CurveDemandLevel == 50 && predictedLoad.EqualFanLevel == 34,
-            "CPU power demand was attenuated by thermal filtering.");
-        var highHeat = policy.Evaluate(Input(2, cpu: 85));
-        Check(highHeat.CpuCurveTemperatureC == 85 && highHeat.CpuTemperatureFilterBypassed && highHeat.CurveDemandLevel == 44,
-            "High CPU heat did not bypass curve smoothing.");
-        policy = new(config);
-        policy.Evaluate(Input(0));
-        Check(policy.Evaluate(Input(1, gpu: 84)).CurveDemandLevel == 50,
-            "GPU temperature was accidentally filtered.");
+        var highHeat = policy.Evaluate(Input(1, cpu: 85));
+        Check(highHeat.SmoothedDemandLevel == highHeat.RawDemandLevel && highHeat.ThermalOverride && highHeat.EqualFanLevel == 34,
+            "High CPU heat did not bypass final smoothing with the existing emergency step.");
         var invalidRaw = policy.Evaluate(Input(2, cpu: double.NaN));
-        Check(!invalidRaw.Accepted && invalidRaw.CpuCurveTemperatureC is null,
-            "A valid previous filtered value hid an invalid raw CPU sensor.");
+        Check(!invalidRaw.Accepted && invalidRaw.SmoothedDemandLevel is null,
+            "A valid previous smoothed demand hid an invalid raw CPU sensor.");
 
         // e43bab: fresh telemetry, sudden 54 -> 97 C, 55.166 W / 61.203%.
         // Worker admission uses this immutable ORIGINAL snapshot, not the EMA.

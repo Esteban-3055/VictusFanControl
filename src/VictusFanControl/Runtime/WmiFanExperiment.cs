@@ -151,7 +151,7 @@ internal static class WmiFanExperiment
         var config = CreatePolicy();
         WriteJson(Path.Combine(o.Directory, "policy.json"), config);
         WriteJson(Path.Combine(o.Directory, "inertia.json"), WmiFanInertiaPolicy.Settings);
-        WriteJson(Path.Combine(o.Directory, "cpu-temperature-filter.json"), WmiCpuTemperatureFilter.Settings);
+        WriteJson(Path.Combine(o.Directory, "final-demand-filter.json"), WmiFinalDemandFilter.Settings);
         var engine = new WmiFanInertiaPolicy(config);
         await using var csv = new CsvTelemetryLogger(Path.Combine(o.Directory, "telemetry.csv"));
         await csv.WriteHeaderAsync(CancellationToken.None);
@@ -217,8 +217,7 @@ internal static class WmiFanExperiment
                 EnsureNormal();
                 var sent = session?.Apply(decision.EqualFanLevel.Value, safety.CustomControlPermitted) ?? false;
                 decisions.WriteLine(JsonSerializer.Serialize(new { Utc = DateTimeOffset.UtcNow,
-                    decision.EqualFanLevel, decision.RawDemandLevel, decision.CurveDemandLevel,
-                    decision.CpuCurveTemperatureC, decision.CpuTemperatureFilterBypassed,
+                    decision.EqualFanLevel, decision.RawDemandLevel, decision.SmoothedDemandLevel, decision.ThermalOverride,
                     decision.Detail, Sent = sent, o.Control,
                     WindowsPower = SystemPowerStatusReader.Read(),
                     snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC,
@@ -226,7 +225,7 @@ internal static class WmiFanExperiment
                     snapshot.FanSampleAgeMilliseconds, snapshot.FanAgeCapturedAtUtc, SetpointReadback = false }));
                 WriteJson(Path.Combine(o.Directory, "heartbeat.json"), new { Pid = Environment.ProcessId,
                     Utc = DateTimeOffset.UtcNow, ElapsedMs = clock.ElapsedMilliseconds, Level = decision.EqualFanLevel });
-                Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; CPU={snapshot.CpuControlTemperatureC:0}C CPUcurve={decision.CpuCurveTemperatureC:0.0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}");
+                Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; demand={decision.RawDemandLevel:0.0} smooth={decision.SmoothedDemandLevel:0.0} thermalOverride={decision.ThermalOverride}; CPU={snapshot.CpuControlTemperatureC:0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}");
                 await Task.Delay(1000, cts.Token);
             }
         }

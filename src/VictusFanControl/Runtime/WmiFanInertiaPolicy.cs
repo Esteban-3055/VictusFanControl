@@ -3,18 +3,17 @@ using VictusFanControl.Control.Adaptive;
 namespace VictusFanControl.Runtime;
 
 internal sealed record WmiFanInertiaSettings(
-    double SmallIncreaseConfirmationSeconds = 2,
-    int SmallIncreaseMaximumLevels = 2,
+    double IncreaseConfirmationSeconds = 2,
+    int NormalMaximumUpStepLevels = 1,
     double DecreaseConfirmationSeconds = 12,
-    string ThermalIncrease = "immediate-with-existing-up-step-limit");
+    string ThermalIncrease = "raw-CPU85-or-GPU78;immediate-with-existing-up-step-limit");
 
 internal sealed record WmiFanPolicyDecision(
     bool Accepted,
     int? EqualFanLevel,
     double? RawDemandLevel,
-    double? CurveDemandLevel,
-    double? CpuCurveTemperatureC,
-    bool CpuTemperatureFilterBypassed,
+    double? SmoothedDemandLevel,
+    bool ThermalOverride,
     string Detail);
 
 /// <summary>
@@ -26,7 +25,7 @@ internal sealed class WmiFanInertiaPolicy
     internal static WmiFanInertiaSettings Settings { get; } = new();
     private readonly AdaptiveFanPolicyConfig _config;
     private readonly AdaptiveFanPolicyEngine _demand;
-    private readonly WmiCpuTemperatureFilter _cpuFilter = new();
+    private readonly WmiFinalDemandFilter _finalFilter = new();
     private int? _current;
     private DateTimeOffset? _increaseSince;
     private int _increaseFloor;
@@ -54,25 +53,20 @@ internal sealed class WmiFanInertiaPolicy
         if (!demand.Accepted || !demand.EqualFanLevel.HasValue)
         {
             ClearConfirmation();
-            _cpuFilter.Reset();
-            return new(false, null, demand.RawDemandLevel, null, null, false, demand.Detail);
+            _finalFilter.Reset();
+            return new(false, null, demand.RawDemandLevel, null, false, demand.Detail);
         }
 
-        var cpu = _cpuFilter.Evaluate(input.Timestamp, input.CpuEffectiveTemperatureC, _config.MaximumSampleGap);
-        // Only CPU temperature is filtered. GPU heat, power and load remain
-        // instantaneous and can independently win the maximum-demand rule.
-        var curveDemand = new[]
-        {
-            AdaptiveFanPolicyEngine.Interpolate(_config.CpuTemperatureCurve, cpu.TemperatureC),
-            AdaptiveFanPolicyEngine.Interpolate(_config.GpuTemperatureCurve, input.GpuTemperatureC),
-            AdaptiveFanPolicyEngine.Interpolate(_config.CpuPowerCurve, input.CpuPackagePowerW),
-            AdaptiveFanPolicyEngine.Interpolate(_config.GpuPowerCurve, input.GpuPowerW),
-            AdaptiveFanPolicyEngine.Interpolate(_config.CpuLoadCurve, input.CpuLoadPercent),
-            AdaptiveFanPolicyEngine.Interpolate(_config.GpuLoadCurve, input.GpuLoadPercent)
-        }.Max();
-        var requested = Math.Clamp((int)Math.Ceiling(curveDemand), _config.MinimumLevel, _config.MaximumLevel);
+        // Every normal route (CPU/GPU heat, power, load) passes through the
+        // same final-demand filter. Raw sensors are used only for validation,
+        // demand calculation and the separately identified thermal override.
+        var thermalOverride = input.CpuEffectiveTemperatureC >= WmiFinalDemandFilter.Settings.CpuThermalOverrideC ||
+            input.GpuTemperatureC >= WmiFinalDemandFilter.Settings.GpuThermalOverrideC;
+        var smoothed = _finalFilter.Evaluate(input.Timestamp, demand.RawDemandLevel!.Value,
+            _config.MinimumLevel, _config.MaximumLevel, _config.MaximumSampleGap, thermalOverride);
+        var requested = Math.Clamp((int)Math.Ceiling(smoothed), _config.MinimumLevel, _config.MaximumLevel);
         WmiFanPolicyDecision Accepted(string detail) =>
-            new(true, _current, demand.RawDemandLevel, curveDemand, cpu.TemperatureC, cpu.Bypassed, detail);
+            new(true, _current, demand.RawDemandLevel, smoothed, thermalOverride, detail);
         if (!_current.HasValue)
         {
             _current = requested;
@@ -83,15 +77,11 @@ internal sealed class WmiFanInertiaPolicy
         if (requested > current)
         {
             _decreaseSince = null;
-            var thermalDemand = Math.Max(
-                AdaptiveFanPolicyEngine.Interpolate(_config.CpuTemperatureCurve, cpu.TemperatureC),
-                AdaptiveFanPolicyEngine.Interpolate(_config.GpuTemperatureCurve, input.GpuTemperatureC));
-            var thermalIncrease = Math.Ceiling(thermalDemand) > current;
-            if (thermalIncrease || requested - current > Settings.SmallIncreaseMaximumLevels)
+            if (thermalOverride)
             {
                 _current = Math.Min(requested, current + _config.MaximumUpStepPerSample);
                 ClearConfirmation();
-                return Accepted($"Immediate {(thermalIncrease ? "thermal" : "large-demand")} increase to {_current}; requested={requested}.");
+                return Accepted($"Thermal override increase to {_current}; requested={requested}.");
             }
 
             if (!_increaseSince.HasValue)
@@ -101,14 +91,14 @@ internal sealed class WmiFanInertiaPolicy
             }
             _increaseFloor = Math.Min(_increaseFloor, requested);
             var elapsed = (input.Timestamp - _increaseSince.Value).TotalSeconds;
-            if (elapsed >= Settings.SmallIncreaseConfirmationSeconds)
+            if (elapsed >= Settings.IncreaseConfirmationSeconds)
             {
                 // Raise only to the demand sustained throughout the window.
-                _current = Math.Min(_increaseFloor, current + _config.MaximumUpStepPerSample);
+                _current = Math.Min(_increaseFloor, current + Settings.NormalMaximumUpStepLevels);
                 ClearConfirmation();
-                return Accepted($"Confirmed small increase to {_current}; sustained={elapsed:0.00}s; requested={requested}.");
+                return Accepted($"Confirmed normal increase to {_current}; sustained={elapsed:0.00}s; requested={requested}.");
             }
-            return Accepted($"Holding {current}; confirming small increase {elapsed:0.00}/{Settings.SmallIncreaseConfirmationSeconds}s.");
+            return Accepted($"Holding {current}; confirming normal increase {elapsed:0.00}/{Settings.IncreaseConfirmationSeconds}s.");
         }
 
         _increaseSince = null;
