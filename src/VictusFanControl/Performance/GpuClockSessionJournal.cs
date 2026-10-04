@@ -300,15 +300,40 @@ internal sealed class JsonGpuClockSessionJournal :
             return;
         }
 
-        if (!MoveFileEx(
-                source,
-                destination,
-                MoveFileFlags.ReplaceExisting |
-                MoveFileFlags.WriteThrough))
+        const int ErrorSharingViolation = 32;
+        const int ErrorLockViolation = 33;
+        const int MaxReplaceAttempts = 5;
+
+        for (var attempt = 1;
+             attempt <= MaxReplaceAttempts;
+             attempt++)
         {
-            throw new Win32Exception(
-                Marshal.GetLastWin32Error(),
-                "Durable GPU clock journal replace failed.");
+            if (MoveFileEx(
+                    source,
+                    destination,
+                    MoveFileFlags.ReplaceExisting |
+                    MoveFileFlags.WriteThrough))
+            {
+                return;
+            }
+
+            var error =
+                Marshal.GetLastWin32Error();
+
+            var transientShareFailure =
+                error == ErrorSharingViolation ||
+                error == ErrorLockViolation;
+
+            if (!transientShareFailure ||
+                attempt == MaxReplaceAttempts)
+            {
+                throw new Win32Exception(
+                    error,
+                    "Durable GPU clock journal replace failed.");
+            }
+
+            Thread.Sleep(
+                attempt * 10);
         }
     }
 
