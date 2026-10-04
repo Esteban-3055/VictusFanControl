@@ -16,6 +16,7 @@ internal static class WmiFanExperimentSelfTest
         Directory.CreateDirectory(directory);
         try
         {
+            TestHeartbeats(directory);
             TestFreshAcquisitionAsync().GetAwaiter().GetResult();
             TestInertia();
             TestFinalDemandFilter();
@@ -118,11 +119,84 @@ internal static class WmiFanExperimentSelfTest
             Reject(() => WmiFanExperimentBoundary.EnsureRequestAllowed(level));
             WmiFanExperimentBoundary.BeginRecovery();
             WmiFanExperimentBoundary.EnsureRequestAllowed(release);
-            output.WriteLine("PASS: final demand EMA on all six sources, normal slow actuation, raw thermal override/handoff, time-based inertia, sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
+            output.WriteLine("PASS: atomic heartbeat replacement, transient sharing conflicts without deadline renewal, stalled/invalid heartbeat rejection, final demand EMA on all six sources, normal slow actuation, raw thermal override/handoff, time-based inertia, sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
             return 0;
         }
         catch (Exception ex) { output.WriteLine("FAIL: " + ex); return 1; }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private static void TestHeartbeats(string directory)
+    {
+        var path = Path.Combine(directory, "heartbeat.json");
+        var monitor = new WmiFanHeartbeatMonitor(17752); // PID from capture 3fdb9c.
+        TimeSpan At(double seconds) => TimeSpan.FromSeconds(seconds);
+        void Publish(long elapsed, int pid = 17752) =>
+            WmiFanExperiment.WriteJson(path, new { Pid = pid, ElapsedMs = elapsed });
+        void RejectHeartbeat<T>() where T : Exception
+        {
+            try { monitor.Observe(path, At(60)); }
+            catch (T) { return; }
+            throw new Exception("Expected heartbeat rejection: " + typeof(T).Name);
+        }
+        Check(!monitor.Observe(path, At(0)) && !monitor.TimedOut(At(30)) && monitor.TimedOut(At(30.001)),
+            "Absent heartbeat must preserve the 30-second startup deadline.");
+        Publish(1835);
+        Check(monitor.Observe(path, At(2)), "First heartbeat not observed.");
+        Check(!monitor.Observe(path, At(9)) && !monitor.TimedOut(At(10)) && monitor.TimedOut(At(10.001)),
+            "Repeated heartbeat must not renew the eight-second progress deadline.");
+        Publish(1800);
+        Check(!monitor.Observe(path, At(9)), "Regressed heartbeat renewed liveness.");
+        File.Delete(path);
+        Check(!monitor.Observe(path, At(9)) && monitor.TimedOut(At(10.001)),
+            "Missing publication after admission renewed liveness.");
+        Publish(2000);
+        Check(monitor.Observe(path, At(11)), "New heartbeat failed to renew progress.");
+
+        // Windows locks reproduce the precise ReadAllText failure in 3fdb9c.
+        if (OperatingSystem.IsWindows())
+        {
+            using (var locked = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                Reject(() => File.ReadAllText(path));
+                Check(!monitor.Observe(path, At(18)) && monitor.TimedOut(At(19.001)),
+                    "Sharing violation escaped or renewed the watchdog deadline.");
+                var startup = new WmiFanHeartbeatMonitor(17752);
+                Check(!startup.Observe(path, At(29)) && startup.TimedOut(At(30.001)),
+                    "Locked first heartbeat bypassed startup expiry.");
+            }
+            Publish(2100);
+            Check(monitor.Observe(path, At(20)), "Released sharing lock prevented the next observation.");
+        }
+
+        // Keep an old publication open while replacing its pathname. This fails
+        // on Windows with the old reader's share flags, and must not block a writer.
+        Publish(3000);
+        using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
+        {
+            for (var i = 1; i <= 20; i++)
+            {
+                Publish(3000 + i);
+                Check(monitor.Observe(path, At(30 + i)), "Atomic replacement failed with an open reader.");
+            }
+            using var old = System.Text.Json.JsonDocument.Parse(held);
+            Check(old.RootElement.GetProperty("ElapsedMs").GetInt64() == 3000,
+                "Replacement modified the already-open publication.");
+        }
+        Publish(4000, pid: 1);
+        RejectHeartbeat<InvalidOperationException>();
+        Publish(-1);
+        RejectHeartbeat<InvalidOperationException>();
+        File.WriteAllText(path, "{\"Pid\":17752");
+        RejectHeartbeat<System.Text.Json.JsonException>();
+        File.WriteAllText(path, "{}");
+        RejectHeartbeat<KeyNotFoundException>();
+        Check(monitor.TimedOut(At(60)), "Invalid heartbeat renewed progress before rejection.");
+        Check(WmiFanHeartbeatMonitor.IsSharingViolation(new IOException("sharing", unchecked((int)0x80070020))) &&
+            WmiFanHeartbeatMonitor.IsSharingViolation(new IOException("locking", unchecked((int)0x80070021))) &&
+            !WmiFanHeartbeatMonitor.IsSharingViolation(new IOException("access", unchecked((int)0x80070005))) &&
+            !WmiFanHeartbeatMonitor.IsSharingViolation(new IOException("disk", unchecked((int)0x80070070))),
+            "Only sharing/lock errors may be retried without renewing liveness.");
     }
 
     private static void TestInertia()

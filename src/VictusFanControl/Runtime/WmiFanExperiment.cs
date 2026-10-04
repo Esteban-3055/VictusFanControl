@@ -303,21 +303,15 @@ internal static class WmiFanExperiment
             stdout = PumpAsync(worker.StandardOutput, Path.Combine(o.Directory, "worker-stdout.txt"), Console.Out);
             stderr = PumpAsync(worker.StandardError, Path.Combine(o.Directory, "worker-stderr.txt"), Console.Error);
             var clock = Stopwatch.StartNew();
-            var lastHeartbeat = TimeSpan.Zero;
-            long lastElapsed = -1;
+            var heartbeats = new WmiFanHeartbeatMonitor(worker.Id);
             while (!worker.HasExited && !cts.IsCancellationRequested && clock.Elapsed.TotalSeconds < o.Seconds + 20)
             {
                 foreach (var e in ReadAcpiEvents(baseline, started)) events[e.RecordId] = e;
                 if (events.Count > 0) { stopReason = "new-ACPI-13-or-15"; break; }
                 var heartbeat = Path.Combine(o.Directory, "heartbeat.json");
-                if (File.Exists(heartbeat))
-                {
-                    using var h = JsonDocument.Parse(File.ReadAllText(heartbeat));
-                    if (h.RootElement.GetProperty("Pid").GetInt32() != worker.Id) throw new InvalidOperationException("Wrong heartbeat PID.");
-                    var elapsed = h.RootElement.GetProperty("ElapsedMs").GetInt64();
-                    if (elapsed > lastElapsed) { lastElapsed = elapsed; lastHeartbeat = clock.Elapsed; }
-                }
-                if (clock.Elapsed - lastHeartbeat > TimeSpan.FromSeconds(lastElapsed < 0 ? 30 : 8))
+                if (!heartbeats.Observe(heartbeat, clock.Elapsed))
+                    EcWmiInvestigationTrace.Record(0, "experiment.heartbeat.no-progress", "absent,locked-or-unchanged;deadline-not-renewed");
+                if (heartbeats.TimedOut(clock.Elapsed))
                 { stopReason = "heartbeat-timeout"; break; }
                 if (File.Exists(WmiFanExperimentBoundary.StopPath)) { stopReason = "stop-signal"; break; }
                 await Task.Delay(500);
