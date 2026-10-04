@@ -40,6 +40,10 @@ internal static class CpuPowerLimiterSelfTest
                 GpuClockLimitBackendSelfTest.Run(output) == 0,
                 "GPU NVML locked-clock backend contract");
 
+            Require(
+                GpuPowerLimitQualificationSelfTest.Run(output) == 0,
+                "GPU NVML power-limit read qualification");
+
             NormalApplyVerifyRelease(output);
             OwnedPresetSwitchIsOneJournaledWrite(output);
             ConfirmedSourceChangeUsesOwnedSwitchOnly(output);

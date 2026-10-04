@@ -849,3 +849,41 @@ promoted to production without a separate stability and compatibility gate.
 
 productionHardwareWritesAuthorized remains false.
 
+## Step 5.9A — read-only GPU power-limit qualification surface
+
+The next GPU performance-control candidate is the NVML power-management limit,
+because unlike locked graphics clocks, public NVML provides an exact getter for
+the configured power-management limit.
+
+NvmlClient now resolves the following power-management exports optionally:
+
+- nvmlDeviceGetPowerManagementMode
+- nvmlDeviceGetPowerManagementLimit
+- nvmlDeviceGetPowerManagementDefaultLimit
+- nvmlDeviceGetPowerManagementLimitConstraints
+- nvmlDeviceGetEnforcedPowerLimit
+- nvmlDeviceSetPowerManagementLimit (presence only; never called by this step)
+
+The dedicated INvmlGpuPowerLimitReadTransport contains no setter method. The
+setter export is exposed only as capability metadata.
+
+GpuPowerLimitQualification is pure and read-only. A target becomes a candidate
+for a later controlled write qualification only when power management is
+enabled, current/default/min/max are readable and internally consistent,
+min < max proves an adjustable range, and the setter export exists.
+
+Even then ProductionWriteAuthorized remains false. A successful read-only
+qualification means only that a carefully bounded physical write/readback/
+restore experiment may be worth performing next.
+
+The configured power-management limit and enforced power limit are modeled
+separately. nvmlDeviceGetPowerManagementLimit is the configured field a future
+setter would mutate; nvmlDeviceGetEnforcedPowerLimit may be lower because
+other limiters can participate in the effective cap.
+
+Hardware-free fixtures cover adjustable, fixed-range, disabled, missing getter,
+missing setter-export and configured-vs-enforced cases.
+
+No GPU power-limit write path exists in this step.
+productionHardwareWritesAuthorized remains false.
+

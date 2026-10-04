@@ -5,7 +5,8 @@ namespace VictusFanControl.Hardware.Nvidia;
 
 internal sealed class NvmlClient :
     IDisposable,
-    INvmlGpuClockControlTransport
+    INvmlGpuClockControlTransport,
+    INvmlGpuPowerLimitReadTransport
 {
     private const int NvmlSuccess = 0;
     private const uint NvmlTemperatureGpu = 0;
@@ -40,6 +41,24 @@ internal sealed class NvmlClient :
 
     private readonly NvmlDeviceGetCurrentClocksEventReasonsDelegate?
         _getCurrentClocksEventReasons;
+
+    private readonly NvmlDeviceSetPowerManagementLimitDelegate?
+        _setPowerManagementLimit;
+
+    private readonly NvmlDeviceGetPowerManagementModeDelegate?
+        _getPowerManagementMode;
+
+    private readonly NvmlDeviceGetPowerManagementLimitDelegate?
+        _getPowerManagementLimit;
+
+    private readonly NvmlDeviceGetPowerManagementDefaultLimitDelegate?
+        _getPowerManagementDefaultLimit;
+
+    private readonly NvmlDeviceGetPowerManagementLimitConstraintsDelegate?
+        _getPowerManagementLimitConstraints;
+
+    private readonly NvmlDeviceGetEnforcedPowerLimitDelegate?
+        _getEnforcedPowerLimit;
 
     private readonly string? _preferredDeviceName;
     private readonly bool _requirePreferredDevice;
@@ -85,6 +104,30 @@ internal sealed class NvmlClient :
             _getCurrentClocksEventReasons =
                 TryGetDelegate<NvmlDeviceGetCurrentClocksEventReasonsDelegate>(
                     "nvmlDeviceGetCurrentClocksEventReasons");
+
+            _setPowerManagementLimit =
+                TryGetDelegate<NvmlDeviceSetPowerManagementLimitDelegate>(
+                    "nvmlDeviceSetPowerManagementLimit");
+
+            _getPowerManagementMode =
+                TryGetDelegate<NvmlDeviceGetPowerManagementModeDelegate>(
+                    "nvmlDeviceGetPowerManagementMode");
+
+            _getPowerManagementLimit =
+                TryGetDelegate<NvmlDeviceGetPowerManagementLimitDelegate>(
+                    "nvmlDeviceGetPowerManagementLimit");
+
+            _getPowerManagementDefaultLimit =
+                TryGetDelegate<NvmlDeviceGetPowerManagementDefaultLimitDelegate>(
+                    "nvmlDeviceGetPowerManagementDefaultLimit");
+
+            _getPowerManagementLimitConstraints =
+                TryGetDelegate<NvmlDeviceGetPowerManagementLimitConstraintsDelegate>(
+                    "nvmlDeviceGetPowerManagementLimitConstraints");
+
+            _getEnforcedPowerLimit =
+                TryGetDelegate<NvmlDeviceGetEnforcedPowerLimitDelegate>(
+                    "nvmlDeviceGetEnforcedPowerLimit");
 
             InitializeDevice();
         }
@@ -291,6 +334,87 @@ internal sealed class NvmlClient :
             ExportAvailable: true,
             Result: result,
             Value: reasons);
+    }
+
+
+    public NvmlGpuPowerLimitAvailability
+        GpuPowerLimitAvailability =>
+        new(
+            SetPowerManagementLimitExportAvailable:
+                _setPowerManagementLimit is not null,
+            PowerManagementModeExportAvailable:
+                _getPowerManagementMode is not null,
+            PowerManagementLimitExportAvailable:
+                _getPowerManagementLimit is not null,
+            DefaultPowerManagementLimitExportAvailable:
+                _getPowerManagementDefaultLimit is not null,
+            PowerManagementLimitConstraintsExportAvailable:
+                _getPowerManagementLimitConstraints is not null,
+            EnforcedPowerLimitExportAvailable:
+                _getEnforcedPowerLimit is not null);
+
+    public NvmlUIntCallResult ReadPowerManagementModeOnce()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_getPowerManagementMode is null)
+            return new NvmlUIntCallResult(false, null, 0);
+
+        var result = _getPowerManagementMode(_device, out var mode);
+        return new NvmlUIntCallResult(true, result, mode);
+    }
+
+    public NvmlUIntCallResult ReadPowerManagementLimitOnce()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_getPowerManagementLimit is null)
+            return new NvmlUIntCallResult(false, null, 0);
+
+        var result = _getPowerManagementLimit(_device, out var limitMilliwatts);
+        return new NvmlUIntCallResult(true, result, limitMilliwatts);
+    }
+
+    public NvmlUIntCallResult ReadDefaultPowerManagementLimitOnce()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_getPowerManagementDefaultLimit is null)
+            return new NvmlUIntCallResult(false, null, 0);
+
+        var result =
+            _getPowerManagementDefaultLimit(
+                _device,
+                out var limitMilliwatts);
+
+        return new NvmlUIntCallResult(true, result, limitMilliwatts);
+    }
+
+    public NvmlPowerLimitConstraintsCallResult
+        ReadPowerManagementLimitConstraintsOnce()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_getPowerManagementLimitConstraints is null)
+            return new NvmlPowerLimitConstraintsCallResult(false, null, 0, 0);
+
+        var result =
+            _getPowerManagementLimitConstraints(
+                _device,
+                out var minMilliwatts,
+                out var maxMilliwatts);
+
+        return new NvmlPowerLimitConstraintsCallResult(
+            true,
+            result,
+            minMilliwatts,
+            maxMilliwatts);
+    }
+
+    public NvmlUIntCallResult ReadEnforcedPowerLimitOnce()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_getEnforcedPowerLimit is null)
+            return new NvmlUIntCallResult(false, null, 0);
+
+        var result = _getEnforcedPowerLimit(_device, out var limitMilliwatts);
+        return new NvmlUIntCallResult(true, result, limitMilliwatts);
     }
 
     public void Dispose()
@@ -586,6 +710,37 @@ internal sealed class NvmlClient :
     private delegate int NvmlDeviceGetCurrentClocksEventReasonsDelegate(
         IntPtr device,
         out ulong clocksEventReasons);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceSetPowerManagementLimitDelegate(
+        IntPtr device,
+        uint limitMilliwatts);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceGetPowerManagementModeDelegate(
+        IntPtr device,
+        out uint mode);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceGetPowerManagementLimitDelegate(
+        IntPtr device,
+        out uint limitMilliwatts);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceGetPowerManagementDefaultLimitDelegate(
+        IntPtr device,
+        out uint defaultLimitMilliwatts);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceGetPowerManagementLimitConstraintsDelegate(
+        IntPtr device,
+        out uint minLimitMilliwatts,
+        out uint maxLimitMilliwatts);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceGetEnforcedPowerLimitDelegate(
+        IntPtr device,
+        out uint limitMilliwatts);
 
     internal readonly record struct GpuSample(
         double TemperatureC,
