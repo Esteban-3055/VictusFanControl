@@ -49,6 +49,10 @@ internal static class CpuPowerLimiterSelfTest
                 "GPU clock ActiveUnverified session controller");
 
             Require(
+                GpuClockPresetTransitionControllerSelfTest.Run(output) == 0,
+                "GPU clock confirmed-source transition controller");
+
+            Require(
                 GpuPowerLimitQualificationSelfTest.Run(output) == 0,
                 "GPU NVML power-limit read qualification");
 

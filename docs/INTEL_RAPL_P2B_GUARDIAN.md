@@ -1052,3 +1052,37 @@ invalidation and zero-write Dispose behavior.
 This step remains software/fixture qualification only. The production NVML
 write gate is still closed and no new physical GPU write is authorized here.
 
+## Step 5.10B — confirmed AC/Battery dispatcher for GPU clocks
+
+GpuClockPresetTransitionController now connects the shared confirmed
+PerformancePowerSourceKind to an already-established GPU clock session.
+
+It deliberately has no startup Apply authority:
+
+- session Disabled + AC/Battery detected -> zero writes, NoActiveSession;
+- session ActiveUnverified + enabled destination -> direct SwitchPreset;
+- same enabled destination already active -> zero-write no-op;
+- disabled destination -> normal journaled Release;
+- Unknown source -> normal journaled Release;
+- RecoveryRequired/Applying/Switching/Releasing/Failed/Unsupported -> blocked.
+
+The AC/Battery values remain exactly:
+
+- AC: 210..1850 MHz;
+- Battery: 210..1200 MHz.
+
+An enabled AC<->Battery transition therefore remains one direct
+nvmlDeviceSetGpuLockedClocks call after PresetSwitchWriteArmed and never
+performs an intermediate ResetGpuLockedClocks.
+
+Disabled/Unknown release is allowed only while the original live process is in
+ActiveUnverified under the exclusive-controller contract. A stale journal after
+restart remains RecoveryRequired and cannot use a source event to perform Set
+or Reset.
+
+This dispatcher still does not own Windows power notifications. Step 6 will
+confirm AC/DC with a real OS query before invoking it.
+
+No production GPU write gate, GUI authority, startup persistence or automatic
+profile integration is enabled by this step.
+
