@@ -306,7 +306,7 @@ internal sealed class JsonCpuPowerSessionJournal : ICpuPowerSessionJournal
         CpuPowerLimitRequest request) =>
         double.IsFinite(request.Pl1Watts) &&
         double.IsFinite(request.Pl2Watts) &&
-        request.Pl1Watts >= 10 &&
+        request.Pl1Watts >= CpuPowerProductDefaults.MinimumPl1Watts &&
         request.Pl2Watts >= request.Pl1Watts;
 
     private static void DurableReplace(
