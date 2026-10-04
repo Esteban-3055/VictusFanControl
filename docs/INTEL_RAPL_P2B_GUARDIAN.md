@@ -803,3 +803,49 @@ ownership unless an exact getter is found.
 
 No GPU hardware qualification PASS is claimed by this commit.
 
+## Step 5.8C — physical observability result and ownership decision
+
+Four read-only captures were taken on the exact HP-8C40-9D0R1LA-F18 target
+around operator-established GPU states:
+
+| State | Current graphics clock | APP_CLOCK_TARGET | Clock event reasons | Exact locked range |
+|---|---:|---:|---:|---|
+| baseline | 2010 MHz | NVML error 3 | 36 | unavailable |
+| AC 210..1850 | 1260 MHz | NVML error 3 | 36 | unavailable |
+| Battery 210..1200 | 1200 MHz | NVML error 3 | 36 | unavailable |
+| reset | 1125 MHz | NVML error 3 | 36 | unavailable |
+
+The result is decisive for the current design:
+
+- the instantaneous graphics clock is not a lock-range getter; it changed in
+  all states and only coincidentally equaled 1200 MHz in the Battery capture;
+- the application-clock target path is unsupported on this target
+  (NVML result 3 in all four captures);
+- the clock-event-reasons bitmap remained exactly 36 in every state and cannot
+  distinguish baseline, either locked preset, or reset;
+- public NVML still exposes no exact installed min/max locked range.
+
+Therefore the exact-ownership safety gate remains closed. The planned GPU
+5x/30s bounded reacquire policy is NOT authorized under NVML-only
+observability, because VFC cannot reliably detect that another application
+replaced the clock range. Conditional automatic reset is also NOT authorized:
+without exact ownership evidence it could erase another application's lock.
+
+This does not invalidate the physical feasibility of the user-requested
+210..1850 and 210..1200 presets. It means only that the stronger product
+semantics requested for coexistence with external writers cannot be proven by
+the available public NVML read surface.
+
+A consolidated evidence record is stored at:
+
+    release/gpu-nvml-observability-8c40-2026-10-04.json
+
+The next research gate is to look for an exact, supported read surface outside
+the current NVML query set. Official NVAPI current/base/boost clock queries and
+CUPTI lock-status APIs may be useful diagnostics, but neither should be treated
+as exact arbitrary min/max ownership unless the API contract explicitly
+provides that information. Undocumented/private driver interfaces must not be
+promoted to production without a separate stability and compatibility gate.
+
+productionHardwareWritesAuthorized remains false.
+
