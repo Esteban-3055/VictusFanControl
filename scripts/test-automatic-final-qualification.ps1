@@ -408,20 +408,16 @@ try {
     [void](Assert-StableFirmware)
 
     $pass = $true
+    $zipPath = "$evidenceRoot.zip"
     Write-Summary 'PASS' ''
 
-    $zipPath = "$evidenceRoot.zip"
     if (Test-Path -LiteralPath $zipPath) {
         Remove-Item -LiteralPath $zipPath -Force
     }
 
     Compress-Archive -Path (Join-Path $evidenceRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
     $zipSha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
-
-    Write-Summary 'PASS' ''
-    Remove-Item -LiteralPath $zipPath -Force
-    Compress-Archive -Path (Join-Path $evidenceRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
-    $zipSha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    Set-Content -LiteralPath ($zipPath + '.sha256') -Encoding ASCII -Value ("{0}  {1}" -f $zipSha256, (Split-Path -Leaf $zipPath))
 
     Write-Host ''
     Write-Host 'AUTOMATIC FINAL NORMAL PATH: PASS' -ForegroundColor Green
