@@ -2492,3 +2492,90 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+### Step 6H physical qualification evidence — 2026-10-04
+
+The combined CPU+GPU Guardian gate is now **physically qualified PASS** on the
+exact HP-8C40-9D0R1LA-F18 target.
+
+Accepted retained evidence:
+
+    release/performance-guardian-6h-combined-qualification-pass-8c40-2026-10-04.json
+    release/performance-guardian-6h-combined-guardian-report-pass-8c40-2026-10-04.json
+    release/performance-guardian-6h-stale-gpu-recovery-pass-8c40-2026-10-04.json
+
+Before the successful run, the qualification-only stale GPU recovery path
+handled the previous interrupted Step 6H journal. It ran on directly confirmed
+AC with the exclusive-controller acknowledgement, observed the stale
+PresetSwitchWriteArmed record (committed 210..1850, pending 210..1200), obtained
+NVML success for exactly one ResetLockedGraphicsClocks operation, and deleted
+the stale journal only after that Reset was accepted.
+
+The subsequent clean combined run proved:
+
+    initial AC:
+      CPU 35/60 W
+      GPU 210..1850 MHz
+
+    Battery:
+      RawAcLineStatus 0
+      CPU 8/15 W
+      GPU 210..1200 MHz
+
+    AC return:
+      RawAcLineStatus 1
+      CPU 35/60 W
+      GPU 210..1850 MHz
+
+    normal DISABLE_SESSION:
+      CPU restored to pre-session 45/115 W
+      GPU released to NVIDIA default
+
+    normal SHUTDOWN:
+      Guardian exit code 0
+      ExitReason CLIENT_SHUTDOWN
+      FinalPhase Stopped
+
+Durable CPU journal evidence stayed in one SessionId with generations
+2 -> 4 -> 6, an immutable 45/115 W OriginalBaseline, no conflict handoff, and
+exact owned-field restoration at release.
+
+Durable GPU journal evidence stayed in one SessionId with generations
+2 -> 4 -> 6 and the requested committed ranges 210..1850 -> 210..1200 ->
+210..1850. The semantic state remains ActiveUnverified while live because the
+public NVML surface still does not provide exact locked-range ownership
+readback.
+
+Final accepted invariants:
+
+    AcceptedRequests / RejectedRequests  4 / 0
+    EnableCalls / ReleaseCalls           1 / 1
+    CPU hardware-write attempts          4
+    GPU hardware-write attempts          4
+    CPU source dispatch attempts         2
+    GPU source dispatch attempts         2
+    source notifications                 3
+    reconciliation signals               1
+    duplicate signals                    2
+    final CPU domain                     Disabled
+    final GPU domain                     Disabled
+    final CPU snapshot                   45/115 W, unlocked
+    CPU journal present                  false
+    GPU journal present                  false
+    SourceFailure / Failure              null / null
+    qualification Result                 PASS
+
+This closes the **Step 6H combined physical qualification**. CPU-only Step 6G,
+GPU-only Step 6F and the combined Step 6H gate have all passed on the selected
+hardware.
+
+This does not yet authorize GUI binding, startup persistence, automatic
+profile integration or general production writes. Remaining backend work is
+lifecycle hardening such as suspend/resume and destructive parent-loss/crash
+recovery qualification.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
