@@ -494,6 +494,10 @@ jobs:
         shell: pwsh
         run: .\scripts\test-adaptive-policy-invariants.ps1
 
+      - name: HP 8C40 final Automatic qualification invariants
+        shell: pwsh
+        run: .\scripts\test-automatic-final-qualification-invariants.ps1
+
       - name: HP 8C40 M5-M8 invariants Windows PowerShell 5.1 compatibility
         shell: powershell
         run: |
