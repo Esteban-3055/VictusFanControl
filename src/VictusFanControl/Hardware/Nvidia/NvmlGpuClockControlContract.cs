@@ -10,6 +10,8 @@ internal readonly record struct NvmlGpuClockControlAvailability(
     bool SetLockedGraphicsClocksExportAvailable,
     bool ResetLockedGraphicsClocksExportAvailable,
     bool CurrentGraphicsClockExportAvailable,
+    bool ApplicationGraphicsClockTargetExportAvailable,
+    bool CurrentClocksEventReasonsExportAvailable,
     bool ExactLockedRangeReadbackAvailable)
 {
     internal bool HasWriteExports =>
@@ -46,6 +48,19 @@ internal readonly record struct NvmlUIntCallResult(
 }
 
 /// <summary>
+/// Raw result of one NVML unsigned-64 query.
+/// </summary>
+internal readonly record struct NvmlULongCallResult(
+    bool ExportAvailable,
+    int? Result,
+    ulong Value)
+{
+    internal bool IsSuccess =>
+        ExportAvailable &&
+        Result == 0;
+}
+
+/// <summary>
 /// Minimal in-process NVML transport needed by the future GPU clock backend.
 ///
 /// Set/Reset methods are intentionally "Once": a caller must treat the write
@@ -68,4 +83,8 @@ internal interface INvmlGpuClockControlTransport
     NvmlControlCallResult ResetGpuLockedClocksOnce();
 
     NvmlUIntCallResult ReadCurrentGraphicsClockOnce();
+
+    NvmlUIntCallResult ReadApplicationGraphicsClockTargetOnce();
+
+    NvmlULongCallResult ReadCurrentClocksEventReasonsOnce();
 }

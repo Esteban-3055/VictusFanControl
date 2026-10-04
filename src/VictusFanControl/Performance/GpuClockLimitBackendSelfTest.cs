@@ -9,6 +9,10 @@ internal static class GpuClockLimitBackendSelfTest
     {
         try
         {
+            Require(
+                GpuClockOwnershipQualificationSelfTest.Run(output) == 0,
+                "GPU clock ownership qualification");
+
             DefaultWriteGateIsClosed(output);
             AuthorizedSetIsExactlyOneNativeCall(output);
             FailedSetIsNotRetried(output);
@@ -98,7 +102,9 @@ internal static class GpuClockLimitBackendSelfTest
             "set maps to exactly one native call");
 
         Require(
-            transport.ReadCalls == 0,
+            transport.ReadCalls == 0 &&
+            transport.AppTargetReadCalls == 0 &&
+            transport.EventReasonReadCalls == 0,
             "backend does not fake exact readback after set");
 
         Require(
@@ -165,8 +171,10 @@ internal static class GpuClockLimitBackendSelfTest
             "reset maps to one native call");
 
         Require(
-            transport.ReadCalls == 0,
-            "reset does not infer release from current frequency");
+            transport.ReadCalls == 0 &&
+            transport.AppTargetReadCalls == 0 &&
+            transport.EventReasonReadCalls == 0,
+            "reset does not infer release from diagnostic telemetry");
 
         output.WriteLine(
             "PASS reset is a single NVML mutation with no hidden follow-up write");
@@ -185,6 +193,18 @@ internal static class GpuClockLimitBackendSelfTest
                         1725)
             };
 
+        transport.AppTargetResult =
+            new NvmlUIntCallResult(
+                true,
+                0,
+                1850);
+
+        transport.EventReasonsResult =
+            new NvmlULongCallResult(
+                true,
+                0,
+                0x2);
+
         var backend =
             new NvmlGpuClockLimitBackend(
                 transport);
@@ -195,14 +215,19 @@ internal static class GpuClockLimitBackendSelfTest
         Require(
             observation.Succeeded &&
             observation.CurrentGraphicsClockMHz ==
-                1725,
-            "current graphics clock is observable");
+                1725 &&
+            observation.ApplicationGraphicsClockTargetMHz ==
+                1850 &&
+            observation.CurrentClocksEventReasons ==
+                0x2,
+            "read-only diagnostic signals are observable");
 
         Require(
+            observation.ExactLockedRange is null &&
             !observation.ProvesExactLockedRangeOwnership &&
             !backend.Capabilities
                 .CanProveExactLockedRangeOwnership,
-            "current clock cannot prove exact min/max locked range");
+            "diagnostic signals cannot prove exact min/max locked range");
 
         output.WriteLine(
             "PASS current graphics clock is telemetry only and never promoted to ownership readback");
@@ -216,6 +241,8 @@ internal static class GpuClockLimitBackendSelfTest
             {
                 Availability =
                     new NvmlGpuClockControlAvailability(
+                        false,
+                        false,
                         false,
                         false,
                         false,
@@ -306,6 +333,8 @@ internal static class GpuClockLimitBackendSelfTest
                     true,
                     true,
                     true,
+                    true,
+                    true,
                     false);
 
         internal NvmlControlCallResult
@@ -327,9 +356,25 @@ internal static class GpuClockLimitBackendSelfTest
                     0,
                     210);
 
+        internal NvmlUIntCallResult
+            AppTargetResult =
+                new(
+                    true,
+                    3,
+                    0);
+
+        internal NvmlULongCallResult
+            EventReasonsResult =
+                new(
+                    true,
+                    3,
+                    0);
+
         internal int SetCalls;
         internal int ResetCalls;
         internal int ReadCalls;
+        internal int AppTargetReadCalls;
+        internal int EventReasonReadCalls;
         internal uint LastSetMin;
         internal uint LastSetMax;
 
@@ -387,6 +432,38 @@ internal static class GpuClockLimitBackendSelfTest
             }
 
             return ReadResult;
+        }
+
+        public NvmlUIntCallResult ReadApplicationGraphicsClockTargetOnce()
+        {
+            AppTargetReadCalls++;
+
+            if (!Availability
+                    .ApplicationGraphicsClockTargetExportAvailable)
+            {
+                return new NvmlUIntCallResult(
+                    false,
+                    null,
+                    0);
+            }
+
+            return AppTargetResult;
+        }
+
+        public NvmlULongCallResult ReadCurrentClocksEventReasonsOnce()
+        {
+            EventReasonReadCalls++;
+
+            if (!Availability
+                    .CurrentClocksEventReasonsExportAvailable)
+            {
+                return new NvmlULongCallResult(
+                    false,
+                    null,
+                    0);
+            }
+
+            return EventReasonsResult;
         }
     }
 }

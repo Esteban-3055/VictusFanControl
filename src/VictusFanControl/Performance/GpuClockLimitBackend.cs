@@ -20,6 +20,8 @@ internal readonly record struct GpuClockBackendCapabilities(
     bool SetLockedGraphicsClocksExportAvailable,
     bool ResetLockedGraphicsClocksExportAvailable,
     bool CurrentGraphicsClockExportAvailable,
+    bool ApplicationGraphicsClockTargetExportAvailable,
+    bool CurrentClocksEventReasonsExportAvailable,
     bool ExactLockedRangeReadbackAvailable,
     bool HardwareWritesAuthorized)
 {
@@ -40,6 +42,9 @@ internal readonly record struct GpuClockBackendWriteResult(
 internal readonly record struct GpuClockBackendObservation(
     bool Succeeded,
     uint? CurrentGraphicsClockMHz,
+    uint? ApplicationGraphicsClockTargetMHz,
+    ulong? CurrentClocksEventReasons,
+    GpuClockLimitRequest? ExactLockedRange,
     bool ProvesExactLockedRangeOwnership,
     GpuClockBackendFailureKind FailureKind,
     int? NvmlResult,
@@ -107,6 +112,8 @@ internal sealed class NvmlGpuClockLimitBackend :
                 availability.SetLockedGraphicsClocksExportAvailable,
                 availability.ResetLockedGraphicsClocksExportAvailable,
                 availability.CurrentGraphicsClockExportAvailable,
+                availability.ApplicationGraphicsClockTargetExportAvailable,
+                availability.CurrentClocksEventReasonsExportAvailable,
                 availability.ExactLockedRangeReadbackAvailable,
                 _hardwareWritesAuthorized);
         }
@@ -164,14 +171,19 @@ internal sealed class NvmlGpuClockLimitBackend :
 
     public GpuClockBackendObservation ReadObservation()
     {
-        var call =
+        var currentClock =
             _transport.ReadCurrentGraphicsClockOnce();
 
-        if (!call.ExportAvailable)
+        if (!currentClock.ExportAvailable)
         {
             return new GpuClockBackendObservation(
                 Succeeded: false,
                 CurrentGraphicsClockMHz: null,
+                ApplicationGraphicsClockTargetMHz:
+                    ReadOptionalApplicationClockTarget(),
+                CurrentClocksEventReasons:
+                    ReadOptionalClocksEventReasons(),
+                ExactLockedRange: null,
                 ProvesExactLockedRangeOwnership: false,
                 FailureKind:
                     GpuClockBackendFailureKind.ExportUnavailable,
@@ -182,7 +194,7 @@ internal sealed class NvmlGpuClockLimitBackend :
 
         var failure =
             ClassifyNvmlResult(
-                call.Result);
+                currentClock.Result);
 
         if (failure !=
             GpuClockBackendFailureKind.None)
@@ -190,25 +202,56 @@ internal sealed class NvmlGpuClockLimitBackend :
             return new GpuClockBackendObservation(
                 Succeeded: false,
                 CurrentGraphicsClockMHz: null,
+                ApplicationGraphicsClockTargetMHz:
+                    ReadOptionalApplicationClockTarget(),
+                CurrentClocksEventReasons:
+                    ReadOptionalClocksEventReasons(),
+                ExactLockedRange: null,
                 ProvesExactLockedRangeOwnership: false,
                 FailureKind: failure,
-                NvmlResult: call.Result,
+                NvmlResult: currentClock.Result,
                 Status:
-                    $"GPU_CLOCK_BACKEND_CURRENT_CLOCK_NVML_{call.Result}");
+                    $"GPU_CLOCK_BACKEND_CURRENT_CLOCK_NVML_{currentClock.Result}");
         }
 
         return new GpuClockBackendObservation(
             Succeeded: true,
-            CurrentGraphicsClockMHz: call.Value,
-            // Current frequency is not a getter for the requested locked
-            // min/max range. It must never be used as exact ownership proof.
+            CurrentGraphicsClockMHz:
+                currentClock.Value,
+            ApplicationGraphicsClockTargetMHz:
+                ReadOptionalApplicationClockTarget(),
+            CurrentClocksEventReasons:
+                ReadOptionalClocksEventReasons(),
+            ExactLockedRange: null,
+            // Public NVML exposes no getter for the exact min/max range
+            // installed by nvmlDeviceSetGpuLockedClocks.
             ProvesExactLockedRangeOwnership: false,
             FailureKind:
                 GpuClockBackendFailureKind.None,
             NvmlResult:
                 NvmlSuccess,
             Status:
-                "GPU_CLOCK_BACKEND_CURRENT_CLOCK_OBSERVATION_ONLY");
+                "GPU_CLOCK_BACKEND_OBSERVATION_ONLY__NO_EXACT_LOCK_RANGE");
+    }
+
+    private uint? ReadOptionalApplicationClockTarget()
+    {
+        var call =
+            _transport.ReadApplicationGraphicsClockTargetOnce();
+
+        return call.IsSuccess
+            ? call.Value
+            : null;
+    }
+
+    private ulong? ReadOptionalClocksEventReasons()
+    {
+        var call =
+            _transport.ReadCurrentClocksEventReasonsOnce();
+
+        return call.IsSuccess
+            ? call.Value
+            : null;
     }
 
     private static GpuClockBackendWriteResult MapWriteResult(

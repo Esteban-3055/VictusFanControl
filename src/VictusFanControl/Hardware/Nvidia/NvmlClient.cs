@@ -10,6 +10,7 @@ internal sealed class NvmlClient :
     private const int NvmlSuccess = 0;
     private const uint NvmlTemperatureGpu = 0;
     private const uint NvmlClockGraphics = 0;
+    private const uint NvmlClockIdApplicationTarget = 1;
     private const int ReadAttempts = 3;
     private const int RetryDelayMs = 2;
 
@@ -33,6 +34,12 @@ internal sealed class NvmlClient :
 
     private readonly NvmlDeviceGetClockInfoDelegate?
         _getClockInfo;
+
+    private readonly NvmlDeviceGetClockDelegate?
+        _getClock;
+
+    private readonly NvmlDeviceGetCurrentClocksEventReasonsDelegate?
+        _getCurrentClocksEventReasons;
 
     private readonly string? _preferredDeviceName;
     private readonly bool _requirePreferredDevice;
@@ -70,6 +77,14 @@ internal sealed class NvmlClient :
             _getClockInfo =
                 TryGetDelegate<NvmlDeviceGetClockInfoDelegate>(
                     "nvmlDeviceGetClockInfo");
+
+            _getClock =
+                TryGetDelegate<NvmlDeviceGetClockDelegate>(
+                    "nvmlDeviceGetClock");
+
+            _getCurrentClocksEventReasons =
+                TryGetDelegate<NvmlDeviceGetCurrentClocksEventReasonsDelegate>(
+                    "nvmlDeviceGetCurrentClocksEventReasons");
 
             InitializeDevice();
         }
@@ -116,6 +131,12 @@ internal sealed class NvmlClient :
 
             CurrentGraphicsClockExportAvailable:
                 _getClockInfo is not null,
+
+            ApplicationGraphicsClockTargetExportAvailable:
+                _getClock is not null,
+
+            CurrentClocksEventReasonsExportAvailable:
+                _getCurrentClocksEventReasons is not null,
 
             // NVML exposes set/reset for GPU locked clocks, but the public API
             // does not expose a getter for the exact requested min/max locked
@@ -204,6 +225,72 @@ internal sealed class NvmlClient :
             ExportAvailable: true,
             Result: result,
             Value: clockMHz);
+    }
+
+
+    /// <summary>
+    /// Reads the deprecated application-clock target for diagnostics only.
+    /// nvmlDeviceSetGpuLockedClocks supersedes application clocks, and NVIDIA
+    /// does not document this target as the exact locked-range max. Therefore
+    /// this signal cannot prove ownership even when it numerically matches a
+    /// requested maximum.
+    /// </summary>
+    public NvmlUIntCallResult ReadApplicationGraphicsClockTargetOnce()
+    {
+        ObjectDisposedException.ThrowIf(
+            _disposed,
+            this);
+
+        if (_getClock is null)
+        {
+            return new NvmlUIntCallResult(
+                ExportAvailable: false,
+                Result: null,
+                Value: 0);
+        }
+
+        var result =
+            _getClock(
+                _device,
+                NvmlClockGraphics,
+                NvmlClockIdApplicationTarget,
+                out var clockMHz);
+
+        return new NvmlUIntCallResult(
+            ExportAvailable: true,
+            Result: result,
+            Value: clockMHz);
+    }
+
+    /// <summary>
+    /// Reads current clock event reasons for observability qualification.
+    /// User-defined/application-clock event bits can indicate a clock policy is
+    /// affecting frequency, but they do not expose the min/max locked range or
+    /// identify which process installed it.
+    /// </summary>
+    public NvmlULongCallResult ReadCurrentClocksEventReasonsOnce()
+    {
+        ObjectDisposedException.ThrowIf(
+            _disposed,
+            this);
+
+        if (_getCurrentClocksEventReasons is null)
+        {
+            return new NvmlULongCallResult(
+                ExportAvailable: false,
+                Result: null,
+                Value: 0);
+        }
+
+        var result =
+            _getCurrentClocksEventReasons(
+                _device,
+                out var reasons);
+
+        return new NvmlULongCallResult(
+            ExportAvailable: true,
+            Result: result,
+            Value: reasons);
     }
 
     public void Dispose()
@@ -487,6 +574,18 @@ internal sealed class NvmlClient :
         IntPtr device,
         uint clockType,
         out uint clockMHz);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceGetClockDelegate(
+        IntPtr device,
+        uint clockType,
+        uint clockId,
+        out uint clockMHz);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int NvmlDeviceGetCurrentClocksEventReasonsDelegate(
+        IntPtr device,
+        out ulong clocksEventReasons);
 
     internal readonly record struct GpuSample(
         double TemperatureC,

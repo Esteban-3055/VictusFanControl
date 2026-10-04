@@ -734,3 +734,48 @@ The fixtures prove:
 No NvmlClient is instantiated by these fixtures and no physical GPU write is
 performed. productionHardwareWritesAuthorized remains false.
 
+## Step 5.8A — GPU ownership observability gate
+
+A review of the public NVML clock-control/query surface changes the GPU
+ownership design materially.
+
+nvmlDeviceSetGpuLockedClocks accepts a requested min/max range and
+nvmlDeviceResetGpuLockedClocks releases it, but public NVML does not expose a
+getter that returns the exact min/max range installed by that command.
+nvmlDeviceGetClockInfo returns the current frequency only.
+
+Two additional read-only signals are now exposed for qualification:
+
+- nvmlDeviceGetClock(..., NVML_CLOCK_ID_APP_CLOCK_TARGET), which reports the
+  deprecated application-clock target;
+- nvmlDeviceGetCurrentClocksEventReasons, which reports clock event-reason
+  bits.
+
+Neither signal is documented as the exact locked min/max range or as process
+ownership. The locked-clock command supersedes application clocks, so a
+numerically matching application target must not be promoted to lock-range
+readback. Event reasons can show that a clock policy is affecting clocks but
+cannot identify the writer or the installed range.
+
+GpuClockOwnershipQualification therefore fails closed unless a future backend
+can provide an exact qualified min/max observation:
+
+- successful NVML Set alone -> no managed ownership;
+- current graphics clock match -> no managed ownership;
+- application target match -> no managed ownership;
+- clock event-reason match -> no managed ownership;
+- combinations of those heuristic signals -> still no managed ownership;
+- only exact observed min/max == requested min/max may enable automatic
+  reacquire and conditional reset.
+
+This means the originally planned GPU 5x/30s bounded reacquire policy remains
+closed under NVML-only observability. Implementing it anyway would risk an
+undetectable write war or resetting a lock installed by another application.
+
+The next qualification step is read-only physical characterization on the
+exact RTX 4060 Laptop target. It may tell us which diagnostic signals are
+useful operationally, but it cannot by itself convert an undocumented
+heuristic into exact ownership.
+
+productionHardwareWritesAuthorized remains false.
+
