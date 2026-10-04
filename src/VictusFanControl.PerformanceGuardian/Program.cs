@@ -52,6 +52,31 @@ internal static class Program
             }
 
             if (args.Length == 1 &&
+                args[0] == "--combined-gate-6h-self-test")
+            {
+                return PerformanceGuardianCombinedGate6HQualification.SelfTest(
+                    Console.Out);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--combined-gate-6h")
+            {
+                return await PerformanceGuardianCombinedGate6HQualification
+                    .RunOuterAsync(
+                        args)
+                    .ConfigureAwait(false);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--run-combined-gate-6h")
+            {
+                return await PerformanceGuardianCombinedGate6HQualification
+                    .RunGuardianAsync(
+                        args)
+                    .ConfigureAwait(false);
+            }
+
+            if (args.Length == 1 &&
                 args[0] == "--cpu-gate-6g-physical-self-test")
             {
                 return PerformanceGuardianCpuGate6GPhysicalQualification.SelfTest(
@@ -366,6 +391,12 @@ internal static class Program
             "VictusFanControl.PerformanceGuardian --process-fixture <directory>");
 
         Console.WriteLine(
+            "VictusFanControl.PerformanceGuardian --combined-gate-6h-self-test");
+
+        Console.WriteLine(
+            "VictusFanControl.PerformanceGuardian --combined-gate-6h --confirm-target HP-8C40-9D0R1LA-F18 --confirm-cpu-hardware-writes --confirm-exclusive-gpu-controller --module <IntelMSR.bin> [--timeout-seconds 15..300] [--output-directory <path>]");
+
+        Console.WriteLine(
             "VictusFanControl.PerformanceGuardian --cpu-gate-6g-physical-self-test");
 
         Console.WriteLine(
@@ -387,6 +418,6 @@ internal static class Program
             "VictusFanControl.PerformanceGuardian --gpu-gate-6f --confirm-target HP-8C40-9D0R1LA-F18 [--timeout-seconds 60] [--output-directory <path>]");
 
         Console.WriteLine(
-            "Production run mode remains closed. Step 6F GPU and Step 6G CPU entry points are explicit qualification gates only.");
+            "Production run mode remains closed. Step 6F GPU, Step 6G CPU and Step 6H combined entry points are explicit qualification gates only.");
     }
 }
