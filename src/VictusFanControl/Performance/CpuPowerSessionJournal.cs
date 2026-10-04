@@ -320,9 +320,10 @@ internal sealed class JsonCpuPowerSessionJournal : ICpuPowerSessionJournal
             return;
         }
 
+        const int ErrorAccessDenied = 5;
         const int ErrorSharingViolation = 32;
         const int ErrorLockViolation = 33;
-        const int MaxReplaceAttempts = 5;
+        const int MaxReplaceAttempts = 8;
 
         for (var attempt = 1;
              attempt <= MaxReplaceAttempts;
@@ -341,6 +342,7 @@ internal sealed class JsonCpuPowerSessionJournal : ICpuPowerSessionJournal
                 Marshal.GetLastWin32Error();
 
             var transientShareFailure =
+                error == ErrorAccessDenied ||
                 error == ErrorSharingViolation ||
                 error == ErrorLockViolation;
 
@@ -349,7 +351,7 @@ internal sealed class JsonCpuPowerSessionJournal : ICpuPowerSessionJournal
             {
                 throw new Win32Exception(
                     error,
-                    "Durable CPU power journal replace failed.");
+                    "Durable CPU power journal replace failed (Win32 " + error + ").");
             }
 
             Thread.Sleep(
