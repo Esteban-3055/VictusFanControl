@@ -673,3 +673,64 @@ left for the detached guardian/process-lifecycle gate. No production source
 listener, startup persistence, GUI authority or physical write authorization
 is added here.
 
+## Step 5.7 — NVML locked-graphics-clock backend foundation
+
+The GPU path now has an in-process NVML command transport and a domain backend
+contract, but it is deliberately not wired into runtime authority.
+
+### Native NVML surface
+
+NvmlClient resolves the following exports optionally so existing telemetry does
+not fail merely because clock-control exports are unavailable on a driver:
+
+- nvmlDeviceSetGpuLockedClocks
+- nvmlDeviceResetGpuLockedClocks
+- nvmlDeviceGetClockInfo
+
+The set/reset transport methods perform exactly one native invocation. They do
+not retry and do not silently reinitialize NVML after a write result. A future
+journaled owner must decide what to do with an ambiguous result.
+
+### Verification limitation discovered during API review
+
+The public NVML command surface provides set/reset for GPU locked clocks, but
+does not provide a getter for the exact min/max range previously requested by
+nvmlDeviceSetGpuLockedClocks. nvmlDeviceGetClockInfo reports the current
+graphics clock only.
+
+Therefore the current graphics clock is explicitly modeled as an observation,
+not as exact locked-range readback and not as proof of VFC ownership. Step 5.8
+must solve ownership/interference semantics without pretending that a sampled
+frequency is equivalent to CPU RAPL raw readback.
+
+### Domain backend contract
+
+NvmlGpuClockLimitBackend exposes:
+
+- SetLockedGraphicsClocks(request)
+- ResetLockedGraphicsClocks()
+- ReadObservation()
+- typed capabilities and failure classification
+
+The backend contains no journal, no retry budget, no AC/Battery policy and no
+ownership state. Each write method maps to at most one native mutation.
+
+The production write gate defaults to closed. Constructing the backend normally
+sets HardwareWritesAuthorized=false, so Set/Reset return WriteGateClosed and
+make zero native write calls. Hardware-free fixtures may opt into the fake
+transport solely to validate one-call semantics.
+
+The fixtures prove:
+
+- default gate closed -> zero native writes;
+- accepted set -> exactly one transport call;
+- rejected set -> no hidden retry;
+- reset -> exactly one transport call;
+- current clock observation never becomes ownership proof;
+- missing exports fail closed;
+- GPU_IS_LOST is classified as device unavailable for the future driver-reset
+  recovery path.
+
+No NvmlClient is instantiated by these fixtures and no physical GPU write is
+performed. productionHardwareWritesAuthorized remains false.
+

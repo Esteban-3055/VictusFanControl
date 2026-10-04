@@ -36,6 +36,10 @@ internal static class CpuPowerLimiterSelfTest
                 GpuClockPresetPolicySelfTest.Run(output) == 0,
                 "GPU clock AC/battery preset selector");
 
+            Require(
+                GpuClockLimitBackendSelfTest.Run(output) == 0,
+                "GPU NVML locked-clock backend contract");
+
             NormalApplyVerifyRelease(output);
             OwnedPresetSwitchIsOneJournaledWrite(output);
             ConfirmedSourceChangeUsesOwnedSwitchOnly(output);
