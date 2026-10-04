@@ -1,3 +1,4 @@
+using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 
@@ -205,6 +206,20 @@ internal static class Program
             args,
             "--8c40-p15d2-marker-root");
 
+        var automaticFinalQualificationHardwareTest = args.Any(
+            arg => string.Equals(
+                arg,
+                "--8c40-automatic-final-qualification",
+                StringComparison.OrdinalIgnoreCase));
+
+        var automaticFinalQualificationToken = ReadOptionValue(
+            args,
+            "--8c40-automatic-test-token");
+
+        var automaticFinalQualificationMarkerRoot = ReadOptionValue(
+            args,
+            "--8c40-automatic-marker-root");
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
@@ -218,12 +233,57 @@ internal static class Program
             (m9dProductionLifecycleHardwareTest ? 1 : 0) +
             (p15cGuiManualHardwareTest ? 1 : 0) +
             (p15d1TrayExitHardwareTest ? 1 : 0) +
-            (p15d2VariableManualHardwareTest ? 1 : 0);
+            (p15d2VariableManualHardwareTest ? 1 : 0) +
+            (automaticFinalQualificationHardwareTest ? 1 : 0);
 
         if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
-                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2, HP 8C40 M6, M7, M9D, P15C, P15D1 and P15D2 hardware-test modes are mutually exclusive.");
+                "Startup refused: suspend, Gate D, Gate E, Gate F1, Gate F2, Gate G1, Gate G2, HP 8C40 M6, M7, M9D, P15C, P15D1, P15D2 and final Automatic qualification modes are mutually exclusive.");
+            Environment.ExitCode = 60;
+            return;
+        }
+
+        if (automaticFinalQualificationHardwareTest)
+        {
+            if (!Hp8C40AutomaticFinalQualificationGate.PhysicalExecutionAuthorized ||
+                !Hp8C40AutomaticFinalQualificationGate.NormalUserAutomaticRemainsClosed())
+            {
+                AppLog.Write(
+                    "HP 8C40 final Automatic qualification refused: dedicated qualification gate is closed or normal user Automatic is already open.");
+                Environment.ExitCode = 60;
+                return;
+            }
+
+            if (!string.Equals(
+                    automaticFinalQualificationToken,
+                    Hp8C40AutomaticFinalQualificationGate.RequiredToken,
+                    StringComparison.Ordinal))
+            {
+                AppLog.Write(
+                    $"HP 8C40 final Automatic qualification refused: explicit --8c40-automatic-test-token {Hp8C40AutomaticFinalQualificationGate.RequiredToken} is required.");
+                Environment.ExitCode = 60;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    automaticFinalQualificationMarkerRoot))
+            {
+                AppLog.Write(
+                    "HP 8C40 final Automatic qualification requires --8c40-automatic-marker-root for isolated evidence.");
+                Environment.ExitCode = 60;
+                return;
+            }
+
+            automaticFinalQualificationMarkerRoot =
+                Path.GetFullPath(
+                    automaticFinalQualificationMarkerRoot);
+        }
+        else if (automaticFinalQualificationToken is not null ||
+                 automaticFinalQualificationMarkerRoot is not null)
+        {
+            AppLog.Write(
+                "Startup refused: final Automatic qualification token/marker options are valid only with --8c40-automatic-final-qualification.");
             Environment.ExitCode = 60;
             return;
         }
@@ -670,7 +730,8 @@ internal static class Program
             m9dProductionLifecycleHardwareTest ||
             p15cGuiManualHardwareTest ||
             p15d1TrayExitHardwareTest ||
-            p15d2VariableManualHardwareTest)
+            p15d2VariableManualHardwareTest ||
+            automaticFinalQualificationHardwareTest)
         {
             var hardware = HardwareIdentityReader.ReadCurrent();
 
@@ -679,17 +740,19 @@ internal static class Program
                     out var lifecycleTargetReason))
             {
                 var gateLabel =
-                    p15d2VariableManualHardwareTest
-                        ? "P15D2 real-GUI variable Manual"
-                        : p15d1TrayExitHardwareTest
-                            ? "P15D1 real-GUI tray Exit"
-                            : p15cGuiManualHardwareTest
-                                ? "P15C real-GUI Manual"
-                            : m7HibernationHardwareTest
-                            ? "M7 hibernation"
-                            : m9dProductionLifecycleHardwareTest
-                                ? "M9D production-path Modern Standby"
-                                : "M6 Modern Standby";
+                    automaticFinalQualificationHardwareTest
+                        ? "final Automatic qualification"
+                        : p15d2VariableManualHardwareTest
+                            ? "P15D2 real-GUI variable Manual"
+                            : p15d1TrayExitHardwareTest
+                                ? "P15D1 real-GUI tray Exit"
+                                : p15cGuiManualHardwareTest
+                                    ? "P15C real-GUI Manual"
+                                : m7HibernationHardwareTest
+                                ? "M7 hibernation"
+                                : m9dProductionLifecycleHardwareTest
+                                    ? "M9D production-path Modern Standby"
+                                    : "M6 Modern Standby";
 
                 AppLog.Write(
                     $"HP 8C40 {gateLabel} startup refused before MainForm/backend creation: " +
@@ -726,7 +789,9 @@ internal static class Program
             p15d1TrayExitHardwareTest,
             p15d1TrayExitMarkerRoot,
             p15d2VariableManualHardwareTest,
-            p15d2VariableManualMarkerRoot);
+            p15d2VariableManualMarkerRoot,
+            automaticFinalQualificationHardwareTest,
+            automaticFinalQualificationMarkerRoot);
         Application.Run(form);
 
         AppLog.Write("GUI exited.");
