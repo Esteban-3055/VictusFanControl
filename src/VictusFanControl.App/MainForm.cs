@@ -896,6 +896,7 @@ internal sealed partial class MainForm : Form
             _p15d2VariableManualHardwareTest;
 
         var p16NormalManualQualificationAuthorized =
+            !_automaticFinalQualificationHardwareTest &&
             !isolatedManualQualification &&
             Hp8C40P16NormalManualQualificationGate.PhysicalExecutionAuthorized &&
             string.Equals(
