@@ -1245,9 +1245,6 @@ internal static class PerformanceGuardianGpuGate6FQualification
         string? confirm =
             null;
 
-        var exclusiveControllerConfirmed =
-            false;
-
         for (var index = 1;
              index < args.Length;
              index++)
@@ -1344,6 +1341,9 @@ internal static class PerformanceGuardianGpuGate6FQualification
 
         string? confirm =
             null;
+
+        var exclusiveControllerConfirmed =
+            false;
 
         for (var index = 1;
              index < args.Length;
