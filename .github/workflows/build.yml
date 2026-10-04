@@ -21,6 +21,12 @@ jobs:
       - name: Restore
         run: dotnet restore VictusFanControl.sln
 
+      - name: Intel RAPL bounded P1 build and recovery fixtures (no hardware IO)
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "CPU probe PowerShell 5.1 build/fixtures failed." }
+
       - name: PowerShell syntax check
         shell: pwsh
         run: |
