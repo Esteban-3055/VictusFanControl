@@ -2429,3 +2429,66 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+### Step 6H journal-polling race hardening and qualification-only stale GPU recovery
+
+The first combined physical Step 6H attempt exposed a filesystem race in the
+qualification harness rather than an AC/DC detection failure.
+
+The outer qualification process polls the CPU/GPU journals while the detached
+Guardian performs durable temp-file + MoveFileEx(REPLACE_EXISTING|WRITE_THROUGH)
+journal commits. The journal readers previously opened the live JSON file with
+FileShare.Read only. On Windows that can temporarily block the Guardian from
+replacing the destination file while the outer poller has it open. A failed
+post-NVML commit can therefore leave the GPU journal durably at
+PresetSwitchWriteArmed even though the source transition has already started.
+
+The journal readers now open with ReadWrite + Delete sharing so a poller does
+not intentionally deny an atomic replace. Durable replacement also performs a
+small bounded retry only for transient Windows access/share/lock errors
+(ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION and ERROR_LOCK_VIOLATION).
+All other errors still fail immediately. This retry changes no hardware-write
+semantics.
+
+Step 6H console progress is now explicit. After unplug/replug it reports:
+
+    source confirmed (including RawAcLineStatus and battery percentage)
+    CPU journal generation/phase/request changes
+    GPU journal generation/phase/committed/pending changes
+    CPU transition committed
+    GPU transition committed
+
+This avoids presenting a GPU journal/commit stall as though Windows were still
+waiting to identify Battery or AC.
+
+A qualification-only stale GPU recovery path is also available to the Step 6H
+launcher. It is NOT production auto-recovery and it is never run at application
+startup. It executes only when the operator already supplied
+-ConfirmExclusiveGpuController and the launcher adds the explicit
+--recover-stale-gpu-qualification-journal intent.
+
+The recovery path is deliberately narrow:
+
+- a stale CPU journal still blocks the test and is never auto-recovered;
+- the production target mutex must be free;
+- AC must be directly confirmed;
+- the stale GPU journal must deserialize and contain only the physically
+  qualified 210..1850 MHz / 210..1200 MHz requests;
+- the exact RTX 4060 Laptop GPU and complete NVML Set/Reset command surface are
+  required;
+- recovery writes durable evidence before the mutation;
+- exactly one NVML Reset is attempted;
+- the stale GPU journal is deleted only after NVML accepts Reset;
+- if Reset is not accepted, the journal is preserved and the new qualification
+  session is refused.
+
+This exception exists only to make repeated physical Step 6H qualification
+self-contained after an interrupted prior qualification while preserving the
+general GPU policy: stale production journals never authorize blind automatic
+Reset after restart.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
