@@ -35,6 +35,7 @@ internal sealed partial class MainForm
     private DateTimeOffset? _automaticFinalFirstActiveUtc;
     private DateTimeOffset? _automaticFinalLastDecisionUtc;
     private string? _automaticFinalFailureDetail;
+    private string? _automaticFinalReadyConfigurationJson;
 
     private static readonly JsonSerializerOptions AutomaticFinalJsonOptions =
         new()
@@ -115,6 +116,28 @@ internal sealed partial class MainForm
 
         if (requestedMode == AdaptiveFanProductionMode.Automatic)
         {
+            EnsureAutomaticFinalQualificationConfiguration();
+
+            var currentConfiguration =
+                _fanProductionController.AutomaticConfiguration ??
+                throw new InvalidOperationException(
+                    "Automatic configuration disappeared after READY.");
+
+            var currentConfigurationJson =
+                FanConfigurationStore.Serialize(
+                    currentConfiguration);
+
+            if (string.IsNullOrWhiteSpace(
+                    _automaticFinalReadyConfigurationJson) ||
+                !string.Equals(
+                    currentConfigurationJson,
+                    _automaticFinalReadyConfigurationJson,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Fan configuration changed after READY. Restart the qualification so the exact applied curves/tuning remain bound to the evidence.");
+            }
+
             return _automaticFinalAutomaticModeRequests == 0 &&
                    _automaticFinalFirmwareModeRequests == 0 &&
                    _automaticFinalManualModeRequests == 0 &&
@@ -385,6 +408,10 @@ internal sealed partial class MainForm
                 _fanProductionController.AutomaticConfiguration ??
                 throw new InvalidOperationException(
                     "Automatic configuration disappeared before READY.");
+
+            _automaticFinalReadyConfigurationJson =
+                FanConfigurationStore.Serialize(
+                    configuration);
 
             WriteAutomaticFinalJson(
                 AutomaticFinalReadyPath,
