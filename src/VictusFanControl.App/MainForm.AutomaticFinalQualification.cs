@@ -39,7 +39,7 @@ internal sealed partial class MainForm
         new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true
+            WriteIndented = false
         };
 
     private string AutomaticFinalMarkerRoot =>
