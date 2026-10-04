@@ -49,7 +49,9 @@ internal static class FanConfigurationSelfTest
             Require(CpuDemandTemperature.Select(sample with { CpuCoreTemperatures=[new(0,0,"P",double.NaN),new(1,1,"E",40)] },CpuDemandTemperatureSource.CoreAverage) is null);
             Require(CpuDemandTemperature.Select(sample with { CpuCoreTemperatures=[new(0,0,"P",90),new(0,1,"E",40)] },CpuDemandTemperatureSource.CoreAverage) is null);
             var text = FanConfigurationStore.Serialize(configuration);
-            var archived = text.Replace("    \"cpuTemperatureSource\": 1,\n", "");
+            var node = System.Text.Json.Nodes.JsonNode.Parse(text)!;
+            Require(node["tuning"]!.AsObject().Remove("cpuTemperatureSource"));
+            var archived = node.ToJsonString();
             Require(archived != text && FanConfigurationStore.Parse(archived).Tuning.CpuTemperatureSource == CpuDemandTemperatureSource.PackageOrHottestCore);
             Reject(() => (configuration with { Tuning=configuration.Tuning with { CpuTemperatureSource=(CpuDemandTemperatureSource)99 } }).BuildPolicy());
         });
