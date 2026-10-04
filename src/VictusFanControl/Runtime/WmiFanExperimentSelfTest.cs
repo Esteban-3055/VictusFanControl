@@ -18,6 +18,7 @@ internal static class WmiFanExperimentSelfTest
         {
             TestFreshAcquisitionAsync().GetAwaiter().GetResult();
             TestInertia();
+            TestCpuTemperatureFilter();
             var result = "{\"Pid\":31920,\"ExitCode\":1,\"StopReason\":\"Telemetry admission lost\",\"SamplesAdmitted\":true,\"NormalPhaseEnded\":true}";
             Check(WmiFanExperiment.ReadWorkerStopReason(result, 31920, 1) == "Telemetry admission lost",
                 "Worker fault must be reported instead of the guardian's duration default.");
@@ -117,7 +118,7 @@ internal static class WmiFanExperimentSelfTest
             Reject(() => WmiFanExperimentBoundary.EnsureRequestAllowed(level));
             WmiFanExperimentBoundary.BeginRecovery();
             WmiFanExperimentBoundary.EnsureRequestAllowed(release);
-            output.WriteLine("PASS: WMI time-based inertia, immediate thermal increases, sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
+            output.WriteLine("PASS: CPU asymmetric curve filter, raw thermal handoff, time-based inertia, immediate high-temperature/GPU increases, sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
             return 0;
         }
         catch (Exception ex) { output.WriteLine("FAIL: " + ex); return 1; }
@@ -148,9 +149,9 @@ internal static class WmiFanExperimentSelfTest
             policy = new(config);
             policy.Evaluate(Input(0));
             policy.Evaluate(Input(1, 31)); // A small power increase is still pending.
-            var hot = Input(1.5) with { CpuEffectiveTemperatureC = gpu ? 40 : 78, GpuTemperatureC = gpu ? 72 : 35 };
+            var hot = Input(1.5) with { CpuEffectiveTemperatureC = gpu ? 40 : 85, GpuTemperatureC = gpu ? 72 : 35 };
             Check(policy.Evaluate(hot).EqualFanLevel == 34,
-                "CPU/GPU temperature-driven increases must bypass confirmation and preserve slew.");
+                "High CPU/GPU temperature-driven increases must bypass confirmation and preserve slew.");
         }
 
         foreach (var cadence in new[] { 0.5, 2.5 })
@@ -211,6 +212,101 @@ internal static class WmiFanExperimentSelfTest
         newSession.Recover();
         Check(newWrites == 3 && newSession.Phase == WmiFanSessionPhase.ReleaseAccepted,
             "Inertia must not delay admission refusal or the two recovery requests.");
+    }
+
+    private static void TestCpuTemperatureFilter()
+    {
+        var origin = new DateTimeOffset(2026, 10, 4, 7, 23, 16, TimeSpan.Zero);
+        var gap = TimeSpan.FromSeconds(3);
+        var filter = new WmiCpuTemperatureFilter();
+        Check(filter.Evaluate(origin, 80, gap).TemperatureC == 80, "Filter cold start understated heat.");
+        var cooling = filter.Evaluate(origin.AddSeconds(1), 40, gap);
+        Check(cooling.TemperatureC is > 72 and < 73 && !cooling.Bypassed, "Cooling EMA is not slow/bounded.");
+        filter.Reset();
+        filter.Evaluate(origin, 40, gap);
+        var heating = filter.Evaluate(origin.AddSeconds(1), 80, gap);
+        Check(heating.TemperatureC is > 65 and < 66, "Heating EMA is not fast/bounded.");
+        var high = filter.Evaluate(origin.AddSeconds(2), 85, gap);
+        Check(high.TemperatureC == 85 && high.Bypassed, "85 C bypass retained cool history.");
+
+        // Equivalent sustained step response despite changing sample cadence.
+        double EndAt(double cadence)
+        {
+            var f = new WmiCpuTemperatureFilter();
+            f.Evaluate(origin, 40, gap);
+            var value = 40.0;
+            for (var s = cadence; s <= 4; s += cadence)
+                value = f.Evaluate(origin.AddSeconds(s), 80, gap).TemperatureC;
+            return value;
+        }
+        Check(Math.Abs(EndAt(0.5) - EndAt(2)) < 1e-9 && EndAt(2) > 79,
+            "CPU filter counts samples instead of elapsed time or suppresses sustained heating.");
+        foreach (var invalid in new[] { "nan", "range", "duplicate", "backwards", "gap" })
+        {
+            filter = new();
+            filter.Evaluate(origin, 80, gap);
+            Reject(() => filter.Evaluate(origin.AddSeconds(invalid switch
+            { "duplicate" => 0, "backwards" => -1, "gap" => 3.01, _ => 1 }),
+                invalid switch { "nan" => double.NaN, "range" => 126, _ => 50 }, gap));
+            Check(filter.Evaluate(origin.AddSeconds(5), 50, gap).TemperatureC == 50,
+                "Rejected filter sample retained pre-gap history.");
+        }
+
+        AdaptiveFanPolicyInput Input(double seconds, double cpu = 40, double power = 10, double gpu = 35) =>
+            new(origin.AddSeconds(seconds), cpu, power, 0, gpu, 0, 0);
+        var config = WmiFanExperiment.CreatePolicy();
+        var policy = new WmiFanInertiaPolicy(config);
+        policy.Evaluate(Input(0));
+        var smallPeak = policy.Evaluate(Input(0.5, cpu: 72));
+        Check(smallPeak.RawDemandLevel == 31.5 && smallPeak.CurveDemandLevel == 30 && smallPeak.EqualFanLevel == 30,
+            "Moderate short CPU peak is not smoothed in curve-only demand.");
+        Check(smallPeak.CpuCurveTemperatureC is > 52 and < 53 && !smallPeak.CpuTemperatureFilterBypassed,
+            "Policy did not expose filtered CPU temperature separately from raw demand.");
+        var predictedLoad = policy.Evaluate(Input(1, power: 115));
+        Check(predictedLoad.CurveDemandLevel == 50 && predictedLoad.EqualFanLevel == 34,
+            "CPU power demand was attenuated by thermal filtering.");
+        var highHeat = policy.Evaluate(Input(2, cpu: 85));
+        Check(highHeat.CpuCurveTemperatureC == 85 && highHeat.CpuTemperatureFilterBypassed && highHeat.CurveDemandLevel == 44,
+            "High CPU heat did not bypass curve smoothing.");
+        policy = new(config);
+        policy.Evaluate(Input(0));
+        Check(policy.Evaluate(Input(1, gpu: 84)).CurveDemandLevel == 50,
+            "GPU temperature was accidentally filtered.");
+        var invalidRaw = policy.Evaluate(Input(2, cpu: double.NaN));
+        Check(!invalidRaw.Accepted && invalidRaw.CpuCurveTemperatureC is null,
+            "A valid previous filtered value hid an invalid raw CPU sensor.");
+
+        // e43bab: fresh telemetry, sudden 54 -> 97 C, 55.166 W / 61.203%.
+        // Worker admission uses this immutable ORIGINAL snapshot, not the EMA.
+        var timestamp = DateTimeOffset.Parse("2026-10-04T07:23:17.4595940+00:00");
+        var snapshot = new TelemetrySnapshot(timestamp, "CPU", 96, 55.166, 61.203,
+            Hp8C40TargetProfile.ExpectedGpuName, 43, 14.21, 0, 3100, 3000)
+        {
+            CpuExpectedPhysicalCoreCount = 14,
+            CpuCoreTemperatures = Enumerable.Range(0, 14)
+                .Select(i => new CpuCoreTemperatureSample(i, i, "Performance", 97)).ToArray(),
+            FanTelemetrySource = "HP-WMI-ACPI-2D", FanRpmResolution = 100,
+            FanSampledAtUtc = DateTimeOffset.Parse("2026-10-04T07:23:17.1225529+00:00"),
+            FanSampleAgeMilliseconds = 469,
+            FanAgeCapturedAtUtc = DateTimeOffset.Parse("2026-10-04T07:23:17.5914333+00:00")
+        };
+        var hardware = new HardwareIdentity(Hp8C40TargetProfile.BoardManufacturer,
+            Hp8C40TargetProfile.BoardProduct, Hp8C40TargetProfile.BoardVersion,
+            Hp8C40TargetProfile.SystemManufacturer, Hp8C40TargetProfile.SystemProductName,
+            Hp8C40TargetProfile.SystemSkuPrefix, Hp8C40TargetProfile.ValidatedBiosVersion);
+        var rawSafety = SafetyGate.Evaluate(hardware, SystemState.Healthy, snapshot,
+            DateTimeOffset.Parse("2026-10-04T07:23:17.5922222+00:00"), true);
+        Check(rawSafety.SnapshotFresh && rawSafety.ThermalEmergency && !rawSafety.CustomControlPermitted,
+            "Filtering may not suppress the captured 97 C thermal handoff.");
+        var calls = new List<HpBiosRequest>();
+        var session = new WmiFanSession(r => { calls.Add(r); return 0; }, _ => { });
+        session.Apply(31, true);
+        Reject(() => session.Apply(35, rawSafety.CustomControlPermitted));
+        session.Recover();
+        Check(calls.Count == 3 && calls[1].Payload[0] == 255 && calls[2].CommandType == 0x1A,
+            "Raw thermal refusal must still allow immediate release requests.");
+        Check(snapshot.CpuControlTemperatureC == 97 && snapshot.FanSampleAgeMilliseconds == 469,
+            "Filter path mutated original sensors or acquisition freshness.");
     }
 
     private static async Task TestFreshAcquisitionAsync()

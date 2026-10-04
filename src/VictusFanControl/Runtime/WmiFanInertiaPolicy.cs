@@ -8,6 +8,15 @@ internal sealed record WmiFanInertiaSettings(
     double DecreaseConfirmationSeconds = 12,
     string ThermalIncrease = "immediate-with-existing-up-step-limit");
 
+internal sealed record WmiFanPolicyDecision(
+    bool Accepted,
+    int? EqualFanLevel,
+    double? RawDemandLevel,
+    double? CurveDemandLevel,
+    double? CpuCurveTemperatureC,
+    bool CpuTemperatureFilterBypassed,
+    string Detail);
+
 /// <summary>
 /// Pure smoothing for the opt-in WMI experiment only. Raw sensors and all
 /// admission/thermal handoff checks remain outside this policy, unchanged.
@@ -17,6 +26,7 @@ internal sealed class WmiFanInertiaPolicy
     internal static WmiFanInertiaSettings Settings { get; } = new();
     private readonly AdaptiveFanPolicyConfig _config;
     private readonly AdaptiveFanPolicyEngine _demand;
+    private readonly WmiCpuTemperatureFilter _cpuFilter = new();
     private int? _current;
     private DateTimeOffset? _increaseSince;
     private int _increaseFloor;
@@ -36,18 +46,33 @@ internal sealed class WmiFanInertiaPolicy
         });
     }
 
-    internal AdaptiveFanPolicyDecision Evaluate(AdaptiveFanPolicyInput input)
+    internal WmiFanPolicyDecision Evaluate(AdaptiveFanPolicyInput input)
     {
+        // Validate ORIGINAL input and continuity before smoothing. A filter
+        // must not turn invalid raw sensors into an accepted policy decision.
         var demand = _demand.Evaluate(input);
         if (!demand.Accepted || !demand.EqualFanLevel.HasValue)
         {
             ClearConfirmation();
-            return demand; // Never hold an accepted target across invalid telemetry.
+            _cpuFilter.Reset();
+            return new(false, null, demand.RawDemandLevel, null, null, false, demand.Detail);
         }
 
-        var requested = demand.EqualFanLevel.Value;
-        AdaptiveFanPolicyDecision Accepted(string detail) =>
-            new(true, _current, demand.RawDemandLevel, detail);
+        var cpu = _cpuFilter.Evaluate(input.Timestamp, input.CpuEffectiveTemperatureC, _config.MaximumSampleGap);
+        // Only CPU temperature is filtered. GPU heat, power and load remain
+        // instantaneous and can independently win the maximum-demand rule.
+        var curveDemand = new[]
+        {
+            AdaptiveFanPolicyEngine.Interpolate(_config.CpuTemperatureCurve, cpu.TemperatureC),
+            AdaptiveFanPolicyEngine.Interpolate(_config.GpuTemperatureCurve, input.GpuTemperatureC),
+            AdaptiveFanPolicyEngine.Interpolate(_config.CpuPowerCurve, input.CpuPackagePowerW),
+            AdaptiveFanPolicyEngine.Interpolate(_config.GpuPowerCurve, input.GpuPowerW),
+            AdaptiveFanPolicyEngine.Interpolate(_config.CpuLoadCurve, input.CpuLoadPercent),
+            AdaptiveFanPolicyEngine.Interpolate(_config.GpuLoadCurve, input.GpuLoadPercent)
+        }.Max();
+        var requested = Math.Clamp((int)Math.Ceiling(curveDemand), _config.MinimumLevel, _config.MaximumLevel);
+        WmiFanPolicyDecision Accepted(string detail) =>
+            new(true, _current, demand.RawDemandLevel, curveDemand, cpu.TemperatureC, cpu.Bypassed, detail);
         if (!_current.HasValue)
         {
             _current = requested;
@@ -59,7 +84,7 @@ internal sealed class WmiFanInertiaPolicy
         {
             _decreaseSince = null;
             var thermalDemand = Math.Max(
-                AdaptiveFanPolicyEngine.Interpolate(_config.CpuTemperatureCurve, input.CpuEffectiveTemperatureC),
+                AdaptiveFanPolicyEngine.Interpolate(_config.CpuTemperatureCurve, cpu.TemperatureC),
                 AdaptiveFanPolicyEngine.Interpolate(_config.GpuTemperatureCurve, input.GpuTemperatureC));
             var thermalIncrease = Math.Ceiling(thermalDemand) > current;
             if (thermalIncrease || requested - current > Settings.SmallIncreaseMaximumLevels)

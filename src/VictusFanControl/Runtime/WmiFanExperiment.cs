@@ -151,6 +151,7 @@ internal static class WmiFanExperiment
         var config = CreatePolicy();
         WriteJson(Path.Combine(o.Directory, "policy.json"), config);
         WriteJson(Path.Combine(o.Directory, "inertia.json"), WmiFanInertiaPolicy.Settings);
+        WriteJson(Path.Combine(o.Directory, "cpu-temperature-filter.json"), WmiCpuTemperatureFilter.Settings);
         var engine = new WmiFanInertiaPolicy(config);
         await using var csv = new CsvTelemetryLogger(Path.Combine(o.Directory, "telemetry.csv"));
         await csv.WriteHeaderAsync(CancellationToken.None);
@@ -196,7 +197,9 @@ internal static class WmiFanExperiment
                     {
                         WriteJson(Path.Combine(o.Directory, "telemetry-fault.json"), new { EvaluatedAtUtc = evaluatedAt,
                             snapshot.Timestamp, snapshot.FanSampledAtUtc, snapshot.FanSampleAgeMilliseconds,
-                            snapshot.FanAgeCapturedAtUtc, snapshot.FanTelemetrySource, safety.Reasons });
+                            snapshot.FanAgeCapturedAtUtc, snapshot.FanTelemetrySource,
+                            snapshot.CpuTemperatureC, snapshot.CpuCoreMaxTemperatureC,
+                            snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC, safety.Reasons });
                         throw new InvalidOperationException("Telemetry admission lost: " + string.Join("; ", safety.Reasons));
                     }
                     await Task.Delay(1000, cts.Token);
@@ -214,14 +217,16 @@ internal static class WmiFanExperiment
                 EnsureNormal();
                 var sent = session?.Apply(decision.EqualFanLevel.Value, safety.CustomControlPermitted) ?? false;
                 decisions.WriteLine(JsonSerializer.Serialize(new { Utc = DateTimeOffset.UtcNow,
-                    decision.EqualFanLevel, decision.RawDemandLevel, decision.Detail, Sent = sent, o.Control,
+                    decision.EqualFanLevel, decision.RawDemandLevel, decision.CurveDemandLevel,
+                    decision.CpuCurveTemperatureC, decision.CpuTemperatureFilterBypassed,
+                    decision.Detail, Sent = sent, o.Control,
                     WindowsPower = SystemPowerStatusReader.Read(),
                     snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC,
                     snapshot.CpuFanRpm, snapshot.GpuFanRpm, snapshot.FanSampledAtUtc,
                     snapshot.FanSampleAgeMilliseconds, snapshot.FanAgeCapturedAtUtc, SetpointReadback = false }));
                 WriteJson(Path.Combine(o.Directory, "heartbeat.json"), new { Pid = Environment.ProcessId,
                     Utc = DateTimeOffset.UtcNow, ElapsedMs = clock.ElapsedMilliseconds, Level = decision.EqualFanLevel });
-                Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; CPU={snapshot.CpuControlTemperatureC:0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}");
+                Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; CPU={snapshot.CpuControlTemperatureC:0}C CPUcurve={decision.CpuCurveTemperatureC:0.0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}");
                 await Task.Delay(1000, cts.Token);
             }
         }
