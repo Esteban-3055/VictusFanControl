@@ -1,13 +1,10 @@
-using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using System.Windows.Forms;
 using VictusFanControl.Performance;
 
 namespace VictusFanControl.PerformanceProbe;
 
-internal static class PowerSourceNotificationQualification
+internal static class PowerSourceCoordinatorQualification
 {
     private const string TargetProfileId =
         "HP-8C40-9D0R1LA-F18";
@@ -28,30 +25,42 @@ internal static class PowerSourceNotificationQualification
         var reader =
             new WindowsPerformancePowerSourceReader();
 
-        var initial =
-            reader.Read();
+        var cpu =
+            new RecordingCpuSink();
 
-        if (!initial.Succeeded)
+        var gpu =
+            new RecordingGpuSink();
+
+        var coordinator =
+            new PerformanceSourceTransitionCoordinator(
+                reader,
+                cpu,
+                gpu);
+
+        var prime =
+            coordinator.Prime();
+
+        if (!prime.Observation.Succeeded)
         {
             Console.Error.WriteLine(
-                "Initial direct power-source query failed: " +
-                initial.Status);
+                "Initial coordinator prime query failed: " +
+                prime.Observation.Status);
 
             return 3;
         }
 
-        if (initial.Source ==
+        if (prime.Observation.Source ==
             options.ExpectedSource)
         {
             Console.Error.WriteLine(
-                "Initial source already equals the expected destination. " +
-                "No notification qualification was attempted.");
+                "Initial source already equals expected destination. " +
+                "No coordinator transition qualification was attempted.");
 
             return 4;
         }
 
         var events =
-            new List<NotificationObservation>();
+            new List<PerformanceSourceDispatchResult>();
 
         var startedAt =
             DateTimeOffset.UtcNow;
@@ -84,40 +93,44 @@ internal static class PowerSourceNotificationQualification
         try
         {
             using var window =
-                new PowerNotificationWindow(
-                    () =>
-                    {
-                        var observation =
-                            reader.Read();
-
-                        events.Add(
-                            new NotificationObservation(
-                                DateTimeOffset.UtcNow,
-                                observation));
-
-                        Console.WriteLine(
-                            $"Power notification -> direct query: {observation.Source} " +
-                            $"raw={observation.RawAcLineStatus?.ToString() ?? "null"} " +
-                            $"status={observation.Status}");
-
-                        if (observation.Succeeded &&
-                            observation.Source ==
-                                options.ExpectedSource)
+                new PowerSourceNotificationQualification
+                    .PowerNotificationWindow(
+                        () =>
                         {
-                            matched = true;
-                            context.ExitThread();
-                        }
-                    });
+                            var dispatch =
+                                coordinator.HandleNotificationSignal();
+
+                            events.Add(
+                                dispatch);
+
+                            Console.WriteLine(
+                                $"Coordinator signal -> source={dispatch.Observation.Source}, " +
+                                $"raw={dispatch.Observation.RawAcLineStatus?.ToString() ?? "null"}, " +
+                                $"duplicate={dispatch.DuplicateSuppressed}, " +
+                                $"cpuAttempted={dispatch.CpuAttempted}, " +
+                                $"gpuAttempted={dispatch.GpuAttempted}, " +
+                                $"status={dispatch.Status}");
+
+                            if (dispatch.Observation.Succeeded &&
+                                dispatch.Observation.Source ==
+                                    options.ExpectedSource &&
+                                !dispatch.DuplicateSuppressed &&
+                                dispatch.CpuAttempted &&
+                                dispatch.GpuAttempted)
+                            {
+                                matched = true;
+                                context.ExitThread();
+                            }
+                        });
 
             timeout.Start();
 
             Console.WriteLine(
-                $"Initial direct source: {initial.Source} " +
-                $"raw={initial.RawAcLineStatus?.ToString() ?? "null"}.");
+                $"Coordinator primed source: {prime.Observation.Source} " +
+                $"raw={prime.Observation.RawAcLineStatus?.ToString() ?? "null"}.");
 
             Console.WriteLine(
-                $"Waiting up to {options.TimeoutSeconds}s for Windows GUID_ACDC_POWER_SOURCE notification, " +
-                $"then confirming destination {options.ExpectedSource} with GetSystemPowerStatus.");
+                $"Waiting up to {options.TimeoutSeconds}s for a real source change to {options.ExpectedSource}.");
 
             Application.Run(
                 context);
@@ -144,12 +157,26 @@ internal static class PowerSourceNotificationQualification
                     startedAt,
                 CompletedAtUtc:
                     DateTimeOffset.UtcNow,
-                Initial:
-                    initial,
-                Notifications:
+                Prime:
+                    prime,
+                NotificationDispatches:
                     events.ToArray(),
-                ExpectedSourceConfirmed:
-                    matched,
+                CpuDispatchCount:
+                    cpu.Calls,
+                CpuLastSource:
+                    cpu.LastSource,
+                GpuDispatchCount:
+                    gpu.Calls,
+                GpuLastSource:
+                    gpu.LastSource,
+                ExpectedSourceDispatchedToBothDomains:
+                    matched &&
+                    cpu.Calls == 1 &&
+                    gpu.Calls == 1 &&
+                    cpu.LastSource ==
+                        options.ExpectedSource &&
+                    gpu.LastSource ==
+                        options.ExpectedSource,
                 ListenerError:
                     listenerError,
                 HardwareWritesPerformed:
@@ -160,7 +187,7 @@ internal static class PowerSourceNotificationQualification
             report);
 
         Console.WriteLine(
-            "Power-source notification report: " +
+            "Performance source coordinator report: " +
             options.OutputPath);
 
         if (listenerError is not null)
@@ -171,17 +198,17 @@ internal static class PowerSourceNotificationQualification
             return 5;
         }
 
-        if (!matched)
+        if (!report.ExpectedSourceDispatchedToBothDomains)
         {
             Console.Error.WriteLine(
-                "Expected source was not confirmed before timeout.");
+                "Expected source was not dispatched exactly once to both recording domains.");
 
             return 6;
         }
 
         Console.WriteLine(
-            "Power-source notification qualification: PASS. " +
-            "Notification was treated only as a trigger; destination came from a direct GetSystemPowerStatus query.");
+            "Performance source coordinator qualification: PASS. " +
+            "Direct query confirmed the changed source and one independent dispatch reached each recording domain.");
 
         return 0;
     }
@@ -195,7 +222,7 @@ internal static class PowerSourceNotificationQualification
                 TryParse(
                     new[]
                     {
-                        "--watch-power-source",
+                        "--watch-coordinator",
                         "--expect",
                         "battery",
                         "--timeout-seconds",
@@ -203,23 +230,23 @@ internal static class PowerSourceNotificationQualification
                         "--output",
                         Path.Combine(
                             Path.GetTempPath(),
-                            "vfc-source-notification.json")
+                            "vfc-source-coordinator.json")
                     },
                     out var battery,
                     out _),
-                "battery notification args parse");
+                "coordinator Battery args parse");
 
             Require(
                 battery.ExpectedSource ==
                     PerformancePowerSourceKind.Battery &&
                 battery.TimeoutSeconds == 30,
-                "battery notification parse values");
+                "coordinator Battery parse values");
 
             Require(
                 TryParse(
                     new[]
                     {
-                        "--watch-power-source",
+                        "--watch-coordinator",
                         "--expect",
                         "ac",
                         "--timeout-seconds",
@@ -227,22 +254,22 @@ internal static class PowerSourceNotificationQualification
                         "--output",
                         Path.Combine(
                             Path.GetTempPath(),
-                            "vfc-source-notification-ac.json")
+                            "vfc-source-coordinator-ac.json")
                     },
                     out var ac,
                     out _),
-                "AC notification args parse");
+                "coordinator AC args parse");
 
             Require(
                 ac.ExpectedSource ==
                     PerformancePowerSourceKind.Ac,
-                "AC notification expected source");
+                "coordinator AC parse value");
 
             Require(
                 !TryParse(
                     new[]
                     {
-                        "--watch-power-source",
+                        "--watch-coordinator",
                         "--expect",
                         "unknown",
                         "--output",
@@ -250,33 +277,17 @@ internal static class PowerSourceNotificationQualification
                     },
                     out _,
                     out _),
-                "Unknown cannot be an expected destination");
-
-            Require(
-                !TryParse(
-                    new[]
-                    {
-                        "--watch-power-source",
-                        "--expect",
-                        "battery",
-                        "--timeout-seconds",
-                        "121",
-                        "--output",
-                        "x.json"
-                    },
-                    out _,
-                    out _),
-                "excessive timeout rejected");
+                "coordinator Unknown expected source rejected");
 
             output.WriteLine(
-                "Performance power-source notification harness self-test: PASS (argument gates only, no listener registration, no hardware I/O).");
+                "Performance source coordinator qualification harness self-test: PASS (argument gates only, no listener registration, no hardware I/O).");
 
             return 0;
         }
         catch (Exception ex)
         {
             output.WriteLine(
-                "Performance power-source notification harness self-test: FAIL - " +
+                "Performance source coordinator qualification harness self-test: FAIL - " +
                 ex.Message);
 
             return 1;
@@ -292,11 +303,11 @@ internal static class PowerSourceNotificationQualification
             default;
 
         error =
-            "Invalid power-source notification qualification arguments.";
+            "Invalid performance source coordinator qualification arguments.";
 
         if (args.Length < 1 ||
             args[0] !=
-                "--watch-power-source")
+                "--watch-coordinator")
         {
             return false;
         }
@@ -369,7 +380,7 @@ internal static class PowerSourceNotificationQualification
 
                 default:
                     error =
-                        "Unknown or incomplete notification qualification argument: " +
+                        "Unknown or incomplete coordinator qualification argument: " +
                         args[index];
 
                     return false;
@@ -460,7 +471,7 @@ internal static class PowerSourceNotificationQualification
     private static void PrintUsage()
     {
         Console.WriteLine(
-            "VictusFanControl.PerformanceProbe --watch-power-source --expect <ac|battery> --timeout-seconds <5..120> --output <json-path>");
+            "VictusFanControl.PerformanceProbe --watch-coordinator --expect <ac|battery> --timeout-seconds <5..120> --output <json-path>");
     }
 
     private static void Require(
@@ -476,10 +487,6 @@ internal static class PowerSourceNotificationQualification
         int TimeoutSeconds,
         string OutputPath);
 
-    private readonly record struct NotificationObservation(
-        DateTimeOffset CapturedAtUtc,
-        PerformancePowerSourceObservation Observation);
-
     private readonly record struct QualificationReport(
         int SchemaVersion,
         string TargetProfileId,
@@ -487,132 +494,73 @@ internal static class PowerSourceNotificationQualification
         int TimeoutSeconds,
         DateTimeOffset StartedAtUtc,
         DateTimeOffset CompletedAtUtc,
-        PerformancePowerSourceObservation Initial,
-        NotificationObservation[] Notifications,
-        bool ExpectedSourceConfirmed,
+        PerformanceSourceDispatchResult Prime,
+        PerformanceSourceDispatchResult[] NotificationDispatches,
+        int CpuDispatchCount,
+        PerformancePowerSourceKind? CpuLastSource,
+        int GpuDispatchCount,
+        PerformancePowerSourceKind? GpuLastSource,
+        bool ExpectedSourceDispatchedToBothDomains,
         string? ListenerError,
         bool HardwareWritesPerformed);
 
-    internal sealed class PowerNotificationWindow :
-        NativeWindow,
-        IDisposable
+    private sealed class RecordingCpuSink :
+        ICpuPowerSourceTransitionSink
     {
-        private const int WmPowerBroadcast =
-            0x0218;
+        internal int Calls;
+        internal PerformancePowerSourceKind? LastSource;
 
-        private const int PbtPowerSettingChange =
-            0x8013;
-
-        private const uint DeviceNotifyWindowHandle =
-            0;
-
-        private static readonly Guid GuidAcDcPowerSource =
-            new(
-                "5D3E9A59-E9D5-4B00-A6BD-FF34FF516548");
-
-        private readonly Action _onSignal;
-
-        private IntPtr _notificationHandle;
-
-        internal PowerNotificationWindow(
-            Action onSignal)
+        public CpuPowerPresetTransitionResult HandleConfirmedSourceChange(
+            PerformancePowerSourceKind source)
         {
-            _onSignal =
-                onSignal ??
-                throw new ArgumentNullException(
-                    nameof(onSignal));
+            Calls++;
+            LastSource =
+                source;
 
-            CreateHandle(
-                new CreateParams
-                {
-                    Caption =
-                        "VictusFanControl.PerformanceProbe.PowerNotificationWindow"
-                });
-
-            var setting =
-                GuidAcDcPowerSource;
-
-            _notificationHandle =
-                RegisterPowerSettingNotification(
-                    Handle,
-                    ref setting,
-                    DeviceNotifyWindowHandle);
-
-            if (_notificationHandle ==
-                IntPtr.Zero)
-            {
-                var error =
-                    Marshal.GetLastWin32Error();
-
-                DestroyHandle();
-
-                throw new Win32Exception(
-                    error,
-                    "RegisterPowerSettingNotification(GUID_ACDC_POWER_SOURCE) failed.");
-            }
+            return new CpuPowerPresetTransitionResult(
+                CpuPowerPresetTransitionDisposition.EnabledPresetSwitched,
+                source,
+                source ==
+                    PerformancePowerSourceKind.Ac
+                    ? PerformancePresetSlot.Ac
+                    : source ==
+                        PerformancePowerSourceKind.Battery
+                        ? PerformancePresetSlot.Battery
+                        : null,
+                Succeeded: true,
+                Status:
+                    "RECORDING_CPU_DOMAIN_NO_HARDWARE_IO");
         }
+    }
 
-        protected override void WndProc(
-            ref Message message)
+    private sealed class RecordingGpuSink :
+        IGpuClockSourceTransitionSink
+    {
+        internal int Calls;
+        internal PerformancePowerSourceKind? LastSource;
+
+        public GpuClockPresetTransitionResult HandleConfirmedSourceChange(
+            PerformancePowerSourceKind source)
         {
-            if (message.Msg ==
-                    WmPowerBroadcast &&
-                message.WParam.ToInt32() ==
-                    PbtPowerSettingChange &&
-                message.LParam !=
-                    IntPtr.Zero)
-            {
-                var settingGuid =
-                    Marshal.PtrToStructure<Guid>(
-                        message.LParam);
+            Calls++;
+            LastSource =
+                source;
 
-                if (settingGuid ==
-                    GuidAcDcPowerSource)
-                {
-                    // Deliberately ignore POWERBROADCAST_SETTING.Data.
-                    // The notification is only a trigger. The callback performs
-                    // a fresh GetSystemPowerStatus query.
-                    _onSignal();
-                }
-            }
-
-            base.WndProc(
-                ref message);
+            return new GpuClockPresetTransitionResult(
+                GpuClockPresetTransitionDisposition.EnabledPresetSwitched,
+                source,
+                source ==
+                    PerformancePowerSourceKind.Ac
+                    ? PerformancePresetSlot.Ac
+                    : source ==
+                        PerformancePowerSourceKind.Battery
+                        ? PerformancePresetSlot.Battery
+                        : null,
+                Succeeded: true,
+                SessionState:
+                    GpuClockSessionState.ActiveUnverified,
+                Status:
+                    "RECORDING_GPU_DOMAIN_NO_HARDWARE_IO");
         }
-
-        public void Dispose()
-        {
-            if (_notificationHandle !=
-                IntPtr.Zero)
-            {
-                _ =
-                    UnregisterPowerSettingNotification(
-                        _notificationHandle);
-
-                _notificationHandle =
-                    IntPtr.Zero;
-            }
-
-            if (Handle !=
-                IntPtr.Zero)
-            {
-                DestroyHandle();
-            }
-        }
-
-        [DllImport(
-            "user32.dll",
-            SetLastError = true)]
-        private static extern IntPtr RegisterPowerSettingNotification(
-            IntPtr recipient,
-            ref Guid powerSettingGuid,
-            uint flags);
-
-        [DllImport(
-            "user32.dll",
-            SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool UnregisterPowerSettingNotification(
-            IntPtr handle);
     }
 }

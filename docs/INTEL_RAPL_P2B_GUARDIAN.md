@@ -1444,3 +1444,43 @@ hardware writes. That combined live guardian path remains a later gate.
 
 productionHardwareWritesAuthorized remains false.
 
+## Step 6C physical-composition harness
+
+A final read-only composition harness is added before any notification-driven
+hardware write is considered.
+
+The harness:
+
+1. primes PerformanceSourceTransitionCoordinator with one direct
+   GetSystemPowerStatus read;
+2. registers the already-qualified GUID_ACDC_POWER_SOURCE Windows listener;
+3. feeds each matching notification into the coordinator;
+4. confirms the source again through GetSystemPowerStatus;
+5. suppresses same-source notifications;
+6. sends a real changed source to recording CPU and GPU sinks only.
+
+The recording sinks implement the same narrow interfaces as the real CPU and
+GPU transition controllers but perform zero hardware I/O.
+
+Physical entry points:
+
+    .\scripts\test-performance-source-coordinator.ps1 -Expect battery
+
+and:
+
+    .\scripts\test-performance-source-coordinator.ps1 -Expect ac
+
+PASS requires the expected destination to be directly confirmed and dispatched
+exactly once to both recording domains.
+
+This specifically validates the initial same-source notification behavior seen
+in Step 6B: registration may emit an immediate event for the current source,
+which must remain a zero-dispatch duplicate.
+
+No CPU RAPL write, GPU NVML Set/Reset, WMI write or EC write exists in this
+qualification path.
+
+Only after this composition gate passes should the detached PerformanceGuardian
+process be allowed to bind the native listener to the real per-domain
+controllers under explicit runtime/startup authority rules.
+

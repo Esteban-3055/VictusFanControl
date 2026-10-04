@@ -36,6 +36,20 @@ internal static class Program
                     args);
             }
 
+            if (args.Length == 1 &&
+                args[0] == "--coordinator-self-test")
+            {
+                return PowerSourceCoordinatorQualification.SelfTest(
+                    Console.Out);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--watch-coordinator")
+            {
+                return PowerSourceCoordinatorQualification.Run(
+                    args);
+            }
+
             if (!TryParse(
                     args,
                     out var label,
@@ -197,7 +211,13 @@ internal static class Program
             "VictusFanControl.PerformanceProbe --watch-power-source --expect <ac|battery> --timeout-seconds <5..120> --output <json-path>");
 
         Console.WriteLine(
-            "Both probe modes are read-only. Notifications are triggers only; GetSystemPowerStatus confirms the source.");
+            "VictusFanControl.PerformanceProbe --coordinator-self-test");
+
+        Console.WriteLine(
+            "VictusFanControl.PerformanceProbe --watch-coordinator --expect <ac|battery> --timeout-seconds <5..120> --output <json-path>");
+
+        Console.WriteLine(
+            "All probe modes are read-only. Notifications are triggers only; GetSystemPowerStatus confirms the source.");
     }
 
     private readonly record struct PowerSourceReport(
