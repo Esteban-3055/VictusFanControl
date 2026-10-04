@@ -1626,3 +1626,131 @@ The detached-process fixture also waits for the guardian process itself to exit
 before asserting named-mutex release, avoiding a report-file/mutex-release race
 in the test.
 
+## Step 6E — Guardian AC/Battery listener with recording CPU/GPU domains
+
+The detached PerformanceGuardian now owns the qualified Windows
+GUID_ACDC_POWER_SOURCE listener for the lifetime of an explicitly enabled
+performance session. This remains a software/lifecycle qualification gate:
+the Guardian uses recording CPU/GPU source sinks only and performs zero Intel
+RAPL writes and zero NVML Set/Reset operations.
+
+### Authority and startup ordering
+
+The live ordering is now:
+
+    Guardian process start
+      -> HELLO with exact launch tuple
+      -> explicit ENABLE_SESSION
+      -> direct GetSystemPowerStatus prime
+      -> RegisterPowerSettingNotification(GUID_ACDC_POWER_SOURCE)
+      -> WM_POWERBROADCAST / PBT_POWERSETTINGCHANGE
+      -> fresh GetSystemPowerStatus query
+      -> source comparison / duplicate suppression
+      -> selected recording CPU/GPU sink dispatch
+
+Starting the Guardian does not register the source listener and does not create
+Apply authority. A HELLO or a source observation also grants no Apply
+authority. Only an accepted ENABLE_SESSION starts the source runtime.
+
+The prime always happens before listener registration. This preserves the
+physical Step 6B/6C observation that Windows may emit an immediate
+same-source notification during registration: that event is compared against
+the primed source and remains a zero-dispatch duplicate.
+
+The native POWERBROADCAST_SETTING.Data payload is still ignored. Every
+matching notification is only a trigger for a fresh direct
+WindowsPerformancePowerSourceReader.Read() / GetSystemPowerStatus query.
+
+### Explicit domain selection
+
+PerformanceSourceTransitionCoordinator now accepts an explicit CPU/GPU
+dispatch mask while preserving the original parameterless both-domain path.
+This is required because ENABLE_SESSION may authorize CPU only, GPU only or
+both. A source transition never invokes a domain that was not explicitly
+selected by the active Guardian session.
+
+Selected domains remain independent:
+
+- CPU recording failure does not block the GPU recording attempt;
+- GPU recording failure does not revert or suppress a successful CPU recording
+  attempt;
+- Unknown/query failure is dispatched once as the existing fail-closed Unknown
+  episode, then repeated Unknown notifications are suppressed;
+- Disabled/no-session state has no listener and therefore no
+  notification-driven startup path.
+
+### Listener/session lifecycle
+
+The Windows listener runs on a dedicated STA message thread and registers only
+for:
+
+    GUID_ACDC_POWER_SOURCE
+    5D3E9A59-E9D5-4B00-A6BD-FF34FF516548
+
+DISABLE_SESSION and SHUTDOWN first pass the existing side-effect envelope
+validation. A wrong/stale nonce therefore cannot unregister the listener or
+invoke release merely by naming a cleanup-capable command.
+
+For a valid cleanup, notification dispatch is fenced before listener
+unregistration and before the recording domain Release callback.
+
+The listener is session-scoped rather than pipe-connection-scoped. A client may
+disconnect and reconnect with the same exact launch tuple while the source
+runtime stays active. Reconnect does not re-prime the source and does not
+register a second listener.
+
+If the held owner Process handle signals exit while the listener is active,
+the Guardian:
+
+1. fences/unregisters source notifications;
+2. releases the active recording domain lifecycle exactly once;
+3. marks authority ParentLost;
+4. writes final evidence;
+5. exits and releases the target-scoped mutex.
+
+### Step 6E fixtures
+
+The Guardian self-test now covers with synthetic source observations and a
+manual listener:
+
+- no listener and no dispatch before explicit Start/ENABLE authority;
+- direct AC prime before registration;
+- initial same-source notification suppression;
+- AC -> Battery recording dispatch;
+- Battery -> AC recording dispatch;
+- one fail-closed Unknown/query-failure dispatch followed by duplicate
+  suppression;
+- CPU recording failure while GPU still executes;
+- GPU recording failure without reverting CPU;
+- explicit CPU-only domain selection with zero GPU sink calls.
+
+The detached native-process fixture additionally uses the real Windows
+notification registration path and proves:
+
+- exact HELLO + explicit CPU/GPU ENABLE_SESSION;
+- source runtime starts once and listener registers once;
+- wrong/stale nonce DISABLE_SESSION is rejected while the active session
+  remains intact;
+- pipe reconnect preserves the same session and does not register a second
+  listener;
+- duplicate Guardian loses the named-mutex writer gate;
+- abrupt owner death while the listener is active stops the source runtime,
+  performs one simulated domain release and exits;
+- named mutex is released after Guardian exit;
+- HardwareWritesPerformed remains false.
+
+Step 6E therefore qualifies Guardian ownership of the Windows source listener
+and its semantic/lifecycle composition with recording domains. It does not
+qualify physical notification-driven CPU/GPU mutation.
+
+productionHardwareWritesAuthorized remains false.
+guiIntegrationAuthorized remains false.
+startupPersistenceAuthorized remains false.
+automaticProfileIntegrationAuthorized remains false.
+
+The next gate is **Step 6F**: replace the recording source-transition sinks
+with the already-qualified real CPU RAPL and GPU locked-clock controllers under
+the same explicit ENABLE_SESSION, source-prime, journal and cleanup rules. Step
+6F must be introduced as a separate bounded hardware gate; no such hardware
+binding is authorized by Step 6E.
+
