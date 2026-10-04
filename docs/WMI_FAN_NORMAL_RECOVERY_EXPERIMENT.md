@@ -9,7 +9,7 @@ Ruta experimental independiente del backend productivo. No instala el driver ACP
 - Supervisor separado: observa heartbeat, salida del worker y eventos ACPI 13/15. El worker detecta pérdida del supervisor y trata de liberar localmente si había intención de escritura. No protege frente a bloqueo de Windows, apagado, doble muerte o firmware bloqueado.
 - Un mutex global serializa todas las llamadas HP de ambos procesos de esta prueba, incluidas RPM. Se vuelve a comprobar stop/whitelist después de adquirirlo. No coordina clientes HP externos ni el firmware.
 - Antes de cada cambio se publica una intención durable. Antes de invocar el método nativo se publica un marcador de llamada pendiente. Si el transporte lanza una excepción sin retorno nativo confirmado, o se abandona el mutex, no se admiten llamadas posteriores: se conserva el lease. Un timeout no se interpreta como cancelación del firmware.
-- El lease experimental impide pruebas simultáneas o reinicio después de una recuperación pendiente. Se retira cuando no hubo intención de escritura o se aceptaron ambas solicitudes de liberación; es un journal de solicitudes pendientes, no una certificación de restauración. No borrarlo para saltar bloqueos.
+- El lease experimental impide pruebas simultáneas o reinicio después de una recuperación pendiente. Sólo se retira con salida del worker confirmada, ninguna llamada nativa pendiente y, además, sin intención de escritura o con ambas solicitudes de liberación aceptadas. Una lectura pendiente en simulación también conserva el lease. Es un journal de solicitudes pendientes, no una certificación de restauración. No borrarlo para saltar bloqueos.
 
 ## Prueba en el Victus
 

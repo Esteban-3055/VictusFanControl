@@ -13,6 +13,11 @@ internal static class WmiFanExperimentSelfTest
         Directory.CreateDirectory(directory);
         try
         {
+            Check(WmiFanExperiment.CanRetireLease(true, false, false, true), "Completed shadow lease retained unnecessarily.");
+            Check(WmiFanExperiment.CanRetireLease(false, true, false, true), "Accepted completed release lease retained unnecessarily.");
+            Check(!WmiFanExperiment.CanRetireLease(true, false, true, true), "Unknown shadow native call may not retire the lease.");
+            Check(!WmiFanExperiment.CanRetireLease(false, true, false, false), "Running worker may not retire the lease.");
+            Check(!WmiFanExperiment.CanRetireLease(false, false, false, true), "Unaccepted release may not retire the lease.");
             var policy = new AdaptiveFanPolicyEngine(WmiFanExperiment.CreatePolicy());
             var t = DateTimeOffset.UtcNow;
             var idle = policy.Evaluate(new(t, 40, 10, 0, 35, 10, 0));

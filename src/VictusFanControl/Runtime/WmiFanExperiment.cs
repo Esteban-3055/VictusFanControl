@@ -46,6 +46,8 @@ internal sealed record WmiFanExperimentOptions(string Directory, string Modules,
 internal static class WmiFanExperiment
 {
     private sealed record AcpiEvent(long RecordId, int Id, DateTime Utc, string Xml);
+    internal static bool CanRetireLease(bool noWriteIntent, bool releaseAccepted, bool nativeUnknown, bool workerExited) =>
+        workerExited && !nativeUnknown && (noWriteIntent || releaseAccepted);
     internal static AdaptiveFanPolicyConfig CreatePolicy()
     {
         var candidate = Hp8C40AdaptiveCandidateV1.Create();
@@ -303,15 +305,18 @@ internal static class WmiFanExperiment
             }
             catch (Exception ex) { code = 1; stopReason += "; post-recovery observation: " + ex.Message; }
             if (events.Count > 0) code = 1;
+            var nativeUnknown = File.Exists(Path.Combine(o.Directory, "native-inflight.json")) ||
+                File.Exists(Path.Combine(o.Directory, "native-uncertain.signal"));
+            var retireLease = CanRetireLease(noWriteIntent, releaseAccepted, nativeUnknown, worker is null || worker.HasExited);
+            if (!retireLease) code = 1;
             WriteJson(Path.Combine(o.Directory, "summary.json"), new { ExitCode = code, StopReason = stopReason,
                 o.Control, DirectEcProhibited = true, ProductionAuthorized = false,
                 NoFanWriteIntent = noWriteIntent, ReleaseRequestsAccepted = releaseAccepted,
-                FirmwareRestorationVerified = false, LeaseRetained = !(noWriteIntent || releaseAccepted),
+                FirmwareRestorationVerified = false, LeaseRetained = !retireLease,
                 AcpiEvents = events.Values, DeniedEc = WmiOnlyInvestigationPolicy.DeniedEcAccesses,
-                NativeCompletionUnknown = File.Exists(Path.Combine(o.Directory, "native-inflight.json")) ||
-                    File.Exists(Path.Combine(o.Directory, "native-uncertain.signal")) });
+                NativeCompletionUnknown = nativeUnknown });
             lease.Dispose();
-            if (noWriteIntent || releaseAccepted) File.Delete(LeasePath);
+            if (retireLease) File.Delete(LeasePath);
             else Console.Error.WriteLine("RECOVERY INCOMPLETE: preserve " + LeasePath);
             worker?.Dispose();
         }
