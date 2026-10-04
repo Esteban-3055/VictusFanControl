@@ -2748,3 +2748,87 @@ productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
+
+
+## Step 6J — combined parent/owner-death qualification
+
+Step 6J qualifies destructive **owner/application process loss** while the
+already-qualified combined CPU+GPU Guardian session is live. It is intentionally
+separate from killing the Guardian process itself.
+
+The physical topology is:
+
+    controller process
+      -> disposable owner process
+           -> detached combined PerformanceGuardian
+
+The disposable owner performs HELLO + ENABLE_SESSION and waits only after:
+
+    CPU journal  Owned 35/60 W
+    GPU journal  ActiveUnverified 210..1850 MHz
+
+The controller then verifies the live AC state independently and terminates
+ONLY the disposable owner with Process.Kill(false). It does not send
+DISABLE_SESSION or SHUTDOWN and it does not kill the Guardian.
+
+The Guardian must observe the real owner Process handle and execute its
+parent-loss path:
+
+    owner process disappears
+      -> stop/fence AC/DC listener
+      -> normal combined ReleaseAsync
+           CPU conditional owned-field restore -> 45/115 W
+           GPU live-session Reset -> NVIDIA default
+      -> remove both journals after successful cleanup
+      -> MarkParentLost
+      -> exit
+
+The combined lifecycle continues to require independent cleanup attempts: a
+failure in one domain cannot suppress the other domain's release attempt.
+
+A clean Step 6J physical PASS requires:
+
+    ParentLostDetected              true
+    ExitReason                      PARENT_LOST_RELEASED
+    FinalPhase                      ParentLost
+    Connections                     1
+    AcceptedRequests                2 (HELLO + ENABLE_SESSION)
+    RejectedRequests                0
+    EnableCalls / ReleaseCalls      1 / 1
+    LastReleaseReason               PARENT_PROCESS_EXIT
+    CPU hardware-write attempts     2 (apply + restore)
+    GPU hardware-write attempts     2 (Set + Reset)
+    source starts / stops           1 / 1
+    source listener registrations   1
+    source CPU/GPU dispatches       0 / 0
+    final CPU domain                Disabled
+    final GPU domain                Disabled
+    final CPU snapshot              45/115 W, unlocked
+    CPU journal present             false
+    GPU journal present             false
+    production mutex available      true
+    SourceFailure / Failure         null / null
+
+The controller itself performs no hardware writes. The only hardware mutation
+authority remains inside the detached Guardian.
+
+This gate proves recovery from the **owner/application crash while Guardian
+survives and still has live ownership context**. It does NOT authorize blind
+automatic GPU Reset after the Guardian process itself crashes or is killed.
+That remains a separate fail-closed stale-journal/recovery problem because
+public NVML cannot prove exact locked-range ownership after Guardian death.
+
+Run from elevated PowerShell with AC connected for the entire test:
+
+    .\scripts\test-performance-guardian-6j-parent-death.ps1
+      -ConfirmTargetProfile HP-8C40-9D0R1LA-F18
+      -ConfirmCpuHardwareWrites
+      -ConfirmExclusiveGpuController
+      -ConfirmOwnerProcessKill
+
+Do not manually terminate the Guardian process.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.
