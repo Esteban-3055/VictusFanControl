@@ -759,3 +759,21 @@ jobs:
           name: curve-editor-ui
           path: curve-editor-ui.png
           if-no-files-found: error
+
+  acpi-field-probe:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build unsigned KMDF source-only ACPI probe and validate native contracts
+        shell: powershell
+        run: .\scripts\Build-Victus-AcpiFieldProbe.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acpi-field-probe-review-only
+          path: |
+            artifacts/acpi-field-probe/AcpiFieldProbe.sys
+            artifacts/acpi-field-probe/probe-client.exe
+            artifacts/acpi-field-probe/contract-test.exe
+            artifacts/acpi-field-probe/build-manifest.json
+          if-no-files-found: error
