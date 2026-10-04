@@ -97,7 +97,8 @@ internal sealed class JsonGpuClockSessionJournal :
                     Path,
                     FileMode.Open,
                     FileAccess.Read,
-                    FileShare.Read,
+                    FileShare.ReadWrite |
+                    FileShare.Delete,
                     4096,
                     FileOptions.SequentialScan);
 
