@@ -97,9 +97,18 @@ internal static class Program
                 GpuPowerLimitQualification.Assess(
                     powerSnapshot);
 
+            var powerFieldSnapshot =
+                client.ReadPowerFieldSnapshotOnce();
+
+            var powerFieldQualification =
+                GpuPowerFieldQualification.Assess(
+                    powerFieldSnapshot,
+                    client.GpuPowerLimitAvailability
+                        .SetPowerManagementLimitExportAvailable);
+
             var report =
                 new GpuObservabilityReport(
-                    SchemaVersion: 2,
+                    SchemaVersion: 3,
                     CapturedAtUtc: DateTimeOffset.UtcNow,
                     TargetProfileId,
                     Label: label,
@@ -117,9 +126,11 @@ internal static class Program
                     PowerManagementLimitConstraints: powerSnapshot.Constraints,
                     EnforcedPowerLimit: powerSnapshot.EnforcedLimit,
                     PowerLimitQualification: powerQualification,
+                    PowerFieldSnapshot: powerFieldSnapshot,
+                    PowerFieldQualification: powerFieldQualification,
                     HardwareWritesPerformed: false,
                     Notes:
-                        "Read-only. Clock lock exact min/max remains unavailable; GPU power-management configured/default/constraints/enforced fields are queried without invoking the setter.");
+                        "Read-only. Legacy GPU power-management getters plus NVML field IDs 187/188/189/190/192 are queried; no setter is invoked.");
 
             var json =
                 JsonSerializer.Serialize(
@@ -194,9 +205,39 @@ internal static class Program
             GpuPowerLimitQualification.Assess(
                 powerSnapshot);
 
+        var powerFieldSnapshot =
+            new NvmlGpuPowerFieldSnapshot(
+                ExportAvailable: true,
+                QueryResult: 0,
+                MinLimit:
+                    FieldFixture(
+                        187,
+                        5000),
+                MaxLimit:
+                    FieldFixture(
+                        188,
+                        75000),
+                DefaultLimit:
+                    FieldFixture(
+                        189,
+                        60000),
+                CurrentLimit:
+                    FieldFixture(
+                        190,
+                        70000),
+                RequestedLimit:
+                    FieldFixture(
+                        192,
+                        60000));
+
+        var powerFieldQualification =
+            GpuPowerFieldQualification.Assess(
+                powerFieldSnapshot,
+                setterExportAvailable: true);
+
         var report =
             new GpuObservabilityReport(
-                SchemaVersion: 2,
+                SchemaVersion: 3,
                 CapturedAtUtc: DateTimeOffset.UnixEpoch,
                 TargetProfileId,
                 Label: "fixture",
@@ -219,6 +260,8 @@ internal static class Program
                 PowerManagementLimitConstraints: powerSnapshot.Constraints,
                 EnforcedPowerLimit: powerSnapshot.EnforcedLimit,
                 PowerLimitQualification: powerQualification,
+                PowerFieldSnapshot: powerFieldSnapshot,
+                PowerFieldQualification: powerFieldQualification,
                 HardwareWritesPerformed: false,
                 Notes: "fixture");
 
@@ -233,17 +276,32 @@ internal static class Program
             report.BatteryOwnershipQualification.ManagedOwnershipAllowed ||
             !report.PowerLimitQualification.ExactConfiguredLimitReadbackAvailable ||
             !report.PowerLimitQualification.ControlledWriteQualificationRecommended ||
-            report.PowerLimitQualification.ProductionWriteAuthorized)
+            report.PowerLimitQualification.ProductionWriteAuthorized ||
+            !report.PowerFieldQualification.ExactUserspaceRequestedLimitReadbackAvailable ||
+            !report.PowerFieldQualification.ControlledWriteQualificationRecommended ||
+            report.PowerFieldQualification.ProductionWriteAuthorized)
         {
             throw new InvalidOperationException(
                 "read-only probe fixture invariant failed");
         }
 
         Console.WriteLine(
-            "GPU NVML observability probe self-test: PASS (clock + power read surfaces, no NVML load, no hardware I/O).");
+            "GPU NVML observability probe self-test: PASS (clock + legacy power + field-value power surfaces, no NVML load, no hardware I/O).");
 
         return 0;
     }
+
+    private static NvmlFieldUnsignedCallResult FieldFixture(
+        uint fieldId,
+        uint value) =>
+        new(
+            ExportAvailable: true,
+            QueryResult: 0,
+            FieldResult: 0,
+            FieldId: fieldId,
+            ValueType: 1,
+            UnsignedValueDecoded: true,
+            Value: value);
 
     private static GpuClockOwnershipQualificationResult
         BlockedFixtureAssessment(
@@ -392,6 +450,8 @@ internal static class Program
         NvmlPowerLimitConstraintsCallResult PowerManagementLimitConstraints,
         NvmlUIntCallResult EnforcedPowerLimit,
         GpuPowerLimitQualificationResult PowerLimitQualification,
+        NvmlGpuPowerFieldSnapshot PowerFieldSnapshot,
+        GpuPowerFieldQualificationResult PowerFieldQualification,
         bool HardwareWritesPerformed,
         string Notes);
 }

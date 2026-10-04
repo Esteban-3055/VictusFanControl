@@ -916,3 +916,60 @@ controlled write qualification; ProductionWriteAuthorized remains false.
 
 No GPU power-limit hardware PASS is claimed by this step.
 
+## Step 5.9C — legacy power getter result and requested-limit field fallback
+
+The first physical power-limit read-only capture on HP-8C40-9D0R1LA-F18
+showed a mixed NVML surface:
+
+- nvmlDeviceSetPowerManagementLimit export: present;
+- nvmlDeviceGetPowerManagementMode: NVML error 3 (not supported);
+- nvmlDeviceGetPowerManagementLimit: NVML error 3 (not supported);
+- default limit: 60000 mW;
+- constraints: 5000..75000 mW;
+- enforced limit: 70000 mW.
+
+Therefore the Step 5.9A legacy-getter ownership route remains blocked. The
+driver advertises an adjustable range and the setter export exists, but the
+legacy configured-limit getter cannot provide exact readback. No write test is
+authorized on that evidence.
+
+A second official NVML read surface was identified before abandoning the power
+path: nvmlDeviceGetFieldValues. Current NVIDIA headers/documentation define:
+
+- NVML_FI_DEV_POWER_MIN_LIMIT = 187;
+- NVML_FI_DEV_POWER_MAX_LIMIT = 188;
+- NVML_FI_DEV_POWER_DEFAULT_LIMIT = 189;
+- NVML_FI_DEV_POWER_CURRENT_LIMIT = 190;
+- NVML_FI_DEV_POWER_REQUESTED_LIMIT = 192.
+
+The requested-limit field is specifically documented as the power limit
+requested by NVML or another userspace client. That makes it materially
+different from the enforced/current field and a candidate exact ownership
+field for a future controller.
+
+NvmlClient now exposes a read-only INvmlGpuPowerFieldReadTransport that queries
+all five fields in one nvmlDeviceGetFieldValues call. Each field retains both
+the top-level query result and its individual nvmlReturn/value type. Only
+unsigned integral value types are accepted for power-limit qualification.
+
+GpuPowerFieldQualification fails closed unless min/max/default/requested are
+all readable, internally consistent and the requested value lies inside the
+advertised range. A successful field qualification still does not authorize a
+production write; it authorizes only designing the one-write/readback/restore
+physical qualification.
+
+This changes the next gate:
+
+1. run the read-only schema-v3 probe on the exact target;
+2. if NVML_FI_DEV_POWER_REQUESTED_LIMIT is readable, consider a token-gated
+   physical write/readback/restore harness;
+3. if the requested field is unsupported too, close the exact-ownership GPU
+   power-limit path on this target.
+
+The legacy physical capture is consolidated in:
+
+    release/gpu-nvml-power-read-8c40-2026-10-04.json
+
+No GPU power-limit setter is called by Step 5.9C.
+productionHardwareWritesAuthorized remains false.
+
