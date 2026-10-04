@@ -1,3 +1,5 @@
+using VictusFanControl.Performance;
+
 namespace VictusFanControl.PerformanceGuardian;
 
 internal static class PerformanceGuardianCleanupSelfTest
