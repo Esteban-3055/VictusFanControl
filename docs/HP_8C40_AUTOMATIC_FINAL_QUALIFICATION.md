@@ -45,11 +45,14 @@ Manual is disabled inside this qualification process to avoid mixed evidence.
 
 ## Frozen A1 profile
 
-A1 qualifies one exact candidate instead of treating every editable combination as already proven:
+A1 pins the operating/timing envelope instead of treating every editable timing combination as already proven. The saved curve profile itself is captured in READY evidence so the exact curves used in the physical run remain auditable:
 
 - CPU demand source: average of the **3 hottest P-Cores**;
 - fan envelope: **30..50**;
-- normal rise: EMA 8 s, confirmation 3 s, max normal step 1;
+- normal polling: 1000 ms;
+- normal step: maximum +1 / -1 level;
+- thermal-demand memory: disabled;
+- normal rise: EMA 8 s, confirmation 3 s;
 - short-load descent: EMA 6 s, confirmation 4 s;
 - sustained-load descent: EMA 20 s, confirmation 16 s;
 - sustained-load qualification: 1200 s observed loaded intervals;
