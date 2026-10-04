@@ -2088,3 +2088,45 @@ guiIntegrationAuthorized=false.
 startupPersistenceAuthorized=false.
 automaticProfileIntegrationAuthorized=false.
 
+
+
+## Step 6G.1 — CPU-only read-only hardware preflight
+
+Before opening any real CPU Guardian write authority, Step 6G now has a
+dedicated read-only target preflight. This is intentionally separate from the
+physical AC/Battery/AC write sequence.
+
+The preflight requires Windows x64, elevation, exact HP-8C40-9D0R1LA-F18 and
+i7-13700H identity, signed IntelMSR.bin, a free production target mutex, no
+stale target-scoped CPU journal, and a fresh direct AC source. It reads RAPL
+0x606/0x610/0x614 through PawnIO, requires PawnIO 2.2+ and 14 physical cores,
+requires three identical 0x610 reads, a clear lock bit and enabled PL1/PL2, and
+builds the exact AC 35/60 W and Battery 8/15 W plans against the live baseline
+and live RAPL power-info constraints.
+
+The active CPU journal path is fixed to:
+
+    %LOCALAPPDATA%\VictusFanControl\Performance\
+      HP-8C40-9D0R1LA-F18\cpu-power-session.json
+
+The preflight constructs the CPU backend with hardwareWritesAuthorized=false
+and proves that a Write call is rejected before ioctl_write_msr. Its report
+therefore requires HardwareWritesPerformed=false.
+
+The key new safety requirement is the live MSR_PKG_POWER_INFO (0x614) minimum.
+The earlier physical 20/40 W qualification did not establish that an 8 W PL1
+is admissible. If 0x614 reports a nonzero minimum above 8 W, Battery 8/15 is
+rejected with zero writes and must be revised before physical CPU
+qualification.
+
+Run on the exact notebook with:
+
+    .\scripts\test-performance-guardian-6g-cpu.ps1 -ConfirmTargetProfile HP-8C40-9D0R1LA-F18
+
+This command is read-only. CI only exercises the parser/software fixtures; the
+target JSON must be reviewed before opening the physical CPU gate.
+
+productionHardwareWritesAuthorized=false.
+guiIntegrationAuthorized=false.
+startupPersistenceAuthorized=false.
+automaticProfileIntegrationAuthorized=false.

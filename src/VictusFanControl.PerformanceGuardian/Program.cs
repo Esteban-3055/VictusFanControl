@@ -47,6 +47,21 @@ internal static class Program
             }
 
             if (args.Length == 1 &&
+                args[0] == "--cpu-gate-6g-self-test")
+            {
+                return PerformanceGuardianCpuGate6GQualification.SelfTest(
+                    Console.Out);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--cpu-gate-6g-preflight")
+            {
+                return PerformanceGuardianCpuGate6GQualification
+                    .RunPreflight(
+                        args);
+            }
+
+            if (args.Length == 1 &&
                 args[0] == "--gpu-gate-6f-self-test")
             {
                 return PerformanceGuardianGpuGate6FQualification.SelfTest(
@@ -321,6 +336,12 @@ internal static class Program
             "VictusFanControl.PerformanceGuardian --process-fixture <directory>");
 
         Console.WriteLine(
+            "VictusFanControl.PerformanceGuardian --cpu-gate-6g-self-test");
+
+        Console.WriteLine(
+            "VictusFanControl.PerformanceGuardian --cpu-gate-6g-preflight --confirm-target HP-8C40-9D0R1LA-F18 --module <IntelMSR.bin> [--output <json-path>]");
+
+        Console.WriteLine(
             "VictusFanControl.PerformanceGuardian --gpu-gate-6f-self-test");
 
         Console.WriteLine(
@@ -330,6 +351,6 @@ internal static class Program
             "VictusFanControl.PerformanceGuardian --gpu-gate-6f --confirm-target HP-8C40-9D0R1LA-F18 [--timeout-seconds 60] [--output-directory <path>]");
 
         Console.WriteLine(
-            "Production run mode remains closed. The Step 6F GPU mode is an explicit bounded qualification gate only.");
+            "Production run mode remains closed. Step 6F GPU and Step 6G CPU entry points are explicit qualification gates only.");
     }
 }
