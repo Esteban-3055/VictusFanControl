@@ -31,7 +31,8 @@ internal readonly record struct GpuClockPresetTransitionResult(
 /// SwitchPreset. Disabled/Unknown destinations use the normal in-process
 /// Release path and therefore one journaled Reset.
 /// </summary>
-internal sealed class GpuClockPresetTransitionController
+internal sealed class GpuClockPresetTransitionController :
+    IGpuClockSourceTransitionSink
 {
     private readonly GpuClockPresetPolicy _policy;
     private readonly GpuClockSessionController _session;
@@ -50,6 +51,10 @@ internal sealed class GpuClockPresetTransitionController
             throw new ArgumentNullException(
                 nameof(session));
     }
+
+    GpuClockPresetTransitionResult IGpuClockSourceTransitionSink.HandleConfirmedSourceChange(
+        PerformancePowerSourceKind source) =>
+        HandleConfirmedSourceChange(source);
 
     internal GpuClockPresetTransitionResult HandleConfirmedSourceChange(
         PerformancePowerSourceKind source)

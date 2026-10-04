@@ -1371,3 +1371,76 @@ without registering a native listener.
 No CPU/GPU transition controller is connected to the native listener yet.
 That dispatch remains the next gate after physical notification qualification.
 
+## Step 6B physical result — Windows notification trigger
+
+GUID_ACDC_POWER_SOURCE notification qualification now passes physically in
+both directions on HP-8C40-9D0R1LA-F18.
+
+AC -> Battery:
+
+- initial direct source: Ac, RawAcLineStatus=1;
+- registration produced an immediate same-source notification, again confirmed
+  as Ac by GetSystemPowerStatus;
+- after physical charger removal, a second notification arrived;
+- the direct query confirmed Battery, RawAcLineStatus=0;
+- ExpectedSourceConfirmed=true;
+- ListenerError=null;
+- no hardware writes.
+
+Battery -> AC:
+
+- initial direct source: Battery, RawAcLineStatus=0;
+- registration again produced an immediate same-source notification;
+- after physical charger insertion, a second notification arrived;
+- the direct query confirmed Ac, RawAcLineStatus=1;
+- ExpectedSourceConfirmed=true;
+- ListenerError=null;
+- no hardware writes.
+
+The initial same-source signal is important: the production coordinator must
+prime its source before dispatch and suppress duplicate same-source
+notifications, otherwise listener registration could cause an unnecessary
+preset operation.
+
+Consolidated evidence:
+
+    release/performance-power-source-notification-8c40-2026-10-04.json
+
+## Step 6C — source transition coordinator
+
+PerformanceSourceTransitionCoordinator now provides the software-only bridge
+between a power-source notification trigger and the independent CPU/GPU domain
+transition controllers.
+
+Rules:
+
+- every signal performs one fresh IPerformancePowerSourceReader.Read();
+- the notification payload itself never selects a preset;
+- the first direct observation only primes current source and dispatches zero
+  CPU/GPU operations;
+- repeated notifications whose direct-query source equals the current source
+  are suppressed;
+- a real source change is dispatched independently to CPU and GPU;
+- a CPU failure/exception does not suppress the GPU attempt;
+- a GPU failure/exception does not roll back or corrupt the CPU domain;
+- query failure maps to Unknown and causes one fail-closed Unknown dispatch
+  when transitioning away from a previously known source;
+- repeated Unknown/query-failure signals are suppressed to avoid retry storms.
+
+CpuPowerPresetTransitionController and GpuClockPresetTransitionController now
+implement narrow source-transition sink interfaces consumed by the coordinator.
+Their existing per-domain journal/write semantics are unchanged.
+
+The coordinator does not grant startup Apply authority. If the underlying CPU
+limiter or GPU session is Disabled, their existing transition controllers still
+refuse to create a new active session merely because a source signal arrived.
+
+Hardware-free fixtures cover priming, duplicate suppression, confirmed
+AC/Battery dispatch, independent-domain failure handling, fail-closed Unknown
+dispatch and unprimed signal behavior.
+
+Step 6C still does not connect the native Windows listener to real CPU/GPU
+hardware writes. That combined live guardian path remains a later gate.
+
+productionHardwareWritesAuthorized remains false.
+

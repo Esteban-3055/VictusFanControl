@@ -181,7 +181,8 @@ internal readonly record struct CpuPowerPresetTransitionResult(
 /// VFC-owned session. A disabled/unknown source gives up preset authority via
 /// the existing conditional Release path when that path is safe to invoke.
 /// </summary>
-internal sealed class CpuPowerPresetTransitionController
+internal sealed class CpuPowerPresetTransitionController :
+    ICpuPowerSourceTransitionSink
 {
     private readonly CpuPowerPresetPolicy _policy;
     private readonly CpuPowerLimiter _limiter;
@@ -198,6 +199,10 @@ internal sealed class CpuPowerPresetTransitionController
             limiter ??
             throw new ArgumentNullException(nameof(limiter));
     }
+
+    CpuPowerPresetTransitionResult ICpuPowerSourceTransitionSink.HandleConfirmedSourceChange(
+        PerformancePowerSourceKind source) =>
+        HandleConfirmedSourceChange(source);
 
     internal CpuPowerPresetTransitionResult HandleConfirmedSourceChange(
         PerformancePowerSourceKind source)
