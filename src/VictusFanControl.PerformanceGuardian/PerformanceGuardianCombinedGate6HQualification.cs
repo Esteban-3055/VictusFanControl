@@ -919,6 +919,7 @@ internal static class PerformanceGuardianCombinedGate6HQualification
                         TargetProfileId,
                         "--confirm-cpu-hardware-writes",
                         "--confirm-exclusive-gpu-controller",
+                        "--recover-stale-gpu-qualification-journal",
                         "--module",
                         module,
                         "--timeout-seconds",
@@ -933,8 +934,9 @@ internal static class PerformanceGuardianCombinedGate6HQualification
             Require(
                 outer.TimeoutSeconds == 120 &&
                 outer.CpuHardwareWritesConfirmed &&
-                outer.ExclusiveGpuControllerConfirmed,
-                "Step 6H parsed confirmations");
+                outer.ExclusiveGpuControllerConfirmed &&
+                outer.RecoverStaleGpuQualificationJournal,
+                "Step 6H parsed confirmations and qualification-only recovery intent");
 
             Require(
                 !TryParseOuter(
@@ -1634,6 +1636,9 @@ internal static class PerformanceGuardianCombinedGate6HQualification
         var gpuConfirmed =
             false;
 
+        var recoverStaleGpu =
+            false;
+
         var timeoutSeconds =
             120;
 
@@ -1657,6 +1662,11 @@ internal static class PerformanceGuardianCombinedGate6HQualification
 
                 case "--confirm-exclusive-gpu-controller":
                     gpuConfirmed =
+                        true;
+                    break;
+
+                case "--recover-stale-gpu-qualification-journal":
+                    recoverStaleGpu =
                         true;
                     break;
 
@@ -1746,7 +1756,8 @@ internal static class PerformanceGuardianCombinedGate6HQualification
                 module!,
                 output,
                 cpuConfirmed,
-                gpuConfirmed);
+                gpuConfirmed,
+                recoverStaleGpu);
 
         return true;
     }
@@ -2242,7 +2253,8 @@ internal static class PerformanceGuardianCombinedGate6HQualification
         string ModulePath,
         string? OutputDirectory,
         bool CpuHardwareWritesConfirmed,
-        bool ExclusiveGpuControllerConfirmed);
+        bool ExclusiveGpuControllerConfirmed,
+        bool RecoverStaleGpuQualificationJournal);
 
     private sealed record CombinedPreflight(
         DateTimeOffset CapturedAtUtc,
