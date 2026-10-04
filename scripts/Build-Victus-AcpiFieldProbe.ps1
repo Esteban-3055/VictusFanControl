@@ -56,9 +56,11 @@ try {
     New-Item $reviewPackage -ItemType Directory | Out-Null
     Copy-Item (Join-Path $source 'AcpiFieldProbe.inf') $reviewPackage
     Copy-Item AcpiFieldProbe.sys $reviewPackage
-    $infverif=(Get-ChildItem $PackageRoot -Filter infverif.exe -Recurse | Where-Object {$_.DirectoryName -match '[\\/]x64$'} | Select-Object -First 1).FullName
-    $inf2cat=(Get-ChildItem $PackageRoot -Filter inf2cat.exe -Recurse | Where-Object {$_.DirectoryName -match '[\\/]x64$'} | Select-Object -First 1).FullName
+    $infverif=(Get-ChildItem $PackageRoot -Filter infverif.exe -Recurse | Where-Object {$_.DirectoryName -match '[\\/](x64|x86)$'} | Sort-Object @{Expression={if($_.Directory.Name -eq 'x64'){0}else{1}}},FullName | Select-Object -First 1).FullName
+    $inf2cat=(Get-ChildItem $PackageRoot -Filter inf2cat.exe -Recurse | Where-Object {$_.DirectoryName -match '[\\/](x64|x86)$'} | Sort-Object @{Expression={if($_.Directory.Name -eq 'x64'){0}else{1}}},FullName | Select-Object -First 1).FullName
     if(-not $infverif -or -not $inf2cat){throw 'WDK INF validation/catalog tools unavailable.'}
+    Write-Host ('INF validator: '+$infverif)
+    Write-Host ('Catalog generator: '+$inf2cat)
     & $infverif /w (Join-Path $reviewPackage 'AcpiFieldProbe.inf')
     if($LASTEXITCODE -ne 0){throw 'Extension INF Windows Driver validation failed.'}
     & $inf2cat (('/driver:')+$reviewPackage) /os:10_GE_X64 /uselocaltime
