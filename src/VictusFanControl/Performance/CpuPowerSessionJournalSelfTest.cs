@@ -89,32 +89,42 @@ internal static class CpuPowerSessionJournalSelfTest
                 Directory.GetFiles(root, "*.tmp").Length == 0,
                 "no temporary journal files remain after replace");
 
-            using (var concurrentReader =
-                   new FileStream(
-                       path,
-                       FileMode.Open,
-                       FileAccess.Read,
-                       FileShare.ReadWrite |
-                       FileShare.Delete))
-            {
-                var pollingSafe =
-                    owned with
+            var concurrentReader =
+                new FileStream(
+                    path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite |
+                    FileShare.Delete);
+
+            var releaseReader =
+                Task.Run(
+                    async () =>
                     {
-                        Generation = 6,
-                        UpdatedAtUtc =
-                            created.AddMilliseconds(1250)
-                    };
+                        await Task.Delay(30);
+                        concurrentReader.Dispose();
+                    });
 
-                journal.Store(
-                    pollingSafe);
+            var pollingSafe =
+                owned with
+                {
+                    Generation = 6,
+                    UpdatedAtUtc =
+                        created.AddMilliseconds(1250)
+                };
 
-                owned =
-                    pollingSafe;
-            }
+            journal.Store(
+                pollingSafe);
+
+            releaseReader.GetAwaiter()
+                .GetResult();
+
+            owned =
+                pollingSafe;
 
             Require(
                 journal.Load() == owned,
-                "journal replacement succeeds while an external polling reader is open");
+                "journal replacement retries across a transient polling-reader conflict");
 
             var presetSwitch =
                 owned with
