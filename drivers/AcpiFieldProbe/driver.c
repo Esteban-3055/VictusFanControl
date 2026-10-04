@@ -4,8 +4,11 @@
 #include <wdf.h>
 #pragma warning(pop)
 #include <acpiioct.h>
+#include <aux_klib.h>
 #include <initguid.h>
+#include <devpkey.h>
 #include "contract.h"
+#include "identity.h"
 DEFINE_GUID(GUID_DEVINTERFACE_VFC_ACPI_PROBE,
     0x7398c2f1,0x15ca,0x4b5b,0x89,0xe8,0x16,0xb6,0x14,0x28,0x0a,0x5d);
 C_ASSERT(sizeof(VFC_READ_INPUT)==8);
@@ -13,7 +16,7 @@ C_ASSERT(sizeof(VFC_READ_OUTPUT)==64);
 C_ASSERT(sizeof(ACPI_EVAL_OUTPUT_BUFFER)==20);
 C_ASSERT(ACPI_METHOD_ARGUMENT_INTEGER==0);
 C_ASSERT(VFC_IOCTL_READ==CTL_CODE(FILE_DEVICE_UNKNOWN,0x800,METHOD_BUFFERED,FILE_READ_DATA));
-typedef struct { WDFIOTARGET PdoTarget; ULONG Used; BOOLEAN ControlPassed, Faulted; } DEVICE_CONTEXT;
+typedef struct { WDFIOTARGET PdoTarget; ULONG Used; BOOLEAN ControlPassed, Faulted, Qualified; } DEVICE_CONTEXT;
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_CONTEXT,Context);
 DRIVER_INITIALIZE DriverEntry;
 EVT_WDF_DRIVER_DEVICE_ADD DeviceAdd;
@@ -24,8 +27,33 @@ EVT_WDF_IO_IN_CALLER_CONTEXT Caller;
 
 NTSTATUS DriverEntry(PDRIVER_OBJECT driver, PUNICODE_STRING path) {
     WDF_DRIVER_CONFIG config;
+    NTSTATUS status=AuxKlibInitialize();
+    if(!NT_SUCCESS(status))return status;
     WDF_DRIVER_CONFIG_INIT(&config,DeviceAdd);
     return WdfDriverCreate(driver,path,WDF_NO_OBJECT_ATTRIBUTES,&config,WDF_NO_HANDLE);
+}
+/* Metadata only; no ACPI method evaluation and no firmware identifiers logged. */
+static BOOLEAN QualifiedIdentity(WDFDEVICE device) {
+    WDF_DEVICE_PROPERTY_DATA property;
+    DEVPROPTYPE type=0;
+    WCHAR instance[64]={0};
+    static const WCHAR expected[]=L"ACPI\\PNP0C09\\1";
+    ULONG required=0,actual=0;
+    NTSTATUS status;
+    unsigned char *raw;
+    BOOLEAN match;
+    WDF_DEVICE_PROPERTY_DATA_INIT(&property,&DEVPKEY_Device_InstanceId);
+    status=WdfDeviceQueryPropertyEx(device,&property,sizeof(instance),instance,&actual,&type);
+    if(!NT_SUCCESS(status) || type!=DEVPROP_TYPE_STRING || actual!=sizeof(expected) ||
+        RtlCompareMemory(instance,expected,sizeof(expected))!=sizeof(expected))return FALSE;
+    status=AuxKlibGetSystemFirmwareTable('RSMB',0,NULL,0,&required);
+    if((!NT_SUCCESS(status) && status!=STATUS_BUFFER_TOO_SMALL) || required<8 || required>1024*1024)return FALSE;
+    raw=ExAllocatePool2(POOL_FLAG_PAGED,required,'IfCV');
+    if(!raw)return FALSE;
+    status=AuxKlibGetSystemFirmwareTable('RSMB',0,raw,required,&actual);
+    match=NT_SUCCESS(status) && actual==required && VfcMatchRawSmbios(raw,actual);
+    RtlSecureZeroMemory(raw,required);ExFreePoolWithTag(raw,'IfCV');
+    return match;
 }
 /* No guessed PDO name: use the PDO of the PnP stack we were attached to. */
 NTSTATUS Prepare(WDFDEVICE device,WDFCMRESLIST raw,WDFCMRESLIST translated) {
@@ -34,6 +62,8 @@ NTSTATUS Prepare(WDFDEVICE device,WDFCMRESLIST raw,WDFCMRESLIST translated) {
     NTSTATUS status;
     DEVICE_CONTEXT *ctx=Context(device);
     UNREFERENCED_PARAMETER(raw); UNREFERENCED_PARAMETER(translated);
+    if(!ctx->Qualified)return STATUS_SUCCESS; /* Inert filter preserves the underlying device. */
+    if(!QualifiedIdentity(device)){ctx->Qualified=FALSE;ctx->Faulted=TRUE;return STATUS_SUCCESS;}
     WDF_OBJECT_ATTRIBUTES_INIT(&attrs); attrs.ParentObject=device;
     status=WdfIoTargetCreate(device,&attrs,&ctx->PdoTarget);
     if (!NT_SUCCESS(status)) return status;
@@ -99,6 +129,8 @@ NTSTATUS DeviceAdd(WDFDRIVER driver,PWDFDEVICE_INIT init) {
     attrs.ExecutionLevel=WdfExecutionLevelPassive;
     status=WdfDeviceCreate(&init,&attrs,&device);
     if(!NT_SUCCESS(status)) return status;
+    if(!QualifiedIdentity(device))return STATUS_SUCCESS; /* No interface or ACPI target on rejection. */
+    Context(device)->Qualified=TRUE;
     WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&queue,WdfIoQueueDispatchSequential);
     queue.EvtIoDeviceControl=ReadObject;
     status=WdfIoQueueCreate(device,&queue,WDF_NO_OBJECT_ATTRIBUTES,WDF_NO_HANDLE);
@@ -135,7 +167,7 @@ VOID ReadObject(WDFQUEUE queue,WDFREQUEST request,size_t outLength,size_t inLeng
     if(in->Version!=VFC_PROBE_VERSION || selector>=VFC_SELECTOR_COUNT){WdfRequestComplete(request,STATUS_INVALID_PARAMETER);return;}
     /* This source-only build exposes _STA control, with EC fields disabled. */
     if(selector && !VFC_FIELD_PROBES_ENABLED){WdfRequestComplete(request,STATUS_NOT_SUPPORTED);return;}
-    if(!ctx->PdoTarget || ctx->Faulted || (ctx->Used&(1u<<selector)) || (selector && !ctx->ControlPassed)){
+    if(!ctx->Qualified || !ctx->PdoTarget || ctx->Faulted || (ctx->Used&(1u<<selector)) || (selector && !ctx->ControlPassed)){
         WdfRequestComplete(request,STATUS_DEVICE_NOT_READY);return;
     }
     status=WdfRequestRetrieveOutputBuffer(request,sizeof(*out),(PVOID*)&out,NULL);

@@ -32,19 +32,25 @@ try {
     $minor=([version]$wdfVersion).Minor
     & cl.exe /nologo /c /TC /kernel /W4 /WX /GS /guard:cf /D_AMD64_ /DAMD64 /D_WIN64 /D_WIN32_WINNT=0x0A00 /DNTDDI_VERSION=0x0A000000 /DKMDF_VERSION_MAJOR=1 "/DKMDF_VERSION_MINOR=$minor" "/I$km" "/I$shared" "/I$acpi" "/I$wdf" /Fodriver.obj (Join-Path $source 'driver.c')
     if($LASTEXITCODE -ne 0){throw 'Kernel source compilation failed.'}
-    & link.exe /nologo /driver /subsystem:native /entry:FxDriverEntry /nodefaultlib /machine:x64 /guard:cf /out:AcpiFieldProbe.sys driver.obj "/libpath:$kmLib" "/libpath:$wdfLib" ntoskrnl.lib hal.lib BufferOverflowFastFailK.lib WdfLdr.lib WdfDriverEntry.lib
+    & link.exe /nologo /driver /subsystem:native /entry:FxDriverEntry /nodefaultlib /machine:x64 /guard:cf /out:AcpiFieldProbe.sys driver.obj "/libpath:$kmLib" "/libpath:$wdfLib" ntoskrnl.lib hal.lib BufferOverflowFastFailK.lib WdfLdr.lib WdfDriverEntry.lib Aux_Klib.lib
     if($LASTEXITCODE -ne 0){throw 'Kernel link failed.'}
     & cl.exe /nologo /TC /W4 /WX /Fecontract-test.exe (Join-Path $source 'contract-test.c')
     if($LASTEXITCODE -ne 0){throw 'Contract fixture build failed.'}
     & .\contract-test.exe
     if($LASTEXITCODE -ne 0){throw 'Contract fixture failed.'}
+    & cl.exe /nologo /TC /W4 /WX /Feidentity-test.exe (Join-Path $source 'identity-test.c')
+    if($LASTEXITCODE -ne 0){throw 'Identity fixture build failed.'}
+    & .\identity-test.exe
+    if($LASTEXITCODE -ne 0){throw 'Identity fixture failed.'}
     & cl.exe /nologo /TC /W4 /WX /wd4505 /Feprobe-client.exe (Join-Path $source 'probe-client.c') /link setupapi.lib
     if($LASTEXITCODE -ne 0){throw 'Control client build failed.'}
     & .\probe-client.exe --invalid
     if($LASTEXITCODE -ne 2){throw 'Client usage rejection failed.'}
+    & .\probe-client.exe --identity
+    if($LASTEXITCODE -ne 12){throw 'Foreign CI SMBIOS profile must be rejected.'}
     & .\probe-client.exe --control
     if($LASTEXITCODE -ne 4){throw 'CI must have no installed probe; absence was not preserved as a separate error.'}
-    $binaries=@('AcpiFieldProbe.sys','contract-test.exe','probe-client.exe')
+    $binaries=@('AcpiFieldProbe.sys','contract-test.exe','identity-test.exe','probe-client.exe')
     [ordered]@{WdkPackage=$version;Kmdf=$wdfVersion;FieldProbesEnabled=$false;DriverInstalled=$false;DriverSigned=$false;ProductionReady=$false;Binaries=@($binaries | ForEach-Object {[ordered]@{file=$_;sha256=(Get-FileHash $_ -Algorithm SHA256).Hash}})} | ConvertTo-Json -Depth 6 | Set-Content build-manifest.json -Encoding UTF8
 } finally {Pop-Location}
 # The last native call intentionally returned 4 (no installed interface).

@@ -775,5 +775,6 @@ jobs:
             artifacts/acpi-field-probe/AcpiFieldProbe.sys
             artifacts/acpi-field-probe/probe-client.exe
             artifacts/acpi-field-probe/contract-test.exe
+            artifacts/acpi-field-probe/identity-test.exe
             artifacts/acpi-field-probe/build-manifest.json
           if-no-files-found: error

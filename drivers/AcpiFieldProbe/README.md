@@ -22,7 +22,7 @@ Solo en Windows con Visual Studio C++ x64 y NuGet. Restaura paquetes oficiales W
 ## Gates pendientes antes de instalar o habilitar campos
 
 1. Diseño de instalación como filtro específico, sin sustituir machine.inf/Acpi.sys y sin filtros globales de clase; rollback, PnP/power/remove/cancel/ACL revisados y probados. Falta validación con Driver Verifier y hardware/VM apropiado. La compilación no valida comportamiento PnP.
-2. Gate efectivo de identidad completa en ejecución (el chequeo PNP0C09 actual es genérico, **no verifica placa/BIOS**), namespace y correspondencia EC0. No instalar este build en el Victus para inferir esas propiedades.
+2. Calificar físicamente el gate de identidad implementado y verificar namespace/correspondencia EC0. El gate comprueba SMBIOS HP/8C40/63.43/modelo/SKU exacto/F.18 e instancia PnP exacta; eso no prueba el namespace ni soporte FieldUnit.
 3. Firma/despliegue compatible con seguridad del equipo; no instrucciones para desactivar Secure Boot, HVCI ni firma. No existe paquete firmado en esta etapa.
 4. Harness físico acotado con observación de eventos ACPI 13/15, salida cruda/tiempos, captura ZIP y validación independiente. Solo entonces habilitar candidatos mediante un cambio revisado y su CI.
 5. El byte ECh completo carece de campo nombrado en la revisión: FFFF/FFFS no cubren bits restantes. El prototipo **no** puede calificar ownership/restauración del backend aunque SRP1/SRP2/SFAN se lean. No setters, restauración, Manual ni Automatic.
@@ -36,3 +36,20 @@ Fuentes primarias consultadas:
 - https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdfdevice/nf-wdfdevice-wdfdeviceinitassignsddlstring
 - https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdfiotarget/nf-wdfiotarget-wdfiotargetsendioctlsynchronously
 - https://learn.microsoft.com/en-us/windows-hardware/drivers/install-the-wdk-using-nuget
+
+## Etapa de identidad implementada
+
+El driver consulta metadatos con AuxKlibGetSystemFirmwareTable(RSMB) y WdfDeviceQueryPropertyEx(InstanceId), APIs documentadas, sin métodos ACPI ni puertos. Verifica tipos SMBIOS 0/1/2 únicos, versión/formato, límite 1 MiB, campos y terminaciones dentro del buffer y Type127 final. Requiere HP, placa 8C40, versión 63.43, modelo Victus by HP Gaming Laptop 15-fa1xxx, SKU exacto 9D0R1LA#AKH y BIOS F.18, más ACPI\PNP0C09\1. No compara fabricante de BIOS porque la evidencia disponible no lo fijó. No almacena ni imprime seriales/UUIDs. SMBIOS identifica el perfil, **no es atestación criptográfica**. Formatos distintos, padding después de Type127 y múltiples placas se rechazan; no se calificaron físicamente estas restricciones todavía.
+
+La identidad se verifica antes de publicar interfaz y antes de abrir target en PrepareHardware. Un rechazo deja el filtro inactivo sin publicar interfaz inicialmente, en vez de fallar el start por ese rechazo. Una pérdida de identidad en un start posterior enclava el rechazo. La preservación del dispositivo base y todos los ciclos PnP aún requieren prueba de runtime/Verifier; no basta la compilación.
+
+`probe-client.exe --identity` ejecuta **el mismo parser de SMBIOS en modo usuario**, sin instalar/cargar el driver ni evaluar ACPI. Es la siguiente comprobación física disponible: debe imprimir identity_match:true en este equipo. No verifica el callback kernel, el PDO ni FieldUnit. En CI debe rechazar el SMBIOS del runner ajeno al target; los fixtures sintéticos verifican límites y perfiles erróneos.
+
+Despliegue propuesto: extensión específica de dispositivo mediante AddFilter, conservando machine.inf/Acpi.sys; posición, INF/CAT y rollback aún pendientes de validación. La ruta de firma de Microsoft requiere cuenta Hardware Dev Center y certificado EV asociado; no existe esa firma en este proyecto. No se sustituye por un certificado local ni se solicita cambiar la seguridad del Victus. **No instalar el SYS de este artifact.**
+
+Fuentes adicionales:
+- https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/aux_klib/nf-aux_klib-auxklibgetsystemfirmwaretable
+- https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemfirmwaretable
+- https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_3.7.0.pdf
+- https://learn.microsoft.com/en-us/windows-hardware/drivers/install/inf-addfilter-directive
+- https://learn.microsoft.com/en-us/windows-hardware/drivers/install/kernel-mode-code-signing-policy--windows-vista-and-later-
