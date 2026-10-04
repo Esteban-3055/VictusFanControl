@@ -609,6 +609,13 @@ internal sealed class P13FanControlSurface : UserControl
 
         try
         {
+            // Qualification sequencing can fail a test, but must never block
+            // the escape to Firmware, including the historical Manual gates.
+            // The observer still checks the required sequence after release.
+            if (kind == P13ControlInteractionKind.ModeRequest &&
+                requestedMode == AdaptiveFanProductionMode.Firmware && !equalFanLevel.HasValue)
+                return true;
+
             if (_interactionAuthorizationProvider is not null &&
                 !_interactionAuthorizationProvider(
                     kind,

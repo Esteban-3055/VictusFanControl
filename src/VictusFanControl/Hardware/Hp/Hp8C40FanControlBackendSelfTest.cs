@@ -1,4 +1,6 @@
 using VictusFanControl.Control;
+using VictusFanControl.Control.Adaptive;
+using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
 using VictusFanControl.Hardware.PawnIo;
 using VictusFanControl.Safety;
@@ -60,6 +62,11 @@ public static class Hp8C40FanControlBackendSelfTest
         failures += await TestWindowCannotReplaceCommandProofAsync(output);
         failures += await TestHungWmiProofRestoresThroughCoordinatorAsync(output);
         failures += await TestExpiredAdmissionBaselineIsNoWriteAsync(output);
+        failures += await TestAcknowledgementTelemetryContinuationAsync(output);
+        failures += await TestSlowAcknowledgementKeepsRefreshingAsync(output);
+        failures += await TestAcknowledgementTelemetryFailureRestoresAsync(output);
+        failures += await TestAcknowledgementTelemetryCannotExtendDeadlineAsync(output);
+        failures += await TestAutomaticRefreshPreservesAdmissionAsync(output);
 
         output.WriteLine();
         output.WriteLine(failures == 0
@@ -1653,6 +1660,8 @@ public static class Hp8C40FanControlBackendSelfTest
             return hardware.ReadEcState();
         };
         var backend = NewBackend(hardware);
+        var refreshes = 0;
+        backend.RefreshActuationTelemetryAsync = ct => { refreshes++; return ValueTask.CompletedTask; };
         await using var coordinator = new FanControlCoordinator(backend);
         var now = DateTimeOffset.UtcNow;
         var safety = new SafetyGateResult(true, true, true, true, true, true, false,
@@ -1665,7 +1674,8 @@ public static class Hp8C40FanControlBackendSelfTest
             catch (TimeoutException) { failed = true; }
             return Report(output, "real coordinator restores FF/FF while timed-out native RPM read still owns its slot",
                 failed && hardware.SetCalls == 1 && hardware.RestoreCalls == 1 &&
-                hardware.State.CpuSetpoint == 255 && coordinator.Authority == FanAuthority.Firmware && slot.CurrentCount == 0);
+                hardware.State.CpuSetpoint == 255 && coordinator.Authority == FanAuthority.Firmware && slot.CurrentCount == 0 &&
+                refreshes == 1); // Dispatch refresh only; a hung native read never manufactures liveness.
         }
         finally
         {
@@ -1685,6 +1695,200 @@ public static class Hp8C40FanControlBackendSelfTest
         catch (FanControlAdmissionException ex) { refused = ex.InnerException is InvalidDataException; }
         return Report(output, "expired WMI admission baseline refuses dispatch without issuing FF/FF",
             refused && hardware.SetCalls == 0 && hardware.RestoreCalls == 0 && hardware.State.CpuSetpoint == 255);
+    }
+
+    private static async Task<int> TestAcknowledgementTelemetryContinuationAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware { UseWmiTachometerBins = true };
+        var lease = new FakeWatchdogLeaseClient();
+        await using var backend = NewProtectedBackend(hardware, lease);
+        var refreshes = 0;
+        var nativeReadInProgress = false;
+        var refreshOutsideNativeRead = true;
+        var refreshAfterDispatchOnly = true;
+        hardware.AsyncControlRead = async ct =>
+        {
+            nativeReadInProgress = true;
+            try
+            {
+                await Task.Yield();
+                ct.ThrowIfCancellationRequested();
+                return hardware.ReadEcState();
+            }
+            finally { nativeReadInProgress = false; }
+        };
+        backend.RefreshActuationTelemetryAsync = ct =>
+        {
+            ct.ThrowIfCancellationRequested();
+            refreshes++;
+            refreshOutsideNativeRead &= !nativeReadInProgress;
+            refreshAfterDispatchOnly &= hardware.SetCalls == 1;
+            return ValueTask.CompletedTask;
+        };
+
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        var admissionDoesNotRefresh = refreshes == 0;
+        await backend.ApplyAsync(new FanCommand(30, 30, "ack telemetry continuation"), CancellationToken.None);
+        var completedRefreshes = refreshes;
+        await backend.ApplyAsync(new FanCommand(30, 30, "redundant target"), CancellationToken.None);
+        var refreshesBeforeRestore = refreshes;
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+        return Report(output, "ACK refresh runs outside native proofs, adds no redundant writes and never runs during admission/restore",
+            admissionDoesNotRefresh && completedRefreshes >= 3 && refreshes == refreshesBeforeRestore &&
+            refreshOutsideNativeRead && refreshAfterDispatchOnly && hardware.SetCalls == 1 &&
+            hardware.RestoreCalls == 1 && lease.Calls.Contains("commit"));
+    }
+
+    private static async Task<int> TestSlowAcknowledgementKeepsRefreshingAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware { FreezeCpuTach = true, FreezeGpuTach = true };
+        await using var backend = new Hp8C40FanControlBackend(hardware, true, "slow synthetic response",
+            timing: FastTiming with { TachometerAckTimeout = TimeSpan.FromSeconds(5), PollInterval = TimeSpan.FromMilliseconds(100) },
+            activeTimeClock: new SyntheticActiveTimeClock());
+        var started = Environment.TickCount64;
+        var lastRefresh = started;
+        long maximumGap = 0;
+        var refreshes = 0;
+        backend.RefreshActuationTelemetryAsync = ct =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var now = Environment.TickCount64;
+            maximumGap = Math.Max(maximumGap, now - lastRefresh);
+            lastRefresh = now;
+            refreshes++;
+            if (now - started > SafetyGate.MaximumTelemetryAge.TotalMilliseconds + 100)
+                hardware.FreezeCpuTach = hardware.FreezeGpuTach = false;
+            return ValueTask.CompletedTask;
+        };
+        await backend.EnterCustomModeAsync(CancellationToken.None);
+        await backend.ApplyAsync(new FanCommand(30, 30, "mechanical ACK exceeds telemetry age"), CancellationToken.None);
+        var elapsed = Environment.TickCount64 - started;
+        await backend.RestoreFirmwareAutoAsync(CancellationToken.None);
+        return Report(output, "mechanical ACK longer than 3 s continues thermal acquisitions without another fan writer",
+            elapsed > SafetyGate.MaximumTelemetryAge.TotalMilliseconds && refreshes > 3 &&
+            maximumGap < SafetyGate.MaximumTelemetryAge.TotalMilliseconds && hardware.SetCalls == 1);
+    }
+
+    private static async Task<int> TestAcknowledgementTelemetryFailureRestoresAsync(TextWriter output)
+    {
+        var failures = 0;
+        foreach (var cancel in new[] { false, true })
+        {
+            var hardware = new FakeHardware { UseWmiTachometerBins = true };
+            var lease = new FakeWatchdogLeaseClient();
+            var backend = NewProtectedBackend(hardware, lease);
+            await using var coordinator = new FanControlCoordinator(backend);
+            using var cts = new CancellationTokenSource();
+            var refreshes = 0;
+            backend.RefreshActuationTelemetryAsync = ct =>
+            {
+                if (++refreshes == 2)
+                {
+                    if (cancel) { cts.Cancel(); ct.ThrowIfCancellationRequested(); }
+                    throw new InvalidOperationException("Synthetic thermal/lifecycle admission lost during ACK.");
+                }
+                return ValueTask.CompletedTask;
+            };
+            var safety = new SafetyGateResult(true, true, true, true, true, true, false,
+                true, true, true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, 1, Array.Empty<string>());
+            await coordinator.TryEnterCustomAsync(safety, CancellationToken.None);
+            Exception? failure = null;
+            try { await coordinator.ApplyAsync(new FanCommand(30, 30, "unsafe ACK refresh"), safety, cts.Token); }
+            catch (Exception ex) { failure = ex; }
+            failures += Report(output, cancel
+                    ? "ACK refresh cancellation restores Firmware without committing the dispatched command"
+                    : "ACK thermal/lifecycle refresh failure restores Firmware without committing the dispatched command",
+                (cancel ? failure is OperationCanceledException : failure is InvalidOperationException) &&
+                refreshes == 2 && hardware.SetCalls == 1 && hardware.RestoreCalls == 1 &&
+                hardware.State.CpuSetpoint == 255 && hardware.State.GpuSetpoint == 255 &&
+                coordinator.Authority == FanAuthority.Firmware && !lease.Calls.Contains("commit"));
+        }
+        return failures;
+    }
+
+    private static async Task<int> TestAcknowledgementTelemetryCannotExtendDeadlineAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware { UseWmiTachometerBins = true };
+        var clock = new AdvancingActiveTimeClock();
+        var backend = NewBackend(hardware, clock);
+        await using var coordinator = new FanControlCoordinator(backend);
+        var refreshes = 0;
+        backend.RefreshActuationTelemetryAsync = ct =>
+        {
+            if (++refreshes == 2) clock.Milliseconds += 251;
+            return ValueTask.CompletedTask;
+        };
+        var safety = new SafetyGateResult(true, true, true, true, true, true, false,
+                true, true, true, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, 1, Array.Empty<string>());
+        await coordinator.TryEnterCustomAsync(safety, CancellationToken.None);
+        var timedOut = false;
+        try { await coordinator.ApplyAsync(new FanCommand(30, 30, "ACK refresh deadline"), safety, CancellationToken.None); }
+        catch (TimeoutException) { timedOut = true; }
+        return Report(output, "thermal refresh cannot renew the independent tachometer ACK deadline",
+            timedOut && refreshes == 2 && hardware.SetCalls == 1 && hardware.RestoreCalls == 1 &&
+            coordinator.Authority == FanAuthority.Firmware);
+    }
+
+    private static async Task<int> TestAutomaticRefreshPreservesAdmissionAsync(TextWriter output)
+    {
+        var hardware = new FakeHardware { UseWmiTachometerBins = true };
+        var backend = NewBackend(hardware);
+        await using var coordinator = new FanControlCoordinator(backend);
+        var identity = new HardwareIdentity(Hp8C40TargetProfile.BoardManufacturer, Hp8C40TargetProfile.BoardProduct,
+            Hp8C40TargetProfile.BoardVersion, Hp8C40TargetProfile.SystemManufacturer, Hp8C40TargetProfile.SystemProductName,
+            Hp8C40TargetProfile.SystemSkuPrefix + "#AKH", Hp8C40TargetProfile.ValidatedBiosVersion);
+        var origin = DateTimeOffset.UtcNow;
+        long clock = 0;
+        DateTimeOffset Now() => origin.AddMilliseconds(clock);
+        TelemetrySnapshot Sample() => new(Now(), "Intel Core i7-13700H", 45, 5, 17,
+            Hp8C40TargetProfile.ExpectedGpuName, 47, 14, 0, 3000, 3000)
+        {
+            CpuExpectedPhysicalCoreCount = Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount,
+            CpuCoreTemperatures = Enumerable.Range(0, Hp8C40TargetProfile.Instance.ExpectedPhysicalCoreCount)
+                .Select(i => new CpuCoreTemperatureSample(i, i, i < 6 ? "Performance" : "Efficiency", 45)).ToArray()
+        };
+        var controller = new AdaptiveFanProductionController(coordinator, Hp8C40AdaptiveCandidateV1.Create(), false, true,
+            automaticHardware: identity, automaticMilliseconds: () => clock, utcNow: Now);
+        await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic, CancellationToken.None);
+        var original = Sample();
+        var latest = original;
+        var supervision = new List<Task>();
+        backend.RefreshActuationTelemetryAsync = ct =>
+        {
+            clock += 100;
+            latest = Sample();
+            var raw = SafetyGate.Evaluate(identity, SystemState.Healthy, latest, Now(), true);
+            var effective = controller.EvaluateAutomaticSafety(latest, raw, observe: true);
+            // Matches the GUI event: accept current safety/cancel immediately,
+            // but never await a coordinator gate owned by this actuation.
+            supervision.Add(coordinator.EnforceSafetyAsync(effective, "ACK thermal acquisition", CancellationToken.None).AsTask());
+            ct.ThrowIfCancellationRequested();
+            if (!controller.EvaluateAutomaticSafety(latest,
+                    SafetyGate.EvaluateForDisplay(identity, SystemState.Healthy, latest, Now(), true), observe: false).CustomControlPermitted)
+                throw new InvalidOperationException("ACK acquisition lost Automatic admission.");
+            return ValueTask.CompletedTask;
+        };
+        var result = await controller.ProcessAutomaticAsync(original,
+            SafetyGate.Evaluate(identity, SystemState.Healthy, original, Now(), true), CancellationToken.None,
+            refreshRawSafetyProvider: () => ReferenceEquals(latest, original)
+                ? SafetyGate.EvaluateForDisplay(identity, SystemState.Healthy, original, Now(), true)
+                : null);
+        await Task.WhenAll(supervision);
+        var sessionStillOpen = controller.AutomaticFreshAcquisitionRequired && coordinator.Authority == FanAuthority.Custom;
+        clock += 100;
+        var next = Sample();
+        var hold = await controller.ProcessAutomaticAsync(next,
+            SafetyGate.Evaluate(identity, SystemState.Healthy, next, Now(), true), CancellationToken.None);
+        await controller.SetModeAsync(AdaptiveFanProductionMode.Firmware, CancellationToken.None);
+        return Report(output, "real Automatic controller accepts newer post-dispatch safety without relaxing native epoch admission or deadlocking",
+            result.Action == AdaptiveFanProductionActionKind.EnterCustomAndApply && sessionStillOpen &&
+            !ReferenceEquals(latest, original) && hold.Action == AdaptiveFanProductionActionKind.HoldCustom &&
+            hardware.SetCalls == 1 && hardware.RestoreCalls == 1 && coordinator.Authority == FanAuthority.Firmware);
+    }
+
+    private sealed class AdvancingActiveTimeClock : IActiveTimeClock
+    {
+        public ulong Milliseconds { get; set; }
     }
 
     private static Hp8C40FanControlBackend NewBackend(

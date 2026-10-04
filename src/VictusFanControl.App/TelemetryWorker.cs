@@ -39,6 +39,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private int _degradedCompleteStreak;
     private int _degradedIncompleteStreak;
     private TelemetrySnapshot? _lastLivenessSnapshot;
+    private TelemetrySnapshot? _acknowledgementSnapshot;
     private int _identicalSnapshotStreak;
 
     public TelemetryWorker(string modulesDirectory)
@@ -49,7 +50,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     public RuntimeStateMachine StateMachine { get; }
 
-    // Prepared Automatic uses the same sequential worker, never a second polling loop.
+    // Automatic and acknowledgement refresh share one reader and read gate; no second polling loop.
     public Func<bool>? FreshFanAcquisitionRequired { get; set; }
     public Func<int?>? AcquisitionBudgetMilliseconds { get; set; }
     public Func<int>? NormalPollingDelayMilliseconds { get; set; }
@@ -58,6 +59,60 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     public event EventHandler<TelemetrySnapshot>? SnapshotAvailable;
     public event EventHandler<string>? DiagnosticsAvailable;
     public event EventHandler<string>? EventLogged;
+
+    /// <summary>Called only by the in-flight actuation, while the main loop awaits its processor.</summary>
+    public async ValueTask<TelemetrySnapshot> RefreshDuringFanAcknowledgementAsync(CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token);
+        var epoch = CurrentPowerEpoch();
+        await _hardwareReadGate.WaitAsync(linked.Token).ConfigureAwait(false);
+        TelemetrySnapshot snapshot;
+        try
+        {
+            linked.Token.ThrowIfCancellationRequested();
+            if (IsSuspended() || CurrentPowerEpoch() != epoch || RecoveryRequested() ||
+                StateMachine.State != SystemState.Healthy || _reader is null)
+                throw new InvalidOperationException("Actuation telemetry refresh refused by lifecycle/recovery fence.");
+            snapshot = _reader.ReadSnapshotDuringFanAcknowledgement();
+            linked.Token.ThrowIfCancellationRequested();
+            var now = DateTimeOffset.UtcNow;
+            if (IsSuspended() || CurrentPowerEpoch() != epoch || RecoveryRequested() ||
+                StateMachine.State != SystemState.Healthy || !snapshot.IsComplete ||
+                now < snapshot.Timestamp || now - snapshot.Timestamp > SafetyGate.MaximumTelemetryAge ||
+                !snapshot.IsFanTelemetryFreshAt(now))
+                throw new InvalidOperationException("Actuation telemetry refresh is incomplete or superseded by lifecycle/recovery.");
+            // Only a real, complete acquisition renews the liveness clock.
+            TouchCompletedRead();
+        }
+        finally { _hardwareReadGate.Release(); }
+        PublishAcknowledgementSnapshot(snapshot);
+        PublishDiagnostics();
+        return snapshot;
+    }
+
+    internal void PublishAcknowledgementSnapshot(TelemetrySnapshot snapshot)
+    {
+        _acknowledgementSnapshot = snapshot;
+        SnapshotAvailable?.Invoke(this, snapshot);
+    }
+
+    internal async Task<TelemetrySnapshot?> ProcessAndPublishSnapshotAsync(
+        TelemetrySnapshot snapshot, CancellationToken cancellationToken)
+    {
+        // Only this sequential worker owns the processor and its ACK callbacks.
+        var epoch = CurrentPowerEpoch();
+        _acknowledgementSnapshot = null;
+        if (SnapshotProcessor is not null)
+            await SnapshotProcessor(snapshot, cancellationToken).ConfigureAwait(false);
+        // A power boundary can arrive while mechanical acknowledgement holds
+        // the processor. Never publish/count its old epoch after that await.
+        if (cancellationToken.IsCancellationRequested || IsSuspended() || CurrentPowerEpoch() != epoch)
+            return null;
+        if (_acknowledgementSnapshot is { } latest)
+            return latest; // Already published; never replay the pre-command epoch.
+        SnapshotAvailable?.Invoke(this, snapshot);
+        return snapshot;
+    }
 
     public void Start()
     {
@@ -259,9 +314,9 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                     continue;
                 }
 
-                if (SnapshotProcessor is not null)
-                    await SnapshotProcessor(snapshot, cancellationToken).ConfigureAwait(false);
-                SnapshotAvailable?.Invoke(this, snapshot);
+                snapshot = await ProcessAndPublishSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                if (snapshot is null)
+                    continue;
                 PublishDiagnostics();
 
                 if (CheckForFrozenSnapshot(snapshot))
@@ -435,9 +490,9 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                     return;
                 }
 
-                if (SnapshotProcessor is not null)
-                    await SnapshotProcessor(snapshot, cancellationToken).ConfigureAwait(false);
-                SnapshotAvailable?.Invoke(this, snapshot);
+                snapshot = await ProcessAndPublishSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                if (snapshot is null)
+                    return;
                 PublishDiagnostics();
 
                 if (snapshot.IsComplete)

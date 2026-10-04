@@ -95,6 +95,49 @@ The application writes:
 
 The parent harness also performs a final independent EC setpoint proof and packages the evidence ZIP with a SHA-256 sidecar.
 
+## Acquisition during fan acknowledgement
+
+The worker awaits one Automatic operation at a time. The backend's mechanical
+acknowledgement can legitimately last longer than the 3-second telemetry watchdog.
+During that wait, after dispatch and each completed native RPM proof, the backend
+requests a CPU/GPU acquisition through the same worker reader and hardware-read gate.
+This acquisition consumes the shared RPM publication with periodic fan queries
+disabled. It starts no second polling loop or fan writer.
+
+Only complete, fresh acquisitions in the current Healthy power epoch renew telemetry
+liveness. Suspension, recovery, cancellation, incomplete/stale samples and thermal
+admission loss still abort the operation. The acknowledgement deadline and watchdog
+threshold remain unchanged. A blocked native RPM query cannot generate a refresh.
+
+The newest acknowledgement acquisition stays published when the operation returns;
+the worker uses it for health evaluation instead of replaying the pre-command sample.
+The same publication rule applies to normal and recovery processing.
+Power-epoch and cancellation checks also run after awaiting the processor, so
+suspend/resume during an actuation cannot publish or count a pre-boundary sample.
+
+Firmware is always available through the qualification pre-action fence, including
+the historical Manual gates. Sequence and minimum-evidence checks still run after
+the release, so an early Firmware return fails the gate while allowing safe cleanup.
+
+The A1 evidence now records `automatic-operation-started` and
+`automatic-operation-interrupted`, including the exception and restore authority.
+Zero completed hardware-command decisions do not prove that no native write was
+attempted. Runtime failure is recorded from the first Automatic selection, even
+before the first confirmed command. Both PASS and FAIL_CLOSED packages include the
+daily application log when available and a SHA-256 sidecar.
+
+Hardware-free regression checks cover acknowledgement exceeding 3 seconds,
+cancellation/thermal rejection with Firmware restore, blocked WMI, independent
+acknowledgement expiry, and publication order:
+
+```powershell
+dotnet run --project .\src\VictusFanControl -c Release -- --hp-backend-self-test
+dotnet run --project .\src\VictusFanControl.App -c Release -- --telemetry-coordination-self-test
+dotnet run --project .\src\VictusFanControl.App -c Release -- --dashboard-self-test
+```
+
+Physical A1 is still required to qualify these changes on HP 8C40/F.18.
+
 ## PASS meaning
 
 A1 PASS means only:

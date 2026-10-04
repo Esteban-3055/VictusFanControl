@@ -22,12 +22,13 @@ $readyPath = Join-Path $evidenceRoot 'automatic-final.ready.json'
 $eventsPath = Join-Path $evidenceRoot 'automatic-final.events.jsonl'
 $resultPath = Join-Path $evidenceRoot 'automatic-final.result.json'
 $summaryPath = Join-Path $evidenceRoot 'automatic-final.harness-summary.json'
+$applicationLogDirectory = Join-Path $env:LOCALAPPDATA 'VictusFanControl\logs'
 
 $gui = $null
 $head = $null
 $pass = $false
 $failure = $null
-$zipPath = $null
+$zipPath = "$evidenceRoot.zip"
 $zipSha256 = $null
 
 function Assert-Administrator {
@@ -245,6 +246,27 @@ function Wait-ForFile([string]$Path, [int]$Seconds, [string]$Label) {
     throw "Timed out waiting for $Label."
 }
 
+function Export-QualificationEvidence {
+    # Preserve the exception log too: a dispatched operation can fail before
+    # returning a decision, so decision counters alone do not describe it.
+    $applicationLog = Join-Path $applicationLogDirectory ('events-{0}.log' -f (Get-Date -Format 'yyyy-MM-dd'))
+    if (Test-Path -LiteralPath $applicationLog) {
+        try {
+            Copy-Item -LiteralPath $applicationLog -Destination (Join-Path $evidenceRoot 'application-events.log') -Force -ErrorAction Stop
+        } catch {
+            Write-Warning ('Could not capture application log: ' + $_.Exception.Message)
+        }
+    }
+
+    $script:zipPath = "$evidenceRoot.zip"
+    if (Test-Path -LiteralPath $zipPath) {
+        Remove-Item -LiteralPath $zipPath -Force
+    }
+    Compress-Archive -Path (Join-Path $evidenceRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
+    $script:zipSha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    Set-Content -LiteralPath ($zipPath + '.sha256') -Encoding ASCII -Value ("{0}  {1}" -f $zipSha256, (Split-Path -Leaf $zipPath))
+}
+
 function Get-DecisionStats {
     if (-not (Test-Path -LiteralPath $eventsPath)) {
         return [pscustomobject]@{ Decisions = 0; Writes = 0; Holds = 0 }
@@ -411,16 +433,8 @@ try {
     [void](Assert-StableFirmware)
 
     $pass = $true
-    $zipPath = "$evidenceRoot.zip"
     Write-Summary 'PASS' ''
-
-    if (Test-Path -LiteralPath $zipPath) {
-        Remove-Item -LiteralPath $zipPath -Force
-    }
-
-    Compress-Archive -Path (Join-Path $evidenceRoot '*') -DestinationPath $zipPath -CompressionLevel Optimal
-    $zipSha256 = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    Set-Content -LiteralPath ($zipPath + '.sha256') -Encoding ASCII -Value ("{0}  {1}" -f $zipSha256, (Split-Path -Leaf $zipPath))
+    Export-QualificationEvidence
 
     Write-Host ''
     Write-Host 'AUTOMATIC FINAL NORMAL PATH: PASS' -ForegroundColor Green
@@ -438,7 +452,13 @@ catch {
             New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
         }
         Write-Summary 'FAIL_CLOSED' $failure
-    } catch {}
+        Export-QualificationEvidence
+        Write-Host "Evidence: $evidenceRoot"
+        Write-Host "ZIP:      $zipPath"
+        Write-Host "SHA256:   $zipSha256"
+    } catch {
+        Write-Warning ('Could not package failure evidence: ' + $_.Exception.Message)
+    }
 
     if ($gui) {
         try {

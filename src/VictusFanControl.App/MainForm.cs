@@ -1017,6 +1017,9 @@ internal sealed partial class MainForm : Form
         _worker.EventLogged += WorkerOnEventLogged;
         _worker.StateMachine.StateChanged += StateMachineOnStateChanged;
 
+        if (automaticExecutionAuthorized && backend is Hp8C40FanControlBackend automaticBackend)
+            automaticBackend.RefreshActuationTelemetryAsync = RefreshAutomaticActuationTelemetryAsync;
+
         _trayIcon = CreateTrayIcon();
 
         _uiTimer = new System.Windows.Forms.Timer { Interval = 1000 };
@@ -2888,6 +2891,10 @@ internal sealed partial class MainForm : Form
             return;
         try
         {
+            if (_automaticFinalQualificationHardwareTest)
+                AppendAutomaticFinalEvent(new { kind = "automatic-operation-started", timestampUtc = DateTimeOffset.UtcNow,
+                    snapshotUtc = snapshot.Timestamp, mode = _fanProductionController.Mode.ToString(),
+                    authority = _fanCoordinator.Authority.ToString() });
             var safety = EvaluateControlSafety(_hardwareIdentity, _worker.StateMachine.State,
                 snapshot, DateTimeOffset.UtcNow, _fanCoordinator.BackendCanWrite);
             var result = await _fanProductionController.ProcessAutomaticAsync(snapshot, safety, cancellationToken,
@@ -2904,7 +2911,27 @@ internal sealed partial class MainForm : Form
         catch (Exception ex)
         {
             AppLog.Write($"Automatic session failed closed: {ex}");
+            if (_automaticFinalQualificationHardwareTest)
+            {
+                AppendAutomaticFinalEvent(new { kind = "automatic-operation-interrupted", timestampUtc = DateTimeOffset.UtcNow,
+                    snapshotUtc = snapshot.Timestamp, exception = ex.ToString(),
+                    authority = _fanCoordinator.Authority.ToString(),
+                    hardwareCompletionVerified = false, journalPresent = File.Exists(P15CJournalPath) });
+                FailAutomaticFinalQualification("Automatic operation was interrupted before completion: " + ex.Message);
+            }
         }
+    }
+
+    private async ValueTask RefreshAutomaticActuationTelemetryAsync(CancellationToken cancellationToken)
+    {
+        if (_fanProductionController.Mode != AdaptiveFanProductionMode.Automatic)
+            return; // Manual/restore paths keep their existing behavior.
+        var snapshot = await _worker.RefreshDuringFanAcknowledgementAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var safety = EvaluateDisplaySafety(_hardwareIdentity, _worker.StateMachine.State, snapshot,
+            DateTimeOffset.UtcNow, _fanCoordinator.BackendCanWrite);
+        if (!safety.CustomControlPermitted)
+            throw new InvalidOperationException("Actuation telemetry safety admission lost: " + string.Join("; ", safety.Reasons));
     }
 
     private void WorkerOnSnapshotAvailable(object? sender, TelemetrySnapshot snapshot)
@@ -3003,7 +3030,8 @@ internal sealed partial class MainForm : Form
             }
 
             if (_automaticFinalQualificationHardwareTest &&
-                _automaticFinalEverActive &&
+                (_fanProductionController.Mode == AdaptiveFanProductionMode.Automatic ||
+                 Volatile.Read(ref _automaticFinalAutomaticModeRequests) > 0) &&
                 !_automaticFinalCompleted)
             {
                 FailAutomaticFinalQualification(

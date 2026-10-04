@@ -328,6 +328,10 @@ public sealed class Hp8C40FanControlBackend :
 
     public event EventHandler<string>? WmiCommandAcknowledged;
 
+    // Optional GUI telemetry continuation. It grants no write authority and runs
+    // in post-dispatch feedback verification, outside native WMI calls.
+    public Func<CancellationToken, ValueTask>? RefreshActuationTelemetryAsync { get; set; }
+
     public string Name => "HP 8C40 BIOS/WMI + EC/tach verification";
 
     public FanFirmwareRestoreEvidence LastRestoreEvidence =>
@@ -703,6 +707,10 @@ public sealed class Hp8C40FanControlBackend :
 
                 var commandCompletedAtMilliseconds = Environment.TickCount64;
 
+                if (RefreshActuationTelemetryAsync is { } refreshAfterDispatch)
+                    await refreshAfterDispatch(cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var setpointAck = await WaitForSetpointAsync(
                     cpuTarget,
                     gpuTarget,
@@ -981,6 +989,13 @@ public sealed class Hp8C40FanControlBackend :
             if (EcWmiInvestigationTrace.Enabled)
                 EcWmiInvestigationTrace.Record(acknowledgement, "ack.snapshot",
                     $"query={last.FanQuerySequence};queryStarted={last.FanQueryStartedAtMilliseconds};rpm={last.CpuRpm}/{last.GpuRpm};setpoint={last.CpuSetpoint}/{last.GpuSetpoint};max=0x{last.MaxFan:X2};switch=0x{last.FanSwitch:X2};activeElapsed={ActiveTimeClock.ElapsedMilliseconds(_activeTimeClock, started)}");
+            if (ActiveTimeClock.HasElapsed(_activeTimeClock, started, _timing.TachometerAckTimeout))
+                break;
+            // ReadEcStateAsync has completed and published the shared RPM proof.
+            // Refresh actual CPU/GPU before a long mechanical acknowledgement wait.
+            if (RefreshActuationTelemetryAsync is { } refreshTelemetry)
+                await refreshTelemetry(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             if (ActiveTimeClock.HasElapsed(_activeTimeClock, started, _timing.TachometerAckTimeout))
                 break;
             if (!IsFreshTachometerProof(last, baseline, commandCompletedAtMilliseconds, lastAcceptedSequence))

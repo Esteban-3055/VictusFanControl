@@ -33,6 +33,20 @@ internal static class DashboardSelfTest
                 await controller.ConfigureAutomaticAsync(c,CancellationToken.None);
             });
             var ventilation = new P13FanControlSurface(controller,hardware,"HP 8C40 / F.18",()=>null,_=>{});
+            using (var fencedSurface = new P13FanControlSurface(controller, hardware, "synthetic closed gate", () => null, _ => {},
+                interactionAuthorizationProvider: (_, _, _) => throw new InvalidOperationException("Synthetic qualification fence failure."),
+                interactionObserver: observation =>
+                {
+                    if (observation.RequestedMode == AdaptiveFanProductionMode.Firmware)
+                        Require(observation.Failure is null && observation.Result?.Mode == AdaptiveFanProductionMode.Firmware);
+                }))
+            {
+                var request = typeof(P13FanControlSurface).GetMethod("RequestModeAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                ((Task)request.Invoke(fencedSurface, new object[] { AdaptiveFanProductionMode.Firmware })!).GetAwaiter().GetResult();
+                ((Task)request.Invoke(fencedSurface, new object[] { AdaptiveFanProductionMode.Manual })!).GetAwaiter().GetResult();
+                Require(controller.Mode == AdaptiveFanProductionMode.Firmware && backend.Commands == 0);
+                Console.WriteLine("PASS: Firmware reaches production through a failed qualification fence; Manual stays blocked.");
+            }
             var monitor = new Panel();
             monitor.Controls.Add(new TelemetryHistoryChart());
             using var host = new Form { Text="Victus Fan Control",ClientSize=new Size(1240,880),MinimumSize=new Size(1040,700) };

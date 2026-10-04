@@ -685,6 +685,9 @@ jobs:
       - name: HP 8C40 P17 WinForms curve editor self-test
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --curve-editor-self-test
 
+      - name: Telemetry and fan acknowledgement coordination self-test
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --telemetry-coordination-self-test
+
       - name: Configurable dashboard WinForms self-test and renders
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --dashboard-self-test
 

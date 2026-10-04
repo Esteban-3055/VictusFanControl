@@ -95,6 +95,14 @@ public sealed class HardwareTelemetryReader : IDisposable
 
     public TelemetrySnapshot ReadSnapshot() => ReadSnapshot(_schedulePeriodicFanReads);
 
+    /// <summary>Refresh CPU/GPU using the RPM proof just published by control; never issue another fan query.</summary>
+    public TelemetrySnapshot ReadSnapshotDuringFanAcknowledgement()
+    {
+        if (_wmiFans is null)
+            throw new InvalidOperationException("Acknowledgement refresh requires the HP 8C40 WMI reader.");
+        return ReadSnapshot(schedulePeriodicFanReads: false);
+    }
+
     /// <summary>Prepared Automatic acquisition: fresh serialized RPM, then CPU/GPU, without scheduling a periodic poll.</summary>
     public async ValueTask<TelemetrySnapshot> ReadFreshSnapshotAsync(CancellationToken cancellationToken)
     {

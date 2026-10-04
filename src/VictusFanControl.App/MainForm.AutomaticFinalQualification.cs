@@ -101,6 +101,12 @@ internal sealed partial class MainForm
         AdaptiveFanProductionMode? requestedMode,
         int? equalFanLevel)
     {
+        // Firmware is an escape action, not a qualification-success assertion.
+        // Never require a completed first actuation or an open test to release.
+        if (_automaticFinalQualificationHardwareTest && kind == P13ControlInteractionKind.ModeRequest &&
+            requestedMode == AdaptiveFanProductionMode.Firmware && !equalFanLevel.HasValue)
+            return true;
+
         if (!_automaticFinalQualificationHardwareTest ||
             _automaticFinalCompleted ||
             !_automaticFinalReadyPublished)
@@ -144,15 +150,6 @@ internal sealed partial class MainForm
                    !_automaticFinalEverActive &&
                    _fanProductionController.Mode == AdaptiveFanProductionMode.Firmware &&
                    _fanCoordinator.Authority == FanAuthority.Firmware;
-        }
-
-        if (requestedMode == AdaptiveFanProductionMode.Firmware)
-        {
-            return _automaticFinalAutomaticModeRequests == 1 &&
-                   _automaticFinalFirmwareModeRequests == 0 &&
-                   _automaticFinalManualModeRequests == 0 &&
-                   _automaticFinalEverActive &&
-                   _fanProductionController.Mode == AdaptiveFanProductionMode.Automatic;
         }
 
         return false;

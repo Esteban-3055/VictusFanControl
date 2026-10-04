@@ -9,6 +9,11 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--telemetry-coordination-self-test")
+        {
+            Environment.ExitCode = TelemetryCoordinationSelfTest.RunAsync().GetAwaiter().GetResult();
+            return;
+        }
         if (args.Length == 1 && args[0] == "--dashboard-self-test")
         {
             ApplicationConfiguration.Initialize();
