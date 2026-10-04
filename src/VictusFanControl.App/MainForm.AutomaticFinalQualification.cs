@@ -460,6 +460,10 @@ internal sealed partial class MainForm
             tuning.HottestPerformanceCoreCount != 3 ||
             tuning.MinimumLevel != 30 ||
             tuning.MaximumLevel != 50 ||
+            tuning.NormalMaximumUpStepLevels != 1 ||
+            tuning.MaximumDownStepLevels != 1 ||
+            tuning.NormalPollingDelayMilliseconds != 1000 ||
+            tuning.RememberThermalDemand ||
             !tuning.AdaptiveDescentEnabled ||
             !Same(tuning.RiseTimeConstantSeconds, 8) ||
             !Same(tuning.IncreaseConfirmationSeconds, 3) ||
@@ -477,7 +481,7 @@ internal sealed partial class MainForm
             !Same(tuning.GpuThermalOverrideC, 78))
         {
             throw new InvalidOperationException(
-                "Persisted qualification profile mismatch. Required: hottest 3 P-Cores, 30..50, adaptive descent, rise 8s/3s, short descent 6s/4s, sustained descent 20s/16s, 1200s load qualification, thresholds 50%/25W/40W, pause 30s, cooldown 120s and thermal overrides 85C/78C.");
+                "Persisted qualification profile mismatch. Required: hottest 3 P-Cores, 30..50, normal step +1/-1, 1000 ms polling, no thermal-demand memory, adaptive descent, rise 8s/3s, short descent 6s/4s, sustained descent 20s/16s, 1200s load qualification, thresholds 50%/25W/40W, pause 30s, cooldown 120s and thermal overrides 85C/78C.");
         }
 
         _ =
@@ -700,9 +704,9 @@ internal sealed partial class MainForm
                     timestampUtc = DateTimeOffset.UtcNow,
                     failure = detail,
                     targetProfileId = _targetProfile?.Id,
-                    backend = _fanCoordinator?.BackendName,
-                    mode = _fanProductionController?.Mode.ToString(),
-                    authority = _fanCoordinator?.Authority.ToString(),
+                    backend = _fanCoordinator.BackendName,
+                    mode = _fanProductionController.Mode.ToString(),
+                    authority = _fanCoordinator.Authority.ToString(),
                     automaticModeRequests =
                         _automaticFinalAutomaticModeRequests,
                     firmwareModeRequests =
@@ -724,14 +728,53 @@ internal sealed partial class MainForm
         AppLog.Write(
             $"AUTOMATIC FINAL FAIL_CLOSED: {detail}");
 
-        Ui(() =>
-        {
-            AppendEvent(
-                $"AUTOMATIC FINAL FAIL_CLOSED: {detail}");
-            _allowExit = true;
-            Enabled = false;
-            Close();
-        });
+        // A qualification failure is not permission to abandon Custom authority.
+        // Perform the same production-controller Firmware transition before closing.
+        _ = Task.Run(
+            async () =>
+            {
+                string cleanup;
+                try
+                {
+                    var release =
+                        await _fanProductionController.SetModeAsync(
+                                AdaptiveFanProductionMode.Firmware,
+                                CancellationToken.None)
+                            .ConfigureAwait(false);
+
+                    cleanup =
+                        $"fail-cleanup action={release.Action}; authority={release.Authority}; detail={release.Detail}";
+
+                    AppendAutomaticFinalEvent(
+                        new
+                        {
+                            kind = "fail-cleanup",
+                            timestampUtc = DateTimeOffset.UtcNow,
+                            action = release.Action.ToString(),
+                            authority = release.Authority.ToString(),
+                            release.Detail,
+                            journalPresent =
+                                File.Exists(P15CJournalPath)
+                        });
+                }
+                catch (Exception ex)
+                {
+                    cleanup =
+                        "fail-cleanup exception=" +
+                        ex.Message;
+                    AppLog.Write(
+                        $"AUTOMATIC FINAL fail-cleanup exception: {ex}");
+                }
+
+                Ui(() =>
+                {
+                    AppendEvent(
+                        $"AUTOMATIC FINAL FAIL_CLOSED: {detail}. {cleanup}");
+                    _allowExit = true;
+                    Enabled = false;
+                    Close();
+                });
+            });
     }
 
     private void AppendAutomaticFinalEvent(
