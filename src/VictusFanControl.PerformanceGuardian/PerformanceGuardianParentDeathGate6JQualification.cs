@@ -318,9 +318,9 @@ internal static class PerformanceGuardianParentDeathGate6JQualification
                             GpuObservation:
                                 gpuObservation,
                             CpuJournal:
-                                liveCpuJournal,
+                                liveCpuJournal!,
                             GpuJournal:
-                                liveGpuJournal,
+                                liveGpuJournal!,
                             HardwareWritesPerformedByController:
                                 false);
 
