@@ -143,6 +143,7 @@ internal sealed class MainForm : Form
     private readonly FanControlCoordinator _fanCoordinator;
     private readonly AdaptiveFanProductionController _fanProductionController;
     private readonly P13FanControlSurface _p13FanControlSurface;
+    private readonly PerformanceControlSurface _performanceControlSurface;
     private readonly string _fanBackendStartupDetail;
     private readonly HardwareIdentity _hardwareIdentity;
     private readonly HardwareTargetProfile? _targetProfile;
@@ -964,6 +965,11 @@ internal sealed class MainForm : Form
                                 : null);
         _p13FanControlSurface.UpdateAuthority(
             _fanCoordinator.Authority);
+
+        _performanceControlSurface =
+            new PerformanceControlSurface(
+                _targetProfile?.Id,
+                AppendEvent);
 
         _worker = new TelemetryWorker(modulesDirectory);
         _worker.SnapshotAvailable += WorkerOnSnapshotAvailable;
@@ -2223,8 +2229,15 @@ internal sealed class MainForm : Form
         var fanCurve = new TabPage("Fan Control");
         fanCurve.Controls.Add(BuildP13FanControlSurface());
 
+        var performance =
+            new TabPage("Performance");
+
+        performance.Controls.Add(
+            _performanceControlSurface);
+
         tabs.TabPages.Add(overview);
         tabs.TabPages.Add(fanCurve);
+        tabs.TabPages.Add(performance);
         tabs.TabPages.Add(diagnostics);
         return tabs;
     }

@@ -584,6 +584,9 @@ jobs:
       - name: HP 8C40 P17 WinForms curve editor self-test
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --curve-editor-self-test
 
+      - name: Performance CPU settings persistence self-test
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --performance-settings-self-test
+
       - name: HP BIOS contract self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --bios-contract-self-test
 

@@ -11,6 +11,7 @@ on:
       - 'src/VictusFanControl.GpuProbe/**'
       - 'src/VictusFanControl.PerformanceProbe/**'
       - 'src/VictusFanControl.PerformanceGuardian/**'
+      - 'src/VictusFanControl.App/**'
       - 'src/VictusFanControl/Hardware/Intel/**'
       - 'src/VictusFanControl/Hardware/Nvidia/**'
       - 'src/VictusFanControl/Hardware/PawnIo/**'

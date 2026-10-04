@@ -2060,6 +2060,28 @@ The selected 35/60 and 8/15 values are the defaults inside that envelope.
 Runtime Apply must still validate the current physical baseline and all existing
 journal/ownership/lock conditions before any future write.
 
+### Step 6G.0a — non-authorizing GUI sliders
+
+The WinForms application now exposes a separate Performance tab for the exact
+HP-8C40-9D0R1LA-F18 target. It contains independent AC and Battery PL1/PL2
+sliders using the product envelope above. Moving a slider only edits in-memory
+preferences; Save persists them to:
+
+    %LOCALAPPDATA%\VictusFanControl\performance-ui-settings.json
+
+The settings document persists only watts. It contains no operating authority,
+Guardian session, startup-persistence flag, ownership state or automatic
+profile state. Invalid/corrupt settings fail back to the exact product defaults.
+
+PL2 >= PL1 is enforced while editing. "Restaurar predeterminados" restores and
+persists AC 35/60 W and Battery 8/15 W. Both Save and Reset explicitly perform
+zero hardware writes.
+
+This GUI work is intentionally configuration-only. It does not launch the
+Performance Guardian, open MSR write authority or bind saved values to a live
+CPU session. That binding remains behind the CPU-only Guardian qualification
+gate.
+
 CPU Guardian hardware binding and physical CPU-only qualification remain
 closed at this point. productionHardwareWritesAuthorized=false.
 guiIntegrationAuthorized=false.

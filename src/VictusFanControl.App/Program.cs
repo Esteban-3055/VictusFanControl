@@ -15,6 +15,15 @@ internal static class Program
             return;
         }
 
+        if (args.Length == 1 &&
+            args[0] == "--performance-settings-self-test")
+        {
+            Environment.ExitCode =
+                PerformanceUiSettingsSelfTest.Run(
+                    Console.Out);
+            return;
+        }
+
         AppLog.Initialize();
 
         AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
