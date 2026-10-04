@@ -16,6 +16,7 @@ public sealed class HardwareTelemetryReader : IDisposable
     private IntelMsrReader? _intel;
     private AcpiEcReader? _ec;
     private readonly HpWmiFanTelemetryReader? _wmiFans;
+    private readonly bool _schedulePeriodicFanReads;
     private NvmlClient? _nvml;
     private readonly WindowsCpuLoadReader _cpuLoad = new();
 
@@ -41,8 +42,11 @@ public sealed class HardwareTelemetryReader : IDisposable
     private DateTimeOffset _nextNvmlInitAttempt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ReinitializeBackoff = TimeSpan.FromSeconds(5);
 
-    public HardwareTelemetryReader(string modulesDirectory)
+    public HardwareTelemetryReader(string modulesDirectory) : this(modulesDirectory, schedulePeriodicFanReads: true) { }
+
+    internal HardwareTelemetryReader(string modulesDirectory, bool schedulePeriodicFanReads)
     {
+        _schedulePeriodicFanReads = schedulePeriodicFanReads;
         _intelModulePath = Path.Combine(modulesDirectory, "IntelMSR.bin");
         _ecModulePath = Path.Combine(modulesDirectory, "LpcACPIEC.bin");
 
@@ -206,7 +210,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         HpWmiFanTelemetrySample? wmiFanSample = null;
         if (_wmiFans is not null)
         {
-            wmiFanSample = _wmiFans.ReadCached();
+            wmiFanSample = _wmiFans.ReadCached(_schedulePeriodicFanReads);
             cpuFanRpm = wmiFanSample?.CpuNominalRpm;
             gpuFanRpm = wmiFanSample?.GpuNominalRpm;
             _lastEcReadError = null;

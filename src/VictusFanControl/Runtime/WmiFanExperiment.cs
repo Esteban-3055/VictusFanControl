@@ -61,6 +61,22 @@ internal static class WmiFanExperiment
         return result.GetProperty("StopReason").GetString() is { Length: > 0 } reason
             ? reason : throw new InvalidOperationException("Worker result lacks stop reason.");
     }
+
+    internal static async Task<TelemetrySnapshot> AcquireSnapshotAsync(
+        HpWmiFanProofReader fans, Func<TelemetrySnapshot> readSnapshot,
+        Action ensureNormal, CancellationToken cancellationToken)
+    {
+        ensureNormal();
+        // One bounded fresh 2D acquisition publishes to the registered reader.
+        // No stale-cache fallback or repeated attempts after a failed query.
+        EcWmiInvestigationTrace.Record(0, "experiment.acquisition.begin", "fresh-RPM-before-CPU-GPU");
+        var fresh = await fans.ReadFreshAsync(cancellationToken);
+        EcWmiInvestigationTrace.Record(0, "experiment.acquisition.end", $"sequence={fresh.Sequence};sampledAt={fresh.Speeds.SampledAtUtc:O}");
+        ensureNormal();
+        var snapshot = readSnapshot(); // CPU/GPU epochs begin AFTER waiting for WMI.
+        ensureNormal();
+        return snapshot;
+    }
     internal static AdaptiveFanPolicyConfig CreatePolicy()
     {
         var candidate = Hp8C40AdaptiveCandidateV1.Create();
@@ -125,8 +141,9 @@ internal static class WmiFanExperiment
                 info.RootElement.GetProperty("Mvid").GetString() != typeof(WmiFanExperiment).Module.ModuleVersionId.ToString())
                 throw new InvalidOperationException("Experiment guardian identity mismatch.");
         }
-        using var reader = new HardwareTelemetryReader(o.Modules);
+        using var reader = new HardwareTelemetryReader(o.Modules, schedulePeriodicFanReads: false);
         if (!reader.BackendsInitialized) throw new InvalidOperationException("Required telemetry backends unavailable.");
+        var fans = new HpWmiFanProofReader(); // RPM only; never proof of setpoint/ownership.
         var client = o.Control ? new HpOmenBiosWmiClient() : null;
         var session = client is null ? null : new WmiFanSession(client.Send, level =>
             WriteJson(Path.Combine(o.Directory, "write-intent.json"), new { Level = level,
@@ -144,8 +161,19 @@ internal static class WmiFanExperiment
         string stopReason = "duration";
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+        void EnsureNormal()
+        {
+            if (File.Exists(WmiFanExperimentBoundary.StopPath))
+            {
+                stopReason = "stop-signal";
+                cts.Cancel();
+            }
+            cts.Token.ThrowIfCancellationRequested();
+            if (guardian.HasExited) throw new InvalidOperationException("Experiment guardian exited.");
+        }
         WriteJson(Path.Combine(o.Directory, "ready.json"), new { Pid = Environment.ProcessId,
-            DirectEcProhibited = true, o.Control, ProductionAuthorized = false, MinimumLevel = 30, MaximumLevel = 50 });
+            DirectEcProhibited = true, o.Control, ProductionAuthorized = false, MinimumLevel = 30, MaximumLevel = 50,
+            FanAcquisition = "fresh-2D-before-snapshot;no-periodic-query-on-snapshot" });
         EcWmiInvestigationTrace.Record(0, "experiment.ready", $"control={o.Control};no-direct-EC");
         try
         {
@@ -156,11 +184,11 @@ internal static class WmiFanExperiment
                 var gap = clock.Elapsed - previous;
                 previous = clock.Elapsed;
                 if (gap > TimeSpan.FromSeconds(3)) throw new InvalidOperationException("Timing/suspend gap; normal control stopped.");
-                var snapshot = reader.ReadSnapshot();
+                var snapshot = await AcquireSnapshotAsync(fans, reader.ReadSnapshot, EnsureNormal, cts.Token);
                 await csv.WriteAsync(snapshot, CancellationToken.None);
                 var evaluatedAt = DateTimeOffset.UtcNow;
                 var safety = SafetyGate.Evaluate(identity, SystemState.Healthy, snapshot, evaluatedAt, fanWritePathPresent: true);
-                // Cached WMI startup may initially lack a sample. No writes are admitted during warmup.
+                // CPU power/load counters may initially lack a baseline. No writes during warmup.
                 if (!safety.CustomControlPermitted)
                 {
                     if (admitted || clock.Elapsed > TimeSpan.FromSeconds(15))
@@ -182,6 +210,7 @@ internal static class WmiFanExperiment
                 // Re-evaluate freshness immediately before dispatch (after logger/policy work).
                 safety = SafetyGate.Evaluate(identity, SystemState.Healthy, snapshot, DateTimeOffset.UtcNow, true);
                 WmiFanExperimentBoundary.SetAdmission(snapshot);
+                EnsureNormal();
                 var sent = session?.Apply(decision.EqualFanLevel.Value, safety.CustomControlPermitted) ?? false;
                 decisions.WriteLine(JsonSerializer.Serialize(new { Utc = DateTimeOffset.UtcNow,
                     decision.EqualFanLevel, decision.RawDemandLevel, Sent = sent, o.Control,
@@ -195,7 +224,8 @@ internal static class WmiFanExperiment
                 await Task.Delay(1000, cts.Token);
             }
         }
-        catch (OperationCanceledException) when (cts.IsCancellationRequested) { stopReason = "cancel"; }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        { if (stopReason == "duration") stopReason = "cancel"; }
         catch (Exception ex) { code = 1; stopReason = ex.Message; Console.Error.WriteLine(ex); }
         finally
         {

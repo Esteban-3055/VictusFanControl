@@ -107,7 +107,11 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             return _disposed || _paused ? null : _window.ReadSnapshot(_milliseconds());
     }
 
-    public HpWmiFanTelemetrySample? ReadCached()
+    public HpWmiFanTelemetrySample? ReadCached() => ReadCached(scheduleQuery: true);
+
+    // The supervised experiment supplies a new acquisition before each
+    // snapshot. Its cache read must not queue a competing periodic query.
+    internal HpWmiFanTelemetrySample? ReadCached(bool scheduleQuery)
     {
         lock (_gate)
         {
@@ -129,7 +133,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
                 _diagnostic = "HP WMI fan sample expired (age >= 3000 ms).";
             }
 
-            if ((_pending is null || _pending.IsCompleted) && now >= _nextAttempt)
+            if (scheduleQuery && (_pending is null || _pending.IsCompleted) && now >= _nextAttempt)
             {
                 var acquisition = _acquisitionDiagnostics.Begin(HpWmiFanAcquisitionPurpose.Periodic, now);
                 var lease = _broker.TryAcquirePeriodic();

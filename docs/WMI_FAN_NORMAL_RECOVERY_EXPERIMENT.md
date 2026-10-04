@@ -5,6 +5,7 @@ Ruta experimental independiente del backend productivo. No instala el driver ACP
 ## Diseño
 
 - Normal: curva candidata existente, con mínimo experimental 30 y máximo 50, niveles CPU/GPU iguales, subida gradual y bajada confirmada. Se escribe sólo cuando cambia el nivel. El mismo SafetyGate exige telemetría completa, fresca, plausible y temperaturas inferiores a los umbrales de entrega a firmware. No hay lectura de consignas ni guardas EC, tampoco sustitutos ficticios.
+- Cada ciclo, tanto en simulación como en control, espera una nueva lectura RPM `20008h/2Dh` con presupuesto total de 3 segundos usando el lector/broker existente. Sólo después se muestrean CPU/GPU y se evalúa la curva. El snapshot consume la publicación de esa lectura sin programar otra consulta periódica. Una consulta rechazada, cancelada o vencida detiene el ciclo sin reutilizar el cache como sustituto. La antigüedad RPM sigue empezando antes de adquirir la respuesta WMI; los timestamps CPU/GPU comienzan después de esa espera. No se modifica el polling de la GUI ni de las demás rutas.
 - Recuperación: se cierra permanentemente la admisión normal y el supervisor envía `FF/FF → LegacyDefault` después de confirmar salida del worker y drenaje de sus consultas. Se intenta LegacyDefault aunque falle la liberación. La aceptación de ambas llamadas **no demuestra independientemente propiedad del firmware**.
 - Supervisor separado: observa heartbeat, salida del worker y eventos ACPI 13/15. El worker detecta pérdida del supervisor y trata de liberar localmente si había intención de escritura. No protege frente a bloqueo de Windows, apagado, doble muerte o firmware bloqueado.
 - Un mutex global serializa todas las llamadas HP de ambos procesos de esta prueba, incluidas RPM. Se vuelve a comprobar stop/whitelist después de adquirirlo. No coordina clientes HP externos ni el firmware.
@@ -38,6 +39,21 @@ La parada fue una pérdida de admisión de telemetría causada por un cálculo d
 El mensaje «Cronología incompleta o contiene EC directo» era otro defecto del lanzador: leía los campos en la raíz del informe offline, aunque están dentro de `Analysis`. Se corrige esa lectura, se distinguen inventario ausente, PID incorrecto, cronología inconsistente y lecturas EC reales, y se conserva el motivo previo del fallo. El supervisor ahora valida y copia el motivo del worker; ya no sustituye una salida temprana por `duration`. Las próximas pérdidas de admisión guardan `telemetry-fault.json` con la edad y sus timestamps.
 
 Esta captura diagnostica defectos del arnés; no valida control activo, restauración por firmware ni ausencia definitiva del error ACPI. El siguiente paso sigue siendo repetir sólo la simulación de cinco minutos antes de evaluar `-Control`.
+
+## Simulación 64fcdb y control d3dffc / 76d955
+
+La simulación corregida `64fcdb` completó cinco minutos: captura válida, 151 consultas WMI, máximo nativo 394,58 ms, ningún nuevo ACPI 13/15 detectado y ninguna escritura de ventilación o lectura EC registrada.
+
+Los intentos activos se interrumpieron sin completar cinco minutos. `d3dffc` duró unos nueve segundos y envió dos órdenes; perdió el cache RPM porque la siguiente consulta se programó sólo al finalizar el muestreo CPU/GPU, cuando la adquisición anterior ya había vencido. `76d955` duró unos 216 segundos y envió nueve órdenes: un snapshot con edad RPM de 2704 ms quedó vencido mientras el setter esperaba la lectura periódica, que terminó correctamente unos 385 ms después. No se detectaron nuevos ACPI 13/15 ni lecturas EC en ninguna captura. Ambos supervisores registraron retorno cero de `FF/FF` y `LegacyDefault`, sin lease retenido ni finalización nativa desconocida; esto no verifica independientemente propiedad del firmware.
+
+SHA-256 de los ZIP revisados:
+
+- `d3dffc`: `7ab0680f6d1554e48dd72e142d33986efe0baa0d2de0f4509aaae377921d9b73`.
+- `76d955`: `7db768901abe06f6a88a074d9c40322695528d862cfd869f1f5e702f9f482fb1`.
+
+La adquisición secuencial descrita arriba elimina esa dependencia del polling respecto al tiempo de muestreo y escrituras del ciclo. Las pruebas sin hardware reproducen el cache vencido y la espera que agota una admisión de 2704 ms; exigen una adquisición real nueva, comprueban que el snapshot no programa polling propio y conservan el vencimiento exacto a 3000 ms. También rechazan respuestas inválidas, consultas completadas demasiado tarde y stop antes/después de adquirir RPM. Se mantienen las comprobaciones de stop y frescura bajo el mutex y justo antes del método nativo: un retraso real todavía puede cerrar la admisión. No se añade reintento de setters ni se cambia la curva o su inercia.
+
+La corrección necesita otra captura física completa antes de avanzar a uso diario. Repetir primero simulación con esta nueva coordinación; pasar a control sólo después de revisar su resultado.
 
 ## Interpretación y límites
 

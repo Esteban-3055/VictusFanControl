@@ -2,6 +2,9 @@ using VictusFanControl.Control;
 using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.PawnIo;
+using VictusFanControl.Hardware.Windows;
+using VictusFanControl.Safety;
+using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.Runtime;
 
@@ -13,6 +16,7 @@ internal static class WmiFanExperimentSelfTest
         Directory.CreateDirectory(directory);
         try
         {
+            TestFreshAcquisitionAsync().GetAwaiter().GetResult();
             var result = "{\"Pid\":31920,\"ExitCode\":1,\"StopReason\":\"Telemetry admission lost\",\"SamplesAdmitted\":true,\"NormalPhaseEnded\":true}";
             Check(WmiFanExperiment.ReadWorkerStopReason(result, 31920, 1) == "Telemetry admission lost",
                 "Worker fault must be reported instead of the guardian's duration default.");
@@ -112,11 +116,107 @@ internal static class WmiFanExperimentSelfTest
             Reject(() => WmiFanExperimentBoundary.EnsureRequestAllowed(level));
             WmiFanExperimentBoundary.BeginRecovery();
             WmiFanExperimentBoundary.EnsureRequestAllowed(release);
-            output.WriteLine("PASS: WMI fan normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
+            output.WriteLine("PASS: WMI sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
             return 0;
         }
         catch (Exception ex) { output.WriteLine("FAIL: " + ex); return 1; }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private static async Task TestFreshAcquisitionAsync()
+    {
+        using var slot = new SemaphoreSlim(1, 1);
+        long clock = 0;
+        var origin = DateTimeOffset.UtcNow;
+        var periodicCalls = 0;
+        var freshCalls = 0;
+        using var telemetry = new HpWmiFanTelemetryReader(_ =>
+        {
+            periodicCalls++;
+            throw new Exception("Experiment cache queued a competing periodic read.");
+        }, () => clock, () => origin.AddMilliseconds(clock), slot);
+        var fans = new HpWmiFanProofReader(r =>
+        {
+            Check(r.CommandType == 0x2D && r.OutputSize == 128, "Fresh acquisition must be RPM-only.");
+            freshCalls++;
+            clock += 385; // 76d955: native WMI returns successfully after a queued change expired.
+            return new(0, [37, 37]);
+        }, slot, () => clock, TimeSpan.FromSeconds(3));
+
+        TelemetrySnapshot ReadSnapshot()
+        {
+            var timestamp = origin.AddMilliseconds(clock);
+            clock += 520; // CPU/GPU sampling duration from d3dffc.
+            var sample = telemetry.ReadCached(scheduleQuery: false);
+            return new(timestamp, "CPU", 55, 16, 9,
+                Hp8C40TargetProfile.ExpectedGpuName, 48, 12, 0,
+                sample?.CpuNominalRpm, sample?.GpuNominalRpm)
+            {
+                CpuExpectedPhysicalCoreCount = 14,
+                CpuCoreTemperatures = Enumerable.Range(0, 14)
+                    .Select(i => new CpuCoreTemperatureSample(i, i, "Performance", 55)).ToArray(),
+                FanTelemetrySource = "HP-WMI-ACPI-2D", FanRpmResolution = 100,
+                FanSampledAtUtc = sample?.SampledAtUtc,
+                FanSampleAgeMilliseconds = sample is null ? null : clock - sample.StartedAtMilliseconds,
+                FanAgeCapturedAtUtc = origin.AddMilliseconds(clock)
+            };
+        }
+        var hardware = new HardwareIdentity(Hp8C40TargetProfile.BoardManufacturer,
+            Hp8C40TargetProfile.BoardProduct, Hp8C40TargetProfile.BoardVersion,
+            Hp8C40TargetProfile.SystemManufacturer, Hp8C40TargetProfile.SystemProductName,
+            Hp8C40TargetProfile.SystemSkuPrefix, Hp8C40TargetProfile.ValidatedBiosVersion);
+        var seed = await WmiFanExperiment.AcquireSnapshotAsync(fans, ReadSnapshot, () => { }, CancellationToken.None);
+        var oldStart = clock - seed.FanSampleAgeMilliseconds!.Value;
+        clock = oldStart + 2704;
+        Check(seed.IsFanTelemetryFreshAt(origin.AddMilliseconds(clock)), "76d955 fixture must start with a barely fresh sample.");
+        var renewed = await WmiFanExperiment.AcquireSnapshotAsync(fans, ReadSnapshot, () => { }, CancellationToken.None);
+        Check(!seed.IsFanTelemetryFreshAt(origin.AddMilliseconds(clock)), "Old admission must expire while acquiring the next RPM sample.");
+        Check(SafetyGate.Evaluate(hardware, SystemState.Healthy, renewed, origin.AddMilliseconds(clock), true).CustomControlPermitted,
+            "Sequential acquisition must supply new RPM metadata before fresh CPU/GPU sampling.");
+        Check(renewed.Timestamp > seed.Timestamp && renewed.FanSampleAgeMilliseconds == 905,
+            "Neither old CPU/GPU data nor old fan age may be relabeled as fresh.");
+        clock = oldStart + 7000; // d3dffc: old cache actually expired; no missing-metadata fallback.
+        Check(telemetry.ReadCached(scheduleQuery: false) is null, "Expired sample must still be unavailable.");
+        renewed = await WmiFanExperiment.AcquireSnapshotAsync(fans, ReadSnapshot, () => { }, CancellationToken.None);
+        Check(renewed.IsComplete && renewed.IsFanTelemetryFreshAt(origin.AddMilliseconds(clock)) && freshCalls == 3,
+            "An expired old cache must be replaced by one real fresh acquisition per cycle.");
+        clock += 2000; // Total fan age 2905, still valid.
+        Check(renewed.IsFanTelemetryFreshAt(origin.AddMilliseconds(clock)), "Freshness limit changed prematurely.");
+        clock += 95;
+        Check(!renewed.IsFanTelemetryFreshAt(origin.AddMilliseconds(clock)), "3000-ms limit was relaxed.");
+        telemetry.ReadCached(scheduleQuery: false);
+        Check(periodicCalls == 0, "Passive experiment reads must never schedule periodic work.");
+
+        var snapshots = 0;
+        foreach (var response in new HpBiosResponse[] { new(1, [37, 37]), new(0, [255, 37]) })
+        {
+            var rejected = new HpWmiFanProofReader(_ => response, slot, () => clock, TimeSpan.FromSeconds(3));
+            var denied = false;
+            try { await WmiFanExperiment.AcquireSnapshotAsync(rejected, () => { snapshots++; return renewed; }, () => { }, CancellationToken.None); }
+            catch (InvalidDataException) { denied = true; }
+            Check(denied && snapshots == 0, "Rejected query must stop before CPU/GPU sampling or cache fallback.");
+        }
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+        var canceledRead = false;
+        try { await WmiFanExperiment.AcquireSnapshotAsync(fans, () => { snapshots++; return renewed; },
+            () => canceled.Token.ThrowIfCancellationRequested(), canceled.Token); }
+        catch (OperationCanceledException) { canceledRead = true; }
+        Check(canceledRead && snapshots == 0 && freshCalls == 3, "Stop before acquisition admitted native work.");
+
+        var slow = new HpWmiFanProofReader(_ => { clock += 3000; return new(0, [37, 37]); },
+            slot, () => clock, TimeSpan.FromSeconds(4));
+        var expiredRead = false;
+        try { await WmiFanExperiment.AcquireSnapshotAsync(slow, () => { snapshots++; return renewed; }, () => { }, CancellationToken.None); }
+        catch (InvalidDataException) { expiredRead = true; }
+        Check(expiredRead && snapshots == 0, "A completed but expired query may not produce a snapshot.");
+
+        var guards = 0;
+        var stoppedAfterRead = false;
+        try { await WmiFanExperiment.AcquireSnapshotAsync(fans, () => { snapshots++; return renewed; },
+            () => { if (++guards == 2) throw new OperationCanceledException("stop after native return"); }, CancellationToken.None); }
+        catch (OperationCanceledException) { stoppedAfterRead = true; }
+        Check(stoppedAfterRead && snapshots == 0, "Stop after native return admitted CPU/GPU sampling.");
     }
 
     private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
