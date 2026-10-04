@@ -42,6 +42,10 @@ try {
     if($LASTEXITCODE -ne 0){throw 'Identity fixture build failed.'}
     & .\identity-test.exe
     if($LASTEXITCODE -ne 0){throw 'Identity fixture failed.'}
+    & cl.exe /nologo /TC /W4 /WX /Felifecycle-test.exe (Join-Path $source 'lifecycle-test.c')
+    if($LASTEXITCODE -ne 0){throw 'Lifecycle fault fixture build failed.'}
+    & .\lifecycle-test.exe
+    if($LASTEXITCODE -ne 0){throw 'Lifecycle fault fixture failed.'}
     & cl.exe /nologo /TC /W4 /WX /wd4505 /Feprobe-client.exe (Join-Path $source 'probe-client.c') /link setupapi.lib
     if($LASTEXITCODE -ne 0){throw 'Control client build failed.'}
     & .\probe-client.exe --invalid
@@ -66,7 +70,7 @@ try {
     & $inf2cat (('/driver:')+$reviewPackage) /os:10_GE_X64 /uselocaltime
     if($LASTEXITCODE -ne 0){throw 'Unsigned catalog generation failed.'}
     if(-not (Test-Path (Join-Path $reviewPackage 'AcpiFieldProbe.cat'))){throw 'Catalog missing after validation.'}
-    $binaries=@('AcpiFieldProbe.sys','contract-test.exe','identity-test.exe','probe-client.exe','review-package\AcpiFieldProbe.inf','review-package\AcpiFieldProbe.sys','review-package\AcpiFieldProbe.cat')
+    $binaries=@('AcpiFieldProbe.sys','contract-test.exe','identity-test.exe','lifecycle-test.exe','probe-client.exe','review-package\AcpiFieldProbe.inf','review-package\AcpiFieldProbe.sys','review-package\AcpiFieldProbe.cat')
     [ordered]@{WdkPackage=$version;Kmdf=$wdfVersion;FieldProbesEnabled=$false;DriverInstalled=$false;DriverSigned=$false;CatalogSigned=$false;InfValidated=$true;CatalogPlatform='10_GE_X64';InstallationReady=$false;ProductionReady=$false;Binaries=@($binaries | ForEach-Object {[ordered]@{file=$_;sha256=(Get-FileHash $_ -Algorithm SHA256).Hash}})} | ConvertTo-Json -Depth 6 | Set-Content build-manifest.json -Encoding UTF8
 } finally {Pop-Location}
 # The last native call intentionally returned 4 (no installed interface).

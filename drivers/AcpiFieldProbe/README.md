@@ -74,3 +74,11 @@ Se detectó que los errores al crear/abrir el target diagnóstico se propagaban 
 Esto corrige las rutas opcionales identificadas en fuente; **no demuestra preservación del EC en runtime**. Los fallos de DriverEntry, recursos de identificación inicial, SDDL o WdfDeviceCreate siguen siendo posibles fallos de carga/adjunción. No afirmar inmunidad del dispositivo base ante cualquier fallo del filtro.
 
 La matriz de pruebas, retirada y alternativas de firma está en [acpi-probe-pnp-signing-review.md](../../docs/acpi-probe-pnp-signing-review.md). Sus casos PnP/Verifier aún no se ejecutaron. UMDF permanece como alternativa por investigar, sin DLL, INF ni prueba física UMDF implementados.
+
+## Pruebas de ciclo de vida sin instalación
+
+`lifecycle.h` comparte la secuencia de ownership entre los callbacks Prepare/Release del driver y `lifecycle-test.c`. Las operaciones WDF se adaptan mediante callbacks; el fixture sustituye esas operaciones por un proveedor que inyecta errores y comprueba el orden, objetos vivos y número de cierres/borrados. Cubre 14 casos: identidad rechazada/perdida, fallo previo, creación/apertura fallida, ausencia de reintento después del fallo, Release repetido, preparación/liberación normal, persistencia de Used/ControlPassed/Faulted y Prepare duplicado. Este último enclava la sonda sin sobrescribir el target existente, que se libera por Release.
+
+El build Windows compila y ejecuta este fixture; el paquete de revisión añade lifecycle-test.exe al manifiesto. Son pruebas host de la lógica compartida, **no** ejecuciones de callbacks KMDF, inyección de fallos WDF real, Verifier, cancelación ni prueba física HP. No promover las filas de runtime por el resultado del fixture.
+
+El usuario dispone únicamente del Victus. La próxima captura disponible es `Export-Victus-AcpiBrokerPreflight.ps1 -RecoveryMetadata`: inventario sin instalar el filtro, que añade Secure Boot, estado de cifrado del volumen del sistema (sin KeyProtectors), DeviceGuard y `reagentc /info`. Errores y datos ausentes se preservan; RecoveryVerified e InstallationReady permanecen false. No cambia BCD, firmware, cifrado ni WinRE. Consulte el plan [acpi-probe-single-victus-plan.md](../../docs/acpi-probe-single-victus-plan.md).

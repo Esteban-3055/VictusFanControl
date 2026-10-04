@@ -1,6 +1,6 @@
 # PnP metadata only: no ACPI evaluation, EC ports, fan commands or driver installation.
 [CmdletBinding()]
-param([string]$OutputRoot='', [switch]$SelfTest)
+param([string]$OutputRoot='', [switch]$RecoveryMetadata, [switch]$SelfTest)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'AcpiProbeCommon.ps1')
 
@@ -17,29 +17,61 @@ function Get-BrokerPnpArguments([string]$InstanceId, [int]$BuildNumber) {
 
 function Invoke-BrokerPnpListing([string]$InstanceId, [int]$BuildNumber) {
     $arguments=Get-BrokerPnpArguments $InstanceId $BuildNumber
+    return Invoke-BrokerMetadataProcess 'pnputil.exe' $arguments
+}
+
+function Invoke-BrokerMetadataProcess([string]$Executable, [string]$Arguments) {
+    # Only these fixed read-only metadata operations are allowed.
+    if(-not (($Executable -eq 'pnputil.exe' -and $Arguments -match '^/enum-devices /instanceid "ACPI\\PNP0C(?:09|14)\\[A-Za-z0-9_&.\\-]+" /relations(?: /drivers)?(?: /services /stack /interfaces)?$') -or
+        ($Executable -eq 'reagentc.exe' -and $Arguments -eq '/info'))){throw 'Unsupported metadata operation.'}
     $process=New-Object Diagnostics.Process
     try {
-        $process.StartInfo.FileName=Join-Path $env:SystemRoot 'System32\pnputil.exe'
-        $process.StartInfo.Arguments=$arguments
+        $process.StartInfo.FileName=Join-Path $env:SystemRoot ('System32\'+$Executable)
+        $process.StartInfo.Arguments=$Arguments
         $process.StartInfo.UseShellExecute=$false
         $process.StartInfo.CreateNoWindow=$true
         $process.StartInfo.RedirectStandardOutput=$true
         $process.StartInfo.RedirectStandardError=$true
-        if(-not $process.Start()){throw 'PnPUtil did not start.'}
+        if(-not $process.Start()){throw ($Executable+' did not start.')}
         $stdout=$process.StandardOutput.ReadToEndAsync()
         $stderr=$process.StandardError.ReadToEndAsync()
         $watch=[Diagnostics.Stopwatch]::StartNew()
         while(-not $process.WaitForExit(5000)){
-            Write-Host ('Inventario PnP: '+[int]$watch.Elapsed.TotalSeconds+' s; no se leen registros EC.')
+            Write-Host ('Inventario '+$Executable+': '+[int]$watch.Elapsed.TotalSeconds+' s; no se leen registros EC.')
             if($watch.Elapsed.TotalSeconds -ge 30){
                 $process.Kill()
                 $null=$process.WaitForExit(5000)
-                throw 'PnPUtil exceeded the 30-second metadata deadline.'
+                throw ($Executable+' exceeded the 30-second metadata deadline.')
             }
         }
-        if(-not $stdout.Wait(5000) -or -not $stderr.Wait(5000)){throw 'PnPUtil output did not complete.'}
-        return [pscustomobject]@{Arguments=$arguments;ExitCode=$process.ExitCode;Stdout=$stdout.Result;Stderr=$stderr.Result}
+        if(-not $stdout.Wait(5000) -or -not $stderr.Wait(5000)){throw 'Metadata output did not complete.'}
+        return [pscustomobject]@{Executable=$Executable;Arguments=$Arguments;ExitCode=$process.ExitCode;Stdout=$stdout.Result;Stderr=$stderr.Result}
     } finally {$process.Dispose()}
+}
+
+function Invoke-BrokerMetadataQuery([scriptblock]$Query) {
+    try {return [pscustomobject]@{Collected=$true;Data=(& $Query);Error=$null}}
+    catch {return [pscustomobject]@{Collected=$false;Data=$null;Error=$_.Exception.Message}}
+}
+
+function Get-BrokerRecoveryMetadata {
+    # Never query key protectors/recovery passwords or change boot settings.
+    return [ordered]@{
+        SecureBoot=(Invoke-BrokerMetadataQuery {Confirm-SecureBootUEFI -ErrorAction Stop})
+        SystemVolume=(Invoke-BrokerMetadataQuery {
+            Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction Stop |
+                Select-Object MountPoint,VolumeStatus,ProtectionStatus,EncryptionPercentage,LockStatus
+        })
+        DeviceGuard=(Invoke-BrokerMetadataQuery {
+            Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard -OperationTimeoutSec 5 -ErrorAction Stop |
+                Select-Object VirtualizationBasedSecurityStatus,SecurityServicesConfigured,SecurityServicesRunning,CodeIntegrityPolicyEnforcementStatus,UsermodeCodeIntegrityPolicyEnforcementStatus
+        })
+        WinRE=(Invoke-BrokerMetadataQuery {Invoke-BrokerMetadataProcess 'reagentc.exe' '/info'})
+        RecoveryVerified=$false
+        InstallationReady=$false
+        SecuritySettingsChanged=$false
+        RecoveryKeysCollected=$false
+    }
 }
 
 if($SelfTest){
@@ -56,6 +88,15 @@ if($SelfTest){
     $rejected=$false
     try {$null=Get-BrokerPnpArguments $id 17763} catch {$rejected=$true}
     if(-not $rejected){throw 'Unsupported enumeration version accepted.'}
+    $falseValue=Invoke-BrokerMetadataQuery {$false}
+    if(-not $falseValue.Collected -or $falseValue.Data -ne $false -or $null -ne $falseValue.Error){throw 'Valid false metadata lost.'}
+    $failedQuery=Invoke-BrokerMetadataQuery {throw 'metadata fixture error'}
+    if($failedQuery.Collected -or $null -ne $failedQuery.Data -or $failedQuery.Error -ne 'metadata fixture error'){throw 'Metadata failure converted into data.'}
+    foreach($invalidOperation in @(@('reagentc.exe','/enable'),@('bcdedit.exe','/set testsigning on'),@('pnputil.exe','/add-driver example.inf'),@('pnputil.exe','/enum-devices /instanceid "ACPI\PNP0C09\1" /relations /remove-device'))){
+        $rejected=$false
+        try {$null=Invoke-BrokerMetadataProcess $invalidOperation[0] $invalidOperation[1]} catch {$rejected=$true}
+        if(-not $rejected){throw 'Mutating metadata command accepted.'}
+    }
     Write-Host 'Broker metadata command fixtures passed; no hardware queried.'
     return
 }
@@ -100,6 +141,10 @@ try {
         catch {$listings += [pscustomobject]@{InstanceId=$device.InstanceId;Result=$null;Error=$_.Exception.Message}}
     }
     ConvertTo-Json -InputObject $listings -Depth 6 | Set-Content (Join-Path $folder 'pnputil.json') -Encoding UTF8
+    if($RecoveryMetadata){
+        Write-Host 'Recuperacion: Secure Boot, cifrado del sistema, DeviceGuard y WinRE; solo lectura.'
+        Get-BrokerRecoveryMetadata | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $folder 'recovery-metadata.json') -Encoding UTF8
+    }
     $summary.MetadataCollected=$true
     $summary.Reason='inventory-only; review per-property errors and PnPUtil exit codes; no broker viability conclusion'
 } catch {

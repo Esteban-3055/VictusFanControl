@@ -9,6 +9,7 @@
 #include <devpkey.h>
 #include "contract.h"
 #include "identity.h"
+#include "lifecycle.h"
 DEFINE_GUID(GUID_DEVINTERFACE_VFC_ACPI_PROBE,
     0x7398c2f1,0x15ca,0x4b5b,0x89,0xe8,0x16,0xb6,0x14,0x28,0x0a,0x5d);
 C_ASSERT(sizeof(VFC_READ_INPUT)==8);
@@ -16,7 +17,7 @@ C_ASSERT(sizeof(VFC_READ_OUTPUT)==64);
 C_ASSERT(sizeof(ACPI_EVAL_OUTPUT_BUFFER)==20);
 C_ASSERT(ACPI_METHOD_ARGUMENT_INTEGER==0);
 C_ASSERT(VFC_IOCTL_READ==CTL_CODE(FILE_DEVICE_UNKNOWN,0x800,METHOD_BUFFERED,FILE_READ_DATA));
-typedef struct { WDFIOTARGET PdoTarget; ULONG Used; BOOLEAN ControlPassed, Faulted, Qualified; } DEVICE_CONTEXT;
+typedef struct { VFC_PROBE_STATE Probe; } DEVICE_CONTEXT;
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_CONTEXT,Context);
 DRIVER_INITIALIZE DriverEntry;
 EVT_WDF_DRIVER_DEVICE_ADD DeviceAdd;
@@ -55,33 +56,34 @@ static BOOLEAN QualifiedIdentity(WDFDEVICE device) {
     RtlSecureZeroMemory(raw,required);ExFreePoolWithTag(raw,'IfCV');
     return match;
 }
-/* No guessed PDO name: use the PDO of the PnP stack we were attached to. */
-NTSTATUS Prepare(WDFDEVICE device,WDFCMRESLIST raw,WDFCMRESLIST translated) {
-    WDF_IO_TARGET_OPEN_PARAMS open;
-    WDFIOTARGET target=NULL;
+/* Thin WDF adapters: the exact ownership sequence is host-testable. */
+static int ProbeIdentity(void *device) { return QualifiedIdentity(device); }
+static int ProbeCreate(void *device,void **result) {
     WDF_OBJECT_ATTRIBUTES attrs;
+    WDFIOTARGET target=NULL;
     NTSTATUS status;
-    DEVICE_CONTEXT *ctx=Context(device);
-    UNREFERENCED_PARAMETER(raw); UNREFERENCED_PARAMETER(translated);
-    if(!ctx->Qualified || ctx->Faulted)return STATUS_SUCCESS; /* No retry after a latched probe failure. */
-    if(!QualifiedIdentity(device)){ctx->Qualified=FALSE;ctx->Faulted=TRUE;return STATUS_SUCCESS;}
-    WDF_OBJECT_ATTRIBUTES_INIT(&attrs); attrs.ParentObject=device;
+    WDF_OBJECT_ATTRIBUTES_INIT(&attrs);attrs.ParentObject=device;
     status=WdfIoTargetCreate(device,&attrs,&target);
-    if (!NT_SUCCESS(status)) { ctx->Faulted=TRUE; return STATUS_SUCCESS; }
+    if(!NT_SUCCESS(status))return 0;
+    *result=target;return 1;
+}
+static int ProbeOpen(void *device,void *target) {
+    WDF_IO_TARGET_OPEN_PARAMS open;
+    /* Use this stack's PDO, never an observed/guessed private name. */
     WDF_IO_TARGET_OPEN_PARAMS_INIT_EXISTING_DEVICE(&open,WdfDeviceWdmGetPhysicalDevice(device));
-    status=WdfIoTargetOpen(target,&open);
-    if (!NT_SUCCESS(status)) {
-        WdfObjectDelete(target); ctx->Faulted=TRUE;
-        return STATUS_SUCCESS; /* Optional diagnostic target must not fail EC start. */
-    }
-    ctx->PdoTarget=target; /* Publish only a fully opened target. */
-    /* Budgets/fault latch intentionally survive stop/start and sleep cycles. */
-    return STATUS_SUCCESS;
+    return NT_SUCCESS(WdfIoTargetOpen(target,&open));
+}
+static void ProbeClose(void *target) { WdfIoTargetClose(target); }
+static void ProbeDelete(void *target) { WdfObjectDelete(target); }
+static const VFC_PROBE_OPS ProbeOps={ProbeIdentity,ProbeCreate,ProbeOpen,ProbeClose,ProbeDelete};
+NTSTATUS Prepare(WDFDEVICE device,WDFCMRESLIST raw,WDFCMRESLIST translated) {
+    UNREFERENCED_PARAMETER(raw);UNREFERENCED_PARAMETER(translated);
+    VfcProbePrepare(&Context(device)->Probe,device,&ProbeOps);
+    return STATUS_SUCCESS; /* Optional diagnostic setup must not fail EC start. */
 }
 NTSTATUS Release(WDFDEVICE device,WDFCMRESLIST translated) {
-    DEVICE_CONTEXT *ctx=Context(device);
     UNREFERENCED_PARAMETER(translated);
-    if (ctx->PdoTarget) { WdfIoTargetClose(ctx->PdoTarget); WdfObjectDelete(ctx->PdoTarget); ctx->PdoTarget=NULL; }
+    VfcProbeRelease(&Context(device)->Probe,&ProbeOps);
     return STATUS_SUCCESS;
 }
 /* Block arbitrary user IOCTLs before they can pass through the filter. */
@@ -95,7 +97,7 @@ VOID Caller(WDFDEVICE device,WDFREQUEST request) {
         WdfRequestComplete(request,STATUS_INVALID_DEVICE_REQUEST); return;
     }
     if(p.Type==WdfRequestTypeDeviceControl && p.Parameters.DeviceIoControl.IoControlCode==VFC_IOCTL_READ &&
-        (!Context(device)->Qualified || Context(device)->Faulted)) {
+        (!Context(device)->Probe.Qualified || Context(device)->Probe.Faulted)) {
         WdfRequestComplete(request,STATUS_DEVICE_NOT_READY); return;
     }
     status=WdfDeviceEnqueueRequest(device,request);
@@ -139,18 +141,18 @@ NTSTATUS DeviceAdd(WDFDRIVER driver,PWDFDEVICE_INIT init) {
     status=WdfDeviceCreate(&init,&attrs,&device);
     if(!NT_SUCCESS(status)) return status;
     if(!QualifiedIdentity(device))return STATUS_SUCCESS; /* No interface or ACPI target on rejection. */
-    Context(device)->Qualified=TRUE;
+    Context(device)->Probe.Qualified=TRUE;
     WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&queue,WdfIoQueueDispatchSequential);
     queue.EvtIoDeviceControl=ReadObject;
     status=WdfIoQueueCreate(device,&queue,WDF_NO_OBJECT_ATTRIBUTES,WDF_NO_HANDLE);
-    if(!NT_SUCCESS(status)) { Context(device)->Faulted=TRUE; return STATUS_SUCCESS; }
+    if(!NT_SUCCESS(status)) { Context(device)->Probe.Faulted=TRUE; return STATUS_SUCCESS; }
     status=WdfDeviceCreateDeviceInterface(device,&GUID_DEVINTERFACE_VFC_ACPI_PROBE,NULL);
-    if(!NT_SUCCESS(status))Context(device)->Faulted=TRUE;
+    if(!NT_SUCCESS(status))Context(device)->Probe.Faulted=TRUE;
     return STATUS_SUCCESS; /* Optional queue/interface failure leaves the probe inactive. */
 }
 VOID ReadObject(WDFQUEUE queue,WDFREQUEST request,size_t outLength,size_t inLength,ULONG code) {
     WDFDEVICE device=WdfIoQueueGetDevice(queue);
-    DEVICE_CONTEXT *ctx=Context(device);
+    VFC_PROBE_STATE *ctx=&Context(device)->Probe;
     VFC_READ_INPUT *in;
     VFC_READ_OUTPUT *out;
     ACPI_EVAL_INPUT_BUFFER nativeIn;
@@ -178,7 +180,7 @@ VOID ReadObject(WDFQUEUE queue,WDFREQUEST request,size_t outLength,size_t inLeng
     if(in->Version!=VFC_PROBE_VERSION || selector>=VFC_SELECTOR_COUNT){WdfRequestComplete(request,STATUS_INVALID_PARAMETER);return;}
     /* This source-only build exposes _STA control, with EC fields disabled. */
     if(selector && !VFC_FIELD_PROBES_ENABLED){WdfRequestComplete(request,STATUS_NOT_SUPPORTED);return;}
-    if(!ctx->Qualified || !ctx->PdoTarget || ctx->Faulted || (ctx->Used&(1u<<selector)) || (selector && !ctx->ControlPassed)){
+    if(!ctx->Qualified || !ctx->Target || ctx->Faulted || (ctx->Used&(1u<<selector)) || (selector && !ctx->ControlPassed)){
         WdfRequestComplete(request,STATUS_DEVICE_NOT_READY);return;
     }
     status=WdfRequestRetrieveOutputBuffer(request,sizeof(*out),(PVOID*)&out,NULL);
@@ -193,7 +195,7 @@ VOID ReadObject(WDFQUEUE queue,WDFREQUEST request,size_t outLength,size_t inLeng
     WDF_REQUEST_SEND_OPTIONS_INIT(&options,WDF_REQUEST_SEND_OPTION_TIMEOUT);
     WDF_REQUEST_SEND_OPTIONS_SET_TIMEOUT(&options,WDF_REL_TIMEOUT_IN_SEC(5));
     begin=KeQueryPerformanceCounter(&frequency);
-    status=WdfIoTargetSendIoctlSynchronously(ctx->PdoTarget,NULL,IOCTL_ACPI_EVAL_METHOD,&input,&output,&options,&returned);
+    status=WdfIoTargetSendIoctlSynchronously(ctx->Target,NULL,IOCTL_ACPI_EVAL_METHOD,&input,&output,&options,&returned);
     end=KeQueryPerformanceCounter(NULL);
     out->NativeStatus=(ULONG)status;out->NativeBytes=(ULONG)returned;
     out->CapturedBytes=(ULONG)(returned>sizeof(nativeOut)?sizeof(nativeOut):returned);

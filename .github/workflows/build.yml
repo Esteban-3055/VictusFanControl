@@ -78,7 +78,7 @@ jobs:
         run: |
           $probeRoot = Join-Path $env:RUNNER_TEMP ('broker-preflight-' + [Guid]::NewGuid().ToString('N'))
           $rejected = $false
-          try { .\scripts\Export-Victus-AcpiBrokerPreflight.ps1 -OutputRoot $probeRoot } catch { $rejected = $true }
+          try { .\scripts\Export-Victus-AcpiBrokerPreflight.ps1 -RecoveryMetadata -OutputRoot $probeRoot } catch { $rejected = $true }
           if (-not $rejected) { throw 'Non-target preflight accepted.' }
           $folder = @(Get-ChildItem $probeRoot -Directory)
           if ($folder.Count -ne 1) { throw 'Preflight evidence missing.' }
@@ -86,6 +86,7 @@ jobs:
           if ($summary.MetadataCollected -or $summary.ProductionReady -or $summary.AcpiEvaluationPerformed -or $summary.DirectEcAccess -or $summary.FanSetters -or $summary.DriverInstalled) { throw 'Invalid rejected preflight summary.' }
           if ($summary.Reason -notmatch 'probe requires HP 8C40') { throw 'Expected identity rejection missing.' }
           if (Test-Path (Join-Path $folder[0].FullName 'pnputil.json')) { throw 'PnP listing ran before target qualification.' }
+          if (Test-Path (Join-Path $folder[0].FullName 'recovery-metadata.json')) { throw 'Recovery query ran before target qualification.' }
           $zip = $folder[0].FullName + '.zip'
           if ((Get-Content ($zip + '.sha256') -Raw).Trim() -ne (Get-FileHash $zip -Algorithm SHA256).Hash) { throw 'ZIP hash mismatch.' }
           $manifest = Get-Content (Join-Path $folder[0].FullName 'manifest.json') -Raw | ConvertFrom-Json
@@ -776,6 +777,7 @@ jobs:
             artifacts/acpi-field-probe/probe-client.exe
             artifacts/acpi-field-probe/contract-test.exe
             artifacts/acpi-field-probe/identity-test.exe
+            artifacts/acpi-field-probe/lifecycle-test.exe
             artifacts/acpi-field-probe/build-manifest.json
             artifacts/acpi-field-probe/review-package/*
           if-no-files-found: error
