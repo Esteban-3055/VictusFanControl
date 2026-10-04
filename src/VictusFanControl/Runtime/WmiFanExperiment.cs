@@ -150,7 +150,8 @@ internal static class WmiFanExperiment
                 Pid = Environment.ProcessId, Utc = DateTimeOffset.UtcNow, RestoreRequired = true }));
         var config = CreatePolicy();
         WriteJson(Path.Combine(o.Directory, "policy.json"), config);
-        var engine = new AdaptiveFanPolicyEngine(config);
+        WriteJson(Path.Combine(o.Directory, "inertia.json"), WmiFanInertiaPolicy.Settings);
+        var engine = new WmiFanInertiaPolicy(config);
         await using var csv = new CsvTelemetryLogger(Path.Combine(o.Directory, "telemetry.csv"));
         await csv.WriteHeaderAsync(CancellationToken.None);
         using var decisions = new StreamWriter(Path.Combine(o.Directory, "decisions.ndjson")) { AutoFlush = true };
@@ -213,7 +214,7 @@ internal static class WmiFanExperiment
                 EnsureNormal();
                 var sent = session?.Apply(decision.EqualFanLevel.Value, safety.CustomControlPermitted) ?? false;
                 decisions.WriteLine(JsonSerializer.Serialize(new { Utc = DateTimeOffset.UtcNow,
-                    decision.EqualFanLevel, decision.RawDemandLevel, Sent = sent, o.Control,
+                    decision.EqualFanLevel, decision.RawDemandLevel, decision.Detail, Sent = sent, o.Control,
                     WindowsPower = SystemPowerStatusReader.Read(),
                     snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC,
                     snapshot.CpuFanRpm, snapshot.GpuFanRpm, snapshot.FanSampledAtUtc,

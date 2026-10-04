@@ -4,7 +4,7 @@ Ruta experimental independiente del backend productivo. No instala el driver ACP
 
 ## Diseño
 
-- Normal: curva candidata existente, con mínimo experimental 30 y máximo 50, niveles CPU/GPU iguales, subida gradual y bajada confirmada. Se escribe sólo cuando cambia el nivel. El mismo SafetyGate exige telemetría completa, fresca, plausible y temperaturas inferiores a los umbrales de entrega a firmware. No hay lectura de consignas ni guardas EC, tampoco sustitutos ficticios.
+- Normal: curva candidata existente, con mínimo experimental 30 y máximo 50 y niveles CPU/GPU iguales. La inercia experimental descrita abajo confirma las variaciones pequeñas de potencia/carga y espera una bajada sostenida. Se escribe sólo cuando cambia el nivel. El mismo SafetyGate exige telemetría completa, fresca, plausible y temperaturas inferiores a los umbrales de entrega a firmware. No hay lectura de consignas ni guardas EC, tampoco sustitutos ficticios.
 - Cada ciclo, tanto en simulación como en control, espera una nueva lectura RPM `20008h/2Dh` con presupuesto total de 3 segundos usando el lector/broker existente. Sólo después se muestrean CPU/GPU y se evalúa la curva. El snapshot consume la publicación de esa lectura sin programar otra consulta periódica. Una consulta rechazada, cancelada o vencida detiene el ciclo sin reutilizar el cache como sustituto. La antigüedad RPM sigue empezando antes de adquirir la respuesta WMI; los timestamps CPU/GPU comienzan después de esa espera. No se modifica el polling de la GUI ni de las demás rutas.
 - Recuperación: se cierra permanentemente la admisión normal y el supervisor envía `FF/FF → LegacyDefault` después de confirmar salida del worker y drenaje de sus consultas. Se intenta LegacyDefault aunque falle la liberación. La aceptación de ambas llamadas **no demuestra independientemente propiedad del firmware**.
 - Supervisor separado: observa heartbeat, salida del worker y eventos ACPI 13/15. El worker detecta pérdida del supervisor y trata de liberar localmente si había intención de escritura. No protege frente a bloqueo de Windows, apagado, doble muerte o firmware bloqueado.
@@ -28,7 +28,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-W
 
 No ejecutar ambas a la vez. Pasar a Control sólo si la primera terminó con captura completa, telemetría admitida y sin nuevos ACPI 13/15; ante cualquier fallo conservar y enviar el ZIP antes de repetir. Q en el recolector solicita cierre normal. No cerrar la consola a la fuerza. El watchdog M4 previamente activo se pausa para evitar sus lecturas EC y se reinicia después del ZIP si no queda lease ni proceso experimental activo; su reinicio queda fuera de la ventana de comparación.
 
-Adjuntar ambos ZIP y SHA256. Cada sesión conserva CSV de sensores, decisiones, intención de escritura, heartbeat, resultados del worker, resumen del supervisor, dos cronologías nativas y los EVTX/ETL habituales. Los eventos en la recuperación cuentan también. Se informa explícitamente `FirmwareRestorationVerified=false`, incluso con solicitudes aceptadas.
+Adjuntar ambos ZIP y SHA256. Cada sesión conserva CSV de sensores, decisiones con motivo, curva (`policy.json`), inercia efectiva (`inertia.json`), intención de escritura, heartbeat, resultados del worker, resumen del supervisor, dos cronologías nativas y los EVTX/ETL habituales. Los eventos en la recuperación cuentan también. Se informa explícitamente `FirmwareRestorationVerified=false`, incluso con solicitudes aceptadas.
 
 ## Captura de simulación ded92d, 2026-10-04
 
@@ -53,7 +53,32 @@ SHA-256 de los ZIP revisados:
 
 La adquisición secuencial descrita arriba elimina esa dependencia del polling respecto al tiempo de muestreo y escrituras del ciclo. Las pruebas sin hardware reproducen el cache vencido y la espera que agota una admisión de 2704 ms; exigen una adquisición real nueva, comprueban que el snapshot no programa polling propio y conservan el vencimiento exacto a 3000 ms. También rechazan respuestas inválidas, consultas completadas demasiado tarde y stop antes/después de adquirir RPM. Se mantienen las comprobaciones de stop y frescura bajo el mutex y justo antes del método nativo: un retraso real todavía puede cerrar la admisión. No se añade reintento de setters ni se cambia la curva o su inercia.
 
-La corrección necesita otra captura física completa antes de avanzar a uso diario. Repetir primero simulación con esta nueva coordinación; pasar a control sólo después de revisar su resultado.
+## Validación de coordinación 942b0e / 41d69e
+
+Las dos capturas con la adquisición secuencial completaron cinco minutos. `942b0e` fue simulación: 190 consultas RPM, máximo nativo 389,57 ms, edad RPM capturada máxima 907 ms y ninguna orden. `41d69e` fue control activo: 191 consultas RPM, 190 decisiones admitidas y tres órdenes normales `30 → 32 → 31`; edad RPM capturada máxima 875 ms y duración nativa máxima 397,84 ms. Ambas capturas fueron válidas, sin nuevos ACPI 13/15 detectados, sin acceso EC directo registrado ni finalización nativa desconocida o lease retenido. En control, las solicitudes de liberación `FF/FF → LegacyDefault` retornaron cero; no se verificó independientemente propiedad del firmware.
+
+SHA-256:
+
+- `942b0e`: `28b975c3cfa2723809cada441cc8b012567b9f03df078a4d8f9ec95a5bbef9fd`.
+- `41d69e`: `2142cc285e67c4669d55b64338bc02b88504d9436f8ecc9609c79c92f781c307`.
+
+Estos resultados respaldan la coordinación en esas ventanas con carga ligera. No validan todas las cargas, uso diario o eliminación definitiva de los episodios ACPI.
+
+## Inercia experimental
+
+`WmiFanInertiaPolicy` se usa únicamente en este arnés, tanto en simulación como con `-Control`. La curva, el rango 30–50 y las lecturas originales permanecen iguales. El motor compartido conserva su comportamiento en la GUI y otras rutas. Se obtiene la demanda instantánea de las seis curvas y se aplica una sola capa de suavizado:
+
+- Primera decisión: nivel solicitado por la curva, sin espera añadida.
+- Subida de uno o dos niveles causada sólo por potencia/carga: al menos dos segundos continuos pidiendo más que el nivel actual. Se sube hasta el menor nivel pedido durante la ventana, respetando el paso máximo existente de cuatro niveles. Si la demanda deja de pedir una subida, se reinicia la confirmación.
+- Si cualquiera de las curvas de temperatura pide subir, o la demanda pide más de dos niveles adicionales, se responde en esa muestra sin confirmación temporal, conservando el paso máximo de cuatro niveles.
+- Bajada: la demanda debe permanecer por debajo de la banda de un nivel durante al menos doce segundos. Se baja un nivel y la siguiente bajada necesita otra ventana continua. Volver a la banda o pedir una subida reinicia la espera. Se usan timestamps de muestras consecutivas válidas; no una cantidad fija de muestras.
+- Entradas inválidas, duplicadas, fuera de orden o con huecos mayores de tres segundos producen rechazo y borran las confirmaciones. No se devuelve una decisión de mantenimiento aceptada ante datos inválidos. El worker conserva su parada y recuperación ante estos rechazos.
+
+`policy.json` conserva la curva candidata y sus parámetros originales; `inertia.json` documenta el reemplazo experimental de la confirmación de bajada por muestras por la confirmación temporal descrita. `decisions.ndjson` añade `Detail` para explicar cada mantenimiento o cambio. No se filtran temperaturas ni se amplía la edad permitida de ninguna lectura. SafetyGate continúa evaluando los sensores antes de la política y antes de despachar; CPU a 95 °C o GPU a 87 °C cierran la admisión normal sin esperar la inercia. La coordinación WMI, las comprobaciones bajo el mutex y la recuperación permanecen iguales.
+
+Las pruebas sin hardware cubren fluctuaciones breves, demanda sostenida con cadencias de 0,5 y 2,5 segundos, reinicio de ventanas, respuesta CPU/GPU inmediata, huecos/entradas inválidas y despacho/recuperación de la sesión. Una secuencia de enfriamientos cortos entre ráfagas reduce órdenes de bajada/subida frente a la política anterior. Al reproducir las 190 muestras admitidas de `41d69e` con ambos motores se mantienen las mismas tres intenciones `30 → 32 → 31`; la bajada nueva ocurre después de 13,28 segundos de demanda baja sostenida. Es una reproducción offline: no predice las temperaturas que tendrá el equipo al cambiar su ventilación.
+
+La inercia todavía necesita prueba física. Ejecutar primero simulación con esta versión; revisar la captura antes de pasar a `-Control`. El suavizado puede reducir cambios audibles, pero no soluciona por sí mismo el vencimiento de telemetría: esa protección y su coordinación ya corregida siguen siendo necesarias. Niveles CPU/GPU iguales tampoco garantizan RPM iguales.
 
 ## Interpretación y límites
 

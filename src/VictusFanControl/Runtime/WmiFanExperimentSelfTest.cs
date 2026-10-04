@@ -17,6 +17,7 @@ internal static class WmiFanExperimentSelfTest
         try
         {
             TestFreshAcquisitionAsync().GetAwaiter().GetResult();
+            TestInertia();
             var result = "{\"Pid\":31920,\"ExitCode\":1,\"StopReason\":\"Telemetry admission lost\",\"SamplesAdmitted\":true,\"NormalPhaseEnded\":true}";
             Check(WmiFanExperiment.ReadWorkerStopReason(result, 31920, 1) == "Telemetry admission lost",
                 "Worker fault must be reported instead of the guardian's duration default.");
@@ -30,7 +31,7 @@ internal static class WmiFanExperimentSelfTest
             Check(!WmiFanExperiment.CanRetireLease(true, false, true, true), "Unknown shadow native call may not retire the lease.");
             Check(!WmiFanExperiment.CanRetireLease(false, true, false, false), "Running worker may not retire the lease.");
             Check(!WmiFanExperiment.CanRetireLease(false, false, false, true), "Unaccepted release may not retire the lease.");
-            var policy = new AdaptiveFanPolicyEngine(WmiFanExperiment.CreatePolicy());
+            var policy = new WmiFanInertiaPolicy(WmiFanExperiment.CreatePolicy());
             var t = DateTimeOffset.UtcNow;
             var idle = policy.Evaluate(new(t, 40, 10, 0, 35, 10, 0));
             var hot = policy.Evaluate(new(t.AddSeconds(1), 90, 115, 100, 84, 140, 100));
@@ -116,11 +117,100 @@ internal static class WmiFanExperimentSelfTest
             Reject(() => WmiFanExperimentBoundary.EnsureRequestAllowed(level));
             WmiFanExperimentBoundary.BeginRecovery();
             WmiFanExperimentBoundary.EnsureRequestAllowed(release);
-            output.WriteLine("PASS: WMI sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
+            output.WriteLine("PASS: WMI time-based inertia, immediate thermal increases, sequential fresh acquisition, capture expiry races, failed/canceled reads, normal/recovery lifecycle, failed intent, ambiguous dispatch, independent recovery steps, whitelist, shadow default, EC prohibition and retained native completion.");
             return 0;
         }
         catch (Exception ex) { output.WriteLine("FAIL: " + ex); return 1; }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private static void TestInertia()
+    {
+        var config = WmiFanExperiment.CreatePolicy() with
+        {
+            CpuPowerCurve = [new(0, 30), new(100, 50)]
+        };
+        var origin = new DateTimeOffset(2026, 10, 4, 6, 0, 0, TimeSpan.Zero);
+        AdaptiveFanPolicyInput Input(double seconds, int level = 30) =>
+            new(origin.AddSeconds(seconds), 40, (level - 30) * 5, 0, 35, 0, 0);
+        var policy = new WmiFanInertiaPolicy(config);
+        Check(policy.Evaluate(Input(0)).EqualFanLevel == 30, "Inertia changed the initial floor.");
+        Check(policy.Evaluate(Input(1, 32)).EqualFanLevel == 30, "Small power spike was sent immediately.");
+        Check(policy.Evaluate(Input(2, 31)).EqualFanLevel == 30, "Small increase confirmed too early.");
+        Check(policy.Evaluate(Input(3, 32)).EqualFanLevel == 31, "Increase must use the lowest sustained demand.");
+        Check(policy.Evaluate(Input(4, 32)).EqualFanLevel == 31, "Each small step needs its own window.");
+        Check(policy.Evaluate(Input(5)).EqualFanLevel == 31, "One-level hysteresis was lost.");
+        Check(policy.Evaluate(Input(6, 32)).EqualFanLevel == 31, "Interrupted increase confirmation survived.");
+        Check(policy.Evaluate(Input(7, 40)).EqualFanLevel == 35, "Large demand must bypass delay and preserve up-step limit.");
+
+        foreach (var gpu in new[] { false, true })
+        {
+            policy = new(config);
+            policy.Evaluate(Input(0));
+            policy.Evaluate(Input(1, 31)); // A small power increase is still pending.
+            var hot = Input(1.5) with { CpuEffectiveTemperatureC = gpu ? 40 : 78, GpuTemperatureC = gpu ? 72 : 35 };
+            Check(policy.Evaluate(hot).EqualFanLevel == 34,
+                "CPU/GPU temperature-driven increases must bypass confirmation and preserve slew.");
+        }
+
+        foreach (var cadence in new[] { 0.5, 2.5 })
+        {
+            policy = new(config);
+            policy.Evaluate(Input(0, 40));
+            var start = cadence;
+            for (var s = start; s < start + 12; s += cadence)
+                Check(policy.Evaluate(Input(s)).EqualFanLevel == 40, "Decrease counted samples instead of 12 real seconds.");
+            Check(policy.Evaluate(Input(start + 12)).EqualFanLevel == 39, "Sustained decrease did not occur at 12 seconds.");
+            Check(policy.Evaluate(Input(start + 12 + cadence)).EqualFanLevel == 39, "Second down-step bypassed confirmation.");
+        }
+
+        policy = new(config);
+        policy.Evaluate(Input(0, 40));
+        for (var s = 1; s <= 10; s++) policy.Evaluate(Input(s));
+        policy.Evaluate(Input(11, 39)); // Inside the one-level decrease deadband.
+        for (var s = 12; s < 24; s++)
+            Check(policy.Evaluate(Input(s)).EqualFanLevel == 40, "Deadband did not reset the decrease window.");
+        Check(policy.Evaluate(Input(24)).EqualFanLevel == 39, "Restarted decrease window never completed.");
+
+        foreach (var invalid in new[] { "input", "duplicate", "backwards", "gap" })
+        {
+            policy = new(config);
+            policy.Evaluate(Input(0, 40));
+            for (var s = 1; s <= 10; s++) policy.Evaluate(Input(s));
+            var bad = invalid switch
+            {
+                "input" => Input(11) with { CpuPackagePowerW = double.NaN },
+                "duplicate" => Input(10),
+                "backwards" => Input(9),
+                _ => Input(14)
+            };
+            var rejected = policy.Evaluate(bad);
+            Check(!rejected.Accepted && rejected.EqualFanLevel is null,
+                "Inertia fabricated an accepted hold across invalid/stale/discontinuous telemetry.");
+            var next = invalid == "gap" ? 15 : 12;
+            Check(policy.Evaluate(Input(next)).EqualFanLevel == 40, "Rejected input did not clear confirmation.");
+        }
+
+        // Acoustic oscillation fixture: short cool periods between recurring
+        // load bursts. Count actual session dispatches, not repeated decisions.
+        var original = new AdaptiveFanPolicyEngine(config);
+        policy = new(config);
+        var oldWrites = 0;
+        var newWrites = 0;
+        var oldSession = new WmiFanSession(_ => { oldWrites++; return 0; }, _ => { });
+        var newSession = new WmiFanSession(_ => { newWrites++; return 0; }, _ => { });
+        for (var s = 0; s <= 39; s++)
+        {
+            var input = Input(s, s % 13 == 0 || s % 13 >= 10 ? 34 : 30);
+            oldSession.Apply(original.Evaluate(input).EqualFanLevel!.Value, true);
+            newSession.Apply(policy.Evaluate(input).EqualFanLevel!.Value, true);
+        }
+        Check(oldWrites > newWrites && newWrites == 1,
+            "Short cooling fluctuations should no longer generate repeated down/up orders.");
+        Reject(() => newSession.Apply(34, false));
+        newSession.Recover();
+        Check(newWrites == 3 && newSession.Phase == WmiFanSessionPhase.ReleaseAccepted,
+            "Inertia must not delay admission refusal or the two recovery requests.");
     }
 
     private static async Task TestFreshAcquisitionAsync()
