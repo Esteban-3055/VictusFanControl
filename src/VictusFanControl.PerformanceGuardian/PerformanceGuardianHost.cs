@@ -391,6 +391,29 @@ internal sealed class PerformanceGuardianHost
 
             PerformanceGuardianAuthorityResult result;
 
+            if (request.Type is
+                    PerformanceGuardianProtocol.DisableSession or
+                    PerformanceGuardianProtocol.Shutdown)
+            {
+                var envelope =
+                    ValidateSideEffectEnvelope(
+                        authority,
+                        request);
+
+                if (!envelope.Accepted)
+                {
+                    _rejectedRequests++;
+
+                    await SendResponseAsync(
+                        pipe,
+                        request,
+                        envelope,
+                        stop.Token).ConfigureAwait(false);
+
+                    continue;
+                }
+            }
+
             if (request.Type ==
                     PerformanceGuardianProtocol.DisableSession &&
                 wasEnabled)
@@ -574,6 +597,87 @@ internal sealed class PerformanceGuardianHost
         {
         }
     }
+
+    private PerformanceGuardianAuthorityResult ValidateSideEffectEnvelope(
+        PerformanceGuardianAuthority authority,
+        PerformanceGuardianRequest request)
+    {
+        if (request.ProtocolVersion !=
+            PerformanceGuardianProtocol.Version)
+        {
+            return RejectEnvelope(
+                authority,
+                "PROTOCOL_VERSION",
+                "Performance Guardian protocol version mismatch.");
+        }
+
+        if (request.RequestId ==
+            Guid.Empty)
+        {
+            return RejectEnvelope(
+                authority,
+                "REQUEST_ID",
+                "Performance Guardian request id cannot be empty.");
+        }
+
+        if (!string.Equals(
+                request.TargetProfileId,
+                _options.TargetProfileId,
+                StringComparison.Ordinal))
+        {
+            return RejectEnvelope(
+                authority,
+                "TARGET_MISMATCH",
+                "Performance Guardian target profile mismatch.");
+        }
+
+        if (request.SessionNonce !=
+            _options.SessionNonce)
+        {
+            return RejectEnvelope(
+                authority,
+                "AUTH_NONCE",
+                "Performance Guardian session nonce mismatch.");
+        }
+
+        if (authority.Phase is
+            PerformanceGuardianAuthorityPhase.ParentLost or
+            PerformanceGuardianAuthorityPhase.Stopped)
+        {
+            return RejectEnvelope(
+                authority,
+                "GUARDIAN_STOPPING",
+                "Performance Guardian authority is no longer active.");
+        }
+
+        return new PerformanceGuardianAuthorityResult(
+            Accepted: true,
+            Code:
+                "ENVELOPE_OK",
+            Message:
+                "Performance Guardian side-effect envelope validated.",
+            Phase:
+                authority.Phase,
+            SessionEnabled:
+                authority.SessionEnabled,
+            CpuEnabled:
+                authority.CpuEnabled,
+            GpuEnabled:
+                authority.GpuEnabled);
+    }
+
+    private static PerformanceGuardianAuthorityResult RejectEnvelope(
+        PerformanceGuardianAuthority authority,
+        string code,
+        string message) =>
+        new(
+            Accepted: false,
+            code,
+            message,
+            authority.Phase,
+            authority.SessionEnabled,
+            authority.CpuEnabled,
+            authority.GpuEnabled);
 
     private async ValueTask SendResponseAsync(
         Stream stream,

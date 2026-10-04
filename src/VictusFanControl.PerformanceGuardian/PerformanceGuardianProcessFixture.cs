@@ -81,6 +81,26 @@ internal static class PerformanceGuardianProcessFixture
                 throw new InvalidDataException(
                     "Performance Guardian supervisor evidence is missing.");
 
+            try
+            {
+                using var guardianProcess =
+                    Process.GetProcessById(
+                        supervisorEvidence.GuardianPid);
+
+                if (guardianProcess.StartTime
+                        .ToUniversalTime()
+                        .Ticks ==
+                    supervisorEvidence.GuardianStartUtcTicks)
+                {
+                    await guardianProcess.WaitForExitAsync(
+                        timeout.Token).ConfigureAwait(false);
+                }
+            }
+            catch (ArgumentException)
+            {
+                // Guardian already exited after handling owner death.
+            }
+
             await WaitForFileAsync(
                 supervisorEvidence.GuardianReportPath,
                 timeout.Token).ConfigureAwait(false);

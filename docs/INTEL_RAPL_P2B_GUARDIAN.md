@@ -1615,3 +1615,14 @@ guiIntegrationAuthorized remains false.
 startupPersistenceAuthorized remains false.
 automaticProfileIntegrationAuthorized remains false.
 
+### Side-effect envelope hardening
+
+DISABLE_SESSION and SHUTDOWN are cleanup-capable commands. Their protocol
+version, request id, exact target and session nonce are now validated before any
+domain Release callback can run. A malformed or wrong-nonce request therefore
+cannot trigger cleanup merely by naming a side-effect command.
+
+The detached-process fixture also waits for the guardian process itself to exit
+before asserting named-mutex release, avoiding a report-file/mutex-release race
+in the test.
+
