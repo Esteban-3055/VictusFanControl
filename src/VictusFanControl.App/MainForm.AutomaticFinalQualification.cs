@@ -355,6 +355,8 @@ internal sealed partial class MainForm
             }
 
             EnsureAutomaticFinalQualificationConfiguration();
+            EnsureAutomaticFinalReadyEnvelope(
+                _lastSnapshot);
 
             var safety =
                 EvaluateControlSafety(
@@ -462,6 +464,49 @@ internal sealed partial class MainForm
         }
 
         return Task.CompletedTask;
+    }
+
+    private static void EnsureAutomaticFinalReadyEnvelope(
+        TelemetrySnapshot snapshot)
+    {
+        if (!snapshot.IsComplete ||
+            !snapshot.CpuControlTemperatureC.HasValue ||
+            !snapshot.CpuPackagePowerW.HasValue ||
+            !snapshot.GpuTemperatureC.HasValue ||
+            !snapshot.GpuPowerW.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Final Automatic qualification requires complete CPU/GPU temperature and power telemetry before READY.");
+        }
+
+        var demandTemperature =
+            CpuDemandTemperature.Select(
+                snapshot,
+                CpuDemandTemperatureSource.HottestPerformanceCoresAverage,
+                hottestPerformanceCoreCount: 3);
+
+        if (!demandTemperature.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Final Automatic qualification requires complete typed CPU core telemetry for the hottest-3-P-Core demand source.");
+        }
+
+        if (snapshot.CpuControlTemperatureC.Value >
+                Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC ||
+            snapshot.GpuTemperatureC.Value >
+                Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC ||
+            snapshot.CpuPackagePowerW.Value >
+                Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW ||
+            snapshot.GpuPowerW.Value >
+                Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW)
+        {
+            throw new InvalidOperationException(
+                $"Final Automatic preflight envelope refused READY: " +
+                $"CPU={snapshot.CpuControlTemperatureC.Value:0.0}C/" +
+                $"{snapshot.CpuPackagePowerW.Value:0.0}W, " +
+                $"GPU={snapshot.GpuTemperatureC.Value:0.0}C/" +
+                $"{snapshot.GpuPowerW.Value:0.0}W.");
+        }
     }
 
     private void EnsureAutomaticFinalQualificationConfiguration()
