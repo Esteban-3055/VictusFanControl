@@ -84,6 +84,7 @@ internal sealed class PerformanceGuardianHost
 
     private readonly GuardianHostOptions _options;
     private readonly IGuardianDomainLifecycle _domains;
+    private readonly IGuardianPowerSourceRuntime _sourceRuntime;
 
     private int _acceptedRequests;
     private int _rejectedRequests;
@@ -94,7 +95,8 @@ internal sealed class PerformanceGuardianHost
 
     internal PerformanceGuardianHost(
         GuardianHostOptions options,
-        IGuardianDomainLifecycle domains)
+        IGuardianDomainLifecycle domains,
+        IGuardianPowerSourceRuntime sourceRuntime)
     {
         _options =
             options;
@@ -103,6 +105,11 @@ internal sealed class PerformanceGuardianHost
             domains ??
             throw new ArgumentNullException(
                 nameof(domains));
+
+        _sourceRuntime =
+            sourceRuntime ??
+            throw new ArgumentNullException(
+                nameof(sourceRuntime));
     }
 
     internal async Task<int> RunAsync(
@@ -244,6 +251,17 @@ internal sealed class PerformanceGuardianHost
                 {
                     try
                     {
+                        _sourceRuntime.Stop(
+                            "PARENT_PROCESS_EXIT");
+                    }
+                    catch (Exception ex)
+                    {
+                        failure =
+                            ex;
+                    }
+
+                    try
+                    {
                         await _domains.ReleaseAsync(
                             cpu,
                             gpu,
@@ -253,7 +271,11 @@ internal sealed class PerformanceGuardianHost
                     catch (Exception ex)
                     {
                         failure =
-                            ex;
+                            failure is null
+                                ? ex
+                                : new AggregateException(
+                                    failure,
+                                    ex);
                     }
                 }
 
@@ -290,6 +312,20 @@ internal sealed class PerformanceGuardianHost
         }
         finally
         {
+            try
+            {
+                _sourceRuntime.Dispose();
+            }
+            catch (Exception ex)
+            {
+                failure =
+                    failure is null
+                        ? ex
+                        : new AggregateException(
+                            failure,
+                            ex);
+            }
+
             try
             {
                 WriteReport(
@@ -420,6 +456,37 @@ internal sealed class PerformanceGuardianHost
             {
                 try
                 {
+                    _sourceRuntime.Stop(
+                        "CLIENT_DISABLE_SESSION");
+                }
+                catch (Exception ex)
+                {
+                    _rejectedRequests++;
+
+                    await SendResponseAsync(
+                        pipe,
+                        request,
+                        new PerformanceGuardianAuthorityResult(
+                            Accepted: false,
+                            Code:
+                                "SOURCE_RUNTIME_STOP_FAILED",
+                            Message:
+                                ex.Message,
+                            Phase:
+                                authority.Phase,
+                            SessionEnabled:
+                                authority.SessionEnabled,
+                            CpuEnabled:
+                                authority.CpuEnabled,
+                            GpuEnabled:
+                                authority.GpuEnabled),
+                        stop.Token).ConfigureAwait(false);
+
+                    continue;
+                }
+
+                try
+                {
                     await _domains.ReleaseAsync(
                         previousCpu,
                         previousGpu,
@@ -457,6 +524,37 @@ internal sealed class PerformanceGuardianHost
                     PerformanceGuardianProtocol.Shutdown &&
                 wasEnabled)
             {
+                try
+                {
+                    _sourceRuntime.Stop(
+                        "CLIENT_SHUTDOWN");
+                }
+                catch (Exception ex)
+                {
+                    _rejectedRequests++;
+
+                    await SendResponseAsync(
+                        pipe,
+                        request,
+                        new PerformanceGuardianAuthorityResult(
+                            Accepted: false,
+                            Code:
+                                "SOURCE_RUNTIME_STOP_FAILED",
+                            Message:
+                                ex.Message,
+                            Phase:
+                                authority.Phase,
+                            SessionEnabled:
+                                authority.SessionEnabled,
+                            CpuEnabled:
+                                authority.CpuEnabled,
+                            GpuEnabled:
+                                authority.GpuEnabled),
+                        stop.Token).ConfigureAwait(false);
+
+                    continue;
+                }
+
                 try
                 {
                     await _domains.ReleaseAsync(
@@ -524,15 +622,49 @@ internal sealed class PerformanceGuardianHost
                 !wasEnabled &&
                 result.SessionEnabled)
             {
+                var domainsEnabled =
+                    false;
+
                 try
                 {
                     await _domains.EnableAsync(
                         result.CpuEnabled,
                         result.GpuEnabled,
                         stop.Token).ConfigureAwait(false);
+
+                    domainsEnabled =
+                        true;
+
+                    _sourceRuntime.Start(
+                        result.CpuEnabled,
+                        result.GpuEnabled);
                 }
                 catch (Exception ex)
                 {
+                    try
+                    {
+                        _sourceRuntime.Stop(
+                            "ENABLE_SESSION_ROLLBACK");
+                    }
+                    catch
+                    {
+                    }
+
+                    if (domainsEnabled)
+                    {
+                        try
+                        {
+                            await _domains.ReleaseAsync(
+                                result.CpuEnabled,
+                                result.GpuEnabled,
+                                "ENABLE_SESSION_ROLLBACK",
+                                CancellationToken.None).ConfigureAwait(false);
+                        }
+                        catch
+                        {
+                        }
+                    }
+
                     _ =
                         authority.Handle(
                             new PerformanceGuardianRequest(
@@ -546,7 +678,9 @@ internal sealed class PerformanceGuardianHost
                         new PerformanceGuardianAuthorityResult(
                             Accepted: false,
                             Code:
-                                "DOMAIN_ENABLE_FAILED",
+                                domainsEnabled
+                                    ? "SOURCE_RUNTIME_START_FAILED"
+                                    : "DOMAIN_ENABLE_FAILED",
                             Message:
                                 ex.Message,
                             Phase:
@@ -718,9 +852,12 @@ internal sealed class PerformanceGuardianHost
         var recording =
             _domains as RecordingGuardianDomainLifecycle;
 
+        var source =
+            _sourceRuntime.Snapshot;
+
         var report =
             new GuardianReport(
-                SchemaVersion: 1,
+                SchemaVersion: 2,
                 TargetProfileId:
                     _options.TargetProfileId,
                 OwnerPid:
@@ -745,6 +882,30 @@ internal sealed class PerformanceGuardianHost
                     recording?.ReleaseCalls,
                 LastReleaseReason:
                     recording?.LastReleaseReason,
+                SourceRuntimeActive:
+                    source.Active,
+                SourceRuntimeStartCalls:
+                    source.StartCalls,
+                SourceRuntimeStopCalls:
+                    source.StopCalls,
+                SourceListenerRegistrations:
+                    source.ListenerRegistrations,
+                SourceNotificationSignals:
+                    source.NotificationSignals,
+                SourceDuplicateSignals:
+                    source.DuplicateSignals,
+                SourceCpuDispatchAttempts:
+                    source.CpuDispatchAttempts,
+                SourceGpuDispatchAttempts:
+                    source.GpuDispatchAttempts,
+                SourceLastSource:
+                    source.LastSource.ToString(),
+                SourceLastStatus:
+                    source.LastStatus,
+                SourceLastStopReason:
+                    source.LastStopReason,
+                SourceFailure:
+                    source.Failure,
                 HardwareWritesPerformed:
                     false,
                 Failure:
@@ -827,6 +988,18 @@ internal sealed class PerformanceGuardianHost
         int? EnableCalls,
         int? ReleaseCalls,
         string? LastReleaseReason,
+        bool SourceRuntimeActive,
+        int SourceRuntimeStartCalls,
+        int SourceRuntimeStopCalls,
+        int SourceListenerRegistrations,
+        int SourceNotificationSignals,
+        int SourceDuplicateSignals,
+        int SourceCpuDispatchAttempts,
+        int SourceGpuDispatchAttempts,
+        string SourceLastSource,
+        string? SourceLastStatus,
+        string? SourceLastStopReason,
+        string? SourceFailure,
         bool HardwareWritesPerformed,
         string? Failure);
 }

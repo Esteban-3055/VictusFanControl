@@ -121,6 +121,10 @@ internal static class PerformanceGuardianProcessFixture
                 "explicit session enable must succeed");
 
             Require(
+                supervisorEvidence.BadDisableNoncePreservedSession,
+                "wrong/stale nonce cleanup command must be rejected while listener remains active");
+
+            Require(
                 supervisorEvidence.ReconnectStatusPreserved,
                 "same nonce reconnect must preserve active session");
 
@@ -151,6 +155,23 @@ internal static class PerformanceGuardianProcessFixture
                 guardian.EnableCalls == 1 &&
                 guardian.ReleaseCalls == 1,
                 "guardian must enable once and release once");
+
+            Require(
+                guardian.SourceRuntimeStartCalls == 1 &&
+                guardian.SourceListenerRegistrations == 1,
+                "explicit ENABLE_SESSION must prime/register exactly one Guardian source runtime");
+
+            Require(
+                guardian.SourceRuntimeStopCalls == 1 &&
+                !guardian.SourceRuntimeActive,
+                "parent death must stop the Guardian source listener exactly once");
+
+            Require(
+                string.Equals(
+                    guardian.SourceLastStopReason,
+                    "PARENT_PROCESS_EXIT",
+                    StringComparison.Ordinal),
+                "parent death must fence source notifications before release");
 
             Require(
                 string.Equals(
@@ -274,6 +295,13 @@ internal static class PerformanceGuardianProcessFixture
                     owner.Id,
                     ownerStartTicks).ConfigureAwait(false);
 
+            var badDisableNoncePreservedSession =
+                await VerifyBadDisableNonceRejectedAsync(
+                    pipeName,
+                    nonce,
+                    owner.Id,
+                    ownerStartTicks).ConfigureAwait(false);
+
             var reconnectStatusPreserved =
                 await VerifyReconnectAsync(
                     pipeName,
@@ -331,6 +359,8 @@ internal static class PerformanceGuardianProcessFixture
                         badNonceRejected,
                     SessionEnabled:
                         sessionEnabled,
+                    BadDisableNoncePreservedSession:
+                        badDisableNoncePreservedSession,
                     ReconnectStatusPreserved:
                         reconnectStatusPreserved,
                     DuplicateGuardianExitCode:
@@ -512,6 +542,56 @@ internal static class PerformanceGuardianProcessFixture
                 response.Code,
                 "SESSION_ENABLED",
                 StringComparison.Ordinal);
+    }
+
+    private static async Task<bool> VerifyBadDisableNonceRejectedAsync(
+        string pipeName,
+        Guid nonce,
+        int ownerPid,
+        long ownerStartTicks)
+    {
+        using var pipe =
+            await ConnectAsync(
+                pipeName).ConfigureAwait(false);
+
+        var hello =
+            await RoundTripAsync(
+                pipe,
+                NewRequest(
+                    nonce,
+                    PerformanceGuardianProtocol.Hello,
+                    ownerPid,
+                    ownerStartTicks)).ConfigureAwait(false);
+
+        if (!hello.Ok ||
+            !hello.SessionEnabled)
+        {
+            return false;
+        }
+
+        var badDisable =
+            await RoundTripAsync(
+                pipe,
+                NewRequest(
+                    Guid.NewGuid(),
+                    PerformanceGuardianProtocol.DisableSession)).ConfigureAwait(false);
+
+        var status =
+            await RoundTripAsync(
+                pipe,
+                NewRequest(
+                    nonce,
+                    PerformanceGuardianProtocol.Status)).ConfigureAwait(false);
+
+        return !badDisable.Ok &&
+            string.Equals(
+                badDisable.Code,
+                "AUTH_NONCE",
+                StringComparison.Ordinal) &&
+            status.Ok &&
+            status.SessionEnabled &&
+            status.CpuEnabled &&
+            status.GpuEnabled;
     }
 
     private static async Task<bool> VerifyReconnectAsync(
@@ -721,6 +801,7 @@ internal static class PerformanceGuardianProcessFixture
         string MutexName,
         bool BadNonceRejected,
         bool SessionEnabled,
+        bool BadDisableNoncePreservedSession,
         bool ReconnectStatusPreserved,
         int DuplicateGuardianExitCode);
 
@@ -738,6 +819,18 @@ internal static class PerformanceGuardianProcessFixture
         int? EnableCalls,
         int? ReleaseCalls,
         string? LastReleaseReason,
+        bool SourceRuntimeActive,
+        int SourceRuntimeStartCalls,
+        int SourceRuntimeStopCalls,
+        int SourceListenerRegistrations,
+        int SourceNotificationSignals,
+        int SourceDuplicateSignals,
+        int SourceCpuDispatchAttempts,
+        int SourceGpuDispatchAttempts,
+        string SourceLastSource,
+        string? SourceLastStatus,
+        string? SourceLastStopReason,
+        string? SourceFailure,
         bool HardwareWritesPerformed,
         string? Failure);
 }

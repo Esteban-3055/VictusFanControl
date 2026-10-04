@@ -61,10 +61,24 @@ internal static class Program
                 var domains =
                     new RecordingGuardianDomainLifecycle();
 
+                var cpuSource =
+                    new RecordingGuardianCpuSourceTransitionSink();
+
+                var gpuSource =
+                    new RecordingGuardianGpuSourceTransitionSink();
+
+                var sourceRuntime =
+                    new GuardianPerformancePowerSourceRuntime(
+                        new WindowsPerformancePowerSourceReader(),
+                        cpuSource,
+                        gpuSource,
+                        new WindowsGuardianPowerSourceNotificationListenerFactory());
+
                 var host =
                     new PerformanceGuardianHost(
                         options,
-                        domains);
+                        domains,
+                        sourceRuntime);
 
                 return await host.RunAsync(
                         CancellationToken.None)
