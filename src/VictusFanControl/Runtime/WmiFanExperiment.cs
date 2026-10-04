@@ -48,6 +48,19 @@ internal static class WmiFanExperiment
     private sealed record AcpiEvent(long RecordId, int Id, DateTime Utc, string Xml);
     internal static bool CanRetireLease(bool noWriteIntent, bool releaseAccepted, bool nativeUnknown, bool workerExited) =>
         workerExited && !nativeUnknown && (noWriteIntent || releaseAccepted);
+    internal static string ReadWorkerStopReason(string json, int expectedPid, int exitCode)
+    {
+        using var document = JsonDocument.Parse(json);
+        var result = document.RootElement;
+        if (result.GetProperty("Pid").GetInt32() != expectedPid ||
+            result.GetProperty("ExitCode").GetInt32() != exitCode ||
+            !result.GetProperty("NormalPhaseEnded").GetBoolean())
+            throw new InvalidOperationException("Worker result identity/exit status mismatch.");
+        if (exitCode == 0 && !result.GetProperty("SamplesAdmitted").GetBoolean())
+            throw new InvalidOperationException("Worker completed without admitted telemetry.");
+        return result.GetProperty("StopReason").GetString() is { Length: > 0 } reason
+            ? reason : throw new InvalidOperationException("Worker result lacks stop reason.");
+    }
     internal static AdaptiveFanPolicyConfig CreatePolicy()
     {
         var candidate = Hp8C40AdaptiveCandidateV1.Create();
@@ -145,12 +158,18 @@ internal static class WmiFanExperiment
                 if (gap > TimeSpan.FromSeconds(3)) throw new InvalidOperationException("Timing/suspend gap; normal control stopped.");
                 var snapshot = reader.ReadSnapshot();
                 await csv.WriteAsync(snapshot, CancellationToken.None);
-                var safety = SafetyGate.Evaluate(identity, SystemState.Healthy, snapshot, DateTimeOffset.UtcNow, fanWritePathPresent: true);
+                var evaluatedAt = DateTimeOffset.UtcNow;
+                var safety = SafetyGate.Evaluate(identity, SystemState.Healthy, snapshot, evaluatedAt, fanWritePathPresent: true);
                 // Cached WMI startup may initially lack a sample. No writes are admitted during warmup.
                 if (!safety.CustomControlPermitted)
                 {
                     if (admitted || clock.Elapsed > TimeSpan.FromSeconds(15))
+                    {
+                        WriteJson(Path.Combine(o.Directory, "telemetry-fault.json"), new { EvaluatedAtUtc = evaluatedAt,
+                            snapshot.Timestamp, snapshot.FanSampledAtUtc, snapshot.FanSampleAgeMilliseconds,
+                            snapshot.FanAgeCapturedAtUtc, snapshot.FanTelemetrySource, safety.Reasons });
                         throw new InvalidOperationException("Telemetry admission lost: " + string.Join("; ", safety.Reasons));
+                    }
                     await Task.Delay(1000, cts.Token);
                     continue;
                 }
@@ -168,7 +187,8 @@ internal static class WmiFanExperiment
                     decision.EqualFanLevel, decision.RawDemandLevel, Sent = sent, o.Control,
                     WindowsPower = SystemPowerStatusReader.Read(),
                     snapshot.CpuControlTemperatureC, snapshot.GpuTemperatureC,
-                    snapshot.CpuFanRpm, snapshot.GpuFanRpm, SetpointReadback = false }));
+                    snapshot.CpuFanRpm, snapshot.GpuFanRpm, snapshot.FanSampledAtUtc,
+                    snapshot.FanSampleAgeMilliseconds, snapshot.FanAgeCapturedAtUtc, SetpointReadback = false }));
                 WriteJson(Path.Combine(o.Directory, "heartbeat.json"), new { Pid = Environment.ProcessId,
                     Utc = DateTimeOffset.UtcNow, ElapsedMs = clock.ElapsedMilliseconds, Level = decision.EqualFanLevel });
                 Console.WriteLine($"{DateTimeOffset.UtcNow:O} {(o.Control ? "WMI CONTROL" : "SHADOW")} level={decision.EqualFanLevel}; CPU={snapshot.CpuControlTemperatureC:0}C GPU={snapshot.GpuTemperatureC:0}C; RPM={snapshot.CpuFanRpm}/{snapshot.GpuFanRpm}");
@@ -191,12 +211,17 @@ internal static class WmiFanExperiment
                 catch (Exception ex) { code = 1; stopReason += "; local recovery: " + ex.Message; }
                 // Retained parent lease is reviewed separately; local acceptance is not ownership proof.
             }
-            WriteJson(Path.Combine(o.Directory, "worker-result.json"), new { ExitCode = code,
+            if (!admitted)
+            {
+                code = 1;
+                stopReason += "; no telemetry sample admitted";
+            }
+            WriteJson(Path.Combine(o.Directory, "worker-result.json"), new { Pid = Environment.ProcessId, ExitCode = code,
                 StopReason = stopReason, SamplesAdmitted = admitted, NormalPhaseEnded = true,
                 DirectEcProhibited = true, FirmwareRestorationVerified = false });
             EcWmiInvestigationTrace.Record(0, "experiment.normal-ended", stopReason);
         }
-        return admitted ? code : 1;
+        return code;
     }
 
     private static async Task<int> GuardianAsync(WmiFanExperimentOptions o)
@@ -225,6 +250,7 @@ internal static class WmiFanExperiment
         long baseline = 0;
         var started = DateTimeOffset.UtcNow;
         string stopReason = "duration";
+        string? workerStopReason = null;
         try
         {
             baseline = LatestSystemRecord(); // Failure rejects before spawning a writer.
@@ -272,9 +298,9 @@ internal static class WmiFanExperiment
             }
             await Task.WhenAll(stdout, stderr);
             code = worker.ExitCode;
+            workerStopReason = ReadWorkerStopReason(File.ReadAllText(Path.Combine(o.Directory, "worker-result.json")), worker.Id, code);
+            if (stopReason == "duration") stopReason = workerStopReason;
             if (events.Count > 0 || stopReason == "heartbeat-timeout") code = 1;
-            // A shadow run with no admitted samples must not appear healthy.
-            if (!File.Exists(Path.Combine(o.Directory, "worker-result.json"))) code = 1;
         }
         catch (Exception ex) { stopReason = ex.Message; Console.Error.WriteLine(ex); code = 1; }
         finally
@@ -310,6 +336,7 @@ internal static class WmiFanExperiment
             var retireLease = CanRetireLease(noWriteIntent, releaseAccepted, nativeUnknown, worker is null || worker.HasExited);
             if (!retireLease) code = 1;
             WriteJson(Path.Combine(o.Directory, "summary.json"), new { ExitCode = code, StopReason = stopReason,
+                WorkerStopReason = workerStopReason,
                 o.Control, DirectEcProhibited = true, ProductionAuthorized = false,
                 NoFanWriteIntent = noWriteIntent, ReleaseRequestsAccepted = releaseAccepted,
                 FirmwareRestorationVerified = false, LeaseRetained = !retireLease,

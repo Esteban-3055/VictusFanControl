@@ -60,15 +60,19 @@ WMI speed never substitutes for setpoint acknowledgement or ownership proof.
 A speed byte L represents the bin `[100L, 100L+99]` RPM. `CpuFanRpm/GpuFanRpm`
 contain its lower nominal value for source compatibility. GUI, tray and console
 prefix this with `~`; diagnostics state the 100-RPM resolution. Snapshot/CSV
-carry source, resolution, query-start UTC timestamp, sample age, and both raw
-speed bytes. Existing CSV columns retain their order; six metadata columns
-are appended. Consumers needing precision should use these fields.
+carry source, resolution, query-start UTC timestamp, sample age, both raw
+speed bytes, and the epoch at which that age was captured. Existing CSV columns
+retain their order; metadata columns are appended. Consumers needing precision
+should use these fields.
 
 `TelemetrySnapshot.IsComplete` also requires fan acquisition metadata and an
 age below 3000 ms for this WMI source. Initial/no-data, expired, failed and
 timeout reads have null fan RPM and cannot contribute to healthy recovery.
 SafetyGate also checks the acquisition age at decision time: a retained snapshot
-adds its elapsed time to the captured fan age and expires at 3000 ms. A fresh
+adds time elapsed since `FanAgeCapturedAtUtc` to the captured fan age and expires
+at 3000 ms. The CPU/GPU sampling-start timestamp remains unchanged, so its
+sampling duration is not counted twice or used to renew CPU/GPU data. Older
+snapshots without this optional field retain the previous conservative check. A fresh
 CPU/GPU snapshot cannot renew an older cached fan sample. Thermal thresholds
 and controller fail-closed behavior are unchanged.
 

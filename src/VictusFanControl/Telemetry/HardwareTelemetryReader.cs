@@ -245,6 +245,12 @@ public sealed class HardwareTelemetryReader : IDisposable
                 "No exact validated hardware target resolved; fan EC telemetry is disabled.";
         }
 
+        // Capture the age epoch BEFORE measuring monotonic age: UTC advances
+        // during this small interval only make the subsequent test conservative.
+        var fanAgeCapturedAtUtc = DateTimeOffset.UtcNow;
+        var fanAgeMilliseconds = wmiFanSample is null
+            ? (long?)null
+            : Math.Max(0, Environment.TickCount64 - wmiFanSample.StartedAtMilliseconds);
         var snapshot = new TelemetrySnapshot(
             Timestamp: timestamp,
             CpuName: Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "Intel CPU",
@@ -263,9 +269,8 @@ public sealed class HardwareTelemetryReader : IDisposable
             FanTelemetrySource = _wmiFans is not null ? "HP-WMI-ACPI-2D" : "PawnIO-EC",
             FanRpmResolution = _wmiFans is not null ? HpWmiFanTelemetrySample.ResolutionRpm : 1,
             FanSampledAtUtc = wmiFanSample?.SampledAtUtc,
-            FanSampleAgeMilliseconds = wmiFanSample is null
-                ? null
-                : Math.Max(0, Environment.TickCount64 - wmiFanSample.StartedAtMilliseconds),
+            FanSampleAgeMilliseconds = fanAgeMilliseconds,
+            FanAgeCapturedAtUtc = _wmiFans is null ? null : fanAgeCapturedAtUtc,
             CpuFanSpeedLevel = wmiFanSample?.CpuSpeedLevel,
             GpuFanSpeedLevel = wmiFanSample?.GpuSpeedLevel
         };

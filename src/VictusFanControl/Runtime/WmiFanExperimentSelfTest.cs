@@ -13,6 +13,14 @@ internal static class WmiFanExperimentSelfTest
         Directory.CreateDirectory(directory);
         try
         {
+            var result = "{\"Pid\":31920,\"ExitCode\":1,\"StopReason\":\"Telemetry admission lost\",\"SamplesAdmitted\":true,\"NormalPhaseEnded\":true}";
+            Check(WmiFanExperiment.ReadWorkerStopReason(result, 31920, 1) == "Telemetry admission lost",
+                "Worker fault must be reported instead of the guardian's duration default.");
+            Reject(() => WmiFanExperiment.ReadWorkerStopReason(result, 31584, 1));
+            Reject(() => WmiFanExperiment.ReadWorkerStopReason(result, 31920, 0));
+            Reject(() => WmiFanExperiment.ReadWorkerStopReason(result.Replace("\"NormalPhaseEnded\":true", "\"NormalPhaseEnded\":false"), 31920, 1));
+            var noSamples = result.Replace("\"ExitCode\":1", "\"ExitCode\":0").Replace("\"SamplesAdmitted\":true", "\"SamplesAdmitted\":false");
+            Reject(() => WmiFanExperiment.ReadWorkerStopReason(noSamples, 31920, 0));
             Check(WmiFanExperiment.CanRetireLease(true, false, false, true), "Completed shadow lease retained unnecessarily.");
             Check(WmiFanExperiment.CanRetireLease(false, true, false, true), "Accepted completed release lease retained unnecessarily.");
             Check(!WmiFanExperiment.CanRetireLease(true, false, true, true), "Unknown shadow native call may not retire the lease.");

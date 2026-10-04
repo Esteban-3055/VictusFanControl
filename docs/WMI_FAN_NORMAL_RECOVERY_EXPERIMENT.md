@@ -29,6 +29,16 @@ No ejecutar ambas a la vez. Pasar a Control sólo si la primera terminó con cap
 
 Adjuntar ambos ZIP y SHA256. Cada sesión conserva CSV de sensores, decisiones, intención de escritura, heartbeat, resultados del worker, resumen del supervisor, dos cronologías nativas y los EVTX/ETL habituales. Los eventos en la recuperación cuentan también. Se informa explícitamente `FirmwareRestorationVerified=false`, incluso con solicitudes aceptadas.
 
+## Captura de simulación ded92d, 2026-10-04
+
+ZIP SHA-256: `cccd8b11d7ff380d1c98788b220839796963a67914af3142ad3b24f3e355492e`. Se verificaron los 143 archivos del manifiesto. Ventana normal de unos 33 segundos; 30 snapshots y 28 decisiones admitidas. Las dos cronologías son consistentes: 17 consultas `20008h/2Dh`, todas con retorno cero y respuesta de 128 bytes; duración nativa mediana 361,69 ms, máxima 383,64 ms. Cero lecturas EC o escrituras de ventilación registradas; no se detectaron nuevos ACPI 13/15. La simulación no llegó a completar los cinco minutos.
+
+La parada fue una pérdida de admisión de telemetría causada por un cálculo de edad: la muestra de RPM tenía 2531 ms al terminar la lectura de sensores, pero se volvía a sumar el tiempo desde el inicio de esa lectura (~505 ms). Se superaba falsamente el límite de 3000 ms. Se añade `FanAgeCapturedAtUtc` al snapshot/CSV para medir únicamente el tiempo posterior a capturar esa edad. Se conserva el límite original, la edad desde el inicio de adquisición WMI y el timestamp CPU/GPU. Una prueba con los datos de esta captura reproduce el rechazo anterior, admite la muestra corregida y comprueba el vencimiento exacto y el rechazo de CPU/GPU antiguos.
+
+El mensaje «Cronología incompleta o contiene EC directo» era otro defecto del lanzador: leía los campos en la raíz del informe offline, aunque están dentro de `Analysis`. Se corrige esa lectura, se distinguen inventario ausente, PID incorrecto, cronología inconsistente y lecturas EC reales, y se conserva el motivo previo del fallo. El supervisor ahora valida y copia el motivo del worker; ya no sustituye una salida temprana por `duration`. Las próximas pérdidas de admisión guardan `telemetry-fault.json` con la edad y sus timestamps.
+
+Esta captura diagnostica defectos del arnés; no valida control activo, restauración por firmware ni ausencia definitiva del error ACPI. El siguiente paso sigue siendo repetir sólo la simulación de cinco minutos antes de evaluar `-Control`.
+
 ## Interpretación y límites
 
 Una sesión de control sin ACPI 13/15 muestra que el episodio no se reprodujo en esa ventana; no demuestra que se haya eliminado. La variante cambia tanto el transporte de comprobación como el modo/ritmo de control y pausa M4, por lo que es una comparación diagnóstica, no causalidad aislada ni validación para uso diario. Si aparece un evento se detiene el control normal y se intenta la recuperación descrita. Si la finalización nativa es desconocida, no se envían llamadas potencialmente superpuestas: se conserva la evidencia y no se anuncia éxito.

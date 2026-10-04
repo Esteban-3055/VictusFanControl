@@ -10,6 +10,20 @@ param(
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 
+function Assert-WmiFanExperimentAnalysis($Envelope,[int]$ExpectedPid) {
+    # Offline analyzer returns {Source,...,Analysis:{...}}, never a flat analysis.
+    if(-not $Envelope -or -not $Envelope.PSObject.Properties['Analysis'] -or -not $Envelope.Analysis){throw 'Informe offline sin objeto Analysis.'}
+    $a=$Envelope.Analysis
+    if(-not $a.PSObject.Properties['ChronologyConsistent'] -or -not $a.ChronologyConsistent){throw 'Cronologia offline inconsistente; revisar Analysis.Warnings.'}
+    if(-not $a.PSObject.Properties['Pid'] -or $a.Pid -ne $ExpectedPid){throw 'PID de cronologia distinto del proceso esperado.'}
+    if(-not $a.PSObject.Properties['EcReads']){throw 'Informe offline sin inventario de lecturas EC.'}
+    if(@($a.EcReads).Count -gt 0){throw 'Cronologia contiene lecturas EC directas.'}
+}
+function Add-WmiFanExperimentFault($State,[string]$Message) {
+    $State.Valid=$false
+    if(-not $State.Fault){$State.Fault=$Message}elseif($State.Fault -notlike ('*'+$Message+'*')){$State.Fault+=' | '+$Message}
+}
+
 function Assert-WmiFanExperimentIsolation($Facts,[int[]]$AllowedPids=@(),[switch]$AllowM4) {
     foreach($path in @($Facts.Journals)){throw ('Lease pendiente; conservarlo y volver a Firmware antes de probar: '+$path)}
     foreach($service in @($Facts.Services)){
@@ -43,6 +57,21 @@ function Get-WmiFanExperimentFacts([switch]$AllowExperimentLease) {
     [pscustomobject]@{Journals=$journals;Services=$services;Processes=$processes}
 }
 if($SelfTest){
+    $envelope=[pscustomobject]@{Source='fixture';Analysis=[pscustomobject]@{Pid=31920;ChronologyConsistent=$true;EcReads=@()}}
+    Assert-WmiFanExperimentAnalysis $envelope 31920
+    foreach($bad in @(
+        [pscustomobject]@{Pid=31920;ChronologyConsistent=$true;EcReads=@()},
+        [pscustomobject]@{Analysis=[pscustomobject]@{Pid=31584;ChronologyConsistent=$true;EcReads=@()}},
+        [pscustomobject]@{Analysis=[pscustomobject]@{Pid=31920;ChronologyConsistent=$false;EcReads=@()}},
+        [pscustomobject]@{Analysis=[pscustomobject]@{Pid=31920;ChronologyConsistent=$true;EcReads=@('read')}},
+        [pscustomobject]@{Analysis=[pscustomobject]@{Pid=31920;ChronologyConsistent=$true}}
+    )){
+        $rejected=$false;try{Assert-WmiFanExperimentAnalysis $bad 31920}catch{$rejected=$true}
+        if(-not $rejected){throw 'Envelope incompleto/contaminado aceptado.'}
+    }
+    $f=@{Valid=$true;Fault='Telemetry admission lost'}
+    Add-WmiFanExperimentFault $f 'Offline mismatch'
+    if($f.Valid -or $f.Fault -ne 'Telemetry admission lost | Offline mismatch'){throw 'Se perdio el motivo original del fallo.'}
     $clean=[pscustomobject]@{Journals=@();Services=@();Processes=@()}
     Assert-WmiFanExperimentIsolation $clean
     foreach($bad in @(
@@ -55,7 +84,7 @@ if($SelfTest){
     }
     $allowed=[pscustomobject]@{Journals=@();Services=@();Processes=@([pscustomobject]@{Name='worker';Id=3})}
     Assert-WmiFanExperimentIsolation $allowed -AllowedPids @(3)
-    Write-Host 'PASS: experiment pending lease, foreign processes/services and allowed worker identity.'
+    Write-Host 'PASS: experiment isolation, nested analyzer envelope, contaminated evidence and original fault preservation.'
     return
 }
 if($env:OS -ne 'Windows_NT'){throw 'Esta prueba requiere Windows.'}
@@ -109,7 +138,12 @@ try{
     $guard={param($captureRoot,$s)
         if(-not $s.Guardian){throw 'Supervisor ausente.'}
         if($s.Guardian.HasExited){
-            if($s.Guardian.ExitCode -ne 0){throw 'Prueba terminada por fallo/evento; conservar evidencia.'}
+            if($s.Guardian.ExitCode -ne 0){
+                $summaryPath=Join-Path $s.Directory 'summary.json'
+                $reason='revisar guardian-stderr.txt'
+                if(Test-Path -LiteralPath $summaryPath){$reason=(Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json).StopReason}
+                throw ('Prueba terminada: '+$reason+'; conservar evidencia.')
+            }
             return
         }
         Assert-WmiFanExperimentIsolation (Get-WmiFanExperimentFacts -AllowExperimentLease) -AllowedPids @($s.Guardian.Id,$s.WorkerPid)
@@ -127,7 +161,7 @@ try{
                 if($stream){$stream.Flush();$stream.Dispose();$s[$name+'Stream']=$null}
             }
             $summary=Get-Content -LiteralPath (Join-Path $s.Directory 'summary.json') -Raw | ConvertFrom-Json
-            if($s.Guardian.ExitCode -ne 0 -or $summary.ExitCode -ne 0 -or $summary.LeaseRetained -or $summary.NativeCompletionUnknown){throw 'Prueba con fallo o recuperacion incompleta; adjuntar ZIP.'}
+            if($s.Guardian.ExitCode -ne 0 -or $summary.ExitCode -ne 0 -or $summary.LeaseRetained -or $summary.NativeCompletionUnknown){throw ('Prueba interrumpida: '+$summary.StopReason+'; lease retenido='+$summary.LeaseRetained+'; finalizacion nativa desconocida='+$summary.NativeCompletionUnknown+'. Adjuntar ZIP.')}
             $s.Valid=$true
         }catch{$s.Fault=$_.Exception.Message}
         finally{
@@ -138,14 +172,16 @@ try{
                     if($id -le 0){continue}
                     $logs=@(Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'VictusFanControl\logs') -Filter ('ec-wmi-'+$id+'-*.log') -File -ErrorAction SilentlyContinue |
                         Where-Object {$_.LastWriteTimeUtc -ge [DateTime]::Parse($s.StartedUtc).ToUniversalTime()})
-                    if($logs.Count -ne 1){$s.Valid=$false;$s.Fault='Falta una cronologia unica por proceso.';continue}
+                    if($logs.Count -ne 1){Add-WmiFanExperimentFault $s 'Falta una cronologia unica por proceso.';continue}
                     Copy-Item -LiteralPath $logs[0].FullName -Destination (Join-Path $s.Directory ('chronology-'+$id+'.log'))
                     & $s.Cli --analyze-ec-wmi-trace $logs[0].FullName --analysis-output-dir (Join-Path $s.Directory ('analysis-'+$id))
-                    if($LASTEXITCODE -ne 0){$s.Valid=$false;$s.Fault='Analisis offline incompleto.'}
-                    $analysis=Get-Content -LiteralPath (Join-Path $s.Directory ('analysis-'+$id+'\summary.json')) -Raw | ConvertFrom-Json
-                    if(-not $analysis.ChronologyConsistent -or $analysis.Pid -ne $id -or @($analysis.EcReads).Count -gt 0){$s.Valid=$false;$s.Fault='Cronologia incompleta o contiene EC directo.'}
+                    if($LASTEXITCODE -ne 0){Add-WmiFanExperimentFault $s 'Analisis offline incompleto.'}
+                    try{
+                        $envelope=Get-Content -LiteralPath (Join-Path $s.Directory ('analysis-'+$id+'\summary.json')) -Raw | ConvertFrom-Json
+                        Assert-WmiFanExperimentAnalysis $envelope $id
+                    }catch{Add-WmiFanExperimentFault $s $_.Exception.Message}
                     $rows=@(Get-Content -LiteralPath $logs[0].FullName | ForEach-Object {$_ | ConvertFrom-Json})
-                    if(@($rows | Where-Object {$_.Stage -like 'ec.*' -or $_.Stage -like 'isolation.*.denied'}).Count){$s.Valid=$false;$s.Fault='Intento EC o solicitud fuera de la frontera.'}
+                    if(@($rows | Where-Object {$_.Stage -like 'ec.*' -or $_.Stage -like 'isolation.*.denied'}).Count){Add-WmiFanExperimentFault $s 'Intento EC o solicitud fuera de la frontera.'}
                 }
                 [IO.File]::WriteAllText((Join-Path $s.Directory 'launcher-summary.json'),(ConvertTo-Json -Depth 5 -InputObject ([pscustomobject]@{Valid=$s.Valid;Fault=$s.Fault;Control=$s.Control;M4Paused=$s.M4Paused;FirmwareRestorationVerified=$false})))
             }

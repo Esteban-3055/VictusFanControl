@@ -141,6 +141,42 @@ public static class HpWmiFanTelemetryReaderSelfTest
                 return Task.CompletedTask;
             });
 
+            await Test("ded92d capture: sampling duration is not counted twice in fan age", () =>
+            {
+                var started = DateTimeOffset.Parse("2026-10-04T05:03:57.5890563Z");
+                var captured = DateTimeOffset.Parse("2026-10-04T05:03:58.0939804Z");
+                var snapshot = new TelemetrySnapshot(started, "CPU", 54, 16.854, 8.775,
+                    Hp8C40TargetProfile.ExpectedGpuName, 55, 1.2, 0, 2600, 2400)
+                {
+                    CpuCoreTemperatures = Enumerable.Range(0, 14)
+                        .Select(i => new CpuCoreTemperatureSample(i, i, "Performance", 55)).ToArray(),
+                    CpuExpectedPhysicalCoreCount = 14,
+                    FanTelemetrySource = "HP-WMI-ACPI-2D", FanRpmResolution = 100,
+                    FanSampledAtUtc = DateTimeOffset.Parse("2026-10-04T05:03:55.5666476Z"),
+                    FanSampleAgeMilliseconds = 2531, FanAgeCapturedAtUtc = captured
+                };
+                var hardware = new HardwareIdentity(
+                    Hp8C40TargetProfile.BoardManufacturer, Hp8C40TargetProfile.BoardProduct,
+                    Hp8C40TargetProfile.BoardVersion, Hp8C40TargetProfile.SystemManufacturer,
+                    Hp8C40TargetProfile.SystemProductName, Hp8C40TargetProfile.SystemSkuPrefix,
+                    Hp8C40TargetProfile.ValidatedBiosVersion);
+                var now = captured.AddMilliseconds(2);
+                Check(!SafetyGate.Evaluate(hardware, SystemState.Healthy, snapshot with { FanAgeCapturedAtUtc = null }, now, true).CustomControlPermitted,
+                    "Fixture must reproduce the old false expiry.");
+                Check(SafetyGate.Evaluate(hardware, SystemState.Healthy, snapshot, now, true).CustomControlPermitted,
+                    "Sampling duration was added to an age already measured after sampling.");
+                Check(snapshot.IsFanTelemetryFreshAt(captured.AddMilliseconds(468)) &&
+                    !snapshot.IsFanTelemetryFreshAt(captured.AddMilliseconds(469)),
+                    "Corrected epoch must still expire exactly at 3000 ms.");
+                Check(!snapshot.IsFanTelemetryFreshAt(captured.AddMilliseconds(-1)) &&
+                    !(snapshot with { FanAgeCapturedAtUtc = started.AddMilliseconds(-1) }).IsFanTelemetryFreshAt(now),
+                    "Future or inconsistent age capture epochs may not be accepted.");
+                var oldCpu = snapshot with { Timestamp = captured.AddSeconds(-4), FanSampleAgeMilliseconds = 0 };
+                Check(!SafetyGate.Evaluate(hardware, SystemState.Healthy, oldCpu, captured, true).CustomControlPermitted,
+                    "Fresh fan epoch may not renew old CPU/GPU telemetry.");
+                return Task.CompletedTask;
+            });
+
             await Test("slow completion is discarded even without a foreground timeout check", async () =>
             {
                 foreach (var late in new long[] { 3000, 5000 })

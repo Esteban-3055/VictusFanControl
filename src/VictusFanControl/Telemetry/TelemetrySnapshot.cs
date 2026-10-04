@@ -33,6 +33,9 @@ public sealed record TelemetrySnapshot(
     public int? FanRpmResolution { get; init; }
     public DateTimeOffset? FanSampledAtUtc { get; init; }
     public long? FanSampleAgeMilliseconds { get; init; }
+    // Epoch at which the monotonic fan age was captured, independent of the
+    // CPU/GPU sampling start. Missing on older/synthetic snapshots.
+    public DateTimeOffset? FanAgeCapturedAtUtc { get; init; }
     public byte? CpuFanSpeedLevel { get; init; }
     public byte? GpuFanSpeedLevel { get; init; }
 
@@ -89,15 +92,17 @@ public sealed record TelemetrySnapshot(
     /// A cached fan sample can expire after this immutable snapshot was built.
     /// Add time spent holding the snapshot to its captured monotonic fan age;
     /// a fresh CPU/GPU timestamp must not renew older fan acquisition data.
-    /// The snapshot timestamp starts before hardware sampling, so this is
-    /// conservatively older by at most that sampling duration.
+    /// Add elapsed time only from the epoch at which that age was captured.
+    /// Using CPU/GPU sampling start would count hardware-sampling time twice.
+    /// Legacy snapshots without that epoch keep the conservative old behavior.
     /// </summary>
     public bool IsFanTelemetryFreshAt(DateTimeOffset now) =>
         FanTelemetrySource != "HP-WMI-ACPI-2D" ||
         (FanSampleAgeMilliseconds is >= 0 &&
          FanSampledAtUtc.HasValue &&
          FanRpmResolution == HpWmiFanTelemetrySample.ResolutionRpm &&
-         now >= Timestamp &&
-         FanSampleAgeMilliseconds.Value + (now - Timestamp).TotalMilliseconds <
+         (FanAgeCapturedAtUtc ?? Timestamp) >= Timestamp &&
+         now >= (FanAgeCapturedAtUtc ?? Timestamp) &&
+         FanSampleAgeMilliseconds.Value + (now - (FanAgeCapturedAtUtc ?? Timestamp)).TotalMilliseconds <
              HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds);
 }
