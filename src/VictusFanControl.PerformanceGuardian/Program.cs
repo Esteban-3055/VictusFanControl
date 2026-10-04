@@ -36,12 +36,17 @@ internal static class Program
                     QualifiedCpuGuardianDomainLifecycleSelfTest.Run(
                         Console.Out);
 
+                var combinedDomainResult =
+                    CombinedGuardianDomainLifecycleSelfTest.Run(
+                        Console.Out);
+
                 return authorityResult == 0 &&
                     sourceRuntimeResult == 0 &&
                     gpuDomainResult == 0 &&
                     cleanupResult == 0 &&
                     cpuBackendResult == 0 &&
-                    cpuDomainResult == 0
+                    cpuDomainResult == 0 &&
+                    combinedDomainResult == 0
                     ? 0
                     : 1;
             }
