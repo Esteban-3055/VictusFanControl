@@ -73,5 +73,8 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw "Performance Guardian software-only fixture failed." }
 
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian-6f-gpu.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance Guardian Step 6F GPU gate fixture failed." }
+
       - name: Build solution
         run: dotnet build VictusFanControl.sln --configuration Release --no-restore

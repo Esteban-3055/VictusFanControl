@@ -31,6 +31,31 @@ internal static class Program
                     : 1;
             }
 
+            if (args.Length == 1 &&
+                args[0] == "--gpu-gate-6f-self-test")
+            {
+                return PerformanceGuardianGpuGate6FQualification.SelfTest(
+                    Console.Out);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--gpu-gate-6f")
+            {
+                return await PerformanceGuardianGpuGate6FQualification
+                    .RunOuterAsync(
+                        args)
+                    .ConfigureAwait(false);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--run-gpu-gate-6f")
+            {
+                return await PerformanceGuardianGpuGate6FQualification
+                    .RunGuardianAsync(
+                        args)
+                    .ConfigureAwait(false);
+            }
+
             if (args.Length == 2 &&
                 args[0] == "--process-fixture")
             {
@@ -273,6 +298,12 @@ internal static class Program
             "VictusFanControl.PerformanceGuardian --process-fixture <directory>");
 
         Console.WriteLine(
-            "Production run mode is intentionally not exposed yet; this step qualifies only software lifecycle/IPC with recording domains.");
+            "VictusFanControl.PerformanceGuardian --gpu-gate-6f-self-test");
+
+        Console.WriteLine(
+            "VictusFanControl.PerformanceGuardian --gpu-gate-6f --confirm-target HP-8C40-9D0R1LA-F18 [--timeout-seconds 60] [--output-directory <path>]");
+
+        Console.WriteLine(
+            "Production run mode remains closed. The Step 6F GPU mode is an explicit bounded qualification gate only.");
     }
 }
