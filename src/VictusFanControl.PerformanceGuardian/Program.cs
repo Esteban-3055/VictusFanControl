@@ -57,6 +57,31 @@ internal static class Program
             }
 
             if (args.Length == 1 &&
+                args[0] == "--parent-death-gate-6j-self-test")
+            {
+                return PerformanceGuardianParentDeathGate6JQualification.SelfTest(
+                    Console.Out);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--parent-death-gate-6j")
+            {
+                return await PerformanceGuardianParentDeathGate6JQualification
+                    .RunOuterAsync(
+                        args)
+                    .ConfigureAwait(false);
+            }
+
+            if (args.Length > 0 &&
+                args[0] == "--run-parent-death-owner-6j")
+            {
+                return await PerformanceGuardianParentDeathGate6JQualification
+                    .RunDisposableOwnerAsync(
+                        args)
+                    .ConfigureAwait(false);
+            }
+
+            if (args.Length == 1 &&
                 args[0] == "--standby-gate-6i-self-test")
             {
                 return PerformanceGuardianStandbyGate6IQualification.SelfTest(
@@ -421,6 +446,12 @@ internal static class Program
             "VictusFanControl.PerformanceGuardian --process-fixture <directory>");
 
         Console.WriteLine(
+            "VictusFanControl.PerformanceGuardian --parent-death-gate-6j-self-test");
+
+        Console.WriteLine(
+            "VictusFanControl.PerformanceGuardian --parent-death-gate-6j --confirm-target HP-8C40-9D0R1LA-F18 --confirm-cpu-hardware-writes --confirm-exclusive-gpu-controller --confirm-owner-process-kill --module <IntelMSR.bin> [--timeout-seconds 30..300] [--output-directory <path>]");
+
+        Console.WriteLine(
             "VictusFanControl.PerformanceGuardian --standby-gate-6i-self-test");
 
         Console.WriteLine(
@@ -454,6 +485,6 @@ internal static class Program
             "VictusFanControl.PerformanceGuardian --gpu-gate-6f --confirm-target HP-8C40-9D0R1LA-F18 [--timeout-seconds 60] [--output-directory <path>]");
 
         Console.WriteLine(
-            "Production run mode remains closed. Step 6F GPU, Step 6G CPU, Step 6H combined and Step 6I standby entry points are explicit qualification gates only.");
+            "Production run mode remains closed. Step 6F GPU, Step 6G CPU, Step 6H combined, Step 6I standby and Step 6J parent-death entry points are explicit qualification gates only.");
     }
 }
