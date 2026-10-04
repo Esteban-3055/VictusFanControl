@@ -81,6 +81,33 @@ internal static class GpuClockSessionJournalSelfTest
                 journal.Load() == active,
                 "active-unverified GPU journal round-trips");
 
+            using (var concurrentReader =
+                   new FileStream(
+                       path,
+                       FileMode.Open,
+                       FileAccess.Read,
+                       FileShare.ReadWrite |
+                       FileShare.Delete))
+            {
+                var pollingSafe =
+                    active with
+                    {
+                        Generation = 6,
+                        UpdatedAtUtc =
+                            created.AddMilliseconds(1500)
+                    };
+
+                journal.Store(
+                    pollingSafe);
+
+                active =
+                    pollingSafe;
+            }
+
+            Require(
+                journal.Load() == active,
+                "GPU journal replacement succeeds while an external polling reader is open");
+
             var switching =
                 active with
                 {
@@ -146,7 +173,7 @@ internal static class GpuClockSessionJournalSelfTest
                 "GPU journal delete removes resolved session");
 
             output.WriteLine(
-                "GPU clock durable session journal self-test: PASS (independent journal, atomic replace, target/phase invariants).");
+                "GPU clock durable session journal self-test: PASS (independent journal, atomic replace, concurrent poller sharing, target/phase invariants).");
 
             return 0;
         }
