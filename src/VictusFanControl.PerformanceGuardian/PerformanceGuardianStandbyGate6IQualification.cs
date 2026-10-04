@@ -331,8 +331,8 @@ internal static class PerformanceGuardianStandbyGate6IQualification
                     "Step 6I resume evidence could not be parsed.");
 
                 var sleepInterval =
-                    resumeEvidence.CapturedAtUtc -
-                    preSleepEvidence.CapturedAtUtc;
+                    resumeEvidence!.CapturedAtUtc -
+                    preSleepEvidence!.CapturedAtUtc;
 
                 Require(
                     sleepInterval >=
