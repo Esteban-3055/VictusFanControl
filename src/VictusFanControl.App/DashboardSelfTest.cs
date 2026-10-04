@@ -84,6 +84,7 @@ internal static class DashboardSelfTest
             Require(shell.ClientRectangle.Contains(shell.RectangleToClient(badge.RectangleToScreen(badge.ClientRectangle))));
             var badgeBounds=host.RectangleToClient(badge.RectangleToScreen(badge.ClientRectangle));
             Require(badgeBounds.Right<=host.Width-8);
+            Require(ventilation.VerticalScroll.Visible);
             host.Close();coordinator.DisposeAsync().AsTask().GetAwaiter().GetResult();
             Require(settings.IsDisposed && ventilation.IsDisposed && monitor.IsDisposed);
             Console.WriteLine("PASS: dashboard navigation does not change fan mode; all detached pages dispose; large/small Windows renders saved.");

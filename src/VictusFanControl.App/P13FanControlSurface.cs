@@ -205,11 +205,11 @@ internal sealed class P13FanControlSurface : UserControl
     {
         var root = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
+            AutoSize = true,
             Padding = new Padding(18),
             ColumnCount = 1,
-            RowCount = 7,
-            AutoScroll = true
+            RowCount = 7
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
