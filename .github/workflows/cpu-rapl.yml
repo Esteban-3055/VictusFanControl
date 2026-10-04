@@ -26,6 +26,7 @@ on:
       - 'scripts/test-performance-guardian-6g-cpu.ps1'
       - 'scripts/test-performance-guardian-6g-cpu-physical.ps1'
       - 'scripts/test-performance-guardian-6h-combined.ps1'
+      - 'scripts/test-performance-guardian-6i-standby.ps1'
       - 'docs/INTEL_RAPL_P1.md'
       - 'docs/INTEL_RAPL_P2*.md'
       - 'release/intel-rapl-p1-qualification.json'
@@ -88,6 +89,9 @@ jobs:
 
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian-6h-combined.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw "Performance Guardian Step 6H combined harness fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian-6i-standby.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance Guardian Step 6I standby harness fixture failed." }
 
       - name: Build solution
         run: dotnet build VictusFanControl.sln --configuration Release --no-restore
