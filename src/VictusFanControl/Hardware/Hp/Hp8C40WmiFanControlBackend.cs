@@ -82,6 +82,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
         _guardian.EnsureAlive();
         _guardian.Heartbeat();
         ReleaseEvidence = null;
+        LastRestoreEvidence = default;
         _active = true; // Local admission only; no native setter yet.
     }
 
