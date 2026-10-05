@@ -102,15 +102,15 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             var preview = new AdaptiveFanPolicyShadowEvaluator(Hardware, configuration.BuildPolicy(), true, configuration);
             var shadow = preview.Evaluate(SystemState.Healthy, isolatedHot, Now());
             var normal = await controller.ProcessAutomaticAsync(isolatedHot, Raw(isolatedHot), CancellationToken.None);
-            Check(normal.EqualFanLevel==26 && !normal.ThermalOverride && shadow.RecommendedEqualLevel==26,
-                "isolated 90 C core does not drive Average demand; preview and prepared controller agree");
+            Check(normal.EqualFanLevel==30 && !normal.ThermalOverride && shadow.RecommendedEqualLevel==30,
+                "isolated 90 C core does not drive Average demand; preview/controller agree at the prepared 30 floor");
             clock = 100;
             var emergency = isolatedHot with { Timestamp=Now(),
                 CpuCoreTemperatures=isolatedHot.CpuCoreTemperatures.Select((c,i)=>c with { TemperatureC=i==0 ? 99 : 45 }).ToArray() };
             var stopped = await controller.ProcessAutomaticAsync(emergency, Raw(emergency), CancellationToken.None);
             var shadowStopped = preview.Evaluate(SystemState.Healthy, emergency, Now());
             Check(stopped.Action==AdaptiveFanProductionActionKind.RestoreFirmware && averageBackend.Restores==1 &&
-                averageBackend.Levels.SequenceEqual(new[]{26}) && shadowStopped.EffectiveThermalEmergency && !shadowStopped.PolicyAccepted,
+                averageBackend.Levels.SequenceEqual(new[]{30}) && shadowStopped.EffectiveThermalEmergency && !shadowStopped.PolicyAccepted,
                 "raw core at 99 C restores Firmware immediately despite Average below 50 C");
         }
 
@@ -128,9 +128,9 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             var pShadow=new AdaptiveFanPolicyShadowEvaluator(Hardware,settings.BuildPolicy(),true,settings);
             var shadow=pShadow.Evaluate(SystemState.Healthy,snapshot,Now());
             var actual=await pController.ProcessAutomaticAsync(snapshot,Raw(snapshot),CancellationToken.None);
-            Check(actual.EqualFanLevel==(source==CpuDemandTemperatureSource.PerformanceCoreAverage?26:28) &&
+            Check(actual.EqualFanLevel==30 &&
                 shadow.RecommendedEqualLevel==actual.EqualFanLevel,
-                $"{source}: configured N=2 reaches preview and controller consistently");
+                $"{source}: configured N=2 reaches preview/controller consistently without dropping below the prepared 30 floor");
             clock=100;
             var emergency=snapshot with {Timestamp=Now(),CpuCoreTemperatures=snapshot.CpuCoreTemperatures
                 .Select((c,i)=>i==13?c with {TemperatureC=99}:c).ToArray()};
@@ -269,6 +269,48 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             Check(mismatch.Action == AdaptiveFanProductionActionKind.RestoreFirmware && backend.Levels.Count == 1,
                 "mismatched original SafetyGate cannot be repaired into write permission");
         }
+        // Stored tuning may request a lower floor, but the exact HP 8C40
+        // Automatic runtime and its shadow must both reason inside 30..50.
+        clock = 0;
+        var configuredBackend = new Backend();
+        await using (var configuredCoordinator = new FanControlCoordinator(configuredBackend))
+        {
+            var configured = new FanConfiguration
+            {
+                Tuning = new FanConfiguration().Tuning with { MinimumLevel = 28 }
+            };
+            var configuredController = new AdaptiveFanProductionController(
+                configuredCoordinator,
+                Hp8C40AdaptiveCandidateV1.Create(),
+                true,
+                true,
+                automaticHardware: Hardware,
+                automaticMilliseconds: () => clock,
+                utcNow: Now,
+                automaticConfiguration: configured);
+            await configuredController.SetModeAsync(
+                AdaptiveFanProductionMode.Automatic,
+                CancellationToken.None);
+            var low = Sample(Now());
+            var actual = await configuredController.ProcessAutomaticAsync(
+                low,
+                Raw(low),
+                CancellationToken.None);
+            var configuredShadow = new AdaptiveFanPolicyShadowEvaluator(
+                Hardware,
+                configured.BuildPolicy(),
+                preparedAutomatic: true,
+                configuration: configured);
+            var shadow = configuredShadow.Evaluate(
+                SystemState.Healthy,
+                low,
+                Now());
+            Check(actual.EqualFanLevel == Hp8C40AutomaticPolicy.MinimumLevel &&
+                shadow.RecommendedEqualLevel == Hp8C40AutomaticPolicy.MinimumLevel &&
+                configuredBackend.Levels.SequenceEqual(new[] { Hp8C40AutomaticPolicy.MinimumLevel }),
+                "configured 28 floor is projected to the prepared 30 floor before Automatic smoothing and shadow planning");
+        }
+
         backend = new Backend();
         await using (var coordinator = new FanControlCoordinator(backend))
         {
