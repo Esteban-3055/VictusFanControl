@@ -515,7 +515,29 @@ internal sealed class P13FanControlSurface : UserControl
             // The observer still checks the required sequence after release.
             if (kind == P13ControlInteractionKind.ModeRequest &&
                 requestedMode == AdaptiveFanProductionMode.Firmware && !equalFanLevel.HasValue)
+            {
+                // Firmware is always an escape action, so the qualification
+                // provider can never veto it. Still notify the provider before
+                // SetModeAsync so a qualification can mark the user-requested
+                // release before synchronous authority-change callbacks fire.
+                if (_interactionAuthorizationProvider is not null)
+                {
+                    try
+                    {
+                        _ = _interactionAuthorizationProvider(
+                            kind,
+                            requestedMode,
+                            equalFanLevel);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log(
+                            $"P13 Firmware escape ignored qualification pre-action fence exception after notification: {ex.Message}");
+                    }
+                }
+
                 return true;
+            }
 
             if (_interactionAuthorizationProvider is not null &&
                 !_interactionAuthorizationProvider(
