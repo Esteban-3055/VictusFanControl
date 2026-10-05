@@ -12,6 +12,18 @@ internal static class WmiFanGuiIntegrationSelfTest
         try
         {
             await Hp8C40WmiFanControlBackendSelfTest.RunAsync(Console.Out);
+
+            var boundaryRoot = Path.Combine(Path.GetTempPath(), "VFC-WmiBoundary-" + Guid.NewGuid().ToString("N"));
+            var boundaryA = Path.Combine(boundaryRoot, "a");
+            var boundaryB = Path.Combine(boundaryRoot, "b");
+            WmiFanExperimentBoundary.Enable(boundaryA, true, gui: true);
+            WmiFanExperimentBoundary.BeginRecovery();
+            WmiFanExperimentBoundary.RearmGuiAfterSuccessfulRelease(boundaryA, boundaryB);
+            if (WmiFanExperimentBoundary.Recovering ||
+                !string.Equals(Path.GetFullPath(boundaryB), WmiFanExperimentBoundary.SessionDirectory, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("WMI GUI boundary did not rearm after a verified release.");
+            Console.WriteLine("PASS: WMI GUI boundary recovery closes then rearms a fresh session directory.");
+
             var client = new WmiFanGuiGuardianClient(fixture: true);
             await client.StartAsync(default);
             client.EnsureAlive(); client.PersistIntent(30); client.Heartbeat();
