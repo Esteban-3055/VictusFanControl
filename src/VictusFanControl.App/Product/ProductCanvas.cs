@@ -39,6 +39,8 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     private float _scale = 1, _offsetX, _offsetY;
     private ProductHit? _dragSlider;
     private int _dragNode = -1;
+    private (ProductPage,ProductPowerProfile,AdaptiveCurveAxis,int,int)? _dragContext;
+    private (ProductPage,ProductPowerProfile,AdaptiveCurveAxis,int,int) DragContext => (Page,Editing,Axis,FanTab,PerformanceTab);
     private string? _keyboardId;
     private readonly Dictionary<int,Font> _fonts = [];
     internal IReadOnlyList<ProductHit> Hits => _hits;
@@ -97,7 +99,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         if(type=="fan")
         {
             var state=g.Save();g.TranslateTransform(x+size/2,y+size/2);
-            for(int i=0;i<5;i++){g.RotateTransform(72);g.FillEllipse(brush,-size*.12f,-size*.48f,size*.3f,size*.37f);}
+            for(int i=0;i<4;i++){using var blade=new GraphicsPath();blade.AddBezier(0,-size*.08f,-size*.36f,-size*.06f,-size*.49f,-size*.39f,-size*.23f,-size*.46f);blade.AddBezier(-size*.23f,-size*.46f,size*.10f,-size*.54f,size*.12f,-size*.25f,0,-size*.08f);blade.CloseFigure();g.FillPath(brush,blade);g.RotateTransform(90);}
             g.FillEllipse(brush,-size*.1f,-size*.1f,size*.2f,size*.2f);g.Restore(state);
         }
         else if(type=="home") {g.DrawLines(pen,new PointF[]{new(x,y+size*.45f),new(x+size/2,y),new(x+size,y+size*.45f)});g.DrawRectangle(pen,x+size*.16f,y+size*.4f,size*.68f,size*.56f);}
@@ -107,7 +109,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         else if(type=="plug") {g.DrawLine(pen,x+size*.3f,y,x+size*.3f,y+size*.3f);g.DrawLine(pen,x+size*.65f,y,x+size*.65f,y+size*.3f);g.FillRectangle(brush,x+size*.2f,y+size*.3f,size*.55f,size*.4f);g.DrawLine(pen,x+size*.48f,y+size*.7f,x+size*.48f,y+size);}
         else if(type=="cpu") {g.DrawRectangle(pen,x+size*.2f,y+size*.2f,size*.6f,size*.6f);for(int i=1;i<=3;i++){g.DrawLine(pen,x,y+size*i/4,x+size*.2f,y+size*i/4);g.DrawLine(pen,x+size*.8f,y+size*i/4,x+size,y+size*i/4);g.DrawLine(pen,x+size*i/4,y,x+size*i/4,y+size*.2f);g.DrawLine(pen,x+size*i/4,y+size*.8f,x+size*i/4,y+size);}}
         else if(type=="gpu") {g.DrawRectangle(pen,x,y+size*.15f,size*.85f,size*.6f);g.DrawEllipse(pen,x+size*.2f,y+size*.25f,size*.35f,size*.35f);g.DrawLine(pen,x+size*.85f,y+size*.25f,x+size,y+size*.25f);}
-        else if(type=="settings") {g.DrawEllipse(pen,x+size*.15f,y+size*.15f,size*.7f,size*.7f);g.DrawEllipse(pen,x+size*.35f,y+size*.35f,size*.3f,size*.3f);}
+        else if(type=="settings") {var teeth=Enumerable.Range(0,32).Select(i=>{var angle=i*Math.PI/16;var radius=size*(i%4 is 1 or 2?.5:.38);return new PointF(x+size/2+(float)Math.Cos(angle)*(float)radius,y+size/2+(float)Math.Sin(angle)*(float)radius);}).ToArray();g.DrawPolygon(pen,teeth);g.DrawEllipse(pen,x+size*.35f,y+size*.35f,size*.3f,size*.3f);}
         else {g.DrawRectangle(pen,x,y,size*.8f,size);g.DrawLine(pen,x+size*.15f,y+size*.3f,x+size*.65f,y+size*.3f);g.DrawLine(pen,x+size*.15f,y+size*.55f,x+size*.5f,y+size*.55f);}
     }
     private static string Value(double? value,string unit,int decimals=0) => value.HasValue && double.IsFinite(value.Value) ? value.Value.ToString("F"+decimals)+" "+unit : "— "+unit;
@@ -309,11 +311,11 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             foreach(var point in visible){using var b=new SolidBrush(Ink);g.FillEllipse(b,point.X-6,point.Y-6,12,12);g.DrawEllipse(line,point.X-7,point.Y-7,14,14);}
             if(editable&&axis==Axis&&SelectedNode>=0&&SelectedNode<ps.Count){var selected=Position(ps[SelectedNode]);using var ring=new Pen(Yellow,3);g.DrawEllipse(ring,selected.X-12,selected.Y-12,24,24);}
         }
-        DrawText(g,"Entrada ("+Unit()+")",plot.Left+plot.Width*.32f,plot.Bottom+(editable?78:46),20,Muted,300);
-        DrawText(g,"Nivel común CPU/GPU · 30–50",plot.Left,plot.Top-41,20,Muted,600);
+        DrawText(g,"Entrada ("+Unit()+")",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300);
+        DrawText(g,"Nivel común · 30–50",plot.Left,plot.Top-41,19,Muted,285);
         if(editable){var cpu=Axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.CpuLoad;
-            DrawText(g,cpu?"● CPU · editable":"● CPU · referencia",plot.Left,plot.Bottom+48,18,Red,310);
-            DrawText(g,cpu?"● GPU · referencia":"● GPU · editable",plot.Left+330,plot.Bottom+48,18,Blue,310);}
+            DrawText(g,cpu?"● CPU · editable":"● CPU · referencia",plot.Left+290,plot.Top-41,16,Red,165);
+            DrawText(g,cpu?"● GPU · referencia":"● GPU · editable",plot.Left+465,plot.Top-41,16,Blue,169);}
     }
     private void TelemetryPage(Graphics g)
     {
@@ -394,24 +396,28 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         if(!_plot.IsEmpty&&!Busy)
         {
             var points=AdaptiveCurveProfiles.Curve(Profile.Fan.BuildPolicy(),Axis);var xmax=AdaptiveCurveProfiles.MaximumInput(Axis);
-            for(int i=0;i<points.Count;i++){var px=_plot.Left+(float)(points[i].Input/xmax)*_plot.Width;var py=_plot.Bottom-(float)((points[i].Level-30)/20)*_plot.Height;if(Math.Abs(p.X-px)<17&&Math.Abs(p.Y-py)<17){_dragNode=i;SelectedNode=i;_keyboardId="node-"+i;Capture=true;Invalidate();return;}}
+            for(int i=0;i<points.Count;i++){var px=_plot.Left+(float)(points[i].Input/xmax)*_plot.Width;var py=_plot.Bottom-(float)((points[i].Level-30)/20)*_plot.Height;if(Math.Abs(p.X-px)<17&&Math.Abs(p.Y-py)<17){_dragContext=DragContext;_dragNode=i;SelectedNode=i;_keyboardId="node-"+i;Capture=true;Invalidate();return;}}
         }
         var hit=_hits.LastOrDefault(h=>h.Bounds.Contains(p));if(hit is null||!CanInteract(hit))return;
         _keyboardId=hit.Id;
-        if(hit.Slider){_dragSlider=hit;Capture=true;EditSlider(hit,p);}
+        if(hit.Slider){_dragContext=DragContext;_dragSlider=hit;Capture=true;EditSlider(hit,p);}
         else Command?.Invoke(hit.Id);
     }
+    internal void PointerDown(Point point)=>OnMouseDown(new MouseEventArgs(MouseButtons.Left,1,point.X,point.Y,0));
+    internal void PointerMove(Point point)=>OnMouseMove(new MouseEventArgs(MouseButtons.Left,0,point.X,point.Y,0));
+    internal void PointerUp(Point point)=>OnMouseUp(new MouseEventArgs(MouseButtons.Left,1,point.X,point.Y,0));
     internal bool IsHeaderDrag(Point point){var p=Virtual(point);return p.X>=0&&p.X<1430&&p.Y>=0&&p.Y<64;}
     private void EditSlider(ProductHit hit,PointF point) => ValueEdited?.Invoke(hit.Id,Math.Clamp((int)Math.Round(hit.Min+(point.X-hit.Bounds.Left)/hit.Bounds.Width*(hit.Max-hit.Min)),hit.Min,hit.Max));
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);var p=Virtual(e.Location);
+        if(_dragContext.HasValue&&(_dragContext.Value!=DragContext||Busy)){_dragSlider=null;_dragNode=-1;_dragContext=null;Capture=false;return;}
         if(_dragSlider is not null){EditSlider(_dragSlider,p);return;}
         if(_dragNode>=0){var x=Math.Round(Math.Clamp((p.X-_plot.Left)/_plot.Width,0,1)*AdaptiveCurveProfiles.MaximumInput(Axis));var level=(int)Math.Round(30+Math.Clamp((_plot.Bottom-p.Y)/_plot.Height,0,1)*20);NodeEdited?.Invoke(_dragNode,x,level);return;}
         Cursor=_hits.Any(h=>CanInteract(h)&&h.Bounds.Contains(p))?Cursors.Hand:Cursors.Default;
     }
-    protected override void OnMouseUp(MouseEventArgs e){base.OnMouseUp(e);_dragSlider=null;_dragNode=-1;Capture=false;}
-    protected override void OnMouseCaptureChanged(EventArgs e){base.OnMouseCaptureChanged(e);if(!Capture){_dragSlider=null;_dragNode=-1;}}
+    protected override void OnMouseUp(MouseEventArgs e){base.OnMouseUp(e);_dragSlider=null;_dragNode=-1;_dragContext=null;Capture=false;}
+    protected override void OnMouseCaptureChanged(EventArgs e){base.OnMouseCaptureChanged(e);if(!Capture){_dragSlider=null;_dragNode=-1;_dragContext=null;}}
     private bool CanInteract(ProductHit hit) => hit.Enabled&&(!Busy||hit.Id is "firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close");
     private ProductHit? KeyboardHit=>_hits.LastOrDefault(h=>h.Id==_keyboardId&&CanInteract(h));
     private int SliderValue(string id) => id switch{"manual"=>ManualLevel,"pl1"=>Profile.CpuPl1Watts,"pl2"=>Profile.CpuPl2Watts,"gpu"=>Profile.GpuMaximumMHz,_=>0};

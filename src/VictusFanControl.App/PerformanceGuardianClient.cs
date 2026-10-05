@@ -63,6 +63,7 @@ internal sealed class PerformanceGuardianClient
             _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("Performance Guardian: " + e.Data); };
             _process.OutputDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("Performance Guardian: " + e.Data); };
             _process.BeginErrorReadLine(); _process.BeginOutputReadLine();
+            if(_process.HasExited)throw new IOException("Performance Guardian terminó durante el inicio; revisa los informes.");
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             await ConnectAsync(timeout.Token).ConfigureAwait(false);
             LastStatus = await SendAsync(PerformanceGuardianProtocol.EnableSession, configuration, timeout.Token).ConfigureAwait(false);
@@ -73,8 +74,8 @@ internal sealed class PerformanceGuardianClient
         catch
         {
             _pipe?.Dispose(); _pipe = null;
-            // Retain a live process so release can reconnect. Never kill a hardware owner.
-            if (_process is { HasExited: true }) { _process.Dispose(); _process = null; }
+            // Retain live or failed owners; a nonzero exit is not proof of restored hardware.
+            if (_process is { HasExited: true, ExitCode: 0 }) { _process.Dispose(); _process = null; }
             throw;
         }
         finally { _gate.Release(); }

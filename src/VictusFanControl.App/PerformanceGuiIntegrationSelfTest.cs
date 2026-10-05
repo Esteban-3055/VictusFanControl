@@ -87,6 +87,23 @@ internal static class PerformanceGuiIntegrationSelfTest
                 Console.WriteLine("PASS: domain enable rejection remains inactive; reconnect/SHUTDOWN releases the transport owner.");
             }
             finally { if (client.HasProcess) await client.CloseAsync(); }
+            // A started process exiting with an error must remain unresolved, rather than look Disabled.
+            Process? failedOwner=null;
+            var failedClient=new PerformanceGuardianClient(Path.GetTempPath(), _=>
+            {
+                var start=new ProcessStartInfo("cmd.exe") {UseShellExecute=false,CreateNoWindow=true,RedirectStandardError=true,RedirectStandardOutput=true};
+                start.ArgumentList.Add("/c");start.ArgumentList.Add("exit 23");failedOwner=Process.Start(start)!;
+                if(!failedOwner.WaitForExit(5000))throw new TimeoutException("Fatal-start fixture did not exit.");return failedOwner;
+            });
+            try
+            {
+                bool refused=false;try{await failedClient.EnableAsync(configuration);}catch(IOException){refused=true;}
+                Require(refused&&failedClient.HasProcess&&!failedClient.LastStatusFresh&&!failedClient.LimitsActive,"Failed start fabricated a retired/active Guardian session.");
+                refused=false;try{await failedClient.CloseAsync();}catch(IOException){refused=true;}
+                Require(refused&&failedClient.HasProcess,"Nonzero owner exit was presented as successful release.");
+                Console.WriteLine("PASS: failed startup owner retained; nonzero exit never implies a confirmed reset.");
+            }
+            finally{failedOwner?.Dispose();} // Already-exited fixture only; no live Guardian is terminated.
             return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine("GUI integration self-test failed: " + ex); return 1; }

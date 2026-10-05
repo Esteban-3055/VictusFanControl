@@ -178,6 +178,16 @@ internal static class ProductGuiSelfTest
                 PumpUntil(()=>!canvas.Busy,"Isolated profile save did not complete.");
                 require(!form.Dirty&&File.Exists(path)&&ProductProfilesStore.Load(path,out _).Ac.CpuPl1Watts==36,"Saved preferences were not persisted.");
                 form.EditValue("pl1",37);form.HandleCommand("discard");require(form.Draft.Ac.CpuPl1Watts==36&&!form.Dirty,"Discard lost the latest successful save.");
+                canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;canvas.Refresh();
+                Point ScreenPoint(float x,float y){var scale=Math.Min(canvas.Width/1672f,canvas.Height/941f);return new((int)((canvas.Width-1672*scale)/2+x*scale),(int)((canvas.Height-941*scale)/2+y*scale));}
+                var slider=canvas.Hits.Last(h=>h.Id=="pl1");var left=ScreenPoint(slider.Bounds.Left,slider.Bounds.Top+20);var right=ScreenPoint(slider.Bounds.Right,slider.Bounds.Top+20);
+                canvas.PointerDown(left);canvas.PointerMove(right);canvas.PointerUp(right);require(form.Draft.Ac.CpuPl1Watts==44,"Pointer slider failed its upper bound.");
+                canvas.Refresh();canvas.PointerDown(right);form.HandleCommand("profile-battery");canvas.Refresh();var priorBattery=form.Draft.Battery.CpuPl1Watts;canvas.PointerMove(left);canvas.PointerUp(left);
+                require(form.Draft.Battery.CpuPl1Watts==priorBattery,"A captured drag leaked into a newly selected profile.");
+                form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.Axis=AdaptiveCurveAxis.CpuTemperature;canvas.Refresh();
+                var point=form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3];var from=ScreenPoint(958+(float)(point.Input/110)*634,648-(float)((point.Level-30)/20)*350);var to=ScreenPoint(958+(float)(71d/110)*634,648);
+                canvas.PointerDown(from);canvas.PointerMove(to);canvas.PointerUp(to);require(form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Input==71,"Pointer node drag failed.");
+                form.HandleCommand("discard");
                 require(runtime.Commands==0,"Persistence/draft fixtures wrote hardware.");
                 canvas.State=runtime.State with{Runtime="Healthy",PerformanceSupported=true,CanApplyPerformance=true};
                 form.EditValue("gpu",1800);form.HandleCommand("performance-apply");

@@ -198,3 +198,15 @@ validation as pending and cannot promote a gate. See
 Physical Apply/Release, AC/Battery transitions, lifecycle, tray exit and real DPI
 remain required. No physical PASS is asserted by software tests or PNGs. Blocks 2/3
 remain paused; normal Automatic and custom GPU clocks remain closed.
+
+Pointer fixtures also exercise actual mouse-down/move/up dispatch for sliders and
+curve nodes at the scaled window size. Captured drags are canceled when page, axis,
+profile or busy state changes, preventing edits from leaking into another draft.
+Graph labels occupy separate rows, and vector fan/settings icons more closely
+follow the reference shapes. These cosmetic changes grant no hardware admission.
+
+The IPC client also retains a Guardian process that exits with an error during
+Enable, so the product reports an unresolved session rather than Disabled and
+cannot immediately replace it. The existing Close contract rejects nonzero exit.
+A native IPC-client fixture starts an already-exited error process and checks both
+Enable and Close; it never launches a hardware owner or kills a live Guardian.
