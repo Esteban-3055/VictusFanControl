@@ -55,10 +55,10 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         if (_history.Count > 600) _history.RemoveRange(0,_history.Count-600);
     }
     private Font F(int size) { if (!_fonts.TryGetValue(size,out var font)) _fonts[size] = font = new("Segoe UI",size,FontStyle.Regular,GraphicsUnit.Pixel); return font; }
-    private void DrawText(Graphics g,string text,float x,float y,int size=23,Color? color=null,float width=1200,bool bold=false)
+    private void DrawText(Graphics g,string text,float x,float y,int size=23,Color? color=null,float width=1200,bool bold=false,bool centered=false)
     {
         using var brush = new SolidBrush(color ?? Ink);
-        using var format = new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.LineLimit };
+        using var format = new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.LineLimit, Alignment = centered?StringAlignment.Center:StringAlignment.Near };
         if (bold) { using var font = new Font(F(size),FontStyle.Bold); g.DrawString(text,font,brush,new RectangleF(x,y,width,size*2.7f),format); }
         else g.DrawString(text,F(size),brush,new RectangleF(x,y,width,size*2.7f),format);
     }
@@ -77,7 +77,10 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     {
         enabled &= !Busy || id is "firmware" or "window-minimize" or "window-maximize" or "window-close"; Card(g,r,primary && enabled,10);
         if(primary && enabled){using var b=new SolidBrush(Color.FromArgb(0,111,244));using var p=Rounded(r,10);g.FillPath(b,p);}
-        DrawText(g,label,r.X+18,r.Y+(r.Height-24)/2,23,enabled?Ink:Color.FromArgb(92,115,138),r.Width-30);
+        int size=23;while(size>17&&g.MeasureString(label,F(size)).Width>r.Width-24)size--;
+        using(var brush=new SolidBrush(enabled?Ink:Color.FromArgb(92,115,138)))
+        using(var format=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap})
+            g.DrawString(label,F(size),brush,new RectangleF(r.X+10,r.Y,r.Width-20,r.Height),format);
         Hit(id,r,label,enabled);
     }
     private void Bar(Graphics g,RectangleF r,double? value,double max,Color color)
@@ -123,7 +126,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         for(int i=0;i<names.Length;i++)
         {
             var rect=new RectangleF(8,85+i*76,262,70);if((int)Page==i){Card(g,rect,true,12);using var b=new SolidBrush(Blue);g.FillRectangle(b,8,rect.Y+5,5,60);}
-            Icon(g,icons[i],36,rect.Y+20,35,(int)Page==i?Ink:Muted);DrawText(g,names[i],100,rect.Y+22,24,(int)Page==i?Ink:Muted,168);
+            Icon(g,icons[i],36,rect.Y+20,35,(int)Page==i?Ink:Muted);DrawText(g,names[i],100,rect.Y+22,22,(int)Page==i?Ink:Muted,168);
             Hit("page-"+i,rect,names[i]);
         }
         if(Page is ProductPage.Performance or ProductPage.Profiles or ProductPage.Curves)
@@ -160,7 +163,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(299,87,1352,329));DrawText(g,"Estado general",319,105,29,null,1000,true);
         string[] titles=["Ventiladores","CPU RAPL","GPU NVML","Fuente de energía"];
         string[] values=[State.FanMode,State.CpuState,State.GpuState,SourceText()];string[] icons=["fan","cpu","gpu","plug"];
-        for(int i=0;i<4;i++){float x=319+i*329;Card(g,new(x,157,310,238));DrawText(g,titles[i],x+30,178,24,null,275,true);Icon(g,icons[i],x+123,230,62,i==1?Green:Muted);DrawText(g,values[i],x+30,311,25,i==3?Green:Ink,275,true);
+        for(int i=0;i<4;i++){float x=319+i*329;Card(g,new(x,157,310,238));DrawText(g,titles[i],x+10,178,24,null,290,true,true);Icon(g,icons[i],x+123,230,62,i==1?Green:Muted);DrawText(g,values[i],x+10,311,25,i==3?Green:Ink,290,true,true);
             var small=i switch {0=>State.FanLevel.HasValue?"Nivel: "+State.FanLevel:"Autoridad: "+State.FanAuthority,1=>AppliedCpu(),2=>AppliedGpu(),_=>State.Source=="Unknown"?"Sin fuente confirmada":"Detectada por Windows"};DrawText(g,small,x+30,350,20,i==1?Green:Blue,275);}
         Card(g,new(299,435,1352,216));DrawText(g,"Temperaturas y uso",319,448,28,null,1000,true);var s=FreshSnapshot;
         Metric(g,"CPU",Value(s?.CpuControlTemperatureC,"°C"),new(319,494,310,136),Green,s?.CpuControlTemperatureC);
@@ -200,7 +203,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         Button(g,"firmware","Volver a Firmware",new(581,734,287,70));
         Card(g,new(915,450,734,378));DrawText(g,"Curva del perfil · "+ProfileName,937,468,25,null,685,true);
         DrawText(g,"Editando: "+ProfileName+" · Aplicado: "+(State.AppliedFanProfile??"Ninguno"),945,513,19,Muted,675);
-        DrawCurve(g,new(972,566,625,190),false);DrawText(g,"Rojo CPU · Azul GPU · rango real 30–50",945,784,19,Muted,680);
+        DrawCurve(g,new(972,590,625,145),false);
     }
     private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit)
     {
@@ -243,9 +246,9 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"CPU: "+State.CpuState,1178,341,23,Green,438);DrawText(g,"GPU: "+State.GpuState,1178,388,23,Blue,438);
         DrawText(g,"Aplicado: "+AppliedCpu(),1178,438,22,Muted,438);DrawText(g,AppliedGpu(),1178,480,22,Muted,438);
         DrawText(g,"Editar y guardar no aplican hardware. Aplicar usa la fuente real y ambos perfiles guardados en esta sesión.",1178,537,22,Muted,438);
-        Button(g,"save","Guardar configuración",new(1178,655,438,61),false);
-        Button(g,"performance-apply","Aplicar CPU / GPU",new(1178,729,438,61),true,State.PerformanceSupported&&State.CanApplyPerformance&&(Profiles.CpuEnabled||Profiles.GpuEnabled));
-        Button(g,"performance-release","Liberar CPU / GPU",new(1178,795,438,39),false,State.PerformanceProcessPresent);
+        Button(g,"save","Guardar configuración",new(1178,655,438,48),false);
+        Button(g,"performance-apply","Aplicar CPU / GPU",new(1178,714,438,48),true,State.PerformanceSupported&&State.CanApplyPerformance&&(Profiles.CpuEnabled||Profiles.GpuEnabled));
+        Button(g,"performance-release","Liberar CPU / GPU",new(1178,773,438,48),false,State.PerformanceProcessPresent);
     }
     private void ProfilePage(Graphics g)
     {
@@ -275,9 +278,9 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         for(int i=0;i<count;i++){var index=start+i;var rect=new RectangleF(333,495+i*36,489,34);if(index==SelectedNode)Card(g,rect,true,6);
             DrawText(g,$"{index+1}          {points[index].Input:0} {Unit()}             {points[index].Level:0}",343,rect.Y+3,21,Muted,414);Hit("node-"+index,rect,"Punto "+(index+1));}
         Button(g,"node-add","+  Añadir punto",new(331,767,226,44),true,points.Count<64);Button(g,"node-remove","−  Quitar",new(567,767,116,44),false,SelectedNode>=0&&points.Count>2);Button(g,"curve-reset","Restablecer",new(693,767,131,44));
-        DrawText(g,"Editor gráfico · arrastra los puntos",889,201,27,null,735,true);DrawCurve(g,new(958,298,634,381),true);
+        DrawText(g,"Editor gráfico · arrastra los puntos",889,201,27,null,735,true);DrawCurve(g,new(958,298,634,350),true);
         var selected=SelectedNode>=0&&SelectedNode<points.Count?points[SelectedNode]:null;
-        DrawText(g,selected is null?"Selecciona un nodo; flechas ajustan entrada/nivel.":$"Punto {SelectedNode+1}: {selected.Input:0} {Unit()} · nivel {selected.Level:0}",892,708,21,Muted,737);
+        DrawText(g,selected is null?"Selecciona un nodo; flechas ajustan entrada/nivel.":$"Punto {SelectedNode+1}: {selected.Input:0} {Unit()} · nivel {selected.Level:0}",892,728,18,Muted,737);
         Button(g,"save","Guardar curvas",new(894,763,325,48),true);Button(g,"curve-defaults","Valores iniciales del perfil",new(1235,763,389,48));
     }
     private string Unit() => Axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.GpuTemperature?"°C":Axis is AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.GpuPower?"W":"%";
@@ -321,7 +324,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     {
         DrawText(g,"Monitorización (tiempo real)",310,88,31,null,1320,true);
         string[] labels=["Temperaturas","Uso y potencia","RPM","Niveles"];
-        for(int i=0;i<4;i++)Button(g,"monitor-tab-"+i,labels[i],new(310+i*247,144,235,49),MonitorTab==i);
+        for(int i=0;i<4;i++)Button(g,"monitor-tab-"+i,labels[i],new(310+i*238,144,225,49),MonitorTab==i);
         Card(g,new(310,212,938,606));DrawText(g,"Historial real · últimos 5 minutos",334,229,25,null,865,true);
         if(MonitorTab==0){History(g,new(390,308,804,177),s=>s.CpuControlTemperatureC,s=>s.GpuTemperatureC,110,"Temperatura (°C)");History(g,new(390,597,804,144),s=>s.CpuLoadPercent,s=>s.GpuLoadPercent,100,"Uso (%)");}
         else if(MonitorTab==1){History(g,new(390,308,804,177),s=>s.CpuLoadPercent,s=>s.GpuLoadPercent,100,"Uso (%)");History(g,new(390,597,804,144),s=>s.CpuPackagePowerW,s=>s.GpuPowerW,150,"Potencia (W)");}

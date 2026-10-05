@@ -13,7 +13,7 @@ internal static class ProductGuiSelfTest
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());
-            form.ClientSize=new(1672,941);form.Show();Application.DoEvents();var canvas=form.Canvas;
+            form.ClientSize=new(1672,941);form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;canvas.Size=new(1672,941);
             Require(runtime.Commands==0,"Startup acquired authority.");
             form.HandleCommand("profile-battery");form.EditValue("pl1",30);form.EditValue("pl2",15);
             Require(form.Draft.Battery.CpuPl1Watts==30&&form.Draft.Battery.CpuPl2Watts==30&&form.Draft.Ac.CpuPl1Watts==35,"PL1/PL2 or independent AC failed.");
@@ -44,6 +44,7 @@ internal static class ProductGuiSelfTest
                 canvas.Refresh();Application.DoEvents();using var bitmap=new Bitmap(canvas.Width,canvas.Height);canvas.DrawToBitmap(bitmap,new(0,0,bitmap.Width,bitmap.Height));
                 bitmap.Save(Path.Combine(output,name+".png"),ImageFormat.Png);
                 Require(canvas.Hits.All(h=>h.Bounds.Left>=0&&h.Bounds.Top>=0&&h.Bounds.Right<=1673&&h.Bounds.Bottom<=942),"Hit area outside reference surface.");
+                Require(bitmap.Size==canvas.Size,"Render dimensions changed.");
                 Require(bitmap.GetPixel(bitmap.Width/2,bitmap.Height/2).A==255,"Render is transparent.");
             }
             foreach(var page in Enum.GetValues<ProductPage>()){canvas.Page=page;canvas.FanTab=0;canvas.PerformanceTab=0;Render("page-"+page);}
@@ -51,8 +52,13 @@ internal static class ProductGuiSelfTest
             canvas.Page=ProductPage.Performance;for(int i=1;i<=3;i++){canvas.PerformanceTab=i;Render("performance-tab-"+i);}
             canvas.Page=ProductPage.Monitoring;for(int i=1;i<=3;i++){canvas.MonitorTab=i;Render("monitor-tab-"+i);}
             canvas.Page=ProductPage.Curves;foreach(var size in new[]{new Size(1040,660),new Size(1254,706),new Size(1920,1080),new Size(2508,1412),new Size(3344,1882)})
-            {form.ClientSize=size;Render("layout-"+size.Width+"x"+size.Height);}
+            {canvas.Size=size;Require(canvas.Size==size,"Requested layout was clamped.");Render("layout-"+size.Width+"x"+size.Height);}
             Require(runtime.Commands==0,"Rendering wrote hardware.");
+            canvas.Size=new(1672,941);canvas.Page=ProductPage.Home;
+            foreach(var state in new[]{"Unsupported","Recovering","Failed"}){canvas.State=canvas.State with{Runtime=state,CpuState=state,GpuState=state,PerformanceActive=false,CanApplyPerformance=false};Render("state-"+state);}
+            canvas.Page=ProductPage.Performance;canvas.State=canvas.State with{Runtime="Healthy",CpuState="Active",GpuState="Failed",PerformanceActive=false};Render("state-partial-CPU-active-GPU-failed");
+            form.HandleCommand("fan-mode-1");form.HandleCommand("manual-apply");form.HandleCommand("firmware");form.HandleCommand("performance-release");
+            Require(runtime.Commands==4,"Explicit controls did not dispatch their separate contracts.");
             Console.WriteLine("PASS: product GUI draft isolation, editing/navigation without authority, sliders, nodes, closed gates and real Windows renders.");
             return 0;
         }

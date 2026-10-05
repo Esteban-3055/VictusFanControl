@@ -2,6 +2,20 @@
 
 VictusFanControl is an experimental, fail-closed fan-control application for the exact validated HP Victus target **HP 8C40 / 9D0R1LA / BIOS F.18**.
 
+## Current GUI phase
+
+The normal Windows application now opens the rebuilt product interface: seven pages,
+exactly two editable AC/Battery profiles, six independent fan demand curves per
+profile, a node graph, CPU PL1/PL2 and GPU clock preferences, and live telemetry.
+Editing and saving never grant hardware authority. Apply and Release remain explicit.
+Normal Automatic and custom GPU clock execution remain closed pending qualification.
+
+The historical qualification GUI is retained only for explicit test entries.
+Blocks 2 and 3 are paused until this GUI phase is complete. See
+[the GUI audit and execution boundaries](docs/GUI_PRODUCT_PHASE.md) for current
+behavior, deliberate reference adaptations, and validation limits. Older milestone
+sections below describe their original qualification state.
+
 ## Current target
 
 The active production-development target is:

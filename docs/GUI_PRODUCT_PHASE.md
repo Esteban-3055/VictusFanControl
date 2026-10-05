@@ -67,7 +67,7 @@ unknown-schema and corrupt files remain intact and fall back to safe defaults.
 The fan demand engine retains all six temperature/power/load curves, EMA,
 confirmation, adaptive descent and raw thermal safety. The editor clamps nodes
 into the real WMI range, keeps strict input order and monotonic outputs, and
-validates each change. Keyboard arrows adjust the selected node. No curve edit
+validates each change. Keyboard arrows adjust the selected node and focused sliders. No curve edit
 can alter execution gates or hardware ownership.
 
 CPU and GPU remain separate Guardian domains. Partial status is shown, including
@@ -110,7 +110,10 @@ rejection, monotonic curve editing, persistence/corruption, CPU ordering and
 closed custom-GPU execution. Existing adaptive, SafetyGate, WMI, Guardian and
 performance tests remain in Windows CI. Product GUI fixtures exercise drafts,
 sliders/nodes, navigation without hardware, closed Automatic, real Windows
-rendering of all pages/tabs and 1040–3344 pixel surfaces.
+rendering of all pages/tabs, Unsupported/Recovering/Failed and partial CPU-active /
+GPU-failed states, plus exact 1040–3344 pixel surfaces. Explicit Manual/Apply/
+Firmware/Release gestures dispatch separate recording ports. The render fixture
+uses a detached-size canvas to avoid Windows CI desktop window-size clamping.
 
 CI PNGs are isolated recording fixtures, not evidence of physical hardware state.
 The canvas uses DPI-aware reference coordinates and re-renders text/vectors at
