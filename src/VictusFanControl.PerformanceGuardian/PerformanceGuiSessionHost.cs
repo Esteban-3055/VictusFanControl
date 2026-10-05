@@ -70,7 +70,7 @@ internal static class PerformanceGuiSessionHost
         using var cpu = cpuBackend is not null ? new QualifiedCpuGuardianDomainLifecycle(cpuBackend,
             new JsonCpuPowerSessionJournal(cpuJournal, configuration.TargetProfileId), configuration.CpuPresets()) : null;
         using var gpu = gpuBackend is not null ? new QualifiedGpuGuardianDomainLifecycle(gpuBackend,
-            new JsonGpuClockSessionJournal(gpuJournal, configuration.TargetProfileId), GpuClockPresetSet.UserRequestedVictus) : null;
+            new JsonGpuClockSessionJournal(gpuJournal, configuration.TargetProfileId), configuration.GpuPresets()) : null;
         using var combined = cpu is not null && gpu is not null ? new CombinedGuardianDomainLifecycle(cpu, cpu, gpu, gpu) : null;
         IGuardianDomainLifecycle domain = (IGuardianDomainLifecycle?)combined ?? (IGuardianDomainLifecycle?)cpu ?? gpu!;
         using var source = new GuardianPerformancePowerSourceRuntime(new WindowsPerformancePowerSourceReader(),

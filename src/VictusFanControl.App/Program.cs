@@ -9,6 +9,11 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--product-gui-self-test")
+        {
+            ApplicationConfiguration.Initialize();
+            Environment.ExitCode = ProductGuiSelfTest.Run(); return;
+        }
         if (args.Length == 1 && args[0] == "--wmi-fan-gui-self-test")
         {
             Environment.ExitCode = WmiFanGuiIntegrationSelfTest.RunAsync().GetAwaiter().GetResult();
@@ -810,6 +815,12 @@ internal static class Program
         }
 
         AppLog.Write($"Starting GUI. Modules={modulesDirectory}");
+
+        if (hardwareTestModeCount == 0)
+        {
+            using var product = new ProductForm(modulesDirectory,args.Contains("--start-minimized"));
+            Application.Run(product); AppLog.Write("Product GUI exited."); return;
+        }
 
         using var form = new MainForm(
             modulesDirectory,

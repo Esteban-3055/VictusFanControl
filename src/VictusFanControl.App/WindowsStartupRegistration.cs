@@ -6,7 +6,7 @@ namespace VictusFanControl.App;
 
 internal static class WindowsStartupRegistration
 {
-    internal static string BuildXml(string sid, string executable, string modulesDirectory)
+    internal static string BuildXml(string sid, string executable, string modulesDirectory, bool startMinimized = true)
     {
         if (string.IsNullOrWhiteSpace(sid) || !Path.IsPathFullyQualified(executable) || !Path.IsPathFullyQualified(modulesDirectory) ||
             modulesDirectory.Contains('"')) throw new ArgumentException("Invalid startup identity/paths.");
@@ -19,7 +19,7 @@ internal static class WindowsStartupRegistration
             E("Settings", new[] { E("MultipleInstancesPolicy", "IgnoreNew"), E("DisallowStartIfOnBatteries", "false"),
                 E("StopIfGoingOnBatteries", "false"), E("ExecutionTimeLimit", "PT0S"), E("AllowHardTerminate", "false") }),
             new XElement(ns + "Actions", new XAttribute("Context", "User"), new XElement(ns + "Exec",
-                E("Command", executable), E("Arguments", "--start-minimized --modules-dir \"" + modulesDirectory + "\""),
+                E("Command", executable), E("Arguments", (startMinimized ? "--start-minimized " : "") + "--modules-dir \"" + modulesDirectory + "\""),
                 E("WorkingDirectory", Path.GetDirectoryName(executable)!))))).ToString();
     }
 
@@ -38,14 +38,14 @@ internal static class WindowsStartupRegistration
             Environment.ProcessPath, StringComparison.OrdinalIgnoreCase);
     }
 
-    internal static async Task SetEnabledAsync(bool enabled, string modulesDirectory)
+    internal static async Task SetEnabledAsync(bool enabled, string modulesDirectory, bool startMinimized = true)
     {
         if (enabled)
         {
             if (!string.Equals(Path.GetFileName(Environment.ProcessPath), "VictusFanControl.App.exe", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Abre VictusFanControl.App.exe para configurar el inicio automático.");
             using var identity = WindowsIdentity.GetCurrent();
-            var xml = BuildXml(identity.User!.Value, Environment.ProcessPath ?? throw new IOException("Executable unavailable."), modulesDirectory);
+            var xml = BuildXml(identity.User!.Value, Environment.ProcessPath ?? throw new IOException("Executable unavailable."), modulesDirectory, startMinimized);
             var temporary = Path.Combine(Path.GetTempPath(), "vfc-startup-" + Guid.NewGuid().ToString("N") + ".xml");
             try
             {

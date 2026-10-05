@@ -21,6 +21,7 @@ public static class AdaptiveFanProductionControllerSelfTest
         failures += await TestCustomModeHandoffAsync(output);
         failures += await TestFaultedFirmwareSelectionAsync(output);
         failures += Block1QualificationSequenceSelfTest.Run(output);
+        VictusFanControl.Product.ProductProfilesSelfTest.Run(output);
         failures += await TestModeSwitchWaitsForInFlightManualApplyAsync(output);
         failures += await TestSafetyRestoreWinsConcurrentModeSwitchAsync(output);
         failures += await TestManualFreshSafetyRefreshAndRetryAsync(output);
