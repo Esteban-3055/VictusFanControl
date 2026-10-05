@@ -230,7 +230,8 @@ if($isAuthorized){
 }
 
 foreach($needle in @('p16NormalManualQualificationAuthorized','Hp8C40P16NormalManualQualificationGate.PhysicalExecutionAuthorized','Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(_targetProfile?.Id) ||','Hp8C40TargetProfile.Instance.Id')){Assert-Contains $main $needle ("P16 MainForm bridge missing: {0}" -f $needle)}
-foreach($needle in @('_manualLevel.Minimum = 10;','_manualLevel.Maximum = 50;','await _controller.ApplyManualAsync(','P13 mode request {mode}: action={result.Action};','P13 manual request {level}/{level}: action={result.Action};')){Assert-Contains $surface $needle ("P16 P13 prerequisite missing: {0}" -f $needle)}
+foreach($needle in @('_manualLevel.Minimum = _controller.ManualMinimumLevel;','_manualLevel.Maximum = _controller.ManualMaximumLevel;','await _controller.ApplyManualAsync(','P13 mode request {mode}: action={result.Action};','P13 manual request {level}/{level}: action={result.Action};')){Assert-Contains $surface $needle ("P16 P13 prerequisite missing: {0}" -f $needle)}
+foreach($needle in @('public int ManualMinimumLevel => _minimumLevel;','public int ManualMaximumLevel => _maximumLevel;','Math.Max(config.MinimumLevel, backendCapabilities.MinimumLevel)','Math.Min(config.MaximumLevel, backendCapabilities.MaximumLevel)')){Assert-Contains $adapter $needle ("P16/current Manual backend-envelope prerequisite missing: {0}" -f $needle)}
 Assert-NotContains $program '--8c40-p16' 'P16 must not add special command-line mode.'
 Assert-NotContains $program 'P16NormalManual' 'P16 must not add P16 Program hardware-test state.'
 
