@@ -84,3 +84,40 @@ Soak no requiere hardware: realiza 30 ciclos de apertura/salida tras 3 de
 calentamiento y 924 renderizados con navegación, cambios de tamaño y simulación.
 Su informe queda en `app/logs/product-gui-soak/report.json`. Es una prueba acelerada
 de recursos de Windows, no una prueba física de ventiladores.
+
+
+## Prueba supervisada de las curvas Automatic en la GUI nueva
+
+Entrada separada: `Start-ProductGui.ps1 -Mode AutomaticReview`. `Open` y el inicio
+con Windows conservan Automatic cerrado. El modo de prueba exige el destino
+exacto 8C40/F.18 mediante el gate de cualificación existente; no abre el gate normal.
+Arranca en Firmware, no aplica CPU/GPU y requiere seleccionar Automatic explícitamente.
+No admite una sesión Performance existente ni otra entrada de cualificación simultánea.
+
+Cada activación toma una copia de la curva del perfil de la fuente real y espera
+3 adquisiciones únicas Healthy antes de controlar. El motor proyecta esa curva
+en 30–50; los puntos inferiores a 30 siguen editables y visibles en el simulador,
+pero esta primera prueba física automática los limita a 30. Manual conserva 10–50.
+La revisión comprueba CPU ≤90 °C/60 W y GPU ≤82 °C/75 W, incluida la temperatura
+del núcleo más caliente. Un dato inválido, cambio de fuente, lifecycle o error
+interrumpe la sesión y solicita Firmware; no rearma automáticamente.
+
+El plazo monotónico de 300 s se inicia con el clic Automatic y se verifica antes
+del despacho. El supervisor solicita Firmware al vencer el plazo, con hasta 2 s
+entre comprobaciones. El plazo no cancela una llamada de firmware ya despachada.
+La finalización bloquea una nueva activación hasta reiniciar tras liberación limpia.
+También puede seleccionarse Firmware antes del plazo.
+
+Primer ensayo, con cargador conectado y sin carga artificial:
+1. Salir de la GUI anterior desde la bandeja; conservar logs/journals.
+2. Abrir el paquete nuevo con `-Mode AutomaticReview`; esperar Healthy y fuente Ac.
+3. Mantener CPU/GPU sin aplicar y seleccionar Automatic una vez.
+4. Observar 30–60 s y exportar diagnóstico mientras Automatic esté activo.
+5. Volver a Firmware, esperar 20 s y exportar otro diagnóstico.
+
+El diagnóstico incluye la configuración congelada aplicada, última decisión,
+nivel solicitado, demanda cruda/filtrada y segundos restantes; el log conserva
+cada decisión y solicitudes WMI. Las RPM y solicitudes aceptadas no prueban
+ownership ni setpoint exacto. Cambiar/guardar un borrador no modifica la curva
+en ejecución. Para otro ensayo: Firmware, editar, y seleccionar Automatic de nuevo
+antes del vencimiento. No desenchufar, suspender ni añadir carga en el primer ensayo.

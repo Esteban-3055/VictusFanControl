@@ -283,6 +283,12 @@ internal static class Program
             (p15d2VariableManualHardwareTest ? 1 : 0) +
             (automaticFinalQualificationHardwareTest ? 1 : 0) + (block1Test ? 1 : 0);
 
+        var productAutomaticReview = args.Contains("--product-automatic-review");
+        if (productAutomaticReview && hardwareTestModeCount != 0)
+        {
+            AppLog.Write("Product Automatic review cannot be combined with other hardware qualification entries.");
+            Environment.ExitCode = 60; return;
+        }
         if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
@@ -820,7 +826,7 @@ internal static class Program
 
         if (hardwareTestModeCount == 0)
         {
-            using var product = new ProductForm(modulesDirectory,args.Contains("--start-minimized"));
+            using var product = new ProductForm(modulesDirectory,args.Contains("--start-minimized"),automaticReview:productAutomaticReview);
             Application.Run(product); AppLog.Write("Product GUI exited."); return;
         }
 

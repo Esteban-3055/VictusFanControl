@@ -11,6 +11,7 @@ internal sealed class ProductForm : Form
 {
     private readonly ProductCanvas _canvas = new();
     private readonly string _modules;
+    private readonly bool _automaticReview;
     private IProductRuntime? _runtime;
     private ProductProfiles _draft;
     private ProductProfiles _saved;
@@ -30,9 +31,9 @@ internal sealed class ProductForm : Form
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,bool automaticReview=false)
     {
-        _modules=modules;_runtime=fixture;_profilesPath=profilesPath;
+        _modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
         string? notice=null;
         _draft=fixtureProfiles is null?ProductProfilesStore.Load(profilesPath,out notice,Migrate):ProductProfilesStore.Copy(fixtureProfiles);
         _saved=ProductProfilesStore.Copy(_draft);
@@ -61,7 +62,7 @@ internal sealed class ProductForm : Form
     {
         try
         {
-            if(_runtime is null)_runtime=await (runtimeFactory?.Invoke()??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,Draft)));
+            if(_runtime is null)_runtime=await (runtimeFactory?.Invoke()??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,Draft,_automaticReview)));
             // A close during construction waits for this task, then disposes the returned service without starting it.
             if(_closing||IsDisposed)return;
             _runtime.Changed+=UpdateState;UpdateState(_runtime.State);
@@ -121,6 +122,7 @@ internal sealed class ProductForm : Form
         }
         if(_canvas.Busy&&id is not("firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close"))return;
         if(id=="fan-mode-1"&&(!_canvas.State.ManualAuthorized||_canvas.State.LifecycleBlocked))return;
+        if(id=="fan-mode-2"&&_canvas.State.LifecycleBlocked)return;
         if(id=="manual-apply"&&(!_canvas.State.ManualAuthorized||_canvas.State.FanMode!="Manual"||_canvas.State.Runtime!="Healthy"||_canvas.State.LifecycleBlocked))return;
         if(id=="performance-apply"&&(!_canvas.State.PerformanceSupported||!_canvas.State.CanApplyPerformance||!(_draft.CpuEnabled||_draft.GpuEnabled)))return;
         if(id=="performance-release"&&!_canvas.State.PerformanceProcessPresent)return;

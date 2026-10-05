@@ -3,6 +3,8 @@ using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Product;
 using VictusFanControl.Performance;
 using VictusFanControl.Telemetry;
+using VictusFanControl.Safety;
+using VictusFanControl.Hardware.Hp;
 namespace VictusFanControl.App;
 
 internal static class ProductGuiSelfTest
@@ -12,6 +14,7 @@ internal static class ProductGuiSelfTest
         try
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
+            TestAutomaticReview(Require);
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());
             form.ClientSize=new(1672,941);form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;canvas.Size=new(1672,941);
             Require(runtime.Commands==0,"Startup acquired authority.");
@@ -109,6 +112,42 @@ internal static class ProductGuiSelfTest
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }
+    private static void TestAutomaticReview(Action<bool,string> require)
+    {
+        var target=Hp8C40TargetProfile.Instance.Id;
+        require(!Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized,"Review promoted the normal Automatic gate.");
+        require(!ProductAutomaticReview.IsAuthorized(false,target)&&!ProductAutomaticReview.IsAuthorized(true,"Unsupported")&&ProductAutomaticReview.IsAuthorized(true,target),"Review target/explicit admission failed.");
+        long clock=1000;var review=new ProductAutomaticReview(()=>clock);
+        var snapshot=Snapshot(DateTimeOffset.UtcNow,40,35,5,5) with{CpuExpectedPhysicalCoreCount=1};
+        SafetyGateResult Safety(TelemetrySnapshot s)=>new(true,true,true,true,true,true,false,true,true,true,s.Timestamp,s.Timestamp,1,Array.Empty<string>());
+        void Rejected(Action action,string message){bool failed=false;try{action();}catch(InvalidOperationException){failed=true;}require(failed,message);}
+        Rejected(()=>review.EnsureDispatchAllowed(snapshot),"Inactive review admitted a dispatch.");
+        review.Start();
+        Rejected(()=>review.Observe(snapshot,Safety(snapshot) with{EvaluationSequence=0}),"Presentation-only safety admitted review.");
+        require(review.RemainingSeconds==300&&!review.Expired,"Review did not use its activation clock.");
+        require(!review.Observe(snapshot,Safety(snapshot)),"Review wrote after only one healthy sample.");
+        snapshot=snapshot with{Timestamp=snapshot.Timestamp.AddSeconds(1)};require(!review.Observe(snapshot,Safety(snapshot)),"Review wrote after only two healthy samples.");
+        snapshot=snapshot with{Timestamp=snapshot.Timestamp.AddSeconds(1)};require(review.Observe(snapshot,Safety(snapshot)),"Three unique healthy samples did not admit review.");
+        Rejected(()=>review.Observe(snapshot,Safety(snapshot)),"Duplicate acquisition admitted.");
+        Rejected(()=>review.EnsureDispatchAllowed(snapshot with{CpuPackagePowerW=61}),"CPU power envelope escaped.");
+        Rejected(()=>review.EnsureDispatchAllowed(snapshot with{GpuTemperatureC=83}),"GPU thermal envelope escaped.");
+        Rejected(()=>review.EnsureDispatchAllowed(snapshot with{CpuCoreTemperatures=[new(0,0,"Performance",91)]}),"Hottest-core envelope escaped.");
+        Rejected(()=>review.EnsureDispatchAllowed(snapshot with{GpuPowerW=double.NaN}),"Nonfinite power admitted.");
+        clock+=299999;require(!review.Expired,"Review expired before deadline.");clock++;
+        require(review.Expired&&review.RemainingSeconds==0,"Review deadline escaped.");
+        Rejected(()=>review.EnsureDispatchAllowed(snapshot),"Expired review dispatched.");
+        review.Stop();require(review.RemainingSeconds is null,"Stopped review retained a deadline.");
+        review.Start();clock--;require(review.Expired,"Backwards clock admitted review.");
+        // Explicit review still starts in Firmware, and editing/saving never dispatches a curve.
+        var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://review",fixture:runtime,fixtureProfiles:new ProductProfiles(),automaticReview:true);
+        form.Show();Application.DoEvents();require(runtime.Commands==0&&form.Canvas.State.FanMode=="Firmware","Review auto-started control.");
+        runtime.Publish(runtime.State with{AutomaticAuthorized=true,AutomaticReview=true,Runtime="Healthy"});
+        form.HandleCommand("fan-mode-2");PumpUntil(()=>!form.Canvas.Busy,"Review mode command did not finish.");require(runtime.Commands==1,"Explicit Automatic click was not dispatched once.");
+        form.EditNode(3,70,35);require(runtime.Commands==1,"Curve editing dispatched hardware in review.");
+        runtime.Publish(runtime.State with{AutomaticAuthorized=true,LifecycleBlocked=true});form.HandleCommand("fan-mode-2");require(runtime.Commands==1,"Interrupted review rearmed from GUI.");
+        var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Review fixture shutdown failed.");exit.GetAwaiter().GetResult();
+    }
+
     private static void PumpUntil(Func<bool> completed,string failure)
     {
         var timer=System.Diagnostics.Stopwatch.StartNew();

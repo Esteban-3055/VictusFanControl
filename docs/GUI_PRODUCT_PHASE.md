@@ -368,3 +368,16 @@ workflow now initializes that same read-only inventory query once with a bounded
 30-second timeout before the test suite. Real isolation guards retain their
 five-second deadline and every original assertion. This changes runner setup,
 not HP requests, production admission or release behavior.
+
+
+### Entrada explícita de revisión Automatic
+
+La GUI incluye `--product-automatic-review`, expuesto únicamente por el modo
+`AutomaticReview` del launcher verificado. Usa la autorización dedicada de
+cualificación para 8C40/F.18, arranque Firmware, copia de curva por fuente real,
+3 muestras Healthy, límites físicos conservadores y una ventana de 300 s.
+`Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized` permanece false.
+El runtime usa evaluaciones SafetyGate de control con secuencia positiva; las
+previsualizaciones del despacho mantienen la evaluación de presentación sin
+consumir secuencias. El diagnóstico captura tanto borrador como curva aplicada.
+La aceptación física de esta entrada y la cualificación general siguen pendientes.
