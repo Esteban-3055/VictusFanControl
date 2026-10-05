@@ -332,7 +332,7 @@ function Assert-AppAudit {
             }
         }
         if ($found -lt 0) {
-            throw "App causal ordering missing after index $cursor: $pattern"
+            throw "App causal ordering missing after index ${cursor}: $pattern"
         }
         $cursor = $found
     }
