@@ -23,12 +23,18 @@ internal static class WmiFanExperimentBoundary
 
     internal static void Enable(string directory, bool control, bool gui = false)
     {
-        if (Enabled) throw new InvalidOperationException("Experiment boundary is already installed.");
-        SessionDirectory = Path.GetFullPath(directory);
-        Control = control;
-        _gui = gui;
-        // Reuse the existing hard prohibition before EC module loading / I/O.
-        WmiOnlyInvestigationPolicy.Enable();
+        lock (SessionGate)
+        {
+            if (Enabled) throw new InvalidOperationException("Experiment boundary is already installed.");
+            SessionDirectory = Path.GetFullPath(directory);
+            Directory.CreateDirectory(SessionDirectory);
+            Control = control;
+            _gui = gui;
+            Volatile.Write(ref _admission, null);
+            Interlocked.Exchange(ref _recovering, 0);
+            // Reuse the existing hard prohibition before EC module loading / I/O.
+            WmiOnlyInvestigationPolicy.Enable();
+        }
     }
 
     internal static void BeginRecovery() => Interlocked.Exchange(ref _recovering, 1);
