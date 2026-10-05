@@ -90,7 +90,9 @@ internal sealed class P13FanControlSurface : UserControl
         _candidateConfig = configuration.BuildPolicy();
         _shadowEvaluator = new AdaptiveFanPolicyShadowEvaluator(_hardware,
             AdaptiveCurveProfiles.Validate(_previewProfile), preparedAutomatic: true, configuration: configuration);
-        _candidateValue.Text = $"{_previewProfile.Name} · {configuration.Tuning.MinimumLevel}–{configuration.Tuning.MaximumLevel}";
+        _candidateValue.Text =
+            $"{_previewProfile.Name} · configurado {configuration.Tuning.MinimumLevel}–{configuration.Tuning.MaximumLevel} · " +
+            $"Automatic efectivo {Hp8C40AutomaticPolicy.MinimumLevel}–{Hp8C40AutomaticPolicy.MaximumLevel}";
         _previewLevelValue.Text = "—";
         _previewDetailValue.Text = "Ajustes aplicados; esperando una muestra nueva.";
     }
@@ -319,8 +321,10 @@ internal sealed class P13FanControlSurface : UserControl
                 ? "OPEN"
                 : "CLOSED";
         var configured = _controller.AutomaticConfiguration;
-        _candidateValue.Text = configured is null ? $"{Hp8C40AdaptiveCandidateV1.Id} — shadow-only / unvalidated"
-            : $"{configured.Profile.Name} · {configured.Tuning.MinimumLevel}–{configured.Tuning.MaximumLevel} · vista previa";
+        _candidateValue.Text = configured is null
+            ? $"{Hp8C40AdaptiveCandidateV1.Id} · Automatic efectivo {Hp8C40AutomaticPolicy.MinimumLevel}–{Hp8C40AutomaticPolicy.MaximumLevel}"
+            : $"{configured.Profile.Name} · configurado {configured.Tuning.MinimumLevel}–{configured.Tuning.MaximumLevel} · " +
+              $"Automatic efectivo {Hp8C40AutomaticPolicy.MinimumLevel}–{Hp8C40AutomaticPolicy.MaximumLevel}";
 
         state.Controls.Add(new Label { Text = "Requested mode:", AutoSize = true }, 0, 0);
         state.Controls.Add(_modeValue, 1, 0);
