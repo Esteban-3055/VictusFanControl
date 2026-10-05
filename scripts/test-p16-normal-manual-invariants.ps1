@@ -13,6 +13,7 @@ $userGate=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Contro
 $candidate=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Control\Adaptive\Hp8C40AdaptiveCandidateV1.cs') -Raw
 $main=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\MainForm.cs') -Raw
 $surface=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\P13FanControlSurface.cs') -Raw
+$adapter=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl\Control\Adaptive\AdaptiveFanProductionController.cs') -Raw
 $program=Get-Content -LiteralPath (Join-Path $root 'src\VictusFanControl.App\Program.cs') -Raw
 $harness=Get-Content -LiteralPath (Join-Path $root 'scripts\test-p16-normal-manual.ps1') -Raw
 $packager=Get-Content -LiteralPath (Join-Path $root 'scripts\package-p16-evidence.ps1') -Raw
