@@ -1,4 +1,4 @@
-param([ValidateSet('Verify','SelfTest','Open')][string]$Mode = 'Open')
+param([ValidateSet('Verify','SelfTest','Soak','Open')][string]$Mode = 'Open')
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $manifest = Get-Content -LiteralPath (Join-Path $root 'PRODUCT-GUI-MANIFEST.json') -Raw | ConvertFrom-Json
@@ -19,7 +19,7 @@ try {
     $start.FileName = Join-Path $app 'VictusFanControl.App.exe'
     $start.UseShellExecute = $false
     $start.WorkingDirectory = $app
-    $start.Arguments = if ($Mode -eq 'SelfTest') { '--product-gui-self-test' } else { '--modules-dir "' + (Join-Path $app 'modules') + '"' }
+    $start.Arguments = if ($Mode -eq 'SelfTest') { '--product-gui-self-test' } elseif ($Mode -eq 'Soak') { '--product-gui-soak-self-test' } else { '--modules-dir "' + (Join-Path $app 'modules') + '"' }
     $process = [System.Diagnostics.Process]::Start($start)
     try {
         $process.WaitForExit()

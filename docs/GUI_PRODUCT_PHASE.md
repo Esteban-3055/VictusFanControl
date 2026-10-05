@@ -215,3 +215,43 @@ Imported or fallback preferences are marked as needing Save; Discard returns to 
 session baseline and cannot label an unpersisted fallback as saved. The corrupt-file
 form fixture checks that the original survives Load/Discard and is replaced only
 by an explicit successful Save.
+
+## Offline simulator, portable profiles, diagnostics and prolonged GUI checks
+
+Curves has Editor / Simulator views. The simulator uses the same
+`AdaptiveFanInertiaPolicy` + `Hp8C40AutomaticPolicy.Create` and the edited profile's
+fan tuning/configuration. Its six sliders are synthetic inputs; CPU temperature is
+already the selected demand aggregate. It does not invent individual core readings
+or raw-safety telemetry. Advance 1/60/1200 virtual seconds processes every one-second
+sample, preserving EMA, confirmation, thermal demand override and sustained-load
+history. Results show raw demand, filtered demand and common level 30–50; only the
+latest 600 samples are retained. A session is bounded to 24 virtual hours. Profile
+or configuration changes reset the model; input changes retain temporal history.
+The simulation has no hardware/service port and never mutates preferences. It is
+not a thermal plant model, an RPM prediction or a test of SafetyGate/Guardian.
+
+Settings can export both profiles as strict JSON and import into the draft.
+Import size is limited to 1 MiB; malformed/schema/authority injection is rejected
+without changing the draft. Import marks unsaved preferences, never writes the live
+profile file or applies hardware. Export does not change dirty/applied state.
+
+The diagnostic ZIP exports a presentation snapshot, draft configuration and at most
+2 MiB from the current app event log, plus an explanatory README. It never enumerates
+or removes recovery journals/leases and performs no process/hardware operations.
+Logs can contain local paths; the UI tells users to review before sharing. Export
+uses a temporary ZIP and atomic replacement, preserving the destination on failure.
+The snapshot expressly states that physical qualification is not established.
+
+The Windows soak fixture uses recording ports, three warmup + thirty open/close
+cycles and 924 renders with page/profile/size/keyboard/simulation changes. It records
+GDI, USER and private-memory samples in `logs/product-gui-soak/report.json`. After
+warmup/full GC, limits are baseline +16 GDI/USER objects and +64 MiB private bytes,
+so bounded framework caches are tolerated while repeated leaks fail CI. No live
+hardware runtime is constructed. This is an accelerated resource/interaction test,
+not evidence of days of physical operation. CI publishes the report separately.
+`Start-ProductGui.ps1 -Mode Soak` runs the same isolated fixture from the package.
+
+Core regression compares virtual phases with the prepared inertia policy; GUI
+fixtures check simulator authority isolation/reset, portable-file failure handling,
+draft-only import, bounded diagnostic content and preservation of saved preferences.
+Automatic normal and custom GPU gates remain closed; Blocks 2/3 stay paused.

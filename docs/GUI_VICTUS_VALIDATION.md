@@ -22,6 +22,7 @@ Desde PowerShell, en la carpeta extraída:
 ```powershell
 .\Start-ProductGui.ps1 -Mode Verify
 .\Start-ProductGui.ps1 -Mode SelfTest
+.\Start-ProductGui.ps1 -Mode Soak
 .\Start-ProductGui.ps1 -Mode Open
 ```
 
@@ -64,3 +65,22 @@ sliders, teclado/accesibilidad, guardado atómico/corrupción, descarte, fallos 
 Aplicar/Liberar, datos obsoletos/incompletos, historial con huecos, cola lifecycle,
 salida durante inicio/operación y estados parciales. La tabla identifica el trabajo
 que requiere Windows y el equipo real.
+
+## Herramientas que no necesitan el Victus
+
+En Curvas, abrir Simulador: los seis valores son entradas sintéticas. Avanzar 1 s,
+60 s o 20 min hace correr el motor real en tiempo virtual. Cambiar las entradas
+conserva la historia; cambiar perfil/configuración o Reiniciar limpia el modelo.
+El gráfico representa demanda cruda, EMA y nivel calculado, no RPM. No valida
+SafetyGate ni respuesta física y no habilita Automatic.
+
+En Configuración, Exportar perfiles crea un respaldo JSON. Importar carga ambos
+perfiles solo en edición; necesita Guardar para persistir y Aplicar sigue siendo
+un contrato separado. Un archivo inválido deja el borrador anterior intacto.
+Exportar diagnóstico genera un ZIP de estado, borrador y últimos 2 MiB del log;
+revisar rutas locales antes de compartir. No copia ni elimina journals/leases.
+
+Soak no requiere hardware: realiza 30 ciclos de apertura/salida tras 3 de
+calentamiento y 924 renderizados con navegación, cambios de tamaño y simulación.
+Su informe queda en `app/logs/product-gui-soak/report.json`. Es una prueba acelerada
+de recursos de Windows, no una prueba física de ventiladores.

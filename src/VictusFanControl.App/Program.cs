@@ -9,6 +9,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.Length==1&&args[0]=="--product-gui-soak-self-test")
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSoak();return;}
         if (args.Length == 1 && args[0] == "--product-gui-self-test")
         {
             ApplicationConfiguration.Initialize();

@@ -39,7 +39,7 @@ internal sealed class ProductForm : Form
         _presentationTimer.Tick+=(_,_)=>{if(!_closing&&!IsDisposed)_canvas.Invalidate();};
         Text="VictusFanControl";FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=new(1344,756);StartPosition=FormStartPosition.CenterScreen;
-        _canvas.Profiles=_draft;_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
+        _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
         _canvas.Command+=HandleCommand;_canvas.ValueEdited+=EditValue;_canvas.NodeEdited+=EditNode;
         _canvas.MouseDown+=(_,e)=>{if(e.Button==MouseButtons.Left&&_canvas.IsHeaderDrag(e.Location)){ReleaseCapture();SendMessage(Handle,0xA1,2,0);}};
         _canvas.MouseDoubleClick+=(_,e)=>{if(_canvas.IsHeaderDrag(e.Location))ToggleMaximize();};
@@ -99,7 +99,7 @@ internal sealed class ProductForm : Form
     {
         if(_closing||IsDisposed)return;
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
-        if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
+        if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
         if(id.StartsWith("axis-")){_canvas.Axis=(AdaptiveCurveAxis)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id.StartsWith("fan-tab-")){_canvas.FanTab=int.Parse(id[8..]);_canvas.Invalidate();return;}
         if(id.StartsWith("perf-tab-")){_canvas.PerformanceTab=int.Parse(id[9..]);_canvas.Invalidate();return;}
@@ -113,7 +113,7 @@ internal sealed class ProductForm : Form
         if(id.EndsWith("-minus")||id.EndsWith("-plus"))
         {
             var plus=id.EndsWith("-plus");var key=id[..(id.Length-(plus?5:6))];var p=_draft.Get(_canvas.Editing);
-            var current=key switch{"manual"=>_canvas.ManualLevel,"pl1"=>p.CpuPl1Watts,"pl2"=>p.CpuPl2Watts,"gpu"=>p.GpuMaximumMHz,_=>0};
+            var current=key.StartsWith("sim-input-")?_canvas.SimulationInputs.Value(int.Parse(key[10..])):key switch{"manual"=>_canvas.ManualLevel,"pl1"=>p.CpuPl1Watts,"pl2"=>p.CpuPl2Watts,"gpu"=>p.GpuMaximumMHz,_=>0};
             EditValue(key,current+(plus?1:-1));return;
         }
         if(_canvas.Busy&&id is not("firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close"))return;
@@ -126,13 +126,17 @@ internal sealed class ProductForm : Form
             case "window-minimize":Hide();break;
             case "window-maximize":ToggleMaximize();break;
             case "window-close":Hide();break;
+            case "curve-editor":_canvas.SimulationVisible=false;break;
+            case "curve-simulator":_canvas.SimulationVisible=true;break;
+            case "sim-1":case "sim-60":case "sim-1200":try{_canvas.Simulation.Advance(_canvas.SimulationInputs,int.Parse(id[4..]));}catch(Exception ex){_canvas.Notice=ex.Message;}break;
+            case "sim-reset":ResetSimulation();break;
             case "edit-curve":_canvas.Page=ProductPage.Curves;break;
             case "edit-performance":_canvas.Page=ProductPage.Performance;break;
             case "cpu-toggle":Change(_draft with{CpuEnabled=!_draft.CpuEnabled});break;
             case "gpu-toggle":Change(_draft with{GpuEnabled=!_draft.GpuEnabled});break;
             case "minimized-toggle":Change(_draft with{StartMinimized=!_draft.StartMinimized});break;
             case "save":_ = SaveAsync();break;
-            case "discard":_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;_canvas.Dirty=!_hasSavedBaseline;_canvas.SelectedNode=-1;_canvas.Notice=_hasSavedBaseline?"Se recuperaron las preferencias guardadas.":"Se recuperó la configuración inicial; falta guardarla.";break;
+            case "discard":_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=!_hasSavedBaseline;_canvas.SelectedNode=-1;_canvas.Notice=_hasSavedBaseline?"Se recuperaron las preferencias guardadas.":"Se recuperó la configuración inicial; falta guardarla.";break;
             case "startup-toggle":_ = ToggleStartupAsync();break;
             case "firmware":case "fan-mode-0":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask);break;
             case "fan-mode-1":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Manual,Draft)??Task.CompletedTask);break;
@@ -144,17 +148,21 @@ internal sealed class ProductForm : Form
             case "node-remove":RemoveNode();break;
             case "curve-reset":ResetCurve(false);break;
             case "curve-defaults":ResetCurve(true);break;
+            case "profiles-export":using(var dialog=new SaveFileDialog{Filter="Perfiles JSON (*.json)|*.json",FileName="VictusFanControl-perfiles.json",AddExtension=true,DefaultExt="json"})if(dialog.ShowDialog(this)==DialogResult.OK)_ = ExportProfilesAsync(dialog.FileName);break;
+            case "profiles-import":using(var dialog=new OpenFileDialog{Filter="Perfiles JSON (*.json)|*.json",CheckFileExists=true})if(dialog.ShowDialog(this)==DialogResult.OK)_ = ImportProfilesAsync(dialog.FileName);break;
+            case "diagnostics-export":using(var dialog=new SaveFileDialog{Filter="Diagnóstico ZIP (*.zip)|*.zip",FileName="VictusFanControl-diagnostico.zip",AddExtension=true,DefaultExt="zip"})if(dialog.ShowDialog(this)==DialogResult.OK)_ = ExportDiagnosticsAsync(dialog.FileName);break;
             case "open-logs":try {Process.Start(new ProcessStartInfo(Path.GetDirectoryName(AppLog.CurrentLogPath)!){UseShellExecute=true});}catch(Exception ex){_canvas.Notice=ex.Message;}break;
         }
         _canvas.Invalidate();
     }
     private void Change(ProductProfiles next)
     {
-        if(_canvas.Busy||_closing||IsDisposed)return;next.Validate();_draft=next;_canvas.Profiles=_draft;_canvas.Dirty=true;_canvas.Notice="Cambios en edición; no aplicados al hardware.";_canvas.Invalidate();
+        if(_canvas.Busy||_closing||IsDisposed)return;next.Validate();_draft=next;_canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=true;_canvas.Notice="Cambios en edición; no aplicados al hardware.";_canvas.Invalidate();
     }
     internal void EditValue(string key,int value)
     {
         if(_canvas.Busy||_closing||IsDisposed)return;
+        if(key.StartsWith("sim-input-")){_canvas.SimulationInputs=_canvas.SimulationInputs.With(int.Parse(key[10..]),value);_canvas.Invalidate();return;}
         var slot=_canvas.Editing;var p=_draft.Get(slot);
         if(key=="manual") {_canvas.ManualLevel=Math.Clamp(value,30,50);_canvas.Invalidate();return;}
         var next=key switch
@@ -196,6 +204,14 @@ internal sealed class ProductForm : Form
         var fan=all?defaults:p.Fan with{Profile=AdaptiveCurveProfiles.WithCurve(p.Fan.Profile,_canvas.Axis,AdaptiveCurveProfiles.Curve(defaults.BuildPolicy(),_canvas.Axis))};
         Change(_draft.With(_canvas.Editing,p with{Fan=fan}));_canvas.SelectedNode=-1;
     }
+    internal Task ExportProfilesAsync(string path)=>RunAsync(async()=>{var draft=Draft;await Task.Run(()=>ProductProfilesStore.Save(draft,path));_canvas.Notice="Respaldo exportado; las preferencias en edición no se han aplicado.";});
+    internal Task ImportProfilesAsync(string path)=>RunAsync(async()=>
+    {
+        var imported=await Task.Run(()=>{if(new FileInfo(path).Length>1024*1024)throw new InvalidDataException("El archivo de perfiles supera 1 MiB.");return ProductProfilesStore.Parse(File.ReadAllText(path));});
+        if(_closing)return;imported.Validate();_draft=imported;_canvas.Profiles=_draft;ResetSimulation();_canvas.SelectedNode=-1;_canvas.Dirty=true;_canvas.Notice="Perfiles importados en edición; falta Guardar. No se aplicó hardware.";
+    });
+    internal Task ExportDiagnosticsAsync(string path,string? fixtureLog=null)=>RunAsync(async()=>{var state=_canvas.State;var draft=Draft;await Task.Run(()=>ProductDiagnostics.Export(path,state,draft,fixtureLog??AppLog.CurrentLogPath));_canvas.Notice="Diagnóstico exportado. Revisa rutas locales antes de compartirlo.";});
+    private void ResetSimulation()=>_canvas.Simulation=new(_draft.Get(_canvas.Editing).Fan);
     private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));_saved=ProductProfilesStore.Copy(settings);_hasSavedBaseline=true;_canvas.Dirty=false;if(_canvas.StartupEnabled)await WindowsStartupRegistration.SetEnabledAsync(true,_modules,settings.StartMinimized);_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
     private async Task ToggleStartupAsync() => await RunAsync(async()=>{var requested=!_canvas.StartupEnabled;await WindowsStartupRegistration.SetEnabledAsync(requested,_modules,_draft.StartMinimized);_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.Notice="Registro de inicio actualizado; el inicio permanece en Firmware.";});
     private async Task RunAsync(Func<Task> command)

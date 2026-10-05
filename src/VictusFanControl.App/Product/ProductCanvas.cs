@@ -24,6 +24,9 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     internal int PerformanceTab { get; set; }
     internal int MonitorTab { get; set; }
     internal int ManualLevel { get; set; } = 30;
+    internal bool SimulationVisible {get;set;}
+    internal ProductSimulationInputs SimulationInputs {get;set;}=new();
+    internal ProductCurveSimulation Simulation {get;set;}=new(new ProductProfiles().Ac.Fan);
     internal int SelectedNode { get; set; } = -1;
     internal bool Dirty { get; set; }
     internal bool Busy { get; set; }
@@ -213,14 +216,14 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Editando: "+ProfileName+" · Aplicado: "+(State.AppliedFanProfile??"Ninguno"),945,513,19,Muted,675);
         DrawCurve(g,new(972,590,625,145),false);
     }
-    private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit)
+    private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit,bool compact=false)
     {
-        DrawText(g,name,r.X,r.Y,24,null,r.Width-300);Card(g,new(r.Right-220,r.Y-9,155,56),false,9);DrawText(g,value+" "+unit,r.Right-208,r.Y+1,unit=="MHz"?22:27,null,130,true);
-        var track=new RectangleF(r.X,r.Y+73,r.Width,14);Bar(g,track,value-min,max-min,Blue);
-        var px=track.Left+(float)(value-min)/(max-min)*track.Width;using var b=new SolidBrush(Ink);g.FillEllipse(b,px-17,track.Y-10,34,34);
-        DrawText(g,min.ToString(),r.X,r.Y+99,18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+99,18,Muted,110);
-        Hit(id,new(r.X,r.Y+58,r.Width,42),name,!Busy,true,min,max);
-        Button(g,id+"-minus","−",new(r.Right-282,r.Y-9,50,56));Button(g,id+"-plus","+",new(r.Right-61,r.Y-9,50,56));
+        DrawText(g,name,r.X,r.Y,compact?20:24,null,r.Width-300);Card(g,new(r.Right-220,r.Y-9,155,compact?34:56),false,9);DrawText(g,value+" "+unit,r.Right-208,r.Y+1,compact?21:unit=="MHz"?22:27,null,130,true);
+        var track=new RectangleF(r.X,r.Y+(compact?53:73),r.Width,compact?10:14);Bar(g,track,value-min,max-min,Blue);
+        var px=track.Left+(float)(value-min)/(max-min)*track.Width;using var b=new SolidBrush(Ink);g.FillEllipse(b,px-(compact?13:17),track.Y-(compact?8:10),compact?26:34,compact?26:34);
+        DrawText(g,min.ToString(),r.X,r.Y+(compact?76:99),compact?14:18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+(compact?76:99),compact?14:18,Muted,110);
+        Hit(id,new(r.X,r.Y+(compact?43:58),r.Width,compact?34:42),name,!Busy,true,min,max);
+        Button(g,id+"-minus","−",new(r.Right-282,r.Y-9,50,compact?34:56));Button(g,id+"-plus","+",new(r.Right-61,r.Y-9,50,compact?34:56));
     }
     private void Performance(Graphics g)
     {
@@ -276,7 +279,9 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     }
     private void Curves(Graphics g,bool insideFans=false)
     {
-        if(!insideFans)DrawText(g,"Curvas de ventilador · "+ProfileName,319,137,29,null,1280,true);
+        if(!insideFans)DrawText(g,"Curvas de ventilador · "+ProfileName,319,137,29,null,770,true);
+        Button(g,"curve-editor","Editor gráfico",new(1160,138,230,34),!SimulationVisible);Button(g,"curve-simulator","Simulador",new(1405,138,243,34),SimulationVisible);
+        if(SimulationVisible){SimulationPage(g);return;}
         Card(g,new(308,179,539,652));Card(g,new(867,179,782,652));
         DrawText(g,"Seleccionar variable",331,198,25,null,490,true);
         string[] axes=["Temperatura CPU","Temperatura GPU","Potencia CPU","Potencia GPU","Carga CPU","Carga GPU"];
@@ -294,6 +299,29 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         var selected=SelectedNode>=0&&SelectedNode<points.Count?points[SelectedNode]:null;
         DrawText(g,selected is null?"Selecciona un nodo; flechas ajustan entrada/nivel.":$"Punto {SelectedNode+1}: {selected.Input:0} {Unit()} · nivel {selected.Level:0}",892,728,18,Muted,737);
         Button(g,"save","Guardar curvas",new(894,763,325,48),true);Button(g,"curve-defaults","Valores iniciales del perfil",new(1235,763,389,48));
+    }
+    private void SimulationPage(Graphics g)
+    {
+        Card(g,new(308,179,539,652));Card(g,new(867,179,782,652));
+        DrawText(g,"Entradas sintéticas",331,198,26,null,490,true);
+        string[] names=["CPU demanda","GPU temp.","CPU potencia","GPU potencia","CPU carga","GPU carga"];
+        for(int i=0;i<6;i++)Slider(g,"sim-input-"+i,names[i],new(331,250+i*92,490,90),SimulationInputs.Value(i),0,(int)AdaptiveCurveProfiles.MaximumInput((AdaptiveCurveAxis)i),i<2?"°C":i<4?"W":"%",true);
+        DrawText(g,"Simulación sin hardware · "+ProfileName,889,201,27,null,735,true);
+        DrawText(g,"CPU de demanda: "+(Profile.Fan.Tuning.CpuTemperatureSource switch{CpuDemandTemperatureSource.CoreAverage=>"media de núcleos",CpuDemandTemperatureSource.PerformanceCoreAverage=>"media de P-Cores",CpuDemandTemperatureSource.HottestPerformanceCoresAverage=>"P-Cores más calientes",_=>"paquete/núcleo más caliente"}),889,238,18,Muted,730);
+        var d=Simulation.Current;
+        Metric(g,"Demanda cruda",Value(d?.RawDemandLevel,"",1),new(890,280,230,131),Red);
+        Metric(g,"Filtrada (EMA)",Value(d?.SmoothedDemandLevel,"",1),new(1136,280,230,131),Blue);
+        Metric(g,"Nivel calculado",d?.EqualFanLevel?.ToString()??"—",new(1382,280,240,131),Green);
+        DrawText(g,$"Tiempo virtual: {Simulation.ElapsedSeconds} s · carga: {d?.ObservedLoadSeconds??0:0} s",889,426,20,Muted,730);
+        var plot=new RectangleF(955,490,637,158);using var grid=new Pen(Border);
+        for(int i=0;i<=4;i++){var y=plot.Bottom-i*plot.Height/4;g.DrawLine(grid,plot.Left,y,plot.Right,y);DrawText(g,(30+i*5).ToString(),plot.Left-42,y-12,17,Muted,40);}
+        void Series(Func<AdaptiveFanInertiaDecision,double?> select,Color color)
+        {using var line=new Pen(color,2);var points=Simulation.History.Select(p=>new PointF(plot.Right-(Simulation.ElapsedSeconds-p.Seconds)/600f*plot.Width,plot.Bottom-(float)((select(p.Decision)!.Value-30)/20)*plot.Height)).ToArray();if(points.Length>1)g.DrawLines(line,points);}
+        Series(d=>d.RawDemandLevel,Red);Series(d=>d.SmoothedDemandLevel,Blue);Series(d=>d.EqualFanLevel,Green);
+        DrawText(g,"Últimos 600 s virtuales · cruda / EMA / nivel",889,662,19,Muted,730);
+        DrawText(g,d?.ThermalOverride==true?"Override de demanda térmica":d?.SustainedLoadCooling==true?"Descenso de carga prolongada":"Respuesta con inercia y confirmación",889,697,20,d?.ThermalOverride==true?Yellow:Muted,730);
+        Button(g,"sim-1","+ 1 s",new(889,738,160,44),true);Button(g,"sim-60","+ 60 s",new(1064,738,170,44));Button(g,"sim-1200","+ 20 min",new(1249,738,195,44));Button(g,"sim-reset","Reiniciar",new(1459,738,165,44));
+        DrawText(g,"Modelo de demanda; no valida SafetyGate, RPM ni respuesta física.",889,798,17,Yellow,730);
     }
     private string Unit() => Axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.GpuTemperature?"°C":Axis is AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.GpuPower?"W":"%";
     private void DrawCurve(Graphics g,RectangleF plot,bool editable)
@@ -381,13 +409,15 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         Button(g,"startup-toggle",StartupEnabled?"✓  Iniciar con Windows":"○  Iniciar con Windows",new(334,241,590,55),StartupEnabled,StartupKnown);
         Button(g,"minimized-toggle",Profiles.StartMinimized?"✓  Minimizar al iniciar":"○  Minimizar al iniciar",new(956,241,665,55),Profiles.StartMinimized);
         DrawText(g,"El inicio nunca aplica ventiladores ni límites CPU/GPU automáticamente.",334,326,23,Muted,1250);
-        Card(g,new(310,406,1337,197));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);DrawText(g,"Tema oscuro · Español · perfiles AC/Batería",334,491,23,Muted,495);
+        Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);DrawText(g,"Tema oscuro · Español · perfiles AC/Batería",334,491,23,Muted,495);
         Button(g,"discard","Descartar cambios",new(846,478,310,68),false,Dirty);
-        Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,547,20,Dirty?Yellow:Green,830);
+        Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,551,18,Dirty?Yellow:Green,475);
+        Button(g,"profiles-import","Importar perfiles",new(846,555,310,40));Button(g,"profiles-export","Exportar perfiles",new(1176,555,442,40));
         Card(g,new(310,623,1337,201));DrawText(g,"Registros y estado",334,647,28,null,1250,true);
         DrawText(g,State.Failure??State.Message,334,704,21,State.Failure is null?Muted:Yellow,880);
-        Button(g,"open-logs","Abrir carpeta de logs",new(1240,694,379,66));
-        DrawText(g,"Detalle técnico: ventiladores "+State.FanAuthority+" · CPU "+State.CpuState+" · GPU "+State.GpuState,334,773,19,Muted,1220);
+        Button(g,"open-logs","Abrir carpeta de logs",new(1240,690,379,43));
+        Button(g,"diagnostics-export","Exportar diagnóstico",new(1240,745,379,43));
+        DrawText(g,"Detalle técnico: ventiladores "+State.FanAuthority+" · CPU "+State.CpuState+" · GPU "+State.GpuState,334,773,18,Muted,880);
     }
     private PointF Virtual(Point point)=>new((point.X-_offsetX)/_scale,(point.Y-_offsetY)/_scale);
     protected override void OnMouseDown(MouseEventArgs e)
@@ -420,7 +450,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     protected override void OnMouseCaptureChanged(EventArgs e){base.OnMouseCaptureChanged(e);if(!Capture){_dragSlider=null;_dragNode=-1;_dragContext=null;}}
     private bool CanInteract(ProductHit hit) => hit.Enabled&&(!Busy||hit.Id is "firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close");
     private ProductHit? KeyboardHit=>_hits.LastOrDefault(h=>h.Id==_keyboardId&&CanInteract(h));
-    private int SliderValue(string id) => id switch{"manual"=>ManualLevel,"pl1"=>Profile.CpuPl1Watts,"pl2"=>Profile.CpuPl2Watts,"gpu"=>Profile.GpuMaximumMHz,_=>0};
+    private int SliderValue(string id) => id.StartsWith("sim-input-")?SimulationInputs.Value(int.Parse(id[10..])):id switch{"manual"=>ManualLevel,"pl1"=>Profile.CpuPl1Watts,"pl2"=>Profile.CpuPl2Watts,"gpu"=>Profile.GpuMaximumMHz,_=>0};
     internal void HandleKey(Keys keyData)=>OnKeyDown(new KeyEventArgs(keyData));
     protected override bool IsInputKey(Keys keyData)=>(keyData&Keys.KeyCode) is Keys.Left or Keys.Right or Keys.Up or Keys.Down or Keys.Tab or Keys.PageDown or Keys.PageUp or Keys.Home or Keys.End || base.IsInputKey(keyData);
     protected override bool ProcessDialogKey(Keys keyData)
@@ -440,7 +470,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         }
         if((e.KeyCode is Keys.Enter or Keys.Space)&&KeyboardHit is { } action)
         {if(!action.Slider)Command?.Invoke(action.Id);e.Handled=true;return;}
-        if(!Busy&&(Page==ProductPage.Curves||Page==ProductPage.Fans&&FanTab==2)&&e.KeyCode is Keys.PageDown or Keys.PageUp or Keys.Home or Keys.End)
+        if(!Busy&&!SimulationVisible&&(Page==ProductPage.Curves||Page==ProductPage.Fans&&FanTab==2)&&e.KeyCode is Keys.PageDown or Keys.PageUp or Keys.Home or Keys.End)
         {
             var count=AdaptiveCurveProfiles.Curve(Profile.Fan.BuildPolicy(),Axis).Count;
             var index=e.KeyCode==Keys.Home?0:e.KeyCode==Keys.End?count-1:Math.Clamp(SelectedNode+(e.KeyCode==Keys.PageDown?1:-1),0,count-1);
@@ -449,7 +479,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         if(Busy||e.KeyCode is not(Keys.Left or Keys.Right or Keys.Up or Keys.Down))return;
         if(KeyboardHit is { Slider:true } slider)
         {ValueEdited?.Invoke(slider.Id,Math.Clamp(SliderValue(slider.Id)+(e.KeyCode is Keys.Right or Keys.Up?1:-1),slider.Min,slider.Max));e.Handled=true;return;}
-        if((Page==ProductPage.Curves||Page==ProductPage.Fans&&FanTab==2)&&(KeyboardHit is null||_keyboardId=="node-"+SelectedNode))
+        if(!SimulationVisible&&(Page==ProductPage.Curves||Page==ProductPage.Fans&&FanTab==2)&&(KeyboardHit is null||_keyboardId=="node-"+SelectedNode))
         {
             var ps=AdaptiveCurveProfiles.Curve(Profile.Fan.BuildPolicy(),Axis);
             if(SelectedNode>=0&&SelectedNode<ps.Count){var p=ps[SelectedNode];NodeEdited?.Invoke(SelectedNode,p.Input+(e.KeyCode==Keys.Right?1:e.KeyCode==Keys.Left?-1:0),(int)p.Level+(e.KeyCode==Keys.Up?1:e.KeyCode==Keys.Down?-1:0));e.Handled=true;}

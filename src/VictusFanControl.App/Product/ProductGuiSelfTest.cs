@@ -86,6 +86,12 @@ internal static class ProductGuiSelfTest
             canvas.Page=ProductPage.Performance;canvas.State=canvas.State with{Runtime="Healthy",CpuState="Active",GpuState="Failed",PerformanceActive=false};Render("state-partial-CPU-active-GPU-failed");
             form.HandleCommand("fan-mode-1");form.HandleCommand("manual-apply");form.HandleCommand("firmware");form.HandleCommand("performance-release");
             Require(runtime.Commands==4,"Explicit controls did not dispatch their separate contracts.");
+            form.HandleCommand("curve-simulator");var unedited=ProductProfilesStore.Serialize(form.Draft);var commands=runtime.Commands;
+            form.EditValue("sim-input-2",40);form.EditValue("sim-input-3",110);form.EditValue("sim-input-4",100);form.HandleCommand("sim-1200");
+            Require(canvas.Simulation.ElapsedSeconds==1200&&unedited==ProductProfilesStore.Serialize(form.Draft)&&runtime.Commands==commands,"Simulation acquired authority or edited profiles.");
+            form.HandleCommand("profile-battery");Require(canvas.Simulation.ElapsedSeconds==0,"Simulation mixed profile histories.");
+            canvas.Page=ProductPage.Curves;canvas.Refresh();canvas.HandleKey(Keys.End);canvas.HandleKey(Keys.Up);Require(unedited==ProductProfilesStore.Serialize(form.Draft),"Simulation keys edited hidden curve nodes.");
+            form.HandleCommand("sim-60");form.HandleCommand("sim-reset");Require(canvas.Simulation.ElapsedSeconds==0,"Simulation reset failed.");
             RunLifecycleFixtures(Require);
             RunFailureAndPersistenceFixtures(Require);
             canvas.State=confirmed with{Snapshot=confirmed.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddMinutes(-1)}};
@@ -93,6 +99,8 @@ internal static class ProductGuiSelfTest
             canvas.State=confirmed with{Snapshot=confirmed.Snapshot! with{CpuPackagePowerW=null,GpuPowerW=null,CpuFanRpm=null,GpuFanRpm=null}};Render("state-missing-metrics");
             canvas.Page=ProductPage.Curves;canvas.SelectedNode=5;Render("curve-selected-node");
             canvas.Editing=ProductPowerProfile.Battery;canvas.Axis=AdaptiveCurveAxis.GpuPower;Render("curve-battery-GPU-power");
+            canvas.SimulationVisible=true;canvas.Editing=ProductPowerProfile.Ac;canvas.Simulation=new(baseline.Ac.Fan);canvas.SimulationInputs=new(80,70,40,110,100,100);canvas.Simulation.Advance(new(),1);canvas.Simulation.Advance(canvas.SimulationInputs,1201);Render("curve-simulator-sustained-load");
+            canvas.Size=new(1040,660);Render("curve-simulator-minimum-layout");
             Console.WriteLine("PASS: product GUI draft isolation, editing/navigation without authority, sliders, nodes, closed gates and real Windows renders.");
             return 0;
         }
@@ -189,6 +197,24 @@ internal static class ProductGuiSelfTest
                 canvas.PointerDown(from);canvas.PointerMove(to);canvas.PointerUp(to);require(form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Input==71,"Pointer node drag failed.");
                 form.HandleCommand("discard");
                 require(runtime.Commands==0,"Persistence/draft fixtures wrote hardware.");
+                var backup=Path.Combine(dir,"backup.json");var savedBytes=File.ReadAllText(path);var dirty=form.Dirty;
+                var export=form.ExportProfilesAsync(backup);PumpUntil(()=>export.IsCompleted,"Profile export blocked.");export.GetAwaiter().GetResult();
+                require(form.Dirty==dirty&&File.ReadAllText(path)==savedBytes,"Export changed persistence or dirty state.");
+                var portable=ProductProfilesStore.Parse(File.ReadAllText(backup)) with{Battery=new ProductProfiles().Battery with{CpuPl1Watts=12,CpuPl2Watts=18}};ProductProfilesStore.Save(portable,backup);
+                var import=form.ImportProfilesAsync(backup);PumpUntil(()=>import.IsCompleted,"Profile import blocked.");import.GetAwaiter().GetResult();
+                require(form.Dirty&&form.Draft.Battery.CpuPl1Watts==12&&File.ReadAllText(path)==savedBytes&&runtime.Commands==0,"Import persisted/applied hardware or lost a profile.");
+                var previous=ProductProfilesStore.Serialize(form.Draft);File.WriteAllText(backup,"broken");import=form.ImportProfilesAsync(backup);PumpUntil(()=>import.IsCompleted,"Invalid import blocked.");
+                require(previous==ProductProfilesStore.Serialize(form.Draft)&&!string.IsNullOrWhiteSpace(canvas.Notice),"Invalid import replaced the draft.");
+                var log=Path.Combine(dir,"fixture-events.log");File.WriteAllText(log,new string('x',2*1024*1024+100));var diagnostic=Path.Combine(dir,"diagnostic.zip");
+                var bundle=form.ExportDiagnosticsAsync(diagnostic,log);PumpUntil(()=>bundle.IsCompleted,"Diagnostic export blocked.");bundle.GetAwaiter().GetResult();
+                using(var zip=System.IO.Compression.ZipFile.OpenRead(diagnostic))
+                {
+                    require(zip.Entries.Count==4&&zip.GetEntry("profiles-draft.json") is not null&&zip.GetEntry("events-tail.log")!.Length<=2*1024*1024,"Diagnostic leaked extra files or exceeded log bounds.");
+                    using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
+                    require(state.RootElement.GetProperty("physicalQualification").GetString()=="not-established-by-this-export","Diagnostic fabricated physical qualification.");
+                }
+                require(File.ReadAllText(path)==savedBytes&&runtime.Commands==0,"Diagnostic mutated preferences or dispatched hardware.");
+                form.HandleCommand("discard");
                 canvas.State=runtime.State with{Runtime="Healthy",PerformanceSupported=true,CanApplyPerformance=true};
                 form.EditValue("gpu",1800);form.HandleCommand("performance-apply");
                 require(runtime.Commands==0&&!canvas.Busy&&!string.IsNullOrWhiteSpace(canvas.Notice),"Custom GPU passed the surface execution gate.");
@@ -238,6 +264,38 @@ internal static class ProductGuiSelfTest
         finally{Directory.Delete(dir,true);}
         Console.WriteLine("PASS: six-axis/two-profile bounds, 64-node navigation, save/discard/failure, no-response Apply/Release, telemetry gaps and Exit drain.");
     }
+    internal static int RunSoak()
+    {
+        try
+        {
+            var records=new List<object>();int frames=0;
+            void Cycle(int index)
+            {
+                var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://soak",fixture:runtime,fixtureProfiles:new ProductProfiles());
+                form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;
+                for(int i=0;i<28;i++)
+                {
+                    form.HandleCommand("page-"+(i%7));form.HandleCommand(i%2==0?"profile-ac":"profile-battery");canvas.Size=i%2==0?new(1040,660):new(1344,756);
+                    canvas.SimulationVisible=i%4==0;form.EditValue("sim-input-4",i%101);form.HandleCommand("sim-60");
+                    canvas.Refresh();canvas.Focus();canvas.HandleKey(Keys.Tab);canvas.HandleKey(Keys.Shift|Keys.Tab);
+                    using var bitmap=new Bitmap(canvas.Width,canvas.Height);canvas.DrawToBitmap(bitmap,new(0,0,bitmap.Width,bitmap.Height));frames++;
+                    if(canvas.Hits.Count>100||runtime.Commands!=0)throw new InvalidOperationException("Soak accumulated controls or acquired authority.");
+                }
+                var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Soak Exit did not complete.");if(runtime.Disposals!=1)throw new InvalidOperationException("Soak leaked a runtime.");
+            }
+            for(int i=0;i<3;i++)Cycle(i);
+            (uint Gdi,uint User,long Bytes) Measure(){GC.Collect();GC.WaitForPendingFinalizers();GC.Collect();using var p=System.Diagnostics.Process.GetCurrentProcess();p.Refresh();return(GetGuiResources(p.Handle,0),GetGuiResources(p.Handle,1),p.PrivateMemorySize64);}
+            var before=Measure();if(before.Gdi==0)throw new InvalidOperationException("GDI measurement unavailable.");
+            for(int i=0;i<30;i++){Cycle(i);if(i%5==4){var m=Measure();records.Add(new{cycle=i+1,gdi=m.Gdi,user=m.User,privateBytes=m.Bytes});}}
+            var after=Measure();
+            var report=new{kind="isolated-product-gui-soak",cycles=30,warmupCycles=3,frames,baseline=new{gdi=before.Gdi,user=before.User,privateBytes=before.Bytes},final=new{gdi=after.Gdi,user=after.User,privateBytes=after.Bytes},samples=records,hardwareCommands=0};
+            var path=Path.GetFullPath("logs/product-gui-soak/report.json");Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllText(path,System.Text.Json.JsonSerializer.Serialize(report,new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));
+            if(after.Gdi>before.Gdi+16||after.User>before.User+16||after.Bytes>before.Bytes+64*1024*1024)throw new InvalidOperationException("Soak resource growth exceeded bounded tolerances; inspect report.json.");
+            Console.WriteLine($"PASS: product GUI soak, {frames} renders, 30 open/close cycles, GDI {before.Gdi}->{after.Gdi}, USER {before.User}->{after.User}, zero hardware commands.");return 0;
+        }
+        catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
+    }
+    [System.Runtime.InteropServices.DllImport("user32.dll")]private static extern uint GetGuiResources(IntPtr process,uint flags);
     private static TelemetrySnapshot Snapshot(DateTimeOffset timestamp,double cpu,double gpu,double cpuLoad,double gpuLoad)=>new(timestamp,"Intel i7-13700H",cpu,18,cpuLoad,"RTX 4060 Laptop",gpu,42,gpuLoad,3020,2980)
     {CpuCoreTemperatures=[new(0,0,"Performance",cpu+3)]};
     private sealed class RecordingRuntime:IProductRuntime
