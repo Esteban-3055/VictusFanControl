@@ -33,8 +33,13 @@ internal static class DashboardSelfTest
                 await controller.ConfigureAutomaticAsync(c,CancellationToken.None);
             });
             var ventilation = new P13FanControlSurface(controller,hardware,"HP 8C40 / F.18",()=>null,_=>{});
+            var firmwareFenceNotifications = 0;
             using (var fencedSurface = new P13FanControlSurface(controller, hardware, "synthetic closed gate", () => null, _ => {},
-                interactionAuthorizationProvider: (_, _, _) => throw new InvalidOperationException("Synthetic qualification fence failure."),
+                interactionAuthorizationProvider: (_, mode, _) =>
+                {
+                    if (mode == AdaptiveFanProductionMode.Firmware) firmwareFenceNotifications++;
+                    throw new InvalidOperationException("Synthetic qualification fence failure.");
+                },
                 interactionObserver: observation =>
                 {
                     if (observation.RequestedMode == AdaptiveFanProductionMode.Firmware)
@@ -44,8 +49,9 @@ internal static class DashboardSelfTest
                 var request = typeof(P13FanControlSurface).GetMethod("RequestModeAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
                 ((Task)request.Invoke(fencedSurface, new object[] { AdaptiveFanProductionMode.Firmware })!).GetAwaiter().GetResult();
                 ((Task)request.Invoke(fencedSurface, new object[] { AdaptiveFanProductionMode.Manual })!).GetAwaiter().GetResult();
-                Require(controller.Mode == AdaptiveFanProductionMode.Firmware && backend.Commands == 0);
-                Console.WriteLine("PASS: Firmware reaches production through a failed qualification fence; Manual stays blocked.");
+                Require(controller.Mode == AdaptiveFanProductionMode.Firmware && backend.Commands == 0 &&
+                    firmwareFenceNotifications == 1);
+                Console.WriteLine("PASS: Firmware notifies then bypasses a failed qualification fence; Manual stays blocked.");
             }
             Require(!Descendants(ventilation).OfType<Button>().Any(b => b.Text == "Editar curvas y perfiles…"));
             var monitor = new Panel();
