@@ -224,7 +224,7 @@ fan tuning/configuration. Its six sliders are synthetic inputs; CPU temperature 
 already the selected demand aggregate. It does not invent individual core readings
 or raw-safety telemetry. Advance 1/60/1200 virtual seconds processes every one-second
 sample, preserving EMA, confirmation, thermal demand override and sustained-load
-history. Results show raw demand, filtered demand and common level 30–50; only the
+history. Results show raw demand, filtered demand and the editable common level 10–50; only the
 latest 600 samples are retained. A session is bounded to 24 virtual hours. Profile
 or configuration changes reset the model; input changes retain temporal history.
 The simulation has no hardware/service port and never mutates preferences. It is
@@ -286,3 +286,39 @@ thermal confirmation and the existing sequence/freshness guards. Regression cove
 sequence-zero refusal without fan dispatch, a fresh-control retry that writes once,
 unchanged-target hold, and Firmware release. Repeat Manual qualification only after
 the pending draft/profile GUI checks; no execution gate is promoted by this fix.
+
+
+## Live offline simulator and editable 10–50 range (2026-10-05)
+
+The physical GUI review confirmed AC/Battery editing isolation and discard,
+then diagnostic(3) confirmed saved CPU drafts AC 18/36 W and Battery 9/18 W
+survived reopening build 472142c with healthy telemetry, Firmware, disabled
+CPU/GPU and no Guardian session. The user also confirmed importing the original
+backup, saving and reopening restored AC 20/40 W and Battery 8/15 W.
+
+The offline simulator now advances one virtual second per visible presentation
+tick by default. Pausar/Reanudar controls playback; +60 s and +20 min remain
+available for accelerated inspection. Input edits feed the next tick without
+resetting filter/load history. Leaving Curvas, selecting Editor gráfico,
+hiding/minimizing the window or closing it prevents automatic advancement;
+returning does not catch up hidden time. Reset replaces only simulation state.
+Simulation errors pause playback. The timer never dispatches a runtime command.
+
+The curve editor, keyboard/pointer mapping, graph axes, storage and simulation
+now support 10–50. Legacy product files with tuning minimum 30 load with an
+editor minimum of 10 while retaining every stored curve point and independent
+performance preference; loading does not rewrite the file. Previously clamped
+points are not reconstructed or silently replaced. New defaults retain the
+original candidate curve points instead of clamping them to 30.
+
+This is an editable demand model, not an expansion of physical qualification.
+The normal WMI backend and prepared Automatic actuation retain 30–50, and the
+Automatic execution gate remains closed. Manual levels 10–29 still require a
+separate WMI-only physical qualification and explicit backend promotion before
+being exposed as executable levels. No direct EC path is introduced.
+
+Regression coverage checks level-10 persistence and simulation, legacy range
+migration without point loss, unchanged prepared Automatic minimum, live
+playback/pause/input changes/hidden-page behavior/reset, and zero hardware
+commands from simulator interactions. Windows CI validates native GUI behavior;
+physical live-simulator acceptance remains pending on the new package.

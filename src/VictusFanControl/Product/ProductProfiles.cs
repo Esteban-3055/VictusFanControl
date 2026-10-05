@@ -23,12 +23,12 @@ public sealed record ProductProfile
         if(config is null||new[]{config.CpuTemperatureCurve,config.GpuTemperatureCurve,config.CpuPowerCurve,config.GpuPowerCurve,config.CpuLoadCurve,config.GpuLoadCurve}.Any(curve=>curve is null||curve.Any(point=>point is null)))
             throw new InvalidDataException("Cada perfil requiere las seis curvas y puntos válidos.");
         _ = Fan.BuildPolicy();
-        if (Fan.Tuning.MinimumLevel != Hp8C40AutomaticPolicy.MinimumLevel || Fan.Tuning.MaximumLevel != Hp8C40AutomaticPolicy.MaximumLevel)
-            throw new InvalidDataException("La GUI conserva el rango de ventiladores 30–50 del backend WMI.");
+        if (Fan.Tuning.MinimumLevel is not (10 or 30) || Fan.Tuning.MaximumLevel != Hp8C40AutomaticPolicy.MaximumLevel)
+            throw new InvalidDataException("El editor admite niveles 10–50; el control físico conserva su rango validado.");
         if (GpuMaximumMHz < GpuProductPreferences.MinimumMHz || GpuMaximumMHz > GpuProductPreferences.Maximum(source))
             throw new InvalidDataException("Límite GPU fuera del rango conservador del perfil.");
         foreach (var axis in Enum.GetValues<AdaptiveCurveAxis>())
-            if (AdaptiveCurveProfiles.Curve(AdaptiveCurveProfiles.Validate(Fan.Profile), axis).Any(p => p.Level < 30 || p.Level > 50))
+            if (AdaptiveCurveProfiles.Curve(AdaptiveCurveProfiles.Validate(Fan.Profile), axis).Any(p => p.Level < 10 || p.Level > 50))
                 throw new InvalidDataException("Curva de ventiladores fuera de rango.");
     }
 }
@@ -71,11 +71,11 @@ public sealed record ProductProfiles
     public static ProductProfile DefaultProfile(ProductPowerProfile source, FanConfiguration? previous = null)
     {
         var fan = FanConfigurationStore.Copy(previous ?? new FanConfiguration());
-        var c = fan.BuildPolicy();
+        var c = AdaptiveCurveProfiles.Validate(fan.Profile);
         foreach (var axis in Enum.GetValues<AdaptiveCurveAxis>())
             fan = fan with { Profile = AdaptiveCurveProfiles.WithCurve(fan.Profile, axis,
-                AdaptiveCurveProfiles.Curve(c, axis).Select(p => p with { Level = Math.Clamp(p.Level, 30, 50) }).ToArray()) };
-        fan = fan with { Tuning = fan.Tuning with { MinimumLevel = 30, MaximumLevel = 50 } };
+                AdaptiveCurveProfiles.Curve(c, axis).Select(p => p with { Level = Math.Clamp(p.Level, 10, 50) }).ToArray()) };
+        fan = fan with { Tuning = fan.Tuning with { MinimumLevel = 10, MaximumLevel = 50 } };
         return new() { Fan = fan,
             CpuPl1Watts = source == ProductPowerProfile.Ac ? CpuPowerProductDefaults.DefaultAcPl1Watts : CpuPowerProductDefaults.DefaultBatteryPl1Watts,
             CpuPl2Watts = source == ProductPowerProfile.Ac ? CpuPowerProductDefaults.DefaultAcPl2Watts : CpuPowerProductDefaults.DefaultBatteryPl2Watts,
@@ -104,7 +104,11 @@ public static class ProductProfilesStore
         CheckKeys(document.RootElement);
         if(document.RootElement.ValueKind!=JsonValueKind.Object||!document.RootElement.TryGetProperty("schemaVersion",out _))throw new InvalidDataException("Falta la versión del esquema.");
         var profiles = JsonSerializer.Deserialize<ProductProfiles>(text, Json) ?? throw new InvalidDataException("Perfiles vacíos.");
-        profiles.Validate(); return profiles;
+        profiles.Validate();
+        // Older GUI files used the prepared Automatic minimum for editing too.
+        // Preserve every stored curve point; expand only the offline editor envelope.
+        ProductProfile Expand(ProductProfile p) => p with { Fan = p.Fan with { Tuning = p.Fan.Tuning with { MinimumLevel = 10 } } };
+        return profiles with { Ac = Expand(profiles.Ac), Battery = Expand(profiles.Battery) };
     }
     public static ProductProfiles Copy(ProductProfiles profiles) => Parse(Serialize(profiles));
     public static ProductProfiles Load(string? path, out string? notice, Func<ProductProfiles>? migrate = null)

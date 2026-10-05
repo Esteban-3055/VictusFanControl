@@ -37,7 +37,7 @@ internal sealed class ProductForm : Form
         _draft=fixtureProfiles is null?ProductProfilesStore.Load(profilesPath,out notice,Migrate):ProductProfilesStore.Copy(fixtureProfiles);
         _saved=ProductProfilesStore.Copy(_draft);
         _hasSavedBaseline=fixtureProfiles is not null||(File.Exists(profilesPath??ProductProfilesStore.DefaultPath)&&notice is null);
-        _presentationTimer.Tick+=(_,_)=>{if(!_closing&&!IsDisposed)_canvas.Invalidate();};
+        _presentationTimer.Tick+=(_,_)=>PresentationTick();
         Text="VictusFanControl";FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=new(1344,756);StartPosition=FormStartPosition.CenterScreen;
         _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
@@ -133,6 +133,7 @@ internal sealed class ProductForm : Form
             case "curve-simulator":_canvas.SimulationVisible=true;break;
             case "sim-1":case "sim-60":case "sim-1200":try{_canvas.Simulation.Advance(_canvas.SimulationInputs,int.Parse(id[4..]));}catch(Exception ex){_canvas.Notice=ex.Message;}break;
             case "sim-reset":ResetSimulation();break;
+            case "sim-run":_canvas.SimulationRunning=!_canvas.SimulationRunning;break;
             case "edit-curve":_canvas.Page=ProductPage.Curves;break;
             case "edit-performance":_canvas.Page=ProductPage.Performance;break;
             case "cpu-toggle":Change(_draft with{CpuEnabled=!_draft.CpuEnabled});break;
@@ -183,7 +184,7 @@ internal sealed class ProductForm : Form
         var slot=_canvas.Editing;var p=_draft.Get(slot);var points=AdaptiveCurveProfiles.Curve(p.Fan.BuildPolicy(),_canvas.Axis).ToArray();
         if(index<0||index>=points.Length)return;
         var lo=index==0?0:points[index-1].Input+1;var hi=index==points.Length-1?AdaptiveCurveProfiles.MaximumInput(_canvas.Axis):points[index+1].Input-1;
-        var lowLevel=index==0?30:points[index-1].Level;var highLevel=index==points.Length-1?50:points[index+1].Level;
+        var lowLevel=index==0?10:points[index-1].Level;var highLevel=index==points.Length-1?50:points[index+1].Level;
         points[index]=new(Math.Clamp(Math.Round(input),lo,hi),Math.Clamp(level,(int)lowLevel,(int)highLevel));
         var profile=AdaptiveCurveProfiles.WithCurve(p.Fan.Profile,_canvas.Axis,points);
         Change(_draft.With(slot,p with{Fan=p.Fan with{Profile=profile}}));
@@ -214,6 +215,18 @@ internal sealed class ProductForm : Form
         if(_closing)return;imported.Validate();_draft=imported;_canvas.Profiles=_draft;ResetSimulation();_canvas.SelectedNode=-1;_canvas.Dirty=true;_canvas.Notice="Perfiles importados en edición; falta Guardar. No se aplicó hardware.";
     });
     internal Task ExportDiagnosticsAsync(string path,string? fixtureLog=null)=>RunAsync(async()=>{var state=_canvas.State;var draft=Draft;await Task.Run(()=>ProductDiagnostics.Export(path,state,draft,fixtureLog??AppLog.CurrentLogPath));_canvas.Notice="Diagnóstico exportado. Revisa rutas locales antes de compartirlo.";});
+    internal void PresentationTick()
+    {
+        if(_closing||IsDisposed)return;
+        // Only the visible offline simulator consumes virtual time. No catch-up
+        // on returning from the tray, another page or the editor.
+        if(Visible&&WindowState!=FormWindowState.Minimized&&!_canvas.Busy&&_canvas.Page==ProductPage.Curves&&_canvas.SimulationVisible&&_canvas.SimulationRunning)
+        {
+            try{_canvas.Simulation.Advance(_canvas.SimulationInputs,1);}
+            catch(Exception ex){_canvas.SimulationRunning=false;_canvas.Notice=ex.Message;}
+        }
+        _canvas.Invalidate();
+    }
     private void ResetSimulation()=>_canvas.Simulation=new(_draft.Get(_canvas.Editing).Fan);
     private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));_saved=ProductProfilesStore.Copy(settings);_hasSavedBaseline=true;_canvas.Dirty=false;if(_canvas.StartupEnabled)await WindowsStartupRegistration.SetEnabledAsync(true,_modules,settings.StartMinimized);_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
     private async Task ToggleStartupAsync() => await RunAsync(async()=>{var requested=!_canvas.StartupEnabled;await WindowsStartupRegistration.SetEnabledAsync(requested,_modules,_draft.StartMinimized);_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.Notice="Registro de inicio actualizado; el inicio permanece en Firmware.";});

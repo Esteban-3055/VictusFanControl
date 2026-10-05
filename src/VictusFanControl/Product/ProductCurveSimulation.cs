@@ -14,7 +14,7 @@ public sealed record ProductSimulationInputs(int CpuTemperature=40,int GpuTemper
 }
 public sealed record ProductSimulationPoint(int Seconds,AdaptiveFanInertiaDecision Decision);
 
-/// <summary>Pure prepared-policy simulation. No runtime, hardware identity, sensors, Guardian or authority.</summary>
+/// <summary>Pure editable-policy simulation. No runtime, hardware identity, sensors, Guardian or authority.</summary>
 public sealed class ProductCurveSimulation
 {
     private readonly AdaptiveFanInertiaPolicy _engine;
@@ -26,7 +26,7 @@ public sealed class ProductCurveSimulation
     public ProductCurveSimulation(FanConfiguration configuration)
     {
         var copy=FanConfigurationStore.Copy(configuration);
-        _engine=new(Hp8C40AutomaticPolicy.Create(copy.BuildPolicy()),copy.Tuning);
+        _engine=new(copy.BuildPolicy(),copy.Tuning);
     }
     public void Advance(ProductSimulationInputs inputs,int seconds)
     {

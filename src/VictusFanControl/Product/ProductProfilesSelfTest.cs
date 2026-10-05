@@ -9,7 +9,7 @@ internal static class ProductProfilesSelfTest
         var original = new ProductProfiles(); var edited = ProductProfilesStore.Copy(original);
         var cpu = AdaptiveCurveProfiles.Curve(edited.Ac.Fan.BuildPolicy(), AdaptiveCurveAxis.CpuTemperature).ToArray(); cpu[3] = cpu[3] with { Level = 31 };
         edited = edited with { Ac = edited.Ac with { Fan = edited.Ac.Fan with { Profile = AdaptiveCurveProfiles.WithCurve(edited.Ac.Fan.Profile, AdaptiveCurveAxis.CpuTemperature, cpu) } } };
-        if (original.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 30 || edited.Battery.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 30)
+        if (original.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 28 || edited.Battery.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 28)
             throw new InvalidOperationException("AC editing mutated another profile.");
         var roundtrip = ProductProfilesStore.Parse(ProductProfilesStore.Serialize(edited));
         if (roundtrip.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 31) throw new InvalidOperationException("Profile roundtrip lost curve.");
@@ -40,19 +40,28 @@ internal static class ProductProfilesSelfTest
             if (notice is null || File.ReadAllText(path) != "broken") throw new InvalidOperationException("Corrupt settings were not retained.");
         }
         finally { Directory.Delete(dir,true); }
-        var fan=original.Ac.Fan;var simulator=new ProductCurveSimulation(fan);var reference=new AdaptiveFanInertiaPolicy(Hp8C40AutomaticPolicy.Create(fan.BuildPolicy()),fan.Tuning);
+        var lowProfile=original.Ac with { Fan=original.Ac.Fan with { Profile=AdaptiveCurveProfiles.Create("8349d1c765b948a4976ea9664ad578ba","Low",original.Ac.Fan.BuildPolicy() with {
+            CpuTemperatureCurve=[new(0,10),new(110,50)],GpuTemperatureCurve=[new(0,10),new(100,50)],
+            CpuPowerCurve=[new(0,10),new(150,50)],GpuPowerCurve=[new(0,10),new(200,50)],
+            CpuLoadCurve=[new(0,10),new(100,50)],GpuLoadCurve=[new(0,10),new(100,50)] }) } };
+        var low=ProductProfilesStore.Parse(ProductProfilesStore.Serialize(original with{Ac=lowProfile}));
+        var lowSimulation=new ProductCurveSimulation(low.Ac.Fan);lowSimulation.Advance(new(0,0,0,0,0,0),1);
+        if(lowSimulation.Current?.EqualFanLevel!=10||low.Ac.Fan.BuildPolicy().CpuTemperatureCurve[0].Level!=10||Hp8C40AutomaticPolicy.Create(low.Ac.Fan.BuildPolicy()).MinimumLevel!=30)throw new InvalidOperationException("Offline 10-level curve lost range or changed production envelope.");
+        var legacy=ProductProfilesStore.Parse(ProductProfilesStore.Serialize(original with { Ac=original.Ac with { Fan=original.Ac.Fan with { Tuning=original.Ac.Fan.Tuning with { MinimumLevel=30 } } } }));
+        if(legacy.Ac.Fan.Tuning.MinimumLevel!=10||AdaptiveCurveProfiles.Validate(legacy.Ac.Fan.Profile).CpuTemperatureCurve[0].Level!=AdaptiveCurveProfiles.Validate(original.Ac.Fan.Profile).CpuTemperatureCurve[0].Level)throw new InvalidOperationException("Legacy editor range migration lost stored curve.");
+        var fan=original.Ac.Fan;var simulator=new ProductCurveSimulation(fan);var reference=new AdaptiveFanInertiaPolicy(fan.BuildPolicy(),fan.Tuning);
         var unchanged=ProductProfilesStore.Serialize(original);var elapsed=0;
         foreach(var phase in new[]{(new ProductSimulationInputs(),1),(new ProductSimulationInputs(80,70,40,110,100,100),1201),(new ProductSimulationInputs(),180),(new ProductSimulationInputs(90,80,60,130,100,100),10)})
         {
             simulator.Advance(phase.Item1,phase.Item2);AdaptiveFanInertiaDecision? expected=null;
             for(int tick=0;tick<phase.Item2;tick++){elapsed++;var v=phase.Item1;expected=reference.Evaluate(new(DateTimeOffset.UnixEpoch.AddSeconds(elapsed),v.CpuTemperature,v.CpuPower,v.CpuLoad,v.GpuTemperature,v.GpuPower,v.GpuLoad));}
-            if(simulator.Current!=expected||simulator.ElapsedSeconds!=elapsed||simulator.History.Any(p=>p.Decision.EqualFanLevel is <30 or >50)||simulator.History.Count>600)throw new InvalidOperationException("Simulation diverged from prepared inertia policy.");
+            if(simulator.Current!=expected||simulator.ElapsedSeconds!=elapsed||simulator.History.Any(p=>p.Decision.EqualFanLevel is <10 or >50)||simulator.History.Count>600)throw new InvalidOperationException("Simulation diverged from editable inertia policy.");
             if(elapsed==1202&&simulator.Current?.SustainedLoadCooling!=true)throw new InvalidOperationException("Simulation lost sustained-load history.");
         }
         if(unchanged!=ProductProfilesStore.Serialize(original))throw new InvalidOperationException("Simulation mutated configuration.");
         var before=simulator.ElapsedSeconds;Reject(()=>simulator.Advance(new(CpuTemperature:999),1));Reject(()=>simulator.Advance(new(),3601));
         if(simulator.ElapsedSeconds!=before)throw new InvalidOperationException("Invalid simulation advanced virtual time.");
-        output.WriteLine("PASS  Offline simulation matches prepared inertia across rise/load/cooling/thermal phases; bounded history and no configuration effects");
+        output.WriteLine("PASS  Offline simulation matches editable inertia across rise/load/cooling/thermal phases; bounded history and no configuration effects");
         output.WriteLine("PASS  Product AC/Battery isolation, strict/null/duplicate schema, atomic failure preservation, PL1/PL2 and closed custom GPU gate");
     }
 }
