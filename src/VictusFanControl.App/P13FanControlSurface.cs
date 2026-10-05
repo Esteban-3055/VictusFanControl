@@ -357,17 +357,23 @@ internal sealed class P13FanControlSurface : UserControl
         var saved =
             P13UiSettingsStore.Load();
 
-        _manualLevel.Minimum = 10;
-        _manualLevel.Maximum = 50;
+        _manualLevel.Minimum = _controller.ManualMinimumLevel;
+        _manualLevel.Maximum = _controller.ManualMaximumLevel;
 
         var initialManualLevel =
-            _fixedManualQualificationLevel ?? saved.ManualEqualLevel;
+            _fixedManualQualificationLevel ??
+            Math.Clamp(
+                saved.ManualEqualLevel,
+                _controller.ManualMinimumLevel,
+                _controller.ManualMaximumLevel);
 
-        if (initialManualLevel < _manualLevel.Minimum ||
-            initialManualLevel > _manualLevel.Maximum)
+        if (_fixedManualQualificationLevel.HasValue &&
+            (initialManualLevel < _manualLevel.Minimum ||
+             initialManualLevel > _manualLevel.Maximum))
         {
             throw new InvalidOperationException(
-                $"Manual qualification level {initialManualLevel} is outside the 10..50 envelope.");
+                $"Manual qualification level {initialManualLevel} is outside the active backend envelope " +
+                $"{_controller.ManualMinimumLevel}..{_controller.ManualMaximumLevel}.");
         }
 
         _manualLevel.Value = initialManualLevel;
@@ -401,7 +407,7 @@ internal sealed class P13FanControlSurface : UserControl
         {
             Text = _fixedManualQualificationLevel.HasValue
                 ? $"Qualification level {_fixedManualQualificationLevel.Value} (fixed):"
-                : "Level 10..50:",
+                : $"Level {_controller.ManualMinimumLevel}..{_controller.ManualMaximumLevel}:",
             AutoSize = true,
             Margin = new Padding(3, 7, 3, 3)
         });
