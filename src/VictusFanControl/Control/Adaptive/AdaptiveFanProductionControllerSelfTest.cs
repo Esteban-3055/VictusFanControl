@@ -16,6 +16,8 @@ public static class AdaptiveFanProductionControllerSelfTest
         failures += await TestManualEqualOnlyAndNoRetransmitAsync(output);
         failures += await TestAutomaticNoRetransmitAndSafetyReleaseAsync(output);
         failures += await TestManualRangeGuardAsync(output);
+        failures += await TestBackendManualEnvelopeAsync(output);
+        failures += await TestCustomModeHandoffAsync(output);
         failures += await TestManualFreshSafetyRefreshAndRetryAsync(output);
         failures += await TestManualFreshSafetyExhaustionRestoresAsync(output);
         failures += await TestQualificationInterruptionAsync(output);
@@ -202,6 +204,93 @@ public static class AdaptiveFanProductionControllerSelfTest
             backend.EnterCalls == 0 &&
             backend.ApplyCalls == 0 &&
             backend.RestoreCalls == 0);
+    }
+
+    private static async Task<int> TestBackendManualEnvelopeAsync(TextWriter output)
+    {
+        var backend = new RecordingBackend(30, 50);
+        await using var coordinator = new FanControlCoordinator(backend);
+        var controller = new AdaptiveFanProductionController(
+            coordinator, BuildConfig(), true, false);
+
+        var rangeBound =
+            controller.ManualMinimumLevel == 30 &&
+            controller.ManualMaximumLevel == 50;
+
+        _ = await controller.SetModeAsync(
+            AdaptiveFanProductionMode.Manual, CancellationToken.None);
+
+        var rejected = false;
+        try
+        {
+            var snapshot = BuildSnapshot(DateTimeOffset.UtcNow, 50, 45);
+            _ = await controller.ApplyManualAsync(
+                29, BuildSafety(snapshot), CancellationToken.None);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            rejected = true;
+        }
+
+        return Report(
+            output,
+            "Manual command range is intersected with the active backend envelope",
+            rangeBound &&
+            rejected &&
+            backend.EnterCalls == 0 &&
+            backend.ApplyCalls == 0 &&
+            backend.RestoreCalls == 0);
+    }
+
+    private static async Task<int> TestCustomModeHandoffAsync(TextWriter output)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+        var controller = new AdaptiveFanProductionController(
+            coordinator, BuildConfig(), true, true);
+
+        _ = await controller.SetModeAsync(
+            AdaptiveFanProductionMode.Manual, CancellationToken.None);
+
+        var t0 = DateTimeOffset.UtcNow;
+        var manualSnapshot = BuildSnapshot(t0, 55, 50);
+        var manual = await controller.ApplyManualAsync(
+            30, BuildSafety(manualSnapshot), CancellationToken.None);
+
+        var toAutomatic = await controller.SetModeAsync(
+            AdaptiveFanProductionMode.Automatic, CancellationToken.None);
+        var authorityAfterAutomaticSelection = coordinator.Authority;
+
+        var automaticSnapshot = BuildSnapshot(t0 + TimeSpan.FromSeconds(1), 55, 50);
+        var automatic = await controller.ProcessAutomaticAsync(
+            automaticSnapshot, BuildSafety(automaticSnapshot), CancellationToken.None);
+
+        var toManual = await controller.SetModeAsync(
+            AdaptiveFanProductionMode.Manual, CancellationToken.None);
+        var authorityAfterManualSelection = coordinator.Authority;
+
+        var finalSnapshot = BuildSnapshot(t0 + TimeSpan.FromSeconds(2), 55, 50);
+        var manualAgain = await controller.ApplyManualAsync(
+            31, BuildSafety(finalSnapshot), CancellationToken.None);
+
+        var restoreCallsBeforeFirmware = backend.RestoreCalls;
+        var firmware = await controller.SetModeAsync(
+            AdaptiveFanProductionMode.Firmware, CancellationToken.None);
+
+        return Report(
+            output,
+            "Manual/Automatic handoff keeps one Custom session and Firmware performs the only restore",
+            manual.Action == AdaptiveFanProductionActionKind.EnterCustomAndApply &&
+            toAutomatic.Action == AdaptiveFanProductionActionKind.HoldCustom &&
+            authorityAfterAutomaticSelection == FanAuthority.Custom &&
+            automatic.ExecutionAuthorized &&
+            toManual.Action == AdaptiveFanProductionActionKind.HoldCustom &&
+            authorityAfterManualSelection == FanAuthority.Custom &&
+            manualAgain.ExecutionAuthorized &&
+            restoreCallsBeforeFirmware == 0 &&
+            firmware.Action == AdaptiveFanProductionActionKind.RestoreFirmware &&
+            backend.RestoreCalls == 1 &&
+            coordinator.Authority == FanAuthority.Firmware);
     }
 
     private static async Task<int> TestManualFreshSafetyRefreshAndRetryAsync(TextWriter output)
@@ -506,10 +595,19 @@ public static class AdaptiveFanProductionControllerSelfTest
 
     private sealed class RecordingBackend : IFanControlBackend
     {
+        private readonly int _minimumLevel;
+        private readonly int _maximumLevel;
+
+        public RecordingBackend(int minimumLevel = 10, int maximumLevel = 50)
+        {
+            _minimumLevel = minimumLevel;
+            _maximumLevel = maximumLevel;
+        }
+
         public string Name => "adaptive-production-self-test";
         public bool CanWrite => true;
         public FanBackendCapabilities Capabilities =>
-            new(Hp8C40TargetProfile.BoardProduct, 10, 50, false);
+            new(Hp8C40TargetProfile.BoardProduct, _minimumLevel, _maximumLevel, false);
 
         public int EnterCalls { get; private set; }
         public int ApplyCalls { get; private set; }
