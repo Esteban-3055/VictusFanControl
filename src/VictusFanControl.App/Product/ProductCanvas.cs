@@ -219,10 +219,10 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit,bool compact=false)
     {
         DrawText(g,name,r.X,r.Y,compact?20:24,null,r.Width-300);Card(g,new(r.Right-220,r.Y-9,155,compact?34:56),false,9);DrawText(g,value+" "+unit,r.Right-208,r.Y+1,compact?21:unit=="MHz"?22:27,null,130,true);
-        var track=new RectangleF(r.X,r.Y+(compact?53:73),r.Width,compact?10:14);Bar(g,track,value-min,max-min,Blue);
+        var track=new RectangleF(r.X,r.Y+(compact?41:73),r.Width,compact?10:14);Bar(g,track,value-min,max-min,Blue);
         var px=track.Left+(float)(value-min)/(max-min)*track.Width;using var b=new SolidBrush(Ink);g.FillEllipse(b,px-(compact?13:17),track.Y-(compact?8:10),compact?26:34,compact?26:34);
-        DrawText(g,min.ToString(),r.X,r.Y+(compact?76:99),compact?14:18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+(compact?76:99),compact?14:18,Muted,110);
-        Hit(id,new(r.X,r.Y+(compact?43:58),r.Width,compact?34:42),name,!Busy,true,min,max);
+        DrawText(g,min.ToString(),r.X,r.Y+(compact?62:99),compact?14:18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+(compact?62:99),compact?14:18,Muted,110);
+        Hit(id,new(r.X,r.Y+(compact?31:58),r.Width,compact?34:42),name,!Busy,true,min,max);
         Button(g,id+"-minus","−",new(r.Right-282,r.Y-9,50,compact?34:56));Button(g,id+"-plus","+",new(r.Right-61,r.Y-9,50,compact?34:56));
     }
     private void Performance(Graphics g)
