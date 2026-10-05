@@ -927,6 +927,12 @@ internal sealed partial class MainForm : Form
                     : Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(_targetProfile?.Id) ||
                       p16NormalManualQualificationAuthorized;
 
+        // A validated target gate is necessary but not sufficient: a backend
+        // construction failure must leave ordinary Manual visibly/read-only closed.
+        manualExecutionAuthorized =
+            manualExecutionAuthorized &&
+            backend.CanWrite;
+
         var automaticExecutionAuthorized =
             isolatedManualQualification
                 ? false
