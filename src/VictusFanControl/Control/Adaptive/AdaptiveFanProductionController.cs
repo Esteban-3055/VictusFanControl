@@ -90,9 +90,11 @@ public sealed class AdaptiveFanProductionController
             // Validate the exact target even while execution remains gated off.
             _ = new Hp8C40AutomaticThermalAdmission(automaticHardware, automaticMilliseconds);
             _automaticConfiguration = automaticConfiguration is null ? null : FanConfigurationStore.Copy(automaticConfiguration);
-            _preparedEngine = _automaticConfiguration is null
-                ? new AdaptiveFanInertiaPolicy(Hp8C40AutomaticPolicy.Create(config))
-                : new AdaptiveFanInertiaPolicy(_automaticConfiguration.BuildPolicy(), _automaticConfiguration.Tuning);
+            var preparedPolicy = Hp8C40AutomaticPolicy.Create(
+                _automaticConfiguration?.BuildPolicy() ?? config);
+            _preparedEngine = new AdaptiveFanInertiaPolicy(
+                preparedPolicy,
+                _automaticConfiguration?.Tuning);
         }
         _qualificationSession = qualificationSession;
         _manualExecutionAuthorized = manualExecutionAuthorized;
@@ -495,7 +497,12 @@ public sealed class AdaptiveFanProductionController
         Action<FanConfiguration>? persist = null)
     {
         var copy = FanConfigurationStore.Copy(configuration);
-        var engine = new AdaptiveFanInertiaPolicy(copy.BuildPolicy(), copy.Tuning);
+        // Stored/user curves retain their configured envelope, but the exact
+        // HP 8C40 Automatic runtime is always projected into its physically
+        // qualified 30..50 actuation envelope before smoothing/hysteresis.
+        var engine = new AdaptiveFanInertiaPolicy(
+            Hp8C40AutomaticPolicy.Create(copy.BuildPolicy()),
+            copy.Tuning);
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
