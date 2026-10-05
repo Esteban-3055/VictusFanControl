@@ -121,12 +121,12 @@ internal sealed class ProductRuntime : IProductRuntime
         Publish();
     }
     public void Start() { _worker.Start(); _poll = PollAsync(); }
-    private SafetyGateResult Safety(bool control = true)
+    private SafetyGateResult Safety()
     {
-        var s = control ? SafetyGate.Evaluate(_hardware, _worker.StateMachine.State, _snapshot, DateTimeOffset.UtcNow, _fans.BackendCanWrite) : SafetyGate.EvaluateForDisplay(_hardware, _worker.StateMachine.State, _snapshot, DateTimeOffset.UtcNow, _fans.BackendCanWrite);
+        var s = SafetyGate.Evaluate(_hardware, _worker.StateMachine.State, _snapshot, DateTimeOffset.UtcNow, _fans.BackendCanWrite);
         return _controller.Mode == AdaptiveFanProductionMode.Automatic
-            ? _controller.EvaluateAutomaticSafety(_snapshot,s,observe:control)
-            : control ? _thermal.Apply(_hardware,_snapshot,s) : _thermal.Preview(_hardware,_snapshot,s);
+            ? _controller.EvaluateAutomaticSafety(_snapshot,s,observe:true)
+            : _thermal.Apply(_hardware,_snapshot,s);
     }
     private async Task EnforceAsync()
     {
@@ -179,7 +179,7 @@ internal sealed class ProductRuntime : IProductRuntime
     public Task ApplyManualAsync(int level) => CommandAsync(async () =>
     {
         if (_lifecycleBlocked || _controller.Mode != AdaptiveFanProductionMode.Manual) throw new InvalidOperationException("Selecciona Manual antes de aplicar; una sesión interrumpida no puede rearmarse.");
-        var result = await _controller.ApplyManualAsync(level,Safety(),() => Safety(false),CancellationToken.None);
+        var result = await _controller.ApplyManualAsync(level,Safety(),() => Safety(),CancellationToken.None);
         if (!result.ExecutionAuthorized || result.Action == AdaptiveFanProductionActionKind.Blocked) throw new InvalidOperationException(result.Detail);
         Publish(result.Detail);
     });

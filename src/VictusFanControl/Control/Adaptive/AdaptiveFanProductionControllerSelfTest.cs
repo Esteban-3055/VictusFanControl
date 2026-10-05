@@ -25,6 +25,7 @@ public static class AdaptiveFanProductionControllerSelfTest
         failures += await TestModeSwitchWaitsForInFlightManualApplyAsync(output);
         failures += await TestSafetyRestoreWinsConcurrentModeSwitchAsync(output);
         failures += await TestManualFreshSafetyRefreshAndRetryAsync(output);
+        failures += await TestManualPresentationSafetyCannotRefreshControlAsync(output);
         failures += await TestManualFreshSafetyExhaustionRestoresAsync(output);
         failures += await TestQualificationInterruptionAsync(output);
         failures += await Hp8C40AutomaticIntegrationSelfTest.RunAsync(output);
@@ -446,6 +447,31 @@ public static class AdaptiveFanProductionControllerSelfTest
             coordinator.Authority == FanAuthority.Firmware &&
             backend.ApplyCalls == 1 &&
             backend.RestoreCalls == 1);
+    }
+
+    private static async Task<int> TestManualPresentationSafetyCannotRefreshControlAsync(TextWriter output)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+        var controller = new AdaptiveFanProductionController(coordinator, BuildConfig(), true, false);
+        _ = await controller.SetModeAsync(AdaptiveFanProductionMode.Manual, CancellationToken.None);
+        var initial = BuildSafety(BuildSnapshot(DateTimeOffset.UtcNow, 45, 40));
+        // Presentation evaluations have sequence zero, even when all sensors are healthy.
+        var display = initial with { EvaluationSequence = 0 };
+        var rejected = await controller.ApplyManualAsync(30, initial, () => display, CancellationToken.None);
+        var refusedWithoutWrite = rejected.Action == AdaptiveFanProductionActionKind.RestoreFirmware &&
+            coordinator.Authority == FanAuthority.Firmware && backend.ApplyCalls == 0 && backend.RestoreCalls == 1;
+        var currentSnapshot = BuildSnapshot(DateTimeOffset.UtcNow, 45, 40);
+        var refreshes = 0;
+        SafetyGateResult RefreshControl() { refreshes++; return BuildSafety(currentSnapshot); }
+        var applied = await controller.ApplyManualAsync(30, BuildSafety(currentSnapshot), RefreshControl, CancellationToken.None);
+        var repeated = await controller.ApplyManualAsync(30, BuildSafety(currentSnapshot), RefreshControl, CancellationToken.None);
+        var wroteOnce = applied.Action == AdaptiveFanProductionActionKind.EnterCustomAndApply &&
+            repeated.Action == AdaptiveFanProductionActionKind.HoldCustom && refreshes >= 1 &&
+            backend.ApplyCalls == 1 && backend.Commands[0].CpuLevel == 30 && backend.Commands[0].GpuLevel == 30;
+        await controller.ReleaseToFirmwareAsync("presentation/control refresh regression cleanup", CancellationToken.None);
+        return Report(output, "Manual refuses presentation-only safety without writing; fresh control refresh applies once and releases",
+            refusedWithoutWrite && wroteOnce && coordinator.Authority == FanAuthority.Firmware && backend.RestoreCalls == 2);
     }
 
     private static async Task<int> TestManualFreshSafetyRefreshAndRetryAsync(TextWriter output)

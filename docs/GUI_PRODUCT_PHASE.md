@@ -272,3 +272,17 @@ path on real window handles for three cycles with recording runtime ports. It
 also injects a startup exception and verifies its exported diagnostic. No hardware
 runtime is constructed by these fixtures. Repeat the real startup/telemetry step
 with the corrected package before continuing hardware-control tests.
+
+The next real startup diagnostic confirmed Healthy telemetry with all fourteen
+cores, complete CPU/GPU/fan readings, and Firmware authority without a Performance
+session. A later diagnostic also recorded four Manual attempts: each entered
+read-only Custom preparation, rejected a stale SafetyGate refresh, and returned to
+reported Firmware authority through accepted release requests (physical ownership
+remains unverified). These are failed Manual attempts, not a Manual PASS.
+The product adapter incorrectly supplied a presentation evaluation (sequence zero)
+as its post-admission control refresh. Its control-only safety helper now always
+allocates a control evaluation, including every bounded Manual retry, preserving
+thermal confirmation and the existing sequence/freshness guards. Regression covers
+sequence-zero refusal without fan dispatch, a fresh-control retry that writes once,
+unchanged-target hold, and Firmware release. Repeat Manual qualification only after
+the pending draft/profile GUI checks; no execution gate is promoted by this fix.
