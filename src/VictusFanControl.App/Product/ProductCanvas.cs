@@ -178,14 +178,16 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     }
     private void Rpm(Graphics g,RectangleF r,string title,double? rpm)
     {Card(g,r);Icon(g,"fan",r.X+30,r.Y+16,55);DrawText(g,title,r.X+124,r.Y+9,21,Muted,r.Width-140);DrawText(g,Value(rpm,"RPM"),r.X+124,r.Y+36,32,Blue,r.Width-140,true);Bar(g,new(r.X+124,r.Bottom-14,r.Width-155,8),rpm,6000,Blue);}
-    private string AppliedCpu()
+    internal string AppliedCpu()
     {
-        var c=State.AppliedPerformance;if(c is null||!c.CpuEnabled||State.CpuState!="Active")return "Sin límite aplicado";
+        if(State.CpuState=="Disabled")return "Sin límite aplicado";
+        var c=State.AppliedPerformance;if(c is null||!c.CpuEnabled||State.CpuState!="Active")return "Sin confirmación actual";
         return State.AppliedPerformanceSource=="Battery"?$"{c.BatteryPl1Watts} / {c.BatteryPl2Watts} W":State.AppliedPerformanceSource=="Ac"?$"{c.AcPl1Watts} / {c.AcPl2Watts} W":"Fuente desconocida";
     }
-    private string AppliedGpu()
+    internal string AppliedGpu()
     {
-        var c=State.AppliedPerformance;if(c is null||!c.GpuEnabled||State.GpuState!="ActiveUnverified")return "Sin límite aplicado";
+        if(State.GpuState=="Disabled")return "Sin límite aplicado";
+        var c=State.AppliedPerformance;if(c is null||!c.GpuEnabled||State.GpuState!="ActiveUnverified")return "Sin confirmación actual";
         return State.AppliedPerformanceSource=="Battery"?$"210–{c.BatteryGpuMaximumMHz} MHz":State.AppliedPerformanceSource=="Ac"?$"210–{c.AcGpuMaximumMHz} MHz":"Fuente desconocida";
     }
     private void Fans(Graphics g)

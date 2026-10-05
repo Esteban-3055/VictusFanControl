@@ -55,6 +55,11 @@ internal static class ProductGuiSelfTest
                 PerformanceActive=true,PerformanceProcessPresent=true,GuardianState="SessionEnabled",
                 AppliedPerformanceSource="Ac",AppliedPerformance=new PerformanceGuiSessionConfiguration(),Snapshot=Snapshot(DateTimeOffset.UtcNow,36,48,12,28)
             };
+            var confirmed=canvas.State;canvas.State=confirmed with{CpuState="Recovering",GpuState="Failed"};
+            Require(canvas.AppliedCpu()=="Sin confirmación actual"&&canvas.AppliedGpu()=="Sin confirmación actual","Loss of confirmation was presented as a completed reset.");
+            canvas.State=confirmed with{CpuState="Disabled",GpuState="Disabled"};Require(canvas.AppliedCpu()=="Sin límite aplicado"&&canvas.AppliedGpu()=="Sin límite aplicado","Disabled domains were presented as active.");
+            canvas.State=confirmed with{Source="Battery",AppliedPerformanceSource="Ac"};Require(canvas.AppliedCpu()=="35 / 60 W"&&canvas.AppliedGpu()=="210–1850 MHz","A Windows source change fabricated an applied profile transition.");
+            canvas.State=confirmed;
             canvas.Editing=ProductPowerProfile.Ac;canvas.SelectedNode=-1;canvas.StartupKnown=true;
             for(int i=300;i>=0;i--){var wave=Math.Sin(i*.13);canvas.AddSnapshot(Snapshot(DateTimeOffset.UtcNow.AddSeconds(-i),60-i*.06+wave*2,50-i*.025+wave,38+wave*12,24+wave*8));}
             void Render(string name)

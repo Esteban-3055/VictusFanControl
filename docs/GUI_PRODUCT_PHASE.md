@@ -140,7 +140,9 @@ paused and all normal hardware gates unchanged.
   tray Exit wait for every pending boundary rather than only the newest task.
 - The normal product presentation requires a live Guardian process and a response
   less than six seconds old. Expired or future-dated status is not presented as
-  Active; a retained session is Recovering until a fresh response arrives.
+  Active; a retained session is Recovering until a fresh response arrives. Failed
+  or unconfirmed domains say "Sin confirmación actual"; only Disabled says
+  "Sin límite aplicado", so loss of IPC never implies a confirmed hardware reset.
 - Apply handlers recheck admission and busy state. Firmware remains available while
   another command is pending. These checks supplement the backend protections.
 - Tab/Shift+Tab, slider arrows and accessible slider values use the same draft-only
