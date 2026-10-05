@@ -35,6 +35,13 @@ public sealed class AdaptiveFanControlIntentPlanner
         _lastAppliedLevel = null;
     }
 
+    internal void SeedCustom(int level)
+    {
+        if (level is < 0 or > 255) throw new ArgumentOutOfRangeException(nameof(level));
+        _notionalCustom = true;
+        _lastAppliedLevel = level;
+    }
+
     public AdaptiveFanControlIntent Plan(
         bool controlPreconditionsReady,
         AdaptiveFanPolicyDecision? decision)

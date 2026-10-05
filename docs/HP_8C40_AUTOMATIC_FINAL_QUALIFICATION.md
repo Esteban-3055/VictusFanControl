@@ -133,3 +133,12 @@ operation followed by descent. Software tests do not prove hardware ownership.
 Neither run is a physical PASS. These samples do not prove whether 0x90 was a
 transient EC read or real firmware activity. The earlier WMI experiment did not
 read these guards; this migration adopts that explicitly different evidence model.
+
+## Combined Block1 checkpoint
+
+Normal Automatic remains closed. The next grouped physical gate uses the explicit
+`--8c40-block1-test` entry point and `scripts/test-wmi-block1.ps1`, not the A1
+Automatic-only entry point. See `HP_8C40_WMI_BLOCK1.md` for the console sequence,
+CPU/GPU conditioning, retained Custom handoffs, rearm and active tray shutdown.
+The previous rearm evidence already demonstrated two distinct supervised sessions;
+Block1 includes a brief rearm as part of its combined shutdown test.

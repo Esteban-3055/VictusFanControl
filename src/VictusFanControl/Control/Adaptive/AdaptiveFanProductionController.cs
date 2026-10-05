@@ -187,6 +187,12 @@ public sealed class AdaptiveFanProductionController
                 await _coordinator.GetStableAuthorityAsync(
                     cancellationToken).ConfigureAwait(false);
 
+            if (stableAuthority == FanAuthority.Faulted)
+            {
+                return Result(AdaptiveFanProductionActionKind.Blocked, false, null, null,
+                    "Fan authority is Faulted; recovery is unresolved. No blind restore or custom re-entry was attempted.");
+            }
+
             if (requestedMode == _mode)
             {
                 return Result(
@@ -197,17 +203,6 @@ public sealed class AdaptiveFanProductionController
                     null,
                     null,
                     $"Production fan mode is already {_mode}.");
-            }
-
-            if (stableAuthority == FanAuthority.Faulted &&
-                requestedMode != AdaptiveFanProductionMode.Firmware)
-            {
-                return Result(
-                    AdaptiveFanProductionActionKind.Blocked,
-                    false,
-                    null,
-                    null,
-                    "Fan authority is Faulted; return to Firmware/recover before selecting another custom mode.");
             }
 
             var customToCustom =
@@ -229,7 +224,15 @@ public sealed class AdaptiveFanProductionController
                         cancellationToken).ConfigureAwait(false);
             }
 
+            var retainedLevel = customToCustom
+                ? (_mode == AdaptiveFanProductionMode.Manual ? _lastManualAppliedLevel : _planner.LastAppliedLevel)
+                : null;
             ResetPolicyStateLocked();
+            if (retainedLevel.HasValue)
+            {
+                _planner.SeedCustom(retainedLevel.Value);
+                _lastManualAppliedLevel = retainedLevel;
+            }
             _mode = requestedMode;
             _automaticAdmission = requestedMode == AdaptiveFanProductionMode.Automatic && _automaticHardware is not null
                 ? new Hp8C40AutomaticThermalAdmission(_automaticHardware, _automaticMilliseconds)

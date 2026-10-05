@@ -139,6 +139,10 @@ internal static class WmiFanExperimentBoundary
         if (!Enabled) return;
         WmiFanExperiment.WriteJson(InFlightPath, new { Pid = Environment.ProcessId,
             Utc = DateTimeOffset.UtcNow, request.CommandType });
+        File.AppendAllText(Path.Combine(SessionDirectory!, "native-dispatch.jsonl"),
+            System.Text.Json.JsonSerializer.Serialize(new { pid = Environment.ProcessId,
+                timestampUtc = DateTimeOffset.UtcNow, commandType = request.CommandType,
+                payload = request.Payload.Select(b => (int)b).ToArray(), recovering = Recovering }) + Environment.NewLine);
     }
 
     internal static void MarkNativeReturned()

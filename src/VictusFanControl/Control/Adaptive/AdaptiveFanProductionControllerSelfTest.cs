@@ -19,6 +19,8 @@ public static class AdaptiveFanProductionControllerSelfTest
         failures += await TestBackendManualEnvelopeAsync(output);
         failures += await TestReadOnlyFallbackRemainsConstructibleAsync(output);
         failures += await TestCustomModeHandoffAsync(output);
+        failures += await TestFaultedFirmwareSelectionAsync(output);
+        failures += Block1QualificationSequenceSelfTest.Run(output);
         failures += await TestModeSwitchWaitsForInFlightManualApplyAsync(output);
         failures += await TestSafetyRestoreWinsConcurrentModeSwitchAsync(output);
         failures += await TestManualFreshSafetyRefreshAndRetryAsync(output);
@@ -292,6 +294,12 @@ public static class AdaptiveFanProductionControllerSelfTest
             AdaptiveFanProductionMode.Manual, CancellationToken.None);
         var authorityAfterManualSelection = coordinator.Authority;
 
+        var duplicateSnapshot = BuildSnapshot(t0 + TimeSpan.FromSeconds(1.5), 55, 50);
+        var callsBeforeDuplicate = backend.ApplyCalls;
+        var duplicate = await controller.ApplyManualAsync(automatic.EqualFanLevel!.Value,
+            BuildSafety(duplicateSnapshot), CancellationToken.None);
+        var duplicateDidNotWrite = duplicate.Action == AdaptiveFanProductionActionKind.HoldCustom &&
+            backend.ApplyCalls == callsBeforeDuplicate;
         var finalSnapshot = BuildSnapshot(t0 + TimeSpan.FromSeconds(2), 55, 50);
         var manualAgain = await controller.ApplyManualAsync(
             31, BuildSafety(finalSnapshot), CancellationToken.None);
@@ -307,6 +315,8 @@ public static class AdaptiveFanProductionControllerSelfTest
             toAutomatic.Action == AdaptiveFanProductionActionKind.HoldCustom &&
             authorityAfterAutomaticSelection == FanAuthority.Custom &&
             automatic.ExecutionAuthorized &&
+            automatic.Action == AdaptiveFanProductionActionKind.ApplyChangedLevel &&
+            duplicateDidNotWrite && backend.EnterCalls == 1 &&
             toManual.Action == AdaptiveFanProductionActionKind.HoldCustom &&
             authorityAfterManualSelection == FanAuthority.Custom &&
             manualAgain.ExecutionAuthorized &&
@@ -314,6 +324,27 @@ public static class AdaptiveFanProductionControllerSelfTest
             firmware.Action == AdaptiveFanProductionActionKind.RestoreFirmware &&
             backend.RestoreCalls == 1 &&
             coordinator.Authority == FanAuthority.Firmware);
+    }
+
+    private static async Task<int> TestFaultedFirmwareSelectionAsync(TextWriter output)
+    {
+        var backend = new RecordingBackend();
+        await using var coordinator = new FanControlCoordinator(backend);
+        var controller = new AdaptiveFanProductionController(coordinator, BuildConfig(), true, true);
+        await controller.SetModeAsync(AdaptiveFanProductionMode.Manual, CancellationToken.None);
+        var snapshot = BuildSnapshot(DateTimeOffset.UtcNow, 55, 50);
+        await controller.ApplyManualAsync(30, BuildSafety(snapshot), CancellationToken.None);
+        backend.DuringRestore = _ => throw new IOException("synthetic unresolved release");
+        try { await controller.ReleaseToFirmwareAsync("fixture", CancellationToken.None); }
+        catch (IOException) { }
+        var calls = backend.RestoreCalls;
+        var firmware = await controller.SetModeAsync(AdaptiveFanProductionMode.Firmware, CancellationToken.None);
+        var manual = await controller.SetModeAsync(AdaptiveFanProductionMode.Manual, CancellationToken.None);
+        var passed = firmware.Action == AdaptiveFanProductionActionKind.Blocked && !firmware.ExecutionAuthorized &&
+            manual.Action == AdaptiveFanProductionActionKind.Blocked && coordinator.Authority == FanAuthority.Faulted &&
+            backend.RestoreCalls == calls;
+        backend.DuringRestore = null; // Fixture teardown only; never clears a production lease.
+        return Report(output, "Faulted + logical Firmware remains visibly blocked without blind restore/re-entry", passed);
     }
 
     private static async Task<int> TestModeSwitchWaitsForInFlightManualApplyAsync(TextWriter output)

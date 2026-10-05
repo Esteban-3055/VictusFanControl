@@ -35,6 +35,8 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     private bool _reentryBlocked;
     internal FanWmiReleaseEvidence? ReleaseEvidence { get; private set; }
     internal string GuardianReportPath => _guardian.ReportPath;
+    internal string GuardianSessionDirectory => _guardian.SessionDirectory;
+    internal int? LastAcceptedLevel => _session.LastAcceptedLevel;
     public event EventHandler<string>? CommandAccepted;
     public string Name => "HP 8C40 WMI-only / supervised requests; hardware ownership unverified";
     public bool CanWrite => true;

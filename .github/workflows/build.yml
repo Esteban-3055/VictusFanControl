@@ -53,6 +53,13 @@ jobs:
             exit 1
           }
 
+      - name: WMI Block1 grouped harness fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\test-wmi-block1.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-wmi-block1.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Block1 PowerShell 5.1 evidence self-test failed.' }
+
       - name: Passive Manual WMI timeout collector fixtures PowerShell 7 and 5.1
         shell: pwsh
         run: |

@@ -485,7 +485,8 @@ internal sealed partial class MainForm : Form
         bool p15d2VariableManualHardwareTest = false,
         string? p15d2VariableManualMarkerRoot = null,
         bool automaticFinalQualificationHardwareTest = false,
-        string? automaticFinalQualificationMarkerRoot = null)
+        string? automaticFinalQualificationMarkerRoot = null,
+        string? block1QualificationRoot = null)
     {
         _loadedFanConfiguration = FanConfigurationStore.Load(null, out _fanConfigurationNotice);
         Text = "Victus Fan Control";
@@ -493,6 +494,7 @@ internal sealed partial class MainForm : Form
         MinimumSize = new Size(1040, 700);
         Size = new Size(1240, 880);
 
+        _block1Root = block1QualificationRoot;
         _modulesDirectory = modulesDirectory;
         _suspendLifecycleHardwareTest = suspendLifecycleHardwareTest;
         _gateDHardwareTest = gateDHardwareTest;
@@ -938,6 +940,12 @@ internal sealed partial class MainForm : Form
                 ? false
                 : Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized;
 
+        if (Block1Enabled)
+        {
+            automaticExecutionAuthorized = _wmiFanBackend is not null && backend.CanWrite &&
+                !Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized;
+        }
+
         if (_automaticFinalQualificationHardwareTest)
         {
             automaticExecutionAuthorized =
@@ -999,6 +1007,7 @@ internal sealed partial class MainForm : Form
                                 ? () => _p15d2ReadyPublished && !_p15d2Completed
                                 : null,
                 interactionAuthorizationProvider:
+                    Block1Enabled ? AuthorizeBlock1 :
                     _automaticFinalQualificationHardwareTest
                         ? IsAutomaticFinalControlInteractionAuthorized
                         : _p15cGuiManualHardwareTest
@@ -1017,6 +1026,7 @@ internal sealed partial class MainForm : Form
                             ? Hp8C40P15D1TrayExitQualificationGate.QualificationLevel
                             : null,
                 interactionObserver:
+                    Block1Enabled ? OnBlock1Interaction :
                     _automaticFinalQualificationHardwareTest
                         ? OnAutomaticFinalControlInteraction
                         : _p15cGuiManualHardwareTest
@@ -1065,6 +1075,7 @@ internal sealed partial class MainForm : Form
         _uiTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _uiTimer.Tick += (_, _) =>
         {
+            MonitorBlock1();
             UpdateSafetyStatus();
             UpdateTray();
         };
@@ -1073,6 +1084,7 @@ internal sealed partial class MainForm : Form
 
         Shown += (_, _) =>
         {
+            InitializeBlock1();
             AppendEvent($"Modules: {modulesDirectory}");
             AppendEvent($"Board: {_hardwareIdentity.BoardDisplay}; System={_hardwareIdentity.SystemProductName}; SKU={_hardwareIdentity.SystemSku}; BIOS={_hardwareIdentity.BiosVersion}");
             AppendEvent($"Persistent log: {AppLog.CurrentLogPath}");
@@ -1191,6 +1203,7 @@ internal sealed partial class MainForm : Form
             // without a delivered suspend is also an interrupted session.
             if (code is PbtApmSuspend or PbtApmResumeAutomatic or PbtApmResumeSuspend or PbtApmResumeCritical)
             {
+                if (Block1Enabled) FailBlock1("Block1 lifecycle interruption: WM_POWERBROADCAST/0x" + code.ToString("X4"));
                 InterruptP16QualificationSession($"WM_POWERBROADCAST/0x{code:X4}");
             }
 
@@ -2656,6 +2669,7 @@ internal sealed partial class MainForm : Form
                 }
             }
 
+            RequestBlock1TrayExit();
             _allowExit = true;
             Close();
         };
@@ -2797,6 +2811,7 @@ internal sealed partial class MainForm : Form
         object? sender,
         FanAuthorityChangedEventArgs e)
     {
+        RecordBlock1Authority(e);
         RecordAutomaticFinalAuthorityChange(e);
 
         if (_gateF1HardwareTest &&
@@ -2950,9 +2965,11 @@ internal sealed partial class MainForm : Form
             {
                 RecordAutomaticFinalDecision(snapshot, result);
             }
+            RecordBlock1Automatic(snapshot, result);
         }
         catch (Exception ex)
         {
+            if (Block1Enabled) FailBlock1("Automatic operation interrupted: " + ex.Message);
             AppLog.Write($"Automatic session failed closed: {ex}");
             if (_automaticFinalQualificationHardwareTest)
             {
@@ -2985,6 +3002,7 @@ internal sealed partial class MainForm : Form
     private void WorkerOnSnapshotAvailable(object? sender, TelemetrySnapshot snapshot)
     {
         _lastSnapshot = snapshot;
+        ObserveBlock1Snapshot(snapshot);
         _ = EnforceLatestFanSafetyAsync("latest telemetry snapshot");
 
         if (_automaticFinalQualificationHardwareTest &&
@@ -3053,6 +3071,9 @@ internal sealed partial class MainForm : Form
 
     private void StateMachineOnStateChanged(object? sender, SystemStateChangedEventArgs e)
     {
+        if (Block1Enabled && e.Current != SystemState.Healthy && _block1.Phase != Block1Phase.Preparing &&
+            !_block1FirmwareRequested && !_shutdownStarted)
+            FailBlock1("Block1 runtime left Healthy: " + e.Reason);
         if (e.Current == SystemState.Healthy)
         {
             // RuntimeStateMachine raises StateChanged synchronously on the
@@ -6614,6 +6635,7 @@ internal sealed partial class MainForm : Form
         }
         catch (Exception ex)
         {
+            if (Block1Enabled) FailBlock1("Fan shutdown failed: " + ex.Message);
             AppLog.Write($"Fan coordinator shutdown/restore failed: {ex}");
             if (_p15d1TrayExitHardwareTest)
             {
@@ -6626,7 +6648,7 @@ internal sealed partial class MainForm : Form
         {
             await _performanceControlSurface.CloseSessionAsync();
         }
-        catch (Exception ex) { AppLog.Write("Performance release during GUI exit failed: " + ex); }
+        catch (Exception ex) { if (Block1Enabled) FailBlock1("Performance shutdown failed: " + ex.Message); AppLog.Write("Performance release during GUI exit failed: " + ex); }
 
         if (_p15d1TrayExitHardwareTest)
         {
@@ -6697,10 +6719,12 @@ internal sealed partial class MainForm : Form
         }
         catch (Exception ex)
         {
+            if (Block1Enabled) FailBlock1("Telemetry shutdown failed: " + ex.Message);
             AppLog.Write($"Worker shutdown failed: {ex}");
         }
 
         _shutdownComplete = true;
+        CompleteBlock1Shutdown();
         Close();
     }
 

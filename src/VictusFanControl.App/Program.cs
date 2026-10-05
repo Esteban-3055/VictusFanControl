@@ -252,6 +252,14 @@ internal static class Program
             args,
             "--8c40-automatic-marker-root");
 
+        var block1Test = args.Contains("--8c40-block1-test");
+        var block1Token = ReadOptionValue(args, "--8c40-block1-token");
+        var block1Root = ReadOptionValue(args, "--8c40-block1-root");
+        if (block1Test ? block1Token != Block1QualificationSequence.RequiredToken || string.IsNullOrWhiteSpace(block1Root)
+            : block1Token is not null || block1Root is not null)
+            throw new ArgumentException("Block1 requires --8c40-block1-test --8c40-block1-token 8C40-WMI-BLOCK1 --8c40-block1-root PATH.");
+        if (block1Test) block1Root = Path.GetFullPath(block1Root!);
+
         var hardwareTestModeCount =
             (suspendHardwareTest ? 1 : 0) +
             (gateDHardwareTest ? 1 : 0) +
@@ -266,7 +274,7 @@ internal static class Program
             (p15cGuiManualHardwareTest ? 1 : 0) +
             (p15d1TrayExitHardwareTest ? 1 : 0) +
             (p15d2VariableManualHardwareTest ? 1 : 0) +
-            (automaticFinalQualificationHardwareTest ? 1 : 0);
+            (automaticFinalQualificationHardwareTest ? 1 : 0) + (block1Test ? 1 : 0);
 
         if (hardwareTestModeCount > 1)
         {
@@ -763,7 +771,7 @@ internal static class Program
             p15cGuiManualHardwareTest ||
             p15d1TrayExitHardwareTest ||
             p15d2VariableManualHardwareTest ||
-            automaticFinalQualificationHardwareTest)
+            automaticFinalQualificationHardwareTest || block1Test)
         {
             var hardware = HardwareIdentityReader.ReadCurrent();
 
@@ -823,7 +831,8 @@ internal static class Program
             p15d2VariableManualHardwareTest,
             p15d2VariableManualMarkerRoot,
             automaticFinalQualificationHardwareTest,
-            automaticFinalQualificationMarkerRoot);
+            automaticFinalQualificationMarkerRoot,
+            block1Root);
         form.AutomaticPerformanceLimitsRequired = args.Contains("--automatic-performance-limits");
         if (args.Contains("--start-minimized")) form.Shown += (_, _) => form.StartInTray();
         Application.Run(form);

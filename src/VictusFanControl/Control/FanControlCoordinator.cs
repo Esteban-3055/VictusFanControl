@@ -701,7 +701,10 @@ public sealed class FanControlCoordinator : IAsyncDisposable
         try
         {
             await _backend.RestoreFirmwareAutoAsync(cancellationToken).ConfigureAwait(false);
-            Transition(FanAuthority.Firmware, "HP firmware authority restored.");
+            Transition(FanAuthority.Firmware,
+                LastRestoreEvidence is { LocalFirmwareAckVerified: false }
+                    ? "Firmware release requests accepted; independent hardware ownership unverified."
+                    : "HP firmware authority restored.");
         }
         catch
         {
@@ -720,7 +723,10 @@ public sealed class FanControlCoordinator : IAsyncDisposable
                 "Fail-safe restore requested after an uncertain authority transition.");
 
             await _backend.RestoreFirmwareAutoAsync(cancellationToken).ConfigureAwait(false);
-            Transition(FanAuthority.Firmware, "HP firmware authority restored.");
+            Transition(FanAuthority.Firmware,
+                LastRestoreEvidence is { LocalFirmwareAckVerified: false }
+                    ? "Firmware release requests accepted; independent hardware ownership unverified."
+                    : "HP firmware authority restored.");
         }
         catch
         {
