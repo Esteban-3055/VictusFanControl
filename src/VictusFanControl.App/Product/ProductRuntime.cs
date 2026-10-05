@@ -32,6 +32,7 @@ internal sealed record ProductRuntimeState
     internal string? GpuStatus { get; init; }
     internal string? AppliedFanProfile { get; init; }
     internal PerformanceGuiSessionConfiguration? AppliedPerformance { get; init; }
+    internal string AppliedPerformanceSource { get; init; } = "Unknown";
     internal TelemetrySnapshot? Snapshot { get; init; }
     internal string Message { get; init; } = "Inicio en Firmware. Los límites requieren Aplicar.";
     internal string? Failure { get; init; }
@@ -244,7 +245,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 CanApplyPerformance = !_closing && !_lifecycleBlocked && !_performance.HasProcess && _controller.Mode == AdaptiveFanProductionMode.Firmware && _fans.Authority == FanAuthority.Firmware && _worker.StateMachine.State == SystemState.Healthy,
                 PerformanceActive = _performance.LimitsActive, PerformanceProcessPresent = _performance.HasProcess,
                 CpuState = p?.CpuState ?? (_performance.HasProcess ? "Recovering" : "Disabled"), GpuState = p?.GpuState ?? (_performance.HasProcess ? "Recovering" : "Disabled"),
-                CpuStatus = p?.CpuStatus, GpuStatus = p?.GpuStatus, AppliedPerformance = _performance.AppliedConfiguration ?? (p is { CpuState: "Active" } or { GpuState: "ActiveUnverified" } ? _requestedPerformance : null),
+                CpuStatus = p?.CpuStatus, GpuStatus = p?.GpuStatus, AppliedPerformanceSource = p?.PowerSource ?? "Unknown", AppliedPerformance = _performance.AppliedConfiguration ?? (p is { CpuState: "Active" } or { GpuState: "ActiveUnverified" } ? _requestedPerformance : null),
                 GuardianState = p?.RuntimeFailure is not null ? "Failed" : _performance.HasProcess ? p?.Phase ?? "Recovering" : "Sin sesión",
                 AppliedFanProfile = _fans.Authority == FanAuthority.Custom ? _selectedFanProfile : null,
                 LifecycleBlocked = _lifecycleBlocked, Message = message ?? _state.Message, Failure = failure ?? _state.Failure

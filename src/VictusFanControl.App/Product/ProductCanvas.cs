@@ -178,12 +178,12 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     private string AppliedCpu()
     {
         var c=State.AppliedPerformance;if(c is null||!c.CpuEnabled||State.CpuState!="Active")return "Sin límite aplicado";
-        return State.Source=="Battery"?$"{c.BatteryPl1Watts} / {c.BatteryPl2Watts} W":State.Source=="Ac"?$"{c.AcPl1Watts} / {c.AcPl2Watts} W":"Fuente desconocida";
+        return State.AppliedPerformanceSource=="Battery"?$"{c.BatteryPl1Watts} / {c.BatteryPl2Watts} W":State.AppliedPerformanceSource=="Ac"?$"{c.AcPl1Watts} / {c.AcPl2Watts} W":"Fuente desconocida";
     }
     private string AppliedGpu()
     {
         var c=State.AppliedPerformance;if(c is null||!c.GpuEnabled||State.GpuState!="ActiveUnverified")return "Sin límite aplicado";
-        return State.Source=="Battery"?$"210–{c.BatteryGpuMaximumMHz} MHz":State.Source=="Ac"?$"210–{c.AcGpuMaximumMHz} MHz":"Fuente desconocida";
+        return State.AppliedPerformanceSource=="Battery"?$"210–{c.BatteryGpuMaximumMHz} MHz":State.AppliedPerformanceSource=="Ac"?$"210–{c.AcGpuMaximumMHz} MHz":"Fuente desconocida";
     }
     private void Fans(Graphics g)
     {
@@ -207,7 +207,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     }
     private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit)
     {
-        DrawText(g,name,r.X,r.Y,24,null,r.Width-300);Card(g,new(r.Right-220,r.Y-9,155,56),false,9);DrawText(g,value+" "+unit,r.Right-208,r.Y+1,27,null,130,true);
+        DrawText(g,name,r.X,r.Y,24,null,r.Width-300);Card(g,new(r.Right-220,r.Y-9,155,56),false,9);DrawText(g,value+" "+unit,r.Right-208,r.Y+1,unit=="MHz"?22:27,null,130,true);
         var track=new RectangleF(r.X,r.Y+73,r.Width,14);Bar(g,track,value-min,max-min,Blue);
         var px=track.Left+(float)(value-min)/(max-min)*track.Width;using var b=new SolidBrush(Ink);g.FillEllipse(b,px-17,track.Y-10,34,34);
         DrawText(g,min.ToString(),r.X,r.Y+99,18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+99,18,Muted,110);
@@ -238,7 +238,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         else
         {
             Card(g,new(320,253,807,570));DrawText(g,PerformanceTab==2?"Fuente real y perfil aplicado":"Autoridad independiente",350,276,29,null,740,true);
-            string[] lines=PerformanceTab==2?["Fuente real: "+SourceText(),"Perfil que editas: "+ProfileName,"Perfil CPU/GPU aplicado: "+(State.AppliedPerformance is null?"Ninguno":State.Source),"CPU: "+AppliedCpu(),"GPU: "+AppliedGpu(),"La pestaña AC/Batería solo cambia la edición."]:
+            string[] lines=PerformanceTab==2?["Fuente real: "+SourceText(),"Perfil que editas: "+ProfileName,"Perfil CPU/GPU aplicado: "+(State.AppliedPerformance is null?"Ninguno":State.AppliedPerformanceSource),"CPU: "+AppliedCpu(),"GPU: "+AppliedGpu(),"La pestaña AC/Batería solo cambia la edición."]:
                 ["Performance Guardian: "+State.GuardianState,"CPU: "+State.CpuState,"GPU: "+State.GpuState,"Fan authority: "+State.FanAuthority,"Journal y recuperación pertenecen al backend.","Fan Control y CPU/GPU no forman una transacción atómica."];
             for(int i=0;i<lines.Length;i++)DrawText(g,lines[i],350,359+i*64,24,i<3?Ink:Muted,735);
         }
@@ -304,12 +304,12 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     private void TelemetryPage(Graphics g)
     {
         var s=FreshSnapshot;Card(g,new(310,157,1337,199));DrawText(g,"Temperaturas",332,174,27,null,1200,true);
-        Metric(g,"CPU (Paquete)",Value(s?.CpuTemperatureC,"°C"),new(332,216,416,120),Green,s?.CpuTemperatureC);
-        Metric(g,"CPU (Núcleo más caliente)",Value(s?.CpuCoreMaxTemperatureC,"°C"),new(766,216,416,120),Green,s?.CpuCoreMaxTemperatureC);
-        Metric(g,"GPU",Value(s?.GpuTemperatureC,"°C"),new(1200,216,424,120),Green,s?.GpuTemperatureC);
+        Metric(g,"CPU (Paquete)",Value(s?.CpuTemperatureC,"°C"),new(332,216,416,135),Green,s?.CpuTemperatureC);
+        Metric(g,"CPU (Núcleo más caliente)",Value(s?.CpuCoreMaxTemperatureC,"°C"),new(766,216,416,135),Green,s?.CpuCoreMaxTemperatureC);
+        Metric(g,"GPU",Value(s?.GpuTemperatureC,"°C"),new(1200,216,424,135),Green,s?.GpuTemperatureC);
         Card(g,new(310,376,1337,207));DrawText(g,"Uso y potencia",332,394,27,null,1200,true);
-        Metric(g,"CPU Uso",Value(s?.CpuLoadPercent,"%"),new(332,444,310,120),Blue,s?.CpuLoadPercent);Metric(g,"GPU Uso",Value(s?.GpuLoadPercent,"%"),new(659,444,310,120),Blue,s?.GpuLoadPercent);
-        Metric(g,"CPU Potencia",Value(s?.CpuPackagePowerW,"W"),new(985,444,310,120),Yellow,s?.CpuPackagePowerW,115);Metric(g,"GPU Potencia",Value(s?.GpuPowerW,"W"),new(1311,444,313,120),Yellow,s?.GpuPowerW,140);
+        Metric(g,"CPU Uso",Value(s?.CpuLoadPercent,"%"),new(332,444,310,135),Blue,s?.CpuLoadPercent);Metric(g,"GPU Uso",Value(s?.GpuLoadPercent,"%"),new(659,444,310,135),Blue,s?.GpuLoadPercent);
+        Metric(g,"CPU Potencia",Value(s?.CpuPackagePowerW,"W"),new(985,444,310,135),Yellow,s?.CpuPackagePowerW,115);Metric(g,"GPU Potencia",Value(s?.GpuPowerW,"W"),new(1311,444,313,135),Yellow,s?.GpuPowerW,140);
         Card(g,new(310,604,1337,217));DrawText(g,"Ventiladores y estado",332,623,27,null,1200,true);Rpm(g,new(332,676,625,119),"CPU Fan",s?.CpuFanRpm);Rpm(g,new(976,676,648,119),"GPU Fan",s?.GpuFanRpm);
     }
     private void SafetyPage(Graphics g)

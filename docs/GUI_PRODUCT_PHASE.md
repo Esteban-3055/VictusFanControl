@@ -59,6 +59,8 @@ select the historical MainForm. A separate `--product-gui-self-test` entry uses
 recording ports and never constructs hardware readers.
 
 AC/Battery editing is independent of Windows' real source and applied state.
+Applied CPU/GPU values use the source reported by Guardian IPC, rather than
+assuming a new Windows source has already been applied.
 Preferences persist atomically in `product-profiles.json`; no mode, authority,
 Guardian nonce, source observation or lease is stored. Missing files import
 legacy fan/CPU preferences into deep independent AC/Battery copies. Invalid,
