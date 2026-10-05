@@ -194,3 +194,22 @@ After A1 physical PASS is reviewed and committed without rewriting evidence:
 - **B:** endurance run: >=20 min representative load, then unload and observe the sustained-load slow descent and eventual 120 s idle cooldown.
 
 Only after A1/A2/A3/B should the project consider promoting normal Automatic or merging the fan branch into the Performance integration branch.
+
+## Second coordination retest and controlled performance limits
+
+`automatic-final-normal_2026-10-04_203843.zip` matches the supplied SHA256
+`8264ea1d19c533fd3ce057fbf2d3bbd3893e564f43e613301f78a53f41a15f1b`.
+Captured source `8d1a195477d711c9f6853677c13a3b0de2a745f3` produced 61 completed
+decisions, 6 completed hardware-command decisions and 55 holds. ACK acquisitions
+are now represented in policy history, without the prior false continuity refusal.
+The final recorded CPU control samples were 98 C at 23:40:42.841 and
+23:40:43.698 UTC, followed by canceled actuation and Firmware restoration.
+The result remains FAIL_CLOSED, with no user Firmware request and no retained fan
+journal. This supports the observed working normal decisions, not an A1 PASS.
+
+The provisional CPU/GPU GUI binding can now condition a new A1 via
+`-WithPerformanceLimits`. Enable in Rendimiento after READY and before Automatic;
+CPU must report Active and GPU ActiveUnverified. Configuration and status are bound
+to the run. Loss of the required status fails closed. GUI exit releases performance
+through the detached Guardian, and the harness checks that no CPU/GPU session
+journal remains. CPU/GPU protections and fan thermal thresholds are unchanged.

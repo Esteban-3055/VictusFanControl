@@ -9,6 +9,11 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--performance-gui-self-test")
+        {
+            Environment.ExitCode = PerformanceGuiIntegrationSelfTest.RunAsync().GetAwaiter().GetResult();
+            return;
+        }
         if (args.Length == 1 && args[0] == "--telemetry-coordination-self-test")
         {
             Environment.ExitCode = TelemetryCoordinationSelfTest.RunAsync().GetAwaiter().GetResult();
@@ -26,6 +31,18 @@ internal static class Program
             Environment.ExitCode = AdaptiveCurveEditorSelfTest.Run();
             return;
         }
+
+        if (args.Length == 1 &&
+            args[0] == "--performance-settings-self-test")
+        {
+            Environment.ExitCode =
+                PerformanceUiSettingsSelfTest.Run(
+                    Console.Out);
+            return;
+        }
+
+        if (args.Contains("--automatic-performance-limits") && !args.Contains("--8c40-automatic-final-qualification"))
+            throw new ArgumentException("--automatic-performance-limits requires the Automatic qualification entry point.");
 
         AppLog.Initialize();
 
@@ -797,6 +814,8 @@ internal static class Program
             p15d2VariableManualMarkerRoot,
             automaticFinalQualificationHardwareTest,
             automaticFinalQualificationMarkerRoot);
+        form.AutomaticPerformanceLimitsRequired = args.Contains("--automatic-performance-limits");
+        if (args.Contains("--start-minimized")) form.Shown += (_, _) => form.StartInTray();
         Application.Run(form);
 
         AppLog.Write("GUI exited.");

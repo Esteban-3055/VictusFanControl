@@ -15,6 +15,8 @@ $outputFull = [IO.Path]::GetFullPath($OutputRoot)
 $app = Join-Path $outputFull 'app'
 $watchdog = Join-Path $outputFull 'watchdog'
 
+Require-File (Join-Path $app 'performance-guardian\VictusFanControl.PerformanceGuardian.exe')
+Require-File (Join-Path $app 'performance-guardian\VictusFanControl.PerformanceGuardian.runtimeconfig.json')
 Require-File (Join-Path $app 'VictusFanControl.App.exe')
 Require-File (Join-Path $app 'VictusFanControl.App.dll')
 Require-File (Join-Path $app 'VictusFanControl.App.deps.json')

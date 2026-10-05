@@ -1,0 +1,36 @@
+{
+  "SchemaVersion": 1,
+  "CapturedDateUtc": "2026-10-04",
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "Qualification": "Direct Windows AC/DC source query via GetSystemPowerStatus",
+  "AcCapture": {
+    "CapturedAtUtc": "2026-10-04T07:00:03.0618799+00:00",
+    "Source": "Ac",
+    "RawAcLineStatus": 1,
+    "BatteryPercent": 100,
+    "BatteryFlags": 1,
+    "Status": "WINDOWS_POWER_SOURCE_CONFIRMED_AC",
+    "HardwareWritesPerformed": false
+  },
+  "BatteryCapture": {
+    "CapturedAtUtc": "2026-10-04T07:00:17.2027192+00:00",
+    "Source": "Battery",
+    "RawAcLineStatus": 0,
+    "BatteryPercent": 100,
+    "BatteryFlags": 1,
+    "Status": "WINDOWS_POWER_SOURCE_CONFIRMED_BATTERY",
+    "HardwareWritesPerformed": false
+  },
+  "Interpretation": {
+    "AcDirectQueryQualified": true,
+    "BatteryDirectQueryQualified": true,
+    "UnknownFailsClosedByDesign": true,
+    "NextGate": "GUID_ACDC_POWER_SOURCE notification trigger followed by direct GetSystemPowerStatus confirmation."
+  },
+  "ProductGates": {
+    "ProductionHardwareWritesAuthorized": false,
+    "GuiIntegrationAuthorized": false,
+    "StartupPersistenceAuthorized": false,
+    "AutomaticProfileIntegrationAuthorized": false
+  }
+}

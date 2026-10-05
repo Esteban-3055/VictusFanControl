@@ -37,13 +37,15 @@ foreach ($needle in @(
     '_shadowEvaluator.Evaluate(',
     'Automatic candidate preview — NO WRITE',
     'Manual equal fan level',
-    'Curvas y perfiles — referencia Equilibrado',
+    'Edita las curvas y la respuesta de Automatic en Ajustes.',
     'P13UiSettingsStore.Load()',
     '_lastAuthority',
     'GateStatusText'
 )) {
     Assert-Contains $surface $needle ("P13.5 control-surface invariant missing: {0}" -f $needle)
 }
+
+Assert-NotContains $surface 'Editar curvas y perfiles…' 'Obsolete preview-only curve editor must stay removed.'
 
 $gateCheck = $surface.IndexOf('if (!_controller.ManualExecutionAuthorized)', [StringComparison]::Ordinal)
 $safetyRead = $surface.IndexOf('_controlSafetyProvider()', [StringComparison]::Ordinal)

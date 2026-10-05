@@ -47,13 +47,21 @@ internal static class DashboardSelfTest
                 Require(controller.Mode == AdaptiveFanProductionMode.Firmware && backend.Commands == 0);
                 Console.WriteLine("PASS: Firmware reaches production through a failed qualification fence; Manual stays blocked.");
             }
+            Require(!Descendants(ventilation).OfType<Button>().Any(b => b.Text == "Editar curvas y perfiles…"));
             var monitor = new Panel();
             monitor.Controls.Add(new TelemetryHistoryChart());
             using var host = new Form { Text="Victus Fan Control",ClientSize=new Size(1240,880),MinimumSize=new Size(1040,700) };
-            var shell = new DashboardShell(("Monitor",monitor),("Ventilación",ventilation),("Ajustes",settings),
+            var performanceEvents = 0;
+            var performance = new PerformanceControlSurface(VictusFanControl.Performance.CpuPowerProductDefaults.TargetProfileId, _ => performanceEvents++);
+            var shell = new DashboardShell(("Monitor",monitor),("Ventilación",ventilation),
+                ("Rendimiento",performance),("Ajustes",settings),
                 ("Diagnósticos",new Label {Text="No hay una captura en curso.",AutoSize=true}));
             host.Controls.Add(shell);DashboardTheme.Apply(host);host.Show();Application.DoEvents();
             var navigation = Descendants(shell).OfType<Button>().Where(b=>b.AccessibleName?.StartsWith("Navegación:")==true).ToArray();
+            Require(navigation.Length==5);
+            navigation.Single(b=>b.Text=="Rendimiento").PerformClick();Application.DoEvents();
+            Require(Descendants(performance).OfType<TrackBar>().Count()==4 &&
+                performanceEvents==0 && backend.Commands==0 && controller.Mode==AdaptiveFanProductionMode.Firmware);
             navigation.Single(b=>b.Text=="Ajustes").PerformClick();Application.DoEvents();
             var numbers = (Dictionary<string,NumericUpDown>)typeof(FanSettingsPanel)
                 .GetField("_numbers",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(settings)!;
@@ -105,6 +113,10 @@ internal static class DashboardSelfTest
                 using var bitmap=new Bitmap(host.Width,host.Height);
                 host.DrawToBitmap(bitmap,new Rectangle(Point.Empty,host.Size));bitmap.Save(file);
             }
+            navigation.Single(b=>b.Text=="Rendimiento").PerformClick();Application.DoEvents();
+            Render("dashboard-performance-ui.png");
+            Require(performanceEvents==0 && backend.Commands==0);
+            navigation.Single(b=>b.Text=="Ajustes").PerformClick();Application.DoEvents();
             Render("dashboard-settings-ui.png");
             host.ClientSize=new Size(1040,700);Render("dashboard-settings-small-ui.png");
             Require(settings.AutoScroll && Descendants(settings).OfType<NumericUpDown>().All(n=>n.Width>=60));

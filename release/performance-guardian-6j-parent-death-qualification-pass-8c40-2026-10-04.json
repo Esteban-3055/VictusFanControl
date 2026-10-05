@@ -1,0 +1,79 @@
+{
+  "SchemaVersion": 1,
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "Gate": "Step 6J combined parent/owner-death qualification",
+  "Result": "PASS",
+  "StartedAtUtc": "2026-10-04T20:03:37.8673685+00:00",
+  "CompletedAtUtc": "2026-10-04T20:03:38.5260431+00:00",
+  "Preflight": {
+    "Source": "AC",
+    "PawnIoVersion": "2.2.0",
+    "PhysicalCoreCount": 14,
+    "CpuBaseline": {
+      "Pl1Watts": 45,
+      "Pl2Watts": 115,
+      "Locked": false
+    },
+    "CpuWriteGateClosed": true,
+    "GpuDeviceName": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "GpuWriteGateClosed": true,
+    "CpuJournalPresent": false,
+    "GpuJournalPresent": false,
+    "ProductionMutexAvailable": true,
+    "HardwareWritesPerformed": false
+  },
+  "PreKill": {
+    "OwnerPid": 524,
+    "GuardianPid": 17824,
+    "Cpu": {
+      "Pl1Watts": 35,
+      "Pl2Watts": 60,
+      "Locked": false
+    },
+    "CpuJournalPhase": "Owned",
+    "GpuRequest": {
+      "MinGraphicsClockMHz": 210,
+      "MaxGraphicsClockMHz": 1850
+    },
+    "GpuJournalPhase": "ActiveUnverified",
+    "HardwareWritesPerformedByController": false
+  },
+  "ParentDeath": {
+    "ParentLostDetected": true,
+    "ExitReason": "PARENT_LOST_RELEASED",
+    "FinalPhase": "ParentLost",
+    "AcceptedRequests": 2,
+    "RejectedRequests": 0,
+    "EnableCalls": 1,
+    "ReleaseCalls": 1,
+    "LastReleaseReason": "PARENT_PROCESS_EXIT",
+    "CpuHardwareWriteAttempts": 2,
+    "GpuHardwareWriteAttempts": 2,
+    "CpuDomainState": "Disabled",
+    "GpuDomainState": "Disabled",
+    "SourceRuntimeStartCalls": 1,
+    "SourceRuntimeStopCalls": 1,
+    "SourceListenerRegistrations": 1,
+    "SourceCpuDispatchAttempts": 0,
+    "SourceGpuDispatchAttempts": 0,
+    "SourceFailure": null,
+    "Failure": null
+  },
+  "Final": {
+    "GuardianExited": true,
+    "CpuSnapshot": {
+      "Pl1Watts": 45,
+      "Pl2Watts": 115,
+      "Locked": false
+    },
+    "FinalCpuOwnedFieldsRestored": true,
+    "GpuObservationSucceeded": true,
+    "CpuJournalPresent": false,
+    "GpuJournalPresent": false,
+    "ProductionMutexAvailableAfterCleanup": true
+  },
+  "ProductionHardwareWritesAuthorized": false,
+  "GuiIntegrationAuthorized": false,
+  "StartupPersistenceAuthorized": false,
+  "AutomaticProfileIntegrationAuthorized": false
+}

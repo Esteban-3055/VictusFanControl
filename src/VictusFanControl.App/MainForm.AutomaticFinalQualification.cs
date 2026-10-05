@@ -122,6 +122,12 @@ internal sealed partial class MainForm
 
         if (requestedMode == AdaptiveFanProductionMode.Automatic)
         {
+            if (AutomaticPerformanceLimitsRequired &&
+                (!_performanceControlSurface.LimitsActive || _performanceControlSurface.AppliedConfiguration is not { CpuEnabled: true, GpuEnabled: true }))
+                throw new InvalidOperationException("Aplica CPU y GPU en Rendimiento y espera estado Active / ActiveUnverified antes de Automatic.");
+            AppendAutomaticFinalEvent(new { kind = "performance-session-bound", timestampUtc = DateTimeOffset.UtcNow,
+                required = AutomaticPerformanceLimitsRequired, configuration = _performanceControlSurface.AppliedConfiguration,
+                status = _performanceControlSurface.LastStatus, guardianReportPath = _performanceControlSurface.GuardianReportPath });
             EnsureAutomaticFinalQualificationConfiguration();
 
             var currentConfiguration =
@@ -638,7 +644,9 @@ internal sealed partial class MainForm
                     result.ActuationDemandLevel,
                     result.ThermalOverride,
                     authority = result.Authority.ToString(),
-                    result.Detail
+                    result.Detail,
+                    performanceLimitsRequired = AutomaticPerformanceLimitsRequired,
+                    performanceStatus = _performanceControlSurface.LastStatus
                 });
 
             if (!result.ExecutionAuthorized ||
@@ -657,10 +665,11 @@ internal sealed partial class MainForm
             }
         }
 
+        if (failure is null && AutomaticPerformanceLimitsRequired && !_performanceControlSurface.LimitsActive)
+            failure = "CPU/GPU performance session lost active status during Automatic qualification.";
         if (failure is not null)
         {
-            FailAutomaticFinalQualification(
-                failure);
+            FailAutomaticFinalQualification(failure);
         }
     }
 

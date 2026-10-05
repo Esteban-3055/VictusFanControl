@@ -1,0 +1,80 @@
+{
+  "SchemaVersion": 1,
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "CapturedAtUtc": "2026-10-04T17:38:26.3669133+00:00",
+  "CpuName": "13th Gen Intel(R) Core(TM) i7-13700H",
+  "ModulePath": "C:\\Users\\TheMa\\VictusFanControl\\modules\\IntelMSR.bin",
+  "ModuleSha256": "d6ed85d65ab17a22f813ef98207d6d537155ee2ded5976a21cb48413c9b92e5f",
+  "PawnIoVersion": "2.2.0",
+  "PhysicalCoreCount": 14,
+  "Source": {
+    "Succeeded": true,
+    "Source": 1,
+    "RawAcLineStatus": 1,
+    "BatteryPercent": 100,
+    "BatteryFlags": 1,
+    "Status": "WINDOWS_POWER_SOURCE_CONFIRMED_AC"
+  },
+  "UnitsRaw": 658947,
+  "UnitsRawHex": "0x00000000000A0E03",
+  "PowerInfoRaw": 360,
+  "PowerInfoRawHex": "0x0000000000000168",
+  "PowerUnitWatts": 0.125,
+  "PowerInfo": {
+    "ThermalSpecWatts": 45,
+    "MinimumWatts": 0,
+    "MaximumWatts": 0,
+    "Raw": 360
+  },
+  "BaselineSamples": [
+    {
+      "Raw": 18722037335818600,
+      "Pl1Watts": 45,
+      "Pl2Watts": 115,
+      "Locked": false
+    },
+    {
+      "Raw": 18722037335818600,
+      "Pl1Watts": 45,
+      "Pl2Watts": 115,
+      "Locked": false
+    },
+    {
+      "Raw": 18722037335818600,
+      "Pl1Watts": 45,
+      "Pl2Watts": 115,
+      "Locked": false
+    }
+  ],
+  "BaselineRawHex": "0x0042839800DF8168",
+  "BaselineStable": true,
+  "Pl1Enabled": true,
+  "Pl2Enabled": true,
+  "AcRequest": {
+    "Pl1Watts": 35,
+    "Pl2Watts": 60
+  },
+  "AcPlan": {
+    "RequestedRaw": 18720147550208280,
+    "AppliedPl1Watts": 35,
+    "AppliedPl2Watts": 60
+  },
+  "AcPlanFailure": null,
+  "BatteryRequest": {
+    "Pl1Watts": 8,
+    "Pl2Watts": 15
+  },
+  "BatteryPlan": {
+    "RequestedRaw": 18718601361981504,
+    "AppliedPl1Watts": 8,
+    "AppliedPl2Watts": 15
+  },
+  "BatteryPlanFailure": null,
+  "ActiveJournalPath": "C:\\Users\\TheMa\\AppData\\Local\\VictusFanControl\\Performance\\HP-8C40-9D0R1LA-F18\\cpu-power-session.json",
+  "ActiveJournalPresent": false,
+  "ProductionMutexAvailable": true,
+  "HardwareWriteGateClosedProved": true,
+  "HardwareWritesPerformed": false,
+  "Result": "PASS",
+  "Failure": null
+}

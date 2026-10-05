@@ -9,11 +9,13 @@
   "readyToRun": false,
   "directories": {
     "app": "app",
-    "watchdog": "watchdog"
+    "watchdog": "watchdog",
+    "performanceGuardian": "app/performance-guardian"
   },
   "projects": {
     "app": "src/VictusFanControl.App/VictusFanControl.App.csproj",
-    "watchdog": "src/VictusFanControl.Watchdog/VictusFanControl.Watchdog.csproj"
+    "watchdog": "src/VictusFanControl.Watchdog/VictusFanControl.Watchdog.csproj",
+    "performanceGuardian": "src/VictusFanControl.PerformanceGuardian/VictusFanControl.PerformanceGuardian.csproj"
   },
   "excludedStandaloneProjects": [
     "src/VictusFanControl/VictusFanControl.csproj",

@@ -1,0 +1,81 @@
+{
+  "SchemaVersion": 1,
+  "CapturedDateUtc": "2026-10-04",
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "Qualification": "Read-only Windows notification -> direct query -> dedup -> independent CPU/GPU recording dispatch",
+  "ToBattery": {
+    "StartedAtUtc": "2026-10-04T07:24:52.8740446+00:00",
+    "CompletedAtUtc": "2026-10-04T07:25:28.166543+00:00",
+    "Prime": {
+      "Source": "Ac",
+      "RawAcLineStatus": 1,
+      "Status": "PERFORMANCE_SOURCE_PRIMED_NO_DISPATCH"
+    },
+    "Duplicate": {
+      "Source": "Ac",
+      "RawAcLineStatus": 1,
+      "DuplicateSuppressed": true,
+      "CpuAttempted": false,
+      "GpuAttempted": false
+    },
+    "Change": {
+      "Source": "Battery",
+      "RawAcLineStatus": 0,
+      "CpuAttempted": true,
+      "CpuSucceeded": true,
+      "GpuAttempted": true,
+      "GpuSucceeded": true,
+      "Status": "PERFORMANCE_SOURCE_CHANGE_DISPATCHED_TO_CPU_AND_GPU"
+    },
+    "CpuDispatchCount": 1,
+    "GpuDispatchCount": 1,
+    "ExpectedSourceDispatchedToBothDomains": true,
+    "ListenerError": null,
+    "HardwareWritesPerformed": false
+  },
+  "ToAc": {
+    "StartedAtUtc": "2026-10-04T07:25:54.5898689+00:00",
+    "CompletedAtUtc": "2026-10-04T07:26:03.5145674+00:00",
+    "Prime": {
+      "Source": "Battery",
+      "RawAcLineStatus": 0,
+      "Status": "PERFORMANCE_SOURCE_PRIMED_NO_DISPATCH"
+    },
+    "Duplicate": {
+      "Source": "Battery",
+      "RawAcLineStatus": 0,
+      "DuplicateSuppressed": true,
+      "CpuAttempted": false,
+      "GpuAttempted": false
+    },
+    "Change": {
+      "Source": "Ac",
+      "RawAcLineStatus": 1,
+      "CpuAttempted": true,
+      "CpuSucceeded": true,
+      "GpuAttempted": true,
+      "GpuSucceeded": true,
+      "Status": "PERFORMANCE_SOURCE_CHANGE_DISPATCHED_TO_CPU_AND_GPU"
+    },
+    "CpuDispatchCount": 1,
+    "GpuDispatchCount": 1,
+    "ExpectedSourceDispatchedToBothDomains": true,
+    "ListenerError": null,
+    "HardwareWritesPerformed": false
+  },
+  "Interpretation": {
+    "CompositionPathPhysicallyQualified": true,
+    "DirectQueryAuthorityQualified": true,
+    "InitialSameSourceNotificationSuppressed": true,
+    "AcToBatteryIndependentDispatchQualified": true,
+    "BatteryToAcIndependentDispatchQualified": true,
+    "HardwareWritePathExercised": false,
+    "NextGate": "Detached PerformanceGuardian process/lifecycle and explicit session authority before binding real CPU/GPU hardware controllers."
+  },
+  "ProductGates": {
+    "ProductionHardwareWritesAuthorized": false,
+    "GuiIntegrationAuthorized": false,
+    "StartupPersistenceAuthorized": false,
+    "AutomaticProfileIntegrationAuthorized": false
+  }
+}

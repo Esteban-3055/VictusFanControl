@@ -1,0 +1,52 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-10-04T05:31:51.8714666+00:00",
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "DeviceName": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "SourceFile": "gpu-nvml-observe_2026-10-04_023148_power-limit-read.json",
+  "SourceSha256": "8502b07ef172f4362c69cf0686436272d35c526ed9585ea22db5f938fea45f68",
+  "LegacyPowerManagement": {
+    "SetterExportAvailable": true,
+    "PowerManagementMode": {
+      "Result": 3,
+      "Value": 0
+    },
+    "ConfiguredLimit": {
+      "Result": 3,
+      "ValueMilliwatts": 0
+    },
+    "DefaultLimit": {
+      "Result": 0,
+      "ValueMilliwatts": 60000
+    },
+    "Constraints": {
+      "Result": 0,
+      "MinMilliwatts": 5000,
+      "MaxMilliwatts": 75000
+    },
+    "EnforcedLimit": {
+      "Result": 0,
+      "ValueMilliwatts": 70000
+    }
+  },
+  "Interpretation": {
+    "LegacyConfiguredLimitGetterUsable": false,
+    "AdjustableRangeAdvertised": true,
+    "SetterExportPresent": true,
+    "ControlledWriteQualificationAuthorized": false,
+    "Reason": "The legacy configured-limit getter returns NVML_ERROR_NOT_SUPPORTED, so exact readback is unavailable through that API even though default/constraints/enforced queries succeed."
+  },
+  "NextReadOnlyGate": {
+    "Api": "nvmlDeviceGetFieldValues",
+    "FieldIds": {
+      "MinLimit": 187,
+      "MaxLimit": 188,
+      "DefaultLimit": 189,
+      "CurrentLimit": 190,
+      "RequestedLimit": 192
+    },
+    "KeyField": "NVML_FI_DEV_POWER_REQUESTED_LIMIT",
+    "Purpose": "Determine whether the driver exposes the exact userspace-requested power limit even though nvmlDeviceGetPowerManagementLimit is unsupported."
+  },
+  "ProductionHardwareWritesAuthorized": false
+}

@@ -22,9 +22,7 @@ internal sealed class P13FanControlSurface : UserControl
     private AdaptiveFanPolicyShadowEvaluator _shadowEvaluator;
     private readonly HardwareIdentity _hardware;
     private AdaptiveCurveProfile _previewProfile = AdaptiveCurveProfiles.Presets()[1];
-    private AdaptiveCurveEditorForm? _curveEditor;
     private AdaptiveFanPolicyConfig _candidateConfig;
-    private readonly Dictionary<int,Label> _curveValues = [];
     private readonly Func<SafetyGateResult?> _controlSafetyProvider;
     private readonly Action<string> _log;
     private readonly Func<bool>? _manualInteractionReadyProvider;
@@ -90,15 +88,11 @@ internal sealed class P13FanControlSurface : UserControl
     {
         _previewProfile = AdaptiveCurveProfiles.Copy(configuration.Profile);
         _candidateConfig = configuration.BuildPolicy();
-        var curves = new[] {_candidateConfig.CpuTemperatureCurve, _candidateConfig.GpuTemperatureCurve, _candidateConfig.CpuPowerCurve, _candidateConfig.GpuPowerCurve, _candidateConfig.CpuLoadCurve, _candidateConfig.GpuLoadCurve};
-        foreach (var pair in _curveValues) pair.Value.Text = string.Join("  ",curves[pair.Key].Select(p=>$"{p.Input:0.#}→{p.Level}"));
         _shadowEvaluator = new AdaptiveFanPolicyShadowEvaluator(_hardware,
             AdaptiveCurveProfiles.Validate(_previewProfile), preparedAutomatic: true, configuration: configuration);
         _candidateValue.Text = $"{_previewProfile.Name} · {configuration.Tuning.MinimumLevel}–{configuration.Tuning.MaximumLevel}";
         _previewLevelValue.Text = "—";
         _previewDetailValue.Text = "Ajustes aplicados; esperando una muestra nueva.";
-        if (_curveEditor is { IsDisposed: false })
-            _curveEditor.SetCpuTemperatureSource(configuration.Tuning.CpuTemperatureSource, configuration.Tuning.HottestPerformanceCoreCount);
     }
 
     public AdaptiveFanProductionMode RequestedMode => _controller.Mode;
@@ -162,12 +156,10 @@ internal sealed class P13FanControlSurface : UserControl
 
             _previewDetailValue.Text =
                 $"{_previewProfile.Name}: {result.Detail}";
-            if (_curveEditor is { IsDisposed: false }) _curveEditor.UpdateTelemetry(state, snapshot, result);
         }
         catch (Exception ex)
         {
             _shadowEvaluator.Reset();
-            _curveEditor?.ClearTelemetry();
             _previewSafetyValue.Text = "ERROR / RESET";
             _previewLevelValue.Text = "—";
             _previewRawDemandValue.Text = "—";
@@ -187,7 +179,6 @@ internal sealed class P13FanControlSurface : UserControl
         }
 
         _shadowEvaluator.Reset();
-        _curveEditor?.ClearTelemetry();
         _previewSafetyValue.Text =
             $"BLOCKED ({state})";
         _previewLevelValue.Text = "—";
@@ -339,7 +330,7 @@ internal sealed class P13FanControlSurface : UserControl
         state.Controls.Add(_manualGateValue, 1, 2);
         state.Controls.Add(new Label { Text = "Automatic execution gate:", AutoSize = true }, 0, 3);
         state.Controls.Add(_automaticGateValue, 1, 3);
-        state.Controls.Add(new Label { Text = "Candidate curve:", AutoSize = true }, 0, 4);
+        state.Controls.Add(new Label { Text = "Perfil de Automatic:", AutoSize = true }, 0, 4);
         state.Controls.Add(_candidateValue, 1, 4);
 
         content.Controls.Add(buttons, 0, 0);
@@ -470,35 +461,11 @@ internal sealed class P13FanControlSurface : UserControl
         previewTable.Controls.Add(_previewDetailValue, 1, 4);
         previewGroup.Controls.Add(previewTable);
 
-        var curveGroup = new GroupBox
+        var configurationHint = new Label
         {
-            Text = "Curvas y perfiles — referencia Equilibrado",
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            Padding = new Padding(12),
-            Margin = new Padding(3, 8, 3, 8)
+            Text = "Edita las curvas y la respuesta de Automatic en Ajustes.",
+            AutoSize = true, MaximumSize = new Size(760, 0), Margin = new Padding(3, 12, 3, 3)
         };
-
-        var curves = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            ColumnCount = 2,
-            RowCount = 6
-        };
-        curves.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        curves.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-
-        AddCurveRow(curves, 0, "CPU temperature", _candidateConfig.CpuTemperatureCurve);
-        AddCurveRow(curves, 1, "GPU temperature", _candidateConfig.GpuTemperatureCurve);
-        AddCurveRow(curves, 2, "CPU package power", _candidateConfig.CpuPowerCurve);
-        AddCurveRow(curves, 3, "GPU power", _candidateConfig.GpuPowerCurve);
-        AddCurveRow(curves, 4, "CPU load", _candidateConfig.CpuLoadCurve);
-        AddCurveRow(curves, 5, "GPU load", _candidateConfig.GpuLoadCurve);
-        var editor = new Button { Text = "Editar curvas y perfiles…", AutoSize = true, Dock = DockStyle.Top };
-        editor.Click += (_, _) => OpenCurveEditor();
-        curveGroup.Controls.Add(curves);
-        curveGroup.Controls.Add(editor);
 
         _statusValue.AutoSize = true;
         _statusValue.MaximumSize = new Size(760, 0);
@@ -517,76 +484,10 @@ internal sealed class P13FanControlSurface : UserControl
         root.Controls.Add(group, 0, 1);
         root.Controls.Add(manualGroup, 0, 2);
         root.Controls.Add(previewGroup, 0, 3);
-        root.Controls.Add(curveGroup, 0, 4);
+        root.Controls.Add(configurationHint, 0, 4);
         root.Controls.Add(_statusValue, 0, 5);
         root.Controls.Add(safetyBoundary, 0, 6);
         return root;
-    }
-
-    private void OpenCurveEditor()
-    {
-        try
-        {
-            if (_curveEditor is null || _curveEditor.IsDisposed)
-            {
-                _curveEditor = new AdaptiveCurveEditorForm(profile =>
-                {
-                    // Validate and construct completely before swapping; no production object changes.
-                    var copy = AdaptiveCurveProfiles.Copy(profile);
-                    var configuration = (_controller.AutomaticConfiguration ?? new FanConfiguration()) with { Profile = copy };
-                    var evaluator = new AdaptiveFanPolicyShadowEvaluator(_hardware, AdaptiveCurveProfiles.Validate(copy),
-                        preparedAutomatic: Hp8C40TargetProfile.Matches(_hardware, out _), configuration: configuration);
-                    _shadowEvaluator = evaluator;
-                    _previewProfile = copy;
-                    _candidateValue.Text = $"{copy.Name} — previsualización, sin autorización automática";
-                    _previewLevelValue.Text = "—";
-                    _previewRawDemandValue.Text = "—";
-                    _previewIntentValue.Text = "HoldFirmware";
-                    _previewDetailValue.Text = "Perfil aplicado a la vista previa; esperando telemetría fresca.";
-                    _log($"Curve profile applied to shadow preview: {copy.Name}; no hardware command.");
-                }, _previewProfile, cpuSource: _controller.AutomaticConfiguration?.Tuning.CpuTemperatureSource ?? CpuDemandTemperatureSource.PackageOrHottestCore,
-                    hottestPerformanceCoreCount: _controller.AutomaticConfiguration?.Tuning.HottestPerformanceCoreCount ?? 3);
-                _curveEditor.Show(FindForm());
-            }
-            else { _curveEditor.Show(); _curveEditor.Activate(); }
-        }
-        catch (Exception ex)
-        {
-            _log($"Curve editor could not open: {ex.Message}");
-            MessageBox.Show(this, ex.Message, "Editor de curvas", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing) _curveEditor?.Dispose();
-        base.Dispose(disposing);
-    }
-
-    private void AddCurveRow(
-        TableLayoutPanel table,
-        int row,
-        string name,
-        IReadOnlyList<AdaptiveFanCurvePoint> curve)
-    {
-        var value =
-            string.Join(
-                "  ",
-                curve.Select(point =>
-                    $"{point.Input:0.#}→{point.Level}"));
-
-        table.Controls.Add(
-            new Label
-            {
-                Text = name + ":",
-                AutoSize = true
-            },
-            0,
-            row);
-
-        var label = new Label { Text = value, AutoSize = true, MaximumSize = new Size(590,0) };
-        _curveValues[row] = label;
-        table.Controls.Add(label,1,row);
     }
 
     private bool TryBeginControlInteraction(

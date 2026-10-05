@@ -8,6 +8,11 @@ internal sealed record SystemPowerStatusSample(
     byte BatteryPercent,
     byte BatteryFlags)
 {
+    // GetSystemPowerStatus documents 0=offline, 1=online, 255=unknown.
+    // Preserve the raw byte so performance control never misclassifies an
+    // unknown AC state as Battery merely because AcOnline is false.
+    public byte RawAcLineStatus { get; init; } = 0xFF;
+
     public bool BatteryPresent => (BatteryFlags & 0x80) == 0;
 
     public override string ToString() =>
@@ -35,7 +40,10 @@ internal static class SystemPowerStatusReader
         return new SystemPowerStatusSample(
             AcOnline: native.ACLineStatus == 1,
             BatteryPercent: native.BatteryLifePercent,
-            BatteryFlags: native.BatteryFlag);
+            BatteryFlags: native.BatteryFlag)
+        {
+            RawAcLineStatus = native.ACLineStatus
+        };
     }
 
     [StructLayout(LayoutKind.Sequential)]

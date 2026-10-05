@@ -143,6 +143,7 @@ internal sealed partial class MainForm : Form
     private readonly FanControlCoordinator _fanCoordinator;
     private readonly AdaptiveFanProductionController _fanProductionController;
     private readonly P13FanControlSurface _p13FanControlSurface;
+    private readonly PerformanceControlSurface _performanceControlSurface;
     private readonly string _fanBackendStartupDetail;
     private readonly HardwareIdentity _hardwareIdentity;
     private readonly HardwareTargetProfile? _targetProfile;
@@ -1003,6 +1004,21 @@ internal sealed partial class MainForm : Form
                                 : null);
         _p13FanControlSurface.UpdateAuthority(
             _fanCoordinator.Authority);
+
+        _performanceControlSurface =
+            new PerformanceControlSurface(
+                _targetProfile?.Id,
+                AppendEvent,
+                new PerformanceGuardianClient(_modulesDirectory),
+                () => !_shutdownStarted && _fanProductionController.Mode == AdaptiveFanProductionMode.Firmware &&
+                    _fanCoordinator.Authority == FanAuthority.Firmware);
+
+        _performanceControlSurface.SessionStatusChanged += () =>
+        {
+            if (_automaticFinalQualificationHardwareTest && AutomaticPerformanceLimitsRequired &&
+                _automaticFinalEverActive && !_automaticFinalCompleted && !_performanceControlSurface.LimitsActive)
+                FailAutomaticFinalQualification("Required CPU/GPU session lost active status.");
+        };
 
         _worker = new TelemetryWorker(modulesDirectory)
         {
@@ -2276,7 +2292,8 @@ internal sealed partial class MainForm : Form
         }, _fanConfigurationNotice);
         var shell = new DashboardShell(
             ("Monitor", BuildOverview()), ("Ventilación", BuildP13FanControlSurface()),
-            ("Ajustes", settings), ("Diagnósticos", BuildDiagnostics()));
+            ("Rendimiento", _performanceControlSurface),
+            ("Ajustes", BuildApplicationSettings(settings)), ("Diagnósticos", BuildDiagnostics()));
         DashboardTheme.Apply(this);
         DashboardTheme.Apply(shell);
         return shell;
@@ -2487,7 +2504,7 @@ internal sealed partial class MainForm : Form
         buttons.Controls.Add(copy);
         buttons.Controls.Add(clear);
         buttons.Controls.Add(openLogs);
-        buttons.Controls.Add(readEcState);
+        if (_hardwareIdentity.BoardProduct == "88F8") buttons.Controls.Add(readEcState);
         buttons.Controls.Add(scanOmen);
 
         var split = new SplitContainer
@@ -6536,6 +6553,12 @@ internal sealed partial class MainForm : Form
 
             try
             {
+                _performanceControlSurface.CloseSessionAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception ex) { AppLog.Write("Performance release during Windows shutdown failed: " + ex); }
+
+            try
+            {
                 _worker.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
             catch (Exception ex)
@@ -6571,6 +6594,12 @@ internal sealed partial class MainForm : Form
                 Environment.ExitCode = 161;
             }
         }
+
+        try
+        {
+            await _performanceControlSurface.CloseSessionAsync();
+        }
+        catch (Exception ex) { AppLog.Write("Performance release during GUI exit failed: " + ex); }
 
         if (_p15d1TrayExitHardwareTest)
         {

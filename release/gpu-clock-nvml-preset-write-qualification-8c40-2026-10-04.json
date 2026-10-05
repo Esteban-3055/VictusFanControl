@@ -1,0 +1,63 @@
+{
+  "SchemaVersion": 1,
+  "CapturedDateUtc": "2026-10-04",
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "DeviceName": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "Qualification": "Direct C# -> NVML locked graphics clock preset Set/Reset",
+  "Presets": [
+    {
+      "Preset": "ac",
+      "Request": {
+        "MinGraphicsClockMHz": 210,
+        "MaxGraphicsClockMHz": 1850
+      },
+      "HoldSeconds": 5,
+      "StartedAtUtc": "2026-10-04T06:28:34.9513455+00:00",
+      "CompletedAtUtc": "2026-10-04T06:28:40.0346511+00:00",
+      "BeforeCurrentGraphicsClockMHz": 1800,
+      "DuringCurrentGraphicsClockMHz": 1845,
+      "AfterCurrentGraphicsClockMHz": 1845,
+      "ApplySucceeded": true,
+      "ReleaseAttempted": true,
+      "ReleaseSucceeded": true,
+      "FinalSessionState": "Disabled",
+      "SessionStatus": "GPU_CLOCK_RELEASED_TO_NVIDIA_DEFAULT",
+      "Exception": null
+    },
+    {
+      "Preset": "battery",
+      "Request": {
+        "MinGraphicsClockMHz": 210,
+        "MaxGraphicsClockMHz": 1200
+      },
+      "HoldSeconds": 5,
+      "StartedAtUtc": "2026-10-04T06:30:17.4171923+00:00",
+      "CompletedAtUtc": "2026-10-04T06:30:22.5061201+00:00",
+      "BeforeCurrentGraphicsClockMHz": 1890,
+      "DuringCurrentGraphicsClockMHz": 1200,
+      "AfterCurrentGraphicsClockMHz": 1200,
+      "ApplySucceeded": true,
+      "ReleaseAttempted": true,
+      "ReleaseSucceeded": true,
+      "FinalSessionState": "Disabled",
+      "SessionStatus": "GPU_CLOCK_RELEASED_TO_NVIDIA_DEFAULT",
+      "Exception": null
+    }
+  ],
+  "Interpretation": {
+    "DirectNvmlSetPathPhysicallyQualified": true,
+    "DirectNvmlNormalResetPathPhysicallyQualified": true,
+    "AcPresetCommandAccepted": true,
+    "BatteryPresetCommandAccepted": true,
+    "ExactLockedRangeReadbackAvailable": false,
+    "ExactOwnershipClaimed": false,
+    "CurrentClockIsObservationOnly": true,
+    "NextGate": "Direct in-session AC -> Battery -> AC preset switching with no intermediate Reset."
+  },
+  "ProductGates": {
+    "ProductionHardwareWritesAuthorized": false,
+    "GuiIntegrationAuthorized": false,
+    "StartupPersistenceAuthorized": false,
+    "AutomaticProfileIntegrationAuthorized": false
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "SchemaVersion": 1,
+  "CapturedDateUtc": "2026-10-04",
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "DeviceName": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "Purpose": "Physical read-only characterization of public NVML observability around externally-applied GPU locked-clock states.",
+  "SourceFiles": [
+    {
+      "File": "gpu-nvml-observe_2026-10-04_015147_baseline.json",
+      "Sha256": "4359a16bca8b817ee3eea8310c2f736647857d3670ad9c98dfcba8f1c00daf70",
+      "Label": "baseline",
+      "CurrentGraphicsClockMHz": 2010,
+      "ApplicationGraphicsClockTargetNvmlResult": 3,
+      "CurrentClocksEventReasons": 36,
+      "ExactLockedRangeReadbackAvailable": false
+    },
+    {
+      "File": "gpu-nvml-observe_2026-10-04_015201_ac-210-1850.json",
+      "Sha256": "773406fb66038d8c6ba48513603fec8adb14a58b53f92ab7dcc2f816f5b2a60f",
+      "Label": "ac-210-1850",
+      "CurrentGraphicsClockMHz": 1260,
+      "ApplicationGraphicsClockTargetNvmlResult": 3,
+      "CurrentClocksEventReasons": 36,
+      "ExactLockedRangeReadbackAvailable": false
+    },
+    {
+      "File": "gpu-nvml-observe_2026-10-04_015210_battery-210-1200.json",
+      "Sha256": "4ce822bd52a1950cf42352fccb1623328a178e235552c1e7f7bb44c325fd6178",
+      "Label": "battery-210-1200",
+      "CurrentGraphicsClockMHz": 1200,
+      "ApplicationGraphicsClockTargetNvmlResult": 3,
+      "CurrentClocksEventReasons": 36,
+      "ExactLockedRangeReadbackAvailable": false
+    },
+    {
+      "File": "gpu-nvml-observe_2026-10-04_015231_reset.json",
+      "Sha256": "80d861f70d71b3216058b50c6305b7c2b8262e66e49024f49f12d00f603fcddb",
+      "Label": "reset",
+      "CurrentGraphicsClockMHz": 1125,
+      "ApplicationGraphicsClockTargetNvmlResult": 3,
+      "CurrentClocksEventReasons": 36,
+      "ExactLockedRangeReadbackAvailable": false
+    }
+  ],
+  "Interpretation": {
+    "ApplicationGraphicsClockTarget": "The export exists but the call returned NVML error 3 in all four captures, so this target does not provide the application-clock target as a usable ownership signal.",
+    "CurrentClocksEventReasons": "Value 36 was identical in baseline, AC lock, Battery lock and reset states; it is non-discriminating for locked-range ownership on this target.",
+    "CurrentGraphicsClock": "Observed values changed across captures (2010, 1260, 1200, 1125 MHz) and therefore reflect instantaneous operating conditions rather than exact requested locked range.",
+    "ExactLockedRange": "No exact public-NVML min/max readback was available in any capture."
+  },
+  "ProductDecision": {
+    "ManagedOwnershipAllowed": false,
+    "AutomaticReacquireAllowed": false,
+    "ConditionalResetAllowed": false,
+    "BoundedFiveByThirtyPolicyAuthorized": false,
+    "Reason": "Public NVML cannot prove exact locked-clock range ownership on the qualified target. Implementing external-writer detection, automatic reacquire, or conditional reset would be unsafe."
+  },
+  "EvidenceScope": {
+    "HardwareWritesPerformedByProbe": false,
+    "ExternalOperatorWritesUsedToCreateStates": true,
+    "PhysicalGpuWritePathQualified": false,
+    "ProductionHardwareWritesAuthorized": false
+  }
+}

@@ -1,5 +1,6 @@
 param(
-    [int]$TimeoutMinutes = 15
+    [int]$TimeoutMinutes = 15,
+    [switch]$WithPerformanceLimits
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +26,8 @@ $summaryPath = Join-Path $evidenceRoot 'automatic-final.harness-summary.json'
 $applicationLogDirectory = Join-Path $env:LOCALAPPDATA 'VictusFanControl\logs'
 
 $gui = $null
+$guiStartedUtc = $null
+$guiStartUtcTicks = $null
 $head = $null
 $pass = $false
 $failure = $null
@@ -247,6 +250,21 @@ function Wait-ForFile([string]$Path, [int]$Seconds, [string]$Label) {
 }
 
 function Export-QualificationEvidence {
+    if ($WithPerformanceLimits -and $gui) {
+        $sessions = Join-Path $env:LOCALAPPDATA 'VictusFanControl\Performance\gui'
+        if (Test-Path -LiteralPath $sessions) {
+            foreach ($reportFile in @(Get-ChildItem -LiteralPath $sessions -Recurse -Filter 'guardian-report.json')) {
+                $report = Get-Content -LiteralPath $reportFile.FullName -Raw | ConvertFrom-Json
+                if ($report.OwnerPid -eq $gui.Id -and
+                    ([datetime]$reportFile.LastWriteTimeUtc) -ge ([datetime]$guiStartedUtc)) {
+                    $destination = Join-Path $evidenceRoot ('performance-' + $reportFile.Directory.Name)
+                    New-Item -ItemType Directory -Path $destination -Force | Out-Null
+                    Copy-Item -LiteralPath $reportFile.FullName -Destination $destination
+                    Copy-Item -LiteralPath (Join-Path $reportFile.Directory.FullName 'configuration.json') -Destination $destination
+                }
+            }
+        }
+    }
     # Preserve the exception log too: a dispatched operation can fail before
     # returning a decision, so decision counters alone do not describe it.
     $applicationLog = Join-Path $applicationLogDirectory ('events-{0}.log' -f (Get-Date -Format 'yyyy-MM-dd'))
@@ -304,6 +322,7 @@ function Write-Summary([string]$Result, [string]$Failure) {
         timestampUtc = (Get-Date).ToUniversalTime().ToString('O')
         sourceHead = $head
         branch = $expectedBranch
+        performanceLimitsRequired = [bool]$WithPerformanceLimits
         targetProfileId = $targetProfile
         guiPid = if ($gui) { $gui.Id } else { 0 }
         decisions = $stats.Decisions
@@ -358,12 +377,17 @@ try {
 
     Write-Host ''
     Write-Host 'Launching isolated final Automatic qualification...' -ForegroundColor Cyan
-    $gui = Start-Process -FilePath $appExe -ArgumentList @(
+    $guiArguments = @(
         '--8c40-automatic-final-qualification',
         '--8c40-automatic-test-token', $token,
         '--8c40-automatic-marker-root', $evidenceRoot,
         '--modules-dir', $modulesDir
-    ) -PassThru
+    )
+    if ($WithPerformanceLimits) { $guiArguments += '--automatic-performance-limits' }
+    $gui = Start-Process -FilePath $appExe -ArgumentList $guiArguments -PassThru
+
+    $guiStartedUtc = $gui.StartTime.ToUniversalTime()
+    $guiStartUtcTicks = $guiStartedUtc.Ticks
 
     Wait-ForFile $readyPath 120 'AUTOMATIC FINAL READY'
 
@@ -381,6 +405,10 @@ try {
 
     Write-Host ''
     Write-Host 'READY. Do these actions in the GUI:' -ForegroundColor Green
+    if ($WithPerformanceLimits) {
+        Write-Host '  0) In Rendimiento, save your CPU limits; keep CPU and GPU selected; click Aplicar.'
+        Write-Host '     Wait for CPU Active and GPU ActiveUnverified. Do this BEFORE Automatic.'
+    }
     Write-Host '  1) Click Automatic ONCE.'
     Write-Host '  2) Run a representative workload long enough to cause at least one level change.'
     Write-Host '     The gate requires >=30 Automatic decisions and >=2 real fan command decisions.'
@@ -430,6 +458,31 @@ try {
         throw 'Durable watchdog journal remains after PASS.'
     }
 
+    if ($WithPerformanceLimits) {
+        $performanceRoot = Join-Path $env:LOCALAPPDATA 'VictusFanControl\Performance'
+        $domainRoot = Join-Path $performanceRoot $targetProfile
+        foreach ($journal in @('cpu-power-session.json', 'gpu-clock-session.json')) {
+            if (Test-Path -LiteralPath (Join-Path $domainRoot $journal)) { throw "Performance journal remains: $journal" }
+        }
+        $bound = @(Get-Content -LiteralPath $eventsPath | ForEach-Object { $_ | ConvertFrom-Json } |
+            Where-Object { $_.kind -eq 'performance-session-bound' }) | Select-Object -Last 1
+        if (-not $bound.required -or -not $bound.status.sessionEnabled -or
+            $bound.status.cpuState -ne 'Active' -or $bound.status.gpuState -ne 'ActiveUnverified') {
+            throw 'Performance session was not bound to the Automatic run.'
+        }
+        $guardianReportPath = [IO.Path]::GetFullPath([string]$bound.guardianReportPath)
+        $sessionRoot = [IO.Path]::GetFullPath((Join-Path $performanceRoot 'gui')) + [IO.Path]::DirectorySeparatorChar
+        if (-not $guardianReportPath.StartsWith($sessionRoot, [StringComparison]::OrdinalIgnoreCase) -or
+            -not (Test-Path -LiteralPath $guardianReportPath)) { throw 'Matching performance release report is missing.' }
+        $guardian = Get-Content -LiteralPath $guardianReportPath -Raw | ConvertFrom-Json
+        if ($guardian.OwnerPid -ne $gui.Id -or $guardian.OwnerStartUtcTicks -ne $guiStartUtcTicks -or
+            $guardian.ExitReason -ne 'CLIENT_SHUTDOWN' -or $guardian.FinalPhase -ne 'Stopped' -or
+            $guardian.CpuDomainState -ne 'Disabled' -or $guardian.GpuDomainState -ne 'Disabled' -or
+            $guardian.SourceRuntimeActive -or $guardian.Failure -or $guardian.SourceFailure -or
+            $guardian.CpuHardwareWriteAttempts -lt 2 -or $guardian.GpuHardwareWriteAttempts -lt 2) {
+            throw 'Performance Guardian did not prove normal CPU/GPU release for this GUI process.'
+        }
+    }
     [void](Assert-StableFirmware)
 
     $pass = $true

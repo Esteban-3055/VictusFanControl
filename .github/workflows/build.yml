@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [ main, 'feature/**' ]
+    branches: [ main, 'feature/**', 'integration/**' ]
   pull_request:
     branches: [ main ]
 
@@ -20,6 +20,14 @@ jobs:
 
       - name: Restore
         run: dotnet restore VictusFanControl.sln
+
+      - name: Intel RAPL bounded P1 build and recovery fixtures (no hardware IO)
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "CPU probe PowerShell 5.1 build/fixtures failed." }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest -WriteTest -PL1Watts 20 -PL2Watts 40
+          if ($LASTEXITCODE -ne 0) { throw "CPU probe explicit 20/40 PowerShell 5.1 validation failed." }
 
       - name: PowerShell syntax check
         shell: pwsh
@@ -690,6 +698,12 @@ jobs:
 
       - name: Configurable dashboard WinForms self-test and renders
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --dashboard-self-test
+
+      - name: Performance CPU settings persistence self-test
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --performance-settings-self-test
+
+      - name: Performance GUI IPC and startup contract self-test
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --performance-gui-self-test
 
       - name: HP BIOS contract self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --bios-contract-self-test

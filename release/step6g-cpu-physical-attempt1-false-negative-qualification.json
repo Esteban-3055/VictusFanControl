@@ -1,0 +1,263 @@
+{
+  "SchemaVersion": 1,
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "StartedAtUtc": "2026-10-04T12:16:06.7066339+00:00",
+  "CompletedAtUtc": "2026-10-04T12:16:16.5767633+00:00",
+  "ModulePath": "C:\\Users\\TheMa\\VictusFanControl\\modules\\IntelMSR.bin",
+  "ModuleSha256": "d6ed85d65ab17a22f813ef98207d6d537155ee2ded5976a21cb48413c9b92e5f",
+  "Initial": {
+    "Succeeded": true,
+    "Source": 1,
+    "RawAcLineStatus": 1,
+    "BatteryPercent": 100,
+    "BatteryFlags": 1,
+    "Status": "WINDOWS_POWER_SOURCE_CONFIRMED_AC"
+  },
+  "ReadOnlyPreflight": {
+    "PawnIoVersion": "2.2.0",
+    "PhysicalCoreCount": 14,
+    "UnitsRaw": 658947,
+    "PowerUnitWatts": 0.125,
+    "PowerInfoRaw": 360,
+    "PowerInfo": {
+      "ThermalSpecWatts": 45,
+      "MinimumWatts": 0,
+      "MaximumWatts": 0,
+      "Raw": 360
+    },
+    "BaselineSamples": [
+      {
+        "Raw": 18722037335818600,
+        "Pl1Watts": 45,
+        "Pl2Watts": 115,
+        "Locked": false
+      },
+      {
+        "Raw": 18722037335818600,
+        "Pl1Watts": 45,
+        "Pl2Watts": 115,
+        "Locked": false
+      },
+      {
+        "Raw": 18722037335818600,
+        "Pl1Watts": 45,
+        "Pl2Watts": 115,
+        "Locked": false
+      }
+    ],
+    "AcPlan": {
+      "RequestedRaw": 18720147550208280,
+      "AppliedPl1Watts": 35,
+      "AppliedPl2Watts": 60
+    },
+    "BatteryPlan": {
+      "RequestedRaw": 18718601361981504,
+      "AppliedPl1Watts": 8,
+      "AppliedPl2Watts": 15
+    },
+    "HardwareWriteGateClosedProved": true,
+    "HardwareWritesPerformed": false
+  },
+  "BatterySeen": {
+    "Succeeded": true,
+    "Source": 2,
+    "RawAcLineStatus": 0,
+    "BatteryPercent": 100,
+    "BatteryFlags": 1,
+    "Status": "WINDOWS_POWER_SOURCE_CONFIRMED_BATTERY"
+  },
+  "AcReturnSeen": {
+    "Succeeded": true,
+    "Source": 1,
+    "RawAcLineStatus": 1,
+    "BatteryPercent": 100,
+    "BatteryFlags": 1,
+    "Status": "WINDOWS_POWER_SOURCE_CONFIRMED_AC"
+  },
+  "InitialCpuJournal": {
+    "SchemaVersion": 1,
+    "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+    "SessionId": "df89c721-5742-4e91-aefa-aa214c59d418",
+    "Generation": 2,
+    "Phase": 1,
+    "OriginalBaseline": {
+      "Raw": 18722037335818600,
+      "Pl1Watts": 45,
+      "Pl2Watts": 115,
+      "Locked": false
+    },
+    "Request": {
+      "Pl1Watts": 35,
+      "Pl2Watts": 60
+    },
+    "AppliedRaw": 18720147550208280,
+    "ExternalHandoff": null,
+    "Conflict": {
+      "State": 0,
+      "AttemptsUsed": 0,
+      "MaxAttempts": 5,
+      "AttemptInFlight": false,
+      "FirstDetectedActiveMilliseconds": null,
+      "LastDetectedActiveMilliseconds": null,
+      "RetryStartedActiveMilliseconds": 0,
+      "StabilityStartedActiveMilliseconds": 0
+    },
+    "PendingRaw": null,
+    "CreatedAtUtc": "2026-10-04T12:16:06.9774721+00:00",
+    "UpdatedAtUtc": "2026-10-04T12:16:07.0091006+00:00"
+  },
+  "BatteryCpuJournal": {
+    "SchemaVersion": 1,
+    "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+    "SessionId": "df89c721-5742-4e91-aefa-aa214c59d418",
+    "Generation": 4,
+    "Phase": 1,
+    "OriginalBaseline": {
+      "Raw": 18722037335818600,
+      "Pl1Watts": 45,
+      "Pl2Watts": 115,
+      "Locked": false
+    },
+    "Request": {
+      "Pl1Watts": 8,
+      "Pl2Watts": 15
+    },
+    "AppliedRaw": 18718601361981504,
+    "ExternalHandoff": null,
+    "Conflict": {
+      "State": 0,
+      "AttemptsUsed": 0,
+      "MaxAttempts": 5,
+      "AttemptInFlight": false,
+      "FirstDetectedActiveMilliseconds": null,
+      "LastDetectedActiveMilliseconds": null,
+      "RetryStartedActiveMilliseconds": 0,
+      "StabilityStartedActiveMilliseconds": 0
+    },
+    "PendingRaw": null,
+    "CreatedAtUtc": "2026-10-04T12:16:06.9774721+00:00",
+    "UpdatedAtUtc": "2026-10-04T12:16:11.0818263+00:00"
+  },
+  "AcReturnCpuJournal": {
+    "SchemaVersion": 1,
+    "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+    "SessionId": "df89c721-5742-4e91-aefa-aa214c59d418",
+    "Generation": 6,
+    "Phase": 1,
+    "OriginalBaseline": {
+      "Raw": 18722037335818600,
+      "Pl1Watts": 45,
+      "Pl2Watts": 115,
+      "Locked": false
+    },
+    "Request": {
+      "Pl1Watts": 35,
+      "Pl2Watts": 60
+    },
+    "AppliedRaw": 18720147550208280,
+    "ExternalHandoff": null,
+    "Conflict": {
+      "State": 0,
+      "AttemptsUsed": 0,
+      "MaxAttempts": 5,
+      "AttemptInFlight": false,
+      "FirstDetectedActiveMilliseconds": null,
+      "LastDetectedActiveMilliseconds": null,
+      "RetryStartedActiveMilliseconds": 0,
+      "StabilityStartedActiveMilliseconds": 0
+    },
+    "PendingRaw": null,
+    "CreatedAtUtc": "2026-10-04T12:16:06.9774721+00:00",
+    "UpdatedAtUtc": "2026-10-04T12:16:16.3345393+00:00"
+  },
+  "EnableResponse": {
+    "ProtocolVersion": 1,
+    "RequestId": "f639c058-8e51-496c-8f82-7e07147ee056",
+    "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+    "Ok": true,
+    "Code": "SESSION_ENABLED",
+    "Message": "Explicit Performance Guardian startup/apply authority granted.",
+    "Phase": "SessionEnabled",
+    "SessionEnabled": true,
+    "CpuEnabled": true,
+    "GpuEnabled": false
+  },
+  "DisableResponse": {
+    "ProtocolVersion": 1,
+    "RequestId": "4aba7ecf-b56a-476f-b937-c01fd8c4a0b3",
+    "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+    "Ok": true,
+    "Code": "SESSION_DISABLED",
+    "Message": "Performance Guardian live session authority revoked.",
+    "Phase": "Idle",
+    "SessionEnabled": false,
+    "CpuEnabled": false,
+    "GpuEnabled": false
+  },
+  "ShutdownResponse": {
+    "ProtocolVersion": 1,
+    "RequestId": "9c5d9ef4-89c5-47a3-930d-64d4ab71e705",
+    "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+    "Ok": true,
+    "Code": "SHUTDOWN_ACCEPTED",
+    "Message": "Performance Guardian shutdown requested.",
+    "Phase": "Idle",
+    "SessionEnabled": false,
+    "CpuEnabled": false,
+    "GpuEnabled": false
+  },
+  "GuardianExitCode": 0,
+  "GuardianReport": {
+    "SchemaVersion": 2,
+    "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+    "OwnerPid": 30304,
+    "OwnerStartUtcTicks": 639267129663888687,
+    "ParentLostDetected": false,
+    "ExitReason": "CANCELLED",
+    "FinalPhase": "Idle",
+    "Connections": 1,
+    "AcceptedRequests": 4,
+    "RejectedRequests": 0,
+    "EnableCalls": 1,
+    "ReleaseCalls": 1,
+    "LastReleaseReason": "CLIENT_DISABLE_SESSION",
+    "InitialSource": "Ac",
+    "CpuHardwareWriteAttempts": 4,
+    "GpuHardwareWriteAttempts": 0,
+    "CpuDomainState": "Disabled",
+    "GpuDomainState": null,
+    "CpuDomainStatus": "GUARDIAN_CPU_RELEASED_TO_PRESESSION_TARGET",
+    "GpuDomainStatus": null,
+    "SourceRuntimeActive": false,
+    "SourceRuntimeStartCalls": 1,
+    "SourceRuntimeStopCalls": 1,
+    "SourceListenerRegistrations": 1,
+    "SourceNotificationSignals": 3,
+    "SourceReconciliationSignals": 1,
+    "SourceDuplicateSignals": 2,
+    "SourceCpuDispatchAttempts": 2,
+    "SourceGpuDispatchAttempts": 0,
+    "SourceLastSource": "Ac",
+    "SourceLastStatus": "PERFORMANCE_GUARDIAN_SOURCE_RUNTIME_STOPPED",
+    "SourceLastStopReason": "CLIENT_DISABLE_SESSION",
+    "SourceFailure": null,
+    "HardwareWritesPerformed": true,
+    "Failure": null
+  },
+  "FinalSnapshot": {
+    "Raw": 18722037335818600,
+    "Pl1Watts": 45,
+    "Pl2Watts": 115,
+    "Locked": false
+  },
+  "SameSession": true,
+  "IncreasingGenerations": true,
+  "ImmutableOriginalBaseline": true,
+  "FinalOwnedFieldsRestored": true,
+  "ActiveJournalPath": "C:\\Users\\TheMa\\AppData\\Local\\VictusFanControl\\Performance\\HP-8C40-9D0R1LA-F18\\cpu-power-session.json",
+  "JournalPresent": false,
+  "ProductionHardwareWritesAuthorized": false,
+  "QualificationHardwareWritesAuthorized": true,
+  "Result": "FAIL",
+  "Failure": null
+}

@@ -49,4 +49,6 @@ function Publish-P14Project {
 Publish-P14Project -Project (Join-Path $repoRoot 'src\VictusFanControl.App\VictusFanControl.App.csproj') -Destination $appOut
 Publish-P14Project -Project (Join-Path $repoRoot 'src\VictusFanControl.Watchdog\VictusFanControl.Watchdog.csproj') -Destination $watchdogOut
 
+Publish-P14Project -Project (Join-Path $repoRoot 'src\VictusFanControl.PerformanceGuardian\VictusFanControl.PerformanceGuardian.csproj') -Destination (Join-Path $appOut 'performance-guardian')
+
 Write-Host "P14.2 win-x64 publish layout built: $outputFull" -ForegroundColor Green
