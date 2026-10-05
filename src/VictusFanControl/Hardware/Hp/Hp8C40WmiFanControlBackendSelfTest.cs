@@ -36,10 +36,13 @@ internal static class Hp8C40WmiFanControlBackendSelfTest
         await backend.RestoreFirmwareAutoAsync(default);
         Require(backend.ReleaseEvidence is { GuardianLeaseRetired: true, IndependentFirmwareOwnershipVerified: false } &&
             !backend.LastRestoreEvidence.LocalFirmwareAckVerified, "WMI acceptance promoted to EC ownership proof.");
-        rejected = false;
-        try { await backend.EnterCustomModeAsync(default); } catch (FanControlAdmissionException) { rejected = true; }
-        Require(rejected, "Released session silently reopened.");
-        await output.WriteLineAsync("PASS: WMI admission, changed-target writes only, fresh RPM, no blind heartbeat, guardian-loss fence and truthful release.");
+        await backend.EnterCustomModeAsync(default);
+        await backend.ApplyAsync(new(32, 32, "rearmed"), default);
+        await backend.RestoreFirmwareAutoAsync(default);
+        Require(guardian.StartCalls == 2 && guardian.Releases == 2 && requests.Count == 3 &&
+            requests[^1].Payload[0] == 32,
+            "Verified release did not rearm a fresh supervised WMI session.");
+        await output.WriteLineAsync("PASS: WMI admission, changed-target writes only, fresh RPM, no blind heartbeat, guardian-loss fence, truthful release and verified rearm.");
 
         var failing = new FakeGuardian { RejectIntent = true };
         var dispatches = 0;
@@ -74,15 +77,21 @@ internal static class Hp8C40WmiFanControlBackendSelfTest
     private sealed class FakeGuardian : IWmiFanGuiGuardian
     {
         public bool Started, Alive = true, RejectIntent, RejectRelease;
-        public int Intents, Heartbeats;
+        public int Intents, Heartbeats, StartCalls, Releases;
         public string SessionDirectory => "fixture";
         public string ReportPath => "fixture/report.json";
-        public Task StartAsync(CancellationToken t) { Started = true; return Task.CompletedTask; }
+        public Task StartAsync(CancellationToken t) { Started = true; StartCalls++; return Task.CompletedTask; }
         public void EnsureAlive() { if (!Started || !Alive) throw new IOException("Guardian lost"); }
         public void PersistIntent(int level) { if (RejectIntent) throw new IOException("Intent failed"); Intents++; }
         public void Heartbeat() { Heartbeats++; }
-        public Task<FanWmiReleaseEvidence> ReleaseAsync(CancellationToken t) => RejectRelease
-            ? Task.FromException<FanWmiReleaseEvidence>(new IOException("Guardian lost")) : Task.FromResult(new FanWmiReleaseEvidence(true, true, true, false, ReportPath, "CLIENT_RELEASE"));
+        public Task<FanWmiReleaseEvidence> ReleaseAsync(CancellationToken t)
+        {
+            Releases++;
+            if (RejectRelease)
+                return Task.FromException<FanWmiReleaseEvidence>(new IOException("Guardian lost"));
+            Started = false;
+            return Task.FromResult(new FanWmiReleaseEvidence(true, true, true, false, ReportPath, "CLIENT_RELEASE"));
+        }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
