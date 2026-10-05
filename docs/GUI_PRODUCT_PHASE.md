@@ -361,3 +361,10 @@ check is a brief cool/light-load Manual 30 -> 10 -> Firmware integration test,
 with diagnostics before/after release. It is not a repeat of the historical
 full sweep and does not authorize Automatic or prove independent firmware
 ownership from WMI/RPM alone.
+
+CI validation encountered the previously observed hosted-runner Win32_Service
+initialization timeout before the GM26 non-target rejection fixture. The build
+workflow now initializes that same read-only inventory query once with a bounded
+30-second timeout before the test suite. Real isolation guards retain their
+five-second deadline and every original assertion. This changes runner setup,
+not HP requests, production admission or release behavior.

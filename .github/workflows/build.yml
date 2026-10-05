@@ -21,6 +21,15 @@ jobs:
       - name: Restore
         run: dotnet restore VictusFanControl.sln
 
+      # Hosted runners can spend more than five seconds initializing CIM's
+      # service provider. Warm only this read-only inventory query; the actual
+      # isolation guards keep their existing five-second fail-closed deadline.
+      - name: Initialize hosted Windows service inventory for bounded guards
+        shell: pwsh
+        timeout-minutes: 1
+        run: |
+          Get-CimInstance Win32_Service -Filter "Name LIKE 'VictusFanControl%'" -OperationTimeoutSec 30 -ErrorAction Stop | Out-Null
+
       - name: Intel RAPL bounded P1 build and recovery fixtures (no hardware IO)
         shell: pwsh
         run: |
