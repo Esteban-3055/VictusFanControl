@@ -38,7 +38,8 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     private RectangleF _plot;
     private float _scale = 1, _offsetX, _offsetY;
     private ProductHit? _dragSlider;
-    private int _dragNode = -1, _keyboardHit = -1;
+    private int _dragNode = -1;
+    private string? _keyboardId;
     private readonly Dictionary<int,Font> _fonts = [];
     internal IReadOnlyList<ProductHit> Hits => _hits;
     internal ProductCanvas()
@@ -149,7 +150,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"VictusFanControl v0.4.0  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
         DrawText(g,State.LifecycleBlocked?"Sesión bloqueada por interrupción":State.Runtime=="Healthy"?"Telemetría validada":"Telemetría: "+State.Runtime,1210,901,18,State.LifecycleBlocked?Yellow:Muted,430);
         if(Busy || !string.IsNullOrWhiteSpace(Notice)) {DrawText(g,Busy?"Operación en curso…":Notice,305,849,18,Yellow,1330);}
-        if(_keyboardHit>=0 && _keyboardHit<_hits.Count && Focused){using var p=new Pen(Ink,2){DashStyle=DashStyle.Dot};g.DrawRectangle(p,_hits[_keyboardHit].Bounds.X,_hits[_keyboardHit].Bounds.Y,_hits[_keyboardHit].Bounds.Width,_hits[_keyboardHit].Bounds.Height);}
+        if(KeyboardHit is { } focused&&Focused){using var p=new Pen(Ink,2){DashStyle=DashStyle.Dot};g.DrawRectangle(p,focused.Bounds.X,focused.Bounds.Y,focused.Bounds.Width,focused.Bounds.Height);}
     }
     private TelemetrySnapshot? FreshSnapshot => State.Runtime == "Healthy" && State.Snapshot is { } snapshot &&
         DateTimeOffset.UtcNow >= snapshot.Timestamp && DateTimeOffset.UtcNow - snapshot.Timestamp <= VictusFanControl.Safety.SafetyGate.MaximumTelemetryAge ? snapshot : null;
@@ -368,10 +369,10 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         if(!_plot.IsEmpty&&!Busy)
         {
             var points=AdaptiveCurveProfiles.Curve(Profile.Fan.BuildPolicy(),Axis);var xmax=AdaptiveCurveProfiles.MaximumInput(Axis);
-            for(int i=0;i<points.Count;i++){var px=_plot.Left+(float)(points[i].Input/xmax)*_plot.Width;var py=_plot.Bottom-(float)((points[i].Level-30)/20)*_plot.Height;if(Math.Abs(p.X-px)<17&&Math.Abs(p.Y-py)<17){_dragNode=i;SelectedNode=i;Capture=true;Invalidate();return;}}
+            for(int i=0;i<points.Count;i++){var px=_plot.Left+(float)(points[i].Input/xmax)*_plot.Width;var py=_plot.Bottom-(float)((points[i].Level-30)/20)*_plot.Height;if(Math.Abs(p.X-px)<17&&Math.Abs(p.Y-py)<17){_dragNode=i;SelectedNode=i;_keyboardId="node-"+i;Capture=true;Invalidate();return;}}
         }
         var hit=_hits.LastOrDefault(h=>h.Bounds.Contains(p));if(hit is null||!CanInteract(hit))return;
-        _keyboardHit=_hits.IndexOf(hit);
+        _keyboardId=hit.Id;
         if(hit.Slider){_dragSlider=hit;Capture=true;EditSlider(hit,p);}
         else Command?.Invoke(hit.Id);
     }
@@ -382,11 +383,12 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         base.OnMouseMove(e);var p=Virtual(e.Location);
         if(_dragSlider is not null){EditSlider(_dragSlider,p);return;}
         if(_dragNode>=0){var x=Math.Round(Math.Clamp((p.X-_plot.Left)/_plot.Width,0,1)*AdaptiveCurveProfiles.MaximumInput(Axis));var level=(int)Math.Round(30+Math.Clamp((_plot.Bottom-p.Y)/_plot.Height,0,1)*20);NodeEdited?.Invoke(_dragNode,x,level);return;}
-        Cursor=_hits.Any(h=>h.Enabled&&h.Bounds.Contains(p))?Cursors.Hand:Cursors.Default;
+        Cursor=_hits.Any(h=>CanInteract(h)&&h.Bounds.Contains(p))?Cursors.Hand:Cursors.Default;
     }
     protected override void OnMouseUp(MouseEventArgs e){base.OnMouseUp(e);_dragSlider=null;_dragNode=-1;Capture=false;}
     protected override void OnMouseCaptureChanged(EventArgs e){base.OnMouseCaptureChanged(e);if(!Capture){_dragSlider=null;_dragNode=-1;}}
     private bool CanInteract(ProductHit hit) => hit.Enabled&&(!Busy||hit.Id is "firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close");
+    private ProductHit? KeyboardHit=>_hits.LastOrDefault(h=>h.Id==_keyboardId&&CanInteract(h));
     private int SliderValue(string id) => id switch{"manual"=>ManualLevel,"pl1"=>Profile.CpuPl1Watts,"pl2"=>Profile.CpuPl2Watts,"gpu"=>Profile.GpuMaximumMHz,_=>0};
     internal void HandleKey(Keys keyData)=>OnKeyDown(new KeyEventArgs(keyData));
     protected override bool IsInputKey(Keys keyData)=>(keyData&Keys.KeyCode) is Keys.Left or Keys.Right or Keys.Up or Keys.Down or Keys.Tab || base.IsInputKey(keyData);
@@ -401,18 +403,16 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         if(e.KeyCode==Keys.Tab)
         {
             var enabled=_hits.Where(CanInteract).ToArray();if(enabled.Length==0)return;
-            var current=_keyboardHit>=0&&_keyboardHit<_hits.Count?_hits[_keyboardHit]:null;var index=Array.IndexOf(enabled,current);
+            var current=KeyboardHit;var index=Array.IndexOf(enabled,current);
             index=index<0?(e.Shift?enabled.Length-1:0):(index+(e.Shift?-1:1)+enabled.Length)%enabled.Length;
-            _keyboardHit=_hits.IndexOf(enabled[index]);Invalidate();e.Handled=true;return;
+            _keyboardId=enabled[index].Id;Invalidate();e.Handled=true;return;
         }
-        if((e.KeyCode is Keys.Enter or Keys.Space)&&_keyboardHit>=0&&_keyboardHit<_hits.Count)
-        {var h=_hits[_keyboardHit];if(CanInteract(h)&&!h.Slider)Command?.Invoke(h.Id);e.Handled=true;return;}
+        if((e.KeyCode is Keys.Enter or Keys.Space)&&KeyboardHit is { } action)
+        {if(!action.Slider)Command?.Invoke(action.Id);e.Handled=true;return;}
         if(Busy||e.KeyCode is not(Keys.Left or Keys.Right or Keys.Up or Keys.Down))return;
-        if(_keyboardHit>=0&&_keyboardHit<_hits.Count)
-        {
-            var h=_hits[_keyboardHit];if(CanInteract(h)&&h.Slider){ValueEdited?.Invoke(h.Id,Math.Clamp(SliderValue(h.Id)+(e.KeyCode is Keys.Right or Keys.Up?1:-1),h.Min,h.Max));e.Handled=true;return;}
-        }
-        if(Page==ProductPage.Curves||Page==ProductPage.Fans&&FanTab==2)
+        if(KeyboardHit is { Slider:true } slider)
+        {ValueEdited?.Invoke(slider.Id,Math.Clamp(SliderValue(slider.Id)+(e.KeyCode is Keys.Right or Keys.Up?1:-1),slider.Min,slider.Max));e.Handled=true;return;}
+        if((Page==ProductPage.Curves||Page==ProductPage.Fans&&FanTab==2)&&(KeyboardHit is null||_keyboardId=="node-"+SelectedNode))
         {
             var ps=AdaptiveCurveProfiles.Curve(Profile.Fan.BuildPolicy(),Axis);
             if(SelectedNode>=0&&SelectedNode<ps.Count){var p=ps[SelectedNode];NodeEdited?.Invoke(SelectedNode,p.Input+(e.KeyCode==Keys.Right?1:e.KeyCode==Keys.Left?-1:0),(int)p.Level+(e.KeyCode==Keys.Up?1:e.KeyCode==Keys.Down?-1:0));e.Handled=true;}
@@ -427,10 +427,10 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     private sealed class HitAccessible(ProductCanvas owner,ProductHit hit) : AccessibleObject
     {
         // Resolve every action against the live surface: a screen reader can retain a child across repaints.
-        private ProductHit? Current=>owner._hits.LastOrDefault(h=>h.Id==hit.Id);
+        private ProductHit? Current=>owner.IsDisposed?null:owner._hits.LastOrDefault(h=>h.Id==hit.Id);
         public override string? Name {get=>Current?.Label??hit.Label;set{}}
         public override AccessibleRole Role=>hit.Slider?AccessibleRole.Slider:AccessibleRole.PushButton;
-        public override AccessibleStates State=>Current is { } current&&owner.CanInteract(current)?AccessibleStates.Focusable|(owner.Focused&&owner._keyboardHit==owner._hits.IndexOf(current)?AccessibleStates.Focused:AccessibleStates.None):AccessibleStates.Unavailable;
+        public override AccessibleStates State=>Current is { } current&&owner.CanInteract(current)?AccessibleStates.Focusable|(owner.Focused&&owner._keyboardId==current.Id?AccessibleStates.Focused:AccessibleStates.None):AccessibleStates.Unavailable;
         public override string? DefaultAction=>hit.Slider?"Ajustar":"Activar";
         public override string? Value
         {
@@ -445,7 +445,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         public override Rectangle Bounds=>Current is not { } current?Rectangle.Empty:owner.RectangleToScreen(new((int)(owner._offsetX+current.Bounds.X*owner._scale),(int)(owner._offsetY+current.Bounds.Y*owner._scale),(int)(current.Bounds.Width*owner._scale),(int)(current.Bounds.Height*owner._scale)));
         public override void Select(AccessibleSelection flags)
         {
-            if((flags&AccessibleSelection.TakeFocus)!=0&&Current is { } current&&owner.CanInteract(current)){owner.Focus();owner._keyboardHit=owner._hits.IndexOf(current);owner.Invalidate();}
+            if((flags&AccessibleSelection.TakeFocus)!=0&&Current is { } current&&owner.CanInteract(current)){owner.Focus();owner._keyboardId=current.Id;owner.Invalidate();}
         }
         public override void DoDefaultAction(){if(Current is { Slider:false } current&&owner.CanInteract(current))owner.Command?.Invoke(current.Id);}
     }

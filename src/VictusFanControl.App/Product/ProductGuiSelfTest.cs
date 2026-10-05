@@ -39,6 +39,8 @@ internal static class ProductGuiSelfTest
             canvas.Busy=true;var beforeBusy=ProductProfilesStore.Serialize(form.Draft);canvas.HandleKey(Keys.Left);
             bool busyRejected=false;try{pl1.Value="8";}catch(InvalidOperationException){busyRejected=true;}Require(busyRejected&&beforeBusy==ProductProfilesStore.Serialize(form.Draft),"Busy accessibility gesture changed a draft.");canvas.Busy=false;
             canvas.Page=ProductPage.Home;canvas.Refresh();Require(pl1.Bounds==Rectangle.Empty,"Stale accessible child retained an invisible hit area.");
+            canvas.Page=ProductPage.Curves;canvas.Refresh();var priorAxis=canvas.Axis;canvas.HandleKey(Keys.Enter);
+            Require(canvas.Axis==priorAxis,"A retained focus activated an unrelated control on another page.");
             Require(runtime.Commands==0,"Keyboard or accessibility edited hardware.");
             var now=DateTime.UtcNow.Ticks;Require(PerformanceGuardianClient.IsStatusFresh(now,now-TimeSpan.FromSeconds(5).Ticks,true),"Fresh Guardian response refused.");
             Require(!PerformanceGuardianClient.IsStatusFresh(now,now-TimeSpan.FromSeconds(6).Ticks,true)&&!PerformanceGuardianClient.IsStatusFresh(now,now+1,true)&&!PerformanceGuardianClient.IsStatusFresh(now,now,false),"Stale/future/exited Guardian response remained active.");
@@ -93,6 +95,13 @@ internal static class ProductGuiSelfTest
     }
     private static void RunLifecycleFixtures(Action<bool,string> require)
     {
+        using(var reverse=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),fixtureProfiles:new ProductProfiles()))
+        {
+            reverse.Show();Application.DoEvents();reverse.Canvas.Focus();reverse.Canvas.Refresh();reverse.Canvas.HandleKey(Keys.Shift|Keys.Tab);
+            var last=reverse.Canvas.Hits.ToList().FindLastIndex(h=>h.Enabled);
+            require((reverse.Canvas.AccessibilityObject.GetChild(last)!.State&AccessibleStates.Focused)!=0,"Initial Shift+Tab skipped the last control.");
+            var exit=reverse.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Reverse-tab fixture shutdown failed.");
+        }
         var ready=new TaskCompletionSource<IProductRuntime>(TaskCreationOptions.RunContinuationsAsynchronously);var late=new RecordingRuntime();
         using(var pending=new ProductForm("fixture://modules",fixtureProfiles:new ProductProfiles(),runtimeFactory:()=>ready.Task))
         {

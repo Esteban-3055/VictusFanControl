@@ -145,7 +145,9 @@ paused and all normal hardware gates unchanged.
   another command is pending. These checks supplement the backend protections.
 - Tab/Shift+Tab, slider arrows and accessible slider values use the same draft-only
   edit path. Retained accessible controls resolve against the live page; unavailable
-  controls cannot dispatch an action. Ordinary typing no longer edits curve nodes.
+  controls cannot dispatch an action. Keyboard focus follows a control ID across
+  redraws instead of accidentally selecting another page's control by list index.
+  Ordinary typing no longer edits curve nodes.
 - Failed/Faulted states use red, Applying/Recovering use yellow, and disabled or
   unsupported domains use muted text; CPU/GPU colors remain for active domains.
 
