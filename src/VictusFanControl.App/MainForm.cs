@@ -920,7 +920,7 @@ internal sealed partial class MainForm : Form
                 StringComparison.Ordinal);
 
         var manualExecutionAuthorized =
-            _automaticFinalQualificationHardwareTest || _wmiFanBackend is not null
+            _automaticFinalQualificationHardwareTest
                 ? false
                 : isolatedManualQualification
                     ? p15cManualExecutionAuthorized || p15d1ManualExecutionAuthorized || p15d2ManualExecutionAuthorized
@@ -3074,7 +3074,8 @@ internal sealed partial class MainForm : Form
             if (_automaticFinalQualificationHardwareTest &&
                 (_fanProductionController.Mode == AdaptiveFanProductionMode.Automatic ||
                  Volatile.Read(ref _automaticFinalAutomaticModeRequests) > 0) &&
-                !_automaticFinalCompleted)
+                !_automaticFinalCompleted &&
+                !_automaticFinalFirmwareReleaseRequested)
             {
                 FailAutomaticFinalQualification(
                     $"Runtime left Healthy during normal Automatic qualification: {e.Current}. {e.Reason}");
