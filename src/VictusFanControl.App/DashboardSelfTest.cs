@@ -54,6 +54,9 @@ internal static class DashboardSelfTest
                 Console.WriteLine("PASS: Firmware notifies then bypasses a failed qualification fence; Manual stays blocked.");
             }
             Require(!Descendants(ventilation).OfType<Button>().Any(b => b.Text == "Editar curvas y perfiles…"));
+            var manualLevel = Descendants(ventilation).OfType<NumericUpDown>().Single();
+            Require(manualLevel.Minimum == controller.ManualMinimumLevel &&
+                manualLevel.Maximum == controller.ManualMaximumLevel);
             var monitor = new Panel();
             monitor.Controls.Add(new TelemetryHistoryChart());
             using var host = new Form { Text="Victus Fan Control",ClientSize=new Size(1240,880),MinimumSize=new Size(1040,700) };
@@ -150,7 +153,7 @@ internal static class DashboardSelfTest
     {
         public string Name=>"dashboard-self-test";
         public bool CanWrite=>true;
-        public FanBackendCapabilities Capabilities=>new(Hp8C40TargetProfile.BoardProduct,10,50,false);
+        public FanBackendCapabilities Capabilities=>new(Hp8C40TargetProfile.BoardProduct,30,50,false);
         public int Commands {get;private set;}
         public ValueTask ProbeControlDependencyAsync(CancellationToken ct)=>ValueTask.CompletedTask;
         public ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken ct)=>ValueTask.FromResult(new FanBackendStatus(Name,true,false,true,true,"synthetic"));
