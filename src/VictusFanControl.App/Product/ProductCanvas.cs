@@ -194,7 +194,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             bool enabled=i==0||i==1&&State.ManualAuthorized&&!State.LifecycleBlocked||i==2&&State.AutomaticAuthorized&&!State.LifecycleBlocked;
             Hit("fan-mode-"+i,r,modes[i],enabled&&(!Busy||i==0));if(!enabled)DrawText(g,"Aplicación bloqueada",r.X+235,r.Y+18,15,Yellow,160);}
         Card(g,new(312,450,583,378));DrawText(g,"Control manual",334,468,26,null,520,true);
-        Slider(g,"manual", "Nivel común CPU y GPU",new(339,535,510,115),ManualLevel,30,50,"");
+        Slider(g,"manual", "Nivel CPU / GPU",new(339,535,510,115),ManualLevel,30,50,"");
         DrawText(g,"Editar el nivel no escribe en el hardware.",339,663,20,Muted,520);
         Button(g,"manual-apply","Aplicar nivel",new(339,734,226,70),true,State.ManualAuthorized&&State.FanMode=="Manual"&&State.Runtime=="Healthy"&&!State.LifecycleBlocked);
         Button(g,"firmware","Volver a Firmware",new(581,734,287,70));
@@ -204,12 +204,12 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     }
     private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit)
     {
-        DrawText(g,name,r.X,r.Y,24,null,r.Width-170);Card(g,new(r.Right-155,r.Y-9,155,56),false,9);DrawText(g,value+" "+unit,r.Right-143,r.Y+1,27,null,130,true);
+        DrawText(g,name,r.X,r.Y,24,null,r.Width-300);Card(g,new(r.Right-220,r.Y-9,155,56),false,9);DrawText(g,value+" "+unit,r.Right-208,r.Y+1,27,null,130,true);
         var track=new RectangleF(r.X,r.Y+73,r.Width,14);Bar(g,track,value-min,max-min,Blue);
         var px=track.Left+(float)(value-min)/(max-min)*track.Width;using var b=new SolidBrush(Ink);g.FillEllipse(b,px-17,track.Y-10,34,34);
         DrawText(g,min.ToString(),r.X,r.Y+99,18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+99,18,Muted,110);
         Hit(id,new(r.X,r.Y+58,r.Width,42),name,!Busy,true,min,max);
-        Button(g,id+"-minus","−",new(r.Right-218,r.Y-9,50,56));Button(g,id+"-plus","+",new(r.Right-61,r.Y-9,50,56));
+        Button(g,id+"-minus","−",new(r.Right-282,r.Y-9,50,56));Button(g,id+"-plus","+",new(r.Right-61,r.Y-9,50,56));
     }
     private void Performance(Graphics g)
     {

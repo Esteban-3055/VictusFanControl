@@ -712,14 +712,6 @@ jobs:
       - name: Definitive product GUI AC Battery bindings and Windows renders
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --product-gui-self-test
 
-      - name: Upload definitive product GUI renders
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: product-gui-renders-${{ github.sha }}
-          path: logs/product-gui-self-test/*.png
-          if-no-files-found: error
-
       - name: Performance CPU settings persistence self-test
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --performance-settings-self-test
 
@@ -811,6 +803,14 @@ jobs:
         with:
           name: dashboard-ui
           path: dashboard-*-ui.png
+          if-no-files-found: error
+
+      - name: Upload definitive product GUI renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-gui-renders-${{ github.sha }}
+          path: logs/product-gui-self-test/*.png
           if-no-files-found: error
 
   acpi-field-probe:
