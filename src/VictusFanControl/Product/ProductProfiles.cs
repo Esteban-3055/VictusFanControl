@@ -18,6 +18,10 @@ public sealed record ProductProfile
     {
         if (Fan is null || !CpuPowerProductDefaults.IsConfigurable(CpuPl1Watts, CpuPl2Watts))
             throw new InvalidDataException("PL1/PL2 inválidos; PL2 debe ser mayor o igual a PL1.");
+        if(Fan.Profile is null)throw new InvalidDataException("Falta el perfil de curva.");
+        var config=Fan.Profile.Config;
+        if(config is null||new[]{config.CpuTemperatureCurve,config.GpuTemperatureCurve,config.CpuPowerCurve,config.GpuPowerCurve,config.CpuLoadCurve,config.GpuLoadCurve}.Any(curve=>curve is null||curve.Any(point=>point is null)))
+            throw new InvalidDataException("Cada perfil requiere las seis curvas y puntos válidos.");
         _ = Fan.BuildPolicy();
         if (Fan.Tuning.MinimumLevel != Hp8C40AutomaticPolicy.MinimumLevel || Fan.Tuning.MaximumLevel != Hp8C40AutomaticPolicy.MaximumLevel)
             throw new InvalidDataException("La GUI conserva el rango de ventiladores 30–50 del backend WMI.");
@@ -87,6 +91,18 @@ public static class ProductProfilesStore
     public static string Serialize(ProductProfiles profiles) { profiles.Validate(); return JsonSerializer.Serialize(profiles, Json); }
     public static ProductProfiles Parse(string text)
     {
+        using var document=JsonDocument.Parse(text);
+        static void CheckKeys(JsonElement element)
+        {
+            if(element.ValueKind==JsonValueKind.Object)
+            {
+                var keys=new HashSet<string>(StringComparer.Ordinal);
+                foreach(var field in element.EnumerateObject()){if(!keys.Add(field.Name))throw new InvalidDataException("Campo duplicado: "+field.Name);CheckKeys(field.Value);}
+            }
+            else if(element.ValueKind==JsonValueKind.Array)foreach(var child in element.EnumerateArray())CheckKeys(child);
+        }
+        CheckKeys(document.RootElement);
+        if(document.RootElement.ValueKind!=JsonValueKind.Object||!document.RootElement.TryGetProperty("schemaVersion",out _))throw new InvalidDataException("Falta la versión del esquema.");
         var profiles = JsonSerializer.Deserialize<ProductProfiles>(text, Json) ?? throw new InvalidDataException("Perfiles vacíos.");
         profiles.Validate(); return profiles;
     }
@@ -109,7 +125,12 @@ public static class ProductProfilesStore
         var text = Serialize(profiles); path ??= DefaultPath;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try { File.WriteAllText(temporary, text); File.Move(temporary, path, overwrite: true); }
+        try
+        {
+            using(var stream=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None))
+            {var bytes=System.Text.Encoding.UTF8.GetBytes(text);stream.Write(bytes);stream.Flush(flushToDisk:true);}
+            File.Move(temporary, path, overwrite: true);
+        }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 }

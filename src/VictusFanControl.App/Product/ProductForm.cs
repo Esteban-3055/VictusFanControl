@@ -13,6 +13,10 @@ internal sealed class ProductForm : Form
     private readonly string _modules;
     private IProductRuntime? _runtime;
     private ProductProfiles _draft;
+    private ProductProfiles _saved;
+    private readonly string? _profilesPath;
+    private readonly System.Windows.Forms.Timer _presentationTimer = new() { Interval = 1000 };
+    private TaskCompletionSource? _commandsDrained;
     private readonly NotifyIcon _tray;
     private bool _closing, _exitRequested, _disposedRuntime, _creating;
     private IntPtr _displayRegistration, _suspendRegistration;
@@ -24,11 +28,13 @@ internal sealed class ProductForm : Form
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null)
     {
-        _modules=modules;_runtime=fixture;
+        _modules=modules;_runtime=fixture;_profilesPath=profilesPath;
         string? notice=null;
-        _draft=fixtureProfiles is null?ProductProfilesStore.Load(null,out notice,Migrate):ProductProfilesStore.Copy(fixtureProfiles);
+        _draft=fixtureProfiles is null?ProductProfilesStore.Load(profilesPath,out notice,Migrate):ProductProfilesStore.Copy(fixtureProfiles);
+        _saved=ProductProfilesStore.Copy(_draft);
+        _presentationTimer.Tick+=(_,_)=>{if(!_closing&&!IsDisposed)_canvas.Invalidate();};
         Text="VictusFanControl";FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=new(1344,756);StartPosition=FormStartPosition.CenterScreen;
         _canvas.Profiles=_draft;_canvas.Notice=notice??"";Controls.Add(_canvas);
@@ -57,7 +63,7 @@ internal sealed class ProductForm : Form
             if(_closing||IsDisposed)return;
             _runtime.Changed+=UpdateState;UpdateState(_runtime.State);
             if(!isolated)RegisterPowerNotifications();
-            _runtime.Start();
+            _runtime.Start();_presentationTimer.Start();
             if(!isolated){_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.StartupKnown=true;}
             if(!_closing&&!IsDisposed&&(minimized||_draft.StartMinimized))Hide();
         }
@@ -96,6 +102,11 @@ internal sealed class ProductForm : Form
         if(id.StartsWith("fan-tab-")){_canvas.FanTab=int.Parse(id[8..]);_canvas.Invalidate();return;}
         if(id.StartsWith("perf-tab-")){_canvas.PerformanceTab=int.Parse(id[9..]);_canvas.Invalidate();return;}
         if(id.StartsWith("monitor-tab-")){_canvas.MonitorTab=int.Parse(id[12..]);_canvas.Invalidate();return;}
+        if(id is "node-previous" or "node-next")
+        {
+            var count=AdaptiveCurveProfiles.Curve(_draft.Get(_canvas.Editing).Fan.BuildPolicy(),_canvas.Axis).Count;
+            _canvas.SelectedNode=Math.Clamp(_canvas.SelectedNode+(id=="node-next"?1:-1),0,count-1);_canvas.Invalidate();return;
+        }
         if(id.StartsWith("node-" )&&int.TryParse(id[5..],out var node)){_canvas.SelectedNode=node;_canvas.Invalidate();return;}
         if(id.EndsWith("-minus")||id.EndsWith("-plus"))
         {
@@ -119,12 +130,13 @@ internal sealed class ProductForm : Form
             case "gpu-toggle":Change(_draft with{GpuEnabled=!_draft.GpuEnabled});break;
             case "minimized-toggle":Change(_draft with{StartMinimized=!_draft.StartMinimized});break;
             case "save":_ = SaveAsync();break;
+            case "discard":_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;_canvas.Dirty=false;_canvas.SelectedNode=-1;_canvas.Notice="Se recuperaron las preferencias guardadas.";break;
             case "startup-toggle":_ = ToggleStartupAsync();break;
             case "firmware":case "fan-mode-0":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask);break;
             case "fan-mode-1":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Manual,Draft)??Task.CompletedTask);break;
             case "fan-mode-2":if(!_canvas.State.AutomaticAuthorized){_canvas.Notice="Automatic normal sigue cerrado hasta su calificación.";break;}_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,Draft)??Task.CompletedTask);break;
             case "manual-apply":_ = RunAsync(()=>_runtime?.ApplyManualAsync(_canvas.ManualLevel)??Task.CompletedTask);break;
-            case "performance-apply":_ = RunAsync(()=>_runtime?.ApplyPerformanceAsync(Draft)??Task.CompletedTask);break;
+            case "performance-apply":_ = RunAsync(()=>{var profiles=Draft;profiles.Validate();profiles.PerformanceConfiguration().Validate();return _runtime?.ApplyPerformanceAsync(profiles)??Task.CompletedTask;});break;
             case "performance-release":_ = RunAsync(()=>_runtime?.ReleasePerformanceAsync()??Task.CompletedTask);break;
             case "node-add":AddNode();break;
             case "node-remove":RemoveNode();break;
@@ -136,11 +148,11 @@ internal sealed class ProductForm : Form
     }
     private void Change(ProductProfiles next)
     {
-        if(_canvas.Busy)return;next.Validate();_draft=next;_canvas.Profiles=_draft;_canvas.Dirty=true;_canvas.Notice="Cambios en edición; no aplicados al hardware.";_canvas.Invalidate();
+        if(_canvas.Busy||_closing||IsDisposed)return;next.Validate();_draft=next;_canvas.Profiles=_draft;_canvas.Dirty=true;_canvas.Notice="Cambios en edición; no aplicados al hardware.";_canvas.Invalidate();
     }
     internal void EditValue(string key,int value)
     {
-        if(_canvas.Busy)return;
+        if(_canvas.Busy||_closing||IsDisposed)return;
         var slot=_canvas.Editing;var p=_draft.Get(slot);
         if(key=="manual") {_canvas.ManualLevel=Math.Clamp(value,30,50);_canvas.Invalidate();return;}
         var next=key switch
@@ -154,7 +166,7 @@ internal sealed class ProductForm : Form
     }
     internal void EditNode(int index,double input,int level)
     {
-        if(_canvas.Busy)return;
+        if(_canvas.Busy||_closing||IsDisposed)return;
         var slot=_canvas.Editing;var p=_draft.Get(slot);var points=AdaptiveCurveProfiles.Curve(p.Fan.BuildPolicy(),_canvas.Axis).ToArray();
         if(index<0||index>=points.Length)return;
         var lo=index==0?0:points[index-1].Input+1;var hi=index==points.Length-1?AdaptiveCurveProfiles.MaximumInput(_canvas.Axis):points[index+1].Input-1;
@@ -182,18 +194,18 @@ internal sealed class ProductForm : Form
         var fan=all?defaults:p.Fan with{Profile=AdaptiveCurveProfiles.WithCurve(p.Fan.Profile,_canvas.Axis,AdaptiveCurveProfiles.Curve(defaults.BuildPolicy(),_canvas.Axis))};
         Change(_draft.With(_canvas.Editing,p with{Fan=fan}));_canvas.SelectedNode=-1;
     }
-    private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings));if(_canvas.StartupEnabled)await WindowsStartupRegistration.SetEnabledAsync(true,_modules,settings.StartMinimized);_canvas.Dirty=false;_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
+    private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));_saved=ProductProfilesStore.Copy(settings);_canvas.Dirty=false;if(_canvas.StartupEnabled)await WindowsStartupRegistration.SetEnabledAsync(true,_modules,settings.StartMinimized);_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
     private async Task ToggleStartupAsync() => await RunAsync(async()=>{var requested=!_canvas.StartupEnabled;await WindowsStartupRegistration.SetEnabledAsync(requested,_modules,_draft.StartMinimized);_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.Notice="Registro de inicio actualizado; el inicio permanece en Firmware.";});
     private async Task RunAsync(Func<Task> command)
     {
         if(_closing)return;
-        _pendingCommands++;_canvas.Busy=true;_canvas.Notice="";_canvas.Invalidate();
+        if(_pendingCommands++==0)_commandsDrained=new(TaskCreationOptions.RunContinuationsAsynchronously);_canvas.Busy=true;_canvas.Notice="";_canvas.Invalidate();
         try{await command();}catch(Exception ex){_canvas.Notice=ex.Message;AppLog.Write("Product UI command failed: "+ex);}
-        finally{_pendingCommands--;_canvas.Busy=_pendingCommands>0;if(!IsDisposed)_canvas.Invalidate();}
+        finally{if(--_pendingCommands==0)_commandsDrained?.TrySetResult();_canvas.Busy=_pendingCommands>0;if(!IsDisposed)_canvas.Invalidate();}
     }
     protected override void Dispose(bool disposing)
     {
-        if(disposing){UnregisterPowerNotifications();if(_runtime is not null)_runtime.Changed-=UpdateState;_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();}
+        if(disposing){_presentationTimer.Dispose();UnregisterPowerNotifications();if(_runtime is not null)_runtime.Changed-=UpdateState;_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();}
         base.Dispose(disposing);
     }
     private void ToggleMaximize()=>WindowState=WindowState==FormWindowState.Maximized?FormWindowState.Normal:FormWindowState.Maximized;
@@ -204,7 +216,7 @@ internal sealed class ProductForm : Form
         if(_disposedRuntime)return;
         if(e.CloseReason is not(CloseReason.WindowsShutDown or CloseReason.TaskManagerClosing)&&!_exitRequested){e.Cancel=true;Hide();return;}
         e.Cancel=true;if(_closing)return;_closing=true;_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
-        try {await _startup;await _lifecycleRelease;if(_runtime is not null)await Task.Run(async()=>await _runtime.DisposeAsync());}
+        try {await _startup;if(_commandsDrained is not null)await _commandsDrained.Task;await _lifecycleRelease;if(_runtime is not null)await Task.Run(async()=>await _runtime.DisposeAsync());}
         catch(Exception ex){Environment.ExitCode=171;AppLog.Write("Product shutdown unresolved: "+ex);}
         finally{_disposedRuntime=true;_tray.Visible=false;Close();_shutdown.TrySetResult();}
     }

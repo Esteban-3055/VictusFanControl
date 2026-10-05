@@ -100,3 +100,9 @@ Software-only CI/self-tests do not authorize hardware execution. Physical gates 
 ## License
 
 MIT. See [LICENSE](LICENSE). Third-party components and licenses are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+The successful build workflow also publishes `product-gui-review-<HEAD>`: the
+verified Windows payload, current GUI documentation, SHA256 manifest and launcher.
+Use [the grouped validation route](docs/GUI_VICTUS_VALIDATION.md) for the remaining
+Victus checks. `Start-ProductGui.ps1 -Mode SelfTest` uses isolated recording ports;
+`-Mode Open` starts the normal GUI in Firmware without applying limits.

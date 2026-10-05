@@ -158,3 +158,43 @@ lifecycle boundaries, display-Off maintenance resume, busy Apply/Firmware,
 keyboard and accessibility, freshness boundaries and status colors. All use
 recording ports; they do not qualify physical suspend, fan response or recovery.
 Actual hardware and multi-monitor DPI validation remain required.
+
+## Software completion without target-side execution
+
+The curve table now has aligned columns/grid, previous/next selection, and
+Home/End/PageUp/PageDown access to all 64 nodes. The graph identifies its editable
+CPU/GPU series and dashed peer reference; a yellow ring marks the selected node.
+Units and the WMI 30–50 envelope deliberately differ from percentage-based images.
+Settings/Profiles offer explicit discard to the latest successfully saved draft.
+Saving flushes the new file before atomic replacement. Unsupported schema, duplicate
+JSON keys, null curves/points and invalid values fall back without replacing the
+original. Save failures retain dirty state and clean the temporary file.
+
+History uses the current clock, rather than pinning the last received sample to
+"now". Five-minute series drop expired samples and break at missing/nonfinite
+readings or gaps over three seconds. Future samples cannot erase retained history.
+A one-second presentation timer updates data age even with no runtime event.
+Healthy runtime with stale/no snapshot no longer displays "Telemetría validada".
+Accepted fan levels are shown only while Custom authority is present.
+
+The form drains admitted UI commands before runtime disposal on Exit; no new draft
+edits are admitted while closing. The surface also checks the existing performance
+configuration execution contract before dispatch, so custom GPU values fail before
+the runtime port. Apply uses the current draft, independently of disk persistence.
+
+Expanded Windows fixtures exercise both profiles and all six axes, 64-node limits,
+keyboard paging, save/discard/save failures, startup failure, Guardian no-response
+Apply/Release, lost/missing/expired telemetry, invalid/gapped/future history and Exit
+while a command is pending. These add to the original lifecycle, accessibility,
+partial-state and size fixtures. Every hardware effect is a recording port.
+
+CI packages the already verified P14 payload into `product-gui-review-<HEAD>` with
+current documentation, a SHA256 manifest and a Verify/SelfTest/Open launcher. The
+packaged executable runs the same isolated GUI tests in CI. Historical P14 metadata
+and artifact attestation remain unchanged. The new artifact describes physical GUI
+validation as pending and cannot promote a gate. See
+[the grouped Victus validation route](GUI_VICTUS_VALIDATION.md).
+
+Physical Apply/Release, AC/Battery transitions, lifecycle, tray exit and real DPI
+remain required. No physical PASS is asserted by software tests or PNGs. Blocks 2/3
+remain paused; normal Automatic and custom GPU clocks remain closed.

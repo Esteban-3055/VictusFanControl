@@ -239,7 +239,7 @@ internal sealed class ProductRuntime : IProductRuntime
             {
                 Hardware = _hardware.SystemProductName + " (" + _hardware.BoardProduct + ")", Target = _target?.Id ?? "Unsupported",
                 Source = source, Runtime = _worker.StateMachine.State.ToString(), Snapshot = _snapshot,
-                FanMode = _controller.Mode.ToString(), FanAuthority = _fans.Authority.ToString(), FanLevel = _wmi?.LastAcceptedLevel,
+                FanMode = _controller.Mode.ToString(), FanAuthority = _fans.Authority.ToString(), FanLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedLevel : null,
                 ManualAuthorized = _controller.ManualExecutionAuthorized, AutomaticAuthorized = _controller.AutomaticExecutionAuthorized,
                 PerformanceSupported = _target == Hp8C40TargetProfile.Instance,
                 CanApplyPerformance = !_closing && !_lifecycleBlocked && !_performance.HasProcess && _controller.Mode == AdaptiveFanProductionMode.Firmware && _fans.Authority == FanAuthority.Firmware && _worker.StateMachine.State == SystemState.Healthy,

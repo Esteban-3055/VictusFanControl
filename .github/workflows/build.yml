@@ -791,6 +791,21 @@ jobs:
           Write-Host "P14.5 audit artifact digest: $env:P14_AUDIT_ARTIFACT_DIGEST"
           Write-Host "P14.5 audit artifact URL: $env:P14_AUDIT_ARTIFACT_URL"
 
+      - name: Package definitive GUI for grouped Victus validation
+        shell: pwsh
+        run: |
+          $guiReview = Join-Path $env:RUNNER_TEMP 'VictusFanControl-product-gui-review'
+          .\scripts\package-product-gui-review.ps1 -RcArtifactDirectory (Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.4-artifact') -OutputDirectory $guiReview -SourceHead '${{ github.sha }}'
+          & (Join-Path $guiReview 'Start-ProductGui.ps1') -Mode SelfTest
+
+      - name: Upload definitive GUI review package
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-gui-review-${{ github.sha }}
+          path: ${{ runner.temp }}/VictusFanControl-product-gui-review
+          if-no-files-found: error
+          retention-days: 30
+
       - name: HP 8C40 P17 upload curve editor render
         uses: actions/upload-artifact@v4
         with:
