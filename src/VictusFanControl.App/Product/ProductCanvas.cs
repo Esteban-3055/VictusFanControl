@@ -216,6 +216,8 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(915,450,734,378));DrawText(g,"Curva del perfil · "+ProfileName,937,468,25,null,685,true);
         DrawText(g,"Editando: "+ProfileName+" · Aplicado: "+(State.AppliedFanProfile??"Ninguno"),945,513,19,Muted,675);
         DrawCurve(g,new(972,590,625,145),false);
+        if(State.LifecycleBlocked)DrawText(g,State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.",937,755,18,Yellow,685);
+        else if(State.AutomaticReview)DrawText(g,"Prueba 10–50 · "+(State.AutomaticReviewRemainingSeconds is { } seconds?$"{seconds} s restantes":"máximo 5 min por activación"),937,755,18,Muted,685);
     }
     private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit,bool compact=false)
     {
@@ -245,7 +247,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             Slider(g,"gpu","Graphics clock máximo",new(350,470,735,120),Profile.GpuMaximumMHz,210,GpuProductPreferences.Maximum(Editing),"MHz");
             DrawText(g,"Clock mínimo: 210 MHz · límite configurado, no lectura del rango",350,635,21,Muted,735);
             DrawText(g,"ActiveUnverified significa Set aceptado. El rango locked completo no es observable en este driver.",350,687,21,Muted,735);
-            DrawText(g,"Los valores personalizados permanecen cerrados hasta su calificación física.",350,768,19,Yellow,735);
+            DrawText(g,"Ajustable dentro del perfil; el driver puede rechazar un valor.",350,768,19,Yellow,735);
         }
         else
         {

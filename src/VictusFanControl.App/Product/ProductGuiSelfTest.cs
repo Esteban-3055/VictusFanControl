@@ -4,6 +4,8 @@ using VictusFanControl.Product;
 using VictusFanControl.Performance;
 using VictusFanControl.Telemetry;
 using VictusFanControl.Safety;
+using VictusFanControl.Runtime;
+using VictusFanControl.Control;
 using VictusFanControl.Hardware.Hp;
 namespace VictusFanControl.App;
 
@@ -21,7 +23,7 @@ internal static class ProductGuiSelfTest
             form.HandleCommand("profile-battery");form.EditValue("pl1",30);form.EditValue("pl2",15);
             Require(form.Draft.Battery.CpuPl1Watts==30&&form.Draft.Battery.CpuPl2Watts==30&&form.Draft.Ac.CpuPl1Watts==35,"PL1/PL2 or independent AC failed.");
             form.HandleCommand("profile-ac");canvas.Axis=AdaptiveCurveAxis.CpuTemperature;form.EditNode(3,70,31);
-            Require(form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level==31&&form.Draft.Battery.Fan.BuildPolicy().CpuTemperatureCurve[3].Level==28,"Curve edit leaked across profiles.");
+            Require(form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level==31&&form.Draft.Battery.Fan.BuildPolicy().CpuTemperatureCurve[3].Level==ProductProfiles.DefaultProfile(ProductPowerProfile.Battery).Fan.BuildPolicy().CpuTemperatureCurve[3].Level,"Curve edit leaked across profiles.");
             for(int i=0;i<7;i++)form.HandleCommand("page-"+i);
             form.EditValue("manual",0);Require(canvas.ManualLevel==10,"Manual lower endpoint inaccessible.");
             form.EditValue("manual",99);Require(canvas.ManualLevel==50,"Manual upper endpoint escaped.");
@@ -114,6 +116,10 @@ internal static class ProductGuiSelfTest
     }
     private static void TestAutomaticReview(Action<bool,string> require)
     {
+        require(ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Healthy,FanAuthority.Custom)&&ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Healthy,FanAuthority.Firmware),"Independent CPU/GPU session requires an unrelated fan mode.");
+        require(!ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Healthy,FanAuthority.Restoring)&&!ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Healthy,FanAuthority.Faulted)&&!ProductRuntime.PerformanceAdmissionPermitted(false,true,false,SystemState.Healthy,FanAuthority.Custom)&&!ProductRuntime.PerformanceAdmissionPermitted(false,false,true,SystemState.Healthy,FanAuthority.Custom)&&!ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Degraded,FanAuthority.Custom),"CPU/GPU session escaped a failure/lifecycle/existing-owner fence.");
+        require(TelemetryWorker.IsPlannedFanReleaseRead(new WmiFanReadAdmissionPausedException(true)),"Planned native read denial was treated as sensor failure.");
+        require(!TelemetryWorker.IsPlannedFanReleaseRead(new WmiFanReadAdmissionPausedException(false))&&!TelemetryWorker.IsPlannedFanReleaseRead(new IOException("native failed")),"Unexpected native fault was hidden by planned release handling.");
         var target=Hp8C40TargetProfile.Instance.Id;
         require(!Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized,"Review promoted the normal Automatic gate.");
         require(!ProductAutomaticReview.IsAuthorized(false,target)&&!ProductAutomaticReview.IsAuthorized(true,"Unsupported")&&ProductAutomaticReview.IsAuthorized(true,target),"Review target/explicit admission failed.");
@@ -146,6 +152,13 @@ internal static class ProductGuiSelfTest
         form.EditNode(3,70,35);require(runtime.Commands==1,"Curve editing dispatched hardware in review.");
         runtime.Publish(runtime.State with{AutomaticAuthorized=true,LifecycleBlocked=true});form.HandleCommand("fan-mode-2");require(runtime.Commands==1,"Interrupted review rearmed from GUI.");
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Review fixture shutdown failed.");exit.GetAwaiter().GetResult();
+        var pendingPerformance=new RecordingRuntime { PerformanceGate=new(TaskCreationOptions.RunContinuationsAsynchronously) };
+        using var coexist=new ProductForm("fixture://coexist",fixture:pendingPerformance,fixtureProfiles:new ProductProfiles());
+        coexist.Show();Application.DoEvents();pendingPerformance.Publish(pendingPerformance.State with{Runtime="Healthy",FanMode="Automatic",FanAuthority="Custom",PerformanceSupported=true,CanApplyPerformance=true});
+        coexist.HandleCommand("performance-apply");require(coexist.Canvas.Busy&&pendingPerformance.Commands==1,"Slow Performance Apply fixture did not start.");
+        coexist.HandleCommand("firmware");require(pendingPerformance.Commands==2&&coexist.Canvas.Busy,"Pending Performance Apply blocked the Firmware escape.");
+        pendingPerformance.PerformanceGate.SetResult();PumpUntil(()=>!coexist.Canvas.Busy,"Independent operation did not drain.");
+        var coexistExit=coexist.RequestExitAsync();PumpUntil(()=>coexistExit.IsCompleted,"Coexistence fixture failed to close.");coexistExit.GetAwaiter().GetResult();
     }
 
     private static void PumpUntil(Func<bool> completed,string failure)
@@ -300,15 +313,15 @@ internal static class ProductGuiSelfTest
                 }
                 require(File.ReadAllText(path)==savedBytes&&runtime.Commands==0,"Diagnostic mutated preferences or dispatched hardware.");
                 form.HandleCommand("discard");
-                canvas.State=runtime.State with{Runtime="Healthy",PerformanceSupported=true,CanApplyPerformance=true};
+                canvas.State=runtime.State with{Runtime="Healthy",FanMode="Automatic",FanAuthority="Custom",PerformanceSupported=true,CanApplyPerformance=true};
                 form.EditValue("gpu",1800);form.HandleCommand("performance-apply");
-                require(runtime.Commands==0&&!canvas.Busy&&!string.IsNullOrWhiteSpace(canvas.Notice),"Custom GPU passed the surface execution gate.");
+                require(runtime.Commands==1&&!canvas.Busy,"Bounded custom GPU did not dispatch explicit Apply while Automatic was active.");
                 form.EditValue("gpu",1850);runtime.CommandFailure="Simulated Guardian no response";
-                form.HandleCommand("performance-apply");require(runtime.Commands==1&&!canvas.Busy&&canvas.Notice.Contains("Simulated"),"Apply failure was hidden or left UI stuck.");
+                form.HandleCommand("performance-apply");require(runtime.Commands==2&&!canvas.Busy&&canvas.Notice.Contains("Simulated"),"Apply failure was hidden or left UI stuck.");
                 canvas.State=canvas.State with{PerformanceProcessPresent=true,CpuState="Recovering",GpuState="Failed",Failure="Guardian sin respuesta"};
-                form.HandleCommand("performance-release");require(runtime.Commands==2&&!canvas.Busy&&canvas.AppliedCpu()=="Sin confirmación actual","Release failure fabricated reset or blocked UI.");
+                form.HandleCommand("performance-release");require(runtime.Commands==3&&!canvas.Busy&&canvas.AppliedCpu()=="Sin confirmación actual","Release failure fabricated reset or blocked UI.");
                 runtime.CommandFailure=null;runtime.Publish(runtime.State with{Runtime="Recovering",ManualAuthorized=false,Snapshot=Snapshot(DateTimeOffset.UtcNow.AddSeconds(-10),40,45,5,5)});
-                require(canvas.CurrentSnapshot is null,"Telemetry loss displayed current values.");form.HandleCommand("manual-apply");require(runtime.Commands==2,"Telemetry loss admitted Manual.");
+                require(canvas.CurrentSnapshot is null,"Telemetry loss displayed current values.");form.HandleCommand("manual-apply");require(runtime.Commands==3,"Telemetry loss admitted Manual.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Persistence fixture shutdown failed.");
             }
             var corrupt=Path.Combine(dir,"corrupt.json");File.WriteAllText(corrupt,"broken");
@@ -389,13 +402,13 @@ internal static class ProductGuiSelfTest
         public ProductRuntimeState State {get;}=new();
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;
         internal int? LastManualLevel;
-        internal TaskCompletionSource? ReleaseGate,ManualGate;
+        internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate;
         internal string? CommandFailure,StartFailure;
         internal void Publish(ProductRuntimeState state)=>Changed?.Invoke(state);
         public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
         public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
         public Task ApplyManualAsync(int level){Commands++;LastManualLevel=level;return Task.CompletedTask;}
-        public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
+        public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;return CommandFailure is null?PerformanceGate?.Task??Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public Task ReleasePerformanceAsync(){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public void FenceLifecycle(string r){Interlocked.Increment(ref Fences);}
         public Task ReleaseForLifecycleAsync(string r){Interlocked.Increment(ref Releases);return ReleaseGate?.Task??Task.CompletedTask;}

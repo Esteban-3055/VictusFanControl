@@ -47,6 +47,7 @@ public sealed class AdaptiveFanProductionController
     private readonly FanControlCoordinator _coordinator;
     private readonly AdaptiveFanPolicyEngine _engine;
     private AdaptiveFanInertiaPolicy? _preparedEngine;
+    private readonly int _automaticMinimumLevel;
     private FanConfiguration? _automaticConfiguration;
     public FanConfiguration? AutomaticConfiguration => _automaticConfiguration is null ? null : FanConfigurationStore.Copy(_automaticConfiguration);
     public int AutomaticNormalPollingDelayMilliseconds => _automaticConfiguration?.Tuning.NormalPollingDelayMilliseconds ?? 1000;
@@ -77,7 +78,8 @@ public sealed class AdaptiveFanProductionController
         HardwareIdentity? automaticHardware = null,
         Func<long>? automaticMilliseconds = null,
         Func<DateTimeOffset>? utcNow = null,
-        FanConfiguration? automaticConfiguration = null)
+        FanConfiguration? automaticConfiguration = null,
+        int automaticMinimumLevel = Hp8C40AutomaticPolicy.MinimumLevel)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _engine = new AdaptiveFanPolicyEngine(
@@ -85,13 +87,17 @@ public sealed class AdaptiveFanProductionController
         _automaticHardware = automaticHardware;
         _automaticMilliseconds = automaticMilliseconds;
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+        if (automaticMinimumLevel is not (10 or Hp8C40AutomaticPolicy.MinimumLevel) ||
+            (automaticMinimumLevel == 10 && (automaticHardware is null || coordinator.BackendCapabilities.MinimumLevel > 10)))
+            throw new ArgumentException("Low Automatic envelope requires exact-target telemetry and a qualified 10-level backend.",nameof(automaticMinimumLevel));
+        _automaticMinimumLevel = automaticMinimumLevel;
         if (automaticHardware is not null)
         {
             // Validate the exact target even while execution remains gated off.
             _ = new Hp8C40AutomaticThermalAdmission(automaticHardware, automaticMilliseconds);
             _automaticConfiguration = automaticConfiguration is null ? null : FanConfigurationStore.Copy(automaticConfiguration);
             var preparedPolicy = Hp8C40AutomaticPolicy.Create(
-                _automaticConfiguration?.BuildPolicy() ?? config);
+                _automaticConfiguration?.BuildPolicy() ?? config, _automaticMinimumLevel);
             _preparedEngine = new AdaptiveFanInertiaPolicy(
                 preparedPolicy,
                 _automaticConfiguration?.Tuning);
@@ -501,10 +507,10 @@ public sealed class AdaptiveFanProductionController
     {
         var copy = FanConfigurationStore.Copy(configuration);
         // Stored/user curves retain their configured envelope, but the exact
-        // HP 8C40 Automatic runtime is always projected into its physically
-        // qualified 30..50 actuation envelope before smoothing/hysteresis.
+        // HP 8C40 default Automatic path stays at 30..50. An explicit product
+        // review may select the already-characterized 10..50 backend envelope.
         var engine = new AdaptiveFanInertiaPolicy(
-            Hp8C40AutomaticPolicy.Create(copy.BuildPolicy()),
+            Hp8C40AutomaticPolicy.Create(copy.BuildPolicy(),_automaticMinimumLevel),
             copy.Tuning);
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try

@@ -13,13 +13,14 @@ Expand-Archive -LiteralPath $zip -DestinationPath $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'release/Start-ProductGui.ps1') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/GUI_VICTUS_VALIDATION.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/GUI_PRODUCT_PHASE.md') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'docs/QUIET_PRODUCT_PRESETS.md') -Destination $OutputDirectory
 $entries = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-Object FullName | ForEach-Object {
     [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
 })
 $manifest = [ordered]@{
     schemaVersion=1;kind='VictusFanControl.ProductGuiReview';sourceHead=$SourceHead
     inheritedRcZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
-    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='closed';productAutomaticReview='explicit-only-300s-30-to-50';files=$entries
+    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='conservative-envelope';productAutomaticReview='explicit-only-300s-10-to-50';files=$entries
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'PRODUCT-GUI-MANIFEST.json') -Encoding utf8
 & (Join-Path $OutputDirectory 'Start-ProductGui.ps1') -Mode Verify

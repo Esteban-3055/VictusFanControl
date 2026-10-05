@@ -38,8 +38,9 @@ public static class GpuProductPreferences
     public const int MinimumMHz = 210;
     public const int QualifiedAcMaximumMHz = 1850;
     public const int QualifiedBatteryMaximumMHz = 1200;
-    // The GUI can edit/persist conservative targets, but new ranges require physical qualification.
-    public const bool CustomClockExecutionAuthorized = false;
+    // Product adjustment is authorized only inside these conservative AC/Battery envelopes.
+    // NVML rejection remains a failure; acceptance never claims independent range ownership.
+    public const bool CustomClockExecutionAuthorized = true;
     public static int Maximum(ProductPowerProfile source) => source switch
     { ProductPowerProfile.Ac => QualifiedAcMaximumMHz, ProductPowerProfile.Battery => QualifiedBatteryMaximumMHz, _ => throw new ArgumentOutOfRangeException(nameof(source)) };
 }
@@ -70,7 +71,7 @@ public sealed record ProductProfiles
     };
     public static ProductProfile DefaultProfile(ProductPowerProfile source, FanConfiguration? previous = null)
     {
-        var fan = FanConfigurationStore.Copy(previous ?? new FanConfiguration());
+        var fan = FanConfigurationStore.Copy(previous ?? QuietFanConfiguration(source));
         var c = AdaptiveCurveProfiles.Validate(fan.Profile);
         foreach (var axis in Enum.GetValues<AdaptiveCurveAxis>())
             fan = fan with { Profile = AdaptiveCurveProfiles.WithCurve(fan.Profile, axis,
@@ -81,6 +82,27 @@ public sealed record ProductProfiles
             CpuPl2Watts = source == ProductPowerProfile.Ac ? CpuPowerProductDefaults.DefaultAcPl2Watts : CpuPowerProductDefaults.DefaultBatteryPl2Watts,
             GpuMaximumMHz = GpuProductPreferences.Maximum(source) };
     }
+    private static FanConfiguration QuietFanConfiguration(ProductPowerProfile source)
+    {
+        var ac=source==ProductPowerProfile.Ac;
+        AdaptiveFanCurvePoint[] Points(params double[] pairs)=>Enumerable.Range(0,pairs.Length/2).Select(i=>new AdaptiveFanCurvePoint(pairs[i*2],pairs[i*2+1])).ToArray();
+        var policy=Hp8C40AdaptiveCandidateV1.Create() with
+        {
+            CpuTemperatureCurve=ac?Points(40,12,50,16,60,21,70,28,78,35,85,44,90,50):Points(40,10,50,13,60,18,70,26,78,35,85,44,90,50),
+            GpuTemperatureCurve=ac?Points(35,12,45,15,55,20,65,28,72,35,78,44,81,50):Points(35,10,45,12,55,17,65,26,72,35,78,44,81,50),
+            CpuPowerCurve=ac?Points(0,10,15,10,30,16,45,23,65,32,90,43,115,50):Points(0,10,10,10,15,12,25,17,40,24,60,32,90,43,115,50),
+            GpuPowerCurve=ac?Points(0,10,20,10,40,16,70,24,95,34,115,42,140,50):Points(0,10,10,10,20,12,40,17,70,26,95,36,115,44,140,50),
+            CpuLoadCurve=Points(0,10,25,10,50,12,75,18,100,24),
+            GpuLoadCurve=Points(0,10,25,10,50,12,75,18,100,24)
+        };
+        return new()
+        {
+            Profile=AdaptiveCurveProfiles.Create(ac?"5629a2f243674123ae9e243bdd8743cc":"911be76e54814f12a56bdb8eb193cf90",ac?"Silencioso AC":"Silencioso Batería",policy),
+            Tuning=AdaptiveFanTuning.WithSmoothAdaptiveResponse(new AdaptiveFanTuning()) with
+            {MinimumLevel=10,MaximumLevel=50,CpuTemperatureSource=CpuDemandTemperatureSource.HottestPerformanceCoresAverage,HottestPerformanceCoreCount=3}
+        };
+    }
+
 }
 
 public static class ProductProfilesStore

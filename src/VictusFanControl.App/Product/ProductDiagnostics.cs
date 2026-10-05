@@ -11,7 +11,7 @@ internal static class ProductDiagnostics
     {
         var full=Path.GetFullPath(path);var temporary=full+"."+Guid.NewGuid().ToString("N")+".tmp";
         var summary=new{kind="VictusFanControl.GuiDiagnostic",capturedUtc=DateTimeOffset.UtcNow,version=typeof(ProductDiagnostics).Assembly.GetName().Version?.ToString(),
-            state.Hardware,state.Target,state.Source,state.Runtime,state.FanMode,state.FanAuthority,state.FanLevel,state.LifecycleBlocked,
+            state.Hardware,state.Target,state.Source,state.Runtime,state.FanMode,state.FanAuthority,state.FanLevel,state.LifecycleBlocked,state.LifecycleBlockReason,
             state.AutomaticReview,state.AutomaticReviewRemainingSeconds,state.AutomaticDecision,state.AppliedAutomaticConfiguration,state.AppliedFanProfile,
             state.CpuState,state.GpuState,state.CpuStatus,state.GpuStatus,state.GuardianState,state.AppliedPerformanceSource,state.Message,state.Failure,
             snapshot=state.Snapshot,physicalQualification="not-established-by-this-export"};

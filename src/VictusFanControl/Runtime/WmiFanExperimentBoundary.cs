@@ -4,6 +4,13 @@ using VictusFanControl.Safety;
 
 namespace VictusFanControl.Runtime;
 
+/// <summary>A read was rejected before native dispatch; its planned-release cause is captured at that boundary.</summary>
+internal sealed class WmiFanReadAdmissionPausedException : InvalidOperationException
+{
+    internal bool PlannedRelease { get; }
+    internal WmiFanReadAdmissionPausedException(bool plannedRelease) : base("WMI GUI recovery has closed new fan reads; drain existing native work before release.") => PlannedRelease=plannedRelease;
+}
+
 /// <summary>Process-local whitelist plus cross-process serialization for the WMI experiment and GUI.</summary>
 internal static class WmiFanExperimentBoundary
 {
@@ -12,6 +19,7 @@ internal static class WmiFanExperimentBoundary
     private static int _recovering;
     private static bool _gui;
     private static readonly object SessionGate = new();
+    internal static Func<bool>? PlannedGuiRelease { get; set; }
     internal static Action? EnsureGuiGuardianAlive { get; set; }
     private sealed record Admission(TelemetrySnapshot Snapshot, Action EnsureThermalAllowed);
     private static Admission? _admission;
@@ -85,7 +93,7 @@ internal static class WmiFanExperimentBoundary
     internal static void EnsureRequestAllowed(HpBiosRequest request)
     {
         if (_gui && Recovering && request.CommandType == Hp8C40BiosFanControl.GetFanLevelCommandType)
-            throw new InvalidOperationException("WMI GUI recovery has closed new fan reads; drain existing native work before release.");
+            throw new WmiFanReadAdmissionPausedException(PlannedGuiRelease?.Invoke()==true);
         if (!IsAllowed(request, Control, Recovering, File.Exists(StopPath), gui: _gui))
             throw new InvalidOperationException("Request is outside the WMI fan experiment lifecycle/whitelist.");
         if (request.CommandType == 0x2E && request.Payload[0] != 255)

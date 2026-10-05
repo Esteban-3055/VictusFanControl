@@ -259,6 +259,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         _cts.Dispose();
     }
 
+    internal static bool IsPlannedFanReleaseRead(Exception error) => error is WmiFanReadAdmissionPausedException { PlannedRelease:true };
+
     private async Task RunAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -332,6 +334,12 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 {
                     HandleNormalSnapshotHealth(snapshot);
                 }
+            }
+            catch (Exception ex) when (IsPlannedFanReleaseRead(ex))
+            {
+                // Only the native admission denial captured during an explicit GUI release is expected.
+                // Do not renew any acquisition/health clock. The unchanged watchdog still detects a real gap.
+                Log("Planned GUI fan release deferred one WMI read; acquisition age unchanged.");
             }
             catch (Exception ex)
             {

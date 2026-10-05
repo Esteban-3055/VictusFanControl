@@ -9,15 +9,33 @@ internal static class ProductProfilesSelfTest
         var original = new ProductProfiles(); var edited = ProductProfilesStore.Copy(original);
         var cpu = AdaptiveCurveProfiles.Curve(edited.Ac.Fan.BuildPolicy(), AdaptiveCurveAxis.CpuTemperature).ToArray(); cpu[3] = cpu[3] with { Level = 31 };
         edited = edited with { Ac = edited.Ac with { Fan = edited.Ac.Fan with { Profile = AdaptiveCurveProfiles.WithCurve(edited.Ac.Fan.Profile, AdaptiveCurveAxis.CpuTemperature, cpu) } } };
-        if (original.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 28 || edited.Battery.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 28)
+        if (original.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 28 || edited.Battery.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != original.Battery.Fan.BuildPolicy().CpuTemperatureCurve[3].Level)
             throw new InvalidOperationException("AC editing mutated another profile.");
+        foreach(var source in Enum.GetValues<ProductPowerProfile>())
+        {
+            var profile=original.Get(source);profile.Validate(source);
+            var policy=profile.Fan.BuildPolicy();
+            if(policy.CpuTemperatureCurve[0].Level>=25||policy.GpuTemperatureCurve[0].Level>=23||policy.CpuPowerCurve[0].Level!=10||policy.GpuPowerCurve[0].Level!=10||policy.CpuLoadCurve[0].Level!=10||policy.GpuLoadCurve[0].Level!=10)
+                throw new InvalidOperationException("Quiet profile is defeated by a feed-forward floor.");
+            var quiet=new ProductCurveSimulation(profile.Fan);quiet.Advance(new(40,35,5,5,5,0),300);
+            var expected=source==ProductPowerProfile.Ac?12:10;
+            if(quiet.History.Any(p=>p.Decision.EqualFanLevel!=expected))throw new InvalidOperationException("Cold quiet preset hunts or loses its source-specific floor.");
+            quiet.Advance(new(90,81,60,75,100,100),10);
+            if(quiet.Current?.EqualFanLevel!=50)throw new InvalidOperationException("Quiet preset delayed hot endpoint cooling.");
+        }
+        if(original.Ac.Fan.Profile.Id==original.Battery.Fan.Profile.Id)throw new InvalidOperationException("Quiet defaults lost AC/Battery identity.");
         var roundtrip = ProductProfilesStore.Parse(ProductProfilesStore.Serialize(edited));
         if (roundtrip.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 31) throw new InvalidOperationException("Profile roundtrip lost curve.");
         static void Reject(Action a) { try { a(); } catch (Exception e) when (e is ArgumentException or System.Text.Json.JsonException or InvalidDataException or IOException or InvalidOperationException) { return; } throw new InvalidOperationException("Invalid product setting accepted."); }
         Reject(() => (original with { Ac = original.Ac with { CpuPl1Watts = 40, CpuPl2Watts = 20 } }).Validate());
         Reject(() => ProductProfilesStore.Parse(ProductProfilesStore.Serialize(original).Replace("\"schemaVersion\": 1", "\"schemaVersion\": 999")));
         Reject(() => ProductProfilesStore.Parse(ProductProfilesStore.Serialize(original).Insert(1,"\"authority\":true,")));
-        Reject(() => new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 1800 }.Validate());
+        var customGpu=new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 1800, BatteryGpuMaximumMHz = 1000 };
+        customGpu.Validate();
+        if(customGpu.GpuPresets().Ac.MaxGraphicsClockMHz!=1800||customGpu.GpuPresets().Battery.MaxGraphicsClockMHz!=1000)throw new InvalidOperationException("Custom GPU preferences did not reach the preset controller.");
+        Reject(() => new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 1851 }.Validate());
+        Reject(() => new PerformanceGuiSessionConfiguration { BatteryGpuMaximumMHz = 1201 }.Validate());
+        Reject(() => new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 209 }.Validate());
         new PerformanceGuiSessionConfiguration().Validate();
         var json=ProductProfilesStore.Serialize(original);
         foreach(var invalid in new[]{"{}","null","[]",json.Insert(1,"\"schemaVersion\":1,"),json.Replace("\"tuning\": {","\"tuning\": null, \"oldTuning\": {"),json.Replace("\"cpuPl1Watts\": 35","\"cpuPl1Watts\": -1"),json.Replace("\"gpuMaximumMHz\": 1850","\"gpuMaximumMHz\": 9999"),json.Replace("\"input\": 40","\"input\": 40, \"input\": 40")})Reject(()=>ProductProfilesStore.Parse(invalid));
@@ -62,6 +80,6 @@ internal static class ProductProfilesSelfTest
         var before=simulator.ElapsedSeconds;Reject(()=>simulator.Advance(new(CpuTemperature:999),1));Reject(()=>simulator.Advance(new(),3601));
         if(simulator.ElapsedSeconds!=before)throw new InvalidOperationException("Invalid simulation advanced virtual time.");
         output.WriteLine("PASS  Offline simulation matches editable inertia across rise/load/cooling/thermal phases; bounded history and no configuration effects");
-        output.WriteLine("PASS  Product AC/Battery isolation, strict/null/duplicate schema, atomic failure preservation, PL1/PL2 and closed custom GPU gate");
+        output.WriteLine("PASS  Product AC/Battery isolation, strict/null/duplicate schema, atomic failure preservation, PL1/PL2 and bounded configurable GPU execution");
     }
 }

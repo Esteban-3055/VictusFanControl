@@ -381,3 +381,18 @@ El runtime usa evaluaciones SafetyGate de control con secuencia positiva; las
 previsualizaciones del despacho mantienen la evaluación de presentación sin
 consumir secuencias. El diagnóstico captura tanto borrador como curva aplicada.
 La aceptación física de esta entrada y la cualificación general siguen pendientes.
+
+
+## Actualización: presets silenciosos y limitadores ajustables
+
+La revisión producto admite 10–50 explícitamente, defaults silenciosos AC/Batería
+con seis ejes y sin piso oculto 30. Se conserva el gate normal Automatic cerrado,
+inicio Firmware, ventana de cinco minutos y bloqueo ante interrupciones reales.
+La devolución voluntaria a Firmware distingue la denegación WMI prevista del
+fallo de sensores; el motivo de un bloqueo queda visible y en el diagnóstico.
+CPU/GPU usan una cola independiente y pueden aplicarse con Automatic activo.
+Los máximos GPU ajustables están habilitados dentro de 210–1850 AC y 210–1200
+Batería; GPU continúa ActiveUnverified y NVML puede rechazar valores.
+Las preferencias existentes no se sobrescriben; usar Valores iniciales del perfil
+para instalar el preset nuevo conservando PL1/PL2/GPU. La derivación, tablas,
+replay y límites de evidencia están en [QUIET_PRODUCT_PRESETS.md](QUIET_PRODUCT_PRESETS.md).

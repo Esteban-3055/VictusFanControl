@@ -68,8 +68,9 @@ que requiere Windows y el equipo real.
 
 ## Herramientas que no necesitan el Victus
 
-En Curvas, abrir Simulador: los seis valores son entradas sintéticas. Avanzar 1 s,
-60 s o 20 min hace correr el motor real en tiempo virtual. Cambiar las entradas
+En Curvas, abrir Simulador: los seis valores son entradas sintéticas. El tiempo
+virtual avanza cada segundo mientras está visible; Pausar/Reanudar y saltos de
+60 s o 20 min controlan la reproducción. Cambiar las entradas
 conserva la historia; cambiar perfil/configuración o Reiniciar limpia el modelo.
 El gráfico representa demanda cruda, EMA y nivel calculado, no RPM. No valida
 SafetyGate ni respuesta física y no habilita Automatic.
@@ -92,12 +93,14 @@ Entrada separada: `Start-ProductGui.ps1 -Mode AutomaticReview`. `Open` y el inic
 con Windows conservan Automatic cerrado. El modo de prueba exige el destino
 exacto 8C40/F.18 mediante el gate de cualificación existente; no abre el gate normal.
 Arranca en Firmware, no aplica CPU/GPU y requiere seleccionar Automatic explícitamente.
-No admite una sesión Performance existente ni otra entrada de cualificación simultánea.
+No admite otra entrada de cualificación simultánea. Performance utiliza su propio
+Guardian y puede convivir con esta revisión; validar primero cada dominio por separado.
 
 Cada activación toma una copia de la curva del perfil de la fuente real y espera
 3 adquisiciones únicas Healthy antes de controlar. El motor proyecta esa curva
-en 30–50; los puntos inferiores a 30 siguen editables y visibles en el simulador,
-pero esta primera prueba física automática los limita a 30. Manual conserva 10–50.
+en 10–50 en esta entrada explícita producto. La ruta preparada histórica conserva
+30–50. Manual conserva 10–50. Los defaults silenciosos nuevos requieren aceptación
+física y están documentados en QUIET_PRODUCT_PRESETS.md.
 La revisión comprueba CPU ≤90 °C/60 W y GPU ≤82 °C/75 W, incluida la temperatura
 del núcleo más caliente. Un dato inválido, cambio de fuente, lifecycle o error
 interrumpe la sesión y solicita Firmware; no rearma automáticamente.

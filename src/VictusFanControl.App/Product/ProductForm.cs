@@ -82,7 +82,7 @@ internal sealed class ProductForm : Form
     }
     private static ProductProfiles Migrate()
     {
-        var previous=FanConfigurationStore.Load(null,out _);var performance=PerformanceUiSettingsStore.Load();
+        var previous=File.Exists(FanConfigurationStore.DefaultPath)?FanConfigurationStore.Load(null,out _):null;var performance=PerformanceUiSettingsStore.Load();
         return new()
         {
             Ac=ProductProfiles.DefaultProfile(ProductPowerProfile.Ac,previous) with {CpuPl1Watts=performance.AcPl1Watts,CpuPl2Watts=performance.AcPl2Watts},

@@ -336,6 +336,31 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             Check(failed && persisted == 1 && backend.Levels.Count == 0,
                 "Manual mode blocks settings before persistence even without a fan write");
         }
+        backend = new Backend();
+        await using(var coordinator=new FanControlCoordinator(backend))
+        {
+            var profiles=new VictusFanControl.Product.ProductProfiles();
+            var controller=new AdaptiveFanProductionController(coordinator,Hp8C40AdaptiveCandidateV1.Create(),true,true,
+                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,
+                automaticConfiguration:profiles.Ac.Fan,automaticMinimumLevel:10);
+            for(var session=0;session<4;session++)
+            {
+                var ac=session%2==0;
+                await controller.ConfigureAutomaticAsync(ac?profiles.Ac.Fan:profiles.Battery.Fan,default);
+                await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,default);
+                clock+=1000;
+                var sample=Sample(Now(),40) with{GpuTemperatureC=35,GpuPowerW=5};
+                var actual=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+                var target=ac?12:10;
+                Check(actual.EqualFanLevel==target&&actual.Action==AdaptiveFanProductionActionKind.EnterCustomAndApply,
+                    "explicit quiet 10..50 review applies the source curve after each clean Firmware release");
+                clock+=1000;sample=sample with{Timestamp=Now()};
+                await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+                Check(backend.Levels.Count==session+1,"quiet review holds without retransmission");
+                await controller.SetModeAsync(AdaptiveFanProductionMode.Firmware,default);
+                Check(coordinator.Authority==FanAuthority.Firmware&&backend.Restores==session+1,"quiet review releases before reconfiguration");
+            }
+        }
         return failures;
     }
 
