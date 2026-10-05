@@ -53,8 +53,28 @@ public sealed class FanControlCoordinator : IAsyncDisposable
     public FanAuthority Authority => _authority;
     public string BackendName => _backend.Name;
     public bool BackendCanWrite => _backend.CanWrite;
+    public FanBackendCapabilities BackendCapabilities => _backend.Capabilities;
     public bool IsSafetyEvaluationCurrent(SafetyGateResult safety) =>
         IsLatestSafetyEvaluation(safety);
+
+    /// <summary>
+    /// Waits for any in-flight coordinator operation (apply/restore/entry) to
+    /// finish and returns the resulting stable authority snapshot.
+    /// </summary>
+    public async ValueTask<FanAuthority> GetStableAuthorityAsync(
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            return _authority;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
     public FanFirmwareRestoreEvidence? LastRestoreEvidence =>
         (_backend as IFanControlRestoreEvidenceSource)?.LastRestoreEvidence;
 
