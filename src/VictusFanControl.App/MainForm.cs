@@ -2773,6 +2773,8 @@ internal sealed partial class MainForm : Form
         object? sender,
         FanAuthorityChangedEventArgs e)
     {
+        RecordAutomaticFinalAuthorityChange(e);
+
         if (_gateF1HardwareTest &&
             _gateF1HardwareTestArmed &&
             !_gateF1HardwareTestCompleted &&

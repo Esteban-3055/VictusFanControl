@@ -23,6 +23,7 @@ internal sealed partial class MainForm
     private volatile bool _automaticFinalReadyPublished;
     private volatile bool _automaticFinalCompleted;
     private volatile bool _automaticFinalEverActive;
+    private volatile bool _automaticFinalFirmwareReleaseRequested;
     private int _automaticFinalAutomaticModeRequests;
     private int _automaticFinalFirmwareModeRequests;
     private int _automaticFinalManualModeRequests;
@@ -105,7 +106,12 @@ internal sealed partial class MainForm
         // Never require a completed first actuation or an open test to release.
         if (_automaticFinalQualificationHardwareTest && kind == P13ControlInteractionKind.ModeRequest &&
             requestedMode == AdaptiveFanProductionMode.Firmware && !equalFanLevel.HasValue)
+        {
+            // Set before the synchronous coordinator callback during the real
+            // Firmware action; the interaction observer still validates PASS.
+            _automaticFinalFirmwareReleaseRequested = true;
             return true;
+        }
 
         if (!_automaticFinalQualificationHardwareTest ||
             _automaticFinalCompleted ||
@@ -563,6 +569,31 @@ internal sealed partial class MainForm
             configuration.BuildPolicy();
     }
 
+    private void RecordAutomaticFinalAuthorityChange(FanAuthorityChangedEventArgs change)
+    {
+        if (!_automaticFinalQualificationHardwareTest || _automaticFinalCompleted)
+            return;
+
+        AppendAutomaticFinalEvent(new
+        {
+            kind = "fan-authority-transition",
+            timestampUtc = change.Timestamp,
+            previous = change.Previous.ToString(),
+            current = change.Current.ToString(),
+            reason = change.Reason,
+            supervisedFirmwareRelease = _automaticFinalFirmwareReleaseRequested
+        });
+
+        // This callback runs before recovery starts, including transitions
+        // between policy decisions. Failure cleanup is queued, never awaited
+        // from the coordinator's operation gate.
+        if (_automaticFinalEverActive && !_automaticFinalFirmwareReleaseRequested &&
+            change.Current != FanAuthority.Custom)
+            FailAutomaticFinalQualification(
+                $"Automatic lost fan authority before the supervised Firmware button: " +
+                $"{change.Previous} -> {change.Current}; {change.Reason}");
+    }
+
     private void RecordAutomaticFinalDecision(
         TelemetrySnapshot snapshot,
         AdaptiveFanProductionResult result)
@@ -657,8 +688,10 @@ internal sealed partial class MainForm
                     $"Automatic decision lost execution authorization: action={result.Action}; detail={result.Detail}";
             }
             else if (_automaticFinalEverActive &&
-                     result.Action ==
-                         AdaptiveFanProductionActionKind.RestoreFirmware)
+                     !_automaticFinalFirmwareReleaseRequested &&
+                     (result.Authority != FanAuthority.Custom ||
+                      result.Action is AdaptiveFanProductionActionKind.RestoreFirmware or
+                          AdaptiveFanProductionActionKind.HoldFirmware))
             {
                 failure =
                     $"Automatic returned to Firmware before the supervised Firmware button: {result.Detail}";

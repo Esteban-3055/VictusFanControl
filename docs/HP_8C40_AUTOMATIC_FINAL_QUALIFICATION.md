@@ -213,3 +213,28 @@ CPU must report Active and GPU ActiveUnverified. Configuration and status are bo
 to the run. Loss of the required status fails closed. GUI exit releases performance
 through the detached Guardian, and the harness checks that no CPU/GPU session
 journal remains. CPU/GPU protections and fan thermal thresholds are unchanged.
+
+
+## Firmware ownership loss and failure evidence (2026-10-04)
+
+Physical run `automatic-final-normal_2026-10-04_213320.zip` (SHA256
+`f3b6722eb25532eff092bfa1709211cf1a8a8f20a40ff4f005b714c50173cebb`)
+used source `8c3f96f` and AC CPU limits 20/40 W. After the first acknowledged
+30/30 command, ownership validation observed EC setpoints 255/255 at
+21:34:32 Santiago time. The coordinator restored Firmware. A1 then counted
+HoldFirmware decisions until a second Automatic click produced a pre-action
+fence error. That later error masked the original ownership failure; this run
+is FAIL_CLOSED and does not establish a thermal trigger or an A1 PASS.
+
+A1 now records coordinator authority transitions and fails immediately when an
+active session loses Custom authority without the supervised Firmware action.
+The original coordinator reason is retained, including ownership and EC details.
+Post-active HoldFirmware/non-Custom decisions also fail as a fallback. The real
+Firmware button remains an escape action and its result still must satisfy all
+normal-path PASS checks. Failure cleanup is queued outside the coordinator gate.
+The harness waits up to 30 seconds for the GUI's normal cleanup before packaging
+failure evidence, so the Guardian report can be included; if cleanup remains
+pending, it explicitly warns that release evidence may be incomplete. It never
+kills the GUI, Guardian or watchdog. Thermal thresholds, EC ownership guards and
+hardware writes are unchanged. A new physical run is required to determine why
+firmware relinquished the previous 30/30 ownership.

@@ -40,6 +40,11 @@ Require ($program.Contains('automaticFinalQualificationHardwareTest')) 'Program 
 
 Require ($main.Contains('_automaticFinalQualificationHardwareTest')) 'MainForm missing dedicated qualification flag'
 Require ($main.Contains('Hp8C40AutomaticFinalQualificationGate.IsAuthorizedForTarget')) 'MainForm must derive Automatic authority only from exact-target qualification gate'
+Require ($main.Contains('RecordAutomaticFinalAuthorityChange(e)')) 'authority loss between decisions must be observed synchronously'
+Require ($qualification.Contains('fan-authority-transition')) 'original coordinator reason must be retained'
+Require ($qualification.Contains('_automaticFinalFirmwareReleaseRequested')) 'real Firmware escape must not be reported as unsolicited loss'
+Require ($qualification.Contains('AdaptiveFanProductionActionKind.HoldFirmware))')) 'post-active HoldFirmware must fail qualification'
+
 Require ($main.Contains('RecordAutomaticFinalDecision')) 'Automatic decisions must be recorded in qualification mode'
 Require ($main.Contains('TryPublishAutomaticFinalReadyAsync')) 'qualification READY must depend on live runtime preflight'
 Require ($main.Contains('IsAutomaticFinalControlInteractionAuthorized')) 'real P13 interactions must be fenced'

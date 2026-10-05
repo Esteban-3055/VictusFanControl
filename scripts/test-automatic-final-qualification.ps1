@@ -504,6 +504,17 @@ catch {
         if (-not (Test-Path -LiteralPath $evidenceRoot)) {
             New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
         }
+        # GUI FAIL_CLOSED queues normal fan/Guardian release. Wait for that
+        # cleanup before collecting reports; never terminate either process.
+        if ($gui -and (Test-Path -LiteralPath $resultPath)) {
+            $gui.Refresh()
+            if (-not $gui.HasExited) {
+                $closedNormally = $gui.WaitForExit(30000)
+                if (-not $closedNormally) {
+                    Write-Warning 'Normal GUI cleanup is still pending; release evidence may be incomplete.'
+                }
+            }
+        }
         Write-Summary 'FAIL_CLOSED' $failure
         Export-QualificationEvidence
         Write-Host "Evidence: $evidenceRoot"
