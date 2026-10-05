@@ -180,8 +180,8 @@ internal static class ProductGuiSelfTest
                 form.EditValue("pl1",37);form.HandleCommand("discard");require(form.Draft.Ac.CpuPl1Watts==36&&!form.Dirty,"Discard lost the latest successful save.");
                 canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;canvas.Refresh();
                 Point ScreenPoint(float x,float y){var scale=Math.Min(canvas.Width/1672f,canvas.Height/941f);return new((int)((canvas.Width-1672*scale)/2+x*scale),(int)((canvas.Height-941*scale)/2+y*scale));}
-                var slider=canvas.Hits.Last(h=>h.Id=="pl1");var left=ScreenPoint(slider.Bounds.Left,slider.Bounds.Top+20);var right=ScreenPoint(slider.Bounds.Right,slider.Bounds.Top+20);
-                canvas.PointerDown(left);canvas.PointerMove(right);canvas.PointerUp(right);require(form.Draft.Ac.CpuPl1Watts==44,"Pointer slider failed its upper bound.");
+                var slider=canvas.Hits.Last(h=>h.Id=="pl1");var left=ScreenPoint(slider.Bounds.Left+2,slider.Bounds.Top+20);var right=ScreenPoint(slider.Bounds.Right-2,slider.Bounds.Top+20);var beyond=ScreenPoint(slider.Bounds.Right+50,slider.Bounds.Top+20);
+                canvas.PointerDown(left);require(canvas.Capture,"Pointer fixture did not acquire slider capture.");canvas.PointerMove(beyond);canvas.PointerUp(beyond);require(form.Draft.Ac.CpuPl1Watts==44,"Pointer slider failed its upper bound: "+form.Draft.Ac.CpuPl1Watts);
                 canvas.Refresh();canvas.PointerDown(right);form.HandleCommand("profile-battery");canvas.Refresh();var priorBattery=form.Draft.Battery.CpuPl1Watts;canvas.PointerMove(left);canvas.PointerUp(left);
                 require(form.Draft.Battery.CpuPl1Watts==priorBattery,"A captured drag leaked into a newly selected profile.");
                 form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.Axis=AdaptiveCurveAxis.CpuTemperature;canvas.Refresh();
