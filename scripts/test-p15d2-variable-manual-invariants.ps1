@@ -432,11 +432,17 @@ foreach($needle in @(
 )){Assert-Contains $adapter $needle ("P15D2 existing production-adapter prerequisite missing: {0}" -f $needle)}
 
 foreach($needle in @(
-    '_manualLevel.Minimum = 10;',
-    '_manualLevel.Maximum = 50;',
+    '_manualLevel.Minimum = _controller.ManualMinimumLevel;',
+    '_manualLevel.Maximum = _controller.ManualMaximumLevel;',
     'P13ControlInteractionKind.ManualApply',
     'qualification pre-action fence rejected the interaction'
 )){Assert-Contains $surface $needle ("P15D2 real P13 surface prerequisite missing: {0}" -f $needle)}
+foreach($needle in @(
+    'public int ManualMinimumLevel => _minimumLevel;',
+    'public int ManualMaximumLevel => _maximumLevel;',
+    'Math.Max(config.MinimumLevel, backendCapabilities.MinimumLevel)',
+    'Math.Min(config.MaximumLevel, backendCapabilities.MaximumLevel)'
+)){Assert-Contains $adapter $needle ("P15D2/current Manual backend-envelope prerequisite missing: {0}" -f $needle)}
 
 if($status -in @('P15D2_VARIABLE_MANUAL_IMPLEMENTATION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PREPARATION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_AUTHORIZED_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_REAUTHORIZED_AFTER_EC_TRANSIENT_AWAITING_SAME_HEAD_CI','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PENDING_GATE_CLOSED','P15D2_VARIABLE_MANUAL_RETRY_STATUS_BARRIER_CORRECTION_CI_PASS_GATE_CLOSED','P15D2_VARIABLE_MANUAL_PHYSICAL_PASS_FORMALLY_CLOSED')){
     foreach($needle in @(
