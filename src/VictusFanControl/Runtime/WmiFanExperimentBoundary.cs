@@ -10,6 +10,8 @@ internal static class WmiFanExperimentBoundary
     internal static string? SessionDirectory { get; private set; }
     internal static bool Control { get; private set; }
     private static int _recovering;
+    private static bool _gui;
+    internal static Action? EnsureGuiGuardianAlive { get; set; }
     private sealed record Admission(TelemetrySnapshot Snapshot, Action EnsureThermalAllowed);
     private static Admission? _admission;
     internal static bool Enabled => SessionDirectory is not null;
@@ -18,11 +20,12 @@ internal static class WmiFanExperimentBoundary
     private static string InFlightPath => Path.Combine(SessionDirectory!, "native-inflight.json");
     private static string UncertainPath => Path.Combine(SessionDirectory!, "native-uncertain.signal");
 
-    internal static void Enable(string directory, bool control)
+    internal static void Enable(string directory, bool control, bool gui = false)
     {
         if (Enabled) throw new InvalidOperationException("Experiment boundary is already installed.");
         SessionDirectory = Path.GetFullPath(directory);
         Control = control;
+        _gui = gui;
         // Reuse the existing hard prohibition before EC module loading / I/O.
         WmiOnlyInvestigationPolicy.Enable();
     }
@@ -45,10 +48,18 @@ internal static class WmiFanExperimentBoundary
 
     internal static void EnsureRequestAllowed(HpBiosRequest request)
     {
+        if (_gui && Recovering && request.CommandType == Hp8C40BiosFanControl.GetFanLevelCommandType)
+            throw new InvalidOperationException("WMI GUI recovery has closed new fan reads; drain existing native work before release.");
         if (!IsAllowed(request, Control, Recovering, File.Exists(StopPath)))
             throw new InvalidOperationException("Request is outside the WMI fan experiment lifecycle/whitelist.");
         if (request.CommandType == 0x2E && request.Payload[0] != 255)
         {
+            if (_gui)
+            {
+                EnsureGuiGuardianAlive?.Invoke();
+                VictusFanControl.Control.FanDispatchAdmissionScope.EnsureAllowed();
+                return;
+            }
             var admission = Volatile.Read(ref _admission);
             var snapshot = admission?.Snapshot;
             var now = DateTimeOffset.UtcNow;

@@ -9,6 +9,16 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--wmi-fan-gui-self-test")
+        {
+            Environment.ExitCode = WmiFanGuiIntegrationSelfTest.RunAsync().GetAwaiter().GetResult();
+            return;
+        }
+        if (args.Length == 2 && args[0] == "--wmi-fan-fixture-owner")
+        {
+            Environment.ExitCode = WmiFanGuiIntegrationSelfTest.RunFixtureOwnerAsync(args[1]).GetAwaiter().GetResult();
+            return;
+        }
         if (args.Length == 1 && args[0] == "--performance-gui-self-test")
         {
             Environment.ExitCode = PerformanceGuiIntegrationSelfTest.RunAsync().GetAwaiter().GetResult();

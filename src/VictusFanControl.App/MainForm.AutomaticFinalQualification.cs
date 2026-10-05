@@ -13,6 +13,9 @@ namespace VictusFanControl.App;
 
 internal sealed partial class MainForm
 {
+    private Hp8C40WmiFanControlBackend? _wmiFanBackend;
+    private bool AutomaticFanJournalPresent => File.Exists(WmiFanGuiGuardianHost.LeasePath) ||
+        File.Exists(P15CJournalPath) || File.Exists(WmiFanExperiment.LeasePath);
     private readonly bool _automaticFinalQualificationHardwareTest;
     private readonly string? _automaticFinalQualificationMarkerRoot;
     private readonly object _automaticFinalEvidenceSync = new();
@@ -266,40 +269,11 @@ internal sealed partial class MainForm
                             "Firmware return does not satisfy the normal Automatic qualification sequence or evidence minimums.");
                     }
 
-                    var restore =
-                        _fanCoordinator.LastRestoreEvidence;
-
-                    if (!restore.HasValue ||
-                        !restore.Value.LocalFirmwareAckVerified ||
-                        !restore.Value.WatchdogLeaseRequired ||
-                        !restore.Value.WatchdogReleaseVerified)
-                    {
-                        throw new InvalidOperationException(
-                            "Firmware return lacks complete strong-restore evidence.");
-                    }
-
-                    if (File.Exists(
-                            P15CJournalPath))
-                    {
-                        throw new InvalidOperationException(
-                            "Firmware return completed but the durable fan watchdog journal is still present.");
-                    }
-
-                    var ecProof =
-                        ReadStableM6FirmwareAutoProof();
-
-                    if (!ecProof.Verified)
-                    {
-                        throw new InvalidOperationException(
-                            $"Independent EC proof did not observe stable FF/FF after Firmware return: {ecProof.Detail}; last={ecProof.Cpu}/{ecProof.Gpu}.");
-                    }
-
-                    CompleteAutomaticFinalQualification(
-                        restore.Value.LocalFirmwareAckVerified,
-                        restore.Value.WatchdogReleaseVerified,
-                        ecProof.Cpu,
-                        ecProof.Gpu,
-                        ecProof.Samples);
+                    var release = _wmiFanBackend?.ReleaseEvidence;
+                    if (release is not { ReleaseRequestAccepted: true, LegacyDefaultRequestAccepted: true,
+                        GuardianLeaseRetired: true, IndependentFirmwareOwnershipVerified: false } || AutomaticFanJournalPresent)
+                        throw new InvalidOperationException("WMI Firmware return lacks accepted release/default requests and retired guardian lease.");
+                    CompleteAutomaticFinalQualification(release);
                     return;
 
                 case AdaptiveFanProductionMode.Manual:
@@ -397,8 +371,7 @@ internal sealed partial class MainForm
             _automaticFinalLastReadySafetyTimestamp =
                 timestamp;
 
-            if (File.Exists(
-                    P15CJournalPath))
+            if (AutomaticFanJournalPresent)
             {
                 throw new InvalidOperationException(
                     "Final Automatic qualification cannot publish READY while a durable fan watchdog journal exists.");
@@ -429,7 +402,7 @@ internal sealed partial class MainForm
                 new
                 {
                     schemaVersion = 1,
-                    gate = "HP-8C40-AUTOMATIC-FINAL-NORMAL",
+                    gate = "HP-8C40-AUTOMATIC-WMI-NORMAL",
                     result = "READY",
                     timestampUtc = DateTimeOffset.UtcNow,
                     processId = Environment.ProcessId,
@@ -439,6 +412,8 @@ internal sealed partial class MainForm
                     targetProfileId = _targetProfile?.Id,
                     backend = _fanCoordinator.BackendName,
                     backendCanWrite = _fanCoordinator.BackendCanWrite,
+                    directEcProhibited = WmiOnlyInvestigationPolicy.Enabled,
+                    fanGuardianReportPath = _wmiFanBackend?.GuardianReportPath,
                     authority = _fanCoordinator.Authority.ToString(),
                     runtimeState = _worker.StateMachine.State.ToString(),
                     normalUserAutomaticAuthorized =
@@ -450,7 +425,7 @@ internal sealed partial class MainForm
                     healthySamples =
                         _automaticFinalReadySafetyStreak,
                     journalPresent =
-                        File.Exists(P15CJournalPath),
+                        AutomaticFanJournalPresent,
                     configuration
                 });
 
@@ -706,12 +681,7 @@ internal sealed partial class MainForm
         }
     }
 
-    private void CompleteAutomaticFinalQualification(
-        bool localFirmwareAckVerified,
-        bool watchdogReleaseVerified,
-        byte finalCpuSetpoint,
-        byte finalGpuSetpoint,
-        int ecProofSamples)
+    private void CompleteAutomaticFinalQualification(FanWmiReleaseEvidence release)
     {
         lock (_automaticFinalEvidenceSync)
         {
@@ -730,7 +700,7 @@ internal sealed partial class MainForm
                 new
                 {
                     schemaVersion = 1,
-                    gate = "HP-8C40-AUTOMATIC-FINAL-NORMAL",
+                    gate = "HP-8C40-AUTOMATIC-WMI-NORMAL",
                     result = "PASS",
                     timestampUtc = DateTimeOffset.UtcNow,
                     processId = Environment.ProcessId,
@@ -769,13 +739,16 @@ internal sealed partial class MainForm
                         _fanProductionController.Mode.ToString(),
                     finalAuthority =
                         _fanCoordinator.Authority.ToString(),
-                    localFirmwareAckVerified,
-                    watchdogReleaseVerified,
+                    directEcProhibited = true,
+                    deniedEcAccesses = WmiOnlyInvestigationPolicy.DeniedEcAccesses,
+                    release.ReleaseRequestAccepted,
+                    release.LegacyDefaultRequestAccepted,
+                    release.GuardianLeaseRetired,
+                    release.IndependentFirmwareOwnershipVerified,
+                    fanGuardianReportPath = release.ReportPath,
                     journalPresentAfterRestore =
-                        File.Exists(P15CJournalPath),
-                    finalCpuSetpoint,
-                    finalGpuSetpoint,
-                    ecProofSamples,
+                        AutomaticFanJournalPresent,
+
                     normalUserAutomaticAuthorized =
                         Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized
                 });
@@ -786,7 +759,7 @@ internal sealed partial class MainForm
         Ui(() =>
         {
             AppendEvent(
-                "AUTOMATIC FINAL RESULT: PASS normal route. Real P13 Automatic produced live final-backend decisions and real Firmware completed strong restore with stable FF/FF.");
+                "AUTOMATIC FINAL RESULT: PASS normal route. Real P13 Automatic produced live final-backend decisions and real Firmware completed accepted WMI release/default requests with retired guardian lease; hardware ownership unverified.");
             _allowExit = true;
             Close();
         });
@@ -810,7 +783,7 @@ internal sealed partial class MainForm
                 new
                 {
                     schemaVersion = 1,
-                    gate = "HP-8C40-AUTOMATIC-FINAL-NORMAL",
+                    gate = "HP-8C40-AUTOMATIC-WMI-NORMAL",
                     result = "FAIL_CLOSED",
                     timestampUtc = DateTimeOffset.UtcNow,
                     failure = detail,
@@ -831,7 +804,7 @@ internal sealed partial class MainForm
                     everActive =
                         _automaticFinalEverActive,
                     journalPresent =
-                        File.Exists(P15CJournalPath)
+                        AutomaticFanJournalPresent
                 });
         }
 
@@ -865,7 +838,7 @@ internal sealed partial class MainForm
                             authority = release.Authority.ToString(),
                             release.Detail,
                             journalPresent =
-                                File.Exists(P15CJournalPath)
+                                AutomaticFanJournalPresent
                         });
                 }
                 catch (Exception ex)

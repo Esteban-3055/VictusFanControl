@@ -725,6 +725,12 @@ internal sealed partial class MainForm : Form
         }
 
         IFanControlBackend backend;
+        if (_targetProfile == Hp8C40TargetProfile.Instance &&
+            (_m9dProductionLifecycleHardwareTest || DisplayAware8C40LifecycleHardwareTest ||
+             _p15cGuiManualHardwareTest || _p15d1TrayExitHardwareTest || _p15d2VariableManualHardwareTest))
+            throw new NotSupportedException("Historical EC qualification launches are unavailable in the WMI-only GUI.");
+        if (_targetProfile == Hp8C40TargetProfile.Instance)
+            WmiOnlyInvestigationPolicy.Enable(); // Before any backend, module or watchdog initialization.
         try
         {
             IFanControlWatchdogLeaseClient? watchdogLease = null;
@@ -750,7 +756,14 @@ internal sealed partial class MainForm : Form
                             Hp88F8TargetProfile.Instance.Id);
             }
 
-            if (_m9dProductionLifecycleHardwareTest)
+            if (_targetProfile == Hp8C40TargetProfile.Instance &&
+                !_m9dProductionLifecycleHardwareTest && !DisplayAware8C40LifecycleHardwareTest)
+            {
+                _wmiFanBackend = new Hp8C40WmiFanControlBackend(new WmiFanGuiGuardianClient());
+                backend = _wmiFanBackend;
+                _fanBackendStartupDetail = "WMI-only GUI fan route; direct EC prohibited; detached WMI recovery guardian; hardware ownership unverified.";
+            }
+            else if (_m9dProductionLifecycleHardwareTest)
             {
                 _m9WatchdogBootstrapEvidence =
                     Hp8C40WatchdogServiceBootstrap
@@ -897,6 +910,7 @@ internal sealed partial class MainForm : Form
             _p15d2VariableManualHardwareTest;
 
         var p16NormalManualQualificationAuthorized =
+            _wmiFanBackend is null &&
             !_automaticFinalQualificationHardwareTest &&
             !isolatedManualQualification &&
             Hp8C40P16NormalManualQualificationGate.PhysicalExecutionAuthorized &&
@@ -906,7 +920,7 @@ internal sealed partial class MainForm : Form
                 StringComparison.Ordinal);
 
         var manualExecutionAuthorized =
-            _automaticFinalQualificationHardwareTest
+            _automaticFinalQualificationHardwareTest || _wmiFanBackend is not null
                 ? false
                 : isolatedManualQualification
                     ? p15cManualExecutionAuthorized || p15d1ManualExecutionAuthorized || p15d2ManualExecutionAuthorized
@@ -943,6 +957,10 @@ internal sealed partial class MainForm : Form
             automaticQualificationBackend.WmiCommandAcknowledged += (_, proof) =>
                 AppLog.Write($"AUTOMATIC FINAL WMI COMMAND PROOF: {proof}");
         }
+
+        if (_wmiFanBackend is not null)
+            _wmiFanBackend.CommandAccepted += (_, proof) =>
+                AppLog.Write($"WMI FAN REQUEST ACCEPTED: {proof}");
 
         _fanProductionController =
             new AdaptiveFanProductionController(

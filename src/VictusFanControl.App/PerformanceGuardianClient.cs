@@ -138,7 +138,7 @@ internal sealed class PerformanceGuardianClient
             throw new IOException("Guardian response identity/version mismatch.");
     }
 
-    private static string ResolveExecutable()
+    internal static string ResolveExecutable()
     {
         var published = Path.Combine(AppContext.BaseDirectory, "VictusFanControl.PerformanceGuardian.exe");
         if (File.Exists(published)) return published;

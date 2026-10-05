@@ -193,3 +193,13 @@ journals after GUI exit, and packages matching Guardian reports/configurations.
 It defines a controlled performance-conditioned fan run; it does not prove fan
 behavior with unlimited CPU/GPU power. Both release paths still require evidence.
 Software fixtures do not promote physical GUI qualification.
+
+
+## WMI-only fan route
+
+The HP 8C40 GUI now uses HP WMI for fan setters and RPM, with a separate detached
+WMI fan guardian. The performance Guardian CPU/GPU domains and limits are unchanged.
+Direct EC is prohibited in the GUI fan route; no M4 EC watchdog bootstrap occurs.
+The final test now reports accepted WMI release/default requests and retired fan
+lease, explicitly without independent firmware ownership proof. See
+`HP_8C40_AUTOMATIC_FINAL_QUALIFICATION.md` for the new evidence scope and retest.

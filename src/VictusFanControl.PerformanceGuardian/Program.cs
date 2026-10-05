@@ -9,6 +9,10 @@ internal static class Program
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--fan-wmi-session")
+                return await VictusFanControl.Runtime.WmiFanGuiGuardianHost.RunAsync(args).ConfigureAwait(false);
+            if (args.Length > 0 && args[0] == "--fan-wmi-fixture-session")
+                return await VictusFanControl.Runtime.WmiFanGuiGuardianHost.RunAsync(args, fixture: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-fixture-enable-failure")
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureEnableFailure: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-fixture-session")

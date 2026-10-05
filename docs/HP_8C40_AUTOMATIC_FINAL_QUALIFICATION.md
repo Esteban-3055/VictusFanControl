@@ -1,240 +1,103 @@
-# HP 8C40 — final Automatic qualification
+# HP 8C40 — GUI Automatic qualification using WMI only
 
-Branch prepared: `feature/victus-8c40-automatic-final-qualification`
+The current GUI route for the exact HP 8C40 / F.18 / 9D0R1LA target follows the
+supervised WMI experiment. PowerShell launches the gate; it is not a fan-control
+backend. CPU sensing/limits still use Intel MSR/PawnIO; GPU sensing/limits use
+NVML/NVIDIA. Fan commands and RPM use HP BIOS WMI exclusively. HP/Windows may
+access EC internally; the application does not load or access the EC directly.
 
-This branch starts from the fan/Automatic HEAD `e1b199b55ea9e95bc83b77b7a6f7bbff7002e6d1` and prepares the first supervised physical gate for the **final GUI + final fan backend path**.
+## Active route
 
-## Scope of this gate
+- Fresh fan RPM: HP `20008h/2Dh`, shared broker, no EC fallback.
+- Equal fan commands: `20008h/2Eh`, 30..50, only on changed target.
+- No immediate RPM-as-setpoint acknowledgement and no mechanical wait loop.
+- A detached WMI guardian durably arms an exclusive lease before the first write.
+- Each native HP call holds the same named mutex as the experimental route.
+  An in-flight/uncertain marker blocks subsequent calls. Native timeouts do not
+  prove cancellation. Stop/lifecycle/admission are rechecked before dispatch.
+- Guardian heartbeat follows fresh feedback checks, not a blind timer. Owner
+  exit, missing progress, lifecycle gaps or new ACPI 13/15 close admission.
+- Recovery sends `FF/FF -> LegacyDefault` through WMI; LegacyDefault is attempted
+  even if FF/FF is rejected. Successful recovery retires the guardian lease.
+- If guardian recovery fails, the GUI may attempt local release after read
+  quiescence. The shared mutex/markers still fence those calls. Local acceptance
+  never retires a retained guardian lease or permits re-entry.
+- Direct EC access is prohibited process-wide in this GUI and guardian route.
+  Historical EC GUI qualification launches are rejected before backend setup.
+  Historical CLI tests and the old backend remain available as historical source;
+  they are not selected by the current GUI.
 
-This is **A1: normal-path qualification**.
+WMI return code zero proves accepted requests, **not independent firmware
+ownership or completion**. RPM is feedback, not commanded-setpoint readback.
+The coordinator's Custom/Firmware states describe the local control lifecycle.
+The new evidence gate is `HP-8C40-AUTOMATIC-WMI-NORMAL` and must not be interpreted
+as a PASS of the former EC-based final gate.
 
-It is deliberately narrower than final product promotion. It proves:
+## Running the physical normal-path test
 
-1. normal user Automatic remains closed;
-2. an explicit exact-target qualification launch can temporarily authorize Automatic;
-3. the real P13 GUI Automatic button changes only logical mode at first;
-4. fresh telemetry drives `AdaptiveFanProductionController.ProcessAutomaticAsync`;
-5. real changed targets go through `FanControlCoordinator` and the current HP 8C40 product backend;
-6. at least 30 Automatic decisions and at least 2 real fan-command decisions are observed;
-7. the real P13 Firmware button performs strong restore;
-8. final restore requires local firmware ACK, watchdog RELEASE, durable journal absence and two consecutive EC `FF/FF` observations.
+Close other fan-control instances. Keep AC connected and the existing saved
+qualification profile (hottest 3 P-Cores, 30..50, normal +1/-1, 1000 ms,
+adaptive descent, rise 8s/3s, short descent 6s/4s, sustained descent 20s/16s,
+1200s load qualification, 50%/25W/40W thresholds, 30s pause, 120s cooldown,
+85C/78C demand overrides). Thermal protection is unchanged: CPU 95..98.x requires
+confirmation bounded by five unique samples / 2000 ms; CPU >=99 and GPU >=87
+close admission immediately.
 
-This gate does **not** promote normal Automatic.
-
-## Hard isolation
-
-Normal product gate remains:
-
-```text
-Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized = false
-```
-
-The dedicated gate requires all of:
-
-- command line mode `--8c40-automatic-final-qualification`;
-- exact token `8C40-AUTOMATIC-FINAL`;
-- isolated marker root;
-- exact target HP-8C40-9D0R1LA-F18;
-- normal product Automatic still closed;
-- writable final backend;
-- Firmware authority;
-- no durable watchdog journal;
-- fresh healthy SafetyGate samples.
-
-Manual is disabled inside this qualification process to avoid mixed evidence.
-
-## Frozen A1 profile
-
-A1 pins the operating/timing envelope instead of treating every editable timing combination as already proven. The saved curve profile itself is captured in READY evidence so the exact curves used in the physical run remain auditable:
-
-- CPU demand source: average of the **3 hottest P-Cores**;
-- fan envelope: **30..50**;
-- normal polling: 1000 ms;
-- normal step: maximum +1 / -1 level;
-- thermal-demand memory: disabled;
-- normal rise: EMA 8 s, confirmation 3 s;
-- short-load descent: EMA 6 s, confirmation 4 s;
-- sustained-load descent: EMA 20 s, confirmation 16 s;
-- sustained-load qualification: 1200 s observed loaded intervals;
-- load thresholds: CPU/GPU utilization 50 %, CPU package 25 W, GPU 40 W;
-- tolerated pause: 30 s;
-- sustained-load cooldown: 120 s idle;
-- thermal response threshold: CPU 85 C, GPU 78 C;
-- existing emergency admission remains CPU 95..98.x confirmation / CPU >=99 immediate / GPU >=87 immediate.
-
-A settings file that does not match this A1 profile is rejected before READY.
-
-## Running A1
-
-Before launching the gate, configure and save the candidate in the normal GUI while still in Firmware.
-
-Then, from elevated PowerShell:
+From elevated PowerShell:
 
 ```powershell
 git switch feature/victus-8c40-automatic-final-qualification
 git pull --ff-only
-.\scripts\test-automatic-final-qualification.ps1
+.\scripts\test-automatic-final-qualification.ps1 -WithPerformanceLimits
 ```
 
-The harness verifies branch/upstream identity, clean tracked state, exact hardware, AC power, battery sanity, no conflicting controller, PawnIO modules, persisted profile and absence of a stale fan journal.
+1. Wait for READY.
+2. Apply both CPU and GPU limits in Rendimiento; for this retest use CPU AC 20/40 W.
+   Wait for CPU Active and GPU ActiveUnverified.
+3. Click Automatic once and run representative load.
+4. After at least 30 decisions and two accepted changed-target commands, click
+   Firmware once. The GUI completes normal cleanup and exits.
 
-When READY is printed:
+Do not select Manual, edit settings, suspend, disconnect AC or close the GUI
+during the normal-path gate. A released WMI session is permanently closed;
+restart the GUI to start another supervised session. Manual and normal product
+Automatic remain closed pending new physical qualification.
 
-1. click **Automatic** once;
-2. run a representative workload long enough to obtain at least one changed fan level;
-3. observe normal response;
-4. click **Firmware** once.
+The harness requires IntelMSR.bin; it no longer requires LpcACPIEC.bin or launches
+an EC/setpoint probe. Existing WMI GUI, experimental or M4 leases block admission.
+The fan report is bound to the GUI PID/start time and unique session path. PASS
+requires accepted WMI release/default requests, retired fan lease, zero denied EC
+access attempts, and `IndependentFirmwareOwnershipVerified=false`. With limits,
+the independent performance Guardian must additionally prove CPU/GPU release.
+Failure packaging waits for normal cleanup and captures both reports when present.
+Never delete a retained lease just to bypass a failed recovery.
 
-Do not use Manual, edit settings, disconnect AC, suspend, or close the GUI during A1.
+## Verification and remaining gates
 
-The application writes:
+Hardware-free checks cover changed-target writes, guardian readiness before
+writes, intent failure, native rejection/no retry, guardian loss, drained local
+release, uncertain-native lease retention, real detached child release and real
+owner-process exit. Windows CI runs `--wmi-fan-gui-self-test` using explicit
+zero-hardware fixtures. The experimental WMI regression suite remains intact.
 
-- `automatic-final.ready.json`;
-- `automatic-final.events.jsonl`;
-- `automatic-final.result.json`.
+Physical WMI normal-path PASS is still pending. Subsequent tests must qualify
+app/tray exit while active, telemetry loss, suspend/resume and >=20-minute loaded
+operation followed by descent. Software tests do not prove hardware ownership.
 
-The parent harness also performs a final independent EC setpoint proof and packages the evidence ZIP with a SHA-256 sidecar.
+## Diagnostic evidence leading to this migration
 
-## Acquisition during fan acknowledgement
+- `automatic-final-normal_2026-10-04_213320.zip`, SHA256
+  `f3b6722eb25532eff092bfa1709211cf1a8a8f20a40ff4f005b714c50173cebb`:
+  source 8c3f96f, AC 20/40 W, initial 30/30 confirmed, then EC setpoints FF/FF.
+  The former gate initially masked this loss until a second Automatic click.
+- `automatic-final-normal_2026-10-04_214835.zip`, SHA256
+  `bd1799d2d287e9ff2fec6fb4507fbf567c13c49dab1bf29b69458e9b14d45551`:
+  source 146d832, nine decisions, one completed command, then EC 0xEC=0x90
+  during the next command acknowledgement. Last ACK sensor samples CPU 77 C /
+  GPU 47 C. The error was not a thermal cutoff. The performance report proved
+  normal CPU/GPU release. Immediate failure detection and report collection
+  worked; the summary still used the generic fail-safe coordinator reason.
 
-The worker awaits one Automatic operation at a time. The backend's mechanical
-acknowledgement can legitimately last longer than the 3-second telemetry watchdog.
-During that wait, after dispatch and each completed native RPM proof, the backend
-requests a CPU/GPU acquisition through the same worker reader and hardware-read gate.
-This acquisition consumes the shared RPM publication with periodic fan queries
-disabled. It starts no second polling loop or fan writer.
-
-Only complete, fresh acquisitions in the current Healthy power epoch renew telemetry
-liveness. Suspension, recovery, cancellation, incomplete/stale samples and thermal
-admission loss still abort the operation. The acknowledgement deadline and watchdog
-threshold remain unchanged. A blocked native RPM query cannot generate a refresh.
-
-The newest acknowledgement acquisition stays published when the operation returns;
-the worker uses it for health evaluation instead of replaying the pre-command sample.
-The same publication rule applies to normal and recovery processing.
-Power-epoch and cancellation checks also run after awaiting the processor, so
-suspend/resume during an actuation cannot publish or count a pre-boundary sample.
-
-Firmware is always available through the qualification pre-action fence, including
-the historical Manual gates. Sequence and minimum-evidence checks still run after
-the release, so an early Firmware return fails the gate while allowing safe cleanup.
-
-The A1 evidence now records `automatic-operation-started` and
-`automatic-operation-interrupted`, including the exception and restore authority.
-Zero completed hardware-command decisions do not prove that no native write was
-attempted. Runtime failure is recorded from the first Automatic selection, even
-before the first confirmed command. Both PASS and FAIL_CLOSED packages include the
-daily application log when available and a SHA-256 sidecar.
-
-Hardware-free regression checks cover acknowledgement exceeding 3 seconds,
-cancellation/thermal rejection with Firmware restore, blocked WMI, independent
-acknowledgement expiry, and publication order:
-
-```powershell
-dotnet run --project .\src\VictusFanControl -c Release -- --hp-backend-self-test
-dotnet run --project .\src\VictusFanControl.App -c Release -- --telemetry-coordination-self-test
-dotnet run --project .\src\VictusFanControl.App -c Release -- --dashboard-self-test
-```
-
-Physical A1 is still required to qualify these changes on HP 8C40/F.18.
-
-### A1 evidence: first command confirmed, policy continuity rejected
-
-The physical run `automatic-final-normal_2026-10-04_202116.zip` used source
-`93b220233769b31a9b360c1a8d4b92a51eb0ebfc`. Its SHA-256 is
-`c1ac58e10a4c531f6c58939da580a425149a3b9e296be78d6f745c0deadb59d8`.
-The result remains FAIL_CLOSED, with two decisions and one completed command.
-
-The first acquisition was at 23:21:29.5998932 UTC. Its 30/30 command completed
-at 23:21:33.693577 UTC with two fresh WMI confirmations: baseline 2200/1900 RPM,
-confirmed nominal 2700/2500 RPM. No telemetry watchdog expiry was logged in this
-run. The next decision acquisition at 23:21:35.0618799 UTC was 5.462 seconds after
-the first decision's acquisition. Policy continuity had not consumed the real
-acquisitions made during acknowledgement, so it refused that interval. Firmware
-restore completed and the result reported no remaining journal.
-
-Acknowledgement acquisitions now also update validated policy demand/EMA and
-workload history. They keep the selected fan target and planner unchanged, clear
-normal increase/decrease confirmation windows, and issue no additional command.
-The next normal decision resumes from the last real acquisition. Missing samples,
-duplicates and invalid sensors retain their rejection behavior and the original
-3-second continuity limit. Observation is permitted only inside an active Automatic
-actuation with matching current thermal admission, without reacquiring the
-controller operation semaphore. Evidence records these samples as
-`automatic-actuation-observation`, separately from completed decisions.
-
-## PASS meaning
-
-A1 PASS means only:
-
-- the final GUI selection,
-- final Automatic controller path,
-- final writable fan backend,
-- changed-level actuation,
-- and explicit Firmware restore
-
-worked together on the exact target during a supervised normal session.
-
-It does **not** yet authorize:
-
-- normal product Automatic;
-- startup Automatic;
-- profile-triggered Automatic;
-- Automatic + Performance Control;
-- destructive telemetry-loss qualification;
-- app-exit-while-Automatic qualification;
-- 20-minute real sustained-load descent qualification.
-
-## Next gates after A1
-
-After A1 physical PASS is reviewed and committed without rewriting evidence:
-
-- **A2:** explicit app/tray exit while Automatic is active; prove final watchdog/restore behavior.
-- **A3:** controlled loss/staleness of telemetry while Automatic is active; prove fail-closed Firmware handoff.
-- **B:** endurance run: >=20 min representative load, then unload and observe the sustained-load slow descent and eventual 120 s idle cooldown.
-
-Only after A1/A2/A3/B should the project consider promoting normal Automatic or merging the fan branch into the Performance integration branch.
-
-## Second coordination retest and controlled performance limits
-
-`automatic-final-normal_2026-10-04_203843.zip` matches the supplied SHA256
-`8264ea1d19c533fd3ce057fbf2d3bbd3893e564f43e613301f78a53f41a15f1b`.
-Captured source `8d1a195477d711c9f6853677c13a3b0de2a745f3` produced 61 completed
-decisions, 6 completed hardware-command decisions and 55 holds. ACK acquisitions
-are now represented in policy history, without the prior false continuity refusal.
-The final recorded CPU control samples were 98 C at 23:40:42.841 and
-23:40:43.698 UTC, followed by canceled actuation and Firmware restoration.
-The result remains FAIL_CLOSED, with no user Firmware request and no retained fan
-journal. This supports the observed working normal decisions, not an A1 PASS.
-
-The provisional CPU/GPU GUI binding can now condition a new A1 via
-`-WithPerformanceLimits`. Enable in Rendimiento after READY and before Automatic;
-CPU must report Active and GPU ActiveUnverified. Configuration and status are bound
-to the run. Loss of the required status fails closed. GUI exit releases performance
-through the detached Guardian, and the harness checks that no CPU/GPU session
-journal remains. CPU/GPU protections and fan thermal thresholds are unchanged.
-
-
-## Firmware ownership loss and failure evidence (2026-10-04)
-
-Physical run `automatic-final-normal_2026-10-04_213320.zip` (SHA256
-`f3b6722eb25532eff092bfa1709211cf1a8a8f20a40ff4f005b714c50173cebb`)
-used source `8c3f96f` and AC CPU limits 20/40 W. After the first acknowledged
-30/30 command, ownership validation observed EC setpoints 255/255 at
-21:34:32 Santiago time. The coordinator restored Firmware. A1 then counted
-HoldFirmware decisions until a second Automatic click produced a pre-action
-fence error. That later error masked the original ownership failure; this run
-is FAIL_CLOSED and does not establish a thermal trigger or an A1 PASS.
-
-A1 now records coordinator authority transitions and fails immediately when an
-active session loses Custom authority without the supervised Firmware action.
-The original coordinator reason is retained, including ownership and EC details.
-Post-active HoldFirmware/non-Custom decisions also fail as a fallback. The real
-Firmware button remains an escape action and its result still must satisfy all
-normal-path PASS checks. Failure cleanup is queued outside the coordinator gate.
-The harness waits up to 30 seconds for the GUI's normal cleanup before packaging
-failure evidence, so the Guardian report can be included; if cleanup remains
-pending, it explicitly warns that release evidence may be incomplete. It never
-kills the GUI, Guardian or watchdog. Thermal thresholds, EC ownership guards and
-hardware writes are unchanged. A new physical run is required to determine why
-firmware relinquished the previous 30/30 ownership.
+Neither run is a physical PASS. These samples do not prove whether 0x90 was a
+transient EC read or real firmware activity. The earlier WMI experiment did not
+read these guards; this migration adopts that explicitly different evidence model.

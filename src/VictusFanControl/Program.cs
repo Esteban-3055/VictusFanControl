@@ -14,6 +14,8 @@ internal static class Program
     public static async Task<int> Main(string[] args)
     {
         EcWmiInvestigationTrace.Initialize();
+        if (args.Length == 1 && args[0] == "--wmi-fan-backend-self-test")
+            return await Hp8C40WmiFanControlBackendSelfTest.RunAsync(Console.Out);
         if (args.Length > 0 && args[0] == "--wmi-fan-experiment-self-test")
             return args.Length == 1 ? WmiFanExperimentSelfTest.Run(Console.Out) : 2;
         if (args.Length > 0 && args[0] == "--wmi-fan-experiment")

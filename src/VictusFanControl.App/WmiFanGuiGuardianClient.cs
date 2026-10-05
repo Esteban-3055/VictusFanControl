@@ -1,0 +1,107 @@
+using System.Diagnostics;
+using System.Text.Json;
+using VictusFanControl.Hardware.Hp;
+using VictusFanControl.Runtime;
+
+namespace VictusFanControl.App;
+
+internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
+{
+    private readonly bool _fixture;
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private Process? _child;
+    private readonly int _ownerPid = Environment.ProcessId;
+    private readonly long _ownerStart;
+    private bool _released;
+    private string LeasePath => _fixture ? Path.Combine(SessionDirectory, "fixture-lease.json") : WmiFanGuiGuardianHost.LeasePath;
+    public string SessionDirectory { get; }
+    public string ReportPath => Path.Combine(SessionDirectory, "guardian-report.json");
+
+    internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null)
+    {
+        _fixture = fixture;
+        using var owner = Process.GetCurrentProcess();
+        _ownerStart = owner.StartTime.ToUniversalTime().Ticks;
+        if (!fixture && fixtureDirectory is not null) throw new ArgumentException("Fixture directory requires explicit fixture mode.");
+        SessionDirectory = fixtureDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "VictusFanControl", "FanWmi", "gui", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(SessionDirectory);
+        if (!fixture)
+        {
+            WmiFanExperimentBoundary.Enable(SessionDirectory, true, gui: true);
+            WmiFanExperimentBoundary.EnsureGuiGuardianAlive = EnsureAlive;
+        }
+    }
+
+    public async Task StartAsync(CancellationToken token)
+    {
+        if (_released) throw new InvalidOperationException("WMI session is permanently released.");
+        if (_child is not null) { EnsureAlive(); return; }
+        if (File.Exists(LeasePath) || (!_fixture &&
+            (File.Exists(WmiFanGuiGuardianHost.LegacyLeasePath) || File.Exists(WmiFanExperiment.LeasePath))))
+            throw new InvalidOperationException("Pending fan lease blocks WMI GUI control; do not delete it.");
+        Heartbeat();
+        var start = new ProcessStartInfo(PerformanceGuardianClient.ResolveExecutable())
+        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
+        foreach (var arg in new[] { _fixture ? "--fan-wmi-fixture-session" : "--fan-wmi-session",
+            "--session-dir", SessionDirectory, "--owner-pid", _ownerPid.ToString(), "--owner-start", _ownerStart.ToString() })
+            start.ArgumentList.Add(arg);
+        _child = Process.Start(start) ?? throw new IOException("Could not start WMI fan guardian.");
+        _child.ErrorDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("WMI fan guardian: " + e.Data); };
+        _child.OutputDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("WMI fan guardian: " + e.Data); };
+        _child.BeginErrorReadLine(); _child.BeginOutputReadLine();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(15));
+        var readyPath = Path.Combine(SessionDirectory, "ready.json");
+        while (!File.Exists(readyPath))
+        {
+            if (_child.HasExited) throw new IOException("WMI fan guardian failed before READY; no target dispatched.");
+            await Task.Delay(50, deadline.Token).ConfigureAwait(false);
+        }
+        using var ready = JsonDocument.Parse(File.ReadAllText(readyPath));
+        var r = ready.RootElement;
+        if (r.GetProperty("OwnerPid").GetInt32() != _ownerPid || r.GetProperty("OwnerStartUtcTicks").GetInt64() != _ownerStart ||
+            r.GetProperty("GuardianPid").GetInt32() != _child.Id ||
+            r.GetProperty("GuardianStartUtcTicks").GetInt64() != _child.StartTime.ToUniversalTime().Ticks ||
+            !r.GetProperty("DirectEcProhibited").GetBoolean() || r.GetProperty("LeasePath").GetString() != LeasePath)
+            throw new IOException("WMI guardian READY identity mismatch.");
+        EnsureAlive();
+    }
+
+    public void EnsureAlive()
+    {
+        if (_child is null || _child.HasExited || _released || !File.Exists(LeasePath) ||
+            File.Exists(Path.Combine(SessionDirectory, "stop.signal")))
+            throw new IOException("WMI fan guardian session is closed or unavailable.");
+    }
+    public void Heartbeat() => WmiFanExperiment.WriteJson(Path.Combine(SessionDirectory, "heartbeat.json"),
+        new { Pid = _ownerPid, ElapsedMs = _clock.ElapsedMilliseconds });
+    public void PersistIntent(int level)
+    {
+        EnsureAlive();
+        WmiFanExperiment.WriteJson(Path.Combine(SessionDirectory, "write-intent.json"), new
+        { OwnerPid = _ownerPid, OwnerStartUtcTicks = _ownerStart, Level = level, Utc = DateTimeOffset.UtcNow });
+        EnsureAlive();
+    }
+
+    public async Task<FanWmiReleaseEvidence> ReleaseAsync(CancellationToken token)
+    {
+        _released = true;
+        if (_child is null) return new(false, false, !File.Exists(LeasePath), false, ReportPath, "NO_SESSION");
+        File.WriteAllText(Path.Combine(SessionDirectory, "stop.signal"), "CLIENT_RELEASE");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        await _child.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
+        if (!File.Exists(ReportPath)) throw new IOException("WMI guardian exited without release report; retain the lease.");
+        using var report = JsonDocument.Parse(File.ReadAllText(ReportPath));
+        var r = report.RootElement;
+        if (r.GetProperty("OwnerPid").GetInt32() != _ownerPid || r.GetProperty("OwnerStartUtcTicks").GetInt64() != _ownerStart ||
+            r.GetProperty("TargetProfileId").GetString() != Hp8C40TargetProfile.Instance.Id ||
+            !r.GetProperty("DirectEcProhibited").GetBoolean() || r.GetProperty("IndependentFirmwareOwnershipVerified").GetBoolean() ||
+            r.GetProperty("Failure").ValueKind != JsonValueKind.Null || _child.ExitCode != 0 || File.Exists(LeasePath))
+            throw new IOException("WMI release report failed identity/completion checks; review retained lease.");
+        return new(r.GetProperty("ReleaseRequestAccepted").GetBoolean(), r.GetProperty("LegacyDefaultRequestAccepted").GetBoolean(),
+            r.GetProperty("GuardianLeaseRetired").GetBoolean(), false, ReportPath, r.GetProperty("ExitReason").GetString()!);
+    }
+    public ValueTask DisposeAsync() { _child?.Dispose(); return ValueTask.CompletedTask; }
+}

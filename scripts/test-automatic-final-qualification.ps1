@@ -15,7 +15,9 @@ $modulesDir = Join-Path $repoRoot 'modules'
 $appExe = Join-Path $repoRoot 'src\VictusFanControl.App\bin\Release\net8.0-windows\VictusFanControl.App.exe'
 $cli = Join-Path $repoRoot 'src\VictusFanControl\bin\Release\net8.0-windows\VictusFanControl.dll'
 $configPath = Join-Path $env:LOCALAPPDATA 'VictusFanControl\fan-configuration.json'
-$journalPath = Join-Path $env:ProgramData 'VictusFanControl\WatchdogM4\state\lease.json'
+$journalPath = Join-Path $env:ProgramData 'VictusFanControl\WmiFanGui\lease.json'
+$legacyJournalPath = Join-Path $env:ProgramData 'VictusFanControl\WatchdogM4\state\lease.json'
+$experimentJournalPath = Join-Path $env:ProgramData 'VictusFanControl\WmiFanExperiment\lease.json'
 
 $stamp = Get-Date -Format 'yyyy-MM-dd_HHmmss'
 $evidenceRoot = Join-Path $repoRoot ("logs\automatic-final-normal_{0}" -f $stamp)
@@ -183,52 +185,6 @@ function Assert-QualificationConfiguration {
     }
 }
 
-function Read-Setpoint {
-    $raw = (& dotnet $cli --probe-8c40-setpoint --modules-dir $modulesDir 2>&1 | Out-String)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Setpoint probe failed. Raw: $raw"
-    }
-
-    $line = $raw -split "[\r\n]+" |
-        Where-Object { $_ -match '^setpoint CPU=' } |
-        Select-Object -Last 1
-
-    $m = [regex]::Match([string]$line, '^setpoint CPU=(\d+) GPU=(\d+)$')
-    if (-not $m.Success) {
-        throw "Could not parse setpoint probe. Raw: $raw"
-    }
-
-    [pscustomobject]@{
-        Cpu = [int]$m.Groups[1].Value
-        Gpu = [int]$m.Groups[2].Value
-        Raw = [string]$line
-    }
-}
-
-function Assert-StableFirmware {
-    $consecutive = 0
-    $samples = @()
-
-    for ($i = 1; $i -le 8; $i++) {
-        $s = Read-Setpoint
-        $samples += $s
-        Write-Host ("Final firmware proof {0}/8: {1}" -f $i, $s.Raw)
-
-        if ($s.Cpu -eq 255 -and $s.Gpu -eq 255) {
-            $consecutive++
-            if ($consecutive -ge 2) {
-                return $samples
-            }
-        } else {
-            $consecutive = 0
-        }
-
-        Start-Sleep -Milliseconds 100
-    }
-
-    throw 'Final independent proof did not observe two consecutive FF/FF setpoints.'
-}
-
 function Wait-ForFile([string]$Path, [int]$Seconds, [string]$Label) {
     $deadline = (Get-Date).AddSeconds($Seconds)
     while ((Get-Date) -lt $deadline) {
@@ -250,6 +206,12 @@ function Wait-ForFile([string]$Path, [int]$Seconds, [string]$Label) {
 }
 
 function Export-QualificationEvidence {
+    if (Test-Path -LiteralPath $readyPath) {
+        $r = Get-Content -LiteralPath $readyPath -Raw | ConvertFrom-Json
+        if ($r.fanGuardianReportPath -and (Test-Path -LiteralPath $r.fanGuardianReportPath)) {
+            Copy-Item -LiteralPath $r.fanGuardianReportPath -Destination (Join-Path $evidenceRoot 'fan-guardian-report.json') -Force
+        }
+    }
     if ($WithPerformanceLimits -and $gui) {
         $sessions = Join-Path $env:LOCALAPPDATA 'VictusFanControl\Performance\gui'
         if (Test-Path -LiteralPath $sessions) {
@@ -316,7 +278,7 @@ function Write-Summary([string]$Result, [string]$Failure) {
     $stats = Get-DecisionStats
     [ordered]@{
         schemaVersion = 1
-        gate = 'HP-8C40-AUTOMATIC-FINAL-NORMAL-HARNESS'
+        gate = 'HP-8C40-AUTOMATIC-WMI-NORMAL-HARNESS'
         result = $Result
         failure = $Failure
         timestampUtc = (Get-Date).ToUniversalTime().ToString('O')
@@ -347,13 +309,12 @@ try {
     Assert-PowerAndConflicts
     Assert-QualificationConfiguration
 
-    if (Test-Path -LiteralPath $journalPath) {
-        throw "A durable fan watchdog journal already exists: $journalPath"
+    foreach ($pending in @($journalPath, $legacyJournalPath, $experimentJournalPath)) {
+        if (Test-Path -LiteralPath $pending) { throw "Pending fan lease blocks WMI qualification: $pending" }
     }
 
     foreach ($required in @(
-        (Join-Path $modulesDir 'IntelMSR.bin'),
-        (Join-Path $modulesDir 'LpcACPIEC.bin')
+        (Join-Path $modulesDir 'IntelMSR.bin')
     )) {
         if (-not (Test-Path -LiteralPath $required)) {
             throw "Required PawnIO module missing: $required"
@@ -399,7 +360,8 @@ try {
         $ready.normalUserAutomaticAuthorized -or
         -not $ready.dedicatedAutomaticAuthorized -or
         $ready.manualAuthorized -or
-        $ready.journalPresent) {
+        $ready.journalPresent -or -not $ready.directEcProhibited -or
+        $ready.gate -ne 'HP-8C40-AUTOMATIC-WMI-NORMAL') {
         throw 'READY marker did not prove the expected isolated qualification boundary.'
     }
 
@@ -483,14 +445,28 @@ try {
             throw 'Performance Guardian did not prove normal CPU/GPU release for this GUI process.'
         }
     }
-    [void](Assert-StableFirmware)
+    if (-not $result.directEcProhibited -or $result.deniedEcAccesses -ne 0 -or
+        -not $result.releaseRequestAccepted -or -not $result.legacyDefaultRequestAccepted -or
+        -not $result.guardianLeaseRetired -or $result.independentFirmwareOwnershipVerified) {
+        throw 'WMI-only result lacks truthful release evidence or contains EC access attempts.'
+    }
+    $fanReportPath = [IO.Path]::GetFullPath([string]$ready.fanGuardianReportPath)
+    $fanRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'VictusFanControl\FanWmi\gui')) + [IO.Path]::DirectorySeparatorChar
+    if (-not $fanReportPath.StartsWith($fanRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath $fanReportPath)) { throw 'Matching WMI fan guardian report missing.' }
+    $fanReport = Get-Content -LiteralPath $fanReportPath -Raw | ConvertFrom-Json
+    if ($fanReport.OwnerPid -ne $gui.Id -or $fanReport.OwnerStartUtcTicks -ne $guiStartUtcTicks -or
+        $fanReport.ExitReason -ne 'CLIENT_RELEASE' -or $fanReport.Failure -or
+        -not $fanReport.ReleaseRequestAccepted -or -not $fanReport.LegacyDefaultRequestAccepted -or
+        -not $fanReport.GuardianLeaseRetired -or -not $fanReport.DirectEcProhibited -or
+        $fanReport.IndependentFirmwareOwnershipVerified) { throw 'WMI fan guardian release report failed validation.' }
 
     $pass = $true
     Write-Summary 'PASS' ''
     Export-QualificationEvidence
 
     Write-Host ''
-    Write-Host 'AUTOMATIC FINAL NORMAL PATH: PASS' -ForegroundColor Green
+    Write-Host 'AUTOMATIC WMI NORMAL PATH: PASS (requests accepted; independent firmware ownership unverified)' -ForegroundColor Green
     Write-Host "Evidence: $evidenceRoot"
     Write-Host "ZIP:      $zipPath"
     Write-Host "SHA256:   $zipSha256"

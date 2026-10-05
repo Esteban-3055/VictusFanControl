@@ -622,6 +622,9 @@ jobs:
       - name: Modern Standby M0 observer self-test
         run: dotnet run --project .\src\VictusFanControl.ModernStandbyProbe -c Release --no-build -- --self-test
 
+      - name: WMI-only GUI fan guardian integration fixtures (no hardware IO)
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --wmi-fan-gui-self-test
+
       - name: Watchdog Gate B restore self-test
         run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --gate-b-self-test
 
