@@ -11,6 +11,7 @@ internal static class WmiFanExperimentBoundary
     internal static bool Control { get; private set; }
     private static int _recovering;
     private static bool _gui;
+    private static readonly object SessionGate = new();
     internal static Action? EnsureGuiGuardianAlive { get; set; }
     private sealed record Admission(TelemetrySnapshot Snapshot, Action EnsureThermalAllowed);
     private static Admission? _admission;
@@ -31,6 +32,35 @@ internal static class WmiFanExperimentBoundary
     }
 
     internal static void BeginRecovery() => Interlocked.Exchange(ref _recovering, 1);
+
+    internal static void RearmGuiAfterSuccessfulRelease(
+        string releasedDirectory,
+        string nextDirectory)
+    {
+        lock (SessionGate)
+        {
+            if (!_gui || !Recovering || SessionDirectory is null)
+                throw new InvalidOperationException("WMI GUI boundary is not in a rearmable recovery state.");
+
+            var released = Path.GetFullPath(releasedDirectory);
+            var current = Path.GetFullPath(SessionDirectory);
+            if (!string.Equals(released, current, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("WMI GUI release directory does not match the active boundary.");
+
+            if (File.Exists(Path.Combine(released, "native-inflight.json")) ||
+                File.Exists(Path.Combine(released, "native-uncertain.signal")))
+                throw new InvalidOperationException("WMI GUI boundary cannot rearm while native completion is uncertain.");
+
+            var next = Path.GetFullPath(nextDirectory);
+            Directory.CreateDirectory(next);
+            Volatile.Write(ref _admission, null);
+            SessionDirectory = next;
+            Control = true;
+            _gui = true;
+            Interlocked.Exchange(ref _recovering, 0);
+        }
+    }
+
     internal static void SetAdmission(TelemetrySnapshot snapshot, Action ensureThermalAllowed) =>
         Volatile.Write(ref _admission, new(snapshot, ensureThermalAllowed));
 
