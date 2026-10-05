@@ -42,8 +42,8 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     private float _scale = 1, _offsetX, _offsetY;
     private ProductHit? _dragSlider;
     private int _dragNode = -1;
-    private (ProductPage,ProductPowerProfile,AdaptiveCurveAxis,int,int)? _dragContext;
-    private (ProductPage,ProductPowerProfile,AdaptiveCurveAxis,int,int) DragContext => (Page,Editing,Axis,FanTab,PerformanceTab);
+    private (ProductPage,ProductPowerProfile,AdaptiveCurveAxis,int,int,bool)? _dragContext;
+    private (ProductPage,ProductPowerProfile,AdaptiveCurveAxis,int,int,bool) DragContext => (Page,Editing,Axis,FanTab,PerformanceTab,SimulationVisible);
     private string? _keyboardId;
     private readonly Dictionary<int,Font> _fonts = [];
     internal IReadOnlyList<ProductHit> Hits => _hits;

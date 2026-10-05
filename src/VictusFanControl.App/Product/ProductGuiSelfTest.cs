@@ -196,6 +196,13 @@ internal static class ProductGuiSelfTest
                 var point=form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3];var from=ScreenPoint(958+(float)(point.Input/110)*634,648-(float)((point.Level-30)/20)*350);var to=ScreenPoint(958+(float)(71d/110)*634,648);
                 canvas.PointerDown(from);canvas.PointerMove(to);canvas.PointerUp(to);require(form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Input==71,"Pointer node drag failed.");
                 form.HandleCommand("discard");
+                canvas.Refresh();var modeDraft=ProductProfilesStore.Serialize(form.Draft);var modePoint=form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3];
+                var modeStart=ScreenPoint(958+(float)(modePoint.Input/110)*634,648-(float)((modePoint.Level-30)/20)*350);
+                canvas.PointerDown(modeStart);require(canvas.Capture,"Editor/simulator transition fixture did not capture a node.");form.HandleCommand("curve-simulator");canvas.Refresh();canvas.PointerMove(to);canvas.PointerUp(to);
+                require(modeDraft==ProductProfilesStore.Serialize(form.Draft),"Captured node drag edited a hidden curve after switching to simulation.");
+                canvas.Refresh();var synthetic=canvas.Hits.Last(h=>h.Id=="sim-input-0");var syntheticStart=ScreenPoint(synthetic.Bounds.Left+2,synthetic.Bounds.Top+15);
+                canvas.PointerDown(syntheticStart);require(canvas.Capture,"Simulator/editor transition fixture did not capture a slider.");var inputs=canvas.SimulationInputs;form.HandleCommand("curve-editor");canvas.Refresh();canvas.PointerMove(to);canvas.PointerUp(to);
+                require(inputs==canvas.SimulationInputs,"Captured synthetic slider changed after switching to the editor.");
                 require(runtime.Commands==0,"Persistence/draft fixtures wrote hardware.");
                 var backup=Path.Combine(dir,"backup.json");var savedBytes=File.ReadAllText(path);var dirty=form.Dirty;
                 var export=form.ExportProfilesAsync(backup);PumpUntil(()=>export.IsCompleted,"Profile export blocked.");export.GetAwaiter().GetResult();
