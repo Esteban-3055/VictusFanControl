@@ -98,10 +98,20 @@ public sealed class AdaptiveFanProductionController
         _manualExecutionAuthorized = manualExecutionAuthorized;
         _automaticExecutionAuthorized = automaticExecutionAuthorized;
         var backendCapabilities = _coordinator.BackendCapabilities;
-        _minimumLevel = Math.Max(config.MinimumLevel, backendCapabilities.MinimumLevel);
-        _maximumLevel = Math.Min(config.MaximumLevel, backendCapabilities.MaximumLevel);
-        if (_minimumLevel > _maximumLevel)
-            throw new InvalidOperationException("Fan backend and policy have no overlapping Manual command range.");
+        if (_manualExecutionAuthorized && _coordinator.BackendCanWrite)
+        {
+            _minimumLevel = Math.Max(config.MinimumLevel, backendCapabilities.MinimumLevel);
+            _maximumLevel = Math.Min(config.MaximumLevel, backendCapabilities.MaximumLevel);
+            if (_minimumLevel > _maximumLevel)
+                throw new InvalidOperationException("Fan backend and policy have no overlapping Manual command range.");
+        }
+        else
+        {
+            // Read-only/closed-gate fallback must remain constructible. These
+            // values are display bounds only because Manual cannot dispatch.
+            _minimumLevel = config.MinimumLevel;
+            _maximumLevel = config.MaximumLevel;
+        }
     }
 
     public AdaptiveFanProductionMode Mode => _mode;
