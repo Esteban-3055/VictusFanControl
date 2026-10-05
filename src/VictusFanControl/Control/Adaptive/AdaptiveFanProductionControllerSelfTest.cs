@@ -17,6 +17,7 @@ public static class AdaptiveFanProductionControllerSelfTest
         failures += await TestAutomaticNoRetransmitAndSafetyReleaseAsync(output);
         failures += await TestManualRangeGuardAsync(output);
         failures += await TestBackendManualEnvelopeAsync(output);
+        failures += await TestReadOnlyFallbackRemainsConstructibleAsync(output);
         failures += await TestCustomModeHandoffAsync(output);
         failures += await TestModeSwitchWaitsForInFlightManualApplyAsync(output);
         failures += await TestSafetyRestoreWinsConcurrentModeSwitchAsync(output);
@@ -242,6 +243,26 @@ public static class AdaptiveFanProductionControllerSelfTest
             backend.EnterCalls == 0 &&
             backend.ApplyCalls == 0 &&
             backend.RestoreCalls == 0);
+    }
+
+    private static async Task<int> TestReadOnlyFallbackRemainsConstructibleAsync(TextWriter output)
+    {
+        await using var coordinator = new FanControlCoordinator(new DisabledFanControlBackend());
+        var controller = new AdaptiveFanProductionController(
+            coordinator, BuildConfig(), false, false);
+
+        var manual = await controller.SetModeAsync(
+            AdaptiveFanProductionMode.Manual, CancellationToken.None);
+
+        return Report(
+            output,
+            "read-only backend fallback stays constructible and cannot open Manual",
+            !controller.ManualExecutionAuthorized &&
+            !controller.AutomaticExecutionAuthorized &&
+            controller.ManualMinimumLevel == BuildConfig().MinimumLevel &&
+            controller.ManualMaximumLevel == BuildConfig().MaximumLevel &&
+            manual.Action == AdaptiveFanProductionActionKind.Blocked &&
+            coordinator.Authority == FanAuthority.Firmware);
     }
 
     private static async Task<int> TestCustomModeHandoffAsync(TextWriter output)
