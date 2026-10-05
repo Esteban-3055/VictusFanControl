@@ -15,7 +15,14 @@ if ($Mode -eq 'Verify') { return }
 $app = Join-Path $root 'VictusFanControl-0.4.0-rc.1-win-x64/app'
 Push-Location $app
 try {
-    if ($Mode -eq 'SelfTest') { & (Join-Path $app 'VictusFanControl.App.exe') --product-gui-self-test }
-    else { & (Join-Path $app 'VictusFanControl.App.exe') --modules-dir (Join-Path $app 'modules') }
-    if ($LASTEXITCODE -ne 0) { throw "GUI exited with code $LASTEXITCODE; retain logs and recovery journals." }
+    $start = New-Object System.Diagnostics.ProcessStartInfo
+    $start.FileName = Join-Path $app 'VictusFanControl.App.exe'
+    $start.UseShellExecute = $false
+    $start.WorkingDirectory = $app
+    $start.Arguments = if ($Mode -eq 'SelfTest') { '--product-gui-self-test' } else { '--modules-dir "' + (Join-Path $app 'modules') + '"' }
+    $process = [System.Diagnostics.Process]::Start($start)
+    try {
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 0) { throw "GUI exited with code $($process.ExitCode); retain logs and recovery journals." }
+    } finally { $process.Dispose() }
 } finally { Pop-Location }
