@@ -25,11 +25,12 @@ internal sealed class ProductForm : Form
     private Task _lifecycleRelease = Task.CompletedTask;
     private int _pendingCommands;
     private Task _startup = Task.CompletedTask;
+    private string? _startupFailure;
     private readonly TaskCompletionSource _shutdown = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false)
     {
         _modules=modules;_runtime=fixture;_profilesPath=profilesPath;
         string? notice=null;
@@ -52,11 +53,11 @@ internal sealed class ProductForm : Form
         Shown+=(_,_)=>
         {
             if(_creating)return;_creating=true;
-            _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory);
+            _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory,registerPowerNotificationsInFixture);
         };
         FormClosing+=OnClosing;FormClosed+=(_,_)=>{UnregisterPowerNotifications();_tray.Visible=false;};
     }
-    private async Task InitializeAsync(bool minimized,bool isolated,Func<Task<IProductRuntime>>? runtimeFactory)
+    private async Task InitializeAsync(bool minimized,bool isolated,Func<Task<IProductRuntime>>? runtimeFactory,bool registerPowerNotificationsInFixture)
     {
         try
         {
@@ -64,16 +65,17 @@ internal sealed class ProductForm : Form
             // A close during construction waits for this task, then disposes the returned service without starting it.
             if(_closing||IsDisposed)return;
             _runtime.Changed+=UpdateState;UpdateState(_runtime.State);
-            if(!isolated)RegisterPowerNotifications();
+            if(!isolated||registerPowerNotificationsInFixture)RegisterPowerNotifications();
             _runtime.Start();_presentationTimer.Start();
             if(!isolated){_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.StartupKnown=true;}
             if(!_closing&&!IsDisposed&&(minimized||_draft.StartMinimized))Hide();
         }
         catch(Exception ex)
         {
+            _startupFailure="No se pudo iniciar: "+ex.Message;
             if(_runtime is not null){_runtime.FenceLifecycle("Startup incompleto");_lifecycleRelease=Task.Run(()=>_runtime.ReleaseForLifecycleAsync("Startup incompleto"));}
             AppLog.Write("Product GUI startup: "+ex);
-            if(!_closing&&!IsDisposed)_canvas.Notice="No se pudo iniciar: "+ex.Message;
+            if(!_closing&&!IsDisposed)UpdateState(_runtime?.State??_canvas.State);
         }
         finally{if(!IsDisposed)_canvas.Invalidate();}
     }
@@ -90,6 +92,7 @@ internal sealed class ProductForm : Form
     {
         if(IsDisposed||_closing)return;
         if(InvokeRequired){if(IsHandleCreated)BeginInvoke(()=>UpdateState(state));return;}
+        if(_startupFailure is not null&&state.Failure is null)state=state with{Failure=_startupFailure};
         _canvas.State=state;if(state.Snapshot is not null)_canvas.AddSnapshot(state.Snapshot);
         _tray.Text=("VictusFanControl · "+state.FanMode+" · "+state.FanAuthority)[..Math.Min(63,("VictusFanControl · "+state.FanMode+" · "+state.FanAuthority).Length)];
         if(state.Failure is not null)_canvas.Notice=state.Failure;
@@ -290,15 +293,20 @@ internal sealed class ProductForm : Form
     [StructLayout(LayoutKind.Sequential)]private struct PowerSetting{internal Guid Id;internal uint Length;}
     private void RegisterPowerNotifications()
     {
-        _suspendRegistration=RegisterSuspendResumeNotification(Handle,0);
-        var id=SessionDisplay;_displayRegistration=RegisterPowerSettingNotification(Handle,ref id,0);
-        if(_suspendRegistration==IntPtr.Zero||_displayRegistration==IntPtr.Zero){UnregisterPowerNotifications();throw new InvalidOperationException("No se pudieron registrar las notificaciones lifecycle.");}
+        try
+        {
+            _suspendRegistration=RegisterSuspendResumeNotification(Handle,0);
+            if(_suspendRegistration==IntPtr.Zero)throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(),"No se pudieron registrar las notificaciones de suspensión/reanudación.");
+            var id=SessionDisplay;_displayRegistration=RegisterPowerSettingNotification(Handle,ref id,0);
+            if(_displayRegistration==IntPtr.Zero)throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(),"No se pudieron registrar las notificaciones de pantalla.");
+        }
+        catch{UnregisterPowerNotifications();throw;}
     }
     private void UnregisterPowerNotifications(){if(_displayRegistration!=IntPtr.Zero){UnregisterPowerSettingNotification(_displayRegistration);_displayRegistration=IntPtr.Zero;}if(_suspendRegistration!=IntPtr.Zero){UnregisterSuspendResumeNotification(_suspendRegistration);_suspendRegistration=IntPtr.Zero;}}
     [DllImport("user32.dll")]private static extern bool ReleaseCapture();
     [DllImport("user32.dll")]private static extern IntPtr SendMessage(IntPtr h,int msg,int w,int l);
     [DllImport("user32.dll",SetLastError=true)]private static extern IntPtr RegisterPowerSettingNotification(IntPtr h,ref Guid id,uint flags);
     [DllImport("user32.dll",SetLastError=true)]private static extern bool UnregisterPowerSettingNotification(IntPtr h);
-    [DllImport("powrprof.dll",SetLastError=true)]private static extern IntPtr RegisterSuspendResumeNotification(IntPtr h,uint flags);
-    [DllImport("powrprof.dll",SetLastError=true)]private static extern bool UnregisterSuspendResumeNotification(IntPtr h);
+    [DllImport("user32.dll",ExactSpelling=true,SetLastError=true)]private static extern IntPtr RegisterSuspendResumeNotification(IntPtr h,uint flags);
+    [DllImport("user32.dll",ExactSpelling=true,SetLastError=true)][return:MarshalAs(UnmanagedType.Bool)]private static extern bool UnregisterSuspendResumeNotification(IntPtr h);
 }

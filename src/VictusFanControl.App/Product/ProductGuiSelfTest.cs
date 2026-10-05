@@ -114,6 +114,32 @@ internal static class ProductGuiSelfTest
     }
     private static void RunLifecycleFixtures(Action<bool,string> require)
     {
+        // Exercise the production P/Invoke bindings against a real HWND, with no hardware runtime.
+        for(int i=0;i<3;i++)
+        {
+            var native=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:native,fixtureProfiles:new ProductProfiles(),registerPowerNotificationsInFixture:true);
+            form.Show();PumpUntil(()=>native.Starts==1||form.Canvas.State.Failure is not null,"Native power-notification startup did not complete.");
+            require(native.Starts==1&&form.Canvas.State.Failure is null,"Native power notifications prevented startup: "+form.Canvas.State.Failure);
+            var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Native power-notification shutdown failed.");exit.GetAwaiter().GetResult();
+            require(native.Disposals==1&&native.Commands==0,"Native power-notification fixture leaked its runtime or applied hardware.");
+        }
+        var broken=new RecordingRuntime{StartFailure="fixture startup failure"};
+        using(var form=new ProductForm("fixture://modules",fixture:broken,fixtureProfiles:new ProductProfiles()))
+        {
+            form.Show();PumpUntil(()=>broken.Releases==1,"Incomplete startup did not release its lifecycle boundary.");
+            require(broken.Fences==1&&form.Canvas.State.Failure?.Contains("fixture startup failure")==true,"Startup failure was not preserved in the diagnostic state.");
+            broken.Publish(broken.State);require(form.Canvas.State.Failure?.Contains("fixture startup failure")==true,"A later presentation update erased startup failure.");
+            var dir=Path.Combine(Path.GetTempPath(),"vfc-startup-diagnostic-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(dir);
+            try
+            {
+                var path=Path.Combine(dir,"diagnostic.zip");var export=form.ExportDiagnosticsAsync(path);PumpUntil(()=>export.IsCompleted,"Startup failure export did not finish.");export.GetAwaiter().GetResult();
+                using var zip=System.IO.Compression.ZipFile.OpenRead(path);using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());
+                using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());require(state.RootElement.GetProperty("Failure").GetString()?.Contains("fixture startup failure")==true,"Export omitted startup failure.");
+            }
+            finally{Directory.Delete(dir,true);}
+            var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Failed-startup fixture shutdown failed.");require(broken.Disposals==1&&broken.Commands==0,"Failed startup acquired authority or leaked its runtime.");
+        }
+        Console.WriteLine("PASS: real Windows suspend/display registration and unregister, three cycles, startup failure retained in diagnostic ZIP, zero hardware commands.");
         using(var reverse=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),fixtureProfiles:new ProductProfiles()))
         {
             reverse.Show();Application.DoEvents();reverse.Canvas.Focus();reverse.Canvas.Refresh();reverse.Canvas.HandleKey(Keys.Shift|Keys.Tab);
@@ -311,9 +337,9 @@ internal static class ProductGuiSelfTest
         public ProductRuntimeState State {get;}=new();
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;
         internal TaskCompletionSource? ReleaseGate,ManualGate;
-        internal string? CommandFailure;
+        internal string? CommandFailure,StartFailure;
         internal void Publish(ProductRuntimeState state)=>Changed?.Invoke(state);
-        public void Start(){Starts++;Changed?.Invoke(State);}
+        public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
         public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
         public Task ApplyManualAsync(int level){Commands++;return Task.CompletedTask;}
         public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}

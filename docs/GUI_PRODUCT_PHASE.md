@@ -255,3 +255,20 @@ Core regression compares virtual phases with the prepared inertia policy; GUI
 fixtures check simulator authority isolation/reset, portable-file failure handling,
 draft-only import, bounded diagnostic content and preservation of saved preferences.
 Automatic normal and custom GPU gates remain closed; Blocks 2/3 stay paused.
+
+## Physical startup diagnostic and native notification regression (2026-10-05)
+
+The first product-GUI startup on the exact 8C40/F.18 target failed before telemetry
+started. The supplied diagnostic recorded `EntryPointNotFoundException` for
+`RegisterSuspendResumeNotification` in `powrprof.dll`; Firmware authority and no
+Performance session were reported. This is a failed startup observation, not a
+physical GUI PASS. Both suspend/resume bindings belong to `user32.dll` and are now
+corrected. Registration failure cleans up partial registrations and captures the
+Win32 error immediately. Startup exceptions remain in the presentation/diagnostic
+state, even if a later update or export changes the transient notice.
+
+The Windows GUI self-test now uses the production registration/unregistration
+path on real window handles for three cycles with recording runtime ports. It
+also injects a startup exception and verifies its exported diagnostic. No hardware
+runtime is constructed by these fixtures. Repeat the real startup/telemetry step
+with the corrected package before continuing hardware-control tests.
