@@ -53,9 +53,11 @@ public sealed class AdaptiveFanPolicyShadowEvaluator
         _preparedAutomatic = preparedAutomatic;
         if (preparedAutomatic)
         {
-            _preparedEngine = configuration is null
-                ? new AdaptiveFanInertiaPolicy(Hp8C40AutomaticPolicy.Create(config))
-                : new AdaptiveFanInertiaPolicy(configuration.BuildPolicy(), configuration.Tuning);
+            var preparedPolicy = Hp8C40AutomaticPolicy.Create(
+                configuration?.BuildPolicy() ?? config);
+            _preparedEngine = new AdaptiveFanInertiaPolicy(
+                preparedPolicy,
+                configuration?.Tuning);
             _admission = new Hp8C40AutomaticThermalAdmission(hardware);
         }
     }
