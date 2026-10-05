@@ -373,6 +373,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         if(hit.Slider){_dragSlider=hit;Capture=true;EditSlider(hit,p);}
         else Command?.Invoke(hit.Id);
     }
+    internal bool IsHeaderDrag(Point point){var p=Virtual(point);return p.X>=0&&p.X<1430&&p.Y>=0&&p.Y<64;}
     private void EditSlider(ProductHit hit,PointF point) => ValueEdited?.Invoke(hit.Id,Math.Clamp((int)Math.Round(hit.Min+(point.X-hit.Bounds.Left)/hit.Bounds.Width*(hit.Max-hit.Min)),hit.Min,hit.Max));
     protected override void OnMouseMove(MouseEventArgs e)
     {

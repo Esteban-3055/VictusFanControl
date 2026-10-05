@@ -31,8 +31,8 @@ internal sealed class ProductForm : Form
         MinimumSize=new(1040,660);ClientSize=new(1344,756);StartPosition=FormStartPosition.CenterScreen;
         _canvas.Profiles=_draft;_canvas.Notice=notice??"";Controls.Add(_canvas);
         _canvas.Command+=HandleCommand;_canvas.ValueEdited+=EditValue;_canvas.NodeEdited+=EditNode;
-        _canvas.MouseDown+=(_,e)=>{if(e.Button==MouseButtons.Left&&e.Y<Height*64/941&&e.X<Width*1430/1672){ReleaseCapture();SendMessage(Handle,0xA1,2,0);}};
-        _canvas.MouseDoubleClick+=(_,e)=>{if(e.Y<Height*64/941&&e.X<Width*1430/1672)ToggleMaximize();};
+        _canvas.MouseDown+=(_,e)=>{if(e.Button==MouseButtons.Left&&_canvas.IsHeaderDrag(e.Location)){ReleaseCapture();SendMessage(Handle,0xA1,2,0);}};
+        _canvas.MouseDoubleClick+=(_,e)=>{if(_canvas.IsHeaderDrag(e.Location))ToggleMaximize();};
         var menu=new ContextMenuStrip();menu.Items.Add("Abrir VictusFanControl",null,(_,_)=>ShowFromTray());
         menu.Items.Add("Volver a Firmware",null,async(_,_)=>await RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask));
         menu.Items.Add("Liberar CPU / GPU",null,async(_,_)=>await RunAsync(()=>_runtime?.ReleasePerformanceAsync()??Task.CompletedTask));

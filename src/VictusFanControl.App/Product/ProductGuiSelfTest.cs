@@ -44,6 +44,9 @@ internal static class ProductGuiSelfTest
                 canvas.Refresh();Application.DoEvents();using var bitmap=new Bitmap(canvas.Width,canvas.Height);canvas.DrawToBitmap(bitmap,new(0,0,bitmap.Width,bitmap.Height));
                 bitmap.Save(Path.Combine(output,name+".png"),ImageFormat.Png);
                 Require(canvas.Hits.All(h=>h.Bounds.Left>=0&&h.Bounds.Top>=0&&h.Bounds.Right<=1673&&h.Bounds.Bottom<=942),"Hit area outside reference surface.");
+                var scale=Math.Min(canvas.Width/1672f,canvas.Height/941f);var ox=(canvas.Width-1672*scale)/2;var oy=(canvas.Height-941*scale)/2;
+                Require(canvas.IsHeaderDrag(new((int)(ox+100*scale),(int)(oy+30*scale))),"Scaled header lost window dragging.");
+                Require(!canvas.IsHeaderDrag(new((int)(ox+1540*scale),(int)(oy+30*scale))),"Window action was mistaken for dragging.");
                 Require(bitmap.Size==canvas.Size,"Render dimensions changed.");
                 Require(bitmap.GetPixel(bitmap.Width/2,bitmap.Height/2).A==255,"Render is transparent.");
             }
