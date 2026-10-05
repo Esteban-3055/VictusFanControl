@@ -18,6 +18,8 @@ public static class AdaptiveFanProductionControllerSelfTest
         failures += await TestManualRangeGuardAsync(output);
         failures += await TestBackendManualEnvelopeAsync(output);
         failures += await TestCustomModeHandoffAsync(output);
+        failures += await TestModeSwitchWaitsForInFlightManualApplyAsync(output);
+        failures += await TestSafetyRestoreWinsConcurrentModeSwitchAsync(output);
         failures += await TestManualFreshSafetyRefreshAndRetryAsync(output);
         failures += await TestManualFreshSafetyExhaustionRestoresAsync(output);
         failures += await TestQualificationInterruptionAsync(output);
@@ -291,6 +293,106 @@ public static class AdaptiveFanProductionControllerSelfTest
             firmware.Action == AdaptiveFanProductionActionKind.RestoreFirmware &&
             backend.RestoreCalls == 1 &&
             coordinator.Authority == FanAuthority.Firmware);
+    }
+
+    private static async Task<int> TestModeSwitchWaitsForInFlightManualApplyAsync(TextWriter output)
+    {
+        var applyStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseApply = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var backend = new RecordingBackend
+        {
+            DuringApply = async _ =>
+            {
+                applyStarted.TrySetResult();
+                await releaseApply.Task.ConfigureAwait(false);
+            }
+        };
+        await using var coordinator = new FanControlCoordinator(backend);
+        var controller = new AdaptiveFanProductionController(
+            coordinator, BuildConfig(), true, true);
+
+        _ = await controller.SetModeAsync(
+            AdaptiveFanProductionMode.Manual, CancellationToken.None);
+
+        var t0 = DateTimeOffset.UtcNow;
+        var snapshot = BuildSnapshot(t0, 55, 50);
+        var applying = controller.ApplyManualAsync(
+            30, BuildSafety(snapshot), CancellationToken.None).AsTask();
+
+        await applyStarted.Task.ConfigureAwait(false);
+        var switching = controller.SetModeAsync(
+            AdaptiveFanProductionMode.Automatic, CancellationToken.None).AsTask();
+
+        var switchedBeforeApplyCompleted =
+            await Task.WhenAny(switching, Task.Delay(100)).ConfigureAwait(false) == switching;
+
+        releaseApply.TrySetResult();
+        var applied = await applying.ConfigureAwait(false);
+        var switched = await switching.ConfigureAwait(false);
+
+        return Report(
+            output,
+            "mode switch waits for an in-flight Manual Apply and then preserves the Custom session",
+            !switchedBeforeApplyCompleted &&
+            applied.Action == AdaptiveFanProductionActionKind.EnterCustomAndApply &&
+            switched.Action == AdaptiveFanProductionActionKind.HoldCustom &&
+            controller.Mode == AdaptiveFanProductionMode.Automatic &&
+            coordinator.Authority == FanAuthority.Custom &&
+            backend.ApplyCalls == 1 &&
+            backend.RestoreCalls == 0);
+    }
+
+    private static async Task<int> TestSafetyRestoreWinsConcurrentModeSwitchAsync(TextWriter output)
+    {
+        var restoreStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRestore = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var backend = new RecordingBackend
+        {
+            DuringRestore = async _ =>
+            {
+                restoreStarted.TrySetResult();
+                await releaseRestore.Task.ConfigureAwait(false);
+            }
+        };
+        await using var coordinator = new FanControlCoordinator(backend);
+        var controller = new AdaptiveFanProductionController(
+            coordinator, BuildConfig(), true, true);
+
+        _ = await controller.SetModeAsync(
+            AdaptiveFanProductionMode.Manual, CancellationToken.None);
+
+        var t0 = DateTimeOffset.UtcNow;
+        var safeSnapshot = BuildSnapshot(t0, 55, 50);
+        _ = await controller.ApplyManualAsync(
+            30, BuildSafety(safeSnapshot), CancellationToken.None);
+
+        var unsafeSnapshot = BuildSnapshot(t0 + TimeSpan.FromSeconds(1), 70, 87);
+        var unsafeSafety = BuildSafety(unsafeSnapshot);
+        var restoring = coordinator.EnforceSafetyAsync(
+            unsafeSafety,
+            "synthetic concurrent safety handoff",
+            CancellationToken.None).AsTask();
+
+        await restoreStarted.Task.ConfigureAwait(false);
+        var switching = controller.SetModeAsync(
+            AdaptiveFanProductionMode.Automatic, CancellationToken.None).AsTask();
+
+        var switchedBeforeRestoreCompleted =
+            await Task.WhenAny(switching, Task.Delay(100)).ConfigureAwait(false) == switching;
+
+        releaseRestore.TrySetResult();
+        _ = await restoring.ConfigureAwait(false);
+        var switched = await switching.ConfigureAwait(false);
+
+        return Report(
+            output,
+            "Safety restore wins a concurrent custom-mode switch; the switch observes stable Firmware authority",
+            !switchedBeforeRestoreCompleted &&
+            switched.Action == AdaptiveFanProductionActionKind.HoldFirmware &&
+            controller.Mode == AdaptiveFanProductionMode.Automatic &&
+            coordinator.Authority == FanAuthority.Firmware &&
+            backend.ApplyCalls == 1 &&
+            backend.RestoreCalls == 1);
     }
 
     private static async Task<int> TestManualFreshSafetyRefreshAndRetryAsync(TextWriter output)
@@ -615,6 +717,8 @@ public static class AdaptiveFanProductionControllerSelfTest
         public bool Active { get; private set; }
         public Action? AfterEnter { get; set; }
         public Func<CancellationToken, ValueTask>? DuringEnter { get; set; }
+        public Func<CancellationToken, ValueTask>? DuringApply { get; set; }
+        public Func<CancellationToken, ValueTask>? DuringRestore { get; set; }
         public List<FanCommand> Commands { get; } = [];
 
         public ValueTask ProbeControlDependencyAsync(CancellationToken cancellationToken)
@@ -639,20 +743,22 @@ public static class AdaptiveFanProductionControllerSelfTest
             AfterEnter?.Invoke();
         }
 
-        public ValueTask ApplyAsync(FanCommand command, CancellationToken cancellationToken)
+        public async ValueTask ApplyAsync(FanCommand command, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ApplyCalls++;
             Commands.Add(command);
-            return ValueTask.CompletedTask;
+            if (DuringApply is not null)
+                await DuringApply(cancellationToken).ConfigureAwait(false);
         }
 
-        public ValueTask RestoreFirmwareAutoAsync(CancellationToken cancellationToken)
+        public async ValueTask RestoreFirmwareAutoAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             RestoreCalls++;
+            if (DuringRestore is not null)
+                await DuringRestore(cancellationToken).ConfigureAwait(false);
             Active = false;
-            return ValueTask.CompletedTask;
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
