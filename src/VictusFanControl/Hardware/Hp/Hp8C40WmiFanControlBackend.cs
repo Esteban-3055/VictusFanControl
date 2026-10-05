@@ -28,9 +28,11 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
 {
     private readonly IWmiFanGuiGuardian _guardian;
     private readonly Func<CancellationToken, ValueTask<HpWmiFanProofSample>> _read;
-    private readonly WmiFanSession _session;
+    private readonly Func<HpBiosRequest, int> _send;
+    private WmiFanSession _session;
     private bool _active;
-    private bool _closed;
+    private bool _releaseInProgress;
+    private bool _reentryBlocked;
     internal FanWmiReleaseEvidence? ReleaseEvidence { get; private set; }
     internal string GuardianReportPath => _guardian.ReportPath;
     public event EventHandler<string>? CommandAccepted;
@@ -45,7 +47,8 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     {
         _guardian = guardian;
         HpOmenBiosWmiClient? client = null;
-        _session = new WmiFanSession(send ?? (r => (client ??= new HpOmenBiosWmiClient()).Send(r)), guardian.PersistIntent);
+        _send = send ?? (r => (client ??= new HpOmenBiosWmiClient()).Send(r));
+        _session = new WmiFanSession(_send, guardian.PersistIntent);
         var fans = new HpWmiFanProofReader();
         _read = read ?? fans.ReadFreshAsync;
     }
@@ -70,18 +73,23 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
 
     public async ValueTask EnterCustomModeAsync(CancellationToken token)
     {
-        if (_closed) throw new FanControlAdmissionException("WMI session was released; restart the GUI for a new supervised session.");
+        if (_reentryBlocked)
+            throw new FanControlAdmissionException("WMI session recovery is unresolved; re-entry remains blocked.");
+        if (_releaseInProgress)
+            throw new FanControlAdmissionException("WMI session release is still in progress.");
         if (_active) return;
         await _guardian.StartAsync(token).ConfigureAwait(false);
         _guardian.EnsureAlive();
         _guardian.Heartbeat();
+        ReleaseEvidence = null;
         _active = true; // Local admission only; no native setter yet.
     }
 
     public async ValueTask ApplyAsync(FanCommand command, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (!_active || _closed) throw new InvalidOperationException("WMI fan admission is closed.");
+        if (!_active || _releaseInProgress || _reentryBlocked)
+            throw new InvalidOperationException("WMI fan admission is closed.");
         if (command.CpuLevel != command.GpuLevel) throw new ArgumentException("WMI session requires equal fan levels.");
         _guardian.EnsureAlive();
         FanDispatchAdmissionScope.EnsureAllowed();
@@ -103,10 +111,12 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
 
     public async ValueTask RestoreFirmwareAutoAsync(CancellationToken token)
     {
-        if (_closed && ReleaseEvidence?.GuardianLeaseRetired == true) return;
-        _closed = true;
-        // Stop admission synchronously before asking the detached process to
-        // drain the shared native boundary and send FF/FF -> LegacyDefault.
+        if (!_active)
+            return;
+        if (_reentryBlocked)
+            throw new InvalidOperationException("WMI session recovery is unresolved; release cannot be retried blindly.");
+
+        _releaseInProgress = true;
         WmiFanExperimentBoundary.BeginRecovery();
         try
         {
@@ -117,6 +127,8 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
         }
         catch (Exception guardianFailure)
         {
+            _releaseInProgress = false;
+            _reentryBlocked = true;
             if (!_session.MayHaveWritten) throw;
             // Match the experiment's local fallback after supervisor loss.
             // Never overlap a pending native RPM query/setter, never retire the
@@ -135,12 +147,21 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
             throw new InvalidOperationException("Local WMI release/default requests accepted after guardian failure; " +
                 "guardian lease retained and re-entry blocked: " + guardianFailure.Message, guardianFailure);
         }
+
         if (!ReleaseEvidence.GuardianLeaseRetired ||
             (_session.MayHaveWritten && (!ReleaseEvidence.ReleaseRequestAccepted || !ReleaseEvidence.LegacyDefaultRequestAccepted)))
-            throw new InvalidOperationException("WMI guardian release is incomplete; retain lease and block re-entry.");
+        {
+            _releaseInProgress = false;
+            _reentryBlocked = true;
+            throw new InvalidOperationException("WMI guardian release is incomplete; retain fail-closed re-entry block.");
+        }
+
         _active = false;
+        _session = new WmiFanSession(_send, _guardian.PersistIntent);
+        _releaseInProgress = false;
+        _reentryBlocked = false;
         LastRestoreEvidence = new(false, true, true, DateTimeOffset.UtcNow,
-            "Guardian release requests accepted; independent firmware ownership unverified (WMI-only).");
+            "Guardian release requests accepted; independent firmware ownership unverified (WMI-only); a new supervised session may be armed later.");
     }
 
     public async ValueTask DisposeAsync()
