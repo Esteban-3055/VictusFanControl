@@ -231,7 +231,7 @@ internal sealed class ProductRuntime : IProductRuntime
     {
         var source = "Unknown";
         try { var reading = new WindowsPerformancePowerSourceReader().Read(); if (reading.Succeeded) source = reading.Source.ToString(); } catch { }
-        var p = _performance.LastStatus;
+        var p = _performance.LastStatusFresh ? _performance.LastStatus : null;
         ProductRuntimeState state;
         lock (_stateSync)
         {

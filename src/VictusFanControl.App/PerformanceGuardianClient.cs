@@ -21,8 +21,16 @@ internal sealed class PerformanceGuardianClient
     internal PerformanceGuiSessionConfiguration? AppliedConfiguration { get; private set; }
     internal string? GuardianReportPath { get; private set; }
     internal bool HasProcess => _process is not null;
-    internal bool LimitsActive => _process is { HasExited: false } && LastStatus is { Ok: true, SessionEnabled: true, RuntimeFailure: null } s &&
-        DateTime.UtcNow.Ticks - Interlocked.Read(ref _lastStatusUtcTicks) < TimeSpan.FromSeconds(6).Ticks &&
+    internal bool LastStatusFresh
+    {
+        get
+        {
+            try { return LastStatus is not null && IsStatusFresh(DateTime.UtcNow.Ticks,Interlocked.Read(ref _lastStatusUtcTicks),_process is { HasExited:false }); }
+            catch(InvalidOperationException) { return false; }
+        }
+    }
+    internal static bool IsStatusFresh(long nowTicks,long observedTicks,bool ownerAlive) => ownerAlive&&observedTicks>0&&nowTicks>=observedTicks&&nowTicks-observedTicks<TimeSpan.FromSeconds(6).Ticks;
+    internal bool LimitsActive => LastStatusFresh && LastStatus is { Ok:true,SessionEnabled:true,RuntimeFailure:null } s &&
         (!s.CpuEnabled || s.CpuState == "Active") && (!s.GpuEnabled || s.GpuState == "ActiveUnverified");
 
     internal PerformanceGuardianClient(string modulesDirectory, Func<ProcessStartInfo, Process?>? startProcess = null)

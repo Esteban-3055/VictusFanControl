@@ -19,10 +19,12 @@ internal sealed class ProductForm : Form
     private bool _displayOff;
     private Task _lifecycleRelease = Task.CompletedTask;
     private int _pendingCommands;
+    private Task _startup = Task.CompletedTask;
+    private readonly TaskCompletionSource _shutdown = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null)
     {
         _modules=modules;_runtime=fixture;
         string? notice=null;
@@ -37,23 +39,35 @@ internal sealed class ProductForm : Form
         menu.Items.Add("Volver a Firmware",null,async(_,_)=>await RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask));
         menu.Items.Add("Liberar CPU / GPU",null,async(_,_)=>await RunAsync(()=>_runtime?.ReleasePerformanceAsync()??Task.CompletedTask));
         menu.Items.Add("Salir",null,(_,_)=>{_exitRequested=true;Close();});
-        _tray=new(){Icon=SystemIcons.Application,Text="VictusFanControl · Firmware",ContextMenuStrip=menu,Visible=fixture is null};
+        _tray=new(){Icon=SystemIcons.Application,Text="VictusFanControl · Firmware",ContextMenuStrip=menu,Visible=fixture is null&&runtimeFactory is null};
         _tray.DoubleClick+=(_,_)=>ShowFromTray();
-        Shown+=async(_,_)=>
+        Shown+=(_,_)=>
         {
             if(_creating)return;_creating=true;
-            if(fixture is not null){fixture.Changed+=UpdateState;UpdateState(fixture.State);return;}
-            try
-            {
-                _runtime=await Task.Run(()=>new ProductRuntime(_modules,Draft));_runtime.Changed+=UpdateState;UpdateState(_runtime.State);
-                RegisterPowerNotifications();_runtime.Start();
-                _canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.StartupKnown=true;
-                if(minimized||_draft.StartMinimized)Hide();
-            }
-            catch(Exception ex){if(_runtime is not null){_runtime.FenceLifecycle("Startup incompleto");_lifecycleRelease=Task.Run(()=>_runtime.ReleaseForLifecycleAsync("Startup incompleto"));}_canvas.Notice="No se pudo iniciar: "+ex.Message;AppLog.Write("Product GUI startup: "+ex);}
-            finally{_canvas.Invalidate();}
+            _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory);
         };
-        FormClosing+=OnClosing;FormClosed+=(_,_)=>{UnregisterPowerNotifications();_tray.Visible=false;_tray.Dispose();};
+        FormClosing+=OnClosing;FormClosed+=(_,_)=>{UnregisterPowerNotifications();_tray.Visible=false;};
+    }
+    private async Task InitializeAsync(bool minimized,bool isolated,Func<Task<IProductRuntime>>? runtimeFactory)
+    {
+        try
+        {
+            if(_runtime is null)_runtime=await (runtimeFactory?.Invoke()??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,Draft)));
+            // A close during construction waits for this task, then disposes the returned service without starting it.
+            if(_closing||IsDisposed)return;
+            _runtime.Changed+=UpdateState;UpdateState(_runtime.State);
+            if(!isolated)RegisterPowerNotifications();
+            _runtime.Start();
+            if(!isolated){_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.StartupKnown=true;}
+            if(!_closing&&!IsDisposed&&(minimized||_draft.StartMinimized))Hide();
+        }
+        catch(Exception ex)
+        {
+            if(_runtime is not null){_runtime.FenceLifecycle("Startup incompleto");_lifecycleRelease=Task.Run(()=>_runtime.ReleaseForLifecycleAsync("Startup incompleto"));}
+            AppLog.Write("Product GUI startup: "+ex);
+            if(!_closing&&!IsDisposed)_canvas.Notice="No se pudo iniciar: "+ex.Message;
+        }
+        finally{if(!IsDisposed)_canvas.Invalidate();}
     }
     private static ProductProfiles Migrate()
     {
@@ -75,6 +89,7 @@ internal sealed class ProductForm : Form
     }
     internal void HandleCommand(string id)
     {
+        if(_closing||IsDisposed)return;
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id.StartsWith("axis-")){_canvas.Axis=(AdaptiveCurveAxis)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
@@ -88,6 +103,11 @@ internal sealed class ProductForm : Form
             var current=key switch{"manual"=>_canvas.ManualLevel,"pl1"=>p.CpuPl1Watts,"pl2"=>p.CpuPl2Watts,"gpu"=>p.GpuMaximumMHz,_=>0};
             EditValue(key,current+(plus?1:-1));return;
         }
+        if(_canvas.Busy&&id is not("firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close"))return;
+        if(id=="fan-mode-1"&&(!_canvas.State.ManualAuthorized||_canvas.State.LifecycleBlocked))return;
+        if(id=="manual-apply"&&(!_canvas.State.ManualAuthorized||_canvas.State.FanMode!="Manual"||_canvas.State.Runtime!="Healthy"||_canvas.State.LifecycleBlocked))return;
+        if(id=="performance-apply"&&(!_canvas.State.PerformanceSupported||!_canvas.State.CanApplyPerformance||!(_draft.CpuEnabled||_draft.GpuEnabled)))return;
+        if(id=="performance-release"&&!_canvas.State.PerformanceProcessPresent)return;
         switch(id)
         {
             case "window-minimize":Hide();break;
@@ -178,14 +198,15 @@ internal sealed class ProductForm : Form
     }
     private void ToggleMaximize()=>WindowState=WindowState==FormWindowState.Maximized?FormWindowState.Normal:FormWindowState.Maximized;
     private void ShowFromTray(){Show();WindowState=FormWindowState.Normal;Activate();}
+    internal Task RequestExitAsync(){_exitRequested=true;Close();return _shutdown.Task;}
     private async void OnClosing(object? sender,FormClosingEventArgs e)
     {
         if(_disposedRuntime)return;
         if(e.CloseReason is not(CloseReason.WindowsShutDown or CloseReason.TaskManagerClosing)&&!_exitRequested){e.Cancel=true;Hide();return;}
         e.Cancel=true;if(_closing)return;_closing=true;_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
-        try {await _lifecycleRelease;if(_runtime is not null)await Task.Run(async()=>await _runtime.DisposeAsync());}
+        try {await _startup;await _lifecycleRelease;if(_runtime is not null)await Task.Run(async()=>await _runtime.DisposeAsync());}
         catch(Exception ex){Environment.ExitCode=171;AppLog.Write("Product shutdown unresolved: "+ex);}
-        finally{_disposedRuntime=true;_tray.Visible=false;Close();}
+        finally{_disposedRuntime=true;_tray.Visible=false;Close();_shutdown.TrySetResult();}
     }
     protected override void WndProc(ref Message m)
     {
@@ -197,23 +218,44 @@ internal sealed class ProductForm : Form
         }
         if(m.Msg==0x218&&_runtime is not null)
         {
-            var code=m.WParam.ToInt32();
+            var code=m.WParam.ToInt32();int? display=null;
             if(code==0x8013&&m.LParam!=IntPtr.Zero)
             {
                 var setting=Marshal.PtrToStructure<PowerSetting>(m.LParam);
-                if(setting.Id==SessionDisplay&&setting.Length>=4)
-                {
-                    var value=Marshal.ReadInt32(m.LParam,Marshal.SizeOf<PowerSetting>());
-                    if(value==0&&!_displayOff){_displayOff=true;_runtime.FenceLifecycle("SESSION_DISPLAY_STATUS/Off");_lifecycleRelease=Task.Run(()=>_runtime.ReleaseForLifecycleAsync("Display Off lifecycle"));}
-                    else if(value==1&&_displayOff){_displayOff=false;_ = ResumeAfterReleaseAsync();}
-                }
+                if(setting.Id==SessionDisplay&&setting.Length>=4)display=Marshal.ReadInt32(m.LParam,Marshal.SizeOf<PowerSetting>());
             }
-            else if(code==4){_runtime.FenceLifecycle("PBT_APMSUSPEND");_lifecycleRelease=Task.Run(()=>_runtime.ReleaseForLifecycleAsync("System suspend"));_lifecycleRelease.GetAwaiter().GetResult();}
-            else if(code is 6 or 7 or 18){if(!_displayOff)_ = ResumeAfterReleaseAsync();}
+            var operation=HandlePowerEventAsync(code,display);
+            if(code==4)operation.GetAwaiter().GetResult();
         }
         base.WndProc(ref m);
     }
-    private async Task ResumeAfterReleaseAsync(){await _lifecycleRelease;if(!_closing&&!_displayOff)_runtime?.ResumeTelemetry("Interactive resume");}
+    internal Task HandlePowerEventAsync(int code,int? display=null)
+    {
+        if(_closing||_runtime is null)return Task.CompletedTask;
+        if(code==0x8013)
+        {
+            if(display==0&&!_displayOff){_displayOff=true;_runtime.FenceLifecycle("SESSION_DISPLAY_STATUS/Off");return QueueLifecycleRelease("Display Off lifecycle");}
+            if(display==1&&_displayOff){_displayOff=false;return ResumeAfterReleaseAsync();}
+        }
+        else if(code==4){_runtime.FenceLifecycle("PBT_APMSUSPEND");return QueueLifecycleRelease("System suspend");}
+        else if(code is 6 or 7 or 18){if(!_displayOff)return ResumeAfterReleaseAsync();}
+        return Task.CompletedTask;
+    }
+    private Task QueueLifecycleRelease(string reason)
+    {
+        var previous=_lifecycleRelease;var runtime=_runtime!;
+        // Each boundary fences immediately; all queued releases finish before resume or exit.
+        return _lifecycleRelease=Task.Run(async()=>
+        {
+            try{await previous;await runtime.ReleaseForLifecycleAsync(reason);}
+            catch(Exception ex){AppLog.Write("Product lifecycle release failed: "+ex);UpdateState(runtime.State with{LifecycleBlocked=true,Failure="Liberación lifecycle no resuelta: "+ex.Message});}
+        });
+    }
+    private async Task ResumeAfterReleaseAsync()
+    {
+        await _lifecycleRelease;
+        if(!_closing&&!_displayOff)_runtime?.ResumeTelemetry("Interactive resume");
+    }
     private static readonly Guid SessionDisplay=new("2b84c20e-ad23-4ddf-93db-05ffbd7efca5");
     [StructLayout(LayoutKind.Sequential)]private struct PowerSetting{internal Guid Id;internal uint Length;}
     private void RegisterPowerNotifications()

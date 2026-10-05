@@ -128,3 +128,29 @@ no theme/language switches without implementation. Icons are deterministic vecto
 icons rather than copied generated artwork. Surface gradients and chart styles
 approximate the reference rendering; fidelity is reviewed against actual Windows
 captures, not claimed pixel-identical to generated images.
+
+## Follow-up: interaction and lifecycle hardening
+
+Continuation from `12d5c51b81047d3404838d4d2eabd9e471c02535` keeps Blocks 2/3
+paused and all normal hardware gates unchanged.
+
+- Closing during asynchronous runtime construction waits for the returned service
+  and disposes it without starting telemetry or registering notifications.
+- Display-Off and suspend fence immediately. Releases are queued, so resume and
+  tray Exit wait for every pending boundary rather than only the newest task.
+- The normal product presentation requires a live Guardian process and a response
+  less than six seconds old. Expired or future-dated status is not presented as
+  Active; a retained session is Recovering until a fresh response arrives.
+- Apply handlers recheck admission and busy state. Firmware remains available while
+  another command is pending. These checks supplement the backend protections.
+- Tab/Shift+Tab, slider arrows and accessible slider values use the same draft-only
+  edit path. Retained accessible controls resolve against the live page; unavailable
+  controls cannot dispatch an action. Ordinary typing no longer edits curve nodes.
+- Failed/Faulted states use red, Applying/Recovering use yellow, and disabled or
+  unsupported domains use muted text; CPU/GPU colors remain for active domains.
+
+The Windows product GUI test now includes delayed-construction Exit, queued
+lifecycle boundaries, display-Off maintenance resume, busy Apply/Firmware,
+keyboard and accessibility, freshness boundaries and status colors. All use
+recording ports; they do not qualify physical suspend, fan response or recovery.
+Actual hardware and multi-monitor DPI validation remain required.
