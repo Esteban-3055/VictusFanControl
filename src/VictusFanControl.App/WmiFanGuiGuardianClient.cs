@@ -14,7 +14,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     private readonly long _ownerStart;
     private bool _released;
     private string LeasePath => _fixture ? Path.Combine(SessionDirectory, "fixture-lease.json") : WmiFanGuiGuardianHost.LeasePath;
-    public string SessionDirectory { get; }
+    public string SessionDirectory { get; private set; }
     public string ReportPath => Path.Combine(SessionDirectory, "guardian-report.json");
 
     internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null)
@@ -23,8 +23,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         using var owner = Process.GetCurrentProcess();
         _ownerStart = owner.StartTime.ToUniversalTime().Ticks;
         if (!fixture && fixtureDirectory is not null) throw new ArgumentException("Fixture directory requires explicit fixture mode.");
-        SessionDirectory = fixtureDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "VictusFanControl", "FanWmi", "gui", Guid.NewGuid().ToString("N"));
+        SessionDirectory = fixtureDirectory ?? CreateSessionDirectory();
         Directory.CreateDirectory(SessionDirectory);
         if (!fixture)
         {
@@ -87,21 +86,66 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     public async Task<FanWmiReleaseEvidence> ReleaseAsync(CancellationToken token)
     {
         _released = true;
-        if (_child is null) return new(false, false, !File.Exists(LeasePath), false, ReportPath, "NO_SESSION");
-        File.WriteAllText(Path.Combine(SessionDirectory, "stop.signal"), "CLIENT_RELEASE");
+        var releasedDirectory = SessionDirectory;
+        var releasedReportPath = Path.Combine(releasedDirectory, "guardian-report.json");
+        var releasedLeasePath = _fixture
+            ? Path.Combine(releasedDirectory, "fixture-lease.json")
+            : WmiFanGuiGuardianHost.LeasePath;
+
+        if (_child is null)
+            return new(false, false, !File.Exists(releasedLeasePath), false, releasedReportPath, "NO_SESSION");
+
+        File.WriteAllText(Path.Combine(releasedDirectory, "stop.signal"), "CLIENT_RELEASE");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(20));
         await _child.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
-        if (!File.Exists(ReportPath)) throw new IOException("WMI guardian exited without release report; retain the lease.");
-        using var report = JsonDocument.Parse(File.ReadAllText(ReportPath));
+        if (!File.Exists(releasedReportPath))
+            throw new IOException("WMI guardian exited without release report; retain the lease.");
+
+        using var report = JsonDocument.Parse(File.ReadAllText(releasedReportPath));
         var r = report.RootElement;
-        if (r.GetProperty("OwnerPid").GetInt32() != _ownerPid || r.GetProperty("OwnerStartUtcTicks").GetInt64() != _ownerStart ||
+        if (r.GetProperty("OwnerPid").GetInt32() != _ownerPid ||
+            r.GetProperty("OwnerStartUtcTicks").GetInt64() != _ownerStart ||
             r.GetProperty("TargetProfileId").GetString() != Hp8C40TargetProfile.Instance.Id ||
-            !r.GetProperty("DirectEcProhibited").GetBoolean() || r.GetProperty("IndependentFirmwareOwnershipVerified").GetBoolean() ||
-            r.GetProperty("Failure").ValueKind != JsonValueKind.Null || _child.ExitCode != 0 || File.Exists(LeasePath))
+            !r.GetProperty("DirectEcProhibited").GetBoolean() ||
+            r.GetProperty("IndependentFirmwareOwnershipVerified").GetBoolean() ||
+            r.GetProperty("Failure").ValueKind != JsonValueKind.Null ||
+            _child.ExitCode != 0 ||
+            File.Exists(releasedLeasePath))
             throw new IOException("WMI release report failed identity/completion checks; review retained lease.");
-        return new(r.GetProperty("ReleaseRequestAccepted").GetBoolean(), r.GetProperty("LegacyDefaultRequestAccepted").GetBoolean(),
-            r.GetProperty("GuardianLeaseRetired").GetBoolean(), false, ReportPath, r.GetProperty("ExitReason").GetString()!);
+
+        var evidence = new FanWmiReleaseEvidence(
+            r.GetProperty("ReleaseRequestAccepted").GetBoolean(),
+            r.GetProperty("LegacyDefaultRequestAccepted").GetBoolean(),
+            r.GetProperty("GuardianLeaseRetired").GetBoolean(),
+            false,
+            releasedReportPath,
+            r.GetProperty("ExitReason").GetString()!);
+
+        _child.Dispose();
+        _child = null;
+
+        if (!_fixture)
+        {
+            var nextDirectory = CreateSessionDirectory();
+            WmiFanExperimentBoundary.RearmGuiAfterSuccessfulRelease(
+                releasedDirectory,
+                nextDirectory);
+            SessionDirectory = nextDirectory;
+            _clock.Restart();
+            _released = false;
+        }
+
+        return evidence;
     }
+
+    private static string CreateSessionDirectory() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "VictusFanControl",
+            "FanWmi",
+            "gui",
+            Guid.NewGuid().ToString("N"));
+
     public ValueTask DisposeAsync() { _child?.Dispose(); return ValueTask.CompletedTask; }
 }
