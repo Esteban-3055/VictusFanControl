@@ -18,7 +18,7 @@ blue GPU/load/RPM, yellow power and red/blue CPU/GPU charts.
 | Reference | Product surface | Backend-correct adaptation |
 |---|---|---|
 | 1 Home | Four authority/source cards, temperature/load, dual RPM | Actual state; no fabricated watts or ownership claim |
-| 2 Fan control | Firmware / Manual / Automatic cards, fixed-level slider, curve preview | Three real modes; no duplicate Custom mode; WMI 30–50 |
+| 2 Fan control | Firmware / Manual / Automatic cards, fixed-level slider, curve preview | Three real modes; no duplicate Custom mode; Manual WMI 10–50, prepared Automatic 30–50 |
 | 3 Fan telemetry | Temperatures, load/power and RPM cards | Missing/stale readings show unavailable; no invented Windows power-plan name |
 | 4 CPU RAPL | PL1/PL2 sliders, selection and application/status card | CPU 8–44 W / 8–114 W, PL2 >= PL1; two source profiles |
 | 5 Profiles | Exactly AC and Battery, independent details and navigation | No create/duplicate/delete of general presets |
@@ -164,7 +164,7 @@ Actual hardware and multi-monitor DPI validation remain required.
 The curve table now has aligned columns/grid, previous/next selection, and
 Home/End/PageUp/PageDown access to all 64 nodes. The graph identifies its editable
 CPU/GPU series and dashed peer reference; a yellow ring marks the selected node.
-Units and the WMI 30–50 envelope deliberately differ from percentage-based images.
+Units deliberately differ from percentage-based images; Manual WMI uses levels 10–50.
 Settings/Profiles offer explicit discard to the latest successfully saved draft.
 Saving flushes the new file before atomic replacement. Unsupported schema, duplicate
 JSON keys, null curves/points and invalid values fall back without replacing the
@@ -311,14 +311,53 @@ performance preference; loading does not rewrite the file. Previously clamped
 points are not reconstructed or silently replaced. New defaults retain the
 original candidate curve points instead of clamping them to 30.
 
-This is an editable demand model, not an expansion of physical qualification.
-The normal WMI backend and prepared Automatic actuation retain 30–50, and the
-Automatic execution gate remains closed. Manual levels 10–29 still require a
-separate WMI-only physical qualification and explicit backend promotion before
-being exposed as executable levels. No direct EC path is introduced.
+This is an editable demand model, not proof of hardware control. The earlier
+8C40 qualification already characterized every equal level 10–50 and passed
+production endpoint/restart/large-transition tests (see HARDWARE_8C40.md).
+The WMI-only migration had independently narrowed Manual to 30–50. That
+integration restriction is corrected below; the historical characterization
+is retained rather than requesting another full sweep. Prepared Automatic
+actuation retains 30–50 and its execution gate remains closed. No direct EC
+path is introduced.
 
 Regression coverage checks level-10 persistence and simulation, legacy range
 migration without point loss, unchanged prepared Automatic minimum, live
 playback/pause/input changes/hidden-page behavior/reset, and zero hardware
 commands from simulator interactions. Windows CI validates native GUI behavior;
 physical live-simulator acceptance remains pending on the new package.
+
+
+## Restore the qualified Manual 10–50 range through WMI-only GUI
+
+The exact target HP 8C40 / 63.43 / 9D0R1LA / F.18 already passed the full
+10–50 equal-level characterization, level-10 restart from stopped fans, large
+10/30/50 transitions and production endpoint regression documented in
+HARDWARE_8C40.md. Those tests used HP WMI setters with EC acknowledgement and
+dual tachometers. They establish the physical command range; they do not turn
+the current WMI-only request acceptance into independent ownership proof.
+
+Manual slider/edit clamping and backend capabilities now advertise 10–50.
+The GUI backend's command session explicitly selects minimum 10, including
+rearm after a clean release. The same session class keeps minimum 30 by default
+for the supervised Automatic experiment. The final native whitelist admits
+10–29 only in the GUI boundary; shadow, stop and recovery still prohibit normal
+commands, and asymmetric/out-of-range/malformed requests remain rejected.
+Guardian intent persistence also rejects levels outside 10–50 before writing.
+
+Changing the slider, opening Manual or loading preferences does not dispatch a
+fan setter; only explicit Apply does. Startup remains Firmware. SafetyGate,
+thermal thresholds, fresh RPM, durable intent before dispatch, guardian identity,
+no duplicate setter, native serialization, release/default and unknown-completion
+fences are unchanged. The legacy 88F8 target and Automatic gate are untouched.
+
+Deterministic regressions exercise GUI endpoint editing and explicit Apply(10),
+backend 10/29/50 payloads, outside-range/asymmetric refusal before intent, low-end
+rearm, failed low-end intent, guardian loss, and GUI-versus-experiment whitelist
+isolation. The real detached guardian fixture persists level-10 intent and
+completes its existing release/lease-retirement flow without hardware IO.
+
+Current product GUI hardware acceptance remains pending. The next operator
+check is a brief cool/light-load Manual 30 -> 10 -> Firmware integration test,
+with diagnostics before/after release. It is not a repeat of the historical
+full sweep and does not authorize Automatic or prove independent firmware
+ownership from WMI/RPM alone.

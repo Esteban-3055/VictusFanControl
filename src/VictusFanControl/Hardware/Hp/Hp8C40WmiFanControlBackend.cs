@@ -40,7 +40,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     public event EventHandler<string>? CommandAccepted;
     public string Name => "HP 8C40 WMI-only / supervised requests; hardware ownership unverified";
     public bool CanWrite => true;
-    public FanBackendCapabilities Capabilities => new("8C40", 30, 50, false);
+    public FanBackendCapabilities Capabilities => new("8C40", Hp8C40TargetProfile.MinimumValidatedFanLevel, Hp8C40TargetProfile.MaximumPhysicallyQualifiedFanLevel, false);
     public FanFirmwareRestoreEvidence LastRestoreEvidence { get; private set; }
 
     internal Hp8C40WmiFanControlBackend(IWmiFanGuiGuardian guardian,
@@ -50,7 +50,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
         _guardian = guardian;
         HpOmenBiosWmiClient? client = null;
         _send = send ?? (r => (client ??= new HpOmenBiosWmiClient()).Send(r));
-        _session = new WmiFanSession(_send, guardian.PersistIntent);
+        _session = new WmiFanSession(_send, guardian.PersistIntent, Capabilities.MinimumLevel);
         var fans = new HpWmiFanProofReader();
         _read = read ?? fans.ReadFreshAsync;
     }
@@ -160,7 +160,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
         }
 
         _active = false;
-        _session = new WmiFanSession(_send, _guardian.PersistIntent);
+        _session = new WmiFanSession(_send, _guardian.PersistIntent, Capabilities.MinimumLevel);
         _releaseInProgress = false;
         _reentryBlocked = false;
         LastRestoreEvidence = new(false, true, true, DateTimeOffset.UtcNow,

@@ -4,7 +4,7 @@ using VictusFanControl.Safety;
 
 namespace VictusFanControl.Runtime;
 
-/// <summary>Process-local whitelist plus cross-process serialization for the experiment only.</summary>
+/// <summary>Process-local whitelist plus cross-process serialization for the WMI experiment and GUI.</summary>
 internal static class WmiFanExperimentBoundary
 {
     internal static string? SessionDirectory { get; private set; }
@@ -70,7 +70,7 @@ internal static class WmiFanExperimentBoundary
     internal static void SetAdmission(TelemetrySnapshot snapshot, Action ensureThermalAllowed) =>
         Volatile.Write(ref _admission, new(snapshot, ensureThermalAllowed));
 
-    internal static bool IsAllowed(HpBiosRequest r, bool control, bool recovering, bool stopped)
+    internal static bool IsAllowed(HpBiosRequest r, bool control, bool recovering, bool stopped, bool gui = false)
     {
         if (r.Command != Hp8C40BiosFanControl.DefaultCommand || r.Payload is not { Length: 4 }) return false;
         if (r.CommandType == 0x2D && r.OutputSize == 128 && r.Payload.All(b => b == 0)) return true;
@@ -78,7 +78,7 @@ internal static class WmiFanExperimentBoundary
         if (recovering)
             return (r.CommandType == 0x2E && r.Payload.SequenceEqual(new byte[] { 255, 255, 0, 0 })) ||
                 (r.CommandType == 0x1A && r.Payload.SequenceEqual(new byte[] { 255, 0, 0, 0 }));
-        return !stopped && r.CommandType == 0x2E && r.Payload[0] is >= 30 and <= 50 &&
+        return !stopped && r.CommandType == 0x2E && r.Payload[0] >= (gui ? Hp8C40TargetProfile.MinimumValidatedFanLevel : 30) && r.Payload[0] <= 50 &&
             r.Payload[1] == r.Payload[0] && r.Payload[2] == 0 && r.Payload[3] == 0;
     }
 
@@ -86,7 +86,7 @@ internal static class WmiFanExperimentBoundary
     {
         if (_gui && Recovering && request.CommandType == Hp8C40BiosFanControl.GetFanLevelCommandType)
             throw new InvalidOperationException("WMI GUI recovery has closed new fan reads; drain existing native work before release.");
-        if (!IsAllowed(request, Control, Recovering, File.Exists(StopPath)))
+        if (!IsAllowed(request, Control, Recovering, File.Exists(StopPath), gui: _gui))
             throw new InvalidOperationException("Request is outside the WMI fan experiment lifecycle/whitelist.");
         if (request.CommandType == 0x2E && request.Payload[0] != 255)
         {

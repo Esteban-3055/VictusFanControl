@@ -77,6 +77,8 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         new { Pid = _ownerPid, ElapsedMs = _clock.ElapsedMilliseconds });
     public void PersistIntent(int level)
     {
+        if (level < Hp8C40TargetProfile.MinimumValidatedFanLevel || level > Hp8C40TargetProfile.MaximumPhysicallyQualifiedFanLevel)
+            throw new ArgumentOutOfRangeException(nameof(level));
         EnsureAlive();
         WmiFanExperiment.WriteJson(Path.Combine(SessionDirectory, "write-intent.json"), new
         { OwnerPid = _ownerPid, OwnerStartUtcTicks = _ownerStart, Level = level, Utc = DateTimeOffset.UtcNow });

@@ -26,7 +26,15 @@ internal static class WmiFanGuiIntegrationSelfTest
 
             var client = new WmiFanGuiGuardianClient(fixture: true);
             await client.StartAsync(default);
-            client.EnsureAlive(); client.PersistIntent(30); client.Heartbeat();
+            client.EnsureAlive();
+            foreach(var invalid in new[]{9,51})
+            {
+                var refused=false;try{client.PersistIntent(invalid);}catch(ArgumentOutOfRangeException){refused=true;}
+                if(!refused||File.Exists(Path.Combine(client.SessionDirectory,"write-intent.json")))throw new InvalidOperationException("Invalid Manual level created guardian intent.");
+            }
+            client.PersistIntent(10); client.Heartbeat();
+            using(var intent=JsonDocument.Parse(File.ReadAllText(Path.Combine(client.SessionDirectory,"write-intent.json"))))
+                if(intent.RootElement.GetProperty("Level").GetInt32()!=10)throw new InvalidOperationException("Detached guardian lost Manual low endpoint intent.");
             var release = await client.ReleaseAsync(default);
             if (release is not { ReleaseRequestAccepted: true, LegacyDefaultRequestAccepted: true,
                 GuardianLeaseRetired: true, IndependentFirmwareOwnershipVerified: false })

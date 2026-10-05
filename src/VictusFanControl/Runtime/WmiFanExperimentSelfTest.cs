@@ -90,6 +90,15 @@ internal static class WmiFanExperimentSelfTest
             var rpm = Hp8C40BiosFanControl.BuildGetFanLevelRequest();
             var level = Hp8C40BiosFanControl.BuildSetFanLevelRequest(30, 30);
             var release = Hp8C40BiosFanControl.BuildReleaseFanLevelRequest();
+            foreach(var target in new byte[]{10,29})
+            {
+                var low = Hp8C40BiosFanControl.BuildSetFanLevelRequest(target,target);
+                Check(WmiFanExperimentBoundary.IsAllowed(low,true,false,false,gui:true),"GUI low Manual command denied.");
+                Check(!WmiFanExperimentBoundary.IsAllowed(low,true,false,false),"Low GUI range leaked into experiment.");
+                Check(!WmiFanExperimentBoundary.IsAllowed(low,false,false,false,gui:true)&&!WmiFanExperimentBoundary.IsAllowed(low,true,true,false,gui:true)&&!WmiFanExperimentBoundary.IsAllowed(low,true,false,true,gui:true),"Low Manual bypassed shadow/recovery/stop fence.");
+            }
+            foreach(var payload in new byte[][]{[9,9,0,0],[51,51,0,0],[10,11,0,0],[10,10,1,0]})
+                Check(!WmiFanExperimentBoundary.IsAllowed(level with{Payload=payload},true,false,false,gui:true),"GUI whitelist admitted invalid low-range command.");
             Check(WmiFanExperimentBoundary.IsAllowed(rpm, false, false, false), "Shadow RPM denied.");
             Check(!WmiFanExperimentBoundary.IsAllowed(level, false, false, false), "Shadow setter admitted.");
             Check(WmiFanExperimentBoundary.IsAllowed(level, true, false, false), "Normal setter denied.");

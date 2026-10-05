@@ -20,6 +20,9 @@ internal static class ProductGuiSelfTest
             form.HandleCommand("profile-ac");canvas.Axis=AdaptiveCurveAxis.CpuTemperature;form.EditNode(3,70,31);
             Require(form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level==31&&form.Draft.Battery.Fan.BuildPolicy().CpuTemperatureCurve[3].Level==28,"Curve edit leaked across profiles.");
             for(int i=0;i<7;i++)form.HandleCommand("page-"+i);
+            form.EditValue("manual",0);Require(canvas.ManualLevel==10,"Manual lower endpoint inaccessible.");
+            form.EditValue("manual",99);Require(canvas.ManualLevel==50,"Manual upper endpoint escaped.");
+            form.EditValue("manual",10);
             Require(runtime.Commands==0,"Editing/navigation wrote hardware.");
             form.HandleCommand("fan-mode-2");Require(runtime.Commands==0,"Closed Automatic gate dispatched.");
             form.EditValue("gpu",99999);Require(form.Draft.Ac.GpuMaximumMHz==1850,"GPU slider escaped upper bound.");
@@ -85,7 +88,7 @@ internal static class ProductGuiSelfTest
             foreach(var state in new[]{"Unsupported","Recovering","Failed"}){canvas.State=canvas.State with{Runtime=state,CpuState=state,GpuState=state,PerformanceActive=false,CanApplyPerformance=false};Render("state-"+state);}
             canvas.Page=ProductPage.Performance;canvas.State=canvas.State with{Runtime="Healthy",CpuState="Active",GpuState="Failed",PerformanceActive=false};Render("state-partial-CPU-active-GPU-failed");
             form.HandleCommand("fan-mode-1");form.HandleCommand("manual-apply");form.HandleCommand("firmware");form.HandleCommand("performance-release");
-            Require(runtime.Commands==4,"Explicit controls did not dispatch their separate contracts.");
+            Require(runtime.Commands==4&&runtime.LastManualLevel==10,"Explicit Manual Apply did not dispatch level 10 through its separate contract.");
             form.HandleCommand("curve-simulator");var unedited=ProductProfilesStore.Serialize(form.Draft);var commands=runtime.Commands;
             form.EditValue("sim-input-2",40);form.EditValue("sim-input-3",110);form.EditValue("sim-input-4",100);form.HandleCommand("sim-1200");
             Require(canvas.Simulation.ElapsedSeconds==1200&&unedited==ProductProfilesStore.Serialize(form.Draft)&&runtime.Commands==commands,"Simulation acquired authority or edited profiles.");
@@ -346,12 +349,13 @@ internal static class ProductGuiSelfTest
         public event Action<ProductRuntimeState>? Changed;
         public ProductRuntimeState State {get;}=new();
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;
+        internal int? LastManualLevel;
         internal TaskCompletionSource? ReleaseGate,ManualGate;
         internal string? CommandFailure,StartFailure;
         internal void Publish(ProductRuntimeState state)=>Changed?.Invoke(state);
         public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
         public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
-        public Task ApplyManualAsync(int level){Commands++;return Task.CompletedTask;}
+        public Task ApplyManualAsync(int level){Commands++;LastManualLevel=level;return Task.CompletedTask;}
         public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public Task ReleasePerformanceAsync(){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public void FenceLifecycle(string r){Interlocked.Increment(ref Fences);}

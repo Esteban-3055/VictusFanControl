@@ -30,7 +30,7 @@ internal static class Hp8C40WmiFanControlBackendSelfTest
         Require(guardian.Heartbeats == hb, "Liveness-only probe renewed heartbeat.");
         guardian.Alive = false;
         var rejected = false;
-        try { await backend.ApplyAsync(new(32, 32, "lost"), default); } catch (IOException) { rejected = true; }
+        try { await backend.ApplyAsync(new(10, 10, "lost"), default); } catch (IOException) { rejected = true; }
         Require(rejected && requests.Count == 2, "Guardian loss admitted hardware write.");
         guardian.Alive = true;
         await backend.RestoreFirmwareAutoAsync(default);
@@ -44,12 +44,30 @@ internal static class Hp8C40WmiFanControlBackendSelfTest
             "Verified release did not rearm a fresh supervised WMI session.");
         await output.WriteLineAsync("PASS: WMI admission, changed-target writes only, fresh RPM, no blind heartbeat, guardian-loss fence, truthful release and verified rearm.");
 
+        var rangeGuardian = new FakeGuardian();var rangeCalls = new List<HpBiosRequest>();
+        var manualRange = new Hp8C40WmiFanControlBackend(rangeGuardian, r => { rangeCalls.Add(r); return 0; }, Read);
+        Require(manualRange.Capabilities.MinimumLevel==10&&manualRange.Capabilities.MaximumLevel==50&&!manualRange.Capabilities.SupportsIndependentLevels,"Manual capabilities lost equal-only 10..50.");
+        await manualRange.EnterCustomModeAsync(default);
+        foreach(var invalid in new[]{new FanCommand(9,9,"low"),new FanCommand(51,51,"high"),new FanCommand(10,11,"asymmetric")})
+        {
+            rejected=false;try{await manualRange.ApplyAsync(invalid,default);}catch(ArgumentException){rejected=true;}
+            Require(rejected&&rangeCalls.Count==0&&rangeGuardian.Intents==0,"Invalid Manual command persisted or dispatched.");
+        }
+        foreach(var target in new[]{10,29,50})await manualRange.ApplyAsync(new(target,target,"qualified Manual range"),default);
+        await manualRange.ApplyAsync(new(50,50,"hold"),default);
+        Require(rangeCalls.Select(r=>(int)r.Payload[0]).SequenceEqual(new[]{10,29,50})&&rangeCalls.All(r=>r.Payload[0]==r.Payload[1])&&rangeGuardian.Intents==3,"Manual low range payload/deduplication mismatch.");
+        await manualRange.RestoreFirmwareAutoAsync(default);await manualRange.EnterCustomModeAsync(default);
+        await manualRange.ApplyAsync(new(10,10,"rearmed low endpoint"),default);
+        Require(rangeCalls.Count==4&&rangeCalls[^1].Payload[0]==10,"Rearmed session lost Manual minimum.");
+        await manualRange.RestoreFirmwareAutoAsync(default);
+        await output.WriteLineAsync("PASS: GUI WMI equal Manual 10/29/50, invalid/asymmetric refusal before intent, duplicate suppression and low-end rearm; no hardware IO.");
+
         var failing = new FakeGuardian { RejectIntent = true };
         var dispatches = 0;
         var b = new Hp8C40WmiFanControlBackend(failing, _ => { dispatches++; return 0; }, Read);
         await b.EnterCustomModeAsync(default);
         rejected = false;
-        try { await b.ApplyAsync(new(30, 30, "intent failure"), default); } catch (IOException) { rejected = true; }
+        try { await b.ApplyAsync(new(10, 10, "intent failure"), default); } catch (IOException) { rejected = true; }
         Require(rejected && dispatches == 0, "Failed durable intent permitted dispatch.");
         failing.RejectIntent = false;
         var nativeFailure = new Hp8C40WmiFanControlBackend(failing, _ => { dispatches++; return 7; }, Read);

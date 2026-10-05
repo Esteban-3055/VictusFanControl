@@ -168,7 +168,7 @@ internal sealed class ProductForm : Form
         if(_canvas.Busy||_closing||IsDisposed)return;
         if(key.StartsWith("sim-input-")){_canvas.SimulationInputs=_canvas.SimulationInputs.With(int.Parse(key[10..]),value);_canvas.Invalidate();return;}
         var slot=_canvas.Editing;var p=_draft.Get(slot);
-        if(key=="manual") {_canvas.ManualLevel=Math.Clamp(value,30,50);_canvas.Invalidate();return;}
+        if(key=="manual") {_canvas.ManualLevel=Math.Clamp(value,10,50);_canvas.Invalidate();return;}
         var next=key switch
         {
             "pl1"=>p with{CpuPl1Watts=Math.Clamp(value,CpuPowerProductDefaults.MinimumPl1Watts,CpuPowerProductDefaults.MaximumConfigurablePl1Watts),CpuPl2Watts=Math.Max(p.CpuPl2Watts,Math.Clamp(value,8,44))},

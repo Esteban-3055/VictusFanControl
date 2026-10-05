@@ -209,7 +209,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             bool enabled=i==0||i==1&&State.ManualAuthorized&&!State.LifecycleBlocked||i==2&&State.AutomaticAuthorized&&!State.LifecycleBlocked;
             Hit("fan-mode-"+i,r,modes[i],enabled&&(!Busy||i==0));if(!enabled)DrawText(g,"Aplicación bloqueada",r.X+235,r.Y+18,15,Yellow,160);}
         Card(g,new(312,450,583,378));DrawText(g,"Control manual",334,468,26,null,520,true);
-        Slider(g,"manual", "Nivel CPU / GPU",new(339,535,510,115),ManualLevel,30,50,"");
+        Slider(g,"manual", "Nivel CPU / GPU",new(339,535,510,115),ManualLevel,10,50,"");
         DrawText(g,"Editar el nivel no escribe en el hardware.",339,663,20,Muted,520);
         Button(g,"manual-apply","Aplicar nivel",new(339,734,226,70),true,State.ManualAuthorized&&State.FanMode=="Manual"&&State.Runtime=="Healthy"&&!State.LifecycleBlocked);
         Button(g,"firmware","Volver a Firmware",new(581,734,287,70));
@@ -362,7 +362,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,157,1337,666));DrawText(g,"Reglas de seguridad",332,177,30,null,1250,true);
         DrawText(g,"Protecciones del backend · solo lectura",332,225,23,Muted,1240);
         string[] titles=["Respuesta térmica de demanda","SafetyGate independiente","Límites reales de ventiladores","Telemetría fresca y completa","Guardian y recuperación"];
-        string[] details=["La curva y el filtrado conservan los overrides térmicos del motor vigente.","Temperaturas crudas conservan las protecciones CPU/GPU; editar la curva no las altera.","Rango común WMI 30–50. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recovery no concede autoridad automáticamente. Los journals no se borran desde la GUI."];
+        string[] details=["La curva y el filtrado conservan los overrides térmicos del motor vigente.","Temperaturas crudas conservan las protecciones CPU/GPU; editar la curva no las altera.","Manual WMI 10–50; automático preparado 30–50. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recovery no concede autoridad automáticamente. Los journals no se borran desde la GUI."];
         for(int i=0;i<5;i++){var r=new RectangleF(331,282+i*103,1293,87);Card(g,r);Icon(g,i==4?"profiles":"fan",r.X+24,r.Y+24,37);DrawText(g,titles[i],r.X+99,r.Y+12,23,null,1100,true);DrawText(g,details[i],r.X+99,r.Y+47,19,Muted,1100);}
     }
     private void Monitoring(Graphics g)
