@@ -59,9 +59,16 @@ git pull --ff-only
    Firmware once. The GUI completes normal cleanup and exits.
 
 Do not select Manual, edit settings, suspend, disconnect AC or close the GUI
-during the normal-path gate. A released WMI session is permanently closed;
-restart the GUI to start another supervised session. Manual and normal product
-Automatic remain closed pending new physical qualification.
+during this isolated Automatic normal-path gate. The ordinary product now keeps
+Manual authorized on the exact HP 8C40 target, but this qualification still
+forces Manual closed so its evidence remains Automatic-only. Normal product
+Automatic remains closed pending promotion.
+
+A verified WMI Firmware release retires the current guardian lease and rearms a
+fresh session directory for a later Manual/Automatic acquisition in the same GUI.
+If release/recovery is uncertain, re-entry remains fail-closed. Direct
+Manual<->Automatic transitions that already own Custom preserve the supervised
+Custom session and do not insert an unnecessary Firmware release between modes.
 
 The harness requires IntelMSR.bin; it no longer requires LpcACPIEC.bin or launches
 an EC/setpoint probe. Existing WMI GUI, experimental or M4 leases block admission.
@@ -71,6 +78,31 @@ access attempts, and `IndependentFirmwareOwnershipVerified=false`. With limits,
 the independent performance Guardian must additionally prove CPU/GPU release.
 Failure packaging waits for normal cleanup and captures both reports when present.
 Never delete a retained lease just to bypass a failed recovery.
+
+## Mode-transition serialization
+
+The production controller and FanControlCoordinator serialize UI mode changes,
+Manual Apply, Automatic decisions, backend dispatch and firmware restore. A mode
+change first waits for a stable coordinator authority snapshot. The intended
+matrix is:
+
+- Firmware -> Manual/Automatic: logical selection only; no fan write until the
+  selected mode produces an explicit command.
+- Manual <-> Automatic while Custom is active: keep the current equal fan target
+  and Custom authority; reset per-mode policy state; the new mode owns the next
+  command.
+- Manual/Automatic -> Firmware: one supervised WMI release/default sequence.
+- Faulted -> custom mode: blocked; Firmware/recovery must resolve first.
+- Lifecycle/Safety restore racing a mode click wins through the coordinator gate;
+  the mode switch observes the resulting stable Firmware/Faulted authority.
+- During an explicit supervised Firmware release, the short WMI-read closure is
+  expected and must not invalidate the Automatic qualification solely because
+  telemetry briefly reports Degraded. A release failure is still rejected by the
+  release evidence/journal checks.
+
+Manual uses the active backend envelope. The current WMI-only backend remains
+qualified/whitelisted for equal levels 30..50; the GUI therefore does not expose
+10..29 while this backend is active.
 
 ## Verification and remaining gates
 
