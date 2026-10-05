@@ -97,11 +97,16 @@ public sealed class AdaptiveFanProductionController
         _qualificationSession = qualificationSession;
         _manualExecutionAuthorized = manualExecutionAuthorized;
         _automaticExecutionAuthorized = automaticExecutionAuthorized;
-        _minimumLevel = config.MinimumLevel;
-        _maximumLevel = config.MaximumLevel;
+        var backendCapabilities = _coordinator.BackendCapabilities;
+        _minimumLevel = Math.Max(config.MinimumLevel, backendCapabilities.MinimumLevel);
+        _maximumLevel = Math.Min(config.MaximumLevel, backendCapabilities.MaximumLevel);
+        if (_minimumLevel > _maximumLevel)
+            throw new InvalidOperationException("Fan backend and policy have no overlapping Manual command range.");
     }
 
     public AdaptiveFanProductionMode Mode => _mode;
+    public int ManualMinimumLevel => _minimumLevel;
+    public int ManualMaximumLevel => _maximumLevel;
     public bool ManualExecutionAuthorized =>
         _manualExecutionAuthorized && !(_qualificationSession?.IsInterrupted ?? false);
     public bool AutomaticExecutionAuthorized => _automaticExecutionAuthorized;
@@ -166,10 +171,14 @@ public sealed class AdaptiveFanProductionController
                     "Automatic mode remains blocked by the post-M9 hardware gate.");
             }
 
+            var stableAuthority =
+                await _coordinator.GetStableAuthorityAsync(
+                    cancellationToken).ConfigureAwait(false);
+
             if (requestedMode == _mode)
             {
                 return Result(
-                    _coordinator.Authority == FanAuthority.Custom
+                    stableAuthority == FanAuthority.Custom
                         ? AdaptiveFanProductionActionKind.HoldCustom
                         : AdaptiveFanProductionActionKind.HoldFirmware,
                     true,
@@ -178,13 +187,34 @@ public sealed class AdaptiveFanProductionController
                     $"Production fan mode is already {_mode}.");
             }
 
+            if (stableAuthority == FanAuthority.Faulted &&
+                requestedMode != AdaptiveFanProductionMode.Firmware)
+            {
+                return Result(
+                    AdaptiveFanProductionActionKind.Blocked,
+                    false,
+                    null,
+                    null,
+                    "Fan authority is Faulted; return to Firmware/recover before selecting another custom mode.");
+            }
+
+            var customToCustom =
+                stableAuthority == FanAuthority.Custom &&
+                _mode is AdaptiveFanProductionMode.Manual or AdaptiveFanProductionMode.Automatic &&
+                requestedMode is AdaptiveFanProductionMode.Manual or AdaptiveFanProductionMode.Automatic;
+
             var restored = false;
-            if (_coordinator.Authority == FanAuthority.Custom)
+            if (!customToCustom &&
+                requestedMode == AdaptiveFanProductionMode.Firmware &&
+                stableAuthority != FanAuthority.Firmware)
             {
                 await _coordinator.RestoreFirmwareAsync(
                     $"Fan mode transition {_mode} -> {requestedMode}.",
                     cancellationToken).ConfigureAwait(false);
                 restored = true;
+                stableAuthority =
+                    await _coordinator.GetStableAuthorityAsync(
+                        cancellationToken).ConfigureAwait(false);
             }
 
             ResetPolicyStateLocked();
@@ -193,10 +223,22 @@ public sealed class AdaptiveFanProductionController
                 ? new Hp8C40AutomaticThermalAdmission(_automaticHardware, _automaticMilliseconds)
                 : null;
 
+            if (customToCustom)
+            {
+                return Result(
+                    AdaptiveFanProductionActionKind.HoldCustom,
+                    true,
+                    null,
+                    null,
+                    $"Production fan mode changed to {_mode}; existing Custom authority/target was retained until the new mode issues its next command.");
+            }
+
             return Result(
                 restored
                     ? AdaptiveFanProductionActionKind.RestoreFirmware
-                    : AdaptiveFanProductionActionKind.HoldFirmware,
+                    : stableAuthority == FanAuthority.Custom
+                        ? AdaptiveFanProductionActionKind.HoldCustom
+                        : AdaptiveFanProductionActionKind.HoldFirmware,
                 true,
                 null,
                 null,
