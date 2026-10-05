@@ -14,6 +14,7 @@ internal sealed class ProductForm : Form
     private IProductRuntime? _runtime;
     private ProductProfiles _draft;
     private ProductProfiles _saved;
+    private bool _hasSavedBaseline;
     private readonly string? _profilesPath;
     private readonly System.Windows.Forms.Timer _presentationTimer = new() { Interval = 1000 };
     private TaskCompletionSource? _commandsDrained;
@@ -34,10 +35,11 @@ internal sealed class ProductForm : Form
         string? notice=null;
         _draft=fixtureProfiles is null?ProductProfilesStore.Load(profilesPath,out notice,Migrate):ProductProfilesStore.Copy(fixtureProfiles);
         _saved=ProductProfilesStore.Copy(_draft);
+        _hasSavedBaseline=fixtureProfiles is not null||(File.Exists(profilesPath??ProductProfilesStore.DefaultPath)&&notice is null);
         _presentationTimer.Tick+=(_,_)=>{if(!_closing&&!IsDisposed)_canvas.Invalidate();};
         Text="VictusFanControl";FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=new(1344,756);StartPosition=FormStartPosition.CenterScreen;
-        _canvas.Profiles=_draft;_canvas.Notice=notice??"";Controls.Add(_canvas);
+        _canvas.Profiles=_draft;_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
         _canvas.Command+=HandleCommand;_canvas.ValueEdited+=EditValue;_canvas.NodeEdited+=EditNode;
         _canvas.MouseDown+=(_,e)=>{if(e.Button==MouseButtons.Left&&_canvas.IsHeaderDrag(e.Location)){ReleaseCapture();SendMessage(Handle,0xA1,2,0);}};
         _canvas.MouseDoubleClick+=(_,e)=>{if(_canvas.IsHeaderDrag(e.Location))ToggleMaximize();};
@@ -130,7 +132,7 @@ internal sealed class ProductForm : Form
             case "gpu-toggle":Change(_draft with{GpuEnabled=!_draft.GpuEnabled});break;
             case "minimized-toggle":Change(_draft with{StartMinimized=!_draft.StartMinimized});break;
             case "save":_ = SaveAsync();break;
-            case "discard":_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;_canvas.Dirty=false;_canvas.SelectedNode=-1;_canvas.Notice="Se recuperaron las preferencias guardadas.";break;
+            case "discard":_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;_canvas.Dirty=!_hasSavedBaseline;_canvas.SelectedNode=-1;_canvas.Notice=_hasSavedBaseline?"Se recuperaron las preferencias guardadas.":"Se recuperó la configuración inicial; falta guardarla.";break;
             case "startup-toggle":_ = ToggleStartupAsync();break;
             case "firmware":case "fan-mode-0":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask);break;
             case "fan-mode-1":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Manual,Draft)??Task.CompletedTask);break;
@@ -194,7 +196,7 @@ internal sealed class ProductForm : Form
         var fan=all?defaults:p.Fan with{Profile=AdaptiveCurveProfiles.WithCurve(p.Fan.Profile,_canvas.Axis,AdaptiveCurveProfiles.Curve(defaults.BuildPolicy(),_canvas.Axis))};
         Change(_draft.With(_canvas.Editing,p with{Fan=fan}));_canvas.SelectedNode=-1;
     }
-    private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));_saved=ProductProfilesStore.Copy(settings);_canvas.Dirty=false;if(_canvas.StartupEnabled)await WindowsStartupRegistration.SetEnabledAsync(true,_modules,settings.StartMinimized);_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
+    private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));_saved=ProductProfilesStore.Copy(settings);_hasSavedBaseline=true;_canvas.Dirty=false;if(_canvas.StartupEnabled)await WindowsStartupRegistration.SetEnabledAsync(true,_modules,settings.StartMinimized);_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
     private async Task ToggleStartupAsync() => await RunAsync(async()=>{var requested=!_canvas.StartupEnabled;await WindowsStartupRegistration.SetEnabledAsync(requested,_modules,_draft.StartMinimized);_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.Notice="Registro de inicio actualizado; el inicio permanece en Firmware.";});
     private async Task RunAsync(Func<Task> command)
     {

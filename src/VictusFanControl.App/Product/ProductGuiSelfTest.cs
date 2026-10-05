@@ -200,6 +200,14 @@ internal static class ProductGuiSelfTest
                 require(canvas.CurrentSnapshot is null,"Telemetry loss displayed current values.");form.HandleCommand("manual-apply");require(runtime.Commands==2,"Telemetry loss admitted Manual.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Persistence fixture shutdown failed.");
             }
+            var corrupt=Path.Combine(dir,"corrupt.json");File.WriteAllText(corrupt,"broken");
+            using(var form=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),profilesPath:corrupt))
+            {
+                form.Show();Application.DoEvents();require(form.Dirty&&File.ReadAllText(corrupt)=="broken","Fallback preferences were presented as saved or overwritten.");
+                form.EditValue("pl1",37);form.HandleCommand("discard");require(form.Dirty&&form.Draft.Ac.CpuPl1Watts==35,"Discard marked an unpersisted fallback as saved.");
+                form.HandleCommand("save");PumpUntil(()=>!form.Canvas.Busy,"Fallback save did not finish.");require(!form.Dirty&&ProductProfilesStore.Load(corrupt,out var warning).Ac.CpuPl1Watts==35&&warning is null,"Explicit save failed to replace corrupt preferences.");
+                var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Corrupt-preference fixture shutdown failed.");
+            }
             // A failed atomic save preserves dirty state and cleans its temporary file.
             var blocked=Path.Combine(dir,"directory-target");Directory.CreateDirectory(blocked);
             using(var form=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),fixtureProfiles:new ProductProfiles(),profilesPath:blocked))

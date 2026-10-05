@@ -210,3 +210,8 @@ Enable, so the product reports an unresolved session rather than Disabled and
 cannot immediately replace it. The existing Close contract rejects nonzero exit.
 A native IPC-client fixture starts an already-exited error process and checks both
 Enable and Close; it never launches a hardware owner or kills a live Guardian.
+
+Imported or fallback preferences are marked as needing Save; Discard returns to the
+session baseline and cannot label an unpersisted fallback as saved. The corrupt-file
+form fixture checks that the original survives Load/Discard and is replaced only
+by an explicit successful Save.
