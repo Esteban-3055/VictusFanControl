@@ -72,6 +72,8 @@ conserva la muestra usada al interrumpir; no se reemplaza por la muestra Healthy
 posterior. El export añade preparación, configuración Performance aplicada,
 presencia del owner y estado activo. Esto es evidencia de software/solicitud,
 no prueba independiente del rango NVML ni ownership WMI.
+Los números no finitos se conservan como cadenas JSON `NaN`/`Infinity`;
+no se convierten en muestras válidas ni impiden exportar la evidencia.
 
 ## Verificación y prueba física siguiente
 

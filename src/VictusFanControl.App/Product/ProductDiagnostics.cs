@@ -24,7 +24,9 @@ internal static class ProductDiagnostics
                 using(var zip=new ZipArchive(stream,ZipArchiveMode.Create,leaveOpen:true))
                 {
                     void Write(string name,string text){using var writer=new StreamWriter(zip.CreateEntry(name).Open());writer.Write(text);}
-                    Write("gui-state.json",JsonSerializer.Serialize(summary,new JsonSerializerOptions{WriteIndented=true}));
+                    // Keep the triggering evidence exportable even when the rejected sample contains NaN/Infinity.
+                    Write("gui-state.json",JsonSerializer.Serialize(summary,new JsonSerializerOptions{WriteIndented=true,
+                        NumberHandling=System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals}));
                     Write("profiles-draft.json",ProductProfilesStore.Serialize(draft));
                     Write("README.txt","Estado observado y preferencias en edición. No es prueba de ownership, reset ni cualificación física. Solo configuración; importar no aplica hardware. Journals y leases originales no se alteran. El log puede contener rutas locales; revisar antes de compartir.");
                     if(logPath is not null&&File.Exists(logPath))

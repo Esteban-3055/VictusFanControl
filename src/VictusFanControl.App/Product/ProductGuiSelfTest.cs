@@ -322,6 +322,13 @@ internal static class ProductGuiSelfTest
                         state.RootElement.GetProperty("snapshot").GetProperty("CpuPackagePowerW").GetDouble()==10 &&
                         state.RootElement.GetProperty("AppliedPerformance").GetProperty("CpuEnabled").GetBoolean(),"Later healthy telemetry erased the triggering sample or applied limits from diagnostics.");
                 }
+                canvas.State=canvas.State with{AutomaticInterruptionSnapshot=interrupted with{GpuPowerW=double.NaN}};
+                bundle=form.ExportDiagnosticsAsync(diagnostic,log);PumpUntil(()=>bundle.IsCompleted,"Invalid-metric diagnostic export blocked.");bundle.GetAwaiter().GetResult();
+                using(var zip=System.IO.Compression.ZipFile.OpenRead(diagnostic))
+                {
+                    using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
+                    require(state.RootElement.GetProperty("AutomaticInterruptionSnapshot").GetProperty("GpuPowerW").GetString()=="NaN","Invalid triggering telemetry could not be exported faithfully.");
+                }
                 require(File.ReadAllText(path)==savedBytes&&runtime.Commands==0,"Diagnostic mutated preferences or dispatched hardware.");
                 form.HandleCommand("discard");
                 canvas.State=runtime.State with{Runtime="Healthy",FanMode="Automatic",FanAuthority="Custom",PerformanceSupported=true,CanApplyPerformance=true};
