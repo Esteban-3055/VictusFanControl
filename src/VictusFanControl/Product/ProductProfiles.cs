@@ -186,11 +186,15 @@ public static class ProductProfilesStore
             if(File.Exists(path))
             {
                 var bytes=File.ReadAllBytes(path);
-                // Invalid existing files are retained by Load; only a valid v1 is migration evidence.
+                // Inspect the same bytes that will be backed up, with the BOM handling used by Load.
+                // PowerShell 5.1 can write UTF-8 BOM or UTF-16; JsonDocument's byte parser accepts neither.
                 try
                 {
-                    using var document=JsonDocument.Parse(bytes);
-                    if(document.RootElement.TryGetProperty("schemaVersion",out var schema)&&schema.GetInt32()==1)
+                    using var original=new MemoryStream(bytes,writable:false);
+                    using var reader=new StreamReader(original,System.Text.Encoding.UTF8,detectEncodingFromByteOrderMarks:true);
+                    using var document=JsonDocument.Parse(reader.ReadToEnd());
+                    if(document.RootElement.ValueKind==JsonValueKind.Object&&document.RootElement.TryGetProperty("schemaVersion",out var schema)&&
+                        schema.ValueKind==JsonValueKind.Number&&schema.TryGetInt32(out var version)&&version==1)
                     {
                         var backup=path+".v1-backup-"+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))[..12].ToLowerInvariant()+".json";
                         if(File.Exists(backup)){if(!File.ReadAllBytes(backup).SequenceEqual(bytes))throw new IOException("El respaldo v1 existente no coincide; no se reemplazó el original.");}

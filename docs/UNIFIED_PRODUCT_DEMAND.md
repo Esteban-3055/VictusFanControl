@@ -79,11 +79,18 @@ antes de reemplazar v1. No sobrescribe un respaldo distinto. El respaldo integra
 LegacyFan permanece tras editar/restablecer y exportar v2. No se promete equivalencia
 entre la curva nueva y las seis curvas antiguas.
 
+La detección del archivo v1 admite BOM de UTF-8, UTF-16 LE/BE y UTF-32, igual que
+la carga desde Windows; el respaldo conserva codificación, BOM y bytes originales.
+Si el JSON existente está dañado o declara una versión con un tipo inválido, cargar
+conserva ese archivo y usa valores seguros. Guardar explícitamente permite reemplazarlo
+por un v2 válido; un conflicto de respaldo v1 conserva ambos archivos y cancela el guardado.
+
 ## Verificación y límites
 
 Tests: demanda MAX con carga mixta; cero en potencia/carga; temperatura mínima;
 monotonicidad de ganancias; 72.485 W sin corte a 70; overrides raw ante curva plana;
-telemetría inválida; esquema estricto; migración exacta y repetida; aislamiento,
+telemetría inválida; esquema estricto; migración exacta y repetida en UTF-8 BOM/UTF-16/UTF-32;
+conflicto de respaldo sin reemplazo; recuperación explícita de JSON dañado; aislamiento,
 configuración congelada, simulación equivalente; aplicación real del modelo a través
 del controlador con backend sintético; gestos, nodos, límites y renders Windows.
 

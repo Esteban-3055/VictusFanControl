@@ -44,9 +44,27 @@ internal static class ProductProfilesSelfTest
             ProductProfilesStore.Save(loaded,path);var backups=Directory.GetFiles(dir,"*.v1-backup-*.json");Check(backups.Length==1&&File.ReadAllText(backups[0])==text,"Legacy save did not preserve exact original bytes.");
             ProductProfilesStore.Save(loaded,path);Check(Directory.GetFiles(dir,"*.v1-backup-*.json").Length==1,"Repeated save created or overwrote backup.");
             var again=ProductProfilesStore.Load(path,out var againNotice);Check(againNotice is null&&ProductProfilesStore.Serialize(again)==ProductProfilesStore.Serialize(loaded),"Unified roundtrip reapplied migration or lost influence.");
+            foreach(var encoding in new System.Text.Encoding[]{new System.Text.UTF8Encoding(true),System.Text.Encoding.Unicode,System.Text.Encoding.BigEndianUnicode,System.Text.Encoding.UTF32})
+            {
+                var encodedDir=Path.Combine(dir,encoding.WebName);Directory.CreateDirectory(encodedDir);
+                var encodedPath=Path.Combine(encodedDir,"profiles.json");File.WriteAllText(encodedPath,text,encoding);
+                var originalBytes=File.ReadAllBytes(encodedPath);
+                var migrated=ProductProfilesStore.Load(encodedPath,out var encodedNotice);
+                Check(encodedNotice is not null&&migrated.Ac.CpuPl1Watts==30,"Encoded legacy profile did not load for migration.");
+                ProductProfilesStore.Save(migrated,encodedPath);
+                var encodedBackups=Directory.GetFiles(encodedDir,"*.v1-backup-*.json");
+                Check(encodedBackups.Length==1&&File.ReadAllBytes(encodedBackups[0]).SequenceEqual(originalBytes),"Migration lost exact legacy bytes for "+encoding.WebName);
+                ProductProfilesStore.Save(migrated,encodedPath);
+                Check(Directory.GetFiles(encodedDir,"*.v1-backup-*.json").Length==1,"Encoded migration repeated its backup.");
+                // A mismatching existing backup must keep the original and clean its staged replacement.
+                File.WriteAllBytes(encodedPath,originalBytes);File.WriteAllText(encodedBackups[0],"conflicting backup");
+                try { ProductProfilesStore.Save(migrated,encodedPath);throw new InvalidOperationException("Conflicting legacy backup was overwritten."); }
+                catch(IOException) { }
+                Check(File.ReadAllBytes(encodedPath).SequenceEqual(originalBytes)&&File.ReadAllText(encodedBackups[0])=="conflicting backup"&&Directory.GetFiles(encodedDir,"*.tmp").Length==0,"Backup conflict modified retained files or left a staged file.");
+            }
         }
         finally{Directory.Delete(dir,true);}
-        output.WriteLine("PASS  Unified normalized MAX, independent gains, absolute watts, protected raw heat, frozen draft and exact v1 backup migration");
+        output.WriteLine("PASS  Unified normalized MAX, independent gains, absolute watts, protected raw heat, frozen draft and exact v1 backups including UTF-8 BOM/UTF-16/UTF-32 and conflict preservation");
     }
     internal static void Run(TextWriter output)
     {
@@ -119,6 +137,14 @@ internal static class ProductProfilesSelfTest
             }
             File.WriteAllText(path,"broken"); _ = ProductProfilesStore.Load(path,out var notice);
             if (notice is null || File.ReadAllText(path) != "broken") throw new InvalidOperationException("Corrupt settings were not retained.");
+            foreach(var invalid in new[]{"[]","null","{\"schemaVersion\":\"broken\"}","{\"schemaVersion\":1.5}","{\"schemaVersion\":999999999999999999999999}"})
+            {
+                File.WriteAllText(path,invalid);var safe=ProductProfilesStore.Load(path,out var warning);
+                if(warning is null||File.ReadAllText(path)!=invalid)throw new InvalidOperationException("Malformed original was changed on load.");
+                ProductProfilesStore.Save(safe,path);
+                if(ProductProfilesStore.Load(path,out var savedWarning).SchemaVersion!=2||savedWarning is not null||Directory.GetFiles(dir,"*.tmp").Length!=0)
+                    throw new InvalidOperationException("Explicit save could not recover malformed profile JSON.");
+            }
         }
         finally { Directory.Delete(dir,true); }
         var lowProfile=original.Ac with { Fan=original.Ac.Fan with { UnifiedDemand=new(){Curve=[new(0,10),new(100,50)]}, Profile=AdaptiveCurveProfiles.Create("8349d1c765b948a4976ea9664ad578ba","Low",original.Ac.Fan.BuildPolicy() with {
@@ -143,6 +169,6 @@ internal static class ProductProfilesSelfTest
         var before=simulator.ElapsedSeconds;Reject(()=>simulator.Advance(new(CpuTemperature:999),1));Reject(()=>simulator.Advance(new(),3601));
         if(simulator.ElapsedSeconds!=before)throw new InvalidOperationException("Invalid simulation advanced virtual time.");
         output.WriteLine("PASS  Offline simulation matches editable inertia across rise/load/cooling/thermal phases; bounded history and no configuration effects");
-        output.WriteLine("PASS  Product AC/Battery isolation, strict/null/duplicate schema, atomic failure preservation, PL1/PL2 and bounded configurable GPU execution");
+        output.WriteLine("PASS  Product AC/Battery isolation, strict/null/duplicate schema, explicit malformed-file recovery, atomic failure preservation, PL1/PL2 and bounded configurable GPU execution");
     }
 }
