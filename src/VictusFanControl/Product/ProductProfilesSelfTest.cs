@@ -25,6 +25,22 @@ internal static class ProductProfilesSelfTest
             if(quiet.Current?.EqualFanLevel!=50)throw new InvalidOperationException("Quiet preset delayed hot endpoint cooling.");
         }
         if(original.Ac.Fan.Profile.Id==original.Battery.Fan.Profile.Id)throw new InvalidOperationException("Quiet defaults lost AC/Battery identity.");
+        var acPolicy=original.Ac.Fan.BuildPolicy();var batteryPolicy=original.Battery.Fan.BuildPolicy();
+        foreach(var policy in new[]{acPolicy,batteryPolicy})
+            if(policy.GpuPowerCurve[^1].Input!=75||AdaptiveCurveProfiles.Interpolate(policy.GpuPowerCurve,70)!=42||AdaptiveCurveProfiles.Interpolate(policy.GpuPowerCurve,72.485)<=42||AdaptiveCurveProfiles.Interpolate(policy.GpuPowerCurve,100)!=50)
+                throw new InvalidOperationException("GPU nominal/headroom power curve is clipped or retains a 140 W default scale.");
+        foreach(var axis in Enum.GetValues<AdaptiveCurveAxis>())
+        {
+            var input=axis switch{AdaptiveCurveAxis.CpuTemperature=>60,AdaptiveCurveAxis.GpuTemperature=>55,AdaptiveCurveAxis.CpuPower=>18,AdaptiveCurveAxis.GpuPower=>20,_=>100};
+            if(AdaptiveCurveProfiles.Interpolate(AdaptiveCurveProfiles.Curve(batteryPolicy,axis),input)>=AdaptiveCurveProfiles.Interpolate(AdaptiveCurveProfiles.Curve(acPolicy,axis),input))
+                throw new InvalidOperationException("Battery idle/power/load contribution is not quieter than AC.");
+        }
+        var batteryQuiet=new ProductCurveSimulation(original.Battery.Fan);batteryQuiet.Advance(new(50,45,8,10,50,50),300);
+        if(batteryQuiet.History.Any(p=>p.Decision.EqualFanLevel!=10))throw new InvalidOperationException("Battery low-power work is defeated by load feed-forward.");
+        batteryQuiet.Advance(new(90,81,8,10,0,0),10);
+        if(batteryQuiet.Current?.EqualFanLevel!=50)throw new InvalidOperationException("Quiet Battery default masks hot temperatures at low power/load.");
+        var changedLimits=original.Ac with{CpuPl1Watts=30,CpuPl2Watts=35};
+        if(!changedLimits.Fan.BuildPolicy().CpuPowerCurve.SequenceEqual(acPolicy.CpuPowerCurve))throw new InvalidOperationException("Changing caps remaps CPU watt demand.");
         var roundtrip = ProductProfilesStore.Parse(ProductProfilesStore.Serialize(edited));
         if (roundtrip.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 31) throw new InvalidOperationException("Profile roundtrip lost curve.");
         static void Reject(Action a) { try { a(); } catch (Exception e) when (e is ArgumentException or System.Text.Json.JsonException or InvalidDataException or IOException or InvalidOperationException) { return; } throw new InvalidOperationException("Invalid product setting accepted."); }

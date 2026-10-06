@@ -46,12 +46,12 @@ La seguridad conserva MAX(Package, núcleo más caliente). No se editan sus umbr
 
 | Eje | AC: entrada→nivel | Batería: entrada→nivel |
 |---|---|---|
-| CPU °C | 40→12, 50→16, 60→21, 70→28, 78→35, 85→44, 90→50 | 40→10, 50→13, 60→18, 70→26, 78→35, 85→44, 90→50 |
-| GPU °C | 35→12, 45→15, 55→20, 65→28, 72→35, 78→44, 81→50 | 35→10, 45→12, 55→17, 65→26, 72→35, 78→44, 81→50 |
-| CPU W | 0→10, 15→10, 30→16, 45→23, 65→32, 90→43, 115→50 | 0→10, 10→10, 15→12, 25→17, 40→24, 60→32, 90→43, 115→50 |
-| GPU W | 0→10, 20→10, 40→16, 70→24, 95→34, 115→42, 140→50 | 0→10, 10→10, 20→12, 40→17, 70→26, 95→36, 115→44, 140→50 |
-| CPU carga % | 0→10, 25→10, 50→12, 75→18, 100→24 | Igual AC |
-| GPU carga % | 0→10, 25→10, 50→12, 75→18, 100→24 | Igual AC |
+| CPU °C | 40→12, 50→16, 60→21, 70→28, 78→35, 85→44, 90→50 | 40→10, 50→10, 60→12, 70→24, 78→35, 85→44, 90→50 |
+| GPU °C | 35→12, 45→15, 55→20, 65→28, 72→35, 78→44, 81→50 | 35→10, 45→10, 55→12, 65→24, 72→35, 78→44, 81→50 |
+| CPU W | 0→10, 15→10, 30→16, 45→23, 65→32, 90→43, 115→50 | 0→10, 10→10, 18→10, 25→14, 40→24, 60→32, 90→43, 115→50 |
+| GPU W | 0→10, 10→10, 20→12, 30→16, 40→21, 50→27, 60→34, 70→42, 75→50 | 0→10, 10→10, 20→10, 30→14, 40→20, 50→27, 60→34, 70→42, 75→50 |
+| CPU carga % | 0→10, 25→10, 50→12, 75→18, 100→24 | 0→10, 25→10, 50→10, 75→12, 100→16 |
+| GPU carga % | 0→10, 25→10, 50→12, 75→18, 100→24 | 0→10, 25→10, 50→10, 75→12, 100→16 |
 
 EMA subida 8 s, confirmación 3 s y paso normal 1 nivel. Tras carga breve:
 EMA bajada 6 s, confirmación 4 s. Tras carga prolongada: EMA 20 s y confirmación
@@ -59,7 +59,8 @@ EMA bajada 6 s, confirmación 4 s. Tras carga prolongada: EMA 20 s y confirmaci�
 No hay piso oculto 30 en las curvas de potencia/carga. El motor preparado histórico
 continúa en 30–50; solo la entrada explícita de revisión producto toma 10–50.
 
-Replay del motor puro con fechas y demandas originales, sin simulación térmica:
+Replay histórico del candidato anterior (no recalculado para los defaults de 2026-10-06),
+con fechas y demandas originales, sin simulación térmica:
 
 | Traza | Candidato | Nivel mínimo / medio / máximo | Cambios |
 |---|---|---|---:|
@@ -71,6 +72,51 @@ Replay del motor puro con fechas y demandas originales, sin simulación térmica
 En muestras frías idénticas durante 300 s, los tests exigen nivel constante 12 AC
 / 10 Batería. También exigen llegar a 50 ante una entrada caliente, no escribir
 al editar/guardar y liberar antes de reconfigurar/reentrar.
+
+## Ajustes del 2026-10-06 y precisión del editor
+
+El diagnóstico de sesión `20261006T044854083Z-939bce10aba842628cdf73e5af82950d`
+registra GPU hasta 72.485 W, exclusivamente AC. Se usa 70 W como referencia nominal,
+con progresión 70→42 / 75→50. No se recortan lecturas al nominal ni se modifica la
+admisión de 75 W. El rango de edición sigue admitiendo curvas personalizadas hasta
+200 W; el default ya no tiene anclas irrelevantes en 95/115/140 W.
+
+CPU conserva la curva en watts absolutos: mover PL1/PL2 cambia el límite solicitado,
+no el significado térmico de una lectura de 30 W. Las cargas AC conservan un aporte
+moderado; en batería se reduce el aporte para que utilización alta con pocos watts
+no venza el silencio. Se conservan las anclas térmicas altas y el override raw.
+Estos presets siguen pendientes de medición acústica/térmica, especialmente batería.
+
+En Rendimiento, pulsar el número PL1/PL2/GPU abre un campo de texto con Aceptar,
+Cancelar, Enter y Esc. Acepta enteros en los rangos vigentes (CPU PL1 8–44 W,
+PL2 PL1–114 W, GPU 210–2500 MHz), rechaza fracciones y valores fuera de rango sin
+redondear ni truncar. Aumentar PL1 por encima del PL2 actual eleva también PL2,
+como el slider; el diálogo lo explica. Editar sigue modificando solo el borrador.
+
+Curvas queda en el menú lateral; Ventiladores tiene Control, Telemetría y Seguridad.
+En el editor, la curva seleccionada es sólida (CPU roja / GPU azul) con nodos;
+la otra curva es gris discontinua sin nodos. Esa comparación es la curva del otro
+componente en el mismo perfil, no una curva medida de firmware ni el preset original.
+Verde sigue mostrando la solicitud aceptada; amarillo la vista previa del borrador.
+
+## Propuesta de una curva única por fuente (pendiente)
+
+Objetivo: seis sliders de influencia y una curva Demanda %→Nivel para AC, otra para
+batería. Requiere un esquema nuevo y migración explícita: las seis curvas actuales
+no pueden convertirse exactamente a una sola curva y seis porcentajes.
+
+Diseño recomendado: normalizar temperaturas, watts y cargas con referencias
+estables por fuente; aplicar influencia a cada contribución y tomar MAX. Evitar
+promedios ponderados: cinco señales frías no deben diluir una CPU caliente.
+Temperaturas conservan una contribución mínima protegida; los overrides térmicos,
+SafetyGate, telemetría fresca y Guardian quedan fuera de los sliders. Un porcentaje
+de influencia no es un porcentaje de ventilador ni una promesa de RPM.
+
+No normalizar automáticamente cada lectura contra el PL1/PL2 editable ni la potencia
+baja de batería: 18 W no debe pasar a ser máxima demanda de refrigeración solo por
+limitar el consumo. La nueva arquitectura necesita tests del motor, simulador,
+marcadores, serialización, conservación de perfiles antiguos y aplicación congelada
+antes de publicarse; esta entrega mejora los defaults y la GUI del motor vigente.
 
 ## Instalación del preset en preferencias existentes
 

@@ -91,12 +91,15 @@ public sealed record ProductProfiles
         AdaptiveFanCurvePoint[] Points(params double[] pairs)=>Enumerable.Range(0,pairs.Length/2).Select(i=>new AdaptiveFanCurvePoint(pairs[i*2],pairs[i*2+1])).ToArray();
         var policy=Hp8C40AdaptiveCandidateV1.Create() with
         {
-            CpuTemperatureCurve=ac?Points(40,12,50,16,60,21,70,28,78,35,85,44,90,50):Points(40,10,50,13,60,18,70,26,78,35,85,44,90,50),
-            GpuTemperatureCurve=ac?Points(35,12,45,15,55,20,65,28,72,35,78,44,81,50):Points(35,10,45,12,55,17,65,26,72,35,78,44,81,50),
-            CpuPowerCurve=ac?Points(0,10,15,10,30,16,45,23,65,32,90,43,115,50):Points(0,10,10,10,15,12,25,17,40,24,60,32,90,43,115,50),
-            GpuPowerCurve=ac?Points(0,10,20,10,40,16,70,24,95,34,115,42,140,50):Points(0,10,10,10,20,12,40,17,70,26,95,36,115,44,140,50),
-            CpuLoadCurve=Points(0,10,25,10,50,12,75,18,100,24),
-            GpuLoadCurve=Points(0,10,25,10,50,12,75,18,100,24)
+            CpuTemperatureCurve=ac?Points(40,12,50,16,60,21,70,28,78,35,85,44,90,50):Points(40,10,50,10,60,12,70,24,78,35,85,44,90,50),
+            GpuTemperatureCurve=ac?Points(35,12,45,15,55,20,65,28,72,35,78,44,81,50):Points(35,10,45,10,55,12,65,24,72,35,78,44,81,50),
+            // CPU watts stay absolute: changing PL1/PL2 must not remap the same heat input.
+            CpuPowerCurve=ac?Points(0,10,15,10,30,16,45,23,65,32,90,43,115,50):Points(0,10,10,10,18,10,25,14,40,24,60,32,90,43,115,50),
+            // 70 W nominal, with headroom to the existing 75 W review envelope.
+            // Sensor values are never clipped to the nominal rating.
+            GpuPowerCurve=ac?Points(0,10,10,10,20,12,30,16,40,21,50,27,60,34,70,42,75,50):Points(0,10,10,10,20,10,30,14,40,20,50,27,60,34,70,42,75,50),
+            CpuLoadCurve=ac?Points(0,10,25,10,50,12,75,18,100,24):Points(0,10,25,10,50,10,75,12,100,16),
+            GpuLoadCurve=ac?Points(0,10,25,10,50,12,75,18,100,24):Points(0,10,25,10,50,10,75,12,100,16)
         };
         return new()
         {

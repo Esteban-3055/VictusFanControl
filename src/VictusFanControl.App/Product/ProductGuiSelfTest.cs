@@ -34,6 +34,21 @@ internal static class ProductGuiSelfTest
             form.HandleCommand("fan-mode-2");Require(runtime.Commands==0,"Closed Automatic gate dispatched.");
             form.EditValue("gpu",99999);Require(form.Draft.Ac.GpuMaximumMHz==2500,"GPU slider escaped upper bound.");
             form.EditValue("gpu",0);Require(form.Draft.Ac.GpuMaximumMHz==210,"GPU slider escaped lower bound.");
+            Require(form.TryEditNumericValue("pl1","30",out _)&&form.TryEditNumericValue("pl2","35",out _)&&form.TryEditNumericValue("gpu","1800",out _),"Exact numeric values rejected.");
+            Require(form.Draft.Ac.CpuPl1Watts==30&&form.Draft.Ac.CpuPl2Watts==35&&form.Draft.Ac.GpuMaximumMHz==1800&&form.Draft.Battery.GpuMaximumMHz==1200,"Exact numeric edits rounded, clamped or leaked across sources.");
+            var typedDraft=ProductProfilesStore.Serialize(form.Draft);
+            foreach(var entry in new[]{("pl1","45"),("pl2","29"),("pl2","115"),("gpu","209"),("gpu","2501"),("gpu","1800.5"),("gpu",""),("gpu","NaN"),("gpu","99999999999")})
+                Require(!form.TryEditNumericValue(entry.Item1,entry.Item2,out var error)&&error.Length>0&&typedDraft==ProductProfilesStore.Serialize(form.Draft),"Invalid text silently changed a performance draft.");
+            canvas.Busy=true;Require(!form.TryEditNumericValue("gpu","1700",out _)&&typedDraft==ProductProfilesStore.Serialize(form.Draft),"Busy numeric edit changed draft.");canvas.Busy=false;
+            using(var numeric=new ProductNumericDialog("GPU máximo (MHz) · AC",1800,210,2500,text=>form.TryEditNumericValue("gpu",text,out var error)?null:error))
+            {
+                numeric.Show(form);Application.DoEvents();numeric.Input.Text="1800.5";
+                Require(!numeric.TryCommit()&&numeric.DialogResult!=DialogResult.OK,"Dialog accepted fractional MHz.");
+                numeric.Input.Text="1750";Require(numeric.TryCommit()&&numeric.DialogResult==DialogResult.OK&&form.Draft.Ac.GpuMaximumMHz==1750,"Dialog lost exact MHz.");
+            }
+            using(var cancelled=new ProductNumericDialog("CPU PL1 (W) · AC",30,8,44,text=>form.TryEditNumericValue("pl1",text,out var error)?null:error))
+            {cancelled.Show(form);Application.DoEvents();cancelled.Input.Text="40";cancelled.DialogResult=DialogResult.Cancel;Require(form.Draft.Ac.CpuPl1Watts==30,"Cancelled dialog edited draft.");}
+            Require(runtime.Commands==0,"Typed values wrote hardware.");
             form.EditNode(3,999,999);form.Draft.Validate();
             canvas.SelectedNode=3;form.HandleCommand("node-add");form.HandleCommand("node-remove");form.Draft.Validate();
             // Keyboard and accessibility gestures use the same draft-only path as the mouse.
@@ -85,7 +100,12 @@ internal static class ProductGuiSelfTest
                 Require(bitmap.GetPixel(bitmap.Width/2,bitmap.Height/2).A==255,"Render is transparent.");
             }
             foreach(var page in Enum.GetValues<ProductPage>()){canvas.Page=page;canvas.FanTab=0;canvas.PerformanceTab=0;Render("page-"+page);}
-            canvas.Page=ProductPage.Fans;for(int i=1;i<=3;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
+            canvas.Page=ProductPage.Fans;for(int i=1;i<=2;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
+            Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
+            canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;Render("performance-exact-CPU");Require(canvas.Hits.Any(h=>h.Id=="pl1-text")&&canvas.Hits.Any(h=>h.Id=="pl2-text"),"CPU numeric inputs inaccessible.");
+            canvas.PerformanceTab=1;Render("performance-exact-GPU");Require(canvas.Hits.Any(h=>h.Id=="gpu-text"),"GPU numeric input inaccessible.");
+            using(var numeric=new ProductNumericDialog("GPU máximo (MHz) · AC",1800,210,2500,_=>null))
+            {numeric.Show(form);Application.DoEvents();using var bitmap=new Bitmap(numeric.Width,numeric.Height);numeric.DrawToBitmap(bitmap,new(0,0,bitmap.Width,bitmap.Height));bitmap.Save(Path.Combine(output,"performance-numeric-dialog.png"),ImageFormat.Png);numeric.DialogResult=DialogResult.Cancel;}
             canvas.Page=ProductPage.Performance;for(int i=1;i<=3;i++){canvas.PerformanceTab=i;Render("performance-tab-"+i);}
             canvas.Page=ProductPage.Monitoring;for(int i=1;i<=3;i++){canvas.MonitorTab=i;Render("monitor-tab-"+i);}
             canvas.Page=ProductPage.Curves;foreach(var size in new[]{new Size(1040,660),new Size(1254,706),new Size(1920,1080),new Size(2508,1412),new Size(3344,1882)})

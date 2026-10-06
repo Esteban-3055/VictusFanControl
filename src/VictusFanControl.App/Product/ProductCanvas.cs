@@ -199,8 +199,8 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     }
     private void Fans(Graphics g)
     {
-        Tabs(g,"fan-tab-",["Control de ventiladores","Estado y telemetría","Curvas","Reglas y seguridad"],FanTab);
-        if(FanTab==1){TelemetryPage(g);return;}if(FanTab==2){Curves(g,true);return;}if(FanTab==3){SafetyPage(g);return;}
+        Tabs(g,"fan-tab-",["Control de ventiladores","Estado y telemetría","Reglas y seguridad"],FanTab);
+        if(FanTab==1){TelemetryPage(g);return;}if(FanTab==2){SafetyPage(g);return;}
         Card(g,new(311,161,1338,268));DrawText(g,"Modo de control",333,181,26,null,1100,true);
         string[] modes=["Firmware","Manual","Automático"],captions=["Control del sistema (BIOS)","Nivel fijo para CPU y GPU","Curva + límites CPU y GPU"];
         string[] icons=["fan","profiles","curve"];
@@ -223,6 +223,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit,bool compact=false)
     {
         DrawText(g,name,r.X,r.Y,compact?20:24,null,r.Width-300);Card(g,new(r.Right-220,r.Y-9,155,compact?34:56),false,9);DrawText(g,value+" "+unit,r.Right-208,r.Y+1,compact?21:unit=="MHz"?22:27,null,130,true);
+        if(id is "pl1" or "pl2" or "gpu")Hit(id+"-text",new(r.Right-220,r.Y-9,155,compact?34:56),"Escribir valor exacto de "+name,!Busy);
         var track=new RectangleF(r.X,r.Y+(compact?41:73),r.Width,compact?10:14);Bar(g,track,value-min,max-min,Blue);
         var px=track.Left+(float)(value-min)/(max-min)*track.Width;using var b=new SolidBrush(Ink);g.FillEllipse(b,px-(compact?13:17),track.Y-(compact?8:10),compact?26:34,compact?26:34);
         DrawText(g,min.ToString(),r.X,r.Y+(compact?62:99),compact?14:18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+(compact?62:99),compact?14:18,Muted,110);
@@ -238,6 +239,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         {
             Card(g,new(320,253,807,570));DrawText(g,"Límites de CPU (Intel RAPL)",350,276,29,null,740,true);
             Button(g,"cpu-toggle",Profiles.CpuEnabled?"✓  Control de CPU seleccionado":"○  Control de CPU desactivado",new(350,337,735,60),Profiles.CpuEnabled);
+            DrawText(g,"Pulsa el valor numérico para escribir un valor exacto.",350,414,18,Muted,735);
             Slider(g,"pl1","PL1 · Potencia sostenida",new(350,453,735,120),Profile.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl1Watts,CpuPowerProductDefaults.MaximumConfigurablePl1Watts,"W");
             Slider(g,"pl2","PL2 · Potencia turbo",new(350,637,735,120),Profile.CpuPl2Watts,Math.Max(Profile.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl2Watts),CpuPowerProductDefaults.MaximumConfigurablePl2Watts,"W");
         }
@@ -245,6 +247,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         {
             Card(g,new(320,253,807,570));DrawText(g,"Límite GPU (NVIDIA NVML)",350,276,29,null,740,true);
             Button(g,"gpu-toggle",Profiles.GpuEnabled?"✓  Control de GPU seleccionado":"○  Control de GPU desactivado",new(350,337,735,60),Profiles.GpuEnabled);
+            DrawText(g,"Pulsa el valor numérico para escribir un valor exacto.",350,425,18,Muted,735);
             Slider(g,"gpu","Graphics clock máximo",new(350,470,735,120),Profile.GpuMaximumMHz,210,GpuProductPreferences.Maximum(Editing),"MHz");
             DrawText(g,"Clock mínimo: 210 MHz · límite configurado, no lectura del rango",350,635,21,Muted,735);
             DrawText(g,"ActiveUnverified significa Set aceptado. El rango locked completo no es observable en este driver.",350,687,21,Muted,735);
@@ -281,9 +284,9 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         Button(g,"edit-curve","Editar curva",new(891,617,341,67),true);Button(g,"edit-performance","Editar rendimiento",new(1250,617,371,67));
         Button(g,"save","Guardar ambos perfiles",new(891,730,424,65),true);Button(g,"discard","Descartar cambios",new(1331,730,290,65),false,Dirty);
     }
-    private void Curves(Graphics g,bool insideFans=false)
+    private void Curves(Graphics g)
     {
-        if(!insideFans)DrawText(g,"Curvas de ventilador · "+ProfileName,319,137,29,null,770,true);
+        DrawText(g,"Curvas de ventilador · "+ProfileName,319,137,29,null,770,true);
         Button(g,"curve-editor","Editor gráfico",new(1160,138,230,34),!SimulationVisible);Button(g,"curve-simulator","Simulador",new(1405,138,243,34),SimulationVisible);
         if(SimulationVisible){SimulationPage(g);return;}
         Card(g,new(308,179,539,652));Card(g,new(867,179,782,652));
@@ -300,6 +303,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             DrawText(g,(index+1).ToString(),345,rect.Y+4,21,Muted,43);DrawText(g,points[index].Input.ToString("0"),445,rect.Y+4,21,Muted,168);DrawText(g,points[index].Level.ToString("0"),669,rect.Y+4,21,Muted,130);Hit("node-"+index,rect,"Punto "+(index+1));}
         Button(g,"node-add","+  Añadir punto",new(331,767,226,44),true,points.Count<64);Button(g,"node-remove","−  Quitar",new(567,767,116,44),false,SelectedNode>=0&&points.Count>2);Button(g,"curve-reset","Restablecer",new(693,767,131,44));
         DrawText(g,"Editor gráfico · arrastra los puntos",889,201,27,null,735,true);DrawCurve(g,new(958,298,634,350),true);
+        DrawText(g,"Línea gris: comparación CPU/GPU, solo lectura; no es firmware.",892,698,17,Muted,737);
         var selected=SelectedNode>=0&&SelectedNode<points.Count?points[SelectedNode]:null;
         DrawText(g,selected is null?"Selecciona un nodo; flechas ajustan entrada/nivel.":$"Punto {SelectedNode+1}: {selected.Input:0} {Unit()} · nivel {selected.Level:0}",892,728,18,Muted,737);
         Button(g,"save","Guardar curvas",new(894,763,325,48),true);Button(g,"curve-defaults","Valores iniciales del perfil",new(1235,763,389,48));
@@ -349,10 +353,10 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         var c=Profile.Fan.BuildPolicy();var other=Axis switch{AdaptiveCurveAxis.CpuTemperature=>AdaptiveCurveAxis.GpuTemperature,AdaptiveCurveAxis.GpuTemperature=>AdaptiveCurveAxis.CpuTemperature,AdaptiveCurveAxis.CpuPower=>AdaptiveCurveAxis.GpuPower,AdaptiveCurveAxis.GpuPower=>AdaptiveCurveAxis.CpuPower,AdaptiveCurveAxis.CpuLoad=>AdaptiveCurveAxis.GpuLoad,_=>AdaptiveCurveAxis.CpuLoad};
         foreach(var axis in new[]{other,Axis})
         {
-            var ps=AdaptiveCurveProfiles.Curve(c,axis);var color=axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.CpuLoad?Red:Blue;
+            var ps=AdaptiveCurveProfiles.Curve(c,axis);var color=editable&&axis!=Axis?Muted:axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.CpuLoad?Red:Blue;
             using var line=new Pen(color,axis==Axis?3:2){DashStyle=axis==Axis?DashStyle.Solid:DashStyle.Dash};
             var visible=ps.Where(p=>p.Input<=xmax).Select(Position).ToArray();if(visible.Length>1)g.DrawLines(line,visible);
-            foreach(var point in visible){using var b=new SolidBrush(Ink);g.FillEllipse(b,point.X-6,point.Y-6,12,12);g.DrawEllipse(line,point.X-7,point.Y-7,14,14);}
+            if(editable&&axis==Axis)foreach(var point in visible){using var b=new SolidBrush(Ink);g.FillEllipse(b,point.X-6,point.Y-6,12,12);g.DrawEllipse(line,point.X-7,point.Y-7,14,14);}
             if(editable&&axis==Axis&&SelectedNode>=0&&SelectedNode<ps.Count){var selected=Position(ps[SelectedNode]);using var ring=new Pen(Yellow,3);g.DrawEllipse(ring,selected.X-12,selected.Y-12,24,24);}
         }
         var markers=CurrentCurveMarkers(editable?[Axis]:[other,Axis]);
@@ -369,8 +373,8 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Entrada ("+Unit()+")",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300);
         DrawText(g,"Nivel común · 10–50",plot.Left,plot.Top-41,19,Muted,285);
         if(editable){var cpu=Axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.CpuLoad;
-            DrawText(g,cpu?"● CPU · editable":"● CPU · referencia",plot.Left+290,plot.Top-41,16,Red,165);
-            DrawText(g,cpu?"● GPU · referencia":"● GPU · editable",plot.Left+465,plot.Top-41,16,Blue,169);}
+            DrawText(g,cpu?"● CPU · editable":"● GPU · editable",plot.Left+275,plot.Top-41,16,cpu?Red:Blue,170);
+            DrawText(g,cpu?"┄ GPU · comparación":"┄ CPU · comparación",plot.Left+449,plot.Top-41,16,Muted,185);}
     }
     private void TelemetryPage(Graphics g)
     {

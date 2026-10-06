@@ -105,7 +105,7 @@ internal sealed class ProductForm : Form
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
         if(id.StartsWith("axis-")){_canvas.Axis=(AdaptiveCurveAxis)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
-        if(id.StartsWith("fan-tab-")){_canvas.FanTab=int.Parse(id[8..]);_canvas.Invalidate();return;}
+        if(id.StartsWith("fan-tab-")){_canvas.FanTab=Math.Clamp(int.Parse(id[8..]),0,2);_canvas.Invalidate();return;}
         if(id.StartsWith("perf-tab-")){_canvas.PerformanceTab=int.Parse(id[9..]);_canvas.Invalidate();return;}
         if(id.StartsWith("monitor-tab-")){_canvas.MonitorTab=int.Parse(id[12..]);_canvas.Invalidate();return;}
         if(id is "node-previous" or "node-next")
@@ -126,6 +126,15 @@ internal sealed class ProductForm : Form
         if(id=="manual-apply"&&(!_canvas.State.ManualAuthorized||_canvas.State.FanMode!="Manual"||_canvas.State.Runtime!="Healthy"||_canvas.State.LifecycleBlocked))return;
         if(id=="performance-apply"&&(!_canvas.State.PerformanceSupported||!_canvas.State.CanApplyPerformance||!(_draft.CpuEnabled||_draft.GpuEnabled)))return;
         if(id=="performance-release"&&!_canvas.State.PerformanceProcessPresent)return;
+        if(id is "pl1-text" or "pl2-text" or "gpu-text")
+        {
+            var key=id[..^5];var p=_draft.Get(_canvas.Editing);var range=NumericRange(key);
+            var title=key switch{"pl1"=>"CPU PL1 (W)","pl2"=>"CPU PL2 (W)",_=>"GPU máximo (MHz)"};
+            var value=key switch{"pl1"=>p.CpuPl1Watts,"pl2"=>p.CpuPl2Watts,_=>p.GpuMaximumMHz};
+            using var dialog=new ProductNumericDialog(title+" · "+(_canvas.Editing==ProductPowerProfile.Ac?"AC":"Batería"),value,range.Min,range.Max,
+                text=>TryEditNumericValue(key,text,out var error)?null:error);
+            dialog.ShowDialog(this);_canvas.Invalidate();return;
+        }
         switch(id)
         {
             case "window-minimize":Hide();break;
@@ -182,6 +191,23 @@ internal sealed class ProductForm : Form
             _=>p
         };
         Change(_draft.With(slot,next));
+    }
+    private (int Min,int Max) NumericRange(string key)=>key switch
+    {
+        "pl1"=>(CpuPowerProductDefaults.MinimumPl1Watts,CpuPowerProductDefaults.MaximumConfigurablePl1Watts),
+        "pl2"=>(Math.Max(_draft.Get(_canvas.Editing).CpuPl1Watts,CpuPowerProductDefaults.MinimumPl2Watts),CpuPowerProductDefaults.MaximumConfigurablePl2Watts),
+        "gpu"=>(GpuProductPreferences.MinimumMHz,GpuProductPreferences.Maximum(_canvas.Editing)),
+        _=>throw new ArgumentException("Campo numérico desconocido.",nameof(key))
+    };
+    internal bool TryEditNumericValue(string key,string text,out string error)
+    {
+        error="";
+        if(_canvas.Busy||_closing||IsDisposed){error="Espera a que termine la operación actual.";return false;}
+        if(key is not("pl1" or "pl2" or "gpu")){error="Campo numérico desconocido.";return false;}
+        var range=NumericRange(key);
+        if(!int.TryParse(text,System.Globalization.NumberStyles.Integer,System.Globalization.CultureInfo.InvariantCulture,out var value)||value<range.Min||value>range.Max)
+        {error=$"Introduce un número entero entre {range.Min} y {range.Max}.";return false;}
+        EditValue(key,value);return true;
     }
     internal void EditNode(int index,double input,int level)
     {
@@ -327,4 +353,34 @@ internal sealed class ProductForm : Form
     [DllImport("user32.dll",SetLastError=true)]private static extern bool UnregisterPowerSettingNotification(IntPtr h);
     [DllImport("user32.dll",ExactSpelling=true,SetLastError=true)]private static extern IntPtr RegisterSuspendResumeNotification(IntPtr h,uint flags);
     [DllImport("user32.dll",ExactSpelling=true,SetLastError=true)][return:MarshalAs(UnmanagedType.Bool)]private static extern bool UnregisterSuspendResumeNotification(IntPtr h);
+}
+
+internal sealed class ProductNumericDialog : Form
+{
+    internal TextBox Input {get;}=new(){Dock=DockStyle.Fill,AccessibleName="Valor exacto"};
+    private readonly Label _error=new(){Dock=DockStyle.Fill,ForeColor=ProductCanvas.Yellow,AutoSize=true};
+    private readonly Func<string,string?> _commit;
+    internal ProductNumericDialog(string title,int value,int min,int max,Func<string,string?> commit)
+    {
+        _commit=commit;Text=title;StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.FixedDialog;
+        MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;AutoScaleMode=AutoScaleMode.Dpi;
+        ClientSize=new(460,245);BackColor=ProductCanvas.Background;ForeColor=ProductCanvas.Ink;Font=new("Segoe UI",10);
+        var layout=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new(20),ColumnCount=1,RowCount=5};
+        layout.RowStyles.Add(new(SizeType.Absolute,34));layout.RowStyles.Add(new(SizeType.Absolute,34));
+        layout.RowStyles.Add(new(SizeType.Absolute,42));layout.RowStyles.Add(new(SizeType.Percent,100));layout.RowStyles.Add(new(SizeType.Absolute,36));
+        layout.Controls.Add(new Label{Text=$"Valor entero · {min}–{max}",Dock=DockStyle.Fill},0,0);
+        Input.Text=value.ToString(System.Globalization.CultureInfo.InvariantCulture);layout.Controls.Add(Input,0,1);
+        layout.Controls.Add(_error,0,2);
+        layout.Controls.Add(new Label{Text="Editar solo cambia el borrador. Si aumentas PL1 por encima de PL2, PL2 sube al mismo valor.",Dock=DockStyle.Fill,ForeColor=ProductCanvas.Muted},0,3);
+        var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft};
+        var accept=new Button{Text="Aceptar",AutoSize=true};var cancel=new Button{Text="Cancelar",AutoSize=true,DialogResult=DialogResult.Cancel};
+        accept.Click+=(_,_)=>TryCommit();buttons.Controls.Add(cancel);buttons.Controls.Add(accept);layout.Controls.Add(buttons,0,4);
+        AcceptButton=accept;CancelButton=cancel;Controls.Add(layout);Shown+=(_,_)=>{Input.Focus();Input.SelectAll();};
+    }
+    internal bool TryCommit()
+    {
+        var error=_commit(Input.Text);_error.Text=error??"";
+        if(error is not null){Input.Focus();Input.SelectAll();return false;}
+        DialogResult=DialogResult.OK;return true;
+    }
 }
