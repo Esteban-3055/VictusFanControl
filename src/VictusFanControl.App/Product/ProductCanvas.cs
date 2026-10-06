@@ -303,7 +303,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             DrawText(g,(index+1).ToString(),345,rect.Y+4,21,Muted,43);DrawText(g,points[index].Input.ToString("0"),445,rect.Y+4,21,Muted,168);DrawText(g,points[index].Level.ToString("0"),669,rect.Y+4,21,Muted,130);Hit("node-"+index,rect,"Punto "+(index+1));}
         Button(g,"node-add","+  Añadir punto",new(331,767,226,44),true,points.Count<64);Button(g,"node-remove","−  Quitar",new(567,767,116,44),false,SelectedNode>=0&&points.Count>2);Button(g,"curve-reset","Restablecer",new(693,767,131,44));
         DrawText(g,"Editor gráfico · arrastra los puntos",889,201,27,null,735,true);DrawCurve(g,new(958,298,634,350),true);
-        DrawText(g,"Línea gris: comparación CPU/GPU, solo lectura; no es firmware.",892,698,17,Muted,737);
+        DrawText(g,"Línea gris: comparación CPU/GPU, solo lectura; no es firmware.",892,231,17,Muted,737);
         var selected=SelectedNode>=0&&SelectedNode<points.Count?points[SelectedNode]:null;
         DrawText(g,selected is null?"Selecciona un nodo; flechas ajustan entrada/nivel.":$"Punto {SelectedNode+1}: {selected.Input:0} {Unit()} · nivel {selected.Level:0}",892,728,18,Muted,737);
         Button(g,"save","Guardar curvas",new(894,763,325,48),true);Button(g,"curve-defaults","Valores iniciales del perfil",new(1235,763,389,48));

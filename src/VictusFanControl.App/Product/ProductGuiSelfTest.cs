@@ -127,7 +127,7 @@ internal static class ProductGuiSelfTest
             canvas.State=confirmed with{Snapshot=confirmed.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddMinutes(-1)}};
             canvas.Page=ProductPage.Monitoring;Render("state-stale-telemetry",false);Require(canvas.CurrentSnapshot is null,"Expired telemetry appeared as current.");
             canvas.State=confirmed with{Snapshot=confirmed.Snapshot! with{CpuPackagePowerW=null,GpuPowerW=null,CpuFanRpm=null,GpuFanRpm=null}};Render("state-missing-metrics");
-            canvas.Page=ProductPage.Curves;canvas.SelectedNode=5;Render("curve-selected-node");
+            canvas.Page=ProductPage.Curves;canvas.SimulationVisible=false;canvas.SelectedNode=5;Render("curve-selected-node");
             canvas.Editing=ProductPowerProfile.Battery;canvas.Axis=AdaptiveCurveAxis.GpuPower;Render("curve-battery-GPU-power");
             canvas.SimulationVisible=true;canvas.Editing=ProductPowerProfile.Ac;canvas.Simulation=new(baseline.Ac.Fan);canvas.SimulationInputs=new(80,70,40,110,100,100);canvas.Simulation.Advance(new(),1);canvas.Simulation.Advance(canvas.SimulationInputs,1201);Render("curve-simulator-sustained-load");
             canvas.Size=new(1040,660);Render("curve-simulator-minimum-layout");
