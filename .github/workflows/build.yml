@@ -817,6 +817,15 @@ jobs:
           $guiReview = Join-Path $env:RUNNER_TEMP 'VictusFanControl-product-gui-review'
           .\scripts\package-product-gui-review.ps1 -RcArtifactDirectory (Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.4-artifact') -OutputDirectory $guiReview -SourceHead '${{ github.sha }}'
           & (Join-Path $guiReview 'Start-ProductGui.ps1') -Mode FinalCheck
+          $manifest = Get-Content -LiteralPath (Join-Path $guiReview 'PRODUCT-GUI-MANIFEST.json') -Raw | ConvertFrom-Json
+          $actual = @(Get-ChildItem -LiteralPath $guiReview -Recurse -File | Where-Object { $_.FullName -ne (Join-Path $guiReview 'PRODUCT-GUI-MANIFEST.json') })
+          if ($actual.Count -ne $manifest.files.Count) { throw 'Packaged fixtures added unlisted files to the final candidate.' }
+          $listed = @{}
+          foreach ($entry in $manifest.files) { $listed[$entry.path] = $true }
+          foreach ($file in $actual) {
+            $relative = $file.FullName.Substring($guiReview.Length + 1).Replace('\','/')
+            if (-not $listed.ContainsKey($relative)) { throw "Unlisted final candidate file: $relative" }
+          }
 
       - name: Upload definitive GUI review package
         uses: actions/upload-artifact@v4

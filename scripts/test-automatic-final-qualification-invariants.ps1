@@ -92,6 +92,7 @@ Require ($program.Contains('ProductAutomaticReview.ResolveEntry')) 'review entry
 Require ($launcher.Contains('AutomaticExtendedReview') -and $launcher.Contains('--product-automatic-extended-review')) 'extended launcher entry missing'
 Require ($launcher.Contains('explicit-only-2700s-10-to-50-16MiB-diagnostics') -and $package.Contains('explicit-only-2700s-10-to-50-16MiB-diagnostics')) 'extended package contract mismatch'
 Require ($launcher.Contains("'FinalCheck'") -and $launcher.Contains("@('SelfTest','Soak','RecoverySelfTest')")) 'final candidate must check packaged software with zero-hardware fixture entries'
+Require ($launcher.Contains('$start.WorkingDirectory = $fixtureOutput') -and $launcher.Contains('No hardware activation or physical qualification performed.')) 'packaged fixture outputs must remain outside the verified payload'
 $candidate = Get-Content (Join-Path $repoRoot 'release/product-final-candidate.json') -Raw | ConvertFrom-Json
 Require ($candidate.stableReleaseAuthorized -eq $false -and $candidate.normalAutomatic -eq 'closed') 'candidate must not claim a stable release or normal Automatic authority'
 Require ($candidate.remainingPhysicalChecks.Count -eq 3) 'candidate must retain its thermal/lifecycle/exit physical regressions'

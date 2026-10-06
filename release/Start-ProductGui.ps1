@@ -26,6 +26,7 @@ if ($Mode -eq 'FinalCheck') {
     foreach ($check in @('SelfTest','Soak','RecoverySelfTest')) {
         & $PSCommandPath -Mode $check
     }
+    & $PSCommandPath -Mode Verify
     Write-Host 'Final candidate software checks: PASS. No hardware activation or physical qualification performed.'
     return
 }
@@ -62,6 +63,13 @@ try {
     $start.FileName = Join-Path $app 'VictusFanControl.App.exe'
     $start.UseShellExecute = $false
     $start.WorkingDirectory = $app
+    if ($Mode -in @('SelfTest','Soak')) {
+        # Render/report outputs must not mutate the manifest-bound package.
+        $fixtureOutput = Join-Path ([IO.Path]::GetTempPath()) ('Victus-Product-' + $Mode + '-' + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $fixtureOutput | Out-Null
+        $start.WorkingDirectory = $fixtureOutput
+        Write-Host "Zero-hardware fixture output: $fixtureOutput"
+    }
     $start.Arguments = if ($Mode -eq 'SelfTest') { '--product-gui-self-test' } elseif ($Mode -eq 'Soak') { '--product-gui-soak-self-test' } else { '--modules-dir "' + (Join-Path $app 'modules') + '"' }
     if ($Mode -in @('AutomaticReview','AutomaticExtendedReview')) {
         $minutes = if ($Mode -eq 'AutomaticExtendedReview') { 45 } else { 5 }

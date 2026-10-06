@@ -17,6 +17,9 @@ Desde la carpeta extraída:
 
 FinalCheck ejecuta las pruebas de GUI, el soak y los fixtures de recuperación
 contra los ejecutables del paquete. No activa ventiladores ni límites reales.
+Sus capturas y reportes se guardan en una carpeta temporal, cuya ruta se muestra;
+al terminar se vuelve a verificar el paquete. CI exige además que el ZIP no
+contenga archivos ajenos al manifiesto.
 CI también verifica compilación, IPC, Guardian, fuente, lifecycle, manifiestos
 y distribución reproducible. Un PASS de software no aprueba el hardware.
 
