@@ -87,7 +87,19 @@ $package = Get-Content (Join-Path $repoRoot 'scripts/package-product-gui-review.
 Require ($review -match 'MaximumSeconds\s*=\s*300') 'short product review must stay bounded to five minutes'
 Require ($review -match 'ExtendedMaximumSeconds\s*=\s*2700') 'extended review must stay bounded to 45 minutes'
 Require ($review -match 'MaximumCpuSpikeMilliseconds\s*=\s*2000') 'long review must not relax CPU confirmation'
+Require ($review.Contains('CpuSpikeThresholdC = SafetyGate.CpuEmergencyC')) 'product active confirmation must share the core 95 C threshold'
 Require ($program.Contains('ProductAutomaticReview.ResolveEntry')) 'review entry combinations must be rejected'
 Require ($launcher.Contains('AutomaticExtendedReview') -and $launcher.Contains('--product-automatic-extended-review')) 'extended launcher entry missing'
 Require ($launcher.Contains('explicit-only-2700s-10-to-50-16MiB-diagnostics') -and $package.Contains('explicit-only-2700s-10-to-50-16MiB-diagnostics')) 'extended package contract mismatch'
-Write-Host 'PASS: explicit extended product review is bounded to 45 minutes with unchanged thermal admission and closed normal Automatic.'
+Require ($launcher.Contains("'FinalCheck'") -and $launcher.Contains("@('SelfTest','Soak','RecoverySelfTest')")) 'final candidate must check packaged software with zero-hardware fixture entries'
+$candidate = Get-Content (Join-Path $repoRoot 'release/product-final-candidate.json') -Raw | ConvertFrom-Json
+Require ($candidate.stableReleaseAuthorized -eq $false -and $candidate.normalAutomatic -eq 'closed') 'candidate must not claim a stable release or normal Automatic authority'
+Require ($candidate.remainingPhysicalChecks.Count -eq 3) 'candidate must retain its thermal/lifecycle/exit physical regressions'
+Require ($candidate.automaticThermalContract -eq 'cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response') 'candidate thermal contract drifted'
+Require ($launcher.Contains($candidate.automaticThermalContract) -and $package.Contains($candidate.automaticThermalContract)) 'launcher and package must bind the current thermal contract'
+foreach ($evidence in $candidate.physicalEvidence) {
+    Require ([IO.Path]::GetFileName($evidence) -eq $evidence -and (Test-Path -LiteralPath (Join-Path $repoRoot ('release/' + $evidence)))) 'candidate physical evidence reference missing or invalid'
+    $record = Get-Content -LiteralPath (Join-Path $repoRoot ('release/' + $evidence)) -Raw | ConvertFrom-Json
+    Require ($record.target -eq 'HP-8C40-9D0R1LA-F18' -and $record.sourceHead -match '^[0-9a-f]{40}$') 'candidate evidence must bind the exact target and historical code'
+}
+Write-Host 'PASS: final candidate retains the closed normal gate, explicit physical pending checks and shared 95 C / 2000-ms confirmation.'

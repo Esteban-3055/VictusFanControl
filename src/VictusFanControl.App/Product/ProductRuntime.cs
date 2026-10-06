@@ -50,6 +50,13 @@ internal sealed record ProductRuntimeState
     internal string? Failure { get; init; }
     internal bool LifecycleBlocked { get; init; }
     internal string? LifecycleBlockReason { get; init; }
+    internal string? InterruptionDetails => !LifecycleBlocked ? null :
+        (LifecycleBlockReason ?? "Sesión interrumpida; revisar el diagnóstico.") +
+        $"\n\nEstado actual: ventiladores {FanMode} · {FanAuthority}; CPU {CpuState}; GPU {GpuState}." +
+        (AutomaticInterruptionSnapshot is { } s
+            ? $"\nMuestra del disparo ({s.Timestamp:O}): CPU {s.CpuControlTemperatureC:0.##} °C; GPU {s.GpuTemperatureC:0.##} °C."
+            : "") +
+        "\n\nExporta el diagnóstico y usa Salir desde la bandeja para liberar la sesión. Reabre después de una salida limpia. Si la liberación falla, conserva el informe y los journals; no fuerces la reentrada.";
 }
 
 internal interface IProductRuntime : IAsyncDisposable

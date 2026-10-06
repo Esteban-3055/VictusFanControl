@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "kind": "VictusFanControl.ProductFinalCandidate",
+  "target": "HP-8C40-9D0R1LA-F18",
+  "releaseStage": "final-candidate",
+  "stableReleaseAuthorized": false,
+  "normalAutomatic": "closed",
+  "startup": "firmware-no-performance-apply",
+  "reentryAfterInterruption": "clean-exit-and-new-process-only",
+  "automaticThermalContract": "cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
+  "physicalEvidence": [
+    "product-gui-source-transition-8c40-2026-10-06.json",
+    "product-gui-sustained-load-8c40-2026-10-06.json",
+    "product-gui-live-tuning-8c40-2026-10-06.json",
+    "product-gui-live-performance-8c40-2026-10-06.json",
+    "product-gui-thermal-interruption-8c40-2026-10-06.json"
+  ],
+  "remainingPhysicalChecks": [
+    "representative-use-regression-of-active-95C-contract",
+    "current-gui-suspend-resume-without-fan-reentry",
+    "current-gui-clean-exit-release-and-open-in-firmware"
+  ],
+  "evidenceLimits": [
+    "Prior thermal observations used the previous GUI 90C confirmation contract.",
+    "The thermal-interruption record is an observed interruption, not a stability PASS.",
+    "GPU NVML acceptance does not prove exact locked-range readback.",
+    "WMI acceptance does not prove independent firmware/fan ownership.",
+    "No unattended or startup hardware activation is authorized."
+  ]
+}

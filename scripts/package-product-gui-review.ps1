@@ -21,13 +21,25 @@ Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_VALIDATION_STATUS.md') -De
 Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_ADVANCED_SETTINGS.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_FINAL_RELEASE_PLAN.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_PERFORMANCE_UPDATES.md') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_FINAL_CANDIDATE.md') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'release/product-final-candidate.json') -Destination (Join-Path $OutputDirectory 'PRODUCT-FINAL-CANDIDATE.json')
+$candidatePath = Join-Path $OutputDirectory 'PRODUCT-FINAL-CANDIDATE.json'
+$candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
+$candidate | Add-Member -NotePropertyName sourceHead -NotePropertyValue $SourceHead
+New-Item -ItemType Directory -Path (Join-Path $OutputDirectory 'evidence') | Out-Null
+foreach ($evidence in $candidate.physicalEvidence) {
+    if ([IO.Path]::GetFileName($evidence) -ne $evidence) { throw 'Invalid candidate evidence path.' }
+    Copy-Item -LiteralPath (Join-Path $root ('release/' + $evidence)) -Destination (Join-Path $OutputDirectory 'evidence')
+}
+$candidate | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $candidatePath -Encoding utf8
 $entries = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-Object FullName | ForEach-Object {
     [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
 })
 $manifest = [ordered]@{
     schemaVersion=1;kind='VictusFanControl.ProductGuiReview';sourceHead=$SourceHead
     inheritedRcZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
-    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticExtendedReview='explicit-only-2700s-10-to-50-16MiB-diagnostics';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu90-confirm-2000ms-cpu99-immediate-raw-response';productAutomaticSourceTransition='bounded-4000ms-fresh-guardian-preserves-inertia';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';curveApply='explicit-live-unified-preserves-session-inertia';productDemand='unified-max-six-influences-v1';productProfiles='v2-preserves-v1-backup';performanceRecovery='explicit-release-only-exact-session-backups';files=$entries
+    releaseStage='final-candidate';finalReleaseReady=$false
+    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticExtendedReview='explicit-only-2700s-10-to-50-16MiB-diagnostics';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response';productAutomaticSourceTransition='bounded-4000ms-fresh-guardian-preserves-inertia';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';curveApply='explicit-live-unified-preserves-session-inertia';productDemand='unified-max-six-influences-v1';productProfiles='v2-preserves-v1-backup';performanceRecovery='explicit-release-only-exact-session-backups';files=$entries
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'PRODUCT-GUI-MANIFEST.json') -Encoding utf8
 & (Join-Path $OutputDirectory 'Start-ProductGui.ps1') -Mode Verify

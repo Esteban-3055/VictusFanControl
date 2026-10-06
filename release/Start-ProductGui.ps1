@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Verify','SelfTest','Soak','Open','AutomaticReview','AutomaticExtendedReview','RecoverPerformance','RecoverySelfTest')][string]$Mode = 'Open',
+    [ValidateSet('Verify','FinalCheck','SelfTest','Soak','Open','AutomaticReview','AutomaticExtendedReview','RecoverPerformance','RecoverySelfTest')][string]$Mode = 'Open',
     [Guid]$ExpectedCpuSession = [Guid]::Empty,
     [Guid]$ExpectedGpuSession = [Guid]::Empty,
     [switch]$ConfirmExclusiveGpuController
@@ -15,11 +15,22 @@ foreach ($entry in $manifest.files) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing package file: $relative" }
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant() -ne $entry.sha256 -or (Get-Item -LiteralPath $file).Length -ne $entry.size) { throw "Package integrity failed: $relative" }
 }
-Write-Host "Verified GUI build $($manifest.sourceHead). Physical validation remains pending."
+Write-Host "Verified GUI build $($manifest.sourceHead). Final candidate; remaining physical checks are listed in PRODUCT-FINAL-CANDIDATE.json."
+if ($manifest.releaseStage -ne 'final-candidate' -or $manifest.finalReleaseReady -ne $false -or $manifest.normalAutomatic -ne 'closed') { throw 'Unsupported final candidate authorization.' }
+$candidate = Get-Content -LiteralPath (Join-Path $root 'PRODUCT-FINAL-CANDIDATE.json') -Raw | ConvertFrom-Json
+if ($candidate.schemaVersion -ne 1 -or $candidate.kind -ne 'VictusFanControl.ProductFinalCandidate' -or $candidate.sourceHead -ne $manifest.sourceHead -or $candidate.stableReleaseAuthorized -ne $false) { throw 'Invalid final candidate identity or authorization.' }
 if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }
+if ($Mode -eq 'FinalCheck') {
+    # All three entries use explicit zero-hardware fixtures against the exact packaged binaries.
+    foreach ($check in @('SelfTest','Soak','RecoverySelfTest')) {
+        & $PSCommandPath -Mode $check
+    }
+    Write-Host 'Final candidate software checks: PASS. No hardware activation or physical qualification performed.'
+    return
+}
 if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticReview -ne 'explicit-only-300s-10-to-50') { throw 'This package does not authorize the supervised Automatic review entry.' }
-if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticThermal -ne 'cpu90-confirm-2000ms-cpu99-immediate-raw-response') { throw 'This package does not include bounded CPU spike confirmation and raw thermal response.' }
+if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticThermal -ne 'cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response') { throw 'This package does not include the final candidate thermal contract.' }
 if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticPerformance -ne 'required-both-before-fans') { throw 'This package does not authorize the coupled CPU/GPU Automatic entry.' }
 if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticSourceTransition -ne 'bounded-4000ms-fresh-guardian-preserves-inertia') { throw 'This package does not include the bounded AC/Battery curve transition review.' }
 if ($Mode -eq 'AutomaticExtendedReview' -and $manifest.productAutomaticExtendedReview -ne 'explicit-only-2700s-10-to-50-16MiB-diagnostics') { throw 'This package does not authorize the supervised extended Automatic review entry.' }

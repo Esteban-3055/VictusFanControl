@@ -224,7 +224,12 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Editando: "+ProfileName+" · Aplicado: "+(State.AppliedFanProfile??"Ninguno"),945,513,19,Muted,675);
         // Reserve separate rows for ticks, the X-axis title and both review status lines.
         DrawCurve(g,new(972,585,625,110),false);
-        if(State.LifecycleBlocked)DrawText(g,State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.",937,775,18,Yellow,685,height:47);
+        if(State.LifecycleBlocked)
+        {
+            DrawText(g,"Sesión interrumpida · "+State.FanMode+" / "+State.FanAuthority,937,775,18,Yellow,685,height:24);
+            Button(g,"interruption-details","Ver motivo completo",new(937,800,270,26));
+            DrawText(g,"Salir desde bandeja y reabrir tras liberar.",1218,802,16,Muted,415,height:24);
+        }
         else if(State.AutomaticPreparing)DrawText(g,"Preparando CPU/GPU; Firmware cancela la entrada a Automatic.",937,775,18,Muted,685,height:47);
         else if(State.AutomaticReview)
         {
@@ -408,7 +413,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,157,1337,666));DrawText(g,"Reglas de seguridad",332,177,30,null,1250,true);
         DrawText(g,"Protecciones del backend · solo lectura",332,225,23,Muted,1240);
         string[] titles=["Respuesta térmica de demanda","SafetyGate independiente","Límites reales de ventiladores","Telemetría fresca y completa","Guardian y recuperación"];
-        string[] details=["La curva y el filtrado conservan los overrides térmicos del motor vigente.","Temperaturas crudas conservan las protecciones CPU/GPU; editar la curva no las altera.","Manual WMI 10–50; automático preparado 30–50. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recovery no concede autoridad automáticamente. Los journals no se borran desde la GUI."];
+        string[] details=["La temperatura cruda activa la respuesta térmica, aunque el filtro o las influencias indiquen menos.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >82 °C interrumpe.","Manual WMI y revisión Automático: 10–50. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recovery no concede autoridad automáticamente. Los journals no se borran desde la GUI."];
         for(int i=0;i<5;i++){var r=new RectangleF(331,282+i*103,1293,87);Card(g,r);Icon(g,i==4?"profiles":"fan",r.X+24,r.Y+24,37);DrawText(g,titles[i],r.X+99,r.Y+12,23,null,1100,true);DrawText(g,details[i],r.X+99,r.Y+47,19,Muted,1100);}
     }
     private void Monitoring(Graphics g)
@@ -461,10 +466,11 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,551,18,Dirty?Yellow:Green,475);
         Button(g,"profiles-import","Importar perfiles",new(846,555,310,40));Button(g,"profiles-export","Exportar perfiles",new(1176,555,442,40));
         Card(g,new(310,623,1337,201));DrawText(g,"Registros y estado",334,647,28,null,1250,true);
-        DrawText(g,State.Failure??State.Message,334,704,21,State.Failure is null?Muted:Yellow,880);
+        DrawText(g,State.LifecycleBlocked?State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.":State.Failure??State.Message,334,704,21,State.LifecycleBlocked||State.Failure is not null?Yellow:Muted,880,height:57);
+        if(State.LifecycleBlocked)Button(g,"interruption-details","Ver motivo completo",new(334,779,290,32));
         Button(g,"open-logs","Abrir carpeta de logs",new(1240,690,379,43));
         Button(g,"diagnostics-export","Exportar diagnóstico",new(1240,745,379,43));
-        DrawText(g,"Detalle técnico: ventiladores "+State.FanAuthority+" · CPU "+State.CpuState+" · GPU "+State.GpuState,334,773,18,Muted,880);
+        if(!State.LifecycleBlocked)DrawText(g,"Detalle técnico: ventiladores "+State.FanAuthority+" · CPU "+State.CpuState+" · GPU "+State.GpuState,334,773,18,Muted,880);
     }
     private PointF Virtual(Point point)=>new((point.X-_offsetX)/_scale,(point.Y-_offsetY)/_scale);
     protected override void OnMouseDown(MouseEventArgs e)

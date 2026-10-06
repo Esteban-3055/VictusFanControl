@@ -1,7 +1,8 @@
 # Cierre de la versión final
 
 Destino: HP 8C40 / 9D0R1LA / BIOS F.18. El paquete actual sigue siendo de revisión;
-la etiqueta de versión final requiere cerrar las rutas pendientes, sin repetir
+La candidata incluye `PRODUCT_FINAL_CANDIDATE.md`, evidencia consolidada y
+`FinalCheck` sobre los ejecutables distribuidos. La etiqueta estable requiere cerrar las rutas pendientes, sin repetir
 las pruebas de subsistemas ya aprobadas en PRODUCT_VALIDATION_STATUS.md.
 
 ## 1. Consolidación de la GUI
@@ -10,6 +11,9 @@ Entrada lateral «Avanzado» y título coherente. El gráfico de Ventiladores re
 filas distintas para números del eje X, «Demanda (%)», plazo de revisión y carga
 acumulada. Los renders de Windows incluyen descenso breve y prolongado a tamaño
 nativo y mínimo. No se cambia el motor por estas correcciones visuales.
+El bloqueo dispone de «Ver motivo completo», con causa original, muestra del
+disparo, estado actual y salida limpia. Reglas y seguridad muestra el rango
+vigente 10–50 y el contrato térmico de esta candidata.
 
 ## 2. Actualización de límites durante el uso
 
@@ -38,8 +42,14 @@ integración con la GUI y Automático actuales.
 
 ## 4. Uso continuo y distribución
 
-Después de cerrar los puntos 2–3, definir explícitamente el contrato de Automático
-normal, pérdida de telemetría, interrupción y reentrada. El arranque con Windows
+El contrato de interrupción y reentrada está definido: se mantiene Firmware
+tras un fallo y se requiere salida limpia/nueva apertura, sin rearmado incidental.
+Se elimina el plazo adicional de CPU >90 °C de la GUI ya establecida. Desde 95 °C
+se conservan los 2000 ms y cinco muestras de la admisión del controlador; desde
+99 °C el retorno es inmediato. Inicio ≤90 °C, fuente, potencia, GPU y telemetría
+siguen protegidos. Hace falta una regresión breve de este cambio y del punto 3,
+sin repetir la carga prolongada anterior, antes de promover Automático normal.
+El arranque con Windows
 no debe activar hardware como efecto incidental de una preferencia.
 Mantener las protecciones crudas y la liberación; verificar el paquete exacto,
 sus ejecutables y manifiesto antes de etiquetar y publicar una versión final.

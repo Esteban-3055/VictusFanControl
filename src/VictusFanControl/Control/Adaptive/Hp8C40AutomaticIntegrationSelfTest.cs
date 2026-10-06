@@ -137,10 +137,33 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             Check(held.Action==AdaptiveFanProductionActionKind.HoldCustom&&held.EqualFanLevel==34&&
                 coordinator.Authority==FanAuthority.Custom&&productBackend.Restores==0&&controller.AutomaticAcquisitionBudgetMilliseconds is null,
                 "timely recovered product spike retains Automatic and slow descent");
-            clock=1300;var critical=cold with{Timestamp=Now(),CpuTemperatureC=99};
+            clock=1300;var warm=cold with{Timestamp=Now(),CpuTemperatureC=93};
+            var cooling=await controller.ProcessAutomaticAsync(warm,Raw(warm),CancellationToken.None);
+            Check(cooling.ThermalOverride&&cooling.ActuationDemandLevel>=44&&cooling.EqualFanLevel==38&&
+                coordinator.Authority==FanAuthority.Custom&&productBackend.Restores==0&&controller.AutomaticAcquisitionBudgetMilliseconds is null,
+                "established raw CPU 93 C keeps protected cooling without a confirmation deadline in the legacy response");
+            clock=1400;var critical=cold with{Timestamp=Now(),CpuTemperatureC=99};
             var stopped=await controller.ProcessAutomaticAsync(critical,Raw(critical),CancellationToken.None);
             Check(stopped.Action==AdaptiveFanProductionActionKind.RestoreFirmware&&productBackend.Restores==1,
                 "product raw response preserves immediate CPU 99 C handoff");
+        }
+
+        clock=0;var unifiedBackend=new Backend();
+        await using(var coordinator=new FanControlCoordinator(unifiedBackend))
+        {
+            var configuration=VictusFanControl.Product.ProductProfiles.DefaultProfile(VictusFanControl.Product.ProductPowerProfile.Ac).Fan;
+            var controller=new AdaptiveFanProductionController(coordinator,configuration.BuildPolicy(),true,true,
+                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,
+                automaticConfiguration:configuration,automaticMinimumLevel:10,useRawCpuThermalResponse:true);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,CancellationToken.None);
+            var cold=Sample(Now(),63) with{GpuTemperatureC=35,CpuCoreTemperatures=Sample(Now()).CpuCoreTemperatures.Select(c=>c with{TemperatureC=45}).ToArray()};
+            var initial=await controller.ProcessAutomaticAsync(cold,Raw(cold),CancellationToken.None);
+            clock=700;var warm=cold with{Timestamp=Now(),CpuTemperatureC=93};
+            var cooling=await controller.ProcessAutomaticAsync(warm,Raw(warm),CancellationToken.None);
+            Check(initial.EqualFanLevel.HasValue&&cooling.ThermalOverride&&cooling.ActuationDemandLevel==50&&
+                cooling.EqualFanLevel==Math.Min(50,initial.EqualFanLevel.Value+4)&&coordinator.Authority==FanAuthority.Custom&&
+                unifiedBackend.Restores==0&&controller.AutomaticAcquisitionBudgetMilliseconds is null,
+                "unified product CPU 93 C retains maximum thermal target and protected four-level rise without a confirmation deadline");
         }
 
         foreach (var source in new[]{CpuDemandTemperatureSource.PerformanceCoreAverage, CpuDemandTemperatureSource.HottestPerformanceCoresAverage})

@@ -1,5 +1,12 @@
 # Automatic: activación coordinada de curva y límites
 
+**Contrato vigente de la candidata:** ver [PRODUCT_FINAL_CANDIDATE.md](PRODUCT_FINAL_CANDIDATE.md).
+El inicio conserva CPU ≤90 °C; la confirmación activa comienza a 95 °C, con
+2000 ms y retorno inmediato a 99 °C. Se conserva salida limpia/nueva apertura
+tras interrupción. Las secciones de diagnóstico de abajo describen versiones
+anteriores y sus pruebas; sus procedimientos y umbrales históricos no sustituyen
+el contrato actual ni representan pendientes adicionales.
+
 ## Estado consolidado y revisión prolongada
 
 Ver [PRODUCT_VALIDATION_STATUS.md](PRODUCT_VALIDATION_STATUS.md): conserva los

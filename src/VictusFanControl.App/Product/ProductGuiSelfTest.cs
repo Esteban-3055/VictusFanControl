@@ -155,7 +155,7 @@ internal static class ProductGuiSelfTest
             canvas.Page=ProductPage.Curves;canvas.SimulationVisible=false;canvas.ShowCurvePoints=false;Render("curve-influences");Require(canvas.Hits.Count(h=>h.Id.StartsWith("influence-")&&h.Slider)==6&&canvas.Hits.All(h=>!h.Id.StartsWith("axis-")),"Influence controls missing or obsolete axis buttons remain.");canvas.ShowCurvePoints=true;canvas.SelectedNode=5;Render("curve-selected-node");
             var expandedInfluences=baseline.Ac.Fan.UnifiedDemand!;
             for(int i=0;i<6;i++)expandedInfluences=expandedInfluences.WithInfluence(i,200);
-            canvas.Profiles=baseline with{Ac=baseline.Ac with{Fan=baseline.Ac.Fan with{UnifiedDemand=expandedInfluences}}};canvas.ShowCurvePoints=false;
+            canvas.Profiles=baseline with{Ac=baseline.Ac with{Fan=baseline.Ac.Fan with{UnifiedDemand=expandedInfluences}}};canvas.Editing=ProductPowerProfile.Ac;canvas.ShowCurvePoints=false;
             Render("curve-influences-200");Require(canvas.Hits.Count(h=>h.Id.StartsWith("influence-")&&h.Slider&&h.Max==200)==6,"Rendered influence sliders did not expose 200 percent.");
             canvas.Size=new(1040,660);Render("curve-influences-200-minimum");canvas.Size=new(1672,941);canvas.Profiles=baseline;
             canvas.Editing=ProductPowerProfile.Battery;canvas.ShowCurvePoints=true;Render("curve-battery-unified");
@@ -176,6 +176,19 @@ internal static class ProductGuiSelfTest
             Render("fans-review-brief-layout");canvas.Size=new(1040,660);Render("fans-review-brief-minimum-layout");
             canvas.State=canvas.State with{AutomaticDecision=canvas.State.AutomaticDecision! with{ObservedLoadSeconds=1815.785,SustainedLoadCooling=true}};
             Render("fans-review-sustained-minimum-layout");canvas.Size=new(1672,941);Render("fans-review-sustained-layout");
+            canvas.State=markerState;
+            var interruption=markerSample with{CpuTemperatureC=96,CpuCoreTemperatures=[new(0,0,"Performance",98)]};
+            canvas.State=markerState with{FanMode="Firmware",FanAuthority="Firmware",LifecycleBlocked=true,
+                LifecycleBlockReason=ProductAutomaticReview.CpuSpikeDeadlineFailure,AutomaticInterruptionSnapshot=interruption,
+                Failure=null,Message="Telemetría recuperada."};
+            Require(canvas.State.InterruptionDetails!.Contains(ProductAutomaticReview.CpuSpikeDeadlineFailure)&&
+                canvas.State.InterruptionDetails.Contains("CPU 98 °C")&&canvas.State.InterruptionDetails.Contains("Salir desde la bandeja"),
+                "Later healthy telemetry hid the interruption or its clean-exit guidance.");
+            canvas.Page=ProductPage.Fans;Render("fans-interrupted-layout");
+            Require(canvas.Hits.Single(h=>h.Id=="interruption-details").Enabled&&canvas.Hits.Where(h=>h.Id is "fan-mode-1" or "fan-mode-2").All(h=>!h.Enabled),
+                "Interruption details reopened hardware control or were inaccessible.");
+            canvas.Size=new(1040,660);Render("fans-interrupted-minimum-layout");
+            canvas.Page=ProductPage.Settings;Render("settings-interrupted-minimum-layout");canvas.Size=new(1672,941);Render("settings-interrupted-layout");
             canvas.State=markerState;
             canvas.Page=ProductPage.Curves;Render("editor-live-demand-marker");
             canvas.Profiles=canvas.Profiles with{Ac=canvas.Profiles.Ac with{Fan=markerConfig with{UnifiedDemand=markerConfig.UnifiedDemand! with{Curve=[new(0,10),new(90,10),new(100,50)]}}}};
@@ -265,14 +278,28 @@ internal static class ProductGuiSelfTest
         clock=800;review.EnsureDispatchAllowed(spike);review.EnsureDispatchAllowed(spike);
         require(review.RemainingCpuSpikeMilliseconds==1500,"Dispatch previews renewed the CPU spike deadline.");
         Rejected(()=>review.Observe(spike,Safety(spike)),"Repeated high acquisition counted as new.");
-        clock=1400;var recovered=Sample(1400,62);require(review.Observe(recovered,Safety(recovered))&&review.RemainingCpuSpikeMilliseconds is null,"Timely cool acquisition failed to clear spike.");
+        clock=1400;var recovered=Sample(1400,94.9);require(review.Observe(recovered,Safety(recovered))&&review.RemainingCpuSpikeMilliseconds is null,"Timely acquisition below the core emergency threshold failed to clear spike.");
         clock=1500;var coreSpike=Sample(1500,60) with{CpuCoreTemperatures=[new(0,0,"Performance",97)]};
         require(review.Observe(coreSpike,Safety(coreSpike)),"Hottest-core spike was not admitted for confirmation.");
-        clock=2500;var sustained=Sample(2500,94);require(review.Observe(sustained,Safety(sustained)),"Early sustained sample escaped the bounded confirmation path.");
+        clock=2500;var sustained=Sample(2500,95);require(review.Observe(sustained,Safety(sustained)),"Exact 95 C sample escaped the bounded confirmation path.");
         require(review.RemainingCpuSpikeMilliseconds==1000,"Another high sample reset the deadline.");
         clock=3500;
         Rejected(()=>review.EnsureDispatchAllowed(sustained),"Sustained CPU heat admitted dispatch at deadline.");
         var lateCool=Sample(3500,62);Rejected(()=>review.Observe(lateCool,Safety(lateCool)),"Late cool acquisition rescued expired spike admission.");
+        // Regression from bf445702: 92, 93, 93 C caused a GUI-only 90 C deadline
+        // while core admission remained open. Fresh readings below 95 C must not
+        // create an acquisition budget or erase the activation's duration limit.
+        review.Start();clock=4000;
+        for(var i=0;i<3;i++){var cool=Sample(4000+i*100);review.Observe(cool,Safety(cool));}
+        for(var i=0;i<8;i++)
+        {
+            clock=4300+i*700;var warm=Sample((int)clock,i==0?92:i==7?94.9:93);
+            require(review.Observe(warm,Safety(warm))&&review.RemainingCpuSpikeMilliseconds is null,
+                "Fresh established CPU below 95 C recreated the obsolete 90 C deadline.");
+        }
+        require(review.RemainingSeconds<300,"Warm CPU samples renewed the activation deadline.");
+        var independentGpuFault=Sample((int)clock+100,93) with{GpuTemperatureC=83};
+        Rejected(()=>review.Observe(independentGpuFault,Safety(independentGpuFault)),"Warm CPU concealed an independent GPU envelope fault.");
         review.Start();for(var i=0;i<3;i++){var cool=Sample(4000+i*100);review.Observe(cool,Safety(cool));}
         foreach(var critical in new[]{Sample(4300,99),Sample(4300,60) with{CpuCoreTemperatures=[new(0,0,"Efficiency",99)]}})
             Rejected(()=>review.Observe(critical,Safety(critical)),"CPU >=99 package/hottest-core did not hand off immediately.");
@@ -466,6 +493,8 @@ internal static class ProductGuiSelfTest
                     using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
                     require(state.RootElement.GetProperty("sessionId").GetString()==AppLog.SessionId&&state.RootElement.GetProperty("sessionStartedUtc").GetDateTimeOffset()==AppLog.SessionStartedUtc,"Diagnostic session identity mismatch.");
                     require(state.RootElement.GetProperty("physicalQualification").GetString()=="not-established-by-this-export","Diagnostic fabricated physical qualification.");
+                    require(state.RootElement.GetProperty("automaticThermalContract").GetString()=="cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
+                        "Diagnostic did not identify the thermal contract used by this build.");
                     require(state.RootElement.GetProperty("AutomaticInterruptionSnapshot").GetProperty("CpuPackagePowerW").GetDouble()==61 &&
                         state.RootElement.GetProperty("snapshot").GetProperty("CpuPackagePowerW").GetDouble()==10 &&
                         state.RootElement.GetProperty("AppliedPerformance").GetProperty("CpuEnabled").GetBoolean(),"Later healthy telemetry erased the triggering sample or applied limits from diagnostics.");

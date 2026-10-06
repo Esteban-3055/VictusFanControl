@@ -42,9 +42,49 @@ internal static class ProductAutomaticActivationSelfTest
         }
         Console.WriteLine("PASS: explicit 5/45-minute review selection, fixed deadlines and unchanged 2000-ms thermal confirmation.");
     }
+    private static void TestSharedThermalContract(Action<bool,string> require)
+    {
+        var hardware=new VictusFanControl.Hardware.Windows.HardwareIdentity(
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.BoardManufacturer,
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.BoardProduct,
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.BoardVersion,
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.SystemManufacturer,
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.SystemProductName,
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.SystemSkuPrefix,
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.ValidatedBiosVersion);
+        var origin=DateTimeOffset.UtcNow;long clock=0;
+        VictusFanControl.Telemetry.TelemetrySnapshot Sample(double cpu)=>new(origin.AddMilliseconds(clock),
+            "Intel Core i7-13700H",cpu,30,50,VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.ExpectedGpuName,
+            65,60,70,4900,4900)
+        {
+            CpuExpectedPhysicalCoreCount=14,
+            CpuCoreTemperatures=Enumerable.Range(0,14).Select(i=>new VictusFanControl.Telemetry.CpuCoreTemperatureSample(i,i,i<6?"Performance":"Efficiency",cpu)).ToArray()
+        };
+        var core=new VictusFanControl.Safety.Hp8C40AutomaticThermalAdmission(hardware,()=>clock);
+        var review=new ProductAutomaticReview(()=>clock);review.Start();
+        void Observe(double cpu,bool pending)
+        {
+            var sample=Sample(cpu);var effective=core.Observe(sample,sample.Timestamp);
+            require(effective.EffectiveSafety.CustomControlPermitted&&!effective.Closed,"Core thermal admission rejected an expected fresh sample.");
+            review.Observe(sample,effective.EffectiveSafety);
+            require(effective.CpuConfirmationPending==pending&&review.RemainingCpuSpikeMilliseconds==effective.RemainingConfirmationMilliseconds,
+                "GUI and actual core thermal admission disagreed on the confirmation budget.");
+        }
+        for(int i=0;i<3;i++){clock=i*100;Observe(63,false);}
+        foreach(var point in new[]{(300,92d),(1000,93d),(1700,93d),(2400,94.9)}){clock=point.Item1;Observe(point.Item2,false);}
+        clock=2500;Observe(95,true);clock=3000;Observe(98,true);
+        clock=3500;Observe(94.9,false);
+        clock=3600;Observe(98,true);clock=5600;
+        var late=Sample(93);var denied=core.Observe(late,late.Timestamp);
+        require(denied.Closed,"Late below-95 recovery reopened the actual core admission.");
+        var rejected=false;try{review.Observe(late,denied.EffectiveSafety);}catch(InvalidOperationException){rejected=true;}
+        require(rejected,"Late recovery reopened the GUI after the shared deadline.");
+        Console.WriteLine("PASS: actual core and product GUI agree on fresh 92/93 C, exact 95 C, timely 94.9 C recovery and expired confirmation.");
+    }
     private static async Task RunAsync(Action<bool,string> require)
     {
         TestExtendedReview(require);
+        TestSharedThermalContract(require);
         TestSourceTransitions(require);
         var activation = new ProductAutomaticActivation();
         var profiles = new ProductProfiles { CpuEnabled = false, GpuEnabled = false };

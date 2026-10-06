@@ -13,7 +13,8 @@ internal sealed class ProductAutomaticReview
     internal const int ExtendedMaximumSeconds = 2700;
     internal int MaximumDurationSeconds { get; }
     internal const int MaximumCpuSpikeMilliseconds = 2000;
-    internal const string CpuSpikeDeadlineFailure = "Confirmación de pico CPU vencida: sin adquisición fresca de recuperación ≤90 °C en 2000 ms; volver a Firmware.";
+    internal const double CpuSpikeThresholdC = SafetyGate.CpuEmergencyC;
+    internal const string CpuSpikeDeadlineFailure = "Confirmación de pico CPU vencida: sin adquisición fresca de recuperación <95 °C en 2000 ms; volver a Firmware.";
     internal const double CpuImmediateHandoffC = Hp8C40ThermalEmergencyConfirmation.CpuHardEmergencyC;
     private long? _cpuHighSince;
     private long? _lastClock;
@@ -123,7 +124,10 @@ internal sealed class ProductAutomaticReview
             _observed = snapshot;
             try { EnsureDispatchAllowed(snapshot); }
             catch { _observed = previous; throw; }
-            if (snapshot.CpuControlTemperatureC > Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC)
+            // The <=90 C envelope is for startup, not a second emergency threshold.
+            // Established control follows the same >=95 C confirmation as the core;
+            // 90..94.x C keeps raw maximum cooling without starting a false deadline.
+            if (snapshot.CpuControlTemperatureC >= CpuSpikeThresholdC)
                 _cpuHighSince ??= _milliseconds();
             else _cpuHighSince = null;
             _lastSample = snapshot.Timestamp;

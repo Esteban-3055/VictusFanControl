@@ -26,6 +26,7 @@ alcance específico; no invalida automáticamente los resultados anteriores.
 
 - Influencias ampliadas: temperatura 100–200 %, potencia/carga 0–200 %; validación, persistencia, simulador y editor comparten el rango. Defaults y protecciones conservados; efectos acústicos de valores altos dependen del perfil elegido.
 - Regresión de display/suspensión y salida con la integración Automatic actual.
+- Regresión breve del contrato térmico de la candidata: inicio ≤90 °C, confirmación activa desde 95 °C y retorno inmediato desde 99 °C. La evidencia anterior no aprueba físicamente este cambio.
 - Promoción posterior de Automatic normal y decisiones de arranque/reentrada.
   No hay validación de uso desatendido ni habilitación de arranque automático.
 
@@ -34,6 +35,14 @@ carga es una heurística; no representa una temperatura de chasis medida.
 
 ## Revisión prolongada preparada
 
+La candidata actual se describe en `PRODUCT_FINAL_CANDIDATE.md`. El último
+diagnóstico bf445702 contiene 1421 muestras completas, cuatro curvas, tres
+ajustes y tres límites aplicados en la misma activación. A las 19:31:23 Santiago
+interrumpió por la confirmación adicional de 90 °C, con CPU observada 92/93/93 °C
+y nivel solicitado 50. Se conserva en
+`release/product-gui-thermal-interruption-8c40-2026-10-06.json`; no es un PASS
+de estabilidad ni de la nueva regla activa de 95 °C.
+
 `Start-ProductGui.ps1 -Mode AutomaticExtendedReview` abre una entrada explícita
 para el destino exacto, con **45 minutos por activación** y niveles **10–50**.
 `AutomaticReview` conserva cinco minutos. `Open` e inicio con Windows siguen en
@@ -41,7 +50,7 @@ Firmware con Automatic normal cerrado. La duración no se guarda en preferencias
 
 Ambas entradas comparten los mismos límites, preparación CPU/GPU, fuente real,
 telemetría, protección térmica, cancelación, liberación y bloqueo tras lifecycle.
-CPU >90 y <99 °C dispone de 2000 ms tras establecimiento; CPU ≥99 °C vuelve
+CPU ≥95 y <99 °C dispone de 2000 ms tras establecimiento; CPU ≥99 °C vuelve
 inmediatamente. GPU >82 °C, CPU >60 W, GPU >75 W o datos inválidos interrumpen.
 El paso de fuente sigue limitado a 4 s y no renueva el plazo ni la inercia.
 Aplicar una curva y repetir Automatic tampoco renuevan el reloj.

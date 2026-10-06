@@ -139,6 +139,10 @@ internal sealed partial class ProductForm : Form
         }
         switch(id)
         {
+            case "interruption-details":
+                if(_canvas.State.InterruptionDetails is { } details)
+                    MessageBox.Show(this,details,"Sesión interrumpida",MessageBoxButtons.OK,MessageBoxIcon.Information);
+                break;
             case "window-minimize":Hide();break;
             case "window-maximize":ToggleMaximize();break;
             case "window-close":Hide();break;
