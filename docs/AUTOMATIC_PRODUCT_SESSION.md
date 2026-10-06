@@ -100,6 +100,9 @@ Los registros se guardan en `%LOCALAPPDATA%\VictusFanControl\logs\sessions\<sess
 un segmento anterior; el ZIP reúne hasta 2 MiB recientes por flujo, sin filas
 parciales. El nombre sugerido del ZIP contiene el ID de sesión. No se recorren
 logs de otras aperturas. No se eliminan diagnósticos anteriores ni journals.
+Solo los harnesses explícitos de MainForm conservan además una copia diaria
+para sus recolectores históricos. ProductForm no activa esa compatibilidad y
+los ZIP siguen leyendo exclusivamente las rutas de sesión.
 `telemetry-tail.jsonl` conserva las muestras originales, incluidos valores no
 finitos representados como strings, sin lecturas adicionales de hardware.
 Cada activación Automatic registra otro `automaticSessionId`, la configuración

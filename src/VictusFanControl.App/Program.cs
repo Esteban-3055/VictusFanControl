@@ -830,6 +830,7 @@ internal static class Program
             Application.Run(product); AppLog.Write("Product GUI exited."); return;
         }
 
+        AppLog.EnableQualificationCompatibilityLog();
         using var form = new MainForm(
             modulesDirectory,
             suspendHardwareTest,

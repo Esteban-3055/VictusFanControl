@@ -10,6 +10,7 @@ internal static class AppLog
     private const long MaxFileBytes = 5 * 1024 * 1024;
     private static readonly object Gate = new();
     private static bool _initialized;
+    internal static bool QualificationCompatibilityLogEnabled { get; private set; }
     internal static DateTimeOffset SessionStartedUtc { get; } = DateTimeOffset.UtcNow;
     internal static string SessionId { get; } = SessionStartedUtc.ToString("yyyyMMddTHHmmssfffZ") + "-" + Guid.NewGuid().ToString("N");
     public static string LogDirectory { get; } = Path.Combine(
@@ -40,6 +41,17 @@ internal static class AppLog
         }
     }
 
+    // Explicit legacy hardware harnesses retain their existing daily-log collector contract.
+    // Product GUI never opts in; its exports always use the primary session path.
+    internal static void EnableQualificationCompatibilityLog()
+    {
+        lock (Gate)
+        {
+            QualificationCompatibilityLogEnabled = true;
+            Write("Qualification daily-log compatibility enabled for session: " + SessionId);
+        }
+    }
+
     public static void Write(string message)
     {
         try
@@ -47,7 +59,10 @@ internal static class AppLog
             lock (Gate)
             {
                 Initialize();
-                Append(CurrentLogPath, $"{DateTimeOffset.Now:O}  {message}{Environment.NewLine}");
+                var line = $"{DateTimeOffset.Now:O}  {message}{Environment.NewLine}";
+                Append(CurrentLogPath, line);
+                if (QualificationCompatibilityLogEnabled)
+                    Append(Path.Combine(LogDirectory, $"events-{DateTime.Now:yyyy-MM-dd}.log"), line);
             }
         }
         catch { /* Diagnostics must never crash monitoring. */ }

@@ -140,6 +140,7 @@ internal static class ProductGuiSelfTest
     }
     private static void TestSessionLogs(Action<bool,string> require)
     {
+        require(!AppLog.QualificationCompatibilityLogEnabled,"Product GUI opted into legacy daily logs.");
         AppLog.Initialize();var id=AppLog.SessionId;var path=AppLog.CurrentLogPath;AppLog.Initialize();
         require(id==AppLog.SessionId&&path==AppLog.CurrentLogPath&&Path.GetDirectoryName(path)==AppLog.SessionDirectory,"Log identity changed within an application session.");
         var directory=Path.Combine(Path.GetTempPath(),"vfc-log-tail-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
