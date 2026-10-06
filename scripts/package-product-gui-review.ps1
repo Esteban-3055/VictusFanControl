@@ -27,4 +27,5 @@ $manifest = [ordered]@{
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'PRODUCT-GUI-MANIFEST.json') -Encoding utf8
 & (Join-Path $OutputDirectory 'Start-ProductGui.ps1') -Mode Verify
+& (Join-Path $OutputDirectory 'Start-ProductGui.ps1') -Mode RecoverySelfTest
 Write-Host 'Product GUI review package: PASS. No hardware execution or gate promotion performed.'

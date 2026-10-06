@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Verify','SelfTest','Soak','Open','AutomaticReview','RecoverPerformance')][string]$Mode = 'Open',
+    [ValidateSet('Verify','SelfTest','Soak','Open','AutomaticReview','RecoverPerformance','RecoverySelfTest')][string]$Mode = 'Open',
     [Guid]$ExpectedCpuSession = [Guid]::Empty,
     [Guid]$ExpectedGpuSession = [Guid]::Empty,
     [switch]$ConfirmExclusiveGpuController
@@ -22,13 +22,22 @@ if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticReview -ne 'expli
 if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticThermal -ne 'cpu90-confirm-2000ms-cpu99-immediate-raw-response') { throw 'This package does not include bounded CPU spike confirmation and raw thermal response.' }
 if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticPerformance -ne 'required-both-before-fans') { throw 'This package does not authorize the coupled CPU/GPU Automatic entry.' }
 $app = Join-Path $root 'VictusFanControl-0.4.0-rc.1-win-x64/app'
+if ($Mode -eq 'RecoverPerformance' -or $Mode -eq 'RecoverySelfTest') {
+    $guardian = Join-Path $app 'performance-guardian/VictusFanControl.PerformanceGuardian.exe'
+    if (-not (Test-Path -LiteralPath $guardian -PathType Leaf)) { throw "Missing packaged Performance Guardian: $guardian" }
+}
+if ($Mode -eq 'RecoverySelfTest') {
+    & $guardian --gui-recovery-self-test
+    if ($LASTEXITCODE -ne 0) { throw 'Packaged recovery fixtures failed.' }
+    return
+}
 if ($Mode -eq 'RecoverPerformance') {
     if ($manifest.performanceRecovery -ne 'explicit-release-only-exact-session-backups') { throw 'This package does not include explicit Performance recovery.' }
     if ($ExpectedCpuSession -eq [Guid]::Empty -or $ExpectedGpuSession -eq [Guid]::Empty) { throw 'Specify both expected journal session IDs.' }
     if (-not $ConfirmExclusiveGpuController) { throw 'Close other GPU clock controllers (Afterburner, nvidia-smi clock scripts) and specify -ConfirmExclusiveGpuController.' }
     $directory = Join-Path ([Environment]::GetFolderPath('Desktop')) ('Victus-Performance-recovery-' + [Guid]::NewGuid().ToString('N'))
     Write-Host 'Explicit release-only recovery. Close other Victus applications normally. CPU restores only still-owned PL fields; GPU requests one NVIDIA default Reset. No fan writes or Automatic activation. Original journals are backed up before release.'
-    & (Join-Path $app 'VictusFanControl.PerformanceGuardian.exe') --recover-gui-session --confirm-target HP-8C40-9D0R1LA-F18 --confirm-cpu-hardware-writes --confirm-exclusive-gpu-controller --module (Join-Path $app 'modules/IntelMSR.bin') --cpu-session $ExpectedCpuSession.ToString('D') --gpu-session $ExpectedGpuSession.ToString('D') --output-directory $directory
+    & $guardian --recover-gui-session --confirm-target HP-8C40-9D0R1LA-F18 --confirm-cpu-hardware-writes --confirm-exclusive-gpu-controller --module (Join-Path $app 'modules/IntelMSR.bin') --cpu-session $ExpectedCpuSession.ToString('D') --gpu-session $ExpectedGpuSession.ToString('D') --output-directory $directory
     $recoveryExit = $LASTEXITCODE
     Write-Host "Recovery evidence: $directory"
     if ($recoveryExit -ne 0) { throw "Recovery did not complete (code $recoveryExit). Retain the evidence and pending journals." }
