@@ -26,6 +26,8 @@ internal static class Program
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureEnableFailure: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-fixture-session")
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true).ConfigureAwait(false);
+            if (args.Length > 0 && args[0] == "--gui-fixture-update-failure")
+                return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureUpdateFailure: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-session")
                 return await PerformanceGuiSessionHost.RunAsync(args).ConfigureAwait(false);
             if (args.Length == 1 &&
@@ -62,6 +64,7 @@ internal static class Program
                 var standbyRuntimeResult =
                     GuardianModernStandbyLifecycleRuntimeSelfTest.Run(
                         Console.Out);
+                var guiUpdateResult = PerformanceGuiConfigurationUpdateSelfTest.Run(Console.Out);
 
                 return authorityResult == 0 &&
                     sourceRuntimeResult == 0 &&
@@ -70,7 +73,7 @@ internal static class Program
                     cpuBackendResult == 0 &&
                     cpuDomainResult == 0 &&
                     combinedDomainResult == 0 &&
-                    standbyRuntimeResult == 0
+                    standbyRuntimeResult == 0 && guiUpdateResult == 0
                     ? 0
                     : 1;
             }

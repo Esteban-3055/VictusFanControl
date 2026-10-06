@@ -41,7 +41,7 @@ internal sealed partial class ProductCanvas
     internal int AdvancedTab { get; set; }
     internal AdaptiveFanTuning DraftTuning=>Profiles.Ac.Fan.Tuning;
     internal bool TuningPending=>Profiles.Battery.Fan.Tuning!=DraftTuning||State.AppliedAutomaticConfiguration?.Tuning!=DraftTuning;
-    internal bool CanApplyTuning=>!Busy&&!State.LifecycleBlocked&&!State.AutomaticPreparing&&State.AutomaticSourceTransition is null&&
+    internal bool CanApplyTuning=>!Busy&&!State.PerformanceUpdating&&!State.LifecycleBlocked&&!State.AutomaticPreparing&&State.AutomaticSourceTransition is null&&
         State.Target=="HP-8C40-9D0R1LA-F18"&&State.Runtime=="Healthy"&&FreshSnapshot is not null&&
         (State.FanMode=="Firmware"&&State.FanAuthority=="Firmware"||State.AutomaticAuthorized&&State.FanMode=="Automatic"&&State.FanAuthority=="Custom");
     private void TuningRow(Graphics g,ProductTuningField f,float y)

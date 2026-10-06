@@ -60,7 +60,7 @@ internal interface IGuardianPowerSourceNotificationListenerFactory
 /// registration -> notification -> fresh query -> dedup -> selected sinks.
 /// </summary>
 internal sealed class GuardianPerformancePowerSourceRuntime :
-    IGuardianPowerSourceRuntime
+    IGuardianPowerSourceRuntime, IGuardianConfigurationRuntime
 {
     private readonly object _sync =
         new();
@@ -192,6 +192,22 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
                 true;
 
             return prime;
+        }
+    }
+
+    public void ExecuteConfigurationUpdate(Action<PerformancePowerSourceKind> update)
+    {
+        ThrowIfDisposed();
+        lock (_sync)
+        {
+            var observed = _reader.Read();
+            if (!_active || _failure is not null || !observed.Succeeded ||
+                observed.Source is not (PerformancePowerSourceKind.Ac or PerformancePowerSourceKind.Battery) || observed.Source != _lastSource)
+                throw new InvalidOperationException("Source runtime is not ready for an update; wait for confirmed stable AC/Battery.");
+            update(observed.Source);
+            var after = _reader.Read();
+            if (!after.Succeeded || after.Source != observed.Source)
+                throw new InvalidOperationException("Power source changed during preset update; inspect committed domain values.");
         }
     }
 

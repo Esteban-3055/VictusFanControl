@@ -15,7 +15,7 @@ internal static class ProductDiagnostics
         var summary=new{diagnosticMaximumBytesPerStream=maximumLogBytes,kind="VictusFanControl.GuiDiagnostic",capturedUtc=DateTimeOffset.UtcNow,version=typeof(ProductDiagnostics).Assembly.GetName().Version?.ToString(),sessionId=AppLog.SessionId,sessionStartedUtc=AppLog.SessionStartedUtc,
             state.Hardware,state.Target,state.Source,state.Runtime,state.FanMode,state.FanAuthority,state.FanLevel,state.LifecycleBlocked,state.LifecycleBlockReason,
             state.AutomaticReview,state.AutomaticReviewMaximumSeconds,state.AutomaticReviewRemainingSeconds,state.AutomaticCpuSpikeRemainingMilliseconds,state.AutomaticDecision,state.AppliedAutomaticConfiguration,state.AppliedFanProfile,
-            state.AutomaticPreparing,state.AutomaticSessionId,state.AutomaticDecisionSnapshot,state.AutomaticInterruptionSnapshot,state.PerformanceActive,state.PerformanceProcessPresent,state.AppliedPerformance,
+            state.AutomaticPreparing,state.AutomaticSessionId,state.AutomaticDecisionSnapshot,state.AutomaticInterruptionSnapshot,state.PerformanceActive,state.PerformanceProcessPresent,state.PerformanceUpdating,state.AppliedPerformance,
             state.CpuState,state.GpuState,state.CpuStatus,state.GpuStatus,state.GuardianState,state.AppliedPerformanceSource,state.Message,state.Failure,
             snapshot=state.Snapshot,physicalQualification="not-established-by-this-export"};
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);

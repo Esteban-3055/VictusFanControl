@@ -83,6 +83,47 @@ internal sealed class PerformanceGuardianClient
         finally { _gate.Release(); }
     }
 
+    internal async Task<PerformanceGuardianResponse> UpdateAsync(PerformanceGuiSessionConfiguration configuration)
+    {
+        configuration.Validate();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+        await _gate.WaitAsync(timeout.Token).ConfigureAwait(false);
+        try
+        {
+            if (_process is null || _process.HasExited || !LimitsActive || AppliedConfiguration is null ||
+                configuration.CpuEnabled != AppliedConfiguration.CpuEnabled || configuration.GpuEnabled != AppliedConfiguration.GpuEnabled)
+                throw new InvalidOperationException("Actualizar requiere la misma sesión activa y selección CPU/GPU.");
+            if (_pipe is null || !_pipe.IsConnected) await ConnectAsync(timeout.Token).ConfigureAwait(false);
+            LastStatus = null;
+            LastStatus = await SendAsync(PerformanceGuardianProtocol.UpdateConfiguration, configuration, timeout.Token).ConfigureAwait(false);
+            CaptureConfiguration(LastStatus);
+            if (!LastStatus.Ok || AppliedConfiguration != configuration || !LimitsActive)
+                throw new InvalidOperationException(LastStatus.Code + ": " + LastStatus.Message);
+            return LastStatus;
+        }
+        catch
+        {
+            // A lost reply is not proof of rollback. Reconnect STATUS to recover committed presets.
+            if (LastStatus is null) { _pipe?.Dispose(); _pipe = null; }
+            throw;
+        }
+        finally { _gate.Release(); }
+    }
+
+    private void CaptureConfiguration(PerformanceGuardianResponse response)
+    {
+        if (response.Configuration is not { } configuration) return;
+        try
+        {
+            configuration.Validate();
+            if (AppliedConfiguration is { } previous &&
+                (configuration.CpuEnabled != previous.CpuEnabled || configuration.GpuEnabled != previous.GpuEnabled))
+                throw new IOException("Guardian changed active domains unexpectedly.");
+        }
+        catch { LastStatus = null; throw; }
+        AppliedConfiguration = configuration;
+    }
+
     internal async Task<PerformanceGuardianResponse?> StatusAsync()
     {
         await _gate.WaitAsync().ConfigureAwait(false);
@@ -93,6 +134,7 @@ internal sealed class PerformanceGuardianClient
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             if (_pipe is null || !_pipe.IsConnected) await ConnectAsync(timeout.Token).ConfigureAwait(false);
             LastStatus = await SendAsync(PerformanceGuardianProtocol.Status, null, timeout.Token).ConfigureAwait(false);
+            CaptureConfiguration(LastStatus);
             return LastStatus;
         }
         catch { LastStatus = null; _pipe?.Dispose(); _pipe = null; throw; }
@@ -156,7 +198,8 @@ internal sealed class PerformanceGuardianClient
     {
         var request = new PerformanceGuardianRequest(PerformanceGuardianProtocol.Version, Guid.NewGuid(), CpuPowerProductDefaults.TargetProfileId,
             _nonce, type, type == PerformanceGuardianProtocol.Hello ? _ownerPid : null,
-            type == PerformanceGuardianProtocol.Hello ? _ownerStart : null, configuration?.CpuEnabled, configuration?.GpuEnabled);
+            type == PerformanceGuardianProtocol.Hello ? _ownerStart : null, configuration?.CpuEnabled, configuration?.GpuEnabled,
+            type == PerformanceGuardianProtocol.UpdateConfiguration ? configuration : null);
         await PerformanceGuardianCodec.WriteRequestAsync(_pipe!, request, token).ConfigureAwait(false);
         var response = await PerformanceGuardianCodec.ReadResponseAsync(_pipe!, token).ConfigureAwait(false)
             ?? throw new EndOfStreamException("Guardian cerró la conexión.");

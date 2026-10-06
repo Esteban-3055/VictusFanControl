@@ -16,8 +16,8 @@ internal sealed class QualifiedCpuGuardianDomainLifecycle :
 {
     private readonly CountingCpuPowerLimitBackend _backend;
     private readonly CpuPowerLimiter _limiter;
-    private readonly CpuPowerPresetPolicy _policy;
-    private readonly CpuPowerPresetTransitionController _transition;
+    private CpuPowerPresetPolicy _policy;
+    private CpuPowerPresetTransitionController _transition;
     private readonly PerformancePowerSourceKind? _requiredInitialSource;
 
     private int _enableCalls;
@@ -242,6 +242,22 @@ internal sealed class QualifiedCpuGuardianDomainLifecycle :
         return ValueTask.CompletedTask;
     }
 
+    internal void UpdatePresets(CpuPowerPresetSet presets, PerformancePowerSourceKind source)
+    {
+        ThrowIfDisposed();
+        var policy = new CpuPowerPresetPolicy(presets);
+        var selection = policy.Resolve(source);
+        if (!selection.SourceKnown || !selection.Enabled || !selection.Request.HasValue ||
+            !_limiter.SwitchOwnedPreset(selection.Request.Value))
+        {
+            _lastStatus = _limiter.LastError ?? "CPU_UPDATE_REJECTED";
+            throw new InvalidOperationException(_lastStatus);
+        }
+        _policy = policy;
+        _transition = new CpuPowerPresetTransitionController(policy, _limiter);
+        _lastStatus = "GUARDIAN_CPU_PRESETS_UPDATED__" + source.ToString().ToUpperInvariant();
+    }
+
     public CpuPowerPresetTransitionResult HandleConfirmedSourceChange(
         PerformancePowerSourceKind source)
     {
@@ -373,6 +389,7 @@ internal static class QualifiedCpuGuardianDomainLifecycleSelfTest
 
         try
         {
+            LivePresetsRetainBaseline(root, output);
             NormalAcBatteryAcRelease(
                 root,
                 output);
@@ -414,6 +431,24 @@ internal static class QualifiedCpuGuardianDomainLifecycleSelfTest
             {
             }
         }
+    }
+
+    private static void LivePresetsRetainBaseline(string root, TextWriter output)
+    {
+        var journal=new JsonCpuPowerSessionJournal(Path.Combine(root,"live-update-cpu.json"),TargetProfileId);
+        var backend=new FakeCpuBackend(journal);
+        using var lifecycle=new QualifiedCpuGuardianDomainLifecycle(backend,journal,CpuPowerProductDefaults.CreateDefaultPresetSet());
+        lifecycle.EnableAsync(true,false,PerformancePowerSourceKind.Ac,CancellationToken.None).GetAwaiter().GetResult();
+        var before=journal.Load()!;
+        lifecycle.UpdatePresets(CpuPowerProductDefaults.CreatePresetSet(8,15,35,60),PerformancePowerSourceKind.Ac);
+        var after=journal.Load()!;
+        Require(before.SessionId==after.SessionId&&before.OriginalBaseline==after.OriginalBaseline&&backend.Raw==FakeCpuBackend.BatteryRaw,
+            "live CPU update replaced the session/baseline or omitted the current preset");
+        Require(lifecycle.HandleConfirmedSourceChange(PerformancePowerSourceKind.Battery).Succeeded&&backend.Raw==FakeCpuBackend.AcRaw,
+            "source transition lost live CPU presets");
+        lifecycle.ReleaseAsync(true,false,"LIVE_UPDATE_TEST",CancellationToken.None).GetAwaiter().GetResult();
+        Require(backend.Raw==FakeCpuBackend.BaselineRaw&&journal.Load() is null,"live CPU update broke baseline release");
+        output.WriteLine("PASS live CPU presets retain original journal/baseline, route next source and restore normally");
     }
 
     private static void NormalAcBatteryAcRelease(

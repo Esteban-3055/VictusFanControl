@@ -11,7 +11,7 @@ namespace VictusFanControl.PerformanceGuardian;
 /// <summary>Explicit GUI session over the qualified hardware/lifecycle adapters.</summary>
 internal static class PerformanceGuiSessionHost
 {
-    internal static async Task<int> RunAsync(string[] args, bool fixture = false, bool fixtureEnableFailure = false)
+    internal static async Task<int> RunAsync(string[] args, bool fixture = false, bool fixtureEnableFailure = false, bool fixtureUpdateFailure = false)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -30,7 +30,7 @@ internal static class PerformanceGuiSessionHost
             Guid.Parse(Get("--nonce")), int.Parse(Get("--owner-pid")), long.Parse(Get("--owner-start")), Get("--report"), null);
         if (fixture)
         {
-            var recording = new GuiFixtureDomains(fixtureEnableFailure);
+            var recording = new GuiFixtureDomains(fixtureEnableFailure, fixtureUpdateFailure, configuration);
             using var runtime = new GuardianPerformancePowerSourceRuntime(new GuiFixtureSource(),
                 new RecordingGuardianCpuSourceTransitionSink(), new RecordingGuardianGpuSourceTransitionSink(),
                 new WindowsGuardianPowerSourceNotificationListenerFactory());
@@ -79,30 +79,29 @@ internal static class PerformanceGuiSessionHost
             new WindowsGuardianPowerSourceNotificationListenerFactory());
         using var standby = new GuardianModernStandbyLifecycleRuntime(source, domain,
             new WindowsGuardianModernStandbyNotificationListenerFactory());
-        return await new PerformanceGuardianHost(options, new ConfiguredDomains(domain, configuration), standby).RunAsync(CancellationToken.None).ConfigureAwait(false);
+        var configured = new ConfiguredGuiPerformanceDomains(domain, configuration,
+            cpu is null ? null : (next, confirmed) => cpu.UpdatePresets(next.CpuPresets(), confirmed),
+            gpu is null ? null : (next, confirmed) => gpu.UpdatePresets(next.GpuPresets(), confirmed));
+        return await new PerformanceGuardianHost(options, configured, standby).RunAsync(CancellationToken.None).ConfigureAwait(false);
     }
     private sealed class GuiFixtureSource : IPerformancePowerSourceReader
     {
         public PerformancePowerSourceObservation Read() => new(true, PerformancePowerSourceKind.Ac, 1, 80, 0, "FIXTURE_AC");
     }
 
-    private sealed class ConfiguredDomains(IGuardianDomainLifecycle inner, PerformanceGuiSessionConfiguration configuration) : IGuardianDomainLifecycle
-    {
-        public GuardianDomainLifecycleSnapshot Snapshot => inner.Snapshot;
-        public ValueTask EnableAsync(bool cpuEnabled, bool gpuEnabled, PerformancePowerSourceKind source, CancellationToken token)
-        {
-            if (cpuEnabled != configuration.CpuEnabled || gpuEnabled != configuration.GpuEnabled)
-                throw new InvalidOperationException("GUI domain selection differs from the validated launch configuration.");
-            return inner.EnableAsync(cpuEnabled, gpuEnabled, source, token);
-        }
-        public ValueTask ReleaseAsync(bool cpuEnabled, bool gpuEnabled, string reason, CancellationToken token) =>
-            inner.ReleaseAsync(cpuEnabled, gpuEnabled, reason, token);
-    }
-
-    private sealed class GuiFixtureDomains(bool failEnable) : IGuardianDomainLifecycle
+    private sealed class GuiFixtureDomains(bool failEnable, bool failUpdate, PerformanceGuiSessionConfiguration initial) : IGuardianDomainLifecycle, IGuardianConfigurableDomains
     {
         private readonly RecordingGuardianDomainLifecycle _recording = new();
         private bool _active;
+        public PerformanceGuiSessionConfiguration Configuration { get; private set; } = initial;
+        public void UpdateConfiguration(PerformanceGuiSessionConfiguration next, PerformancePowerSourceKind source)
+        {
+            next.Validate();
+            if (!_active || next.CpuEnabled != Configuration.CpuEnabled || next.GpuEnabled != Configuration.GpuEnabled || source != PerformancePowerSourceKind.Ac)
+                throw new InvalidOperationException("Fixture update admission rejected.");
+            if (failUpdate) throw new IOException("Synthetic update failure; prior committed configuration retained.");
+            Configuration = next;
+        }
         public GuardianDomainLifecycleSnapshot Snapshot => _recording.Snapshot with
         {
             CpuState = _active ? "Active" : "Disabled", GpuState = _active ? "ActiveUnverified" : "Disabled"

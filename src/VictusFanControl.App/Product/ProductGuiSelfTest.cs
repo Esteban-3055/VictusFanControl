@@ -19,6 +19,7 @@ internal static class ProductGuiSelfTest
             TestAutomaticReview(Require);
             TestLiveCurveApply(Require);
             TestAdvancedSettings(Require);
+            TestLivePerformanceApply(Require);
             TestSessionLogs(Require);
             ProductAutomaticActivationSelfTest.Run(Require);
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());
@@ -121,6 +122,13 @@ internal static class ProductGuiSelfTest
             Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
             canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;Render("performance-exact-CPU");Require(canvas.Hits.Any(h=>h.Id=="pl1-text")&&canvas.Hits.Any(h=>h.Id=="pl2-text"),"CPU numeric inputs inaccessible.");
             canvas.PerformanceTab=1;Render("performance-exact-GPU");Require(canvas.Hits.Any(h=>h.Id=="gpu-text"),"GPU numeric input inaccessible.");
+            canvas.PerformanceTab=0;canvas.Profiles=baseline with{Ac=baseline.Ac with{CpuPl1Watts=25,CpuPl2Watts=38}};
+            canvas.State=confirmed with{FanMode="Automatic",CanApplyPerformance=true};
+            Render("performance-live-pending");Require(canvas.CanApplyPerformance,"Pending live caps did not enable Apply in the rendered surface.");
+            canvas.Size=new(1040,660);Render("performance-live-pending-minimum");
+            canvas.Size=new(1672,941);canvas.State=canvas.State with{AppliedPerformance=canvas.Profiles.PerformanceConfiguration()};
+            Render("performance-live-confirmed");Require(!canvas.CanApplyPerformance,"Confirmed live caps left Apply enabled in the rendered surface.");
+            canvas.Profiles=baseline;canvas.State=confirmed;
             using(var numeric=new ProductNumericDialog("GPU máximo (MHz) · AC",1800,210,2500,_=>null))
             {numeric.Show(form);Application.DoEvents();using var bitmap=new Bitmap(numeric.Width,numeric.Height);numeric.DrawToBitmap(bitmap,new(0,0,bitmap.Width,bitmap.Height));bitmap.Save(Path.Combine(output,"performance-numeric-dialog.png"),ImageFormat.Png);numeric.DialogResult=DialogResult.Cancel;}
             canvas.Page=ProductPage.Performance;for(int i=1;i<=3;i++){canvas.PerformanceTab=i;Render("performance-tab-"+i);}
@@ -587,6 +595,39 @@ internal static class ProductGuiSelfTest
         }
         finally{Directory.Delete(dir,true);}
     }
+    private static void TestLivePerformanceApply(Action<bool,string> require)
+    {
+        ProductPerformanceUpdate.EnsureWaitAllowed(100,4099,"Ac","Ac",84,77);
+        foreach(var input in new[]{(4100L,"Ac",84d,77d),(99L,"Ac",84d,77d),(101L,"Battery",84d,77d),(101L,"Ac",85d,77d),(101L,"Ac",84d,78d)})
+        {
+            var refused=false;try{ProductPerformanceUpdate.EnsureWaitAllowed(100,input.Item1,input.Item2,"Ac",input.Item3,input.Item4);}catch(InvalidOperationException){refused=true;}
+            require(refused,"Live performance wait renewed its deadline or admitted source/thermal urgency.");
+        }
+        var profiles=new ProductProfiles();var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://performance",fixture:runtime,fixtureProfiles:profiles);
+        form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Page=ProductPage.Performance;
+        var active=runtime.State with{Target="HP-8C40-9D0R1LA-F18",Runtime="Healthy",Source="Ac",FanMode="Automatic",FanAuthority="Custom",
+            PerformanceSupported=true,CanApplyPerformance=true,PerformanceProcessPresent=true,PerformanceActive=true,CpuState="Active",GpuState="ActiveUnverified",
+            AppliedPerformance=profiles.PerformanceConfiguration(),AppliedPerformanceSource="Ac",Snapshot=Snapshot(DateTimeOffset.UtcNow,45,40,10,5)};
+        runtime.Publish(active);canvas.Refresh();require(!canvas.CanApplyPerformance,"Unchanged limits enabled Apply.");
+        form.EditValue("pl2",38);canvas.Refresh();
+        require(canvas.CanApplyPerformance&&canvas.Hits.Single(h=>h.Id=="performance-apply").Enabled&&canvas.AppliedCpu()=="35 / 60 W",
+            "Edited PL2 did not enable Apply or was presented as already applied.");
+        form.HandleCommand("performance-apply");PumpUntil(()=>!canvas.Busy,"Performance Apply did not drain.");
+        var expected=form.Draft.PerformanceConfiguration();
+        require(runtime.Commands==1&&runtime.LastPerformance==expected&&expected.AcPl2Watts==38,"Live Apply omitted exact presets.");
+        runtime.Publish(active with{AppliedPerformance=expected});require(!canvas.CanApplyPerformance&&canvas.AppliedCpu()=="35 / 38 W","Confirmed values left Apply enabled or displayed old limits.");
+        form.HandleCommand("cpu-toggle");require(form.Draft.CpuEnabled,"Active CPU domain checkbox silently changed ownership.");
+        form.EditValue("gpu",1801);require(canvas.CanApplyPerformance,"Exact GPU edit did not enable Apply.");
+        foreach(var blocked in new[]{active with{AppliedPerformance=expected,PerformanceUpdating=true},active with{AppliedPerformance=expected,LifecycleBlocked=true},
+            active with{AppliedPerformance=expected,AutomaticSourceTransition="Battery"},active with{AppliedPerformance=expected,AutomaticPreparing=true},
+            active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-10)}}})
+        {runtime.Publish(blocked);form.HandleCommand("performance-apply");require(!canvas.CanApplyPerformance&&runtime.Commands==1,"Unsafe/pending performance edit dispatched.");}
+        var frozen=ProductPerformanceUpdate.WithPerformance(profiles,expected);
+        require(ReferenceEquals(frozen.Ac.Fan,profiles.Ac.Fan)&&ReferenceEquals(frozen.Battery.Fan,profiles.Battery.Fan)&&frozen.PerformanceConfiguration()==expected,
+            "Performance update replaced fan curves/tuning or omitted a power profile.");
+        var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Performance fixture exit did not drain.");exit.GetAwaiter().GetResult();
+    }
+
     private static void TestAdvancedSettings(Action<bool,string> require)
     {
         var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://advanced",fixture:runtime,fixtureProfiles:new ProductProfiles());
@@ -618,13 +659,14 @@ internal static class ProductGuiSelfTest
         public ProductRuntimeState State {get;}=new();
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;
         internal int? LastManualLevel;
+        internal PerformanceGuiSessionConfiguration? LastPerformance;
         internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate;
         internal string? CommandFailure,StartFailure;
         internal void Publish(ProductRuntimeState state)=>Changed?.Invoke(state);
         public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
         public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
         public Task ApplyManualAsync(int level){Commands++;LastManualLevel=level;return Task.CompletedTask;}
-        public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;return CommandFailure is null?PerformanceGate?.Task??Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
+        public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;LastPerformance=p.PerformanceConfiguration();return CommandFailure is null?PerformanceGate?.Task??Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public Task ReleasePerformanceAsync(){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public void FenceLifecycle(string r){Interlocked.Increment(ref Fences);}
         public Task ReleaseForLifecycleAsync(string r){Interlocked.Increment(ref Releases);return ReleaseGate?.Task??Task.CompletedTask;}

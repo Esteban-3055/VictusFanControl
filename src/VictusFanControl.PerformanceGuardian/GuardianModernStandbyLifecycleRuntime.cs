@@ -70,7 +70,7 @@ internal interface IGuardianModernStandbyNotificationListenerFactory
 /// only while the live session is still known.
 /// </summary>
 internal sealed class GuardianModernStandbyLifecycleRuntime :
-    IGuardianPowerSourceRuntime
+    IGuardianPowerSourceRuntime, IGuardianConfigurationRuntime
 {
     private readonly object _sync =
         new();
@@ -192,6 +192,17 @@ internal sealed class GuardianModernStandbyLifecycleRuntime :
                 null;
 
             return prime;
+        }
+    }
+
+    public void ExecuteConfigurationUpdate(Action<PerformancePowerSourceKind> update)
+    {
+        ThrowIfDisposed();
+        lock (_sync)
+        {
+            if (!_active || _suspended || _primaryDisplayReleaseCompleted || _failure is not null || _inner is not IGuardianConfigurationRuntime runtime)
+                throw new InvalidOperationException("Display/lifecycle boundary blocks configuration update.");
+            runtime.ExecuteConfigurationUpdate(update);
         }
     }
 

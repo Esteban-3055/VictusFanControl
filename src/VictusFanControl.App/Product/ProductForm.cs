@@ -125,7 +125,8 @@ internal sealed partial class ProductForm : Form
         if(id=="fan-mode-1"&&(!_canvas.State.ManualAuthorized||_canvas.State.LifecycleBlocked))return;
         if(id=="fan-mode-2"&&_canvas.State.LifecycleBlocked)return;
         if(id=="manual-apply"&&(!_canvas.State.ManualAuthorized||_canvas.State.FanMode!="Manual"||_canvas.State.Runtime!="Healthy"||_canvas.State.LifecycleBlocked))return;
-        if(id=="performance-apply"&&(!_canvas.State.PerformanceSupported||!_canvas.State.CanApplyPerformance||!(_draft.CpuEnabled||_draft.GpuEnabled)))return;
+        if(id=="performance-apply"&&!_canvas.CanApplyPerformance)return;
+        if(id is "cpu-toggle" or "gpu-toggle"&&_canvas.State.PerformanceProcessPresent)return;
         if(id=="performance-release"&&!_canvas.State.PerformanceProcessPresent)return;
         if(id is "pl1-text" or "pl2-text" or "gpu-text")
         {
@@ -166,7 +167,7 @@ internal sealed partial class ProductForm : Form
                 if(_canvas.State.FanMode=="Automatic"){_canvas.Notice="Automatic ya está seleccionado; usa Aplicar en Curvas para actualizar curva e influencias. El plazo no se renueva.";break;}
                 _ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,Draft)??Task.CompletedTask);break;
             case "manual-apply":_ = RunAsync(()=>_runtime?.ApplyManualAsync(_canvas.ManualLevel)??Task.CompletedTask);break;
-            case "performance-apply":_ = RunAsync(()=>{var profiles=Draft;profiles.Validate();profiles.PerformanceConfiguration().Validate();return _runtime?.ApplyPerformanceAsync(profiles)??Task.CompletedTask;});break;
+            case "performance-apply":_ = RunAsync(()=>{var profiles=_canvas.PerformanceDraft;profiles.Validate();profiles.PerformanceConfiguration().Validate();return _runtime?.ApplyPerformanceAsync(profiles)??Task.CompletedTask;});break;
             case "performance-release":_ = RunAsync(()=>_runtime?.ReleasePerformanceAsync()??Task.CompletedTask);break;
             case "node-add":AddNode();break;
             case "node-remove":RemoveNode();break;

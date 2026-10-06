@@ -63,6 +63,10 @@ internal static class PerformanceGuardianAuthoritySelfTest
                     PerformanceGuardianAuthorityPhase.Idle,
                 "hello accepted");
 
+            var update = Request(nonce, PerformanceGuardianProtocol.UpdateConfiguration) with
+                { Configuration = new PerformanceGuiSessionConfiguration() };
+            Require(!gate.Handle(update).Accepted, "update before enabled session rejected");
+
             var enabled =
                 gate.Handle(
                     Request(
@@ -77,6 +81,13 @@ internal static class PerformanceGuardianAuthoritySelfTest
                 gate.CpuEnabled &&
                 gate.GpuEnabled,
                 "explicit session authority enabled");
+
+            Require(!gate.Handle(update with { SessionNonce = Guid.NewGuid() }).Accepted,
+                "live update requires launch nonce");
+            Require(gate.Handle(update).Accepted && gate.CpuEnabled && gate.GpuEnabled,
+                "live update authorized without mutating active domain selection");
+            Require(!gate.Handle(update with { Configuration = null }).Accepted,
+                "live update requires presets");
 
             var reconnectHello =
                 gate.Handle(
@@ -148,6 +159,8 @@ internal static class PerformanceGuardianAuthoritySelfTest
                 statusAfterShutdown.Code ==
                     "GUARDIAN_STOPPING",
                 "stopped guardian rejects later client authority");
+
+            Require(!gate.Handle(update).Accepted, "stopped guardian rejects live update");
 
             var parentGate =
                 new PerformanceGuardianAuthority(

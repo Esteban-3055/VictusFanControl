@@ -23,7 +23,7 @@ alcance específico; no invalida automáticamente los resultados anteriores.
 
 ## Pendientes del motor y GUI actuales
 
-- Actualización CPU/GPU en vivo: propuesta pendiente de implementar y validar; la sesión actual exige desactivar los límites antes de reemplazar su configuración.
+- Regresión física breve de actualización CPU/GPU en vivo: implementada con fixtures de journals, fallos parciales, IPC y botón; procedimiento en PRODUCT_PERFORMANCE_UPDATES.md.
 - Regresión de display/suspensión y salida con la integración Automatic actual.
 - Promoción posterior de Automatic normal y decisiones de arranque/reentrada.
   No hay validación de uso desatendido ni habilitación de arranque automático.

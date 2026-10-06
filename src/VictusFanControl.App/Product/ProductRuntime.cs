@@ -36,6 +36,7 @@ internal sealed record ProductRuntimeState
     internal bool CanApplyPerformance { get; init; }
     internal bool PerformanceActive { get; init; }
     internal bool PerformanceProcessPresent { get; init; }
+    internal bool PerformanceUpdating { get; init; }
     internal string CpuState { get; init; } = "Disabled";
     internal string GpuState { get; init; } = "Disabled";
     internal string GuardianState { get; init; } = "Sin sesión";
@@ -101,6 +102,8 @@ internal sealed class ProductRuntime : IProductRuntime
     private PerformanceGuiSessionConfiguration? _requestedPerformance;
     private Task? _poll;
     private volatile bool _closing, _lifecycleBlocked;
+    private volatile bool _performanceUpdating;
+    private long _performanceUpdateStarted;
     public event Action<ProductRuntimeState>? Changed;
     public ProductRuntimeState State { get { lock (_stateSync) return _state; } }
 
@@ -207,6 +210,20 @@ internal sealed class ProductRuntime : IProductRuntime
                         remainingMilliseconds = _automaticReview?.RemainingCpuSpikeMilliseconds }));
                 if (_automaticPerformance is null || _selectedFanProfile is null || _automaticProfiles is null)
                     throw new InvalidOperationException("Falta la configuración de la sesión Automatic.");
+                if (_performanceUpdating)
+                {
+                    ProductPerformanceUpdate.EnsureWaitAllowed(_performanceUpdateStarted,Environment.TickCount64,expected??"Unknown",
+                        _selectedFanProfile,snapshot.CpuControlTemperatureC,snapshot.GpuTemperatureC);
+                    await _controller.ObserveAutomaticSourceWaitAsync(snapshot, () =>
+                    {
+                        _automaticActivation.EnsureCurrent(_activeAutomaticTicket!);
+                        if (_closing || _lifecycleBlocked) throw new InvalidOperationException("Actualización interrumpida por lifecycle.");
+                        _automaticReview?.EnsureDispatchAllowed(snapshot);
+                    }, token);
+                    _automaticDecision=null;_automaticDecisionSnapshot=null;
+                    Publish("Actualizando CPU/GPU; se conserva el nivel y continúan las lecturas sin nuevos comandos de ventiladores.");
+                    return;
+                }
                 var wasTransition = _sourceTransition.Pending;
                 var status = _performance.LastStatus;
                 var reconciled = _sourceTransition.Observe(expected ?? "Unknown", _selectedFanProfile, _automaticPerformance,
@@ -476,12 +493,93 @@ internal sealed class ProductRuntime : IProductRuntime
         !closing && !lifecycleBlocked && !hasProcess && runtime == SystemState.Healthy && authority is not (FanAuthority.Faulted or FanAuthority.Restoring);
     public Task ApplyPerformanceAsync(ProductProfiles profiles) => CommandAsync(async () =>
     {
-        if (_target != Hp8C40TargetProfile.Instance || !PerformanceAdmissionPermitted(_closing,_lifecycleBlocked,_performance.HasProcess,_worker.StateMachine.State,_fans.Authority))
-            throw new InvalidOperationException("Aplicar rendimiento requiere el destino validado, telemetría Healthy y ninguna recuperación pendiente.");
         profiles.Validate(); var configuration = profiles.PerformanceConfiguration(); configuration.Validate();
-        if (_performance.HasProcess) throw new InvalidOperationException("Libera la sesión CPU/GPU antes de cambiar su configuración.");
+        if (_performance.HasProcess)
+        {
+            await UpdatePerformanceAsync(configuration);
+            return;
+        }
+        if (_target != Hp8C40TargetProfile.Instance || !PerformanceAdmissionPermitted(_closing,_lifecycleBlocked,false,_worker.StateMachine.State,_fans.Authority) || _automaticActivation.Pending)
+            throw new InvalidOperationException("Aplicar rendimiento requiere el destino validado, telemetría Healthy y ninguna recuperación pendiente.");
         _requestedPerformance = configuration; Publish("Aplicando CPU/GPU…"); await _performance.EnableAsync(configuration); Publish("Sesión de rendimiento aplicada. GPU: solicitud aceptada; rango independiente no verificable.");
     });
+    private async Task UpdatePerformanceAsync(PerformanceGuiSessionConfiguration configuration)
+    {
+        var started=false;
+        await FanCommandAsync(() =>
+        {
+            var source=new WindowsPerformancePowerSourceReader().Read().Source.ToString();
+            if (!CanUpdatePerformance(source) || _performance.AppliedConfiguration is not { } old ||
+                old.CpuEnabled!=configuration.CpuEnabled || old.GpuEnabled!=configuration.GpuEnabled)
+                throw new InvalidOperationException("Actualizar requiere datos vigentes, sesión CPU/GPU activa y la misma selección de dominios. Espera una fuente estable.");
+            if (old==configuration) return Task.CompletedTask;
+            if (_controller.Mode==AdaptiveFanProductionMode.Automatic)
+            {
+                if (_activeAutomaticTicket is null) throw new InvalidOperationException("Falta la activación Automatic.");
+                _automaticActivation.EnsureCurrent(_activeAutomaticTicket);
+                _automaticReview?.EnsureDispatchAllowed(_snapshot!);
+                if (_snapshot!.CpuControlTemperatureC>=85 || _snapshot.GpuTemperatureC>=78)
+                    throw new InvalidOperationException("Espera a que termine la respuesta térmica urgente antes de actualizar límites.");
+            }
+            _performanceUpdateStarted=Environment.TickCount64;_performanceUpdating=true;started=true;
+            AppLog.Write("PRODUCT PERFORMANCE UPDATE STARTED: "+System.Text.Json.JsonSerializer.Serialize(new
+                {automaticSessionId=_automaticSessionId,previous=old,requested=configuration,remainingSeconds=_automaticReview?.RemainingSeconds}));
+            Publish("Actualizando CPU/GPU en la misma sesión…");
+            return Task.CompletedTask;
+        });
+        if(!started)return;
+        try
+        {
+            await _performance.UpdateAsync(configuration);
+            await FanCommandAsync(() =>
+            {
+                _requestedPerformance=_performance.AppliedConfiguration;
+                if(_controller.Mode==AdaptiveFanProductionMode.Automatic&&!_lifecycleBlocked)
+                {
+                    var source=new WindowsPerformancePowerSourceReader().Read().Source.ToString();
+                    if(Environment.TickCount64-_performanceUpdateStarted>=4000 || _activeAutomaticTicket is null || !_automaticActivation.IsCurrent(_activeAutomaticTicket) ||
+                        source!=_selectedFanProfile || !ProductAutomaticActivation.PerformanceReady(configuration,
+                            _performance.AppliedConfiguration,_performance.LastStatus,_performance.LastStatusFresh,source))
+                        throw new InvalidOperationException("La fuente o activación cambió al actualizar CPU/GPU.");
+                    _automaticReview?.EnsureDispatchAllowed(_snapshot!);
+                    if(!Safety().CustomControlPermitted)throw new InvalidOperationException("La seguridad no permite continuar Automatic tras actualizar.");
+                    _automaticPerformance=configuration;
+                    if(_automaticProfiles is { } frozen)_automaticProfiles=ProductPerformanceUpdate.WithPerformance(frozen,configuration);
+                }
+                _performanceUpdating=false;
+                AppLog.Write("PRODUCT PERFORMANCE UPDATE APPLIED: "+System.Text.Json.JsonSerializer.Serialize(new
+                    {automaticSessionId=_automaticSessionId,performance=_performance.AppliedConfiguration,guardian=_performance.LastStatus,
+                        remainingSeconds=_automaticReview?.RemainingSeconds}));
+                Publish("Límites actualizados y confirmados por dominio. Guardar conserva los valores para próximos inicios.");
+                return Task.CompletedTask;
+            });
+        }
+        catch(Exception ex)
+        {
+            // Keep journals and independently committed values. Never fabricate rollback or renew Automatic.
+            _requestedPerformance=_performance.AppliedConfiguration;
+            await FanCommandAsync(async () =>
+            {
+                _performanceUpdating=false;
+                if(_controller.Mode==AdaptiveFanProductionMode.Automatic)
+                {
+                    _automaticInterruptionSnapshot=_snapshot;_automaticActivation.Cancel();_lifecycleBlocked=true;
+                    _lifecycleBlockReason="Actualización CPU/GPU no confirmada: "+ex.Message;_fans.CloseCustomAdmissionForLifecycleBoundary();_automaticReview?.Stop();
+                    await _controller.ReleaseToFirmwareAsync(_lifecycleBlockReason,CancellationToken.None);
+                }
+                AppLog.Write("PRODUCT PERFORMANCE UPDATE FAILED: "+System.Text.Json.JsonSerializer.Serialize(new
+                    {automaticSessionId=_automaticSessionId,performance=_performance.AppliedConfiguration,guardian=_performance.LastStatus,error=ex.Message}));
+                Publish("Actualización incompleta; revisa el estado aplicado de cada dominio.",ex.Message);
+            });
+            throw;
+        }
+        finally { _performanceUpdating=false; }
+    }
+    private bool CanUpdatePerformance(string source) => !_closing&&!_lifecycleBlocked&&!_performanceUpdating&&
+        !_automaticActivation.Pending&&!_sourceTransition.Pending&&_target==Hp8C40TargetProfile.Instance&&
+        _worker.StateMachine.State==SystemState.Healthy&&_performance.LimitsActive&&_performance.LastStatus?.PowerSource==source&&
+        source is "Ac" or "Battery"&&_fans.Authority is not (FanAuthority.Restoring or FanAuthority.Faulted)&&
+        _snapshot is { } s&&s.Timestamp<=DateTimeOffset.UtcNow&&DateTimeOffset.UtcNow-s.Timestamp<=SafetyGate.MaximumTelemetryAge;
     public Task ReleasePerformanceAsync() => _automaticActivation.ReleaseLimitsAsync(
         // Restore fans before removing the prerequisite limits; do not hold the Performance queue while releasing WMI.
         () => FanCommandAsync(async () =>
@@ -563,8 +661,10 @@ internal sealed class ProductRuntime : IProductRuntime
                 AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic && ReferenceEquals(_automaticDecision,_controller.LastAutomaticResult) ? _automaticDecision : null,
                 AppliedAutomaticConfiguration = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _controller.AutomaticConfiguration : null,
                 PerformanceSupported = _target == Hp8C40TargetProfile.Instance,
-                CanApplyPerformance = _target == Hp8C40TargetProfile.Instance && PerformanceAdmissionPermitted(_closing,_lifecycleBlocked,_performance.HasProcess,_worker.StateMachine.State,_fans.Authority),
+                CanApplyPerformance = !_performanceUpdating&&!_automaticActivation.Pending&&!_sourceTransition.Pending&&
+                    (_target == Hp8C40TargetProfile.Instance && PerformanceAdmissionPermitted(_closing,_lifecycleBlocked,_performance.HasProcess,_worker.StateMachine.State,_fans.Authority) || CanUpdatePerformance(source)),
                 PerformanceActive = _performance.LimitsActive, PerformanceProcessPresent = _performance.HasProcess,
+                PerformanceUpdating = _performanceUpdating,
                 CpuState = p?.CpuState ?? (_performance.HasProcess ? "Recovering" : "Disabled"), GpuState = p?.GpuState ?? (_performance.HasProcess ? "Recovering" : "Disabled"),
                 CpuStatus = p?.CpuStatus, GpuStatus = p?.GpuStatus, AppliedPerformanceSource = p?.PowerSource ?? "Unknown", AppliedPerformance = _performance.AppliedConfiguration ?? (p is { CpuState: "Active" } or { GpuState: "ActiveUnverified" } ? _requestedPerformance : null),
                 GuardianState = p?.RuntimeFailure is not null ? "Failed" : _performance.HasProcess ? p?.Phase ?? "Recovering" : "Sin sesión",

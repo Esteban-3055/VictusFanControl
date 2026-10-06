@@ -57,7 +57,7 @@ La aplicación de ajustes dispone de fixtures sin hardware y una regresión fís
 breve aprobada: filtro de subida 7 → 8 s durante la misma activación, diagnóstico
 `20261006T204954587Z-1c74bf2b83ad43f7bf160eda608d5932`. Esto no certifica todos los
 parámetros, la suspensión ni el cambio de definición de carga bajo carga real.
-El cambio de límites CPU/GPU en vivo propuesto es
-una tarea independiente del Guardian y todavía no está implementado. Mientras
-tanto el panel de rendimiento explica que Firmware conserva los límites y que
-Desactivar límites sale de Automático a Firmware antes de liberarlos; Manual mantiene su control independiente.
+El cambio de límites CPU/GPU en vivo es independiente de Avanzado y está implementado
+en Rendimiento, con su regresión física breve pendiente (PRODUCT_PERFORMANCE_UPDATES.md).
+Firmware conserva los límites. Desactivar límites sale de Automático a Firmware
+antes de liberarlos; Manual mantiene su control independiente.

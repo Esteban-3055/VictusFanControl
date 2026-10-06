@@ -198,6 +198,12 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         var c=State.AppliedPerformance;if(c is null||!c.GpuEnabled||State.GpuState!="ActiveUnverified")return "Sin confirmación actual";
         return State.AppliedPerformanceSource=="Battery"?$"210–{c.BatteryGpuMaximumMHz} MHz":State.AppliedPerformanceSource=="Ac"?$"210–{c.AcGpuMaximumMHz} MHz":"Fuente desconocida";
     }
+    internal ProductProfiles PerformanceDraft => State.PerformanceProcessPresent&&State.AppliedPerformance is { } active
+        ? Profiles with{CpuEnabled=active.CpuEnabled,GpuEnabled=active.GpuEnabled}:Profiles;
+    internal bool PerformancePending => State.AppliedPerformance != PerformanceDraft.PerformanceConfiguration();
+    internal bool CanApplyPerformance => !Busy&&!State.LifecycleBlocked&&!State.PerformanceUpdating&&!State.AutomaticPreparing&&
+        State.AutomaticSourceTransition is null&&State.PerformanceSupported&&State.CanApplyPerformance&&PerformancePending&&
+        (PerformanceDraft.CpuEnabled||PerformanceDraft.GpuEnabled)&&(!State.PerformanceProcessPresent||State.AppliedPerformance is not null&&FreshSnapshot is not null);
     private void Fans(Graphics g)
     {
         Tabs(g,"fan-tab-",["Control de ventiladores","Estado y telemetría","Reglas y seguridad"],FanTab);
@@ -246,7 +252,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         if(PerformanceTab==0)
         {
             Card(g,new(320,253,807,570));DrawText(g,"Límites de CPU (Intel RAPL)",350,276,29,null,740,true);
-            Button(g,"cpu-toggle",Profiles.CpuEnabled?"✓  Control de CPU seleccionado":"○  CPU no seleccionada para aplicar",new(350,337,735,60),Profiles.CpuEnabled);
+            Button(g,"cpu-toggle",PerformanceDraft.CpuEnabled?State.PerformanceProcessPresent?"✓  Control de CPU en la sesión":"✓  Control de CPU seleccionado":"○  CPU no seleccionada para aplicar",new(350,337,735,60),PerformanceDraft.CpuEnabled,!State.PerformanceProcessPresent);
             DrawText(g,"Pulsa el valor numérico para escribir un valor exacto.",350,414,18,Muted,735);
             Slider(g,"pl1","PL1 · Potencia sostenida",new(350,453,735,120),Profile.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl1Watts,CpuPowerProductDefaults.MaximumConfigurablePl1Watts,"W");
             Slider(g,"pl2","PL2 · Potencia turbo",new(350,637,735,120),Profile.CpuPl2Watts,Math.Max(Profile.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl2Watts),CpuPowerProductDefaults.MaximumConfigurablePl2Watts,"W");
@@ -254,7 +260,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         else if(PerformanceTab==1)
         {
             Card(g,new(320,253,807,570));DrawText(g,"Límite GPU (NVIDIA NVML)",350,276,29,null,740,true);
-            Button(g,"gpu-toggle",Profiles.GpuEnabled?"✓  Control de GPU seleccionado":"○  GPU no seleccionada para aplicar",new(350,337,735,60),Profiles.GpuEnabled);
+            Button(g,"gpu-toggle",PerformanceDraft.GpuEnabled?State.PerformanceProcessPresent?"✓  Control de GPU en la sesión":"✓  Control de GPU seleccionado":"○  GPU no seleccionada para aplicar",new(350,337,735,60),PerformanceDraft.GpuEnabled,!State.PerformanceProcessPresent);
             DrawText(g,"Pulsa el valor numérico para escribir un valor exacto.",350,425,18,Muted,735);
             Slider(g,"gpu","Graphics clock máximo",new(350,470,735,120),Profile.GpuMaximumMHz,210,GpuProductPreferences.Maximum(Editing),"MHz");
             DrawText(g,"Clock mínimo: 210 MHz · límite configurado, no lectura del rango",350,635,21,Muted,735);
@@ -270,10 +276,12 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         }
         Card(g,new(1148,253,500,570));DrawText(g,"Estado y aplicación",1178,276,28,null,438,true);
         DrawText(g,"CPU: "+State.CpuState,1178,341,23,DomainColor(State.CpuState,Green),438);DrawText(g,"GPU: "+State.GpuState,1178,388,23,DomainColor(State.GpuState,Blue),438);
-        DrawText(g,"Aplicado: "+AppliedCpu(),1178,438,22,Muted,438);DrawText(g,AppliedGpu(),1178,480,22,Muted,438);
-        DrawText(g,State.PerformanceProcessPresent?"Automático requiere ambos límites. Firmware los conserva. Para cambiarlos, desactiva CPU/GPU.":"Editar y guardar no aplican límites. Aplicar usa la selección CPU/GPU; Automático activa ambos.",1178,537,22,Muted,438,height:108);
+        var appliedSource=State.AppliedPerformanceSource switch{"Ac"=>"AC","Battery"=>"Batería",_=>"—"};
+        DrawText(g,"CPU ("+appliedSource+"): "+AppliedCpu(),1178,438,22,Muted,438);DrawText(g,"GPU ("+appliedSource+"): "+AppliedGpu(),1178,480,22,Muted,438);
+        DrawText(g,State.PerformanceUpdating?"Actualizando límites…":PerformancePending?"Valores editados pendientes de aplicar":"Valores coinciden con la sesión",1178,533,20,PerformancePending?Yellow:Green,438,height:52);
+        DrawText(g,State.PerformanceProcessPresent?"Aplicar actualiza ambos perfiles. Guardar conserva la edición.":"Aplicar inicia CPU/GPU según la selección. Automático requiere ambos límites.",1178,584,19,Muted,438,height:65);
         Button(g,"save","Guardar configuración",new(1178,655,438,48),false);
-        Button(g,"performance-apply","Aplicar CPU / GPU",new(1178,714,438,48),true,State.PerformanceSupported&&State.CanApplyPerformance&&(Profiles.CpuEnabled||Profiles.GpuEnabled));
+        Button(g,"performance-apply",State.PerformanceProcessPresent?"Aplicar cambios":"Aplicar CPU / GPU",new(1178,714,438,48),true,CanApplyPerformance);
         Button(g,"performance-release","Desactivar límites CPU / GPU",new(1178,773,438,48),false,State.PerformanceProcessPresent);
     }
     private void ProfilePage(Graphics g)
@@ -348,7 +356,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Modelo de demanda; no valida SafetyGate, RPM ni respuesta física.",889,798,17,Yellow,730);
     }
     private static string VariableName(int index)=>new[]{"Temperatura CPU","Temperatura GPU","Potencia CPU","Potencia GPU","Carga CPU","Carga GPU"}[index];
-    internal bool CanApplyCurve => !Busy && State.AutomaticAuthorized && !State.AutomaticPreparing && State.AutomaticSourceTransition is null && !State.LifecycleBlocked &&
+    internal bool CanApplyCurve => !Busy && !State.PerformanceUpdating && State.AutomaticAuthorized && !State.AutomaticPreparing && State.AutomaticSourceTransition is null && !State.LifecycleBlocked &&
         State.Runtime=="Healthy" && State.FanMode=="Automatic" && State.FanAuthority=="Custom" &&
         State.Source==Editing.ToString() && State.AppliedFanProfile==Editing.ToString() && FreshSnapshot is not null;
     internal IReadOnlyList<ProductDemandMarker> CurrentDemandMarkers()

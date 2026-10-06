@@ -13,9 +13,10 @@ nativo y mínimo. No se cambia el motor por estas correcciones visuales.
 
 ## 2. Actualización de límites durante el uso
 
-Implementar una acción «Aplicar cambios» que distinga borrador y límites realmente
-aplicados. Mantener una acción separada «Desactivar límites CPU / GPU».
-La sesión actual del Guardian todavía no admite reemplazo en vivo.
+Implementada la acción «Aplicar cambios» para distinguir borrador y límites
+aplicados, con «Desactivar límites CPU / GPU» separada. El Guardian permite
+actualizar presets en la misma sesión; queda la regresión física breve de
+PRODUCT_PERFORMANCE_UPDATES.md antes de aprobar esta ruta para versión final.
 
 La nueva ruta debe conservar el baseline original y la identidad de los journals,
 serializar solicitudes y comprobar lectura CPU / aceptación GPU. Debe publicar

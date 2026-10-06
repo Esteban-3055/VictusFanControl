@@ -629,6 +629,26 @@ internal sealed class PerformanceGuardianHost
                     true;
             }
 
+            if (request.Type == PerformanceGuardianProtocol.UpdateConfiguration && result.Accepted)
+            {
+                try
+                {
+                    if (_domains is not IGuardianConfigurableDomains configured || _sourceRuntime is not IGuardianConfigurationRuntime runtime)
+                        throw new InvalidOperationException("This Guardian does not support live configuration updates.");
+                    var next = request.Configuration ?? throw new InvalidOperationException("Missing validated presets.");
+                    next.Validate();
+                    runtime.ExecuteConfigurationUpdate(source => configured.UpdateConfiguration(next, source));
+                    result = result with { Code = "CONFIGURATION_UPDATED", Message = "Live presets updated in the original ownership session." };
+                }
+                catch (Exception ex)
+                {
+                    _acceptedRequests--;
+                    _rejectedRequests++;
+                    result = result with { Accepted = false, Code = "CONFIGURATION_UPDATE_FAILED", Message = ex.Message +
+                        (ex is AggregateException aggregate ? " " + string.Join("; ", aggregate.InnerExceptions.Select(e => e.Message)) : "") };
+                }
+            }
+
             if (request.Type ==
                     PerformanceGuardianProtocol.EnableSession &&
                 result.Accepted &&
@@ -862,7 +882,8 @@ internal sealed class PerformanceGuardianHost
                 _domains.Snapshot.CpuStatus,
                 _domains.Snapshot.GpuStatus,
                 _sourceRuntime.Snapshot.LastSource.ToString(),
-                _sourceRuntime.Snapshot.Failure);
+                _sourceRuntime.Snapshot.Failure,
+                (_domains as IGuardianConfigurableDomains)?.Configuration);
 
         try
         {

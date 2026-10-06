@@ -20,8 +20,8 @@ internal sealed class QualifiedGpuGuardianDomainLifecycle :
 {
     private readonly CountingGpuClockLimitBackend _backend;
     private readonly GpuClockSessionController _session;
-    private readonly GpuClockPresetPolicy _policy;
-    private readonly GpuClockPresetTransitionController _transition;
+    private GpuClockPresetPolicy _policy;
+    private GpuClockPresetTransitionController _transition;
 
     private int _enableCalls;
     private int _releaseCalls;
@@ -227,6 +227,22 @@ internal sealed class QualifiedGpuGuardianDomainLifecycle :
         return ValueTask.CompletedTask;
     }
 
+    internal void UpdatePresets(GpuClockPresetSet presets, PerformancePowerSourceKind source)
+    {
+        ThrowIfDisposed();
+        var policy = new GpuClockPresetPolicy(presets);
+        var selection = policy.Resolve(source);
+        if (!selection.SourceKnown || !selection.Enabled || !selection.Request.HasValue ||
+            !_session.SwitchPreset(selection.Request.Value))
+        {
+            _lastStatus = _session.LastStatus ?? "GPU_UPDATE_REJECTED";
+            throw new InvalidOperationException(_lastStatus);
+        }
+        _policy = policy;
+        _transition = new GpuClockPresetTransitionController(policy, _session);
+        _lastStatus = "GUARDIAN_GPU_PRESETS_UPDATED__" + source.ToString().ToUpperInvariant();
+    }
+
     public GpuClockPresetTransitionResult HandleConfirmedSourceChange(
         PerformancePowerSourceKind source)
     {
@@ -321,6 +337,7 @@ internal static class QualifiedGpuGuardianDomainLifecycleSelfTest
 
         try
         {
+            LivePresetsRetainSession(root, output);
             NormalAcBatteryAcRelease(
                 root,
                 output);
@@ -358,6 +375,23 @@ internal static class QualifiedGpuGuardianDomainLifecycleSelfTest
             {
             }
         }
+    }
+
+    private static void LivePresetsRetainSession(string root, TextWriter output)
+    {
+        var journal=new JsonGpuClockSessionJournal(Path.Combine(root,"live-update-gpu.json"),TargetProfileId);
+        var backend=new FakeGpuBackend();
+        using var lifecycle=new QualifiedGpuGuardianDomainLifecycle(backend,journal,GpuClockPresetSet.UserRequestedVictus);
+        lifecycle.EnableAsync(false,true,PerformancePowerSourceKind.Ac,CancellationToken.None).GetAwaiter().GetResult();
+        var before=journal.Load()!;
+        lifecycle.UpdatePresets(new(new(true,210,1801),new(true,210,1101)),PerformancePowerSourceKind.Ac);
+        Require(journal.Load()!.SessionId==before.SessionId&&backend.LastRequest==new GpuClockLimitRequest(210,1801)&&backend.ResetCalls==0,
+            "live GPU update reset hardware or replaced the journal session");
+        Require(lifecycle.HandleConfirmedSourceChange(PerformancePowerSourceKind.Battery).Succeeded&&backend.LastRequest==new GpuClockLimitRequest(210,1101),
+            "source transition lost live GPU presets");
+        lifecycle.ReleaseAsync(false,true,"LIVE_UPDATE_TEST",CancellationToken.None).GetAwaiter().GetResult();
+        Require(backend.ResetCalls==1&&journal.Load() is null,"live GPU update broke normal final Reset");
+        output.WriteLine("PASS live GPU presets retain journal session, use direct Set and one final Reset");
     }
 
     private static void NormalAcBatteryAcRelease(

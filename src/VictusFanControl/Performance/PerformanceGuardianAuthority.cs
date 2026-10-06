@@ -147,6 +147,11 @@ internal sealed class PerformanceGuardianAuthority
             PerformanceGuardianProtocol.EnableSession =>
                 HandleEnable(request),
 
+            PerformanceGuardianProtocol.UpdateConfiguration =>
+                SessionEnabled && request.Configuration is not null
+                    ? Accept("UPDATE_AUTHORIZED", "Update requires validated live domain and source admission.")
+                    : Reject("UPDATE_REQUIRES_SESSION", "Configuration update requires an enabled session and presets."),
+
             PerformanceGuardianProtocol.DisableSession =>
                 HandleDisable(),
 

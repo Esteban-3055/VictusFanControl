@@ -64,6 +64,15 @@ internal static class PerformanceGuiIntegrationSelfTest
                 var rejected = false;
                 try { await client.EnableAsync(configuration); } catch (InvalidOperationException) { rejected = true; }
                 Require(rejected, "Concurrent replacement session accepted.");
+                var guardianPid=launched!.Id;
+                var updated=configuration with{AcPl2Watts=38,AcGpuMaximumMHz=1800};
+                Require((await client.UpdateAsync(updated)).Ok&&client.AppliedConfiguration==updated&&client.LimitsActive&&launched.Id==guardianPid,
+                    "Live IPC update replaced owner or failed to confirm presets.");
+                Require((await client.StatusAsync())?.Configuration==updated,"STATUS lost live committed presets.");
+                rejected=false;try{await client.UpdateAsync(updated with{GpuEnabled=false});}catch(InvalidOperationException){rejected=true;}
+                Require(rejected&&client.AppliedConfiguration==updated,"Domain selection changed inside an active session.");
+                Require((await client.UpdateAsync(updated)).Ok&&client.HasProcess,"Repeated unchanged update lost the owner.");
+                Console.WriteLine("PASS: real GUI IPC live presets, same process, STATUS readback and domain-selection fence; zero hardware writes.");
                 await client.CloseAsync();
                 Require(!client.HasProcess && !client.LimitsActive, "GUI shutdown leaked owner.");
                 using var report = JsonDocument.Parse(File.ReadAllText(reportPath!));
@@ -78,6 +87,16 @@ internal static class PerformanceGuiIntegrationSelfTest
                 await Task.WhenAll(enabling, closing);
                 Require(!client.HasProcess, "Close while starting leaked Guardian.");
                 Console.WriteLine("PASS: close while GUI session starts serializes and releases.");
+                fixtureMode = "--gui-fixture-update-failure";
+                await client.EnableAsync(configuration);
+                rejected=false;
+                try{await client.UpdateAsync(configuration with{AcPl2Watts=38});}catch(InvalidOperationException){rejected=true;}
+                Require(rejected&&client.HasProcess&&client.AppliedConfiguration==configuration&&!client.LimitsActive,
+                    "Failed IPC update fabricated new presets, retired owner or success.");
+                Require((await client.StatusAsync())?.Configuration==configuration&&client.LimitsActive,
+                    "STATUS did not recover prior committed fixture presets after rejected update.");
+                await client.CloseAsync();
+                Console.WriteLine("PASS: rejected live IPC update retains committed configuration and owner; STATUS and normal cleanup remain available.");
                 fixtureMode = "--gui-fixture-enable-failure";
                 rejected = false;
                 try { await client.EnableAsync(configuration); } catch (InvalidOperationException) { rejected = true; }

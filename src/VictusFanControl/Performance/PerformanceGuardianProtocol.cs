@@ -10,6 +10,7 @@ internal static class PerformanceGuardianProtocol
 
     internal const string Hello = "HELLO";
     internal const string EnableSession = "ENABLE_SESSION";
+    internal const string UpdateConfiguration = "UPDATE_CONFIGURATION";
     internal const string DisableSession = "DISABLE_SESSION";
     internal const string Status = "STATUS";
     internal const string Shutdown = "SHUTDOWN";
@@ -24,7 +25,8 @@ internal sealed record PerformanceGuardianRequest(
     int? OwnerPid = null,
     long? OwnerStartUtcTicks = null,
     bool? CpuEnabled = null,
-    bool? GpuEnabled = null);
+    bool? GpuEnabled = null,
+    PerformanceGuiSessionConfiguration? Configuration = null);
 
 internal sealed record PerformanceGuardianResponse(
     int ProtocolVersion,
@@ -42,7 +44,8 @@ internal sealed record PerformanceGuardianResponse(
     string? CpuStatus = null,
     string? GpuStatus = null,
     string? PowerSource = null,
-    string? RuntimeFailure = null);
+    string? RuntimeFailure = null,
+    PerformanceGuiSessionConfiguration? Configuration = null);
 
 internal sealed class PerformanceGuardianProtocolException :
     IOException
@@ -60,7 +63,7 @@ internal sealed class PerformanceGuardianProtocolException :
 
 /// <summary>
 /// Bounded length-prefixed JSON protocol. The wire surface is semantic only:
-/// it contains session enable flags but no raw MSR values, NVML clock ranges,
+/// it contains enable flags and validated product presets but no raw MSR values,
 /// WMI method ids, EC offsets or arbitrary hardware commands.
 /// </summary>
 internal static class PerformanceGuardianCodec
