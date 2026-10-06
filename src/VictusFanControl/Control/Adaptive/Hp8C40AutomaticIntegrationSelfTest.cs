@@ -434,7 +434,7 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             var controller=new AdaptiveFanProductionController(coordinator,profiles.Ac.Fan.BuildPolicy(),true,true,
                 automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,automaticConfiguration:profiles.Ac.Fan,automaticMinimumLevel:10);
             await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,default);
-            clock=1000;var sample=Sample(Now(),40) with{GpuTemperatureC=35,GpuPowerW=5};
+            clock=1000;var sample=Sample(Now(),40) with{GpuTemperatureC=35,GpuPowerW=5,CpuLoadPercent=60};
             await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
             clock+=1000;sample=sample with{Timestamp=Now()};
             controller.EvaluateAutomaticSafety(sample,Raw(sample),observe:true);
@@ -454,6 +454,8 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             await controller.ApplyUnifiedDemandAsync(profiles.Battery.Fan.UnifiedDemand!,()=>{},default,profiles.Battery.Fan);
             clock+=1000;sample=sample with{Timestamp=Now()};
             var resumed=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(resumed.ObservedLoadSeconds>=3&&resumed.SustainedLoadCooling==false,
+                "production diagnostic lost load history across source wait and curve handoff");
             Check(resumed.EqualFanLevel==12&&resumed.SmoothedDemandLevel is >10 and <12&&
                 controller.AutomaticConfiguration!.Profile.Id==profiles.Battery.Fan.Profile.Id&&backend.Levels.Count==1,
                 "Battery handoff lost continuity, metadata or actuation inertia");

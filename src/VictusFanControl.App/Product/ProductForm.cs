@@ -11,7 +11,7 @@ internal sealed class ProductForm : Form
 {
     private readonly ProductCanvas _canvas = new();
     private readonly string _modules;
-    private readonly bool _automaticReview;
+    private readonly ProductAutomaticReviewMode? _automaticReview;
     private IProductRuntime? _runtime;
     private ProductProfiles _draft;
     private ProductProfiles _saved;
@@ -31,7 +31,7 @@ internal sealed class ProductForm : Form
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,bool automaticReview=false)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null)
     {
         _modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
         string? notice=null;

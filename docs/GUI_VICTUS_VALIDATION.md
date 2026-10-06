@@ -1,4 +1,8 @@
-# GUI: paquete y recorrido agrupado pendiente
+# GUI: recorridos y evidencia de validación
+
+Consultar primero [PRODUCT_VALIDATION_STATUS.md](PRODUCT_VALIDATION_STATUS.md):
+consolida pruebas aprobadas y la regresión específica del motor actual. El recorrido
+inicial de abajo es histórico y no exige repetir todos los subsistemas.
 
 Este documento corresponde a la GUI normal `ProductForm`. Los PASS de software y
 las capturas de CI no prueban el comportamiento físico del Victus. Bloques 2/3,
@@ -145,7 +149,9 @@ revisión de cinco minutos. Volver a Firmware conserva la sesión Performance;
 Liberar CPU/GPU vuelve primero a Firmware si Automatic está activo.
 Consultar [AUTOMATIC_PRODUCT_SESSION.md](AUTOMATIC_PRODUCT_SESSION.md) para
 transiciones, fallos y la siguiente prueba combinada. AutomaticReview permite ahora
-la reconciliación acotada AC/Batería de curvas; su validación física está pendiente.
+la reconciliación acotada AC/Batería de curvas; el ensayo ligero f669831 del
+6 de octubre está aprobado. La entrada `AutomaticExtendedReview` prepara la
+observación de carga prolongada con un máximo de 45 minutos.
 La reentrada tras interrupciones sigue cerrada.
 
 

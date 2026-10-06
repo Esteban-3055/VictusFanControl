@@ -1,5 +1,18 @@
 # Automatic: activación coordinada de curva y límites
 
+## Estado consolidado y revisión prolongada
+
+Ver [PRODUCT_VALIDATION_STATUS.md](PRODUCT_VALIDATION_STATUS.md): conserva los
+PASS físicos históricos y la transición de GUI f669831 AC → Batería → AC del
+6 de octubre (203 muestras completas, misma activación, sin interrupción).
+Los apartados históricos que dicen «pendiente» describen el estado de esa entrega;
+no revierten pruebas aprobadas después. Guardian 6I/6J y P15D1/P15D2 ya están aprobados.
+
+Se añade `-Mode AutomaticExtendedReview`: 45 min por activación, mismos límites
+y protecciones que la revisión de 5 min. No promueve Automatic normal. Estado/ZIP
+identifican la duración y el historial de carga; la entrada larga conserva/exporta
+hasta 16 MiB por flujo para observar veinte minutos de carga y enfriamiento.
+
 ## Contrato de producto
 
 Seleccionar Automatic es la autorización explícita para habilitar CPU y GPU con
@@ -53,8 +66,9 @@ ni se mata el proceso: se informa que debe liberarse la sesión anterior.
 | Minimizar u ocultar al tray con una sesión ya activa | Continúa con su supervisión y plazo existentes | Continúa con su Guardian existente |
 | Cerrar explícitamente la aplicación | Intenta liberar fans | Intenta liberar Performance incluso si otro dominio falla |
 
-El cambio automático de curva por AC/Batería, la reentrada tras lifecycle/fallo
-y el arranque Automatic persistente siguen pendientes de cualificación física.
+El cambio de curva AC/Batería pasó el ensayo ligero de f669831. La integración
+actual tras lifecycle y la respuesta prolongada siguen pendientes; la reentrada
+automática y el arranque Automatic persistente no están habilitados.
 Esta integración no abre el gate Automatic normal; usa exclusivamente
 `Start-ProductGui.ps1 -Mode AutomaticReview` en 8C40/F.18 y niveles 10–50.
 

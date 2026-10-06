@@ -80,3 +80,14 @@ Write-Host 'PASS: final Automatic qualification remains isolated from normal pro
 Write-Host 'PASS: exact target + explicit token + evidence root are required.'
 Write-Host 'PASS: qualification profile is pinned to hottest 3 P-Cores, 30..50 and adaptive timings.'
 Write-Host 'PASS: WMI-only Automatic -> Firmware requires accepted release/default and retired guardian; no EC proof.'
+
+$review = Get-Content (Join-Path $repoRoot 'src/VictusFanControl.App/Product/ProductAutomaticReview.cs') -Raw
+$launcher = Get-Content (Join-Path $repoRoot 'release/Start-ProductGui.ps1') -Raw
+$package = Get-Content (Join-Path $repoRoot 'scripts/package-product-gui-review.ps1') -Raw
+Require ($review -match 'MaximumSeconds\s*=\s*300') 'short product review must stay bounded to five minutes'
+Require ($review -match 'ExtendedMaximumSeconds\s*=\s*2700') 'extended review must stay bounded to 45 minutes'
+Require ($review -match 'MaximumCpuSpikeMilliseconds\s*=\s*2000') 'long review must not relax CPU confirmation'
+Require ($program.Contains('ProductAutomaticReview.ResolveEntry')) 'review entry combinations must be rejected'
+Require ($launcher.Contains('AutomaticExtendedReview') -and $launcher.Contains('--product-automatic-extended-review')) 'extended launcher entry missing'
+Require ($launcher.Contains('explicit-only-2700s-10-to-50-16MiB-diagnostics') -and $package.Contains('explicit-only-2700s-10-to-50-16MiB-diagnostics')) 'extended package contract mismatch'
+Write-Host 'PASS: explicit extended product review is bounded to 45 minutes with unchanged thermal admission and closed normal Automatic.'

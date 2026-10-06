@@ -4,10 +4,14 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
+internal enum ProductAutomaticReviewMode { Short, Extended }
+
 /// <summary>Explicit physical review admission; never changes the normal Automatic gate.</summary>
 internal sealed class ProductAutomaticReview
 {
     internal const int MaximumSeconds = 300;
+    internal const int ExtendedMaximumSeconds = 2700;
+    internal int MaximumDurationSeconds { get; }
     internal const int MaximumCpuSpikeMilliseconds = 2000;
     internal const string CpuSpikeDeadlineFailure = "Confirmación de pico CPU vencida: sin adquisición fresca de recuperación ≤90 °C en 2000 ms; volver a Firmware.";
     internal const double CpuImmediateHandoffC = Hp8C40ThermalEmergencyConfirmation.CpuHardEmergencyC;
@@ -19,12 +23,27 @@ internal sealed class ProductAutomaticReview
     private long? _started;
     private DateTimeOffset? _lastSample;
     private int _healthySamples;
-    internal ProductAutomaticReview(Func<long>? milliseconds = null) => _milliseconds = milliseconds ?? (() => Environment.TickCount64);
+    internal ProductAutomaticReview(Func<long>? milliseconds = null, ProductAutomaticReviewMode mode = ProductAutomaticReviewMode.Short)
+    {
+        MaximumDurationSeconds = mode switch
+        {
+            ProductAutomaticReviewMode.Short => MaximumSeconds,
+            ProductAutomaticReviewMode.Extended => ExtendedMaximumSeconds,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode))
+        };
+        _milliseconds = milliseconds ?? (() => Environment.TickCount64);
+    }
+    internal static ProductAutomaticReviewMode? ResolveEntry(bool shortRequested, bool extendedRequested, int otherHardwareModes)
+    {
+        if (shortRequested && extendedRequested || (shortRequested || extendedRequested) && otherHardwareModes != 0)
+            throw new ArgumentException("Selecciona una sola revisión Automatic, sin combinarla con otra prueba de hardware.");
+        return extendedRequested ? ProductAutomaticReviewMode.Extended : shortRequested ? ProductAutomaticReviewMode.Short : null;
+    }
     internal static bool IsAuthorized(bool requested, string? target) => requested && Hp8C40AutomaticFinalQualificationGate.IsAuthorizedForTarget(target);
     internal void Start() { lock (_sync) { _started = _milliseconds(); _lastSample = null; _healthySamples = 0; _cpuHighSince = null; _lastClock = _started; _observed = null; } }
     internal void Stop() { lock (_sync) { _started = null; _cpuHighSince = null; _observed = null; } }
-    internal int? RemainingSeconds { get { lock (_sync) return _started.HasValue ? (int)Math.Clamp((MaximumSeconds * 1000L - (_milliseconds() - _started.Value) + 999) / 1000, 0, MaximumSeconds) : null; } }
-    internal bool Expired { get { lock (_sync) return _started.HasValue && (_milliseconds() < _started.Value || _milliseconds() - _started.Value >= MaximumSeconds * 1000L); } }
+    internal int? RemainingSeconds { get { lock (_sync) return _started.HasValue ? (int)Math.Clamp((MaximumDurationSeconds * 1000L - (_milliseconds() - _started.Value) + 999) / 1000, 0, MaximumDurationSeconds) : null; } }
+    internal bool Expired { get { lock (_sync) return _started.HasValue && (_milliseconds() < _started.Value || _milliseconds() - _started.Value >= MaximumDurationSeconds * 1000L); } }
     internal int? RemainingCpuSpikeMilliseconds
     {
         get { lock (_sync) return _started.HasValue && _cpuHighSince.HasValue

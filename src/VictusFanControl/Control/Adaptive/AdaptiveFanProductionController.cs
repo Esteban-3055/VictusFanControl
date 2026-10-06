@@ -34,6 +34,8 @@ public sealed record AdaptiveFanProductionResult(
     public double? SmoothedDemandLevel { get; init; }
     public double? ActuationDemandLevel { get; init; }
     public bool ThermalOverride { get; init; }
+    public bool? SustainedLoadCooling { get; init; }
+    public double? ObservedLoadSeconds { get; init; }
     public UnifiedDemandObservation? UnifiedDemand { get; init; }
 }
 
@@ -821,6 +823,8 @@ public sealed class AdaptiveFanProductionController
                 SmoothedDemandLevel = preparedDecision?.SmoothedDemandLevel,
                 ActuationDemandLevel = preparedDecision?.ActuationDemandLevel,
                 ThermalOverride = preparedDecision?.ThermalOverride ?? false,
+                SustainedLoadCooling = preparedDecision?.SustainedLoadCooling,
+                ObservedLoadSeconds = preparedDecision?.ObservedLoadSeconds,
                 UnifiedDemand = preparedDecision?.UnifiedDemand ?? decision.UnifiedDemand
             };
             Volatile.Write(ref _lastAutomaticResult, result);

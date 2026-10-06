@@ -7,8 +7,44 @@ internal static class ProductAutomaticActivationSelfTest
 {
     // This suite has no controls; do not block continuations on the caller's WinForms synchronization context.
     internal static void Run(Action<bool,string> require) => Task.Run(() => RunAsync(require)).GetAwaiter().GetResult();
+    private static void TestExtendedReview(Action<bool,string> require)
+    {
+        require(ProductAutomaticReview.ResolveEntry(false,false,0) is null &&
+            ProductAutomaticReview.ResolveEntry(true,false,0)==ProductAutomaticReviewMode.Short &&
+            ProductAutomaticReview.ResolveEntry(false,true,0)==ProductAutomaticReviewMode.Extended,
+            "Review entry selection changed ordinary startup or lost an explicit mode.");
+        foreach(var flags in new[]{(true,true,0),(true,false,1),(false,true,1)})
+        {
+            var rejected=false;try{ProductAutomaticReview.ResolveEntry(flags.Item1,flags.Item2,flags.Item3);}catch(ArgumentException){rejected=true;}
+            require(rejected,"Combined physical review modes were admitted.");
+        }
+        long clock=1000;var review=new ProductAutomaticReview(()=>clock,ProductAutomaticReviewMode.Extended);
+        require(review.MaximumDurationSeconds==2700&&review.RemainingSeconds is null&&!review.Expired,"Long review began without activation.");
+        review.Start();require(review.RemainingSeconds==2700,"Long review did not start with its bounded budget.");
+        clock+=300000;require(!review.Expired&&review.RemainingSeconds==2400,"Long review inherited the short deadline.");
+        clock+=2399999;require(!review.Expired&&review.RemainingSeconds==1,"Long review expired early.");
+        clock++;require(review.Expired&&review.RemainingSeconds==0,"Long review passed its 45-minute deadline.");
+        review.Stop();require(review.RemainingSeconds is null,"Stopped long review kept an active timer.");
+        review.Start();clock--;require(review.Expired,"Regressive clock extended a long review.");
+        foreach(var mode in new[]{ProductAutomaticReviewMode.Short,ProductAutomaticReviewMode.Extended})
+        {
+            clock=0;review=new ProductAutomaticReview(()=>clock,mode);review.Start();
+            var origin=DateTimeOffset.UtcNow;
+            VictusFanControl.Telemetry.TelemetrySnapshot Sample(int ms,double cpu)=>new(origin.AddMilliseconds(ms),"fixture CPU",cpu,5,20,"fixture GPU",35,5,10,1800,1800){CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",cpu)]};
+            VictusFanControl.Safety.SafetyGateResult Safety(VictusFanControl.Telemetry.TelemetrySnapshot sample)=>
+                new(true,true,true,true,true,true,false,true,true,true,sample.Timestamp,sample.Timestamp,1,Array.Empty<string>());
+            for(int i=0;i<3;i++){clock=i*100;var sample=Sample(i*100,63);review.Observe(sample,Safety(sample));}
+            clock=300;var hot=Sample(300,96);review.Observe(hot,Safety(hot));
+            require(review.RemainingCpuSpikeMilliseconds==2000,"Long duration altered the thermal spike budget.");
+            clock=2300;var cool=Sample(2300,63);var rejected=false;
+            try{review.Observe(cool,Safety(cool));}catch(InvalidOperationException){rejected=true;}
+            require(rejected,"Late cool telemetry rescued thermal admission in a review mode.");
+        }
+        Console.WriteLine("PASS: explicit 5/45-minute review selection, fixed deadlines and unchanged 2000-ms thermal confirmation.");
+    }
     private static async Task RunAsync(Action<bool,string> require)
     {
+        TestExtendedReview(require);
         TestSourceTransitions(require);
         var activation = new ProductAutomaticActivation();
         var profiles = new ProductProfiles { CpuEnabled = false, GpuEnabled = false };

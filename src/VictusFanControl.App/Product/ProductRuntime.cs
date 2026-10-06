@@ -22,6 +22,7 @@ internal sealed record ProductRuntimeState
     internal bool ManualAuthorized { get; init; }
     internal bool AutomaticAuthorized { get; init; }
     internal bool AutomaticReview { get; init; }
+    internal int? AutomaticReviewMaximumSeconds { get; init; }
     internal bool AutomaticPreparing { get; init; }
     internal string? AutomaticSourceTransition { get; init; }
     internal TelemetrySnapshot? AutomaticInterruptionSnapshot { get; init; }
@@ -102,15 +103,15 @@ internal sealed class ProductRuntime : IProductRuntime
     public event Action<ProductRuntimeState>? Changed;
     public ProductRuntimeState State { get { lock (_stateSync) return _state; } }
 
-    internal ProductRuntime(string modules, ProductProfiles profiles, bool automaticReview = false)
+    internal ProductRuntime(string modules, ProductProfiles profiles, ProductAutomaticReviewMode? automaticReview = null)
     {
         _hardware = HardwareIdentityReader.ReadCurrent();
         _target = HpHardwareTargetResolver.Resolve(_hardware,out _);
-        if (automaticReview)
+        if (automaticReview.HasValue)
         {
             if (!ProductAutomaticReview.IsAuthorized(true, _target?.Id)) throw new InvalidOperationException("Prueba Automatic disponible solo para el HP 8C40/F.18 validado.");
-            _automaticReview = new();
-            _state = _state with { Message = "Prueba Automatic habilitada: 10–50, máximo 5 min. Inicio en Firmware; requiere clic explícito." };
+            _automaticReview = new(mode: automaticReview.Value);
+            _state = _state with { Message = $"Prueba Automatic habilitada: 10–50, máximo {_automaticReview.MaximumDurationSeconds / 60} min. Inicio en Firmware; requiere clic explícito." };
         }
         if (_hardware.BoardProduct == "8C40") WmiOnlyInvestigationPolicy.Enable();
         IFanControlBackend backend;
@@ -306,7 +307,7 @@ internal sealed class ProductRuntime : IProductRuntime
     {
         if (!_closing && !_lifecycleBlocked && _controller.Mode == AdaptiveFanProductionMode.Automatic)
         {
-            Publish("Automatic ya está seleccionado. Volver a pulsarlo no reaplica límites ni renueva los cinco minutos.");
+            Publish("Automatic ya está seleccionado. Volver a pulsarlo no reaplica límites ni renueva el plazo de revisión.");
             return Task.CompletedTask;
         }
         // Reject unavailable modes before a new generation could supersede a running session.
@@ -485,8 +486,8 @@ internal sealed class ProductRuntime : IProductRuntime
                     {
                         if (_automaticReview.Expired && _controller.Mode == AdaptiveFanProductionMode.Automatic)
                         {
-                            _lifecycleBlocked = true; _lifecycleBlockReason = "Finalizó la prueba de cinco minutos. Reinicia tras una liberación limpia."; _fans.CloseCustomAdmissionForLifecycleBoundary(); _automaticReview.Stop();
-                            await _controller.ReleaseToFirmwareAsync("Fin de los cinco minutos de prueba Automatic.",CancellationToken.None);
+                            _lifecycleBlocked = true; _lifecycleBlockReason = $"Finalizó la revisión de {_automaticReview.MaximumDurationSeconds / 60} minutos. Reinicia tras una liberación limpia."; _fans.CloseCustomAdmissionForLifecycleBoundary(); _automaticReview.Stop();
+                            await _controller.ReleaseToFirmwareAsync($"Fin de los {_automaticReview.MaximumDurationSeconds / 60} minutos de revisión Automatic.",CancellationToken.None);
                             Publish("Prueba Automatic finalizada; Firmware solicitado. Reinicia para otra sesión.");
                         }
                     });
@@ -510,7 +511,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 Source = source, Runtime = _worker.StateMachine.State.ToString(), Snapshot = _snapshot,
                 FanMode = _controller.Mode.ToString(), FanAuthority = _fans.Authority.ToString(), FanLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedLevel : null,
                 ManualAuthorized = _controller.ManualExecutionAuthorized, AutomaticAuthorized = _controller.AutomaticExecutionAuthorized,
-                AutomaticReview = _automaticReview is not null, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
+                AutomaticReview = _automaticReview is not null, AutomaticReviewMaximumSeconds = _automaticReview?.MaximumDurationSeconds, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
                 AutomaticCpuSpikeRemainingMilliseconds = _automaticReview?.RemainingCpuSpikeMilliseconds,
                 AutomaticPreparing = _automaticActivation.Pending, AutomaticSessionId = _automaticSessionId, AutomaticDecisionSnapshot = _automaticDecisionSnapshot, AutomaticInterruptionSnapshot = _automaticInterruptionSnapshot,
                 AutomaticSourceTransition = _sourceTransition.Pending ? _sourceTransition.Candidate : null,

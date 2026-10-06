@@ -271,7 +271,7 @@ internal static class ProductGuiSelfTest
         require(gpuWhileCpuPending.Contains("GPU temperatura 83 °C > 82 °C")&&!gpuWhileCpuPending.Contains("CPU temperatura"),
             "Admitted CPU spike was falsely blamed for an independent GPU rejection.");
         // Explicit review still starts in Firmware, and editing/saving never dispatches a curve.
-        var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://review",fixture:runtime,fixtureProfiles:new ProductProfiles(),automaticReview:true);
+        var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://review",fixture:runtime,fixtureProfiles:new ProductProfiles(),automaticReview:ProductAutomaticReviewMode.Short);
         form.Show();Application.DoEvents();require(runtime.Commands==0&&form.Canvas.State.FanMode=="Firmware","Review auto-started control.");
         runtime.Publish(runtime.State with{AutomaticAuthorized=true,AutomaticReview=true,Runtime="Healthy"});
         form.HandleCommand("fan-mode-2");PumpUntil(()=>!form.Canvas.Busy,"Review mode command did not finish.");require(runtime.Commands==1,"Explicit Automatic click was not dispatched once.");
@@ -451,6 +451,18 @@ internal static class ProductGuiSelfTest
                 {
                     using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
                     require(state.RootElement.GetProperty("AutomaticInterruptionSnapshot").GetProperty("GpuPowerW").GetString()=="NaN","Invalid triggering telemetry could not be exported faithfully.");
+                }
+                File.WriteAllText(log,"review-start\n"+new string('x',AppLog.DefaultTailBytes+100)+"\nreview-end\n");
+                canvas.State=canvas.State with{AutomaticReview=true,AutomaticReviewMaximumSeconds=ProductAutomaticReview.ExtendedMaximumSeconds};
+                bundle=form.ExportDiagnosticsAsync(diagnostic,log);PumpUntil(()=>bundle.IsCompleted,"Extended diagnostic export blocked.");bundle.GetAwaiter().GetResult();
+                using(var zip=System.IO.Compression.ZipFile.OpenRead(diagnostic))
+                {
+                    using var logReader=new StreamReader(zip.GetEntry("events-tail.log")!.Open());var retained=logReader.ReadToEnd();
+                    require(retained.StartsWith("review-start\n")&&retained.EndsWith("review-end\n")&&
+                        zip.GetEntry("events-tail.log")!.Length<=AppLog.ExtendedReviewTailBytes,"Extended review lost the beginning of retained evidence or escaped its bound.");
+                    using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
+                    require(state.RootElement.GetProperty("AutomaticReviewMaximumSeconds").GetInt32()==2700&&
+                        state.RootElement.GetProperty("diagnosticMaximumBytesPerStream").GetInt32()==AppLog.ExtendedReviewTailBytes,"Diagnostic omitted its long review duration or retention bound.");
                 }
                 require(File.ReadAllText(path)==savedBytes&&runtime.Commands==0,"Diagnostic mutated preferences or dispatched hardware.");
                 form.HandleCommand("discard");

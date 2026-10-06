@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Verify','SelfTest','Soak','Open','AutomaticReview','RecoverPerformance','RecoverySelfTest')][string]$Mode = 'Open',
+    [ValidateSet('Verify','SelfTest','Soak','Open','AutomaticReview','AutomaticExtendedReview','RecoverPerformance','RecoverySelfTest')][string]$Mode = 'Open',
     [Guid]$ExpectedCpuSession = [Guid]::Empty,
     [Guid]$ExpectedGpuSession = [Guid]::Empty,
     [switch]$ConfirmExclusiveGpuController
@@ -18,10 +18,11 @@ foreach ($entry in $manifest.files) {
 Write-Host "Verified GUI build $($manifest.sourceHead). Physical validation remains pending."
 if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }
-if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticReview -ne 'explicit-only-300s-10-to-50') { throw 'This package does not authorize the supervised Automatic review entry.' }
-if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticThermal -ne 'cpu90-confirm-2000ms-cpu99-immediate-raw-response') { throw 'This package does not include bounded CPU spike confirmation and raw thermal response.' }
-if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticPerformance -ne 'required-both-before-fans') { throw 'This package does not authorize the coupled CPU/GPU Automatic entry.' }
-if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticSourceTransition -ne 'bounded-4000ms-fresh-guardian-preserves-inertia') { throw 'This package does not include the bounded AC/Battery curve transition review.' }
+if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticReview -ne 'explicit-only-300s-10-to-50') { throw 'This package does not authorize the supervised Automatic review entry.' }
+if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticThermal -ne 'cpu90-confirm-2000ms-cpu99-immediate-raw-response') { throw 'This package does not include bounded CPU spike confirmation and raw thermal response.' }
+if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticPerformance -ne 'required-both-before-fans') { throw 'This package does not authorize the coupled CPU/GPU Automatic entry.' }
+if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticSourceTransition -ne 'bounded-4000ms-fresh-guardian-preserves-inertia') { throw 'This package does not include the bounded AC/Battery curve transition review.' }
+if ($Mode -eq 'AutomaticExtendedReview' -and $manifest.productAutomaticExtendedReview -ne 'explicit-only-2700s-10-to-50-16MiB-diagnostics') { throw 'This package does not authorize the supervised extended Automatic review entry.' }
 $app = Join-Path $root 'VictusFanControl-0.4.0-rc.1-win-x64/app'
 if ($Mode -eq 'RecoverPerformance' -or $Mode -eq 'RecoverySelfTest') {
     $guardian = Join-Path $app 'performance-guardian/VictusFanControl.PerformanceGuardian.exe'
@@ -51,9 +52,10 @@ try {
     $start.UseShellExecute = $false
     $start.WorkingDirectory = $app
     $start.Arguments = if ($Mode -eq 'SelfTest') { '--product-gui-self-test' } elseif ($Mode -eq 'Soak') { '--product-gui-soak-self-test' } else { '--modules-dir "' + (Join-Path $app 'modules') + '"' }
-    if ($Mode -eq 'AutomaticReview') {
-        $start.Arguments += ' --product-automatic-review'
-        Write-Host 'Supervised Automatic review: exact HP 8C40/F.18, levels 10-50, maximum 5 minutes per activation. Starts in Firmware. Selecting Automatic first applies both CPU/GPU limits, then arms the curve after confirmation. Firmware cancels preparation; limits retain their separate supervised session.'
+    if ($Mode -in @('AutomaticReview','AutomaticExtendedReview')) {
+        $minutes = if ($Mode -eq 'AutomaticExtendedReview') { 45 } else { 5 }
+        $start.Arguments += if ($Mode -eq 'AutomaticExtendedReview') { ' --product-automatic-extended-review' } else { ' --product-automatic-review' }
+        Write-Host "Supervised Automatic review: exact HP 8C40/F.18, levels 10-50, maximum $minutes minutes per activation. Starts in Firmware. Selecting Automatic first applies both CPU/GPU limits, then arms the curve after confirmation. Firmware cancels preparation; limits retain their separate supervised session."
     }
     $process = [System.Diagnostics.Process]::Start($start)
     try {

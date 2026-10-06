@@ -218,7 +218,12 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawCurve(g,new(972,590,625,145),false);
         if(State.LifecycleBlocked)DrawText(g,State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.",937,755,18,Yellow,685);
         else if(State.AutomaticPreparing)DrawText(g,"Preparando CPU/GPU; Firmware cancela la entrada a Automatic.",937,755,18,Muted,685);
-        else if(State.AutomaticReview)DrawText(g,"Prueba 10–50 · "+(State.AutomaticReviewRemainingSeconds is { } seconds?$"{seconds} s restantes":"máximo 5 min por activación"),937,755,18,Muted,685);
+        else if(State.AutomaticReview)
+        {
+            DrawText(g,"Prueba 10–50 · "+(State.AutomaticReviewRemainingSeconds is { } seconds?$"{seconds} s restantes":$"máximo {(State.AutomaticReviewMaximumSeconds ?? ProductAutomaticReview.MaximumSeconds) / 60} min por activación"),937,755,18,Muted,685);
+            if(State.AutomaticDecision?.ObservedLoadSeconds is { } loaded)
+                DrawText(g,$"Carga acumulada: {loaded / 60:0.0} min · "+(State.AutomaticDecision.SustainedLoadCooling==true?"descenso de carga prolongada":"descenso de actividad breve"),937,786,17,Muted,685);
+        }
     }
     private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit,bool compact=false)
     {

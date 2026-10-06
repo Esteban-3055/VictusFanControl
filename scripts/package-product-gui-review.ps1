@@ -17,13 +17,14 @@ Copy-Item -LiteralPath (Join-Path $root 'docs/QUIET_PRODUCT_PRESETS.md') -Destin
 Copy-Item -LiteralPath (Join-Path $root 'docs/UNIFIED_PRODUCT_DEMAND.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/AUTOMATIC_PRODUCT_SESSION.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/PERFORMANCE_GUI_RECOVERY.md') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_VALIDATION_STATUS.md') -Destination $OutputDirectory
 $entries = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-Object FullName | ForEach-Object {
     [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
 })
 $manifest = [ordered]@{
     schemaVersion=1;kind='VictusFanControl.ProductGuiReview';sourceHead=$SourceHead
     inheritedRcZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
-    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu90-confirm-2000ms-cpu99-immediate-raw-response';productAutomaticSourceTransition='bounded-4000ms-fresh-guardian-preserves-inertia';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';curveApply='explicit-live-unified-preserves-session-inertia';productDemand='unified-max-six-influences-v1';productProfiles='v2-preserves-v1-backup';performanceRecovery='explicit-release-only-exact-session-backups';files=$entries
+    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticExtendedReview='explicit-only-2700s-10-to-50-16MiB-diagnostics';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu90-confirm-2000ms-cpu99-immediate-raw-response';productAutomaticSourceTransition='bounded-4000ms-fresh-guardian-preserves-inertia';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';curveApply='explicit-live-unified-preserves-session-inertia';productDemand='unified-max-six-influences-v1';productProfiles='v2-preserves-v1-backup';performanceRecovery='explicit-release-only-exact-session-backups';files=$entries
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'PRODUCT-GUI-MANIFEST.json') -Encoding utf8
 & (Join-Path $OutputDirectory 'Start-ProductGui.ps1') -Mode Verify

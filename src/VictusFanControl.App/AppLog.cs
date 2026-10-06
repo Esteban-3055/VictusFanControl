@@ -7,7 +7,10 @@ namespace VictusFanControl.App;
 
 internal static class AppLog
 {
-    private const long MaxFileBytes = 5 * 1024 * 1024;
+    internal const int DefaultTailBytes = 2 * 1024 * 1024;
+    internal const int ExtendedReviewTailBytes = 16 * 1024 * 1024;
+    private static long _maxFileBytes = 5 * 1024 * 1024;
+    private static int _exportTailBytes = DefaultTailBytes;
     private static readonly object Gate = new();
     private static bool _initialized;
     internal static bool QualificationCompatibilityLogEnabled { get; private set; }
@@ -25,9 +28,26 @@ internal static class AppLog
         applicationMvid = typeof(AppLog).Assembly.ManifestModule.ModuleVersionId,
         coreMvid = typeof(TelemetrySnapshot).Assembly.ManifestModule.ModuleVersionId,
         scope = "one-application-process;automatic-activations-have-separate-ids",
-        exportLogs = "current-session-only;latest-2-MiB-per-stream;rotation-keeps-one-previous-segment"
+        exportLogs = $"current-session-only;latest-{_exportTailBytes / (1024 * 1024)}-MiB-per-stream;rotation-keeps-one-previous-segment",
+        rotationMaximumBytesPerSegment = _maxFileBytes
     };
     private static readonly JsonSerializerOptions Json = new() { NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals };
+
+    // Explicit long review only. Bounded retention remains isolated to this process.
+    internal static void EnableExtendedReviewDiagnostics()
+    {
+        lock (Gate)
+        {
+            _maxFileBytes = ExtendedReviewTailBytes / 2;
+            _exportTailBytes = ExtendedReviewTailBytes;
+            try
+            {
+                if (_initialized)
+                    File.WriteAllText(Path.Combine(SessionDirectory, "session.json"), JsonSerializer.Serialize(SessionIdentity));
+            }
+            catch { /* Logging failures must not change control admission. */ }
+        }
+    }
 
     public static void Initialize()
     {
@@ -83,14 +103,14 @@ internal static class AppLog
 
     private static void Append(string path, string text)
     {
-        if (File.Exists(path) && new FileInfo(path).Length >= MaxFileBytes)
+        if (File.Exists(path) && new FileInfo(path).Length >= _maxFileBytes)
             File.Move(path, path + ".1", overwrite: true);
         File.AppendAllText(path, text);
     }
 
     // A consistent tail across rotation, never a fragment of a JSON row or UTF-8 code point.
     // No discovery of other sessions, recovery files, leases or journals.
-    internal static string ReadTail(string path, int maximumBytes = 2 * 1024 * 1024)
+    internal static string ReadTail(string path, int maximumBytes = DefaultTailBytes)
     {
         lock (Gate)
         {

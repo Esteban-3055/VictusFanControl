@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "kind": "VictusFanControl.ProductGuiObservedSourceTransition",
+  "target": "HP-8C40-9D0R1LA-F18",
+  "sourceHead": "f6698316d8ff9aa9309386b80a2d3cb7d31abda5",
+  "evidenceFile": "VictusFanControl-diagnostico-20261006T172222249Z-6ae2aef721de4e999736ae6c155fc8ff.zip",
+  "evidenceZipSha256": "fc81402cc38b770c52f7ffb6a91e57ba1006e138fae87aa12bfccd0b63b09a6f",
+  "sessionId": "20261006T172222249Z-6ae2aef721de4e999736ae6c155fc8ff",
+  "automaticSessionId": "d7f6fe5fd9d9444d81cffa19d6fd7677",
+  "capturedUtc": "2026-10-06T17:27:02.5401009+00:00",
+  "telemetryRows": 203,
+  "incompleteRows": 0,
+  "maxCpuControlTemperatureC": 77,
+  "maxGpuTemperatureC": 39,
+  "observedSequence": [
+    "Ac",
+    "Battery",
+    "Ac"
+  ],
+  "finalFanMode": "Automatic",
+  "finalFanAuthority": "Custom",
+  "finalRuntime": "Healthy",
+  "finalLifecycleBlocked": false,
+  "finalFailure": null,
+  "finalCpuState": "Active",
+  "finalGpuState": "ActiveUnverified",
+  "result": "PASS_OBSERVED_LIGHT_LOAD_SOURCE_TRANSITION",
+  "scope": "Same Automatic activation across both source transitions; not prolonged-load or final lifecycle qualification.",
+  "gpuExactRangeReadback": false,
+  "independentFanOwnershipVerified": false,
+  "transitions": [
+    {
+      "from": "Ac",
+      "to": "Battery",
+      "snapshotTimestamp": "2026-10-06T17:25:56.6576912+00:00",
+      "guardianRequestId": "fb8a72f0-b917-4b80-8e19-9c5573c015a6",
+      "guardianPowerSource": "Battery",
+      "remainingSeconds": 119,
+      "performance": {
+        "SchemaVersion": 1,
+        "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+        "CpuEnabled": true,
+        "GpuEnabled": true,
+        "AcPl1Watts": 30,
+        "AcPl2Watts": 50,
+        "BatteryPl1Watts": 9,
+        "BatteryPl2Watts": 12,
+        "AcGpuMaximumMHz": 1800,
+        "BatteryGpuMaximumMHz": 1200
+      }
+    },
+    {
+      "from": "Battery",
+      "to": "Ac",
+      "snapshotTimestamp": "2026-10-06T17:26:20.6683863+00:00",
+      "guardianRequestId": "6d5c9541-4c99-44f6-93ef-08c9f48d896d",
+      "guardianPowerSource": "Ac",
+      "remainingSeconds": 95,
+      "performance": {
+        "SchemaVersion": 1,
+        "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+        "CpuEnabled": true,
+        "GpuEnabled": true,
+        "AcPl1Watts": 30,
+        "AcPl2Watts": 50,
+        "BatteryPl1Watts": 9,
+        "BatteryPl2Watts": 12,
+        "AcGpuMaximumMHz": 1800,
+        "BatteryGpuMaximumMHz": 1200
+      }
+    }
+  ]
+}

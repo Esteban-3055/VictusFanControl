@@ -283,12 +283,17 @@ internal static class Program
             (p15d2VariableManualHardwareTest ? 1 : 0) +
             (automaticFinalQualificationHardwareTest ? 1 : 0) + (block1Test ? 1 : 0);
 
-        var productAutomaticReview = args.Contains("--product-automatic-review");
-        if (productAutomaticReview && hardwareTestModeCount != 0)
+        ProductAutomaticReviewMode? productAutomaticReview;
+        try
         {
-            AppLog.Write("Product Automatic review cannot be combined with other hardware qualification entries.");
-            Environment.ExitCode = 60; return;
+            productAutomaticReview = ProductAutomaticReview.ResolveEntry(
+                args.Contains("--product-automatic-review"), args.Contains("--product-automatic-extended-review"), hardwareTestModeCount);
         }
+        catch (ArgumentException ex)
+        {
+            AppLog.Write(ex.Message); Environment.ExitCode = 60; return;
+        }
+        if (productAutomaticReview == ProductAutomaticReviewMode.Extended) AppLog.EnableExtendedReviewDiagnostics();
         if (hardwareTestModeCount > 1)
         {
             AppLog.Write(
