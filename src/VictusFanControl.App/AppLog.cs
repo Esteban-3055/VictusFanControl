@@ -81,7 +81,7 @@ internal static class AppLog
         {
             var segments = new[] { path + ".1", path }.Where(File.Exists).ToArray();
             var chunks = new List<byte[]>(); var remaining = maximumBytes; var truncated = false;
-            foreach (var segment in segments.Reverse())
+            foreach (var segment in Enumerable.Reverse(segments))
             {
                 using var stream = new FileStream(segment, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                 var size = (int)Math.Min(stream.Length, remaining);

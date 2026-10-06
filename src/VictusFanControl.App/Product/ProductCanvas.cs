@@ -365,7 +365,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             if(marker.IsApplied){using var fill=new SolidBrush(Green);g.FillEllipse(fill,point.X-5,point.Y-5,10,10);}
         }
         var applied=markers.FirstOrDefault(m=>m.IsApplied);
-        DrawText(g,(applied is null?"● Solicitud Automatic: —":$"● Solicitud: {applied.Level:0}")+"  ·  ○ Vista previa",plot.Left,plot.Top-22,15,applied is null?Muted:Green,plot.Width);
+        DrawText(g,(applied is null?"● Solicitud Automatic: —":$"● Solicitud: {applied.Level:0}")+"  ·  ○ Vista previa",plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
         DrawText(g,"Entrada ("+Unit()+")",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300);
         DrawText(g,"Nivel común · 10–50",plot.Left,plot.Top-41,19,Muted,285);
         if(editable){var cpu=Axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.CpuLoad;
