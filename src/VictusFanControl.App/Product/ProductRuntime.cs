@@ -145,8 +145,12 @@ internal sealed class ProductRuntime : IProductRuntime
             if (!_closing && e.Current != SystemState.Healthy && (_automaticActivation.Pending || _fans.Authority == FanAuthority.Custom || _controller.Mode == AdaptiveFanProductionMode.Automatic))
             {
                 _automaticActivation.Cancel();
-                _lifecycleBlocked = true; _lifecycleBlockReason = "Telemetría no disponible: " + e.Reason; _fans.CloseCustomAdmissionForLifecycleBoundary();
-                _ = ResetInterruptedFanAsync("Telemetría no disponible: " + e.Reason);
+                var reason = _automaticReview?.RemainingCpuSpikeMilliseconds == 0
+                    ? ProductAutomaticReview.CpuSpikeDeadlineFailure : "Telemetría no disponible: " + e.Reason;
+                _automaticInterruptionSnapshot = _snapshot;
+                AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + reason);
+                _lifecycleBlocked = true; _lifecycleBlockReason = reason; _fans.CloseCustomAdmissionForLifecycleBoundary();
+                _ = ResetInterruptedFanAsync(reason);
             }
             _ = EnforceAsync(); Publish(e.Reason);
         };

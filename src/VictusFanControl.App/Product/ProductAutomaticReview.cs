@@ -9,6 +9,7 @@ internal sealed class ProductAutomaticReview
 {
     internal const int MaximumSeconds = 300;
     internal const int MaximumCpuSpikeMilliseconds = 2000;
+    internal const string CpuSpikeDeadlineFailure = "Confirmación de pico CPU vencida: sin adquisición fresca de recuperación ≤90 °C en 2000 ms; volver a Firmware.";
     internal const double CpuImmediateHandoffC = Hp8C40ThermalEmergencyConfirmation.CpuHardEmergencyC;
     private long? _cpuHighSince;
     private long? _lastClock;
@@ -38,7 +39,7 @@ internal sealed class ProductAutomaticReview
             throw new InvalidOperationException("Prueba Automatic recibió un reloj regresivo.");
         _lastClock = now;
         if (_cpuHighSince.HasValue && now - _cpuHighSince.Value >= MaximumCpuSpikeMilliseconds)
-            throw new InvalidOperationException("CPU temperatura sostenida > 90 °C durante 2000 ms; volver a Firmware.");
+            throw new InvalidOperationException(CpuSpikeDeadlineFailure);
     }
     internal void EnsureDispatchAllowed(TelemetrySnapshot snapshot)
     {
