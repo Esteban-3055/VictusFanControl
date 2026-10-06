@@ -57,4 +57,4 @@ La nueva aplicación de ajustes dispone de fixtures sin hardware; falta una
 regresión corta en el Victus. El cambio de límites CPU/GPU en vivo propuesto es
 una tarea independiente del Guardian y todavía no está implementado. Mientras
 tanto el panel de rendimiento explica que Firmware conserva los límites y que
-Desactivar límites regresa a Firmware antes de liberarlos.
+Desactivar límites sale de Automático a Firmware antes de liberarlos; Manual mantiene su control independiente.
