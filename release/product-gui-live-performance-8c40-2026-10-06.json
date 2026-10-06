@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "kind": "VictusFanControl.ProductGuiLivePerformanceValidation",
+  "sourceHead": "34388b897321211f0a153336ffe59fb9327613a8",
+  "target": "HP-8C40-9D0R1LA-F18",
+  "result": "PASS_OBSERVED_AC_LIVE_UPDATES",
+  "evidence": [
+    {
+      "domain": "CPU",
+      "fileName": "VictusFanControl-diagnostico-20261006T214054889Z-5e6ef5a8a24c4077bb51144fad430ba0.zip",
+      "sha256": "f4f30c8b076003da3c665e7489ece32b277dacf10a2954391d993eba9703aa94",
+      "sessionId": "20261006T214054889Z-5e6ef5a8a24c4077bb51144fad430ba0",
+      "applicationMvid": "87f0953d-a69b-48d4-b7cc-6a42a7e16567",
+      "coreMvid": "ed17a708-8be0-4e39-b02d-2eeaeb51d77b",
+      "automaticSessionId": "c6a9805633ad4b798af0cb662208e0a5",
+      "previous": {
+        "SchemaVersion": 1,
+        "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+        "CpuEnabled": true,
+        "GpuEnabled": true,
+        "AcPl1Watts": 25,
+        "AcPl2Watts": 40,
+        "BatteryPl1Watts": 9,
+        "BatteryPl2Watts": 12,
+        "AcGpuMaximumMHz": 1996,
+        "BatteryGpuMaximumMHz": 1200
+      },
+      "committed": {
+        "SchemaVersion": 1,
+        "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+        "CpuEnabled": true,
+        "GpuEnabled": true,
+        "AcPl1Watts": 25,
+        "AcPl2Watts": 38,
+        "BatteryPl1Watts": 9,
+        "BatteryPl2Watts": 12,
+        "AcGpuMaximumMHz": 1996,
+        "BatteryGpuMaximumMHz": 1200
+      },
+      "appliedAt": "2026-10-06T18:41:39.123507-03:00",
+      "updateMilliseconds": 16.538,
+      "sameReviewRemainingSeconds": true,
+      "automaticDecisionsAfterUpdate": 6,
+      "finalRuntime": "Healthy",
+      "finalFanMode": "Automatic",
+      "lifecycleBlocked": false,
+      "gpuState": "ActiveUnverified"
+    },
+    {
+      "domain": "GPU",
+      "fileName": "VictusFanControl-diagnostico-20261006T220836655Z-bf44570214cd43cab444bf4e52d22d07(1).zip",
+      "sha256": "8fdccb59cc5cf8a5742a763a109c17b9d139e41e1b93a2ec79265e994b5086fc",
+      "sessionId": "20261006T220836655Z-bf44570214cd43cab444bf4e52d22d07",
+      "applicationMvid": "87f0953d-a69b-48d4-b7cc-6a42a7e16567",
+      "coreMvid": "ed17a708-8be0-4e39-b02d-2eeaeb51d77b",
+      "automaticSessionId": "df8edd5831ae4367bab27f6725dd2d2a",
+      "previous": {
+        "SchemaVersion": 1,
+        "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+        "CpuEnabled": true,
+        "GpuEnabled": true,
+        "AcPl1Watts": 28,
+        "AcPl2Watts": 38,
+        "BatteryPl1Watts": 9,
+        "BatteryPl2Watts": 12,
+        "AcGpuMaximumMHz": 1800,
+        "BatteryGpuMaximumMHz": 1200
+      },
+      "committed": {
+        "SchemaVersion": 1,
+        "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+        "CpuEnabled": true,
+        "GpuEnabled": true,
+        "AcPl1Watts": 28,
+        "AcPl2Watts": 38,
+        "BatteryPl1Watts": 9,
+        "BatteryPl2Watts": 12,
+        "AcGpuMaximumMHz": 1750,
+        "BatteryGpuMaximumMHz": 1200
+      },
+      "appliedAt": "2026-10-06T19:17:37.097177-03:00",
+      "updateMilliseconds": 37.738,
+      "sameReviewRemainingSeconds": true,
+      "automaticDecisionsAfterUpdate": 5,
+      "finalRuntime": "Healthy",
+      "finalFanMode": "Automatic",
+      "lifecycleBlocked": false,
+      "gpuState": "ActiveUnverified"
+    }
+  ],
+  "limits": [
+    "GPU Set accepted by NVML; no independent exact locked range readback.",
+    "No journal IDs or CPU restore baseline exported by these diagnostic ZIPs.",
+    "Does not establish subsequent display/suspend/exit regression or unattended Automatic authority."
+  ]
+}

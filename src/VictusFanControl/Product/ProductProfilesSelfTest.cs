@@ -22,14 +22,33 @@ internal static class ProductProfilesSelfTest
         var flat=noPower with{Curve=[new(0,10),new(90,10),new(100,50)]};
         Check(flat.Evaluate(Input(cpu:50,gpu:35) with{CpuRawControlTemperatureC=85}).Level==44&&flat.Evaluate(Input(cpu:50,gpu:35) with{CpuRawControlTemperatureC=90}).Level==50,"Edited curve hid raw CPU thermal floors.");
         Check(flat.Evaluate(Input(cpu:40,gpu:78)).Level>=44&&flat.Evaluate(Input(cpu:40,gpu:81)).Level==50,"Disabled feed-forward or flat curve hid GPU heat.");
-        foreach(var invalid in new[]{ac with{CpuTemperatureInfluence=99},ac with{GpuTemperatureInfluence=151},ac with{CpuPowerInfluence=-1},ac with{GpuLoadInfluence=101},ac with{Curve=null!},ac with{Curve=[null!,new(100,50)]},ac with{Curve=[new(1,10),new(100,50)]},ac with{Curve=[new(0,10),new(100,49)]},ac with{Curve=[new(0,20),new(50,10),new(100,50)]},ac with{Curve=[new(0,10),new(50.5,30),new(100,50)]}})Reject(invalid.Validate);
+        foreach(var invalid in new[]{ac with{CpuTemperatureInfluence=99},ac with{GpuTemperatureInfluence=201},ac with{CpuPowerInfluence=-1},ac with{GpuLoadInfluence=201},ac with{Curve=null!},ac with{Curve=[null!,new(100,50)]},ac with{Curve=[new(1,10),new(100,50)]},ac with{Curve=[new(0,10),new(100,49)]},ac with{Curve=[new(0,20),new(50,10),new(100,50)]},ac with{Curve=[new(0,10),new(50.5,30),new(100,50)]}})Reject(invalid.Validate);
         Reject(()=>ac.Evaluate(Input(cpuW:double.NaN)));Reject(()=>ac.Evaluate(Input() with{CpuRawControlTemperatureC=double.PositiveInfinity}));
         var model=ac;
         for(int i=0;i<6;i++)
         {
-            var stronger=model.WithInfluence(i,150*(i<2?1:0)+100*(i>=2?1:0));
+            var stronger=model.WithInfluence(i,200);
+            stronger.Validate();Reject(()=>model.WithInfluence(i,201).Validate());
             Check(stronger.Evaluate(Input()).Percent>=model.Evaluate(Input()).Percent,"Increasing influence reduced MAX demand.");
         }
+        var cold=Input(cpu:40,gpu:35,cpuW:0,gpuW:0,cpuLoad:0,gpuLoad:0);
+        AdaptiveFanPolicyInput[] quarter=[cold with{CpuEffectiveTemperatureC=52.5},cold with{GpuTemperatureC=46.5},cold with{CpuPackagePowerW=15},cold with{GpuPowerW=18.75},cold with{CpuLoadPercent=25},cold with{GpuLoadPercent=25}];
+        AdaptiveFanPolicyInput[] half=[cold with{CpuEffectiveTemperatureC=65},cold with{GpuTemperatureC=58},cold with{CpuPackagePowerW=30},cold with{GpuPowerW=37.5},cold with{CpuLoadPercent=50},cold with{GpuLoadPercent=50}];
+        var expanded=ac;
+        for(int i=0;i<6;i++)
+        {
+            var gain=ac.WithInfluence(i,200);var q=gain.Evaluate(quarter[i]);var h=gain.Evaluate(half[i]);
+            Check(q.Contributions[i]==50&&q.Percent==50&&h.Contributions[i]==100&&h.Percent==100&&h.Level==50,
+                "200 percent must double each normalized signal and saturate demand, axis "+i);
+            expanded=expanded.WithInfluence(i,200);
+        }
+        var saturated=expanded.Evaluate(Input(cpu:80,gpu:70,cpuW:40,gpuW:50,cpuLoad:100,gpuLoad:100));
+        Check(saturated.Contributions.All(v=>v<=100)&&saturated.Percent==100&&saturated.Level==50,"Expanded gains escaped the demand/level envelope.");
+        var defaults=new ProductProfiles();var expandedProfiles=defaults with{Ac=defaults.Ac with{Fan=defaults.Ac.Fan with{UnifiedDemand=expanded}}};
+        var expandedCopy=ProductProfilesStore.Copy(expandedProfiles);
+        Check(Enumerable.Range(0,6).All(i=>expandedCopy.Ac.Fan.UnifiedDemand!.Influence(i)==200)&&
+            FanConfigurationStore.Serialize(expandedCopy.Battery.Fan)==FanConfigurationStore.Serialize(defaults.Battery.Fan),
+            "Profile serialization clipped expanded influences or changed the Battery peer.");
         var profiles=new ProductProfiles();var frozen=FanConfigurationStore.Copy(profiles.Ac.Fan);
         var edited=profiles.Ac.Fan with{UnifiedDemand=noPower};
         Check(frozen.UnifiedDemand!.GpuPowerInfluence==60&&edited.UnifiedDemand!.GpuPowerInfluence==0,"Draft influence mutated frozen configuration.");

@@ -43,7 +43,17 @@ Diagnósticos registran UPDATE STARTED / APPLIED / FAILED, valores solicitados,
 configuración comprometida, estados del Guardian, ID Automático y tiempo restante.
 PerformanceUpdating diferencia una actualización en curso.
 
-## Regresión física breve pendiente
+## Regresión física breve aprobada en AC
+
+En HEAD 34388b8, sesión 5e6ef5a8: CPU 25/40 → 25/38 W y respuesta
+CONFIGURATION_UPDATED, misma activación y continuidad posterior sin bloqueo.
+En sesión bf445702: GPU 1800 → 1750 MHz, CONFIGURATION_UPDATED, misma activación,
+CPU 28/38 W conservada y continuidad posterior Healthy. GPU sigue ActiveUnverified:
+la aceptación NVML no verifica de forma independiente el rango completo.
+Resumen ligado a SHA256 de ambos ZIP en
+release/product-gui-live-performance-8c40-2026-10-06.json.
+
+Procedimiento conservado como referencia:
 
 1. Salir normalmente de la versión anterior, extraer el nuevo ZIP y Verify.
 2. Con AC y actividad ligera, preparar CPU 25/40 W; iniciar Automático y esperar
@@ -54,4 +64,5 @@ PerformanceUpdating diferencia una actualización en curso.
 
 Los fixtures cubren journals/baseline, presets siguientes, Reset final, commits
 parciales, bloqueo por fuente/display, límites temporales, IPC con mismo proceso
-y edición/confirmación del botón. No sustituyen esta nueva regresión física.
+y edición/confirmación del botón. El alcance físico observado aquí corresponde a AC;
+no acredita por sí solo display/suspensión/salida posteriores ni fallos deliberados.

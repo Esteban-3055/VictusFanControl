@@ -16,6 +16,7 @@ Las pruebas del equipo histórico 88F8 no sustituyen la evidencia de este destin
 | Automatic continuo AC → Batería → AC en la GUI actual | `release/product-gui-source-transition-8c40-2026-10-06.json` | HEAD f669831; 203 muestras completas, CPU control máximo 77 °C/GPU 39 °C; misma activación, sin bloqueo ni interrupción |
 | Carga prolongada y enfriamiento con el motor actual | `release/product-gui-sustained-load-8c40-2026-10-06.json` | HEAD fbed6fd; 2083 muestras completas, una activación sin interrupciones, 1815.785 s de carga acumulada; descenso prolongado y retorno a breve tras reposo |
 | Aplicación en vivo desde Avanzado | `release/product-gui-live-tuning-8c40-2026-10-06.json` | HEAD 0db58a2; filtro 7 → 8 s en la misma activación, 123 muestras completas, sin interrupciones ni renovación del plazo; CPU/GPU activos |
+| Límites CPU/GPU aplicados durante Automatic en AC | `release/product-gui-live-performance-8c40-2026-10-06.json` | HEAD 34388b8; CPU 25/40 → 25/38 W y GPU 1800 → 1750 MHz en sus activaciones originales, sin interrupciones ni renovación; GPU aceptada por NVML, sin lectura independiente del rango |
 
 No repetir estas pruebas básicas para declarar nuevamente sus subsistemas PASS.
 Una modificación posterior requiere regresión de las rutas que cambió, con su
@@ -23,7 +24,7 @@ alcance específico; no invalida automáticamente los resultados anteriores.
 
 ## Pendientes del motor y GUI actuales
 
-- Regresión física breve de actualización CPU/GPU en vivo: implementada con fixtures de journals, fallos parciales, IPC y botón; procedimiento en PRODUCT_PERFORMANCE_UPDATES.md.
+- Influencias ampliadas: temperatura 100–200 %, potencia/carga 0–200 %; validación, persistencia, simulador y editor comparten el rango. Defaults y protecciones conservados; efectos acústicos de valores altos dependen del perfil elegido.
 - Regresión de display/suspensión y salida con la integración Automatic actual.
 - Promoción posterior de Automatic normal y decisiones de arranque/reentrada.
   No hay validación de uso desatendido ni habilitación de arranque automático.

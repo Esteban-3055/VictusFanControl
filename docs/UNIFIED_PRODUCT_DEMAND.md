@@ -12,15 +12,19 @@ GPU/potencias, Guardian y liberación Firmware. No hay nuevo IO nativo directo.
 Cada señal se normaliza a 0–100 % con límites fijos. Se multiplica por su influencia,
 se limita cada contribución a 100 %, se toma MAX y se interpola una sola curva.
 Los porcentajes son ganancias independientes; no suman 100 % ni se promedian.
+Cada influencia llega a 200 %. Con 200 %, una señal normalizada de 25 % aporta
+50 % y una de 50 % aporta 100 %: la demanda y el eje del gráfico siguen limitados
+a 100 %, y el nivel máximo sigue en 50. El aumento adelanta la ventilación; no
+duplica el nivel del ventilador ni modifica los presets existentes por sí mismo.
 
 | Variable | Referencia fija (0 % → 100 %) | Influencia AC / batería | Rango del slider |
 |---|---|---:|---|
-| Temperatura CPU de demanda | 40 → 90 °C | 100 / 100 % | 100–150 % |
-| Temperatura GPU | 35 → 81 °C | 100 / 100 % | 100–150 % |
-| Potencia CPU real | 0 → 60 W | 40 / 20 % | 0–100 % |
-| Potencia GPU real | 0 → 75 W | 60 / 35 % | 0–100 % |
-| Carga CPU | 0 → 100 % | 20 / 10 % | 0–100 % |
-| Carga GPU | 0 → 100 % | 20 / 10 % | 0–100 % |
+| Temperatura CPU de demanda | 40 → 90 °C | 100 / 100 % | 100–200 % |
+| Temperatura GPU | 35 → 81 °C | 100 / 100 % | 100–200 % |
+| Potencia CPU real | 0 → 60 W | 40 / 20 % | 0–200 % |
+| Potencia GPU real | 0 → 75 W | 60 / 35 % | 0–200 % |
+| Carga CPU | 0 → 100 % | 20 / 10 % | 0–200 % |
+| Carga GPU | 0 → 100 % | 20 / 10 % | 0–200 % |
 
 CPU de demanda conserva el promedio de los tres P-Cores más calientes por default.
 El máximo crudo paquete/núcleo se conserva aparte y nunca se promedia para seguridad.
@@ -83,6 +87,9 @@ ProductProfiles v2 requiere el modelo nuevo para AC y batería. FanConfiguration
 conserva su esquema externo v1 y campo opcional, para que los consumidores históricos
 sin ese campo mantengan sus contratos. Las seis curvas heredadas quedan almacenadas
 como datos de compatibilidad y se ignoran cuando UnifiedDemand está presente.
+Los valores nuevos mantienen los esquemas actuales y se guardan/exportan sin
+recorte. Una versión anterior con máximos 100/150 rechaza un perfil que los exceda;
+utilizar la versión nueva para editar/importar influencias ampliadas.
 
 Cargar/importar ProductProfiles v1 primero valida el archivo. Después conserva
 Fan completo en LegacyFan, conserva PL1/PL2/MHz, interruptores y preferencias de
@@ -101,7 +108,8 @@ por un v2 válido; un conflicto de respaldo v1 conserva ambos archivos y cancela
 
 ## Verificación y límites
 
-Tests: demanda MAX con carga mixta; cero en potencia/carga; temperatura mínima;
+Tests: demanda MAX con carga mixta; cada variable a 200 %, duplicación y saturación
+independientes, rechazo de 201 %, persistencia e aislamiento AC/Batería; cero en potencia/carga; temperatura mínima;
 monotonicidad de ganancias; 72.485 W sin corte a 70; overrides raw ante curva plana;
 telemetría inválida; esquema estricto; migración exacta y repetida en UTF-8 BOM/UTF-16/UTF-32;
 conflicto de respaldo sin reemplazo; recuperación explícita de JSON dañado; aislamiento,

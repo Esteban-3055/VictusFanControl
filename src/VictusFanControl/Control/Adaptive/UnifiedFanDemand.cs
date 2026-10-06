@@ -3,6 +3,7 @@ namespace VictusFanControl.Control.Adaptive;
 /// <summary>One demand-to-level curve. Influences are independent gains, never averaging weights.</summary>
 public sealed record UnifiedFanDemand
 {
+    public const int MaximumInfluencePercent = 200;
     public int SchemaVersion { get; init; } = 1;
     public int CpuTemperatureInfluence { get; init; } = 100;
     public int GpuTemperatureInfluence { get; init; } = 100;
@@ -24,8 +25,8 @@ public sealed record UnifiedFanDemand
     public void Validate()
     {
         if(SchemaVersion!=1)throw new InvalidDataException("Versión de demanda incompatible.");
-        for(int i=0;i<6;i++)if(Influence(i)<(i<2?100:0)||Influence(i)>(i<2?150:100))
-            throw new InvalidDataException("Influencia térmica 100–150 %; potencia/carga 0–100 %.");
+        for(int i=0;i<6;i++)if(Influence(i)<(i<2?100:0)||Influence(i)>MaximumInfluencePercent)
+            throw new InvalidDataException("Influencia térmica 100–200 %; potencia/carga 0–200 %.");
         if(Curve is null||Curve.Count is <2 or >64||Curve.Any(p=>p is null)||Curve[0].Input!=0||Curve[^1].Input!=100||Curve[^1].Level!=50)
             throw new InvalidDataException("Curva de demanda: 2–64 puntos, extremos 0/100 % y nivel final 50.");
         double previous=-1,previousLevel=10;

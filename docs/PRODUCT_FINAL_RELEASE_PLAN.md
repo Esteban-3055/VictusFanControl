@@ -15,8 +15,8 @@ nativo y mínimo. No se cambia el motor por estas correcciones visuales.
 
 Implementada la acción «Aplicar cambios» para distinguir borrador y límites
 aplicados, con «Desactivar límites CPU / GPU» separada. El Guardian permite
-actualizar presets en la misma sesión; queda la regresión física breve de
-PRODUCT_PERFORMANCE_UPDATES.md antes de aprobar esta ruta para versión final.
+actualizar presets en la misma sesión; la regresión física breve en AC está aprobada
+en PRODUCT_PERFORMANCE_UPDATES.md (CPU 25/40 → 25/38 W; GPU 1800 → 1750 MHz).
 
 La nueva ruta debe conservar el baseline original y la identidad de los journals,
 serializar solicitudes y comprobar lectura CPU / aceptación GPU. Debe publicar
@@ -24,8 +24,9 @@ estado por dominio si falla uno, en vez de anunciar éxito conjunto. Cambiar AC 
 Batería solo edita esa fuente; la aplicación debe usar la alimentación real.
 En Automático se requiere confirmación vigente de ambos dominios para seguir;
 una actualización no renueva el plazo ni adquiere ventiladores por su cuenta.
-Fallos, cambios de fuente y suspensión durante la actualización necesitan
-fixtures y una regresión física breve propia antes de aprobar esta ruta.
+Fallos parciales, fuente y display/suspensión durante la actualización tienen
+fixtures sin hardware. La regresión de ciclo de vida integrada sigue en el punto 3;
+los dos Apply observados en AC no la sustituyen.
 
 ## 3. Regresión de ciclo de vida de la GUI actual
 

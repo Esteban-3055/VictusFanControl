@@ -192,7 +192,7 @@ internal sealed partial class ProductForm : Form
         if(key.StartsWith("influence-"))
         {
             var axis=int.Parse(key[10..]);if(axis is <0 or >5)return;
-            var model=p.Fan.UnifiedDemand!;var nextModel=model.WithInfluence(axis,Math.Clamp(value,axis<2?100:0,axis<2?150:100));
+            var model=p.Fan.UnifiedDemand!;var nextModel=model.WithInfluence(axis,Math.Clamp(value,axis<2?100:0,UnifiedFanDemand.MaximumInfluencePercent));
             Change(_draft.With(slot,p with{Fan=p.Fan with{UnifiedDemand=nextModel}}));return;
         }
         if(key=="manual") {_canvas.ManualLevel=Math.Clamp(value,10,50);_canvas.Invalidate();return;}

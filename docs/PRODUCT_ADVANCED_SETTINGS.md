@@ -58,6 +58,6 @@ breve aprobada: filtro de subida 7 → 8 s durante la misma activación, diagnó
 `20261006T204954587Z-1c74bf2b83ad43f7bf160eda608d5932`. Esto no certifica todos los
 parámetros, la suspensión ni el cambio de definición de carga bajo carga real.
 El cambio de límites CPU/GPU en vivo es independiente de Avanzado y está implementado
-en Rendimiento, con su regresión física breve pendiente (PRODUCT_PERFORMANCE_UPDATES.md).
+en Rendimiento, con regresión física breve aprobada en AC (PRODUCT_PERFORMANCE_UPDATES.md).
 Firmware conserva los límites. Desactivar límites sale de Automático a Firmware
 antes de liberarlos; Manual mantiene su control independiente.

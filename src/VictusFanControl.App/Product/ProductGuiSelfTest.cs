@@ -57,7 +57,7 @@ internal static class ProductGuiSelfTest
             {
                 var batteryPeer=ProductProfilesStore.Serialize(form.Draft.With(ProductPowerProfile.Ac,ProductProfiles.DefaultProfile(ProductPowerProfile.Ac)));
                 form.EditValue("influence-"+i,-999);Require(form.Draft.Ac.Fan.UnifiedDemand!.Influence(i)==(i<2?100:0),"Influence lower bound escaped.");
-                form.EditValue("influence-"+i,999);Require(form.Draft.Ac.Fan.UnifiedDemand!.Influence(i)==(i<2?150:100),"Influence upper bound escaped.");
+                form.EditValue("influence-"+i,999);Require(form.Draft.Ac.Fan.UnifiedDemand!.Influence(i)==200,"Influence upper bound escaped.");
                 Require(batteryPeer==ProductProfilesStore.Serialize(form.Draft.With(ProductPowerProfile.Ac,ProductProfiles.DefaultProfile(ProductPowerProfile.Ac))),"Influence leaked into Battery.");
             }
             form.HandleCommand("curve-defaults");Require(form.Draft.PerformanceConfiguration()==oldCaps,"Reset of curve/influences changed CPU/GPU caps.");
@@ -153,6 +153,11 @@ internal static class ProductGuiSelfTest
             canvas.Page=ProductPage.Monitoring;Render("state-stale-telemetry",false);Require(canvas.CurrentSnapshot is null,"Expired telemetry appeared as current.");
             canvas.State=confirmed with{Snapshot=confirmed.Snapshot! with{CpuPackagePowerW=null,GpuPowerW=null,CpuFanRpm=null,GpuFanRpm=null}};Render("state-missing-metrics");
             canvas.Page=ProductPage.Curves;canvas.SimulationVisible=false;canvas.ShowCurvePoints=false;Render("curve-influences");Require(canvas.Hits.Count(h=>h.Id.StartsWith("influence-")&&h.Slider)==6&&canvas.Hits.All(h=>!h.Id.StartsWith("axis-")),"Influence controls missing or obsolete axis buttons remain.");canvas.ShowCurvePoints=true;canvas.SelectedNode=5;Render("curve-selected-node");
+            var expandedInfluences=baseline.Ac.Fan.UnifiedDemand!;
+            for(int i=0;i<6;i++)expandedInfluences=expandedInfluences.WithInfluence(i,200);
+            canvas.Profiles=baseline with{Ac=baseline.Ac with{Fan=baseline.Ac.Fan with{UnifiedDemand=expandedInfluences}}};canvas.ShowCurvePoints=false;
+            Render("curve-influences-200");Require(canvas.Hits.Count(h=>h.Id.StartsWith("influence-")&&h.Slider&&h.Max==200)==6,"Rendered influence sliders did not expose 200 percent.");
+            canvas.Size=new(1040,660);Render("curve-influences-200-minimum");canvas.Size=new(1672,941);canvas.Profiles=baseline;
             canvas.Editing=ProductPowerProfile.Battery;canvas.ShowCurvePoints=true;Render("curve-battery-unified");
             canvas.SimulationVisible=true;canvas.Editing=ProductPowerProfile.Ac;canvas.Simulation=new(baseline.Ac.Fan);canvas.SimulationInputs=new(80,70,40,110,100,100);canvas.Simulation.Advance(new(),1);canvas.Simulation.Advance(canvas.SimulationInputs,1201);Render("curve-simulator-sustained-load");
             canvas.Size=new(1040,660);Render("curve-simulator-minimum-layout");

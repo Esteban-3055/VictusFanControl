@@ -312,7 +312,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         if(!ShowCurvePoints)
         {
             string[] names=["Temperatura CPU","Temperatura GPU","Potencia CPU","Potencia GPU","Carga CPU","Carga GPU"];
-            for(int i=0;i<6;i++)Slider(g,"influence-"+i,names[i],new(331,310+i*78,490,72),model.Influence(i),i<2?100:0,i<2?150:100,"%",true);
+            for(int i=0;i<6;i++)Slider(g,"influence-"+i,names[i],new(331,310+i*78,490,72),model.Influence(i),i<2?100:0,UnifiedFanDemand.MaximumInfluencePercent,"%",true);
             DrawText(g,"Temperaturas protegidas · los aportes no se promedian.",331,794,16,Muted,490);
         }
         else
