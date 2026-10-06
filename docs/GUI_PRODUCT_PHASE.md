@@ -391,8 +391,8 @@ inicio Firmware, ventana de cinco minutos y bloqueo ante interrupciones reales.
 La devolución voluntaria a Firmware distingue la denegación WMI prevista del
 fallo de sensores; el motivo de un bloqueo queda visible y en el diagnóstico.
 CPU/GPU usan una cola independiente y pueden aplicarse con Automatic activo.
-Los máximos GPU ajustables están habilitados dentro de 210–1850 AC y 210–1200
-Batería; GPU continúa ActiveUnverified y NVML puede rechazar valores.
+Los máximos GPU son configurables entre 210 y 2500 MHz en ambos perfiles,
+con defaults 1850 AC y 1200 Batería; GPU continúa ActiveUnverified y NVML puede rechazar valores.
 Las preferencias existentes no se sobrescriben; usar Valores iniciales del perfil
 para instalar el preset nuevo conservando PL1/PL2/GPU. La derivación, tablas,
 replay y límites de evidencia están en [QUIET_PRODUCT_PRESETS.md](QUIET_PRODUCT_PRESETS.md).

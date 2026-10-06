@@ -159,7 +159,7 @@ internal sealed class ProductForm : Form
             case "curve-defaults":ResetCurve(true);break;
             case "profiles-export":using(var dialog=new SaveFileDialog{Filter="Perfiles JSON (*.json)|*.json",FileName="VictusFanControl-perfiles.json",AddExtension=true,DefaultExt="json"})if(dialog.ShowDialog(this)==DialogResult.OK)_ = ExportProfilesAsync(dialog.FileName);break;
             case "profiles-import":using(var dialog=new OpenFileDialog{Filter="Perfiles JSON (*.json)|*.json",CheckFileExists=true})if(dialog.ShowDialog(this)==DialogResult.OK)_ = ImportProfilesAsync(dialog.FileName);break;
-            case "diagnostics-export":using(var dialog=new SaveFileDialog{Filter="Diagnóstico ZIP (*.zip)|*.zip",FileName="VictusFanControl-diagnostico.zip",AddExtension=true,DefaultExt="zip"})if(dialog.ShowDialog(this)==DialogResult.OK)_ = ExportDiagnosticsAsync(dialog.FileName);break;
+            case "diagnostics-export":using(var dialog=new SaveFileDialog{Filter="Diagnóstico ZIP (*.zip)|*.zip",FileName="VictusFanControl-diagnostico-"+AppLog.SessionId+".zip",AddExtension=true,DefaultExt="zip"})if(dialog.ShowDialog(this)==DialogResult.OK)_ = ExportDiagnosticsAsync(dialog.FileName);break;
             case "open-logs":try {Process.Start(new ProcessStartInfo(Path.GetDirectoryName(AppLog.CurrentLogPath)!){UseShellExecute=true});}catch(Exception ex){_canvas.Notice=ex.Message;}break;
         }
         _canvas.Invalidate();

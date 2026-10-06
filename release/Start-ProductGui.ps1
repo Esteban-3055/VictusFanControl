@@ -11,6 +11,7 @@ foreach ($entry in $manifest.files) {
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant() -ne $entry.sha256 -or (Get-Item -LiteralPath $file).Length -ne $entry.size) { throw "Package integrity failed: $relative" }
 }
 Write-Host "Verified GUI build $($manifest.sourceHead). Physical validation remains pending."
+if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }
 if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticReview -ne 'explicit-only-300s-10-to-50') { throw 'This package does not authorize the supervised Automatic review entry.' }
 if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticPerformance -ne 'required-both-before-fans') { throw 'This package does not authorize the coupled CPU/GPU Automatic entry.' }

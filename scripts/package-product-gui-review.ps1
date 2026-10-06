@@ -21,7 +21,7 @@ $entries = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-O
 $manifest = [ordered]@{
     schemaVersion=1;kind='VictusFanControl.ProductGuiReview';sourceHead=$SourceHead
     inheritedRcZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
-    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='conservative-envelope';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticPerformance='required-both-before-fans';files=$entries
+    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticPerformance='required-both-before-fans';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';files=$entries
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'PRODUCT-GUI-MANIFEST.json') -Encoding utf8
 & (Join-Path $OutputDirectory 'Start-ProductGui.ps1') -Mode Verify

@@ -17,6 +17,7 @@ internal static class ProductGuiSelfTest
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
             TestAutomaticReview(Require);
+            TestSessionLogs(Require);
             ProductAutomaticActivationSelfTest.Run(Require);
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());
             form.ClientSize=new(1672,941);form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;canvas.Size=new(1672,941);
@@ -31,7 +32,7 @@ internal static class ProductGuiSelfTest
             form.EditValue("manual",10);
             Require(runtime.Commands==0,"Editing/navigation wrote hardware.");
             form.HandleCommand("fan-mode-2");Require(runtime.Commands==0,"Closed Automatic gate dispatched.");
-            form.EditValue("gpu",99999);Require(form.Draft.Ac.GpuMaximumMHz==1850,"GPU slider escaped upper bound.");
+            form.EditValue("gpu",99999);Require(form.Draft.Ac.GpuMaximumMHz==2500,"GPU slider escaped upper bound.");
             form.EditValue("gpu",0);Require(form.Draft.Ac.GpuMaximumMHz==210,"GPU slider escaped lower bound.");
             form.EditNode(3,999,999);form.Draft.Validate();
             canvas.SelectedNode=3;form.HandleCommand("node-add");form.HandleCommand("node-remove");form.Draft.Validate();
@@ -110,10 +111,54 @@ internal static class ProductGuiSelfTest
             canvas.Editing=ProductPowerProfile.Battery;canvas.Axis=AdaptiveCurveAxis.GpuPower;Render("curve-battery-GPU-power");
             canvas.SimulationVisible=true;canvas.Editing=ProductPowerProfile.Ac;canvas.Simulation=new(baseline.Ac.Fan);canvas.SimulationInputs=new(80,70,40,110,100,100);canvas.Simulation.Advance(new(),1);canvas.Simulation.Advance(canvas.SimulationInputs,1201);Render("curve-simulator-sustained-load");
             canvas.Size=new(1040,660);Render("curve-simulator-minimum-layout");
+            canvas.Size=new(1672,941);canvas.SimulationVisible=false;canvas.Editing=ProductPowerProfile.Ac;canvas.Axis=AdaptiveCurveAxis.CpuTemperature;
+            var markerSample=Snapshot(DateTimeOffset.UtcNow,75,68,25,100);
+            var markerConfig=baseline.Ac.Fan with{Tuning=baseline.Ac.Fan.Tuning with{CpuTemperatureSource=CpuDemandTemperatureSource.PackageOrHottestCore}};
+            canvas.Profiles=baseline with{Ac=baseline.Ac with{Fan=markerConfig}};
+            canvas.State=confirmed with{FanMode="Automatic",FanAuthority="Custom",FanLevel=31,AppliedFanProfile="Ac",AppliedAutomaticConfiguration=markerConfig,
+                Snapshot=markerSample,AutomaticDecisionSnapshot=markerSample,AutomaticDecision=new(AdaptiveFanProductionMode.Automatic,AdaptiveFanProductionActionKind.HoldCustom,true,31,35,FanAuthority.Custom,"fixture")};
+            var curveMarkers=canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature);
+            Require(curveMarkers.Count==2&&curveMarkers.Single(m=>m.IsApplied).Level==31,"Accepted request marker was replaced by draft interpolation.");
+            canvas.Page=ProductPage.Fans;canvas.FanTab=0;Render("fans-live-demand-marker");
+            canvas.Page=ProductPage.Curves;Render("editor-live-demand-marker");
+            canvas.Profiles=canvas.Profiles with{Ac=canvas.Profiles.Ac with{Fan=markerConfig with{Profile=AdaptiveCurveProfiles.WithCurve(markerConfig.Profile,AdaptiveCurveAxis.CpuTemperature,[new(0,10),new(110,20)])}}};
+            var changedMarkers=canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature);
+            Require(changedMarkers.Single(m=>m.IsApplied)==curveMarkers.Single(m=>m.IsApplied)&&changedMarkers.Single(m=>!m.IsApplied).Level!=curveMarkers.Single(m=>!m.IsApplied).Level,"Editing changed the accepted request or left preview frozen.");
+            Render("editor-draft-vs-applied-marker");
+            canvas.Editing=ProductPowerProfile.Battery;Require(canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature).All(m=>!m.IsApplied),"Other profile displayed a fabricated applied request.");
+            canvas.Editing=ProductPowerProfile.Ac;canvas.State=canvas.State with{Snapshot=markerSample with{Timestamp=DateTimeOffset.UtcNow.AddMinutes(-1)}};
+            Require(canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature).Count==0,"Stale telemetry left moving markers visible.");
+            canvas.State=canvas.State with{Snapshot=markerSample,AutomaticDecisionSnapshot=markerSample with{Timestamp=DateTimeOffset.UtcNow.AddMinutes(-1)}};
+            Require(canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature).All(m=>!m.IsApplied),"Stale decision appeared as an accepted current request.");
+            canvas.State=canvas.State with{FanMode="Firmware",FanAuthority="Firmware"};
+            Require(canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature).All(m=>!m.IsApplied),"Firmware displayed a custom applied request.");
+
             Console.WriteLine("PASS: product GUI draft isolation, editing/navigation without authority, sliders, nodes, closed gates and real Windows renders.");
             return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
+    }
+    private static void TestSessionLogs(Action<bool,string> require)
+    {
+        AppLog.Initialize();var id=AppLog.SessionId;var path=AppLog.CurrentLogPath;AppLog.Initialize();
+        require(id==AppLog.SessionId&&path==AppLog.CurrentLogPath&&Path.GetDirectoryName(path)==AppLog.SessionDirectory,"Log identity changed within an application session.");
+        var directory=Path.Combine(Path.GetTempPath(),"vfc-log-tail-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
+        try
+        {
+            var log=Path.Combine(directory,"events.log");
+            File.WriteAllText(log+".1","old row\nolder retained row\n");File.WriteAllText(log,"current ñ row\nlast row\n");
+            var tail=AppLog.ReadTail(log,36);
+            require(tail=="current ñ row\nlast row\n","Rotated tail retained a partial line or lost current UTF-8 rows.");
+            File.WriteAllText(Path.Combine(directory,"other-session.log"),"unrelated session\n");
+            require(!AppLog.ReadTail(log).Contains("unrelated session"),"Log export mixed other sessions.");
+            File.WriteAllText(log,"complete\npartial");File.Delete(log+".1");
+            require(AppLog.ReadTail(log)=="complete\n","Concurrent partial JSON row entered diagnostic export.");
+            var sample=Snapshot(DateTimeOffset.UtcNow,40,35,5,0) with{GpuPowerW=double.NaN};AppLog.WriteTelemetry(sample);
+            var rows=AppLog.ReadTail(AppLog.TelemetryLogPath).Split('\n',StringSplitOptions.RemoveEmptyEntries);
+            using var row=System.Text.Json.JsonDocument.Parse(rows[^1]);
+            require(row.RootElement.GetProperty("sessionId").GetString()==id&&row.RootElement.GetProperty("snapshot").GetProperty("GpuPowerW").GetString()=="NaN","Telemetry lost session identity or invalid values.");
+        }
+        finally{Directory.Delete(directory,true);}
     }
     private static void TestAutomaticReview(Action<bool,string> require)
     {
@@ -309,14 +354,15 @@ internal static class ProductGuiSelfTest
                 require(form.Dirty&&form.Draft.Battery.CpuPl1Watts==12&&File.ReadAllText(path)==savedBytes&&runtime.Commands==0,"Import persisted/applied hardware or lost a profile.");
                 var previous=ProductProfilesStore.Serialize(form.Draft);File.WriteAllText(backup,"broken");import=form.ImportProfilesAsync(backup);PumpUntil(()=>import.IsCompleted,"Invalid import blocked.");
                 require(previous==ProductProfilesStore.Serialize(form.Draft)&&!string.IsNullOrWhiteSpace(canvas.Notice),"Invalid import replaced the draft.");
-                var log=Path.Combine(dir,"fixture-events.log");File.WriteAllText(log,new string('x',2*1024*1024+100));var diagnostic=Path.Combine(dir,"diagnostic.zip");
+                var log=Path.Combine(dir,"fixture-events.log");File.WriteAllText(log,new string('x',2*1024*1024+100)+"\n");var diagnostic=Path.Combine(dir,"diagnostic.zip");
                 var interrupted=Snapshot(DateTimeOffset.UtcNow.AddSeconds(-5),40,35,5,5) with{CpuPackagePowerW=61};
                 canvas.State=canvas.State with{AutomaticInterruptionSnapshot=interrupted,Snapshot=interrupted with{CpuPackagePowerW=10},AppliedPerformance=new ProductProfiles().PerformanceConfiguration()};
                 var bundle=form.ExportDiagnosticsAsync(diagnostic,log);PumpUntil(()=>bundle.IsCompleted,"Diagnostic export blocked.");bundle.GetAwaiter().GetResult();
                 using(var zip=System.IO.Compression.ZipFile.OpenRead(diagnostic))
                 {
-                    require(zip.Entries.Count==4&&zip.GetEntry("profiles-draft.json") is not null&&zip.GetEntry("events-tail.log")!.Length<=2*1024*1024,"Diagnostic leaked extra files or exceeded log bounds.");
+                    require(zip.Entries.Count==5+(zip.GetEntry("telemetry-tail.jsonl") is null?0:1)&&zip.GetEntry("profiles-draft.json") is not null&&zip.GetEntry("events-tail.log")!.Length<=2*1024*1024,"Diagnostic leaked extra files or exceeded log bounds.");
                     using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
+                    require(state.RootElement.GetProperty("sessionId").GetString()==AppLog.SessionId&&state.RootElement.GetProperty("sessionStartedUtc").GetDateTimeOffset()==AppLog.SessionStartedUtc,"Diagnostic session identity mismatch.");
                     require(state.RootElement.GetProperty("physicalQualification").GetString()=="not-established-by-this-export","Diagnostic fabricated physical qualification.");
                     require(state.RootElement.GetProperty("AutomaticInterruptionSnapshot").GetProperty("CpuPackagePowerW").GetDouble()==61 &&
                         state.RootElement.GetProperty("snapshot").GetProperty("CpuPackagePowerW").GetDouble()==10 &&

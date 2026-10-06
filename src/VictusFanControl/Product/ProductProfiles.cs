@@ -26,7 +26,7 @@ public sealed record ProductProfile
         if (Fan.Tuning.MinimumLevel is not (10 or 30) || Fan.Tuning.MaximumLevel != Hp8C40AutomaticPolicy.MaximumLevel)
             throw new InvalidDataException("El editor admite niveles 10–50; el control físico conserva su rango validado.");
         if (GpuMaximumMHz < GpuProductPreferences.MinimumMHz || GpuMaximumMHz > GpuProductPreferences.Maximum(source))
-            throw new InvalidDataException("Límite GPU fuera del rango conservador del perfil.");
+            throw new InvalidDataException("Límite GPU fuera del rango configurable 210–2500 MHz.");
         foreach (var axis in Enum.GetValues<AdaptiveCurveAxis>())
             if (AdaptiveCurveProfiles.Curve(AdaptiveCurveProfiles.Validate(Fan.Profile), axis).Any(p => p.Level < 10 || p.Level > 50))
                 throw new InvalidDataException("Curva de ventiladores fuera de rango.");
@@ -38,10 +38,13 @@ public static class GpuProductPreferences
     public const int MinimumMHz = 210;
     public const int QualifiedAcMaximumMHz = 1850;
     public const int QualifiedBatteryMaximumMHz = 1200;
-    // Product adjustment is authorized only inside these conservative AC/Battery envelopes.
+    public const int ConfigurableMaximumMHz = 2500;
+    // Configurable range is user authorized; historical qualification remains 1850/1200.
     // NVML rejection remains a failure; acceptance never claims independent range ownership.
     public const bool CustomClockExecutionAuthorized = true;
     public static int Maximum(ProductPowerProfile source) => source switch
+    { ProductPowerProfile.Ac or ProductPowerProfile.Battery => ConfigurableMaximumMHz, _ => throw new ArgumentOutOfRangeException(nameof(source)) };
+    public static int DefaultMaximum(ProductPowerProfile source) => source switch
     { ProductPowerProfile.Ac => QualifiedAcMaximumMHz, ProductPowerProfile.Battery => QualifiedBatteryMaximumMHz, _ => throw new ArgumentOutOfRangeException(nameof(source)) };
 }
 
@@ -80,7 +83,7 @@ public sealed record ProductProfiles
         return new() { Fan = fan,
             CpuPl1Watts = source == ProductPowerProfile.Ac ? CpuPowerProductDefaults.DefaultAcPl1Watts : CpuPowerProductDefaults.DefaultBatteryPl1Watts,
             CpuPl2Watts = source == ProductPowerProfile.Ac ? CpuPowerProductDefaults.DefaultAcPl2Watts : CpuPowerProductDefaults.DefaultBatteryPl2Watts,
-            GpuMaximumMHz = GpuProductPreferences.Maximum(source) };
+            GpuMaximumMHz = GpuProductPreferences.DefaultMaximum(source) };
     }
     private static FanConfiguration QuietFanConfiguration(ProductPowerProfile source)
     {

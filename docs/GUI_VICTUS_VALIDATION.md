@@ -141,3 +141,14 @@ Liberar CPU/GPU vuelve primero a Firmware si Automatic está activo.
 Consultar [AUTOMATIC_PRODUCT_SESSION.md](AUTOMATIC_PRODUCT_SESSION.md) para
 transiciones, fallos y la siguiente prueba combinada. Las curvas por cambio de
 fuente y la reentrada tras interrupciones siguen sin reaplicación automática.
+
+
+## Actualización: diagnósticos por sesión y demanda en gráficos
+
+Ver [AUTOMATIC_PRODUCT_SESSION.md](AUTOMATIC_PRODUCT_SESSION.md) para el cierre
+parcial basado en diagnósticos (7)–(9) y la prueba siguiente del paquete con IDs
+por proceso/activación, telemetría JSONL y puntos solicitado/vista previa.
+La interrupción de CPU 97 °C ocurrió con CPU/GPU activos; no es una validación
+PASS de estabilidad. Automatic normal sigue cerrado. GPU configurable 210–2500
+MHz en ambos perfiles, defaults históricos conservados. El punto verde es nivel
+solicitado, no RPM ni ownership; amarillo es interpolación del borrador.

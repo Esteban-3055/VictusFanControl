@@ -24,6 +24,8 @@ internal sealed record ProductRuntimeState
     internal bool AutomaticReview { get; init; }
     internal bool AutomaticPreparing { get; init; }
     internal TelemetrySnapshot? AutomaticInterruptionSnapshot { get; init; }
+    internal string? AutomaticSessionId { get; init; }
+    internal TelemetrySnapshot? AutomaticDecisionSnapshot { get; init; }
     internal int? AutomaticReviewRemainingSeconds { get; init; }
     internal AdaptiveFanProductionResult? AutomaticDecision { get; init; }
     internal FanConfiguration? AppliedAutomaticConfiguration { get; init; }
@@ -83,6 +85,8 @@ internal sealed class ProductRuntime : IProductRuntime
     private string? _lifecycleBlockReason;
     private AdaptiveFanProductionResult? _automaticDecision;
     private TelemetrySnapshot? _automaticInterruptionSnapshot;
+    private TelemetrySnapshot? _automaticDecisionSnapshot;
+    private string? _automaticSessionId;
     private PerformanceGuiSessionConfiguration? _automaticPerformance;
     private ProductAutomaticActivation.Ticket? _activeAutomaticTicket;
     private DateTimeOffset _automaticStartedUtc;
@@ -132,7 +136,7 @@ internal sealed class ProductRuntime : IProductRuntime
             SnapshotProcessor = ProcessAutomaticAsync
         };
         _fans.AuthorityChanged += (_, e) => { AppLog.Write("Product fan authority: " + e); Publish(e.Reason); };
-        _worker.SnapshotAvailable += (_, snapshot) => { _snapshot = snapshot; _ = EnforceAsync(); Publish(); };
+        _worker.SnapshotAvailable += (_, snapshot) => { AppLog.WriteTelemetry(snapshot); _snapshot = snapshot; _ = EnforceAsync(); Publish(); };
         _worker.StateMachine.StateChanged += (_, e) =>
         {
             if (!_closing && e.Current != SystemState.Healthy && (_automaticActivation.Pending || _fans.Authority == FanAuthority.Custom || _controller.Mode == AdaptiveFanProductionMode.Automatic))
@@ -200,15 +204,15 @@ internal sealed class ProductRuntime : IProductRuntime
                     if (currentSource.ToString() != _selectedFanProfile) return null;
                     return SafetyGate.EvaluateForDisplay(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
                 });
-                _automaticDecision = decision;
-                AppLog.Write("PRODUCT AUTOMATIC DECISION: " + System.Text.Json.JsonSerializer.Serialize(decision));
+                _automaticDecision = decision; _automaticDecisionSnapshot = snapshot;
+                AppLog.Write("PRODUCT AUTOMATIC DECISION: " + System.Text.Json.JsonSerializer.Serialize(new { automaticSessionId = _automaticSessionId, snapshotTimestamp = snapshot.Timestamp, decision }));
                 if (decision.Action == AdaptiveFanProductionActionKind.Blocked || decision.Action == AdaptiveFanProductionActionKind.RestoreFirmware)
                     throw new InvalidOperationException(decision.Detail);
                 Publish($"Prueba Automatic · {_selectedFanProfile} · nivel {decision.EqualFanLevel?.ToString() ?? "—"} · {_automaticReview?.RemainingSeconds} s restantes.");
             }
             catch (Exception ex)
             {
-                _automaticInterruptionSnapshot = snapshot; _automaticActivation.Cancel();
+                _automaticInterruptionSnapshot = snapshot; AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + ex.Message); _automaticActivation.Cancel();
                 _lifecycleBlocked = true; _lifecycleBlockReason = ex.Message; _fans.CloseCustomAdmissionForLifecycleBoundary();
                 _automaticReview?.Stop();
                 var failure = ex.Message;
@@ -277,7 +281,7 @@ internal sealed class ProductRuntime : IProductRuntime
                             await SetFanModeAsync(AdaptiveFanProductionMode.Firmware);
                             _automaticActivation.EnsureCurrent(ticket);
                         }
-                        AppLog.Write("PRODUCT AUTOMATIC ACTIVATED WITH PERFORMANCE: " + System.Text.Json.JsonSerializer.Serialize(ticket.Performance));
+                        AppLog.Write("PRODUCT AUTOMATIC ACTIVATED WITH PERFORMANCE: " + System.Text.Json.JsonSerializer.Serialize(new { automaticSessionId = _automaticSessionId, performance = ticket.Performance, fan = _controller.AutomaticConfiguration }));
                     }));
             }
             finally { Publish(); }
@@ -299,7 +303,7 @@ internal sealed class ProductRuntime : IProductRuntime
     {
         if (mode != AdaptiveFanProductionMode.Firmware && _lifecycleBlocked)
             throw new InvalidOperationException("Sesión interrumpida. La reapertura tras lifecycle permanece cerrada; usa Firmware y reinicia después de una liberación limpia.");
-        if (mode == AdaptiveFanProductionMode.Automatic) { _automaticDecision = null; _automaticInterruptionSnapshot = null; _automaticStartedUtc = DateTimeOffset.UtcNow; _automaticReview?.Start(); }
+        if (mode == AdaptiveFanProductionMode.Automatic) { _automaticSessionId = Guid.NewGuid().ToString("N"); _automaticDecision = null; _automaticDecisionSnapshot = null; _automaticInterruptionSnapshot = null; _automaticStartedUtc = DateTimeOffset.UtcNow; _automaticReview?.Start(); }
         _plannedFanRelease = mode == AdaptiveFanProductionMode.Firmware;
         AdaptiveFanProductionResult result;
         try { result = await _controller.SetModeAsync(mode,CancellationToken.None); }
@@ -400,7 +404,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 FanMode = _controller.Mode.ToString(), FanAuthority = _fans.Authority.ToString(), FanLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedLevel : null,
                 ManualAuthorized = _controller.ManualExecutionAuthorized, AutomaticAuthorized = _controller.AutomaticExecutionAuthorized,
                 AutomaticReview = _automaticReview is not null, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
-                AutomaticPreparing = _automaticActivation.Pending, AutomaticInterruptionSnapshot = _automaticInterruptionSnapshot,
+                AutomaticPreparing = _automaticActivation.Pending, AutomaticSessionId = _automaticSessionId, AutomaticDecisionSnapshot = _automaticDecisionSnapshot, AutomaticInterruptionSnapshot = _automaticInterruptionSnapshot,
                 AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticDecision : null,
                 AppliedAutomaticConfiguration = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _controller.AutomaticConfiguration : null,
                 PerformanceSupported = _target == Hp8C40TargetProfile.Instance,

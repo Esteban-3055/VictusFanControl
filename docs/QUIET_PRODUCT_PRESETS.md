@@ -88,7 +88,10 @@ reaplicación/cancelación y los límites del autoarranque están detallados en
 
 CPU PL1/PL2 usa el rango de producto, validación PL2≥PL1, journal y recuperación
 por Performance Guardian. Defaults CPU AC 35/60 W y Batería 8/15 W permanecen.
-GPU ajustable AC 210–1850 MHz y Batería 210–1200 MHz, mínimo locked 210 MHz.
+GPU configurable 210–2500 MHz en AC y Batería, mínimo locked 210 MHz.
+Defaults conservados: 1850 MHz AC y 1200 MHz Batería. Los presets históricos
+físicamente ensayados permanecen 210–1850 y 210–1200; ampliar el selector
+no declara probado físicamente todo el rango nuevo.
 La aplicación explícita lleva la configuración congelada al mismo controlador
 NVML; no implica que cada MHz tenga cualificación física separada. Un rechazo
 NVML se informa como fallo. ActiveUnverified sigue significando aceptación de

@@ -90,3 +90,61 @@ curva. Volver a Firmware y reactivar para comprobar reutilización del Guardian.
 Finalmente Liberar CPU/GPU debe dejar fans en Firmware y dominios Disabled.
 El rechazo/timeout debe conservar sus informes y no fabricar una restauración.
 Estas nuevas pruebas combinadas aún están pendientes de ejecución en el equipo.
+
+
+## Sesiones, muestras y gráficos (6 de octubre de 2026)
+
+Cada proceso GUI tiene `sessionId`, inicio UTC, PID y MVID de App/Core.
+Los registros se guardan en `%LOCALAPPDATA%\VictusFanControl\logs\sessions\<sessionId>`:
+`session.json`, `events.log`, `telemetry.jsonl`. Cada flujo rota a 5 MiB y retiene
+un segmento anterior; el ZIP reúne hasta 2 MiB recientes por flujo, sin filas
+parciales. El nombre sugerido del ZIP contiene el ID de sesión. No se recorren
+logs de otras aperturas. No se eliminan diagnósticos anteriores ni journals.
+`telemetry-tail.jsonl` conserva las muestras originales, incluidos valores no
+finitos representados como strings, sin lecturas adicionales de hardware.
+Cada activación Automatic registra otro `automaticSessionId`, la configuración
+congelada y los timestamps de decisión. `AutomaticDecisionSnapshot` enlaza la
+solicitud con su muestra exacta; `AutomaticInterruptionSnapshot` conserva el disparo.
+
+En los gráficos del control de ventiladores y del editor, el punto verde indica
+el nivel común solicitado por Automatic, con el eje X correspondiente a la
+muestra de esa decisión y su configuración aplicada. No representa RPM, lectura
+independiente del setpoint ni ownership. El anillo amarillo indica la interpolación
+de la curva en edición usando la entrada actual. Es demanda de ese eje, no el
+MAX de seis curvas ni una orden de hardware. Mover nodos actualiza el anillo,
+sin modificar la curva aplicada. Cambiar a otro perfil, Firmware, bloqueo o
+caducidad elimina el punto de solicitud; datos caducos/ausentes/NaN eliminan la
+vista previa. El selector térmico CPU sigue la configuración de cada curva.
+
+El selector GPU permite 210–2500 MHz AC/Batería; el mínimo solicitado a NVML es
+210 y el máximo es el valor elegido. No se fija el reloj a 2500 ni se cambian
+preferencias existentes/defaults. Un rechazo NVML sigue cerrando la operación.
+
+## Evidencia física reciente y validación pendiente
+
+Diagnóstico (7), paquete a9001de: Automatic activa CPU/GPU y admite retorno
+voluntario Firmware→Automatic sin bloqueo. Diagnóstico (8): CPU 91 °C dispara
+el margen; al exportar fans en Firmware y Performance Disabled/sin owner.
+Diagnóstico (9): una activación expira a 00:27:55 Santiago por los cinco minutos;
+otra activa CPU 35/50 W y GPU 210–1800 MHz, pero a 00:32:21 CPU Package 97 °C
+(core máximo 94 °C, potencia 37.51 W) produce retorno Firmware aceptado a
+00:32:22. GPU 73 °C/60.90 W y fans 3500 RPM al disparar. Esto refuta que los
+límites de potencia/reloj garanticen por sí mismos ausencia de picos térmicos.
+Los límites CPU/GPU seguían activos al exportar (9).
+
+La validación completa NO se declara PASS: faltan estabilidad bajo carga y
+transiciones de curva AC/Batería/lifecycle. Se conserva el margen CPU 90 °C,
+GPU 82 °C, CPU 60 W y GPU 75 W de esta revisión, y su ventana de 300 s.
+El gate normal Automatic permanece cerrado. Las nuevas muestras por sesión
+permiten reconstruir el historial previo al disparo sin mezclar aperturas.
+
+Prueba siguiente agrupada: abrir el paquete nuevo en AutomaticReview, mantener
+AC, conservar inicialmente GPU 1800 (o el valor previamente utilizado),
+seleccionar Automatic y observar 60–90 s con el uso que se desea evaluar.
+Comprobar los puntos en control/editor; editar un nodo y verificar que cambia
+solo la vista previa; descartar la edición. Exportar antes de los cinco minutos
+(o inmediatamente al interrumpirse), luego Liberar CPU/GPU y exportar otra vez.
+Registrar la carga/programa usado. El mismo ID de proceso une ambos ZIP y los
+IDs de activación separan los tramos Automatic. La ampliación GPU puede probarse
+por separado con Apply explícito en Firmware, incluyendo liberar/reset, sin
+combinarla con cambios de curva durante la prueba térmica.

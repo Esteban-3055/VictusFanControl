@@ -248,7 +248,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             Slider(g,"gpu","Graphics clock máximo",new(350,470,735,120),Profile.GpuMaximumMHz,210,GpuProductPreferences.Maximum(Editing),"MHz");
             DrawText(g,"Clock mínimo: 210 MHz · límite configurado, no lectura del rango",350,635,21,Muted,735);
             DrawText(g,"ActiveUnverified significa Set aceptado. El rango locked completo no es observable en este driver.",350,687,21,Muted,735);
-            DrawText(g,"Ajustable dentro del perfil; el driver puede rechazar un valor.",350,768,19,Yellow,735);
+            DrawText(g,"Rango configurable 210–2500 MHz; el driver puede rechazar el valor.",350,768,19,Yellow,735);
         }
         else
         {
@@ -328,6 +328,18 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Modelo de demanda; no valida SafetyGate, RPM ni respuesta física.",889,798,17,Yellow,730);
     }
     private string Unit() => Axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.GpuTemperature?"°C":Axis is AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.GpuPower?"W":"%";
+    internal IReadOnlyList<ProductCurveMarker> CurrentCurveMarkers(params AdaptiveCurveAxis[] axes)
+    {
+        var live=FreshSnapshot;
+        var sample=State.AutomaticDecisionSnapshot;
+        var active=live is not null && State.FanMode=="Automatic" && State.FanAuthority=="Custom" && !State.LifecycleBlocked &&
+            State.AppliedFanProfile==Editing.ToString() && State.Source==State.AppliedFanProfile &&
+            State.AutomaticDecision is { ExecutionAuthorized:true, EqualFanLevel: not null } &&
+            State.AutomaticDecision.EqualFanLevel==State.FanLevel && sample is not null && sample.Timestamp<=DateTimeOffset.UtcNow &&
+            DateTimeOffset.UtcNow-sample.Timestamp<=VictusFanControl.Safety.SafetyGate.MaximumTelemetryAge;
+        return ProductCurveMarkers.Build(Profile.Fan,live,active?State.AppliedAutomaticConfiguration:null,
+            active?sample:null,active?State.FanLevel:null,axes);
+    }
     private void DrawCurve(Graphics g,RectangleF plot,bool editable)
     {
         _plot=editable?plot:RectangleF.Empty;double xmax=AdaptiveCurveProfiles.MaximumInput(Axis);
@@ -343,6 +355,17 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             foreach(var point in visible){using var b=new SolidBrush(Ink);g.FillEllipse(b,point.X-6,point.Y-6,12,12);g.DrawEllipse(line,point.X-7,point.Y-7,14,14);}
             if(editable&&axis==Axis&&SelectedNode>=0&&SelectedNode<ps.Count){var selected=Position(ps[SelectedNode]);using var ring=new Pen(Yellow,3);g.DrawEllipse(ring,selected.X-12,selected.Y-12,24,24);}
         }
+        var markers=CurrentCurveMarkers(editable?[Axis]:[other,Axis]);
+        // Draw previews first, then the accepted level. Neither marker is an editable hit target.
+        foreach(var marker in markers.OrderBy(m=>m.IsApplied))
+        {
+            var point=Position(new(Math.Clamp(marker.Input,0,xmax),marker.Level));
+            using var halo=new Pen(Background,6);g.DrawEllipse(halo,point.X-9,point.Y-9,18,18);
+            using var ring=new Pen(marker.IsApplied?Green:Yellow,3);g.DrawEllipse(ring,point.X-9,point.Y-9,18,18);
+            if(marker.IsApplied){using var fill=new SolidBrush(Green);g.FillEllipse(fill,point.X-5,point.Y-5,10,10);}
+        }
+        var applied=markers.FirstOrDefault(m=>m.IsApplied);
+        DrawText(g,(applied is null?"● Solicitud Automatic: —":$"● Solicitud: {applied.Level:0}")+"  ·  ○ Vista previa",plot.Left,plot.Top-22,15,applied is null?Muted:Green,plot.Width);
         DrawText(g,"Entrada ("+Unit()+")",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300);
         DrawText(g,"Nivel común · 10–50",plot.Left,plot.Top-41,19,Muted,285);
         if(editable){var cpu=Axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.CpuLoad;

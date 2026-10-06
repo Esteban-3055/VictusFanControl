@@ -1,5 +1,6 @@
 using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Performance;
+using VictusFanControl.Telemetry;
 namespace VictusFanControl.Product;
 
 internal static class ProductProfilesSelfTest
@@ -33,10 +34,29 @@ internal static class ProductProfilesSelfTest
         var customGpu=new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 1800, BatteryGpuMaximumMHz = 1000 };
         customGpu.Validate();
         if(customGpu.GpuPresets().Ac.MaxGraphicsClockMHz!=1800||customGpu.GpuPresets().Battery.MaxGraphicsClockMHz!=1000)throw new InvalidOperationException("Custom GPU preferences did not reach the preset controller.");
-        Reject(() => new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 1851 }.Validate());
-        Reject(() => new PerformanceGuiSessionConfiguration { BatteryGpuMaximumMHz = 1201 }.Validate());
+        var expandedGpu=new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 2500, BatteryGpuMaximumMHz = 2500 };
+        expandedGpu.Validate();
+        if(expandedGpu.GpuPresets().Ac.MinGraphicsClockMHz!=210||expandedGpu.GpuPresets().Ac.MaxGraphicsClockMHz!=2500||expandedGpu.GpuPresets().Battery.MaxGraphicsClockMHz!=2500)
+            throw new InvalidOperationException("Expanded GPU range did not reach NVML presets.");
+        Reject(() => new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 2501 }.Validate());
+        Reject(() => new PerformanceGuiSessionConfiguration { BatteryGpuMaximumMHz = 2501 }.Validate());
         Reject(() => new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 209 }.Validate());
         new PerformanceGuiSessionConfiguration().Validate();
+        var sample=new TelemetrySnapshot(DateTimeOffset.UtcNow,"fixture",90,18,20,"fixture",45,40,100,3100,3100)
+        {CpuExpectedPhysicalCoreCount=3,CpuCoreTemperatures=[new(0,0,"Performance",80),new(1,2,"Performance",70),new(2,4,"Performance",60)]};
+        var liveDraft=original.Ac.Fan with{Tuning=original.Ac.Fan.Tuning with{CpuTemperatureSource=CpuDemandTemperatureSource.PackageOrHottestCore}};
+        var markers=ProductCurveMarkers.Build(liveDraft,sample,original.Ac.Fan,sample,31,Enum.GetValues<AdaptiveCurveAxis>());
+        var appliedMarker=markers.Single(m=>m.Axis==AdaptiveCurveAxis.CpuTemperature&&m.IsApplied);
+        var previewMarker=markers.Single(m=>m.Axis==AdaptiveCurveAxis.CpuTemperature&&!m.IsApplied);
+        if(markers.Count!=12||appliedMarker.Input!=70||appliedMarker.Level!=31||previewMarker.Input!=90||previewMarker.Level!=50)
+            throw new InvalidOperationException("Curve marker mixed draft input, raw safety temperature or executed level.");
+        if(ProductCurveMarkers.Build(liveDraft,sample with{GpuPowerW=double.NaN},null,null,null,AdaptiveCurveAxis.GpuPower).Count!=0||
+            ProductCurveMarkers.Build(liveDraft,null,null,null,null,AdaptiveCurveAxis.CpuTemperature).Count!=0)
+            throw new InvalidOperationException("Invalid/missing sensor produced a live marker.");
+        var expandedProfiles=original with{Ac=original.Ac with{GpuMaximumMHz=2500},Battery=original.Battery with{GpuMaximumMHz=210}};
+        var expandedRoundtrip=ProductProfilesStore.Parse(ProductProfilesStore.Serialize(expandedProfiles));
+        if(expandedRoundtrip.Ac.GpuMaximumMHz!=2500||expandedRoundtrip.Battery.GpuMaximumMHz!=210||original.Ac.GpuMaximumMHz!=1850||original.Battery.GpuMaximumMHz!=1200)
+            throw new InvalidOperationException("GPU range changed defaults or lost independent persisted values.");
         var json=ProductProfilesStore.Serialize(original);
         foreach(var invalid in new[]{"{}","null","[]",json.Insert(1,"\"schemaVersion\":1,"),json.Replace("\"tuning\": {","\"tuning\": null, \"oldTuning\": {"),json.Replace("\"cpuPl1Watts\": 35","\"cpuPl1Watts\": -1"),json.Replace("\"gpuMaximumMHz\": 1850","\"gpuMaximumMHz\": 9999"),json.Replace("\"input\": 40","\"input\": 40, \"input\": 40")})Reject(()=>ProductProfilesStore.Parse(invalid));
         Reject(()=>(original with{Ac=original.Ac with{Fan=original.Ac.Fan with{Profile=original.Ac.Fan.Profile with{Config=original.Ac.Fan.Profile.Config with{CpuTemperatureCurve=[null!]}}}}}).Validate());
