@@ -226,7 +226,8 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         if(id is "pl1" or "pl2" or "gpu")Hit(id+"-text",new(r.Right-220,r.Y-9,155,compact?34:56),"Escribir valor exacto de "+name,!Busy);
         var track=new RectangleF(r.X,r.Y+(compact?41:73),r.Width,compact?10:14);Bar(g,track,value-min,max-min,Blue);
         var px=track.Left+(float)(value-min)/(max-min)*track.Width;using var b=new SolidBrush(Ink);g.FillEllipse(b,px-(compact?13:17),track.Y-(compact?8:10),compact?26:34,compact?26:34);
-        DrawText(g,min.ToString(),r.X,r.Y+(compact?62:99),compact?14:18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+(compact?62:99),compact?14:18,Muted,110);
+        if(id.StartsWith("influence-"))DrawText(g,$"Rango {min}–{max} %",r.X+120,r.Y+59,13,Muted,260);
+        else {DrawText(g,min.ToString(),r.X,r.Y+(compact?62:99),compact?14:18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+(compact?62:99),compact?14:18,Muted,110);}
         Hit(id,new(r.X,r.Y+(compact?31:58),r.Width,compact?34:42),name,!Busy,true,min,max);
         Button(g,id+"-minus","−",new(r.Right-282,r.Y-9,50,compact?34:56));Button(g,id+"-plus","+",new(r.Right-61,r.Y-9,50,compact?34:56));
     }
@@ -367,7 +368,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             if(marker.IsApplied){using var fill=new SolidBrush(Green);g.FillEllipse(fill,point.X-5,point.Y-5,10,10);}
         }
         var applied=markers.FirstOrDefault(m=>m.IsApplied);var preview=markers.FirstOrDefault(m=>!m.IsApplied);
-        DrawText(g,(simulated is not null?"● Simulado":applied is null?"● Solicitud: —":$"● Solicitud: {applied.Level:0}")+" · ○ Objetivo"+(preview is null?"":$" {preview.Input:0.0} %"),plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
+        DrawText(g,(simulated is not null?"● Simulado":applied is null?"● Solicitud: —":$"● Solicitud: {applied.Level:0}")+" · ○ Objetivo"+(preview is null?"":$" {preview.Input:0.0} %")+(preview?.Observation.ThermalProtection==true?" · Protección térmica":""),plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
         DrawText(g,"Demanda (%)",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300);DrawText(g,"Nivel común · 10–50",plot.Left,plot.Top-41,19,Muted,275);
         if(editable){DrawText(g,"● Curva editable",plot.Left+275,plot.Top-41,16,Blue,170);DrawText(g,"┄ Preset inicial",plot.Left+449,plot.Top-41,16,Muted,185);}
     }
