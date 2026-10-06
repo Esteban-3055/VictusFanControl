@@ -409,6 +409,20 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             var next=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
             Check(next.EqualFanLevel==12&&next.SmoothedDemandLevel is >12 and <40&&next.RawDemandLevel is >=40 and <41,
                 "live Apply preserves EMA and current actuation rather than jumping to the new raw target");
+            var tuned=original.Tuning with{RiseTimeConstantSeconds=5,IncreaseConfirmationSeconds=2};
+            var beforeTuning=backend.Levels.Count;
+            await controller.ApplyTuningAsync(tuned,()=>{},default);
+            Check(controller.AutomaticConfiguration!.Tuning==tuned&&controller.LastAutomaticResult is null&&backend.Levels.Count==beforeTuning&&backend.Restores==0,
+                "live tuning changes response without writes, release or stale markers");
+            clock+=1000;sample=sample with{Timestamp=Now()};
+            var afterTuning=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(afterTuning.SmoothedDemandLevel>next.SmoothedDemandLevel&&afterTuning.SmoothedDemandLevel<40&&afterTuning.EqualFanLevel==12,
+                "live tuning preserves EMA and restarts confirmation rather than jumping to raw demand");
+            var beforeRejectedTuning=FanConfigurationStore.Serialize(controller.AutomaticConfiguration!);
+            var refused=false;try{await controller.ApplyTuningAsync(tuned with{RiseTimeConstantSeconds=0},()=>{},default);}catch(InvalidDataException){refused=true;}
+            Check(refused&&FanConfigurationStore.Serialize(controller.AutomaticConfiguration!)==beforeRejectedTuning,"invalid tuning leaves the active engine intact");
+            refused=false;try{await controller.ApplyTuningAsync(tuned,()=>throw new InvalidOperationException("cancelled tuning"),default);}catch(InvalidOperationException){refused=true;}
+            Check(refused&&backend.Levels.Count==beforeTuning,"cancelled tuning admission does not write hardware");
             var intact=FanConfigurationStore.Serialize(controller.AutomaticConfiguration!);
             var rejected=false;try{await controller.ApplyUnifiedDemandAsync(original.UnifiedDemand!,()=>throw new InvalidOperationException("cancelled click"),default);}catch(InvalidOperationException){rejected=true;}
             Check(rejected&&FanConfigurationStore.Serialize(controller.AutomaticConfiguration!)==intact&&backend.Levels.Count==levels,
@@ -419,6 +433,7 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             clock+=1000;sample=Sample(Now(),96) with{GpuTemperatureC=35,GpuPowerW=5};
             await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
             clock+=1000;await controller.ApplyUnifiedDemandAsync(original.UnifiedDemand!,()=>{},default);
+            await controller.ApplyTuningAsync(tuned with{RiseTimeConstantSeconds=6},()=>{},default);
             clock+=1001;rejected=false;
             try{await controller.ApplyUnifiedDemandAsync(replacement,()=>{},default);}catch(InvalidOperationException){rejected=true;}
             Check(rejected&&controller.AutomaticConfiguration!.UnifiedDemand!.Curve.SequenceEqual(original.UnifiedDemand!.Curve),
@@ -467,6 +482,15 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             await controller.ApplyUnifiedDemandAsync(profiles.Ac.Fan.UnifiedDemand!,()=>{},default,profiles.Ac.Fan);
             Check(controller.Mode==AdaptiveFanProductionMode.Automatic&&backend.Restores==0&&backend.Levels.Count==1,
                 "AC return reacquired authority or wrote during configuration");
+            var adjusted=profiles.Ac.Fan.Tuning with{RiseTimeConstantSeconds=7};
+            await controller.ApplyTuningAsync(adjusted,()=>{},default);
+            clock+=1000;sample=sample with{Timestamp=Now()};
+            var preserved=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(preserved.ObservedLoadSeconds>resumed.ObservedLoadSeconds,"response tuning preserves accumulated loaded intervals");
+            await controller.ApplyTuningAsync(adjusted with{LoadThresholdPercent=99},()=>{},default);
+            clock+=1000;sample=sample with{Timestamp=Now()};
+            var resetLoad=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(resetLoad.ObservedLoadSeconds==0&&resetLoad.SustainedLoadCooling==false,"new load definition starts a new workload history");
             await controller.SetModeAsync(AdaptiveFanProductionMode.Firmware,default);
             rejected=false;try{await controller.ObserveAutomaticSourceWaitAsync(sample,()=>{},default);}catch(InvalidOperationException){rejected=true;}
             Check(rejected,"source wait continued after Firmware cancellation");

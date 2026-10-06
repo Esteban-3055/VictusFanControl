@@ -7,7 +7,7 @@ using VictusFanControl.Performance;
 namespace VictusFanControl.App;
 
 /// <summary>New normal product GUI. Legacy MainForm is reachable only through explicit qualification entries.</summary>
-internal sealed class ProductForm : Form
+internal sealed partial class ProductForm : Form
 {
     private readonly ProductCanvas _canvas = new();
     private readonly string _modules;
@@ -104,6 +104,7 @@ internal sealed class ProductForm : Form
         if(_closing||IsDisposed)return;
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
+        if(HandleAdvancedCommand(id))return;
         if(id is "curve-influences" or "curve-points"){_canvas.ShowCurvePoints=id=="curve-points";_canvas.Invalidate();return;}
         if(id.StartsWith("fan-tab-")){_canvas.FanTab=Math.Clamp(int.Parse(id[8..]),0,2);_canvas.Invalidate();return;}
         if(id.StartsWith("perf-tab-")){_canvas.PerformanceTab=int.Parse(id[9..]);_canvas.Invalidate();return;}
@@ -374,7 +375,7 @@ internal sealed class ProductNumericDialog : Form
     internal TextBox Input {get;}=new(){Dock=DockStyle.Fill,AccessibleName="Valor exacto"};
     private readonly Label _error=new(){Dock=DockStyle.Fill,ForeColor=ProductCanvas.Yellow,AutoSize=true};
     private readonly Func<string,string?> _commit;
-    internal ProductNumericDialog(string title,int value,int min,int max,Func<string,string?> commit)
+    internal ProductNumericDialog(string title,double value,double min,double max,Func<string,string?> commit,bool integer=true,string? help=null)
     {
         _commit=commit;Text=title;StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.FixedDialog;
         MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;AutoScaleMode=AutoScaleMode.Dpi;
@@ -382,10 +383,10 @@ internal sealed class ProductNumericDialog : Form
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new(20),ColumnCount=1,RowCount=5};
         layout.RowStyles.Add(new(SizeType.Absolute,34));layout.RowStyles.Add(new(SizeType.Absolute,34));
         layout.RowStyles.Add(new(SizeType.Absolute,42));layout.RowStyles.Add(new(SizeType.Percent,100));layout.RowStyles.Add(new(SizeType.Absolute,36));
-        layout.Controls.Add(new Label{Text=$"Valor entero · {min}–{max}",Dock=DockStyle.Fill},0,0);
+        layout.Controls.Add(new Label{Text=$"Valor {(integer?"entero":"numérico")} · {min}–{max}",Dock=DockStyle.Fill},0,0);
         Input.Text=value.ToString(System.Globalization.CultureInfo.InvariantCulture);layout.Controls.Add(Input,0,1);
         layout.Controls.Add(_error,0,2);
-        layout.Controls.Add(new Label{Text="Editar solo cambia el borrador. Si aumentas PL1 por encima de PL2, PL2 sube al mismo valor.",Dock=DockStyle.Fill,ForeColor=ProductCanvas.Muted},0,3);
+        layout.Controls.Add(new Label{Text=help??"Editar solo cambia el borrador. Si aumentas PL1 por encima de PL2, PL2 sube al mismo valor.",Dock=DockStyle.Fill,ForeColor=ProductCanvas.Muted},0,3);
         var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft};
         var accept=new Button{Text="Aceptar",AutoSize=true};var cancel=new Button{Text="Cancelar",AutoSize=true,DialogResult=DialogResult.Cancel};
         accept.Click+=(_,_)=>TryCommit();buttons.Controls.Add(cancel);buttons.Controls.Add(accept);layout.Controls.Add(buttons,0,4);

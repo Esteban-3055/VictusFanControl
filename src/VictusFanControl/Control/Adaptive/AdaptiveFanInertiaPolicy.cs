@@ -31,7 +31,7 @@ public class AdaptiveFanInertiaPolicy
     private readonly AdaptiveFanPolicyConfig _config;
     private readonly AdaptiveFanPolicyEngine _demand;
     private readonly AdaptiveFinalDemandFilter _finalFilter;
-    private readonly AdaptiveFanTuning? _tuning;
+    private AdaptiveFanTuning? _tuning;
     private readonly AdaptiveLoadHistory _loadHistory = new();
     private int? _current;
     private DateTimeOffset? _increaseSince;
@@ -150,6 +150,22 @@ public class AdaptiveFanInertiaPolicy
         // Preserve actuation, EMA, telemetry continuity and load history. A confirmation
         // earned with the previous curve must not authorize a step with the new curve.
         _demand.UpdateUnifiedDemand(demand);
+        ClearConfirmation();
+    }
+
+    internal void UpdateTuning(AdaptiveFanTuning tuning)
+    {
+        tuning.Validate();
+        if (_tuning is null || tuning.MinimumLevel != _tuning.MinimumLevel || tuning.MaximumLevel != _tuning.MaximumLevel ||
+            tuning.MaximumDownStepLevels != _tuning.MaximumDownStepLevels || tuning.ThermalMaximumUpStepLevels != _tuning.ThermalMaximumUpStepLevels)
+            throw new InvalidOperationException("El cambio en vivo conserva el rango físico y los pasos protegidos.");
+        // Load counted under another definition cannot qualify the new threshold.
+        if (tuning.AdaptiveDescentEnabled != _tuning.AdaptiveDescentEnabled || tuning.SustainedLoadSeconds != _tuning.SustainedLoadSeconds ||
+            tuning.LoadThresholdPercent != _tuning.LoadThresholdPercent || tuning.CpuLoadPowerThresholdW != _tuning.CpuLoadPowerThresholdW ||
+            tuning.GpuLoadPowerThresholdW != _tuning.GpuLoadPowerThresholdW)
+            _loadHistory.Reset();
+        _finalFilter.UpdateTuning(tuning);
+        _tuning = tuning;
         ClearConfirmation();
     }
 

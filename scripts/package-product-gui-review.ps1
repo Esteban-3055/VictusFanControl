@@ -18,6 +18,7 @@ Copy-Item -LiteralPath (Join-Path $root 'docs/UNIFIED_PRODUCT_DEMAND.md') -Desti
 Copy-Item -LiteralPath (Join-Path $root 'docs/AUTOMATIC_PRODUCT_SESSION.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/PERFORMANCE_GUI_RECOVERY.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_VALIDATION_STATUS.md') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_ADVANCED_SETTINGS.md') -Destination $OutputDirectory
 $entries = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-Object FullName | ForEach-Object {
     [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
 })

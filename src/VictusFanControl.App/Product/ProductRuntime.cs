@@ -58,6 +58,7 @@ internal interface IProductRuntime : IAsyncDisposable
     void Start();
     Task SelectFanModeAsync(AdaptiveFanProductionMode mode, ProductProfiles profiles);
     Task ApplyFanCurveAsync(ProductPowerProfile source, UnifiedFanDemand demand);
+    Task ApplyFanTuningAsync(AdaptiveFanTuning tuning);
     Task ApplyManualAsync(int level);
     Task ApplyPerformanceAsync(ProductProfiles profiles);
     Task ReleasePerformanceAsync();
@@ -420,6 +421,50 @@ internal sealed class ProductRuntime : IProductRuntime
             Publish("Curva e influencias aplicadas; conservan la inercia y el plazo de la sesión. Guardar conserva los cambios para el próximo inicio.");
         });
     }
+    public Task ApplyFanTuningAsync(AdaptiveFanTuning tuning) => FanCommandAsync(async () =>
+    {
+        tuning.Validate();
+        void Admit()
+        {
+            if (_closing || _lifecycleBlocked || _target != Hp8C40TargetProfile.Instance || _worker.StateMachine.State != SystemState.Healthy ||
+                _automaticActivation.Pending || _sourceTransition.Pending)
+                throw new InvalidOperationException("Ajustes requieren el destino validado, Healthy y ninguna recuperación o transición pendiente.");
+            var snapshot = _snapshot ?? throw new InvalidOperationException("Falta telemetría vigente.");
+            if (CpuDemandTemperature.Select(snapshot,tuning.CpuTemperatureSource,tuning.HottestPerformanceCoreCount) is null)
+                throw new InvalidOperationException("La fuente CPU o el número N no dispone de núcleos completos compatibles.");
+            var raw = SafetyGate.EvaluateForDisplay(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
+            if (_controller.Mode == AdaptiveFanProductionMode.Automatic)
+            {
+                if (_activeAutomaticTicket is null) throw new InvalidOperationException("Falta la sesión Automatic.");
+                _automaticActivation.EnsureCurrent(_activeAutomaticTicket);
+                if (_automaticPerformance is null || !ProductAutomaticActivation.PerformanceReady(_automaticPerformance,
+                    _performance.AppliedConfiguration,_performance.LastStatus,_performance.LastStatusFresh,
+                    new WindowsPerformancePowerSourceReader().Read().Source.ToString()) ||
+                    !_controller.EvaluateAutomaticSafety(snapshot,raw,observe:false).CustomControlPermitted)
+                    throw new InvalidOperationException("La seguridad o CPU/GPU no permiten aplicar ajustes ahora.");
+                _automaticReview?.EnsureDispatchAllowed(snapshot);
+            }
+            else if (_controller.Mode != AdaptiveFanProductionMode.Firmware || _fans.Authority != FanAuthority.Firmware || !raw.CustomControlPermitted)
+                throw new InvalidOperationException("Preparar ajustes requiere Firmware y telemetría segura y vigente.");
+        }
+        Admit();
+        if (_controller.Mode == AdaptiveFanProductionMode.Automatic)
+        {
+            var profiles = _automaticProfiles ?? throw new InvalidOperationException("Faltan perfiles de la sesión.");
+            await _controller.ApplyTuningAsync(tuning,Admit,CancellationToken.None);
+            _automaticProfiles = profiles with { Ac = profiles.Ac with { Fan = profiles.Ac.Fan with { Tuning = tuning } },
+                Battery = profiles.Battery with { Fan = profiles.Battery.Fan with { Tuning = tuning } } };
+        }
+        else
+        {
+            var configuration = _controller.AutomaticConfiguration ?? throw new InvalidOperationException("Falta configuración del motor.");
+            await _controller.ConfigureAutomaticAsync(configuration with { Tuning = tuning },CancellationToken.None);
+        }
+        _automaticDecision=null;_automaticDecisionSnapshot=null;
+        AppLog.Write("PRODUCT AUTOMATIC TUNING APPLIED: "+System.Text.Json.JsonSerializer.Serialize(new
+            { automaticSessionId=_automaticSessionId,mode=_controller.Mode.ToString(),remainingSeconds=_automaticReview?.RemainingSeconds,tuning }));
+        Publish("Ajustes actualizados. Se conserva el filtro; las confirmaciones reinician y una nueva definición de carga reinicia su historial.");
+    });
     public Task ApplyManualAsync(int level) => FanCommandAsync(async () =>
     {
         if (_lifecycleBlocked || _controller.Mode != AdaptiveFanProductionMode.Manual) throw new InvalidOperationException("Selecciona Manual antes de aplicar; una sesión interrumpida no puede rearmarse.");

@@ -11,7 +11,8 @@ public sealed record AdaptiveFinalDemandFilterSettings(
 public class AdaptiveFinalDemandFilter
 {
     public static AdaptiveFinalDemandFilterSettings Settings { get; } = new();
-    private readonly AdaptiveFanTuning? _tuning;
+    private AdaptiveFanTuning? _tuning;
+    internal void UpdateTuning(AdaptiveFanTuning tuning) { tuning.Validate(); _tuning = tuning; }
     public AdaptiveFinalDemandFilter(AdaptiveFanTuning? tuning = null)
     {
         tuning?.Validate();

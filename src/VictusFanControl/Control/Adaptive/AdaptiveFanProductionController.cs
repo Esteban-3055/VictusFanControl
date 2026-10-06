@@ -560,6 +560,24 @@ public sealed class AdaptiveFanProductionController
         finally { _operationGate.Release(); }
     }
 
+    public async ValueTask ApplyTuningAsync(AdaptiveFanTuning tuning, Action verifyAdmission, CancellationToken token)
+    {
+        tuning.Validate();ArgumentNullException.ThrowIfNull(verifyAdmission);
+        await _operationGate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            if (!_automaticExecutionAuthorized || _automaticHardware is null || _automaticAdmission is null || _automaticAdmission.IsClosed ||
+                _mode != AdaptiveFanProductionMode.Automatic || _coordinator.Authority != FanAuthority.Custom ||
+                _preparedEngine is null || _automaticConfiguration?.UnifiedDemand is null)
+                throw new InvalidOperationException("Aplicar ajustes requiere Automatic activo y una sesión vigente.");
+            verifyAdmission();
+            _preparedEngine.UpdateTuning(tuning);
+            _automaticConfiguration = _automaticConfiguration with { Tuning = tuning };
+            Volatile.Write(ref _lastAutomaticResult, null);
+        }
+        finally { _operationGate.Release(); }
+    }
+
     /// <summary>Keep acquisition/filter continuity while source limits reconcile; never dispatch a fan write.</summary>
     public async ValueTask ObserveAutomaticSourceWaitAsync(TelemetrySnapshot snapshot, Action verifyAdmission, CancellationToken token)
     {

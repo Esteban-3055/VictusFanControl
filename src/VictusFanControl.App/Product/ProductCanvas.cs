@@ -7,11 +7,11 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
-internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings }
+internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced }
 internal sealed record ProductHit(string Id, RectangleF Bounds, string Label, bool Enabled, bool Slider = false, int Min = 0, int Max = 0);
 
 /// <summary>Owner-drawn product surface in reference coordinates. All gestures edit drafts or emit semantic commands.</summary>
-internal sealed class ProductCanvas : System.Windows.Forms.Control
+internal sealed partial class ProductCanvas : System.Windows.Forms.Control
 {
     internal static readonly Color Background = Color.FromArgb(9,19,27), Surface = Color.FromArgb(15,26,35), Border = Color.FromArgb(43,62,77);
     internal static readonly Color Ink = Color.FromArgb(230,240,255), Muted = Color.FromArgb(167,192,218), Blue = Color.FromArgb(0,157,255), Green = Color.FromArgb(0,237,111), Red = Color.FromArgb(255,63,64), Yellow = Color.FromArgb(246,212,31);
@@ -62,12 +62,12 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         if (_history.Count > 600) _history.RemoveRange(0,_history.Count-600);
     }
     private Font F(int size) { if (!_fonts.TryGetValue(size,out var font)) _fonts[size] = font = new("Segoe UI",size,FontStyle.Regular,GraphicsUnit.Pixel); return font; }
-    private void DrawText(Graphics g,string text,float x,float y,int size=23,Color? color=null,float width=1200,bool bold=false,bool centered=false)
+    private void DrawText(Graphics g,string text,float x,float y,int size=23,Color? color=null,float width=1200,bool bold=false,bool centered=false,float? height=null)
     {
         using var brush = new SolidBrush(color ?? Ink);
         using var format = new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.LineLimit, Alignment = centered?StringAlignment.Center:StringAlignment.Near };
-        if (bold) { using var font = new Font(F(size),FontStyle.Bold); g.DrawString(text,font,brush,new RectangleF(x,y,width,size*2.7f),format); }
-        else g.DrawString(text,F(size),brush,new RectangleF(x,y,width,size*2.7f),format);
+        if (bold) { using var font = new Font(F(size),FontStyle.Bold); g.DrawString(text,font,brush,new RectangleF(x,y,width,height??size*2.7f),format); }
+        else g.DrawString(text,F(size),brush,new RectangleF(x,y,width,height??size*2.7f),format);
     }
     private static GraphicsPath Rounded(RectangleF r,float radius)
     {
@@ -128,8 +128,8 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         using(var p=new Pen(Border)) {g.DrawLine(p,0,64,1672,64);g.DrawLine(p,279,64,279,882);g.DrawLine(p,0,882,1672,882);}
         Icon(g,"fan",24,16,36,Blue);DrawText(g,"VictusFanControl",76,17,25,null,220,true);DrawText(g,"│",288,16,26,Muted,25);DrawText(g,State.Hardware,328,18,23,Muted,1070);
         Button(g,"window-minimize","−",new(1450,8,54,45));Button(g,"window-maximize","□",new(1524,8,54,45));Button(g,"window-close","×",new(1598,8,54,45));
-        string[] names=["Inicio","Ventiladores","Rendimiento","Perfiles","Curvas","Monitorización","Configuración"];
-        string[] icons=["home","fan","chart","profiles","curve","pulse","settings"];
+        string[] names=["Inicio","Ventiladores","Rendimiento","Perfiles","Curvas","Monitorización","Configuración","Ajustes avanzados"];
+        string[] icons=["home","fan","chart","profiles","curve","pulse","settings","settings"];
         for(int i=0;i<names.Length;i++)
         {
             var rect=new RectangleF(8,85+i*76,262,70);if((int)Page==i){Card(g,rect,true,12);using var b=new SolidBrush(Blue);g.FillRectangle(b,8,rect.Y+5,5,60);}
@@ -151,6 +151,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Curves: Curves(g);break;
             case ProductPage.Monitoring: Monitoring(g);break;
             case ProductPage.Settings: Settings(g);break;
+            case ProductPage.Advanced: Advanced(g);break;
         }
         using(var b=new SolidBrush(FreshSnapshot is not null?Green:Yellow))g.FillEllipse(b,24,901,20,20);
         DrawText(g,"VictusFanControl v0.4.0  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
@@ -244,7 +245,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         if(PerformanceTab==0)
         {
             Card(g,new(320,253,807,570));DrawText(g,"Límites de CPU (Intel RAPL)",350,276,29,null,740,true);
-            Button(g,"cpu-toggle",Profiles.CpuEnabled?"✓  Control de CPU seleccionado":"○  Control de CPU desactivado",new(350,337,735,60),Profiles.CpuEnabled);
+            Button(g,"cpu-toggle",Profiles.CpuEnabled?"✓  Control de CPU seleccionado":"○  CPU no seleccionada para aplicar",new(350,337,735,60),Profiles.CpuEnabled);
             DrawText(g,"Pulsa el valor numérico para escribir un valor exacto.",350,414,18,Muted,735);
             Slider(g,"pl1","PL1 · Potencia sostenida",new(350,453,735,120),Profile.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl1Watts,CpuPowerProductDefaults.MaximumConfigurablePl1Watts,"W");
             Slider(g,"pl2","PL2 · Potencia turbo",new(350,637,735,120),Profile.CpuPl2Watts,Math.Max(Profile.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl2Watts),CpuPowerProductDefaults.MaximumConfigurablePl2Watts,"W");
@@ -252,7 +253,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         else if(PerformanceTab==1)
         {
             Card(g,new(320,253,807,570));DrawText(g,"Límite GPU (NVIDIA NVML)",350,276,29,null,740,true);
-            Button(g,"gpu-toggle",Profiles.GpuEnabled?"✓  Control de GPU seleccionado":"○  Control de GPU desactivado",new(350,337,735,60),Profiles.GpuEnabled);
+            Button(g,"gpu-toggle",Profiles.GpuEnabled?"✓  Control de GPU seleccionado":"○  GPU no seleccionada para aplicar",new(350,337,735,60),Profiles.GpuEnabled);
             DrawText(g,"Pulsa el valor numérico para escribir un valor exacto.",350,425,18,Muted,735);
             Slider(g,"gpu","Graphics clock máximo",new(350,470,735,120),Profile.GpuMaximumMHz,210,GpuProductPreferences.Maximum(Editing),"MHz");
             DrawText(g,"Clock mínimo: 210 MHz · límite configurado, no lectura del rango",350,635,21,Muted,735);
@@ -269,10 +270,10 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(1148,253,500,570));DrawText(g,"Estado y aplicación",1178,276,28,null,438,true);
         DrawText(g,"CPU: "+State.CpuState,1178,341,23,DomainColor(State.CpuState,Green),438);DrawText(g,"GPU: "+State.GpuState,1178,388,23,DomainColor(State.GpuState,Blue),438);
         DrawText(g,"Aplicado: "+AppliedCpu(),1178,438,22,Muted,438);DrawText(g,AppliedGpu(),1178,480,22,Muted,438);
-        DrawText(g,"Automatic activa ambos límites. Aplicar usa los interruptores CPU/GPU. Editar y guardar no aplican hardware.",1178,537,22,Muted,438);
+        DrawText(g,State.PerformanceProcessPresent?"Límites activos. Para cambiarlos, desactiva primero CPU/GPU. Firmware conserva los límites; desactivarlos devuelve los ventiladores a Firmware.":"Editar y guardar no aplican límites. Aplicar usa la selección CPU/GPU; Automático activa ambos.",1178,537,22,Muted,438,height:108);
         Button(g,"save","Guardar configuración",new(1178,655,438,48),false);
         Button(g,"performance-apply","Aplicar CPU / GPU",new(1178,714,438,48),true,State.PerformanceSupported&&State.CanApplyPerformance&&(Profiles.CpuEnabled||Profiles.GpuEnabled));
-        Button(g,"performance-release","Liberar CPU / GPU",new(1178,773,438,48),false,State.PerformanceProcessPresent);
+        Button(g,"performance-release","Desactivar límites CPU / GPU",new(1178,773,438,48),false,State.PerformanceProcessPresent);
     }
     private void ProfilePage(Graphics g)
     {

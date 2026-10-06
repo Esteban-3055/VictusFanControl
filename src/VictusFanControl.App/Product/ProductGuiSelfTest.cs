@@ -18,6 +18,7 @@ internal static class ProductGuiSelfTest
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
             TestAutomaticReview(Require);
             TestLiveCurveApply(Require);
+            TestAdvancedSettings(Require);
             TestSessionLogs(Require);
             ProductAutomaticActivationSelfTest.Run(Require);
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());
@@ -112,6 +113,10 @@ internal static class ProductGuiSelfTest
                 Require(bitmap.GetPixel(bitmap.Width/2,bitmap.Height/2).A==255,"Render is transparent.");
             }
             foreach(var page in Enum.GetValues<ProductPage>()){canvas.Page=page;canvas.FanTab=0;canvas.PerformanceTab=0;Render("page-"+page);}
+            canvas.Page=ProductPage.Advanced;for(int i=0;i<4;i++){canvas.AdvancedTab=i;Render("advanced-tab-"+i);}
+            Require(canvas.Hits.All(h=>!h.Id.Contains("MaximumDownStep")&&!h.Id.Contains("MinimumLevel")),"Advanced settings expose controls ignored by the protected physical envelope.");
+            canvas.Size=new(1040,660);for(int i=0;i<4;i++){canvas.AdvancedTab=i;Render("advanced-minimum-tab-"+i);}
+            canvas.Size=new(1672,941);
             canvas.Page=ProductPage.Fans;for(int i=1;i<=2;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
             Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
             canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;Render("performance-exact-CPU");Require(canvas.Hits.Any(h=>h.Id=="pl1-text")&&canvas.Hits.Any(h=>h.Id=="pl2-text"),"CPU numeric inputs inaccessible.");
@@ -526,7 +531,7 @@ internal static class ProductGuiSelfTest
                 form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;
                 for(int i=0;i<28;i++)
                 {
-                    form.HandleCommand("page-"+(i%7));form.HandleCommand(i%2==0?"profile-ac":"profile-battery");canvas.Size=i%2==0?new(1040,660):new(1344,756);
+                    form.HandleCommand("page-"+(i%Enum.GetValues<ProductPage>().Length));form.HandleCommand(i%2==0?"profile-ac":"profile-battery");canvas.AdvancedTab=i%4;canvas.Size=i%2==0?new(1040,660):new(1344,756);
                     canvas.SimulationVisible=i%4==0;form.EditValue("sim-input-4",i%101);form.HandleCommand("sim-60");
                     canvas.Refresh();canvas.Focus();canvas.HandleKey(Keys.Tab);canvas.HandleKey(Keys.Shift|Keys.Tab);
                     using var bitmap=new Bitmap(canvas.Width,canvas.Height);canvas.DrawToBitmap(bitmap,new(0,0,bitmap.Width,bitmap.Height));frames++;
@@ -575,11 +580,33 @@ internal static class ProductGuiSelfTest
         }
         finally{Directory.Delete(dir,true);}
     }
+    private static void TestAdvancedSettings(Action<bool,string> require)
+    {
+        var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://advanced",fixture:runtime,fixtureProfiles:new ProductProfiles());
+        form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Page=ProductPage.Advanced;
+        var original=ProductProfilesStore.Serialize(form.Draft);
+        foreach(var invalid in new[]{"NaN","Infinity","1e3","1.000.0","0.1","11"})
+            require(!form.TryEditTuningValue("rise",invalid,out _),"Invalid tuning numeric value accepted: "+invalid);
+        require(!form.TryEditTuningValue("cores","2.5",out _)&&ProductProfilesStore.Serialize(form.Draft)==original,"Rejected edits changed tuning.");
+        require(form.TryEditTuningValue("rise","7,5",out _),"Decimal comma rejected.");
+        require(form.Draft.Ac.Fan.Tuning.RiseTimeConstantSeconds==7.5&&form.Draft.Battery.Fan.Tuning==form.Draft.Ac.Fan.Tuning&&runtime.Commands==0,"Tuning edit wrote hardware or changed only one source.");
+        require(!form.TryEditTuningValue("short-fall","50",out _),"Brief descent slower than prolonged descent accepted.");
+        var active=canvas.State with{Target="HP-8C40-9D0R1LA-F18",Runtime="Healthy",Source="Ac",AutomaticAuthorized=true,
+            FanMode="Automatic",FanAuthority="Custom",Snapshot=Snapshot(DateTimeOffset.UtcNow,40,35,10,5),AppliedAutomaticConfiguration=new ProductProfiles().Ac.Fan};
+        runtime.Publish(active);form.HandleCommand("profile-battery");form.HandleCommand("tuning-apply");PumpUntil(()=>!canvas.Busy,"Tuning apply did not drain.");
+        require(runtime.Commands==1&&runtime.LastTuning==form.Draft.Ac.Fan.Tuning&&form.Dirty,"Common tuning apply depended on editing source or saved implicitly.");
+        foreach(var blocked in new[]{active with{LifecycleBlocked=true},active with{AutomaticPreparing=true},active with{AutomaticSourceTransition="Battery"},
+            active with{FanMode="Manual"},active with{Snapshot=active.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-10)}}})
+        {runtime.Publish(blocked);form.HandleCommand("tuning-apply");require(runtime.Commands==1,"Blocked tuning apply dispatched.");}
+        var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Advanced fixture exit did not drain.");exit.GetAwaiter().GetResult();
+    }
     private sealed class RecordingRuntime:IProductRuntime
     {
         internal ProductPowerProfile? LastCurveSource;
         internal UnifiedFanDemand? LastCurve;
         public Task ApplyFanCurveAsync(ProductPowerProfile source,UnifiedFanDemand demand){Commands++;LastCurveSource=source;LastCurve=demand with{Curve=demand.Curve.ToArray()};return Task.CompletedTask;}
+        internal AdaptiveFanTuning? LastTuning;
+        public Task ApplyFanTuningAsync(AdaptiveFanTuning tuning){Commands++;LastTuning=tuning;return Task.CompletedTask;}
         public event Action<ProductRuntimeState>? Changed;
         public ProductRuntimeState State {get;}=new();
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;

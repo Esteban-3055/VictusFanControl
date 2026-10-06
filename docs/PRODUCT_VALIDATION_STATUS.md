@@ -14,6 +14,7 @@ Las pruebas del equipo histórico 88F8 no sustituyen la evidencia de este destin
 | Muerte del proceso propietario | `release/performance-guardian-6j-parent-death-qualification-pass-8c40-2026-10-04.json` | Guardian vivo libera ambos dominios; no cubre destrucción del propio Guardian |
 | Curvas aplicadas en vivo | Diagnóstico `20261006T163959090Z-28cde682f9524671b1511d131eebce2d` | Cinco Apply en una activación; CPU 92 → 48 °C en 1.041 s, sin renovar el plazo |
 | Automatic continuo AC → Batería → AC en la GUI actual | `release/product-gui-source-transition-8c40-2026-10-06.json` | HEAD f669831; 203 muestras completas, CPU control máximo 77 °C/GPU 39 °C; misma activación, sin bloqueo ni interrupción |
+| Carga prolongada y enfriamiento con el motor actual | `release/product-gui-sustained-load-8c40-2026-10-06.json` | HEAD fbed6fd; 2083 muestras completas, una activación sin interrupciones, 1815.785 s de carga acumulada; descenso prolongado y retorno a breve tras reposo |
 
 No repetir estas pruebas básicas para declarar nuevamente sus subsistemas PASS.
 Una modificación posterior requiere regresión de las rutas que cambió, con su
@@ -21,7 +22,8 @@ alcance específico; no invalida automáticamente los resultados anteriores.
 
 ## Pendientes del motor y GUI actuales
 
-- Observar veinte minutos de carga **acumulada por el motor**, seguidos de enfriamiento.
+- Regresión física breve de la nueva aplicación de ajustes avanzados en vivo.
+- Actualización CPU/GPU en vivo: propuesta pendiente de implementar y validar; la sesión actual exige desactivar los límites antes de reemplazar su configuración.
 - Regresión de display/suspensión y salida con la integración Automatic actual.
 - Promoción posterior de Automatic normal y decisiones de arranque/reentrada.
   No hay validación de uso desatendido ni habilitación de arranque automático.
@@ -52,9 +54,9 @@ por flujo**, únicamente de la apertura actual. Sigue siendo una cola acotada:
 exportar en los hitos evita perder evidencia si hay muchas activaciones o logs.
 Los modos habituales conservan segmentos de 5 MiB y exportación de 2 MiB por flujo.
 
-## Regresión agrupada pendiente en el Victus
+## Regresión agrupada preparada: duración y enfriamiento ya observados
 
-Esta versión prepara la prueba; no declara ejecutado un nuevo PASS físico.
+Los pasos 1–3 siguientes conservan el procedimiento histórico. La sesión `20261006T192934603Z-bb911eb9b49a4941b33a4829eba25943` ya aprueba carga y enfriamiento en AC con CPU 25/40 W y GPU 1996 MHz. No repetirlos para aprobar otra vez la misma función. Los pasos 4–5 y la regresión de ajustes nuevos siguen pendientes.
 
 1. Salir normalmente de la GUI anterior. Extraer un paquete nuevo, Verify, abrir
    con `-Mode AutomaticExtendedReview`. Mantener AC y los valores ya usados:
@@ -79,3 +81,25 @@ Esta versión prepara la prueba; no declara ejecutado un nuevo PASS físico.
 Después de esta regresión se podrá decidir la promoción del uso continuo normal.
 El arranque/reentrada automática requiere un contrato propio; no se activa como
 consecuencia de aprobar solo la duración de la prueba.
+
+## Evaluación del diagnóstico de las 17:15
+
+Una activación entre 16:39:31 y 17:15:12 (hora de Chile), CPU 25/40 W,
+GPU 1996 MHz. Se acumularon 30 min 15.785 s de carga observada.
+El descenso prolongado comenzó a las 16:59:42; después de retirar la carga,
+los pasos de bajada confirmaban unos 16.7 s. A las 17:11:57 se completó el
+reposo observado y las confirmaciones pasaron a unos 4.2 s. Los intervalos
+reales entre comandos también incluyen adquisición y respuesta WMI.
+
+CPU control máximo 97 °C, GPU 78 °C. Seis picos CPU recuperados dentro del
+plazo; cero interrupciones. Al exportar: Healthy, Automatic, CPU 44 °C,
+GPU 37 °C, RPM informadas 1200/1200. El nivel solicitado final era 13;
+la lectura cuantizada de RPM era nivel 12: no hay readback del setpoint ni
+prueba de propiedad independiente. La aceptación WMI no se presenta como
+confirmación física exacta. CPU pico 43.28 W con PL2 40 W tampoco constituye,
+por sí solo, prueba de fallo del limitador; falta una ventana de potencia y
+readback contemporáneo para evaluar una sobrescritura externa.
+
+El registro aprueba comportamiento observado con esa configuración y el motor
+anterior a la nueva aplicación de ajustes. No certifica la GUI modificada, la
+expiración de los 45 minutos, la suspensión actual ni el uso desatendido.
