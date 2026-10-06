@@ -9,6 +9,7 @@ using System.Text.Json;
 using Microsoft.Win32;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.PawnIo;
+using VictusFanControl.Hardware.Windows;
 
 namespace VictusFanControl.CpuProbe;
 
