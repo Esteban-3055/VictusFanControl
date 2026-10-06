@@ -5,7 +5,8 @@ namespace VictusFanControl.App;
 
 internal static class ProductAutomaticActivationSelfTest
 {
-    internal static void Run(Action<bool,string> require) => RunAsync(require).GetAwaiter().GetResult();
+    // This suite has no controls; do not block continuations on the caller's WinForms synchronization context.
+    internal static void Run(Action<bool,string> require) => Task.Run(() => RunAsync(require)).GetAwaiter().GetResult();
     private static async Task RunAsync(Action<bool,string> require)
     {
         var activation = new ProductAutomaticActivation();

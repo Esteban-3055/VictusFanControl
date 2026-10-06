@@ -35,8 +35,8 @@ internal sealed class ProductAutomaticActivation
     {
         try
         {
-            EnsureCurrent(ticket); await admit(); EnsureCurrent(ticket);
-            await performance(); EnsureCurrent(ticket); await fans();
+            EnsureCurrent(ticket); await admit().ConfigureAwait(false); EnsureCurrent(ticket);
+            await performance().ConfigureAwait(false); EnsureCurrent(ticket); await fans().ConfigureAwait(false);
         }
         finally { lock (_sync) if (_pending == ticket.Generation) _pending = null; }
     }
@@ -46,13 +46,13 @@ internal sealed class ProductAutomaticActivation
         if (hasProcess)
         {
             if (applied != expected) throw new InvalidOperationException("Libera CPU/GPU antes de activar Automatic con límites diferentes o una sesión parcial.");
-            await refreshStatus();
+            await refreshStatus().ConfigureAwait(false);
         }
-        else await enable();
+        else await enable().ConfigureAwait(false);
     }
     internal async Task ReleaseLimitsAsync(Func<Task> restoreFans, Func<Task> releaseLimits)
     {
-        Cancel(); await restoreFans(); await releaseLimits();
+        Cancel(); await restoreFans().ConfigureAwait(false); await releaseLimits().ConfigureAwait(false);
     }
     internal static bool PerformanceReady(PerformanceGuiSessionConfiguration expected,
         PerformanceGuiSessionConfiguration? applied, PerformanceGuardianResponse? status, bool fresh, string source) =>
