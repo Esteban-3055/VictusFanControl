@@ -9,6 +9,15 @@ internal static class Program
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--gui-fixture-startup-failure")
+            {
+                Console.Error.WriteLine("Performance Guardian failed: Synthetic pending journal; zero hardware IO.");
+                return 99;
+            }
+            if (args.Length > 0 && args[0] == "--recover-gui-session")
+                return PerformanceGuiRecovery.Run(args);
+            if (args.SequenceEqual(new[] { "--gui-recovery-self-test" }))
+                return PerformanceGuiRecoverySelfTest.Run(Console.Out);
             if (args.Length > 0 && args[0] == "--fan-wmi-session")
                 return await VictusFanControl.Runtime.WmiFanGuiGuardianHost.RunAsync(args).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--fan-wmi-fixture-session")
@@ -449,6 +458,8 @@ internal static class Program
 
     private static void PrintUsage()
     {
+        Console.WriteLine("VictusFanControl.PerformanceGuardian --gui-recovery-self-test");
+        Console.WriteLine("VictusFanControl.PerformanceGuardian --recover-gui-session --confirm-target HP-8C40-9D0R1LA-F18 --confirm-cpu-hardware-writes --confirm-exclusive-gpu-controller --module <IntelMSR.bin> --cpu-session <expected-guid> --gpu-session <expected-guid> --output-directory <new-directory>");
         Console.WriteLine(
             "VictusFanControl.PerformanceGuardian --self-test");
 

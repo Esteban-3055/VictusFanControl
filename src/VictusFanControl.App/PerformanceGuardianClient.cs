@@ -17,6 +17,7 @@ internal sealed class PerformanceGuardianClient
     private int _ownerPid;
     private long _ownerStart;
     private long _lastStatusUtcTicks;
+    private string? _startupFailure;
     internal PerformanceGuardianResponse? LastStatus { get; private set; }
     internal PerformanceGuiSessionConfiguration? AppliedConfiguration { get; private set; }
     internal string? GuardianReportPath { get; private set; }
@@ -50,6 +51,7 @@ internal sealed class PerformanceGuardianClient
             using var owner = Process.GetCurrentProcess();
             _ownerPid = owner.Id; _ownerStart = owner.StartTime.ToUniversalTime().Ticks;
             _nonce = Guid.NewGuid(); _pipeName = "VFC.Performance.Gui." + _nonce.ToString("N");
+            _startupFailure = null;
             var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VictusFanControl", "Performance", "gui", _nonce.ToString("N"));
             Directory.CreateDirectory(directory);
             var configPath = Path.Combine(directory, "configuration.json");
@@ -60,10 +62,10 @@ internal sealed class PerformanceGuardianClient
                 "--nonce", _nonce.ToString("D"), "--owner-pid", _ownerPid.ToString(), "--owner-start", _ownerStart.ToString(), "--report", GuardianReportPath })
                 start.ArgumentList.Add(arg);
             _process = _startProcess(start) ?? throw new IOException("No se pudo iniciar Performance Guardian.");
-            _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("Performance Guardian: " + e.Data); };
+            _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) { if(e.Data.StartsWith("Performance Guardian failed:",StringComparison.Ordinal))Volatile.Write(ref _startupFailure,e.Data); AppLog.Write("Performance Guardian: " + e.Data); } };
             _process.OutputDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("Performance Guardian: " + e.Data); };
             _process.BeginErrorReadLine(); _process.BeginOutputReadLine();
-            if(_process.HasExited)throw new IOException("Performance Guardian terminó durante el inicio; revisa los informes.");
+            if(_process.HasExited)throw StoppedException();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             await ConnectAsync(timeout.Token).ConfigureAwait(false);
             LastStatus = await SendAsync(PerformanceGuardianProtocol.EnableSession, configuration, timeout.Token).ConfigureAwait(false);
@@ -87,7 +89,7 @@ internal sealed class PerformanceGuardianClient
         try
         {
             if (_process is null) return null;
-            if (_process.HasExited) throw new IOException("Performance Guardian terminó; revisa el informe de liberación.");
+            if (_process.HasExited) throw StoppedException();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             if (_pipe is null || !_pipe.IsConnected) await ConnectAsync(timeout.Token).ConfigureAwait(false);
             LastStatus = await SendAsync(PerformanceGuardianProtocol.Status, null, timeout.Token).ConfigureAwait(false);
@@ -122,9 +124,32 @@ internal sealed class PerformanceGuardianClient
     {
         _pipe?.Dispose();
         _pipe = new NamedPipeClientStream(".", _pipeName!, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-        await _pipe.ConnectAsync(token).ConfigureAwait(false);
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var connection = _pipe.ConnectAsync(waiting.Token);
+        var exit = _process!.WaitForExitAsync(waiting.Token);
+        try
+        {
+            await Task.WhenAny(connection, exit).ConfigureAwait(false);
+            if (_process.HasExited)
+            {
+                waiting.Cancel();
+                try { await connection.ConfigureAwait(false); } catch(Exception ex) when(ex is OperationCanceledException or IOException) { }
+                throw StoppedException();
+            }
+            await connection.ConfigureAwait(false);
+        }
+        finally { waiting.Cancel(); }
         var hello = await SendAsync(PerformanceGuardianProtocol.Hello, null, token).ConfigureAwait(false);
         if (!hello.Ok) throw new IOException("Guardian rechazó la identidad: " + hello.Message);
+    }
+
+    private IOException StoppedException()
+    {
+        // Already exited: drain redirected error output before reporting the cause.
+        _process!.WaitForExit();
+        var detail = Volatile.Read(ref _startupFailure);
+        return new IOException("Performance Guardian terminó con error " + _process.ExitCode +
+            "; conserva los registros pendientes y revisa la recuperación. " + (detail ?? "Revisa el informe de liberación."));
     }
 
     private async Task<PerformanceGuardianResponse> SendAsync(string type, PerformanceGuiSessionConfiguration? configuration, CancellationToken token)

@@ -104,6 +104,24 @@ internal static class PerformanceGuiIntegrationSelfTest
                 Console.WriteLine("PASS: failed startup owner retained; nonzero exit never implies a confirmed reset.");
             }
             finally{failedOwner?.Dispose();} // Already-exited fixture only; no live Guardian is terminated.
+            Process? startupFailureOwner = null;
+            var startupFailureClient = new PerformanceGuardianClient(Path.GetTempPath(), start =>
+            {
+                start.ArgumentList[0] = "--gui-fixture-startup-failure";
+                startupFailureOwner = Process.Start(start);
+                return startupFailureOwner;
+            });
+            try
+            {
+                var timer = Stopwatch.StartNew();
+                IOException? failure = null;
+                try { await startupFailureClient.EnableAsync(configuration); } catch(IOException ex) { failure = ex; }
+                Require(failure?.Message.Contains("Synthetic pending journal", StringComparison.Ordinal) == true &&
+                    timer.Elapsed < TimeSpan.FromSeconds(15) && startupFailureClient.HasProcess && !startupFailureClient.LimitsActive,
+                    "Early Guardian exit lost its root cause, waited for pipe timeout, or retired unresolved owner.");
+                Console.WriteLine("PASS: startup failure interrupts pipe wait promptly and preserves explicit cause/unresolved owner.");
+            }
+            finally { startupFailureOwner?.Dispose(); } // Fixture has already exited; no hardware process is killed.
             return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine("GUI integration self-test failed: " + ex); return 1; }
