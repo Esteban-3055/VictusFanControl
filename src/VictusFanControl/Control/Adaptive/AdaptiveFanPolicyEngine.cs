@@ -54,7 +54,7 @@ public sealed record AdaptiveFanPolicyDecision(
 /// </summary>
 public sealed class AdaptiveFanPolicyEngine
 {
-    private readonly AdaptiveFanPolicyConfig _config;
+    private AdaptiveFanPolicyConfig _config;
 
     private int? _currentLevel;
     private DateTimeOffset? _lastTimestamp;
@@ -69,6 +69,14 @@ public sealed class AdaptiveFanPolicyEngine
     }
 
     public int? CurrentLevel => _currentLevel;
+
+    internal void UpdateUnifiedDemand(UnifiedFanDemand demand)
+    {
+        demand.Validate();
+        _config = _config with { UnifiedDemand = demand with { Curve = demand.Curve.ToArray() } };
+        _consecutiveDecreaseSamples = 0;
+        _lastUnifiedDemand = null;
+    }
 
     public void Reset()
     {

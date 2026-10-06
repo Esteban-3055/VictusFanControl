@@ -55,6 +55,7 @@ internal interface IProductRuntime : IAsyncDisposable
     ProductRuntimeState State { get; }
     void Start();
     Task SelectFanModeAsync(AdaptiveFanProductionMode mode, ProductProfiles profiles);
+    Task ApplyFanCurveAsync(ProductPowerProfile source, UnifiedFanDemand demand);
     Task ApplyManualAsync(int level);
     Task ApplyPerformanceAsync(ProductProfiles profiles);
     Task ReleasePerformanceAsync();
@@ -329,6 +330,37 @@ internal sealed class ProductRuntime : IProductRuntime
         if (mode != AdaptiveFanProductionMode.Automatic) { _selectedFanProfile = null; _automaticPerformance = null; _activeAutomaticTicket = null; _automaticReview?.Stop(); }
         Publish(result.Detail);
     }
+    public Task ApplyFanCurveAsync(ProductPowerProfile source, UnifiedFanDemand demand)
+    {
+        demand.Validate();var frozen=demand with { Curve=demand.Curve.ToArray() };
+        var ticket=_activeAutomaticTicket;
+        return FanCommandAsync(async () =>
+        {
+            void Admit()
+            {
+                if(ticket is null)throw new InvalidOperationException("Selecciona Automatic antes de aplicar una curva.");
+                _automaticActivation.EnsureCurrent(ticket);
+                if(_closing||_lifecycleBlocked||_controller.Mode!=AdaptiveFanProductionMode.Automatic||_fans.Authority!=FanAuthority.Custom||
+                    !Enum.IsDefined(source)||_selectedFanProfile!=source.ToString()||
+                    new WindowsPerformancePowerSourceReader().Read().Source.ToString()!=source.ToString())
+                    throw new InvalidOperationException("Aplicar requiere Automatic activo y el perfil de la fuente real.");
+                if(_automaticPerformance is null||!ProductAutomaticActivation.PerformanceReady(_automaticPerformance,
+                    _performance.AppliedConfiguration,_performance.LastStatus,_performance.LastStatusFresh,source.ToString()))
+                    throw new InvalidOperationException("CPU/GPU deben conservar su confirmación vigente para aplicar la curva.");
+                var snapshot=_snapshot??throw new InvalidOperationException("Falta telemetría vigente.");
+                var raw=SafetyGate.EvaluateForDisplay(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
+                if(!_controller.EvaluateAutomaticSafety(snapshot,raw,observe:false).CustomControlPermitted)
+                    throw new InvalidOperationException("La seguridad actual no permite aplicar la curva.");
+                _automaticReview?.EnsureDispatchAllowed(snapshot);
+            }
+            Admit();
+            await _controller.ApplyUnifiedDemandAsync(frozen,Admit,CancellationToken.None);
+            _automaticDecision=null;_automaticDecisionSnapshot=null;
+            AppLog.Write("PRODUCT AUTOMATIC CURVE APPLIED: "+System.Text.Json.JsonSerializer.Serialize(new
+                {automaticSessionId=_automaticSessionId,source=source.ToString(),remainingSeconds=_automaticReview?.RemainingSeconds,demand=frozen}));
+            Publish("Curva e influencias aplicadas; conservan la inercia y el plazo de la sesión. Guardar conserva los cambios para el próximo inicio.");
+        });
+    }
     public Task ApplyManualAsync(int level) => FanCommandAsync(async () =>
     {
         if (_lifecycleBlocked || _controller.Mode != AdaptiveFanProductionMode.Manual) throw new InvalidOperationException("Selecciona Manual antes de aplicar; una sesión interrumpida no puede rearmarse.");
@@ -423,7 +455,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 AutomaticReview = _automaticReview is not null, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
                 AutomaticCpuSpikeRemainingMilliseconds = _automaticReview?.RemainingCpuSpikeMilliseconds,
                 AutomaticPreparing = _automaticActivation.Pending, AutomaticSessionId = _automaticSessionId, AutomaticDecisionSnapshot = _automaticDecisionSnapshot, AutomaticInterruptionSnapshot = _automaticInterruptionSnapshot,
-                AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticDecision : null,
+                AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic && ReferenceEquals(_automaticDecision,_controller.LastAutomaticResult) ? _automaticDecision : null,
                 AppliedAutomaticConfiguration = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _controller.AutomaticConfiguration : null,
                 PerformanceSupported = _target == Hp8C40TargetProfile.Instance,
                 CanApplyPerformance = _target == Hp8C40TargetProfile.Instance && PerformanceAdmissionPermitted(_closing,_lifecycleBlocked,_performance.HasProcess,_worker.StateMachine.State,_fans.Authority),

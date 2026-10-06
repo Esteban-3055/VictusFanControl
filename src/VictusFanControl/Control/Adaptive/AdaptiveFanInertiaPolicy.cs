@@ -145,6 +145,14 @@ public class AdaptiveFanInertiaPolicy
         return Accepted($"Holding {current}; requested={requested}.");
     }
 
+    internal void UpdateUnifiedDemand(UnifiedFanDemand demand)
+    {
+        // Preserve actuation, EMA, telemetry continuity and load history. A confirmation
+        // earned with the previous curve must not authorize a step with the new curve.
+        _demand.UpdateUnifiedDemand(demand);
+        ClearConfirmation();
+    }
+
     /// <summary>Consume real ACK acquisitions without changing the selected fan target.</summary>
     public bool ObserveDuringActuation(AdaptiveFanPolicyInput input, out string failure)
     {

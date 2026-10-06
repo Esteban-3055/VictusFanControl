@@ -390,6 +390,43 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
                 Check(coordinator.Authority==FanAuthority.Firmware&&backend.Restores==session+1,"quiet review releases before reconfiguration");
             }
         }
+        backend=new Backend();clock=0;
+        await using(var coordinator=new FanControlCoordinator(backend))
+        {
+            var original=new VictusFanControl.Product.ProductProfiles().Ac.Fan;
+            var controller=new AdaptiveFanProductionController(coordinator,original.BuildPolicy(),true,true,
+                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,automaticConfiguration:original,automaticMinimumLevel:10);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,default);
+            clock+=1000;var sample=Sample(Now(),40) with{GpuTemperatureC=35,GpuPowerW=5};
+            await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            var levels=backend.Levels.Count;
+            var replacement=original.UnifiedDemand! with{Curve=[new(0,40),new(100,50)]};
+            await controller.ApplyUnifiedDemandAsync(replacement,()=>{},default);
+            Check(controller.Mode==AdaptiveFanProductionMode.Automatic&&coordinator.Authority==FanAuthority.Custom&&
+                backend.Levels.Count==levels&&backend.Restores==0&&controller.LastAutomaticResult is null,
+                "live Apply swaps only configuration without writes, restore, session restart or stale decision marker");
+            clock+=1000;sample=sample with{Timestamp=Now()};
+            var next=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(next.EqualFanLevel==12&&next.SmoothedDemandLevel is >12 and <40&&next.RawDemandLevel is >=40 and <41,
+                "live Apply preserves EMA and current actuation rather than jumping to the new raw target");
+            var intact=FanConfigurationStore.Serialize(controller.AutomaticConfiguration!);
+            var rejected=false;try{await controller.ApplyUnifiedDemandAsync(original.UnifiedDemand!,()=>throw new InvalidOperationException("cancelled click"),default);}catch(InvalidOperationException){rejected=true;}
+            Check(rejected&&FanConfigurationStore.Serialize(controller.AutomaticConfiguration!)==intact&&backend.Levels.Count==levels,
+                "cancelled admission leaves the applied curve and hardware untouched");
+            clock+=1000;sample=Sample(Now(),85) with{GpuTemperatureC=35,GpuPowerW=5};
+            var thermal=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(thermal.EqualFanLevel==16&&thermal.ThermalOverride,"live Apply preserves protected immediate four-level thermal rise");
+            clock+=1000;sample=Sample(Now(),96) with{GpuTemperatureC=35,GpuPowerW=5};
+            await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            clock+=1000;await controller.ApplyUnifiedDemandAsync(original.UnifiedDemand!,()=>{},default);
+            clock+=1001;rejected=false;
+            try{await controller.ApplyUnifiedDemandAsync(replacement,()=>{},default);}catch(InvalidOperationException){rejected=true;}
+            Check(rejected&&controller.AutomaticConfiguration!.UnifiedDemand!.Curve.SequenceEqual(original.UnifiedDemand!.Curve),
+                "live Apply does not renew an outstanding thermal confirmation deadline");
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Firmware,default);
+            rejected=false;try{await controller.ApplyUnifiedDemandAsync(original.UnifiedDemand!,()=>{},default);}catch(InvalidOperationException){rejected=true;}
+            Check(rejected&&backend.Restores==1,"live Apply cannot acquire authority from Firmware");
+        }
         return failures;
     }
 

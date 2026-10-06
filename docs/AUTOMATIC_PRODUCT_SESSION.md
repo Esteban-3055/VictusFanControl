@@ -41,6 +41,7 @@ ni se mata el proceso: se informa que debe liberarse la sesión anterior.
 | Actualización Healthy durante Automatic | Evalúa las seis curvas e inercia; escribe solo un cambio de nivel | Comprueba estado vigente; no aplica límites por cada muestra |
 | Seleccionar pestaña AC/Batería | Cambia solo el perfil que se edita | No cambia la fuente aplicada |
 | Editar, guardar, descartar, importar curvas o límites | No modifica la curva congelada ya aplicada | No modifica una sesión viva |
+| Aplicar en Curvas durante Automatic activo | Sustituye solo curva e influencias de la fuente activa en la siguiente adquisición; conserva nivel, EMA, carga y plazo de sesión; reinicia confirmaciones normales pendientes | No modifica límites ni escribe preferencias; exige CPU/GPU vigentes |
 | Firmware limpio → editar → Automatic explícito | Admite otra curva; nuevo plazo de revisión | Reutiliza si idénticos; si se editaron límites exige liberar antes |
 | Firmware durante la preparación | Cancela el intento; no inicia después Automatic | Una petición en vuelo puede completar; límites quedan visibles y liberables |
 | Volver voluntariamente a Firmware o Manual | Cambia solo el control de fans | Conserva los límites activos |

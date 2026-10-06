@@ -531,6 +531,29 @@ public sealed class AdaptiveFanProductionController
         finally { _operationGate.Release(); }
     }
 
+    public async ValueTask ApplyUnifiedDemandAsync(UnifiedFanDemand demand, Action verifyAdmission, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(verifyAdmission);
+        demand.Validate();
+        var frozen = demand with { Curve = demand.Curve.ToArray() };
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_automaticExecutionAuthorized || _automaticHardware is null || _automaticAdmission is null || _automaticAdmission.IsClosed ||
+                _mode != AdaptiveFanProductionMode.Automatic || _coordinator.Authority != FanAuthority.Custom ||
+                _preparedEngine is null || _automaticConfiguration?.UnifiedDemand is null)
+                throw new InvalidOperationException("Aplicar requiere Automatic activo y una sesión vigente con curva única.");
+            verifyAdmission();
+            var replacement = _automaticConfiguration with { UnifiedDemand = frozen };
+            Volatile.Write(ref _lastAutomaticResult, null);
+            _preparedEngine.UpdateUnifiedDemand(frozen);
+            _automaticConfiguration = replacement;
+            // The previous decision belongs to the previous curve, even though the
+            // current physical request and planner stay intact until the next acquisition.
+        }
+        finally { _operationGate.Release(); }
+    }
+
     /// <summary>All Automatic consumers use this session; display/dispatch never count a sample.</summary>
     public SafetyGateResult EvaluateAutomaticSafety(
         TelemetrySnapshot? snapshot, SafetyGateResult raw, bool observe)

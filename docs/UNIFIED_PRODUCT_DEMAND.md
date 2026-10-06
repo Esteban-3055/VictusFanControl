@@ -61,7 +61,21 @@ El simulador usa la misma demanda e inercia y el mismo gráfico con puntos de ob
 y nivel simulado; avanza automáticamente con datos sintéticos. No simula transferencia
 térmica, RPM, Guardian ni admisión física. Editar curva/influencia reinicia su historia
 para evitar mezclar configuraciones. Editar/guardar/importar no aplica hardware.
-Automatic mantiene su configuración congelada hasta volver a Firmware y reentrar.
+Editar y Guardar mantienen la configuración activa sin cambios. Aplicar, junto a
+Guardar curva e influencias, reemplaza explícitamente solo la curva y las seis
+influencias de la fuente que está controlando Automatic. No aplica límites CPU/GPU,
+no guarda en disco ni cambia el otro perfil. Requiere autoridad Custom, telemetría
+vigente, fuente coincidente y confirmación CPU/GPU; no permite rearmar una sesión
+cancelada, en preparación, interrumpida o vencida.
+
+La sustitución se serializa con las adquisiciones y comandos del controlador. No
+emite IO por sí misma: entra en vigor en la siguiente adquisición aceptada. Conserva
+nivel solicitado, EMA, historial de carga, continuidad, pasos y admisión térmica.
+Reinicia las confirmaciones normales pendientes para que la curva anterior no
+autorice un paso de la nueva. Conserva el ID y el plazo de cinco minutos de la sesión.
+Se oculta la decisión verde anterior hasta disponer de una decisión de la nueva
+curva y se registra PRODUCT AUTOMATIC CURVE APPLIED con perfil y configuración.
+Para conservar los cambios tras reiniciar, usar Guardar por separado.
 
 ## Persistencia y migración
 
@@ -93,6 +107,8 @@ telemetría inválida; esquema estricto; migración exacta y repetida en UTF-8 B
 conflicto de respaldo sin reemplazo; recuperación explícita de JSON dañado; aislamiento,
 configuración congelada, simulación equivalente; aplicación real del modelo a través
 del controlador con backend sintético; gestos, nodos, límites y renders Windows.
+Aplicar en vivo: nivel/EMA/continuidad retenidos, cero IO inmediato, cancelación sin
+cambios, rechazo desde Firmware, respuesta térmica protegida y plazo térmico sin renovación.
 
 La caracterización térmica/acústica de estos defaults sigue pendiente, especialmente
 batería. Los logs históricos no validan físicamente el nuevo cálculo.

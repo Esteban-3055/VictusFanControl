@@ -166,6 +166,20 @@ internal static class ProductProfilesSelfTest
             if(elapsed==1202&&simulator.Current?.SustainedLoadCooling!=true)throw new InvalidOperationException("Simulation lost sustained-load history.");
         }
         if(unchanged!=ProductProfilesStore.Serialize(original))throw new InvalidOperationException("Simulation mutated configuration.");
+        var hotSwap=new AdaptiveFanInertiaPolicy(original.Ac.Fan.BuildPolicy(),original.Ac.Fan.Tuning);
+        AdaptiveFanPolicyInput Cold(int second)=>new(DateTimeOffset.UnixEpoch.AddSeconds(second),40,5,0,35,5,0);
+        var initialSwap=hotSwap.Evaluate(Cold(1));
+        hotSwap.UpdateUnifiedDemand(new(){Curve=[new(0,40),new(100,50)]});
+        var afterSwap=hotSwap.Evaluate(Cold(2));
+        if(initialSwap.EqualFanLevel!=12||afterSwap.EqualFanLevel!=12||afterSwap.SmoothedDemandLevel is not (>12 and <40))
+            throw new InvalidOperationException("Live curve replacement reset the fan level or EMA history.");
+        if(hotSwap.Evaluate(Cold(2)).Accepted)throw new InvalidOperationException("Live curve replacement lost telemetry continuity.");
+        var confirmSwap=new AdaptiveFanInertiaPolicy(original.Ac.Fan.BuildPolicy(),original.Ac.Fan.Tuning);
+        confirmSwap.Evaluate(Cold(1));confirmSwap.UpdateUnifiedDemand(new(){Curve=[new(0,40),new(100,50)]});
+        for(var second=2;second<=4;second++)confirmSwap.Evaluate(Cold(second));
+        confirmSwap.UpdateUnifiedDemand(new(){Curve=[new(0,35),new(100,50)]});
+        if(confirmSwap.Evaluate(Cold(5)).EqualFanLevel!=12)throw new InvalidOperationException("Live curve replacement reused confirmation earned by the old curve.");
+        output.WriteLine("PASS  Live curve replacement retains current level, EMA history and duplicate acquisition rejection");
         var before=simulator.ElapsedSeconds;Reject(()=>simulator.Advance(new(CpuTemperature:999),1));Reject(()=>simulator.Advance(new(),3601));
         if(simulator.ElapsedSeconds!=before)throw new InvalidOperationException("Invalid simulation advanced virtual time.");
         output.WriteLine("PASS  Offline simulation matches editable inertia across rise/load/cooling/thermal phases; bounded history and no configuration effects");

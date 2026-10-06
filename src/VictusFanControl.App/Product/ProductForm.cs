@@ -151,13 +151,18 @@ internal sealed class ProductForm : Form
             case "gpu-toggle":Change(_draft with{GpuEnabled=!_draft.GpuEnabled});break;
             case "minimized-toggle":Change(_draft with{StartMinimized=!_draft.StartMinimized});break;
             case "save":_ = SaveAsync();break;
+            case "curve-apply":
+                if(!_canvas.CanApplyCurve){_canvas.Notice="Selecciona el perfil de la fuente real y espera a que Automatic esté controlando.";break;}
+                var source=_canvas.Editing;var demand=Draft.Get(source).Fan.UnifiedDemand!;
+                _ = RunAsync(async()=>{if(_runtime is null)throw new InvalidOperationException("Runtime no disponible.");await _runtime.ApplyFanCurveAsync(source,demand);
+                    _canvas.Notice="Curva e influencias aplicadas en Automatic. Guardar conserva los cambios; CPU/GPU mantienen sus límites actuales.";});break;
             case "discard":_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=!_hasSavedBaseline;_canvas.SelectedNode=-1;_canvas.Notice=_hasSavedBaseline?"Se recuperaron las preferencias guardadas.":"Se recuperó la configuración inicial; falta guardarla.";break;
             case "startup-toggle":_ = ToggleStartupAsync();break;
             case "firmware":case "fan-mode-0":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask);break;
             case "fan-mode-1":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Manual,Draft)??Task.CompletedTask);break;
             case "fan-mode-2":
                 if(!_canvas.State.AutomaticAuthorized){_canvas.Notice="Automatic normal sigue cerrado hasta su calificación.";break;}
-                if(_canvas.State.FanMode=="Automatic"){_canvas.Notice="Automatic ya está seleccionado; vuelve a Firmware para aplicar cambios. El plazo no se renueva.";break;}
+                if(_canvas.State.FanMode=="Automatic"){_canvas.Notice="Automatic ya está seleccionado; usa Aplicar en Curvas para actualizar curva e influencias. El plazo no se renueva.";break;}
                 _ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,Draft)??Task.CompletedTask);break;
             case "manual-apply":_ = RunAsync(()=>_runtime?.ApplyManualAsync(_canvas.ManualLevel)??Task.CompletedTask);break;
             case "performance-apply":_ = RunAsync(()=>{var profiles=Draft;profiles.Validate();profiles.PerformanceConfiguration().Validate();return _runtime?.ApplyPerformanceAsync(profiles)??Task.CompletedTask;});break;

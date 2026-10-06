@@ -17,6 +17,7 @@ internal static class ProductGuiSelfTest
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
             TestAutomaticReview(Require);
+            TestLiveCurveApply(Require);
             TestSessionLogs(Require);
             ProductAutomaticActivationSelfTest.Run(Require);
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());
@@ -536,8 +537,36 @@ internal static class ProductGuiSelfTest
     [System.Runtime.InteropServices.DllImport("user32.dll")]private static extern uint GetGuiResources(IntPtr process,uint flags);
     private static TelemetrySnapshot Snapshot(DateTimeOffset timestamp,double cpu,double gpu,double cpuLoad,double gpuLoad)=>new(timestamp,"Intel i7-13700H",cpu,18,cpuLoad,"RTX 4060 Laptop",gpu,42,gpuLoad,3020,2980)
     {CpuCoreTemperatures=[new(0,0,"Performance",cpu+3)]};
+    private static void TestLiveCurveApply(Action<bool,string> require)
+    {
+        var dir=Path.Combine(Path.GetTempPath(),"vfc-live-curve-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(dir);
+        try
+        {
+            var runtime=new RecordingRuntime();var path=Path.Combine(dir,"profiles.json");
+            using var form=new ProductForm("fixture://curve-apply",fixture:runtime,fixtureProfiles:new ProductProfiles(),profilesPath:path);
+            form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Page=ProductPage.Curves;
+            form.EditNode(3,60,30);var curve=form.Draft.Ac.Fan.UnifiedDemand!;
+            form.HandleCommand("curve-apply");require(runtime.Commands==0,"Firmware Apply acquired authority.");
+            var active=new ProductRuntimeState{AutomaticAuthorized=true,Runtime="Healthy",Source="Ac",AppliedFanProfile="Ac",
+                FanMode="Automatic",FanAuthority="Custom",Snapshot=Snapshot(DateTimeOffset.UtcNow,50,40,10,10)};
+            runtime.Publish(active);canvas.Refresh();
+            require(canvas.CanApplyCurve&&canvas.Hits.Any(h=>h.Id=="curve-apply"&&h.Enabled),"Live Apply button missing or disabled for active source.");
+            form.HandleCommand("curve-apply");PumpUntil(()=>!canvas.Busy,"Live Apply did not drain.");
+            require(runtime.Commands==1&&runtime.LastCurveSource==ProductPowerProfile.Ac&&runtime.LastCurve!.Curve.SequenceEqual(curve.Curve)&&
+                form.Dirty&&!File.Exists(path),"Apply saved settings, lost draft data or dispatched another operation.");
+            form.HandleCommand("profile-battery");form.HandleCommand("curve-apply");require(runtime.Commands==1,"Apply accepted the inactive battery profile.");
+            form.HandleCommand("profile-ac");runtime.Publish(active with{LifecycleBlocked=true});form.HandleCommand("curve-apply");require(runtime.Commands==1,"Apply accepted a blocked lifecycle.");
+            runtime.Publish(active with{AutomaticPreparing=true});form.HandleCommand("curve-apply");require(runtime.Commands==1,"Apply accepted a pending activation.");
+            runtime.Publish(active with{Snapshot=active.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-10)}});form.HandleCommand("curve-apply");require(runtime.Commands==1,"Apply accepted stale telemetry.");
+            var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Live Apply fixture shutdown failed.");exit.GetAwaiter().GetResult();
+        }
+        finally{Directory.Delete(dir,true);}
+    }
     private sealed class RecordingRuntime:IProductRuntime
     {
+        internal ProductPowerProfile? LastCurveSource;
+        internal UnifiedFanDemand? LastCurve;
+        public Task ApplyFanCurveAsync(ProductPowerProfile source,UnifiedFanDemand demand){Commands++;LastCurveSource=source;LastCurve=demand with{Curve=demand.Curve.ToArray()};return Task.CompletedTask;}
         public event Action<ProductRuntimeState>? Changed;
         public ProductRuntimeState State {get;}=new();
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;

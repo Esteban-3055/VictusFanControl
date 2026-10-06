@@ -315,7 +315,9 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Azul: edición · gris: preset inicial del perfil, solo lectura.",892,231,17,Muted,737);DrawCurve(g,new(958,298,634,350),true);
         var selected=SelectedNode>=0&&SelectedNode<points.Count?points[SelectedNode]:null;
         DrawText(g,selected is null?"Selecciona un nodo; flechas ajustan demanda/nivel.":$"Punto {SelectedNode+1}: demanda {selected.Input:0} % · nivel {selected.Level:0}",892,728,18,Muted,737);
-        Button(g,"save","Guardar curva e influencias",new(894,763,325,48),true);Button(g,"curve-defaults","Valores iniciales del perfil",new(1235,763,389,48));
+        Button(g,"save","Guardar curva e influencias",new(894,763,325,48),true);
+        Button(g,"curve-apply","Aplicar",new(1235,763,133,48),false,CanApplyCurve);
+        Button(g,"curve-defaults","Restablecer perfil",new(1383,763,241,48));
     }
     private void SimulationPage(Graphics g)
     {
@@ -339,6 +341,9 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Modelo de demanda; no valida SafetyGate, RPM ni respuesta física.",889,798,17,Yellow,730);
     }
     private static string VariableName(int index)=>new[]{"Temperatura CPU","Temperatura GPU","Potencia CPU","Potencia GPU","Carga CPU","Carga GPU"}[index];
+    internal bool CanApplyCurve => !Busy && State.AutomaticAuthorized && !State.AutomaticPreparing && !State.LifecycleBlocked &&
+        State.Runtime=="Healthy" && State.FanMode=="Automatic" && State.FanAuthority=="Custom" &&
+        State.Source==Editing.ToString() && State.AppliedFanProfile==Editing.ToString() && FreshSnapshot is not null;
     internal IReadOnlyList<ProductDemandMarker> CurrentDemandMarkers()
     {
         var live=FreshSnapshot;var sample=State.AutomaticDecisionSnapshot;

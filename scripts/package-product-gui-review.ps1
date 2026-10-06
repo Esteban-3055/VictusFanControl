@@ -22,7 +22,7 @@ $entries = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-O
 $manifest = [ordered]@{
     schemaVersion=1;kind='VictusFanControl.ProductGuiReview';sourceHead=$SourceHead
     inheritedRcZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
-    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu90-confirm-2000ms-cpu99-immediate-raw-response';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';productDemand='unified-max-six-influences-v1';productProfiles='v2-preserves-v1-backup';files=$entries
+    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu90-confirm-2000ms-cpu99-immediate-raw-response';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';curveApply='explicit-live-unified-preserves-session-inertia';productDemand='unified-max-six-influences-v1';productProfiles='v2-preserves-v1-backup';files=$entries
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'PRODUCT-GUI-MANIFEST.json') -Encoding utf8
 & (Join-Path $OutputDirectory 'Start-ProductGui.ps1') -Mode Verify
