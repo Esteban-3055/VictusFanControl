@@ -333,7 +333,7 @@ internal static class FrequencyReadOnlyProbe
 
     private static string Hex(ulong value) => $"0x{value:X16}";
 
-    private static string Csv(string value) => "\\\"" + value.Replace("\\\"", "\\\"\\\"") + "\\\"";
+    private static string Csv(string value) => "\"" + value.Replace("\"", "\"\"") + "\"";
 
     private static void WriteJson(string path, object value)
     {
