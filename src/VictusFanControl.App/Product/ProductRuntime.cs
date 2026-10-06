@@ -215,7 +215,8 @@ internal sealed class ProductRuntime : IProductRuntime
                         snapshotTimestamp = snapshot.Timestamp, guardian = status, remainingSeconds = _automaticReview?.RemainingSeconds }));
                 void AdmitSource(bool requireMatchedLimits)
                 {
-                    _automaticActivation.EnsureCurrent(_activeAutomaticTicket!);
+                    if (!_automaticActivation.IsCurrent(_activeAutomaticTicket!))
+                        throw new OperationCanceledException("Transición cancelada por la selección de Firmware o la liberación de límites.");
                     if (_closing || _lifecycleBlocked || _controller.Mode != AdaptiveFanProductionMode.Automatic ||
                         new WindowsPerformancePowerSourceReader().Read().Source.ToString() != expected)
                         throw new InvalidOperationException("Fuente o sesión cambiaron durante la transición Automatic.");
@@ -274,6 +275,12 @@ internal sealed class ProductRuntime : IProductRuntime
                 if (decision.Action == AdaptiveFanProductionActionKind.Blocked || decision.Action == AdaptiveFanProductionActionKind.RestoreFirmware)
                     throw new InvalidOperationException(decision.Detail);
                 Publish($"Prueba Automatic · {_selectedFanProfile} · nivel {decision.EqualFanLevel?.ToString() ?? "—"} · {_automaticReview?.RemainingSeconds} s restantes.");
+            }
+            catch (OperationCanceledException) when (!_closing && !_lifecycleBlocked &&
+                _activeAutomaticTicket is { } ticket && !_automaticActivation.IsCurrent(ticket))
+            {
+                await SetFanModeAsync(AdaptiveFanProductionMode.Firmware);
+                Publish("Transición cancelada; ventiladores en Firmware.");
             }
             catch (Exception ex)
             {

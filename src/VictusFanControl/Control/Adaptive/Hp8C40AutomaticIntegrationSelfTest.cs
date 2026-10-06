@@ -436,6 +436,13 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,default);
             clock=1000;var sample=Sample(Now(),40) with{GpuTemperatureC=35,GpuPowerW=5};
             await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            clock+=1000;sample=sample with{Timestamp=Now()};
+            controller.EvaluateAutomaticSafety(sample,Raw(sample),observe:true);
+            var cancelled=false;
+            try{await controller.ObserveAutomaticSourceWaitAsync(sample,()=>throw new OperationCanceledException("Firmware click"),default);}
+            catch(OperationCanceledException){cancelled=true;}
+            Check(cancelled&&backend.Levels.SequenceEqual(new[]{12})&&backend.Restores==0,
+                "cancelled source wait mutated policy or dispatched hardware");
             for(var i=0;i<3;i++)
             {
                 clock+=1000;sample=sample with{Timestamp=Now()};
