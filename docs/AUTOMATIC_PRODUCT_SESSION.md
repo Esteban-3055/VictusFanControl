@@ -210,3 +210,46 @@ activar una vez, repetir el uso habitual durante 60–90 s y exportar dentro del
 plazo de cinco minutos. Si vuelve a Firmware, exportar en ese momento; el motivo
 distinguirá umbral crítico, confirmación vencida o pérdida de adquisición.
 No combinar este ensayo con un cambio de curva o ampliación de reloj GPU.
+
+
+## Ensayo de recuperación y protección crítica — sesión 04:30 UTC
+
+El diagnóstico de sesión `20261006T043042114Z-e618184c52d74340b150aeb14ac66ce5`
+corresponde al paquete 4945206. Automatic se activó a 01:30:53.649 Santiago;
+registró 163 decisiones y se interrumpió a 01:34:56.116, tras 242.47 s.
+Tres picos iniciaron confirmación y recuperaron sin abandonar Automatic:
+
+| Hora Santiago | CPU control | Recuperación siguiente | Tiempo entre muestras |
+|---|---:|---:|---:|
+| 01:31:19.061 | 91 °C (package 83, core 91) | 87 °C | 0.998 s |
+| 01:33:18.391 | 91 °C | 72 °C | 1.095 s |
+| 01:33:25.401 | 93 °C | 79 °C | 1.088 s |
+
+Hubo seis decisiones de respuesta térmica raw, incluidas subidas 13→17→21,
+35→39→43 y 42→46. Los RPM observados durante el tramo llegaron a 4600/4600.
+La igualdad de la solicitud no garantiza igualdad exacta de cada lectura RPM.
+
+La muestra final a 01:34:56.113 reporta package 98 °C y un P-Core a 100 °C:
+CPU control=100 °C, por encima del retorno inmediato de 99 °C. CPU 24.77 W,
+GPU 74 °C/57.34 W, fans 3700/3700 RPM. Performance seguía en CPU Active/GPU
+ActiveUnverified con CPU 35/50 W y GPU 210–1800 MHz. Firmware fue aceptado
+a 01:34:57.170 (~1.05 s después del registro de interrupción). La siguiente
+muestra, ya en Firmware, CPU 72 °C, llegó 2.066 s después del disparo.
+No se atribuye causalidad física al consumo de esa muestra ni se concluye que
+los límites eviten picos críticos. No hubo vencimiento de los cinco minutos.
+
+El comportamiento de interrupción crítica es el previsto. El mensaje
+`Prueba Automatic requiere SafetyGate vigente y Healthy` ocultaba el motivo:
+la admisión efectiva ya había cerrado por temperatura, aunque Runtime siguiera
+Healthy. Se corrige para identificar CPU control, package, núcleo máximo,
+umbral y retorno inmediato. Los rechazos por epoch/orden se identifican por
+separado; los demás rechazos conservan las Reasons originales de SafetyGate.
+Un pico CPU admitido no se etiqueta como causa de un rechazo independiente
+GPU/potencia. No se cambian temperaturas, plazos, curvas, límites ni gates.
+
+Resultado físico parcial: recuperaciones CPU 91–93 °C observadas y retorno
+crítico por core 100 °C observado. No es una cualificación completa: el tramo
+no contiene recuperaciones CPU 95–98 °C con SafetyGate raw térmico, ni pruebas
+Battery/transición/lifecycle. El estado al exportar es Healthy/Firmware con
+bloqueo de revisión y límites aún activos. No se cambia ese bloqueo a reentrada
+automática ni se declara estabilidad térmica general.

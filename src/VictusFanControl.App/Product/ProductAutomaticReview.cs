@@ -48,17 +48,19 @@ internal sealed class ProductAutomaticReview
             if (!_started.HasValue || Expired) throw new InvalidOperationException("Prueba Automatic finalizada; volver a Firmware.");
             CheckCpuDeadline();
             static bool Within(double? value, double maximum) => value.HasValue && double.IsFinite(value.Value) && value.Value >= 0 && value.Value <= maximum;
+            var cpuSpikeAdmitted = _healthySamples >= Hp8C40AutomaticFinalQualificationGate.RequiredHealthyPreWriteSamples &&
+                ReferenceEquals(snapshot, _observed);
             if (!snapshot.IsComplete ||
                 !Within(snapshot.CpuControlTemperatureC, 110) || snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC ||
                 (snapshot.CpuControlTemperatureC > Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC &&
-                    (_healthySamples < Hp8C40AutomaticFinalQualificationGate.RequiredHealthyPreWriteSamples || !ReferenceEquals(snapshot, _observed))) ||
+                    !cpuSpikeAdmitted) ||
                 !Within(snapshot.GpuTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC) ||
                 !Within(snapshot.CpuPackagePowerW, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW) ||
                 !Within(snapshot.GpuPowerW, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW))
-                throw new InvalidOperationException(EnvelopeFailure(snapshot));
+                throw new InvalidOperationException(EnvelopeFailure(snapshot, cpuSpikeAdmitted));
         }
     }
-    internal static string EnvelopeFailure(TelemetrySnapshot snapshot)
+    internal static string EnvelopeFailure(TelemetrySnapshot snapshot, bool cpuSpikeAdmitted = false)
     {
         var failures = new List<string>();
         void Check(string name, double? value, double maximum, string unit)
@@ -67,8 +69,10 @@ internal sealed class ProductAutomaticReview
             else if (value.Value > maximum) failures.Add($"{name} {value.Value:0.##} {unit} > {maximum:0.##} {unit}");
         }
         if (snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC)
-            failures.Add($"CPU temperatura {snapshot.CpuControlTemperatureC:0.##} °C >= {CpuImmediateHandoffC:0} °C (retorno inmediato)");
-        else Check("CPU temperatura", snapshot.CpuControlTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC, "°C");
+            failures.Add($"CPU temperatura de control {snapshot.CpuControlTemperatureC:0.##} °C >= {CpuImmediateHandoffC:0} °C " +
+                $"(paquete {snapshot.CpuTemperatureC:0.##} °C; núcleo más caliente {snapshot.CpuCoreMaxTemperatureC:0.##} °C; retorno inmediato a Firmware)");
+        else Check("CPU temperatura", snapshot.CpuControlTemperatureC,
+            cpuSpikeAdmitted ? CpuImmediateHandoffC : Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC, "°C");
         Check("CPU potencia", snapshot.CpuPackagePowerW, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW, "W");
         Check("GPU temperatura", snapshot.GpuTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC, "°C");
         Check("GPU potencia", snapshot.GpuPowerW, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW, "W");
@@ -82,8 +86,18 @@ internal sealed class ProductAutomaticReview
             // Only real acquisitions open/reset the spike window. Preview never counts
             // a sample; a late cool acquisition cannot rescue an expired window.
             CheckCpuDeadline();
-            if (!safety.CustomControlPermitted || safety.SnapshotTimestamp != snapshot.Timestamp || safety.EvaluationSequence <= 0)
-                throw new InvalidOperationException("Prueba Automatic requiere SafetyGate vigente y Healthy.");
+            if (safety.SnapshotTimestamp != snapshot.Timestamp || safety.EvaluationSequence <= 0)
+                throw new InvalidOperationException("Prueba Automatic requiere una evaluación de control vigente y de la misma adquisición.");
+            if (!safety.CustomControlPermitted)
+            {
+                // Effective admission deliberately rejects a critical raw core
+                // before the review envelope. Preserve that actual cause instead
+                // of calling a Healthy runtime an unspecified SafetyGate fault.
+                if (safety.ThermalEmergency && snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC)
+                    throw new InvalidOperationException(EnvelopeFailure(snapshot));
+                var reasons = safety.Reasons.Count > 0 ? string.Join("; ", safety.Reasons) : "SafetyGate no permite control Custom.";
+                throw new InvalidOperationException("Prueba Automatic interrumpida por SafetyGate: " + reasons);
+            }
             if (_lastSample.HasValue && (snapshot.Timestamp <= _lastSample.Value || snapshot.Timestamp - _lastSample.Value > SafetyGate.MaximumTelemetryAge))
                 throw new InvalidOperationException("Prueba Automatic recibió una adquisición repetida o discontinua.");
             var previous = _observed;

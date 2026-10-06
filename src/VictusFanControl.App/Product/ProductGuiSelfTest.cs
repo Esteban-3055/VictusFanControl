@@ -223,6 +223,21 @@ internal static class ProductGuiSelfTest
         Rejected(()=>review.Observe(badSafety,Safety(badSafety) with{SnapshotFresh=false,CustomControlPermitted=false}),"Stale high acquisition entered spike admission.");
         require(ProductAutomaticReview.AcquisitionBudget(1200,700)==700&&ProductAutomaticReview.AcquisitionBudget(null,700)==700&&
             ProductAutomaticReview.AcquisitionBudget(1200,null)==1200&&ProductAutomaticReview.AcquisitionBudget(null,null) is null,"Acquisition budget extended a thermal deadline.");
+        // Regression from session e618184c: package 98 C is below 99 C,
+        // but the hottest core is 100 C and effective admission has already closed.
+        var actualCritical=Sample(4300,98) with{CpuCoreTemperatures=[new(0,0,"Performance",100)]};
+        string Failure(Action action){try{action();throw new Exception("Expected review rejection.");}catch(InvalidOperationException ex){return ex.Message;}}
+        var criticalReason=Failure(()=>review.Observe(actualCritical,Safety(actualCritical) with{CustomControlPermitted=false,ThermalEmergency=true}));
+        require(criticalReason.Contains("control 100 °C >= 99 °C")&&criticalReason.Contains("paquete 98 °C")&&
+            criticalReason.Contains("núcleo más caliente 100 °C")&&criticalReason.Contains("Firmware")&&!criticalReason.Contains("Healthy"),
+            "Effective critical admission hid the actual package/hottest-core cause.");
+        var epochReason=Failure(()=>review.Observe(actualCritical,Safety(actualCritical) with{SnapshotTimestamp=actualCritical.Timestamp.AddSeconds(-1),CustomControlPermitted=false,ThermalEmergency=true}));
+        require(epochReason.Contains("misma adquisición")&&!epochReason.Contains("control 100"),"Mismatched safety reported an unrelated thermal cause.");
+        var staleReason=Failure(()=>review.Observe(badSafety,Safety(badSafety) with{SnapshotFresh=false,CustomControlPermitted=false,Reasons=["Telemetry is stale."]}));
+        require(staleReason.Contains("Telemetry is stale."),"SafetyGate rejection discarded its underlying reasons.");
+        var gpuWhileCpuPending=ProductAutomaticReview.EnvelopeFailure(Sample(4400,96) with{GpuTemperatureC=83},cpuSpikeAdmitted:true);
+        require(gpuWhileCpuPending.Contains("GPU temperatura 83 °C > 82 °C")&&!gpuWhileCpuPending.Contains("CPU temperatura"),
+            "Admitted CPU spike was falsely blamed for an independent GPU rejection.");
         // Explicit review still starts in Firmware, and editing/saving never dispatches a curve.
         var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://review",fixture:runtime,fixtureProfiles:new ProductProfiles(),automaticReview:true);
         form.Show();Application.DoEvents();require(runtime.Commands==0&&form.Canvas.State.FanMode=="Firmware","Review auto-started control.");
