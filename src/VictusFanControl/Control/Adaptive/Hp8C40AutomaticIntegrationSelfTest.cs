@@ -114,6 +114,35 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
                 "raw core at 99 C restores Firmware immediately despite Average below 50 C");
         }
 
+        // Product review opts into raw-heat response. Historical prepared
+        // qualification settings remain reproducible above.
+        clock=0;var productBackend=new Backend();
+        await using(var coordinator=new FanControlCoordinator(productBackend))
+        {
+            var configuration=new FanConfiguration();
+            var controller=new AdaptiveFanProductionController(coordinator,configuration.BuildPolicy(),true,true,
+                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,
+                automaticConfiguration:configuration,useRawCpuThermalResponse:true);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,CancellationToken.None);
+            var cold=Sample(Now(),63) with{GpuTemperatureC=35,CpuCoreTemperatures=Sample(Now()).CpuCoreTemperatures.Select(c=>c with{TemperatureC=45}).ToArray()};
+            var initial=await controller.ProcessAutomaticAsync(cold,Raw(cold),CancellationToken.None);
+            clock=100;var spike=cold with{Timestamp=Now(),CpuTemperatureC=96};
+            var raw=Raw(spike);var effective=controller.EvaluateAutomaticSafety(spike,raw,observe:true);
+            var raised=await controller.ProcessAutomaticAsync(spike,raw,CancellationToken.None);
+            Check(raw.ThermalEmergency&&effective.CustomControlPermitted&&initial.EqualFanLevel==30&&
+                raised.ThermalOverride&&raised.EqualFanLevel==34&&raised.ActuationDemandLevel>=44,
+                "product review CPU package 96 C raises fans immediately despite cool core-average demand");
+            clock=1200;var recovered=cold with{Timestamp=Now(),CpuTemperatureC=62};
+            var held=await controller.ProcessAutomaticAsync(recovered,Raw(recovered),CancellationToken.None);
+            Check(held.Action==AdaptiveFanProductionActionKind.HoldCustom&&held.EqualFanLevel==34&&
+                coordinator.Authority==FanAuthority.Custom&&productBackend.Restores==0&&controller.AutomaticAcquisitionBudgetMilliseconds is null,
+                "timely recovered product spike retains Automatic and slow descent");
+            clock=1300;var critical=cold with{Timestamp=Now(),CpuTemperatureC=99};
+            var stopped=await controller.ProcessAutomaticAsync(critical,Raw(critical),CancellationToken.None);
+            Check(stopped.Action==AdaptiveFanProductionActionKind.RestoreFirmware&&productBackend.Restores==1,
+                "product raw response preserves immediate CPU 99 C handoff");
+        }
+
         foreach (var source in new[]{CpuDemandTemperatureSource.PerformanceCoreAverage, CpuDemandTemperatureSource.HottestPerformanceCoresAverage})
         {
             clock=0;

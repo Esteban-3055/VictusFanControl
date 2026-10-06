@@ -27,6 +27,7 @@ internal sealed record ProductRuntimeState
     internal string? AutomaticSessionId { get; init; }
     internal TelemetrySnapshot? AutomaticDecisionSnapshot { get; init; }
     internal int? AutomaticReviewRemainingSeconds { get; init; }
+    internal int? AutomaticCpuSpikeRemainingMilliseconds { get; init; }
     internal AdaptiveFanProductionResult? AutomaticDecision { get; init; }
     internal FanConfiguration? AppliedAutomaticConfiguration { get; init; }
     internal bool PerformanceSupported { get; init; }
@@ -125,13 +126,15 @@ internal sealed class ProductRuntime : IProductRuntime
             backend.CanWrite && (Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized || _automaticReview is not null),
             automaticHardware: _target == Hp8C40TargetProfile.Instance ? _hardware : null,
             automaticConfiguration: profiles.Ac.Fan,
-            automaticMinimumLevel: _automaticReview is not null ? 10 : Hp8C40AutomaticPolicy.MinimumLevel);
+            automaticMinimumLevel: _automaticReview is not null ? 10 : Hp8C40AutomaticPolicy.MinimumLevel,
+            useRawCpuThermalResponse: _automaticReview is not null);
         WmiFanExperimentBoundary.PlannedGuiRelease = () => _plannedFanRelease;
         _performance = new(modules);
         _worker = new(modules)
         {
             FreshFanAcquisitionRequired = () => _controller.AutomaticFreshAcquisitionRequired,
-            AcquisitionBudgetMilliseconds = () => _controller.AutomaticAcquisitionBudgetMilliseconds,
+            AcquisitionBudgetMilliseconds = () => ProductAutomaticReview.AcquisitionBudget(
+                _controller.AutomaticAcquisitionBudgetMilliseconds, _automaticReview?.RemainingCpuSpikeMilliseconds),
             NormalPollingDelayMilliseconds = () => _controller.AutomaticNormalPollingDelayMilliseconds,
             SnapshotProcessor = ProcessAutomaticAsync
         };
@@ -188,10 +191,20 @@ internal sealed class ProductRuntime : IProductRuntime
                     _performance.AppliedConfiguration, _performance.LastStatus, _performance.LastStatusFresh, expected))
                     throw new InvalidOperationException("Automatic interrumpido: CPU/GPU sin confirmación vigente o Performance Guardian en recuperación.");
                 var raw = SafetyGate.Evaluate(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
-                if (_automaticReview is not null && !_automaticReview.Observe(snapshot,raw))
+                // Use the shared bounded 8C40 admission, rather than rejecting the
+                // unchanged raw SafetyGate's first CPU >=95 C sample here.
+                var effective = _controller.EvaluateAutomaticSafety(snapshot, raw, observe: true);
+                var wasCpuPending = _automaticReview?.RemainingCpuSpikeMilliseconds.HasValue == true;
+                if (_automaticReview is not null && !_automaticReview.Observe(snapshot,effective))
                 {
                     Publish("Prueba Automatic: verificando tres adquisiciones Healthy antes de controlar."); return;
                 }
+                var cpuPending = _automaticReview?.RemainingCpuSpikeMilliseconds.HasValue == true;
+                if (cpuPending != wasCpuPending)
+                    AppLog.Write("PRODUCT AUTOMATIC CPU SPIKE: " + System.Text.Json.JsonSerializer.Serialize(new
+                    { automaticSessionId = _automaticSessionId, snapshotTimestamp = snapshot.Timestamp,
+                        cpuControlTemperatureC = snapshot.CpuControlTemperatureC, pending = cpuPending,
+                        remainingMilliseconds = _automaticReview?.RemainingCpuSpikeMilliseconds }));
                 var decision = await _controller.ProcessAutomaticAsync(snapshot,raw,token, refreshRawSafetyProvider: () =>
                 {
                     if (!ReferenceEquals(_snapshot,snapshot) || _closing || _lifecycleBlocked) return null;
@@ -404,6 +417,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 FanMode = _controller.Mode.ToString(), FanAuthority = _fans.Authority.ToString(), FanLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedLevel : null,
                 ManualAuthorized = _controller.ManualExecutionAuthorized, AutomaticAuthorized = _controller.AutomaticExecutionAuthorized,
                 AutomaticReview = _automaticReview is not null, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
+                AutomaticCpuSpikeRemainingMilliseconds = _automaticReview?.RemainingCpuSpikeMilliseconds,
                 AutomaticPreparing = _automaticActivation.Pending, AutomaticSessionId = _automaticSessionId, AutomaticDecisionSnapshot = _automaticDecisionSnapshot, AutomaticInterruptionSnapshot = _automaticInterruptionSnapshot,
                 AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticDecision : null,
                 AppliedAutomaticConfiguration = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _controller.AutomaticConfiguration : null,

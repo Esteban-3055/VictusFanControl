@@ -106,8 +106,12 @@ guardar/importar o cambiar la pestaña AC/Batería no aplica límites.
 ## Prueba física pendiente
 
 `Start-ProductGui.ps1 -Mode AutomaticReview` requiere 8C40/F.18, empieza en
-Firmware y conserva la revisión de 300 s, tres adquisiciones Healthy y el margen
-CPU ≤90 °C/60 W, GPU ≤82 °C/75 W. Una liberación voluntaria limpia permite
+Firmware y conserva la revisión de 300 s y tres adquisiciones iniciales Healthy
+con CPU ≤90 °C/60 W y GPU ≤82 °C/75 W. Durante AutomaticReview activo,
+CPU >90 y <99 °C recibe hasta 2000 ms para recuperar con una muestra fresca;
+CPU ≥99 °C retorna inmediatamente. Potencia y GPU no reciben esa espera.
+La respuesta térmica usa el máximo raw, omite EMA y conserva subida de 4 niveles.
+El contrato completo está en AUTOMATIC_PRODUCT_SESSION.md. Una liberación voluntaria limpia permite
 reaplicar una curva modificada. Un fallo real, cambio de fuente, lifecycle o
 vencimiento conserva el bloqueo y ahora muestra su motivo en Ventiladores.
 

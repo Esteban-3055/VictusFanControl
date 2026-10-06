@@ -48,6 +48,7 @@ public sealed class AdaptiveFanProductionController
     private readonly AdaptiveFanPolicyEngine _engine;
     private AdaptiveFanInertiaPolicy? _preparedEngine;
     private readonly int _automaticMinimumLevel;
+    private readonly bool _useRawCpuThermalResponse;
     private FanConfiguration? _automaticConfiguration;
     public FanConfiguration? AutomaticConfiguration => _automaticConfiguration is null ? null : FanConfigurationStore.Copy(_automaticConfiguration);
     public int AutomaticNormalPollingDelayMilliseconds => _automaticConfiguration?.Tuning.NormalPollingDelayMilliseconds ?? 1000;
@@ -79,7 +80,8 @@ public sealed class AdaptiveFanProductionController
         Func<long>? automaticMilliseconds = null,
         Func<DateTimeOffset>? utcNow = null,
         FanConfiguration? automaticConfiguration = null,
-        int automaticMinimumLevel = Hp8C40AutomaticPolicy.MinimumLevel)
+        int automaticMinimumLevel = Hp8C40AutomaticPolicy.MinimumLevel,
+        bool useRawCpuThermalResponse = false)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _engine = new AdaptiveFanPolicyEngine(
@@ -91,6 +93,7 @@ public sealed class AdaptiveFanProductionController
             (automaticMinimumLevel == 10 && (automaticHardware is null || coordinator.BackendCapabilities.MinimumLevel > 10)))
             throw new ArgumentException("Low Automatic envelope requires exact-target telemetry and a qualified 10-level backend.",nameof(automaticMinimumLevel));
         _automaticMinimumLevel = automaticMinimumLevel;
+        _useRawCpuThermalResponse = useRawCpuThermalResponse;
         if (automaticHardware is not null)
         {
             // Validate the exact target even while execution remains gated off.
@@ -875,7 +878,7 @@ public sealed class AdaptiveFanProductionController
             snapshot.CpuLoadPercent.Value,
             snapshot.GpuTemperatureC.Value,
             snapshot.GpuPowerW.Value,
-            snapshot.GpuLoadPercent.Value);
+            snapshot.GpuLoadPercent.Value) { CpuRawControlTemperatureC = _useRawCpuThermalResponse ? snapshot.CpuControlTemperatureC : null };
 
         failure = string.Empty;
         return true;

@@ -104,8 +104,13 @@ Cada activación toma una copia de la curva del perfil de la fuente real y esper
 en 10–50 en esta entrada explícita producto. La ruta preparada histórica conserva
 30–50. Manual conserva 10–50. Los defaults silenciosos nuevos requieren aceptación
 física y están documentados en QUIET_PRODUCT_PRESETS.md.
-La revisión comprueba CPU ≤90 °C/60 W y GPU ≤82 °C/75 W, incluida la temperatura
-del núcleo más caliente. Un dato inválido, cambio de fuente, lifecycle o error
+El inicio exige CPU ≤90 °C/60 W y GPU ≤82 °C/75 W. Durante la revisión activa,
+CPU >90 y <99 °C dispone de hasta 2000 ms para recuperar ≤90 °C con una
+adquisición fresca; CPU ≥99 °C retorna inmediatamente. Se usa MAX(package,
+núcleo más caliente). GPU y potencia conservan rechazo inmediato.
+La lectura pendiente omite la pausa normal; frío tardío no rearma la admisión.
+La respuesta térmica raw omite EMA/confirmación de subida y conserva el paso
+de 4 niveles. Ver AUTOMATIC_PRODUCT_SESSION.md para contrato y evidencia. Un dato inválido, cambio de fuente, lifecycle o error
 interrumpe la sesión y solicita Firmware; no rearma automáticamente.
 
 El plazo monotónico de 300 s se inicia tras confirmar límites y seleccionar el

@@ -14,6 +14,7 @@ Write-Host "Verified GUI build $($manifest.sourceHead). Physical validation rema
 if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }
 if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticReview -ne 'explicit-only-300s-10-to-50') { throw 'This package does not authorize the supervised Automatic review entry.' }
+if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticThermal -ne 'cpu90-confirm-2000ms-cpu99-immediate-raw-response') { throw 'This package does not include bounded CPU spike confirmation and raw thermal response.' }
 if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticPerformance -ne 'required-both-before-fans') { throw 'This package does not authorize the coupled CPU/GPU Automatic entry.' }
 $app = Join-Path $root 'VictusFanControl-0.4.0-rc.1-win-x64/app'
 Push-Location $app

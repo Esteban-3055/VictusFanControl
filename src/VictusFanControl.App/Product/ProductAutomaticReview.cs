@@ -8,6 +8,11 @@ namespace VictusFanControl.App;
 internal sealed class ProductAutomaticReview
 {
     internal const int MaximumSeconds = 300;
+    internal const int MaximumCpuSpikeMilliseconds = 2000;
+    internal const double CpuImmediateHandoffC = Hp8C40ThermalEmergencyConfirmation.CpuHardEmergencyC;
+    private long? _cpuHighSince;
+    private long? _lastClock;
+    private TelemetrySnapshot? _observed;
     private readonly Func<long> _milliseconds;
     private readonly object _sync = new();
     private long? _started;
@@ -15,18 +20,37 @@ internal sealed class ProductAutomaticReview
     private int _healthySamples;
     internal ProductAutomaticReview(Func<long>? milliseconds = null) => _milliseconds = milliseconds ?? (() => Environment.TickCount64);
     internal static bool IsAuthorized(bool requested, string? target) => requested && Hp8C40AutomaticFinalQualificationGate.IsAuthorizedForTarget(target);
-    internal void Start() { lock (_sync) { _started = _milliseconds(); _lastSample = null; _healthySamples = 0; } }
-    internal void Stop() { lock (_sync) _started = null; }
+    internal void Start() { lock (_sync) { _started = _milliseconds(); _lastSample = null; _healthySamples = 0; _cpuHighSince = null; _lastClock = _started; _observed = null; } }
+    internal void Stop() { lock (_sync) { _started = null; _cpuHighSince = null; _observed = null; } }
     internal int? RemainingSeconds { get { lock (_sync) return _started.HasValue ? (int)Math.Clamp((MaximumSeconds * 1000L - (_milliseconds() - _started.Value) + 999) / 1000, 0, MaximumSeconds) : null; } }
     internal bool Expired { get { lock (_sync) return _started.HasValue && (_milliseconds() < _started.Value || _milliseconds() - _started.Value >= MaximumSeconds * 1000L); } }
+    internal int? RemainingCpuSpikeMilliseconds
+    {
+        get { lock (_sync) return _started.HasValue && _cpuHighSince.HasValue
+            ? (int)Math.Clamp(MaximumCpuSpikeMilliseconds - (_milliseconds() - _cpuHighSince.Value), 0, MaximumCpuSpikeMilliseconds) : null; }
+    }
+    internal static int? AcquisitionBudget(int? coreBudget, int? reviewBudget) =>
+        coreBudget.HasValue && reviewBudget.HasValue ? Math.Min(coreBudget.Value, reviewBudget.Value) : coreBudget ?? reviewBudget;
+    private void CheckCpuDeadline()
+    {
+        var now = _milliseconds();
+        if (_lastClock.HasValue && now < _lastClock.Value)
+            throw new InvalidOperationException("Prueba Automatic recibió un reloj regresivo.");
+        _lastClock = now;
+        if (_cpuHighSince.HasValue && now - _cpuHighSince.Value >= MaximumCpuSpikeMilliseconds)
+            throw new InvalidOperationException("CPU temperatura sostenida > 90 °C durante 2000 ms; volver a Firmware.");
+    }
     internal void EnsureDispatchAllowed(TelemetrySnapshot snapshot)
     {
         lock (_sync)
         {
             if (!_started.HasValue || Expired) throw new InvalidOperationException("Prueba Automatic finalizada; volver a Firmware.");
+            CheckCpuDeadline();
             static bool Within(double? value, double maximum) => value.HasValue && double.IsFinite(value.Value) && value.Value >= 0 && value.Value <= maximum;
             if (!snapshot.IsComplete ||
-                !Within(snapshot.CpuControlTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC) ||
+                !Within(snapshot.CpuControlTemperatureC, 110) || snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC ||
+                (snapshot.CpuControlTemperatureC > Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC &&
+                    (_healthySamples < Hp8C40AutomaticFinalQualificationGate.RequiredHealthyPreWriteSamples || !ReferenceEquals(snapshot, _observed))) ||
                 !Within(snapshot.GpuTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC) ||
                 !Within(snapshot.CpuPackagePowerW, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW) ||
                 !Within(snapshot.GpuPowerW, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW))
@@ -41,7 +65,9 @@ internal sealed class ProductAutomaticReview
             if (!value.HasValue || !double.IsFinite(value.Value) || value.Value < 0) failures.Add(name + " no disponible o inválido");
             else if (value.Value > maximum) failures.Add($"{name} {value.Value:0.##} {unit} > {maximum:0.##} {unit}");
         }
-        Check("CPU temperatura", snapshot.CpuControlTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC, "°C");
+        if (snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC)
+            failures.Add($"CPU temperatura {snapshot.CpuControlTemperatureC:0.##} °C >= {CpuImmediateHandoffC:0} °C (retorno inmediato)");
+        else Check("CPU temperatura", snapshot.CpuControlTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC, "°C");
         Check("CPU potencia", snapshot.CpuPackagePowerW, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW, "W");
         Check("GPU temperatura", snapshot.GpuTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC, "°C");
         Check("GPU potencia", snapshot.GpuPowerW, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW, "W");
@@ -52,11 +78,20 @@ internal sealed class ProductAutomaticReview
     {
         lock (_sync)
         {
-            EnsureDispatchAllowed(snapshot);
+            // Only real acquisitions open/reset the spike window. Preview never counts
+            // a sample; a late cool acquisition cannot rescue an expired window.
+            CheckCpuDeadline();
             if (!safety.CustomControlPermitted || safety.SnapshotTimestamp != snapshot.Timestamp || safety.EvaluationSequence <= 0)
                 throw new InvalidOperationException("Prueba Automatic requiere SafetyGate vigente y Healthy.");
             if (_lastSample.HasValue && (snapshot.Timestamp <= _lastSample.Value || snapshot.Timestamp - _lastSample.Value > SafetyGate.MaximumTelemetryAge))
                 throw new InvalidOperationException("Prueba Automatic recibió una adquisición repetida o discontinua.");
+            var previous = _observed;
+            _observed = snapshot;
+            try { EnsureDispatchAllowed(snapshot); }
+            catch { _observed = previous; throw; }
+            if (snapshot.CpuControlTemperatureC > Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC)
+                _cpuHighSince ??= _milliseconds();
+            else _cpuHighSince = null;
             _lastSample = snapshot.Timestamp;
             return ++_healthySamples >= Hp8C40AutomaticFinalQualificationGate.RequiredHealthyPreWriteSamples;
         }

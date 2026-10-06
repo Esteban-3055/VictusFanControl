@@ -74,9 +74,13 @@ public class AdaptiveFanInertiaPolicy
         var decreaseSeconds = _tuning is { AdaptiveDescentEnabled: true } && !_loadHistory.SustainedLoadCooling
             ? _tuning.ShortLoadDecreaseConfirmationSeconds
             : _tuning?.DecreaseConfirmationSeconds ?? Settings.DecreaseConfirmationSeconds;
-        var thermalOverride = input.CpuEffectiveTemperatureC >= (_tuning?.CpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.CpuThermalOverrideC) ||
+        var thermalOverride = (input.CpuRawControlTemperatureC ?? input.CpuEffectiveTemperatureC) >= (_tuning?.CpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.CpuThermalOverrideC) ||
             input.GpuTemperatureC >= (_tuning?.GpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.GpuThermalOverrideC);
-        var smoothed = _finalFilter.Evaluate(input.Timestamp, demand.RawDemandLevel!.Value,
+        // Raw heat cannot be hidden by a cool core average or a low edited
+        // curve. Keep the protected four-level rise and established descent.
+        var thermalDemand = thermalOverride && input.CpuRawControlTemperatureC.HasValue
+            ? Math.Max(demand.RawDemandLevel!.Value, Math.Min(44, _config.MaximumLevel)) : demand.RawDemandLevel!.Value;
+        var smoothed = _finalFilter.Evaluate(input.Timestamp, thermalDemand,
             _config.MinimumLevel, _config.MaximumLevel, _config.MaximumSampleGap, thermalOverride, _loadHistory.SustainedLoadCooling);
         // Keep EMA history at full precision. Quantize only normal actuation;
         // raw thermal override must retain its existing conservative ceiling.
@@ -155,9 +159,11 @@ public class AdaptiveFanInertiaPolicy
             return false;
         }
         _loadHistory.Observe(input, _tuning);
-        var thermalOverride = input.CpuEffectiveTemperatureC >= (_tuning?.CpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.CpuThermalOverrideC) ||
+        var thermalOverride = (input.CpuRawControlTemperatureC ?? input.CpuEffectiveTemperatureC) >= (_tuning?.CpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.CpuThermalOverrideC) ||
             input.GpuTemperatureC >= (_tuning?.GpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.GpuThermalOverrideC);
-        _ = _finalFilter.Evaluate(input.Timestamp, demand.RawDemandLevel.Value,
+        var thermalDemand = thermalOverride && input.CpuRawControlTemperatureC.HasValue
+            ? Math.Max(demand.RawDemandLevel.Value, Math.Min(44, _config.MaximumLevel)) : demand.RawDemandLevel.Value;
+        _ = _finalFilter.Evaluate(input.Timestamp, thermalDemand,
             _config.MinimumLevel, _config.MaximumLevel, _config.MaximumSampleGap, thermalOverride, _loadHistory.SustainedLoadCooling);
         // Observations update demand/load history, never actuation or step counts.
         // Start the next confirmation window from a normal policy decision.

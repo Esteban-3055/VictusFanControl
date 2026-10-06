@@ -26,7 +26,12 @@ public sealed record AdaptiveFanPolicyInput(
     double CpuLoadPercent,
     double GpuTemperatureC,
     double GpuPowerW,
-    double GpuLoadPercent);
+    double GpuLoadPercent)
+{
+    // Demand aggregation is independent of the raw hottest/package guard.
+    // Legacy callers without per-core telemetry retain their original input.
+    public double? CpuRawControlTemperatureC { get; init; }
+}
 
 public sealed record AdaptiveFanPolicyDecision(
     bool Accepted,
@@ -315,7 +320,9 @@ public sealed class AdaptiveFanPolicyEngine
         AdaptiveFanPolicyInput input,
         out string failure)
     {
-        if (!double.IsFinite(input.CpuEffectiveTemperatureC) ||
+        if ((input.CpuRawControlTemperatureC.HasValue &&
+             (!double.IsFinite(input.CpuRawControlTemperatureC.Value) || input.CpuRawControlTemperatureC.Value is < 0 or > 125)) ||
+            !double.IsFinite(input.CpuEffectiveTemperatureC) ||
             input.CpuEffectiveTemperatureC is < 0 or > 125 ||
             !double.IsFinite(input.CpuPackagePowerW) ||
             input.CpuPackagePowerW is < 0 or > 500 ||

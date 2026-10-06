@@ -13,8 +13,10 @@ Primero se comprueba destino, Firmware, telemetría completa Healthy/vigente y
 fuente real conocida. Performance Guardian aplica CPU/GPU; se exige respuesta
 vigente, sesión habilitada, CPU Active, GPU ActiveUnverified, configuración
 idéntica y fuente coincidente. Solo entonces se configura la curva de la fuente
-real y se inicia la revisión de 300 s. Sus tres adquisiciones Healthy y márgenes
-CPU ≤90 °C/60 W, GPU ≤82 °C/75 W no se amplían.
+real y se inicia la revisión de 300 s. El inicio exige tres adquisiciones Healthy
+con CPU ≤90 °C/60 W y GPU ≤82 °C/75 W. Una vez establecida, la CPU dispone
+de la confirmación de picos acotada descrita abajo; GPU y potencia conservan
+sus rechazos inmediatos.
 
 Preparar Performance no retiene la cola de ventiladores ni detiene las lecturas.
 Firmware invalida el intento desde el clic, antes de esperar una cola. Una
@@ -136,8 +138,9 @@ límites de potencia/reloj garanticen por sí mismos ausencia de picos térmicos
 Los límites CPU/GPU seguían activos al exportar (9).
 
 La validación completa NO se declara PASS: faltan estabilidad bajo carga y
-transiciones de curva AC/Batería/lifecycle. Se conserva el margen CPU 90 °C,
-GPU 82 °C, CPU 60 W y GPU 75 W de esta revisión, y su ventana de 300 s.
+transiciones de curva AC/Batería/lifecycle. El inicio conserva CPU ≤90 °C; la revisión activa incorpora la confirmación
+temporal descrita abajo. GPU 82 °C, CPU 60 W, GPU 75 W y la ventana de 300 s
+conservan sus límites.
 El gate normal Automatic permanece cerrado. Las nuevas muestras por sesión
 permiten reconstruir el historial previo al disparo sin mezclar aperturas.
 
@@ -151,3 +154,59 @@ Registrar la carga/programa usado. El mismo ID de proceso une ambos ZIP y los
 IDs de activación separan los tramos Automatic. La ampliación GPU puede probarse
 por separado con Apply explícito en Firmware, incluyendo liberar/reset, sin
 combinarla con cambios de curva durante la prueba térmica.
+
+
+## Corrección de cancelaciones por picos CPU (6 de octubre de 2026)
+
+Sesión `20261006T040723439Z-31eef8824c4d4b94840eebeb8a7e4dad`, paquete
+4045d88: CPU 63 °C a 04:08:47.359 UTC, 96 °C a 04:08:48.723, 62 °C a
+04:08:50.821. La lectura de 96 °C (core máximo 93 °C, CPU 29.97 W,
+GPU 58 °C/23.53 W, fans 1900/1800 RPM) anuló la revisión por su veto
+instantáneo de 90 °C, antes de llegar al controlador. CPU 35/50 W y GPU
+210–1800 MHz seguían activos. La siguiente muestra ocurrió ya en Firmware
+2.098 s después: no prueba que una repetición dentro de 2 s habría recuperado,
+ni permite asegurar que la nueva versión evitará todo retorno.
+
+La entrada producto explícita ahora usa el resultado efectivo de la admisión
+8C40 existente, conservando el detector raw SafetyGate sin cambios. Tras tres
+muestras iniciales ≤90 °C, una adquisición CPU >90 y <99 °C abre una ventana
+monotónica máxima de 2000 ms. No se reinicia con otra muestra caliente ni con
+previews/repintados. Solo una adquisición nueva, completa, Healthy y vigente
+≤90 °C, recibida antes del plazo, la cancela. Una muestra fresca a tiempo
+mantiene Automatic; un plazo vencido rechaza incluso una muestra fría tardía.
+CPU ≥99 °C (package o cualquier núcleo) solicita Firmware inmediatamente.
+La confirmación compartida CPU ≥95 °C conserva además su veto tras cinco
+adquisiciones únicas consecutivas y su plazo de 2000 ms; ninguna capa amplía
+el presupuesto de la otra. GPU >82 °C, CPU >60 W, GPU >75 W, datos inválidos,
+pérdida de límites/owner, fuente y lifecycle siguen interrumpiendo sin espera.
+
+El worker no añade su pausa normal durante un pico: solicita lectura fresca
+secuencial con el menor presupuesto restante entre ambas capas. Si la adquisición
+no completa a tiempo, la ruta de fallo de telemetría cierra la sesión. El plazo
+se comprueba antes de cada despacho; no cancela una llamada de firmware ya
+iniciada ni garantiza latencia física de restauración.
+
+La revisión producto usa MAX(package, núcleo más caliente) para activar la
+respuesta térmica, separado del promedio P-Core configurable para demanda.
+A CPU ≥85 °C o GPU ≥78 °C (o umbral de respuesta más bajo configurado), el
+objetivo de respuesta es al menos nivel 44, limitado por el máximo configurado.
+Omite EMA y confirmación normal, pero conserva el paso protegido de hasta
+4 niveles por decisión y la bajada gradual. No salta directamente de 19 a 44.
+La curva en edición y sus preferencias no se reescriben. Este comportamiento
+se habilita solo para AutomaticReview; la ruta de cualificación histórica y
+el gate Automatic normal permanecen reproducibles. El simulador representa
+las seis señales de demanda, no la confirmación de seguridad de sensores raw.
+
+Cada inicio/recuperación de pico registra `PRODUCT AUTOMATIC CPU SPIKE` con
+ID de activación, timestamp, CPU raw, estado y presupuesto. El estado exporta
+`AutomaticCpuSpikeRemainingMilliseconds`; las muestras originales y el disparo
+permanecen en los registros de sesión. Las pruebas sin hardware cubren inicio
+caliente, recuperación, núcleo excluido del promedio, repetición/preview,
+calor sostenido, frío tardío, 99 °C inmediato, presupuesto mínimo y respuesta
+real del controlador con backend simulado. No constituyen validación física.
+
+Ensayo siguiente: conservar AC y los límites 35/50 W y GPU 1800 MHz utilizados,
+activar una vez, repetir el uso habitual durante 60–90 s y exportar dentro del
+plazo de cinco minutos. Si vuelve a Firmware, exportar en ese momento; el motivo
+distinguirá umbral crítico, confirmación vencida o pérdida de adquisición.
+No combinar este ensayo con un cambio de curva o ampliación de reloj GPU.

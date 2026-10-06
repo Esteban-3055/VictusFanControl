@@ -108,6 +108,21 @@ internal static class FanConfigurationSelfTest
             Require(AdaptiveFanInertiaPolicy.RoundNormalDemandToTenth(3.05) == 3.0 &&
                 AdaptiveFanInertiaPolicy.RoundNormalDemandToTenth(3.06) == 3.1);
         });
+        Check("raw CPU heat bypasses cool averages and low edited demand, with protected rise", () =>
+        {
+            var origin=DateTimeOffset.UtcNow;
+            var policy=new AdaptiveFanInertiaPolicy(configuration.BuildPolicy(),configuration.Tuning);
+            AdaptiveFanPolicyInput Input(int sec,double raw)=>new(origin.AddSeconds(sec),60,5,5,35,0,0)
+                {CpuRawControlTemperatureC=raw};
+            Require(policy.Evaluate(Input(0,63)).EqualFanLevel==26);
+            var high=policy.Evaluate(Input(1,96));
+            Require(high.Accepted&&high.ThermalOverride&&high.EqualFanLevel==30&&high.ActuationDemandLevel>=44);
+            var cool=policy.Evaluate(Input(2,62));Require(cool.Accepted&&!cool.ThermalOverride&&cool.EqualFanLevel==30);
+            Require(!policy.Evaluate(Input(3,double.NaN)).Accepted);
+            policy.Reset();Require(policy.Evaluate(Input(0,85)).ThermalOverride);
+            policy.Reset();var gpu=policy.Evaluate(Input(0,60) with{GpuTemperatureC=78});
+            Require(gpu.ThermalOverride&&gpu.ActuationDemandLevel>=44);
+        });
         Check("normal rise is faster, EMA retains precision, invalid input resets", () =>
         {
             var origin = DateTimeOffset.UtcNow;

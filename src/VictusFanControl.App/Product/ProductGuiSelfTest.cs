@@ -194,6 +194,35 @@ internal static class ProductGuiSelfTest
         Rejected(()=>review.EnsureDispatchAllowed(snapshot),"Expired review dispatched.");
         review.Stop();require(review.RemainingSeconds is null,"Stopped review retained a deadline.");
         review.Start();clock--;require(review.Expired,"Backwards clock admitted review.");
+        // The product review consumes the controller's effective safety, not a
+        // raw thermal-only veto. Startup still requires three cool acquisitions.
+        clock=0; review=new ProductAutomaticReview(()=>clock); review.Start();
+        var origin=snapshot.Timestamp;
+        TelemetrySnapshot Sample(int ms,double cpu=63)=>snapshot with{Timestamp=origin.AddMilliseconds(ms),CpuTemperatureC=cpu,
+            CpuCoreTemperatures=[new(0,0,"Performance",cpu)]};
+        var hotStart=Sample(0,96);
+        Rejected(()=>review.Observe(hotStart,Safety(hotStart)),"High CPU startup admitted review.");
+        for(var i=0;i<3;i++){clock=i*100;var cool=Sample(i*100);review.Observe(cool,Safety(cool));}
+        clock=300; var spike=Sample(300,96);
+        require(review.Observe(spike,Safety(spike))&&review.RemainingCpuSpikeMilliseconds==2000,"Isolated CPU spike cancelled established review.");
+        clock=800;review.EnsureDispatchAllowed(spike);review.EnsureDispatchAllowed(spike);
+        require(review.RemainingCpuSpikeMilliseconds==1500,"Dispatch previews renewed the CPU spike deadline.");
+        Rejected(()=>review.Observe(spike,Safety(spike)),"Repeated high acquisition counted as new.");
+        clock=1400;var recovered=Sample(1400,62);require(review.Observe(recovered,Safety(recovered))&&review.RemainingCpuSpikeMilliseconds is null,"Timely cool acquisition failed to clear spike.");
+        clock=1500;var coreSpike=Sample(1500,60) with{CpuCoreTemperatures=[new(0,0,"Performance",97)]};
+        require(review.Observe(coreSpike,Safety(coreSpike)),"Hottest-core spike was not admitted for confirmation.");
+        clock=2500;var sustained=Sample(2500,94);require(review.Observe(sustained,Safety(sustained)),"Early sustained sample escaped the bounded confirmation path.");
+        require(review.RemainingCpuSpikeMilliseconds==1000,"Another high sample reset the deadline.");
+        clock=3500;
+        Rejected(()=>review.EnsureDispatchAllowed(sustained),"Sustained CPU heat admitted dispatch at deadline.");
+        var lateCool=Sample(3500,62);Rejected(()=>review.Observe(lateCool,Safety(lateCool)),"Late cool acquisition rescued expired spike admission.");
+        review.Start();for(var i=0;i<3;i++){var cool=Sample(4000+i*100);review.Observe(cool,Safety(cool));}
+        foreach(var critical in new[]{Sample(4300,99),Sample(4300,60) with{CpuCoreTemperatures=[new(0,0,"Efficiency",99)]}})
+            Rejected(()=>review.Observe(critical,Safety(critical)),"CPU >=99 package/hottest-core did not hand off immediately.");
+        var badSafety=Sample(4300,96);
+        Rejected(()=>review.Observe(badSafety,Safety(badSafety) with{SnapshotFresh=false,CustomControlPermitted=false}),"Stale high acquisition entered spike admission.");
+        require(ProductAutomaticReview.AcquisitionBudget(1200,700)==700&&ProductAutomaticReview.AcquisitionBudget(null,700)==700&&
+            ProductAutomaticReview.AcquisitionBudget(1200,null)==1200&&ProductAutomaticReview.AcquisitionBudget(null,null) is null,"Acquisition budget extended a thermal deadline.");
         // Explicit review still starts in Firmware, and editing/saving never dispatches a curve.
         var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://review",fixture:runtime,fixtureProfiles:new ProductProfiles(),automaticReview:true);
         form.Show();Application.DoEvents();require(runtime.Commands==0&&form.Canvas.State.FanMode=="Firmware","Review auto-started control.");
