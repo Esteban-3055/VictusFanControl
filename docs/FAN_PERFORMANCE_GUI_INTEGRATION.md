@@ -218,3 +218,13 @@ Batería; GPU continúa ActiveUnverified y NVML puede rechazar valores.
 Las preferencias existentes no se sobrescriben; usar Valores iniciales del perfil
 para instalar el preset nuevo conservando PL1/PL2/GPU. La derivación, tablas,
 replay y límites de evidencia están en [QUIET_PRODUCT_PRESETS.md](QUIET_PRODUCT_PRESETS.md).
+
+## Automatic producto con límites como prerrequisito
+
+La selección explícita de Automatic prepara ambos límites y confirma su estado
+antes de seleccionar la curva. La cola Performance se mantiene separada de
+telemetría y Firmware. Una sesión idéntica se reutiliza sin Enable repetido;
+una diferente/parcial no se reemplaza. Liberar límites desde Automatic restaura
+primero fans. Las recuperaciones continúan independientes; no hay transacción
+atómica ni rearmado tras lifecycle/fallo. Ver
+[AUTOMATIC_PRODUCT_SESSION.md](AUTOMATIC_PRODUCT_SESSION.md).

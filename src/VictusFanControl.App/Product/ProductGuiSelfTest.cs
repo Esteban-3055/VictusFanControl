@@ -17,6 +17,7 @@ internal static class ProductGuiSelfTest
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
             TestAutomaticReview(Require);
+            ProductAutomaticActivationSelfTest.Run(Require);
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());
             form.ClientSize=new(1672,941);form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;canvas.Size=new(1672,941);
             Require(runtime.Commands==0,"Startup acquired authority.");
@@ -139,6 +140,9 @@ internal static class ProductGuiSelfTest
         Rejected(()=>review.EnsureDispatchAllowed(snapshot with{GpuTemperatureC=83}),"GPU thermal envelope escaped.");
         Rejected(()=>review.EnsureDispatchAllowed(snapshot with{CpuCoreTemperatures=[new(0,0,"Performance",91)]}),"Hottest-core envelope escaped.");
         Rejected(()=>review.EnsureDispatchAllowed(snapshot with{GpuPowerW=double.NaN}),"Nonfinite power admitted.");
+        require(ProductAutomaticReview.EnvelopeFailure(snapshot with{CpuPackagePowerW=61}).Contains("CPU potencia 61 W > 60 W") &&
+            !ProductAutomaticReview.EnvelopeFailure(snapshot with{CpuPackagePowerW=61}).Contains("GPU temperatura"),"Interruption reason did not identify the actual failed metric.");
+        require(ProductAutomaticReview.EnvelopeFailure(snapshot with{GpuPowerW=double.NaN}).Contains("GPU potencia no disponible"),"Invalid telemetry lost its interruption cause.");
         clock+=299999;require(!review.Expired,"Review expired before deadline.");clock++;
         require(review.Expired&&review.RemainingSeconds==0,"Review deadline escaped.");
         Rejected(()=>review.EnsureDispatchAllowed(snapshot),"Expired review dispatched.");
@@ -149,6 +153,8 @@ internal static class ProductGuiSelfTest
         form.Show();Application.DoEvents();require(runtime.Commands==0&&form.Canvas.State.FanMode=="Firmware","Review auto-started control.");
         runtime.Publish(runtime.State with{AutomaticAuthorized=true,AutomaticReview=true,Runtime="Healthy"});
         form.HandleCommand("fan-mode-2");PumpUntil(()=>!form.Canvas.Busy,"Review mode command did not finish.");require(runtime.Commands==1,"Explicit Automatic click was not dispatched once.");
+        runtime.Publish(runtime.State with{AutomaticAuthorized=true,AutomaticReview=true,Runtime="Healthy",FanMode="Automatic"});
+        form.HandleCommand("fan-mode-2");require(runtime.Commands==1&&form.Canvas.Notice.Contains("no se renueva"),"Repeated Automatic click reapplied control or lost its bounded-review notice.");
         form.EditNode(3,70,35);require(runtime.Commands==1,"Curve editing dispatched hardware in review.");
         runtime.Publish(runtime.State with{AutomaticAuthorized=true,LifecycleBlocked=true});form.HandleCommand("fan-mode-2");require(runtime.Commands==1,"Interrupted review rearmed from GUI.");
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Review fixture shutdown failed.");exit.GetAwaiter().GetResult();
@@ -304,12 +310,17 @@ internal static class ProductGuiSelfTest
                 var previous=ProductProfilesStore.Serialize(form.Draft);File.WriteAllText(backup,"broken");import=form.ImportProfilesAsync(backup);PumpUntil(()=>import.IsCompleted,"Invalid import blocked.");
                 require(previous==ProductProfilesStore.Serialize(form.Draft)&&!string.IsNullOrWhiteSpace(canvas.Notice),"Invalid import replaced the draft.");
                 var log=Path.Combine(dir,"fixture-events.log");File.WriteAllText(log,new string('x',2*1024*1024+100));var diagnostic=Path.Combine(dir,"diagnostic.zip");
+                var interrupted=Snapshot(DateTimeOffset.UtcNow.AddSeconds(-5),40,35,61,5);
+                canvas.State=canvas.State with{AutomaticInterruptionSnapshot=interrupted,Snapshot=interrupted with{CpuPackagePowerW=10},AppliedPerformance=new ProductProfiles().PerformanceConfiguration()};
                 var bundle=form.ExportDiagnosticsAsync(diagnostic,log);PumpUntil(()=>bundle.IsCompleted,"Diagnostic export blocked.");bundle.GetAwaiter().GetResult();
                 using(var zip=System.IO.Compression.ZipFile.OpenRead(diagnostic))
                 {
                     require(zip.Entries.Count==4&&zip.GetEntry("profiles-draft.json") is not null&&zip.GetEntry("events-tail.log")!.Length<=2*1024*1024,"Diagnostic leaked extra files or exceeded log bounds.");
                     using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
                     require(state.RootElement.GetProperty("physicalQualification").GetString()=="not-established-by-this-export","Diagnostic fabricated physical qualification.");
+                    require(state.RootElement.GetProperty("AutomaticInterruptionSnapshot").GetProperty("CpuPackagePowerW").GetDouble()==61 &&
+                        state.RootElement.GetProperty("snapshot").GetProperty("CpuPackagePowerW").GetDouble()==10 &&
+                        state.RootElement.GetProperty("AppliedPerformance").GetProperty("CpuEnabled").GetBoolean(),"Later healthy telemetry erased the triggering sample or applied limits from diagnostics.");
                 }
                 require(File.ReadAllText(path)==savedBytes&&runtime.Commands==0,"Diagnostic mutated preferences or dispatched hardware.");
                 form.HandleCommand("discard");

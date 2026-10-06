@@ -30,8 +30,23 @@ internal sealed class ProductAutomaticReview
                 !Within(snapshot.GpuTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC) ||
                 !Within(snapshot.CpuPackagePowerW, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW) ||
                 !Within(snapshot.GpuPowerW, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW))
-                throw new InvalidOperationException("Prueba Automatic fuera de su margen: CPU ≤90 °C/60 W, GPU ≤82 °C/75 W y telemetría completa.");
+                throw new InvalidOperationException(EnvelopeFailure(snapshot));
         }
+    }
+    internal static string EnvelopeFailure(TelemetrySnapshot snapshot)
+    {
+        var failures = new List<string>();
+        void Check(string name, double? value, double maximum, string unit)
+        {
+            if (!value.HasValue || !double.IsFinite(value.Value) || value.Value < 0) failures.Add(name + " no disponible o inválido");
+            else if (value.Value > maximum) failures.Add($"{name} {value.Value:0.##} {unit} > {maximum:0.##} {unit}");
+        }
+        Check("CPU temperatura", snapshot.CpuControlTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC, "°C");
+        Check("CPU potencia", snapshot.CpuPackagePowerW, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW, "W");
+        Check("GPU temperatura", snapshot.GpuTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC, "°C");
+        Check("GPU potencia", snapshot.GpuPowerW, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW, "W");
+        if (!snapshot.IsComplete) failures.Add("telemetría incompleta");
+        return "Prueba Automatic fuera de su margen: " + string.Join("; ", failures) + ".";
     }
     internal bool Observe(TelemetrySnapshot snapshot, SafetyGateResult safety)
     {

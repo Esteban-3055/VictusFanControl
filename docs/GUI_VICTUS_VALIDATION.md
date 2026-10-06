@@ -2,7 +2,8 @@
 
 Este documento corresponde a la GUI normal `ProductForm`. Los PASS de software y
 las capturas de CI no prueban el comportamiento físico del Victus. Bloques 2/3,
-Automatic normal y clocks GPU personalizados permanecen pendientes/cerrados.
+Automatic normal permanece cerrado. Los clocks GPU se ajustan dentro del rango
+conservador de producto; la estabilidad física de cada ajuste sigue pendiente.
 
 ## Preparación
 
@@ -14,7 +15,7 @@ módulos PawnIO fijados, manifiestos y este recorrido. Requiere Windows x64,
 El `README-RC.txt` y los JSON P14 del payload son contratos históricos conservados
 para reproducibilidad. Para la fase actual usar este documento y
 `GUI_PRODUCT_PHASE.md`: Manual está sujeto al gate vigente del destino exacto;
-Automatic normal y clocks GPU personalizados siguen cerrados. El manifiesto
+Automatic normal sigue cerrado; GPU admite ajustes conservadores. El manifiesto
 `PRODUCT-GUI-MANIFEST.json` identifica el HEAD y los hashes de esta compilación.
 
 Desde PowerShell, en la carpeta extraída:
@@ -45,8 +46,9 @@ o un cambio de RPM como prueba de ownership. No ejecutar stress simultáneo.
 | 4. CPU/GPU y fuente | En Firmware, conservar GPU AC 1850/Batería 1200 y mínimo 210; Aplicar CPU/GPU; desconectar/conectar cargador; Liberar | Estado CPU y GPU por separado, GPU ActiveUnverified cuando corresponde; fuente Windows separada del perfil confirmado por Guardian; reset/release documentado |
 | 5. Lifecycle y salida | Con sesión apropiada, probar pantalla Off/On y suspensión/reanudación; observar recuperación; salir desde bandeja y volver a abrir | Liberaciones y revalidación; ventiladores interrumpidos no se rearman automáticamente; salida limpia o fallo explícito con journals conservados |
 
-Para el grupo 4 no aplicar máximos GPU distintos de los dos valores cualificados.
-Los valores personalizados se pueden editar/guardar, pero Aplicar los rechaza.
+Para el primer ensayo del grupo 4 conservar los defaults GPU 1850/1200 MHz.
+Los valores personalizados dentro del rango conservador se admiten; la aceptación
+NVML no demuestra una lectura independiente del rango.
 Probar CPU y GPU juntas ahorra una sesión; si hay fallo parcial, registrar ambos
 dominios y liberar mediante la GUI antes de repetir. Si falla restauración,
 detener ese grupo y conservar los informes; continuar solo con revisión visual.
@@ -92,7 +94,8 @@ de recursos de Windows, no una prueba física de ventiladores.
 Entrada separada: `Start-ProductGui.ps1 -Mode AutomaticReview`. `Open` y el inicio
 con Windows conservan Automatic cerrado. El modo de prueba exige el destino
 exacto 8C40/F.18 mediante el gate de cualificación existente; no abre el gate normal.
-Arranca en Firmware, no aplica CPU/GPU y requiere seleccionar Automatic explícitamente.
+Arranca en Firmware sin límites aplicados. Seleccionar Automatic explícitamente
+aplica ambos límites CPU/GPU antes de configurar la curva.
 No admite otra entrada de cualificación simultánea. Performance utiliza su propio
 Guardian y puede convivir con esta revisión; validar primero cada dominio por separado.
 
@@ -105,7 +108,8 @@ La revisión comprueba CPU ≤90 °C/60 W y GPU ≤82 °C/75 W, incluida la temp
 del núcleo más caliente. Un dato inválido, cambio de fuente, lifecycle o error
 interrumpe la sesión y solicita Firmware; no rearma automáticamente.
 
-El plazo monotónico de 300 s se inicia con el clic Automatic y se verifica antes
+El plazo monotónico de 300 s se inicia tras confirmar límites y seleccionar el
+modo Automatic; no consume tiempo durante la preparación. Se verifica antes
 del despacho. El supervisor solicita Firmware al vencer el plazo, con hasta 2 s
 entre comprobaciones. El plazo no cancela una llamada de firmware ya despachada.
 La finalización bloquea una nueva activación hasta reiniciar tras liberación limpia.
@@ -114,7 +118,8 @@ También puede seleccionarse Firmware antes del plazo.
 Primer ensayo, con cargador conectado y sin carga artificial:
 1. Salir de la GUI anterior desde la bandeja; conservar logs/journals.
 2. Abrir el paquete nuevo con `-Mode AutomaticReview`; esperar Healthy y fuente Ac.
-3. Mantener CPU/GPU sin aplicar y seleccionar Automatic una vez.
+3. Seleccionar Automatic una vez; esperar CPU Active y GPU ActiveUnverified
+   antes de observar la curva. Automatic habilita ambos dominios.
 4. Observar 30–60 s y exportar diagnóstico mientras Automatic esté activo.
 5. Volver a Firmware, esperar 20 s y exportar otro diagnóstico.
 
@@ -124,3 +129,15 @@ cada decisión y solicitudes WMI. Las RPM y solicitudes aceptadas no prueban
 ownership ni setpoint exacto. Cambiar/guardar un borrador no modifica la curva
 en ejecución. Para otro ensayo: Firmware, editar, y seleccionar Automatic de nuevo
 antes del vencimiento. No desenchufar, suspender ni añadir carga en el primer ensayo.
+
+## Automatic con límites CPU/GPU
+
+La entrada `AutomaticReview` ahora aplica ambos límites CPU/GPU al seleccionar
+Automatic, aunque sus interruptores individuales estén apagados. Usa los valores
+en edición, comienza en Firmware y espera confirmación de Performance Guardian
+antes de iniciar la curva. Repetir el clic no reescribe límites ni renueva la
+revisión de cinco minutos. Volver a Firmware conserva la sesión Performance;
+Liberar CPU/GPU vuelve primero a Firmware si Automatic está activo.
+Consultar [AUTOMATIC_PRODUCT_SESSION.md](AUTOMATIC_PRODUCT_SESSION.md) para
+transiciones, fallos y la siguiente prueba combinada. Las curvas por cambio de
+fuente y la reentrada tras interrupciones siguen sin reaplicación automática.

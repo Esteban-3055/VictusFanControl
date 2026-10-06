@@ -202,7 +202,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         Tabs(g,"fan-tab-",["Control de ventiladores","Estado y telemetría","Curvas","Reglas y seguridad"],FanTab);
         if(FanTab==1){TelemetryPage(g);return;}if(FanTab==2){Curves(g,true);return;}if(FanTab==3){SafetyPage(g);return;}
         Card(g,new(311,161,1338,268));DrawText(g,"Modo de control",333,181,26,null,1100,true);
-        string[] modes=["Firmware","Manual","Automático"],captions=["Control del sistema (BIOS)","Nivel fijo para CPU y GPU","Curvas del perfil de fuente real"];
+        string[] modes=["Firmware","Manual","Automático"],captions=["Control del sistema (BIOS)","Nivel fijo para CPU y GPU","Curva + límites CPU y GPU"];
         string[] icons=["fan","profiles","curve"];
         for(int i=0;i<3;i++){var r=new RectangleF(334+i*433,224,411,182);bool selected=State.FanMode==(i==2?"Automatic":modes[i]);Card(g,r,selected);
             Icon(g,icons[i],r.X+175,r.Y+22,48,selected?Blue:Muted);DrawText(g,modes[i],r.X+35,r.Y+90,27,null,r.Width-60,true);DrawText(g,captions[i],r.X+35,r.Y+128,20,Muted,r.Width-60);
@@ -217,6 +217,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Editando: "+ProfileName+" · Aplicado: "+(State.AppliedFanProfile??"Ninguno"),945,513,19,Muted,675);
         DrawCurve(g,new(972,590,625,145),false);
         if(State.LifecycleBlocked)DrawText(g,State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.",937,755,18,Yellow,685);
+        else if(State.AutomaticPreparing)DrawText(g,"Preparando CPU/GPU; Firmware cancela la entrada a Automatic.",937,755,18,Muted,685);
         else if(State.AutomaticReview)DrawText(g,"Prueba 10–50 · "+(State.AutomaticReviewRemainingSeconds is { } seconds?$"{seconds} s restantes":"máximo 5 min por activación"),937,755,18,Muted,685);
     }
     private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit,bool compact=false)
@@ -259,7 +260,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(1148,253,500,570));DrawText(g,"Estado y aplicación",1178,276,28,null,438,true);
         DrawText(g,"CPU: "+State.CpuState,1178,341,23,DomainColor(State.CpuState,Green),438);DrawText(g,"GPU: "+State.GpuState,1178,388,23,DomainColor(State.GpuState,Blue),438);
         DrawText(g,"Aplicado: "+AppliedCpu(),1178,438,22,Muted,438);DrawText(g,AppliedGpu(),1178,480,22,Muted,438);
-        DrawText(g,"Editar y guardar no aplican hardware. Aplicar usa la fuente real y los valores en edición de ambos perfiles.",1178,537,22,Muted,438);
+        DrawText(g,"Automatic activa ambos límites. Aplicar usa los interruptores CPU/GPU. Editar y guardar no aplican hardware.",1178,537,22,Muted,438);
         Button(g,"save","Guardar configuración",new(1178,655,438,48),false);
         Button(g,"performance-apply","Aplicar CPU / GPU",new(1178,714,438,48),true,State.PerformanceSupported&&State.CanApplyPerformance&&(Profiles.CpuEnabled||Profiles.GpuEnabled));
         Button(g,"performance-release","Liberar CPU / GPU",new(1178,773,438,48),false,State.PerformanceProcessPresent);

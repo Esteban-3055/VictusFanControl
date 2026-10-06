@@ -81,6 +81,11 @@ PL1, PL2 y máximo GPU previamente editados. Instalar un paquete no aplica hardw
 
 ## CPU/GPU de uso normal
 
+Actualización: seleccionar Automatic prepara ambos límites antes de la curva,
+reutiliza una sesión idéntica y requiere confirmación vigente. Los casos de
+reaplicación/cancelación y los límites del autoarranque están detallados en
+[AUTOMATIC_PRODUCT_SESSION.md](AUTOMATIC_PRODUCT_SESSION.md).
+
 CPU PL1/PL2 usa el rango de producto, validación PL2≥PL1, journal y recuperación
 por Performance Guardian. Defaults CPU AC 35/60 W y Batería 8/15 W permanecen.
 GPU ajustable AC 210–1850 MHz y Batería 210–1200 MHz, mínimo locked 210 MHz.

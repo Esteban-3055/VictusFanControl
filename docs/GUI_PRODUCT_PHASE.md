@@ -396,3 +396,11 @@ Batería; GPU continúa ActiveUnverified y NVML puede rechazar valores.
 Las preferencias existentes no se sobrescriben; usar Valores iniciales del perfil
 para instalar el preset nuevo conservando PL1/PL2/GPU. La derivación, tablas,
 replay y límites de evidencia están en [QUIET_PRODUCT_PRESETS.md](QUIET_PRODUCT_PRESETS.md).
+
+## Activación conjunta de Automatic
+
+Automatic ahora habilita CPU/GPU con el perfil congelado antes de iniciar fans.
+El estado vigente de ambos dominios es una condición continua del control.
+No cambia el gate normal, el inicio Firmware ni la revisión de cinco minutos.
+La matriz completa de aplicación, cancelación y casos sin rearmado está en
+[AUTOMATIC_PRODUCT_SESSION.md](AUTOMATIC_PRODUCT_SESSION.md).
