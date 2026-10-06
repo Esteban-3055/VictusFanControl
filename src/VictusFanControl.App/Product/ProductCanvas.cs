@@ -270,7 +270,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(1148,253,500,570));DrawText(g,"Estado y aplicación",1178,276,28,null,438,true);
         DrawText(g,"CPU: "+State.CpuState,1178,341,23,DomainColor(State.CpuState,Green),438);DrawText(g,"GPU: "+State.GpuState,1178,388,23,DomainColor(State.GpuState,Blue),438);
         DrawText(g,"Aplicado: "+AppliedCpu(),1178,438,22,Muted,438);DrawText(g,AppliedGpu(),1178,480,22,Muted,438);
-        DrawText(g,State.PerformanceProcessPresent?"Límites activos. Para cambiarlos, desactiva primero CPU/GPU. Firmware conserva los límites; desactivarlos devuelve los ventiladores a Firmware.":"Editar y guardar no aplican límites. Aplicar usa la selección CPU/GPU; Automático activa ambos.",1178,537,22,Muted,438,height:108);
+        DrawText(g,State.PerformanceProcessPresent?"Para cambiar, desactiva CPU/GPU. Firmware conserva límites; desactivarlos vuelve a Firmware.":"Editar y guardar no aplican límites. Aplicar usa la selección CPU/GPU; Automático activa ambos.",1178,537,22,Muted,438,height:108);
         Button(g,"save","Guardar configuración",new(1178,655,438,48),false);
         Button(g,"performance-apply","Aplicar CPU / GPU",new(1178,714,438,48),true,State.PerformanceSupported&&State.CanApplyPerformance&&(Profiles.CpuEnabled||Profiles.GpuEnabled));
         Button(g,"performance-release","Desactivar límites CPU / GPU",new(1178,773,438,48),false,State.PerformanceProcessPresent);
