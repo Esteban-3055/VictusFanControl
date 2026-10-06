@@ -55,7 +55,7 @@ internal sealed partial class ProductCanvas
     }
     private void Advanced(Graphics g)
     {
-        DrawText(g,"Ajustes avanzados",320,87,30,null,1200,true);
+        DrawText(g,"Avanzado",320,87,30,null,1200,true);
         DrawText(g,"Respuesta común para AC y Batería · curvas y límites siguen siendo independientes",320,132,20,Muted,1300);
         string[] tabs=["Temperatura CPU","Suavizado e inercia","Historial de carga","Respuesta térmica"];
         for(int i=0;i<4;i++)Button(g,"advanced-tab-"+i,tabs[i],new(320+i*334,180,317,49),AdvancedTab==i);

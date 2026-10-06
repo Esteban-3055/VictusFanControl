@@ -1,4 +1,4 @@
-# Ajustes avanzados del producto
+# Avanzado
 
 La nueva entrada lateral recupera opciones que consume el motor actual, sin
 reintroducir el editor de seis curvas, exportaciones antiguas, autorizaciones ni
@@ -53,8 +53,11 @@ disponible para un inicio posterior.
 ## Pendientes para cerrar la versión
 
 La prueba prolongada del motor está documentada en PRODUCT_VALIDATION_STATUS.md.
-La nueva aplicación de ajustes dispone de fixtures sin hardware; falta una
-regresión corta en el Victus. El cambio de límites CPU/GPU en vivo propuesto es
+La aplicación de ajustes dispone de fixtures sin hardware y una regresión física
+breve aprobada: filtro de subida 7 → 8 s durante la misma activación, diagnóstico
+`20261006T204954587Z-1c74bf2b83ad43f7bf160eda608d5932`. Esto no certifica todos los
+parámetros, la suspensión ni el cambio de definición de carga bajo carga real.
+El cambio de límites CPU/GPU en vivo propuesto es
 una tarea independiente del Guardian y todavía no está implementado. Mientras
 tanto el panel de rendimiento explica que Firmware conserva los límites y que
 Desactivar límites sale de Automático a Firmware antes de liberarlos; Manual mantiene su control independiente.

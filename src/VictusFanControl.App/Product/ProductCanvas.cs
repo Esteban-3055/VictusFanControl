@@ -128,7 +128,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         using(var p=new Pen(Border)) {g.DrawLine(p,0,64,1672,64);g.DrawLine(p,279,64,279,882);g.DrawLine(p,0,882,1672,882);}
         Icon(g,"fan",24,16,36,Blue);DrawText(g,"VictusFanControl",76,17,25,null,220,true);DrawText(g,"│",288,16,26,Muted,25);DrawText(g,State.Hardware,328,18,23,Muted,1070);
         Button(g,"window-minimize","−",new(1450,8,54,45));Button(g,"window-maximize","□",new(1524,8,54,45));Button(g,"window-close","×",new(1598,8,54,45));
-        string[] names=["Inicio","Ventiladores","Rendimiento","Perfiles","Curvas","Monitorización","Configuración","Ajustes avanzados"];
+        string[] names=["Inicio","Ventiladores","Rendimiento","Perfiles","Curvas","Monitorización","Configuración","Avanzado"];
         string[] icons=["home","fan","chart","profiles","curve","pulse","settings","settings"];
         for(int i=0;i<names.Length;i++)
         {
@@ -216,14 +216,15 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Button(g,"firmware","Volver a Firmware",new(581,734,287,70));
         Card(g,new(915,450,734,378));DrawText(g,"Curva del perfil · "+ProfileName,937,468,25,null,685,true);
         DrawText(g,"Editando: "+ProfileName+" · Aplicado: "+(State.AppliedFanProfile??"Ninguno"),945,513,19,Muted,675);
-        DrawCurve(g,new(972,590,625,145),false);
-        if(State.LifecycleBlocked)DrawText(g,State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.",937,755,18,Yellow,685);
-        else if(State.AutomaticPreparing)DrawText(g,"Preparando CPU/GPU; Firmware cancela la entrada a Automatic.",937,755,18,Muted,685);
+        // Reserve separate rows for ticks, the X-axis title and both review status lines.
+        DrawCurve(g,new(972,585,625,110),false);
+        if(State.LifecycleBlocked)DrawText(g,State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.",937,775,18,Yellow,685,height:47);
+        else if(State.AutomaticPreparing)DrawText(g,"Preparando CPU/GPU; Firmware cancela la entrada a Automatic.",937,775,18,Muted,685,height:47);
         else if(State.AutomaticReview)
         {
-            DrawText(g,"Prueba 10–50 · "+(State.AutomaticReviewRemainingSeconds is { } seconds?$"{seconds} s restantes":$"máximo {(State.AutomaticReviewMaximumSeconds ?? ProductAutomaticReview.MaximumSeconds) / 60} min por activación"),937,755,18,Muted,685);
+            DrawText(g,"Prueba 10–50 · "+(State.AutomaticReviewRemainingSeconds is { } seconds?$"{seconds} s restantes":$"máximo {(State.AutomaticReviewMaximumSeconds ?? ProductAutomaticReview.MaximumSeconds) / 60} min por activación"),937,775,18,Muted,685,height:24);
             if(State.AutomaticDecision?.ObservedLoadSeconds is { } loaded)
-                DrawText(g,$"Carga acumulada: {loaded / 60:0.0} min · "+(State.AutomaticDecision.SustainedLoadCooling==true?"descenso de carga prolongada":"descenso de actividad breve"),937,786,17,Muted,685);
+                DrawText(g,$"Carga acumulada: {loaded / 60:0.0} min · "+(State.AutomaticDecision.SustainedLoadCooling==true?"descenso de carga prolongada":"descenso de actividad breve"),937,801,17,Muted,685,height:23);
         }
     }
     private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit,bool compact=false)
@@ -380,7 +381,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         }
         var applied=markers.FirstOrDefault(m=>m.IsApplied);var preview=markers.FirstOrDefault(m=>!m.IsApplied);
         DrawText(g,(simulated is not null?"● Simulado":applied is null?"● Solicitud: —":$"● Solicitud: {applied.Level:0}")+" · ○ Objetivo"+(preview is null?"":$" {preview.Input:0.0} %")+(preview?.Observation.ThermalProtection==true?" · Protección térmica":""),plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
-        DrawText(g,"Demanda (%)",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300);DrawText(g,"Nivel común · 10–50",plot.Left,plot.Top-41,19,Muted,275);
+        DrawText(g,"Demanda (%)",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300,height:26);DrawText(g,"Nivel común · 10–50",plot.Left,plot.Top-41,19,Muted,275);
         if(editable){DrawText(g,"● Curva editable",plot.Left+275,plot.Top-41,16,Blue,170);DrawText(g,"┄ Preset inicial",plot.Left+449,plot.Top-41,16,Muted,185);}
     }
     private void TelemetryPage(Graphics g)

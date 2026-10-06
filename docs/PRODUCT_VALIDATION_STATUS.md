@@ -15,6 +15,7 @@ Las pruebas del equipo histórico 88F8 no sustituyen la evidencia de este destin
 | Curvas aplicadas en vivo | Diagnóstico `20261006T163959090Z-28cde682f9524671b1511d131eebce2d` | Cinco Apply en una activación; CPU 92 → 48 °C en 1.041 s, sin renovar el plazo |
 | Automatic continuo AC → Batería → AC en la GUI actual | `release/product-gui-source-transition-8c40-2026-10-06.json` | HEAD f669831; 203 muestras completas, CPU control máximo 77 °C/GPU 39 °C; misma activación, sin bloqueo ni interrupción |
 | Carga prolongada y enfriamiento con el motor actual | `release/product-gui-sustained-load-8c40-2026-10-06.json` | HEAD fbed6fd; 2083 muestras completas, una activación sin interrupciones, 1815.785 s de carga acumulada; descenso prolongado y retorno a breve tras reposo |
+| Aplicación en vivo desde Avanzado | `release/product-gui-live-tuning-8c40-2026-10-06.json` | HEAD 0db58a2; filtro 7 → 8 s en la misma activación, 123 muestras completas, sin interrupciones ni renovación del plazo; CPU/GPU activos |
 
 No repetir estas pruebas básicas para declarar nuevamente sus subsistemas PASS.
 Una modificación posterior requiere regresión de las rutas que cambió, con su
@@ -22,7 +23,6 @@ alcance específico; no invalida automáticamente los resultados anteriores.
 
 ## Pendientes del motor y GUI actuales
 
-- Regresión física breve de la nueva aplicación de ajustes avanzados en vivo.
 - Actualización CPU/GPU en vivo: propuesta pendiente de implementar y validar; la sesión actual exige desactivar los límites antes de reemplazar su configuración.
 - Regresión de display/suspensión y salida con la integración Automatic actual.
 - Promoción posterior de Automatic normal y decisiones de arranque/reentrada.
@@ -56,7 +56,7 @@ Los modos habituales conservan segmentos de 5 MiB y exportación de 2 MiB por fl
 
 ## Regresión agrupada preparada: duración y enfriamiento ya observados
 
-Los pasos 1–3 siguientes conservan el procedimiento histórico. La sesión `20261006T192934603Z-bb911eb9b49a4941b33a4829eba25943` ya aprueba carga y enfriamiento en AC con CPU 25/40 W y GPU 1996 MHz. No repetirlos para aprobar otra vez la misma función. Los pasos 4–5 y la regresión de ajustes nuevos siguen pendientes.
+Los pasos 1–3 siguientes conservan el procedimiento histórico. La sesión `20261006T192934603Z-bb911eb9b49a4941b33a4829eba25943` ya aprueba carga y enfriamiento en AC con CPU 25/40 W y GPU 1996 MHz. No repetirlos para aprobar otra vez la misma función. La regresión breve de Avanzado también está aprobada. Los pasos 4–5 siguen pendientes.
 
 1. Salir normalmente de la GUI anterior. Extraer un paquete nuevo, Verify, abrir
    con `-Mode AutomaticExtendedReview`. Mantener AC y los valores ya usados:
@@ -103,3 +103,18 @@ readback contemporáneo para evaluar una sobrescritura externa.
 El registro aprueba comportamiento observado con esa configuración y el motor
 anterior a la nueva aplicación de ajustes. No certifica la GUI modificada, la
 expiración de los 45 minutos, la suspensión actual ni el uso desatendido.
+
+## Evaluación del diagnóstico de las 17:52
+
+Paquete 0db58a2, 123 muestras completas y 46 decisiones. Activación única
+`12944dd91d9948d09628f2bd5c02010f`: empezó con filtro de subida de 7 s y a las
+17:51:17.745 se aplicaron 8 s desde Avanzado. El registro conserva el mismo ID,
+2696 s restantes al aplicar y 2633 s al exportar; no se renovó el reloj de 45 min.
+La configuración final confirma 8 s. CPU/GPU conservan 25/40 W y 1996 MHz en AC,
+CPU Active y GPU ActiveUnverified. No hubo interrupciones ni recuperación después
+de la validación inicial. CPU máximo 68 °C y GPU 37 °C, en actividad ligera.
+
+Aprueba exclusivamente esta actualización de respuesta en vivo. No prueba todos
+los parámetros, el cambio de definición de carga, el rango NVIDIA exacto ni
+propiedad independiente de ventiladores. El cierre hacia versión final se detalla
+en PRODUCT_FINAL_RELEASE_PLAN.md.

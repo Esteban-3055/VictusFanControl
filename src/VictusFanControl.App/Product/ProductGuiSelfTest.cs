@@ -157,6 +157,13 @@ internal static class ProductGuiSelfTest
             var curveMarkers=canvas.CurrentDemandMarkers();
             Require(curveMarkers.Count==2&&curveMarkers.Single(m=>m.IsApplied).Level==31,"Accepted request marker was replaced by draft interpolation.");
             canvas.Page=ProductPage.Fans;canvas.FanTab=0;Render("fans-live-demand-marker");
+            var markerState=canvas.State;
+            canvas.State=markerState with{AutomaticReview=true,AutomaticReviewMaximumSeconds=2700,AutomaticReviewRemainingSeconds=2633,
+                AutomaticDecision=markerState.AutomaticDecision! with{ObservedLoadSeconds=0,SustainedLoadCooling=false}};
+            Render("fans-review-brief-layout");canvas.Size=new(1040,660);Render("fans-review-brief-minimum-layout");
+            canvas.State=canvas.State with{AutomaticDecision=canvas.State.AutomaticDecision! with{ObservedLoadSeconds=1815.785,SustainedLoadCooling=true}};
+            Render("fans-review-sustained-minimum-layout");canvas.Size=new(1672,941);Render("fans-review-sustained-layout");
+            canvas.State=markerState;
             canvas.Page=ProductPage.Curves;Render("editor-live-demand-marker");
             canvas.Profiles=canvas.Profiles with{Ac=canvas.Profiles.Ac with{Fan=markerConfig with{UnifiedDemand=markerConfig.UnifiedDemand! with{Curve=[new(0,10),new(90,10),new(100,50)]}}}};
             var changedMarkers=canvas.CurrentDemandMarkers();
