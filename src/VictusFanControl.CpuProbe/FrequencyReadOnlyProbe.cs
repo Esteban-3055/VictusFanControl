@@ -18,6 +18,7 @@ internal static class FrequencyReadOnlyProbe
     private const uint MsrPlatformInfo = 0xCE;
     private const uint MsrIa32PerfStatus = 0x198;
     private const uint MsrTurboRatioLimit = 0x1AD;
+    private const uint MsrSecondaryTurboRatioLimit = 0x650;
     private const uint MsrPkgPowerLimit = 0x610;
     private const uint MsrIa32PmEnable = 0x770;
     private const uint MsrIa32HwpCapabilities = 0x771;
@@ -33,6 +34,8 @@ internal static class FrequencyReadOnlyProbe
             Directory.CreateDirectory(options.OutputDirectory);
             using var session = new PawnIoModuleSession(options.ModulePath);
 
+            var cpuid1 = X86Base.CpuId(0x01, 0);
+            var cpuid1Eax = unchecked((uint)cpuid1.Eax);
             var cpuid6 = X86Base.CpuId(0x06, 0);
             var cpuid6Eax = unchecked((uint)cpuid6.Eax);
             var logicalCount = Environment.ProcessorCount;
@@ -42,6 +45,7 @@ internal static class FrequencyReadOnlyProbe
 
             var platformInfo = ReadRequired(session, 0, MsrPlatformInfo);
             var turboRatioLimit = ReadRequired(session, 0, MsrTurboRatioLimit);
+            var secondaryTurboRatioLimit = TryRead(session, 0, MsrSecondaryTurboRatioLimit);
             var packagePowerLimit = ReadRequired(session, 0, MsrPkgPowerLimit);
 
             var hwpRows = new List<object>(logicalCount);
@@ -76,6 +80,13 @@ internal static class FrequencyReadOnlyProbe
                 IntelModuleSha256 = moduleHash,
                 ReadOnly = true,
                 WritesAttempted = 0,
+                Cpuid01 = new
+                {
+                    Eax = $"0x{cpuid1Eax:X8}",
+                    DisplayFamily = DecodeDisplayFamily(cpuid1Eax),
+                    DisplayModel = DecodeDisplayModel(cpuid1Eax),
+                    Stepping = (int)(cpuid1Eax & 0xF)
+                },
                 Cpuid06 = new
                 {
                     Eax = $"0x{cpuid6Eax:X8}",
@@ -91,12 +102,21 @@ internal static class FrequencyReadOnlyProbe
                     MaxNonTurboRatioField = (int)((platformInfo >> 8) & 0xFF),
                     ProgrammableTurboRatioLimit = ((platformInfo >> 28) & 1UL) != 0
                 },
-                TurboRatioLimit = new
+                PrimaryTurboRatioLimit = new
                 {
+                    Msr = "0x1AD",
                     Raw = Hex(turboRatioLimit),
-                    RatioFields = Enumerable.Range(0, 8)
-                        .Select(index => (int)((turboRatioLimit >> (index * 8)) & 0xFF))
-                        .ToArray()
+                    RatioFields = DecodeRatioFields(turboRatioLimit)
+                },
+                SecondaryTurboRatioLimit = new
+                {
+                    Msr = "0x650",
+                    secondaryTurboRatioLimit.Success,
+                    Raw = secondaryTurboRatioLimit.Success ? Hex(secondaryTurboRatioLimit.Value) : null,
+                    RatioFields = secondaryTurboRatioLimit.Success
+                        ? DecodeRatioFields(secondaryTurboRatioLimit.Value)
+                        : null,
+                    secondaryTurboRatioLimit.Status
                 },
                 PackagePowerLimitRaw = Hex(packagePowerLimit),
                 HwpMsrReadAccess = hwpRows
@@ -157,6 +177,10 @@ internal static class FrequencyReadOnlyProbe
             Console.WriteLine($"CPUID HWP baseline support: {Bit(cpuid6Eax, 7)}");
             Console.WriteLine($"Current signed PawnIO module can read IA32_HWP_REQUEST 0x774: {hwpRequestReadable}");
             Console.WriteLine($"MSR_PLATFORM_INFO[28] programmable turbo-ratio indication: {((platformInfo >> 28) & 1UL) != 0}");
+            Console.WriteLine($"Primary turbo ratios (0x1AD): {string.Join("/", DecodeRatioFields(turboRatioLimit))}");
+            Console.WriteLine(secondaryTurboRatioLimit.Success
+                ? $"Secondary turbo ratios (0x650): {string.Join("/", DecodeRatioFields(secondaryTurboRatioLimit.Value))}"
+                : $"Secondary turbo ratio read (0x650): {secondaryTurboRatioLimit.Status}");
             Console.WriteLine($"Evidence: {options.OutputDirectory}");
             return 0;
         }
@@ -328,6 +352,26 @@ internal static class FrequencyReadOnlyProbe
             ((result.Value >> 8) & 0xFF).ToString(CultureInfo.InvariantCulture),
             ((result.Value >> 16) & 0xFF).ToString(CultureInfo.InvariantCulture),
             ((result.Value >> 24) & 0xFF).ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static int[] DecodeRatioFields(ulong value) =>
+        Enumerable.Range(0, 8)
+            .Select(index => (int)((value >> (index * 8)) & 0xFF))
+            .ToArray();
+
+    private static int DecodeDisplayFamily(uint eax)
+    {
+        var family = (int)((eax >> 8) & 0xF);
+        var extendedFamily = (int)((eax >> 20) & 0xFF);
+        return family == 0xF ? family + extendedFamily : family;
+    }
+
+    private static int DecodeDisplayModel(uint eax)
+    {
+        var family = (int)((eax >> 8) & 0xF);
+        var model = (int)((eax >> 4) & 0xF);
+        var extendedModel = (int)((eax >> 16) & 0xF);
+        return family is 0x6 or 0xF ? (extendedModel << 4) | model : model;
     }
 
     private static bool Bit(uint value, int bit) => (value & (1u << bit)) != 0;
