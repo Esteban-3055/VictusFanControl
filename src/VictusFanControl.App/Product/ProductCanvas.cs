@@ -341,7 +341,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Modelo de demanda; no valida SafetyGate, RPM ni respuesta física.",889,798,17,Yellow,730);
     }
     private static string VariableName(int index)=>new[]{"Temperatura CPU","Temperatura GPU","Potencia CPU","Potencia GPU","Carga CPU","Carga GPU"}[index];
-    internal bool CanApplyCurve => !Busy && State.AutomaticAuthorized && !State.AutomaticPreparing && !State.LifecycleBlocked &&
+    internal bool CanApplyCurve => !Busy && State.AutomaticAuthorized && !State.AutomaticPreparing && State.AutomaticSourceTransition is null && !State.LifecycleBlocked &&
         State.Runtime=="Healthy" && State.FanMode=="Automatic" && State.FanAuthority=="Custom" &&
         State.Source==Editing.ToString() && State.AppliedFanProfile==Editing.ToString() && FreshSnapshot is not null;
     internal IReadOnlyList<ProductDemandMarker> CurrentDemandMarkers()

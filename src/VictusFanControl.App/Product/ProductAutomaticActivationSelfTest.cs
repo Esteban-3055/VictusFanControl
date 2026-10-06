@@ -9,6 +9,7 @@ internal static class ProductAutomaticActivationSelfTest
     internal static void Run(Action<bool,string> require) => Task.Run(() => RunAsync(require)).GetAwaiter().GetResult();
     private static async Task RunAsync(Action<bool,string> require)
     {
+        TestSourceTransitions(require);
         var activation = new ProductAutomaticActivation();
         var profiles = new ProductProfiles { CpuEnabled = false, GpuEnabled = false };
         var ticket = activation.Begin(profiles);
@@ -80,5 +81,51 @@ internal static class ProductAutomaticActivationSelfTest
             "Unresolved fan release was hidden.");
         require(order.Count == 0, "CPU/GPU were released after an unresolved fan restore.");
         Console.WriteLine("PASS: Automatic coupled activation order, frozen preferences, Guardian reuse/partial failure, source/freshness fences and late cancellation.");
+    }
+    private static void TestSourceTransitions(Action<bool,string> require)
+    {
+        long clock = 0;
+        var gate = new ProductAutomaticSourceTransition(() => clock);
+        var config = new ProductProfiles().PerformanceConfiguration();
+        var status = new PerformanceGuardianResponse(1, Guid.NewGuid(), config.TargetProfileId,
+            true, "fixture", "fixture", "SessionEnabled", true, true, true, "Active", "ActiveUnverified", PowerSource: "Ac");
+        bool Observe(string source, string selected, PerformanceGuardianResponse? response, bool fresh = true) =>
+            gate.Observe(source, selected, config, config, response, fresh);
+        require(Observe("Ac", "Ac", status) && !gate.Pending, "Stable AC incorrectly started a transition.");
+        require(!Observe("Battery", "Ac", status) && gate.Pending, "Source mismatch admitted the old limits.");
+        clock = 1000;
+        require(!Observe("Battery", "Ac", status with { PowerSource = "Battery" }), "Cached response admitted the handoff.");
+        status = status with { RequestId = Guid.NewGuid(), PowerSource = "Battery" };
+        require(Observe("Battery", "Ac", status), "Fresh Battery limits did not admit a stable handoff.");
+        gate.Reset();
+        require(Observe("Battery", "Battery", status) && !gate.Pending, "Duplicate source observation started another transition.");
+        require(!Observe("Ac", "Battery", status), "Battery-to-AC bypassed reconciliation.");
+        clock = 2000; status = status with { RequestId = Guid.NewGuid(), PowerSource = "Ac" };
+        require(Observe("Ac", "Battery", status), "Fresh AC limits did not admit the return.");
+        gate.Reset();
+        require(!Observe("Battery", "Ac", status), "Bounce fixture unexpectedly admitted.");
+        clock = 3000; require(!Observe("Ac", "Ac", status with { RequestId = Guid.NewGuid() }), "First bounce back did not require stability.");
+        clock = 4000; require(!Observe("Battery", "Ac", status), "Bounce did not reset stability.");
+        clock = 6000;
+        bool rejected = false;
+        try { Observe("Ac", "Ac", status with { RequestId = Guid.NewGuid() }); } catch (InvalidOperationException) { rejected = true; }
+        require(rejected, "Repeated source bounce renewed the four-second deadline.");
+        foreach (var bad in new[] { status with { RuntimeFailure = "failed" }, status with { GpuState = "Failed" },
+            status with { CpuState = "Recovering" }, status with { Ok = false }, status with { SessionEnabled = false } })
+        {
+            gate.Reset(); rejected = false;
+            try { Observe("Ac", "Ac", bad); } catch (InvalidOperationException) { rejected = true; }
+            require(rejected && !gate.Pending, "Failed/partial limits entered source reconciliation.");
+        }
+        foreach (var source in new[] { "Unknown", "Ac" })
+        {
+            gate.Reset(); rejected = false;
+            try { Observe(source, "Ac", status, fresh: false); } catch (InvalidOperationException) { rejected = true; }
+            require(rejected, "Unknown source or stale status admitted.");
+        }
+        gate.Reset(); clock = 7000; Observe("Battery", "Ac", status); clock = 6999; rejected = false;
+        try { Observe("Battery", "Ac", status); } catch (InvalidOperationException) { rejected = true; }
+        require(rejected, "Clock regression extended source reconciliation.");
+        Console.WriteLine("PASS: bounded AC/Battery source handoff, fresh response, stable samples, duplicates, bounce deadline and failure fences.");
     }
 }

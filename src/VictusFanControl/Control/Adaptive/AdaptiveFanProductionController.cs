@@ -531,11 +531,13 @@ public sealed class AdaptiveFanProductionController
         finally { _operationGate.Release(); }
     }
 
-    public async ValueTask ApplyUnifiedDemandAsync(UnifiedFanDemand demand, Action verifyAdmission, CancellationToken cancellationToken)
+    public async ValueTask ApplyUnifiedDemandAsync(UnifiedFanDemand demand, Action verifyAdmission, CancellationToken cancellationToken,
+        FanConfiguration? sourceConfiguration = null)
     {
         ArgumentNullException.ThrowIfNull(verifyAdmission);
         demand.Validate();
         var frozen = demand with { Curve = demand.Curve.ToArray() };
+        var sourceCopy = sourceConfiguration is null ? null : FanConfigurationStore.Copy(sourceConfiguration);
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -544,12 +546,33 @@ public sealed class AdaptiveFanProductionController
                 _preparedEngine is null || _automaticConfiguration?.UnifiedDemand is null)
                 throw new InvalidOperationException("Aplicar requiere Automatic activo y una sesión vigente con curva única.");
             verifyAdmission();
-            var replacement = _automaticConfiguration with { UnifiedDemand = frozen };
+            if (sourceCopy is not null && sourceCopy.Tuning != _automaticConfiguration.Tuning)
+                throw new InvalidOperationException("La transición en vivo requiere la misma configuración de inercia en AC/Batería.");
+            var replacement = (sourceCopy ?? _automaticConfiguration) with { UnifiedDemand = frozen };
             Volatile.Write(ref _lastAutomaticResult, null);
             _preparedEngine.UpdateUnifiedDemand(frozen);
             _automaticConfiguration = replacement;
             // The previous decision belongs to the previous curve, even though the
             // current physical request and planner stay intact until the next acquisition.
+        }
+        finally { _operationGate.Release(); }
+    }
+
+    /// <summary>Keep acquisition/filter continuity while source limits reconcile; never dispatch a fan write.</summary>
+    public async ValueTask ObserveAutomaticSourceWaitAsync(TelemetrySnapshot snapshot, Action verifyAdmission, CancellationToken token)
+    {
+        await _operationGate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            if (_mode != AdaptiveFanProductionMode.Automatic || _coordinator.Authority != FanAuthority.Custom ||
+                _preparedEngine is null || _automaticAdmission is null || _automaticAdmission.IsClosed ||
+                !ReferenceEquals(snapshot, _automaticAdmission.LastObservedSnapshot))
+                throw new InvalidOperationException("Transición requiere una sesión Automatic activa y una adquisición vigente.");
+            verifyAdmission();
+            if (!TryBuildPolicyInput(snapshot, out var input, out var failure) ||
+                !_preparedEngine.ObserveDuringActuation(input, out failure))
+                throw new InvalidOperationException("Adquisición durante transición rechazada: " + failure);
+            Volatile.Write(ref _lastAutomaticResult, null);
         }
         finally { _operationGate.Release(); }
     }

@@ -38,7 +38,7 @@ ni se mata el proceso: se informa que debe liberarse la sesión anterior.
 | Clic Automatic con una sesión idéntica y vigente | Inicia con la curva actual de la fuente real | Reutiliza la sesión; consulta Status, no reescribe Enable |
 | Sesión existente distinta, parcial o no confirmada | Permanece Firmware | Rechaza el reemplazo; conserva owner y evidencia |
 | Clic Automatic cuando ya está seleccionado | Continúa la sesión; no reinicia el reloj ni sustituye la curva | No reescribe ni cambia límites |
-| Actualización Healthy durante Automatic | Evalúa las seis curvas e inercia; escribe solo un cambio de nivel | Comprueba estado vigente; no aplica límites por cada muestra |
+| Actualización Healthy durante Automatic | Evalúa demanda unificada e inercia; escribe solo un cambio de nivel | Comprueba estado vigente; no aplica límites por cada muestra |
 | Seleccionar pestaña AC/Batería | Cambia solo el perfil que se edita | No cambia la fuente aplicada |
 | Editar, guardar, descartar, importar curvas o límites | No modifica la curva congelada ya aplicada | No modifica una sesión viva |
 | Aplicar en Curvas durante Automatic activo | Sustituye solo curva e influencias de la fuente activa en la siguiente adquisición; conserva nivel, EMA, carga y plazo de sesión; reinicia confirmaciones normales pendientes | No modifica límites ni escribe preferencias; exige CPU/GPU vigentes |
@@ -47,7 +47,7 @@ ni se mata el proceso: se informa que debe liberarse la sesión anterior.
 | Volver voluntariamente a Firmware o Manual | Cambia solo el control de fans | Conserva los límites activos |
 | Liberar CPU/GPU desde Automatic | Vuelve primero a Firmware; si la liberación WMI falla no retira los límites | Se libera después, mediante su Guardian |
 | Fuente cambia durante preparación | No inicia con una curva de la fuente anterior; requiere otro clic | Guardian mantiene su seguimiento de la fuente real |
-| Fuente cambia con Automatic activo | Solicita Firmware y bloquea la revisión; no aplica automáticamente la otra curva | Guardian conserva sus transiciones AC/Batería independientes |
+| Fuente cambia con AutomaticReview activo | Conserva el nivel sin writes hasta confirmar fuente estable y respuesta CPU/GPU posterior; cambia curva e influencias sin reiniciar inercia ni plazo. Espera máxima 4 s; fallo o calor urgente pendiente vuelve a Firmware | Guardian conserva sus transiciones AC/Batería independientes; la GUI no emite Enable ni reescribe límites |
 | Guardian falla, pierde vigencia o entra en recuperación durante Automatic | Interrumpe, solicita Firmware y bloquea reentrada | Conserva la recuperación propia; no reinicia ciegamente al Guardian |
 | Telemetría perdida, margen excedido, suspensión/lifecycle, vencimiento | Interrumpe; Healthy posterior no rearma; reiniciar después de liberar limpio | No hay reaplicación por el estado Healthy de la GUI; Guardian conserva su ciclo propio |
 | Minimizar u ocultar al tray con una sesión ya activa | Continúa con su supervisión y plazo existentes | Continúa con su Guardian existente |
@@ -57,6 +57,46 @@ El cambio automático de curva por AC/Batería, la reentrada tras lifecycle/fall
 y el arranque Automatic persistente siguen pendientes de cualificación física.
 Esta integración no abre el gate Automatic normal; usa exclusivamente
 `Start-ProductGui.ps1 -Mode AutomaticReview` en 8C40/F.18 y niveles 10–50.
+
+## Revisión continua AC/Batería — 2026-10-06
+
+El diagnóstico `20261006T163422778Z-245aaeab54b8429e8c365f5840c75551`
+valida detección de cambio de fuente y retorno protector a Firmware de la versión
+anterior. El usuario confirma desconexión/reconexión. El estado final AC y los
+statuses de presets CPU/GPU respaldan su seguimiento independiente, pero no hay
+un estado Battery intermedio con evidencia suficiente de los límites efectivos.
+El diagnóstico `20261006T163959090Z-28cde682f9524671b1511d131eebce2d`
+registra cinco aplicaciones en vivo en una única activación AC, sin renovación
+del plazo, y recuperación de CPU control 92→48 °C en 1.041 s sin interrupción.
+No contiene cambio de fuente. Son resultados parciales, no cualificación general.
+
+La nueva revisión permite transiciones continuas únicamente tras establecer
+Custom. Exige dos lecturas de fuente iguales separadas al menos un segundo y una
+respuesta Guardian distinta de la observada al detectar el cambio. CPU Active,
+GPU ActiveUnverified, ambas habilitaciones, configuración exacta, fuente coincidente
+y vigencia son obligatorias. Rebotes no renuevan el límite total de cuatro segundos.
+Durante la espera no hay nuevas escrituras fans: se conserva el nivel y se observan
+adquisiciones para conservar continuidad, EMA e historial de carga. No se pausa el
+plazo de cinco minutos ni la confirmación térmica. CPU control ≥85 °C o GPU ≥78 °C
+durante una espera no resuelta devuelve a Firmware; una transición confirmada puede
+continuar con el override térmico habitual. Unknown, pérdida de vigencia, fallo
+Performance, telemetría perdida o vencimiento mantienen su retorno protector.
+
+Las curvas AC/Batería se congelan al clic inicial. Aplicar modifica también la copia
+de esa fuente dentro de la sesión, por lo que se recupera al volver a ella. Guardar
+por sí solo no cambia estas copias. El cambio exige Tuning idéntico entre fuentes;
+no sustituye el motor ni la sesión. Aplicar se deshabilita durante la reconciliación.
+Los eventos STARTED/WAIT/CONFIRMED incluyen ID de activación, fuente, snapshot y
+respuesta Guardian; CONFIRMED añade configuraciones y segundos restantes. Esta
+evidencia identifica solicitudes aceptadas, no demuestra rango NVML exacto ni
+ownership físico del setpoint WMI. Firmware/lifecycle cancelan la transición.
+
+Ensayo ligero, dentro de la misma revisión: mantener los límites usados en la última
+prueba (AC 30/50 W, GPU 1800 MHz; Battery 9/12 W, GPU 1200 MHz), guardar ambas curvas
+antes de activar, permanecer AC 30 s, desconectar 30 s, reconectar 30 s, exportar.
+Si aparece Firmware/bloqueo, exportar inmediatamente sin rearmar. Cerrar con Salir
+de la bandeja al terminar; no matar procesos ni borrar journals. Batería suficiente,
+sin benchmark ni carga nueva durante este primer ensayo.
 
 ## Diagnóstico de interrupciones
 

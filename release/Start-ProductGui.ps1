@@ -21,6 +21,7 @@ if ($Mode -eq 'Verify') { return }
 if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticReview -ne 'explicit-only-300s-10-to-50') { throw 'This package does not authorize the supervised Automatic review entry.' }
 if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticThermal -ne 'cpu90-confirm-2000ms-cpu99-immediate-raw-response') { throw 'This package does not include bounded CPU spike confirmation and raw thermal response.' }
 if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticPerformance -ne 'required-both-before-fans') { throw 'This package does not authorize the coupled CPU/GPU Automatic entry.' }
+if ($Mode -eq 'AutomaticReview' -and $manifest.productAutomaticSourceTransition -ne 'bounded-4000ms-fresh-guardian-preserves-inertia') { throw 'This package does not include the bounded AC/Battery curve transition review.' }
 $app = Join-Path $root 'VictusFanControl-0.4.0-rc.1-win-x64/app'
 if ($Mode -eq 'RecoverPerformance' -or $Mode -eq 'RecoverySelfTest') {
     $guardian = Join-Path $app 'performance-guardian/VictusFanControl.PerformanceGuardian.exe'

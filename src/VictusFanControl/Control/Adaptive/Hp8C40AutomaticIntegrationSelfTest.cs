@@ -427,6 +427,41 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             rejected=false;try{await controller.ApplyUnifiedDemandAsync(original.UnifiedDemand!,()=>{},default);}catch(InvalidOperationException){rejected=true;}
             Check(rejected&&backend.Restores==1,"live Apply cannot acquire authority from Firmware");
         }
+        backend=new Backend();clock=0;
+        await using(var coordinator=new FanControlCoordinator(backend))
+        {
+            var profiles=new VictusFanControl.Product.ProductProfiles();
+            var controller=new AdaptiveFanProductionController(coordinator,profiles.Ac.Fan.BuildPolicy(),true,true,
+                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,automaticConfiguration:profiles.Ac.Fan,automaticMinimumLevel:10);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,default);
+            clock=1000;var sample=Sample(Now(),40) with{GpuTemperatureC=35,GpuPowerW=5};
+            await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            for(var i=0;i<3;i++)
+            {
+                clock+=1000;sample=sample with{Timestamp=Now()};
+                var observed=controller.EvaluateAutomaticSafety(sample,Raw(sample),observe:true);
+                Check(observed.CustomControlPermitted,"source wait lost safety admission");
+                await controller.ObserveAutomaticSourceWaitAsync(sample,()=>{},default);
+            }
+            Check(backend.Levels.SequenceEqual(new[]{12})&&backend.Restores==0,"source wait dispatched writes or restored Firmware");
+            await controller.ApplyUnifiedDemandAsync(profiles.Battery.Fan.UnifiedDemand!,()=>{},default,profiles.Battery.Fan);
+            clock+=1000;sample=sample with{Timestamp=Now()};
+            var resumed=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(resumed.EqualFanLevel==12&&resumed.SmoothedDemandLevel is >10 and <12&&
+                controller.AutomaticConfiguration!.Profile.Id==profiles.Battery.Fan.Profile.Id&&backend.Levels.Count==1,
+                "Battery handoff lost continuity, metadata or actuation inertia");
+            var rejected=false;
+            try{await controller.ApplyUnifiedDemandAsync(profiles.Ac.Fan.UnifiedDemand!,()=>{},default,
+                profiles.Ac.Fan with{Tuning=profiles.Ac.Fan.Tuning with{RiseTimeConstantSeconds=9}});}catch(InvalidOperationException){rejected=true;}
+            Check(rejected&&controller.AutomaticConfiguration!.Profile.Id==profiles.Battery.Fan.Profile.Id,
+                "different inertia tuning silently replaced the running engine");
+            await controller.ApplyUnifiedDemandAsync(profiles.Ac.Fan.UnifiedDemand!,()=>{},default,profiles.Ac.Fan);
+            Check(controller.Mode==AdaptiveFanProductionMode.Automatic&&backend.Restores==0&&backend.Levels.Count==1,
+                "AC return reacquired authority or wrote during configuration");
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Firmware,default);
+            rejected=false;try{await controller.ObserveAutomaticSourceWaitAsync(sample,()=>{},default);}catch(InvalidOperationException){rejected=true;}
+            Check(rejected,"source wait continued after Firmware cancellation");
+        }
         return failures;
     }
 

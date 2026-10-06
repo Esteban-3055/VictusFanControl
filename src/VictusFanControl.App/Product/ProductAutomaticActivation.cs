@@ -60,3 +60,36 @@ internal sealed class ProductAutomaticActivation
         status is { Ok: true, SessionEnabled: true, CpuEnabled: true, GpuEnabled: true,
             CpuState: "Active", GpuState: "ActiveUnverified", RuntimeFailure: null } && status.PowerSource == source;
 }
+
+/// <summary>Bounded source reconciliation. A cached pre-change response cannot authorize a handoff.</summary>
+internal sealed class ProductAutomaticSourceTransition
+{
+    internal const int MaximumMilliseconds = 4000;
+    private readonly Func<long> _clock;
+    private long? _started;
+    private long _candidateSince;
+    private string? _candidate;
+    private Guid? _previousResponse;
+    private int _samples;
+    internal bool Pending => _started.HasValue;
+    internal string? Candidate => _candidate;
+    internal ProductAutomaticSourceTransition(Func<long>? clock = null) => _clock = clock ?? (() => Environment.TickCount64);
+    internal void Reset() { _started = null; _candidate = null; _previousResponse = null; _samples = 0; }
+    internal bool Observe(string source, string selected, PerformanceGuiSessionConfiguration expected,
+        PerformanceGuiSessionConfiguration? applied, PerformanceGuardianResponse? status, bool fresh)
+    {
+        if (source is not ("Ac" or "Battery") || !expected.CpuEnabled || !expected.GpuEnabled || !fresh || applied != expected ||
+            status is not { Ok: true, SessionEnabled: true, CpuEnabled: true, GpuEnabled: true,
+                CpuState: "Active", GpuState: "ActiveUnverified", RuntimeFailure: null })
+            throw new InvalidOperationException("Transición Automatic sin fuente válida o confirmación vigente de CPU/GPU; volver a Firmware.");
+        var now = _clock();
+        if (!_started.HasValue && source == selected && ProductAutomaticActivation.PerformanceReady(expected, applied, status, fresh, source)) return true;
+        if (!_started.HasValue) { _started = now; _previousResponse = status.RequestId; }
+        if (now < _started.Value || now - _started.Value >= MaximumMilliseconds)
+            throw new InvalidOperationException("Transición AC/Batería no confirmada en cuatro segundos; volver a Firmware.");
+        if (_candidate != source) { _candidate = source; _candidateSince = now; _samples = 0; }
+        ++_samples;
+        return _samples >= 2 && now - _candidateSince >= 1000 && status.RequestId != _previousResponse &&
+            ProductAutomaticActivation.PerformanceReady(expected, applied, status, fresh, source);
+    }
+}

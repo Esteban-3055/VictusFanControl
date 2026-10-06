@@ -144,8 +144,9 @@ antes de iniciar la curva. Repetir el clic no reescribe límites ni renueva la
 revisión de cinco minutos. Volver a Firmware conserva la sesión Performance;
 Liberar CPU/GPU vuelve primero a Firmware si Automatic está activo.
 Consultar [AUTOMATIC_PRODUCT_SESSION.md](AUTOMATIC_PRODUCT_SESSION.md) para
-transiciones, fallos y la siguiente prueba combinada. Las curvas por cambio de
-fuente y la reentrada tras interrupciones siguen sin reaplicación automática.
+transiciones, fallos y la siguiente prueba combinada. AutomaticReview permite ahora
+la reconciliación acotada AC/Batería de curvas; su validación física está pendiente.
+La reentrada tras interrupciones sigue cerrada.
 
 
 ## Actualización: diagnósticos por sesión y demanda en gráficos

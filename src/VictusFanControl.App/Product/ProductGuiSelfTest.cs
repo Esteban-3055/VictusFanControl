@@ -557,6 +557,7 @@ internal static class ProductGuiSelfTest
             form.HandleCommand("profile-battery");form.HandleCommand("curve-apply");require(runtime.Commands==1,"Apply accepted the inactive battery profile.");
             form.HandleCommand("profile-ac");runtime.Publish(active with{LifecycleBlocked=true});form.HandleCommand("curve-apply");require(runtime.Commands==1,"Apply accepted a blocked lifecycle.");
             runtime.Publish(active with{AutomaticPreparing=true});form.HandleCommand("curve-apply");require(runtime.Commands==1,"Apply accepted a pending activation.");
+            runtime.Publish(active with{AutomaticSourceTransition="Battery"});form.HandleCommand("curve-apply");require(runtime.Commands==1,"Apply accepted a pending source transition.");
             runtime.Publish(active with{Snapshot=active.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-10)}});form.HandleCommand("curve-apply");require(runtime.Commands==1,"Apply accepted stale telemetry.");
             var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Live Apply fixture shutdown failed.");exit.GetAwaiter().GetResult();
         }
