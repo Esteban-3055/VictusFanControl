@@ -34,6 +34,7 @@ public sealed record AdaptiveFanProductionResult(
     public double? SmoothedDemandLevel { get; init; }
     public double? ActuationDemandLevel { get; init; }
     public bool ThermalOverride { get; init; }
+    public UnifiedDemandObservation? UnifiedDemand { get; init; }
 }
 
 /// <summary>
@@ -773,7 +774,8 @@ public sealed class AdaptiveFanProductionController
             {
                 SmoothedDemandLevel = preparedDecision?.SmoothedDemandLevel,
                 ActuationDemandLevel = preparedDecision?.ActuationDemandLevel,
-                ThermalOverride = preparedDecision?.ThermalOverride ?? false
+                ThermalOverride = preparedDecision?.ThermalOverride ?? false,
+                UnifiedDemand = preparedDecision?.UnifiedDemand ?? decision.UnifiedDemand
             };
             Volatile.Write(ref _lastAutomaticResult, result);
             return result;
@@ -878,7 +880,7 @@ public sealed class AdaptiveFanProductionController
             snapshot.CpuLoadPercent.Value,
             snapshot.GpuTemperatureC.Value,
             snapshot.GpuPowerW.Value,
-            snapshot.GpuLoadPercent.Value) { CpuRawControlTemperatureC = _useRawCpuThermalResponse ? snapshot.CpuControlTemperatureC : null };
+            snapshot.GpuLoadPercent.Value) { CpuRawControlTemperatureC = _useRawCpuThermalResponse || _automaticConfiguration?.UnifiedDemand is not null ? snapshot.CpuControlTemperatureC : null };
 
         failure = string.Empty;
         return true;

@@ -114,6 +114,8 @@ public sealed record FanConfiguration
     public int SchemaVersion { get; init; } = 1;
     public AdaptiveFanTuning Tuning { get; init; } = AdaptiveFanTuning.WithSmoothAdaptiveResponse(new() { CpuTemperatureSource = CpuDemandTemperatureSource.CoreAverage });
     public AdaptiveCurveProfile Profile { get; init; } = QuietProfile();
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public UnifiedFanDemand? UnifiedDemand { get; init; }
 
     public static AdaptiveCurveProfile QuietProfile()
     {
@@ -132,12 +134,13 @@ public sealed record FanConfiguration
         if (SchemaVersion != 1 || Tuning is null || Profile is null)
             throw new InvalidDataException("Configuración de ventiladores incompatible.");
         Tuning.Validate();
+        UnifiedDemand?.Validate();
         var c = AdaptiveCurveProfiles.Validate(Profile);
         IReadOnlyList<AdaptiveFanCurvePoint> Clamp(IReadOnlyList<AdaptiveFanCurvePoint> points) =>
             points.Select(p => p with { Level = Math.Clamp(p.Level, Tuning.MinimumLevel, Tuning.MaximumLevel) }).ToArray();
         return c with
         {
-            MinimumLevel = Tuning.MinimumLevel, MaximumLevel = Tuning.MaximumLevel,
+            MinimumLevel = Tuning.MinimumLevel, MaximumLevel = Tuning.MaximumLevel, UnifiedDemand=UnifiedDemand,
             MaximumUpStepPerSample = Tuning.ThermalMaximumUpStepLevels,
             MaximumDownStepPerSample = Tuning.MaximumDownStepLevels,
             CpuTemperatureCurve = Clamp(c.CpuTemperatureCurve), GpuTemperatureCurve = Clamp(c.GpuTemperatureCurve),

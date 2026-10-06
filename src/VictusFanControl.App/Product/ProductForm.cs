@@ -104,20 +104,20 @@ internal sealed class ProductForm : Form
         if(_closing||IsDisposed)return;
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
-        if(id.StartsWith("axis-")){_canvas.Axis=(AdaptiveCurveAxis)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
+        if(id is "curve-influences" or "curve-points"){_canvas.ShowCurvePoints=id=="curve-points";_canvas.Invalidate();return;}
         if(id.StartsWith("fan-tab-")){_canvas.FanTab=Math.Clamp(int.Parse(id[8..]),0,2);_canvas.Invalidate();return;}
         if(id.StartsWith("perf-tab-")){_canvas.PerformanceTab=int.Parse(id[9..]);_canvas.Invalidate();return;}
         if(id.StartsWith("monitor-tab-")){_canvas.MonitorTab=int.Parse(id[12..]);_canvas.Invalidate();return;}
         if(id is "node-previous" or "node-next")
         {
-            var count=AdaptiveCurveProfiles.Curve(_draft.Get(_canvas.Editing).Fan.BuildPolicy(),_canvas.Axis).Count;
+            var count=_draft.Get(_canvas.Editing).Fan.UnifiedDemand!.Curve.Count;
             _canvas.SelectedNode=Math.Clamp(_canvas.SelectedNode+(id=="node-next"?1:-1),0,count-1);_canvas.Invalidate();return;
         }
         if(id.StartsWith("node-" )&&int.TryParse(id[5..],out var node)){_canvas.SelectedNode=node;_canvas.Invalidate();return;}
         if(id.EndsWith("-minus")||id.EndsWith("-plus"))
         {
             var plus=id.EndsWith("-plus");var key=id[..(id.Length-(plus?5:6))];var p=_draft.Get(_canvas.Editing);
-            var current=key.StartsWith("sim-input-")?_canvas.SimulationInputs.Value(int.Parse(key[10..])):key switch{"manual"=>_canvas.ManualLevel,"pl1"=>p.CpuPl1Watts,"pl2"=>p.CpuPl2Watts,"gpu"=>p.GpuMaximumMHz,_=>0};
+            var current=key.StartsWith("influence-")?p.Fan.UnifiedDemand!.Influence(int.Parse(key[10..])):key.StartsWith("sim-input-")?_canvas.SimulationInputs.Value(int.Parse(key[10..])):key switch{"manual"=>_canvas.ManualLevel,"pl1"=>p.CpuPl1Watts,"pl2"=>p.CpuPl2Watts,"gpu"=>p.GpuMaximumMHz,_=>0};
             EditValue(key,current+(plus?1:-1));return;
         }
         if(_canvas.Busy&&id is not("firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close"))return;
@@ -182,6 +182,12 @@ internal sealed class ProductForm : Form
         if(_canvas.Busy||_closing||IsDisposed)return;
         if(key.StartsWith("sim-input-")){_canvas.SimulationInputs=_canvas.SimulationInputs.With(int.Parse(key[10..]),value);_canvas.Invalidate();return;}
         var slot=_canvas.Editing;var p=_draft.Get(slot);
+        if(key.StartsWith("influence-"))
+        {
+            var axis=int.Parse(key[10..]);if(axis is <0 or >5)return;
+            var model=p.Fan.UnifiedDemand!;var nextModel=model.WithInfluence(axis,Math.Clamp(value,axis<2?100:0,axis<2?150:100));
+            Change(_draft.With(slot,p with{Fan=p.Fan with{UnifiedDemand=nextModel}}));return;
+        }
         if(key=="manual") {_canvas.ManualLevel=Math.Clamp(value,10,50);_canvas.Invalidate();return;}
         var next=key switch
         {
@@ -211,32 +217,35 @@ internal sealed class ProductForm : Form
     }
     internal void EditNode(int index,double input,int level)
     {
-        if(_canvas.Busy||_closing||IsDisposed)return;
-        var slot=_canvas.Editing;var p=_draft.Get(slot);var points=AdaptiveCurveProfiles.Curve(p.Fan.BuildPolicy(),_canvas.Axis).ToArray();
+        if(_canvas.Busy||_closing||IsDisposed||!double.IsFinite(input))return;
+        var slot=_canvas.Editing;var p=_draft.Get(slot);var model=p.Fan.UnifiedDemand!;var points=model.Curve.ToArray();
         if(index<0||index>=points.Length)return;
-        var lo=index==0?0:points[index-1].Input+1;var hi=index==points.Length-1?AdaptiveCurveProfiles.MaximumInput(_canvas.Axis):points[index+1].Input-1;
+        var lo=index==0?0:points[index-1].Input+1;var hi=index==points.Length-1?100:points[index+1].Input-1;
         var lowLevel=index==0?10:points[index-1].Level;var highLevel=index==points.Length-1?50:points[index+1].Level;
-        points[index]=new(Math.Clamp(Math.Round(input),lo,hi),Math.Clamp(level,(int)lowLevel,(int)highLevel));
-        var profile=AdaptiveCurveProfiles.WithCurve(p.Fan.Profile,_canvas.Axis,points);
-        Change(_draft.With(slot,p with{Fan=p.Fan with{Profile=profile}}));
+        var x=index==0?0:index==points.Length-1?100:Math.Clamp(Math.Round(input),lo,hi);
+        var y=index==points.Length-1?50:Math.Clamp(level,(int)lowLevel,(int)highLevel);
+        points[index]=new(x,y);
+        Change(_draft.With(slot,p with{Fan=p.Fan with{UnifiedDemand=model with{Curve=points}}}));
     }
     private void AddNode()
     {
-        var p=_draft.Get(_canvas.Editing);var points=AdaptiveCurveProfiles.Curve(p.Fan.BuildPolicy(),_canvas.Axis).ToList();if(points.Count>=64)return;
+        var p=_draft.Get(_canvas.Editing);var model=p.Fan.UnifiedDemand!;var points=model.Curve.ToList();if(points.Count>=64)return;
         var gap=Enumerable.Range(0,points.Count-1).OrderByDescending(i=>points[i+1].Input-points[i].Input).First();
         if(points[gap+1].Input-points[gap].Input<2){_canvas.Notice="No queda espacio entre puntos.";return;}
         var x=Math.Floor((points[gap].Input+points[gap+1].Input)/2);var y=Math.Round(AdaptiveCurveProfiles.Interpolate(points,x));points.Insert(gap+1,new(x,y));
-        Change(_draft.With(_canvas.Editing,p with{Fan=p.Fan with{Profile=AdaptiveCurveProfiles.WithCurve(p.Fan.Profile,_canvas.Axis,points)}}));_canvas.SelectedNode=gap+1;
+        Change(_draft.With(_canvas.Editing,p with{Fan=p.Fan with{UnifiedDemand=model with{Curve=points.ToArray()}}}));_canvas.SelectedNode=gap+1;_canvas.ShowCurvePoints=true;
     }
     private void RemoveNode()
     {
-        var p=_draft.Get(_canvas.Editing);var points=AdaptiveCurveProfiles.Curve(p.Fan.BuildPolicy(),_canvas.Axis).ToList();if(points.Count<=2||_canvas.SelectedNode<0||_canvas.SelectedNode>=points.Count)return;
-        points.RemoveAt(_canvas.SelectedNode);_canvas.SelectedNode=-1;Change(_draft.With(_canvas.Editing,p with{Fan=p.Fan with{Profile=AdaptiveCurveProfiles.WithCurve(p.Fan.Profile,_canvas.Axis,points)}}));
+        var p=_draft.Get(_canvas.Editing);var model=p.Fan.UnifiedDemand!;var points=model.Curve.ToList();
+        if(points.Count<=2||_canvas.SelectedNode<=0||_canvas.SelectedNode>=points.Count-1)return;
+        points.RemoveAt(_canvas.SelectedNode);_canvas.SelectedNode=-1;
+        Change(_draft.With(_canvas.Editing,p with{Fan=p.Fan with{UnifiedDemand=model with{Curve=points.ToArray()}}}));
     }
     private void ResetCurve(bool all)
     {
         var p=_draft.Get(_canvas.Editing);var defaults=ProductProfiles.DefaultProfile(_canvas.Editing).Fan;
-        var fan=all?defaults:p.Fan with{Profile=AdaptiveCurveProfiles.WithCurve(p.Fan.Profile,_canvas.Axis,AdaptiveCurveProfiles.Curve(defaults.BuildPolicy(),_canvas.Axis))};
+        var fan=p.Fan with{UnifiedDemand=all?defaults.UnifiedDemand:p.Fan.UnifiedDemand! with{Curve=defaults.UnifiedDemand!.Curve},Tuning=all?defaults.Tuning:p.Fan.Tuning};
         Change(_draft.With(_canvas.Editing,p with{Fan=fan}));_canvas.SelectedNode=-1;
     }
     internal Task ExportProfilesAsync(string path)=>RunAsync(async()=>{var draft=Draft;await Task.Run(()=>ProductProfilesStore.Save(draft,path));_canvas.Notice="Respaldo exportado; las preferencias en edición no se han aplicado.";});

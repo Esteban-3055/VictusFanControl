@@ -38,7 +38,14 @@ firmware en batería. Ningún replay prueba ruido, temperatura resultante, cauda
 ni estabilidad física bajo todas las cargas. La antigua calibración equal 10–50
 sustenta el rango de consignas; la aceptación térmica de estos presets queda pendiente.
 
-## Seis curvas de cada preset
+## Motor de demanda única — actualización 2026-10-06
+
+El producto usa ahora una curva Demanda %→Nivel por fuente y seis influencias
+independientes. Las tablas antiguas que siguen son referencia histórica y respaldo;
+no participan en el nuevo cálculo. La documentación del motor está en
+[UNIFIED_PRODUCT_DEMAND.md](UNIFIED_PRODUCT_DEMAND.md).
+
+## Seis curvas del motor anterior (histórico)
 
 Entradas y niveles se interpolan linealmente; domina MAX de las seis demandas.
 La temperatura CPU de demanda es el promedio de los tres P-Cores más calientes.
@@ -73,7 +80,7 @@ En muestras frías idénticas durante 300 s, los tests exigen nivel constante 12
 / 10 Batería. También exigen llegar a 50 ante una entrada caliente, no escribir
 al editar/guardar y liberar antes de reconfigurar/reentrar.
 
-## Ajustes del 2026-10-06 y precisión del editor
+## Ajustes anteriores del 2026-10-06 (histórico)
 
 El diagnóstico de sesión `20261006T044854083Z-939bce10aba842628cdf73e5af82950d`
 registra GPU hasta 72.485 W, exclusivamente AC. Se usa 70 W como referencia nominal,
@@ -99,30 +106,19 @@ la otra curva es gris discontinua sin nodos. Esa comparación es la curva del ot
 componente en el mismo perfil, no una curva medida de firmware ni el preset original.
 Verde sigue mostrando la solicitud aceptada; amarillo la vista previa del borrador.
 
-## Propuesta de una curva única por fuente (pendiente)
+## Motor único implementado
 
-Objetivo: seis sliders de influencia y una curva Demanda %→Nivel para AC, otra para
-batería. Requiere un esquema nuevo y migración explícita: las seis curvas actuales
-no pueden convertirse exactamente a una sola curva y seis porcentajes.
-
-Diseño recomendado: normalizar temperaturas, watts y cargas con referencias
-estables por fuente; aplicar influencia a cada contribución y tomar MAX. Evitar
-promedios ponderados: cinco señales frías no deben diluir una CPU caliente.
-Temperaturas conservan una contribución mínima protegida; los overrides térmicos,
-SafetyGate, telemetría fresca y Guardian quedan fuera de los sliders. Un porcentaje
-de influencia no es un porcentaje de ventilador ni una promesa de RPM.
-
-No normalizar automáticamente cada lectura contra el PL1/PL2 editable ni la potencia
-baja de batería: 18 W no debe pasar a ser máxima demanda de refrigeración solo por
-limitar el consumo. La nueva arquitectura necesita tests del motor, simulador,
-marcadores, serialización, conservación de perfiles antiguos y aplicación congelada
-antes de publicarse; esta entrega mejora los defaults y la GUI del motor vigente.
+Normalización → influencia independiente → MAX → una curva por fuente → inercia.
+La migración v1→v2 conserva los límites y archiva la configuración anterior; al
+Guardar se conserva también una copia exacta del archivo v1. No hay conversión
+matemáticamente exacta de las curvas antiguas: el modelo nuevo carga defaults.
+Las protecciones térmicas raw y las puertas de ejecución quedan independientes.
 
 ## Instalación del preset en preferencias existentes
 
 Los perfiles ya guardados y las curvas del usuario se conservan. En Firmware:
 Curvas → AC → Valores iniciales del perfil; repetir con Batería; Guardar curvas.
-Esto reemplaza las seis curvas y su inercia del perfil seleccionado, y mantiene
+Esto restablece la curva única, las seis influencias y la inercia del perfil seleccionado, y mantiene
 PL1, PL2 y máximo GPU previamente editados. Instalar un paquete no aplica hardware.
 
 ## CPU/GPU de uso normal

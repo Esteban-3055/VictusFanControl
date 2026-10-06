@@ -19,7 +19,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     internal ProductRuntimeState State { get; set; } = new();
     internal ProductPowerProfile Editing { get; set; }
     internal ProductPage Page { get; set; }
-    internal AdaptiveCurveAxis Axis { get; set; }
+    internal bool ShowCurvePoints { get; set; }
     internal int FanTab { get; set; }
     internal int PerformanceTab { get; set; }
     internal int MonitorTab { get; set; }
@@ -43,8 +43,8 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     private float _scale = 1, _offsetX, _offsetY;
     private ProductHit? _dragSlider;
     private int _dragNode = -1;
-    private (ProductPage,ProductPowerProfile,AdaptiveCurveAxis,int,int,bool)? _dragContext;
-    private (ProductPage,ProductPowerProfile,AdaptiveCurveAxis,int,int,bool) DragContext => (Page,Editing,Axis,FanTab,PerformanceTab,SimulationVisible);
+    private (ProductPage,ProductPowerProfile,bool,int,int,bool)? _dragContext;
+    private (ProductPage,ProductPowerProfile,bool,int,int,bool) DragContext => (Page,Editing,ShowCurvePoints,FanTab,PerformanceTab,SimulationVisible);
     private string? _keyboardId;
     private readonly Dictionary<int,Font> _fonts = [];
     internal IReadOnlyList<ProductHit> Hits => _hits;
@@ -278,7 +278,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
             Hit(i==0?"profile-ac":"profile-battery",rect,i==0?"Editar AC":"Editar Batería");}
         DrawText(g,"Seleccionar aquí no cambia la alimentación ni crea autoridad.",335,682,24,Muted,475);
         Card(g,new(867,235,782,591));DrawText(g,"Detalles · "+ProfileName,891,259,28,null,727,true);
-        DrawText(g,"Curva multivariable",891,338,25,null,727,true);DrawText(g,"Temperatura, potencia y carga CPU/GPU. Se conserva el motor de demanda, suavizado y protección.",891,385,23,Muted,727);
+        DrawText(g,"Curva única de demanda",891,338,25,null,727,true);DrawText(g,"Seis influencias independientes → mayor demanda → una curva. Temperaturas protegidas, suavizado y recuperación.",891,385,23,Muted,727);
         DrawText(g,$"CPU PL1 / PL2: {Profile.CpuPl1Watts} / {Profile.CpuPl2Watts} W",891,480,25,Green,727);
         DrawText(g,$"GPU máximo: {Profile.GpuMaximumMHz} MHz",891,535,25,Blue,727);
         Button(g,"edit-curve","Editar curva",new(891,617,341,67),true);Button(g,"edit-performance","Editar rendimiento",new(1250,617,371,67));
@@ -286,27 +286,35 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
     }
     private void Curves(Graphics g)
     {
-        DrawText(g,"Curvas de ventilador · "+ProfileName,319,137,29,null,770,true);
+        DrawText(g,"Curva de demanda · "+ProfileName,319,137,29,null,770,true);
         Button(g,"curve-editor","Editor gráfico",new(1160,138,230,34),!SimulationVisible);Button(g,"curve-simulator","Simulador",new(1405,138,243,34),SimulationVisible);
         if(SimulationVisible){SimulationPage(g);return;}
         Card(g,new(308,179,539,652));Card(g,new(867,179,782,652));
-        DrawText(g,"Seleccionar variable",331,198,25,null,490,true);
-        string[] axes=["Temperatura CPU","Temperatura GPU","Potencia CPU","Potencia GPU","Carga CPU","Carga GPU"];
-        for(int i=0;i<6;i++)Button(g,"axis-"+i,axes[i],new(331+(i%2)*249,251+(i/2)*52,238,43),(int)Axis==i);
-        DrawText(g,"Puntos de la curva",331,419,25,null,365,true);var points=AdaptiveCurveProfiles.Curve(Profile.Fan.BuildPolicy(),Axis);
-        var count=Math.Min(points.Count,7);var start=Math.Clamp(SelectedNode-3,0,Math.Max(0,points.Count-count));
-        Button(g,"node-previous","‹",new(731,418,42,35),false,SelectedNode>0);Button(g,"node-next","›",new(781,418,42,35),false,SelectedNode<points.Count-1);
-        var table=new RectangleF(333,461,489,288);Card(g,table,false,8);
-        DrawText(g,"#",345,469,20,Muted,43);DrawText(g,"Entrada ("+Unit()+")",404,469,20,Muted,192);DrawText(g,"Nivel",650,469,20,Muted,145);
-        using(var grid=new Pen(Border)){g.DrawLine(grid,390,table.Top,390,table.Bottom);g.DrawLine(grid,621,table.Top,621,table.Bottom);for(int row=1;row<8;row++)g.DrawLine(grid,333,461+row*36,822,461+row*36);}
-        for(int i=0;i<count;i++){var index=start+i;var rect=new RectangleF(334,497+i*36,487,35);if(index==SelectedNode)Card(g,rect,true,6);
-            DrawText(g,(index+1).ToString(),345,rect.Y+4,21,Muted,43);DrawText(g,points[index].Input.ToString("0"),445,rect.Y+4,21,Muted,168);DrawText(g,points[index].Level.ToString("0"),669,rect.Y+4,21,Muted,130);Hit("node-"+index,rect,"Punto "+(index+1));}
-        Button(g,"node-add","+  Añadir punto",new(331,767,226,44),true,points.Count<64);Button(g,"node-remove","−  Quitar",new(567,767,116,44),false,SelectedNode>=0&&points.Count>2);Button(g,"curve-reset","Restablecer",new(693,767,131,44));
-        DrawText(g,"Editor gráfico · arrastra los puntos",889,201,27,null,735,true);DrawCurve(g,new(958,298,634,350),true);
-        DrawText(g,"Línea gris: comparación CPU/GPU, solo lectura; no es firmware.",892,231,17,Muted,737);
+        DrawText(g,ShowCurvePoints?"Puntos de la curva":"Influencia por variable",331,198,25,null,490,true);
+        Button(g,"curve-influences","Influencias",new(331,251,238,43),!ShowCurvePoints);Button(g,"curve-points","Puntos",new(580,251,242,43),ShowCurvePoints);
+        var model=Profile.Fan.UnifiedDemand!;var points=model.Curve;
+        if(!ShowCurvePoints)
+        {
+            string[] names=["Temperatura CPU","Temperatura GPU","Potencia CPU","Potencia GPU","Carga CPU","Carga GPU"];
+            for(int i=0;i<6;i++)Slider(g,"influence-"+i,names[i],new(331,310+i*78,490,72),model.Influence(i),i<2?100:0,i<2?150:100,"%",true);
+            DrawText(g,"Temperaturas protegidas · los aportes no se promedian.",331,794,16,Muted,490);
+        }
+        else
+        {
+            var count=Math.Min(points.Count,7);var start=Math.Clamp(SelectedNode-3,0,Math.Max(0,points.Count-count));
+            Button(g,"node-previous","‹",new(731,305,42,35),false,SelectedNode>0);Button(g,"node-next","›",new(781,305,42,35),false,SelectedNode<points.Count-1);
+            var table=new RectangleF(333,357,489,376);Card(g,table,false,8);
+            DrawText(g,"#",345,369,20,Muted,43);DrawText(g,"Demanda (%)",404,369,20,Muted,192);DrawText(g,"Nivel",650,369,20,Muted,145);
+            using(var grid=new Pen(Border)){g.DrawLine(grid,390,table.Top,390,table.Bottom);g.DrawLine(grid,621,table.Top,621,table.Bottom);for(int row=1;row<8;row++)g.DrawLine(grid,333,357+row*47,822,357+row*47);}
+            for(int i=0;i<count;i++){var index=start+i;var rect=new RectangleF(334,404+i*47,487,46);if(index==SelectedNode)Card(g,rect,true,6);
+                DrawText(g,(index+1).ToString(),345,rect.Y+10,21,Muted,43);DrawText(g,points[index].Input.ToString("0"),445,rect.Y+10,21,Muted,168);DrawText(g,points[index].Level.ToString("0"),669,rect.Y+10,21,Muted,130);Hit("node-"+index,rect,"Punto "+(index+1));}
+            Button(g,"node-add","+  Añadir punto",new(331,767,226,44),true,points.Count<64);Button(g,"node-remove","−  Quitar",new(567,767,116,44),false,SelectedNode>0&&SelectedNode<points.Count-1&&points.Count>2);Button(g,"curve-reset","Restablecer",new(693,767,131,44));
+        }
+        DrawText(g,"Una curva · arrastra los puntos",889,201,27,null,735,true);
+        DrawText(g,"Azul: edición · gris: preset inicial del perfil, solo lectura.",892,231,17,Muted,737);DrawCurve(g,new(958,298,634,350),true);
         var selected=SelectedNode>=0&&SelectedNode<points.Count?points[SelectedNode]:null;
-        DrawText(g,selected is null?"Selecciona un nodo; flechas ajustan entrada/nivel.":$"Punto {SelectedNode+1}: {selected.Input:0} {Unit()} · nivel {selected.Level:0}",892,728,18,Muted,737);
-        Button(g,"save","Guardar curvas",new(894,763,325,48),true);Button(g,"curve-defaults","Valores iniciales del perfil",new(1235,763,389,48));
+        DrawText(g,selected is null?"Selecciona un nodo; flechas ajustan demanda/nivel.":$"Punto {SelectedNode+1}: demanda {selected.Input:0} % · nivel {selected.Level:0}",892,728,18,Muted,737);
+        Button(g,"save","Guardar curva e influencias",new(894,763,325,48),true);Button(g,"curve-defaults","Valores iniciales del perfil",new(1235,763,389,48));
     }
     private void SimulationPage(Graphics g)
     {
@@ -317,64 +325,51 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Simulación sin hardware · "+ProfileName,889,201,27,null,735,true);
         DrawText(g,"CPU de demanda: "+(Profile.Fan.Tuning.CpuTemperatureSource switch{CpuDemandTemperatureSource.CoreAverage=>"media de núcleos",CpuDemandTemperatureSource.PerformanceCoreAverage=>"media de P-Cores",CpuDemandTemperatureSource.HottestPerformanceCoresAverage=>"P-Cores más calientes",_=>"paquete/núcleo más caliente"}),889,238,18,Muted,730);
         var d=Simulation.Current;
-        Metric(g,"Demanda cruda",Value(d?.RawDemandLevel,"",1),new(890,280,230,131),Red);
-        Metric(g,"Filtrada (EMA)",Value(d?.SmoothedDemandLevel,"",1),new(1136,280,230,131),Blue);
+        Metric(g,"Demanda total",Value(d?.UnifiedDemand?.Percent,"%",1),new(890,280,230,131),Red);
+        Metric(g,"Objetivo EMA",Value(d?.SmoothedDemandLevel,"",1),new(1136,280,230,131),Blue);
         Metric(g,"Nivel calculado",d?.EqualFanLevel?.ToString()??"—",new(1382,280,240,131),Green);
         DrawText(g,$"Tiempo virtual: {Simulation.ElapsedSeconds} s · {(SimulationRunning?"en marcha":"pausado")} · carga: {d?.ObservedLoadSeconds??0:0} s",889,426,20,Muted,730);
-        var plot=new RectangleF(955,490,637,158);using var grid=new Pen(Border);
-        for(int i=0;i<=4;i++){var y=plot.Bottom-i*plot.Height/4;g.DrawLine(grid,plot.Left,y,plot.Right,y);DrawText(g,(10+i*10).ToString(),plot.Left-42,y-12,17,Muted,40);}
-        void Series(Func<AdaptiveFanInertiaDecision,double?> select,Color color)
-        {using var line=new Pen(color,2);var points=Simulation.History.Select(p=>new PointF(plot.Right-(Simulation.ElapsedSeconds-p.Seconds)/600f*plot.Width,plot.Bottom-(float)((select(p.Decision)!.Value-10)/40)*plot.Height)).ToArray();if(points.Length>1)g.DrawLines(line,points);}
-        Series(d=>d.RawDemandLevel,Red);Series(d=>d.SmoothedDemandLevel,Blue);Series(d=>d.EqualFanLevel,Green);
-        DrawText(g,"Últimos 600 s virtuales · cruda / EMA / nivel",889,662,19,Muted,730);
+        var observation=d?.UnifiedDemand;
+        if(observation is not null)DrawText(g,"Domina: "+VariableName(observation.DominantVariable)+(observation.ThermalProtection?" · protección térmica":""),889,453,17,observation.ThermalProtection?Yellow:Muted,730);
+        IReadOnlyList<ProductDemandMarker> simulated=observation is null?[]:[new(observation.Percent,observation.Level,false,observation),new(observation.Percent,d!.EqualFanLevel!.Value,true,observation)];
+        DrawCurve(g,new(955,527,637,100),false,simulated);
         DrawText(g,d?.ThermalOverride==true?"Override de demanda térmica":d?.SustainedLoadCooling==true?"Descenso de carga prolongada":"Respuesta con inercia y confirmación",889,697,20,d?.ThermalOverride==true?Yellow:Muted,730);
         Button(g,"sim-run",SimulationRunning?"Pausar":"Reanudar",new(889,738,160,44),SimulationRunning);Button(g,"sim-60","+ 60 s",new(1064,738,170,44));Button(g,"sim-1200","+ 20 min",new(1249,738,195,44));Button(g,"sim-reset","Reiniciar",new(1459,738,165,44));
         DrawText(g,"Modelo de demanda; no valida SafetyGate, RPM ni respuesta física.",889,798,17,Yellow,730);
     }
-    private string Unit() => Axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.GpuTemperature?"°C":Axis is AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.GpuPower?"W":"%";
-    internal IReadOnlyList<ProductCurveMarker> CurrentCurveMarkers(params AdaptiveCurveAxis[] axes)
+    private static string VariableName(int index)=>new[]{"Temperatura CPU","Temperatura GPU","Potencia CPU","Potencia GPU","Carga CPU","Carga GPU"}[index];
+    internal IReadOnlyList<ProductDemandMarker> CurrentDemandMarkers()
     {
-        var live=FreshSnapshot;
-        var sample=State.AutomaticDecisionSnapshot;
-        var active=live is not null && State.FanMode=="Automatic" && State.FanAuthority=="Custom" && !State.LifecycleBlocked &&
-            State.AppliedFanProfile==Editing.ToString() && State.Source==State.AppliedFanProfile &&
-            State.AutomaticDecision is { ExecutionAuthorized:true, EqualFanLevel: not null } &&
-            State.AutomaticDecision.EqualFanLevel==State.FanLevel && sample is not null && sample.Timestamp<=DateTimeOffset.UtcNow &&
-            DateTimeOffset.UtcNow-sample.Timestamp<=VictusFanControl.Safety.SafetyGate.MaximumTelemetryAge;
-        return ProductCurveMarkers.Build(Profile.Fan,live,active?State.AppliedAutomaticConfiguration:null,
-            active?sample:null,active?State.FanLevel:null,axes);
+        var live=FreshSnapshot;var sample=State.AutomaticDecisionSnapshot;
+        var active=live is not null&&State.FanMode=="Automatic"&&State.FanAuthority=="Custom"&&!State.LifecycleBlocked&&State.AppliedFanProfile==Editing.ToString()&&State.Source==State.AppliedFanProfile&&
+            State.AutomaticDecision is{ExecutionAuthorized:true,EqualFanLevel:not null}&&State.AutomaticDecision.EqualFanLevel==State.FanLevel&&sample is not null&&sample.Timestamp<=DateTimeOffset.UtcNow&&DateTimeOffset.UtcNow-sample.Timestamp<=VictusFanControl.Safety.SafetyGate.MaximumTelemetryAge;
+        return ProductCurveMarkers.BuildUnified(Profile.Fan,live,active?State.AppliedAutomaticConfiguration:null,active?sample:null,active?State.FanLevel:null);
     }
-    private void DrawCurve(Graphics g,RectangleF plot,bool editable)
+    private void DrawCurve(Graphics g,RectangleF plot,bool editable,IReadOnlyList<ProductDemandMarker>? simulated=null)
     {
-        _plot=editable?plot:RectangleF.Empty;double xmax=AdaptiveCurveProfiles.MaximumInput(Axis);
+        _plot=editable?plot:RectangleF.Empty;
         using var grid=new Pen(Border);for(int i=0;i<=4;i++){float y=plot.Bottom-i*plot.Height/4;g.DrawLine(grid,plot.Left,y,plot.Right,y);DrawText(g,(10+i*10).ToString(),plot.Left-42,y-14,19,Muted,40);}
-        for(int i=0;i<=5;i++){float x=plot.Left+i*plot.Width/5;g.DrawLine(grid,x,plot.Top,x,plot.Bottom);DrawText(g,(i*xmax/5).ToString("0"),x-13,plot.Bottom+12,19,Muted,66);}
-        PointF Position(AdaptiveFanCurvePoint p)=>new(plot.Left+(float)(p.Input/xmax)*plot.Width,plot.Bottom-(float)((p.Level-10)/40)*plot.Height);
-        var c=Profile.Fan.BuildPolicy();var other=Axis switch{AdaptiveCurveAxis.CpuTemperature=>AdaptiveCurveAxis.GpuTemperature,AdaptiveCurveAxis.GpuTemperature=>AdaptiveCurveAxis.CpuTemperature,AdaptiveCurveAxis.CpuPower=>AdaptiveCurveAxis.GpuPower,AdaptiveCurveAxis.GpuPower=>AdaptiveCurveAxis.CpuPower,AdaptiveCurveAxis.CpuLoad=>AdaptiveCurveAxis.GpuLoad,_=>AdaptiveCurveAxis.CpuLoad};
-        foreach(var axis in new[]{other,Axis})
+        for(int i=0;i<=5;i++){float x=plot.Left+i*plot.Width/5;g.DrawLine(grid,x,plot.Top,x,plot.Bottom);DrawText(g,(i*20).ToString(),x-13,plot.Bottom+12,19,Muted,66);}
+        PointF Position(AdaptiveFanCurvePoint p)=>new(plot.Left+(float)(p.Input/100)*plot.Width,plot.Bottom-(float)((p.Level-10)/40)*plot.Height);
+        var current=Profile.Fan.UnifiedDemand!.Curve;var reference=UnifiedFanDemand.Default(Editing==ProductPowerProfile.Battery).Curve;
+        foreach(var isReference in new[]{true,false})
         {
-            var ps=AdaptiveCurveProfiles.Curve(c,axis);var color=editable&&axis!=Axis?Muted:axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.CpuLoad?Red:Blue;
-            using var line=new Pen(color,axis==Axis?3:2){DashStyle=axis==Axis?DashStyle.Solid:DashStyle.Dash};
-            var visible=ps.Where(p=>p.Input<=xmax).Select(Position).ToArray();if(visible.Length>1)g.DrawLines(line,visible);
-            if(editable&&axis==Axis)foreach(var point in visible){using var b=new SolidBrush(Ink);g.FillEllipse(b,point.X-6,point.Y-6,12,12);g.DrawEllipse(line,point.X-7,point.Y-7,14,14);}
-            if(editable&&axis==Axis&&SelectedNode>=0&&SelectedNode<ps.Count){var selected=Position(ps[SelectedNode]);using var ring=new Pen(Yellow,3);g.DrawEllipse(ring,selected.X-12,selected.Y-12,24,24);}
+            var ps=isReference?reference:current;using var line=new Pen(isReference?Muted:Blue,isReference?2:3){DashStyle=isReference?DashStyle.Dash:DashStyle.Solid};
+            var visible=ps.Select(Position).ToArray();g.DrawLines(line,visible);
+            if(editable&&!isReference)foreach(var point in visible){using var b=new SolidBrush(Ink);g.FillEllipse(b,point.X-6,point.Y-6,12,12);g.DrawEllipse(line,point.X-7,point.Y-7,14,14);}
+            if(editable&&!isReference&&SelectedNode>=0&&SelectedNode<ps.Count){var selected=Position(ps[SelectedNode]);using var ring=new Pen(Yellow,3);g.DrawEllipse(ring,selected.X-12,selected.Y-12,24,24);}
         }
-        var markers=CurrentCurveMarkers(editable?[Axis]:[other,Axis]);
-        // Draw previews first, then the accepted level. Neither marker is an editable hit target.
+        var markers=simulated??CurrentDemandMarkers();
         foreach(var marker in markers.OrderBy(m=>m.IsApplied))
         {
-            var point=Position(new(Math.Clamp(marker.Input,0,xmax),marker.Level));
-            using var halo=new Pen(Background,6);g.DrawEllipse(halo,point.X-9,point.Y-9,18,18);
+            var point=Position(new(marker.Input,marker.Level));using var halo=new Pen(Background,6);g.DrawEllipse(halo,point.X-9,point.Y-9,18,18);
             using var ring=new Pen(marker.IsApplied?Green:Yellow,3);g.DrawEllipse(ring,point.X-9,point.Y-9,18,18);
             if(marker.IsApplied){using var fill=new SolidBrush(Green);g.FillEllipse(fill,point.X-5,point.Y-5,10,10);}
         }
-        var applied=markers.FirstOrDefault(m=>m.IsApplied);
-        DrawText(g,(applied is null?"● Solicitud Automatic: —":$"● Solicitud: {applied.Level:0}")+"  ·  ○ Vista previa",plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
-        DrawText(g,"Entrada ("+Unit()+")",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300);
-        DrawText(g,"Nivel común · 10–50",plot.Left,plot.Top-41,19,Muted,285);
-        if(editable){var cpu=Axis is AdaptiveCurveAxis.CpuTemperature or AdaptiveCurveAxis.CpuPower or AdaptiveCurveAxis.CpuLoad;
-            DrawText(g,cpu?"● CPU · editable":"● GPU · editable",plot.Left+275,plot.Top-41,16,cpu?Red:Blue,170);
-            DrawText(g,cpu?"┄ GPU · comparación":"┄ CPU · comparación",plot.Left+449,plot.Top-41,16,Muted,185);}
+        var applied=markers.FirstOrDefault(m=>m.IsApplied);var preview=markers.FirstOrDefault(m=>!m.IsApplied);
+        DrawText(g,(simulated is not null?"● Simulado":applied is null?"● Solicitud: —":$"● Solicitud: {applied.Level:0}")+" · ○ Objetivo"+(preview is null?"":$" {preview.Input:0.0} %"),plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
+        DrawText(g,"Demanda (%)",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300);DrawText(g,"Nivel común · 10–50",plot.Left,plot.Top-41,19,Muted,275);
+        if(editable){DrawText(g,"● Curva editable",plot.Left+275,plot.Top-41,16,Blue,170);DrawText(g,"┄ Preset inicial",plot.Left+449,plot.Top-41,16,Muted,185);}
     }
     private void TelemetryPage(Graphics g)
     {
@@ -456,7 +451,7 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         base.OnMouseDown(e);if(e.Button!=MouseButtons.Left)return;Focus();var p=Virtual(e.Location);
         if(!_plot.IsEmpty&&!Busy)
         {
-            var points=AdaptiveCurveProfiles.Curve(Profile.Fan.BuildPolicy(),Axis);var xmax=AdaptiveCurveProfiles.MaximumInput(Axis);
+            var points=Profile.Fan.UnifiedDemand!.Curve;var xmax=100;
             for(int i=0;i<points.Count;i++){var px=_plot.Left+(float)(points[i].Input/xmax)*_plot.Width;var py=_plot.Bottom-(float)((points[i].Level-10)/40)*_plot.Height;if(Math.Abs(p.X-px)<17&&Math.Abs(p.Y-py)<17){_dragContext=DragContext;_dragNode=i;SelectedNode=i;_keyboardId="node-"+i;Capture=true;Invalidate();return;}}
         }
         var hit=_hits.LastOrDefault(h=>h.Bounds.Contains(p));if(hit is null||!CanInteract(hit))return;
@@ -474,14 +469,14 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         base.OnMouseMove(e);var p=Virtual(e.Location);
         if(_dragContext.HasValue&&(_dragContext.Value!=DragContext||Busy)){_dragSlider=null;_dragNode=-1;_dragContext=null;Capture=false;return;}
         if(_dragSlider is not null){EditSlider(_dragSlider,p);return;}
-        if(_dragNode>=0){var x=Math.Round(Math.Clamp((p.X-_plot.Left)/_plot.Width,0,1)*AdaptiveCurveProfiles.MaximumInput(Axis));var level=(int)Math.Round(10+Math.Clamp((_plot.Bottom-p.Y)/_plot.Height,0,1)*40);NodeEdited?.Invoke(_dragNode,x,level);return;}
+        if(_dragNode>=0){var x=Math.Round(Math.Clamp((p.X-_plot.Left)/_plot.Width,0,1)*100);var level=(int)Math.Round(10+Math.Clamp((_plot.Bottom-p.Y)/_plot.Height,0,1)*40);NodeEdited?.Invoke(_dragNode,x,level);return;}
         Cursor=_hits.Any(h=>CanInteract(h)&&h.Bounds.Contains(p))?Cursors.Hand:Cursors.Default;
     }
     protected override void OnMouseUp(MouseEventArgs e){base.OnMouseUp(e);_dragSlider=null;_dragNode=-1;_dragContext=null;Capture=false;}
     protected override void OnMouseCaptureChanged(EventArgs e){base.OnMouseCaptureChanged(e);if(!Capture){_dragSlider=null;_dragNode=-1;_dragContext=null;}}
     private bool CanInteract(ProductHit hit) => hit.Enabled&&(!Busy||hit.Id is "firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close");
     private ProductHit? KeyboardHit=>_hits.LastOrDefault(h=>h.Id==_keyboardId&&CanInteract(h));
-    private int SliderValue(string id) => id.StartsWith("sim-input-")?SimulationInputs.Value(int.Parse(id[10..])):id switch{"manual"=>ManualLevel,"pl1"=>Profile.CpuPl1Watts,"pl2"=>Profile.CpuPl2Watts,"gpu"=>Profile.GpuMaximumMHz,_=>0};
+    private int SliderValue(string id) => id.StartsWith("influence-")?Profile.Fan.UnifiedDemand!.Influence(int.Parse(id[10..])):id.StartsWith("sim-input-")?SimulationInputs.Value(int.Parse(id[10..])):id switch{"manual"=>ManualLevel,"pl1"=>Profile.CpuPl1Watts,"pl2"=>Profile.CpuPl2Watts,"gpu"=>Profile.GpuMaximumMHz,_=>0};
     internal void HandleKey(Keys keyData)=>OnKeyDown(new KeyEventArgs(keyData));
     protected override bool IsInputKey(Keys keyData)=>(keyData&Keys.KeyCode) is Keys.Left or Keys.Right or Keys.Up or Keys.Down or Keys.Tab or Keys.PageDown or Keys.PageUp or Keys.Home or Keys.End || base.IsInputKey(keyData);
     protected override bool ProcessDialogKey(Keys keyData)
@@ -501,18 +496,18 @@ internal sealed class ProductCanvas : System.Windows.Forms.Control
         }
         if((e.KeyCode is Keys.Enter or Keys.Space)&&KeyboardHit is { } action)
         {if(!action.Slider)Command?.Invoke(action.Id);e.Handled=true;return;}
-        if(!Busy&&!SimulationVisible&&(Page==ProductPage.Curves||Page==ProductPage.Fans&&FanTab==2)&&e.KeyCode is Keys.PageDown or Keys.PageUp or Keys.Home or Keys.End)
+        if(!Busy&&!SimulationVisible&&Page==ProductPage.Curves&&e.KeyCode is Keys.PageDown or Keys.PageUp or Keys.Home or Keys.End)
         {
-            var count=AdaptiveCurveProfiles.Curve(Profile.Fan.BuildPolicy(),Axis).Count;
+            var count=Profile.Fan.UnifiedDemand!.Curve.Count;
             var index=e.KeyCode==Keys.Home?0:e.KeyCode==Keys.End?count-1:Math.Clamp(SelectedNode+(e.KeyCode==Keys.PageDown?1:-1),0,count-1);
-            _keyboardId="node-"+index;Command?.Invoke(_keyboardId);e.Handled=true;return;
+            ShowCurvePoints=true;_keyboardId="node-"+index;Command?.Invoke(_keyboardId);e.Handled=true;return;
         }
         if(Busy||e.KeyCode is not(Keys.Left or Keys.Right or Keys.Up or Keys.Down))return;
         if(KeyboardHit is { Slider:true } slider)
         {ValueEdited?.Invoke(slider.Id,Math.Clamp(SliderValue(slider.Id)+(e.KeyCode is Keys.Right or Keys.Up?1:-1),slider.Min,slider.Max));e.Handled=true;return;}
-        if(!SimulationVisible&&(Page==ProductPage.Curves||Page==ProductPage.Fans&&FanTab==2)&&(KeyboardHit is null||_keyboardId=="node-"+SelectedNode))
+        if(!SimulationVisible&&Page==ProductPage.Curves&&(KeyboardHit is null||_keyboardId=="node-"+SelectedNode))
         {
-            var ps=AdaptiveCurveProfiles.Curve(Profile.Fan.BuildPolicy(),Axis);
+            var ps=Profile.Fan.UnifiedDemand!.Curve;
             if(SelectedNode>=0&&SelectedNode<ps.Count){var p=ps[SelectedNode];NodeEdited?.Invoke(SelectedNode,p.Input+(e.KeyCode==Keys.Right?1:e.KeyCode==Keys.Left?-1:0),(int)p.Level+(e.KeyCode==Keys.Up?1:e.KeyCode==Keys.Down?-1:0));e.Handled=true;}
         }
     }

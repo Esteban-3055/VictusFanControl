@@ -36,7 +36,8 @@ public sealed class ProductCurveSimulation
         for(int i=0;i<seconds;i++)
         {
             var time=ElapsedSeconds+1;
-            var decision=_engine.Evaluate(new(DateTimeOffset.UnixEpoch.AddSeconds(time),inputs.CpuTemperature,inputs.CpuPower,inputs.CpuLoad,inputs.GpuTemperature,inputs.GpuPower,inputs.GpuLoad));
+            var input=new AdaptiveFanPolicyInput(DateTimeOffset.UnixEpoch.AddSeconds(time),inputs.CpuTemperature,inputs.CpuPower,inputs.CpuLoad,inputs.GpuTemperature,inputs.GpuPower,inputs.GpuLoad);
+            var decision=_engine.Evaluate(input);
             if(!decision.Accepted)throw new InvalidOperationException(decision.Detail);
             Current=decision;ElapsedSeconds=time;_history.Add(new(time,decision));
         }

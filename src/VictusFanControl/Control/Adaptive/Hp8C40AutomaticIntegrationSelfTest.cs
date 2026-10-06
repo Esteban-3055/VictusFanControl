@@ -381,7 +381,7 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
                 var sample=Sample(Now(),40) with{GpuTemperatureC=35,GpuPowerW=5};
                 var actual=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
                 var target=ac?12:10;
-                Check(actual.EqualFanLevel==target&&actual.Action==AdaptiveFanProductionActionKind.EnterCustomAndApply,
+                Check(actual.EqualFanLevel==target&&actual.UnifiedDemand is not null&&actual.Action==AdaptiveFanProductionActionKind.EnterCustomAndApply,
                     "explicit quiet 10..50 review applies the source curve after each clean Firmware release");
                 clock+=1000;sample=sample with{Timestamp=Now()};
                 await controller.ProcessAutomaticAsync(sample,Raw(sample),default);

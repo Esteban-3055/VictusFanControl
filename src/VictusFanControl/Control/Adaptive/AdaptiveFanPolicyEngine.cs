@@ -17,7 +17,10 @@ public sealed record AdaptiveFanPolicyConfig(
     IReadOnlyList<AdaptiveFanCurvePoint> CpuPowerCurve,
     IReadOnlyList<AdaptiveFanCurvePoint> GpuPowerCurve,
     IReadOnlyList<AdaptiveFanCurvePoint> CpuLoadCurve,
-    IReadOnlyList<AdaptiveFanCurvePoint> GpuLoadCurve);
+    IReadOnlyList<AdaptiveFanCurvePoint> GpuLoadCurve)
+{
+    public UnifiedFanDemand? UnifiedDemand { get; init; }
+}
 
 public sealed record AdaptiveFanPolicyInput(
     DateTimeOffset Timestamp,
@@ -37,7 +40,10 @@ public sealed record AdaptiveFanPolicyDecision(
     bool Accepted,
     int? EqualFanLevel,
     double? RawDemandLevel,
-    string Detail);
+    string Detail)
+{
+    public UnifiedDemandObservation? UnifiedDemand { get; init; }
+}
 
 /// <summary>
 /// Pure, hardware-independent adaptive fan-policy engine.
@@ -53,6 +59,7 @@ public sealed class AdaptiveFanPolicyEngine
     private int? _currentLevel;
     private DateTimeOffset? _lastTimestamp;
     private int _consecutiveDecreaseSamples;
+    private UnifiedDemandObservation? _lastUnifiedDemand;
 
     public AdaptiveFanPolicyEngine(
         AdaptiveFanPolicyConfig config)
@@ -68,6 +75,7 @@ public sealed class AdaptiveFanPolicyEngine
         _currentLevel = null;
         _lastTimestamp = null;
         _consecutiveDecreaseSamples = 0;
+        _lastUnifiedDemand = null;
     }
 
     public AdaptiveFanPolicyDecision Evaluate(
@@ -113,7 +121,9 @@ public sealed class AdaptiveFanPolicyEngine
 
         _lastTimestamp = input.Timestamp;
 
-        var rawDemand = new[]
+        var unified=_config.UnifiedDemand?.Evaluate(input);
+        _lastUnifiedDemand=unified;
+        var rawDemand = unified?.Level ?? new[]
         {
             Interpolate(
                 _config.CpuTemperatureCurve,
@@ -239,11 +249,13 @@ public sealed class AdaptiveFanPolicyEngine
             Accepted: true,
             EqualFanLevel: _currentLevel,
             RawDemandLevel: rawDemand,
-            Detail: detail);
+            Detail: detail)
+        { UnifiedDemand = _lastUnifiedDemand };
 
     private static void ValidateConfig(
         AdaptiveFanPolicyConfig config)
     {
+        config.UnifiedDemand?.Validate();
         if (config.MinimumLevel <= 0 ||
             config.MaximumLevel < config.MinimumLevel)
         {
@@ -316,7 +328,7 @@ public sealed class AdaptiveFanPolicyEngine
         }
     }
 
-    private static bool ValidateInput(
+    internal static bool ValidateInput(
         AdaptiveFanPolicyInput input,
         out string failure)
     {

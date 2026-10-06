@@ -18,6 +18,7 @@ public sealed record AdaptiveFanInertiaDecision(
 {
     public bool SustainedLoadCooling { get; init; }
     public double ObservedLoadSeconds { get; init; }
+    public UnifiedDemandObservation? UnifiedDemand { get; init; }
 }
 
 /// <summary>
@@ -88,7 +89,7 @@ public class AdaptiveFanInertiaPolicy
         var requested = Math.Clamp((int)Math.Ceiling(actuationDemand), _config.MinimumLevel, _config.MaximumLevel);
         AdaptiveFanInertiaDecision Accepted(string detail) =>
             new(true, _current, demand.RawDemandLevel, smoothed, actuationDemand, thermalOverride, detail)
-            { SustainedLoadCooling = _loadHistory.SustainedLoadCooling, ObservedLoadSeconds = _loadHistory.ObservedLoadSeconds };
+            { SustainedLoadCooling = _loadHistory.SustainedLoadCooling, ObservedLoadSeconds = _loadHistory.ObservedLoadSeconds, UnifiedDemand=demand.UnifiedDemand };
         if (!_current.HasValue)
         {
             _current = requested;

@@ -24,8 +24,8 @@ internal static class ProductGuiSelfTest
             Require(runtime.Commands==0,"Startup acquired authority.");
             form.HandleCommand("profile-battery");form.EditValue("pl1",30);form.EditValue("pl2",15);
             Require(form.Draft.Battery.CpuPl1Watts==30&&form.Draft.Battery.CpuPl2Watts==30&&form.Draft.Ac.CpuPl1Watts==35,"PL1/PL2 or independent AC failed.");
-            form.HandleCommand("profile-ac");canvas.Axis=AdaptiveCurveAxis.CpuTemperature;form.EditNode(3,70,31);
-            Require(form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level==31&&form.Draft.Battery.Fan.BuildPolicy().CpuTemperatureCurve[3].Level==ProductProfiles.DefaultProfile(ProductPowerProfile.Battery).Fan.BuildPolicy().CpuTemperatureCurve[3].Level,"Curve edit leaked across profiles.");
+            form.HandleCommand("profile-ac");canvas.ShowCurvePoints=true;form.EditNode(3,70,31);
+            Require(form.Draft.Ac.Fan.UnifiedDemand!.Curve[3].Level==31&&form.Draft.Battery.Fan.UnifiedDemand!.Curve[3].Level==ProductProfiles.DefaultProfile(ProductPowerProfile.Battery).Fan.UnifiedDemand!.Curve[3].Level,"Curve edit leaked across profiles.");
             for(int i=0;i<7;i++)form.HandleCommand("page-"+i);
             form.EditValue("manual",0);Require(canvas.ManualLevel==10,"Manual lower endpoint inaccessible.");
             form.EditValue("manual",99);Require(canvas.ManualLevel==50,"Manual upper endpoint escaped.");
@@ -49,6 +49,17 @@ internal static class ProductGuiSelfTest
             using(var cancelled=new ProductNumericDialog("CPU PL1 (W) · AC",30,8,44,text=>form.TryEditNumericValue("pl1",text,out var error)?null:error))
             {cancelled.Show(form);Application.DoEvents();cancelled.Input.Text="40";cancelled.DialogResult=DialogResult.Cancel;Require(form.Draft.Ac.CpuPl1Watts==30,"Cancelled dialog edited draft.");}
             Require(runtime.Commands==0,"Typed values wrote hardware.");
+            var oldCaps=form.Draft.PerformanceConfiguration();
+            for(int i=0;i<6;i++)
+            {
+                var batteryPeer=ProductProfilesStore.Serialize(form.Draft.With(ProductPowerProfile.Ac,ProductProfiles.DefaultProfile(ProductPowerProfile.Ac)));
+                form.EditValue("influence-"+i,-999);Require(form.Draft.Ac.Fan.UnifiedDemand!.Influence(i)==(i<2?100:0),"Influence lower bound escaped.");
+                form.EditValue("influence-"+i,999);Require(form.Draft.Ac.Fan.UnifiedDemand!.Influence(i)==(i<2?150:100),"Influence upper bound escaped.");
+                Require(batteryPeer==ProductProfilesStore.Serialize(form.Draft.With(ProductPowerProfile.Ac,ProductProfiles.DefaultProfile(ProductPowerProfile.Ac))),"Influence leaked into Battery.");
+            }
+            form.HandleCommand("curve-defaults");Require(form.Draft.PerformanceConfiguration()==oldCaps,"Reset of curve/influences changed CPU/GPU caps.");
+            form.EditNode(0,90,10);form.EditNode(form.Draft.Ac.Fan.UnifiedDemand!.Curve.Count-1,20,10);
+            Require(form.Draft.Ac.Fan.UnifiedDemand!.Curve[0].Input==0&&form.Draft.Ac.Fan.UnifiedDemand!.Curve[^1]==new AdaptiveFanCurvePoint(100,50),"Curve endpoints escaped protection.");
             form.EditNode(3,999,999);form.Draft.Validate();
             canvas.SelectedNode=3;form.HandleCommand("node-add");form.HandleCommand("node-remove");form.Draft.Validate();
             // Keyboard and accessibility gestures use the same draft-only path as the mouse.
@@ -64,8 +75,8 @@ internal static class ProductGuiSelfTest
             canvas.Busy=true;var beforeBusy=ProductProfilesStore.Serialize(form.Draft);canvas.HandleKey(Keys.Left);
             bool busyRejected=false;try{pl1.Value="8";}catch(InvalidOperationException){busyRejected=true;}Require(busyRejected&&beforeBusy==ProductProfilesStore.Serialize(form.Draft),"Busy accessibility gesture changed a draft.");canvas.Busy=false;
             canvas.Page=ProductPage.Home;canvas.Refresh();Require(pl1.Bounds==Rectangle.Empty,"Stale accessible child retained an invisible hit area.");
-            canvas.Page=ProductPage.Curves;canvas.Refresh();var priorAxis=canvas.Axis;canvas.HandleKey(Keys.Enter);
-            Require(canvas.Axis==priorAxis,"A retained focus activated an unrelated control on another page.");
+            canvas.Page=ProductPage.Curves;canvas.Refresh();var priorAxis=canvas.ShowCurvePoints;canvas.HandleKey(Keys.Enter);
+            Require(canvas.ShowCurvePoints==priorAxis,"A retained focus activated an unrelated control on another page.");
             Require(runtime.Commands==0,"Keyboard or accessibility edited hardware.");
             var now=DateTime.UtcNow.Ticks;Require(PerformanceGuardianClient.IsStatusFresh(now,now-TimeSpan.FromSeconds(5).Ticks,true),"Fresh Guardian response refused.");
             Require(!PerformanceGuardianClient.IsStatusFresh(now,now-TimeSpan.FromSeconds(6).Ticks,true)&&!PerformanceGuardianClient.IsStatusFresh(now,now+1,true)&&!PerformanceGuardianClient.IsStatusFresh(now,now,false),"Stale/future/exited Guardian response remained active.");
@@ -127,31 +138,31 @@ internal static class ProductGuiSelfTest
             canvas.State=confirmed with{Snapshot=confirmed.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddMinutes(-1)}};
             canvas.Page=ProductPage.Monitoring;Render("state-stale-telemetry",false);Require(canvas.CurrentSnapshot is null,"Expired telemetry appeared as current.");
             canvas.State=confirmed with{Snapshot=confirmed.Snapshot! with{CpuPackagePowerW=null,GpuPowerW=null,CpuFanRpm=null,GpuFanRpm=null}};Render("state-missing-metrics");
-            canvas.Page=ProductPage.Curves;canvas.SimulationVisible=false;canvas.SelectedNode=5;Render("curve-selected-node");
-            canvas.Editing=ProductPowerProfile.Battery;canvas.Axis=AdaptiveCurveAxis.GpuPower;Render("curve-battery-GPU-power");
+            canvas.Page=ProductPage.Curves;canvas.SimulationVisible=false;canvas.ShowCurvePoints=false;Render("curve-influences");Require(canvas.Hits.Count(h=>h.Id.StartsWith("influence-")&&h.Slider)==6&&canvas.Hits.All(h=>!h.Id.StartsWith("axis-")),"Influence controls missing or obsolete axis buttons remain.");canvas.ShowCurvePoints=true;canvas.SelectedNode=5;Render("curve-selected-node");
+            canvas.Editing=ProductPowerProfile.Battery;canvas.ShowCurvePoints=true;Render("curve-battery-unified");
             canvas.SimulationVisible=true;canvas.Editing=ProductPowerProfile.Ac;canvas.Simulation=new(baseline.Ac.Fan);canvas.SimulationInputs=new(80,70,40,110,100,100);canvas.Simulation.Advance(new(),1);canvas.Simulation.Advance(canvas.SimulationInputs,1201);Render("curve-simulator-sustained-load");
             canvas.Size=new(1040,660);Render("curve-simulator-minimum-layout");
-            canvas.Size=new(1672,941);canvas.SimulationVisible=false;canvas.Editing=ProductPowerProfile.Ac;canvas.Axis=AdaptiveCurveAxis.CpuTemperature;
+            canvas.Size=new(1672,941);canvas.SimulationVisible=false;canvas.Editing=ProductPowerProfile.Ac;canvas.ShowCurvePoints=true;
             var markerSample=Snapshot(DateTimeOffset.UtcNow,75,68,25,100);
             var markerConfig=baseline.Ac.Fan with{Tuning=baseline.Ac.Fan.Tuning with{CpuTemperatureSource=CpuDemandTemperatureSource.PackageOrHottestCore}};
             canvas.Profiles=baseline with{Ac=baseline.Ac with{Fan=markerConfig}};
             canvas.State=confirmed with{FanMode="Automatic",FanAuthority="Custom",FanLevel=31,AppliedFanProfile="Ac",AppliedAutomaticConfiguration=markerConfig,
                 Snapshot=markerSample,AutomaticDecisionSnapshot=markerSample,AutomaticDecision=new(AdaptiveFanProductionMode.Automatic,AdaptiveFanProductionActionKind.HoldCustom,true,31,35,FanAuthority.Custom,"fixture")};
-            var curveMarkers=canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature);
+            var curveMarkers=canvas.CurrentDemandMarkers();
             Require(curveMarkers.Count==2&&curveMarkers.Single(m=>m.IsApplied).Level==31,"Accepted request marker was replaced by draft interpolation.");
             canvas.Page=ProductPage.Fans;canvas.FanTab=0;Render("fans-live-demand-marker");
             canvas.Page=ProductPage.Curves;Render("editor-live-demand-marker");
-            canvas.Profiles=canvas.Profiles with{Ac=canvas.Profiles.Ac with{Fan=markerConfig with{Profile=AdaptiveCurveProfiles.WithCurve(markerConfig.Profile,AdaptiveCurveAxis.CpuTemperature,[new(0,10),new(110,20)])}}};
-            var changedMarkers=canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature);
+            canvas.Profiles=canvas.Profiles with{Ac=canvas.Profiles.Ac with{Fan=markerConfig with{UnifiedDemand=markerConfig.UnifiedDemand! with{Curve=[new(0,10),new(90,10),new(100,50)]}}}};
+            var changedMarkers=canvas.CurrentDemandMarkers();
             Require(changedMarkers.Single(m=>m.IsApplied)==curveMarkers.Single(m=>m.IsApplied)&&changedMarkers.Single(m=>!m.IsApplied).Level!=curveMarkers.Single(m=>!m.IsApplied).Level,"Editing changed the accepted request or left preview frozen.");
             Render("editor-draft-vs-applied-marker");
-            canvas.Editing=ProductPowerProfile.Battery;Require(canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature).All(m=>!m.IsApplied),"Other profile displayed a fabricated applied request.");
+            canvas.Editing=ProductPowerProfile.Battery;Require(canvas.CurrentDemandMarkers().All(m=>!m.IsApplied),"Other profile displayed a fabricated applied request.");
             canvas.Editing=ProductPowerProfile.Ac;canvas.State=canvas.State with{Snapshot=markerSample with{Timestamp=DateTimeOffset.UtcNow.AddMinutes(-1)}};
-            Require(canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature).Count==0,"Stale telemetry left moving markers visible.");
+            Require(canvas.CurrentDemandMarkers().Count==0,"Stale telemetry left moving markers visible.");
             canvas.State=canvas.State with{Snapshot=markerSample,AutomaticDecisionSnapshot=markerSample with{Timestamp=DateTimeOffset.UtcNow.AddMinutes(-1)}};
-            Require(canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature).All(m=>!m.IsApplied),"Stale decision appeared as an accepted current request.");
+            Require(canvas.CurrentDemandMarkers().All(m=>!m.IsApplied),"Stale decision appeared as an accepted current request.");
             canvas.State=canvas.State with{FanMode="Firmware",FanAuthority="Firmware"};
-            Require(canvas.CurrentCurveMarkers(AdaptiveCurveAxis.CpuTemperature).All(m=>!m.IsApplied),"Firmware displayed a custom applied request.");
+            Require(canvas.CurrentDemandMarkers().All(m=>!m.IsApplied),"Firmware displayed a custom applied request.");
 
             Console.WriteLine("PASS: product GUI draft isolation, editing/navigation without authority, sliders, nodes, closed gates and real Windows renders.");
             return 0;
@@ -364,7 +375,7 @@ internal static class ProductGuiSelfTest
                 foreach(var source in new[]{"profile-ac","profile-battery"})
                 foreach(var axis in Enum.GetValues<AdaptiveCurveAxis>())
                 {
-                    form.HandleCommand(source);canvas.Axis=axis;var slot=source=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;
+                    form.HandleCommand(source);canvas.ShowCurvePoints=true;form.EditValue("influence-"+(int)axis,axis<AdaptiveCurveAxis.CpuPower?130:35);var slot=source=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;
                     var peer=ProductProfilesStore.Serialize(form.Draft.With(slot,ProductProfiles.DefaultProfile(slot)));
                     form.EditNode(0,-999,-999);form.EditNode(1,999,999);form.Draft.Validate();
                     var afterPeer=ProductProfilesStore.Serialize(form.Draft.With(slot,ProductProfiles.DefaultProfile(slot)));
@@ -372,9 +383,9 @@ internal static class ProductGuiSelfTest
                     form.HandleCommand("node-add");form.HandleCommand("node-remove");form.HandleCommand("curve-reset");form.Draft.Validate();
                 }
                 form.HandleCommand("discard");require(!form.Dirty&&original==ProductProfilesStore.Serialize(form.Draft),"Discard did not restore the saved draft.");
-                form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.Axis=AdaptiveCurveAxis.CpuLoad;
+                form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.ShowCurvePoints=true;
                 for(int i=0;i<70;i++)form.HandleCommand("node-add");
-                require(form.Draft.Ac.Fan.BuildPolicy().CpuLoadCurve.Count==64,"Curve count cap is inaccessible or not enforced.");
+                require(form.Draft.Ac.Fan.UnifiedDemand!.Curve.Count==64,"Curve count cap is inaccessible or not enforced.");
                 canvas.Refresh();canvas.HandleKey(Keys.End);canvas.Refresh();
                 require(canvas.SelectedNode==63&&canvas.Hits.Any(h=>h.Id=="node-63"),"Last of 64 nodes is not reachable by keyboard/table.");
                 canvas.HandleKey(Keys.Home);canvas.Refresh();require(canvas.SelectedNode==0,"Home failed to select first node.");
@@ -389,12 +400,12 @@ internal static class ProductGuiSelfTest
                 canvas.PointerDown(left);require(canvas.Capture,"Pointer fixture did not acquire slider capture.");canvas.PointerMove(beyond);canvas.PointerUp(beyond);require(form.Draft.Ac.CpuPl1Watts==44,"Pointer slider failed its upper bound: "+form.Draft.Ac.CpuPl1Watts);
                 canvas.Refresh();canvas.PointerDown(right);form.HandleCommand("profile-battery");canvas.Refresh();var priorBattery=form.Draft.Battery.CpuPl1Watts;canvas.PointerMove(left);canvas.PointerUp(left);
                 require(form.Draft.Battery.CpuPl1Watts==priorBattery,"A captured drag leaked into a newly selected profile.");
-                form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.Axis=AdaptiveCurveAxis.CpuTemperature;canvas.Refresh();
-                var point=form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3];var from=ScreenPoint(958+(float)(point.Input/110)*634,648-(float)((point.Level-10)/40)*350);var to=ScreenPoint(958+(float)(71d/110)*634,648);
-                canvas.PointerDown(from);canvas.PointerMove(to);canvas.PointerUp(to);require(form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Input==71,"Pointer node drag failed.");
+                form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.ShowCurvePoints=true;canvas.Refresh();
+                var point=form.Draft.Ac.Fan.UnifiedDemand!.Curve[3];var from=ScreenPoint(958+(float)(point.Input/100)*634,648-(float)((point.Level-10)/40)*350);var to=ScreenPoint(958+(float)(71d/100)*634,648);
+                canvas.PointerDown(from);canvas.PointerMove(to);canvas.PointerUp(to);require(form.Draft.Ac.Fan.UnifiedDemand!.Curve[3].Input==71,"Pointer node drag failed.");
                 form.HandleCommand("discard");
-                canvas.Refresh();var modeDraft=ProductProfilesStore.Serialize(form.Draft);var modePoint=form.Draft.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3];
-                var modeStart=ScreenPoint(958+(float)(modePoint.Input/110)*634,648-(float)((modePoint.Level-10)/40)*350);
+                canvas.Refresh();var modeDraft=ProductProfilesStore.Serialize(form.Draft);var modePoint=form.Draft.Ac.Fan.UnifiedDemand!.Curve[3];
+                var modeStart=ScreenPoint(958+(float)(modePoint.Input/100)*634,648-(float)((modePoint.Level-10)/40)*350);
                 canvas.PointerDown(modeStart);require(canvas.Capture,"Editor/simulator transition fixture did not capture a node.");form.HandleCommand("curve-simulator");canvas.Refresh();canvas.PointerMove(to);canvas.PointerUp(to);
                 require(modeDraft==ProductProfilesStore.Serialize(form.Draft),"Captured node drag edited a hidden curve after switching to simulation.");
                 canvas.Refresh();var synthetic=canvas.Hits.Last(h=>h.Id=="sim-input-0");var syntheticStart=ScreenPoint(synthetic.Bounds.Left+2,synthetic.Bounds.Top+15);

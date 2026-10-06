@@ -5,6 +5,49 @@ namespace VictusFanControl.Product;
 
 internal static class ProductProfilesSelfTest
 {
+    private static void TestUnifiedDemand(TextWriter output)
+    {
+        static void Check(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
+        static void Reject(Action action){try{action();}catch(Exception ex) when(ex is InvalidDataException or ArgumentException){return;}throw new InvalidOperationException("Invalid unified setting accepted.");}
+        var ac=UnifiedFanDemand.Default(false);var battery=UnifiedFanDemand.Default(true);
+        AdaptiveFanPolicyInput Input(double cpu=60,double gpu=50,double cpuW=20,double gpuW=35,double cpuLoad=50,double gpuLoad=90)=>new(DateTimeOffset.UtcNow,cpu,cpuW,cpuLoad,gpu,gpuW,gpuLoad);
+        var observation=ac.Evaluate(Input());
+        Check(Math.Abs(observation.Percent-40)<1e-9&&observation.DominantVariable==0&&Math.Abs(observation.CpuPower-13.3333333333)<1e-6&&Math.Abs(observation.GpuPower-28)<1e-9,"Normalized MAX demand failed a mixed workload.");
+        var noPower=ac with{CpuPowerInfluence=0,GpuPowerInfluence=0,CpuLoadInfluence=0,GpuLoadInfluence=0};
+        Check(noPower.Evaluate(Input(cpu:70,gpu:35,cpuW:0,gpuW:0,cpuLoad:0,gpuLoad:0)).Percent==60,"Cold variables diluted a hot CPU.");
+        Check(ac.Evaluate(Input(cpu:40,gpu:35,cpuW:0,gpuW:0,cpuLoad:0,gpuLoad:100)).Percent==20,"GPU utilization incorrectly forces full cooling.");
+        Check((ac with{CpuTemperatureInfluence=150}).Evaluate(Input(cpu:65,gpu:35,cpuW:0,gpuW:0,cpuLoad:0,gpuLoad:0)).Percent==75,"Thermal sensitivity gain lost its independent meaning.");
+        Check(ac.Evaluate(Input(gpuW:72.485)).GpuPower>ac.Evaluate(Input(gpuW:70)).GpuPower,"GPU sensor power was clipped to 70 W nominal.");
+        Check(battery.Evaluate(Input()).Level<ac.Evaluate(Input()).Level,"Battery preset is not quieter under identical light input.");
+        var flat=noPower with{Curve=[new(0,10),new(90,10),new(100,50)]};
+        Check(flat.Evaluate(Input(cpu:50,gpu:35) with{CpuRawControlTemperatureC=85}).Level==44&&flat.Evaluate(Input(cpu:50,gpu:35) with{CpuRawControlTemperatureC=90}).Level==50,"Edited curve hid raw CPU thermal floors.");
+        Check(flat.Evaluate(Input(cpu:40,gpu:78)).Level>=44&&flat.Evaluate(Input(cpu:40,gpu:81)).Level==50,"Disabled feed-forward or flat curve hid GPU heat.");
+        foreach(var invalid in new[]{ac with{CpuTemperatureInfluence=99},ac with{GpuTemperatureInfluence=151},ac with{CpuPowerInfluence=-1},ac with{GpuLoadInfluence=101},ac with{Curve=null!},ac with{Curve=[null!,new(100,50)]},ac with{Curve=[new(1,10),new(100,50)]},ac with{Curve=[new(0,10),new(100,49)]},ac with{Curve=[new(0,20),new(50,10),new(100,50)]},ac with{Curve=[new(0,10),new(50.5,30),new(100,50)]}})Reject(invalid.Validate);
+        Reject(()=>ac.Evaluate(Input(cpuW:double.NaN)));Reject(()=>ac.Evaluate(Input() with{CpuRawControlTemperatureC=double.PositiveInfinity}));
+        var model=ac;
+        for(int i=0;i<6;i++)
+        {
+            var stronger=model.WithInfluence(i,150*(i<2?1:0)+100*(i>=2?1:0));
+            Check(stronger.Evaluate(Input()).Percent>=model.Evaluate(Input()).Percent,"Increasing influence reduced MAX demand.");
+        }
+        var profiles=new ProductProfiles();var frozen=FanConfigurationStore.Copy(profiles.Ac.Fan);
+        var edited=profiles.Ac.Fan with{UnifiedDemand=noPower};
+        Check(frozen.UnifiedDemand!.GpuPowerInfluence==60&&edited.UnifiedDemand!.GpuPowerInfluence==0,"Draft influence mutated frozen configuration.");
+        var dir=Path.Combine(Path.GetTempPath(),"vfc-unified-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(dir);
+        try
+        {
+            var legacy=profiles with{SchemaVersion=1,Ac=profiles.Ac with{Fan=profiles.Ac.Fan with{UnifiedDemand=null},CpuPl1Watts=30,CpuPl2Watts=35,GpuMaximumMHz=1800},Battery=profiles.Battery with{Fan=profiles.Battery.Fan with{UnifiedDemand=null}}};
+            var text=ProductProfilesStore.Serialize(legacy);var path=Path.Combine(dir,"profiles.json");File.WriteAllText(path,text);
+            var loaded=ProductProfilesStore.Load(path,out var notice);
+            Check(loaded.SchemaVersion==2&&notice is not null&&loaded.Ac.LegacyFan is not null&&File.ReadAllText(path)==text,"Loading legacy changed disk or lost backup.");
+            Check(FanConfigurationStore.Serialize(loaded.Ac.LegacyFan!)==FanConfigurationStore.Serialize(legacy.Ac.Fan)&&loaded.Ac.CpuPl1Watts==30&&loaded.Ac.CpuPl2Watts==35&&loaded.Ac.GpuMaximumMHz==1800,"Migration lost legacy curves/tuning or caps.");
+            ProductProfilesStore.Save(loaded,path);var backups=Directory.GetFiles(dir,"*.v1-backup-*.json");Check(backups.Length==1&&File.ReadAllText(backups[0])==text,"Legacy save did not preserve exact original bytes.");
+            ProductProfilesStore.Save(loaded,path);Check(Directory.GetFiles(dir,"*.v1-backup-*.json").Length==1,"Repeated save created or overwrote backup.");
+            var again=ProductProfilesStore.Load(path,out var againNotice);Check(againNotice is null&&ProductProfilesStore.Serialize(again)==ProductProfilesStore.Serialize(loaded),"Unified roundtrip reapplied migration or lost influence.");
+        }
+        finally{Directory.Delete(dir,true);}
+        output.WriteLine("PASS  Unified normalized MAX, independent gains, absolute watts, protected raw heat, frozen draft and exact v1 backup migration");
+    }
     internal static void Run(TextWriter output)
     {
         var original = new ProductProfiles(); var edited = ProductProfilesStore.Copy(original);
@@ -24,23 +67,7 @@ internal static class ProductProfilesSelfTest
             quiet.Advance(new(90,81,60,75,100,100),10);
             if(quiet.Current?.EqualFanLevel!=50)throw new InvalidOperationException("Quiet preset delayed hot endpoint cooling.");
         }
-        if(original.Ac.Fan.Profile.Id==original.Battery.Fan.Profile.Id)throw new InvalidOperationException("Quiet defaults lost AC/Battery identity.");
-        var acPolicy=original.Ac.Fan.BuildPolicy();var batteryPolicy=original.Battery.Fan.BuildPolicy();
-        foreach(var policy in new[]{acPolicy,batteryPolicy})
-            if(policy.GpuPowerCurve[^1].Input!=75||AdaptiveCurveProfiles.Interpolate(policy.GpuPowerCurve,70)!=42||AdaptiveCurveProfiles.Interpolate(policy.GpuPowerCurve,72.485)<=42||AdaptiveCurveProfiles.Interpolate(policy.GpuPowerCurve,100)!=50)
-                throw new InvalidOperationException("GPU nominal/headroom power curve is clipped or retains a 140 W default scale.");
-        foreach(var axis in Enum.GetValues<AdaptiveCurveAxis>())
-        {
-            var input=axis switch{AdaptiveCurveAxis.CpuTemperature=>60,AdaptiveCurveAxis.GpuTemperature=>55,AdaptiveCurveAxis.CpuPower=>18,AdaptiveCurveAxis.GpuPower=>20,_=>100};
-            if(AdaptiveCurveProfiles.Interpolate(AdaptiveCurveProfiles.Curve(batteryPolicy,axis),input)>=AdaptiveCurveProfiles.Interpolate(AdaptiveCurveProfiles.Curve(acPolicy,axis),input))
-                throw new InvalidOperationException("Battery idle/power/load contribution is not quieter than AC.");
-        }
-        var batteryQuiet=new ProductCurveSimulation(original.Battery.Fan);batteryQuiet.Advance(new(50,45,8,10,50,50),300);
-        if(batteryQuiet.History.Any(p=>p.Decision.EqualFanLevel!=10))throw new InvalidOperationException("Battery low-power work is defeated by load feed-forward.");
-        batteryQuiet.Advance(new(90,81,8,10,0,0),10);
-        if(batteryQuiet.Current?.EqualFanLevel!=50)throw new InvalidOperationException("Quiet Battery default masks hot temperatures at low power/load.");
-        var changedLimits=original.Ac with{CpuPl1Watts=30,CpuPl2Watts=35};
-        if(!changedLimits.Fan.BuildPolicy().CpuPowerCurve.SequenceEqual(acPolicy.CpuPowerCurve))throw new InvalidOperationException("Changing caps remaps CPU watt demand.");
+        TestUnifiedDemand(output);
         var roundtrip = ProductProfilesStore.Parse(ProductProfilesStore.Serialize(edited));
         if (roundtrip.Ac.Fan.BuildPolicy().CpuTemperatureCurve[3].Level != 31) throw new InvalidOperationException("Profile roundtrip lost curve.");
         static void Reject(Action a) { try { a(); } catch (Exception e) when (e is ArgumentException or System.Text.Json.JsonException or InvalidDataException or IOException or InvalidOperationException) { return; } throw new InvalidOperationException("Invalid product setting accepted."); }
@@ -94,7 +121,7 @@ internal static class ProductProfilesSelfTest
             if (notice is null || File.ReadAllText(path) != "broken") throw new InvalidOperationException("Corrupt settings were not retained.");
         }
         finally { Directory.Delete(dir,true); }
-        var lowProfile=original.Ac with { Fan=original.Ac.Fan with { Profile=AdaptiveCurveProfiles.Create("8349d1c765b948a4976ea9664ad578ba","Low",original.Ac.Fan.BuildPolicy() with {
+        var lowProfile=original.Ac with { Fan=original.Ac.Fan with { UnifiedDemand=new(){Curve=[new(0,10),new(100,50)]}, Profile=AdaptiveCurveProfiles.Create("8349d1c765b948a4976ea9664ad578ba","Low",original.Ac.Fan.BuildPolicy() with {
             CpuTemperatureCurve=[new(0,10),new(110,50)],GpuTemperatureCurve=[new(0,10),new(100,50)],
             CpuPowerCurve=[new(0,10),new(150,50)],GpuPowerCurve=[new(0,10),new(200,50)],
             CpuLoadCurve=[new(0,10),new(100,50)],GpuLoadCurve=[new(0,10),new(100,50)] }) } };

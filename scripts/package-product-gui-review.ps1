@@ -14,6 +14,7 @@ Copy-Item -LiteralPath (Join-Path $root 'release/Start-ProductGui.ps1') -Destina
 Copy-Item -LiteralPath (Join-Path $root 'docs/GUI_VICTUS_VALIDATION.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/GUI_PRODUCT_PHASE.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/QUIET_PRODUCT_PRESETS.md') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'docs/UNIFIED_PRODUCT_DEMAND.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/AUTOMATIC_PRODUCT_SESSION.md') -Destination $OutputDirectory
 $entries = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-Object FullName | ForEach-Object {
     [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
@@ -21,7 +22,7 @@ $entries = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-O
 $manifest = [ordered]@{
     schemaVersion=1;kind='VictusFanControl.ProductGuiReview';sourceHead=$SourceHead
     inheritedRcZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
-    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu90-confirm-2000ms-cpu99-immediate-raw-response';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';files=$entries
+    physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu90-confirm-2000ms-cpu99-immediate-raw-response';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';productDemand='unified-max-six-influences-v1';productProfiles='v2-preserves-v1-backup';files=$entries
 }
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'PRODUCT-GUI-MANIFEST.json') -Encoding utf8
 & (Join-Path $OutputDirectory 'Start-ProductGui.ps1') -Mode Verify

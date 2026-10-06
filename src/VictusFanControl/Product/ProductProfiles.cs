@@ -11,6 +11,8 @@ public enum ProductPowerProfile { Ac, Battery }
 public sealed record ProductProfile
 {
     public FanConfiguration Fan { get; init; } = new();
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public FanConfiguration? LegacyFan { get; init; }
     public int CpuPl1Watts { get; init; }
     public int CpuPl2Watts { get; init; }
     public int GpuMaximumMHz { get; init; }
@@ -23,6 +25,13 @@ public sealed record ProductProfile
         if(config is null||new[]{config.CpuTemperatureCurve,config.GpuTemperatureCurve,config.CpuPowerCurve,config.GpuPowerCurve,config.CpuLoadCurve,config.GpuLoadCurve}.Any(curve=>curve is null||curve.Any(point=>point is null)))
             throw new InvalidDataException("Cada perfil requiere las seis curvas y puntos válidos.");
         _ = Fan.BuildPolicy();
+        if(LegacyFan is not null)
+        {
+            var legacyConfig=LegacyFan.Profile?.Config;
+            if(legacyConfig is null||new[]{legacyConfig.CpuTemperatureCurve,legacyConfig.GpuTemperatureCurve,legacyConfig.CpuPowerCurve,legacyConfig.GpuPowerCurve,legacyConfig.CpuLoadCurve,legacyConfig.GpuLoadCurve}.Any(curve=>curve is null||curve.Any(point=>point is null)))
+                throw new InvalidDataException("Respaldo de curvas anteriores incompleto.");
+            _ = LegacyFan.BuildPolicy();
+        }
         if (Fan.Tuning.MinimumLevel is not (10 or 30) || Fan.Tuning.MaximumLevel != Hp8C40AutomaticPolicy.MaximumLevel)
             throw new InvalidDataException("El editor admite niveles 10–50; el control físico conserva su rango validado.");
         if (GpuMaximumMHz < GpuProductPreferences.MinimumMHz || GpuMaximumMHz > GpuProductPreferences.Maximum(source))
@@ -50,7 +59,7 @@ public static class GpuProductPreferences
 
 public sealed record ProductProfiles
 {
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; init; } = 2;
     public ProductProfile Ac { get; init; } = DefaultProfile(ProductPowerProfile.Ac);
     public ProductProfile Battery { get; init; } = DefaultProfile(ProductPowerProfile.Battery);
     public bool CpuEnabled { get; init; } = true;
@@ -62,8 +71,9 @@ public sealed record ProductProfiles
     { ProductPowerProfile.Ac => this with { Ac = profile }, ProductPowerProfile.Battery => this with { Battery = profile }, _ => throw new ArgumentOutOfRangeException(nameof(source)) };
     public void Validate()
     {
-        if (SchemaVersion != 1 || Ac is null || Battery is null) throw new InvalidDataException("Esquema de perfiles incompatible.");
+        if (SchemaVersion is not(1 or 2) || Ac is null || Battery is null) throw new InvalidDataException("Esquema de perfiles incompatible.");
         Ac.Validate(ProductPowerProfile.Ac); Battery.Validate(ProductPowerProfile.Battery);
+        if(SchemaVersion==2&&(Ac.Fan.UnifiedDemand is null||Battery.Fan.UnifiedDemand is null))throw new InvalidDataException("Cada fuente requiere su curva única de demanda.");
     }
     public PerformanceGuiSessionConfiguration PerformanceConfiguration() => new()
     {
@@ -79,8 +89,8 @@ public sealed record ProductProfiles
         foreach (var axis in Enum.GetValues<AdaptiveCurveAxis>())
             fan = fan with { Profile = AdaptiveCurveProfiles.WithCurve(fan.Profile, axis,
                 AdaptiveCurveProfiles.Curve(c, axis).Select(p => p with { Level = Math.Clamp(p.Level, 10, 50) }).ToArray()) };
-        fan = fan with { Tuning = fan.Tuning with { MinimumLevel = 10, MaximumLevel = 50 } };
-        return new() { Fan = fan,
+        fan = fan with { Tuning = fan.Tuning with { MinimumLevel = 10, MaximumLevel = 50 }, UnifiedDemand=fan.UnifiedDemand??UnifiedFanDemand.Default(source==ProductPowerProfile.Battery) };
+        return new() { Fan = fan, LegacyFan=previous?.UnifiedDemand is null&&previous is not null?FanConfigurationStore.Copy(previous):null,
             CpuPl1Watts = source == ProductPowerProfile.Ac ? CpuPowerProductDefaults.DefaultAcPl1Watts : CpuPowerProductDefaults.DefaultBatteryPl1Watts,
             CpuPl2Watts = source == ProductPowerProfile.Ac ? CpuPowerProductDefaults.DefaultAcPl2Watts : CpuPowerProductDefaults.DefaultBatteryPl2Watts,
             GpuMaximumMHz = GpuProductPreferences.DefaultMaximum(source) };
@@ -130,12 +140,18 @@ public static class ProductProfilesStore
             else if(element.ValueKind==JsonValueKind.Array)foreach(var child in element.EnumerateArray())CheckKeys(child);
         }
         CheckKeys(document.RootElement);
-        if(document.RootElement.ValueKind!=JsonValueKind.Object||!document.RootElement.TryGetProperty("schemaVersion",out _))throw new InvalidDataException("Falta la versión del esquema.");
+        if(document.RootElement.ValueKind!=JsonValueKind.Object||!document.RootElement.TryGetProperty("schemaVersion",out _)||!document.RootElement.TryGetProperty("ac",out _)||!document.RootElement.TryGetProperty("battery",out _))throw new InvalidDataException("Falta la versión o uno de los perfiles AC/Batería.");
         var profiles = JsonSerializer.Deserialize<ProductProfiles>(text, Json) ?? throw new InvalidDataException("Perfiles vacíos.");
         profiles.Validate();
         // Older GUI files used the prepared Automatic minimum for editing too.
         // Preserve every stored curve point; expand only the offline editor envelope.
         ProductProfile Expand(ProductProfile p) => p with { Fan = p.Fan with { Tuning = p.Fan.Tuning with { MinimumLevel = 10 } } };
+        if(profiles.SchemaVersion==1)
+        {
+            ProductProfile Upgrade(ProductProfile p,bool battery)=>Expand(p) with
+            {LegacyFan=p.LegacyFan??FanConfigurationStore.Copy(p.Fan),Fan=Expand(p).Fan with{UnifiedDemand=UnifiedFanDemand.Default(battery)}};
+            return profiles with{SchemaVersion=2,Ac=Upgrade(profiles.Ac,false),Battery=Upgrade(profiles.Battery,true)};
+        }
         return profiles with { Ac = Expand(profiles.Ac), Battery = Expand(profiles.Battery) };
     }
     public static ProductProfiles Copy(ProductProfiles profiles) => Parse(Serialize(profiles));
@@ -144,7 +160,13 @@ public static class ProductProfilesStore
         path ??= DefaultPath; notice = null;
         try
         {
-            if (File.Exists(path)) return Parse(File.ReadAllText(path));
+            if (File.Exists(path))
+            {
+                var text=File.ReadAllText(path);var loaded=Parse(text);
+                using var document=JsonDocument.Parse(text);
+                if(document.RootElement.GetProperty("schemaVersion").GetInt32()==1)notice="Motor nuevo en edición; curvas anteriores conservadas como respaldo. Guardar crea una copia exacta del archivo v1.";
+                return loaded;
+            }
             var defaults = migrate?.Invoke() ?? new ProductProfiles(); defaults.Validate();
             notice = migrate is null ? null : "Se importaron las preferencias anteriores; AC y Batería conservan copias independientes.";
             return Copy(defaults);
@@ -161,6 +183,22 @@ public static class ProductProfilesStore
         {
             using(var stream=new FileStream(temporary,FileMode.CreateNew,FileAccess.Write,FileShare.None))
             {var bytes=System.Text.Encoding.UTF8.GetBytes(text);stream.Write(bytes);stream.Flush(flushToDisk:true);}
+            if(File.Exists(path))
+            {
+                var bytes=File.ReadAllBytes(path);
+                // Invalid existing files are retained by Load; only a valid v1 is migration evidence.
+                try
+                {
+                    using var document=JsonDocument.Parse(bytes);
+                    if(document.RootElement.TryGetProperty("schemaVersion",out var schema)&&schema.GetInt32()==1)
+                    {
+                        var backup=path+".v1-backup-"+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))[..12].ToLowerInvariant()+".json";
+                        if(File.Exists(backup)){if(!File.ReadAllBytes(backup).SequenceEqual(bytes))throw new IOException("El respaldo v1 existente no coincide; no se reemplazó el original.");}
+                        else {using var stream=new FileStream(backup,FileMode.CreateNew,FileAccess.Write,FileShare.None);stream.Write(bytes);stream.Flush(flushToDisk:true);}
+                    }
+                }
+                catch(JsonException){/* A corrupt original is not a legacy profile to migrate. */}
+            }
             File.Move(temporary, path, overwrite: true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
