@@ -310,7 +310,7 @@ internal static class ProductGuiSelfTest
                 var previous=ProductProfilesStore.Serialize(form.Draft);File.WriteAllText(backup,"broken");import=form.ImportProfilesAsync(backup);PumpUntil(()=>import.IsCompleted,"Invalid import blocked.");
                 require(previous==ProductProfilesStore.Serialize(form.Draft)&&!string.IsNullOrWhiteSpace(canvas.Notice),"Invalid import replaced the draft.");
                 var log=Path.Combine(dir,"fixture-events.log");File.WriteAllText(log,new string('x',2*1024*1024+100));var diagnostic=Path.Combine(dir,"diagnostic.zip");
-                var interrupted=Snapshot(DateTimeOffset.UtcNow.AddSeconds(-5),40,35,61,5);
+                var interrupted=Snapshot(DateTimeOffset.UtcNow.AddSeconds(-5),40,35,5,5) with{CpuPackagePowerW=61};
                 canvas.State=canvas.State with{AutomaticInterruptionSnapshot=interrupted,Snapshot=interrupted with{CpuPackagePowerW=10},AppliedPerformance=new ProductProfiles().PerformanceConfiguration()};
                 var bundle=form.ExportDiagnosticsAsync(diagnostic,log);PumpUntil(()=>bundle.IsCompleted,"Diagnostic export blocked.");bundle.GetAwaiter().GetResult();
                 using(var zip=System.IO.Compression.ZipFile.OpenRead(diagnostic))
