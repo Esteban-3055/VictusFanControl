@@ -54,6 +54,7 @@ ni se mata el proceso: se informa que debe liberarse la sesión anterior.
 | Caso | Ventiladores | CPU/GPU |
 |---|---|---|
 | Inicio, reinicio, inicio minimizado, importación | Firmware; no entrada Automatic automática | No se aplican por estas acciones |
+| Reiniciar sesión explícito | Guarda diagnóstico, drena y libera dominios; abre otro proceso en Firmware solo tras limpieza completa, sin registros pendientes | Se liberan; conserva borrador y preferencias guardadas, sin reaplicar |
 | Clic Automatic admitido, sin sesión Performance | Inicia después de confirmar límites para la fuente real | Ambos habilitados con la copia de AC/Batería en edición |
 | Clic Automatic con una sesión idéntica y vigente | Inicia con la curva actual de la fuente real | Reutiliza la sesión; consulta Status, no reescribe Enable |
 | Sesión existente distinta, parcial o no confirmada | Permanece Firmware | Rechaza el reemplazo; conserva owner y evidencia |

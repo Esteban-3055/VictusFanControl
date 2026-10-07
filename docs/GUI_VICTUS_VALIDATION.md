@@ -122,6 +122,9 @@ modo Automatic; no consume tiempo durante la preparación. Se verifica antes
 del despacho. El supervisor solicita Firmware al vencer el plazo, con hasta 2 s
 entre comprobaciones. El plazo no cancela una llamada de firmware ya despachada.
 La finalización bloquea una nueva activación hasta reiniciar tras liberación limpia.
+El botón **Reiniciar sesión** hace esa salida/reapertura, conserva el borrador y
+guarda el diagnóstico anterior; solo relanza cuando la limpieza completa no deja
+registros de recuperación. Véase `PRODUCT_SESSION_RESTART.md`.
 También puede seleccionarse Firmware antes del plazo.
 
 Primer ensayo, con cargador conectado y sin carga artificial:

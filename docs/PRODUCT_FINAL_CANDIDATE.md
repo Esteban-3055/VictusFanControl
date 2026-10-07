@@ -42,7 +42,9 @@ interrumpiendo. No se promete cancelar una llamada WMI ya iniciada.
 
 «Ver motivo completo» conserva la causa, la muestra del disparo y los estados
 actuales aunque la telemetría se recupere. Un bloqueo requiere salida limpia
-y nueva apertura; no hay reentrada espontánea. Firmware voluntario conserva
+y nueva apertura; **Reiniciar sesión** realiza esa secuencia desde la GUI,
+guarda un diagnóstico y conserva el borrador. No hay reentrada espontánea.
+Detalles: [reinicio de sesión](PRODUCT_SESSION_RESTART.md). Firmware voluntario conserva
 la sesión independiente de límites. «Desactivar límites CPU / GPU» y Salir
 solicitan su liberación. NVML acepta la petición GPU sin probar el rango exacto;
 WMI acepta solicitudes sin probar propiedad independiente de ventiladores.

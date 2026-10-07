@@ -31,23 +31,33 @@ internal sealed partial class ProductForm : Form
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null)
     {
         _modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
+        _isolatedRuntime=fixture is not null||runtimeFactory is not null;_restartDirectory=restartDirectory;_restartOpening=restartState is not null;
         string? notice=null;
         _draft=fixtureProfiles is null?ProductProfilesStore.Load(profilesPath,out notice,Migrate):ProductProfilesStore.Copy(fixtureProfiles);
         _saved=ProductProfilesStore.Copy(_draft);
         _hasSavedBaseline=fixtureProfiles is not null||(File.Exists(profilesPath??ProductProfilesStore.DefaultPath)&&notice is null);
+        if(restartState is not null)
+        {
+            _draft=ProductProfilesStore.Parse(restartState.DraftJson);_saved=ProductProfilesStore.Parse(restartState.SavedJson);_hasSavedBaseline=restartState.HasSavedBaseline;
+            _canvas.Page=restartState.Page;_canvas.Editing=restartState.Editing;
+            notice="Sesión reiniciada en Firmware. Borrador conservado; los límites y Automático requieren una nueva aplicación explícita.";
+            AppLog.Write("PRODUCT SESSION RESTART OPENED: previous="+restartState.PreviousSessionId+"; current="+AppLog.SessionId+"; no authority transferred.");
+        }
         _presentationTimer.Tick+=(_,_)=>PresentationTick();
         Text="VictusFanControl";FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=new(1344,756);StartPosition=FormStartPosition.CenterScreen;
         _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
+        if(restartState is not null)_canvas.Dirty=restartState.Dirty;
         _canvas.Command+=HandleCommand;_canvas.ValueEdited+=EditValue;_canvas.NodeEdited+=EditNode;
         _canvas.MouseDown+=(_,e)=>{if(e.Button==MouseButtons.Left&&_canvas.IsHeaderDrag(e.Location)){ReleaseCapture();SendMessage(Handle,0xA1,2,0);}};
         _canvas.MouseDoubleClick+=(_,e)=>{if(_canvas.IsHeaderDrag(e.Location))ToggleMaximize();};
         var menu=new ContextMenuStrip();menu.Items.Add("Abrir VictusFanControl",null,(_,_)=>ShowFromTray());
-        menu.Items.Add("Volver a Firmware",null,async(_,_)=>await RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask));
-        menu.Items.Add("Liberar CPU / GPU",null,async(_,_)=>await RunAsync(()=>_runtime?.ReleasePerformanceAsync()??Task.CompletedTask));
+        menu.Items.Add("Volver a Firmware",null,async(_,_)=>{if(!_restarting)await RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask);});
+        menu.Items.Add("Liberar CPU / GPU",null,async(_,_)=>{if(!_restarting)await RunAsync(()=>_runtime?.ReleasePerformanceAsync()??Task.CompletedTask);});
+        menu.Items.Add("Reiniciar sesión",null,async(_,_)=>await RestartSessionAsync());
         menu.Items.Add("Salir",null,(_,_)=>{_exitRequested=true;Close();});
         _tray=new(){Icon=SystemIcons.Application,Text="VictusFanControl · Firmware",ContextMenuStrip=menu,Visible=fixture is null&&runtimeFactory is null};
         _tray.DoubleClick+=(_,_)=>ShowFromTray();
@@ -64,12 +74,12 @@ internal sealed partial class ProductForm : Form
         {
             if(_runtime is null)_runtime=await (runtimeFactory?.Invoke()??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,Draft,_automaticReview)));
             // A close during construction waits for this task, then disposes the returned service without starting it.
-            if(_closing||IsDisposed)return;
+            if(_closing||_restarting||IsDisposed)return;
             _runtime.Changed+=UpdateState;UpdateState(_runtime.State);
             if(!isolated||registerPowerNotificationsInFixture)RegisterPowerNotifications();
             _runtime.Start();_presentationTimer.Start();
             if(!isolated){_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.StartupKnown=true;}
-            if(!_closing&&!IsDisposed&&(minimized||_draft.StartMinimized))Hide();
+            if(!_closing&&!IsDisposed&&(minimized||_draft.StartMinimized)&&!_restartOpening)Hide();
         }
         catch(Exception ex)
         {
@@ -101,7 +111,8 @@ internal sealed partial class ProductForm : Form
     }
     internal void HandleCommand(string id)
     {
-        if(_closing||IsDisposed)return;
+        if(_closing||_restarting||IsDisposed)return;
+        if(id=="session-restart"){_ = RestartSessionAsync();return;}
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
         if(HandleAdvancedCommand(id))return;
@@ -286,7 +297,7 @@ internal sealed partial class ProductForm : Form
         if(_closing)return;
         if(_pendingCommands++==0)_commandsDrained=new(TaskCreationOptions.RunContinuationsAsynchronously);_canvas.Busy=true;_canvas.Notice="";_canvas.Invalidate();
         try{await command();}catch(Exception ex){_canvas.Notice=ex.Message;AppLog.Write("Product UI command failed: "+ex);}
-        finally{if(--_pendingCommands==0)_commandsDrained?.TrySetResult();_canvas.Busy=_pendingCommands>0;if(!IsDisposed)_canvas.Invalidate();}
+        finally{if(--_pendingCommands==0)_commandsDrained?.TrySetResult();_canvas.Busy=_restarting||_pendingCommands>0;if(!IsDisposed)_canvas.Invalidate();}
     }
     protected override void Dispose(bool disposing)
     {
@@ -301,7 +312,7 @@ internal sealed partial class ProductForm : Form
         if(_disposedRuntime)return;
         if(e.CloseReason is not(CloseReason.WindowsShutDown or CloseReason.TaskManagerClosing)&&!_exitRequested){e.Cancel=true;Hide();return;}
         e.Cancel=true;if(_closing)return;_closing=true;_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
-        try {await _startup;if(_commandsDrained is not null)await _commandsDrained.Task;await _lifecycleRelease;if(_runtime is not null)await Task.Run(async()=>await _runtime.DisposeAsync());}
+        try {if(_restartTask is not null)await _restartTask;await ShutdownRuntimeAsync();}
         catch(Exception ex){Environment.ExitCode=171;AppLog.Write("Product shutdown unresolved: "+ex);}
         finally{_disposedRuntime=true;_tray.Visible=false;Close();_shutdown.TrySetResult();}
     }
@@ -328,6 +339,12 @@ internal sealed partial class ProductForm : Form
     }
     internal Task HandlePowerEventAsync(int code,int? display=null)
     {
+        if(_restarting)
+        {
+            if(code==4||code==0x8013&&display==0)_restartLifecycleInterrupted=true;
+            // Cleanup owns the old runtime now; do not queue release/resume against a disposed service.
+            return Task.CompletedTask;
+        }
         if(_closing||_runtime is null)return Task.CompletedTask;
         if(code==0x8013)
         {

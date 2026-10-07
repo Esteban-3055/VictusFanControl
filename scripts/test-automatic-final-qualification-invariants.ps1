@@ -96,6 +96,7 @@ Require ($launcher.Contains('$start.WorkingDirectory = $fixtureOutput') -and $la
 $candidate = Get-Content (Join-Path $repoRoot 'release/product-final-candidate.json') -Raw | ConvertFrom-Json
 Require ($candidate.stableReleaseAuthorized -eq $false -and $candidate.normalAutomatic -eq 'closed') 'candidate must not claim a stable release or normal Automatic authority'
 Require ($candidate.remainingPhysicalChecks.Count -eq 3) 'candidate must retain its thermal/lifecycle/exit physical regressions'
+Require ($candidate.sessionRestart -eq 'explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics') 'candidate restart must retain clean-release and explicit Firmware reentry'
 Require ($candidate.automaticThermalContract -eq 'cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response') 'candidate thermal contract drifted'
 Require ($launcher.Contains($candidate.automaticThermalContract) -and $package.Contains($candidate.automaticThermalContract)) 'launcher and package must bind the current thermal contract'
 foreach ($evidence in $candidate.physicalEvidence) {

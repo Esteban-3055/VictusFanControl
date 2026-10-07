@@ -9,7 +9,7 @@ using VictusFanControl.Control;
 using VictusFanControl.Hardware.Hp;
 namespace VictusFanControl.App;
 
-internal static class ProductGuiSelfTest
+internal static partial class ProductGuiSelfTest
 {
     internal static int Run()
     {
@@ -21,6 +21,7 @@ internal static class ProductGuiSelfTest
             TestAdvancedSettings(Require);
             TestLivePerformanceApply(Require);
             TestSessionLogs(Require);
+            TestSessionRestart(Require);
             ProductAutomaticActivationSelfTest.Run(Require);
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());
             form.ClientSize=new(1672,941);form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;canvas.Size=new(1672,941);
@@ -182,7 +183,7 @@ internal static class ProductGuiSelfTest
                 LifecycleBlockReason=ProductAutomaticReview.CpuSpikeDeadlineFailure,AutomaticInterruptionSnapshot=interruption,
                 Failure=null,Message="Telemetría recuperada."};
             Require(canvas.State.InterruptionDetails!.Contains(ProductAutomaticReview.CpuSpikeDeadlineFailure)&&
-                canvas.State.InterruptionDetails.Contains("CPU 98 °C")&&canvas.State.InterruptionDetails.Contains("Salir desde la bandeja"),
+                canvas.State.InterruptionDetails.Contains("CPU 98 °C")&&canvas.State.InterruptionDetails.Contains("Reiniciar sesión"),
                 "Later healthy telemetry hid the interruption or its clean-exit guidance.");
             canvas.Page=ProductPage.Fans;Render("fans-interrupted-layout");
             Require(canvas.Hits.Single(h=>h.Id=="interruption-details").Enabled&&canvas.Hits.Where(h=>h.Id is "fan-mode-1" or "fan-mode-2").All(h=>!h.Enabled),
@@ -708,8 +709,8 @@ internal static class ProductGuiSelfTest
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;
         internal int? LastManualLevel;
         internal PerformanceGuiSessionConfiguration? LastPerformance;
-        internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate;
-        internal string? CommandFailure,StartFailure;
+        internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate,DisposeGate;
+        internal string? CommandFailure,StartFailure,DisposeFailure;
         internal void Publish(ProductRuntimeState state)=>Changed?.Invoke(state);
         public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
         public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
@@ -719,6 +720,6 @@ internal static class ProductGuiSelfTest
         public void FenceLifecycle(string r){Interlocked.Increment(ref Fences);}
         public Task ReleaseForLifecycleAsync(string r){Interlocked.Increment(ref Releases);return ReleaseGate?.Task??Task.CompletedTask;}
         public void ResumeTelemetry(string r){Resumes++;}
-        public ValueTask DisposeAsync(){Interlocked.Increment(ref Disposals);return ValueTask.CompletedTask;}
+        public async ValueTask DisposeAsync(){Interlocked.Increment(ref Disposals);if(DisposeGate is not null)await DisposeGate.Task;if(DisposeFailure is not null)throw new IOException(DisposeFailure);}
     }
 }

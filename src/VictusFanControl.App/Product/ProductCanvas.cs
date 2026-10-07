@@ -31,6 +31,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     internal int SelectedNode { get; set; } = -1;
     internal bool Dirty { get; set; }
     internal bool Busy { get; set; }
+    internal bool RestartAvailable { get; set; } = true;
     internal bool StartupEnabled { get; set; }
     internal bool StartupKnown { get; set; }
     internal string Notice { get; set; } = "";
@@ -82,7 +83,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     private void Hit(string id,RectangleF rect,string label,bool enabled=true,bool slider=false,int min=0,int max=0) => _hits.Add(new(id,rect,label,enabled,slider,min,max));
     private void Button(Graphics g,string id,string label,RectangleF r,bool primary=false,bool enabled=true)
     {
-        enabled &= !Busy || id is "firmware" or "window-minimize" or "window-maximize" or "window-close"; Card(g,r,primary && enabled,10);
+        enabled &= !Busy || id is "session-restart" or "firmware" or "window-minimize" or "window-maximize" or "window-close"; Card(g,r,primary && enabled,10);
         if(primary && enabled){using var b=new SolidBrush(Color.FromArgb(0,111,244));using var p=Rounded(r,10);g.FillPath(b,p);}
         int size=23;while(size>17&&g.MeasureString(label,F(size)).Width>r.Width-24)size--;
         using(var brush=new SolidBrush(enabled?Ink:Color.FromArgb(92,115,138)))
@@ -228,7 +229,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         {
             DrawText(g,"Sesión interrumpida · "+State.FanMode+" / "+State.FanAuthority,937,775,18,Yellow,685,height:24);
             Button(g,"interruption-details","Ver motivo completo",new(937,800,270,26));
-            DrawText(g,"Salir desde bandeja y reabrir tras liberar.",1218,802,16,Muted,415,height:24);
+            Button(g,"session-restart","Reiniciar sesión",new(1220,800,377,26),false,RestartAvailable);
         }
         else if(State.AutomaticPreparing)DrawText(g,"Preparando CPU/GPU; Firmware cancela la entrada a Automatic.",937,775,18,Muted,685,height:47);
         else if(State.AutomaticReview)
@@ -468,9 +469,10 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,623,1337,201));DrawText(g,"Registros y estado",334,647,28,null,1250,true);
         DrawText(g,State.LifecycleBlocked?State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.":State.Failure??State.Message,334,704,21,State.LifecycleBlocked||State.Failure is not null?Yellow:Muted,880,height:57);
         if(State.LifecycleBlocked)Button(g,"interruption-details","Ver motivo completo",new(334,779,290,32));
+        Button(g,"session-restart","Reiniciar sesión",new(681,779,337,32),false,RestartAvailable);
         Button(g,"open-logs","Abrir carpeta de logs",new(1240,690,379,43));
         Button(g,"diagnostics-export","Exportar diagnóstico",new(1240,745,379,43));
-        if(!State.LifecycleBlocked)DrawText(g,"Detalle técnico: ventiladores "+State.FanAuthority+" · CPU "+State.CpuState+" · GPU "+State.GpuState,334,773,18,Muted,880);
+        if(!State.LifecycleBlocked)DrawText(g,"Ventiladores "+State.FanAuthority+" · CPU "+State.CpuState+" · GPU "+State.GpuState,334,764,17,Muted,320,height:47);
     }
     private PointF Virtual(Point point)=>new((point.X-_offsetX)/_scale,(point.Y-_offsetY)/_scale);
     protected override void OnMouseDown(MouseEventArgs e)

@@ -56,7 +56,7 @@ internal sealed record ProductRuntimeState
         (AutomaticInterruptionSnapshot is { } s
             ? $"\nMuestra del disparo ({s.Timestamp:O}): CPU {s.CpuControlTemperatureC:0.##} °C; GPU {s.GpuTemperatureC:0.##} °C."
             : "") +
-        "\n\nExporta el diagnóstico y usa Salir desde la bandeja para liberar la sesión. Reabre después de una salida limpia. Si la liberación falla, conserva el informe y los journals; no fuerces la reentrada.";
+        "\n\nUsa Reiniciar sesión: guarda un diagnóstico, libera los controles y abre una sesión nueva en Firmware. Si la liberación falla, no abre otra sesión y conserva los registros. También puedes usar Salir desde la bandeja.";
 }
 
 internal interface IProductRuntime : IAsyncDisposable

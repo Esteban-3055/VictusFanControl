@@ -7,6 +7,7 @@
   "normalAutomatic": "closed",
   "startup": "firmware-no-performance-apply",
   "reentryAfterInterruption": "clean-exit-and-new-process-only",
+  "sessionRestart": "explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics",
   "automaticThermalContract": "cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
   "physicalEvidence": [
     "product-gui-source-transition-8c40-2026-10-06.json",
@@ -18,7 +19,7 @@
   "remainingPhysicalChecks": [
     "representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return",
     "current-gui-suspend-resume-without-fan-reentry",
-    "current-gui-clean-exit-release-and-open-in-firmware"
+    "current-gui-clean-exit-and-session-restart-release-and-open-in-firmware"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",

@@ -9,6 +9,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.Length==3&&args[0]=="--product-restart-fixture-child")
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunRestartFixtureChild(args[1],args[2]);return;}
         if(args.Length==1&&args[0]=="--product-gui-soak-self-test")
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSoak();return;}
         if (args.Length == 1 && args[0] == "--product-gui-self-test")
@@ -831,8 +833,27 @@ internal static class Program
 
         if (hardwareTestModeCount == 0)
         {
-            using var product = new ProductForm(modulesDirectory,args.Contains("--start-minimized"),automaticReview:productAutomaticReview);
-            Application.Run(product); AppLog.Write("Product GUI exited."); return;
+            ProductRestartRequest? restart;
+            try
+            {
+                var statePath=ReadOptionValue(args,"--product-restart-state");
+                var restartState=statePath is null?null:ProductSessionRestart.ReadReleasedState(statePath);
+                using(var product = new ProductForm(modulesDirectory,args.Contains("--start-minimized"),automaticReview:productAutomaticReview,restartState:restartState))
+                {Application.Run(product);restart=product.RestartRequest;}
+                AppLog.Write("Product GUI exited.");
+                if(restart is not null&&Environment.ExitCode==0)
+                {
+                    // All runtime cleanup and form disposal completed. Retire this owner before creating a new one.
+                    singleInstance.ReleaseMutex();singleInstance.Dispose();
+                    ProductSessionRestart.Launch(restart);
+                }
+            }
+            catch(Exception ex)
+            {
+                Environment.ExitCode=172;AppLog.Write("Product session restart/open failed: "+ex);
+                MessageBox.Show("No se pudo abrir la sesión. Se conservaron las preferencias y los registros.\n\n"+ex.Message,"VictusFanControl",MessageBoxButtons.OK,MessageBoxIcon.Error);
+            }
+            return;
         }
 
         AppLog.EnableQualificationCompatibilityLog();
