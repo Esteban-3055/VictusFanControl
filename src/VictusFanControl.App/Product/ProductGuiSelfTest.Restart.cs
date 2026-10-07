@@ -38,9 +38,10 @@ internal static partial class ProductGuiSelfTest
                 require(state.DraftJson==draft&&state.SavedJson==ProductProfilesStore.Serialize(baseline)&&state.Dirty,"Restart lost the unsaved draft or saved baseline.");
                 using var zip=ZipFile.OpenRead(Path.Combine(directory,"diagnostic-before-restart.zip"));
                 require(zip.GetEntry("gui-state.json") is not null&&zip.GetEntry("profiles-draft.json") is not null,"Automatic pre-restart evidence missing.");
-                using(var next=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),fixtureProfiles:baseline,restartState:state))
+                var minimizedState=state with{DraftJson=ProductProfilesStore.Serialize(ProductProfilesStore.Parse(state.DraftJson) with{StartMinimized=true})};
+                using(var next=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),fixtureProfiles:baseline,restartState:minimizedState))
                 {
-                    next.Show();Application.DoEvents();require(next.Visible&&next.Dirty&&ProductProfilesStore.Serialize(next.Draft)==draft&&next.Canvas.State.FanMode=="Firmware"&&!next.Canvas.State.PerformanceActive,"Restored draft acquired hardware authority or was hidden.");
+                    next.Show();Application.DoEvents();require(next.Visible&&next.Dirty&&ProductProfilesStore.Serialize(next.Draft)==minimizedState.DraftJson&&next.Canvas.State.FanMode=="Firmware"&&!next.Canvas.State.PerformanceActive,"Restored draft acquired hardware authority or was hidden.");
                     next.HandleCommand("discard");require(ProductProfilesStore.Serialize(next.Draft)==state.SavedJson,"Discard after restart lost the original saved baseline.");
                     var exit=next.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Restored fixture exit failed.");
                 }

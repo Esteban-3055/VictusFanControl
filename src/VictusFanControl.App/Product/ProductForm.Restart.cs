@@ -31,6 +31,9 @@ internal sealed partial class ProductForm
             catch(Exception ex){preparationFailure??=ex;}
             // Even a full diagnostic disk must not skip hardware cleanup.
             await ShutdownRuntimeAsync();
+            // Save/import operations that were already pending may have completed while draining.
+            // Preserve their final draft and saved baseline instead of an earlier UI snapshot.
+            checkpoint=ProductSessionRestart.Capture(Draft,_saved,_hasSavedBaseline,_canvas.Dirty,_canvas.Page,_canvas.Editing);
             if(!_isolatedRuntime)ProductSessionRestart.EnsureNoRecoveryRecords();
             if(preparationFailure is not null)throw new IOException("No se completó la preparación del reinicio; se intentó liberar la sesión y se conservó el borrador. "+preparationFailure.Message,preparationFailure);
             if(_closing||_exitRequested)return;
