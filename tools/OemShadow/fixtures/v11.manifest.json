@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "version": "v11",
+  "samples": 1976,
+  "thermalSamples": 2074,
+  "originalSources": {
+    "derived/v11/vfc_reference.csv": "d2dca77c25507f1192d76a77e5a902d6371f8b670a150c6b94ecf9002817f2fe",
+    "derived/v11/thermal_fast.csv": "0298337519b4fc9313cb00248df8f6634d87dc20e17f25c774d8041e64ec9051"
+  },
+  "sha256": "9a1faa4117dccb0ef66592353589a52945716a78eb43d79299554ce75c9addfe",
+  "uncompressedSha256": "1d9c229cd7d7704c2dad784204be36012946fe89c8e83f059ab56be64167ab64",
+  "join": "latest thermal row <= reference row; no future samples; every reference row retained",
+  "sourceEpochLimitation": "Historical row timestamps approximate acquisition. True per-query epochs are unavailable. Live capture uses query-start epochs."
+}
