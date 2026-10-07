@@ -52,6 +52,9 @@ public sealed record AdaptiveFanTuning
     public double CpuThermalOverrideC { get; init; } = 85;
     public double GpuThermalOverrideC { get; init; } = 78;
     public bool RememberThermalDemand { get; init; } = false;
+    // Missing fields preserve archived operating preferences.
+    public double NormalDecreaseHysteresisLevels { get; init; } = 0;
+    public double ThermalDecreaseHoldSeconds { get; init; } = 0;
     public int NormalPollingDelayMilliseconds { get; init; } = 1000;
 
     // Missing fields in archived settings preserve the prior fixed descent.
@@ -73,6 +76,15 @@ public sealed record AdaptiveFanTuning
         FallTimeConstantSeconds = 20, DecreaseConfirmationSeconds = 16
     };
 
+    public static AdaptiveFanTuning WithStableQuietResponse(AdaptiveFanTuning tuning) => tuning with
+    {
+        RiseTimeConstantSeconds = 8, IncreaseConfirmationSeconds = 3,
+        AdaptiveDescentEnabled = true, ShortLoadFallTimeConstantSeconds = 15,
+        ShortLoadDecreaseConfirmationSeconds = 6,
+        FallTimeConstantSeconds = 35, DecreaseConfirmationSeconds = 18,
+        NormalDecreaseHysteresisLevels = 1, ThermalDecreaseHoldSeconds = 30
+    };
+
     public void Validate()
     {
         static void Range(double value, double lo, double hi, string name)
@@ -85,26 +97,28 @@ public sealed record AdaptiveFanTuning
         Range(HottestPerformanceCoreCount, 1, 64, "P-Cores más calientes (N)");
         Range(MinimumLevel, 10, 50, "Nivel mínimo");
         Range(MaximumLevel, MinimumLevel, 50, "Nivel máximo");
-        Range(ShortLoadFallTimeConstantSeconds, 1, 60, "Filtro de bajada tras carga breve (s)");
-        Range(ShortLoadDecreaseConfirmationSeconds, 2, 60, "Confirmación de bajada tras carga breve (s)");
-        Range(SustainedLoadSeconds, 60, 3600, "Carga prolongada (s)");
+        Range(ShortLoadFallTimeConstantSeconds, 1, 300, "Filtro de bajada tras carga breve (s)");
+        Range(ShortLoadDecreaseConfirmationSeconds, 2, 180, "Confirmación de bajada tras carga breve (s)");
+        Range(SustainedLoadSeconds, 60, 7200, "Carga prolongada (s)");
         Range(LoadThresholdPercent, 1, 100, "Umbral de carga (%)");
         Range(CpuLoadPowerThresholdW, 1, 200, "Umbral de potencia CPU (W)");
         Range(GpuLoadPowerThresholdW, 1, 250, "Umbral de potencia GPU (W)");
-        Range(LoadPauseToleranceSeconds, 0, 120, "Tolerancia a pausas de carga (s)");
-        Range(SustainedLoadCooldownSeconds, 10, 600, "Reposo tras carga prolongada (s)");
+        Range(LoadPauseToleranceSeconds, 0, 300, "Tolerancia a pausas de carga (s)");
+        Range(SustainedLoadCooldownSeconds, 10, 1800, "Reposo tras carga prolongada (s)");
         if (AdaptiveDescentEnabled && (ShortLoadFallTimeConstantSeconds > FallTimeConstantSeconds ||
             ShortLoadDecreaseConfirmationSeconds > DecreaseConfirmationSeconds))
             throw new InvalidDataException("La bajada tras carga breve debe ser al menos tan rápida como la prolongada.");
-        Range(RiseTimeConstantSeconds, 0.5, 10, "Filtro de subida (s)");
-        Range(FallTimeConstantSeconds, 1, 60, "Filtro de bajada (s)");
-        Range(IncreaseConfirmationSeconds, 0, 5, "Confirmación de subida (s)");
-        Range(DecreaseConfirmationSeconds, 2, 60, "Confirmación de bajada (s)");
+        Range(RiseTimeConstantSeconds, 0.5, 60, "Filtro de subida (s)");
+        Range(FallTimeConstantSeconds, 1, 300, "Filtro de bajada (s)");
+        Range(IncreaseConfirmationSeconds, 0, 30, "Confirmación de subida (s)");
+        Range(DecreaseConfirmationSeconds, 2, 180, "Confirmación de bajada (s)");
+        Range(NormalDecreaseHysteresisLevels, 0, 5, "Histéresis de bajada (niveles)");
+        Range(ThermalDecreaseHoldSeconds, 0, 300, "Espera tras respuesta térmica (s)");
         Range(NormalMaximumUpStepLevels, 1, 4, "Paso normal de subida");
         Range(MaximumDownStepLevels, 1, 2, "Paso de bajada");
         Range(ThermalMaximumUpStepLevels, 4, 4, "Paso térmico protegido");
-        Range(CpuThermalOverrideC, 75, 85, "Respuesta térmica CPU (°C)");
-        Range(GpuThermalOverrideC, 68, 78, "Respuesta térmica GPU (°C)");
+        Range(CpuThermalOverrideC, 60, 85, "Respuesta térmica CPU (°C)");
+        Range(GpuThermalOverrideC, 50, 78, "Respuesta térmica GPU (°C)");
         Range(NormalPollingDelayMilliseconds, 500, 1500, "Pausa normal (ms)");
     }
 }

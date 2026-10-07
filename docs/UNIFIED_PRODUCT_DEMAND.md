@@ -1,5 +1,7 @@
 # Motor de demanda única del producto
 
+Actualización de estabilidad: [estudio 8C40](FAN_STABILITY_STUDY_8C40.md). Los presets actuales incorporan meseta fría, histéresis y espera térmica; las mediciones previas y tablas históricas no certifican este ajuste físico.
+
 ## Cálculo compartido y alcance
 
 La GUI producto usa `FanConfiguration.UnifiedDemand`; el motor puro, inercia,

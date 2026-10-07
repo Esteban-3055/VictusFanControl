@@ -21,13 +21,14 @@ Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_VALIDATION_STATUS.md') -De
 Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_ADVANCED_SETTINGS.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_FINAL_RELEASE_PLAN.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_PERFORMANCE_UPDATES.md') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'docs/FAN_STABILITY_STUDY_8C40.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_FINAL_CANDIDATE.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'release/product-final-candidate.json') -Destination (Join-Path $OutputDirectory 'PRODUCT-FINAL-CANDIDATE.json')
 $candidatePath = Join-Path $OutputDirectory 'PRODUCT-FINAL-CANDIDATE.json'
 $candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
 $candidate | Add-Member -NotePropertyName sourceHead -NotePropertyValue $SourceHead
 New-Item -ItemType Directory -Path (Join-Path $OutputDirectory 'evidence') | Out-Null
-foreach ($evidence in $candidate.physicalEvidence) {
+foreach ($evidence in @($candidate.physicalEvidence) + @($candidate.offlinePolicyEvidence)) {
     if ([IO.Path]::GetFileName($evidence) -ne $evidence) { throw 'Invalid candidate evidence path.' }
     Copy-Item -LiteralPath (Join-Path $root ('release/' + $evidence)) -Destination (Join-Path $OutputDirectory 'evidence')
 }

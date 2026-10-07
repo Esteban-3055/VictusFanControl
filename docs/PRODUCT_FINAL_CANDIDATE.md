@@ -1,5 +1,7 @@
 # Candidata final — HP 8C40 / F.18
 
+Actualización de estabilidad: [estudio 8C40](FAN_STABILITY_STUDY_8C40.md). Los presets actuales incorporan meseta fría, histéresis y espera térmica; las mediciones previas y tablas históricas no certifican este ajuste físico.
+
 Esta candidata reúne la GUI, los dos perfiles AC/Batería, la curva única,
 influencias hasta 200 %, simulador continuo, límites CPU/GPU editables en vivo,
 Avanzado y diagnósticos por sesión. Las preferencias existentes se conservan.

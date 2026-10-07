@@ -114,7 +114,7 @@ public sealed record ProductProfiles
         return new()
         {
             Profile=AdaptiveCurveProfiles.Create(ac?"5629a2f243674123ae9e243bdd8743cc":"911be76e54814f12a56bdb8eb193cf90",ac?"Silencioso AC":"Silencioso Batería",policy),
-            Tuning=AdaptiveFanTuning.WithSmoothAdaptiveResponse(new AdaptiveFanTuning()) with
+            Tuning=AdaptiveFanTuning.WithStableQuietResponse(new AdaptiveFanTuning()) with
             {MinimumLevel=10,MaximumLevel=50,CpuTemperatureSource=CpuDemandTemperatureSource.HottestPerformanceCoresAverage,HottestPerformanceCoreCount=3}
         };
     }

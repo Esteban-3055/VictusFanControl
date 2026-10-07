@@ -147,6 +147,52 @@ internal static class FanConfigurationSelfTest
             Reject(() => (configuration with { Tuning = configuration.Tuning with { SustainedLoadSeconds = double.NaN } }).BuildPolicy());
             Reject(() => (configuration with { Tuning = configuration.Tuning with { ShortLoadDecreaseConfirmationSeconds = 20 } }).BuildPolicy());
         });
+        Check("expanded stability ranges roundtrip and preserve archived defaults", () =>
+        {
+            var wide=configuration.Tuning with {RiseTimeConstantSeconds=60,IncreaseConfirmationSeconds=30,
+                ShortLoadFallTimeConstantSeconds=300,FallTimeConstantSeconds=300,
+                ShortLoadDecreaseConfirmationSeconds=180,DecreaseConfirmationSeconds=180,SustainedLoadSeconds=7200,
+                LoadPauseToleranceSeconds=300,SustainedLoadCooldownSeconds=1800,NormalDecreaseHysteresisLevels=5,ThermalDecreaseHoldSeconds=300};
+            Require(FanConfigurationStore.Copy(configuration with{Tuning=wide}).Tuning==wide);
+            foreach(var bad in new[]{wide with{RiseTimeConstantSeconds=61},wide with{FallTimeConstantSeconds=301},
+                wide with{DecreaseConfirmationSeconds=181},wide with{NormalDecreaseHysteresisLevels=5.1},wide with{ThermalDecreaseHoldSeconds=-1}})Reject(bad.Validate);
+            var archived=System.Text.Json.Nodes.JsonNode.Parse(FanConfigurationStore.Serialize(configuration))!;
+            archived["tuning"]!.AsObject().Remove("normalDecreaseHysteresisLevels");archived["tuning"]!.AsObject().Remove("thermalDecreaseHoldSeconds");
+            var old=FanConfigurationStore.Parse(archived.ToJsonString()).Tuning;
+            Require(old.NormalDecreaseHysteresisLevels==0&&old.ThermalDecreaseHoldSeconds==0);
+        });
+        Check("hysteresis prevents boundary hunting and releases at the actual cold floor", () =>
+        {
+            var fan=VictusFanControl.Product.ProductProfiles.DefaultProfile(VictusFanControl.Product.ProductPowerProfile.Ac).Fan;
+            fan=fan with{UnifiedDemand=new UnifiedFanDemand{Curve=[new(0,10),new(100,50)]}};
+            var tuning=fan.Tuning with{RiseTimeConstantSeconds=.5,FallTimeConstantSeconds=1,IncreaseConfirmationSeconds=0,
+                DecreaseConfirmationSeconds=2,AdaptiveDescentEnabled=false,ThermalDecreaseHoldSeconds=0};
+            var origin=DateTimeOffset.UtcNow;
+            AdaptiveFanPolicyInput Input(int s,double level)=>new(origin.AddSeconds(s),40+(level-10)*1.25,0,0,35,0,0);
+            var p=new AdaptiveFanInertiaPolicy(fan.BuildPolicy(),tuning);
+            Require(p.Evaluate(Input(0,27.3)).EqualFanLevel==28);
+            for(var s=1;s<=60;s++)Require(p.Evaluate(Input(s,s%12<6?26.8:27.3)).EqualFanLevel==28);
+            for(var s=61;s<=125;s++)p.Evaluate(Input(s,10));
+            Require(p.Evaluate(Input(126,10)).EqualFanLevel==10);
+            p.UpdateUnifiedDemand(fan.UnifiedDemand! with{Curve=[new(0,20),new(100,50)]});
+            for(var s=127;s<=150;s++)p.Evaluate(Input(s,10));
+            Require(p.Evaluate(Input(151,10)).EqualFanLevel==20);
+        });
+        Check("ACK heat renews cooling hold; tuning preserves it; thermal rises stay immediate", () =>
+        {
+            var fan=VictusFanControl.Product.ProductProfiles.DefaultProfile(VictusFanControl.Product.ProductPowerProfile.Ac).Fan;
+            var tuning=fan.Tuning with{ThermalDecreaseHoldSeconds=10,ShortLoadDecreaseConfirmationSeconds=2};
+            var origin=DateTimeOffset.UtcNow;
+            AdaptiveFanPolicyInput Input(int s,double raw=50)=>new(origin.AddSeconds(s),50,0,0,35,0,0){CpuRawControlTemperatureC=raw};
+            var p=new AdaptiveFanInertiaPolicy(fan.BuildPolicy(),tuning);
+            Require(p.Evaluate(Input(0)).EqualFanLevel==12);
+            var hot=p.Evaluate(Input(1,90));Require(hot.ThermalOverride&&hot.EqualFanLevel==16&&hot.ActuationDemandLevel==50);
+            Require(p.ObserveDuringActuation(Input(2,90),out _));p.UpdateTuning(tuning with{RiseTimeConstantSeconds=9});
+            for(var s=3;s<14;s++)Require(p.Evaluate(Input(s)).EqualFanLevel==16);
+            Require(p.Evaluate(Input(14)).EqualFanLevel==15);
+            p.Reset();Require(p.Evaluate(Input(15,90)).EqualFanLevel==50);
+            for(var s=16;s<=30;s++)Require(p.Evaluate(Input(s,86)).EqualFanLevel==50);
+        });
         Check("brief heat descends quickly; normal rise has inertia; sustained heat bypasses it", () =>
         {
             var origin = DateTimeOffset.UtcNow;

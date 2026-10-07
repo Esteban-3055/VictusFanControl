@@ -12,11 +12,11 @@ public sealed record UnifiedFanDemand
     public int CpuLoadInfluence { get; init; } = 20;
     public int GpuLoadInfluence { get; init; } = 20;
     public IReadOnlyList<AdaptiveFanCurvePoint> Curve { get; init; } =
-        [new(0,12),new(20,12),new(40,21),new(60,28),new(76,35),new(90,44),new(100,50)];
+        [new(0,12),new(40,12),new(50,20),new(65,30),new(76,36),new(90,44),new(100,50)];
     public static UnifiedFanDemand Default(bool battery) => battery ? new()
     {
         CpuPowerInfluence=20,GpuPowerInfluence=35,CpuLoadInfluence=10,GpuLoadInfluence=10,
-        Curve=[new(0,10),new(25,10),new(40,12),new(60,24),new(76,35),new(90,44),new(100,50)]
+        Curve=[new(0,10),new(40,10),new(50,14),new(65,26),new(76,35),new(90,44),new(100,50)]
     } : new();
     public int Influence(int axis)=>axis switch
     {0=>CpuTemperatureInfluence,1=>GpuTemperatureInfluence,2=>CpuPowerInfluence,3=>GpuPowerInfluence,4=>CpuLoadInfluence,5=>GpuLoadInfluence,_=>throw new ArgumentOutOfRangeException(nameof(axis))};

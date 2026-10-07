@@ -1,5 +1,7 @@
 # Presets silenciosos AC/Batería y operación de la GUI
 
+Actualización de estabilidad: [estudio 8C40](FAN_STABILITY_STUDY_8C40.md). Los presets actuales incorporan meseta fría, histéresis y espera térmica; las mediciones previas y tablas históricas no certifican este ajuste físico.
+
 ## Evidencia y alcance
 
 El diagnóstico GUI (5), capturado 2026-10-05 21:01:17 UTC, corresponde al target

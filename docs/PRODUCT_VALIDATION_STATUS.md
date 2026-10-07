@@ -1,5 +1,7 @@
 # Estado consolidado del producto — 6 de octubre de 2026
 
+Actualización de estabilidad: [estudio 8C40](FAN_STABILITY_STUDY_8C40.md). Los presets actuales incorporan meseta fría, histéresis y espera térmica; las mediciones previas y tablas históricas no certifican este ajuste físico.
+
 Destino actual: HP 8C40, SKU 9D0R1LA, BIOS F.18, i7-13700H y RTX 4060 Laptop.
 Las pruebas del equipo histórico 88F8 no sustituyen la evidencia de este destino.
 

@@ -37,6 +37,8 @@ public class AdaptiveFanInertiaPolicy
     private DateTimeOffset? _increaseSince;
     private int _increaseFloor;
     private DateTimeOffset? _decreaseSince;
+    private DateTimeOffset? _lastThermalResponse;
+    private double _normalFloor;
 
     public AdaptiveFanInertiaPolicy(AdaptiveFanPolicyConfig config, AdaptiveFanTuning? tuning = null)
     {
@@ -44,6 +46,7 @@ public class AdaptiveFanInertiaPolicy
         _tuning = tuning;
         _finalFilter = new(tuning);
         _config = config;
+        _normalFloor = Math.Clamp(config.UnifiedDemand?.Curve[0].Level ?? config.MinimumLevel, config.MinimumLevel, config.MaximumLevel);
         // Reuse curve interpolation and input/continuity validation, but obtain
         // instantaneous demand. Apply inertia exactly once, below.
         _demand = new(config with
@@ -77,6 +80,7 @@ public class AdaptiveFanInertiaPolicy
             : _tuning?.DecreaseConfirmationSeconds ?? Settings.DecreaseConfirmationSeconds;
         var thermalOverride = (input.CpuRawControlTemperatureC ?? input.CpuEffectiveTemperatureC) >= (_tuning?.CpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.CpuThermalOverrideC) ||
             input.GpuTemperatureC >= (_tuning?.GpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.GpuThermalOverrideC);
+        if (thermalOverride) _lastThermalResponse = input.Timestamp;
         // Raw heat cannot be hidden by a cool core average or a low edited
         // curve. Keep the protected four-level rise and established descent.
         var thermalDemand = thermalOverride && input.CpuRawControlTemperatureC.HasValue
@@ -125,10 +129,23 @@ public class AdaptiveFanInertiaPolicy
         }
 
         _increaseSince = null;
-        // Tenth-level quantization replaces the experimental full-level
-        // deadband, which retained an extra level even at the exact floor.
         if (requested < current)
         {
+            // Cooling hold never delays a protected rise. Renew only on fresh raw heat.
+            var hold = _tuning?.ThermalDecreaseHoldSeconds ?? 0;
+            if (hold > 0 && _lastThermalResponse.HasValue &&
+                (input.Timestamp - _lastThermalResponse.Value).TotalSeconds < hold)
+            {
+                _decreaseSince = null;
+                return Accepted($"Holding {current}; thermal cooling hold {hold}s.");
+            }
+            // Schmitt band prevents boundary hunting; release at the actual cold
+            // curve floor so a settled machine can reach its quiet idle level.
+            if (requested > _normalFloor && actuationDemand > current - 1 - (_tuning?.NormalDecreaseHysteresisLevels ?? 0))
+            {
+                _decreaseSince = null;
+                return Accepted($"Holding {current}; normal descent hysteresis.");
+            }
             _decreaseSince ??= input.Timestamp;
             var elapsed = (input.Timestamp - _decreaseSince.Value).TotalSeconds;
             if (elapsed >= decreaseSeconds)
@@ -150,6 +167,7 @@ public class AdaptiveFanInertiaPolicy
         // Preserve actuation, EMA, telemetry continuity and load history. A confirmation
         // earned with the previous curve must not authorize a step with the new curve.
         _demand.UpdateUnifiedDemand(demand);
+        _normalFloor = Math.Clamp(demand.Curve[0].Level, _config.MinimumLevel, _config.MaximumLevel);
         ClearConfirmation();
     }
 
@@ -186,6 +204,7 @@ public class AdaptiveFanInertiaPolicy
         _loadHistory.Observe(input, _tuning);
         var thermalOverride = (input.CpuRawControlTemperatureC ?? input.CpuEffectiveTemperatureC) >= (_tuning?.CpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.CpuThermalOverrideC) ||
             input.GpuTemperatureC >= (_tuning?.GpuThermalOverrideC ?? AdaptiveFinalDemandFilter.Settings.GpuThermalOverrideC);
+        if (thermalOverride) _lastThermalResponse = input.Timestamp;
         var thermalDemand = thermalOverride && input.CpuRawControlTemperatureC.HasValue
             ? Math.Max(demand.RawDemandLevel.Value, Math.Min(44, _config.MaximumLevel)) : demand.RawDemandLevel.Value;
         _ = _finalFilter.Evaluate(input.Timestamp, thermalDemand,
@@ -212,6 +231,7 @@ public class AdaptiveFanInertiaPolicy
         _finalFilter.Reset();
         _loadHistory.Reset();
         _current = null;
+        _lastThermalResponse = null;
         ClearConfirmation();
     }
 

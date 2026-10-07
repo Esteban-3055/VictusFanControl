@@ -726,6 +726,9 @@ jobs:
       - name: Configurable dashboard WinForms self-test and renders
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --dashboard-self-test
 
+      - name: Build isolated offline fan stability replay utility
+        run: dotnet build .\tools\FanStabilityReplay -c Release
+
       - name: Definitive product GUI AC Battery bindings and Windows renders
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --product-gui-self-test
 

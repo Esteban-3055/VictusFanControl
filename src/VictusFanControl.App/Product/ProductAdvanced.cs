@@ -16,21 +16,23 @@ internal static class ProductAdvancedSettings
     internal static readonly ProductTuningField[] Fields =
     [
         new("cores","P-Cores más calientes (N)","núcleos",0,1,64,1,t=>t.HottestPerformanceCoreCount,(t,v)=>t with{HottestPerformanceCoreCount=(int)v}),
-        new("rise","Filtro de subida","s",1,.5,10,.5,t=>t.RiseTimeConstantSeconds,(t,v)=>t with{RiseTimeConstantSeconds=v}),
-        new("rise-confirm","Confirmación de subida","s",1,0,5,.5,t=>t.IncreaseConfirmationSeconds,(t,v)=>t with{IncreaseConfirmationSeconds=v}),
+        new("rise","Filtro de subida","s",1,.5,60,.5,t=>t.RiseTimeConstantSeconds,(t,v)=>t with{RiseTimeConstantSeconds=v}),
+        new("rise-confirm","Confirmación de subida","s",1,0,30,.5,t=>t.IncreaseConfirmationSeconds,(t,v)=>t with{IncreaseConfirmationSeconds=v}),
         new("rise-step","Paso normal de subida","niveles",1,1,4,1,t=>t.NormalMaximumUpStepLevels,(t,v)=>t with{NormalMaximumUpStepLevels=(int)v}),
-        new("short-fall","Filtro de bajada breve","s",1,1,60,.5,t=>t.ShortLoadFallTimeConstantSeconds,(t,v)=>t with{ShortLoadFallTimeConstantSeconds=v}),
-        new("short-confirm","Confirmación de bajada breve","s",1,2,60,.5,t=>t.ShortLoadDecreaseConfirmationSeconds,(t,v)=>t with{ShortLoadDecreaseConfirmationSeconds=v}),
-        new("fall","Filtro de bajada prolongada / fija","s",1,1,60,.5,t=>t.FallTimeConstantSeconds,(t,v)=>t with{FallTimeConstantSeconds=v}),
-        new("fall-confirm","Confirmación de bajada prolongada / fija","s",1,2,60,.5,t=>t.DecreaseConfirmationSeconds,(t,v)=>t with{DecreaseConfirmationSeconds=v}),
-        new("sustained","Carga acumulada para descenso lento","s",2,60,3600,60,t=>t.SustainedLoadSeconds,(t,v)=>t with{SustainedLoadSeconds=v}),
+        new("short-fall","Filtro de bajada breve","s",1,1,300,.5,t=>t.ShortLoadFallTimeConstantSeconds,(t,v)=>t with{ShortLoadFallTimeConstantSeconds=v}),
+        new("short-confirm","Confirmación de bajada breve","s",1,2,180,.5,t=>t.ShortLoadDecreaseConfirmationSeconds,(t,v)=>t with{ShortLoadDecreaseConfirmationSeconds=v}),
+        new("fall","Filtro de bajada prolongada / fija","s",1,1,300,.5,t=>t.FallTimeConstantSeconds,(t,v)=>t with{FallTimeConstantSeconds=v}),
+        new("fall-confirm","Confirmación de bajada prolongada / fija","s",1,2,180,.5,t=>t.DecreaseConfirmationSeconds,(t,v)=>t with{DecreaseConfirmationSeconds=v}),
+        new("sustained","Carga acumulada para descenso lento","s",2,60,7200,60,t=>t.SustainedLoadSeconds,(t,v)=>t with{SustainedLoadSeconds=v}),
         new("load","Utilización CPU o GPU","%",2,1,100,1,t=>t.LoadThresholdPercent,(t,v)=>t with{LoadThresholdPercent=v}),
         new("cpu-load-power","Potencia CPU para contar carga","W",2,1,200,1,t=>t.CpuLoadPowerThresholdW,(t,v)=>t with{CpuLoadPowerThresholdW=v}),
         new("gpu-load-power","Potencia GPU para contar carga","W",2,1,250,1,t=>t.GpuLoadPowerThresholdW,(t,v)=>t with{GpuLoadPowerThresholdW=v}),
-        new("pause","Pausa tolerada antes de calificar","s",2,0,120,1,t=>t.LoadPauseToleranceSeconds,(t,v)=>t with{LoadPauseToleranceSeconds=v}),
-        new("cooldown","Reposo para volver al descenso breve","s",2,10,600,10,t=>t.SustainedLoadCooldownSeconds,(t,v)=>t with{SustainedLoadCooldownSeconds=v}),
-        new("cpu-thermal","Respuesta térmica CPU desde","°C",3,75,85,1,t=>t.CpuThermalOverrideC,(t,v)=>t with{CpuThermalOverrideC=v}),
-        new("gpu-thermal","Respuesta térmica GPU desde","°C",3,68,78,1,t=>t.GpuThermalOverrideC,(t,v)=>t with{GpuThermalOverrideC=v}),
+        new("pause","Pausa tolerada antes de calificar","s",2,0,300,1,t=>t.LoadPauseToleranceSeconds,(t,v)=>t with{LoadPauseToleranceSeconds=v}),
+        new("cooldown","Reposo para volver al descenso breve","s",2,10,1800,10,t=>t.SustainedLoadCooldownSeconds,(t,v)=>t with{SustainedLoadCooldownSeconds=v}),
+        new("cpu-thermal","Respuesta térmica CPU desde","°C",3,60,85,1,t=>t.CpuThermalOverrideC,(t,v)=>t with{CpuThermalOverrideC=v}),
+        new("gpu-thermal","Respuesta térmica GPU desde","°C",3,50,78,1,t=>t.GpuThermalOverrideC,(t,v)=>t with{GpuThermalOverrideC=v}),
+        new("hysteresis","Histéresis de bajada","niveles",4,0,5,.5,t=>t.NormalDecreaseHysteresisLevels,(t,v)=>t with{NormalDecreaseHysteresisLevels=v}),
+        new("thermal-hold","Espera tras respuesta térmica","s",4,0,300,1,t=>t.ThermalDecreaseHoldSeconds,(t,v)=>t with{ThermalDecreaseHoldSeconds=v}),
         new("poll","Pausa entre lecturas normales","ms",3,500,1500,100,t=>t.NormalPollingDelayMilliseconds,(t,v)=>t with{NormalPollingDelayMilliseconds=(int)v})
     ];
     internal static ProductTuningField? Find(string key)=>Fields.FirstOrDefault(f=>f.Key==key);
@@ -57,8 +59,8 @@ internal sealed partial class ProductCanvas
     {
         DrawText(g,"Avanzado",320,87,30,null,1200,true);
         DrawText(g,"Respuesta común para AC y Batería · curvas y límites siguen siendo independientes",320,132,20,Muted,1300);
-        string[] tabs=["Temperatura CPU","Suavizado e inercia","Historial de carga","Respuesta térmica"];
-        for(int i=0;i<4;i++)Button(g,"advanced-tab-"+i,tabs[i],new(320+i*334,180,317,49),AdvancedTab==i);
+        string[] tabs=["Temperatura CPU","Suavizado e inercia","Historial de carga","Respuesta térmica","Estabilidad"];
+        for(int i=0;i<tabs.Length;i++)Button(g,"advanced-tab-"+i,tabs[i],new(320+i*267,180,250,49),AdvancedTab==i);
         Card(g,new(320,249,807,578));Card(g,new(1148,249,500,578));
         float y=AdvancedTab==2?331:273;
         if(AdvancedTab==0)
@@ -75,11 +77,18 @@ internal sealed partial class ProductCanvas
         {
             if(AdvancedTab==2)Button(g,"tuning-adaptive",DraftTuning.AdaptiveDescentEnabled?"✓  Descenso según historial de carga":"○  Descenso fijo",new(342,270,751,46),DraftTuning.AdaptiveDescentEnabled);
             foreach(var f in ProductAdvancedSettings.Fields.Where(f=>f.Tab==AdvancedTab)){TuningRow(g,f,y);y+=77;}
+            if(AdvancedTab==4)
+            {
+                DrawText(g,"La histéresis evita bajar y volver a subir al oscilar cerca de un nivel. En el mínimo de la curva se libera para alcanzar el reposo silencioso.",342,455,21,Muted,750,height:100);
+                DrawText(g,"Cada lectura térmica caliente renueva la espera antes de bajar. No retrasa la subida de protección ni sustituye las emergencias.",342,577,21,Muted,750,height:100);
+                DrawText(g,"Recomendación: 1 nivel de histéresis y 30 s de espera. Los presets conservan tus límites CPU/GPU.",342,699,21,Yellow,750,height:70);
+                Button(g,"tuning-stable-presets","Preparar presets estables AC/Batería",new(342,778,751,39));
+            }
             if(AdvancedTab==3)
             {
                 Button(g,"tuning-remember",DraftTuning.RememberThermalDemand?"✓  Conservar picos en el filtro":"○  Filtrar sin conservar el pico térmico",new(342,519,751,48),DraftTuning.RememberThermalDemand);
                 DrawText(g,"Rango físico: 10–50 · subida térmica: 4 niveles · bajada: 1 nivel",342,600,21,Muted,750);
-                DrawText(g,"Protección de revisión: CPU >90 °C, recuperación en 2 s; CPU ≥99 °C inmediata. GPU >82 °C inmediata.",342,654,21,Yellow,750,height:80);
+                DrawText(g,"Protección de revisión: CPU ≥95 °C, recuperación <95 °C en 2 s; CPU ≥99 °C inmediata. GPU >82 °C inmediata.",342,654,21,Yellow,750,height:80);
                 DrawText(g,"Estos umbrales de respuesta adelantan la ventilación. Las protecciones, la frescura y la autoridad permanecen obligatorias.",342,745,20,Muted,750);
             }
         }
@@ -113,7 +122,7 @@ internal sealed partial class ProductForm
     }
     private bool HandleAdvancedCommand(string id)
     {
-        if(id.StartsWith("advanced-tab-")){_canvas.AdvancedTab=Math.Clamp(int.Parse(id[13..]),0,3);_canvas.Invalidate();return true;}
+        if(id.StartsWith("advanced-tab-")){_canvas.AdvancedTab=Math.Clamp(int.Parse(id[13..]),0,4);_canvas.Invalidate();return true;}
         if(!id.StartsWith("tuning-"))return false;
         if(_canvas.Busy||_closing)return true;
         try
@@ -126,6 +135,17 @@ internal sealed partial class ProductForm
                     _canvas.Notice="Ajustes preparados o aplicados; Guardar los conserva para próximos inicios.";});return true;
             }
             if(id=="tuning-reset"){StageTuning(VictusFanControl.Product.ProductProfiles.DefaultProfile(VictusFanControl.Product.ProductPowerProfile.Ac).Fan.Tuning);return true;}
+            if(id=="tuning-stable-presets")
+            {
+                var tuning=VictusFanControl.Product.ProductProfiles.DefaultProfile(VictusFanControl.Product.ProductPowerProfile.Ac).Fan.Tuning;
+                Change(_draft with
+                {
+                    Ac=_draft.Ac with {Fan=_draft.Ac.Fan with {Tuning=tuning,UnifiedDemand=UnifiedFanDemand.Default(false)}},
+                    Battery=_draft.Battery with {Fan=_draft.Battery.Fan with {Tuning=tuning,UnifiedDemand=UnifiedFanDemand.Default(true)}}
+                });
+                _canvas.Notice="Presets y ajustes preparados, sin escritura al hardware. Guarda y activa Automático desde Firmware; en Automático aplica también curva y Avanzado.";
+                return true;
+            }
             if(id.StartsWith("tuning-source-")){StageTuning(_canvas.DraftTuning with{CpuTemperatureSource=(CpuDemandTemperatureSource)int.Parse(id[14..])});return true;}
             if(id=="tuning-adaptive"){StageTuning(_canvas.DraftTuning with{AdaptiveDescentEnabled=!_canvas.DraftTuning.AdaptiveDescentEnabled});return true;}
             if(id=="tuning-remember"){StageTuning(_canvas.DraftTuning with{RememberThermalDemand=!_canvas.DraftTuning.RememberThermalDemand});return true;}

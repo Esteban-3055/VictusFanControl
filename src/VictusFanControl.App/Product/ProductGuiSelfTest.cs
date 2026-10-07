@@ -114,9 +114,9 @@ internal static class ProductGuiSelfTest
                 Require(bitmap.GetPixel(bitmap.Width/2,bitmap.Height/2).A==255,"Render is transparent.");
             }
             foreach(var page in Enum.GetValues<ProductPage>()){canvas.Page=page;canvas.FanTab=0;canvas.PerformanceTab=0;Render("page-"+page);}
-            canvas.Page=ProductPage.Advanced;for(int i=0;i<4;i++){canvas.AdvancedTab=i;Render("advanced-tab-"+i);}
+            canvas.Page=ProductPage.Advanced;for(int i=0;i<5;i++){canvas.AdvancedTab=i;Render("advanced-tab-"+i);}
             Require(canvas.Hits.All(h=>!h.Id.Contains("MaximumDownStep")&&!h.Id.Contains("MinimumLevel")),"Advanced settings expose controls ignored by the protected physical envelope.");
-            canvas.Size=new(1040,660);for(int i=0;i<4;i++){canvas.AdvancedTab=i;Render("advanced-minimum-tab-"+i);}
+            canvas.Size=new(1040,660);for(int i=0;i<5;i++){canvas.AdvancedTab=i;Render("advanced-minimum-tab-"+i);}
             canvas.Size=new(1672,941);
             canvas.Page=ProductPage.Fans;for(int i=1;i<=2;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
             Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
@@ -667,12 +667,26 @@ internal static class ProductGuiSelfTest
         var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://advanced",fixture:runtime,fixtureProfiles:new ProductProfiles());
         form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Page=ProductPage.Advanced;
         var original=ProductProfilesStore.Serialize(form.Draft);
-        foreach(var invalid in new[]{"NaN","Infinity","1e3","1.000.0","0.1","11"})
+        foreach(var invalid in new[]{"NaN","Infinity","1e3","1.000.0","0.1","61"})
             require(!form.TryEditTuningValue("rise",invalid,out _),"Invalid tuning numeric value accepted: "+invalid);
         require(!form.TryEditTuningValue("cores","2.5",out _)&&ProductProfilesStore.Serialize(form.Draft)==original,"Rejected edits changed tuning.");
         require(form.TryEditTuningValue("rise","7,5",out _),"Decimal comma rejected.");
         require(form.Draft.Ac.Fan.Tuning.RiseTimeConstantSeconds==7.5&&form.Draft.Battery.Fan.Tuning==form.Draft.Ac.Fan.Tuning&&runtime.Commands==0,"Tuning edit wrote hardware or changed only one source.");
         require(!form.TryEditTuningValue("short-fall","50",out _),"Brief descent slower than prolonged descent accepted.");
+        var caps=form.Draft.PerformanceConfiguration();
+        require(form.TryEditTuningValue("rise","60",out _)&&form.TryEditTuningValue("rise-confirm","30",out _)&&
+            form.TryEditTuningValue("fall","300",out _)&&form.TryEditTuningValue("short-fall","300",out _)&&
+            form.TryEditTuningValue("fall-confirm","180",out _)&&form.TryEditTuningValue("short-confirm","180",out _)&&
+            form.TryEditTuningValue("hysteresis","5",out _)&&form.TryEditTuningValue("thermal-hold","300",out _)&&
+            form.TryEditTuningValue("sustained","7200",out _)&&form.TryEditTuningValue("pause","300",out _)&&
+            form.TryEditTuningValue("cooldown","1800",out _),"Expanded advanced limits rejected.");
+        form.HandleCommand("tuning-stable-presets");
+        require(form.Draft.PerformanceConfiguration()==caps&&runtime.Commands==0&&
+            form.Draft.Ac.Fan.UnifiedDemand!.Curve.SequenceEqual(UnifiedFanDemand.Default(false).Curve)&&
+            form.Draft.Battery.Fan.UnifiedDemand!.Curve.SequenceEqual(UnifiedFanDemand.Default(true).Curve)&&
+            form.Draft.Ac.Fan.Tuning.NormalDecreaseHysteresisLevels==1&&form.Draft.Battery.Fan.Tuning==form.Draft.Ac.Fan.Tuning,
+            "Preparing stable presets changed caps, wrote hardware or lost common tuning.");
+        require(form.TryEditTuningValue("rise","7.5",out _),"Live edit after preset preparation failed.");
         var active=canvas.State with{Target="HP-8C40-9D0R1LA-F18",Runtime="Healthy",Source="Ac",AutomaticAuthorized=true,
             FanMode="Automatic",FanAuthority="Custom",Snapshot=Snapshot(DateTimeOffset.UtcNow,40,35,10,5),AppliedAutomaticConfiguration=new ProductProfiles().Ac.Fan};
         runtime.Publish(active);form.HandleCommand("profile-battery");form.HandleCommand("tuning-apply");PumpUntil(()=>!canvas.Busy,"Tuning apply did not drain.");

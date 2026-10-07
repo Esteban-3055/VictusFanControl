@@ -15,6 +15,7 @@ de alimentación no reemplace silenciosamente la inercia activa.
   prolongada/fija, y paso normal de subida. Se admite texto decimal con punto o coma.
 - Historial: activar descenso adaptativo; duración acumulada, utilización,
   potencia CPU/GPU que cuenta como carga, pausa tolerada y reposo de recuperación.
+- Estabilidad: histéresis 0–5 niveles y espera tras calor crudo 0–300 s. Preparar presets estables cambia curvas/influencias y la inercia de ambos borradores, preservando rendimiento y sin aplicar hardware.
 - Respuesta térmica: umbrales de subida urgente CPU/GPU, conservar o no el pico
   en el filtro normal y pausa de adquisición normal.
 
@@ -61,3 +62,5 @@ El cambio de límites CPU/GPU en vivo es independiente de Avanzado y está imple
 en Rendimiento, con regresión física breve aprobada en AC (PRODUCT_PERFORMANCE_UPDATES.md).
 Firmware conserva los límites. Desactivar límites sale de Automático a Firmware
 antes de liberarlos; Manual mantiene su control independiente.
+
+Los rangos ampliados y la nueva recomendación se detallan en [el estudio de estabilidad](FAN_STABILITY_STUDY_8C40.md). Las preferencias archivadas conservan su respuesta hasta restablecer/aplicar explícitamente.

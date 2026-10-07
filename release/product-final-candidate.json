@@ -16,7 +16,7 @@
     "product-gui-thermal-interruption-8c40-2026-10-06.json"
   ],
   "remainingPhysicalChecks": [
-    "representative-use-regression-of-active-95C-contract",
+    "representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return",
     "current-gui-suspend-resume-without-fan-reentry",
     "current-gui-clean-exit-release-and-open-in-firmware"
   ],
@@ -25,6 +25,10 @@
     "The thermal-interruption record is an observed interruption, not a stability PASS.",
     "GPU NVML acceptance does not prove exact locked-range readback.",
     "WMI acceptance does not prove independent firmware/fan ownership.",
-    "No unattended or startup hardware activation is authorized."
+    "No unattended or startup hardware activation is authorized.",
+    "Stable quiet presets have offline replay evidence only; actual cooling and acoustics remain pending."
+  ],
+  "offlinePolicyEvidence": [
+    "product-fan-stability-replay-8c40-2026-10-06.json"
   ]
 }

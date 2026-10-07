@@ -104,3 +104,14 @@ foreach ($evidence in $candidate.physicalEvidence) {
     Require ($record.target -eq 'HP-8C40-9D0R1LA-F18' -and $record.sourceHead -match '^[0-9a-f]{40}$') 'candidate evidence must bind the exact target and historical code'
 }
 Write-Host 'PASS: final candidate retains the closed normal gate, explicit physical pending checks and shared 95 C / 2000-ms confirmation.'
+
+foreach ($evidence in $candidate.offlinePolicyEvidence) {
+    Require ([IO.Path]::GetFileName($evidence) -eq $evidence) 'offline policy evidence path invalid'
+    $offline = Get-Content (Join-Path $repoRoot ('release/' + $evidence)) -Raw | ConvertFrom-Json
+    Require ($offline.target -eq 'HP-8C40-9D0R1LA-F18' -and $offline.physicalPassClaimed -eq $false -and $offline.normalAutomaticAuthorized -eq $false) 'replay must not claim physical qualification or authority'
+    Require ($offline.historicalReconstruction.expectedDecisions -eq $offline.historicalReconstruction.exactLevelMatches) 'historical replay must reproduce all recorded targets'
+    foreach ($binding in $offline.sourceSha256.PSObject.Properties) {
+        Require ((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repoRoot $binding.Name)).Hash.ToLowerInvariant() -eq $binding.Value) 'offline comparison source hash drifted'
+    }
+}
+Write-Host 'PASS: offline stability evidence binds source and retains physical pending status.'
