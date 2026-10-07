@@ -1211,5 +1211,6 @@
     "Historical manual/experimental readings do not qualify new presets.",
     "Battery curve is derived and awaits representative physical observation.",
     "Fewer direction reversals may retain higher fan levels while cooling; quiet minimum is released at the curve floor."
-  ]
+  ],
+  "sourceHashCanonicalization": "UTF-8 text, BOM-aware decode, CRLF-to-LF, SHA256"
 }

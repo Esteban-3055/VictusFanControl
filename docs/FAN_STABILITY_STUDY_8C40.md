@@ -14,7 +14,9 @@ otros motores y actividad de carga: orientan el rango, no prueban estos presets.
 
 El replay con el motor C# de producción reproduce 3349/3349 niveles históricos
 usando curvas, influencias, ajustes en vivo y adquisiciones intermedias originales.
-No filtra la temperatura cruda. El informe con hashes de origen está en
+No filtra la temperatura cruda. Los hashes de código comparan UTF-8 con saltos LF
+para conservar el vínculo de contenido también en checkouts Windows CRLF; los
+hashes de archivos de evidencia siguen vinculando los bytes originales. El informe está en
 `release/product-fan-stability-replay-8c40-2026-10-06.json`.
 
 | Intervalo | Cambios de nivel observados | Inversiones observadas | Cambios propuestos en replay | Inversiones propuestas |

@@ -105,13 +105,32 @@ foreach ($evidence in $candidate.physicalEvidence) {
 }
 Write-Host 'PASS: final candidate retains the closed normal gate, explicit physical pending checks and shared 95 C / 2000-ms confirmation.'
 
+# Git for Windows may check text out as CRLF. Bind canonical source content,
+# preserving every other character, rather than platform-specific line endings.
+function Get-CanonicalSourceSha256([string]$Path) {
+    $content = [IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8).Replace("`r`n", "`n")
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($content)) | ForEach-Object { $_.ToString('x2') }) }
+    finally { $sha.Dispose() }
+}
+$hashFixture = Join-Path ([IO.Path]::GetTempPath()) ('vfc-source-hash-' + [guid]::NewGuid().ToString('N') + '.txt')
+try {
+    $utf8 = New-Object Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($hashFixture, "CPU ≥95 °C`nGPU >82 °C`n", $utf8)
+    $lfHash = Get-CanonicalSourceSha256 $hashFixture
+    [IO.File]::WriteAllText($hashFixture, "CPU ≥95 °C`r`nGPU >82 °C`r`n", $utf8)
+    Require ((Get-CanonicalSourceSha256 $hashFixture) -eq $lfHash) 'LF/CRLF source binding differs'
+    [IO.File]::WriteAllText($hashFixture, "CPU ≥94 °C`r`nGPU >82 °C`r`n", $utf8)
+    Require ((Get-CanonicalSourceSha256 $hashFixture) -ne $lfHash) 'semantic source change escaped binding'
+}
+finally { Remove-Item -LiteralPath $hashFixture -Force -ErrorAction SilentlyContinue }
 foreach ($evidence in $candidate.offlinePolicyEvidence) {
     Require ([IO.Path]::GetFileName($evidence) -eq $evidence) 'offline policy evidence path invalid'
     $offline = Get-Content (Join-Path $repoRoot ('release/' + $evidence)) -Raw | ConvertFrom-Json
     Require ($offline.target -eq 'HP-8C40-9D0R1LA-F18' -and $offline.physicalPassClaimed -eq $false -and $offline.normalAutomaticAuthorized -eq $false) 'replay must not claim physical qualification or authority'
     Require ($offline.historicalReconstruction.expectedDecisions -eq $offline.historicalReconstruction.exactLevelMatches) 'historical replay must reproduce all recorded targets'
     foreach ($binding in $offline.sourceSha256.PSObject.Properties) {
-        Require ((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repoRoot $binding.Name)).Hash.ToLowerInvariant() -eq $binding.Value) 'offline comparison source hash drifted'
+        Require ((Get-CanonicalSourceSha256 (Join-Path $repoRoot $binding.Name)) -eq $binding.Value) 'offline comparison source hash drifted'
     }
 }
 Write-Host 'PASS: offline stability evidence binds source and retains physical pending status.'
