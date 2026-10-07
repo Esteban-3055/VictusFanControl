@@ -17,6 +17,8 @@ internal static class Program
             if (args.SequenceEqual(new[] { "--self-test" })) return await RaplProbeSelfTest.RunAsync();
             if (args.Length > 0 && args[0] == "--frequency-readonly")
                 return FrequencyReadOnlyProbe.Run(args.Skip(1).ToArray());
+            if (args.Length > 0 && args[0] == "--oc-mailbox-ratio-query")
+                return OcMailboxRatioQueryProbe.Run(args.Skip(1).ToArray());
             if (args.Length == 2 && args[0] == "--fixture-supervisor")
                 return GuardianProcessFixture.Supervisor(args[1]);
             if (args.Length == 2 && args[0] == "--worker") return Worker(args[1]);
@@ -25,6 +27,7 @@ internal static class Program
                 Console.WriteLine("CPU-only RAPL diagnostic. No fan, EC or NVIDIA control.");
                 Console.WriteLine("--observe|--write-test --module <IntelMSR.bin> --output-dir <new-dir> --duration-seconds <10..120> [--pl1-watts <W> --pl2-watts <W>]");
                 Console.WriteLine("--frequency-readonly --module <IntelMSR.bin> --output-dir <new-dir> --duration-seconds <10..120>");
+                Console.WriteLine("--oc-mailbox-ratio-query --module <IntelMSR.bin> --output-dir <new-dir>");
                 Console.WriteLine("Default writes reduce both limits 20%. Explicit limits remain downward-only, validated, restored and non-persistent.");
                 return 0;
             }
