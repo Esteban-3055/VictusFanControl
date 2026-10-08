@@ -13,6 +13,8 @@ internal static class Program
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunRestartFixtureChild(args[1],args[2]);return;}
         if(args.Length==1&&args[0]=="--product-gui-soak-self-test")
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSoak();return;}
+        if(args.Length==1&&args[0]=="--platform-physical-self-test")
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=PlatformPhysicalSelfTest.Run();return;}
         if (args.Length == 1 && args[0] == "--product-gui-self-test")
         {
             ApplicationConfiguration.Initialize();
@@ -303,6 +305,8 @@ internal static class Program
             Environment.ExitCode = 60;
             return;
         }
+        if(args.Contains("--platform-thermal-experiment")&&(hardwareTestModeCount!=0||productAutomaticReview is not null))
+            throw new ArgumentException("Platform experiment cannot be combined with another hardware entry.");
 
         if (automaticFinalQualificationHardwareTest)
         {
@@ -833,6 +837,14 @@ internal static class Program
 
         if (hardwareTestModeCount == 0)
         {
+            if(args.Contains("--platform-thermal-experiment"))
+            {
+                if(productAutomaticReview is not null||args.Contains("--product-restart-state")||args.Contains("--start-minimized"))
+                    throw new ArgumentException("Experimental entry cannot be combined with other review/restart modes.");
+                var output=ReadOptionValue(args,"--experimental-output")??throw new ArgumentException("--experimental-output is required.");
+                PlatformThermalExperimentForm.Run(modulesDirectory,output);
+                return;
+            }
             ProductRestartRequest? restart;
             try
             {

@@ -11,6 +11,8 @@ if (Test-Path -LiteralPath $OutputDirectory) { throw 'Use a new output directory
 New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
 Expand-Archive -LiteralPath $zip -DestinationPath $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'release/Start-ProductGui.ps1') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'release/Start-PlatformThermalTest.ps1') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'docs/PLATFORM_PHYSICAL_TEST_2026-10-08.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/GUI_VICTUS_VALIDATION.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/GUI_PRODUCT_PHASE.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/QUIET_PRODUCT_PRESETS.md') -Destination $OutputDirectory
@@ -40,6 +42,7 @@ $entries = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-O
 $manifest = [ordered]@{
     schemaVersion=1;kind='VictusFanControl.ProductGuiReview';sourceHead=$SourceHead
     inheritedRcZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+    platformThermalExperiment='explicit-physical-AC-ABBA-2580s-TZ01-DTT3-retention'
     releaseStage='final-candidate';finalReleaseReady=$false;sessionRestart='explicit-clean-release-new-process-firmware'
     physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticExtendedReview='explicit-only-2700s-10-to-50-16MiB-diagnostics';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response';productAutomaticSourceTransition='bounded-4000ms-fresh-guardian-preserves-inertia';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';curveApply='explicit-live-unified-preserves-session-inertia';productDemand='unified-max-six-influences-v1';productProfiles='v2-preserves-v1-backup';performanceRecovery='explicit-release-only-exact-session-backups';files=$entries
 }

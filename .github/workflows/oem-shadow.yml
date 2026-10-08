@@ -4,7 +4,7 @@ on:
   push:
     branches: ['feature/victus-8c40-oem-shadow-rebuilt']
   pull_request:
-    paths: ['tools/OemShadow/**','tools/OemShadowCapture/**','tools/PlatformThermalReplay/**','scripts/*oem-shadow*','scripts/*platform-thermal*','scripts/generate-platform-research-inertia.py','scripts/Start-OemShadow.ps1','src/VictusFanControl/**','.github/workflows/oem-shadow.yml']
+    paths: ['tools/OemShadow/**','tools/OemShadowCapture/**','tools/PlatformThermalReplay/**','scripts/*oem-shadow*','scripts/*platform-thermal*','scripts/*platform-physical*','scripts/generate-platform-research-inertia.py','scripts/Start-OemShadow.ps1','src/VictusFanControl/**','.github/workflows/oem-shadow.yml']
 jobs:
   verify:
     strategy:
@@ -41,6 +41,8 @@ jobs:
           dotnet run --no-build -c Release --project tools/PlatformThermalReplay -- --self-test
           dotnet run --no-build -c Release --project tools/PlatformThermalReplay -- --replay tools/OemShadow/fixtures tools/PlatformThermalReplay/fixtures artifacts/platform-thermal
           python scripts/check-platform-thermal-replay.py tools/OemShadow/fixtures tools/PlatformThermalReplay/fixtures artifacts/platform-thermal --compress
+          dotnet run --no-build -c Release --project tools/PlatformThermalReplay -- --physical-fixture artifacts/platform-physical-fixture
+          python scripts/check-platform-physical-experiment.py artifacts/platform-physical-fixture
       - if: runner.os == 'Windows'
         run: |
           dotnet build tools/OemShadowCapture/OemShadowCapture.csproj -c Release
@@ -66,3 +68,4 @@ jobs:
             artifacts/Start-OemShadow.ps1
             artifacts/oem-model-comparison/**
             artifacts/platform-thermal/**
+            artifacts/platform-physical-fixture/**

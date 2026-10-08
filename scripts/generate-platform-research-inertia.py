@@ -18,6 +18,15 @@ def generate(source, output):
            '    internal AdaptiveFanInertiaDecision Evaluate(AdaptiveFanPolicyInput input, double? supplementalDemandLevel)\n    {')
     if text.count(old) != 1: raise ValueError('Research entry anchor changed')
     text = text.replace(old, new)
+    # Used only when the physical experiment switches variants. Keep the EMA/load
+    # history, align the target to the last acknowledged physical request, and
+    # discard pending confirmations from the preceding stage.
+    anchor = '    public AdaptiveFanInertiaDecision Evaluate(AdaptiveFanPolicyInput input) =>'
+    transition = ('    internal void AlignExperimentalTarget(int level)\n    {\n'
+                  '        if (level < _config.MinimumLevel || level > _config.MaximumLevel)\n'
+                  '            throw new ArgumentOutOfRangeException(nameof(level));\n'
+                  '        _current = level; ClearConfirmation();\n    }\n\n')
+    text = text.replace(anchor, transition+anchor)
     anchor = 'var demand = _demand.Evaluate(input);'
     if text.count(anchor) != 2: raise ValueError('Production demand/observation anchors changed')
     text = text.replace(anchor, 'var demand = _demand.Evaluate(input, supplementalDemandLevel);', 1)

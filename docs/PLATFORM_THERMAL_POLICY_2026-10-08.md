@@ -215,3 +215,12 @@ Conclusion de esta entrega: **GO para observacion de retencion; NO-GO para
 activar el suplemento como control productivo predeterminado**. No es necesario
 repetir todo el inventario. El dato pendiente mas concreto es la entrada completa
 de nuestra politica durante el regimen alto de la captura nueva.
+
+## Actualización: prueba física opt-in
+
+La entrega posterior implementa la observación conjunta dentro de un host de
+prueba física separado del GUI normal, con bloques ABBA y retención opt-in.
+El protocolo, los límites y comandos se describen en
+[PLATFORM_PHYSICAL_TEST_2026-10-08.md](PLATFORM_PHYSICAL_TEST_2026-10-08.md).
+Esto habilita el ensayo solicitado, no aporta todavía su resultado físico ni
+promueve el suplemento como control productivo por defecto.

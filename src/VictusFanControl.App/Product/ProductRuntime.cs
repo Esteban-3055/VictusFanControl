@@ -114,8 +114,13 @@ internal sealed class ProductRuntime : IProductRuntime
     public event Action<ProductRuntimeState>? Changed;
     public ProductRuntimeState State { get { lock (_stateSync) return _state; } }
 
-    internal ProductRuntime(string modules, ProductProfiles profiles, ProductAutomaticReviewMode? automaticReview = null)
+    private readonly VictusFanControl.PlatformThermalReplay.PhysicalPlatformExperiment? _platformExperiment;
+    internal ProductRuntime(string modules, ProductProfiles profiles, ProductAutomaticReviewMode? automaticReview = null,
+        VictusFanControl.PlatformThermalReplay.PhysicalPlatformExperiment? platformExperiment = null)
     {
+        if(platformExperiment is not null && automaticReview != ProductAutomaticReviewMode.Extended)
+            throw new ArgumentException("Platform experiment requires explicit extended physical review.");
+        _platformExperiment=platformExperiment;
         _hardware = HardwareIdentityReader.ReadCurrent();
         _target = HpHardwareTargetResolver.Resolve(_hardware,out _);
         if (automaticReview.HasValue)
@@ -143,7 +148,8 @@ internal sealed class ProductRuntime : IProductRuntime
             automaticHardware: _target == Hp8C40TargetProfile.Instance ? _hardware : null,
             automaticConfiguration: profiles.Ac.Fan,
             automaticMinimumLevel: _automaticReview is not null ? 10 : Hp8C40AutomaticPolicy.MinimumLevel,
-            useRawCpuThermalResponse: _automaticReview is not null);
+            useRawCpuThermalResponse: _automaticReview is not null,
+            experimentalPolicy: platformExperiment);
         WmiFanExperimentBoundary.PlannedGuiRelease = () => _plannedFanRelease;
         _performance = new(modules);
         _worker = new(modules)
@@ -194,6 +200,7 @@ internal sealed class ProductRuntime : IProductRuntime
         try
         {
             _snapshot = snapshot;
+            _platformExperiment?.ObserveTelemetry(snapshot,new WindowsPerformancePowerSourceReader().Read().Source.ToString());
             if (_closing || _lifecycleBlocked || _controller.Mode != AdaptiveFanProductionMode.Automatic || snapshot.Timestamp <= _automaticStartedUtc) return;
             if (_activeAutomaticTicket is null || !_automaticActivation.IsCurrent(_activeAutomaticTicket)) return;
             try
@@ -297,6 +304,7 @@ internal sealed class ProductRuntime : IProductRuntime
                     return SafetyGate.EvaluateForDisplay(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
                 });
                 _automaticDecision = decision; _automaticDecisionSnapshot = snapshot;
+                _platformExperiment?.NoteApplied(decision,snapshot.Timestamp);
                 AppLog.Write("PRODUCT AUTOMATIC DECISION: " + System.Text.Json.JsonSerializer.Serialize(new { automaticSessionId = _automaticSessionId, snapshotTimestamp = snapshot.Timestamp, decision }));
                 if (decision.Action == AdaptiveFanProductionActionKind.Blocked || decision.Action == AdaptiveFanProductionActionKind.RestoreFirmware)
                     throw new InvalidOperationException(decision.Detail);
@@ -328,6 +336,8 @@ internal sealed class ProductRuntime : IProductRuntime
         _automaticActivation.Cancel();
         return FanCommandAsync(() => SetFanModeAsync(mode));
     }
+    internal Task SetExperimentalStageAsync(VictusFanControl.PlatformThermalReplay.ExperimentStage stage) =>
+        FanCommandAsync(()=>{_platformExperiment?.SetStage(stage);return Task.CompletedTask;});
     private Task ActivateAutomaticAsync(ProductProfiles profiles)
     {
         if (!_closing && !_lifecycleBlocked && _controller.Mode == AdaptiveFanProductionMode.Automatic)

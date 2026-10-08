@@ -518,7 +518,33 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             rejected=false;try{await controller.ObserveAutomaticSourceWaitAsync(sample,()=>{},default);}catch(InvalidOperationException){rejected=true;}
             Check(rejected,"source wait continued after Firmware cancellation");
         }
+        // The opt-in research hook cannot bypass the existing native dispatch boundary.
+        foreach(bool weaken in new[]{false,true})
+        {
+            clock=0;var research=new ResearchFixture{Weaken=weaken};var researchBackend=new Backend();
+            if(!weaken)researchBackend.BeforeNative=()=>{research.Refuse=true;return Task.CompletedTask;};
+            await using var coordinator=new FanControlCoordinator(researchBackend);
+            var controller=new AdaptiveFanProductionController(coordinator,Hp8C40AdaptiveCandidateV1.Create(),true,true,
+                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,automaticConfiguration:new FanConfiguration(),
+                automaticMinimumLevel:10,useRawCpuThermalResponse:true,experimentalPolicy:research);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,default);
+            var sample=Sample(Now());bool rejected=false;
+            try{await controller.ProcessAutomaticAsync(sample,Raw(sample),default);}catch(InvalidOperationException){rejected=true;}
+            Check(rejected&&researchBackend.Levels.Count==0&&coordinator.Authority!=FanAuthority.Custom,
+                weaken?"research cannot lower protected raw demand":"research source loss between evaluation and native Set issues no write and restores firmware");
+        }
         return failures;
+    }
+
+    private sealed class ResearchFixture:IExperimentalFanPolicy
+    {
+        internal bool Refuse,Weaken;
+        public AdaptiveFanInertiaDecision Evaluate(AdaptiveFanPolicyInput input,AdaptiveFanInertiaDecision baseline)=>
+            Weaken?baseline with{RawDemandLevel=baseline.RawDemandLevel-1}:baseline;
+        public void EnsureDispatchAllowed(DateTimeOffset timestamp,DateTimeOffset now)
+        {if(Refuse)throw new InvalidOperationException("synthetic source lost before native dispatch");}
+        public void ObserveDuringActuation(AdaptiveFanPolicyInput input) { }
+        public void Reset() { }
     }
 
     private static SafetyGateResult Raw(TelemetrySnapshot snapshot) =>

@@ -52,6 +52,7 @@ public sealed class AdaptiveFanProductionController
     private AdaptiveFanInertiaPolicy? _preparedEngine;
     private readonly int _automaticMinimumLevel;
     private readonly bool _useRawCpuThermalResponse;
+    private readonly IExperimentalFanPolicy? _experimentalPolicy;
     private FanConfiguration? _automaticConfiguration;
     public FanConfiguration? AutomaticConfiguration => _automaticConfiguration is null ? null : FanConfigurationStore.Copy(_automaticConfiguration);
     public int AutomaticNormalPollingDelayMilliseconds => _automaticConfiguration?.Tuning.NormalPollingDelayMilliseconds ?? 1000;
@@ -84,7 +85,8 @@ public sealed class AdaptiveFanProductionController
         Func<DateTimeOffset>? utcNow = null,
         FanConfiguration? automaticConfiguration = null,
         int automaticMinimumLevel = Hp8C40AutomaticPolicy.MinimumLevel,
-        bool useRawCpuThermalResponse = false)
+        bool useRawCpuThermalResponse = false,
+        IExperimentalFanPolicy? experimentalPolicy = null)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _engine = new AdaptiveFanPolicyEngine(
@@ -97,6 +99,10 @@ public sealed class AdaptiveFanProductionController
             throw new ArgumentException("Low Automatic envelope requires exact-target telemetry and a qualified 10-level backend.",nameof(automaticMinimumLevel));
         _automaticMinimumLevel = automaticMinimumLevel;
         _useRawCpuThermalResponse = useRawCpuThermalResponse;
+        if (experimentalPolicy is not null && (!automaticExecutionAuthorized || automaticHardware is null ||
+            automaticConfiguration is null || automaticMinimumLevel != 10 || !useRawCpuThermalResponse))
+            throw new ArgumentException("Experimental policy requires the explicit exact-target physical review envelope.", nameof(experimentalPolicy));
+        _experimentalPolicy = experimentalPolicy;
         if (automaticHardware is not null)
         {
             // Validate the exact target even while execution remains gated off.
@@ -592,6 +598,7 @@ public sealed class AdaptiveFanProductionController
             if (!TryBuildPolicyInput(snapshot, out var input, out var failure) ||
                 !_preparedEngine.ObserveDuringActuation(input, out failure))
                 throw new InvalidOperationException("Adquisición durante transición rechazada: " + failure);
+            _experimentalPolicy?.ObserveDuringActuation(input);
             Volatile.Write(ref _lastAutomaticResult, null);
         }
         finally { _operationGate.Release(); }
@@ -631,6 +638,7 @@ public sealed class AdaptiveFanProductionController
         if (!TryBuildPolicyInput(snapshot, out var input, out var failure) ||
             !_preparedEngine.ObserveDuringActuation(input, out failure))
             throw new InvalidOperationException("Automatic actuation observation refused: " + failure);
+        _experimentalPolicy?.ObserveDuringActuation(input);
     }
 
     public async ValueTask<AdaptiveFanProductionResult> ProcessAutomaticAsync(
@@ -677,6 +685,7 @@ public sealed class AdaptiveFanProductionController
 
             void EnsureAutomaticDispatchAllowed()
             {
+                _experimentalPolicy?.EnsureDispatchAllowed(snapshot.Timestamp, _utcNow());
                 if (_automaticAdmission is null) return;
                 var raw = refreshRawSafetyProvider is not null ? refreshRawSafetyProvider() :
                     SafetyGate.EvaluateForDisplay(_automaticHardware!,
@@ -741,6 +750,18 @@ public sealed class AdaptiveFanProductionController
             }
 
             var preparedDecision = _preparedEngine?.Evaluate(input);
+            if (_experimentalPolicy is not null)
+            {
+                var baseline = preparedDecision ??
+                    throw new InvalidOperationException("Experimental policy requires the prepared baseline.");
+                var experimental = _experimentalPolicy.Evaluate(input, baseline);
+                if (!baseline.Accepted || !experimental.Accepted || experimental.EqualFanLevel is not (>=10 and <=50) ||
+                    experimental.RawDemandLevel is null || !double.IsFinite(experimental.RawDemandLevel.Value) ||
+                    experimental.RawDemandLevel < baseline.RawDemandLevel || experimental.ThermalOverride != baseline.ThermalOverride)
+                    throw new InvalidOperationException("Experimental policy weakened the protected baseline or returned an invalid target.");
+                preparedDecision = experimental;
+                _experimentalPolicy.EnsureDispatchAllowed(snapshot.Timestamp, _utcNow());
+            }
             var decision = preparedDecision is null ? _engine.Evaluate(input) :
                 new AdaptiveFanPolicyDecision(preparedDecision.Accepted, preparedDecision.EqualFanLevel,
                     preparedDecision.RawDemandLevel, preparedDecision.Detail);
@@ -916,6 +937,7 @@ public sealed class AdaptiveFanProductionController
     {
         _engine.Reset();
         _preparedEngine?.Reset();
+        _experimentalPolicy?.Reset();
         _planner.Reset();
         _lastManualAppliedLevel = null;
     }
