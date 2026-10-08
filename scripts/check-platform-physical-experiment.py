@@ -10,7 +10,10 @@ stamp=replay.stamp
 def frame_pascal(frame):
     result={k[0].upper()+k[1:]:v for k,v in frame.items()}
     for key in ('CpuPackage','CpuCoreMax','Gpu','Tz01','Dtt1','Dtt2','Dtt3'):
-        if result.get(key):result[key]={k[0].upper()+k[1:]:v for k,v in result[key].items()}
+        if result.get(key):
+            result[key]={k[0].upper()+k[1:]:v for k,v in result[key].items()}
+            if isinstance(result[key].get('Value'),str) and result[key]['Value'] in ('NaN','Infinity','-Infinity'):
+                result[key]['Value']=float(result[key]['Value'])
     return result
 
 def baseline_raw(input, fan):

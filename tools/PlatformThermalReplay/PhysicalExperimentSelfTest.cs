@@ -76,6 +76,7 @@ public static class PhysicalExperimentSelfTest
         Fixture("stage",e=>{Qualify(e);var s=Sample(2);e.ObserveTelemetry(s,"Ac");var b=new AdaptiveFanInertiaPolicy(config,fan.Tuning).Evaluate(Input(s));e.Evaluate(Input(s),b);e.SetStage(ExperimentProtocol.At(660));
             Refused(()=>e.EnsureDispatchAllowed(s.Timestamp,s.Timestamp),"old stage cannot dispatch");});
         Fixture("missing",e=>{Qualify(e);e.SetSources(new(55,start.AddSeconds(2)),new(),new(),new(null,start.AddSeconds(2)));e.ObserveTelemetry(Sample(2),"Ac");Check(e.Failure is not null,"missing source permanently interrupts");});
+        Fixture("nan",e=>{Qualify(e);e.SetSources(new(double.NaN,start.AddSeconds(2)),new(),new(),new(50,start.AddSeconds(2)));e.ObserveTelemetry(Sample(2),"Ac");Check(e.Failure is not null,"nonfinite source is retained as evidence and interrupts");});
         Fixture("source",e=>{Qualify(e);e.ObserveTelemetry(Sample(2),"Battery");Check(e.Failure is not null,"AC change interrupts");});
         Fixture("gap",e=>{Qualify(e);e.ObserveTelemetry(Sample(6),"Ac");Check(e.Failure is not null,"gap interrupts");});
         Fixture("future",e=>{e.SetSources(new(55,start.AddSeconds(5)),new(),new(),new(50,start.AddSeconds(5)));e.ObserveTelemetry(Sample(0),"Ac");Check(!e.Ready,"future values never join earlier snapshot");});

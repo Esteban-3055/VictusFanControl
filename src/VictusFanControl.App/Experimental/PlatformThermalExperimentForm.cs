@@ -26,7 +26,8 @@ internal sealed class PlatformThermalExperimentForm : Form
     private ProductRuntime? _runtime;
     private PhysicalPlatformExperiment? _experiment;
     private Task? _run;
-    private bool _starting,_finished,_closing,_disposed;
+    private bool _starting,_closing,_disposed;
+    private volatile bool _finished;
     private IntPtr _displayRegistration,_suspendRegistration;
     private const int PowerBroadcast=0x218;
     private static readonly Guid DisplayGuid=new("2b84c20e-ad23-4ddf-93db-05ffbd7efca5");
@@ -61,7 +62,8 @@ internal sealed class PlatformThermalExperimentForm : Form
         using var identity=WindowsIdentity.GetCurrent();if(!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))throw new InvalidOperationException("Abre PowerShell como administrador.");
         var hardware=HardwareIdentityReader.ReadCurrent();if(!Hp8C40TargetProfile.Matches(hardware,out var reason))throw new InvalidOperationException("Destino no autorizado: "+reason);
         const string hash="d6ed85d65ab17a22f813ef98207d6d537155ee2ded5976a21cb48413c9b92e5f";
-        if(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(_modules,"IntelMSR.bin"))))).ToLowerInvariant()!=hash)throw new InvalidOperationException("IntelMSR.bin no corresponde al módulo validado.");
+        var actualHash=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(_modules,"IntelMSR.bin")))).ToLowerInvariant();
+        if(actualHash!=hash)throw new InvalidOperationException("IntelMSR.bin no corresponde al módulo validado.");
         foreach(var process in Process.GetProcesses())using(process)
         {
             string name;try{name=process.ProcessName;}catch(InvalidOperationException){continue;}
@@ -132,19 +134,19 @@ internal sealed class PlatformThermalExperimentForm : Form
                     await _runtime!.SetExperimentalStageAsync(stage);
                     if(stage.Index==0)
                     {
-                        if(!_experiment.Ready||_runtime.State.Runtime!="Healthy")throw new InvalidOperationException("No hay telemetría y TZ01/DTT3 cualificados tras los dos minutos iniciales.");
+                        if(!_experiment!.Ready||_runtime.State.Runtime!="Healthy")throw new InvalidOperationException("No hay telemetría y TZ01/DTT3 cualificados tras los dos minutos iniciales.");
                         await _runtime.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,profiles);
                     }
                     else if(stage.Index==4)
                     {
                         await _runtime.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,profiles);
                         await _runtime.ReleasePerformanceAsync();
-                        _experiment.RecordHost("release-before-final-cooling",_runtime.State);
+                        _experiment!.RecordHost("release-before-final-cooling",_runtime.State);
                     }
                     previousStage=stage.Index;
                 }
                 else await _runtime!.SetExperimentalStageAsync(stage);
-                if(_experiment.Failure is {} failure)throw new InvalidOperationException(failure);
+                if(_experiment!.Failure is {} failure)throw new InvalidOperationException(failure);
                 if(_runtime!.State.LifecycleBlocked)throw new InvalidOperationException(_runtime.State.LifecycleBlockReason??"Sesión interrumpida");
                 if(stage.Custom&&(_runtime.State.FanMode!="Automatic"||_runtime.State.Failure is not null))throw new InvalidOperationException(_runtime.State.Failure??"Automatic terminó antes de la etapa prevista");
                 await Task.Delay(1000,_cancel.Token);
@@ -182,21 +184,21 @@ internal sealed class PlatformThermalExperimentForm : Form
         if(_experiment is null)return;
         var stage=ExperimentProtocol.At((int)_clock.Elapsed.TotalSeconds);var state=_runtime?.State;var sample=state?.Snapshot;
         _status.Text=(_finished?"Prueba terminada. ":"Prueba en curso. ")+"Etapa: "+stage.Controller+" · "+stage.Activity+"\n"+
-            $"Bloque {stage.Index+1}/4 · tiempo de etapa {stage.RemainingSeconds}s · total {(int)_clock.Elapsed.TotalSeconds}/{ExperimentProtocol.TotalSeconds}s\n\n"+
+            $"{(stage.Custom?$"Bloque {stage.Index+1}/4":"Fase Firmware")} · tiempo de etapa {stage.RemainingSeconds}s · total {(int)_clock.Elapsed.TotalSeconds}/{ExperimentProtocol.TotalSeconds}s\n\n"+
             $"CPU {sample?.CpuControlTemperatureC:0.#} °C · GPU {sample?.GpuTemperatureC:0.#} °C\n"+
             $"Ventiladores observados: CPU {sample?.CpuFanSpeedLevel} / GPU {sample?.GpuFanSpeedLevel}\n"+
-            $"Objetivo confirmado: {state?.AutomaticDecision?.EqualFanLevel} · autoridad {state?.FanAuthority}\n"+
+            $"Objetivo aceptado: {state?.AutomaticDecision?.EqualFanLevel} · autoridad {state?.FanAuthority}\n"+
             $"Telemetría: {state?.Runtime} · TZ01/DTT3: {(_experiment.Ready?"cualificados":"no disponibles")}\n\n"+
             (_experiment.Failure??state?.Failure??state?.Message)+"\n\nRepite la misma carga en los cuatro bloques y ciérrala al indicar Enfriamiento.\nEvidencia: "+_output;
         if(_finished){_stop.Enabled=false;_timer.Stop();}
     }
     protected override void WndProc(ref Message m)
     {
-        if(m.Msg==PowerBroadcast&&_run is not null&&!_finished)
+        if(m.Msg==PowerBroadcast&&(_starting||_run is not null)&&!_finished)
         {
             int code=m.WParam.ToInt32();bool interrupt=code==4;
             if(code==0x8013&&m.LParam!=IntPtr.Zero){var setting=Marshal.PtrToStructure<PowerSetting>(m.LParam);interrupt|=setting.Id==DisplayGuid&&setting.Length>=4&&Marshal.ReadInt32(m.LParam,Marshal.SizeOf<PowerSetting>())==0;}
-            if(interrupt){Stop("Suspensión o apagado de pantalla: prueba interrumpida");if(code==4)_run.GetAwaiter().GetResult();}
+            if(interrupt){Stop("Suspensión o apagado de pantalla: prueba interrumpida");if(code==4&&_run is not null)_run.GetAwaiter().GetResult();}
         }
         base.WndProc(ref m);
     }

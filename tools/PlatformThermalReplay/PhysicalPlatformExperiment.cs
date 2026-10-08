@@ -50,7 +50,7 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
     private double _cpuMaximum,_gpuMaximum;
     private DateTimeOffset? _first,_last;
     private readonly Dictionary<string,int> _counts=new();
-    public static JsonSerializerOptions Json { get; }=new(ShadowSession.Json){PropertyNamingPolicy=JsonNamingPolicy.CamelCase};
+    public static JsonSerializerOptions Json { get; }=new(ShadowSession.Json){PropertyNamingPolicy=JsonNamingPolicy.CamelCase,NumberHandling=System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals};
     public string DirectoryPath=>_directory;
     public bool Ready { get {lock(_sync)return !_closed&&_qualified is {Available:true};} }
     public string? Failure {get {lock(_sync)return _reason;} }
@@ -120,7 +120,8 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
             _qualified=_admission.Evaluate(_frame);
             _telemetryRows++;if(_qualified.Available)_qualifiedRows++;
             _first??=snapshot.Timestamp;_last=snapshot.Timestamp;
-            _cpuMaximum=Math.Max(_cpuMaximum,snapshot.CpuControlTemperatureC??0);_gpuMaximum=Math.Max(_gpuMaximum,snapshot.GpuTemperatureC??0);
+            if(snapshot.CpuControlTemperatureC is {} cpu&&double.IsFinite(cpu))_cpuMaximum=Math.Max(_cpuMaximum,cpu);
+            if(snapshot.GpuTemperatureC is {} gpu&&double.IsFinite(gpu))_gpuMaximum=Math.Max(_gpuMaximum,gpu);
             Write("telemetry",new{stage=_stage,source,snapshot,frame=_frame,admission=_qualified});
             if(_stage.Custom&&(source!="Ac"||!_qualified.Available))Close(source!="Ac"?"Power source changed; experiment is AC-only":"Required TZ01/DTT3 source unavailable or requalifying");
         }

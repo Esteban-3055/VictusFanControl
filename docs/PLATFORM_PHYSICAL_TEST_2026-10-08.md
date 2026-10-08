@@ -11,7 +11,7 @@ La curva actual conserva MAX de sus seis demandas, la fuente CPU configurada,
 una sola EMA final, confirmaciones, descenso adaptativo y protección por
 CPU/GPU raw. La candidata añade, antes de esa EMA:
 
-`MAX(demanda actual, MIN(MAX(demanda TZ01, demanda DTT3), último objetivo físico confirmado))`.
+`MAX(demanda actual, MIN(MAX(demanda TZ01, demanda DTT3), último objetivo solicitado y aceptado))`.
 
 El límite superior del suplemento es 44; la protección original puede pedir 50.
 No promedia temperaturas ni convierte DTT3 en un sensor de ubicación física
@@ -22,7 +22,7 @@ En paralelo se registran: base, TZ01, DTT3, ambas, ambas-retención y las dos
 sensibilidades de umbral. Solo base y ambas-retención se conectan a hardware.
 La base paralela conserva su historia propia; la política física comparte una
 historia de EMA/carga entre bloques. Al cambiar bloque se alinea su objetivo al
-último request confirmado y se descartan las confirmaciones pendientes. Esa
+último request aceptado y se descartan las confirmaciones pendientes. Esa
 historia compartida, y el calor acumulado, son efectos de arrastre que el análisis
 ha de considerar: el bloque A posterior no es una simulación de un equipo frío.
 
@@ -95,7 +95,8 @@ la prueba falla; no necesita Python instalado en el equipo de prueba.
 `experiment.jsonl` no rota: contiene snapshots completos de los 14 núcleos,
 cargas/potencias, niveles HP-WMI y sus epochs, TZ01/DTT1/2/3, admisión, las siete
 políticas, contribución adicional, request físico, resultado del dispatch,
-etapas y cleanup. Los resultados del controlador se distinguen de los niveles
+etapas y cleanup. `appliedChanges` cuenta cambios de request aceptados; no cuenta
+transiciones medidas de RPM ni demuestra el setpoint instalado. Los resultados del controlador se distinguen de los niveles
 observados. Estos niveles dan RPM nominales de 100 RPM por nivel, no una lectura
 exacta de tacómetro ni de ruido. `profiles.json`, `metadata.json` y la identidad
 del paquete fijan configuración y build. `summary.json` no afirma un PASS físico.
