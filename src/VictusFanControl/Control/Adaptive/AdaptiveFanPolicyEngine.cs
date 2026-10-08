@@ -87,16 +87,24 @@ public sealed class AdaptiveFanPolicyEngine
     }
 
     public AdaptiveFanPolicyDecision Evaluate(
-        AdaptiveFanPolicyInput input)
+        AdaptiveFanPolicyInput input) => Evaluate(input, null);
+
+    // Research admission only: the production caller always uses the overload
+    // above. A supplemental floor joins raw demand before the existing inertia.
+    internal AdaptiveFanPolicyDecision Evaluate(
+        AdaptiveFanPolicyInput input, double? supplementalDemandLevel)
     {
-        if (!ValidateInput(input, out var inputFailure))
+        if (!ValidateInput(input, out var inputFailure) ||
+            (supplementalDemandLevel is { } extra &&
+             (!double.IsFinite(extra) || extra is < 0 or > 50)))
         {
             _consecutiveDecreaseSamples = 0;
             return new AdaptiveFanPolicyDecision(
                 Accepted: false,
                 EqualFanLevel: null,
                 RawDemandLevel: null,
-                Detail: inputFailure);
+                Detail: string.IsNullOrEmpty(inputFailure)
+                    ? "Supplemental research demand is invalid." : inputFailure);
         }
 
         if (_lastTimestamp.HasValue)
@@ -152,6 +160,9 @@ public sealed class AdaptiveFanPolicyEngine
                 _config.GpuLoadCurve,
                 input.GpuLoadPercent)
         }.Max();
+
+        if (supplementalDemandLevel.HasValue)
+            rawDemand = Math.Max(rawDemand, supplementalDemandLevel.Value);
 
         rawDemand = Math.Clamp(
             rawDemand,

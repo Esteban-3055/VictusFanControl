@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "originalRevision": "bde367e641e4faa9002a0ab659170ae577659f3e",
+  "originalAssemblySha256": "7da011e3eb31f25ae8f8dc6c79b531d2547c596e5a54ce48bd1104ab1afa9ba3",
+  "artifactSha256": "fdff63eac90040b57c70acf003b82de28961dbda017bd74f2690ed731e3f44ca",
+  "originalAssemblyExactLocalComparisons": 46268,
+  "signature": "SHA256 compact JSON array of timestamp, accepted, equalFanLevel, thermalOverride, sustainedLoadCooling; includes absent live inputs. Discrete signature portable across runtime math libraries.",
+  "signatures": {
+    "v11-recorded-ac": "2ba612ef6dcc42e4762b7e5f8a95a81ff1c7c38b5f283e559e09eca8b253949c",
+    "v11-recorded-battery": "e5fcc59c374e23a6ca7260684bf0190ae08ecbce7751468867afa5a90954f264",
+    "v11-default-battery": "6cac2328727bc4519fd895528d39b5e12e894c77ab0314fb28a868c704fbc011",
+    "v10-recorded-ac": "56df9c68b8ee6b12a93fa4d5483698d443cb8b989b4590890b92588d619f9a88",
+    "v11-default-ac": "d567687be1ec04db4dfe4d36b42fec7e7f816d67f3a3a3316d64354d73183ff3",
+    "live-20261008-recorded-ac": "e47fd4d9c694a34d2ec52fa2ea0b896d55ef3d56dec056256ae21342249ee990",
+    "live-20261008-default-ac": "e47fd4d9c694a34d2ec52fa2ea0b896d55ef3d56dec056256ae21342249ee990",
+    "live-20261008-recorded-battery": "e47fd4d9c694a34d2ec52fa2ea0b896d55ef3d56dec056256ae21342249ee990",
+    "v10-recorded-battery": "e4bea89ed41d531572cf81c798a2e1f83885f866f8fac37d84b95718af7d820e",
+    "v10-default-ac": "f2839a1ee6cfcf33ef257535348f7ac51c35401c01ba06d5f60c0335d4d6c241",
+    "v10-default-battery": "a3db129fea5570859d1f610a3a950300c6337a8c78213d24702294c2c0e70c0e",
+    "live-20261008-default-battery": "e47fd4d9c694a34d2ec52fa2ea0b896d55ef3d56dec056256ae21342249ee990"
+  }
+}

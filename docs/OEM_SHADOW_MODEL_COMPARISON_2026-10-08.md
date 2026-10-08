@@ -151,11 +151,11 @@ OEM con esas señales adicionales.
    duración OEM exacta ni un único conjunto de reglas a partir de estas pruebas.
 3. Ninguno de los candidatos evaluados se promueve a control. El fallo en el
    régimen alto persiste y la mejora media no lo compensa.
-4. Si el objetivo de producto es una ventilación propia, suave y conservadora,
-   conviene diseñar esa política explícitamente con límites térmicos, disponibilidad
-   de sensores, histéresis, respuesta de subida y recuperación existentes. El ajuste
-   estadístico de la curva OEM no debe convertirse automáticamente en su política
-   de seguridad. No se realiza esa integración en este cambio.
+4. La política propia de VFC ya existe: seis demandas MAX, filtro, histéresis y
+   protecciones térmicas. Este estudio no la evalúa ni justifica reemplazarla.
+   La continuación es estudiar TZ01/DTT3 sobre esa política existente, sin convertir
+   el ajuste estadístico OEM en su lógica de seguridad. El experimento y plan de
+   retención están en [PLATFORM_THERMAL_POLICY_2026-10-08.md](PLATFORM_THERMAL_POLICY_2026-10-08.md).
 
 ## Reproducción y verificación
 
