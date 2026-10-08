@@ -58,13 +58,11 @@ public class AdaptiveFanInertiaPolicy
         });
     }
 
-    public AdaptiveFanInertiaDecision Evaluate(AdaptiveFanPolicyInput input) => Evaluate(input, null);
-
-    internal AdaptiveFanInertiaDecision Evaluate(AdaptiveFanPolicyInput input, double? supplementalDemandLevel)
+    public AdaptiveFanInertiaDecision Evaluate(AdaptiveFanPolicyInput input)
     {
         // Validate ORIGINAL input and continuity before smoothing. A filter
         // must not turn invalid raw sensors into an accepted policy decision.
-        var demand = _demand.Evaluate(input, supplementalDemandLevel);
+        var demand = _demand.Evaluate(input);
         if (!demand.Accepted || !demand.EqualFanLevel.HasValue)
         {
             ClearConfirmation();

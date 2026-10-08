@@ -51,8 +51,8 @@ internal static class PlatformTests
         foreach(var source in Enum.GetValues<ProductPowerProfile>())
         {
             var fan=ProductProfiles.DefaultProfile(source).Fan;var config=fan.BuildPolicy();
-            var a=new AdaptiveFanInertiaPolicy(config,fan.Tuning);var b=new AdaptiveFanInertiaPolicy(config,fan.Tuning);
-            var neutral=new AdaptiveFanInertiaPolicy(config,fan.Tuning);
+            var a=new AdaptiveFanInertiaPolicy(config,fan.Tuning);var b=new ResearchFanInertiaPolicy(config,fan.Tuning);
+            var neutral=new ResearchFanInertiaPolicy(config,fan.Tuning);
             for(int i=0;i<2000;i++)
             {
                 var input=new AdaptiveFanPolicyInput(start.AddSeconds(i),40+(i%70),5+(i%60),i%101,
@@ -61,7 +61,7 @@ internal static class PlatformTests
                 Check(decision==b.Evaluate(input,null),"inactive overload preserves exact decision");
                 Check(decision==neutral.Evaluate(input,0),"zero supplement preserves exact decision");
             }
-            var baseline=new AdaptiveFanInertiaPolicy(config,fan.Tuning);var extra=new AdaptiveFanInertiaPolicy(config,fan.Tuning);
+            var baseline=new AdaptiveFanInertiaPolicy(config,fan.Tuning);var extra=new ResearchFanInertiaPolicy(config,fan.Tuning);
             for(int i=0;i<300;i++)
             {
                 var input=new AdaptiveFanPolicyInput(start.AddSeconds(i),40,5,0,35,2,0){CpuRawControlTemperatureC=40};
@@ -70,12 +70,12 @@ internal static class PlatformTests
                 Check(!additional.ThermalOverride,"platform cannot invoke raw CPU/GPU emergency");
                 if(i==299)Check(additional.EqualFanLevel==40,"supplement passes through existing inertia");
             }
-            var hot=new AdaptiveFanInertiaPolicy(config,fan.Tuning);
+            var hot=new ResearchFanInertiaPolicy(config,fan.Tuning);
             hot.Evaluate(new(start,40,5,0,35,2,0));
             var thermal=hot.Evaluate(new(start.AddSeconds(1),40,5,0,35,2,0){CpuRawControlTemperatureC=99},12);
             Check(thermal.ThermalOverride&&thermal.RawDemandLevel>=50,"raw hottest CPU cannot be masked by low supplement");
             foreach(var bad in new[]{double.NaN,double.PositiveInfinity,-1,51})
-                Check(!new AdaptiveFanInertiaPolicy(config,fan.Tuning).Evaluate(new(start,40,5,0,35,2,0),bad).Accepted,"invalid extra refused");
+                Check(!new ResearchFanInertiaPolicy(config,fan.Tuning).Evaluate(new(start,40,5,0,35,2,0),bad).Accepted,"invalid extra refused");
         }
         Console.WriteLine($"Platform thermal policy self-test: PASS ({checks} checks; no hardware IO).");
     }

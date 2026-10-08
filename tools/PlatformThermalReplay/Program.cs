@@ -50,7 +50,7 @@ foreach (var session in new[] {"v10","v11","live-20261008"})
             bool useTz=variant!="baseline"&&variant!="dtt3", useDtt=variant!="baseline"&&variant!="tz01";
             var platform=new PlatformThermalDemand(parameters,useTz,useDtt);
             var baseline=new AdaptiveFanInertiaPolicy(config,fan.Tuning);
-            var augmented=new AdaptiveFanInertiaPolicy(config,fan.Tuning);
+            var augmented=variant=="baseline"?null:new ResearchFanInertiaPolicy(config,fan.Tuning);
             double? rememberedSupplemental=null;
             int? lastShadowLevel=null;
             int? previousAugmented=null, previousBaseline=null;
@@ -85,13 +85,13 @@ foreach (var session in new[] {"v10","v11","live-20261008"})
                         // Keep the parallel observer's history across source outages.
                         // The last qualified demand is explicit MEMORY, not a fresh
                         // sensor value; no target is proposed while sources are unavailable.
-                        shadow=variant=="baseline"?b:EvaluateAugmented(augmented,input,rememberedSupplemental);
+                        shadow=variant=="baseline"?b:EvaluateAugmented(augmented!,input,rememberedSupplemental);
                         lastShadowLevel=shadow.EqualFanLevel;
                         if (observation.Available)a=shadow;
                     }
-                    else { augmented.Reset();rememberedSupplemental=null;lastShadowLevel=null; }
+                    else { augmented?.Reset();rememberedSupplemental=null;lastShadowLevel=null; }
                 }
-                else { augmented.Reset();rememberedSupplemental=null;lastShadowLevel=null; }
+                else { augmented?.Reset();rememberedSupplemental=null;lastShadowLevel=null; }
                 if (a is {Accepted:true} && b is {Accepted:true})
                 {
                     accepted++;
@@ -150,7 +150,7 @@ File.WriteAllText(Path.Combine(output,"summary.json"),JsonSerializer.Serialize(n
 },new JsonSerializerOptions(json){WriteIndented=true})+Environment.NewLine);
 Console.WriteLine($"Platform policy replay: {summaries.Count} variants; no hardware IO.");
 
-static AdaptiveFanInertiaDecision EvaluateAugmented(AdaptiveFanInertiaPolicy policy,AdaptiveFanPolicyInput input,double? extra)
+static AdaptiveFanInertiaDecision EvaluateAugmented(ResearchFanInertiaPolicy policy,AdaptiveFanPolicyInput input,double? extra)
     => policy.Evaluate(input,extra);
 static IEnumerable<string> ReadLines(string path)
 {

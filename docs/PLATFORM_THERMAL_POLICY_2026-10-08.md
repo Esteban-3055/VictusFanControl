@@ -35,8 +35,12 @@ umbrales obligatorios de ventilacion ni en limites de seguridad.
 6. CPU Package/core mas caliente y GPU siguen determinando la respuesta termica
    inmediata. El suplemento no activa, reduce ni sustituye sus protecciones.
 
-Se anadieron dos sobrecargas internas de calculo y una identidad friend para el
-replay. Las firmas publicas existentes se conservan y pasan suplemento `null`.
+Se anadio una sobrecarga interna de demanda y una identidad friend para el replay.
+La inercia de produccion conserva su archivo y hash historicos. Un generador de
+build crea el adaptador de investigacion desde ese archivo, comprueba su SHA-256
+exacto y cambia solamente el nombre de clase y la admision de suplemento. No se
+mantiene una segunda copia manual del algoritmo. Los tests comparan ese adaptador
+inactivo/neutral con la clase productiva. Las firmas publicas conservan suplemento `null`.
 Ningun caller GUI, Runtime, Guardian o controlador productivo suministra el
 suplemento. No hay nuevo modo activo, preferencia persistida o ruta de escritura.
 El candidato reside en `tools/PlatformThermalReplay`, separado del runtime.
@@ -157,7 +161,8 @@ No se presentan esas diferencias como una optimizacion universal.
 
 ## Verificacion y reproduccion
 
-Se ejecutan **9236 comprobaciones puras** de admision, cache, continuidad, limites,
+El build de la herramienta de investigacion necesita Python 3, tambien usado por
+el checker; la CI lo prepara. Se ejecutan **9236 comprobaciones puras** de admision, cache, continuidad, limites,
 demanda adicional, respuesta termica y equivalencia null/neutral. Tambien pasan
 los self-tests existentes de politica, produccion con mocks, perfiles y ajustes.
 

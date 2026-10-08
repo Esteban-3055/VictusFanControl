@@ -9,4 +9,11 @@
     <ProjectReference Include="../../src/VictusFanControl/VictusFanControl.csproj" />
     <ProjectReference Include="../OemShadow/OemShadow.csproj" />
   </ItemGroup>
+  <Target Name="GenerateResearchInertia" BeforeTargets="CoreCompile">
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)"
+          Command="python &quot;../../scripts/generate-platform-research-inertia.py&quot; &quot;../../src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs&quot; &quot;$(IntermediateOutputPath)ResearchFanInertiaPolicy.cs&quot;" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)ResearchFanInertiaPolicy.cs" />
+    </ItemGroup>
+  </Target>
 </Project>
