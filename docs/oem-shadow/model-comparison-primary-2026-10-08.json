@@ -1,0 +1,3952 @@
+{
+  "schemaVersion": 1,
+  "mode": "OFFLINE_RESEARCH_ONLY",
+  "goForFanControl": false,
+  "hardwareIo": false,
+  "featureNames": [
+    "cpu_max",
+    "gpu",
+    "tz01",
+    "dtt3",
+    "ema30_cpu_max",
+    "ema30_gpu",
+    "ema30_tz01",
+    "ema30_dtt3",
+    "ema120_cpu_max",
+    "ema120_gpu",
+    "ema120_tz01",
+    "ema120_dtt3",
+    "peak120_cpu_max",
+    "peak120_gpu",
+    "peak120_tz01",
+    "peak120_dtt3",
+    "above_ema30_cpu_max",
+    "above_ema30_gpu",
+    "above_ema30_tz01",
+    "above_ema30_dtt3"
+  ],
+  "sessions": {
+    "v10": {
+      "eligibleFreshDistinctFanAcquisitions": 1409,
+      "usableCausalTargets": 913,
+      "fraction": 0.6479772888573456,
+      "rejected": {
+        "noCausalFreshSnapshot": 489,
+        "thermalExpiredBeforeFanAcquisition": 7
+      }
+    },
+    "v11": {
+      "eligibleFreshDistinctFanAcquisitions": 372,
+      "usableCausalTargets": 366,
+      "fraction": 0.9838709677419355,
+      "rejected": {
+        "noCausalFreshSnapshot": 6
+      }
+    },
+    "live-20261008": {
+      "eligibleFreshDistinctFanAcquisitions": 1769,
+      "usableCausalTargets": 1768,
+      "fraction": 0.9994347088750707,
+      "rejected": {
+        "noCausalFreshSnapshot": 1
+      }
+    }
+  },
+  "protocol": {
+    "outerSplit": "Leave one entire session out; train on the other two.",
+    "innerSplit": "Each training session held out in turn; select family/hyperparameters without outer labels.",
+    "selectionScore": "Equal-session mean of both-fan MAE + 0.5 * worst-fan underprediction mean, in fan levels.",
+    "highFanDefinition": "Actual CPU level >=39 or GPU level >=35; unsupported stratum is null.",
+    "causality": "Feature snapshot log time <= fan acquisition; all five source epochs fresh at both snapshot and acquisition.",
+    "weighting": "Equal total training weight per session; one target per distinct fresh fan acquisition.",
+    "labels": "Raw fan pairs, including formerly unmapped levels. No A-D filter, no actual fan input, no load/power input.",
+    "limits": "Three correlated sessions of one laptop; historic source epochs approximate acquisition. No proof of hidden OEM logic or control safety."
+  },
+  "folds": [
+    {
+      "heldOut": "v10",
+      "trainingSessions": [
+        "v11",
+        "live-20261008"
+      ],
+      "instantaneousThermalNeighborDiagnostic": {
+        "inputs": [
+          "cpu_max",
+          "gpu",
+          "tz01",
+          "dtt3"
+        ],
+        "comparisons": [
+          {
+            "eachInputToleranceC": 0.1,
+            "heldOutTargetsWithNeighbor": 188,
+            "targetsWithNeighborDifferentByAtLeast5Levels": 90,
+            "largestDifferenceExample": {
+              "worstFanDifferenceLevels": 13.0,
+              "heldOutFanTicks": 17913581816892911,
+              "heldOutThermal": [
+                55.0,
+                40.0,
+                58.05,
+                45.0
+              ],
+              "heldOutFans": [
+                22.0,
+                19.0
+              ],
+              "trainingSession": "live-20261008",
+              "trainingFanTicks": 17914359982737393,
+              "trainingThermal": [
+                55.0,
+                40.0,
+                58.05000000000001,
+                45.0
+              ],
+              "trainingFans": [
+                35.0,
+                32.0
+              ]
+            }
+          },
+          {
+            "eachInputToleranceC": 2.0,
+            "heldOutTargetsWithNeighbor": 562,
+            "targetsWithNeighborDifferentByAtLeast5Levels": 490,
+            "largestDifferenceExample": {
+              "worstFanDifferenceLevels": 15.0,
+              "heldOutFanTicks": 17913581330250358,
+              "heldOutThermal": [
+                48.0,
+                39.0,
+                64.05,
+                46.0
+              ],
+              "heldOutFans": [
+                21.0,
+                19.0
+              ],
+              "trainingSession": "live-20261008",
+              "trainingFanTicks": 17914359861390156,
+              "trainingThermal": [
+                50.0,
+                41.0,
+                62.05000000000001,
+                46.0
+              ],
+              "trainingFans": [
+                36.0,
+                33.0
+              ]
+            }
+          }
+        ],
+        "interpretation": "Similar current temperatures can coexist with different fan levels across sessions. This does not distinguish history, operating mode or other hidden inputs."
+      },
+      "targetSupportDiagnostic": {
+        "trainingFanMin": [
+          21.0,
+          19.0
+        ],
+        "trainingFanMax": [
+          47.0,
+          41.0
+        ],
+        "heldOutFanMin": [
+          21.0,
+          19.0
+        ],
+        "heldOutFanMax": [
+          40.0,
+          36.0
+        ],
+        "outsideTrainingFanRangeCount": 0,
+        "interpretation": "Outcome support diagnostic only; never used to select, fit or predict."
+      },
+      "selectedFamilyFromInnerValidationOnly": "thermal_linear",
+      "selectedTestMetrics": {
+        "samples": 913,
+        "cpuMaeLevels": 3.765865193196823,
+        "gpuMaeLevels": 3.188801926610554,
+        "meanBothMaeLevels": 3.477333559903688,
+        "meanBothSignedErrorLevels": 1.3097549064358738,
+        "p95WorstFanAbsoluteErrorLevels": 11.53477770949484,
+        "bothWithin2LevelsFraction": 0.452354874041621,
+        "eitherFanUnderByAtLeast5LevelsFraction": 0.10843373493975904,
+        "eitherFanUnderByAtLeast10LevelsFraction": 0.002190580503833516,
+        "meanWorstFanUnderLevels": 1.2966777544889745
+      },
+      "selectedHighFanMetrics": {
+        "samples": 56,
+        "cpuMaeLevels": 6.731095441310575,
+        "gpuMaeLevels": 5.93508855752929,
+        "meanBothMaeLevels": 6.333091999419933,
+        "meanBothSignedErrorLevels": -1.5361572334327782,
+        "p95WorstFanAbsoluteErrorLevels": 9.592682537172408,
+        "bothWithin2LevelsFraction": 0.017857142857142856,
+        "eitherFanUnderByAtLeast5LevelsFraction": 0.44642857142857145,
+        "eitherFanUnderByAtLeast10LevelsFraction": 0.03571428571428571,
+        "meanWorstFanUnderLevels": 4.164498518402501
+      },
+      "families": {
+        "constant": {
+          "parameters": {},
+          "innerTrials": [
+            {
+              "parameters": {},
+              "innerHeldOutScores": [
+                4.21532774522171,
+                8.286829612046569
+              ],
+              "macroScore": 6.25107867863414
+            }
+          ],
+          "all": {
+            "samples": 913,
+            "cpuMaeLevels": 4.180374057748552,
+            "gpuMaeLevels": 3.325853711221604,
+            "meanBothMaeLevels": 3.753113884485078,
+            "meanBothSignedErrorLevels": -1.5377164564550545,
+            "p95WorstFanAbsoluteErrorLevels": 13.197945256286637,
+            "bothWithin2LevelsFraction": 0.40744797371303393,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.32858707557502737,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.08105147864184009,
+            "meanWorstFanUnderLevels": 3.0764260892759476
+          },
+          "highFanRegime": {
+            "samples": 56,
+            "cpuMaeLevels": 13.876516684858062,
+            "gpuMaeLevels": 12.42591513276179,
+            "meanBothMaeLevels": 13.151215908809927,
+            "meanBothSignedErrorLevels": -13.151215908809927,
+            "p95WorstFanAbsoluteErrorLevels": 14.197945256286637,
+            "bothWithin2LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast5LevelsFraction": 1.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 1.0,
+            "meanWorstFanUnderLevels": 13.888240636733896
+          },
+          "model": {
+            "family": "constant",
+            "parameters": {},
+            "trainingSessions": [
+              "v11",
+              "live-20261008"
+            ],
+            "mean": [
+              25.802054743713363,
+              23.14551343866678
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 567,
+            "cpuMaeLevels": 4.9216870906038395,
+            "gpuMaeLevels": 4.0330563000658355,
+            "meanBothMaeLevels": 4.4773716953348375,
+            "meanBothSignedErrorLevels": -1.9397961557235093,
+            "p95WorstFanAbsoluteErrorLevels": 14.197945256286637,
+            "bothWithin2LevelsFraction": 0.3262786596119929,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.35978835978835977,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.13051146384479717,
+            "meanWorstFanUnderLevels": 3.6251391064420133
+          }
+        },
+        "cpu_gpu_linear": {
+          "parameters": {
+            "alpha": 0.001
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "alpha": 0.001
+              },
+              "innerHeldOutScores": [
+                2.266377453747454,
+                4.384223008502809
+              ],
+              "macroScore": 3.3253002311251314
+            },
+            {
+              "parameters": {
+                "alpha": 0.01
+              },
+              "innerHeldOutScores": [
+                2.2865394298089625,
+                4.4447234964887805
+              ],
+              "macroScore": 3.3656314631488717
+            },
+            {
+              "parameters": {
+                "alpha": 0.1
+              },
+              "innerHeldOutScores": [
+                2.4479064467953755,
+                4.957213458112752
+              ],
+              "macroScore": 3.7025599524540636
+            },
+            {
+              "parameters": {
+                "alpha": 1.0
+              },
+              "innerHeldOutScores": [
+                2.9083574763386695,
+                6.74442157480505
+              ],
+              "macroScore": 4.82638952557186
+            }
+          ],
+          "all": {
+            "samples": 913,
+            "cpuMaeLevels": 4.1249283972307484,
+            "gpuMaeLevels": 3.3848633755988455,
+            "meanBothMaeLevels": 3.754895886414797,
+            "meanBothSignedErrorLevels": 1.2898547064664498,
+            "p95WorstFanAbsoluteErrorLevels": 12.600739280402578,
+            "bothWithin2LevelsFraction": 0.41511500547645125,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.1380065717415115,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.009857612267250822,
+            "meanWorstFanUnderLevels": 1.4662667242206866
+          },
+          "highFanRegime": {
+            "samples": 56,
+            "cpuMaeLevels": 8.194434438855168,
+            "gpuMaeLevels": 6.8091773438239525,
+            "meanBothMaeLevels": 7.5018058913395596,
+            "meanBothSignedErrorLevels": -2.075268981447901,
+            "p95WorstFanAbsoluteErrorLevels": 11.00233702220589,
+            "bothWithin2LevelsFraction": 0.017857142857142856,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.5535714285714286,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.16071428571428573,
+            "meanWorstFanUnderLevels": 5.059742195781454
+          },
+          "model": {
+            "family": "cpu_gpu_linear",
+            "parameters": {
+              "alpha": 0.001
+            },
+            "trainingSessions": [
+              "v11",
+              "live-20261008"
+            ],
+            "center": [
+              57.064167470266995,
+              41.62652065870515
+            ],
+            "scale": [
+              18.88733771367437,
+              9.807985300999706
+            ],
+            "coefficients": [
+              [
+                -0.8510170567163293,
+                -0.7862007094303866
+              ],
+              [
+                5.6013672488529815,
+                4.616723063321277
+              ]
+            ],
+            "intercept": [
+              25.802054743713363,
+              23.14551343866678
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 567,
+            "cpuMaeLevels": 3.912011129953293,
+            "gpuMaeLevels": 3.2090597108074568,
+            "meanBothMaeLevels": 3.5605354203803747,
+            "meanBothSignedErrorLevels": 0.08094475783879831,
+            "p95WorstFanAbsoluteErrorLevels": 12.071003770028822,
+            "bothWithin2LevelsFraction": 0.4479717813051146,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.19400352733686066,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.015873015873015872,
+            "meanWorstFanUnderLevels": 2.044700659548146
+          }
+        },
+        "thermal_linear": {
+          "parameters": {
+            "alpha": 0.01
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "alpha": 0.001
+              },
+              "innerHeldOutScores": [
+                1.9820921011960229,
+                3.999368226273437
+              ],
+              "macroScore": 2.99073016373473
+            },
+            {
+              "parameters": {
+                "alpha": 0.01
+              },
+              "innerHeldOutScores": [
+                2.0135976505063478,
+                3.679939050342271
+              ],
+              "macroScore": 2.846768350424309
+            },
+            {
+              "parameters": {
+                "alpha": 0.1
+              },
+              "innerHeldOutScores": [
+                2.2619560846612705,
+                4.631020218225352
+              ],
+              "macroScore": 3.446488151443311
+            },
+            {
+              "parameters": {
+                "alpha": 1.0
+              },
+              "innerHeldOutScores": [
+                2.917646507934768,
+                6.639106462682761
+              ],
+              "macroScore": 4.7783764853087645
+            }
+          ],
+          "all": {
+            "samples": 913,
+            "cpuMaeLevels": 3.765865193196823,
+            "gpuMaeLevels": 3.188801926610554,
+            "meanBothMaeLevels": 3.477333559903688,
+            "meanBothSignedErrorLevels": 1.3097549064358738,
+            "p95WorstFanAbsoluteErrorLevels": 11.53477770949484,
+            "bothWithin2LevelsFraction": 0.452354874041621,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.10843373493975904,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.002190580503833516,
+            "meanWorstFanUnderLevels": 1.2966777544889745
+          },
+          "highFanRegime": {
+            "samples": 56,
+            "cpuMaeLevels": 6.731095441310575,
+            "gpuMaeLevels": 5.93508855752929,
+            "meanBothMaeLevels": 6.333091999419933,
+            "meanBothSignedErrorLevels": -1.5361572334327782,
+            "p95WorstFanAbsoluteErrorLevels": 9.592682537172408,
+            "bothWithin2LevelsFraction": 0.017857142857142856,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.44642857142857145,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.03571428571428571,
+            "meanWorstFanUnderLevels": 4.164498518402501
+          },
+          "model": {
+            "family": "thermal_linear",
+            "parameters": {
+              "alpha": 0.01
+            },
+            "trainingSessions": [
+              "v11",
+              "live-20261008"
+            ],
+            "center": [
+              57.06416747026691,
+              41.6265206587048,
+              56.76910312044114,
+              45.64504209628376
+            ],
+            "scale": [
+              18.887337713674306,
+              9.807985300999716,
+              16.795811423182364,
+              7.423303234135415
+            ],
+            "coefficients": [
+              [
+                -1.1987728109214248,
+                -0.8646204663698293
+              ],
+              [
+                4.063236171410748,
+                3.7254888631701677
+              ],
+              [
+                -1.5432653406370718,
+                -1.1383537711503027
+              ],
+              [
+                3.08087906699868,
+                1.8750834331193884
+              ]
+            ],
+            "intercept": [
+              25.802054743713363,
+              23.14551343866678
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 567,
+            "cpuMaeLevels": 3.4303547991937737,
+            "gpuMaeLevels": 2.91740017684478,
+            "meanBothMaeLevels": 3.173877488019277,
+            "meanBothSignedErrorLevels": 0.09008080438362061,
+            "p95WorstFanAbsoluteErrorLevels": 11.11035670317057,
+            "bothWithin2LevelsFraction": 0.5061728395061729,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.16225749559082892,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.003527336860670194,
+            "meanWorstFanUnderLevels": 1.8266299931771866
+          }
+        },
+        "thermal_history_linear": {
+          "parameters": {
+            "alpha": 0.01
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "alpha": 0.001
+              },
+              "innerHeldOutScores": [
+                1.5470268137895269,
+                4.911290716059231
+              ],
+              "macroScore": 3.229158764924379
+            },
+            {
+              "parameters": {
+                "alpha": 0.01
+              },
+              "innerHeldOutScores": [
+                1.724440069533578,
+                4.185607300236668
+              ],
+              "macroScore": 2.9550236848851226
+            },
+            {
+              "parameters": {
+                "alpha": 0.1
+              },
+              "innerHeldOutScores": [
+                1.730259061916198,
+                4.384652796140225
+              ],
+              "macroScore": 3.0574559290282113
+            },
+            {
+              "parameters": {
+                "alpha": 1.0
+              },
+              "innerHeldOutScores": [
+                2.056928250369443,
+                5.336532414141007
+              ],
+              "macroScore": 3.6967303322552247
+            }
+          ],
+          "all": {
+            "samples": 913,
+            "cpuMaeLevels": 3.0506697157397618,
+            "gpuMaeLevels": 2.5711578204691254,
+            "meanBothMaeLevels": 2.8109137681044443,
+            "meanBothSignedErrorLevels": 1.6973466878266061,
+            "p95WorstFanAbsoluteErrorLevels": 10.916044241183883,
+            "bothWithin2LevelsFraction": 0.5969331872946331,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.007667031763417305,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.7396581520754526
+          },
+          "highFanRegime": {
+            "samples": 56,
+            "cpuMaeLevels": 8.724277798302126,
+            "gpuMaeLevels": 6.4196969730596924,
+            "meanBothMaeLevels": 7.571987385680909,
+            "meanBothSignedErrorLevels": 7.571987385680909,
+            "p95WorstFanAbsoluteErrorLevels": 13.533542099362366,
+            "bothWithin2LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.0
+          },
+          "model": {
+            "family": "thermal_history_linear",
+            "parameters": {
+              "alpha": 0.01
+            },
+            "trainingSessions": [
+              "v11",
+              "live-20261008"
+            ],
+            "center": [
+              57.06416747026691,
+              41.6265206587048,
+              56.76910312044114,
+              45.64504209628376,
+              57.17098431802891,
+              41.76718861767418,
+              57.082382521523364,
+              45.789102948555794,
+              59.24437189447214,
+              42.341830848675706,
+              59.886037223558276,
+              46.5617269597615,
+              88.30895797789513,
+              45.16483693098919,
+              68.17787441584427,
+              50.57076626363037,
+              -0.10681684776209842,
+              -0.1406679589693142,
+              -0.3132794010822488,
+              -0.14406085227210805
+            ],
+            "scale": [
+              18.887337713674306,
+              9.807985300999716,
+              16.795811423182364,
+              7.423303234135415,
+              15.041282845859264,
+              9.500393701486786,
+              14.866365287256896,
+              7.100098566341727,
+              12.59927246193949,
+              8.304548851745725,
+              13.913000491396186,
+              6.380731679015492,
+              11.684074661191282,
+              11.564064935993244,
+              20.485784424479355,
+              8.250758278129332,
+              11.281505410704158,
+              2.620204241712956,
+              8.755710967047369,
+              2.305715823337686
+            ],
+            "coefficients": [
+              [
+                0.2647928077000212,
+                0.3232617453986985
+              ],
+              [
+                0.6549445117766262,
+                0.685927673084815
+              ],
+              [
+                -0.26687641937997164,
+                -0.1472888669925474
+              ],
+              [
+                -0.25285908751071445,
+                -0.6215279315740714
+              ],
+              [
+                0.49392914921462217,
+                0.5634110056060934
+              ],
+              [
+                0.7188884052102275,
+                0.7687269151271137
+              ],
+              [
+                -0.40077146612106646,
+                -0.25605979239104976
+              ],
+              [
+                -0.24821023556547334,
+                -0.6607342766936479
+              ],
+              [
+                0.6312988126143441,
+                0.49078307784608033
+              ],
+              [
+                2.5889467291135992,
+                2.308249276747227
+              ],
+              [
+                -1.938130860368581,
+                -1.2259654448280064
+              ],
+              [
+                2.524939010058766,
+                1.4572714122171846
+              ],
+              [
+                -0.1953349233465008,
+                -0.13606411234395138
+              ],
+              [
+                0.8017060903648617,
+                0.9512099628240339
+              ],
+              [
+                -0.8113326343113733,
+                -0.7668672892719594
+              ],
+              [
+                0.9525549316390275,
+                0.8737178706609516
+              ],
+              [
+                -0.21522808947694713,
+                -0.20997823005825325
+              ],
+              [
+                -0.15496377190422442,
+                -0.21969272406521662
+              ],
+              [
+                0.16853103127964683,
+                0.15222548795153804
+              ],
+              [
+                -0.049760054229455904,
+                0.03360699759442702
+              ]
+            ],
+            "intercept": [
+              25.802054743713363,
+              23.14551343866678
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 567,
+            "cpuMaeLevels": 2.972691504440827,
+            "gpuMaeLevels": 2.4834904869022494,
+            "meanBothMaeLevels": 2.728090995671539,
+            "meanBothSignedErrorLevels": 1.4749778066490604,
+            "p95WorstFanAbsoluteErrorLevels": 9.81172549402685,
+            "bothWithin2LevelsFraction": 0.6067019400352733,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.012345679012345678,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.8552097202568212
+          }
+        },
+        "thermal_tree": {
+          "parameters": {
+            "depth": 5,
+            "leaf": 80
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "depth": 3,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                2.602431193090857,
+                7.696438535239483
+              ],
+              "macroScore": 5.14943486416517
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                2.1446805861732057,
+                7.822964063362564
+              ],
+              "macroScore": 4.983822324767885
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 80
+              },
+              "innerHeldOutScores": [
+                2.1110063697554358,
+                6.913667165179554
+              ],
+              "macroScore": 4.512336767467495
+            }
+          ],
+          "all": {
+            "samples": 913,
+            "cpuMaeLevels": 4.877825225527519,
+            "gpuMaeLevels": 3.99012841800413,
+            "meanBothMaeLevels": 4.433976821765825,
+            "meanBothSignedErrorLevels": 0.8354686681667244,
+            "p95WorstFanAbsoluteErrorLevels": 10.670588235294098,
+            "bothWithin2LevelsFraction": 0.21029572836801752,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.16319824753559695,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.01642935377875137,
+            "meanWorstFanUnderLevels": 2.0465972809064255
+          },
+          "highFanRegime": {
+            "samples": 56,
+            "cpuMaeLevels": 5.607485901787044,
+            "gpuMaeLevels": 4.931655713459862,
+            "meanBothMaeLevels": 5.269570807623453,
+            "meanBothSignedErrorLevels": -1.7849648962934235,
+            "p95WorstFanAbsoluteErrorLevels": 6.337931034482722,
+            "bothWithin2LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.5178571428571429,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.017857142857142856,
+            "meanWorstFanUnderLevels": 3.7066341817887163
+          },
+          "model": {
+            "family": "thermal_tree",
+            "parameters": {
+              "depth": 5,
+              "leaf": 80
+            },
+            "trainingSessions": [
+              "v11",
+              "live-20261008"
+            ],
+            "tree": {
+              "childrenLeft": [
+                1,
+                2,
+                3,
+                4,
+                -1,
+                6,
+                -1,
+                -1,
+                9,
+                10,
+                -1,
+                -1,
+                13,
+                -1,
+                -1,
+                16,
+                17,
+                -1,
+                19,
+                -1,
+                -1,
+                -1,
+                23,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                22,
+                15,
+                8,
+                5,
+                -1,
+                7,
+                -1,
+                -1,
+                12,
+                11,
+                -1,
+                -1,
+                14,
+                -1,
+                -1,
+                21,
+                18,
+                -1,
+                20,
+                -1,
+                -1,
+                -1,
+                24,
+                -1,
+                -1
+              ],
+              "feature": [
+                1,
+                1,
+                2,
+                2,
+                -2,
+                3,
+                -2,
+                -2,
+                2,
+                3,
+                -2,
+                -2,
+                2,
+                -2,
+                -2,
+                0,
+                2,
+                -2,
+                2,
+                -2,
+                -2,
+                -2,
+                1,
+                -2,
+                -2
+              ],
+              "threshold": [
+                57.5,
+                40.5,
+                45.54999923706055,
+                42.54999923706055,
+                -2.0,
+                39.5,
+                -2.0,
+                -2.0,
+                46.54999923706055,
+                41.5,
+                -2.0,
+                -2.0,
+                49.54999923706055,
+                -2.0,
+                -2.0,
+                95.5,
+                59.54999923706055,
+                -2.0,
+                73.55000305175781,
+                -2.0,
+                -2.0,
+                -2.0,
+                72.5,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                [
+                  25.802054743713217,
+                  23.14551343866786
+                ],
+                [
+                  24.665779060426726,
+                  22.201008928955904
+                ],
+                [
+                  23.1186396316269,
+                  21.004359145404024
+                ],
+                [
+                  21.95937401771615,
+                  19.976347887026368
+                ],
+                [
+                  22.895740268028092,
+                  20.975510529674526
+                ],
+                [
+                  21.512653844104808,
+                  19.499668906936307
+                ],
+                [
+                  21.44723175645424,
+                  19.51911654976867
+                ],
+                [
+                  21.58075590697965,
+                  19.47942460348282
+                ],
+                [
+                  24.06519461613245,
+                  21.843743294358223
+                ],
+                [
+                  25.333101379176703,
+                  23.12996657578635
+                ],
+                [
+                  25.087755643209942,
+                  23.010954953760486
+                ],
+                [
+                  25.87490392709437,
+                  23.392782637338495
+                ],
+                [
+                  23.324280724208883,
+                  21.092125963256336
+                ],
+                [
+                  21.609886725085182,
+                  19.698407110798197
+                ],
+                [
+                  25.25932653148105,
+                  22.665223992848148
+                ],
+                [
+                  28.520956701411762,
+                  25.182832935092602
+                ],
+                [
+                  29.689241396362384,
+                  26.029106334317355
+                ],
+                [
+                  27.15396734460039,
+                  24.492838728158116
+                ],
+                [
+                  30.625698324022544,
+                  26.596559167090085
+                ],
+                [
+                  33.80158730158729,
+                  29.77777777777775
+                ],
+                [
+                  29.600848098077183,
+                  25.569989083886185
+                ],
+                [
+                  25.072011861313865,
+                  22.68451186131386
+                ],
+                [
+                  42.134782608695744,
+                  36.72173913043482
+                ],
+                [
+                  36.6705882352941,
+                  31.69411764705882
+                ],
+                [
+                  45.33793103448272,
+                  39.66896551724136
+                ]
+              ]
+            }
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 567,
+            "cpuMaeLevels": 4.72913966357057,
+            "gpuMaeLevels": 4.012406382061976,
+            "meanBothMaeLevels": 4.370773022816273,
+            "meanBothSignedErrorLevels": -0.5770820286033975,
+            "p95WorstFanAbsoluteErrorLevels": 11.337931034482722,
+            "bothWithin2LevelsFraction": 0.2204585537918871,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.2275132275132275,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.026455026455026454,
+            "meanWorstFanUnderLevels": 2.7813453219849844
+          }
+        },
+        "thermal_history_tree": {
+          "parameters": {
+            "depth": 3,
+            "leaf": 30
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "depth": 3,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                1.6114805821770244,
+                6.6506083202468975
+              ],
+              "macroScore": 4.131044451211961
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                1.9786399725303745,
+                6.673642330594111
+              ],
+              "macroScore": 4.3261411515622425
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 80
+              },
+              "innerHeldOutScores": [
+                1.585485626954038,
+                6.692283380128467
+              ],
+              "macroScore": 4.138884503541252
+            }
+          ],
+          "all": {
+            "samples": 913,
+            "cpuMaeLevels": 3.1663106495897817,
+            "gpuMaeLevels": 2.8106051959032974,
+            "meanBothMaeLevels": 2.9884579227465395,
+            "meanBothSignedErrorLevels": 1.4605464072212018,
+            "p95WorstFanAbsoluteErrorLevels": 9.422222222222217,
+            "bothWithin2LevelsFraction": 0.5531215772179627,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.06790799561883899,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.9615810519553584
+          },
+          "highFanRegime": {
+            "samples": 56,
+            "cpuMaeLevels": 6.020439302481543,
+            "gpuMaeLevels": 4.30536552649229,
+            "meanBothMaeLevels": 5.162902414486916,
+            "meanBothSignedErrorLevels": 5.162902414486916,
+            "p95WorstFanAbsoluteErrorLevels": 7.507042253521085,
+            "bothWithin2LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.0
+          },
+          "model": {
+            "family": "thermal_history_tree",
+            "parameters": {
+              "depth": 3,
+              "leaf": 30
+            },
+            "trainingSessions": [
+              "v11",
+              "live-20261008"
+            ],
+            "tree": {
+              "childrenLeft": [
+                1,
+                2,
+                3,
+                -1,
+                -1,
+                6,
+                -1,
+                -1,
+                9,
+                10,
+                -1,
+                -1,
+                13,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                8,
+                5,
+                4,
+                -1,
+                -1,
+                7,
+                -1,
+                -1,
+                12,
+                11,
+                -1,
+                -1,
+                14,
+                -1,
+                -1
+              ],
+              "feature": [
+                9,
+                11,
+                9,
+                -2,
+                -2,
+                15,
+                -2,
+                -2,
+                9,
+                11,
+                -2,
+                -2,
+                1,
+                -2,
+                -2
+              ],
+              "threshold": [
+                51.57247352600098,
+                44.31957817077637,
+                38.06160545349121,
+                -2.0,
+                -2.0,
+                58.5,
+                -2.0,
+                -2.0,
+                62.333974838256836,
+                55.59359169006348,
+                -2.0,
+                -2.0,
+                55.0,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                [
+                  25.802054743713217,
+                  23.14551343866786
+                ],
+                [
+                  24.271422324370615,
+                  21.849111513377196
+                ],
+                [
+                  21.915875734294872,
+                  19.94407983376959
+                ],
+                [
+                  21.492355844926426,
+                  19.51670304929531
+                ],
+                [
+                  23.483307060015775,
+                  21.52578538452876
+                ],
+                [
+                  27.344643317525925,
+                  24.334557301228905
+                ],
+                [
+                  26.015954232961345,
+                  23.616505092181775
+                ],
+                [
+                  30.72151898734193,
+                  26.159493670886178
+                ],
+                [
+                  41.61858974358992,
+                  36.541666666666806
+                ],
+                [
+                  35.98571428571427,
+                  31.95
+                ],
+                [
+                  34.41052631578946,
+                  30.30526315789475
+                ],
+                [
+                  39.31111111111112,
+                  35.42222222222222
+                ],
+                [
+                  46.20348837209303,
+                  40.27906976744184
+                ],
+                [
+                  44.76666666666669,
+                  39.13333333333337
+                ],
+                [
+                  46.507042253521085,
+                  40.521126760563355
+                ]
+              ]
+            }
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 567,
+            "cpuMaeLevels": 2.977373429661528,
+            "gpuMaeLevels": 2.4920278582242608,
+            "meanBothMaeLevels": 2.7347006439428947,
+            "meanBothSignedErrorLevels": 1.3811429544431526,
+            "p95WorstFanAbsoluteErrorLevels": 10.766666666666687,
+            "bothWithin2LevelsFraction": 0.6102292768959435,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.07054673721340388,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.8879292521396636
+          }
+        }
+      },
+      "originalSeed": {
+        "usablePredictions": 567,
+        "sameCausalTargetCount": 913,
+        "metricsOnAvailablePredictions": {
+          "samples": 567,
+          "cpuMaeLevels": 3.240740740740741,
+          "gpuMaeLevels": 3.101410934744268,
+          "meanBothMaeLevels": 3.1710758377425043,
+          "meanBothSignedErrorLevels": -2.929453262786596,
+          "p95WorstFanAbsoluteErrorLevels": 10.5,
+          "bothWithin2LevelsFraction": 0.41798941798941797,
+          "eitherFanUnderByAtLeast5LevelsFraction": 0.2292768959435626,
+          "eitherFanUnderByAtLeast10LevelsFraction": 0.059964726631393295,
+          "meanWorstFanUnderLevels": 3.4382716049382718
+        },
+        "definition": "Midpoints of original ranges at the same causal feature snapshot; Unknown abstains."
+      }
+    },
+    {
+      "heldOut": "v11",
+      "trainingSessions": [
+        "v10",
+        "live-20261008"
+      ],
+      "instantaneousThermalNeighborDiagnostic": {
+        "inputs": [
+          "cpu_max",
+          "gpu",
+          "tz01",
+          "dtt3"
+        ],
+        "comparisons": [
+          {
+            "eachInputToleranceC": 0.1,
+            "heldOutTargetsWithNeighbor": 137,
+            "targetsWithNeighborDifferentByAtLeast5Levels": 47,
+            "largestDifferenceExample": {
+              "worstFanDifferenceLevels": 11.0,
+              "heldOutFanTicks": 17913824012957936,
+              "heldOutThermal": [
+                47.0,
+                39.0,
+                49.05,
+                44.0
+              ],
+              "heldOutFans": [
+                21.0,
+                20.0
+              ],
+              "trainingSession": "v10",
+              "trainingFanTicks": 17913600357272022,
+              "trainingThermal": [
+                47.0,
+                39.0,
+                49.05,
+                44.0
+              ],
+              "trainingFans": [
+                32.0,
+                27.0
+              ]
+            }
+          },
+          {
+            "eachInputToleranceC": 2.0,
+            "heldOutTargetsWithNeighbor": 311,
+            "targetsWithNeighborDifferentByAtLeast5Levels": 151,
+            "largestDifferenceExample": {
+              "worstFanDifferenceLevels": 13.0,
+              "heldOutFanTicks": 17913823950675900,
+              "heldOutThermal": [
+                46.0,
+                39.0,
+                49.05,
+                44.0
+              ],
+              "heldOutFans": [
+                21.0,
+                20.0
+              ],
+              "trainingSession": "v10",
+              "trainingFanTicks": 17913600070444947,
+              "trainingThermal": [
+                47.0,
+                40.0,
+                49.05,
+                45.0
+              ],
+              "trainingFans": [
+                34.0,
+                29.0
+              ]
+            }
+          }
+        ],
+        "interpretation": "Similar current temperatures can coexist with different fan levels across sessions. This does not distinguish history, operating mode or other hidden inputs."
+      },
+      "targetSupportDiagnostic": {
+        "trainingFanMin": [
+          21.0,
+          19.0
+        ],
+        "trainingFanMax": [
+          47.0,
+          41.0
+        ],
+        "heldOutFanMin": [
+          21.0,
+          19.0
+        ],
+        "heldOutFanMax": [
+          27.0,
+          24.0
+        ],
+        "outsideTrainingFanRangeCount": 0,
+        "interpretation": "Outcome support diagnostic only; never used to select, fit or predict."
+      },
+      "selectedFamilyFromInnerValidationOnly": "thermal_history_tree",
+      "selectedTestMetrics": {
+        "samples": 366,
+        "cpuMaeLevels": 1.923829838779485,
+        "gpuMaeLevels": 1.5631633282326318,
+        "meanBothMaeLevels": 1.7434965835060587,
+        "meanBothSignedErrorLevels": 0.9220285320615222,
+        "p95WorstFanAbsoluteErrorLevels": 6.622418404805494,
+        "bothWithin2LevelsFraction": 0.587431693989071,
+        "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+        "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+        "meanWorstFanUnderLevels": 0.5145477174025075
+      },
+      "selectedHighFanMetrics": null,
+      "families": {
+        "constant": {
+          "parameters": {},
+          "innerTrials": [
+            {
+              "parameters": {},
+              "innerHeldOutScores": [
+                5.2211111000976365,
+                6.934554548923799
+              ],
+              "macroScore": 6.077832824510718
+            }
+          ],
+          "all": {
+            "samples": 366,
+            "cpuMaeLevels": 4.396308061006395,
+            "gpuMaeLevels": 3.4644000132811463,
+            "meanBothMaeLevels": 3.930354037143771,
+            "meanBothSignedErrorLevels": 3.930354037143771,
+            "p95WorstFanAbsoluteErrorLevels": 6.830734290514592,
+            "bothWithin2LevelsFraction": 0.3333333333333333,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.0
+          },
+          "highFanRegime": null,
+          "model": {
+            "family": "constant",
+            "parameters": {},
+            "trainingSessions": [
+              "v10",
+              "live-20261008"
+            ],
+            "mean": [
+              27.83073429051459,
+              24.76221422093142
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 360,
+            "cpuMaeLevels": 4.364067623847926,
+            "gpuMaeLevels": 3.431658665375864,
+            "meanBothMaeLevels": 3.8978631446118936,
+            "meanBothSignedErrorLevels": 3.8978631446118936,
+            "p95WorstFanAbsoluteErrorLevels": 6.830734290514592,
+            "bothWithin2LevelsFraction": 0.3388888888888889,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.0
+          }
+        },
+        "cpu_gpu_linear": {
+          "parameters": {
+            "alpha": 1.0
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "alpha": 0.001
+              },
+              "innerHeldOutScores": [
+                4.51542113562757,
+                4.931489595079631
+              ],
+              "macroScore": 4.723455365353601
+            },
+            {
+              "parameters": {
+                "alpha": 0.01
+              },
+              "innerHeldOutScores": [
+                4.4989175913143145,
+                4.928315642884242
+              ],
+              "macroScore": 4.713616617099278
+            },
+            {
+              "parameters": {
+                "alpha": 0.1
+              },
+              "innerHeldOutScores": [
+                4.357654000960895,
+                4.944870343940788
+              ],
+              "macroScore": 4.651262172450841
+            },
+            {
+              "parameters": {
+                "alpha": 1.0
+              },
+              "innerHeldOutScores": [
+                3.770870995990386,
+                5.473769867734022
+              ],
+              "macroScore": 4.622320431862204
+            }
+          ],
+          "all": {
+            "samples": 366,
+            "cpuMaeLevels": 3.0701066200456415,
+            "gpuMaeLevels": 2.5356906900249965,
+            "meanBothMaeLevels": 2.802898655035319,
+            "meanBothSignedErrorLevels": 2.508701735965036,
+            "p95WorstFanAbsoluteErrorLevels": 7.276915141776563,
+            "bothWithin2LevelsFraction": 0.34972677595628415,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.22009163870671392
+          },
+          "highFanRegime": null,
+          "model": {
+            "family": "cpu_gpu_linear",
+            "parameters": {
+              "alpha": 1.0
+            },
+            "trainingSessions": [
+              "v10",
+              "live-20261008"
+            ],
+            "center": [
+              58.496464467495926,
+              46.08147460264759
+            ],
+            "scale": [
+              16.37867360550424,
+              13.01009691644271
+            ],
+            "coefficients": [
+              [
+                0.8670762560858774,
+                0.6364863781023045
+              ],
+              [
+                2.1608657990317472,
+                1.8029805218656503
+              ]
+            ],
+            "intercept": [
+              27.83073429051459,
+              24.76221422093142
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 360,
+            "cpuMaeLevels": 3.051902160087995,
+            "gpuMaeLevels": 2.516798937143335,
+            "meanBothMaeLevels": 2.7843505486156648,
+            "meanBothSignedErrorLevels": 2.485250347560877,
+            "p95WorstFanAbsoluteErrorLevels": 7.30451290101266,
+            "bothWithin2LevelsFraction": 0.35555555555555557,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.22375983268515914
+          }
+        },
+        "thermal_linear": {
+          "parameters": {
+            "alpha": 0.1
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "alpha": 0.001
+              },
+              "innerHeldOutScores": [
+                4.064441009640009,
+                4.509096140633054
+              ],
+              "macroScore": 4.286768575136532
+            },
+            {
+              "parameters": {
+                "alpha": 0.01
+              },
+              "innerHeldOutScores": [
+                4.072273929414291,
+                4.406421793706368
+              ],
+              "macroScore": 4.239347861560329
+            },
+            {
+              "parameters": {
+                "alpha": 0.1
+              },
+              "innerHeldOutScores": [
+                4.000471785053293,
+                4.32900544636513
+              ],
+              "macroScore": 4.1647386157092114
+            },
+            {
+              "parameters": {
+                "alpha": 1.0
+              },
+              "innerHeldOutScores": [
+                3.559542898498079,
+                4.792272314168944
+              ],
+              "macroScore": 4.175907606333512
+            }
+          ],
+          "all": {
+            "samples": 366,
+            "cpuMaeLevels": 2.298066814835592,
+            "gpuMaeLevels": 1.910526798828115,
+            "meanBothMaeLevels": 2.1042968068318535,
+            "meanBothSignedErrorLevels": 1.1239096967450273,
+            "p95WorstFanAbsoluteErrorLevels": 4.880945041891682,
+            "bothWithin2LevelsFraction": 0.3989071038251366,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.5656283906082796
+          },
+          "highFanRegime": null,
+          "model": {
+            "family": "thermal_linear",
+            "parameters": {
+              "alpha": 0.1
+            },
+            "trainingSessions": [
+              "v10",
+              "live-20261008"
+            ],
+            "center": [
+              58.49646446749571,
+              46.08147460264755,
+              58.144606624771306,
+              47.94419997968025
+            ],
+            "scale": [
+              16.378673605504254,
+              13.010096916442755,
+              14.163467583631832,
+              8.103198143764045
+            ],
+            "coefficients": [
+              [
+                -1.107574054265876,
+                -0.9945061583155402
+              ],
+              [
+                2.127979714185147,
+                1.9887019760771631
+              ],
+              [
+                0.35602371715773895,
+                0.2212657444158474
+              ],
+              [
+                3.3436990234410886,
+                2.576384531990087
+              ]
+            ],
+            "intercept": [
+              27.83073429051459,
+              24.76221422093142
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 360,
+            "cpuMaeLevels": 2.2970984937236194,
+            "gpuMaeLevels": 1.905529522613802,
+            "meanBothMaeLevels": 2.101314008168711,
+            "meanBothSignedErrorLevels": 1.1045871129137708,
+            "p95WorstFanAbsoluteErrorLevels": 4.882233591341444,
+            "bothWithin2LevelsFraction": 0.4027777777777778,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.575055530451751
+          }
+        },
+        "thermal_history_linear": {
+          "parameters": {
+            "alpha": 1.0
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "alpha": 0.001
+              },
+              "innerHeldOutScores": [
+                3.959055147218083,
+                3.3174433875353935
+              ],
+              "macroScore": 3.638249267376738
+            },
+            {
+              "parameters": {
+                "alpha": 0.01
+              },
+              "innerHeldOutScores": [
+                3.1202080539268056,
+                3.0855114818530494
+              ],
+              "macroScore": 3.1028597678899272
+            },
+            {
+              "parameters": {
+                "alpha": 0.1
+              },
+              "innerHeldOutScores": [
+                2.8137974863692414,
+                3.0537670190908632
+              ],
+              "macroScore": 2.9337822527300523
+            },
+            {
+              "parameters": {
+                "alpha": 1.0
+              },
+              "innerHeldOutScores": [
+                2.3574819613681726,
+                3.2864598784245724
+              ],
+              "macroScore": 2.8219709198963727
+            }
+          ],
+          "all": {
+            "samples": 366,
+            "cpuMaeLevels": 2.3196653211497216,
+            "gpuMaeLevels": 1.8707473649835953,
+            "meanBothMaeLevels": 2.0952063430666588,
+            "meanBothSignedErrorLevels": 1.831464617876218,
+            "p95WorstFanAbsoluteErrorLevels": 6.575769075753184,
+            "bothWithin2LevelsFraction": 0.5300546448087432,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.18449013848130835
+          },
+          "highFanRegime": null,
+          "model": {
+            "family": "thermal_history_linear",
+            "parameters": {
+              "alpha": 1.0
+            },
+            "trainingSessions": [
+              "v10",
+              "live-20261008"
+            ],
+            "center": [
+              58.49646446749571,
+              46.08147460264755,
+              58.144606624771306,
+              47.94419997968025,
+              58.42474309480824,
+              45.864971767380304,
+              58.30835005453584,
+              47.96233794650928,
+              58.42766212285162,
+              45.66526924714726,
+              58.720727963335996,
+              48.05879523657729,
+              82.70027735375896,
+              50.46327060607723,
+              65.95726769686704,
+              52.240011052023796,
+              0.07172137268742702,
+              0.2165028352672498,
+              -0.163743429764463,
+              -0.018137966829146226
+            ],
+            "scale": [
+              16.378673605504254,
+              13.010096916442755,
+              14.163467583631832,
+              8.103198143764045,
+              14.160947210766953,
+              12.2322477768158,
+              13.521645360874404,
+              7.898563893201817,
+              13.562649553685223,
+              11.191566531625435,
+              13.055933117458787,
+              7.589896376050651,
+              15.729332039201875,
+              15.61390559350308,
+              17.31232295887207,
+              8.840832626148424,
+              9.33093664398986,
+              4.204491766434397,
+              5.4808190483009485,
+              2.2313315512188523
+            ],
+            "coefficients": [
+              [
+                0.0006201113007076252,
+                -0.016608878555658162
+              ],
+              [
+                0.5524134094396168,
+                0.4997648036694014
+              ],
+              [
+                0.05928315575468028,
+                0.03594021938043309
+              ],
+              [
+                0.3126452510234172,
+                0.24363478243683404
+              ],
+              [
+                -0.008203559756237435,
+                -0.008949443906485109
+              ],
+              [
+                0.6838983727737044,
+                0.632215164624872
+              ],
+              [
+                0.14912541941978388,
+                0.0974758198251975
+              ],
+              [
+                0.45314821591689464,
+                0.36016502173872605
+              ],
+              [
+                0.1932553204328066,
+                0.14220533931007798
+              ],
+              [
+                0.8355002726765939,
+                0.7301313201642781
+              ],
+              [
+                0.49944207794851586,
+                0.3312191015265348
+              ],
+              [
+                0.693096971988882,
+                0.5373731949641453
+              ],
+              [
+                0.07285962753649221,
+                0.053707190681744996
+              ],
+              [
+                0.694479628868831,
+                0.6230798903281167
+              ],
+              [
+                0.11724472579040243,
+                0.042353731943370526
+              ],
+              [
+                0.42664035998778094,
+                0.3102841412390738
+              ],
+              [
+                0.01353848837064459,
+                -0.015571727001783572
+              ],
+              [
+                -0.28033408570010465,
+                -0.29288296402829744
+              ],
+              [
+                -0.2147062273957054,
+                -0.14760482469207462
+              ],
+              [
+                -0.468685936964007,
+                -0.3901551605030112
+              ]
+            ],
+            "intercept": [
+              27.83073429051459,
+              24.76221422093142
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 360,
+            "cpuMaeLevels": 2.336420350638727,
+            "gpuMaeLevels": 1.878658393948568,
+            "meanBothMaeLevels": 2.107539372293647,
+            "meanBothSignedErrorLevels": 1.8394019516833662,
+            "p95WorstFanAbsoluteErrorLevels": 6.596143937663917,
+            "bothWithin2LevelsFraction": 0.5222222222222223,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.18756497412266349
+          }
+        },
+        "thermal_tree": {
+          "parameters": {
+            "depth": 5,
+            "leaf": 80
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "depth": 3,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                4.052368435977176,
+                4.277156059234118
+              ],
+              "macroScore": 4.164762247605647
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                3.1905838491708556,
+                5.003427777817479
+              ],
+              "macroScore": 4.097005813494167
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 80
+              },
+              "innerHeldOutScores": [
+                3.7560976323575486,
+                4.09636875165186
+              ],
+              "macroScore": 3.9262331920047044
+            }
+          ],
+          "all": {
+            "samples": 366,
+            "cpuMaeLevels": 2.05795441833889,
+            "gpuMaeLevels": 1.7565243407048936,
+            "meanBothMaeLevels": 1.9072393795218918,
+            "meanBothSignedErrorLevels": 0.5459754545714711,
+            "p95WorstFanAbsoluteErrorLevels": 5.749264759213119,
+            "bothWithin2LevelsFraction": 0.5327868852459017,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.7821047802794728
+          },
+          "highFanRegime": null,
+          "model": {
+            "family": "thermal_tree",
+            "parameters": {
+              "depth": 5,
+              "leaf": 80
+            },
+            "trainingSessions": [
+              "v10",
+              "live-20261008"
+            ],
+            "tree": {
+              "childrenLeft": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                -1,
+                -1,
+                8,
+                -1,
+                -1,
+                11,
+                12,
+                -1,
+                -1,
+                -1,
+                16,
+                17,
+                18,
+                -1,
+                -1,
+                -1,
+                -1,
+                23,
+                24,
+                -1,
+                26,
+                -1,
+                28,
+                -1,
+                -1,
+                31,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                22,
+                15,
+                10,
+                7,
+                6,
+                -1,
+                -1,
+                9,
+                -1,
+                -1,
+                14,
+                13,
+                -1,
+                -1,
+                -1,
+                21,
+                20,
+                19,
+                -1,
+                -1,
+                -1,
+                -1,
+                30,
+                25,
+                -1,
+                27,
+                -1,
+                29,
+                -1,
+                -1,
+                32,
+                -1,
+                -1
+              ],
+              "feature": [
+                1,
+                1,
+                2,
+                3,
+                0,
+                -2,
+                -2,
+                0,
+                -2,
+                -2,
+                2,
+                0,
+                -2,
+                -2,
+                -2,
+                1,
+                2,
+                1,
+                -2,
+                -2,
+                -2,
+                -2,
+                1,
+                2,
+                -2,
+                2,
+                -2,
+                3,
+                -2,
+                -2,
+                0,
+                -2,
+                -2
+              ],
+              "threshold": [
+                43.5,
+                37.5,
+                45.54999923706055,
+                39.5,
+                40.5,
+                -2.0,
+                -2.0,
+                43.5,
+                -2.0,
+                -2.0,
+                47.54999923706055,
+                43.5,
+                -2.0,
+                -2.0,
+                -2.0,
+                41.5,
+                56.54999923706055,
+                39.5,
+                -2.0,
+                -2.0,
+                -2.0,
+                -2.0,
+                71.5,
+                59.54999923706055,
+                -2.0,
+                63.55000114440918,
+                -2.0,
+                56.5,
+                -2.0,
+                -2.0,
+                73.5,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                [
+                  27.830734290513984,
+                  24.762214220932492
+                ],
+                [
+                  24.369130863573066,
+                  22.02536401567842
+                ],
+                [
+                  22.122749626859807,
+                  20.14433413272066
+                ],
+                [
+                  21.531975382370852,
+                  19.55819866469754
+                ],
+                [
+                  21.4902350226838,
+                  19.538139150926725
+                ],
+                [
+                  21.521256255392583,
+                  19.54606384814493
+                ],
+                [
+                  21.45780628774704,
+                  19.52985489259454
+                ],
+                [
+                  21.574873464533788,
+                  19.578814554841678
+                ],
+                [
+                  21.60685595441526,
+                  19.573895804574278
+                ],
+                [
+                  21.527650824720972,
+                  19.58607716550986
+                ],
+                [
+                  22.959662098837413,
+                  20.974675143747316
+                ],
+                [
+                  23.426605902777794,
+                  21.414219417735023
+                ],
+                [
+                  22.794427580973398,
+                  20.80280086923527
+                ],
+                [
+                  23.825993157401534,
+                  21.800491403168493
+                ],
+                [
+                  21.491634302508672,
+                  19.592788915713236
+                ],
+                [
+                  26.463756345376254,
+                  23.779319693584505
+                ],
+                [
+                  25.917955231388703,
+                  23.31351232394373
+                ],
+                [
+                  26.3375505216933,
+                  23.67250424294734
+                ],
+                [
+                  25.86288978311164,
+                  23.361008519040524
+                ],
+                [
+                  27.827366261352292,
+                  24.650194611230066
+                ],
+                [
+                  23.286394893741555,
+                  21.062035919382563
+                ],
+                [
+                  28.367474318598447,
+                  25.404024808540818
+                ],
+                [
+                  33.301405622811124,
+                  29.08749534416427
+                ],
+                [
+                  31.264523584195004,
+                  27.23408965305826
+                ],
+                [
+                  28.221601518026507,
+                  25.388427577482556
+                ],
+                [
+                  32.03780662184904,
+                  27.703118811626783
+                ],
+                [
+                  34.54149467069187,
+                  30.14037952067029
+                ],
+                [
+                  31.535971411812174,
+                  27.21459819085573
+                ],
+                [
+                  29.183186711976358,
+                  25.616413122876093
+                ],
+                [
+                  32.74926475921312,
+                  28.038756606638696
+                ],
+                [
+                  40.503641801867126,
+                  35.64097525605006
+                ],
+                [
+                  44.80647625402787,
+                  39.12610959409269
+                ],
+                [
+                  37.47729293777629,
+                  33.18974631326724
+                ]
+              ]
+            }
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 360,
+            "cpuMaeLevels": 2.0839203253112046,
+            "gpuMaeLevels": 1.7769509190737904,
+            "meanBothMaeLevels": 1.9304356221924974,
+            "meanBothSignedErrorLevels": 0.5529826297735909,
+            "p95WorstFanAbsoluteErrorLevels": 5.753169834320079,
+            "bothWithin2LevelsFraction": 0.525,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.7897723372375732
+          }
+        },
+        "thermal_history_tree": {
+          "parameters": {
+            "depth": 5,
+            "leaf": 30
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "depth": 3,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                2.936127560428823,
+                2.583193731282677
+              ],
+              "macroScore": 2.75966064585575
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                2.9432196893809346,
+                2.554315992709115
+              ],
+              "macroScore": 2.7487678410450247
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 80
+              },
+              "innerHeldOutScores": [
+                2.894330342470813,
+                2.680328692495756
+              ],
+              "macroScore": 2.7873295174832844
+            }
+          ],
+          "all": {
+            "samples": 366,
+            "cpuMaeLevels": 1.923829838779485,
+            "gpuMaeLevels": 1.5631633282326318,
+            "meanBothMaeLevels": 1.7434965835060587,
+            "meanBothSignedErrorLevels": 0.9220285320615222,
+            "p95WorstFanAbsoluteErrorLevels": 6.622418404805494,
+            "bothWithin2LevelsFraction": 0.587431693989071,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.5145477174025075
+          },
+          "highFanRegime": null,
+          "model": {
+            "family": "thermal_history_tree",
+            "parameters": {
+              "depth": 5,
+              "leaf": 30
+            },
+            "trainingSessions": [
+              "v10",
+              "live-20261008"
+            ],
+            "tree": {
+              "childrenLeft": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                -1,
+                -1,
+                8,
+                -1,
+                -1,
+                -1,
+                12,
+                13,
+                14,
+                -1,
+                -1,
+                -1,
+                18,
+                -1,
+                -1,
+                21,
+                22,
+                23,
+                -1,
+                -1,
+                26,
+                -1,
+                28,
+                -1,
+                -1,
+                31,
+                32,
+                33,
+                -1,
+                -1,
+                -1,
+                37,
+                -1,
+                39,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                20,
+                11,
+                10,
+                7,
+                6,
+                -1,
+                -1,
+                9,
+                -1,
+                -1,
+                -1,
+                17,
+                16,
+                15,
+                -1,
+                -1,
+                -1,
+                19,
+                -1,
+                -1,
+                30,
+                25,
+                24,
+                -1,
+                -1,
+                27,
+                -1,
+                29,
+                -1,
+                -1,
+                36,
+                35,
+                34,
+                -1,
+                -1,
+                -1,
+                38,
+                -1,
+                40,
+                -1,
+                -1
+              ],
+              "feature": [
+                11,
+                9,
+                17,
+                8,
+                5,
+                -2,
+                -2,
+                11,
+                -2,
+                -2,
+                -2,
+                9,
+                0,
+                7,
+                -2,
+                -2,
+                -2,
+                10,
+                -2,
+                -2,
+                11,
+                17,
+                11,
+                -2,
+                -2,
+                9,
+                -2,
+                10,
+                -2,
+                -2,
+                13,
+                6,
+                16,
+                -2,
+                -2,
+                -2,
+                7,
+                -2,
+                9,
+                -2,
+                -2
+              ],
+              "threshold": [
+                50.52501106262207,
+                38.0334587097168,
+                2.793038845062256,
+                43.23069953918457,
+                35.060991287231445,
+                -2.0,
+                -2.0,
+                38.88537788391113,
+                -2.0,
+                -2.0,
+                -2.0,
+                44.772247314453125,
+                86.5,
+                41.2115478515625,
+                -2.0,
+                -2.0,
+                -2.0,
+                60.27808380126953,
+                -2.0,
+                -2.0,
+                58.0797004699707,
+                -4.2082200050354,
+                54.49761772155762,
+                -2.0,
+                -2.0,
+                45.07338523864746,
+                -2.0,
+                59.516157150268555,
+                -2.0,
+                -2.0,
+                81.5,
+                76.56975555419922,
+                -4.778053045272827,
+                -2.0,
+                -2.0,
+                -2.0,
+                56.34121322631836,
+                -2.0,
+                68.05582046508789,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                [
+                  27.830734290513984,
+                  24.762214220932492
+                ],
+                [
+                  23.84951886975843,
+                  21.68633719711383
+                ],
+                [
+                  21.665165157668863,
+                  19.67501999626533
+                ],
+                [
+                  21.58555084468332,
+                  19.602270920103056
+                ],
+                [
+                  21.881188118811853,
+                  19.86138613861381
+                ],
+                [
+                  21.577464788732406,
+                  19.591549295774634
+                ],
+                [
+                  22.60000000000001,
+                  20.500000000000018
+                ],
+                [
+                  21.518172733178837,
+                  19.54321647868772
+                ],
+                [
+                  21.352188774947624,
+                  19.725791156687617
+                ],
+                [
+                  21.52836903452382,
+                  19.53200101874397
+                ],
+                [
+                  23.611178861788623,
+                  21.453226626016264
+                ],
+                [
+                  25.84291274327478,
+                  23.52182169931592
+                ],
+                [
+                  25.504944190927624,
+                  23.35081506985647
+                ],
+                [
+                  25.57799557265505,
+                  23.4213092602771
+                ],
+                [
+                  23.866666666666678,
+                  21.900000000000013
+                ],
+                [
+                  25.630470460743823,
+                  23.46795753046191
+                ],
+                [
+                  23.779106469244777,
+                  21.685390951782182
+                ],
+                [
+                  28.197139953542358,
+                  24.71302264808359
+                ],
+                [
+                  25.983228080103903,
+                  23.550978147628893
+                ],
+                [
+                  31.065438003032778,
+                  26.218543267067677
+                ],
+                [
+                  35.22813396366745,
+                  30.477426608591053
+                ],
+                [
+                  32.40171510292447,
+                  27.669319694873842
+                ],
+                [
+                  35.868852459016374,
+                  32.18032786885245
+                ],
+                [
+                  34.03333333333333,
+                  30.16666666666666
+                ],
+                [
+                  37.64516129032259,
+                  34.12903225806452
+                ],
+                [
+                  32.13160379535941,
+                  27.31788443541731
+                ],
+                [
+                  26.63333333333334,
+                  23.500000000000014
+                ],
+                [
+                  32.35066030723691,
+                  27.46999271254734
+                ],
+                [
+                  29.10000000000002,
+                  25.100000000000023
+                ],
+                [
+                  32.622418404805494,
+                  27.668126214648343
+                ],
+                [
+                  41.29492693471196,
+                  36.50491373114871
+                ],
+                [
+                  45.7150537634409,
+                  39.94086021505376
+                ],
+                [
+                  46.52564102564101,
+                  40.49999999999998
+                ],
+                [
+                  46.71428571428569,
+                  40.54761904761906
+                ],
+                [
+                  46.45614035087714,
+                  40.48245614035085
+                ],
+                [
+                  41.50000000000003,
+                  37.033333333333346
+                ],
+                [
+                  37.32710280373824,
+                  33.42056074766348
+                ],
+                [
+                  34.33333333333336,
+                  30.033333333333335
+                ],
+                [
+                  38.49350649350649,
+                  34.740259740259695
+                ],
+                [
+                  36.533333333333346,
+                  33.533333333333346
+                ],
+                [
+                  39.74468085106387,
+                  35.51063829787236
+                ]
+              ]
+            }
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 360,
+            "cpuMaeLevels": 1.947560336092477,
+            "gpuMaeLevels": 1.5807049335990428,
+            "meanBothMaeLevels": 1.7641326348457596,
+            "meanBothSignedErrorLevels": 0.9355037015964272,
+            "p95WorstFanAbsoluteErrorLevels": 6.622418404805494,
+            "bothWithin2LevelsFraction": 0.5805555555555556,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+            "meanWorstFanUnderLevels": 0.5178932574767587
+          }
+        }
+      },
+      "originalSeed": {
+        "usablePredictions": 360,
+        "sameCausalTargetCount": 366,
+        "metricsOnAvailablePredictions": {
+          "samples": 360,
+          "cpuMaeLevels": 0.9472222222222222,
+          "gpuMaeLevels": 0.8527777777777777,
+          "meanBothMaeLevels": 0.9,
+          "meanBothSignedErrorLevels": -0.1375,
+          "p95WorstFanAbsoluteErrorLevels": 4.5,
+          "bothWithin2LevelsFraction": 0.8888888888888888,
+          "eitherFanUnderByAtLeast5LevelsFraction": 0.0,
+          "eitherFanUnderByAtLeast10LevelsFraction": 0.0,
+          "meanWorstFanUnderLevels": 0.6763888888888889
+        },
+        "definition": "Midpoints of original ranges at the same causal feature snapshot; Unknown abstains."
+      }
+    },
+    {
+      "heldOut": "live-20261008",
+      "trainingSessions": [
+        "v10",
+        "v11"
+      ],
+      "instantaneousThermalNeighborDiagnostic": {
+        "inputs": [
+          "cpu_max",
+          "gpu",
+          "tz01",
+          "dtt3"
+        ],
+        "comparisons": [
+          {
+            "eachInputToleranceC": 0.1,
+            "heldOutTargetsWithNeighbor": 222,
+            "targetsWithNeighborDifferentByAtLeast5Levels": 89,
+            "largestDifferenceExample": {
+              "worstFanDifferenceLevels": 13.0,
+              "heldOutFanTicks": 17914359982737393,
+              "heldOutThermal": [
+                55.0,
+                40.0,
+                58.05000000000001,
+                45.0
+              ],
+              "heldOutFans": [
+                35.0,
+                32.0
+              ],
+              "trainingSession": "v10",
+              "trainingFanTicks": 17913581816892911,
+              "trainingThermal": [
+                55.0,
+                40.0,
+                58.05,
+                45.0
+              ],
+              "trainingFans": [
+                22.0,
+                19.0
+              ]
+            }
+          },
+          {
+            "eachInputToleranceC": 2.0,
+            "heldOutTargetsWithNeighbor": 998,
+            "targetsWithNeighborDifferentByAtLeast5Levels": 774,
+            "largestDifferenceExample": {
+              "worstFanDifferenceLevels": 15.0,
+              "heldOutFanTicks": 17914358259513619,
+              "heldOutThermal": [
+                77.0,
+                72.0,
+                70.05000000000001,
+                59.0
+              ],
+              "heldOutFans": [
+                47.0,
+                41.0
+              ],
+              "trainingSession": "v10",
+              "trainingFanTicks": 17913587488137801,
+              "trainingThermal": [
+                76.0,
+                72.0,
+                69.05,
+                59.0
+              ],
+              "trainingFans": [
+                32.0,
+                26.0
+              ]
+            }
+          }
+        ],
+        "interpretation": "Similar current temperatures can coexist with different fan levels across sessions. This does not distinguish history, operating mode or other hidden inputs."
+      },
+      "targetSupportDiagnostic": {
+        "trainingFanMin": [
+          21.0,
+          19.0
+        ],
+        "trainingFanMax": [
+          40.0,
+          36.0
+        ],
+        "heldOutFanMin": [
+          21.0,
+          19.0
+        ],
+        "heldOutFanMax": [
+          47.0,
+          41.0
+        ],
+        "outsideTrainingFanRangeCount": 166,
+        "interpretation": "Outcome support diagnostic only; never used to select, fit or predict."
+      },
+      "selectedFamilyFromInnerValidationOnly": "thermal_history_linear",
+      "selectedTestMetrics": {
+        "samples": 1768,
+        "cpuMaeLevels": 2.483753625387399,
+        "gpuMaeLevels": 2.002384774843347,
+        "meanBothMaeLevels": 2.2430692001153734,
+        "meanBothSignedErrorLevels": -1.6604792143063916,
+        "p95WorstFanAbsoluteErrorLevels": 10.218110786610426,
+        "bothWithin2LevelsFraction": 0.5627828054298643,
+        "eitherFanUnderByAtLeast5LevelsFraction": 0.13631221719457012,
+        "eitherFanUnderByAtLeast10LevelsFraction": 0.06221719457013575,
+        "meanWorstFanUnderLevels": 2.3189022864503164
+      },
+      "selectedHighFanMetrics": {
+        "samples": 213,
+        "cpuMaeLevels": 9.552153398919518,
+        "gpuMaeLevels": 8.137251889270148,
+        "meanBothMaeLevels": 8.844702644094836,
+        "meanBothSignedErrorLevels": -8.844702644094836,
+        "p95WorstFanAbsoluteErrorLevels": 11.771841966916242,
+        "bothWithin2LevelsFraction": 0.0,
+        "eitherFanUnderByAtLeast5LevelsFraction": 1.0,
+        "eitherFanUnderByAtLeast10LevelsFraction": 0.5164319248826291,
+        "meanWorstFanUnderLevels": 9.604693857861804
+      },
+      "families": {
+        "constant": {
+          "parameters": {},
+          "innerTrials": [
+            {
+              "parameters": {},
+              "innerHeldOutScores": [
+                6.935849209056768,
+                3.645380329065914
+              ],
+              "macroScore": 5.2906147690613405
+            }
+          ],
+          "all": {
+            "samples": 1768,
+            "cpuMaeLevels": 5.6450380694812665,
+            "gpuMaeLevels": 4.513511117048445,
+            "meanBothMaeLevels": 5.079274593264855,
+            "meanBothSignedErrorLevels": -2.392637580688742,
+            "p95WorstFanAbsoluteErrorLevels": 20.536894223690673,
+            "bothWithin2LevelsFraction": 0.2680995475113122,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.37047511312217196,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.13687782805429866,
+            "meanWorstFanUnderLevels": 4.274789590519149
+          },
+          "highFanRegime": {
+            "samples": 213,
+            "cpuMaeLevels": 19.4852510312024,
+            "gpuMaeLevels": 16.479851207268094,
+            "meanBothMaeLevels": 17.98255111923525,
+            "meanBothSignedErrorLevels": -17.98255111923525,
+            "p95WorstFanAbsoluteErrorLevels": 21.536894223690673,
+            "bothWithin2LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast5LevelsFraction": 1.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 1.0,
+            "meanWorstFanUnderLevels": 19.4852510312024
+          },
+          "model": {
+            "family": "constant",
+            "parameters": {},
+            "trainingSessions": [
+              "v10",
+              "v11"
+            ],
+            "mean": [
+              25.463105776309327,
+              22.914514989915
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 1763,
+            "cpuMaeLevels": 5.650091762882208,
+            "gpuMaeLevels": 4.5157771298877325,
+            "meanBothMaeLevels": 5.082934446384971,
+            "meanBothSignedErrorLevels": -2.4101686299337812,
+            "p95WorstFanAbsoluteErrorLevels": 20.536894223690673,
+            "bothWithin2LevelsFraction": 0.2688598979013046,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.37152580828133863,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.13726602382302894,
+            "meanWorstFanUnderLevels": 4.286913213861518
+          }
+        },
+        "cpu_gpu_linear": {
+          "parameters": {
+            "alpha": 0.001
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "alpha": 0.001
+              },
+              "innerHeldOutScores": [
+                4.105892332547723,
+                2.2484270770172476
+              ],
+              "macroScore": 3.1771597047824853
+            },
+            {
+              "parameters": {
+                "alpha": 0.01
+              },
+              "innerHeldOutScores": [
+                4.085556653502161,
+                2.268836187000492
+              ],
+              "macroScore": 3.1771964202513265
+            },
+            {
+              "parameters": {
+                "alpha": 0.1
+              },
+              "innerHeldOutScores": [
+                4.026151187798674,
+                2.4496557859182198
+              ],
+              "macroScore": 3.237903486858447
+            },
+            {
+              "parameters": {
+                "alpha": 1.0
+              },
+              "innerHeldOutScores": [
+                5.157243991548329,
+                2.915095603934864
+              ],
+              "macroScore": 4.0361697977415965
+            }
+          ],
+          "all": {
+            "samples": 1768,
+            "cpuMaeLevels": 3.8494962565345343,
+            "gpuMaeLevels": 3.1614997326915226,
+            "meanBothMaeLevels": 3.505497994613028,
+            "meanBothSignedErrorLevels": -1.812989823925345,
+            "p95WorstFanAbsoluteErrorLevels": 11.002465961260647,
+            "bothWithin2LevelsFraction": 0.29411764705882354,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.25904977375565613,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.0831447963800905,
+            "meanWorstFanUnderLevels": 3.0745306418118594
+          },
+          "highFanRegime": {
+            "samples": 213,
+            "cpuMaeLevels": 11.123388866337498,
+            "gpuMaeLevels": 9.634072424368908,
+            "meanBothMaeLevels": 10.378730645353203,
+            "meanBothSignedErrorLevels": -10.378730645353203,
+            "p95WorstFanAbsoluteErrorLevels": 19.684017830072758,
+            "bothWithin2LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.9154929577464789,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.6197183098591549,
+            "meanWorstFanUnderLevels": 11.198274224216686
+          },
+          "model": {
+            "family": "cpu_gpu_linear",
+            "parameters": {
+              "alpha": 0.001
+            },
+            "trainingSessions": [
+              "v10",
+              "v11"
+            ],
+            "center": [
+              55.36945546717413,
+              42.57790476361475
+            ],
+            "scale": [
+              17.551003678395023,
+              11.004578460097262
+            ],
+            "coefficients": [
+              [
+                -0.7416710977451068,
+                -0.5834088416870141
+              ],
+              [
+                3.616484380760938,
+                2.9518469320021414
+              ]
+            ],
+            "intercept": [
+              25.463105776309327,
+              22.914514989915
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 1763,
+            "cpuMaeLevels": 3.854273821276123,
+            "gpuMaeLevels": 3.1639013098994297,
+            "meanBothMaeLevels": 3.5090875655877767,
+            "meanBothSignedErrorLevels": -1.8244838826117946,
+            "p95WorstFanAbsoluteErrorLevels": 11.002465961260647,
+            "bothWithin2LevelsFraction": 0.2949517867271696,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.2597844583096994,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.08338060124787294,
+            "meanWorstFanUnderLevels": 3.083250240909454
+          }
+        },
+        "thermal_linear": {
+          "parameters": {
+            "alpha": 0.1
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "alpha": 0.001
+              },
+              "innerHeldOutScores": [
+                5.519120912594387,
+                2.2456729303432232
+              ],
+              "macroScore": 3.882396921468805
+            },
+            {
+              "parameters": {
+                "alpha": 0.01
+              },
+              "innerHeldOutScores": [
+                4.875863163640427,
+                2.2293657570970336
+              ],
+              "macroScore": 3.5526144603687304
+            },
+            {
+              "parameters": {
+                "alpha": 0.1
+              },
+              "innerHeldOutScores": [
+                3.928476802188338,
+                2.5473500663212967
+              ],
+              "macroScore": 3.2379134342548173
+            },
+            {
+              "parameters": {
+                "alpha": 1.0
+              },
+              "innerHeldOutScores": [
+                5.126219220211368,
+                2.9859188958471843
+              ],
+              "macroScore": 4.056069058029276
+            }
+          ],
+          "all": {
+            "samples": 1768,
+            "cpuMaeLevels": 3.5145615872156086,
+            "gpuMaeLevels": 2.8886693130274836,
+            "meanBothMaeLevels": 3.201615450121546,
+            "meanBothSignedErrorLevels": -1.4611033322760472,
+            "p95WorstFanAbsoluteErrorLevels": 12.241217077883846,
+            "bothWithin2LevelsFraction": 0.3585972850678733,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.17986425339366516,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.10916289592760181,
+            "meanWorstFanUnderLevels": 2.6939060739307776
+          },
+          "highFanRegime": {
+            "samples": 213,
+            "cpuMaeLevels": 11.905153857977876,
+            "gpuMaeLevels": 10.282639575138715,
+            "meanBothMaeLevels": 11.093896716558298,
+            "meanBothSignedErrorLevels": -11.093896716558298,
+            "p95WorstFanAbsoluteErrorLevels": 18.237768758725277,
+            "bothWithin2LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.9765258215962441,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.8450704225352113,
+            "meanWorstFanUnderLevels": 11.958651764724888
+          },
+          "model": {
+            "family": "thermal_linear",
+            "parameters": {
+              "alpha": 0.1
+            },
+            "trainingSessions": [
+              "v10",
+              "v11"
+            ],
+            "center": [
+              55.369455467174255,
+              42.577904763614754,
+              55.51020295788212,
+              45.43030542438018
+            ],
+            "scale": [
+              17.55100367839502,
+              11.004578460097274,
+              15.525013441164441,
+              7.134191247156976
+            ],
+            "coefficients": [
+              [
+                -1.2751406793506506,
+                -1.020334615614933
+              ],
+              [
+                1.2223452858222275,
+                1.0424354199569605
+              ],
+              [
+                -0.41441914758171033,
+                -0.28119663161843805
+              ],
+              [
+                3.1359390629403787,
+                2.4667944007145466
+              ]
+            ],
+            "intercept": [
+              25.463105776309327,
+              22.914514989915
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 1763,
+            "cpuMaeLevels": 3.5197099808688956,
+            "gpuMaeLevels": 2.891363051627511,
+            "meanBothMaeLevels": 3.2055365162482032,
+            "meanBothSignedErrorLevels": -1.4704060857251071,
+            "p95WorstFanAbsoluteErrorLevels": 12.2460336153745,
+            "bothWithin2LevelsFraction": 0.35904707884288145,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.18037436188315373,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.10947249007373795,
+            "meanWorstFanUnderLevels": 2.7015461932555955
+          }
+        },
+        "thermal_history_linear": {
+          "parameters": {
+            "alpha": 0.1
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "alpha": 0.001
+              },
+              "innerHeldOutScores": [
+                4.470589563032108,
+                2.882136423430416
+              ],
+              "macroScore": 3.6763629932312623
+            },
+            {
+              "parameters": {
+                "alpha": 0.01
+              },
+              "innerHeldOutScores": [
+                3.274153529337207,
+                2.2604702879932907
+              ],
+              "macroScore": 2.767311908665249
+            },
+            {
+              "parameters": {
+                "alpha": 0.1
+              },
+              "innerHeldOutScores": [
+                2.752901341914648,
+                1.9199087202435874
+              ],
+              "macroScore": 2.336405031079118
+            },
+            {
+              "parameters": {
+                "alpha": 1.0
+              },
+              "innerHeldOutScores": [
+                3.9199546936746117,
+                2.2740750058030774
+              ],
+              "macroScore": 3.0970148497388443
+            }
+          ],
+          "all": {
+            "samples": 1768,
+            "cpuMaeLevels": 2.483753625387399,
+            "gpuMaeLevels": 2.002384774843347,
+            "meanBothMaeLevels": 2.2430692001153734,
+            "meanBothSignedErrorLevels": -1.6604792143063916,
+            "p95WorstFanAbsoluteErrorLevels": 10.218110786610426,
+            "bothWithin2LevelsFraction": 0.5627828054298643,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.13631221719457012,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.06221719457013575,
+            "meanWorstFanUnderLevels": 2.3189022864503164
+          },
+          "highFanRegime": {
+            "samples": 213,
+            "cpuMaeLevels": 9.552153398919518,
+            "gpuMaeLevels": 8.137251889270148,
+            "meanBothMaeLevels": 8.844702644094836,
+            "meanBothSignedErrorLevels": -8.844702644094836,
+            "p95WorstFanAbsoluteErrorLevels": 11.771841966916242,
+            "bothWithin2LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast5LevelsFraction": 1.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.5164319248826291,
+            "meanWorstFanUnderLevels": 9.604693857861804
+          },
+          "model": {
+            "family": "thermal_history_linear",
+            "parameters": {
+              "alpha": 0.1
+            },
+            "trainingSessions": [
+              "v10",
+              "v11"
+            ],
+            "center": [
+              55.369455467174255,
+              42.577904763614754,
+              55.51020295788212,
+              45.43030542438018,
+              55.44568776733607,
+              42.523663308707775,
+              56.0873127043505,
+              45.61682827446476,
+              57.918563019702546,
+              43.361174552064554,
+              59.86125744654737,
+              46.824182548008,
+              81.41590953979842,
+              46.76837903027908,
+              67.16545885479324,
+              49.93973659167219,
+              -0.0762323001618644,
+              0.054241454907052886,
+              -0.5771097464683149,
+              -0.18652285008465766
+            ],
+            "scale": [
+              17.55100367839502,
+              11.004578460097274,
+              15.525013441164441,
+              7.134191247156976,
+              13.953084265406472,
+              10.147419532881967,
+              13.78789472025785,
+              6.808656828947402,
+              12.595009174972935,
+              9.39889537147859,
+              13.68101992319985,
+              6.528198176905142,
+              14.057167197873087,
+              13.312752739415965,
+              19.719172734406598,
+              7.687211796074385,
+              10.926208426404338,
+              3.7965462713090132,
+              8.817173731874709,
+              2.443874555020752
+            ],
+            "coefficients": [
+              [
+                -0.04723420350993926,
+                -0.008815816031566786
+              ],
+              [
+                0.16034027837908743,
+                0.22201335078498996
+              ],
+              [
+                0.024933762003473473,
+                0.0640760573818601
+              ],
+              [
+                0.5411921507854307,
+                0.3208303410926594
+              ],
+              [
+                -0.23889569970710445,
+                -0.15580210514874848
+              ],
+              [
+                0.23565191174010106,
+                0.3574531473013723
+              ],
+              [
+                -0.085184986517391,
+                -0.045219849253646464
+              ],
+              [
+                0.7588265577115939,
+                0.499111000866719
+              ],
+              [
+                -0.6354549659607485,
+                -0.40316758069158803
+              ],
+              [
+                0.629757680052915,
+                0.44755873198218
+              ],
+              [
+                0.2255185060323357,
+                0.10508461436346203
+              ],
+              [
+                1.4234455896373492,
+                1.077212655091279
+              ],
+              [
+                -0.5316381524157557,
+                -0.35705125272239896
+              ],
+              [
+                0.7530020476517354,
+                0.6711466194345758
+              ],
+              [
+                -0.2482953423517318,
+                -0.274732836824494
+              ],
+              [
+                0.85624289322079,
+                0.6698805626057087
+              ],
+              [
+                0.22920340262368227,
+                0.1848027607994929
+              ],
+              [
+                -0.16509258510891497,
+                -0.3118791729371805
+              ],
+              [
+                0.1771110180630838,
+                0.1835359290965803
+              ],
+              [
+                -0.5342423637513753,
+                -0.4539555890580107
+              ]
+            ],
+            "intercept": [
+              25.463105776309327,
+              22.914514989915
+            ]
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 1763,
+            "cpuMaeLevels": 2.4894764899553596,
+            "gpuMaeLevels": 2.0058250426307316,
+            "meanBothMaeLevels": 2.247650766293046,
+            "meanBothSignedErrorLevels": -1.6664202437508333,
+            "p95WorstFanAbsoluteErrorLevels": 10.218155843337668,
+            "bothWithin2LevelsFraction": 0.5615428247305729,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.1366988088485536,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.06239364719228588,
+            "meanWorstFanUnderLevels": 2.3249307070072813
+          }
+        },
+        "thermal_tree": {
+          "parameters": {
+            "depth": 5,
+            "leaf": 80
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "depth": 3,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                6.2721596492686675,
+                2.970895469917348
+              ],
+              "macroScore": 4.621527559593008
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                6.401713280655534,
+                3.6261862787440973
+              ],
+              "macroScore": 5.013949779699816
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 80
+              },
+              "innerHeldOutScores": [
+                5.749432457030399,
+                2.861656689417871
+              ],
+              "macroScore": 4.305544573224135
+            }
+          ],
+          "all": {
+            "samples": 1768,
+            "cpuMaeLevels": 3.5968059838666715,
+            "gpuMaeLevels": 3.1311777525495468,
+            "meanBothMaeLevels": 3.363991868208109,
+            "meanBothSignedErrorLevels": -1.1329806740381485,
+            "p95WorstFanAbsoluteErrorLevels": 11.660377358490642,
+            "bothWithin2LevelsFraction": 0.4451357466063348,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.2166289592760181,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.11255656108597285,
+            "meanWorstFanUnderLevels": 2.5511158760765746
+          },
+          "highFanRegime": {
+            "samples": 213,
+            "cpuMaeLevels": 10.959224916171914,
+            "gpuMaeLevels": 9.392768628408803,
+            "meanBothMaeLevels": 10.17599677229036,
+            "meanBothSignedErrorLevels": -10.17599677229036,
+            "p95WorstFanAbsoluteErrorLevels": 17.25753588516751,
+            "bothWithin2LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.8497652582159625,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.8450704225352113,
+            "meanWorstFanUnderLevels": 11.021256990959417
+          },
+          "model": {
+            "family": "thermal_tree",
+            "parameters": {
+              "depth": 5,
+              "leaf": 80
+            },
+            "trainingSessions": [
+              "v10",
+              "v11"
+            ],
+            "tree": {
+              "childrenLeft": [
+                1,
+                2,
+                3,
+                -1,
+                5,
+                -1,
+                -1,
+                8,
+                9,
+                -1,
+                11,
+                -1,
+                -1,
+                -1,
+                15,
+                16,
+                17,
+                18,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                14,
+                7,
+                4,
+                -1,
+                6,
+                -1,
+                -1,
+                13,
+                10,
+                -1,
+                12,
+                -1,
+                -1,
+                -1,
+                22,
+                21,
+                20,
+                19,
+                -1,
+                -1,
+                -1,
+                -1,
+                -1
+              ],
+              "feature": [
+                1,
+                1,
+                3,
+                -2,
+                2,
+                -2,
+                -2,
+                0,
+                1,
+                -2,
+                0,
+                -2,
+                -2,
+                -2,
+                3,
+                0,
+                3,
+                0,
+                -2,
+                -2,
+                -2,
+                -2,
+                -2
+              ],
+              "threshold": [
+                41.5,
+                36.5,
+                38.5,
+                -2.0,
+                45.04999923706055,
+                -2.0,
+                -2.0,
+                50.5,
+                38.5,
+                -2.0,
+                46.5,
+                -2.0,
+                -2.0,
+                -2.0,
+                58.5,
+                75.5,
+                51.5,
+                53.5,
+                -2.0,
+                -2.0,
+                -2.0,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                [
+                  25.463105776309657,
+                  22.914514989915297
+                ],
+                [
+                  23.430531434525875,
+                  21.249854521997634
+                ],
+                [
+                  22.333503380737522,
+                  20.355652752049963
+                ],
+                [
+                  21.626499111378525,
+                  19.629088008508326
+                ],
+                [
+                  22.634784423638916,
+                  20.665269246824565
+                ],
+                [
+                  22.363079005105703,
+                  20.35742992474725
+                ],
+                [
+                  23.012558444520444,
+                  21.093283156574245
+                ],
+                [
+                  24.7152098013388,
+                  22.29701249161435
+                ],
+                [
+                  25.36079554394697,
+                  22.831381187651466
+                ],
+                [
+                  24.47575916401872,
+                  22.338143282995336
+                ],
+                [
+                  25.913125696353937,
+                  23.13919923132746
+                ],
+                [
+                  25.549984596426324,
+                  22.983190850277225
+                ],
+                [
+                  26.32406580237493,
+                  23.315742455605157
+                ],
+                [
+                  22.452483896585168,
+                  20.424093355686892
+                ],
+                [
+                  29.469215381195855,
+                  26.195483440764686
+                ],
+                [
+                  28.245775003491755,
+                  25.16862382758368
+                ],
+                [
+                  29.181976125930607,
+                  25.92144322794207
+                ],
+                [
+                  28.047841593899907,
+                  25.156125266935653
+                ],
+                [
+                  29.142464114832467,
+                  25.920198222829743
+                ],
+                [
+                  25.976197406293416,
+                  23.710067591604393
+                ],
+                [
+                  31.482525570952237,
+                  27.473862064273177
+                ],
+                [
+                  25.869973394146704,
+                  23.258190801976426
+                ],
+                [
+                  35.33962264150936,
+                  31.122641509433915
+                ]
+              ]
+            }
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 1763,
+            "cpuMaeLevels": 3.6048426457463116,
+            "gpuMaeLevels": 3.136775449168385,
+            "meanBothMaeLevels": 3.370809047457348,
+            "meanBothSignedErrorLevels": -1.1389172456177423,
+            "p95WorstFanAbsoluteErrorLevels": 11.660377358490642,
+            "bothWithin2LevelsFraction": 0.443562110039705,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.21724333522404993,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.1128757799205899,
+            "meanWorstFanUnderLevels": 2.5583510317092366
+          }
+        },
+        "thermal_history_tree": {
+          "parameters": {
+            "depth": 5,
+            "leaf": 80
+          },
+          "innerTrials": [
+            {
+              "parameters": {
+                "depth": 3,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                5.4559839025883665,
+                2.6211447837053683
+              ],
+              "macroScore": 4.038564343146867
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 30
+              },
+              "innerHeldOutScores": [
+                5.492965656156452,
+                2.435108772512413
+              ],
+              "macroScore": 3.9640372143344322
+            },
+            {
+              "parameters": {
+                "depth": 5,
+                "leaf": 80
+              },
+              "innerHeldOutScores": [
+                5.494044478139726,
+                2.167624000821391
+              ],
+              "macroScore": 3.8308342394805583
+            }
+          ],
+          "all": {
+            "samples": 1768,
+            "cpuMaeLevels": 2.426150468773284,
+            "gpuMaeLevels": 2.2059960787914727,
+            "meanBothMaeLevels": 2.316073273782379,
+            "meanBothSignedErrorLevels": -0.891517998643334,
+            "p95WorstFanAbsoluteErrorLevels": 8.787500000000023,
+            "bothWithin2LevelsFraction": 0.584841628959276,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.12047511312217195,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.007352941176470588,
+            "meanWorstFanUnderLevels": 1.8370115741954434
+          },
+          "highFanRegime": {
+            "samples": 213,
+            "cpuMaeLevels": 8.282920617386296,
+            "gpuMaeLevels": 6.935266500966652,
+            "meanBothMaeLevels": 7.609093559176474,
+            "meanBothSignedErrorLevels": -7.609093559176474,
+            "p95WorstFanAbsoluteErrorLevels": 13.18954248366029,
+            "bothWithin2LevelsFraction": 0.0,
+            "eitherFanUnderByAtLeast5LevelsFraction": 1.0,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.06103286384976526,
+            "meanWorstFanUnderLevels": 8.473352971861718
+          },
+          "model": {
+            "family": "thermal_history_tree",
+            "parameters": {
+              "depth": 5,
+              "leaf": 80
+            },
+            "trainingSessions": [
+              "v10",
+              "v11"
+            ],
+            "tree": {
+              "childrenLeft": [
+                1,
+                2,
+                3,
+                4,
+                -1,
+                6,
+                -1,
+                -1,
+                -1,
+                10,
+                11,
+                12,
+                -1,
+                -1,
+                -1,
+                16,
+                -1,
+                -1,
+                19,
+                -1,
+                -1
+              ],
+              "childrenRight": [
+                18,
+                9,
+                8,
+                5,
+                -1,
+                7,
+                -1,
+                -1,
+                -1,
+                15,
+                14,
+                13,
+                -1,
+                -1,
+                -1,
+                17,
+                -1,
+                -1,
+                20,
+                -1,
+                -1
+              ],
+              "feature": [
+                15,
+                9,
+                17,
+                8,
+                -2,
+                18,
+                -2,
+                -2,
+                -2,
+                9,
+                8,
+                6,
+                -2,
+                -2,
+                -2,
+                8,
+                -2,
+                -2,
+                11,
+                -2,
+                -2
+              ],
+              "threshold": [
+                58.5,
+                39.51323318481445,
+                1.8955520391464233,
+                43.11049842834473,
+                -2.0,
+                -0.010780459735542536,
+                -2.0,
+                -2.0,
+                -2.0,
+                44.737104415893555,
+                59.57909393310547,
+                49.167266845703125,
+                -2.0,
+                -2.0,
+                -2.0,
+                67.23880004882812,
+                -2.0,
+                -2.0,
+                59.581830978393555,
+                -2.0,
+                -2.0
+              ],
+              "value": [
+                [
+                  25.463105776309657,
+                  22.914514989915297
+                ],
+                [
+                  24.11715702921604,
+                  21.852419567849683
+                ],
+                [
+                  21.781960914299606,
+                  19.825206826806753
+                ],
+                [
+                  21.51504331394629,
+                  19.567355436125233
+                ],
+                [
+                  21.855670103092752,
+                  19.83505154639171
+                ],
+                [
+                  21.457180179145556,
+                  19.521881220333807
+                ],
+                [
+                  21.457149075377615,
+                  19.473288309427087
+                ],
+                [
+                  21.457253990542082,
+                  19.63719556480891
+                ],
+                [
+                  23.057462278164312,
+                  21.057384098194024
+                ],
+                [
+                  26.51961862342536,
+                  23.93802630663218
+                ],
+                [
+                  25.64663070884439,
+                  23.488610656689247
+                ],
+                [
+                  25.7475049980331,
+                  23.601963885699657
+                ],
+                [
+                  25.561294008426774,
+                  23.621266871384602
+                ],
+                [
+                  25.98657718120799,
+                  23.577181208053624
+                ],
+                [
+                  25.439539790334248,
+                  23.255900969209463
+                ],
+                [
+                  28.1023070974815,
+                  24.75279700087118
+                ],
+                [
+                  32.43749999999996,
+                  27.53749999999998
+                ],
+                [
+                  26.360687677510526,
+                  23.634071045374053
+                ],
+                [
+                  34.665236051501964,
+                  30.175965665236017
+                ],
+                [
+                  32.81045751633971,
+                  28.058823529411683
+                ],
+                [
+                  38.21249999999998,
+                  34.22499999999994
+                ]
+              ]
+            }
+          },
+          "onOriginalSeedAvailableTargets": {
+            "samples": 1763,
+            "cpuMaeLevels": 2.4315889295415247,
+            "gpuMaeLevels": 2.2106009532665327,
+            "meanBothMaeLevels": 2.321094941404029,
+            "meanBothSignedErrorLevels": -0.8944639509301145,
+            "p95WorstFanAbsoluteErrorLevels": 8.787500000000023,
+            "bothWithin2LevelsFraction": 0.5836642087351106,
+            "eitherFanUnderByAtLeast5LevelsFraction": 0.12081678956324447,
+            "eitherFanUnderByAtLeast10LevelsFraction": 0.00737379466817924,
+            "meanWorstFanUnderLevels": 1.8410921274611338
+          }
+        }
+      },
+      "originalSeed": {
+        "usablePredictions": 1763,
+        "sameCausalTargetCount": 1768,
+        "metricsOnAvailablePredictions": {
+          "samples": 1763,
+          "cpuMaeLevels": 3.4364719228587637,
+          "gpuMaeLevels": 2.7705615428247308,
+          "meanBothMaeLevels": 3.1035167328417472,
+          "meanBothSignedErrorLevels": -2.828417470221214,
+          "p95WorstFanAbsoluteErrorLevels": 13.5,
+          "bothWithin2LevelsFraction": 0.579126488939308,
+          "eitherFanUnderByAtLeast5LevelsFraction": 0.3204764605785593,
+          "eitherFanUnderByAtLeast10LevelsFraction": 0.11514463981849121,
+          "meanWorstFanUnderLevels": 3.4517867271695972
+        },
+        "definition": "Midpoints of original ranges at the same causal feature snapshot; Unknown abstains."
+      }
+    }
+  ],
+  "descriptiveFamilyMacroMetrics": {
+    "constant": {
+      "cpuMaeLevels": 4.740573396078738,
+      "gpuMaeLevels": 3.767921613850399,
+      "meanBothMaeLevels": 4.254247504964568,
+      "meanBothSignedErrorLevels": -8.585724723767877e-15,
+      "p95WorstFanAbsoluteErrorLevels": 13.5218579234973,
+      "bothWithin2LevelsFraction": 0.33629361818589315,
+      "eitherFanUnderByAtLeast5LevelsFraction": 0.23302072956573308,
+      "eitherFanUnderByAtLeast10LevelsFraction": 0.07264310223204624,
+      "meanWorstFanUnderLevels": 2.4504052265983653
+    },
+    "cpu_gpu_linear": {
+      "cpuMaeLevels": 3.681510424603642,
+      "gpuMaeLevels": 3.0273512661051214,
+      "meanBothMaeLevels": 3.3544308453543814,
+      "meanBothSignedErrorLevels": 0.6618555395020469,
+      "p95WorstFanAbsoluteErrorLevels": 10.293373461146595,
+      "bothWithin2LevelsFraction": 0.352986476163853,
+      "eitherFanUnderByAtLeast5LevelsFraction": 0.13235211516572254,
+      "eitherFanUnderByAtLeast10LevelsFraction": 0.031000802882447106,
+      "meanWorstFanUnderLevels": 1.5869630015797533
+    },
+    "thermal_linear": {
+      "cpuMaeLevels": 3.1928311984160076,
+      "gpuMaeLevels": 2.6626660128220507,
+      "meanBothMaeLevels": 2.9277486056190294,
+      "meanBothSignedErrorLevels": 0.32418709030161796,
+      "p95WorstFanAbsoluteErrorLevels": 9.552313276423456,
+      "bothWithin2LevelsFraction": 0.4032864209782103,
+      "eitherFanUnderByAtLeast5LevelsFraction": 0.09609932944447473,
+      "eitherFanUnderByAtLeast10LevelsFraction": 0.03711782547714511,
+      "meanWorstFanUnderLevels": 1.5187374063426773
+    },
+    "thermal_history_linear": {
+      "cpuMaeLevels": 2.618029554092294,
+      "gpuMaeLevels": 2.1480966534320225,
+      "meanBothMaeLevels": 2.383063103762159,
+      "meanBothSignedErrorLevels": 0.6227773637988109,
+      "p95WorstFanAbsoluteErrorLevels": 9.236641367849165,
+      "bothWithin2LevelsFraction": 0.5632568791777468,
+      "eitherFanUnderByAtLeast5LevelsFraction": 0.047993082985995805,
+      "eitherFanUnderByAtLeast10LevelsFraction": 0.020739064856711915,
+      "meanWorstFanUnderLevels": 1.0810168590023592
+    },
+    "thermal_tree": {
+      "cpuMaeLevels": 3.510861875911027,
+      "gpuMaeLevels": 2.95927683708619,
+      "meanBothMaeLevels": 3.235069356498608,
+      "meanBothSignedErrorLevels": 0.08282114956668234,
+      "p95WorstFanAbsoluteErrorLevels": 9.36007678433262,
+      "bothWithin2LevelsFraction": 0.39607278674008467,
+      "eitherFanUnderByAtLeast5LevelsFraction": 0.12660906893720503,
+      "eitherFanUnderByAtLeast10LevelsFraction": 0.042995304954908074,
+      "meanWorstFanUnderLevels": 1.7932726457541577
+    },
+    "thermal_history_tree": {
+      "cpuMaeLevels": 2.505430319047517,
+      "gpuMaeLevels": 2.1932548676424672,
+      "meanBothMaeLevels": 2.3493425933449923,
+      "meanBothSignedErrorLevels": 0.49701898021312996,
+      "p95WorstFanAbsoluteErrorLevels": 8.277380209009245,
+      "bothWithin2LevelsFraction": 0.57513163338877,
+      "eitherFanUnderByAtLeast5LevelsFraction": 0.06279436958033698,
+      "eitherFanUnderByAtLeast10LevelsFraction": 0.0024509803921568627,
+      "meanWorstFanUnderLevels": 1.1043801145177696
+    }
+  },
+  "nestedSelectedMacroMetrics": {
+    "cpuMaeLevels": 2.724482885787902,
+    "gpuMaeLevels": 2.251450009895511,
+    "meanBothMaeLevels": 2.4879664478417065,
+    "meanBothSignedErrorLevels": 0.19043474139700142,
+    "p95WorstFanAbsoluteErrorLevels": 9.458435633636919,
+    "bothWithin2LevelsFraction": 0.5341897911535188,
+    "eitherFanUnderByAtLeast5LevelsFraction": 0.08158198404477639,
+    "eitherFanUnderByAtLeast10LevelsFraction": 0.021469258357989754,
+    "meanWorstFanUnderLevels": 1.3767092527805993
+  },
+  "inputHashes": {
+    "v10": "508cfb15e1312c43314fb2668d73a6cbf9eb705915aa48499d53e897f94c00c4",
+    "v11": "9a1faa4117dccb0ef66592353589a52945716a78eb43d79299554ce75c9addfe",
+    "live-20261008": "aee12beaece8f07603313b785402d47d428175481f0f531c5fd006ea95608d93"
+  },
+  "versions": {
+    "numpy": "2.3.5",
+    "scikitLearn": "1.8.0"
+  }
+}

@@ -29,6 +29,12 @@ jobs:
           dotnet run --no-build -c Release --project tools/OemShadow -- --replay tools/OemShadow/fixtures/v11.jsonl.gz artifacts/oem-v11
           dotnet run --no-build -c Release --project tools/OemShadow -- --replay tools/OemShadow/fixtures/live-20261008.jsonl.gz artifacts/oem-live
           python scripts/check-oem-shadow-replay.py tools/OemShadow/fixtures artifacts/oem-v10 artifacts/oem-v11 artifacts/oem-live
+      - name: Offline nested model comparison and independent reconciliation
+        run: |
+          python -m pip install --disable-pip-version-check -r scripts/oem-shadow-research-requirements.txt
+          python scripts/evaluate-oem-shadow-models.py --self-test
+          python scripts/evaluate-oem-shadow-models.py --fixtures tools/OemShadow/fixtures --baseline-root artifacts --output artifacts/oem-model-comparison
+          python scripts/check-oem-shadow-models.py tools/OemShadow/fixtures artifacts/oem-model-comparison
       - if: runner.os == 'Windows'
         run: |
           dotnet build tools/OemShadowCapture/OemShadowCapture.csproj -c Release
@@ -52,3 +58,4 @@ jobs:
             artifacts/oem-*/summary.json
             artifacts/oem-shadow-win/**
             artifacts/Start-OemShadow.ps1
+            artifacts/oem-model-comparison/**

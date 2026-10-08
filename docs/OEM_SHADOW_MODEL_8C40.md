@@ -3,6 +3,8 @@
 Historical reconstruction report. For the subsequent physical capture, corrected
 observed-state classification and schema 2 accounting, see
 [the 2026-10-08 correction](OEM_SHADOW_CLASSIFICATION_2026-10-08.md).
+The subsequent [session-separated model comparison](OEM_SHADOW_MODEL_COMPARISON_2026-10-08.md)
+compares thermal and history hypotheses, including exploratory DTT1/DTT2 inputs.
 The original branch was published as `4c8049c1e74837a23896f300c885e1872fc85457`;
 its Windows and Ubuntu OEM workflow passed (Actions run `37697933954`). The
 pending-publication statements below describe the original preparation stage.
