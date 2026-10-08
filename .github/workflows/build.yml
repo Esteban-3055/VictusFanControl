@@ -874,7 +874,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: product-gui-renders-${{ github.sha }}
-          path: logs/product-gui-self-test/*.png
+          path: |
+            logs/product-gui-self-test/*.png
+            logs/platform-physical-self-test/*.png
           if-no-files-found: error
 
   acpi-field-probe:

@@ -43,6 +43,7 @@ jobs:
           python scripts/check-platform-thermal-replay.py tools/OemShadow/fixtures tools/PlatformThermalReplay/fixtures artifacts/platform-thermal --compress
           dotnet run --no-build -c Release --project tools/PlatformThermalReplay -- --physical-fixture artifacts/platform-physical-fixture
           python scripts/check-platform-physical-experiment.py artifacts/platform-physical-fixture
+          python scripts/test-platform-physical-audit.py artifacts/platform-physical-fixture
       - if: runner.os == 'Windows'
         run: |
           dotnet build tools/OemShadowCapture/OemShadowCapture.csproj -c Release

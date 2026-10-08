@@ -26,7 +26,7 @@ internal sealed class PlatformThermalExperimentForm : Form
     private ProductRuntime? _runtime;
     private PhysicalPlatformExperiment? _experiment;
     private Task? _run;
-    private bool _starting,_closing,_disposed;
+    private bool _starting,_closing,_disposed,_wakeRequested;
     private volatile bool _finished;
     private IntPtr _displayRegistration,_suspendRegistration;
     private const int PowerBroadcast=0x218;
@@ -39,7 +39,7 @@ internal sealed class PlatformThermalExperimentForm : Form
     internal PlatformThermalExperimentForm(string modules,string output)
     {
         _modules=modules;_output=Path.GetFullPath(output);
-        Text="VictusFanControl · curva experimental física";ClientSize=new(810,480);MinimumSize=new(700,440);StartPosition=FormStartPosition.CenterScreen;
+        Text="VictusFanControl · curva experimental física";ClientSize=new(810,480);MinimumSize=new(700,440);StartPosition=FormStartPosition.CenterScreen;AutoScaleMode=AutoScaleMode.Dpi;
         var buttons=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=55,Padding=new Padding(10)};buttons.Controls.AddRange([_start,_stop]);Controls.Add(_status);Controls.Add(buttons);
         _status.Text="Prueba AC: 2 min Firmware + cuatro bloques de 9 min (Actual / Experimental / Experimental / Actual) + 5 min Firmware.\n\nCada bloque: 2 min reposo, 4 min con la misma carga que tú iniciarás, 3 min enfriamiento. No se genera carga automáticamente.\n\nSe congelan tus ajustes guardados y se aplican los límites CPU/GPU mediante el Guardian existente. La candidata retiene ventilación durante el enfriamiento usando TZ01 y DTT3.\n\nCierra otras aplicaciones Victus y otros controladores de reloj GPU. Mantén el cargador conectado y la pantalla encendida. Al detener o finalizar se liberan ventiladores y límites.\n\nEvidencia: "+_output;
         _start.Click+=async(_,_)=>await StartAsync();_stop.Click+=(_,_)=>Stop("Detención solicitada por el usuario");
@@ -52,7 +52,7 @@ internal sealed class PlatformThermalExperimentForm : Form
             _disposed=true;Close();
         };
         FormClosed+=(_,_)=>{_timer.Dispose();if(_displayRegistration!=IntPtr.Zero)UnregisterPowerSettingNotification(_displayRegistration);
-            if(_suspendRegistration!=IntPtr.Zero)UnregisterSuspendResumeNotification(_suspendRegistration);_experiment?.Dispose();_cancel.Dispose();};
+            if(_suspendRegistration!=IntPtr.Zero)UnregisterSuspendResumeNotification(_suspendRegistration);ReleaseWakeRequest();_experiment?.Dispose();_cancel.Dispose();};
     }
     private void CheckEntry()
     {
@@ -83,6 +83,8 @@ internal sealed class PlatformThermalExperimentForm : Form
         try
         {
             CheckEntry();
+            if(SetThreadExecutionState(0x80000003)==0)throw new InvalidOperationException("No se pudo mantener la pantalla activa durante la prueba.");
+            _wakeRequested=true;
             if(!File.Exists(ProductProfilesStore.DefaultPath))throw new InvalidOperationException("Guarda primero tus perfiles en el GUI normal; esta prueba necesita una configuración real reproducible.");
             var profiles=ProductProfilesStore.Load(null,out var notice);
             if(notice is not null)throw new InvalidOperationException(notice);
@@ -99,7 +101,7 @@ internal sealed class PlatformThermalExperimentForm : Form
             _runtime.Start();_stop.Enabled=true;_clock.Start();_timer.Start();
             _run=Task.Run(()=>RunSequenceAsync(profiles));
         }
-        catch(Exception ex){_status.Text="No se pudo iniciar: "+ex.Message;Environment.ExitCode=173;await CleanupAsync(ex.Message);_finished=true;}
+        catch(Exception ex){AppLog.Write("Platform physical startup failed: "+ex);_status.Text="No se pudo iniciar: "+ex.Message;Environment.ExitCode=173;await CleanupAsync(ex.Message);ReleaseWakeRequest();_finished=true;}
         finally{_starting=false;}
     }
     private const string hashForMetadata="d6ed85d65ab17a22f813ef98207d6d537155ee2ded5976a21cb48413c9b92e5f";
@@ -164,13 +166,14 @@ internal sealed class PlatformThermalExperimentForm : Form
     private async Task CleanupAsync(string reason)
     {
         bool succeeded=true;string? failure=null;
+        _runtime?.FenceLifecycle("Fin del experimento: "+reason);
         if(_runtime is not null&&_experiment is not null)
         {
             try{ProductDiagnostics.Export(Path.Combine(_output,"gui-at-stop.zip"),_runtime.State,
                 ProductProfilesStore.Parse(File.ReadAllText(Path.Combine(_output,"profiles.json"))),AppLog.CurrentLogPath);}
             catch(Exception ex){_experiment.RecordHost("diagnostic-export-failed",new{message=ex.Message});}
         }
-        try{if(_runtime is not null){_runtime.FenceLifecycle("Fin del experimento: "+reason);await _runtime.DisposeAsync();}}
+        try{if(_runtime is not null){await _runtime.DisposeAsync();}}
         catch(Exception ex){succeeded=false;failure=ex.ToString();Environment.ExitCode=174;}
         finally{_experiment?.RecordHost("cleanup",new{succeeded,failure,reason,atUtc=DateTimeOffset.UtcNow});_experiment?.Complete(new{succeeded,failure,reason},
             succeeded&&_clock.Elapsed.TotalSeconds>=ExperimentProtocol.TotalSeconds&&reason=="Protocolo completado");}
@@ -190,8 +193,14 @@ internal sealed class PlatformThermalExperimentForm : Form
             $"Objetivo aceptado: {state?.AutomaticDecision?.EqualFanLevel} · autoridad {state?.FanAuthority}\n"+
             $"Telemetría: {state?.Runtime} · TZ01/DTT3: {(_experiment.Ready?"cualificados":"no disponibles")}\n\n"+
             (_experiment.Failure??state?.Failure??state?.Message)+"\n\nRepite la misma carga en los cuatro bloques y ciérrala al indicar Enfriamiento.\nEvidencia: "+_output;
-        if(_finished){_stop.Enabled=false;_timer.Stop();}
+        if(_finished){ReleaseWakeRequest();_stop.Enabled=false;_timer.Stop();}
     }
+    private void ReleaseWakeRequest()
+    {
+        // SetThreadExecutionState is thread-affine: both acquisition and release run on this form's UI thread.
+        if(!_wakeRequested)return;SetThreadExecutionState(0x80000000);_wakeRequested=false;
+    }
+    [DllImport("kernel32.dll",SetLastError=true)]private static extern uint SetThreadExecutionState(uint flags);
     protected override void WndProc(ref Message m)
     {
         if(m.Msg==PowerBroadcast&&(_starting||_run is not null)&&!_finished)

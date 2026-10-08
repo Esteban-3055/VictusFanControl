@@ -31,6 +31,14 @@ def baseline_raw(input, fan):
     return min(50,max(10,replay.interpolate(demand['curve'],max(terms),'input'),cpu_floor,gpu_floor))
 
 def audit(directory):
+    if (directory/'evidence-sha256.json').exists():
+        manifest=json.loads((directory/'evidence-sha256.json').read_text(encoding='utf-8-sig'))
+        for entry in manifest['files']:
+            path=(directory/entry['path']).resolve();assert path.is_relative_to(directory.resolve()),'Manifest traversal'
+            blob=path.read_bytes();assert len(blob)==entry['size'] and hashlib.sha256(blob).hexdigest()==entry['sha256'],'Evidence hash mismatch'
+    if (directory/'metadata.json').exists():
+        metadata=json.loads((directory/'metadata.json').read_text(encoding='utf-8-sig'))
+        assert hashlib.sha256((directory/'profiles.json').read_bytes()).hexdigest()==metadata['profilesSha256']
     trace=directory/'experiment.jsonl';data=trace.read_bytes();assert data.endswith(b'\n'),'Unfinished JSONL line'
     rows=[json.loads(line) for line in data.splitlines()];assert rows[0]['kind']=='session'
     summary=json.loads((directory/'summary.json').read_text(encoding='utf-8-sig'))
@@ -40,6 +48,13 @@ def audit(directory):
     telemetry={};previous=None;gaps=[];qual=0;decisions=[];dispatch=[];last_level=None;changes=0
     blocks=collections.defaultdict(lambda:dict(samples=0,decisions=0,cpu=[],gpu=[],loadSamples=0,aboveBaselineSamples=0,controller=None))
     closed=False
+    variants={};variant_last={}
+    for name in ('tz01','dtt3','both','both-retention','both-warmer-thresholds','both-colder-thresholds'):
+        tz_shift=5 if name=='both-warmer-thresholds' else -5 if name=='both-colder-thresholds' else 0
+        dtt_shift=3 if tz_shift>0 else -3 if tz_shift<0 else 0
+        shifted=dict(settings,tz01Curve=[dict(p,temperatureC=p['temperatureC']+tz_shift) for p in settings['tz01Curve']],
+                     dtt3Curve=[dict(p,temperatureC=p['temperatureC']+dtt_shift) for p in settings['dtt3Curve']])
+        variants[name]=(replay.Admission(name!='dtt3',name!='tz01',shifted),shifted)
     for row in rows:
         kind,d=row['kind'],row['data']
         if kind=='closed':closed=True
@@ -51,7 +66,7 @@ def audit(directory):
             previous=now;available=admission.evaluate(f);assert available==d['admission']['available'],'Source admission mismatch'
             qual+=available;telemetry[now]=d;b['samples']+=1
             for key,field in [('cpu','cpuControlTemperatureC'),('gpu','gpuTemperatureC')]:
-                if s[field] is not None:b[key].append(s[field])
+                if isinstance(s[field],(int,float)) and math.isfinite(s[field]):b[key].append(s[field])
             b['loadSamples']+=bool((s['cpuLoadPercent'] or 0)>=50 or (s['cpuPackagePowerW'] or 0)>=25 or (s['gpuPowerW'] or 0)>=35)
             if available:
                 tz=replay.interpolate(settings['tz01Curve'],f['Tz01']['Value']);dtt=replay.interpolate(settings['dtt3Curve'],f['Dtt3']['Value'])
@@ -59,7 +74,18 @@ def audit(directory):
         elif kind=='decision':
             now=stamp(d['timestamp']);t=telemetry[now];assert t['admission']['available'] and t['source']=='Ac'
             assert d['stage']['index']==t['stage']['index'] and d['stage']['custom'] and not closed
-            raw=baseline_raw(d['input'],fan);assert math.isclose(raw,d['baseline']['rawDemandLevel'],abs_tol=1e-9),'Baseline MAX changed'
+            snapshot=t['snapshot'];input=d['input'];cores=snapshot['cpuCoreTemperatures']
+            assert snapshot['isComplete'] and len(cores)==snapshot['cpuExpectedPhysicalCoreCount']==14
+            source=fan['tuning']['cpuTemperatureSource']
+            if isinstance(source,str):source={'PackageOrHottestCore':0,'CoreAverage':1,'PerformanceCoreAverage':2,'HottestPerformanceCoresAverage':3}[source]
+            raw_cpu=max(snapshot['cpuTemperatureC'],max(c['temperatureC'] for c in cores))
+            selected=[c['temperatureC'] for c in cores if source==1 or c['coreType']=='Performance']
+            if source==3:selected=sorted(selected,reverse=True)[:fan['tuning']['hottestPerformanceCoreCount']]
+            cpu=raw_cpu if source==0 else sum(selected)/len(selected)
+            assert math.isclose(input['cpuEffectiveTemperatureC'],cpu,abs_tol=1e-9) and input['cpuRawControlTemperatureC']==raw_cpu
+            for key in ('cpuPackagePowerW','cpuLoadPercent','gpuTemperatureC','gpuPowerW','gpuLoadPercent'):
+                assert input[key]==snapshot[key] and input[key] is not None and math.isfinite(input[key]),'Missing or changed policy input'
+            raw=baseline_raw(input,fan);assert math.isclose(raw,d['baseline']['rawDemandLevel'],abs_tol=1e-9),'Baseline MAX changed'
             extra=d['supplemental']
             if d['stage']['controller']=='baseline':assert extra is None
             else:
@@ -68,6 +94,26 @@ def audit(directory):
             a=d['active'];b=d['baseline'];assert 10<=a['equalFanLevel']<=50 and a['thermalOverride']==b['thermalOverride']
             assert math.isclose(a['rawDemandLevel'],max(raw,extra or 0),abs_tol=1e-9),'Supplement MAX mismatch'
             assert {v['name'] for v in d['comparisons']}=={'tz01','dtt3','both','both-retention','both-warmer-thresholds','both-colder-thresholds'}
+            f=frame_pascal(t['frame'])
+            for v in d['comparisons']:
+                name=v['name'];va,vs=variants[name];available=va.evaluate(f)
+                assert v['observation']['available']==available, ('variant admission',name)
+                if available:
+                    tz=replay.interpolate(vs['tz01Curve'],f['Tz01']['Value']) if name!='dtt3' else None
+                    dtt=replay.interpolate(vs['dtt3Curve'],f['Dtt3']['Value']) if name!='tz01' else None
+                    extra=max(tz or 0,dtt or 0)
+                    assert math.isclose(v['observation']['demandLevel'],extra,abs_tol=1e-9)
+                    if name=='both-retention':extra=min(extra,variant_last.get(name,b['equalFanLevel']))
+                    assert math.isclose(v['extra'],extra,abs_tol=1e-9)
+                    candidate=v['candidate'];assert candidate is not None
+                    assert math.isclose(candidate['rawDemandLevel'],max(raw,extra),abs_tol=1e-9), ('variant raw',name)
+                    assert candidate['thermalOverride']==b['thermalOverride'] and 10<=candidate['equalFanLevel']<=50
+                    variant_last[name]=candidate['equalFanLevel']
+                else:
+                    assert v['extra'] is None and v['candidate'] is None
+                    # Before a source can qualify, the generated policy uses the
+                    # neutral baseline input; its initial level equals baseline.
+                    variant_last[name]=b['equalFanLevel']
             decisions.append(d);block=blocks[d['stage']['index']];block['decisions']+=1;block['aboveBaselineSamples']+=a['equalFanLevel']>b['equalFanLevel']
         elif kind=='dispatch-result':
             now=stamp(d['timestamp']);decision=next((x for x in reversed(decisions) if stamp(x['timestamp'])==now),None)
@@ -82,6 +128,9 @@ def audit(directory):
     assert dict(collections.Counter(d['stage']['controller'] for d in decisions))==summary['decisionsByController']
     assert summary['cpuMaximumC']==max((v for b in blocks.values() for v in b['cpu']),default=0)
     assert summary['gpuMaximumC']==max((v for b in blocks.values() for v in b['gpu']),default=0)
+    if summary['protocolComplete']:
+        assert all(blocks[i]['decisions']>0 for i in range(4)) and blocks[4]['samples']>0 and blocks[-1]['samples']>0,'Incomplete ABBA coverage'
+        assert previous-min(telemetry)>=2550*10_000_000,'Shortened protocol claimed complete'
     outcomes={}
     for index,b in blocks.items():
         outcome={k:v for k,v in b.items() if k not in ('cpu','gpu')}

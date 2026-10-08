@@ -55,6 +55,9 @@ haya ejecutado el mismo trabajo.
 3. Cierra normalmente otros procesos Victus y otros controladores de reloj GPU.
    Mantén AC conectado y la pantalla encendida. Un apagado de pantalla/suspensión
    interrumpe permanentemente esta ejecución; no se reanuda el control después.
+   Durante la prueba la ventana solicita mantener sistema/pantalla activos; no
+   cambia tus opciones de energía y libera la solicitud al terminar. Una
+   suspensión o apagado de pantalla explícitos siguen interrumpiendo el ensayo.
 4. Desde PowerShell elevado en la carpeta extraída:
 
 ```powershell
