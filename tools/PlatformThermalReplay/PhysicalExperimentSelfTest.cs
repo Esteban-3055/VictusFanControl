@@ -64,13 +64,21 @@ public static class PhysicalExperimentSelfTest
             Refused(()=>experiment.EnsureDispatchAllowed(start.AddSeconds(2279),start.AddSeconds(2280)),"final Firmware blocks dispatch");
             experiment.RecordHost("cleanup",new{succeeded=true,atUtc=start.AddSeconds(ExperimentProtocol.TotalSeconds)});
             experiment.Complete(new{succeeded=true,scope="synthetic-no-hardware"},protocolComplete:true);
-            var finalTrace=File.ReadAllBytes(Path.Combine(output,"experiment.jsonl"));
+            byte[] ReadLiveTrace()
+            {
+                // The writer permits readers; on Windows the reader must also
+                // share the existing writer's write access. Keep production
+                // FileShare.Read unchanged so other writers remain excluded.
+                using var file=new FileStream(Path.Combine(output,"experiment.jsonl"),FileMode.Open,FileAccess.Read,FileShare.ReadWrite);
+                using var copy=new MemoryStream();file.CopyTo(copy);return copy.ToArray();
+            }
+            var finalTrace=ReadLiveTrace();
             var finalSummary=File.ReadAllBytes(Path.Combine(output,"summary.json"));
             experiment.Close("Cierre de ventana");experiment.RecordHost("unexpected-after-completion",new{});
             experiment.ObserveTelemetry(Sample(ExperimentProtocol.TotalSeconds),"Ac");
             experiment.NoteApplied(new(AdaptiveFanProductionMode.Automatic,AdaptiveFanProductionActionKind.HoldCustom,true,50,50,FanAuthority.Custom,"late synthetic callback"),start.AddSeconds(ExperimentProtocol.TotalSeconds));
             experiment.Complete(new{succeeded=false});
-            Check(File.ReadAllBytes(Path.Combine(output,"experiment.jsonl")).SequenceEqual(finalTrace)&&
+            Check(ReadLiveTrace().SequenceEqual(finalTrace)&&
                 File.ReadAllBytes(Path.Combine(output,"summary.json")).SequenceEqual(finalSummary)&&!experiment.Ready,
                 "Completion is final; later UI close, telemetry, host callbacks and repeated completion cannot mutate evidence");
         }
