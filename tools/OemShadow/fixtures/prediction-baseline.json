@@ -1,0 +1,18 @@
+{
+  "sourceRevision": "4c8049c1e74837a23896f300c885e1872fc85457",
+  "canonicalization": "Python json parsed predictions, sort_keys=True, separators=(comma,colon), newline per frame, final newline; UTF-8.",
+  "captures": {
+    "v10": {
+      "frames": 6049,
+      "predictionSha256": "53f3e344a7e4763106e4c648235e659b2447eb7c1b2fd6fef283fae0b1dca3ae"
+    },
+    "v11": {
+      "frames": 1976,
+      "predictionSha256": "cb6d15418943556fd0c92211fe437ef2d73cb395791340aa2c3a7c2db9ecad74"
+    },
+    "live-20261008": {
+      "frames": 3542,
+      "predictionSha256": "2aa7f19af52d5c14bd464315545529498f0a33a088ae5409a44ab4cb17c8e476"
+    }
+  }
+}

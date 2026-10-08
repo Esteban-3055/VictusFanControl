@@ -25,8 +25,10 @@ public static class SelfTests
             }
             Require(OemFanShadowModel.Classify(null,20)==OemState.Unknown,"missing actual");
             Require(OemFanShadowModel.Classify(255,255)==OemState.Unknown,"sentinel actual");
-            Require(OemFanShadowModel.Classify(31,27)==OemState.Transition,"observed ramp");
-            Require(OemFanShadowModel.Classify(40,20)==OemState.Transition,"asymmetric pair is not a plateau");
+            Require(OemFanShadowModel.Classify(31,27)==OemState.Unmapped,"unmapped pair does not prove ramp");
+            Require(OemFanShadowModel.Classify(40,20)==OemState.Unmapped,"asymmetric pair is not a plateau");
+            Reject(new(){ ActualUnmappedStableSeconds=0 }); Reject(new(){ ActualUnmappedMaximumSpan=-1 });
+            Reject(new(){ ActualUnmappedMinimumAcquisitions=1 });
             Reject(new(){ MaxSourceAgeMs=0 }); Reject(new(){ CpuUpSeconds=double.NaN });
             Reject(new(){ MaxGapMs=-1 }); Reject(new(){ MaxHistoryGapMs=1 });
             Reject(new(){ GpuUpTemp=[75,55,45] }); Reject(new(){ DownMax=[[1]] });
@@ -87,6 +89,23 @@ public static class SelfTests
             var accepted=debounce.Evaluate(AF(11,26,24));
             Require(accepted.State==OemState.B && accepted.AcceptedSinceUtc==start.AddSeconds(8),"transition epoch is acquisition, not delayed acceptance");
             Require(debounce.Evaluate(AF(12,26,24,10)).State==OemState.Unknown,"regressing fan source rejected");
+            debounce.Reset();
+            var unmapped=debounce.Evaluate(AF(0,46,40));
+            Require(unmapped.State==OemState.Unmapped && unmapped.Regime?.Kind=="UnmappedUnresolved","unmapped is not an invented transition");
+            Require(debounce.Evaluate(AF(2,46,40,0)).Regime?.DistinctAcquisitions==1,"cached pair cannot earn stability");
+            for(int i=2;i<20;i+=2)
+                Require(debounce.Evaluate(AF(i,46+i%4/2,40+i%4/2)).Regime?.Kind=="UnmappedUnresolved","unmapped stability needs dwell");
+            unmapped=debounce.Evaluate(AF(20,47,41));
+            Require(unmapped.Regime is {Kind:"UnmappedStableCandidate",DistinctAcquisitions:11} &&
+                unmapped.Regime.CpuRange==new LevelRange(46,47) && unmapped.Regime.SinceUtc==start,"sustained unmodeled high plateau detected causally");
+            Require(debounce.Evaluate(AF(21,47,41,20)).Regime?.DistinctAcquisitions==11,"cached stable pair not counted twice");
+            Require(debounce.Evaluate(AF(22,50,44)).Regime?.Kind=="UnmappedUnresolved","drift outside full envelope restarts evidence");
+            Require(debounce.Evaluate(AF(23,50,44,20)).State==OemState.Unknown,"regressing acquisition clears envelope");
+            debounce.Evaluate(AF(24,46,40));
+            Require(debounce.Evaluate(AF(40,46,40)).Regime?.DistinctAcquisitions==1,"gap cannot earn unmapped stability");
+            Require(debounce.Evaluate(AF(41,22,20)).State==OemState.Transition,"return from unmapped needs known debounce");
+            debounce.Evaluate(AF(42,21,19));debounce.Evaluate(AF(43,22,20));
+            Require(debounce.Evaluate(AF(44,21,19)).State==OemState.A,"return from unmapped accepts known plateau");
             var metrics=new Metrics(p);
             Prediction P(OemState state)=>new(state,null,null,Domain.Unknown,0,"TEST","TEST","TEST");
             metrics.Add(AF(0,22,19),P(OemState.A),new(OemState.A,OemState.A,start));
@@ -99,6 +118,18 @@ public static class SelfTests
             Require(result.GetProperty("unknownPredictionSeconds").GetDouble()==1,"unknown time excludes gaps");
             Require(result.GetProperty("unobservedGapSeconds").GetDouble()==18,"gaps reported separately");
             Require(result.GetProperty("transitionMetrics").GetProperty("observed").GetArrayLength()==0,"gap cannot invent a transition");
+            var unmappedMetrics=new Metrics(p);
+            unmappedMetrics.Add(AF(0,22,19),P(OemState.A),new(OemState.A,OemState.A,start));
+            unmappedMetrics.Add(AF(1,46,40),new(OemState.C,new(33,34),new(28,29),Domain.GPU,0,"TEST","TEST","TEST"),
+                new(OemState.Unmapped,OemState.Unmapped,null,new("UnmappedStableCandidate",new(46,47),new(40,41),start.AddSeconds(1),12)));
+            unmappedMetrics.Add(AF(2,25,23),P(OemState.B),new(OemState.B,OemState.B,start.AddSeconds(2)));
+            using var unmappedDocument=System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(unmappedMetrics.Summary("TEST"),ShadowSession.Json));
+            var um=unmappedDocument.RootElement;
+            Require(um.GetProperty("transitionMetrics").GetProperty("observed").GetArrayLength()==0,"unmapped breaks transition chain rather than fabricating A-B");
+            Require(um.GetProperty("transitionMetrics").GetProperty("endpointChangesAcrossUnmapped").GetArrayLength()==1,"unmapped endpoint changes retained explicitly, not erased");
+            Require(um.GetProperty("classificationCoverage").GetProperty("unmappedFrames").GetInt32()==1,"unmapped coverage explicit");
+            Require(um.GetProperty("rawFanRangeComparison").GetProperty("actualAbovePredictedUpperBound").GetInt32()==1,"raw high fans count even outside mapped states");
+            Require(um.GetProperty("observedRegimes").GetProperty("stableCandidateSeconds").GetDouble()==1,"stable unknown interval accounted");
             Console.WriteLine($"OEM shadow self-test: PASS ({checks} checks; no hardware IO)."); return 0;
         }
         catch(Exception ex){Console.Error.WriteLine($"OEM shadow self-test: FAIL after {checks} checks: {ex}");return 1;}

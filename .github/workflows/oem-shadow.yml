@@ -27,7 +27,8 @@ jobs:
       - run: |
           dotnet run --no-build -c Release --project tools/OemShadow -- --replay tools/OemShadow/fixtures/v10.jsonl.gz artifacts/oem-v10
           dotnet run --no-build -c Release --project tools/OemShadow -- --replay tools/OemShadow/fixtures/v11.jsonl.gz artifacts/oem-v11
-          python scripts/check-oem-shadow-replay.py tools/OemShadow/fixtures artifacts/oem-v10 artifacts/oem-v11
+          dotnet run --no-build -c Release --project tools/OemShadow -- --replay tools/OemShadow/fixtures/live-20261008.jsonl.gz artifacts/oem-live
+          python scripts/check-oem-shadow-replay.py tools/OemShadow/fixtures artifacts/oem-v10 artifacts/oem-v11 artifacts/oem-live
       - if: runner.os == 'Windows'
         run: |
           dotnet build tools/OemShadowCapture/OemShadowCapture.csproj -c Release

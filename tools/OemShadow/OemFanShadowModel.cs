@@ -1,6 +1,6 @@
 namespace VictusFanControl.OemShadow;
 
-public enum OemState { Unknown, A, B, C, D, Transition }
+public enum OemState { Unknown, A, B, C, D, Transition, Unmapped }
 public enum Domain { Unknown, CPU, GPU, Shared }
 public sealed record Source(double? Value = null, DateTimeOffset? SampledAtUtc = null)
 {
@@ -31,6 +31,9 @@ public sealed record Parameters
     public double DownSeconds { get; init; } = 30;
     public double RampSeconds { get; init; } = 10;
     public double ActualDebounceSeconds { get; init; } = 3;
+    public double ActualUnmappedStableSeconds { get; init; } = 20;
+    public int ActualUnmappedMaximumSpan { get; init; } = 2;
+    public int ActualUnmappedMinimumAcquisitions { get; init; } = 6;
     public double TransitionMatchWindowSeconds { get; init; } = 120;
     public double[] GpuUpTemp { get; init; } = [45, 55, 75];
     public double[] GpuUpDtt3 { get; init; } = [50, 55, 67];
@@ -40,9 +43,11 @@ public sealed record Parameters
     public void Validate()
     {
         var durations = new[] { MaxSourceAgeMs, MaxGapMs, MaxHistoryGapMs, BootstrapSeconds, CpuUpSeconds,
-            GpuUpSeconds, MinStateSeconds, DownSeconds, RampSeconds, ActualDebounceSeconds, TransitionMatchWindowSeconds };
+            GpuUpSeconds, MinStateSeconds, DownSeconds, RampSeconds, ActualDebounceSeconds, ActualUnmappedStableSeconds, TransitionMatchWindowSeconds };
         if (durations.Any(v => !double.IsFinite(v) || v < 0) || MaxSourceAgeMs <= 0 || MaxGapMs <= 0 ||
             MaxHistoryGapMs < MaxGapMs) throw new ArgumentException("Invalid shadow timing parameters.");
+        if (ActualUnmappedStableSeconds <= 0 || ActualUnmappedMaximumSpan is < 0 or > 10 ||
+            ActualUnmappedMinimumAcquisitions < 2) throw new ArgumentException("Invalid observed regime parameters.");
         var arrays = new[] { GpuUpTemp, GpuUpDtt3, BootstrapMax };
         if (arrays.Any(a => a is null) || DownMax is null || GpuUpTemp.Length != 3 || GpuUpDtt3.Length != 3 ||
             BootstrapMax.Length != 4 || DownMax.Length != 3 || DownMax.Any(a => a is null || a.Length != 4))
@@ -85,7 +90,7 @@ public sealed class OemFanShadowModel
             var r = Ranges(s);
             if (cpu >= r.Cpu.Min - 1 && cpu <= r.Cpu.Max + 1 && gpu >= r.Gpu.Min - 1 && gpu <= r.Gpu.Max + 1) return s;
         }
-        return OemState.Transition;
+        return OemState.Unmapped; // A pair outside the seed ranges does not prove a physical ramp.
     }
     public void Reset()
     {
@@ -161,12 +166,17 @@ public sealed class OemFanShadowModel
     }
 }
 
-public sealed record Actual(OemState State, OemState RawState, DateTimeOffset? AcceptedSinceUtc);
+public sealed record ObservedRegime(string Kind, LevelRange CpuRange, LevelRange GpuRange,
+    DateTimeOffset SinceUtc, int DistinctAcquisitions);
+public sealed record Actual(OemState State, OemState RawState, DateTimeOffset? AcceptedSinceUtc,
+    ObservedRegime? Regime = null);
 public sealed class ActualDebouncer(Parameters settings)
 {
     private DateTimeOffset? _lastAcquisition, _candidateSince, _acceptedSince;
     private OemState _candidate, _stable;
-    public void Reset() { _lastAcquisition = _candidateSince = _acceptedSince = null; _candidate = _stable = OemState.Unknown; }
+    private readonly UnmappedRegimeTracker _unmapped = new(settings);
+    private ObservedRegime? _regime;
+    public void Reset() { _lastAcquisition = _candidateSince = _acceptedSince = null; _candidate = _stable = OemState.Unknown; _unmapped.Reset(); _regime=null; }
     public Actual Evaluate(Frame f)
     {
         var raw = OemFanShadowModel.Classify(f.ActualCpuLevel, f.ActualGpuLevel);
@@ -174,12 +184,21 @@ public sealed class ActualDebouncer(Parameters settings)
             (age < 0 || age >= settings.MaxSourceAgeMs) || raw == OemState.Unknown ||
             (_lastAcquisition is { } last && at < last))
         { Reset(); return new(OemState.Unknown, raw, null); }
-        if (at == _lastAcquisition) return new(_candidate == _stable ? _stable : OemState.Transition, raw, _acceptedSince);
+        if (at == _lastAcquisition) return Result(raw);
+        if (_lastAcquisition is { } previous && (at-previous).TotalMilliseconds > settings.MaxGapMs) Reset();
         _lastAcquisition = at;
-        if (raw == OemState.Transition) { _candidate = raw; _candidateSince = null; return new(raw, raw, _acceptedSince); }
+        if (raw == OemState.Unmapped)
+        {
+            _candidate=_stable=OemState.Unmapped; _candidateSince=_acceptedSince=null;
+            _regime=_unmapped.Add(at,f.ActualCpuLevel!.Value,f.ActualGpuLevel!.Value);
+            return Result(raw);
+        }
+        _unmapped.Reset();
         if (raw != _candidate) { _candidate = raw; _candidateSince = at; }
         if (at - _candidateSince >= TimeSpan.FromSeconds(settings.ActualDebounceSeconds))
         { if (_stable != _candidate) _acceptedSince = _candidateSince; _stable = _candidate; }
-        return new(_candidate == _stable ? _stable : OemState.Transition, raw, _acceptedSince);
+        _regime=null;
+        return Result(raw);
     }
+    private Actual Result(OemState raw) => new(_candidate == _stable ? _stable : OemState.Transition, raw, _acceptedSince, _regime);
 }

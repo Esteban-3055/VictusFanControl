@@ -30,7 +30,9 @@ public sealed class ShadowSession : IDisposable
         _csv.WriteLine(string.Join(",",new[]{"timestamp_utc"}.Concat(names.SelectMany(n=>new[]{n+"_temp_c",n+"_sampled_at_utc",n+"_age_ms"})).Concat(new[]{
             "actual_cpu_fan_level","actual_gpu_fan_level","fan_sampled_at_utc","fan_age_ms","actual_raw_state","actual_oem_state",
             "predicted_oem_state","predicted_cpu_min","predicted_cpu_max","predicted_gpu_min","predicted_gpu_max","dominant_domain",
-            "dwell_ms","hysteresis","reason_code","confidence","match_state","mismatch_type","cpu_power_w","gpu_power_w","cpu_load_pct","gpu_load_pct"})));
+            "dwell_ms","hysteresis","reason_code","confidence","match_state","mismatch_type","cpu_power_w","gpu_power_w","cpu_load_pct","gpu_load_pct",
+            "actual_regime_kind","actual_regime_since_utc","actual_regime_cpu_min","actual_regime_cpu_max",
+            "actual_regime_gpu_min","actual_regime_gpu_max","actual_regime_acquisitions"})));
     }
     public void Invalidate() { _model.Reset();_actual.Reset();_metrics.BreakContinuity(); }
     public void InvalidateClock() { Invalidate();_lastFrame=null;_metrics.ResetTimeline(); }
@@ -46,7 +48,8 @@ public sealed class ShadowSession : IDisposable
         bool comparable=OemFanShadowModel.Plateau(actual.State)&&OemFanShadowModel.Plateau(prediction.State);
         bool? match=comparable?actual.State==prediction.State:null;
         string mismatch=match==true?"MATCH":comparable?prediction.State<actual.State?"UNDER":"OVER":
-            prediction.State==OemState.Unknown?"PREDICTION_UNKNOWN":actual.State==OemState.Unknown?"ACTUAL_UNKNOWN":"TRANSITION";
+            prediction.State==OemState.Unknown?"PREDICTION_UNKNOWN":actual.State==OemState.Unknown?"ACTUAL_UNKNOWN":
+            actual.State==OemState.Unmapped?"ACTUAL_UNMAPPED":"TRANSITION";
         var values=new List<object?>{f.TimestampUtc};
         foreach(var s in new[]{f.CpuPackage,f.CpuCoreMax,f.Gpu,f.Tz01,f.Dtt3,f.Dtt1??new(),f.Dtt2??new()})
             values.AddRange(new object?[]{s.Value,s.SampledAtUtc,s.AgeMs(f.TimestampUtc)});
@@ -55,6 +58,8 @@ public sealed class ShadowSession : IDisposable
             prediction.State,prediction.CpuRange?.Min,prediction.CpuRange?.Max,prediction.GpuRange?.Min,prediction.GpuRange?.Max,
             prediction.DominantDomain,prediction.DwellMs,prediction.Hysteresis,prediction.ReasonCode,prediction.Confidence,match,mismatch,
             f.CpuPowerW,f.GpuPowerW,f.CpuLoadPercent,f.GpuLoadPercent});
+        values.AddRange(new object?[]{actual.Regime?.Kind,actual.Regime?.SinceUtc,actual.Regime?.CpuRange.Min,
+            actual.Regime?.CpuRange.Max,actual.Regime?.GpuRange.Min,actual.Regime?.GpuRange.Max,actual.Regime?.DistinctAcquisitions});
         _csv.WriteLine(string.Join(",",values.Select(Format)));
         _jsonl.WriteLine(JsonSerializer.Serialize(new{input=f,prediction,actual,matchState=match,mismatchType=mismatch},Json));
         if(_summaryAt is null||(f.TimestampUtc-_summaryAt.Value).TotalSeconds>=60){SaveSummary();_summaryAt=f.TimestampUtc;}
