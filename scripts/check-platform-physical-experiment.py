@@ -39,6 +39,17 @@ def audit(directory):
     if (directory/'metadata.json').exists():
         metadata=json.loads((directory/'metadata.json').read_text(encoding='utf-8-sig'))
         assert hashlib.sha256((directory/'profiles.json').read_bytes()).hexdigest()==metadata['profilesSha256']
+        if 'performanceSelection' in metadata:
+            profiles=json.loads((directory/'profiles.json').read_text(encoding='utf-8-sig'))
+            original=json.loads((directory/'profiles-before-test.json').read_text(encoding='utf-8-sig'))
+            assert hashlib.sha256((directory/'profiles-before-test.json').read_bytes()).hexdigest()==metadata['originalProfilesSha256']
+            selected=metadata['performanceSelection']
+            for key in ('cpuPl1Watts','cpuPl2Watts','gpuMaximumMHz'):assert profiles['ac'][key]==selected[key], 'Selected limit mismatch'
+            assert profiles['cpuEnabled'] and profiles['gpuEnabled'] and selected['cpuEnabled'] and selected['gpuEnabled']
+            assert 8<=profiles['ac']['cpuPl1Watts']<=44 and profiles['ac']['cpuPl1Watts']<=profiles['ac']['cpuPl2Watts']<=60
+            assert 210<=profiles['ac']['gpuMaximumMHz']<=2500
+            assert profiles['ac']['fan']==original['ac']['fan'] and profiles['battery']==original['battery'], 'Trial changed the curve or Battery'
+
     trace=directory/'experiment.jsonl';data=trace.read_bytes();assert data.endswith(b'\n'),'Unfinished JSONL line'
     rows=[json.loads(line) for line in data.splitlines()];assert rows[0]['kind']=='session'
     summary=json.loads((directory/'summary.json').read_text(encoding='utf-8-sig'))

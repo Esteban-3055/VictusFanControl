@@ -26,7 +26,7 @@ if($Mode -eq 'SelfTest'){
     if(Test-Path -LiteralPath $OutputDirectory){throw 'Use a new evidence directory.'}
     if($OutputDirectory.Contains('"')){throw 'Invalid output path.'}
     $start.Arguments='--modules-dir "'+(Join-Path $app 'modules')+'" --platform-thermal-experiment --experimental-output "'+$OutputDirectory+'"'
-    Write-Host 'Physical fan experiment: starts only with the Iniciar prueba button. AC only; 43 minutes; frozen saved settings; existing fan watchdog and CPU/GPU Guardian. Close other controllers normally. Repeat the same workload when the window says Carga, and close it when it says Enfriamiento.'
+    Write-Host 'Physical fan experiment: starts only with the Iniciar prueba button. AC only; 43 minutes; CPU PL1/PL2 and GPU MHz editable in the trial window, frozen on Start; existing fan watchdog and CPU/GPU Guardian. Close other controllers normally. Repeat the same workload when the window says Carga, and close it when it says Enfriamiento.'
 }
 $process=[Diagnostics.Process]::Start($start)
 try{$process.WaitForExit();$result=$process.ExitCode}finally{$process.Dispose()}

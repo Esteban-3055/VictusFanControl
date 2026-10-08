@@ -49,9 +49,18 @@ haya ejecutado el mismo trabajo.
 
 1. Descarga el artefacto **product-gui-review-<commit>** de la nueva CI Windows.
    Usa el paquete nuevo completo; los paquetes anteriores no tienen esta entrada.
-2. En el GUI normal, guarda tus perfiles AC/Batería. La prueba lee y congela esos
-   ajustes sin modificar el archivo de preferencias. Ambos límites CPU/GPU deben
-   estar habilitados, porque se reutiliza el contrato físico de revisión existente.
+2. La ventana de la prueba carga tu curva AC guardada al abrirse. Si no hay archivo
+   usa la curva predeterminada y lo indica; si el archivo es inválido bloquea Inicio.
+   No necesitas abrir el GUI normal para editar los límites: la propia prueba
+   incluye **CPU PL1 (W), CPU PL2 (W) y GPU máx. (MHz)**. Inicializa CPU en
+   **25/30 W** y GPU con el valor del perfil. Elige los valores antes de iniciar.
+   PL1 admite 8–44 W; PL2 admite 8–60 W y debe ser >=PL1; GPU admite 210–2500 MHz.
+   El límite de frecuencia GPU no es un límite de potencia. Estos rangos no
+   garantizan terminar la prueba: la envolvente térmica/potencia sigue vigente.
+   Ambos controles de rendimiento se habilitan solo para esta prueba. Al pulsar
+   Inicio se congelan los valores, se bloquean los campos y se usan exactamente
+   los mismos límites durante los cuatro bloques. No se escribe en preferencias.
+   La carga de perfiles y la edición de los campos no realizan IO de hardware.
 3. Cierra normalmente otros procesos Victus y otros controladores de reloj GPU.
    Mantén AC conectado y la pantalla encendida. Un apagado de pantalla/suspensión
    interrumpe permanentemente esta ejecución; no se reanuda el control después.
@@ -103,6 +112,10 @@ transiciones medidas de RPM ni demuestra el setpoint instalado. Los resultados d
 observados. Estos niveles dan RPM nominales de 100 RPM por nivel, no una lectura
 exacta de tacómetro ni de ruido. `profiles.json`, `metadata.json` y la identidad
 del paquete fijan configuración y build. `summary.json` no afirma un PASS físico.
+`profiles-before-test.json` conserva los perfiles de partida (normalizados por
+el parser); `profiles.json` es la configuración efectiva con los límites elegidos.
+`metadata.json` registra la selección, procedencia de la curva y hashes de ambos
+archivos. Los campos siguen visibles y el estado muestra los límites fijos.
 El launcher añade SHA-256 de los archivos y empaqueta el resultado al salir.
 
 El checker independiente verifica epochs, admisión, MAX de las seis entradas,
@@ -132,3 +145,19 @@ Criterios para analizar el resultado real:
 5. Revisar fuente/frescura y todas las causas de interrupción. Una ejecución
    aislada informa sobre esta configuración/carga/equipo; no establece seguridad
    universal ni justifica habilitar el suplemento por defecto.
+
+## Interrupción observada el 8 de octubre — carga CPU 30/50 W
+
+El ensayo `20261008T210326Z-d110e131` (build `919c0cc`) terminó en A, sin
+ningún bloque B físico: 243 snapshots, 124 decisiones, CPU máxima 98 °C y
+GPU máxima 50 °C. La confirmación >=95 °C venció a los 2000 ms. La auditoría
+independiente aceptó la integridad; el cleanup informó éxito. La demanda raw
+pedía 50 mientras los requests ascendían 19→23→27→31→35, antes del cierre.
+Esto evidencia una limitación de la respuesta ante esa transición de carga;
+no demuestra que la candidata de retención haya mejorado o empeorado el equipo.
+
+El editor inicia en 25/30 W para probar una carga moderada reproducible sin
+alterar la curva. No garantiza temperaturas ni un protocolo completo. Un resultado
+con esos límites no valida la configuración 30/50 W. Este cambio no altera los
+pasos térmicos ni extiende la ventana de emergencia; ambas cosas requieren su
+propia evaluación y no se mezclan con la incorporación del editor.

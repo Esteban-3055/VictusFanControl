@@ -12,7 +12,9 @@ def admission(trace):
     data=next(r['data'] for r in trace if r['kind']=='telemetry' and r['data']['admission']['available'])
     data['frame']['tz01']['sampledAtUtc']='2099-01-01T00:00:00+00:00'
 def dispatch(trace):next(r['data'] for r in trace if r['kind']=='dispatch-result')['result']['equalFanLevel']+=1
-def missing(trace):next(r['data'] for r in trace if r['kind']=='telemetry' and r['data']['stage']['custom'])['snapshot']['cpuLoadPercent']=None
+def missing(trace):
+    timestamp=next(r['data']['timestamp'] for r in trace if r['kind']=='decision')
+    next(r['data'] for r in trace if r['kind']=='telemetry' and r['data']['snapshot']['timestamp']==timestamp)['snapshot']['cpuLoadPercent']=None
 def truncate(trace):trace.pop()
 for mutate in (raw,variant,admission,dispatch,missing,truncate):
     with tempfile.TemporaryDirectory(prefix='vfc-audit-negative-') as tmp:
