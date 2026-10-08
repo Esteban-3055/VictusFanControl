@@ -6,6 +6,8 @@ using VictusFanControl.Runtime;
 
 namespace VictusFanControl.Telemetry;
 
+public sealed record HardwareTelemetryReadProgress(string Phase, long StartedAtMilliseconds);
+
 public sealed class HardwareTelemetryReader : IDisposable
 {
     private readonly string _intelModulePath;
@@ -20,6 +22,13 @@ public sealed class HardwareTelemetryReader : IDisposable
     private HpWmiFanProofReader? _freshFans;
     private NvmlClient? _nvml;
     private readonly WindowsCpuLoadReader _cpuLoad = new();
+
+    // Passive, lock-free progress for a watchdog running while a native call is
+    // blocked. These phase markers never renew telemetry or admission clocks.
+    private HardwareTelemetryReadProgress _readProgress = new("NotStarted", Environment.TickCount64);
+    public HardwareTelemetryReadProgress ReadProgress => Volatile.Read(ref _readProgress);
+    private void MarkReadPhase(string phase) =>
+        Volatile.Write(ref _readProgress, new(phase, Environment.TickCount64));
 
     private string _intelStatus = "NOT INITIALIZED";
     private string _ecStatus = "NOT INITIALIZED";
@@ -108,6 +117,7 @@ public sealed class HardwareTelemetryReader : IDisposable
     {
         if (_wmiFans is null)
             throw new InvalidOperationException("Fresh Automatic acquisition requires exact HP 8C40/F.18.");
+        MarkReadPhase("FreshHpWmiFanProof");
         _freshFans ??= new HpWmiFanProofReader();
         await _freshFans.ReadFreshAsync(cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
@@ -120,6 +130,7 @@ public sealed class HardwareTelemetryReader : IDisposable
     {
         var timestamp = DateTimeOffset.UtcNow;
 
+        MarkReadPhase("EnsureBackends");
         EnsureBackendsAvailable(timestamp);
 
         double? cpuTemperature = null;
@@ -129,13 +140,16 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             try
             {
+                MarkReadPhase("IntelPackageTemperature");
                 cpuTemperature = _intel.ReadPackageTemperatureC();
+                MarkReadPhase("IntelPackagePower");
                 cpuPower = _intel.ReadPackagePowerW();
                 _lastIntelReadError = null;
             }
             catch (Exception ex)
             {
                 _lastIntelReadError = ex.Message;
+                MarkReadPhase("IntelRecoveryAndRetry");
                 if (RecoverIntel())
                 {
                     try
@@ -160,6 +174,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             try
             {
+                MarkReadPhase("IntelCoreTemperatures");
                 coreTemperatures = _intel.ReadCoreTemperaturesC()
                     .Select(sample => new CpuCoreTemperatureSample(
                         CoreIndex: sample.CoreIndex,
@@ -182,6 +197,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         double? cpuLoad = null;
         try
         {
+            MarkReadPhase("WindowsCpuLoad");
             cpuLoad = _cpuLoad.ReadTotalLoadPercent();
             _lastWindowsReadError = null;
         }
@@ -199,6 +215,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         {
             try
             {
+                MarkReadPhase("NvmlSample");
                 gpuName = _nvml.DeviceName;
                 var gpu = _nvml.ReadSample();
                 gpuTemperature = gpu.TemperatureC;
@@ -209,6 +226,7 @@ public sealed class HardwareTelemetryReader : IDisposable
             catch (Exception ex)
             {
                 _lastNvmlReadError = ex.Message;
+                MarkReadPhase("NvmlRecoveryAndRetry");
                 if (RecoverNvml())
                 {
                     try
@@ -232,6 +250,7 @@ public sealed class HardwareTelemetryReader : IDisposable
         double? gpuFanRpm = null;
 
         HpWmiFanTelemetrySample? wmiFanSample = null;
+        MarkReadPhase("FanTelemetry");
         if (_wmiFans is not null)
         {
             if (schedulePeriodicFanReads)
@@ -306,7 +325,9 @@ public sealed class HardwareTelemetryReader : IDisposable
             GpuFanSpeedLevel = wmiFanSample?.GpuSpeedLevel
         };
 
+        MarkReadPhase("RecordSnapshotHealth");
         RecordHealth(snapshot);
+        MarkReadPhase("SnapshotComplete");
         return snapshot;
     }
 

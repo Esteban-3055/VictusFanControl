@@ -41,6 +41,27 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private TelemetrySnapshot? _lastLivenessSnapshot;
     private TelemetrySnapshot? _acknowledgementSnapshot;
     private int _identicalSnapshotStreak;
+    private sealed record WorkerProgress(string Phase, long StartedAtMilliseconds);
+    private WorkerProgress _progress = new("NotStarted", Environment.TickCount64);
+    private void MarkProgress(string phase) =>
+        Volatile.Write(ref _progress, new(phase, Environment.TickCount64));
+
+    private object CaptureWatchdogProgress(long ageMilliseconds)
+    {
+        var tick = Environment.TickCount64;
+        var worker = Volatile.Read(ref _progress);
+        var reader = _reader?.ReadProgress;
+        return new
+        {
+            capturedUtc = DateTimeOffset.UtcNow,
+            lastCompletedReadAgeMilliseconds = ageMilliseconds,
+            workerPhase = worker.Phase,
+            workerPhaseAgeMilliseconds = Math.Max(0, tick - worker.StartedAtMilliseconds),
+            readerPhase = reader?.Phase,
+            readerPhaseAgeMilliseconds = reader is null ? (long?)null : Math.Max(0, tick - reader.StartedAtMilliseconds),
+            scope = "passive-phase-observation;not-proof-of-native-cause;does-not-renew-freshness"
+        };
+    }
 
     public TelemetryWorker(string modulesDirectory)
     {
@@ -65,6 +86,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts.Token);
         var epoch = CurrentPowerEpoch();
+        MarkProgress("AcknowledgementReadGate");
         await _hardwareReadGate.WaitAsync(linked.Token).ConfigureAwait(false);
         TelemetrySnapshot snapshot;
         try
@@ -73,6 +95,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             if (IsSuspended() || CurrentPowerEpoch() != epoch || RecoveryRequested() ||
                 StateMachine.State != SystemState.Healthy || _reader is null)
                 throw new InvalidOperationException("Actuation telemetry refresh refused by lifecycle/recovery fence.");
+            MarkProgress("AcknowledgementHardwareRead");
             snapshot = _reader.ReadSnapshotDuringFanAcknowledgement();
             linked.Token.ThrowIfCancellationRequested();
             var now = DateTimeOffset.UtcNow;
@@ -102,8 +125,10 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         // Only this sequential worker owns the processor and its ACK callbacks.
         var epoch = CurrentPowerEpoch();
         _acknowledgementSnapshot = null;
+        MarkProgress("SnapshotProcessor");
         if (SnapshotProcessor is not null)
             await SnapshotProcessor(snapshot, cancellationToken).ConfigureAwait(false);
+        MarkProgress("SnapshotPublication");
         // A power boundary can arrive while mechanical acknowledgement holds
         // the processor. Never publish/count its old epoch after that await.
         if (cancellationToken.IsCancellationRequested || IsSuspended() || CurrentPowerEpoch() != epoch)
@@ -319,6 +344,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 snapshot = await ProcessAndPublishSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
                 if (snapshot is null)
                     continue;
+                MarkProgress("DiagnosticPublicationAndHealth");
                 PublishDiagnostics();
 
                 if (CheckForFrozenSnapshot(snapshot))
@@ -352,6 +378,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             }
 
             var pending = AcquisitionBudgetMilliseconds?.Invoke().HasValue == true;
+            MarkProgress("PollingDelay");
             await WaitOrWakeAsync(pending ? 0 : Math.Clamp(NormalPollingDelayMilliseconds?.Invoke() ?? NormalIntervalMs, 500, 1500), cancellationToken).ConfigureAwait(false);
         }
     }
@@ -373,11 +400,13 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 continue;
             }
 
+            var progress = CaptureWatchdogProgress(ageMs);
             StateMachine.Transition(
                 SystemState.Degraded,
                 $"Telemetry watchdog expired after {ageMs} ms without a completed read.");
             Log($"Telemetry watchdog expired after {ageMs} ms; recovery requested.");
             RequestRecovery("Telemetry freshness watchdog expired.");
+            Log("TELEMETRY WATCHDOG PROGRESS: " + System.Text.Json.JsonSerializer.Serialize(progress));
         }
     }
 
@@ -552,6 +581,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         long expectedPowerEpoch,
         CancellationToken cancellationToken)
     {
+        MarkProgress("HardwareReadGate");
         await _hardwareReadGate.WaitAsync(
                 cancellationToken)
             .ConfigureAwait(false);
@@ -564,6 +594,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                 return null;
             }
 
+            MarkProgress("EnsureReader");
             EnsureReader();
             // Initialization can take time: never hold the lifecycle lock
             // across native backend construction. Fence a newly created reader
@@ -578,6 +609,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             }
 
             TelemetrySnapshot snapshot;
+            MarkProgress("HardwareRead");
             if (FreshFanAcquisitionRequired?.Invoke() == true)
             {
                 using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -588,6 +620,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             else
                 snapshot = _reader!.ReadSnapshot();
 
+            MarkProgress("HardwareReadComplete");
             TouchCompletedRead();
             return snapshot;
         }

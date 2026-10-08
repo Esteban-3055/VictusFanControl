@@ -159,13 +159,15 @@ internal sealed class PlatformThermalExperimentForm : Form
                 {
                     var elapsed=(long)_clock.ElapsedMilliseconds;tz.Poll(elapsed,OemSources.ReadTz);dtt.Poll(elapsed,OemSources.ReadDtt);
                     _experiment!.SetSources(tz.Latest??new(),dtt.Latest?.Dtt1??new(),dtt.Latest?.Dtt2??new(),dtt.Latest?.Dtt3??new());
-                    if(elapsed%1000<250)_experiment.RecordHost("source-health",new{elapsedMilliseconds=elapsed,tzError=tz.Error,dttError=dtt.Error,tzPending=tz.InFlight,dttPending=dtt.InFlight});
+                    if(elapsed%1000<250)_experiment.RecordHost("source-health",new{elapsedMilliseconds=elapsed,tzError=tz.Error,dttError=dtt.Error,tzPending=tz.InFlight,dttPending=dtt.InFlight,
+                        tzProgress=tz.CaptureProgress(),dttProgress=dtt.CaptureProgress()});
                     await Task.Delay(250,auxStop.Token);
                 }
             }
             catch(OperationCanceledException) { }
             catch(Exception ex){_experiment!.Close("Auxiliary sampler failed: "+ex.Message);}
-            finally{_experiment!.RecordHost("terminal-sources",new{tzPending=tz.InFlight,dttPending=dtt.InFlight});}
+            finally{_experiment!.RecordHost("terminal-sources",new{tzPending=tz.InFlight,dttPending=dtt.InFlight,
+                tzProgress=tz.CaptureProgress(),dttProgress=dtt.CaptureProgress()});}
         });
         int previousStage=int.MinValue;string reason="Protocolo completado";
         try

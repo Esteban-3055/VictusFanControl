@@ -30,7 +30,13 @@ internal static class CaptureTests
             {
                 for(int i=1;i<=50;i++)slot.Poll(i*1000,Blocked);
                 Require(calls==1&&slot.InFlight,"blocked provider must not spawn replacement reads");
+                var blockedProgress=slot.CaptureProgress();
+                Require(blockedProgress.InFlight&&blockedProgress.NativeRunning&&blockedProgress.QueueWaitMilliseconds>=0&&
+                    blockedProgress.NativeElapsedMilliseconds>=0,"blocked native progress observable without waiting for admission");
                 slot.Invalidate();release.Set();Require(SpinWait.SpinUntil(()=>!slot.InFlight,5000),"fake query completes");
+                var completedProgress=slot.CaptureProgress();
+                Require(!completedProgress.InFlight&&!completedProgress.NativeRunning&&completedProgress.NativeElapsedMilliseconds>=0,
+                    "native completion records elapsed time without accepting an invalidated sample");
                 slot.Poll(0,()=>new(50,DateTimeOffset.UtcNow));
                 Require(slot.Latest is null,"old epoch completion discarded after discontinuity");
             }

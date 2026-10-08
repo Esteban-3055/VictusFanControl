@@ -53,7 +53,18 @@ def audit(directory):
     trace=directory/'experiment.jsonl';data=trace.read_bytes();assert data.endswith(b'\n'),'Unfinished JSONL line'
     rows=[json.loads(line) for line in data.splitlines()];assert rows[0]['kind']=='session'
     summary=json.loads((directory/'summary.json').read_text(encoding='utf-8-sig'))
-    assert rows[-1]['kind']=='completed' and rows[-1]['data']==summary,'Missing terminal record or mismatched summary'
+    completed=[i for i,row in enumerate(rows) if row['kind']=='completed']
+    assert len(completed)==1 and rows[completed[0]]['data']==summary,'Missing terminal record or mismatched summary'
+    # Older physical hosts log the operator closing the already completed window.
+    # Accept only that known, later UI event; never admit post-completion data or IO.
+    trailing=rows[completed[0]+1:]
+    assert len(trailing)<=1,'Unexpected records after completion'
+    if trailing:
+        close=trailing[0]
+        assert close['kind']=='closed' and close['data']['reason']=='Cierre de ventana','Unexpected record after completion'
+        cleanup_rows=[r['data'] for r in rows[:completed[0]] if r['kind']=='cleanup']
+        assert len(cleanup_rows)==1 and stamp(close['data']['atUtc'])>=stamp(cleanup_rows[0]['atUtc']),'Close predates cleanup'
+
     session=rows[0]['data'];assert not session['normalAutomaticPromoted'] and not summary['physicalPassClaimed']
     settings=session['settings'];fan=session['fan'];admission=replay.Admission(True,True,settings)
     telemetry={};previous=None;gaps=[];qual=0;decisions=[];dispatch=[];last_level=None;changes=0
@@ -150,6 +161,7 @@ def audit(directory):
         outcomes[str(index)]=outcome
     report=dict(schemaVersion=1,traceSha256=hashlib.sha256(data).hexdigest(),rows=len(rows),telemetry=len(telemetry),decisions=len(decisions),dispatchResults=len(dispatch),gapsOver3Seconds=len(gaps),
                 cleanup=summary['cleanup'],protocolComplete=summary['protocolComplete'],physicalExecution=session['physicalExecution'],blocks=outcomes,
+                legacyWindowCloseAfterCompletion=bool(trailing),
                 conclusion='Integrity/admission/MAX audit only. Scheduled workload labels are not proof of matched load. Compare measured power/load and cooling windows before causal or acoustic claims.')
     (directory/'independent-audit.json').write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
     print(f'Independent physical experiment audit: PASS ({len(telemetry)} snapshots; {len(decisions)} decisions; {len(dispatch)} dispatch results).')

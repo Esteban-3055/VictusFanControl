@@ -44,7 +44,7 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
     private int _evaluatedStage=int.MinValue;
     private DateTimeOffset? _evaluatedTimestamp,_lastTelemetry;
     private int? _lastApplied;
-    private bool _closed,_disposed;
+    private bool _closed,_completed,_disposed;
     private string? _reason;
     private int _telemetryRows,_decisions,_appliedChanges,_qualifiedRows;
     private double _cpuMaximum,_gpuMaximum;
@@ -74,7 +74,11 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
             fan=_fan,settings=_settings,physicalExecution,normalAutomaticPromoted=false,performancePresets="Frozen by host in metadata.json; existing Guardian applies/releases them",
             disclosure="Shadow variants share the observed temperatures, not counterfactual thermal outcomes. HP-WMI levels*100 are nominal RPM; workload labels are scheduled instructions, not proof of load. Query epochs do not prove silicon sensor update times."});
     }
-    private void Write(string kind,object data)=>_trace.WriteLine(JsonSerializer.Serialize(new{kind,data},Json));
+    private void Write(string kind,object data)
+    {
+        if(_completed||_disposed)return;
+        _trace.WriteLine(JsonSerializer.Serialize(new{kind,data},Json));
+    }
     public void SetSources(Source tz,Source dtt1,Source dtt2,Source dtt3)
     {
         lock(_sync)
@@ -105,7 +109,7 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
     {
         lock(_sync)
         {
-            if(_disposed)return;
+            if(_disposed||_completed)return;
             if(_lastTelemetry is {} last&&(snapshot.Timestamp<=last||snapshot.Timestamp-last>TimeSpan.FromSeconds(3)))
             {
                 _admission.Reset();_qualified=null;
@@ -178,6 +182,7 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
     {
         lock(_sync)
         {
+            if(_completed||_disposed)return;
             if(result.Action is AdaptiveFanProductionActionKind.EnterCustomAndApply or AdaptiveFanProductionActionKind.ApplyChangedLevel or AdaptiveFanProductionActionKind.HoldCustom)
             {
                 if(result.EqualFanLevel!=_lastApplied&&result.Action!=AdaptiveFanProductionActionKind.HoldCustom)_appliedChanges++;
@@ -188,17 +193,18 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
     }
     public void Close(string reason)
     {
-        lock(_sync){if(_closed)return;_closed=true;_reason=reason;Write("closed",new{atUtc=DateTimeOffset.UtcNow,reason});}
+        lock(_sync){if(_closed||_completed)return;_closed=true;_reason=reason;Write("closed",new{atUtc=DateTimeOffset.UtcNow,reason});}
     }
     public void Reset()
     {
         lock(_sync){_active.Reset();foreach(var v in _variants){v.Policy.Reset();v.Sources.Reset();}_variantLevels.Clear();_lastApplied=null;_evaluatedTimestamp=null;}
     }
-    public void RecordHost(string kind,object data){lock(_sync){if(!_disposed)Write(kind,data);}}
+    public void RecordHost(string kind,object data){lock(_sync){if(!_disposed&&!_completed)Write(kind,data);}}
     public void Complete(object cleanup,bool protocolComplete=false)
     {
         lock(_sync)
         {
+            if(_completed)return;
             var summary=new{schemaVersion=1,kind="VictusFanControl.PhysicalPlatformExperiment",firstUtc=_first,lastUtc=_last,
                 telemetryRows=_telemetryRows,qualifiedRows=_qualifiedRows,decisions=_decisions,appliedChanges=_appliedChanges,
                 cpuMaximumC=_cpuMaximum,gpuMaximumC=_gpuMaximum,decisionsByController=_counts,reason=_reason,cleanup,
@@ -207,6 +213,7 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
             Write("completed",summary);
             var temp=Path.Combine(_directory,"summary.json.tmp");File.WriteAllText(temp,JsonSerializer.Serialize(summary,new JsonSerializerOptions(Json){WriteIndented=true}));
             File.Move(temp,Path.Combine(_directory,"summary.json"),true);
+            _completed=true;_closed=true;
         }
     }
     public void Dispose(){lock(_sync){if(_disposed)return;_disposed=true;_trace.Dispose();}}

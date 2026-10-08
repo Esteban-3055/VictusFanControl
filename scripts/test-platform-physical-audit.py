@@ -15,8 +15,13 @@ def dispatch(trace):next(r['data'] for r in trace if r['kind']=='dispatch-result
 def missing(trace):
     timestamp=next(r['data']['timestamp'] for r in trace if r['kind']=='decision')
     next(r['data'] for r in trace if r['kind']=='telemetry' and r['data']['snapshot']['timestamp']==timestamp)['snapshot']['cpuLoadPercent']=None
-def truncate(trace):trace.pop()
-for mutate in (raw,variant,admission,dispatch,missing,truncate):
+def truncate(trace):trace.pop(next(i for i,r in enumerate(trace) if r['kind']=='completed'))
+def post_data(trace):trace.append(dict(kind='telemetry',data={}))
+def wrong_close(trace):trace.append(dict(kind='closed',data=dict(reason='Unrelated interruption',atUtc='2099-01-01T00:00:00+00:00')))
+def early_close(trace):
+    del trace[next(i for i,r in enumerate(trace) if r['kind']=='completed')+1:]
+    trace.append(dict(kind='closed',data=dict(reason='Cierre de ventana',atUtc='1970-01-01T00:00:00+00:00')))
+for mutate in (raw,variant,admission,dispatch,missing,truncate,post_data,wrong_close,early_close):
     with tempfile.TemporaryDirectory(prefix='vfc-audit-negative-') as tmp:
         root=pathlib.Path(tmp);changed=copy.deepcopy(rows);mutate(changed)
         (root/'experiment.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in changed),encoding='utf-8')
@@ -24,4 +29,4 @@ for mutate in (raw,variant,admission,dispatch,missing,truncate):
         try:audit.audit(root)
         except (AssertionError,ValueError,KeyError,TypeError):continue
         raise AssertionError('Corruption accepted: '+mutate.__name__)
-print('Independent physical audit negative controls: PASS (6 corruptions rejected).')
+print('Independent physical audit negative controls: PASS (9 corruptions rejected).')

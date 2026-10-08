@@ -12,6 +12,16 @@ internal sealed class ReadSlot<T> where T:class
     private Task<(T? Value,string? Error,int Epoch)>? _pending;
     private long _next;
     private int _epoch;
+    private sealed record NativeProgress(long QueuedAt, long? StartedAt = null, long? CompletedAt = null);
+    private NativeProgress? _progress;
+    internal sealed record ReadProgress(bool InFlight, bool NativeRunning, long? QueueWaitMilliseconds, long? NativeElapsedMilliseconds);
+    public ReadProgress CaptureProgress()
+    {
+        var p=Volatile.Read(ref _progress);var now=Environment.TickCount64;
+        return new(InFlight,p?.StartedAt is not null&&p.CompletedAt is null,
+            p is null?null:Math.Max(0,(p.StartedAt??now)-p.QueuedAt),
+            p?.StartedAt is not {} start?null:Math.Max(0,(p.CompletedAt??now)-start));
+    }
     public T? Latest { get; private set; }
     public string? Error { get; private set; }
     public bool InFlight=>_pending is {IsCompleted:false};
@@ -25,7 +35,14 @@ internal sealed class ReadSlot<T> where T:class
         }
         if(_pending is not null||milliseconds<_next)return;
         int epoch=_epoch;_next=milliseconds+1000;
-        _pending=Task.Run(()=>{try{return ((T?)read(),(string?)null,epoch);}catch(Exception ex){return ((T?)null,ex.GetType().Name+": "+ex.Message,epoch);}});
+        var progress=new NativeProgress(Environment.TickCount64);Volatile.Write(ref _progress,progress);
+        _pending=Task.Run(()=>
+        {
+            progress=progress with{StartedAt=Environment.TickCount64};Volatile.Write(ref _progress,progress);
+            try{return ((T?)read(),(string?)null,epoch);}
+            catch(Exception ex){return ((T?)null,ex.GetType().Name+": "+ex.Message,epoch);}
+            finally{Volatile.Write(ref _progress,progress with{CompletedAt=Environment.TickCount64});}
+        });
     }
 }
 
