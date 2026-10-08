@@ -10,7 +10,7 @@ que el fallo del predictor OEM invalide los sensores.
 La propuesta es conservar la curva propia y estudiar **retencion de ventilacion
 durante enfriamiento** mediante TZ01/DTT3. El candidato preferido para la siguiente
 fase es `both-retention`: los sensores pueden sostener demanda previamente
-alcanzada, pero no iniciar una subida nueva por si solos. La variante `both`, que
+alcanzada, sin aportar demanda raw superior al ultimo nivel del observador. La variante `both`, que
 permite demanda adicional completa, se conserva como comparacion. Esta eleccion
 es una decision de diseno apoyada por el experimento, no una cualificacion termica.
 

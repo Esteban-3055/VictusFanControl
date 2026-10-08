@@ -57,18 +57,18 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('fixtures', type=pathlib.Path); p.add_argument('platform_fixtures', type=pathlib.Path)
     p.add_argument('output', type=pathlib.Path); p.add_argument('--compress', action='store_true')
-    a = p.parse_args(); summary = json.loads((a.output/'summary.json').read_text())
+    a = p.parse_args(); summary = json.loads((a.output/'summary.json').read_text(encoding='utf-8-sig'))
     assert summary['productionEnabled'] is False and summary['hardwareWrites'] is False
-    golden = json.loads((a.platform_fixtures/'baseline-signatures.json').read_text())
+    golden = json.loads((a.platform_fixtures/'baseline-signatures.json').read_text(encoding='utf-8-sig'))
     profiles = {p['name']: p['fan'] for p in summary['profiles']}; rows_checked = 0
     recorded_path = a.platform_fixtures/'recorded-fan-settings.json'
     assert hashlib.sha256(recorded_path.read_bytes()).hexdigest() == summary['recordedSettingsHash']
-    recorded = json.loads(recorded_path.read_text())
+    recorded = json.loads(recorded_path.read_text(encoding='utf-8-sig'))
     assert profiles['recorded-ac'] == recorded['ac'] and profiles['recorded-battery'] == recorded['battery']
     for session in ('v10', 'v11'):
         path = a.platform_fixtures/(session+'.cores.jsonl.gz')
         assert hashlib.sha256(path.read_bytes()).hexdigest() == summary['archivedCoreHashes'][session]
-        manifest = json.loads((a.platform_fixtures/(session+'.cores.manifest.json')).read_text())
+        manifest = json.loads((a.platform_fixtures/(session+'.cores.manifest.json')).read_text(encoding='utf-8-sig'))
         assert hashlib.sha256(gzip.decompress(path.read_bytes())).hexdigest() == manifest['uncompressedSha256']
     for run in summary['runs']:
         session, profile, variant = (run[k] for k in ('session','profile','variant'))

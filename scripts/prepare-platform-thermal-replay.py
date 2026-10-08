@@ -22,7 +22,7 @@ def prepare(bundle_path, diagnostic_path, output):
                 'source': name, 'sourceSha256': hashlib.sha256(raw).hexdigest(),
                 'rows': len(result), 'uncompressedSha256': hashlib.sha256(data).hexdigest(),
                 'disclosure': 'Archived CPU row epoch approximates acquisition; no logical processor mapping is inferred.'
-            }, indent=2)+'\n')
+            }, indent=2)+'\n', encoding='utf-8')
     with zipfile.ZipFile(diagnostic_path) as diagnostic:
         raw = diagnostic.read('profiles-draft.json')
         draft = json.loads(raw.decode('utf-8-sig'))
@@ -31,7 +31,7 @@ def prepare(bundle_path, diagnostic_path, output):
             'guiRevision': '1e30e2a1893b0542505b2ac3b3f29e4895a19213',
             'disclosure': 'Diagnostic draft, not proof these preferences were active during archived OEM captures.',
             'ac': draft['ac']['fan'], 'battery': draft['battery']['fan']
-        }, indent=2, ensure_ascii=False)+'\n')
+        }, indent=2, ensure_ascii=False)+'\n', encoding='utf-8')
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
