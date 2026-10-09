@@ -753,8 +753,10 @@ public sealed class AdaptiveFanProductionController
 
             var preparedDecision = _experimentalPolicy is IExperimentalFanSupplement {Enabled:true} supplement
                 ? _preparedEngine?.EvaluateWithSupplement(input, raw => supplement.GetSupplement(input, raw,
-                    _lastAutomaticResult?.Action is AdaptiveFanProductionActionKind.EnterCustomAndApply or AdaptiveFanProductionActionKind.ApplyChangedLevel or AdaptiveFanProductionActionKind.HoldCustom
-                        ? _lastAutomaticResult.EqualFanLevel : null), retentionOnly:true)
+                    // Decision markers are cleared by source waits and configuration
+                    // changes; the applied request remains valid until release or failure.
+                    _planner.NotionalCustom && _coordinator.Authority == FanAuthority.Custom
+                        ? _planner.LastAppliedLevel : null), retentionOnly:true)
                 : _preparedEngine?.Evaluate(input);
             if (_experimentalPolicy is not null && _experimentalPolicy is not IExperimentalFanSupplement {Enabled:false})
             {

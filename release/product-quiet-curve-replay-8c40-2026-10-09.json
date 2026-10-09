@@ -8,13 +8,13 @@
   "sourceSha256": {
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "3bbd2426fc4c23f46ef8b0db80c057de94e8296c72cfad0d83e55ec51abe03fe",
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "025e9ad74f4fc22b45f88983779b82540ae00702babee2245313cab4a059dbb6",
-    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "faaa2dc3f904a599aae74e59d28b531572dbaafdaff83ca6dd5f3be30299e92e",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "dd8211878873bf4af1efd874251108561a05e96a5f4b1af522eb3392a30f68c2",
     "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "7c94c2852df2ebd257c66107770d815ab46a47d7bba95edac275fe9edc1c4077",
     "src/VictusFanControl/Product/ProductProfiles.cs": "573b41d27b0928f3f452c875c8044292209cd05dc4105503a1ef9a1c166937c4",
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
-    "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "a22d0389065f3b570604fbdcc0188b311390c9d962a041de5c00acbd312c8e3a",
-    "tools/PlatformThermalReplay/ProductCurveStudy.cs": "c7d5d4a9bc12f4138dee2d2dd0164030d8ae4dcba2dd26bf9ffb605a48f02cb0",
-    "src/VictusFanControl.App/Product/ProductRuntime.cs": "43c34c8eabae1e02b13b09a4004ca270ad583a16be79811297d8320124f24f2c",
+    "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "e0e395a1eab83272c3c4a38d3a77d48868f951808883fe1deb36640a98665b8f",
+    "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
+    "src/VictusFanControl.App/Product/ProductRuntime.cs": "0fcdbba3badab2599219d9921b03e6d647edbf8ed75eeaef7d4813e33b7f43e9",
     "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "d731e33907c5ade3c328849e578a29c7442713048373c9da3d59221cfa7f5260"
   },
   "historicalReconstruction": {
@@ -297,5 +297,7 @@
     },
     "disclosure": "Same recorded CPU/GPU temperatures and powers for all candidates. Targets are simulated with immediate acknowledgements; levels*100 are nominal RPM, not noise/dBA. No counterfactual cooling, acoustic improvement or physical qualification is inferred."
   },
-  "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification."
+  "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification.",
+  "sourceBindingRevision": 2,
+  "sourceBindingUpdate": "Original published binding remains in tag v1.0.0 (43a8d19c3b743db2ad9c184e34c356f14251edcc). Re-executed the unchanged 390-decision AC input with source-independent retention and the applied-request reference correction; all numerical outputs remain identical. AC/Battery startup and round trips are synthetic software regressions, not new physical observations."
 }

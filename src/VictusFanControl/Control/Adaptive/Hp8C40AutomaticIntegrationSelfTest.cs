@@ -469,11 +469,14 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
         await using(var coordinator=new FanControlCoordinator(backend))
         {
             var profiles=new VictusFanControl.Product.ProductProfiles();
+            var retainedLevel=new RetentionAcknowledgementFixture();
             var controller=new AdaptiveFanProductionController(coordinator,profiles.Ac.Fan.BuildPolicy(),true,true,
-                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,automaticConfiguration:profiles.Ac.Fan,automaticMinimumLevel:10);
+                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,automaticConfiguration:profiles.Ac.Fan,automaticMinimumLevel:10,
+                useRawCpuThermalResponse:true,experimentalPolicy:retainedLevel);
             await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,default);
             clock=1000;var sample=Sample(Now(),40) with{GpuTemperatureC=35,GpuPowerW=5,CpuLoadPercent=60};
             await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(retainedLevel.LastAcknowledgedLevel is null,"retention invented an acknowledgement before the first fan request");
             clock+=1000;sample=sample with{Timestamp=Now()};
             controller.EvaluateAutomaticSafety(sample,Raw(sample),observe:true);
             var cancelled=false;
@@ -492,6 +495,7 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             await controller.ApplyUnifiedDemandAsync(profiles.Battery.Fan.UnifiedDemand!,()=>{},default,profiles.Battery.Fan);
             clock+=1000;sample=sample with{Timestamp=Now()};
             var resumed=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(retainedLevel.LastAcknowledgedLevel==12,"retention lost its acknowledged level across source wait and Battery handoff");
             Check(resumed.ObservedLoadSeconds>=3&&resumed.SustainedLoadCooling==false,
                 "production diagnostic lost load history across source wait and curve handoff");
             Check(resumed.EqualFanLevel==12&&resumed.SmoothedDemandLevel is >10 and <12&&
@@ -509,6 +513,7 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             await controller.ApplyTuningAsync(adjusted,()=>{},default);
             clock+=1000;sample=sample with{Timestamp=Now()};
             var preserved=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(retainedLevel.LastAcknowledgedLevel==12,"retention lost its acknowledged level across AC return and tuning");
             Check(preserved.ObservedLoadSeconds>resumed.ObservedLoadSeconds,"response tuning preserves accumulated loaded intervals");
             await controller.ApplyTuningAsync(adjusted with{LoadThresholdPercent=99},()=>{},default);
             clock+=1000;sample=sample with{Timestamp=Now()};
@@ -545,6 +550,18 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
         {if(Refuse)throw new InvalidOperationException("synthetic source lost before native dispatch");}
         public void ObserveDuringActuation(AdaptiveFanPolicyInput input) { }
         public void Reset() { }
+    }
+
+    private sealed class RetentionAcknowledgementFixture:IExperimentalFanSupplement
+    {
+        public bool Enabled=>true;
+        internal int? LastAcknowledgedLevel;
+        public double? GetSupplement(AdaptiveFanPolicyInput input,double baselineRawDemand,int? lastAcknowledgedLevel)
+        {LastAcknowledgedLevel=lastAcknowledgedLevel;return null;}
+        public AdaptiveFanInertiaDecision Evaluate(AdaptiveFanPolicyInput input,AdaptiveFanInertiaDecision baseline)=>baseline;
+        public void EnsureDispatchAllowed(DateTimeOffset timestamp,DateTimeOffset now) { }
+        public void ObserveDuringActuation(AdaptiveFanPolicyInput input) { }
+        public void Reset()=>LastAcknowledgedLevel=null;
     }
 
     private static SafetyGateResult Raw(TelemetrySnapshot snapshot) =>

@@ -12,6 +12,13 @@ y las protecciones térmicas. Un fallo real de sensores sigue solicitando
 Firmware y no se rearma solo. El estado defectuoso de una sesión anterior se
 limpia mediante Reiniciar sesión, antes de activar desde Firmware.
 
+El techo retenido usa el último nivel aplicado del planificador mientras
+conserva autoridad Custom. Limpiar el marcador de decisión al esperar límites
+CPU/GPU o cambiar la curva no borra esa solicitud. Liberación, fallo o pérdida
+de autoridad descartan la referencia; antes del primer comando no se inventa
+un nivel reconocido. Un backend sintético reproduce el fallo anterior y
+verifica batería, retorno AC y cambio de tiempos sin escribir hardware.
+
 La comparación física disponible es AC: falta observar la retención en batería
 y su transición en el destino. El experimento físico ABBA histórico continúa
 siendo AC exclusivo. Las secciones siguientes describen la implementación y

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Allow optional TZ01/DTT3 retention to start on Battery and continue through AC/Battery profile changes without resetting its episode. Preserve its two-level/60-second bounds, fresh sensor admission, coupled CPU/GPU handoff and thermal/watchdog protections. Battery behavior remains pending a target observation.
+- Preserve the last applied fan request for retention when a source wait or live configuration change clears the decision marker; retain release/failure fencing and verify the regression in the real controller with a synthetic backend.
 
 ## [1.0.0] - 2026-10-09
 
