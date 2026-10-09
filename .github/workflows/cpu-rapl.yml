@@ -2,7 +2,7 @@ name: cpu-rapl
 
 on:
   push:
-    branches: [ 'feature/intel-rapl-*', 'integration/**', 'feature/victus-8c40-automatic-final-qualification' ]
+    branches: [ main, 'feature/intel-rapl-*', 'integration/**', 'feature/victus-8c40-automatic-final-qualification' ]
   pull_request:
     branches: [ main ]
     paths:

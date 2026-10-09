@@ -1,5 +1,7 @@
 # Cierre de la versión final
 
+**Plan histórico anterior a v1.0.0.** La entrega habitual para el destino exacto fue autorizada por el usuario, sin convertir las observaciones físicas pendientes en PASS. El estado vigente está en [PRODUCT_V1.md](PRODUCT_V1.md) y [PRODUCT_VALIDATION_STATUS.md](PRODUCT_VALIDATION_STATUS.md). Se conserva el plan original a continuación.
+
 Destino: HP 8C40 / 9D0R1LA / BIOS F.18. El paquete actual sigue siendo de revisión;
 La candidata incluye `PRODUCT_FINAL_CANDIDATE.md`, evidencia consolidada y
 `FinalCheck` sobre los ejecutables distribuidos. La etiqueta estable requiere cerrar las rutas pendientes, sin repetir

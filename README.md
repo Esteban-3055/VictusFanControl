@@ -1,108 +1,53 @@
-# VictusFanControl
+# VictusFanControl v1.0.0
 
-VictusFanControl is an experimental, fail-closed fan-control application for the exact validated HP Victus target **HP 8C40 / 9D0R1LA / BIOS F.18**.
+[Español](README.es.md) · [Download v1.0.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.0.0) · [Installation and operation](docs/PRODUCT_V1.md) · [Validation status](docs/PRODUCT_VALIDATION_STATUS.md)
 
-## Current GUI phase
+Windows fan control and CPU/GPU preferences for the exact target **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, board revision 63.43, Intel Core i7-13700H and NVIDIA RTX 4060 Laptop GPU. v1.0.0 enables habitual Automatic on this target. Other models and BIOS versions are outside this release's control authorization; HP 88F8 material remains historical.
 
-The normal Windows application now opens the rebuilt product interface: seven pages,
-exactly two editable AC/Battery profiles, six independent fan demand curves per
-profile, a node graph, CPU PL1/PL2 and GPU clock preferences, and live telemetry.
-Editing and saving never grant hardware authority. Apply and Release remain explicit.
-Normal Automatic and custom GPU clock execution remain closed pending qualification.
+## Install
 
-The historical qualification GUI is retained only for explicit test entries.
-Blocks 2 and 3 are paused until this GUI phase is complete. See
-[the GUI audit and execution boundaries](docs/GUI_PRODUCT_PHASE.md) for current
-behavior, deliberate reference adaptations, and validation limits. Older milestone
-sections below describe their original qualification state.
+Requires Windows 11 x64, .NET Desktop Runtime 8 x64, the PawnIO driver and NVIDIA/NVML. The ZIP includes the application's PawnIO modules; it does not install those prerequisites.
 
-## Current target
-
-The active production-development target is:
-
-- HP Victus 15-fa1xxx family, validated SKU prefix `9D0R1LA`
-- motherboard `HP 8C40`, board revision `63.43`
-- BIOS `F.18`
-- Intel Core i7-13700H, 14 physical cores
-- NVIDIA GeForce RTX 4060 Laptop GPU
-- equal CPU/GPU fan commands only, physically validated from level **10 through 50**
-
-The older HP 88F8 target remains in the repository as historical/legacy support and qualification evidence. It is not the target of the current post-M9 work.
-
-## Current control state
-
-The M9 production watchdog path has been promoted for the exact HP 8C40 target. Normal backend construction now uses the target-bound M4 watchdog lease and the existing fail-closed ownership/restore protocol.
-
-User fan control is still deliberately **OFF by default**:
-
-- `control.enabledByDefault=false`
-- `automaticPolicyEnabled=false`
-- no automatic curve commands are issued during ordinary startup
-- M9C and M9D qualification-only construction/execution gates remain closed
-- P13 user-facing Firmware/Manual/Automatic UI is software-complete
-- Manual and Automatic execution gates remain closed
-- post-M9 manual/automatic hardware validation is a separate later gate
-
-Launching the GUI therefore does not by itself request Custom authority.
-
-## Production safety contract
-
-The supported write path is intentionally narrow:
-
-```text
-Telemetry (PawnIO Intel + ACPI EC + NVIDIA NVML + Windows load)
-        |
-        v
-Runtime state + SafetyGate + HP 8C40 thermal confirmation
-        |
-        v
-FanControlCoordinator
-        |
-        v
-HP 8C40 production watchdog lease
-        |
-        v
-Hp8C40FanControlBackend
-        |
-        v
-HP WMI SetFanLevel -> EC setpoint ACK -> dual-tach feedback
-```
-
-Core invariants are:
-
-- CPU and GPU fan levels are always equal.
-- Validated fan envelope is 10..50; level 0/fan-stop is not used.
-- EC 0x62/0x63 are diagnostic read-only; there are no arbitrary EC writes.
-- GPU >= 87 C and CPU >= 99 C trigger immediate firmware handoff.
-- HP 8C40 CPU 95..98.x C requires five fresh consecutive samples before effective thermal preemption.
-- Missing/stale/implausible telemetry, ownership loss, watchdog failure, lifecycle fencing, or backend failure fail closed.
-- Unchanged fan targets are not intended to be continuously retransmitted.
-- Strong restore is firmware FF/FF + LegacyDefault + stable FF/FF + watchdog RELEASE + journal absence.
-
-## Adaptive policy status
-
-The hardware-independent adaptive policy engine and offline shadow/replay tooling exist and are tested. They consume CPU/GPU temperature, power and load, choose a single equal fan demand, apply bounded slew/decrease confirmation/deadband, and reject duplicate/out-of-order/gapped telemetry.
-
-A production policy curve is **not yet physically validated** and automatic policy remains disabled. See `docs/ADAPTIVE_POLICY_PREPARATION.md` and `docs/POST_M9_SOFTWARE_ROADMAP.md`.
-
-## Development setup
-
-Requirements: Windows 11 x64, .NET 8 SDK, Administrator terminal for hardware/service operations, PawnIO 2.2+, and the NVIDIA driver/NVML.
+1. Download **VictusFanControl-1.0.0-win-x64.zip** from Releases and extract all files. Exit older Victus applications normally from their tray menus.
+2. Open PowerShell **as administrator using the same Windows account**, in the extracted folder.
+3. Run:
 
 ```powershell
-.\scripts\setup-pawnio-modules.ps1
-.\scripts\probe-backends.ps1
-.\scripts\run-gui.ps1
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+.\Start-ProductGui.ps1 -Mode Install
 ```
 
-Software-only CI/self-tests do not authorize hardware execution. Physical gates must be opened separately and explicitly.
+`Install` verifies hashes, copies the release under `%LOCALAPPDATA%\VictusFanControl\releases`, registers the current user's elevated logon task, saves **start minimized + activate Automatic on startup**, and opens the app. Custom curves and CPU/GPU limits are preserved. Pending recovery records block activation and are retained.
 
-## License
+Use `-Mode Verify` or `-Mode FinalCheck` to check the package without hardware commands. `-Mode Open` opens without registering a task; a previously saved Automatic-on-start preference still applies. Settings allows disabling Windows startup and saving the minimized/Automatic preferences. Closing the window minimizes it; **Exit** in the tray releases control.
 
-MIT. See [LICENSE](LICENSE). Third-party components and licenses are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+## What v1.0.0 includes
 
-The successful build workflow also publishes `product-gui-review-<HEAD>`: the
-verified Windows payload, current GUI documentation, SHA256 manifest and launcher.
-Use [the grouped validation route](docs/GUI_VICTUS_VALIDATION.md) for the remaining
-Victus checks. `Start-ProductGui.ps1 -Mode SelfTest` uses isolated recording ports;
-`-Mode Open` starts the normal GUI in Firmware without applying limits.
+- Seven-page GUI, AC/Battery profiles, one unified fan curve, six adjustable temperature/power/load influences, simulator, live tuning and session diagnostics.
+- New AC default: levels **12, 12, 18, 28, 34, 44, 50** at demand **0, 40, 50, 65, 76, 90, 100**. Battery retains its defaults. Only untouched old AC fan defaults migrate; saving backs up the previous preferences.
+- Habitual Automatic without the review modes' 5/45-minute expiry, equal CPU/GPU fan commands within 10–50, and both performance limits prepared through Guardian before fans activate.
+- Optional Windows startup and one guarded activation attempt after three distinct fresh observations. Suspension, display-off and interruptions require manual reactivation; session restart opens in Firmware.
+- Optional experimental TZ01/DTT3 retention, disabled by default: AC only, up to two extra raw levels for 60 seconds, bounded by the last acknowledged level. It can prolong noise.
+- CPU/GPU recovery preflight that retains journals and provides explicit recovery with exact session IDs.
+
+## Protection and evidence
+
+Automatic begins in Firmware. Admission requires complete fresh telemetry, a stable source, CPU ≤90 °C and GPU ≤82 °C. During operation, CPU ≥95 °C has at most 2000 ms confirmation; CPU ≥99 °C triggers immediate handoff. GPU >82 °C, CPU >60 W, GPU >75 W, stale data or lifecycle faults interrupt control. The watchdog and bounded AC/Battery handoff remain active.
+
+The product uses bounded HP WMI fan commands and watchdog, PawnIO Intel/ACPI readings, NVIDIA NVML and Performance Guardian. WMI acceptance **does not prove independent firmware ownership or exact setpoint readback**. NVML acceptance **does not prove the exact locked GPU clock range**.
+
+Windows/Linux software checks, packaged fixtures and offline replay are verified. Earlier physical evidence remains scoped to the measured builds/configurations. Lower simulated demand **does not establish lower dBA or equivalent cooling**. Representative use, this build's suspend/exit/logon behavior and comparable thermal/acoustic measurements remain listed in `PRODUCT-RELEASE.json`. See [current evidence and limitations](docs/PRODUCT_VALIDATION_STATUS.md).
+
+## Develop and publish
+
+Use .NET 8 SDK and the explicit product release property:
+
+```powershell
+dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
+```
+
+The pipeline packages all product binaries as **1.0.0.0**. A successful `main` build can publish v1.0.0 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
+
+Historical qualification builds retain their RC version and gates, including `control.enabledByDefault=false` and `automaticPolicyEnabled=false`. These describe the legacy harness; the product's separate authorization covers only the exact target above. Earlier plans remain development history.
+
+MIT: [LICENSE](LICENSE). External components: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

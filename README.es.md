@@ -1,88 +1,53 @@
-# VictusFanControl
+# VictusFanControl v1.0.0
 
-VictusFanControl es una aplicación experimental de control de ventiladores con diseño **fail-closed** para el objetivo exacto validado **HP 8C40 / 9D0R1LA / BIOS F.18**.
+[English](README.md) · [Descargar v1.0.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.0.0) · [Instalación y uso](docs/PRODUCT_V1.md) · [Estado de validación](docs/PRODUCT_VALIDATION_STATUS.md)
 
-## Equipo objetivo actual
+Control de ventiladores y preferencias CPU/GPU para Windows, limitado al destino exacto **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, placa revisión 63.43, Intel Core i7-13700H y NVIDIA RTX 4060 Laptop GPU. v1.0.0 habilita Automático habitual para este equipo. Otros modelos o BIOS quedan fuera de esta autorización; HP 88F8 se conserva como histórico.
 
-El desarrollo productivo actual está limitado a:
+## Instalar
 
-- familia HP Victus 15-fa1xxx, prefijo de SKU validado `9D0R1LA`
-- placa `HP 8C40`, revisión `63.43`
-- BIOS `F.18`
-- Intel Core i7-13700H, 14 núcleos físicos
-- NVIDIA GeForce RTX 4060 Laptop GPU
-- comandos CPU/GPU siempre iguales, con niveles **10 a 50** físicamente validados
+Requiere Windows 11 x64, .NET Desktop Runtime 8 x64, controlador PawnIO y NVIDIA/NVML. El ZIP incluye los módulos PawnIO de la aplicación; no instala estos requisitos.
 
-El objetivo HP 88F8 anterior permanece en el repositorio como soporte/evidencia histórica. No es el objetivo del trabajo post-M9 actual.
-
-## Estado actual del control
-
-La ruta productiva M9 con watchdog ya fue promovida para el objetivo HP 8C40 exacto. La construcción normal del backend utiliza el lease M4 ligado al objetivo y mantiene el protocolo fail-closed de ownership y restauración.
-
-El control de ventiladores para el usuario continúa deliberadamente **apagado por defecto**:
-
-- `control.enabledByDefault=false`
-- `automaticPolicyEnabled=false`
-- el arranque normal no envía comandos de curva automática
-- los gates de cualificación M9C/M9D siguen cerrados
-- la interfaz P13 Firmware/Manual/Automatic está completa a nivel de software
-- los gates de ejecución Manual y Automatic siguen cerrados
-- la validación física post-M9 de control manual/automático será un gate separado
-
-Por lo tanto, abrir la GUI por sí solo no debe solicitar autoridad Custom.
-
-## Contrato de seguridad productivo
-
-La ruta de escritura admitida es deliberadamente estrecha:
-
-```text
-Telemetría (PawnIO Intel + ACPI EC + NVIDIA NVML + carga Windows)
-        |
-        v
-Estado runtime + SafetyGate + confirmación térmica HP 8C40
-        |
-        v
-FanControlCoordinator
-        |
-        v
-Lease del watchdog productivo HP 8C40
-        |
-        v
-Hp8C40FanControlBackend
-        |
-        v
-HP WMI SetFanLevel -> ACK de setpoint EC -> feedback de ambos tacómetros
-```
-
-Invariantes principales:
-
-- Los niveles de CPU y GPU siempre son iguales.
-- El rango validado es 10..50; no se utiliza nivel 0/fan-stop.
-- EC 0x62/0x63 son solo diagnóstico/lectura; no se permiten escrituras EC arbitrarias.
-- GPU >= 87 C y CPU >= 99 C fuerzan handoff inmediato al firmware.
-- En HP 8C40, CPU 95..98.x C exige cinco muestras nuevas consecutivas antes de la preempción térmica efectiva.
-- Telemetría ausente/antigua/implausible, pérdida de ownership, watchdog, lifecycle o backend hacen fail-closed.
-- Un setpoint sin cambios no debe reenviarse continuamente por WMI.
-- Strong restore: FF/FF + LegacyDefault + FF/FF estable + RELEASE del watchdog + journal ausente.
-
-## Política adaptativa
-
-El motor adaptativo independiente del hardware y el replay/shadow offline ya existen y están probados. Utilizan temperatura, potencia y carga de CPU/GPU para producir un único nivel igual, con slew limitado, confirmación de bajada, deadband y rechazo de telemetría duplicada, fuera de orden o con gaps.
-
-La curva productiva todavía **no está físicamente validada** y la política automática sigue desactivada. Ver `docs/ADAPTIVE_POLICY_PREPARATION.md` y `docs/POST_M9_SOFTWARE_ROADMAP.md`.
-
-## Entorno de desarrollo
-
-Requisitos: Windows 11 x64, .NET 8 SDK, terminal de Administrador para operaciones de hardware/servicio, PawnIO 2.2+ y controlador NVIDIA/NVML.
+1. Descarga **VictusFanControl-1.0.0-win-x64.zip** desde Releases y extrae todos los archivos. Sal de las aplicaciones Victus anteriores desde la bandeja.
+2. Abre PowerShell **como administrador con tu misma cuenta de Windows**, en la carpeta extraída.
+3. Ejecuta:
 
 ```powershell
-.\scripts\setup-pawnio-modules.ps1
-.\scripts\probe-backends.ps1
-.\scripts\run-gui.ps1
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+.\Start-ProductGui.ps1 -Mode Install
 ```
 
-Los self-tests/CI de software no autorizan ejecución física. Los gates físicos se abren por separado y de forma explícita.
+`Install` verifica hashes, copia la versión bajo `%LOCALAPPDATA%\VictusFanControl\releases`, registra la tarea elevada de inicio de sesión, guarda **minimizar + activar Automático al iniciar** y abre la aplicación. Conserva curvas personalizadas y límites CPU/GPU. Los registros pendientes de recuperación bloquean la activación y se conservan.
 
-## Licencia
+`-Mode Verify` y `-Mode FinalCheck` comprueban el paquete sin comandos de hardware. `-Mode Open` abre sin registrar una tarea; se aplica Automático al iniciar si ya estaba guardado. En Configuración puedes desactivar el inicio con Windows y guardar las otras preferencias. Cerrar la ventana minimiza; **Salir** en la bandeja libera los controles.
 
-MIT. Ver [LICENSE](LICENSE) y [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+## Funciones de v1.0.0
+
+- GUI de siete páginas, perfiles AC/Batería, curva única, seis influencias de temperatura/potencia/carga, simulador, ajustes en vivo y diagnósticos por sesión.
+- Curva AC predeterminada nueva: niveles **12, 12, 18, 28, 34, 44, 50** para demanda **0, 40, 50, 65, 76, 90, 100**. Batería conserva sus valores. Solo se migran presets AC anteriores intactos; guardar respalda las preferencias.
+- Automático habitual sin vencimiento de 5/45 minutos, niveles iguales CPU/GPU dentro de 10–50, y ambos límites preparados mediante Guardian antes de activar ventiladores.
+- Inicio opcional con Windows y un único intento tras tres lecturas distintas y frescas. Suspensión, pantalla apagada e interrupciones requieren reactivación manual; reiniciar sesión abre en Firmware.
+- Retención TZ01/DTT3 opcional y experimental, desactivada de fábrica: solo AC, hasta dos niveles crudos extra durante 60 s, sin superar el último nivel reconocido. Puede prolongar el ruido.
+- Preflight de recuperación CPU/GPU que conserva journals y ofrece recuperación explícita con los IDs exactos.
+
+## Protecciones y evidencia
+
+Automático comienza en Firmware. La admisión requiere telemetría completa y fresca, fuente estable, CPU ≤90 °C y GPU ≤82 °C. En control, CPU ≥95 °C tiene hasta 2000 ms de confirmación; CPU ≥99 °C solicita Firmware inmediatamente. GPU >82 °C, CPU >60 W, GPU >75 W, datos caducados o fallos de lifecycle interrumpen. Se mantienen el watchdog y la transición acotada AC/Batería.
+
+El producto usa comandos HP WMI acotados y watchdog, lecturas Intel/ACPI mediante PawnIO, NVIDIA NVML y Performance Guardian. La aceptación WMI **no demuestra propiedad independiente del firmware ni readback exacto del nivel**. La aceptación NVML **no verifica el rango exacto de clocks GPU**.
+
+Están verificadas las pruebas de software Windows/Linux, fixtures del paquete y replay. Las pruebas físicas anteriores conservan su alcance por compilación y configuración. Menor demanda simulada **no demuestra menos dBA ni enfriamiento equivalente**. Uso representativo, suspensión/salida/inicio de sesión de esta compilación y comparación térmica/acústica siguen en `PRODUCT-RELEASE.json`. Consulta [la evidencia vigente y sus límites](docs/PRODUCT_VALIDATION_STATUS.md).
+
+## Desarrollo y publicación
+
+Con .NET 8 SDK, usa la propiedad explícita de entrega:
+
+```powershell
+dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
+```
+
+El pipeline empaqueta todos los binarios del producto como **1.0.0.0**. Una compilación de `main` correcta puede publicar v1.0.0 tras pasar las verificaciones OEM, WMI y CPU/GPU del mismo commit. Se comprueba cada archivo contra el manifiesto y se adjuntan SHA-256 y procedencia. No se sobrescribe una release existente.
+
+Los arneses históricos conservan versión RC y gates originales: `control.enabledByDefault=false` y `automaticPolicyEnabled=false`. Esos registros describen la cualificación antigua; el producto tiene autorización separada para este destino exacto. Los planes anteriores se mantienen como historial.
+
+Licencia MIT: [LICENSE](LICENSE). Componentes externos: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -1,4 +1,39 @@
-# Estado consolidado del producto — 6 de octubre de 2026
+# Estado consolidado del producto — v1.0.0, 9 de octubre de 2026
+
+Destino: **HP 8C40 / 9D0R1LA / BIOS F.18**, i7-13700H y RTX 4060 Laptop.
+v1.0.0 habilita Automático habitual, la nueva curva AC y el inicio con Windows
+solicitados por el usuario. [Guía vigente](PRODUCT_V1.md) y
+[notas de versión](../release/RELEASE-NOTES-v1.0.0.md).
+
+| Área | Estado vigente |
+|---|---|
+| GUI y paquete | Build Windows, fixtures del paquete, recuperación y renders verificados; soak de 924 renders/30 aperturas sin incremento GDI/USER |
+| Motor y replay | Verificaciones Windows/Linux; reconciliación independiente de 84 ejecuciones/323876 filas; replay histórico preservado |
+| Nueva curva AC | Predeterminada; replay de 390 decisiones: demanda media 20.8001 frente a 21.5807, 16 cambios frente a 18; temperaturas observadas iguales como entrada, no resultado contrafactual |
+| TZ01/DTT3 | Opcional, experimental y desactivado de fábrica; AC, +2 niveles crudos/60 s; no aprobación acústica ni de batería |
+| Automático habitual | Autorizado solo para el destino exacto; sin vencimiento 5/45 min; mismas protecciones y preparación CPU/GPU |
+| Inicio con Windows | Instalador/tarea y activación con tres lecturas distintas comprobados por fixtures sin hardware; falta observar el logon real de esta compilación |
+| Preferencias | Migra solo antiguo preset AC intacto; conserva curvas personalizadas, límites CPU/GPU y batería; respaldo al guardar |
+| Recuperación | Preflight conserva journals pendientes; recuperación explícita con sesiones exactas; aceptación NVML sin readback exacto del rango |
+
+La nueva entrega **no acredita un PASS físico completo ni menos ruido medido**.
+Se conservan cinco observaciones en `release/product-v1.json` (distribuido como
+`PRODUCT-RELEASE.json`): uso representativo del contrato CPU 95 °C, suspensión sin
+reentrada, salida/reinicio limpios, comparación térmica/acústica y logon real.
+El control se interrumpe ante lifecycle o pérdida de datos y no se rearma solo.
+Las evidencias anteriores no se repiten ni se convierten en pruebas de la nueva
+compilación por actualizar la etiqueta de versión.
+
+El replay de curva/retención utiliza las mismas temperaturas observadas con
+acknowledgement simulado: menor demanda no prueba enfriamiento equivalente.
+WMI no acredita propiedad independiente; NVML no acredita rango GPU exacto.
+La [evaluación TZ01/DTT3](PRODUCT_PLATFORM_RETENTION_2026-10-09.md) detalla su alcance.
+
+## Registro histórico consolidado — 6 de octubre de 2026
+
+Se conserva a continuación el estado anterior, sus pruebas y procedimientos.
+Las frases sobre Automático normal cerrado o arranque no habilitado se refieren
+a esas candidatas; para v1.0.0 rige la tabla y guía anteriores.
 
 Actualización de estabilidad: [estudio 8C40](FAN_STABILITY_STUDY_8C40.md). Los presets actuales incorporan meseta fría, histéresis y espera térmica; las mediciones previas y tablas históricas no certifican este ajuste físico.
 

@@ -1,5 +1,7 @@
 # Candidata final — HP 8C40 / F.18
 
+**Registro de la candidata anterior a v1.0.0.** Para la entrega actual, la curva predeterminada y el inicio automático consulta [PRODUCT_V1.md](PRODUCT_V1.md). Los pendientes se mantienen en `PRODUCT-RELEASE.json`; las afirmaciones de gates cerrados de este documento describen la candidata histórica.
+
 La GUI incorpora [retención TZ01/DTT3 y candidata AC](PRODUCT_PLATFORM_RETENTION_2026-10-09.md)
 opcionales, desactivadas por defecto, y preflight de recuperación CPU/GPU.
 El replay conserva la base numérica. Temperatura comparable y ruido real de

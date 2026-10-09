@@ -1,4 +1,19 @@
 # Changelog
+
+## [1.0.0] - 2026-10-09
+
+- Enable habitual Automatic for HP 8C40 / 9D0R1LA / BIOS F.18 with the new AC default; preserve Battery, custom curves and CPU/GPU limits.
+- Add fixed-path installation, optional elevated Windows logon startup and guarded Automatic activation after three fresh observations.
+- Preserve thermal/watchdog protections and manual reactivation after interruption or lifecycle events.
+- Keep TZ01/DTT3 retention optional and disabled by default; fix pending-session preflight and guarded AC/Battery tuning handoff.
+- Publish a manifest-verified Windows ZIP, SHA-256 and build provenance after same-commit software checks. No new complete physical or acoustic PASS is claimed.
+
+See [release notes](release/RELEASE-NOTES-v1.0.0.md) and [current validation](docs/PRODUCT_VALIDATION_STATUS.md).
+
+## Historical development log (before v1.0.0)
+
+The entries below preserve their original gates, outcomes and dates. Their closed-control statements refer to those historical builds.
+
 - Formally close WMI read-publication correction on 529f3f1 / full Windows CI #1214 SUCCESS (102 steps, 12 query/publication cases and 8 periodic cases). Preserve consumed generation 5, all six FAIL_CLOSED attempts and all physical/permanent gates closed; no target qualification or hardware execution is claimed.
 - Correct the reproduced WMI read-publication gap: mirror successful fresh control queries to existing periodic readers on the same native slot, preserving original acquisition timestamps. Fence publication by reader epoch and query order, reject abandoned/invalid/expired results, and prevent older success from hiding newer failure. Add seven regression groups (12 proof/publication cases total) and include publication source in P16 evidence. Keep uncached command proof, 3-second freshness, native non-overlap, all writes and physical gates unchanged.
 - Re-block consumed P16 generation 5 after attempt 6 FAIL_CLOSED: initial WMI/EC 30 proof succeeded, then periodic WMI freshness loss caused Firmware handoff; changed 40 reached backend tach wait and was canceled during missing fan telemetry. Preserve six attempts and exact evidence identities without claiming independent final restore, GUI exit or P16 PASS. Shared read-slot scheduling/provider cause remains unproven; no threshold, write or reader behavior changed.

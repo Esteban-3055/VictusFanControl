@@ -839,6 +839,12 @@ jobs:
             if (-not $listed.ContainsKey($relative)) { throw "Unlisted final candidate file: $relative" }
           }
 
+      - name: Verify public release archive preparation (no hardware IO)
+        shell: pwsh
+        run: |
+          python scripts/prepare-github-release.py --payload (Join-Path $env:RUNNER_TEMP 'VictusFanControl-product-gui-review') --output (Join-Path $env:RUNNER_TEMP 'VictusFanControl-public-release-assets') --source-head '${{ github.sha }}' --build-run-id '${{ github.run_id }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Public release asset verification failed.' }
+
       - name: Upload definitive GUI review package
         uses: actions/upload-artifact@v4
         with:

@@ -1,5 +1,7 @@
 # Definitive GUI product phase — AC / Battery
 
+**Historical development record.** Current v1.0.0 operation, default curve and guarded Windows startup are described in [PRODUCT_V1.md](PRODUCT_V1.md); evidence limits remain in [PRODUCT_VALIDATION_STATUS.md](PRODUCT_VALIDATION_STATUS.md). Qualification gates and closed-control statements below refer to their original development stages.
+
 Baseline: `bfd184e4889e6cf0b0760a48052c91f00bf441d4`, branch
 `feature/victus-8c40-automatic-final-qualification`. Same-HEAD build, cpu-rapl and
 wmi-fan-experiment checks were successful before implementation. Block1 physical

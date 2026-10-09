@@ -2,7 +2,7 @@ name: oem-shadow
 on:
   workflow_dispatch:
   push:
-    branches: ['feature/victus-8c40-oem-shadow-rebuilt']
+    branches: [main, 'feature/victus-8c40-oem-shadow-rebuilt']
   pull_request:
     paths: ['tools/OemShadow/**','tools/OemShadowCapture/**','tools/PlatformThermalReplay/**','scripts/*oem-shadow*','scripts/*platform-thermal*','scripts/*platform-physical*','scripts/generate-platform-research-inertia.py','scripts/Start-OemShadow.ps1','src/VictusFanControl/**','.github/workflows/oem-shadow.yml']
 jobs:
