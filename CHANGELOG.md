@@ -7,6 +7,7 @@
 - Preserve thermal/watchdog protections and manual reactivation after interruption or lifecycle events.
 - Keep TZ01/DTT3 retention optional and disabled by default; fix pending-session preflight and guarded AC/Battery tuning handoff.
 - Publish a manifest-verified Windows ZIP, SHA-256 and build provenance after same-commit software checks. No new complete physical or acoustic PASS is claimed.
+- Correct Windows PowerShell 5.1 JSON-array admission in the CI collector smoke test: unrelated command timeouts no longer masquerade as firmware failures, and empty ETW histories stay empty. Actual firmware failures, duplicate identities and malformed evidence still fail.
 
 See [release notes](release/RELEASE-NOTES-v1.0.0.md) and [current validation](docs/PRODUCT_VALIDATION_STATUS.md).
 

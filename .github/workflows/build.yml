@@ -197,6 +197,13 @@ jobs:
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-ScenarioC.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Scenario C PowerShell 5.1 self-test failed.' }
 
+      - name: Collector JSON record admission PowerShell 7 and 5.1 (no hardware IO)
+        shell: pwsh
+        run: |
+          .\scripts\test-collector-json-rows.ps1
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-collector-json-rows.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Collector JSON admission PowerShell 5.1 fixtures failed.' }
+
       - name: ACPI collector Windows smoke and ETW session cleanup
         shell: powershell
         run: |
@@ -212,16 +219,23 @@ jobs:
           if ($result.Count -ne 1) { throw 'Collector result missing.' }
           $summary = Get-Content (Join-Path $result[0].FullName 'capture-summary.json') -Raw | ConvertFrom-Json
           if ($summary.HardwareReads -or $summary.FanWrites -or $summary.EventChannelsEnabled) { throw 'Collector altered collection scope.' }
-          $commands = @(Get-Content (Join-Path $result[0].FullName 'commands.json') -Raw | ConvertFrom-Json)
+          . .\scripts\CollectorJsonRows.ps1
+          $commands = @(Convert-CollectorJsonRows (Get-Content (Join-Path $result[0].FullName 'commands.json') -Raw))
           $firmware = @($commands | Where-Object { $_.Destination -match 'acpi[\\/]capture.txt$' })
-          if ($firmware.Count -ne 1 -or $firmware[0].Status -ne 'ok') { throw 'Static firmware helper failed in Windows.' }
-          $tables = @(Get-Content (Join-Path $result[0].FullName 'acpi\tables\tables.json') -Raw | ConvertFrom-Json)
+          Write-Host ('Static firmware command matches: ' + $firmware.Count)
+          $firmware | Select-Object Destination,Status,ExitCode,DurationMs | ConvertTo-Json -Depth 4 | Write-Host
+          try { Get-CollectorFirmwareCommand $commands | Out-Null } catch {
+            $captureText = Join-Path $result[0].FullName 'acpi\capture.txt'
+            if (Test-Path -LiteralPath $captureText) { Get-Content -LiteralPath $captureText -Tail 80 | Write-Host }
+            throw ('Static firmware helper admission failed: ' + $_.Exception.Message + '; command identity/status and helper output preserved above.')
+          }
+          $tables = @(Convert-CollectorJsonRows (Get-Content (Join-Path $result[0].FullName 'acpi\tables\tables.json') -Raw))
           if (-not (Test-Path (Join-Path $result[0].FullName 'acpi\tables\registry-tables.json'))) { throw 'Registry ACPI coverage metadata missing.' }
           $tables | ConvertTo-Json -Depth 8 | Write-Host
           if (@($tables | Where-Object { $_.Status -eq 'exported-first-instance' }).Count -eq 0) { throw 'Windows firmware API exported no tables.' }
-          $enumeration = @(Get-Content (Join-Path $result[0].FullName 'acpi\tables\enumeration.json') -Raw | ConvertFrom-Json)
+          $enumeration = @(Convert-CollectorJsonRows (Get-Content (Join-Path $result[0].FullName 'acpi\tables\enumeration.json') -Raw))
           if (@($enumeration | Where-Object { $_.Signature -eq 'DSDT' }).Count -gt 0 -and @($tables | Where-Object { $_.Signature -eq 'DSDT' -and $_.Status -eq 'exported-first-instance' }).Count -ne 1) { throw 'Advertised DSDT capture missing.' }
-          $sessions = @(Get-Content (Join-Path $result[0].FullName 'etw\sessions.json') -Raw | ConvertFrom-Json)
+          $sessions = @(Convert-CollectorJsonRows (Get-Content (Join-Path $result[0].FullName 'etw\sessions.json') -Raw))
           foreach ($session in $sessions) {
             if ($session.StartStatus -ne 'ok' -or $session.StopStatus -ne 'ok') { throw 'ETW start/stop failed.' }
             logman.exe query $session.Name -ets 2>&1 | Out-Null
