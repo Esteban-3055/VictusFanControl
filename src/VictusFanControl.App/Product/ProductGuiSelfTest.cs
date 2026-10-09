@@ -28,8 +28,9 @@ internal static partial class ProductGuiSelfTest
                 retentionForm.HandleCommand("retention-toggle");
                 Require(retentionForm.Draft.ExperimentalPlatformRetention,"Experimental option did not enter the draft.");
                 var retentionPrior=retentionForm.Draft;retentionForm.HandleCommand("retention-quiet-candidate");
-                Require(retentionForm.Draft.Ac.CpuPl1Watts==retentionPrior.Ac.CpuPl1Watts&&retentionForm.Draft.Battery==retentionPrior.Battery,"Quiet preset changed performance limits or Battery.");
-                var stagedFan=retentionForm.Draft.Ac.Fan;retentionForm.HandleCommand("retention-quiet-candidate");Require(retentionForm.Draft.Ac.Fan==stagedFan,"Repeated preset accumulated a reduction.");
+                var candidateDraft=retentionForm.Draft;
+                Require(ProductProfilesStore.Serialize(candidateDraft with{Ac=candidateDraft.Ac with{Fan=retentionPrior.Ac.Fan}})==ProductProfilesStore.Serialize(retentionPrior),"Quiet preset changed performance limits or Battery.");
+                var stagedPreferences=ProductProfilesStore.Serialize(candidateDraft);retentionForm.HandleCommand("retention-quiet-candidate");Require(ProductProfilesStore.Serialize(retentionForm.Draft)==stagedPreferences,"Repeated preset accumulated a reduction.");
                 retentionForm.HandleCommand("retention-toggle");Require(!retentionForm.Draft.ExperimentalPlatformRetention,"Experimental option did not disable.");
             }
             ProductAutomaticActivationSelfTest.Run(Require);
