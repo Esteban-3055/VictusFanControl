@@ -10,7 +10,8 @@ try {
 $manifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'PRODUCT-GUI-MANIFEST.json') -Raw | ConvertFrom-Json
 if($InstallerProcessId -ne 0) {
     $installer=Get-Process -Id $InstallerProcessId -ErrorAction Stop
-    if($installer.ProcessName -notin @('VictusSetup',('VictusFanControl-'+$manifest.version+'-Setup-win-x64'))) {throw 'Proceso instalador no reconocido.'}
+    $info=$installer.MainModule.FileVersionInfo
+    if($info.FileDescription -ne 'VictusSetup' -or $info.FileVersion -ne ($manifest.version+'.0')) {throw 'Proceso instalador no reconocido.'}
 }
 $others=@(Get-Process -Name 'VictusFanControl*' -ErrorAction SilentlyContinue | Where-Object {$_.Id -ne $InstallerProcessId})
 if($others.Count -ne 0){throw 'Sal de VictusFanControl desde la bandeja antes de instalar. No se detienen procesos ni se eliminan journals.'}
