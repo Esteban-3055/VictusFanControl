@@ -495,15 +495,15 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             Check(resumed.ObservedLoadSeconds>=3&&resumed.SustainedLoadCooling==false,
                 "production diagnostic lost load history across source wait and curve handoff");
             Check(resumed.EqualFanLevel==12&&resumed.SmoothedDemandLevel is >10 and <12&&
-                controller.AutomaticConfiguration!.Profile.Id==profiles.Battery.Fan.Profile.Id&&backend.Levels.Count==1,
+                controller.AutomaticConfiguration!.Profile.Id==profiles.Battery.Fan.Profile.Id&&controller.AutomaticConfiguration.Tuning==profiles.Battery.Fan.Tuning&&backend.Levels.Count==1,
                 "Battery handoff lost continuity, metadata or actuation inertia");
             var rejected=false;
             try{await controller.ApplyUnifiedDemandAsync(profiles.Ac.Fan.UnifiedDemand!,()=>{},default,
-                profiles.Ac.Fan with{Tuning=profiles.Ac.Fan.Tuning with{RiseTimeConstantSeconds=9}});}catch(InvalidOperationException){rejected=true;}
+                profiles.Ac.Fan with{Tuning=profiles.Ac.Fan.Tuning with{MinimumLevel=30}});}catch(InvalidOperationException){rejected=true;}
             Check(rejected&&controller.AutomaticConfiguration!.Profile.Id==profiles.Battery.Fan.Profile.Id,
-                "different inertia tuning silently replaced the running engine");
+                "source transition changed its protected physical range");
             await controller.ApplyUnifiedDemandAsync(profiles.Ac.Fan.UnifiedDemand!,()=>{},default,profiles.Ac.Fan);
-            Check(controller.Mode==AdaptiveFanProductionMode.Automatic&&backend.Restores==0&&backend.Levels.Count==1,
+            Check(controller.Mode==AdaptiveFanProductionMode.Automatic&&controller.AutomaticConfiguration!.Tuning==profiles.Ac.Fan.Tuning&&backend.Restores==0&&backend.Levels.Count==1,
                 "AC return reacquired authority or wrote during configuration");
             var adjusted=profiles.Ac.Fan.Tuning with{RiseTimeConstantSeconds=7};
             await controller.ApplyTuningAsync(adjusted,()=>{},default);

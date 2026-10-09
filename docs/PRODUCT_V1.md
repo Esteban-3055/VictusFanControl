@@ -1,6 +1,6 @@
 # VictusFanControl v1.0.0 — HP 8C40 / 9D0R1LA / BIOS F.18
 
-Esta entrega habilita el uso habitual solicitado para el destino exacto. La curva AC predeterminada es la candidata de menor demanda intermedia: 12, 12, 18, 28, 34, 44, 50 para entradas 0, 40, 50, 65, 76, 90, 100. Conserva las protecciones térmicas crudas, subida e histéresis; descenso normal 25 s/confirmación 12 s y descenso corto 10 s/confirmación 4 s. Batería conserva su curva. Se migran solamente los presets AC anteriores intactos; se conservan curvas personalizadas y límites CPU/GPU. Guardar crea un respaldo exacto previo a v1.0.
+Esta entrega habilita el uso habitual solicitado para el destino exacto. La curva AC predeterminada es la candidata de menor demanda intermedia: 12, 12, 18, 28, 34, 44, 50 para entradas 0, 40, 50, 65, 76, 90, 100. Conserva las protecciones térmicas crudas, subida e histéresis; descenso normal 25 s/confirmación 12 s y descenso corto 10 s/confirmación 4 s. Batería conserva su curva y tiempos de descenso. La transición usa el mismo motor, cambia los tiempos compatibles del perfil de destino y reinicia las confirmaciones, conservando el nivel aplicado y el filtro; los rangos y pasos protegidos no pueden cambiar en vivo. Se migran solamente los presets AC anteriores intactos; se conservan curvas personalizadas y límites CPU/GPU. Guardar crea un respaldo exacto previo a v1.0.
 
 ## Instalar e iniciar con Windows
 

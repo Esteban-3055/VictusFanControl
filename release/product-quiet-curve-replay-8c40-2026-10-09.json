@@ -8,7 +8,7 @@
   "sourceSha256": {
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "3bbd2426fc4c23f46ef8b0db80c057de94e8296c72cfad0d83e55ec51abe03fe",
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "025e9ad74f4fc22b45f88983779b82540ae00702babee2245313cab4a059dbb6",
-    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "0dda983a0882ef75e2ab367eead7bd24ce064c6b0422626a7b69de75dc0e6dbd",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "faaa2dc3f904a599aae74e59d28b531572dbaafdaff83ca6dd5f3be30299e92e",
     "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "7c94c2852df2ebd257c66107770d815ab46a47d7bba95edac275fe9edc1c4077",
     "src/VictusFanControl/Product/ProductProfiles.cs": "573b41d27b0928f3f452c875c8044292209cd05dc4105503a1ef9a1c166937c4",
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",

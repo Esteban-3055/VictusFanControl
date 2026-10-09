@@ -555,7 +555,9 @@ public sealed class AdaptiveFanProductionController
                 throw new InvalidOperationException("Aplicar requiere Automatic activo y una sesión vigente con curva única.");
             verifyAdmission();
             if (sourceCopy is not null && sourceCopy.Tuning != _automaticConfiguration.Tuning)
-                throw new InvalidOperationException("La transición en vivo requiere la misma configuración de inercia en AC/Batería.");
+                // Reuse the guarded live-tuning path: preserve EMA/target, clear confirmations,
+                // and reject changes to the physical range or protected step sizes before mutation.
+                _preparedEngine.UpdateTuning(sourceCopy.Tuning);
             var replacement = (sourceCopy ?? _automaticConfiguration) with { UnifiedDemand = frozen };
             Volatile.Write(ref _lastAutomaticResult, null);
             _preparedEngine.UpdateUnifiedDemand(frozen);

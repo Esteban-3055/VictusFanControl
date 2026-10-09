@@ -26,7 +26,7 @@ internal static class ProductAutomaticActivationSelfTest
         clock++;require(review.Expired&&review.RemainingSeconds==0,"Long review passed its 45-minute deadline.");
         review.Stop();require(review.RemainingSeconds is null,"Stopped long review kept an active timer.");
         review.Start();clock--;require(review.Expired,"Regressive clock extended a long review.");
-        foreach(var mode in new[]{ProductAutomaticReviewMode.Short,ProductAutomaticReviewMode.Extended})
+        foreach(var mode in new[]{ProductAutomaticReviewMode.Short,ProductAutomaticReviewMode.Extended,ProductAutomaticReviewMode.Habitual})
         {
             clock=0;review=new ProductAutomaticReview(()=>clock,mode);review.Start();
             var origin=DateTimeOffset.UtcNow;

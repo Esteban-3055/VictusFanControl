@@ -29,7 +29,7 @@ if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagno
 if ($Mode -eq 'Verify') { return }
 if ($Mode -eq 'FinalCheck') {
     # All three entries use explicit zero-hardware fixtures against the exact packaged binaries.
-    foreach ($check in @('SelfTest','Soak','RecoverySelfTest','Install')) {
+    foreach ($check in @('SelfTest','Soak','RecoverySelfTest')) {
         & $PSCommandPath -Mode $check
     }
     & $PSCommandPath -Mode Verify
@@ -43,11 +43,11 @@ if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.prod
 if ($Mode -eq 'AutomaticExtendedReview' -and $manifest.productAutomaticExtendedReview -ne 'explicit-only-2700s-10-to-50-16MiB-diagnostics') { throw 'This package does not authorize the supervised extended Automatic review entry.' }
 $app = Join-Path $root 'app'
 if($Mode -eq 'Install'){ & (Join-Path $root 'Install-VictusFanControl.ps1');return }
-if ($Mode -eq 'RecoverPerformance' -or $Mode -eq 'RecoverySelfTest','Install') {
+if ($Mode -eq 'RecoverPerformance' -or $Mode -eq 'RecoverySelfTest') {
     $guardian = Join-Path $app 'performance-guardian/VictusFanControl.PerformanceGuardian.exe'
     if (-not (Test-Path -LiteralPath $guardian -PathType Leaf)) { throw "Missing packaged Performance Guardian: $guardian" }
 }
-if ($Mode -eq 'RecoverySelfTest','Install') {
+if ($Mode -eq 'RecoverySelfTest') {
     & $guardian --gui-recovery-self-test
     if ($LASTEXITCODE -ne 0) { throw 'Packaged recovery fixtures failed.' }
     return
