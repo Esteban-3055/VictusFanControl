@@ -10,7 +10,7 @@ import re
 import zipfile
 
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 TARGET = "HP-8C40-9D0R1LA-F18"
 MANIFEST = "PRODUCT-GUI-MANIFEST.json"
 

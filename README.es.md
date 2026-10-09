@@ -1,4 +1,4 @@
-# VictusFanControl v1.0.0
+# VictusFanControl v1.1.0 (desarrollo)
 
 [English](README.md) · [Descargar v1.0.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.0.0) · [Instalación y uso](docs/PRODUCT_V1.md) · [Estado de validación](docs/PRODUCT_VALIDATION_STATUS.md)
 
@@ -51,3 +51,7 @@ El pipeline empaqueta todos los binarios del producto como **1.0.0.0**. Una comp
 Los arneses históricos conservan versión RC y gates originales: `control.enabledByDefault=false` y `automaticPolicyEnabled=false`. Esos registros describen la cualificación antigua; el producto tiene autorización separada para este destino exacto. Los planes anteriores se mantienen como historial.
 
 Licencia MIT: [LICENSE](LICENSE). Componentes externos: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Instalador y actualizaciones v1.1.0
+
+La rama de desarrollo añade `VictusFanControl-1.1.0-Setup-win-x64.exe` y **Configuración → Buscar actualizaciones**. El EXE conserva preferencias y añade el acceso en el menú Inicio; la actualización verifica el digest de la release estable y libera la sesión antes de instalar. Los artefactos de Actions permiten revisar esta entrega; v1.0.0 sigue siendo la release pública hasta publicar v1.1.0. [Guía](docs/PRODUCT_V1.md).

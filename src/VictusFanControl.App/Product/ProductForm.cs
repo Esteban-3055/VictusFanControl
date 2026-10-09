@@ -213,6 +213,7 @@ internal sealed partial class ProductForm : Form
                 _ = RunAsync(async()=>{if(_runtime is null)throw new InvalidOperationException("Runtime no disponible.");await _runtime.ApplyFanCurveAsync(source,demand);
                     _canvas.Notice="Curva e influencias aplicadas en Automatic. Guardar conserva los cambios; CPU/GPU mantienen sus límites actuales.";});break;
             case "discard":_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=!_hasSavedBaseline;_canvas.SelectedNode=-1;_canvas.Notice=_hasSavedBaseline?"Se recuperaron las preferencias guardadas.":"Se recuperó la configuración inicial; falta guardarla.";break;
+            case "updates-check":_ = CheckUpdateAsync();break;
             case "startup-toggle":_ = ToggleStartupAsync();break;
             case "firmware":case "fan-mode-0":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask);break;
             case "fan-mode-1":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Manual,Draft)??Task.CompletedTask);break;
@@ -341,7 +342,7 @@ internal sealed partial class ProductForm : Form
     }
     protected override void Dispose(bool disposing)
     {
-        if(disposing){_presentationTimer.Dispose();UnregisterPowerNotifications();if(_runtime is not null)_runtime.Changed-=UpdateState;_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();}
+        if(disposing){_updateCancellation.Cancel();_updateCancellation.Dispose();_presentationTimer.Dispose();UnregisterPowerNotifications();if(_runtime is not null)_runtime.Changed-=UpdateState;_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();}
         base.Dispose(disposing);
     }
     private void ToggleMaximize()=>WindowState=WindowState==FormWindowState.Maximized?FormWindowState.Normal:FormWindowState.Maximized;
@@ -351,8 +352,8 @@ internal sealed partial class ProductForm : Form
     {
         if(_disposedRuntime)return;
         if(e.CloseReason is not(CloseReason.WindowsShutDown or CloseReason.TaskManagerClosing)&&!_exitRequested){e.Cancel=true;Hide();return;}
-        e.Cancel=true;if(_closing)return;_closing=true;_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
-        try {if(_restartTask is not null)await _restartTask;await ShutdownRuntimeAsync();}
+        e.Cancel=true;if(_closing)return;_closing=true;_updateCancellation.Cancel();_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
+        try {if(_restartTask is not null)await _restartTask;if(_updateInstallTask is not null)await _updateInstallTask;await ShutdownRuntimeAsync();}
         catch(Exception ex){Environment.ExitCode=171;AppLog.Write("Product shutdown unresolved: "+ex);}
         finally{_disposedRuntime=true;_tray.Visible=false;Close();_shutdown.TrySetResult();}
     }

@@ -13,9 +13,9 @@
   </PropertyGroup>
   <!-- P14 historical audit builds retain their original version. Product release publishing opts in. -->
   <PropertyGroup Condition="'$(VictusProductRelease)' == 'true'">
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
-    <InformationalVersion>1.0.0</InformationalVersion>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <InformationalVersion>1.1.0</InformationalVersion>
   </PropertyGroup>
 </Project>

@@ -40,13 +40,13 @@ jobs:
           test "$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')" = "$RELEASE_HEAD"
           # List first: API/auth errors fail the job instead of appearing as a missing release.
           gh api "repos/$GH_REPO/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
-          if jq -e 'any(.[]; .tag_name == "v1.0.0")' "$RUNNER_TEMP/releases.json" >/dev/null; then
-            echo 'v1.0.0 already exists; no tag, notes or assets will be overwritten.'
+          if jq -e 'any(.[]; .tag_name == "v1.1.0")' "$RUNNER_TEMP/releases.json" >/dev/null; then
+            echo 'v1.1.0 already exists; no tag, notes or assets will be overwritten.'
             echo 'publish=false' >> "$GITHUB_OUTPUT"
           else
-            gh api "repos/$GH_REPO/git/matching-refs/tags/v1.0.0" > "$RUNNER_TEMP/tags.json"
-            if jq -e 'any(.[]; .ref == "refs/tags/v1.0.0")' "$RUNNER_TEMP/tags.json" >/dev/null; then
-              echo 'Existing v1.0.0 tag without a release: refusing ambiguous publication.' >&2
+            gh api "repos/$GH_REPO/git/matching-refs/tags/v1.1.0" > "$RUNNER_TEMP/tags.json"
+            if jq -e 'any(.[]; .ref == "refs/tags/v1.1.0")' "$RUNNER_TEMP/tags.json" >/dev/null; then
+              echo 'Existing v1.1.0 tag without a release: refusing ambiguous publication.' >&2
               exit 1
             fi
             echo 'publish=true' >> "$GITHUB_OUTPUT"
@@ -69,19 +69,29 @@ jobs:
       - uses: actions/download-artifact@v4
         if: steps.admission.outputs.publish == 'true'
         with:
-          name: VictusFanControl-1.0.0-win-x64-${{ github.event.workflow_run.head_sha }}
+          name: VictusFanControl-1.1.0-win-x64-${{ github.event.workflow_run.head_sha }}
           path: verified-payload
           github-token: ${{ github.token }}
           run-id: ${{ github.event.workflow_run.id }}
       - name: Verify full payload and prepare release assets
         if: steps.admission.outputs.publish == 'true'
         run: python scripts/prepare-github-release.py --payload verified-payload --output release-assets --source-head "$RELEASE_HEAD" --build-run-id "$BUILD_RUN" --repository "$GH_REPO" --checks-json "$RUNNER_TEMP/checks.json"
-      - name: Publish verified v1.0.0 once
+      - uses: actions/download-artifact@v4
+        if: steps.admission.outputs.publish == 'true'
+        with:
+          name: VictusFanControl-1.1.0-Setup-win-x64-${{ github.event.workflow_run.head_sha }}
+          path: installer-assets
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+      - name: Verify same-build installer before publication
+        if: steps.admission.outputs.publish == 'true'
+        run: python scripts/prepare-installer-assets.py --installer installer-assets/VictusFanControl-1.1.0-Setup-win-x64.exe --source-head "$RELEASE_HEAD" --payload release-assets/VictusFanControl-1.1.0-win-x64.zip --verify --output release-assets
+      - name: Publish verified v1.1.0 once
         if: steps.admission.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail
           test "$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')" = "$RELEASE_HEAD"
           # gh stages asset-bearing releases as drafts, uploads, then publishes.
-          gh release create v1.0.0 release-assets/* --target "$RELEASE_HEAD" --title 'VictusFanControl v1.0.0 — HP 8C40 / F.18' --notes-file release/RELEASE-NOTES-v1.0.0.md --latest
-          gh release view v1.0.0 --json url,isDraft,isPrerelease,assets
+          gh release create v1.1.0 release-assets/* --target "$RELEASE_HEAD" --title 'VictusFanControl v1.1.0 — HP 8C40 / F.18' --notes-file release/RELEASE-NOTES-v1.1.0.md --latest
+          gh release view v1.1.0 --json url,isDraft,isPrerelease,assets

@@ -155,7 +155,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Advanced: Advanced(g);break;
         }
         using(var b=new SolidBrush(FreshSnapshot is not null?Green:Yellow))g.FillEllipse(b,24,901,20,20);
-        DrawText(g,"VictusFanControl v1.0.0  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
+        DrawText(g,"VictusFanControl v"+ProductRelease.Version+"  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
         DrawText(g,State.LifecycleBlocked?"Sesión bloqueada por interrupción":FreshSnapshot is not null?"Telemetría validada":State.Runtime=="Healthy"?"Sin datos actuales":"Telemetría: "+State.Runtime,1210,901,18,State.LifecycleBlocked?Yellow:Muted,430);
         if(Busy || !string.IsNullOrWhiteSpace(Notice)) {DrawText(g,Busy?"Operación en curso…":Notice,305,849,18,Yellow,1330);}
         if(KeyboardHit is { } focused&&Focused){using var p=new Pen(Ink,2){DashStyle=DashStyle.Dot};g.DrawRectangle(p,focused.Bounds.X,focused.Bounds.Y,focused.Bounds.Width,focused.Bounds.Height);}
@@ -469,7 +469,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Button(g,"minimized-toggle",Profiles.StartMinimized?"✓  Minimizar al iniciar":"○  Minimizar al iniciar",new(956,241,665,55),Profiles.StartMinimized);
         Button(g,"automatic-start-toggle",Profiles.ActivateAutomaticOnStart?"✓  Activar Automático al iniciar":"○  Activar Automático al iniciar",new(334,310,590,43),Profiles.ActivateAutomaticOnStart);
         DrawText(g,"Guardar conserva la opción. Espera sensores válidos y aplica CPU/GPU antes de controlar.",956,309,19,Muted,665,height:62);
-        Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);DrawText(g,"Tema oscuro · Español · perfiles AC/Batería",334,491,23,Muted,495);
+        Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);Button(g,"updates-check","Buscar actualizaciones",new(334,480,475,48));
         Button(g,"discard","Descartar cambios",new(846,478,310,68),false,Dirty);
         Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,551,18,Dirty?Yellow:Green,475);
         Button(g,"profiles-import","Importar perfiles",new(846,555,310,40));Button(g,"profiles-export","Exportar perfiles",new(1176,555,442,40));

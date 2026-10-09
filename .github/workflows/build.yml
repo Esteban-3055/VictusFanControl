@@ -859,10 +859,34 @@ jobs:
           python scripts/prepare-github-release.py --payload (Join-Path $env:RUNNER_TEMP 'VictusFanControl-product-gui-review') --output (Join-Path $env:RUNNER_TEMP 'VictusFanControl-public-release-assets') --source-head '${{ github.sha }}' --build-run-id '${{ github.run_id }}'
           if ($LASTEXITCODE -ne 0) { throw 'Public release asset verification failed.' }
 
+      - name: Build self-contained Windows EXE installer and verify package fixtures
+        shell: pwsh
+        run: |
+          $assets = Join-Path $env:RUNNER_TEMP 'VictusFanControl-public-release-assets'
+          $payload = Join-Path $assets 'VictusFanControl-1.1.0-win-x64.zip'
+          $setup = Join-Path $env:RUNNER_TEMP 'VictusFanControl-setup-publish'
+          dotnet run --project tools/ProductSetup -c Release -- --self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Installer security fixtures failed.' }
+          dotnet publish tools/ProductSetup -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false "-p:SetupPayload=$payload" -o $setup
+          if ($LASTEXITCODE -ne 0) { throw 'EXE installer publish failed.' }
+          $installer = Join-Path $assets 'VictusFanControl-1.1.0-Setup-win-x64.exe'
+          Copy-Item (Join-Path $setup 'VictusSetup.exe') $installer
+          python scripts/prepare-installer-assets.py --installer $installer --source-head '${{ github.sha }}' --payload $payload
+          if ($LASTEXITCODE -ne 0) { throw 'Installer asset verification failed.' }
+
+      - name: Upload Windows EXE installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: VictusFanControl-1.1.0-Setup-win-x64-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/VictusFanControl-public-release-assets/*Setup*
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload definitive GUI review package
         uses: actions/upload-artifact@v4
         with:
-          name: VictusFanControl-1.0.0-win-x64-${{ github.sha }}
+          name: VictusFanControl-1.1.0-win-x64-${{ github.sha }}
           path: ${{ runner.temp }}/VictusFanControl-product-gui-review
           if-no-files-found: error
           retention-days: 30

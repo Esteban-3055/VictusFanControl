@@ -46,6 +46,6 @@
     "sourceAdmission": "bounded-acquisition-history-v1",
     "normalAutomaticPromoted": true
   },
-  "version": "1.0.0",
+  "version": "1.1.0",
   "physicalPassClaimed": false
 }

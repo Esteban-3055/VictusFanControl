@@ -1,4 +1,4 @@
-# VictusFanControl v1.0.0
+# VictusFanControl v1.1.0 (desarrollo)
 
 [Español](README.es.md) · [Download v1.0.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.0.0) · [Installation and operation](docs/PRODUCT_V1.md) · [Validation status](docs/PRODUCT_VALIDATION_STATUS.md)
 
@@ -46,8 +46,12 @@ Use .NET 8 SDK and the explicit product release property:
 dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
 ```
 
-The pipeline packages all product binaries as **1.0.0.0**. A successful `main` build can publish v1.0.0 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
+The pipeline packages current product binaries as **1.1.0.0**. A successful `main` build can publish v1.1.0 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
 
 Historical qualification builds retain their RC version and gates, including `control.enabledByDefault=false` and `automaticPolicyEnabled=false`. These describe the legacy harness; the product's separate authorization covers only the exact target above. Earlier plans remain development history.
 
 MIT: [LICENSE](LICENSE). External components: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Instalador y actualizaciones v1.1.0
+
+La rama de desarrollo añade `VictusFanControl-1.1.0-Setup-win-x64.exe` y **Configuración → Buscar actualizaciones**. El EXE conserva preferencias y añade el acceso en el menú Inicio; la actualización verifica el digest de la release estable y libera la sesión antes de instalar. Los artefactos de Actions permiten revisar esta entrega; v1.0.0 sigue siendo la release pública hasta publicar v1.1.0. [Guía](docs/PRODUCT_V1.md).

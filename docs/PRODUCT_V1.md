@@ -1,16 +1,23 @@
-# VictusFanControl v1.0.0 — HP 8C40 / 9D0R1LA / BIOS F.18
+# VictusFanControl v1.1.0 — HP 8C40 / 9D0R1LA / BIOS F.18
 
 Esta entrega habilita el uso habitual solicitado para el destino exacto. La curva AC predeterminada es la candidata de menor demanda intermedia: 12, 12, 18, 28, 34, 44, 50 para entradas 0, 40, 50, 65, 76, 90, 100. Conserva las protecciones térmicas crudas, subida e histéresis; descenso normal 25 s/confirmación 12 s y descenso corto 10 s/confirmación 4 s. Batería conserva su curva y tiempos de descenso. La transición usa el mismo motor, cambia los tiempos compatibles del perfil de destino y reinicia las confirmaciones, conservando el nivel aplicado y el filtro; los rangos y pasos protegidos no pueden cambiar en vivo. Se migran solamente los presets AC anteriores intactos; se conservan curvas personalizadas y límites CPU/GPU. Guardar crea un respaldo exacto previo a v1.0.
 
 ## Instalar e iniciar con Windows
 
-1. Sal de las aplicaciones Victus anteriores desde su bandeja. Extrae el ZIP completo.
-2. Abre PowerShell **como administrador con tu misma cuenta**, entra en la carpeta extraída y ejecuta `./Start-ProductGui.ps1 -Mode Install`.
-3. El instalador verifica hashes, copia la entrega a `%LOCALAPPDATA%/VictusFanControl/releases/1.0.0-{commit}`, registra una tarea elevada para tu inicio de sesión y guarda **minimizado + Automático al iniciar**. Abre la aplicación al finalizar. Requiere el controlador PawnIO y NVIDIA/NVML que ya usa la instalación anterior; .NET Desktop Runtime 8 x64.
+1. Sal de las aplicaciones Victus anteriores desde su bandeja. Ejecuta `VictusFanControl-1.1.0-Setup-win-x64.exe` como administrador con tu misma cuenta y pulsa **Instalar / actualizar**. El instalador crea un acceso en el menú Inicio.
+2. Alternativa ZIP: extrae todo el paquete.
+3. Abre PowerShell **como administrador con tu misma cuenta**, entra en la carpeta extraída y ejecuta `./Start-ProductGui.ps1 -Mode Install`.
+4. El instalador verifica hashes, copia la entrega a `%LOCALAPPDATA%/VictusFanControl/releases/1.1.0-{commit}`, conserva las preferencias previas y actualiza la ruta de la tarea si estaba habilitada. En primera instalación registra el inicio elevado y guarda **minimizado + Automático al iniciar**. El EXE no abre automáticamente el controlador: utiliza el menú Inicio. La alternativa PowerShell abre la GUI al finalizar. Requiere el controlador PawnIO y NVIDIA/NVML que ya usa la instalación anterior; .NET Desktop Runtime 8 x64.
 
 La instalación conserva tus perfiles CPU/GPU y sus journals. No cierra procesos a la fuerza ni restaura registros pendientes. Se puede verificar sin activar hardware con `./Start-ProductGui.ps1 -Mode FinalCheck`.
 
 En **Configuración** puedes desactivar “Iniciar con Windows” inmediatamente y editar “Activar Automático al iniciar” o “Minimizar al iniciar”; pulsa **Guardar preferencias** para persistir estas últimas opciones. Abrir la GUI con la opción guardada también solicita Automático. La tarea espera 10 s tras iniciar sesión, utiliza el usuario interactivo y admite funcionamiento en batería.
+
+## Actualizar desde GitHub
+
+En **Configuración → Buscar actualizaciones**, la aplicación consulta la última release pública estable de `Esteban-3055/VictusFanControl`. No consulta artefactos de Actions ni instala en segundo plano. Sólo ofrece versiones mayores que la instalada y exige un EXE con nombre, URL de repositorio, tamaño y digest SHA-256 válidos. Descarga y verifica antes de cerrar el control; el usuario confirma la apertura del instalador y Windows pide elevación. Guarda o descarta antes el borrador. Se liberan ventiladores, CPU/GPU y lectores; cualquier journal pendiente bloquea la actualización. El instalador espera la terminación del PID y tiempo de inicio exactos, sin forzar cierres. Instala en una carpeta nueva, preserva perfiles y conserva la versión anterior.
+
+El EXE del instalador incluye .NET para poder abrirse por sí mismo; el programa aún necesita .NET Desktop Runtime 8 x64. No tiene firma Authenticode. La validación SHA-256 vincula la descarga a la release del repositorio, no sustituye la firma de un editor ni protege frente a una cuenta de GitHub comprometida.
 
 ## Activación y límites
 
@@ -24,4 +31,4 @@ TZ01/DTT3 permanece experimental y desactivado de fábrica. El desarrollo poster
 
 Las pruebas de software y replay verifican contratos, migración, arranque, cancelación, emergencia y recuperación. Las evidencias físicas previas conservan su identidad histórica. El replay de 390 decisiones produjo menos demanda y menos cambios de nivel, pero **no demuestra menos dBA ni temperaturas equivalentes con la curva nueva**. Tampoco una aceptación NVML demuestra lectura exacta del rango de clocks, ni WMI propiedad independiente del firmware. Las observaciones restantes del arranque real, uso representativo, suspensión y salida de esta compilación se conservan en `PRODUCT-RELEASE.json`; no se convierten en PASS por cambiar la versión.
 
-Compilar la entrega: `dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true`. El pipeline conserva el versionado original del arnés P14 por separado y publica todos los binarios Victus de esta entrega con versión 1.0.0.0.
+Compilar la entrega: `dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true`. El pipeline conserva el versionado original del arnés P14 por separado y publica todos los binarios Victus de esta entrega con versión 1.1.0.0.

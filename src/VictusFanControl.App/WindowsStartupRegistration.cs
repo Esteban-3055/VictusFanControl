@@ -28,15 +28,17 @@ internal static class WindowsStartupRegistration
         get { using var identity = WindowsIdentity.GetCurrent(); return "VictusFanControl-" + identity.User!.Value; }
     }
 
-    internal static async Task<bool> IsEnabledAsync()
+    internal static Task<bool> IsEnabledAsync() => QueryEnabledAsync(true);
+    internal static Task<bool> IsRegisteredEnabledAsync() => QueryEnabledAsync(false);
+    private static async Task<bool> QueryEnabledAsync(bool requireCurrentExecutable)
     {
         var result = await RunAsync("/Query", "/TN", TaskName, "/XML").ConfigureAwait(false);
         if (result.ExitCode != 0) return false;
         var document = XDocument.Parse(result.Output);
         XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
         return document.Descendants(ns+"Enabled").All(e=>e.Value=="true") &&
-            string.Equals(document.Descendants(ns + "Command").SingleOrDefault()?.Value,
-            Environment.ProcessPath, StringComparison.OrdinalIgnoreCase);
+            (!requireCurrentExecutable || string.Equals(document.Descendants(ns + "Command").SingleOrDefault()?.Value,
+            Environment.ProcessPath, StringComparison.OrdinalIgnoreCase));
     }
 
     internal static async Task SetEnabledAsync(bool enabled, string modulesDirectory, bool startMinimized = true)
