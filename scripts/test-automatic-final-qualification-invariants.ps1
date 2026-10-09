@@ -83,7 +83,7 @@ Write-Host 'PASS: WMI-only Automatic -> Firmware requires accepted release/defau
 
 $review = Get-Content (Join-Path $repoRoot 'src/VictusFanControl.App/Product/ProductAutomaticReview.cs') -Raw
 $launcher = Get-Content (Join-Path $repoRoot 'release/Start-ProductGui.ps1') -Raw
-$package = Get-Content (Join-Path $repoRoot 'scripts/package-product-gui-review.ps1') -Raw
+$package = Get-Content (Join-Path $repoRoot 'scripts/package-product-v1.ps1') -Raw
 Require ($review -match 'MaximumSeconds\s*=\s*300') 'short product review must stay bounded to five minutes'
 Require ($review -match 'ExtendedMaximumSeconds\s*=\s*2700') 'extended review must stay bounded to 45 minutes'
 Require ($review -match 'MaximumCpuSpikeMilliseconds\s*=\s*2000') 'long review must not relax CPU confirmation'
@@ -93,15 +93,15 @@ Require ($launcher.Contains('AutomaticExtendedReview') -and $launcher.Contains('
 Require ($launcher.Contains('explicit-only-2700s-10-to-50-16MiB-diagnostics') -and $package.Contains('explicit-only-2700s-10-to-50-16MiB-diagnostics')) 'extended package contract mismatch'
 Require ($launcher.Contains("'FinalCheck'") -and $launcher.Contains("@('SelfTest','Soak','RecoverySelfTest')")) 'final candidate must check packaged software with zero-hardware fixture entries'
 Require ($launcher.Contains('$start.WorkingDirectory = $fixtureOutput') -and $launcher.Contains('No hardware activation or physical qualification performed.')) 'packaged fixture outputs must remain outside the verified payload'
-$candidate = Get-Content (Join-Path $repoRoot 'release/product-final-candidate.json') -Raw | ConvertFrom-Json
-Require ($candidate.stableReleaseAuthorized -eq $false -and $candidate.normalAutomatic -eq 'closed') 'candidate must not claim a stable release or normal Automatic authority'
+$candidate = Get-Content (Join-Path $repoRoot 'release/product-v1.json') -Raw | ConvertFrom-Json
+Require ($candidate.stableReleaseAuthorized -eq $true -and $candidate.normalAutomatic -eq 'authorized-exact-target' -and $candidate.physicalPassClaimed -eq $false) 'target release must distinguish user authorization from physical qualification'
 foreach ($pending in @('representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return',
     'current-gui-suspend-resume-without-fan-reentry','current-gui-clean-exit-and-session-restart-release-and-open-in-firmware',
     'optional-quiet-ac-candidate-with-tz01-dtt3-comparable-thermal-and-measured-acoustics')) {
     Require ($candidate.remainingPhysicalChecks -contains $pending) 'candidate must retain every thermal/lifecycle/exit and optional quiet-curve regression'
 }
-Require ($candidate.experimentalPlatformRetention.defaultEnabled -eq $false -and $candidate.experimentalPlatformRetention.normalAutomaticPromoted -eq $false -and
-    $candidate.experimentalPlatformRetention.maximumExtraRawLevels -eq 2 -and $candidate.experimentalPlatformRetention.maximumSupplementSeconds -eq 60) 'optional retention must remain bounded and unpromoted'
+Require ($candidate.experimentalPlatformRetention.defaultEnabled -eq $false -and $candidate.experimentalPlatformRetention.normalAutomaticPromoted -eq $true -and
+    $candidate.experimentalPlatformRetention.maximumExtraRawLevels -eq 2 -and $candidate.experimentalPlatformRetention.maximumSupplementSeconds -eq 60) 'optional retention must remain bounded and default-off'
 Require ($launcher.Contains('optional-disabled-default-AC-plus2-60s-fresh3s') -and $package.Contains('optional-disabled-default-AC-plus2-60s-fresh3s')) 'launcher and package must bind the optional retention contract'
 Require ($candidate.sessionRestart -eq 'explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics') 'candidate restart must retain clean-release and explicit Firmware reentry'
 Require ($candidate.automaticThermalContract -eq 'cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response') 'candidate thermal contract drifted'
@@ -111,7 +111,7 @@ foreach ($evidence in $candidate.physicalEvidence) {
     $record = Get-Content -LiteralPath (Join-Path $repoRoot ('release/' + $evidence)) -Raw | ConvertFrom-Json
     Require ($record.target -eq 'HP-8C40-9D0R1LA-F18' -and $record.sourceHead -match '^[0-9a-f]{40}$') 'candidate evidence must bind the exact target and historical code'
 }
-Write-Host 'PASS: final candidate retains the closed normal gate, explicit physical pending checks and shared 95 C / 2000-ms confirmation.'
+Write-Host 'PASS: target release retains the historical qualification gate and explicit physical pending checks and shared 95 C / 2000-ms confirmation.'
 
 # Git for Windows may check text out as CRLF. Bind canonical source content,
 # preserving every other character, rather than platform-specific line endings.
@@ -150,3 +150,8 @@ foreach ($evidence in $candidate.offlinePolicyEvidence) {
 }
 Require ($candidate.offlinePolicyEvidence -contains 'product-quiet-curve-replay-8c40-2026-10-09.json') 'current quiet candidate must bind the current controller sources separately from historical evidence'
 Write-Host 'PASS: offline stability evidence binds source and retains physical pending status.'
+
+$productGate=Get-Content (Join-Path $repoRoot 'src/VictusFanControl/Product/ProductRelease.cs') -Raw
+Require ($productGate.Contains('Hp8C40TargetProfile.Instance.Id') -and $productGate.Contains('StringComparison.Ordinal')) 'v1 authority must require the exact target'
+$runtime=Get-Content (Join-Path $repoRoot 'src/VictusFanControl.App/Product/ProductRuntime.cs') -Raw
+Require ($runtime.Contains('ProductRelease.IsAutomaticAuthorized(_target?.Id)') -and $runtime.Contains('ProductAutomaticReviewMode.Habitual') -and $runtime.Contains('_automaticGuard.EnsureDispatchAllowed(snapshot)')) 'normal release must use the existing coupled and thermal guarded path'

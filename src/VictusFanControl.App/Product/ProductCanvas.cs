@@ -155,7 +155,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Advanced: Advanced(g);break;
         }
         using(var b=new SolidBrush(FreshSnapshot is not null?Green:Yellow))g.FillEllipse(b,24,901,20,20);
-        DrawText(g,"VictusFanControl v0.4.0  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
+        DrawText(g,"VictusFanControl v1.0.0  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
         DrawText(g,State.LifecycleBlocked?"Sesión bloqueada por interrupción":FreshSnapshot is not null?"Telemetría validada":State.Runtime=="Healthy"?"Sin datos actuales":"Telemetría: "+State.Runtime,1210,901,18,State.LifecycleBlocked?Yellow:Muted,430);
         if(Busy || !string.IsNullOrWhiteSpace(Notice)) {DrawText(g,Busy?"Operación en curso…":Notice,305,849,18,Yellow,1330);}
         if(KeyboardHit is { } focused&&Focused){using var p=new Pen(Ink,2){DashStyle=DashStyle.Dot};g.DrawRectangle(p,focused.Bounds.X,focused.Bounds.Y,focused.Bounds.Width,focused.Bounds.Height);}
@@ -420,7 +420,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,157,1337,666));DrawText(g,"Reglas de seguridad",332,177,30,null,1250,true);
         DrawText(g,"Protecciones del backend · solo lectura",332,225,23,Muted,1240);
         string[] titles=["Respuesta térmica de demanda","SafetyGate independiente","Límites reales de ventiladores","Telemetría fresca y completa","Guardian y recuperación"];
-        string[] details=["La temperatura cruda activa la respuesta térmica, aunque el filtro o las influencias indiquen menos.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >82 °C interrumpe.","Manual WMI y revisión Automático: 10–50. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recovery no concede autoridad automáticamente. Los journals no se borran desde la GUI."];
+        string[] details=["La temperatura cruda activa la respuesta térmica, aunque el filtro o las influencias indiquen menos.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >82 °C interrumpe.","Manual WMI y Automático: 10–50. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recovery no concede autoridad automáticamente. Los journals no se borran desde la GUI."];
         for(int i=0;i<5;i++){var r=new RectangleF(331,282+i*103,1293,87);Card(g,r);Icon(g,i==4?"profiles":"fan",r.X+24,r.Y+24,37);DrawText(g,titles[i],r.X+99,r.Y+12,23,null,1100,true);DrawText(g,details[i],r.X+99,r.Y+47,19,Muted,1100);}
     }
     private void Monitoring(Graphics g)
@@ -467,7 +467,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,153,1337,233));DrawText(g,"Inicio de la aplicación",334,178,28,null,1250,true);
         Button(g,"startup-toggle",StartupEnabled?"✓  Iniciar con Windows":"○  Iniciar con Windows",new(334,241,590,55),StartupEnabled,StartupKnown);
         Button(g,"minimized-toggle",Profiles.StartMinimized?"✓  Minimizar al iniciar":"○  Minimizar al iniciar",new(956,241,665,55),Profiles.StartMinimized);
-        DrawText(g,"El inicio nunca aplica ventiladores ni límites CPU/GPU automáticamente.",334,326,23,Muted,1250);
+        Button(g,"automatic-start-toggle",Profiles.ActivateAutomaticOnStart?"✓  Activar Automático al iniciar":"○  Activar Automático al iniciar",new(334,310,590,43),Profiles.ActivateAutomaticOnStart);
+        DrawText(g,"Guardar conserva la opción. Espera sensores válidos y aplica CPU/GPU antes de controlar.",956,309,19,Muted,665,height:62);
         Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);DrawText(g,"Tema oscuro · Español · perfiles AC/Batería",334,491,23,Muted,495);
         Button(g,"discard","Descartar cambios",new(846,478,310,68),false,Dirty);
         Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,551,18,Dirty?Yellow:Green,475);

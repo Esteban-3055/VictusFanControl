@@ -22,7 +22,7 @@ foreach(var session in document.RootElement.EnumerateArray())
         foreach(var mode in new[]{"recorded-settings","previous-default","stable-inertia-only","stable-preset"})
         {
             var battery=original.Profile.Name.Contains("Batería",StringComparison.OrdinalIgnoreCase);
-            var fan=mode=="recorded-settings"?original:ProductProfiles.DefaultProfile(battery?ProductPowerProfile.Battery:ProductPowerProfile.Ac).Fan;
+            var fan=mode=="recorded-settings"?original:ProductProfiles.LegacyDefaultProfile(battery?ProductPowerProfile.Battery:ProductPowerProfile.Ac).Fan;
             var oldCurve=battery?new UnifiedFanDemand{CpuPowerInfluence=20,GpuPowerInfluence=35,CpuLoadInfluence=10,GpuLoadInfluence=10,
                 Curve=[new(0,10),new(25,10),new(40,12),new(60,24),new(76,35),new(90,44),new(100,50)]}:
                 new UnifiedFanDemand{Curve=[new(0,12),new(20,12),new(40,21),new(60,28),new(76,35),new(90,44),new(100,50)]};

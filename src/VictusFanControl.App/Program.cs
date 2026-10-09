@@ -9,6 +9,33 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.Contains("--configure-product-startup"))
+        {
+            try
+            {
+                if(args.Length!=3||args[0]!="--configure-product-startup"||args[1]!="--modules-dir")
+                    throw new ArgumentException("Startup configuration accepts only --configure-product-startup --modules-dir PATH.");
+                var modules=Path.GetFullPath(args[2]);
+                if(!HasRequiredModules(modules))throw new IOException("Faltan módulos PawnIO.");
+                var profiles=VictusFanControl.Product.ProductProfilesStore.Load(null,out var notice);
+                if(notice?.StartsWith("Configuración no válida",StringComparison.Ordinal)==true)
+                    throw new InvalidDataException(notice);
+                // Persist preferences only. This entry constructs no runtime or hardware backend.
+                var configured=profiles with{ActivateAutomaticOnStart=true,StartMinimized=true};
+                var path=VictusFanControl.Product.ProductProfilesStore.DefaultPath;
+                var original=File.Exists(path)?File.ReadAllBytes(path):null;
+                VictusFanControl.Product.ProductProfilesStore.Save(configured);
+                try { WindowsStartupRegistration.SetEnabledAsync(true,modules,true).GetAwaiter().GetResult(); }
+                catch
+                {
+                    if(original is null)File.Delete(path);else File.WriteAllBytes(path,original);
+                    throw;
+                }
+                Environment.ExitCode=0;
+            }
+            catch(Exception ex){Environment.ExitCode=173;MessageBox.Show(ex.Message,"No se pudo configurar el inicio",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+            return;
+        }
         if(args.Length==3&&args[0]=="--product-restart-fixture-child")
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunRestartFixtureChild(args[1],args[2]);return;}
         if(args.Length==1&&args[0]=="--product-gui-soak-self-test")

@@ -97,3 +97,8 @@ Queda una comparación física breve con igual carga, límites y condiciones,
 seguida de reposo, suspensión/reanudación y salida limpia. No se necesitan
 repeticiones largas ni eliminar protecciones para forzar un benchmark. La
 retención sigue opcional y la versión sigue candidata hasta cerrar esa evidencia.
+
+
+## Actualización v1.0
+
+La candidata AC se convierte en curva predeterminada; solo se migra el preset anterior intacto. Retención continúa opcional y desactivada por defecto, ahora disponible en Automático habitual del destino exacto. La autorización de uso no acredita mejora acústica o térmica. `PRODUCT_V1.md` describe instalación y arranque con las comprobaciones actuales.

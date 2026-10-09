@@ -4,7 +4,7 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
-internal enum ProductAutomaticReviewMode { Short, Extended }
+internal enum ProductAutomaticReviewMode { Short, Extended, Habitual }
 
 /// <summary>Explicit physical review admission; never changes the normal Automatic gate.</summary>
 internal sealed class ProductAutomaticReview
@@ -12,6 +12,7 @@ internal sealed class ProductAutomaticReview
     internal const int MaximumSeconds = 300;
     internal const int ExtendedMaximumSeconds = 2700;
     internal int MaximumDurationSeconds { get; }
+    private readonly bool _bounded;
     internal const int MaximumCpuSpikeMilliseconds = 2000;
     internal const double CpuSpikeThresholdC = SafetyGate.CpuEmergencyC;
     internal const string CpuSpikeDeadlineFailure = "Confirmación de pico CPU vencida: sin adquisición fresca de recuperación <95 °C en 2000 ms; volver a Firmware.";
@@ -26,10 +27,12 @@ internal sealed class ProductAutomaticReview
     private int _healthySamples;
     internal ProductAutomaticReview(Func<long>? milliseconds = null, ProductAutomaticReviewMode mode = ProductAutomaticReviewMode.Short)
     {
+        _bounded=mode!=ProductAutomaticReviewMode.Habitual;
         MaximumDurationSeconds = mode switch
         {
             ProductAutomaticReviewMode.Short => MaximumSeconds,
             ProductAutomaticReviewMode.Extended => ExtendedMaximumSeconds,
+            ProductAutomaticReviewMode.Habitual => 0,
             _ => throw new ArgumentOutOfRangeException(nameof(mode))
         };
         _milliseconds = milliseconds ?? (() => Environment.TickCount64);
@@ -43,8 +46,8 @@ internal sealed class ProductAutomaticReview
     internal static bool IsAuthorized(bool requested, string? target) => requested && Hp8C40AutomaticFinalQualificationGate.IsAuthorizedForTarget(target);
     internal void Start() { lock (_sync) { _started = _milliseconds(); _lastSample = null; _healthySamples = 0; _cpuHighSince = null; _lastClock = _started; _observed = null; } }
     internal void Stop() { lock (_sync) { _started = null; _cpuHighSince = null; _observed = null; } }
-    internal int? RemainingSeconds { get { lock (_sync) return _started.HasValue ? (int)Math.Clamp((MaximumDurationSeconds * 1000L - (_milliseconds() - _started.Value) + 999) / 1000, 0, MaximumDurationSeconds) : null; } }
-    internal bool Expired { get { lock (_sync) return _started.HasValue && (_milliseconds() < _started.Value || _milliseconds() - _started.Value >= MaximumDurationSeconds * 1000L); } }
+    internal int? RemainingSeconds { get { lock (_sync) return _bounded && _started.HasValue ? (int)Math.Clamp((MaximumDurationSeconds * 1000L - (_milliseconds() - _started.Value) + 999) / 1000, 0, MaximumDurationSeconds) : null; } }
+    internal bool Expired { get { lock (_sync) return _bounded && _started.HasValue && (_milliseconds() < _started.Value || _milliseconds() - _started.Value >= MaximumDurationSeconds * 1000L); } }
     internal int? RemainingCpuSpikeMilliseconds
     {
         get { lock (_sync) return _started.HasValue && _cpuHighSince.HasValue

@@ -81,6 +81,7 @@ internal interface IProductRuntime : IAsyncDisposable
 internal sealed class ProductRuntime : IProductRuntime
 {
     private readonly ProductAutomaticReview? _automaticReview;
+    private readonly ProductAutomaticReview _automaticGuard;
     private readonly ProductAutomaticActivation _automaticActivation = new();
     private readonly ProductAutomaticSourceTransition _sourceTransition = new();
     private readonly HardwareIdentity _hardware;
@@ -134,6 +135,7 @@ internal sealed class ProductRuntime : IProductRuntime
             _automaticReview = new(mode: automaticReview.Value);
             _state = _state with { Message = $"Prueba Automatic habilitada: 10–50, máximo {_automaticReview.MaximumDurationSeconds / 60} min. Inicio en Firmware; requiere clic explícito." };
         }
+        _automaticGuard=_automaticReview??new(mode:ProductAutomaticReviewMode.Habitual);
         if (_hardware.BoardProduct == "8C40") WmiOnlyInvestigationPolicy.Enable();
         IFanControlBackend backend;
         try
@@ -149,19 +151,19 @@ internal sealed class ProductRuntime : IProductRuntime
         _fans = new(backend);
         _controller = new(_fans, Hp8C40AdaptiveCandidateV1.Create(),
             backend.CanWrite && Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(_target?.Id),
-            backend.CanWrite && (Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized || _automaticReview is not null),
+            backend.CanWrite && (ProductRelease.IsAutomaticAuthorized(_target?.Id) || _automaticReview is not null),
             automaticHardware: _target == Hp8C40TargetProfile.Instance ? _hardware : null,
             automaticConfiguration: profiles.Ac.Fan,
-            automaticMinimumLevel: _automaticReview is not null ? 10 : Hp8C40AutomaticPolicy.MinimumLevel,
-            useRawCpuThermalResponse: _automaticReview is not null,
-            experimentalPolicy: (IExperimentalFanPolicy?)platformExperiment ?? (_automaticReview is not null ? _retention : null));
+            automaticMinimumLevel: _target == Hp8C40TargetProfile.Instance ? 10 : Hp8C40AutomaticPolicy.MinimumLevel,
+            useRawCpuThermalResponse: true,
+            experimentalPolicy: (IExperimentalFanPolicy?)platformExperiment ?? (_target == Hp8C40TargetProfile.Instance ? _retention : null));
         WmiFanExperimentBoundary.PlannedGuiRelease = () => _plannedFanRelease;
         _performance = new(modules);
         _worker = new(modules)
         {
             FreshFanAcquisitionRequired = () => _controller.AutomaticFreshAcquisitionRequired,
             AcquisitionBudgetMilliseconds = () => ProductAutomaticReview.AcquisitionBudget(
-                _controller.AutomaticAcquisitionBudgetMilliseconds, _automaticReview?.RemainingCpuSpikeMilliseconds),
+                _controller.AutomaticAcquisitionBudgetMilliseconds, _automaticGuard.RemainingCpuSpikeMilliseconds),
             NormalPollingDelayMilliseconds = () => _controller.AutomaticNormalPollingDelayMilliseconds,
             SnapshotProcessor = ProcessAutomaticAsync
         };
@@ -172,7 +174,7 @@ internal sealed class ProductRuntime : IProductRuntime
             if (!_closing && e.Current != SystemState.Healthy && (_automaticActivation.Pending || _fans.Authority == FanAuthority.Custom || _controller.Mode == AdaptiveFanProductionMode.Automatic))
             {
                 _automaticActivation.Cancel();
-                var reason = _automaticReview?.RemainingCpuSpikeMilliseconds == 0
+                var reason = _automaticGuard.RemainingCpuSpikeMilliseconds == 0
                     ? ProductAutomaticReview.CpuSpikeDeadlineFailure : "Telemetría no disponible: " + e.Reason;
                 _automaticInterruptionSnapshot = _snapshot;
                 AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + reason);
@@ -244,17 +246,17 @@ internal sealed class ProductRuntime : IProductRuntime
                 // Use the shared bounded 8C40 admission, rather than rejecting the
                 // unchanged raw SafetyGate's first CPU >=95 C sample here.
                 var effective = _controller.EvaluateAutomaticSafety(snapshot, raw, observe: true);
-                var wasCpuPending = _automaticReview?.RemainingCpuSpikeMilliseconds.HasValue == true;
-                if (_automaticReview is not null && !_automaticReview.Observe(snapshot,effective))
+                var wasCpuPending = _automaticGuard.RemainingCpuSpikeMilliseconds.HasValue == true;
+                if (!_automaticGuard.Observe(snapshot,effective))
                 {
                     Publish("Prueba Automatic: verificando tres adquisiciones Healthy antes de controlar."); return;
                 }
-                var cpuPending = _automaticReview?.RemainingCpuSpikeMilliseconds.HasValue == true;
+                var cpuPending = _automaticGuard.RemainingCpuSpikeMilliseconds.HasValue == true;
                 if (cpuPending != wasCpuPending)
                     AppLog.Write("PRODUCT AUTOMATIC CPU SPIKE: " + System.Text.Json.JsonSerializer.Serialize(new
                     { automaticSessionId = _automaticSessionId, snapshotTimestamp = snapshot.Timestamp,
                         cpuControlTemperatureC = snapshot.CpuControlTemperatureC, pending = cpuPending,
-                        remainingMilliseconds = _automaticReview?.RemainingCpuSpikeMilliseconds }));
+                        remainingMilliseconds = _automaticGuard.RemainingCpuSpikeMilliseconds }));
                 if (_automaticPerformance is null || _selectedFanProfile is null || _automaticProfiles is null)
                     throw new InvalidOperationException("Falta la configuración de la sesión Automatic.");
                 if (_performanceUpdating)
@@ -265,7 +267,7 @@ internal sealed class ProductRuntime : IProductRuntime
                     {
                         _automaticActivation.EnsureCurrent(_activeAutomaticTicket!);
                         if (_closing || _lifecycleBlocked) throw new InvalidOperationException("Actualización interrumpida por lifecycle.");
-                        _automaticReview?.EnsureDispatchAllowed(snapshot);
+                        _automaticGuard.EnsureDispatchAllowed(snapshot);
                     }, token);
                     _automaticDecision=null;_automaticDecisionSnapshot=null;
                     Publish("Actualizando CPU/GPU; se conserva el nivel y continúan las lecturas sin nuevos comandos de ventiladores.");
@@ -296,11 +298,11 @@ internal sealed class ProductRuntime : IProductRuntime
                     var currentRaw = SafetyGate.EvaluateForDisplay(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
                     if (!_controller.EvaluateAutomaticSafety(snapshot,currentRaw,observe:false).CustomControlPermitted)
                         throw new InvalidOperationException("Seguridad no permite continuar la transición.");
-                    _automaticReview?.EnsureDispatchAllowed(snapshot);
+                    _automaticGuard.EnsureDispatchAllowed(snapshot);
                 }
                 if (!reconciled)
                 {
-                    if (_automaticReview is null || snapshot.CpuControlTemperatureC >= 85 || snapshot.GpuTemperatureC >= 78)
+                    if (snapshot.CpuControlTemperatureC >= 85 || snapshot.GpuTemperatureC >= 78)
                         throw new InvalidOperationException("Transición pendiente con demanda térmica urgente; volver a Firmware.");
                     await _controller.ObserveAutomaticSourceWaitAsync(snapshot, () => AdmitSource(false), token);
                     _automaticDecision = null; _automaticDecisionSnapshot = null;
@@ -331,7 +333,7 @@ internal sealed class ProductRuntime : IProductRuntime
                     // Do not turn that cancellation into a false thermal/lifecycle interruption.
                     if (_automaticPerformance is null || !ProductAutomaticActivation.PerformanceReady(_automaticPerformance,
                         _performance.AppliedConfiguration, _performance.LastStatus, _performance.LastStatusFresh, _selectedFanProfile ?? "Unknown")) return null;
-                    _automaticReview?.EnsureDispatchAllowed(snapshot);
+                    _automaticGuard.EnsureDispatchAllowed(snapshot);
                     var currentSource = new WindowsPerformancePowerSourceReader().Read().Source;
                     if (currentSource.ToString() != _selectedFanProfile) return null;
                     return SafetyGate.EvaluateForDisplay(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
@@ -342,7 +344,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 AppLog.Write("PRODUCT AUTOMATIC DECISION: " + System.Text.Json.JsonSerializer.Serialize(new { automaticSessionId = _automaticSessionId, snapshotTimestamp = snapshot.Timestamp, decision }));
                 if (decision.Action == AdaptiveFanProductionActionKind.Blocked || decision.Action == AdaptiveFanProductionActionKind.RestoreFirmware)
                     throw new InvalidOperationException(decision.Detail);
-                Publish($"Prueba Automatic · {_selectedFanProfile} · nivel {decision.EqualFanLevel?.ToString() ?? "—"} · {_automaticReview?.RemainingSeconds} s restantes.");
+                Publish($"Automático · {_selectedFanProfile} · nivel {decision.EqualFanLevel?.ToString() ?? "—"}"+(_automaticReview is not null?$" · {_automaticReview.RemainingSeconds} s restantes.":" · uso habitual."));
             }
             catch (OperationCanceledException) when (!_closing && !_lifecycleBlocked &&
                 _activeAutomaticTicket is { } ticket && !_automaticActivation.IsCurrent(ticket))
@@ -354,7 +356,7 @@ internal sealed class ProductRuntime : IProductRuntime
             {
                 _automaticInterruptionSnapshot = snapshot; AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + ex.Message); _automaticActivation.Cancel();
                 _lifecycleBlocked = true; _lifecycleBlockReason = ex.Message; _fans.CloseCustomAdmissionForLifecycleBoundary();
-                _automaticReview?.Stop();
+                _automaticGuard.Stop();
                 var failure = ex.Message;
                 try { await _controller.ReleaseToFirmwareAsync("Automatic interrumpido: " + ex.Message,CancellationToken.None); }
                 catch (Exception release) { failure += "; liberación no resuelta: " + release.Message; }
@@ -452,7 +454,7 @@ internal sealed class ProductRuntime : IProductRuntime
     private ProductPowerProfile AutomaticAdmission()
     {
         if (_closing || _lifecycleBlocked) throw new InvalidOperationException("Sesión interrumpida; Automatic no puede rearmarse.");
-        if (!_controller.AutomaticExecutionAuthorized) throw new InvalidOperationException("Automatic está implementado, pero su gate normal sigue cerrado.");
+        if (!_controller.AutomaticExecutionAuthorized) throw new InvalidOperationException("Automático no está autorizado para este equipo.");
         if (_controller.Mode != AdaptiveFanProductionMode.Firmware || _fans.Authority != FanAuthority.Firmware)
             throw new InvalidOperationException("Vuelve a Firmware antes de aplicar una curva. Un clic repetido no renueva la prueba.");
         if (_worker.StateMachine.State != SystemState.Healthy || !Safety().CustomControlPermitted)
@@ -465,13 +467,13 @@ internal sealed class ProductRuntime : IProductRuntime
     {
         if (mode != AdaptiveFanProductionMode.Firmware && _lifecycleBlocked)
             throw new InvalidOperationException("Sesión interrumpida. La reapertura tras lifecycle permanece cerrada; usa Firmware y reinicia después de una liberación limpia.");
-        if (mode == AdaptiveFanProductionMode.Automatic) { _automaticSessionId = Guid.NewGuid().ToString("N"); _automaticDecision = null; _automaticDecisionSnapshot = null; _automaticInterruptionSnapshot = null; _automaticStartedUtc = DateTimeOffset.UtcNow; _automaticReview?.Start(); }
+        if (mode == AdaptiveFanProductionMode.Automatic) { _automaticSessionId = Guid.NewGuid().ToString("N"); _automaticDecision = null; _automaticDecisionSnapshot = null; _automaticInterruptionSnapshot = null; _automaticStartedUtc = DateTimeOffset.UtcNow; _automaticGuard.Start(); }
         _plannedFanRelease = mode == AdaptiveFanProductionMode.Firmware;
         AdaptiveFanProductionResult result;
         try { result = await _controller.SetModeAsync(mode,CancellationToken.None); }
         finally { _plannedFanRelease = false; }
         if (!result.ExecutionAuthorized) throw new InvalidOperationException(result.Detail);
-        if (mode != AdaptiveFanProductionMode.Automatic) { _selectedFanProfile = null; _automaticPerformance = null; _activeAutomaticTicket = null; _automaticProfiles = null; _sourceTransition.Reset(); _automaticReview?.Stop(); }
+        if (mode != AdaptiveFanProductionMode.Automatic) { _selectedFanProfile = null; _automaticPerformance = null; _activeAutomaticTicket = null; _automaticProfiles = null; _sourceTransition.Reset(); _automaticGuard.Stop(); }
         Publish(result.Detail);
     }
     public Task ApplyFanCurveAsync(ProductPowerProfile source, UnifiedFanDemand demand)
@@ -495,7 +497,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 var raw=SafetyGate.EvaluateForDisplay(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
                 if(!_controller.EvaluateAutomaticSafety(snapshot,raw,observe:false).CustomControlPermitted)
                     throw new InvalidOperationException("La seguridad actual no permite aplicar la curva.");
-                _automaticReview?.EnsureDispatchAllowed(snapshot);
+                _automaticGuard.EnsureDispatchAllowed(snapshot);
             }
             Admit();
             await _controller.ApplyUnifiedDemandAsync(frozen,Admit,CancellationToken.None);
@@ -529,7 +531,7 @@ internal sealed class ProductRuntime : IProductRuntime
                     new WindowsPerformancePowerSourceReader().Read().Source.ToString()) ||
                     !_controller.EvaluateAutomaticSafety(snapshot,raw,observe:false).CustomControlPermitted)
                     throw new InvalidOperationException("La seguridad o CPU/GPU no permiten aplicar ajustes ahora.");
-                _automaticReview?.EnsureDispatchAllowed(snapshot);
+                _automaticGuard.EnsureDispatchAllowed(snapshot);
             }
             else if (_controller.Mode != AdaptiveFanProductionMode.Firmware || _fans.Authority != FanAuthority.Firmware || !raw.CustomControlPermitted)
                 throw new InvalidOperationException("Preparar ajustes requiere Firmware y telemetría segura y vigente.");
@@ -587,7 +589,7 @@ internal sealed class ProductRuntime : IProductRuntime
             {
                 if (_activeAutomaticTicket is null) throw new InvalidOperationException("Falta la activación Automatic.");
                 _automaticActivation.EnsureCurrent(_activeAutomaticTicket);
-                _automaticReview?.EnsureDispatchAllowed(_snapshot!);
+                _automaticGuard.EnsureDispatchAllowed(_snapshot!);
                 if (_snapshot!.CpuControlTemperatureC>=85 || _snapshot.GpuTemperatureC>=78)
                     throw new InvalidOperationException("Espera a que termine la respuesta térmica urgente antes de actualizar límites.");
             }
@@ -611,7 +613,7 @@ internal sealed class ProductRuntime : IProductRuntime
                         source!=_selectedFanProfile || !ProductAutomaticActivation.PerformanceReady(configuration,
                             _performance.AppliedConfiguration,_performance.LastStatus,_performance.LastStatusFresh,source))
                         throw new InvalidOperationException("La fuente o activación cambió al actualizar CPU/GPU.");
-                    _automaticReview?.EnsureDispatchAllowed(_snapshot!);
+                    _automaticGuard.EnsureDispatchAllowed(_snapshot!);
                     if(!Safety().CustomControlPermitted)throw new InvalidOperationException("La seguridad no permite continuar Automatic tras actualizar.");
                     _automaticPerformance=configuration;
                     if(_automaticProfiles is { } frozen)_automaticProfiles=ProductPerformanceUpdate.WithPerformance(frozen,configuration);
@@ -634,7 +636,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 if(_controller.Mode==AdaptiveFanProductionMode.Automatic)
                 {
                     _automaticInterruptionSnapshot=_snapshot;_automaticActivation.Cancel();_lifecycleBlocked=true;
-                    _lifecycleBlockReason="Actualización CPU/GPU no confirmada: "+ex.Message;_fans.CloseCustomAdmissionForLifecycleBoundary();_automaticReview?.Stop();
+                    _lifecycleBlockReason="Actualización CPU/GPU no confirmada: "+ex.Message;_fans.CloseCustomAdmissionForLifecycleBoundary();_automaticGuard.Stop();
                     await _controller.ReleaseToFirmwareAsync(_lifecycleBlockReason,CancellationToken.None);
                 }
                 AppLog.Write("PRODUCT PERFORMANCE UPDATE FAILED: "+System.Text.Json.JsonSerializer.Serialize(new
@@ -669,7 +671,7 @@ internal sealed class ProductRuntime : IProductRuntime
     public void FenceLifecycle(string reason)
     {
         _automaticActivation.Cancel();
-        _lifecycleBlocked = true; _lifecycleBlockReason = reason; _fans.CloseCustomAdmissionForLifecycleBoundary(); _automaticReview?.Stop(); _worker.NotifySuspend(reason); Publish(reason);
+        _lifecycleBlocked = true; _lifecycleBlockReason = reason; _fans.CloseCustomAdmissionForLifecycleBoundary(); _automaticGuard.Stop(); _worker.NotifySuspend(reason); Publish(reason);
     }
     public async Task ReleaseForLifecycleAsync(string reason)
     {
@@ -683,7 +685,7 @@ internal sealed class ProductRuntime : IProductRuntime
     private async Task ResetInterruptedFanAsync(string reason)
     {
         _automaticActivation.Cancel();
-        try { _automaticReview?.Stop(); await _controller.ReleaseToFirmwareAsync(reason,CancellationToken.None); Publish(reason); }
+        try { _automaticGuard.Stop(); await _controller.ReleaseToFirmwareAsync(reason,CancellationToken.None); Publish(reason); }
         catch (Exception ex) { Publish("Recovery no resuelto",ex.Message); }
     }
     public void ResumeTelemetry(string reason) { _worker.NotifyResume(reason); Publish("Revalidando telemetría; autoridad de ventiladores permanece bloqueada."); }
@@ -726,7 +728,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 FanMode = _controller.Mode.ToString(), FanAuthority = _fans.Authority.ToString(), FanLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedLevel : null,
                 ManualAuthorized = _controller.ManualExecutionAuthorized, AutomaticAuthorized = _controller.AutomaticExecutionAuthorized,
                 AutomaticReview = _automaticReview is not null, AutomaticReviewMaximumSeconds = _automaticReview?.MaximumDurationSeconds, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
-                AutomaticCpuSpikeRemainingMilliseconds = _automaticReview?.RemainingCpuSpikeMilliseconds,
+                AutomaticCpuSpikeRemainingMilliseconds = _automaticGuard.RemainingCpuSpikeMilliseconds,
                 AutomaticPreparing = _automaticActivation.Pending, AutomaticSessionId = _automaticSessionId, AutomaticDecisionSnapshot = _automaticDecisionSnapshot, AutomaticInterruptionSnapshot = _automaticInterruptionSnapshot,
                 AutomaticSourceTransition = _sourceTransition.Pending ? _sourceTransition.Candidate : null,
                 AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic && ReferenceEquals(_automaticDecision,_controller.LastAutomaticResult) ? _automaticDecision : null,

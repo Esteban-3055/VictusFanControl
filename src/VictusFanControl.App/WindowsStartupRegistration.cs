@@ -13,7 +13,7 @@ internal static class WindowsStartupRegistration
         XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
         XElement E(string name, object value) => new(ns + name, value);
         return new XDocument(new XElement(ns + "Task", new XAttribute("version", "1.2"),
-            E("Triggers", new XElement(ns + "LogonTrigger", E("Enabled", "true"), E("UserId", sid))),
+            E("Triggers", new XElement(ns + "LogonTrigger", E("Enabled", "true"), E("UserId", sid), E("Delay", "PT10S"))),
             E("Principals", new XElement(ns + "Principal", new XAttribute("id", "User"), E("UserId", sid),
                 E("LogonType", "InteractiveToken"), E("RunLevel", "HighestAvailable"))),
             E("Settings", new[] { E("MultipleInstancesPolicy", "IgnoreNew"), E("DisallowStartIfOnBatteries", "false"),
@@ -34,7 +34,8 @@ internal static class WindowsStartupRegistration
         if (result.ExitCode != 0) return false;
         var document = XDocument.Parse(result.Output);
         XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
-        return string.Equals(document.Descendants(ns + "Command").SingleOrDefault()?.Value,
+        return document.Descendants(ns+"Enabled").All(e=>e.Value=="true") &&
+            string.Equals(document.Descendants(ns + "Command").SingleOrDefault()?.Value,
             Environment.ProcessPath, StringComparison.OrdinalIgnoreCase);
     }
 

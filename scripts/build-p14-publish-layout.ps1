@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$OutputRoot
+    [string]$OutputRoot,
+    [switch]$ProductRelease
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,6 +41,7 @@ function Publish-P14Project {
         '-p:ContinuousIntegrationBuild=true'
     )
 
+    if($ProductRelease){$args += '-p:VictusProductRelease=true'}
     & dotnet @args
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet publish failed for '$Project' with exit code $LASTEXITCODE."

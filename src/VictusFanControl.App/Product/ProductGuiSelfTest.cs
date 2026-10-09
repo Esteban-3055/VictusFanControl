@@ -19,11 +19,12 @@ internal static partial class ProductGuiSelfTest
             TestAutomaticReview(Require);
             TestLiveCurveApply(Require);
             TestAdvancedSettings(Require);
+            TestStartupAutomatic(Require);
             TestLivePerformanceApply(Require);
             TestSessionLogs(Require);
             TestSessionRestart(Require);
             PerformanceRecoveryPreviewSelfTest.Run(Require);
-            using(var retentionForm=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),fixtureProfiles:new ProductProfiles()))
+            using(var retentionForm=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),fixtureProfiles:new ProductProfiles{Ac=ProductProfiles.LegacyDefaultProfile(ProductPowerProfile.Ac)}))
             {
                 retentionForm.HandleCommand("retention-toggle");
                 Require(retentionForm.Draft.ExperimentalPlatformRetention,"Experimental option did not enter the draft.");

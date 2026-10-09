@@ -22,8 +22,8 @@ var settings = new PlatformSettings();
 using var recorded = JsonDocument.Parse(File.ReadAllText(Path.Combine(configRoot,"recorded-fan-settings.json")));
 var profiles = new (string Name, FanConfiguration Fan)[]
 {
-    ("default-ac",ProductProfiles.DefaultProfile(ProductPowerProfile.Ac).Fan),
-    ("default-battery",ProductProfiles.DefaultProfile(ProductPowerProfile.Battery).Fan),
+    ("default-ac",ProductProfiles.LegacyDefaultProfile(ProductPowerProfile.Ac).Fan),
+    ("default-battery",ProductProfiles.LegacyDefaultProfile(ProductPowerProfile.Battery).Fan),
     ("recorded-ac",recorded.RootElement.GetProperty("ac").Deserialize<FanConfiguration>(json)!),
     ("recorded-battery",recorded.RootElement.GetProperty("battery").Deserialize<FanConfiguration>(json)!)
 };

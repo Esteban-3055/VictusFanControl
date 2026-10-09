@@ -825,7 +825,7 @@ jobs:
         shell: pwsh
         run: |
           $guiReview = Join-Path $env:RUNNER_TEMP 'VictusFanControl-product-gui-review'
-          .\scripts\package-product-gui-review.ps1 -RcArtifactDirectory (Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.4-artifact') -OutputDirectory $guiReview -SourceHead '${{ github.sha }}'
+          .\scripts\package-product-v1.ps1 -RcArtifactDirectory (Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.4-artifact') -OutputDirectory $guiReview -SourceHead '${{ github.sha }}'
           & (Join-Path $guiReview 'Start-ProductGui.ps1') -Mode FinalCheck
           & (Join-Path $guiReview 'Start-PlatformThermalTest.ps1') -Mode Verify
           & (Join-Path $guiReview 'Start-PlatformThermalTest.ps1') -Mode SelfTest
@@ -842,7 +842,7 @@ jobs:
       - name: Upload definitive GUI review package
         uses: actions/upload-artifact@v4
         with:
-          name: product-gui-review-${{ github.sha }}
+          name: VictusFanControl-1.0.0-win-x64-${{ github.sha }}
           path: ${{ runner.temp }}/VictusFanControl-product-gui-review
           if-no-files-found: error
           retention-days: 30

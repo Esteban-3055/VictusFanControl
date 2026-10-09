@@ -65,6 +65,8 @@ public sealed record ProductProfiles
     public bool CpuEnabled { get; init; } = true;
     public bool GpuEnabled { get; init; } = true;
     public bool StartMinimized { get; init; }
+    public bool ActivateAutomaticOnStart { get; init; }
+    public int DefaultCurveRevision { get; init; } = 2;
     // Preferences only: never persists source qualification, fan authority or a running session.
     public bool ExperimentalPlatformRetention { get; init; }
     public ProductProfile Get(ProductPowerProfile source) => source switch
@@ -73,7 +75,7 @@ public sealed record ProductProfiles
     { ProductPowerProfile.Ac => this with { Ac = profile }, ProductPowerProfile.Battery => this with { Battery = profile }, _ => throw new ArgumentOutOfRangeException(nameof(source)) };
     public void Validate()
     {
-        if (SchemaVersion is not(1 or 2) || Ac is null || Battery is null) throw new InvalidDataException("Esquema de perfiles incompatible.");
+        if (DefaultCurveRevision is not (1 or 2) || SchemaVersion is not(1 or 2) || Ac is null || Battery is null) throw new InvalidDataException("Esquema de perfiles incompatible.");
         Ac.Validate(ProductPowerProfile.Ac); Battery.Validate(ProductPowerProfile.Battery);
         if(SchemaVersion==2&&(Ac.Fan.UnifiedDemand is null||Battery.Fan.UnifiedDemand is null))throw new InvalidDataException("Cada fuente requiere su curva única de demanda.");
     }
@@ -85,6 +87,13 @@ public sealed record ProductProfiles
         AcGpuMaximumMHz = Ac.GpuMaximumMHz, BatteryGpuMaximumMHz = Battery.GpuMaximumMHz
     };
     public static ProductProfile DefaultProfile(ProductPowerProfile source, FanConfiguration? previous = null)
+    {
+        var profile=LegacyDefaultProfile(source,previous);
+        return source==ProductPowerProfile.Ac && previous is null
+            ? profile with{Fan=ProductQuietCandidate.Apply(profile.Fan)} : profile;
+    }
+    // Explicit historical baseline: archived evidence must not follow a later default.
+    public static ProductProfile LegacyDefaultProfile(ProductPowerProfile source, FanConfiguration? previous = null)
     {
         var fan = FanConfigurationStore.Copy(previous ?? QuietFanConfiguration(source));
         var c = AdaptiveCurveProfiles.Validate(fan.Profile);
@@ -154,7 +163,14 @@ public static class ProductProfilesStore
             {LegacyFan=p.LegacyFan??FanConfigurationStore.Copy(p.Fan),Fan=Expand(p).Fan with{UnifiedDemand=UnifiedFanDemand.Default(battery)}};
             return profiles with{SchemaVersion=2,Ac=Upgrade(profiles.Ac,false),Battery=Upgrade(profiles.Battery,true)};
         }
-        return profiles with { Ac = Expand(profiles.Ac), Battery = Expand(profiles.Battery) };
+        var ac=Expand(profiles.Ac);
+        if(!document.RootElement.TryGetProperty("defaultCurveRevision",out _) || profiles.DefaultCurveRevision==1)
+        {
+            // Only the untouched prior fan preset migrates. Preserve custom curves, caps and startup choices.
+            if(FanConfigurationStore.Serialize(ac.Fan)==FanConfigurationStore.Serialize(ProductProfiles.LegacyDefaultProfile(ProductPowerProfile.Ac).Fan))
+                ac=ac with{Fan=ProductProfiles.DefaultProfile(ProductPowerProfile.Ac).Fan};
+        }
+        return profiles with { DefaultCurveRevision=2, Ac = ac, Battery = Expand(profiles.Battery) };
     }
     public static ProductProfiles Copy(ProductProfiles profiles) => Parse(Serialize(profiles));
     public static ProductProfiles Load(string? path, out string? notice, Func<ProductProfiles>? migrate = null)
@@ -167,6 +183,7 @@ public static class ProductProfilesStore
                 var text=File.ReadAllText(path);var loaded=Parse(text);
                 using var document=JsonDocument.Parse(text);
                 if(document.RootElement.GetProperty("schemaVersion").GetInt32()==1)notice="Motor nuevo en edición; curvas anteriores conservadas como respaldo. Guardar crea una copia exacta del archivo v1.";
+                else if(!document.RootElement.TryGetProperty("defaultCurveRevision",out _))notice="v1.0: curva AC predeterminada actualizada si no estaba personalizada; límites y curva Batería conservados. Guardar crea un respaldo del archivo anterior.";
                 return loaded;
             }
             var defaults = migrate?.Invoke() ?? new ProductProfiles(); defaults.Validate();
@@ -196,9 +213,9 @@ public static class ProductProfilesStore
                     using var reader=new StreamReader(original,System.Text.Encoding.UTF8,detectEncodingFromByteOrderMarks:true);
                     using var document=JsonDocument.Parse(reader.ReadToEnd());
                     if(document.RootElement.ValueKind==JsonValueKind.Object&&document.RootElement.TryGetProperty("schemaVersion",out var schema)&&
-                        schema.ValueKind==JsonValueKind.Number&&schema.TryGetInt32(out var version)&&version==1)
+                        schema.ValueKind==JsonValueKind.Number&&schema.TryGetInt32(out var version)&&(version==1||!document.RootElement.TryGetProperty("defaultCurveRevision",out _)))
                     {
-                        var backup=path+".v1-backup-"+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))[..12].ToLowerInvariant()+".json";
+                        var backup=path+(version==1?".v1-backup-":".pre-v1-backup-")+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))[..12].ToLowerInvariant()+".json";
                         if(File.Exists(backup)){if(!File.ReadAllBytes(backup).SequenceEqual(bytes))throw new IOException("El respaldo v1 existente no coincide; no se reemplazó el original.");}
                         else {using var stream=new FileStream(backup,FileMode.CreateNew,FileAccess.Write,FileShare.None);stream.Write(bytes);stream.Flush(flushToDisk:true);}
                     }

@@ -8,7 +8,11 @@ public static class ProductQuietCandidate
     public static ProductProfiles Stage(ProductProfiles profiles)
     {
         profiles.Validate();
-        var fan=profiles.Ac.Fan;
+        var result=profiles with{Ac=profiles.Ac with{Fan=Apply(profiles.Ac.Fan)}};
+        result.Validate();return result;
+    }
+    public static FanConfiguration Apply(FanConfiguration fan)
+    {
         var original=fan.UnifiedDemand??throw new InvalidDataException("La candidata requiere la curva única.");
         double previous=10;
         var curve=original.Curve.Select(p=>
@@ -21,7 +25,6 @@ public static class ProductQuietCandidate
             ShortLoadDecreaseConfirmationSeconds=Math.Min(fan.Tuning.ShortLoadDecreaseConfirmationSeconds,4),
             FallTimeConstantSeconds=Math.Min(fan.Tuning.FallTimeConstantSeconds,25),
             DecreaseConfirmationSeconds=Math.Min(fan.Tuning.DecreaseConfirmationSeconds,12)};
-        var result=profiles with{Ac=profiles.Ac with{Fan=fan with{UnifiedDemand=demand,Tuning=tuning}}};
-        result.Validate();return result;
+        return fan with{UnifiedDemand=demand,Tuning=tuning};
     }
 }

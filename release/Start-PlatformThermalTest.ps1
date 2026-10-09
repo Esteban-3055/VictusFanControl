@@ -8,7 +8,7 @@ $root=$PSScriptRoot
 $manifest=Get-Content -LiteralPath (Join-Path $root 'PRODUCT-GUI-MANIFEST.json') -Raw | ConvertFrom-Json
 if($manifest.platformThermalExperiment -ne 'explicit-physical-AC-ABBA-2580s-TZ01-DTT3-retention'){throw 'This package does not include the physical platform experiment.'}
 if($Mode -eq 'Verify'){Write-Host 'Experimental package integrity: PASS. No hardware activation.';return}
-$app=Join-Path $root 'VictusFanControl-0.4.0-rc.1-win-x64/app'
+$app=Join-Path $root 'app'
 $start=New-Object System.Diagnostics.ProcessStartInfo
 $start.FileName=Join-Path $app 'VictusFanControl.App.exe'
 $start.UseShellExecute=$false
