@@ -95,7 +95,14 @@ Require ($launcher.Contains("'FinalCheck'") -and $launcher.Contains("@('SelfTest
 Require ($launcher.Contains('$start.WorkingDirectory = $fixtureOutput') -and $launcher.Contains('No hardware activation or physical qualification performed.')) 'packaged fixture outputs must remain outside the verified payload'
 $candidate = Get-Content (Join-Path $repoRoot 'release/product-final-candidate.json') -Raw | ConvertFrom-Json
 Require ($candidate.stableReleaseAuthorized -eq $false -and $candidate.normalAutomatic -eq 'closed') 'candidate must not claim a stable release or normal Automatic authority'
-Require ($candidate.remainingPhysicalChecks.Count -eq 3) 'candidate must retain its thermal/lifecycle/exit physical regressions'
+foreach ($pending in @('representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return',
+    'current-gui-suspend-resume-without-fan-reentry','current-gui-clean-exit-and-session-restart-release-and-open-in-firmware',
+    'optional-quiet-ac-candidate-with-tz01-dtt3-comparable-thermal-and-measured-acoustics')) {
+    Require ($candidate.remainingPhysicalChecks -contains $pending) 'candidate must retain every thermal/lifecycle/exit and optional quiet-curve regression'
+}
+Require ($candidate.experimentalPlatformRetention.defaultEnabled -eq $false -and $candidate.experimentalPlatformRetention.normalAutomaticPromoted -eq $false -and
+    $candidate.experimentalPlatformRetention.maximumExtraRawLevels -eq 2 -and $candidate.experimentalPlatformRetention.maximumSupplementSeconds -eq 60) 'optional retention must remain bounded and unpromoted'
+Require ($launcher.Contains('optional-disabled-default-AC-plus2-60s-fresh3s') -and $package.Contains('optional-disabled-default-AC-plus2-60s-fresh3s')) 'launcher and package must bind the optional retention contract'
 Require ($candidate.sessionRestart -eq 'explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics') 'candidate restart must retain clean-release and explicit Firmware reentry'
 Require ($candidate.automaticThermalContract -eq 'cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response') 'candidate thermal contract drifted'
 Require ($launcher.Contains($candidate.automaticThermalContract) -and $package.Contains($candidate.automaticThermalContract)) 'launcher and package must bind the current thermal contract'
@@ -131,7 +138,15 @@ foreach ($evidence in $candidate.offlinePolicyEvidence) {
     Require ($offline.target -eq 'HP-8C40-9D0R1LA-F18' -and $offline.physicalPassClaimed -eq $false -and $offline.normalAutomaticAuthorized -eq $false) 'replay must not claim physical qualification or authority'
     Require ($offline.historicalReconstruction.expectedDecisions -eq $offline.historicalReconstruction.exactLevelMatches) 'historical replay must reproduce all recorded targets'
     foreach ($binding in $offline.sourceSha256.PSObject.Properties) {
-        Require ((Get-CanonicalSourceSha256 (Join-Path $repoRoot $binding.Name)) -eq $binding.Value) 'offline comparison source hash drifted'
+        $sourcePath = Join-Path $repoRoot $binding.Name
+        if ($offline.PSObject.Properties.Name -contains 'historicalSourceSnapshots') {
+            $snapshot = $offline.historicalSourceSnapshots.PSObject.Properties[$binding.Name].Value
+            Require ($snapshot -and $snapshot.StartsWith('tools/FanStabilityReplay/fixtures/historical-2026-10-06/') -and $snapshot -notmatch '\.\.') 'historical source snapshot missing or unsafe'
+            $sourcePath = Join-Path $repoRoot $snapshot
+            Require ($offline.historicalSourceHead -eq '4d4b40fda1bc032bb7c563750c3f6fa403d010c3') 'historical evidence head drifted'
+        }
+        Require ((Get-CanonicalSourceSha256 $sourcePath) -eq $binding.Value) 'offline comparison source hash drifted'
     }
 }
+Require ($candidate.offlinePolicyEvidence -contains 'product-quiet-curve-replay-8c40-2026-10-09.json') 'current quiet candidate must bind the current controller sources separately from historical evidence'
 Write-Host 'PASS: offline stability evidence binds source and retains physical pending status.'

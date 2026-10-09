@@ -1212,5 +1212,14 @@
     "Battery curve is derived and awaits representative physical observation.",
     "Fewer direction reversals may retain higher fan levels while cooling; quiet minimum is released at the curve floor."
   ],
-  "sourceHashCanonicalization": "UTF-8 text, BOM-aware decode, CRLF-to-LF, SHA256"
+  "sourceHashCanonicalization": "UTF-8 text, BOM-aware decode, CRLF-to-LF, SHA256",
+  "historicalSourceHead": "4d4b40fda1bc032bb7c563750c3f6fa403d010c3",
+  "historicalSourceSnapshots": {
+    "src/VictusFanControl/Control/Adaptive/FanConfiguration.cs": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/FanConfiguration.cs.txt",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/AdaptiveFanInertiaPolicy.cs.txt",
+    "src/VictusFanControl/Control/Adaptive/UnifiedFanDemand.cs": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/UnifiedFanDemand.cs.txt",
+    "src/VictusFanControl/Product/ProductProfiles.cs": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/ProductProfiles.cs.txt",
+    "tools/FanStabilityReplay/Program.cs": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/Program.cs.txt",
+    "tools/FanStabilityReplay/prepare-evidence.py": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/prepare-evidence.py.txt"
+  }
 }

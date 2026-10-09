@@ -33,7 +33,7 @@
   ],
   "offlinePolicyEvidence": [
     "product-fan-stability-replay-8c40-2026-10-06.json",
-    "product-quiet-curve-001126-2026-10-09"
+    "product-quiet-curve-replay-8c40-2026-10-09.json"
   ],
   "experimentalPlatformRetention": {
     "defaultEnabled": false,

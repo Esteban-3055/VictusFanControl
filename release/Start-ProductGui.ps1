@@ -19,6 +19,7 @@ Write-Host "Verified GUI build $($manifest.sourceHead). Final candidate; remaini
 if ($manifest.releaseStage -ne 'final-candidate' -or $manifest.finalReleaseReady -ne $false -or $manifest.normalAutomatic -ne 'closed') { throw 'Unsupported final candidate authorization.' }
 $candidate = Get-Content -LiteralPath (Join-Path $root 'PRODUCT-FINAL-CANDIDATE.json') -Raw | ConvertFrom-Json
 if ($candidate.schemaVersion -ne 1 -or $candidate.kind -ne 'VictusFanControl.ProductFinalCandidate' -or $candidate.sourceHead -ne $manifest.sourceHead -or $candidate.stableReleaseAuthorized -ne $false) { throw 'Invalid final candidate identity or authorization.' }
+if ($manifest.productPlatformRetention -ne 'optional-disabled-default-AC-plus2-60s-fresh3s' -or $candidate.experimentalPlatformRetention.defaultEnabled -ne $false -or $candidate.experimentalPlatformRetention.normalAutomaticPromoted -ne $false) { throw 'Invalid optional platform retention contract.' }
 if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }
 if ($Mode -eq 'FinalCheck') {

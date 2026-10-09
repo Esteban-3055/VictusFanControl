@@ -89,6 +89,10 @@ comprueban IDs, archivos parciales/inválidos y conservación exacta de bytes.
 La base histórica sigue conciliándose independientemente en 323876 filas.
 Windows debe verificar GUI, soak, IPC/Guardian y distribución del mismo commit.
 
+La evidencia de estabilidad de octubre 6 conserva sus resultados, hashes y
+fuentes históricas congeladas. La comparación nueva enlaza por separado las
+fuentes actuales; no se sustituye el código histórico al añadir la retención.
+
 Queda una comparación física breve con igual carga, límites y condiciones,
 seguida de reposo, suspensión/reanudación y salida limpia. No se necesitan
 repeticiones largas ni eliminar protecciones para forzar un benchmark. La

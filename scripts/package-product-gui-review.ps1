@@ -26,15 +26,18 @@ Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_PERFORMANCE_UPDATES.md') -
 Copy-Item -LiteralPath (Join-Path $root 'docs/FAN_STABILITY_STUDY_8C40.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_FINAL_CANDIDATE.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_SESSION_RESTART.md') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $root 'docs/PRODUCT_PLATFORM_RETENTION_2026-10-09.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $root 'release/product-final-candidate.json') -Destination (Join-Path $OutputDirectory 'PRODUCT-FINAL-CANDIDATE.json')
 $candidatePath = Join-Path $OutputDirectory 'PRODUCT-FINAL-CANDIDATE.json'
 $candidate = Get-Content -LiteralPath $candidatePath -Raw | ConvertFrom-Json
 $candidate | Add-Member -NotePropertyName sourceHead -NotePropertyValue $SourceHead
 New-Item -ItemType Directory -Path (Join-Path $OutputDirectory 'evidence') | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'docs/evidence/product-quiet-curve-001126-2026-10-09') -Destination (Join-Path $OutputDirectory 'evidence/product-quiet-curve-001126-2026-10-09') -Recurse
 foreach ($evidence in @($candidate.physicalEvidence) + @($candidate.offlinePolicyEvidence)) {
     if ([IO.Path]::GetFileName($evidence) -ne $evidence) { throw 'Invalid candidate evidence path.' }
     Copy-Item -LiteralPath (Join-Path $root ('release/' + $evidence)) -Destination (Join-Path $OutputDirectory 'evidence')
 }
+Copy-Item -LiteralPath (Join-Path $root 'tools/FanStabilityReplay/fixtures/historical-2026-10-06') -Destination (Join-Path $OutputDirectory 'evidence/historical-source-snapshots') -Recurse
 $candidate | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $candidatePath -Encoding utf8
 $entries = @(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-Object FullName | ForEach-Object {
     [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
@@ -43,6 +46,7 @@ $manifest = [ordered]@{
     schemaVersion=1;kind='VictusFanControl.ProductGuiReview';sourceHead=$SourceHead
     inheritedRcZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
     platformThermalExperiment='explicit-physical-AC-ABBA-2580s-TZ01-DTT3-retention'
+    productPlatformRetention='optional-disabled-default-AC-plus2-60s-fresh3s'
     releaseStage='final-candidate';finalReleaseReady=$false;sessionRestart='explicit-clean-release-new-process-firmware'
     physicalGuiValidation='pending';normalAutomatic='closed';customGpuClock='configurable-210-to-2500';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticExtendedReview='explicit-only-2700s-10-to-50-16MiB-diagnostics';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response';productAutomaticSourceTransition='bounded-4000ms-fresh-guardian-preserves-inertia';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';curveApply='explicit-live-unified-preserves-session-inertia';productDemand='unified-max-six-influences-v1';productProfiles='v2-preserves-v1-backup';performanceRecovery='explicit-release-only-exact-session-backups';files=$entries
 }
