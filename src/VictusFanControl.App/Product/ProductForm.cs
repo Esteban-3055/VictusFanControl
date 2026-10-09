@@ -342,7 +342,7 @@ internal sealed partial class ProductForm : Form
     }
     protected override void Dispose(bool disposing)
     {
-        if(disposing){_updateCancellation.Cancel();_updateCancellation.Dispose();_presentationTimer.Dispose();UnregisterPowerNotifications();if(_runtime is not null)_runtime.Changed-=UpdateState;_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();}
+        if(disposing){DisposeUpdateCancellation();_presentationTimer.Dispose();UnregisterPowerNotifications();if(_runtime is not null)_runtime.Changed-=UpdateState;_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();}
         base.Dispose(disposing);
     }
     private void ToggleMaximize()=>WindowState=WindowState==FormWindowState.Maximized?FormWindowState.Normal:FormWindowState.Maximized;

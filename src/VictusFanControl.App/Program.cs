@@ -24,15 +24,15 @@ internal static class Program
                 // Persist preferences only. This entry constructs no runtime or hardware backend.
                 var freshInstall = args[0]=="--configure-product-install" && !File.Exists(VictusFanControl.Product.ProductProfilesStore.DefaultPath);
                 var preserve = args[0]=="--configure-product-install" && !freshInstall;
-                var enableStartup = !preserve || WindowsStartupRegistration.IsRegisteredEnabledAsync().GetAwaiter().GetResult();
-                var configured=preserve ? profiles : profiles with{ActivateAutomaticOnStart=true,StartMinimized=true};
+                var plan = ProductInstallationPlan.Create(profiles,preserve,preserve && WindowsStartupRegistration.IsRegisteredEnabledAsync().GetAwaiter().GetResult());
+                var configured=plan.Profiles;
                 var path=VictusFanControl.Product.ProductProfilesStore.DefaultPath;
                 var original=File.Exists(path)?File.ReadAllBytes(path):null;
-                if(!preserve)VictusFanControl.Product.ProductProfilesStore.Save(configured);
-                try { if(enableStartup)WindowsStartupRegistration.SetEnabledAsync(true,modules,configured.StartMinimized).GetAwaiter().GetResult(); }
+                if(plan.SaveProfiles)VictusFanControl.Product.ProductProfilesStore.Save(configured);
+                try { if(plan.RegisterStartup)WindowsStartupRegistration.SetEnabledAsync(true,modules,configured.StartMinimized).GetAwaiter().GetResult(); }
                 catch
                 {
-                    if(!preserve){if(original is null)File.Delete(path);else File.WriteAllBytes(path,original);}
+                    if(plan.SaveProfiles){if(original is null)File.Delete(path);else File.WriteAllBytes(path,original);}
                     throw;
                 }
                 Environment.ExitCode=0;

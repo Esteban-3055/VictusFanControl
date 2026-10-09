@@ -24,6 +24,16 @@ internal static class ProductUpdatesSelfTest
         using var input=new MemoryStream(new byte[10]);using var output=new MemoryStream();
         bool bounded=false;try{ProductUpdates.CopyBoundedAsync(input,output,9,CancellationToken.None).GetAwaiter().GetResult();}catch(InvalidDataException){bounded=true;}
         require(bounded,"Unbounded update response accepted.");
+        foreach(var automatic in new[]{false,true})foreach(var minimized in new[]{false,true})foreach(var startup in new[]{false,true})
+        {
+            var profiles=new ProductProfiles{ActivateAutomaticOnStart=automatic,StartMinimized=minimized,ExperimentalPlatformRetention=true};
+            var prior=ProductProfilesStore.Serialize(profiles);
+            var plan=ProductInstallationPlan.Create(profiles,true,startup);
+            require(!plan.SaveProfiles&&plan.RegisterStartup==startup&&ProductProfilesStore.Serialize(plan.Profiles)==prior,"Update modified saved preferences or disabled/enabled startup.");
+            var fresh=ProductInstallationPlan.Create(profiles,false,startup);
+            require(fresh.SaveProfiles&&fresh.RegisterStartup&&fresh.Profiles.ActivateAutomaticOnStart&&fresh.Profiles.StartMinimized&&
+                fresh.Profiles.PerformanceConfiguration()==profiles.PerformanceConfiguration()&&fresh.Profiles.ExperimentalPlatformRetention==profiles.ExperimentalPlatformRetention,"Fresh installation changed fan/performance preferences.");
+        }
         Console.WriteLine("Product update policy: PASS (stable channel, repository URL, digest, size and downgrade fences; no network/hardware IO).");
     }
 }
