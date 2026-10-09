@@ -47,7 +47,9 @@ public static class PhysicalExperimentSelfTest
                 // 3.1056265s apart, but a real 241.5788012s acquisition bridges them.
                 long dttTicks=seconds switch{240 or 241=>2_395_000_000L,242=>2_415_788_012L,243=>2_426_056_265L,_=>seconds*TimeSpan.TicksPerSecond};
                 experiment.SetSources(new(platform+8,at),new(50,at),new(48,at),new(platform,start.AddTicks(dttTicks)));
-                if(seconds==242)continue; // Auxiliary acquisition without a main frame.
+                // Also exercise Firmware requalification after a main-frame gap:
+                // the host resets before consuming the still-fresh acquisitions.
+                if(seconds is 2 or 3 or 4 or 242)continue;
                 var snapshot=Sample(seconds,loaded?80:50,loaded?70:40,loaded?30:10,loaded?60:8,loaded?80:5);
                 experiment.ObserveTelemetry(snapshot,"Ac");
                 if(!stage.Custom)continue;

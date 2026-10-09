@@ -93,7 +93,13 @@ def audit(directory):
             f=frame_pascal(d['frame']);now=stamp(f['TimestampUtc']);s=d['snapshot'];b=blocks[d['stage']['index']];b['controller']=d['stage']['controller']
             if previous is not None:
                 assert now>previous,'Non-increasing snapshots'
-                if now-previous>30_000_000:gaps.append((previous,now))
+                if now-previous>30_000_000:
+                    gaps.append((previous,now))
+                    # PhysicalPlatformExperiment resets admission BEFORE evaluating
+                    # this snapshot. Firmware may requalify from causal histories;
+                    # an active custom stage must already have closed authority.
+                    assert not d['stage']['custom'] or closed, 'Main telemetry gap did not close custom experiment'
+                    admission.last=None;admission.channels=[None,None]
             previous=now;available=admission.evaluate(f,source_history(d,session));assert available==d['admission']['available'],'Source admission mismatch'
             qual+=available;telemetry[now]=d;b['samples']+=1
             for key,field in [('cpu','cpuControlTemperatureC'),('gpu','gpuTemperatureC')]:

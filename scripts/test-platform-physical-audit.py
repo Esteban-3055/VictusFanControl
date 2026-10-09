@@ -31,7 +31,12 @@ def missing_bridge(trace):
     data=next(r['data'] for r in trace if r['kind']=='telemetry' and r['data']['snapshot']['timestamp']=='1970-01-01T00:04:03+00:00')
     samples=data['sourceHistory']['dtt3'];assert audit.stamp(samples[-1]['sampledAtUtc'])-audit.stamp(samples[-3]['sampledAtUtc'])>30_000_000
     del samples[-2]
-for mutate in (raw,variant,admission,dispatch,missing,truncate,post_data,wrong_close,early_close,missing_history,future_history,changed_history,duplicate_history,missing_bridge):
+def unauthorized_gap(trace):
+    # Move the real preflight gap into Custom without a prior close. Even if
+    # its fresh histories requalify the channel, authority must be closed.
+    data=next(r['data'] for r in trace if r['kind']=='telemetry' and r['data']['snapshot']['timestamp']=='1970-01-01T00:00:05+00:00')
+    data['stage'].update(index=0,controller='baseline',custom=True)
+for mutate in (raw,variant,admission,dispatch,missing,truncate,post_data,wrong_close,early_close,missing_history,future_history,changed_history,duplicate_history,missing_bridge,unauthorized_gap):
     with tempfile.TemporaryDirectory(prefix='vfc-audit-negative-') as tmp:
         root=pathlib.Path(tmp);changed=copy.deepcopy(rows);mutate(changed)
         (root/'experiment.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in changed),encoding='utf-8')
@@ -39,4 +44,4 @@ for mutate in (raw,variant,admission,dispatch,missing,truncate,post_data,wrong_c
         try:audit.audit(root)
         except (AssertionError,ValueError,KeyError,TypeError):continue
         raise AssertionError('Corruption accepted: '+mutate.__name__)
-print('Independent physical audit negative controls: PASS (14 corruptions rejected).')
+print('Independent physical audit negative controls: PASS (15 corruptions rejected).')

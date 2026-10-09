@@ -202,3 +202,84 @@ de telemetría/prueba HP-WMI PASS. Ambas evidencias reales pasaron la auditoría
 No se declara validación física del cambio ni un paquete Windows publicado.
 El origen del retraso sigue pendiente; esto prepara un diagnóstico útil, no
 una corrección demostrada. No se solicita otra prueba física igual ahora.
+
+
+## Comprobación física de la corrección: 00:11–00:23 UTC, 9 de octubre
+
+Corresponde a 21:11–21:23 del 8 de octubre en Chile. No es otra interrupción:
+el usuario detuvo normalmente la ejecución después del inicio de B1.
+
+- ZIP: `Victus-Platform-physical-20261009T001126Z-5af2aa80.zip`.
+- SHA-256 ZIP: `09a665dc4938730884752a239ea6fef72507694f7b1403c5a1fe9105e59ff283`.
+- Build declarado: `5db184c681b0b94b53de3ab89444d220cfcb0773`.
+- SHA-256 manifiesto: `aa8cc86fadf3e13bc0b50eb2f39670b5677dfc28bff62f8f618f1dde70cc7990`,
+  idéntico al paquete Windows verificado. La traza lleva
+  `bounded-acquisition-history-v1` y los historiales efectivos.
+- CPU PL1/PL2 solicitados 25/30 W; GPU máxima solicitada 1950 MHz.
+- Auditoría independiente PASS: 508 snapshots, 503 cualificados, 390 decisiones
+  y 390 resultados de dispatch; 19 cambios aceptados.
+- 347 decisiones baseline/A1 y 43 both-retention/B1. Protocolo ABBA incompleto.
+- Cierre: `Detención solicitada por el usuario`; código de salida 0;
+  cleanup succeeded=true, failure=null a 00:23:33.1497792 UTC.
+
+### Carga y temperaturas
+
+| Fase | Evidencia CPU | Máxima CPU | Máxima GPU |
+|---|---|---|---|
+| Preflight Firmware | Carga iniciada antes de aplicar los límites; 114 snapshots, 110 completos | 98 °C | 51 °C |
+| A1/baseline | 135 lecturas consecutivas al ≈100 % (99,949–100 %), de 00:15:40.2508339 a 00:19:34.4728152 UTC (234,2219813 s) | 72 °C en A1; 71 °C durante ese tramo al 100 % | 53 °C |
+| B1/both-retention | Solo 58,5906473 s observados de reposo; carga CPU media 5,102 % | 68 °C | 48 °C |
+
+Durante el tramo al 100 %, la potencia CPU media fue 26,769 W. Las primeras
+30 muestras promediaron 30,084 W y las últimas 30, 24,818 W. La selección PL1/PL2
+no se interpreta como un límite instantáneo de cada lectura de potencia.
+Los 98 °C y hasta 67,435 W se registraron en Firmware antes de activar
+Performance a 00:13:34.3156941 UTC; no describen CPU bajo los límites de A1.
+
+### Puentes de continuidad registrados
+
+Durante A1 al 100 % hay nueve saltos entre épocas seleccionadas superiores a
+3 s, en ocho snapshots (uno tiene salto TZ01 y DTT3 simultáneos): cinco DTT3 y
+cuatro TZ01. Cada salto contiene dos adquisiciones intermedias reales. Los
+saltos observados son de 3,0846177 a 3,1259828 s; la mayor separación real
+entre las adquisiciones que los cubren es de 1,059298 s. Todos esos snapshots
+siguen cualificados y permiten decisiones/dispatch auditados.
+
+Ejemplo DTT3 a 00:16:01.3714092 UTC: salto observado 3,1061033 s,
+dos adquisiciones intermedias, mayor intervalo real 1,0449653 s y carga CPU
+100 %. Este es el mecanismo corregido, ahora comprobado físicamente en la
+nueva ejecución. No demuestra retrospectivamente el contenido de las muestras
+que faltaban en la captura anterior.
+
+No hay huecos principales superiores a 3 s en Custom ni disparo espontáneo
+del watchdog durante A1/B1. Hay un hueco principal de 3,5855463 s a
+00:11:45.6669718 UTC durante Firmware, más recuperación inicial registrada;
+la admisión se reinicia y se recualifica usando adquisiciones frescas antes de
+entrar en Custom.
+
+El auditor inicialmente no reflejaba ese reset explícito del host antes de
+Evaluate y rechazaba esta recualificación válida. Se corrige únicamente el
+verificador; no la admisión de control. La reproducción sintética ahora incluye
+un hueco Firmware y 15 controles negativos, incluido mover el hueco a Custom
+sin cierre previo: debe rechazarse. Resultado local: PASS en 2576 snapshots,
+2159 decisiones/resultados y 15 corrupciones rechazadas.
+
+### Alcance y siguiente desarrollo
+
+La captura basta para cerrar la comprobación física de la corrección de
+submuestreo en este escenario. No hace falta otra repetición CPU equivalente
+para ese objetivo. No es una garantía de estabilidad en todo entorno ni un
+PASS del ABBA completo.
+
+B1 conservó el objetivo físico 19 durante 43 decisiones. La demanda auxiliar
+retenida fue 19 y elevó la demanda raw frente al baseline, pero el objetivo
+físico no superó al baseline en esas decisiones. No hubo carga en B1 ni una
+comparación equivalente de enfriamiento; no se demuestra mejora térmica,
+acústica o de rendimiento. La curva sigue experimental y Automatic normal no
+se promueve con esta evidencia.
+
+La GUI se exporta al comenzar la detención, antes de Dispose: muestra Firmware
+como modo solicitado, autoridad todavía Custom y Performance aún Active /
+ActiveUnverified. Esa fotografía transitoria no es un fallo de cleanup ni
+prueba el estado físico final. El resumen posterior reporta limpieza sin error;
+no hay readback independiente de un rango GPU final exacto.
