@@ -1,5 +1,24 @@
 # Retención opcional TZ01/DTT3 y candidata AC
 
+## Compatibilidad AC/batería posterior a v1.0.0
+
+La retención de la GUI habitual permite activación en AC o batería y no impone
+un requisito de alimentación. AC → batería → AC conserva la calificación, la
+inercia y el plazo del episodio; cambiar de fuente no renueva los 60 s. El
+controlador principal mantiene la confirmación CPU/GPU del perfil de destino,
+el plazo de transición de 4 s y el rechazo de alimentación desconocida. Se
+conservan +2 niveles, el techo del último nivel reconocido, frescura/continuidad
+y las protecciones térmicas. Un fallo real de sensores sigue solicitando
+Firmware y no se rearma solo. El estado defectuoso de una sesión anterior se
+limpia mediante Reiniciar sesión, antes de activar desde Firmware.
+
+La comparación física disponible es AC: falta observar la retención en batería
+y su transición en el destino. El experimento físico ABBA histórico continúa
+siendo AC exclusivo. Las secciones siguientes describen la implementación y
+evidencia originales; el ZIP público v1.0.0 conserva su restricción a AC.
+
+## Implementación original y evidencia conservada
+
 La meta es temperatura comparable con menos ruido. La GUI implementa retención
 **experimental, desactivada por defecto**, en Avanzado → TZ01 / DTT3. Guardar
 persiste la preferencia; nunca la calificación, el plazo ni la autoridad. Los

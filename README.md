@@ -27,7 +27,7 @@ Use `-Mode Verify` or `-Mode FinalCheck` to check the package without hardware c
 - New AC default: levels **12, 12, 18, 28, 34, 44, 50** at demand **0, 40, 50, 65, 76, 90, 100**. Battery retains its defaults. Only untouched old AC fan defaults migrate; saving backs up the previous preferences.
 - Habitual Automatic without the review modes' 5/45-minute expiry, equal CPU/GPU fan commands within 10–50, and both performance limits prepared through Guardian before fans activate.
 - Optional Windows startup and one guarded activation attempt after three distinct fresh observations. Suspension, display-off and interruptions require manual reactivation; session restart opens in Firmware.
-- Optional experimental TZ01/DTT3 retention, disabled by default: AC only, up to two extra raw levels for 60 seconds, bounded by the last acknowledged level. It can prolong noise.
+- Optional experimental TZ01/DTT3 retention, disabled by default: current development supports AC and Battery, up to two extra raw levels for 60 seconds, bounded by the last acknowledged level. Source changes preserve the episode; sensor faults still request Firmware. It can prolong noise; Battery behavior needs a target observation. The published v1.0.0 package retains its original AC-only behavior.
 - CPU/GPU recovery preflight that retains journals and provides explicit recovery with exact session IDs.
 
 ## Protection and evidence

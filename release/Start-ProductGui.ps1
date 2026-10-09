@@ -23,7 +23,9 @@ foreach($file in $actual){if(-not $listed.ContainsKey($file.FullName.Substring($
 $candidate = Get-Content -LiteralPath (Join-Path $root 'PRODUCT-RELEASE.json') -Raw | ConvertFrom-Json
 if ($manifest.releaseStage -ne 'target-specific-release' -or $manifest.finalReleaseReady -ne $true -or $manifest.normalAutomatic -ne 'authorized-exact-target' -or
     $candidate.kind -ne 'VictusFanControl.ProductRelease' -or $candidate.version -ne '1.0.0' -or $candidate.sourceHead -ne $manifest.sourceHead -or $candidate.stableReleaseAuthorized -ne $true -or $candidate.physicalPassClaimed -ne $false) { throw 'Invalid target release authorization.' }
-if ($manifest.productPlatformRetention -ne 'optional-disabled-default-AC-plus2-60s-fresh3s' -or $candidate.experimentalPlatformRetention.defaultEnabled -ne $false) { throw 'Invalid optional platform retention contract.' }
+if ($manifest.productPlatformRetention -ne 'optional-disabled-default-AC-Battery-plus2-60s-fresh3s' -or
+    $candidate.experimentalPlatformRetention.defaultEnabled -ne $false -or $candidate.experimentalPlatformRetention.scope -ne 'optional-ac-and-battery' -or
+    $candidate.experimentalPlatformRetention.maximumExtraRawLevels -ne 2 -or $candidate.experimentalPlatformRetention.maximumSupplementSeconds -ne 60) { throw 'Invalid optional platform retention contract.' }
 Write-Host "Verified VictusFanControl v1.0.0 build $($manifest.sourceHead). Exact HP 8C40/F.18 release; evidence limits remain in PRODUCT-RELEASE.json."
 if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }

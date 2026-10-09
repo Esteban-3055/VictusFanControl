@@ -15,16 +15,16 @@ internal static class ProductRetentionTests
         var start=DateTimeOffset.UnixEpoch;
         AdaptiveFanPolicyInput Input(int t,double cpu=40)=>new(start.AddSeconds(t),cpu,5,0,35,2,0){CpuRawControlTemperatureC=cpu};
         TelemetrySnapshot Snapshot(int t)=>new(start.AddSeconds(t),"CPU",40,5,0,"GPU",35,2,0,null,null);
-        void Observe(ProductPlatformRetention p,int t,double tz=90,double dtt=67,string source="Ac",bool custom=false)
-        {var at=start.AddSeconds(t);p.SetSources(new(tz,at),new(dtt,at));p.ObserveTelemetry(Snapshot(t),source,custom);}
+        void Observe(ProductPlatformRetention p,int t,double tz=90,double dtt=67,bool custom=false)
+        {var at=start.AddSeconds(t);p.SetSources(new(tz,at),new(dtt,at));p.ObserveTelemetry(Snapshot(t),custom);}
         var disabled=new ProductPlatformRetention();
         Check(disabled.GetSupplement(Input(0),12,40) is null,"disabled auxiliary sources must impose no admission");
         disabled.EnsureDispatchAllowed(start,start.AddHours(1));
         var bootstrap=new ProductPlatformRetention();bootstrap.Configure(true);
-        bootstrap.SetSources(new(),new());bootstrap.ObserveTelemetry(Snapshot(0),"Ac",false);
+        bootstrap.SetSources(new(),new());bootstrap.ObserveTelemetry(Snapshot(0),false);
         Observe(bootstrap,1);Check(!bootstrap.State.Ready,"initial absence cannot count as an acquisition");
         Observe(bootstrap,2);Check(bootstrap.State.Ready,"two real acquisitions qualify after initially empty native slots");
-        bootstrap.SetSources(new(),new());bootstrap.ObserveTelemetry(Snapshot(3),"Ac",true);
+        bootstrap.SetSources(new(),new());bootstrap.ObserveTelemetry(Snapshot(3),true);
         Refused(()=>bootstrap.GetSupplement(Input(3),12,40),"missing source after qualification remains an active fault");
         var p=new ProductPlatformRetention();p.Configure(true);Observe(p,0);
         Refused(()=>p.GetSupplement(Input(0),12,40),"one acquisition cannot qualify");
@@ -41,14 +41,16 @@ internal static class ProductRetentionTests
         Observe(p,81);Check(p.GetSupplement(Input(81),40,40) is null,"baseline catches retention ceiling");
         Observe(p,82);Check(p.GetSupplement(Input(82),12,13)==13,"cannot request a target above the acknowledged level");
         Refused(()=>p.GetSupplement(Input(81),12,40),"prior frame cannot join current auxiliary epochs");
-        Observe(p,83,source:"Battery",custom:true);
-        Refused(()=>p.GetSupplement(Input(83),12,40),"source change permanently interrupts active feature");
-        Observe(p,84);Refused(()=>p.GetSupplement(Input(84),12,40),"fresh sources alone cannot rearm a fault");
+        Observe(p,83,custom:true);
+        Check(p.GetSupplement(Input(83),12,40)==14,"fresh active retention remains qualified across host profile changes");
+        p.EnsureDispatchAllowed(start.AddSeconds(83),start.AddSeconds(83.2));
         p.Configure(true);Observe(p,90);Observe(p,91);Observe(p,95,custom:true);
         Refused(()=>p.GetSupplement(Input(95),12,40),"custom telemetry gaps fail closed");
         p=new();p.Configure(true);Observe(p,0);Observe(p,1);
-        p.SetSources(new(90,start.AddSeconds(2)),new(double.NaN,start.AddSeconds(2)));p.ObserveTelemetry(Snapshot(2),"Ac",true);
+        p.SetSources(new(90,start.AddSeconds(2)),new(double.NaN,start.AddSeconds(2)));p.ObserveTelemetry(Snapshot(2),true);
         Refused(()=>p.GetSupplement(Input(2),12,40),"invalid auxiliary cannot be silently ignored when enabled");
+        for(int i=3;i<=12;i++)Observe(p,i);
+        Refused(()=>p.GetSupplement(Input(12),12,40),"fresh sources and profile changes cannot rearm a sensor fault");
         var original=new ProductProfiles {ExperimentalPlatformRetention=true};
         Check(ProductProfilesStore.Copy(original).ExperimentalPlatformRetention,"preference survives validated serialization");
         var legacyNode=System.Text.Json.Nodes.JsonNode.Parse(ProductProfilesStore.Serialize(new ProductProfiles()))!;
@@ -78,6 +80,6 @@ internal static class ProductRetentionTests
             var held=capped.EvaluateWithSupplement(Input(i),_=>acknowledged,retentionOnly:true);
             Check(held.EqualFanLevel<=acknowledged,"latent filter memory must not turn retention into an upward fan request");
         }
-        Console.WriteLine($"Product retention self-test: PASS ({checks} checks; bounded episodes, freshness, AC fault, legacy preferences, raw protection; no hardware IO).");
+        Console.WriteLine($"Product retention self-test: PASS ({checks} checks; source-independent bounded episodes, freshness, sticky sensor faults, legacy preferences, raw protection; no hardware IO).");
     }
 }

@@ -10,7 +10,7 @@ solicitados por el usuario. [Guía vigente](PRODUCT_V1.md) y
 | GUI y paquete | Build Windows, fixtures del paquete, recuperación y renders verificados; soak de 924 renders/30 aperturas sin incremento GDI/USER |
 | Motor y replay | Verificaciones Windows/Linux; reconciliación independiente de 84 ejecuciones/323876 filas; replay histórico preservado |
 | Nueva curva AC | Predeterminada; replay de 390 decisiones: demanda media 20.8001 frente a 21.5807, 16 cambios frente a 18; temperaturas observadas iguales como entrada, no resultado contrafactual |
-| TZ01/DTT3 | Opcional, experimental y desactivado de fábrica; AC, +2 niveles crudos/60 s; no aprobación acústica ni de batería |
+| TZ01/DTT3 | Desarrollo posterior a v1.0.0: opcional en AC/batería, +2 niveles crudos/60 s; episodio continuo al cambiar de fuente; sin aprobación física del cambio con retención ni acústica/de batería. ZIP publicado v1.0.0: solo AC |
 | Automático habitual | Autorizado solo para el destino exacto; sin vencimiento 5/45 min; mismas protecciones y preparación CPU/GPU |
 | Inicio con Windows | Instalador/tarea y activación con tres lecturas distintas comprobados por fixtures sin hardware; falta observar el logon real de esta compilación |
 | Preferencias | Migra solo antiguo preset AC intacto; conserva curvas personalizadas, límites CPU/GPU y batería; respaldo al guardar |

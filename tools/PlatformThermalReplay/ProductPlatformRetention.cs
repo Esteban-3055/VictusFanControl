@@ -7,7 +7,7 @@ namespace VictusFanControl.PlatformThermalReplay;
 public sealed record ProductRetentionState(bool Enabled, bool Ready, string Status, Source Tz01, Source Dtt3,
     double? SourceDemand, double? BaselineDemand, double? SupplementalDemand, double? RemainingSeconds);
 
-/// <summary>AC-only experimental retention. Fresh auxiliary sources cannot request a new higher fan level.</summary>
+/// <summary>Power-source-independent experimental retention. Fresh auxiliary sources cannot request a new higher fan level.</summary>
 public sealed class ProductPlatformRetention : IExperimentalFanSupplement
 {
     public const int MaximumExtraLevels = 2;
@@ -62,7 +62,7 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
             Add(_tz,tz); Add(_dtt,dtt);
         }
     }
-    public void ObserveTelemetry(TelemetrySnapshot snapshot, string source, bool custom)
+    public void ObserveTelemetry(TelemetrySnapshot snapshot, bool custom)
     {
         lock(_sync)
         {
@@ -78,19 +78,19 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
             _frame=new(snapshot.Timestamp,new(snapshot.CpuTemperatureC,snapshot.Timestamp),new(snapshot.CpuCoreMaxTemperatureC,snapshot.Timestamp),
                 new(snapshot.GpuTemperatureC,snapshot.Timestamp),tz.LastOrDefault()??new(),dtt.LastOrDefault()??new());
             _qualified=_admission.Evaluate(_frame,tz,dtt);
-            if(custom && (source!="Ac" || !_qualified.Available))
-                _failure=source!="Ac" ? "Retención experimental solo en AC; reinicia en Firmware." : "TZ01/DTT3 no vigentes; reinicia en Firmware.";
+            if(custom && !_qualified.Available)
+                _failure="TZ01/DTT3 no vigentes; reinicia en Firmware.";
         }
     }
-    public void RequireReady(string source, DateTimeOffset now)
+    public void RequireReady(DateTimeOffset now)
     {
         lock(_sync)
         {
             if(!_enabled)return;
-            if(source!="Ac" || _failure is not null || _qualified is not {Available:true} || _frame is null ||
+            if(_failure is not null || _qualified is not {Available:true} || _frame is null ||
                 now<_frame.TimestampUtc || now-_frame.TimestampUtc>=TimeSpan.FromSeconds(3) ||
                 !_frame.Tz01.Fresh(now,3000) || !_frame.Dtt3.Fresh(now,3000))
-                throw new InvalidOperationException(_failure ?? "Retención experimental: requiere AC y TZ01/DTT3 vigentes y cualificados; espera en Firmware.");
+                throw new InvalidOperationException(_failure ?? "Retención experimental: requiere TZ01/DTT3 vigentes y cualificados; espera en Firmware.");
         }
     }
     public double? GetSupplement(AdaptiveFanPolicyInput input, double baselineRawDemand, int? lastAcknowledgedLevel)
@@ -99,7 +99,7 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
         {
             _baseline=baselineRawDemand; _supplement=null;
             if(!_enabled)return null;
-            RequireReady("Ac",input.Timestamp);
+            RequireReady(input.Timestamp);
             if(_frame?.TimestampUtc!=input.Timestamp)throw new InvalidOperationException("Auxiliares no asociados a esta adquisición.");
             _evaluated=input.Timestamp;
             if(_episodeCeiling is {} ceiling && baselineRawDemand>=ceiling) { _episodeStart=null; _episodeCeiling=null; }
@@ -119,7 +119,7 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
         lock(_sync)
         {
             if(!_enabled)return;
-            RequireReady("Ac",now);
+            RequireReady(now);
             if(_evaluated!=snapshotTimestamp || _frame?.TimestampUtc!=snapshotTimestamp)
                 throw new InvalidOperationException("Retención: adquisición de despacho no vigente.");
         }

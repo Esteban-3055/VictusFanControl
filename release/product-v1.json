@@ -31,7 +31,8 @@
     "Stable quiet presets have offline replay evidence only; actual cooling and acoustics remain pending.",
     "Product quiet candidate and bounded TZ01/DTT3 retention are replayed on the same observed temperatures; lower simulated fan levels do not prove counterfactual cooling or acoustic improvement.",
     "Release authorization comes from the user request for habitual exact-target use; it is not a new physical qualification PASS.",
-    "Windows logon task and unattended acquisition must still be observed on the target; CI checks use zero-hardware fixtures."
+    "Windows logon task and unattended acquisition must still be observed on the target; CI checks use zero-hardware fixtures.",
+    "Source-independent TZ01/DTT3 retention requires a target observation in Battery and during AC/Battery handoff; software checks do not prove battery cooling, runtime or acoustics."
   ],
   "offlinePolicyEvidence": [
     "product-fan-stability-replay-8c40-2026-10-06.json",
@@ -39,7 +40,7 @@
   ],
   "experimentalPlatformRetention": {
     "defaultEnabled": false,
-    "scope": "optional-ac-only",
+    "scope": "optional-ac-and-battery",
     "maximumExtraRawLevels": 2,
     "maximumSupplementSeconds": 60,
     "sourceAdmission": "bounded-acquisition-history-v1",

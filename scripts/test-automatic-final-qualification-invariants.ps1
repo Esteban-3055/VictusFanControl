@@ -101,8 +101,9 @@ foreach ($pending in @('representative-use-of-95C-contract-and-stable-presets-ac
     Require ($candidate.remainingPhysicalChecks -contains $pending) 'candidate must retain every thermal/lifecycle/exit and optional quiet-curve regression'
 }
 Require ($candidate.experimentalPlatformRetention.defaultEnabled -eq $false -and $candidate.experimentalPlatformRetention.normalAutomaticPromoted -eq $true -and
+    $candidate.experimentalPlatformRetention.scope -eq 'optional-ac-and-battery' -and
     $candidate.experimentalPlatformRetention.maximumExtraRawLevels -eq 2 -and $candidate.experimentalPlatformRetention.maximumSupplementSeconds -eq 60) 'optional retention must remain bounded and default-off'
-Require ($launcher.Contains('optional-disabled-default-AC-plus2-60s-fresh3s') -and $package.Contains('optional-disabled-default-AC-plus2-60s-fresh3s')) 'launcher and package must bind the optional retention contract'
+Require ($launcher.Contains('optional-disabled-default-AC-Battery-plus2-60s-fresh3s') -and $package.Contains('optional-disabled-default-AC-Battery-plus2-60s-fresh3s')) 'launcher and package must bind the optional AC/Battery retention contract'
 Require ($candidate.sessionRestart -eq 'explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics') 'candidate restart must retain clean-release and explicit Firmware reentry'
 Require ($candidate.automaticThermalContract -eq 'cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response') 'candidate thermal contract drifted'
 Require ($launcher.Contains($candidate.automaticThermalContract) -and $package.Contains($candidate.automaticThermalContract)) 'launcher and package must bind the current thermal contract'

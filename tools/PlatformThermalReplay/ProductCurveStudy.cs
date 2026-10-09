@@ -50,7 +50,7 @@ internal static class ProductCurveStudy
                         if(update.Tz)tz=update.Sample;else dtt=update.Sample;
                         retention.SetSources(tz,dtt);
                     }
-                    retention.ObserveTelemetry(snapshot,data.GetProperty("source").GetString()!,data.GetProperty("stage").GetProperty("custom").GetBoolean());
+                    retention.ObserveTelemetry(snapshot,data.GetProperty("stage").GetProperty("custom").GetBoolean());
                 }
                 else if(kind=="actuation-observation")
                 {

@@ -27,7 +27,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 - Curva AC predeterminada nueva: niveles **12, 12, 18, 28, 34, 44, 50** para demanda **0, 40, 50, 65, 76, 90, 100**. Batería conserva sus valores. Solo se migran presets AC anteriores intactos; guardar respalda las preferencias.
 - Automático habitual sin vencimiento de 5/45 minutos, niveles iguales CPU/GPU dentro de 10–50, y ambos límites preparados mediante Guardian antes de activar ventiladores.
 - Inicio opcional con Windows y un único intento tras tres lecturas distintas y frescas. Suspensión, pantalla apagada e interrupciones requieren reactivación manual; reiniciar sesión abre en Firmware.
-- Retención TZ01/DTT3 opcional y experimental, desactivada de fábrica: solo AC, hasta dos niveles crudos extra durante 60 s, sin superar el último nivel reconocido. Puede prolongar el ruido.
+- Retención TZ01/DTT3 opcional y experimental, desactivada de fábrica: el desarrollo actual admite AC y batería, hasta dos niveles crudos extra durante 60 s, sin superar el último nivel reconocido. El cambio de fuente conserva el episodio; los fallos de sensores siguen solicitando Firmware. Puede prolongar el ruido; el comportamiento en batería requiere observación física. El paquete publicado v1.0.0 conserva su restricción original a AC.
 - Preflight de recuperación CPU/GPU que conserva journals y ofrece recuperación explícita con los IDs exactos.
 
 ## Protecciones y evidencia

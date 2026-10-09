@@ -18,7 +18,7 @@ El arranque comienza en Firmware y hace un único intento: hasta 30 s para tres 
 
 Automático habitual no tiene el plazo de 5/45 minutos de las revisiones. Conserva temperatura CPU ≥95 °C con confirmación máxima de 2000 ms, CPU ≥99 °C inmediata, GPU >82 °C, frescura de 3 s y el watchdog. Suspensión, pantalla apagada, pérdida de sensores o interrupción solicitan Firmware y bloquean reentrada. **Reiniciar sesión** abre una sesión nueva en Firmware y omite la activación al iniciar, incluso si está guardada. La reactivación tras una interrupción es manual. Cerrar la ventana minimiza; **Salir** en la bandeja libera los controles.
 
-TZ01/DTT3 permanece experimental y desactivado de fábrica. Solo AC, +2 niveles crudos durante hasta 60 s, sin superar el último nivel reconocido; falta de frescura/continuidad interrumpe la sesión. Activarlo agrega dependencia de esas lecturas y puede prolongar el ruido. No está validado para batería.
+TZ01/DTT3 permanece experimental y desactivado de fábrica. El desarrollo posterior a la release permite activarlo en AC o batería y mantenerlo durante el cambio de perfil: la extensión no evalúa la alimentación ni reinicia su episodio al cambiarla. Conserva +2 niveles crudos durante hasta 60 s y el último nivel reconocido; falta de frescura/continuidad interrumpe la sesión. El controlador principal sigue confirmando los límites CPU/GPU de destino y conserva las protecciones térmicas. Activarlo agrega dependencia de esas lecturas y puede prolongar el ruido. El comportamiento físico en batería y en el cambio de fuente con retención aún necesita observación. El ZIP publicado v1.0.0 conserva la restricción original a AC.
 
 ## Qué acredita la entrega
 

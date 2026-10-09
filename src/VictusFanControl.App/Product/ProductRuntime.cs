@@ -231,7 +231,7 @@ internal sealed class ProductRuntime : IProductRuntime
         {
             _snapshot = snapshot;
             _platformExperiment?.ObserveTelemetry(snapshot,new WindowsPerformancePowerSourceReader().Read().Source.ToString());
-            _retention.ObserveTelemetry(snapshot,new WindowsPerformancePowerSourceReader().Read().Source.ToString(),_controller.Mode==AdaptiveFanProductionMode.Automatic);
+            _retention.ObserveTelemetry(snapshot,_controller.Mode==AdaptiveFanProductionMode.Automatic);
             if(_retention.Enabled)AppLog.Write("PRODUCT PLATFORM SOURCES: "+System.Text.Json.JsonSerializer.Serialize(_retention.CaptureEvidence()));
             if (_closing || _lifecycleBlocked || _controller.Mode != AdaptiveFanProductionMode.Automatic || snapshot.Timestamp <= _automaticStartedUtc) return;
             if (_activeAutomaticTicket is null || !_automaticActivation.IsCurrent(_activeAutomaticTicket)) return;
@@ -241,7 +241,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 var expected = source.Source == PerformancePowerSourceKind.Ac ? "Ac" : source.Source == PerformancePowerSourceKind.Battery ? "Battery" : null;
                 // Auxiliary faults also close an established session while CPU/GPU
                 // updates or source reconciliation are holding the current fan level.
-                _retention.RequireReady(expected??"Unknown",DateTimeOffset.UtcNow);
+                _retention.RequireReady(DateTimeOffset.UtcNow);
                 var raw = SafetyGate.Evaluate(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
                 // Use the shared bounded 8C40 admission, rather than rejecting the
                 // unchanged raw SafetyGate's first CPU >=95 C sample here.
@@ -396,8 +396,8 @@ internal sealed class ProductRuntime : IProductRuntime
                         _automaticActivation.EnsureCurrent(ticket); slot = AutomaticAdmission();
                         if(_platformExperiment is null)
                         {
-                            if(ticket.Profiles.ExperimentalPlatformRetention && (slot!=ProductPowerProfile.Ac || _controller.Mode!=AdaptiveFanProductionMode.Firmware || _fans.Authority!=FanAuthority.Firmware))
-                                throw new InvalidOperationException("Prepara la retención experimental en Firmware y con alimentación AC.");
+                            if(ticket.Profiles.ExperimentalPlatformRetention && (_controller.Mode!=AdaptiveFanProductionMode.Firmware || _fans.Authority!=FanAuthority.Firmware))
+                                throw new InvalidOperationException("Prepara la retención experimental en Firmware.");
                             _retention.Configure(ticket.Profiles.ExperimentalPlatformRetention);
                         }
                         return Task.CompletedTask;
@@ -414,7 +414,7 @@ internal sealed class ProductRuntime : IProductRuntime
                                 await Task.Delay(250,_lifetime.Token);
                             }
                             _automaticActivation.EnsureCurrent(ticket);
-                            _retention.RequireReady(new WindowsPerformancePowerSourceReader().Read().Source.ToString(),DateTimeOffset.UtcNow);
+                            _retention.RequireReady(DateTimeOffset.UtcNow);
                         }
                         var configuration = ticket.Performance;
                         await ProductAutomaticActivation.PreparePerformanceAsync(configuration, _performance.HasProcess,
@@ -429,7 +429,7 @@ internal sealed class ProductRuntime : IProductRuntime
                         if (!ProductAutomaticActivation.PerformanceReady(ticket.Performance, _performance.AppliedConfiguration,
                             _performance.LastStatus, _performance.LastStatusFresh, current.ToString()))
                             throw new InvalidOperationException("CPU/GPU no confirmaron ambos límites para la fuente real; Automatic permanece en Firmware.");
-                        if(_platformExperiment is null)_retention.RequireReady(current.ToString(),DateTimeOffset.UtcNow);
+                        if(_platformExperiment is null)_retention.RequireReady(DateTimeOffset.UtcNow);
                         await _controller.ConfigureAutomaticAsync(ticket.Profiles.Get(current).Fan, CancellationToken.None);
                         // Configuration may await a controller lock; recheck cancellation before committing.
                         _automaticActivation.EnsureCurrent(ticket);

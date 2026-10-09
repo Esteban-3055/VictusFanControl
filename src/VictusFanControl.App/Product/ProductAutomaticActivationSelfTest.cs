@@ -1,5 +1,8 @@
 using VictusFanControl.Product;
 using VictusFanControl.Performance;
+using VictusFanControl.Control.Adaptive;
+using VictusFanControl.PlatformThermalReplay;
+using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
@@ -86,6 +89,7 @@ internal static class ProductAutomaticActivationSelfTest
         TestExtendedReview(require);
         TestSharedThermalContract(require);
         TestSourceTransitions(require);
+        TestRetentionSourceTransitions(require);
         var activation = new ProductAutomaticActivation();
         var profiles = new ProductProfiles { CpuEnabled = false, GpuEnabled = false };
         var ticket = activation.Begin(profiles);
@@ -203,5 +207,61 @@ internal static class ProductAutomaticActivationSelfTest
         try { Observe("Battery", "Ac", status); } catch (InvalidOperationException) { rejected = true; }
         require(rejected, "Clock regression extended source reconciliation.");
         Console.WriteLine("PASS: bounded AC/Battery source handoff, fresh response, stable samples, duplicates, bounce deadline and failure fences.");
+    }
+    private static void TestRetentionSourceTransitions(Action<bool,string> require)
+    {
+        foreach(var initialSource in new[]{"Ac","Battery"})
+        {
+            var start=DateTimeOffset.UnixEpoch;
+            long clock=0;
+            var profiles=new ProductProfiles{ExperimentalPlatformRetention=true};
+            var config=profiles.PerformanceConfiguration();
+            var gate=new ProductAutomaticSourceTransition(()=>clock);
+            var retention=new ProductPlatformRetention();retention.Configure(true);
+            var selected=initialSource;
+            var status=new PerformanceGuardianResponse(1,Guid.NewGuid(),config.TargetProfileId,
+                true,"fixture","fixture","SessionEnabled",true,true,true,"Active","ActiveUnverified",PowerSource:selected);
+            AdaptiveFanPolicyInput Input(int t)=>new(start.AddSeconds(t),40,5,0,35,2,0){CpuRawControlTemperatureC=40};
+            void Acquire(int t,bool custom)
+            {
+                clock=t*1000L;var at=start.AddSeconds(t);
+                retention.SetSources(new(90,at),new(67,at));
+                retention.ObserveTelemetry(new TelemetrySnapshot(at,"CPU",40,5,0,"GPU",35,2,0,null,null),custom);
+                if(t>0)retention.RequireReady(at);
+            }
+            Acquire(0,false);Acquire(1,false);
+            require(gate.Observe(selected,selected,config,config,status,true),"Retention startup could not admit "+selected);
+            require(retention.GetSupplement(Input(1),12,40)==14,"Retention startup lost its bounded floor on "+selected);
+            // Drive the same gate/order used by the runtime with real fresh auxiliary
+            // acquisitions and a new Guardian response for each destination profile.
+            foreach(var (first,source) in new[]{(2,initialSource=="Ac"?"Battery":"Ac"),(4,initialSource)})
+            {
+                Acquire(first,true);
+                require(!gate.Observe(source,selected,config,config,status,true)&&gate.Pending,
+                    "Retention bypassed destination CPU/GPU confirmation.");
+                require(retention.State.Ready&&retention.State.RemainingSeconds==61-first,
+                    "Source wait faulted retention or renewed its episode.");
+                Acquire(first+1,true);status=status with{RequestId=Guid.NewGuid(),PowerSource=source};
+                require(gate.Observe(source,selected,config,config,status,true),"Fresh limits could not complete retained source handoff.");
+                selected=source;gate.Reset();
+                var floor=retention.GetSupplement(Input(first+1),12,40);
+                require(floor==14&&retention.State.RemainingSeconds==60-first,
+                    "Completed handoff reset retention demand or its elapsed time.");
+                retention.EnsureDispatchAllowed(start.AddSeconds(first+1),start.AddSeconds(first+1.2));
+            }
+            for(int t=6;t<=61;t++)
+            {
+                Acquire(t,true);
+                require(gate.Observe(selected,selected,config,config,status,true),"Stable source lost reconciled limits.");
+                require(t<61?retention.GetSupplement(Input(t),12,40)==14:retention.GetSupplement(Input(t),12,40) is null,
+                    "Round-trip source changes extended the 60-second episode.");
+            }
+            // A confirmed power profile must not mask a true auxiliary failure.
+            retention.SetSources(new(90,start.AddSeconds(62)),new(double.NaN,start.AddSeconds(62)));
+            retention.ObserveTelemetry(new TelemetrySnapshot(start.AddSeconds(62),"CPU",40,5,0,"GPU",35,2,0,null,null),true);
+            bool rejected=false;try{retention.RequireReady(start.AddSeconds(62));}catch(InvalidOperationException){rejected=true;}
+            require(rejected,"A confirmed profile bypassed failed auxiliary admission.");
+        }
+        Console.WriteLine("PASS: retained Automatic starts on AC/Battery, completes both source round trips with confirmed limits, preserves its episode and rejects invalid auxiliary sources; zero hardware IO.");
     }
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Allow optional TZ01/DTT3 retention to start on Battery and continue through AC/Battery profile changes without resetting its episode. Preserve its two-level/60-second bounds, fresh sensor admission, coupled CPU/GPU handoff and thermal/watchdog protections. Battery behavior remains pending a target observation.
+
 ## [1.0.0] - 2026-10-09
 
 - Enable habitual Automatic for HP 8C40 / 9D0R1LA / BIOS F.18 with the new AC default; preserve Battery, custom curves and CPU/GPU limits.
