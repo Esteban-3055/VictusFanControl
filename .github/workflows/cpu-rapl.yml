@@ -1,0 +1,101 @@
+name: cpu-rapl
+
+on:
+  push:
+    branches: [ main, 'feature/intel-rapl-*', 'integration/**', 'feature/victus-8c40-automatic-final-qualification' ]
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/VictusFanControl/Performance/**'
+      - 'src/VictusFanControl.CpuProbe/**'
+      - 'src/VictusFanControl.GpuProbe/**'
+      - 'src/VictusFanControl.PerformanceProbe/**'
+      - 'src/VictusFanControl.PerformanceGuardian/**'
+      - 'src/VictusFanControl.App/**'
+      - 'src/VictusFanControl/Hardware/Intel/**'
+      - 'src/VictusFanControl/Hardware/Nvidia/**'
+      - 'src/VictusFanControl/Hardware/PawnIo/**'
+      - 'scripts/test-intel-rapl-p1.ps1'
+      - 'scripts/test-gpu-nvml-observability.ps1'
+      - 'scripts/test-gpu-nvml-clock-write.ps1'
+      - 'scripts/test-gpu-nvml-clock-transition.ps1'
+      - 'scripts/test-performance-power-source.ps1'
+      - 'scripts/test-performance-power-source-notification.ps1'
+      - 'scripts/test-performance-source-coordinator.ps1'
+      - 'scripts/test-performance-guardian.ps1'
+      - 'scripts/test-performance-guardian-6g-cpu.ps1'
+      - 'scripts/test-performance-guardian-6g-cpu-physical.ps1'
+      - 'scripts/test-performance-guardian-6h-combined.ps1'
+      - 'scripts/test-performance-guardian-6i-standby.ps1'
+      - 'scripts/test-performance-guardian-6j-parent-death.ps1'
+      - 'docs/INTEL_RAPL_P1.md'
+      - 'docs/INTEL_RAPL_P2*.md'
+      - 'release/intel-rapl-p1-qualification.json'
+      - '.github/workflows/cpu-rapl.yml'
+
+jobs:
+  cpu-rapl:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore VictusFanControl.sln
+
+      - name: CPU RAPL P1/P2/P2B fixtures (no hardware IO)
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "CPU RAPL fixture suite failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest -WriteTest -PL1Watts 20 -PL2Watts 40
+          if ($LASTEXITCODE -ne 0) { throw "CPU RAPL explicit 20/40 validation failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-gpu-nvml-observability.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "GPU NVML observability fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-gpu-nvml-clock-write.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "GPU NVML clock write harness fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-gpu-nvml-clock-transition.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "GPU NVML clock transition harness fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-power-source.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance power-source mapping fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-power-source-notification.ps1 -Expect battery -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance power-source notification fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-source-coordinator.ps1 -Expect battery -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance source coordinator harness fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance Guardian software-only fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian-6f-gpu.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance Guardian Step 6F GPU gate fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian-6g-cpu.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance Guardian Step 6G CPU preflight fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian-6g-cpu-physical.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance Guardian Step 6G CPU physical harness fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian-6h-combined.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance Guardian Step 6H combined harness fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian-6i-standby.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance Guardian Step 6I standby harness fixture failed." }
+
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-performance-guardian-6j-parent-death.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Performance Guardian Step 6J parent-death harness fixture failed." }
+
+      - name: Build solution
+        run: dotnet build VictusFanControl.sln --configuration Release --no-restore

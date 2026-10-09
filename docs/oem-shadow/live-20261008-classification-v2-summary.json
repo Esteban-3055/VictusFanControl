@@ -1,0 +1,480 @@
+{
+  "schemaVersion": 2,
+  "mode": "REPLAY",
+  "liveValidation": "PENDING",
+  "goForFanControl": false,
+  "fanWriteAuthority": false,
+  "parameters": {
+    "MaxSourceAgeMs": 3000,
+    "MaxGapMs": 5000,
+    "MaxHistoryGapMs": 30000,
+    "BootstrapSeconds": 10,
+    "CpuUpTemp": 95,
+    "CpuUpTz01": 85,
+    "CpuUpSeconds": 45,
+    "GpuUpSeconds": 60,
+    "MinStateSeconds": 60,
+    "DownSeconds": 30,
+    "RampSeconds": 10,
+    "ActualDebounceSeconds": 3,
+    "ActualUnmappedStableSeconds": 20,
+    "ActualUnmappedMaximumSpan": 2,
+    "ActualUnmappedMinimumAcquisitions": 6,
+    "TransitionMatchWindowSeconds": 120,
+    "GpuUpTemp": [
+      45,
+      55,
+      75
+    ],
+    "GpuUpDtt3": [
+      50,
+      55,
+      67
+    ],
+    "BootstrapMax": [
+      75,
+      60,
+      45,
+      49
+    ],
+    "DownMax": [
+      [
+        55,
+        45,
+        40,
+        42
+      ],
+      [
+        65,
+        55,
+        48,
+        48
+      ],
+      [
+        70,
+        65,
+        55,
+        52
+      ]
+    ]
+  },
+  "samples": 3542,
+  "uniqueFreshFanAcquisitions": 1769,
+  "knownStateAccuracy": 0.8164094232331438,
+  "perState": {
+    "A": {
+      "actualSupport": 1270,
+      "predictedSupport": 1564,
+      "correct": 1254,
+      "recall": 0.9874015748031496,
+      "precision": 0.8017902813299232
+    },
+    "B": {
+      "actualSupport": 936,
+      "predictedSupport": 1361,
+      "correct": 678,
+      "recall": 0.7243589743589743,
+      "precision": 0.4981631153563556
+    },
+    "C": {
+      "actualSupport": 168,
+      "predictedSupport": 556,
+      "correct": 78,
+      "recall": 0.4642857142857143,
+      "precision": 0.14028776978417265
+    },
+    "D": {
+      "actualSupport": 88,
+      "predictedSupport": 0,
+      "correct": 0,
+      "recall": 0,
+      "precision": null
+    }
+  },
+  "confusionMatrix": {
+    "rowsActual": [
+      "Unknown",
+      "A",
+      "B",
+      "C",
+      "D",
+      "Transition",
+      "Unmapped"
+    ],
+    "columnsPredicted": [
+      "Unknown",
+      "A",
+      "B",
+      "C",
+      "D",
+      "Transition",
+      "Unmapped"
+    ],
+    "counts": [
+      [
+        1,
+        0,
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        6,
+        1254,
+        0,
+        0,
+        0,
+        10,
+        0
+      ],
+      [
+        0,
+        258,
+        678,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        4,
+        66,
+        78,
+        0,
+        20,
+        0
+      ],
+      [
+        0,
+        0,
+        36,
+        42,
+        0,
+        10,
+        0
+      ],
+      [
+        4,
+        20,
+        156,
+        14,
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        28,
+        421,
+        422,
+        0,
+        8,
+        0
+      ]
+    ]
+  },
+  "uniqueAcquisitionConfusionMatrix": {
+    "rowsActual": [
+      "Unknown",
+      "A",
+      "B",
+      "C",
+      "D",
+      "Transition",
+      "Unmapped"
+    ],
+    "columnsPredicted": [
+      "Unknown",
+      "A",
+      "B",
+      "C",
+      "D",
+      "Transition",
+      "Unmapped"
+    ],
+    "counts": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        3,
+        627,
+        0,
+        0,
+        0,
+        5,
+        0
+      ],
+      [
+        0,
+        129,
+        339,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        33,
+        39,
+        0,
+        10,
+        0
+      ],
+      [
+        0,
+        0,
+        18,
+        21,
+        0,
+        5,
+        0
+      ],
+      [
+        2,
+        10,
+        78,
+        7,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        14,
+        211,
+        211,
+        0,
+        4,
+        0
+      ]
+    ]
+  },
+  "classificationCoverage": {
+    "knownPlateauFrames": 2462,
+    "knownPlateauFraction": 0.6950875211744777,
+    "unmappedFrames": 879,
+    "transitionFrames": 196,
+    "unknownActualFrames": 5,
+    "knownStateAccuracyDenominator": "Only actual A-D frames; excludes Unmapped, Transition and Unknown."
+  },
+  "observedRegimes": {
+    "frameCounts": {
+      "UnmappedUnresolved": 499,
+      "UnmappedStableCandidate": 380
+    },
+    "distinctAcquisitionCounts": {
+      "UnmappedUnresolved": 250,
+      "UnmappedStableCandidate": 190
+    },
+    "unmappedSeconds": 894.3258865000006,
+    "stableCandidateSeconds": 385.20682359999995,
+    "stableCandidates": [
+      {
+        "Kind": "UnmappedStableCandidate",
+        "CpuRange": {
+          "Min": 31,
+          "Max": 32
+        },
+        "GpuRange": {
+          "Min": 26,
+          "Max": 27
+        },
+        "SinceUtc": "2026-10-08T04:33:39.5067071+00:00",
+        "DistinctAcquisitions": 12
+      },
+      {
+        "Kind": "UnmappedStableCandidate",
+        "CpuRange": {
+          "Min": 35,
+          "Max": 36
+        },
+        "GpuRange": {
+          "Min": 32,
+          "Max": 33
+        },
+        "SinceUtc": "2026-10-08T04:35:04.489583+00:00",
+        "DistinctAcquisitions": 29
+      },
+      {
+        "Kind": "UnmappedStableCandidate",
+        "CpuRange": {
+          "Min": 31,
+          "Max": 32
+        },
+        "GpuRange": {
+          "Min": 26,
+          "Max": 27
+        },
+        "SinceUtc": "2026-10-08T04:50:29.9218357+00:00",
+        "DistinctAcquisitions": 13
+      },
+      {
+        "Kind": "UnmappedStableCandidate",
+        "CpuRange": {
+          "Min": 31,
+          "Max": 32
+        },
+        "GpuRange": {
+          "Min": 26,
+          "Max": 27
+        },
+        "SinceUtc": "2026-10-08T04:57:23.115186+00:00",
+        "DistinctAcquisitions": 17
+      },
+      {
+        "Kind": "UnmappedStableCandidate",
+        "CpuRange": {
+          "Min": 46,
+          "Max": 47
+        },
+        "GpuRange": {
+          "Min": 40,
+          "Max": 41
+        },
+        "SinceUtc": "2026-10-08T05:00:11.242848+00:00",
+        "DistinctAcquisitions": 164
+      },
+      {
+        "Kind": "UnmappedStableCandidate",
+        "CpuRange": {
+          "Min": 35,
+          "Max": 36
+        },
+        "GpuRange": {
+          "Min": 31,
+          "Max": 33
+        },
+        "SinceUtc": "2026-10-08T05:06:16.0073015+00:00",
+        "DistinctAcquisitions": 15
+      }
+    ],
+    "candidatesTruncated": false,
+    "interpretation": "Causal envelopes of unmapped pairs; stable candidates are observations, not qualified OEM states."
+  },
+  "rawFanRangeComparison": {
+    "comparableFrames": 3527,
+    "insideBothRanges": 1978,
+    "actualAbovePredictedUpperBound": 1543,
+    "actualBelowPredictedLowerBound": 6,
+    "interpretation": "All fresh raw fan pairs, including Unmapped. Either fan suffices; above/below may overlap for asymmetric pairs. Exact level comparison, no classification tolerance."
+  },
+  "observedSeconds": 3599.3131364999995,
+  "unknownPredictionSeconds": 11.2174254,
+  "unobservedGapSeconds": 0,
+  "missingOrStaleFrames": {
+    "cpuPackage": 1,
+    "cpuCoreMax": 1,
+    "gpu": 1,
+    "tz01": 1,
+    "dtt3": 1
+  },
+  "transitionMetrics": {
+    "up": {
+      "actualCount": 2,
+      "predictedCount": 2,
+      "matched": 0,
+      "precision": 0,
+      "recall": 0
+    },
+    "down": {
+      "actualCount": 1,
+      "predictedCount": 2,
+      "matched": 0,
+      "precision": 0,
+      "recall": 0
+    },
+    "windowSeconds": 120,
+    "eventsTruncated": false,
+    "epochRule": "Actual: first distinct acquisition later accepted by debounce. Predicted: first plateau after ramp. Unknown, Unmapped or frame gap breaks continuity.",
+    "endpointChangesAcrossUnmapped": [
+      {
+        "From": "B",
+        "To": "C",
+        "AtUtc": "2026-10-08T04:34:03.8099809+00:00"
+      },
+      {
+        "From": "C",
+        "To": "B",
+        "AtUtc": "2026-10-08T04:37:02.3698204+00:00"
+      },
+      {
+        "From": "B",
+        "To": "C",
+        "AtUtc": "2026-10-08T04:51:04.6934352+00:00"
+      },
+      {
+        "From": "C",
+        "To": "D",
+        "AtUtc": "2026-10-08T04:59:04.3744516+00:00"
+      },
+      {
+        "From": "D",
+        "To": "C",
+        "AtUtc": "2026-10-08T05:06:46.3647614+00:00"
+      }
+    ],
+    "endpointChangeInterpretation": "Known endpoints separated by Unmapped observations. Retained for investigation, excluded from direct A-D transition scores; the intermediate path is not modeled.",
+    "observed": [
+      {
+        "From": "A",
+        "To": "B",
+        "actualAtUtc": "2026-10-08T04:14:05.3768568+00:00",
+        "predictedAtUtc": null,
+        "errorSecondsPositiveIsLate": null
+      },
+      {
+        "From": "B",
+        "To": "A",
+        "actualAtUtc": "2026-10-08T04:17:30.6941909+00:00",
+        "predictedAtUtc": null,
+        "errorSecondsPositiveIsLate": null
+      },
+      {
+        "From": "A",
+        "To": "B",
+        "actualAtUtc": "2026-10-08T04:32:32.6316804+00:00",
+        "predictedAtUtc": null,
+        "errorSecondsPositiveIsLate": null
+      }
+    ],
+    "predicted": [
+      {
+        "From": "A",
+        "To": "C",
+        "AtUtc": "2026-10-08T04:34:29.0605939+00:00",
+        "matched": false
+      },
+      {
+        "From": "C",
+        "To": "B",
+        "AtUtc": "2026-10-08T04:36:45.0869865+00:00",
+        "matched": false
+      },
+      {
+        "From": "B",
+        "To": "C",
+        "AtUtc": "2026-10-08T04:59:56.0479115+00:00",
+        "matched": false
+      },
+      {
+        "From": "C",
+        "To": "B",
+        "AtUtc": "2026-10-08T05:07:23.8256238+00:00",
+        "matched": false
+      }
+    ]
+  },
+  "interpretation": "Row counts include cached frames; unique acquisition matrix is also reported. Confidence is a label, not a probability. Missing support is null, not success. Seeds are not qualified for control."
+}

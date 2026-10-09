@@ -1,0 +1,7 @@
+{
+  "source": "derived/v10/vfc_reference.csv",
+  "sourceSha256": "72bae696df5a89b25e452e1b3757ae369b333f771e15723509488fc724c852be",
+  "rows": 6049,
+  "uncompressedSha256": "cd430ca62a4a0d8228446780d86c5262424454962865831c733e376da28c7a51",
+  "disclosure": "Archived CPU row epoch approximates acquisition; no logical processor mapping is inferred."
+}

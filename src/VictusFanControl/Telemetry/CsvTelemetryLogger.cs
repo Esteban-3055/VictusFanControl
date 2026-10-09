@@ -16,7 +16,7 @@ public sealed class CsvTelemetryLogger : IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         await _writer.WriteLineAsync(
-            "timestamp_utc,cpu_name,cpu_temp_c,cpu_package_power_w,cpu_load_pct,gpu_name,gpu_temp_c,gpu_power_w,gpu_load_pct,cpu_fan_rpm,gpu_fan_rpm");
+            "timestamp_utc,cpu_name,cpu_package_temp_c,cpu_core_max_temp_c,cpu_core_avg_temp_c,cpu_core_temps_c,cpu_package_power_w,cpu_load_pct,gpu_name,gpu_temp_c,gpu_power_w,gpu_load_pct,cpu_fan_rpm,gpu_fan_rpm,fan_telemetry_source,fan_rpm_resolution,fan_sampled_at_utc,fan_sample_age_ms,cpu_fan_speed_level,gpu_fan_speed_level,fan_age_captured_at_utc");
     }
 
     public Task WriteAsync(TelemetrySnapshot s, CancellationToken cancellationToken)
@@ -26,6 +26,9 @@ public sealed class CsvTelemetryLogger : IAsyncDisposable
             Escape(s.Timestamp.ToString("O")),
             Escape(s.CpuName),
             Number(s.CpuTemperatureC),
+            Number(s.CpuCoreMaxTemperatureC),
+            Number(s.CpuCoreAverageTemperatureC),
+            Escape(CoreTemperatures(s)),
             Number(s.CpuPackagePowerW),
             Number(s.CpuLoadPercent),
             Escape(s.GpuName),
@@ -33,7 +36,14 @@ public sealed class CsvTelemetryLogger : IAsyncDisposable
             Number(s.GpuPowerW),
             Number(s.GpuLoadPercent),
             Number(s.CpuFanRpm),
-            Number(s.GpuFanRpm)
+            Number(s.GpuFanRpm),
+            Escape(s.FanTelemetrySource),
+            Number(s.FanRpmResolution),
+            Escape(s.FanSampledAtUtc?.ToString("O")),
+            Number(s.FanSampleAgeMilliseconds),
+            Number(s.CpuFanSpeedLevel),
+            Number(s.GpuFanSpeedLevel),
+            Escape(s.FanAgeCapturedAtUtc?.ToString("O"))
         });
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -51,6 +61,12 @@ public sealed class CsvTelemetryLogger : IAsyncDisposable
         await _writer.FlushAsync();
         _writer.Dispose();
     }
+
+    private static string CoreTemperatures(TelemetrySnapshot snapshot) =>
+        string.Join(
+            "|",
+            snapshot.CpuCoreTemperatures.Select(sample =>
+                $"C{sample.CoreIndex}:{sample.CoreType}:{sample.TemperatureC.ToString("0.0", CultureInfo.InvariantCulture)}"));
 
     private static string Number(double? value) =>
         value?.ToString("0.###", CultureInfo.InvariantCulture) ?? string.Empty;

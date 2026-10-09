@@ -1,0 +1,72 @@
+name: oem-shadow
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'feature/victus-8c40-oem-shadow-rebuilt']
+  pull_request:
+    paths: ['tools/OemShadow/**','tools/OemShadowCapture/**','tools/PlatformThermalReplay/**','scripts/*oem-shadow*','scripts/*platform-thermal*','scripts/*platform-physical*','scripts/generate-platform-research-inertia.py','scripts/Start-OemShadow.ps1','src/VictusFanControl/**','.github/workflows/oem-shadow.yml']
+jobs:
+  verify:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: dotnet build tools/OemShadow/OemShadow.csproj -c Release
+      - run: dotnet run --no-build -c Release --project tools/OemShadow -- --self-test
+      - run: |
+          dotnet run --no-build -c Release --project tools/OemShadow -- --replay tools/OemShadow/fixtures/v10.jsonl.gz artifacts/oem-v10
+          dotnet run --no-build -c Release --project tools/OemShadow -- --replay tools/OemShadow/fixtures/v11.jsonl.gz artifacts/oem-v11
+          dotnet run --no-build -c Release --project tools/OemShadow -- --replay tools/OemShadow/fixtures/live-20261008.jsonl.gz artifacts/oem-live
+          python scripts/check-oem-shadow-replay.py tools/OemShadow/fixtures artifacts/oem-v10 artifacts/oem-v11 artifacts/oem-live
+      - name: Offline nested model comparison and independent reconciliation
+        run: |
+          python -m pip install --disable-pip-version-check -r scripts/oem-shadow-research-requirements.txt
+          python scripts/evaluate-oem-shadow-models.py --self-test
+          python scripts/evaluate-oem-shadow-models.py --fixtures tools/OemShadow/fixtures --baseline-root artifacts --output artifacts/oem-model-comparison
+          python scripts/check-oem-shadow-models.py tools/OemShadow/fixtures artifacts/oem-model-comparison
+      - name: Platform sensor policy experiment and independent reconciliation
+        run: |
+          dotnet build tools/PlatformThermalReplay/PlatformThermalReplay.csproj -c Release
+          dotnet run --no-build -c Release --project tools/PlatformThermalReplay -- --self-test
+          dotnet run --no-build -c Release --project tools/PlatformThermalReplay -- --replay tools/OemShadow/fixtures tools/PlatformThermalReplay/fixtures artifacts/platform-thermal
+          python scripts/check-platform-thermal-replay.py tools/OemShadow/fixtures tools/PlatformThermalReplay/fixtures artifacts/platform-thermal --compress
+          dotnet run --no-build -c Release --project tools/PlatformThermalReplay -- --physical-fixture artifacts/platform-physical-fixture
+          python scripts/check-platform-physical-experiment.py artifacts/platform-physical-fixture
+          python scripts/test-platform-physical-audit.py artifacts/platform-physical-fixture
+      - if: runner.os == 'Windows'
+        run: |
+          dotnet build tools/OemShadowCapture/OemShadowCapture.csproj -c Release
+          dotnet run --no-build -c Release --project tools/OemShadowCapture -- --self-test
+          dotnet publish tools/OemShadowCapture/OemShadowCapture.csproj -c Release -r win-x64 --self-contained true -p:InformationalVersion=$(git rev-parse HEAD) -o artifacts/oem-shadow-win
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $root=(Resolve-Path artifacts/oem-shadow-win).Path
+          $files=@(Get-ChildItem -LiteralPath $root -File -Recurse | ForEach-Object {
+            @{path=[IO.Path]::GetRelativePath($root,$_.FullName);sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()}
+          })
+          @{sourceRevision=(git rev-parse HEAD);build='Windows SDK publish';files=$files} | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $root sha256.json) -Encoding utf8
+          & ./scripts/Start-OemShadow.ps1 -Mode Verify -RuntimeDirectory $root
+          & ./scripts/Start-OemShadow.ps1 -Mode SelfTest -RuntimeDirectory $root
+          Copy-Item scripts/Start-OemShadow.ps1 artifacts/Start-OemShadow.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oem-shadow-${{ matrix.os }}
+          path: |
+            artifacts/oem-*/summary.json
+            artifacts/oem-shadow-win/**
+            artifacts/Start-OemShadow.ps1
+            artifacts/oem-model-comparison/**
+            artifacts/platform-thermal/**
+            artifacts/platform-physical-fixture/**

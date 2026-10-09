@@ -17,6 +17,10 @@ logs/*.jsonl
 logs/*.log
 !logs/README.md
 
+# Runtime PawnIO signed modules (downloaded by setup script)
+modules/*.bin
+!modules/README.md
+
 # Local configuration / secrets
 *.local.json
 .env

@@ -2,70 +2,65 @@
 
 ## Current version
 
-v0.1 is telemetry-only. It contains no fan write path.
+Version 0.4 integrates the hardware-validated HP 88F8 backend behind `FanControlCoordinator`. The automatic fan policy remains **OFF**.
 
-## Required invariants before any control release
+The existence of a write-capable backend is intentionally separate from authority: a policy can write only after SafetyGate permits it and the coordinator grants Custom authority.
 
-A future control-capable build must satisfy all of the following before fan writes can be enabled by default.
+## Safety layers
 
-1. **Board allowlist**
-   - Control is disabled unless the detected HP Product ID has a validated profile.
-   - Initial control target: `88F8` only.
+The current implementation checks:
 
-2. **Hard command limits**
-   - For the tested 88F8 profile, experimental level requests are clamped to a validated range.
-   - Current measured range candidate: 14 through 50.
-   - The limits must remain configurable per board, never globally assumed.
+- exact HP target fingerprint and expected RTX 3060 identity;
+- runtime state must be `Healthy`;
+- complete, fresh and plausible telemetry;
+- conservative CPU/GPU thermal handoff thresholds;
+- central 14-50 command bounds independent of backend-advertised capabilities;
+- backend-local 14-50 validation;
+- no pre-existing fixed EC setpoint during authority acquisition;
+- EC 0x34/0x35 acknowledgement after a write;
+- both physical tachometers acknowledge the requested direction;
+- EC ownership remains unchanged while acknowledgement is in progress;
+- verified `FF,FF -> LegacyDefault` restoration.
 
-3. **Sensor plausibility**
-   - Invalid, missing or frozen temperatures cause immediate control abort.
-   - Missing CPU telemetry is always fatal to custom control.
-   - GPU telemetry loss must have a conservative fallback.
+The coordinator continuously enforces the latest SafetyGate result. Safety loss cancels an in-flight acknowledgement before waiting for coordinator serialization, then restores HP authority through a non-cancellable fail-safe path.
 
-4. **Thermal override**
-   - High temperature overrides acoustic targets.
-   - Critical temperature must transition to a firmware-safe/high-cooling state, not continue the adaptive policy.
+## Lifecycle safety
 
-5. **RPM feedback**
-   - After a fan command, measured RPM must move toward an expected range within a bounded time.
-   - Repeated non-response causes custom control to abort.
+Suspend/resume establishes a freshness boundary.
 
-6. **Watchdog / firmware recovery**
-   - The system must not depend on an infinite stream of custom commands to remain safe.
-   - On crash, telemetry failure, unhandled exception or explicit exit, HP firmware control must be restored or allowed to recover automatically.
+- suspend closes admission, cancels any in-flight command and returns authority to HP;
+- resume keeps admission closed;
+- only telemetry sampled after the lifecycle boundary can reopen admission;
+- duplicate Windows resume broadcasts are coalesced;
+- stale SafetyGate results cannot reacquire Custom authority;
+- normal application exit and Windows shutdown dispose/restore the fan coordinator before telemetry is torn down.
 
-7. **Fast up, slow down**
-   - Fan-up reacts quickly to rising thermal input.
-   - Fan-down requires hysteresis and a stable low-load interval.
+Forced process termination is fundamentally different: Windows cannot run managed cleanup after an unconditional kill. Real-hardware characterization showed that EC 0x63 is **not** an independent crash fail-safe in the validated OMEN Gaming Hub coexistence configuration: after the VFC GUI was killed with 30/30 active, the fixed setpoint remained 30/30 while an external HP/OMEN-side component refreshed the countdown twice. Gate B physically proved that an independent LocalSystem Session 0 service can restore that orphaned 30/30 state through the validated `FF,FF -> LegacyDefault` path and independently verify FF/FF. Gate C validated the lease/journal/IPC state machine synthetically in Windows CI. Gate D physically proved the controller-death direction: after durable OWNED 30/30, the exact GUI was force-killed, the same LocalSystem service independently restored firmware authority, cleared the journal, and a separate EC probe confirmed FF/FF without parent-shell restore. Gate E has now physically proved the inverse watchdog-death direction: after READY with backend EC+dual-tach ACK and durable OWNED 30/30, only the watchdog process was force-killed; the still-live GUI detected classified `WATCHDOG_IPC_LOSS`, restored locally to firmware and reached EC FF/FF before SCM restart, then the replacement watchdog consumed the retained journal with `RestoredFirmware` and returned Ready. The Gate E harness also enforces that no out-of-band EC snapshot or artificial dwell exists between READY and watchdog kill, preventing diagnostic EC contention from falsifying the failure-domain test. Gate F1 physically proved simultaneous-domain loss from durable OWNED: watchdog and GUI kill calls were issued 1.071 ms apart, both originals died before recovery, no GUI restore began, and the SCM replacement watchdog alone recovered the retained OWNED 30/30 journal to verified FF/FF. Gate F2 then physically proved the narrower WRITE_ARMED post-write/pre-Commit window: the real backend had already completed WMI 30/30 plus EC and dual-tach acknowledgement while the durable journal remained WRITE_ARMED generation 2 with pending=30/30 and no owned target; watchdog and GUI kill calls were issued 0.244 ms apart, both originals died, and SCM replacement PID 25200 alone recovered the journal with `RestoredFirmware` to verified FF/FF. Gate F is therefore closed. Gate G remains before unattended automatic control.
 
-8. **No blind EC writes**
-   - Direct EC writes are forbidden until the exact 88F8 behavior is independently validated.
-   - Prefer a known working HP BIOS/WMI fan-level interface when possible.
+## Ownership / coexistence
 
-9. **Single controller ownership**
-   - Do not run HP Gaming Hub fan control and a custom write-capable controller simultaneously unless coexistence is explicitly tested.
+An existing fixed EC setpoint is treated as an ownership conflict during admission. Because no write has occurred at that point, the coordinator does **not** send `FF,FF` merely to clear another controller.
 
-10. **Fail closed**
-    - Any unknown state means custom control stops and firmware control wins.
+After VictusFanControl owns a setpoint, any external overwrite is treated as ownership loss. VictusFanControl does not continuously fight it; the command fails and the coordinator returns control to HP.
 
-## Proposed safety state machine
+OMEN Gaming Hub was kept open during the real bounded 30/30 test and the configured CPU undervolt remained unchanged. EC manual/countdown fields are deliberately not written by VictusFanControl.
 
-```text
-OFF
- |
- v
-VALIDATING ----failure----> FIRMWARE_AUTO
- |
- success
- v
-ACTIVE_CUSTOM
- |       |
- |       +-- telemetry invalid --------+
- |       +-- RPM mismatch -------------+--> FIRMWARE_AUTO
- |       +-- overtemperature ----------+
- |       +-- unexpected exception -----+
- |
- explicit stop
- v
-FIRMWARE_AUTO
-```
+## Fan-command tachometer acknowledgement
+
+A normal command succeeds only after two independent layers agree:
+
+1. EC 0x34/0x35 holds the requested fixed setpoints.
+2. Both fan tachometers acknowledge the requested direction within a bounded timeout.
+
+Direction is inferred from the requested level versus HP BIOS current fan level. Material increases/decreases require a measurable RPM change; near-current requests require valid non-zero tachometer continuity. A fan already within 100 RPM of its measured physical ceiling is not required to accelerate further.
+
+The physical ceilings are independent: approximately 4330 RPM CPU and 4670 RPM GPU on the development target.
+
+## Remaining blockers before unattended automatic control
+
+- Gate G full-watchdog lifecycle validation;
+- load/gaming and thermal-emergency validation;
+- level-14 restart-from-rest validation;
+- implementation and tuning of the shared-RPM adaptive policy.
+
+Unknown or ambiguous state remains fail-closed. See `PRE_CONTROL_CHECKLIST.md`.

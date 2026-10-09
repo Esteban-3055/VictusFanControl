@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "pawnIoModules": {
+    "version": "0.2.11",
+    "archiveName": "release_0_2_11.zip",
+    "url": "https://github.com/namazso/PawnIO.Modules/releases/download/0.2.11/release_0_2_11.zip",
+    "sha256": "43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4",
+    "requiredFiles": [
+      "IntelMSR.bin",
+      "LpcACPIEC.bin"
+    ]
+  }
+}

@@ -1,0 +1,1225 @@
+{
+  "schemaVersion": 1,
+  "kind": "VictusFanControl.OfflineFanStabilityReplay",
+  "target": "HP-8C40-9D0R1LA-F18",
+  "baseHead": "5cf6b955a371dcb70fdf2d3518b97fba98e9d2d3",
+  "physicalPassClaimed": false,
+  "normalAutomaticAuthorized": false,
+  "sourceSha256": {
+    "src/VictusFanControl/Control/Adaptive/FanConfiguration.cs": "0112bf3ab80c0a33b20ff1d208296f8086f9cf0cf9efc4d6f4c031809d766a17",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "263a0fe52359a349026185c461542e2b679d5768afbe902d6fac8f999a9a6c06",
+    "src/VictusFanControl/Control/Adaptive/UnifiedFanDemand.cs": "571a67b137a1cb764870aa6afab9ece667aa38e926c92b4b4821b2aff47abd52",
+    "src/VictusFanControl/Product/ProductProfiles.cs": "16191e5a777ec05bb9b5c9a51bbcc3a696d01e3fdedbb859fafa972403bd9ba3",
+    "tools/FanStabilityReplay/Program.cs": "e80539193526ebdfeb438be079bf480be7e3e8fe6face480f2a46eccba49be66",
+    "tools/FanStabilityReplay/prepare-evidence.py": "9d1b6c1380303c5ec97380ee8a2591229c26a5c3104a77ade7f301f35c201b83"
+  },
+  "historicalReconstruction": {
+    "expectedDecisions": 3349,
+    "exactLevelMatches": 3349,
+    "rawTelemetrySmoothing": false
+  },
+  "traceAudit": {
+    "target": "HP-8C40-9D0R1LA-F18",
+    "deduplication": "Union by application session/timestamp and identical event lines; automatic IDs separate. Historical CSV union by timestamp.",
+    "sessions": [
+      {
+        "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+        "archives": [
+          {
+            "file": "VictusFanControl-diagnostico-20261006T185657436Z-0f3c029291024a49b3658c28e4327129 INICIAL.zip",
+            "sha256": "8a057cb067022ce5f26c9f99f7375231ad4dfc4ac0389ca487d84d84f2a305b3"
+          },
+          {
+            "file": "VictusFanControl-diagnostico-20261006T185657436Z-0f3c029291024a49b3658c28e4327129.zip",
+            "sha256": "2f1f654cab8f78b3800163f02b17c398bb3844b7815d9420f2232d1b95c75842"
+          }
+        ],
+        "samples": 713,
+        "complete": 713,
+        "cpuRawRange": [
+          34,
+          100
+        ],
+        "gpuRange": [
+          30,
+          76
+        ],
+        "runs": [
+          {
+            "id": "5f5e686d4d5b4856b0304c6eccc2d2e6",
+            "decisions": 153,
+            "commandChanges": 28,
+            "directionReversals": 2,
+            "totalVariationLevels": 37,
+            "range": [
+              12,
+              47
+            ],
+            "first": "2026-10-06T18:57:45.1662728+00:00",
+            "last": "2026-10-06T19:01:26.1089971+00:00"
+          },
+          {
+            "id": "9888551ba3a944fabe2c7d20ecff7c0b",
+            "decisions": 285,
+            "commandChanges": 25,
+            "directionReversals": 8,
+            "totalVariationLevels": 27,
+            "range": [
+              44,
+              50
+            ],
+            "first": "2026-10-06T19:01:37.7282408+00:00",
+            "last": "2026-10-06T19:08:15.2545327+00:00"
+          },
+          {
+            "id": "d97d725ee7c94d55b046e711e0a33d87",
+            "decisions": 185,
+            "commandChanges": 17,
+            "directionReversals": 7,
+            "totalVariationLevels": 22,
+            "range": [
+              45,
+              50
+            ],
+            "first": "2026-10-06T19:08:45.1535576+00:00",
+            "last": "2026-10-06T19:13:01.6431401+00:00"
+          }
+        ]
+      },
+      {
+        "session": "20261006T192934603Z-bb911eb9b49a4941b33a4829eba25943",
+        "archives": [
+          {
+            "file": "VictusFanControl-diagnostico-20261006T192934603Z-bb911eb9b49a4941b33a4829eba25943.zip",
+            "sha256": "4cfa27e949503f13a0d69b0878e57a0ecbb08975ebb721b7c2dd3fb270a2adfd"
+          }
+        ],
+        "samples": 2083,
+        "complete": 2083,
+        "cpuRawRange": [
+          37,
+          97
+        ],
+        "gpuRange": [
+          32,
+          78
+        ],
+        "runs": [
+          {
+            "id": "89cf13c2fa0e40de9f58e8eaa2f0ff24",
+            "decisions": 1497,
+            "commandChanges": 123,
+            "directionReversals": 65,
+            "totalVariationLevels": 140,
+            "range": [
+              13,
+              50
+            ],
+            "first": "2026-10-06T19:39:35.0996564+00:00",
+            "last": "2026-10-06T20:15:12.4362369+00:00"
+          }
+        ]
+      },
+      {
+        "session": "20261006T204954587Z-1c74bf2b83ad43f7bf160eda608d5932",
+        "archives": [
+          {
+            "file": "VictusFanControl-diagnostico-20261006T204954587Z-1c74bf2b83ad43f7bf160eda608d5932.zip",
+            "sha256": "5ac9fe2e2e63720f94effe6d01058fd6fc932f5a0a188b13d50b4a2647f7fe46"
+          }
+        ],
+        "samples": 123,
+        "complete": 123,
+        "cpuRawRange": [
+          39,
+          68
+        ],
+        "gpuRange": [
+          35,
+          37
+        ],
+        "runs": [
+          {
+            "id": "12944dd91d9948d09628f2bd5c02010f",
+            "decisions": 46,
+            "commandChanges": 3,
+            "directionReversals": 2,
+            "totalVariationLevels": 3,
+            "range": [
+              12,
+              13
+            ],
+            "first": "2026-10-06T20:51:16.7740727+00:00",
+            "last": "2026-10-06T20:52:20.8470666+00:00"
+          }
+        ]
+      },
+      {
+        "session": "20261006T211125739Z-bbf9dfc80a4a401e99c99bbbf2e3e4bd",
+        "archives": [
+          {
+            "file": "VictusFanControl-diagnostico-20261006T211125739Z-bbf9dfc80a4a401e99c99bbbf2e3e4bd.zip",
+            "sha256": "dd25f7dd15341da7ebd71a0f5af5bd713f99d923c845eb782cab4e59fbdf7c3e"
+          }
+        ],
+        "samples": 73,
+        "complete": 73,
+        "cpuRawRange": [
+          39,
+          63
+        ],
+        "gpuRange": [
+          34,
+          35
+        ],
+        "runs": [
+          {
+            "id": "8a5e71ba263a42c7be6997b42fc3c0c2",
+            "decisions": 25,
+            "commandChanges": 2,
+            "directionReversals": 1,
+            "totalVariationLevels": 2,
+            "range": [
+              12,
+              13
+            ],
+            "first": "2026-10-06T21:12:18.391403+00:00",
+            "last": "2026-10-06T21:12:52.920871+00:00"
+          }
+        ]
+      },
+      {
+        "session": "20261006T214054889Z-5e6ef5a8a24c4077bb51144fad430ba0",
+        "archives": [
+          {
+            "file": "VictusFanControl-diagnostico-20261006T214054889Z-5e6ef5a8a24c4077bb51144fad430ba0.zip",
+            "sha256": "f4f30c8b076003da3c665e7489ece32b277dacf10a2954391d993eba9703aa94"
+          }
+        ],
+        "samples": 42,
+        "complete": 42,
+        "cpuRawRange": [
+          43,
+          51
+        ],
+        "gpuRange": [
+          38,
+          40
+        ],
+        "runs": [
+          {
+            "id": "c6a9805633ad4b798af0cb662208e0a5",
+            "decisions": 15,
+            "commandChanges": 0,
+            "directionReversals": 0,
+            "totalVariationLevels": 0,
+            "range": [
+              12,
+              12
+            ],
+            "first": "2026-10-06T21:41:26.2489972+00:00",
+            "last": "2026-10-06T21:41:46.0102419+00:00"
+          }
+        ]
+      },
+      {
+        "session": "20261006T215434573Z-7d6ab1d9af53426bae1c9d050a24b1a0",
+        "archives": [
+          {
+            "file": "VictusFanControl-diagnostico-20261006T215434573Z-7d6ab1d9af53426bae1c9d050a24b1a0.zip",
+            "sha256": "dd3a04c9d0740d9b1b09b1de252c41394300b8f834633240eb606149695b98d8"
+          }
+        ],
+        "samples": 565,
+        "complete": 564,
+        "cpuRawRange": [
+          62,
+          97
+        ],
+        "gpuRange": [
+          53,
+          73
+        ],
+        "runs": [
+          {
+            "id": "cc3a39e2ad9d4e31a33ea12b5f167f1e",
+            "decisions": 207,
+            "commandChanges": 40,
+            "directionReversals": 9,
+            "totalVariationLevels": 58,
+            "range": [
+              26,
+              50
+            ],
+            "first": "2026-10-06T21:54:53.8380291+00:00",
+            "last": "2026-10-06T21:59:49.7518655+00:00"
+          }
+        ]
+      },
+      {
+        "session": "20261006T220836655Z-bf44570214cd43cab444bf4e52d22d07",
+        "archives": [
+          {
+            "file": "VictusFanControl-diagnostico-20261006T220836655Z-bf44570214cd43cab444bf4e52d22d07(1).zip",
+            "sha256": "8fdccb59cc5cf8a5742a763a109c17b9d139e41e1b93a2ec79265e994b5086fc"
+          },
+          {
+            "file": "VictusFanControl-diagnostico-20261006T220836655Z-bf44570214cd43cab444bf4e52d22d07(2).zip",
+            "sha256": "6a2fd0ff2dbc28d534f051408dcdcbe63461edcd985f64038134de6d2b78fe2b"
+          },
+          {
+            "file": "VictusFanControl-diagnostico-20261006T220836655Z-bf44570214cd43cab444bf4e52d22d07.zip",
+            "sha256": "2fe7105e26613cf95f2b686db1acda7648896f03a966481948b3f309def6d0a0"
+          }
+        ],
+        "samples": 1421,
+        "complete": 1421,
+        "cpuRawRange": [
+          57,
+          97
+        ],
+        "gpuRange": [
+          49,
+          75
+        ],
+        "runs": [
+          {
+            "id": "df8edd5831ae4367bab27f6725dd2d2a",
+            "decisions": 936,
+            "commandChanges": 145,
+            "directionReversals": 37,
+            "totalVariationLevels": 174,
+            "range": [
+              29,
+              50
+            ],
+            "first": "2026-10-06T22:09:04.1158325+00:00",
+            "last": "2026-10-06T22:31:22.6099409+00:00"
+          }
+        ]
+      }
+    ],
+    "olderWithoutTelemetry": [
+      {
+        "file": "VictusFanControl-diagnostico(1).zip",
+        "sha256": "8348cd45226efbccfe8616a1bfc99220ce63e9accda416d130d75e4baf6ae754",
+        "events": 124,
+        "scope": "older-cumulative-log-no-telemetry"
+      },
+      {
+        "file": "VictusFanControl-diagnostico(2).zip",
+        "sha256": "063ef24b327314b23f8cd6b26f4b36b494a65ac2257a221e73c45d2e7de7dc91",
+        "events": 138,
+        "scope": "older-cumulative-log-no-telemetry"
+      },
+      {
+        "file": "VictusFanControl-diagnostico(3).zip",
+        "sha256": "4ba9a34285342b35d371dfc2e2d1df510f6fd3d94c9ff447121c928ee8d922ed",
+        "events": 148,
+        "scope": "older-cumulative-log-no-telemetry"
+      },
+      {
+        "file": "VictusFanControl-diagnostico(4).zip",
+        "sha256": "c1daf367ee3a4963292e4fa17fd8cbfc7daf525cf3953d2b3bfa558d37816147",
+        "events": 159,
+        "scope": "older-cumulative-log-no-telemetry"
+      },
+      {
+        "file": "VictusFanControl-diagnostico(5).zip",
+        "sha256": "0d10d668f4b8c1b3f143456df5d14416b5f6b69d52cb19fcfb4612b4e34e58c7",
+        "events": 285,
+        "scope": "older-cumulative-log-no-telemetry"
+      },
+      {
+        "file": "VictusFanControl-diagnostico(6).zip",
+        "sha256": "8369f200cbef8c1ceb6ef59e3f334fc669ead01b5796d617937c1af9f5ce73af",
+        "events": 449,
+        "scope": "older-cumulative-log-no-telemetry"
+      },
+      {
+        "file": "VictusFanControl-diagnostico(7).zip",
+        "sha256": "4bf6f9d222e36cc1b26f9bcac69c72dd284b80a1bcc10ff85d009518ad8e0653",
+        "events": 489,
+        "scope": "older-cumulative-log-no-telemetry"
+      },
+      {
+        "file": "VictusFanControl-diagnostico(8).zip",
+        "sha256": "07db3ddf2f09bbf9bcf546bbbfab4366658fb9c02ddbf33660dee9fc419c96e6",
+        "events": 629,
+        "scope": "older-cumulative-log-no-telemetry"
+      },
+      {
+        "file": "VictusFanControl-diagnostico.zip",
+        "sha256": "55e3aa469c4d66e6361a011524dda5c323ff73eab9c0cab3aa4680df2b931b6a",
+        "events": 112,
+        "scope": "older-cumulative-log-no-telemetry"
+      }
+    ],
+    "historicalCsv": {
+      "distinctSamples": 7244,
+      "sources": [
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-03_152817_d19a70.zip!wmi-only\\telemetry.csv",
+          "sha256": "3bf1655839864e702e848ac77a9ad7c9ecd73b3c277d8161c974a275e45b6713",
+          "samples": 1658
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-03_160201_a5ed39.zip!wmi-only\\telemetry.csv",
+          "sha256": "94856a8e6819d55b13f23cba4ea4ef4ae38cafef04e366d3a16a0d7018efa3fa",
+          "samples": 867
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-03_174956_0c08ef(1).zip!wmi-only\\telemetry.csv",
+          "sha256": "8c7fa95c55456eb782e64d4711986d7aedfd5eb58cf9e5a04d11a7ab0282138d",
+          "samples": 796
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-03_174956_0c08ef.zip!wmi-only\\telemetry.csv",
+          "sha256": "8c7fa95c55456eb782e64d4711986d7aedfd5eb58cf9e5a04d11a7ab0282138d",
+          "samples": 796
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-03_183347_decc6e.zip!scenario-c\\telemetry.csv",
+          "sha256": "f766a58621459887708b4df6f819a66b2a1f8de2c14b70736d66d997fdd2fb4f",
+          "samples": 604
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_020302_ded92d.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "d57fbf8e90650686c97a94f732d5ba909acb79ebcae5b13dfbf3c54a7b3efe32",
+          "samples": 30
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_022417_64fcdb(1).zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "3b154dc49e2e14a0c424c5e5c5108e48dc9341ea397b1f8c2f4f06debdf4f617",
+          "samples": 278
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_025950_d3dffc.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "9bae6a52c7460322208fc1a6ec843ac9eff287febba0fb7a6fb1b96bf548a528",
+          "samples": 7
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_030042_76d955.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "493eb09021a0d5b65d1bfdc673184bb0070cccaf83be8564f7732792f75fefdd",
+          "samples": 187
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_033732_942b0e.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "0d1dc9d3f21b0be8003073bcb522457b837766209c0d9914542f166166d530a4",
+          "samples": 190
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_034859_41d69e.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "aba5eaa0eedd4221cfdb50431470414483da5aedae090fdc6c1ef3d0142386a2",
+          "samples": 191
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_041123_f56cad.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "770722056b2ce84e80c20ae87e970c6b1e24339e33a6d67b34a75337f462f160",
+          "samples": 191
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_042020_e43bab.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "f0b036d43eb925144b29478f9a763e4f789550e4c6eb2e0b03658ac5dd70a92d",
+          "samples": 98
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_044620_2e9836.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "9d1aad4d20b741edba234cdf152ade1c07b3be83fb4d870739b36ebacadda605",
+          "samples": 193
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_045640_f937a9.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "6684342381de00daa5a330c823c17443f609b5d7ed3f577d368dea348d5e319a",
+          "samples": 119
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_052456_2caa18.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "50f97efe197566e2837796797afdf6cff6243bfab6dfe6d9bfe501120a152a8a",
+          "samples": 192
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_053250_3fdb9c.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "8c8997ec302f1c460930d4d44b0e3b6018433ddec44aa0acd75a2c76a0b322f0",
+          "samples": 2
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_055052_2cb711.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "d89f9575f4c7e80fad60b4e15bce972bb091db54e73bc14487e1bd5968690de2",
+          "samples": 192
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_060154_328e09.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "f3cdbba6789f63daa761b43d98217383591972fb01013263594fe66fb16fc522",
+          "samples": 190
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_063237_3d84c5.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "abe9df917d8a985fdbc2e69aeb9cad56f389ca13a0be6495072426c4138f66bb",
+          "samples": 116
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_064004_12c8a0.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "79c7fb157fb50968af64ab6185ed839b59cf34da1458c5036d8d3accc1035ea5",
+          "samples": 191
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_064849_9c9616.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "9af0a617abda9bde121ee17d910d48b89e6c548cb2a103858013d98702ba5b26",
+          "samples": 15
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_090828_856146.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "dde96e98eb8e4fcdb6d7c92525ef00c9de733ba82bc786670ceec620b2f5d8d4",
+          "samples": 191
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_150610_d01746.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "c43d6f2792497886917fb3d0ef558e023f820b472d4bd54077f96892d3190fa9",
+          "samples": 177
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_162856_5a8793.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "652e4ef76536f58fa68161a007ba3c252a20e7ea3ad3a615d95da93afc30b6dc",
+          "samples": 181
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_172146_9d1584.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "7d2253b1500127bf0b0ae109a482b2310af0715288071d369ec75fefa13c8409",
+          "samples": 140
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_174339_8f9f88.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "b5cc1d59a0587650c050d610b78390ece5f4e22944daf39052f7847e8fbff24c",
+          "samples": 124
+        },
+        {
+          "source": "VFC-WMI-Diagnostico_2026-10-04_182005_7405f3.zip!wmi-fan-experiment\\telemetry.csv",
+          "sha256": "d2f170b35f4080747e18395d7c051864a4d01597810faaf0021accdb30dfa0dd",
+          "samples": 124
+        }
+      ],
+      "scope": "Earlier manual, firmware and experimental engines: context, not current-preset proof."
+    },
+    "firmware": [
+      {
+        "file": "2026-10-02_234852_idle_hp-auto.csv",
+        "sha256": "1692553897057c22db3b21f07e557d14c0899148983b45d3ce6c64d5573ada93",
+        "samples": 112,
+        "cpu_package_temp_c": {
+          "min": 47.0,
+          "median": 58.5,
+          "max": 95.0
+        },
+        "cpu_core_max_temp_c": {
+          "min": 43.0,
+          "median": 59.5,
+          "max": 91.0
+        },
+        "gpu_temp_c": {
+          "min": 42.0,
+          "median": 44.0,
+          "max": 61.0
+        },
+        "cpu_package_power_w": {
+          "min": 9.096,
+          "median": 29.032,
+          "max": 87.208
+        },
+        "gpu_power_w": {
+          "min": 1.2,
+          "median": 13.526,
+          "max": 42.326
+        },
+        "cpu_fan_rpm": {
+          "min": 2500.0,
+          "median": 2500.0,
+          "max": 2600.0
+        },
+        "gpu_fan_rpm": {
+          "min": 2300.0,
+          "median": 2400.0,
+          "max": 2400.0
+        }
+      },
+      {
+        "file": "2026-10-02_235753_idle_hp-auto.csv",
+        "sha256": "8bae10379d887e9c3ee4365d5155fe28fe499007950c8690e70a10b24db46f75",
+        "samples": 109,
+        "cpu_package_temp_c": {
+          "min": 45.0,
+          "median": 48.0,
+          "max": 56.0
+        },
+        "cpu_core_max_temp_c": {
+          "min": 41.0,
+          "median": 45.0,
+          "max": 56.0
+        },
+        "gpu_temp_c": {
+          "min": 41.0,
+          "median": 43.0,
+          "max": 46.0
+        },
+        "cpu_package_power_w": {
+          "min": 9.302,
+          "median": 14.76,
+          "max": 22.913
+        },
+        "gpu_power_w": {
+          "min": 1.2,
+          "median": 12.907,
+          "max": 13.864
+        },
+        "cpu_fan_rpm": {
+          "min": 2500.0,
+          "median": 2600.0,
+          "max": 2700.0
+        },
+        "gpu_fan_rpm": {
+          "min": 2300.0,
+          "median": 2400.0,
+          "max": 2400.0
+        }
+      }
+    ]
+  },
+  "policyComparisons": [
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "5f5e686d4d5b4856b0304c6eccc2d2e6",
+      "mode": "recorded-settings",
+      "decisions": 153,
+      "commandChanges": 28,
+      "directionReversals": 2,
+      "totalVariationLevels": 37,
+      "finalLevel": 47,
+      "levelRange": [
+        12,
+        47
+      ],
+      "rejectedSamples": 0,
+      "recordedLevelMatches": 153
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "5f5e686d4d5b4856b0304c6eccc2d2e6",
+      "mode": "previous-default",
+      "decisions": 153,
+      "commandChanges": 29,
+      "directionReversals": 3,
+      "totalVariationLevels": 38,
+      "finalLevel": 44,
+      "levelRange": [
+        12,
+        46
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "5f5e686d4d5b4856b0304c6eccc2d2e6",
+      "mode": "stable-inertia-only",
+      "decisions": 153,
+      "commandChanges": 28,
+      "directionReversals": 2,
+      "totalVariationLevels": 37,
+      "finalLevel": 47,
+      "levelRange": [
+        12,
+        47
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "5f5e686d4d5b4856b0304c6eccc2d2e6",
+      "mode": "stable-preset",
+      "decisions": 153,
+      "commandChanges": 25,
+      "directionReversals": 0,
+      "totalVariationLevels": 34,
+      "finalLevel": 46,
+      "levelRange": [
+        12,
+        46
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "9888551ba3a944fabe2c7d20ecff7c0b",
+      "mode": "recorded-settings",
+      "decisions": 285,
+      "commandChanges": 25,
+      "directionReversals": 8,
+      "totalVariationLevels": 27,
+      "finalLevel": 49,
+      "levelRange": [
+        44,
+        50
+      ],
+      "rejectedSamples": 0,
+      "recordedLevelMatches": 285
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "9888551ba3a944fabe2c7d20ecff7c0b",
+      "mode": "previous-default",
+      "decisions": 285,
+      "commandChanges": 54,
+      "directionReversals": 17,
+      "totalVariationLevels": 80,
+      "finalLevel": 35,
+      "levelRange": [
+        32,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "9888551ba3a944fabe2c7d20ecff7c0b",
+      "mode": "stable-inertia-only",
+      "decisions": 285,
+      "commandChanges": 25,
+      "directionReversals": 4,
+      "totalVariationLevels": 39,
+      "finalLevel": 36,
+      "levelRange": [
+        35,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "9888551ba3a944fabe2c7d20ecff7c0b",
+      "mode": "stable-preset",
+      "decisions": 285,
+      "commandChanges": 25,
+      "directionReversals": 4,
+      "totalVariationLevels": 39,
+      "finalLevel": 37,
+      "levelRange": [
+        35,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "d97d725ee7c94d55b046e711e0a33d87",
+      "mode": "recorded-settings",
+      "decisions": 185,
+      "commandChanges": 17,
+      "directionReversals": 7,
+      "totalVariationLevels": 22,
+      "finalLevel": 50,
+      "levelRange": [
+        45,
+        50
+      ],
+      "rejectedSamples": 0,
+      "recordedLevelMatches": 185
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "d97d725ee7c94d55b046e711e0a33d87",
+      "mode": "previous-default",
+      "decisions": 185,
+      "commandChanges": 32,
+      "directionReversals": 13,
+      "totalVariationLevels": 52,
+      "finalLevel": 50,
+      "levelRange": [
+        39,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "d97d725ee7c94d55b046e711e0a33d87",
+      "mode": "stable-inertia-only",
+      "decisions": 185,
+      "commandChanges": 5,
+      "directionReversals": 3,
+      "totalVariationLevels": 12,
+      "finalLevel": 50,
+      "levelRange": [
+        41,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T185657436Z-0f3c029291024a49b3658c28e4327129",
+      "automaticSession": "d97d725ee7c94d55b046e711e0a33d87",
+      "mode": "stable-preset",
+      "decisions": 185,
+      "commandChanges": 6,
+      "directionReversals": 3,
+      "totalVariationLevels": 13,
+      "finalLevel": 50,
+      "levelRange": [
+        41,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T192934603Z-bb911eb9b49a4941b33a4829eba25943",
+      "automaticSession": "89cf13c2fa0e40de9f58e8eaa2f0ff24",
+      "mode": "recorded-settings",
+      "decisions": 1497,
+      "commandChanges": 123,
+      "directionReversals": 65,
+      "totalVariationLevels": 140,
+      "finalLevel": 13,
+      "levelRange": [
+        13,
+        50
+      ],
+      "rejectedSamples": 0,
+      "recordedLevelMatches": 1497
+    },
+    {
+      "session": "20261006T192934603Z-bb911eb9b49a4941b33a4829eba25943",
+      "automaticSession": "89cf13c2fa0e40de9f58e8eaa2f0ff24",
+      "mode": "previous-default",
+      "decisions": 1497,
+      "commandChanges": 117,
+      "directionReversals": 39,
+      "totalVariationLevels": 156,
+      "finalLevel": 13,
+      "levelRange": [
+        12,
+        48
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T192934603Z-bb911eb9b49a4941b33a4829eba25943",
+      "automaticSession": "89cf13c2fa0e40de9f58e8eaa2f0ff24",
+      "mode": "stable-inertia-only",
+      "decisions": 1497,
+      "commandChanges": 76,
+      "directionReversals": 17,
+      "totalVariationLevels": 108,
+      "finalLevel": 15,
+      "levelRange": [
+        15,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T192934603Z-bb911eb9b49a4941b33a4829eba25943",
+      "automaticSession": "89cf13c2fa0e40de9f58e8eaa2f0ff24",
+      "mode": "stable-preset",
+      "decisions": 1497,
+      "commandChanges": 81,
+      "directionReversals": 17,
+      "totalVariationLevels": 112,
+      "finalLevel": 14,
+      "levelRange": [
+        14,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T204954587Z-1c74bf2b83ad43f7bf160eda608d5932",
+      "automaticSession": "12944dd91d9948d09628f2bd5c02010f",
+      "mode": "recorded-settings",
+      "decisions": 46,
+      "commandChanges": 3,
+      "directionReversals": 2,
+      "totalVariationLevels": 3,
+      "finalLevel": 13,
+      "levelRange": [
+        12,
+        13
+      ],
+      "rejectedSamples": 0,
+      "recordedLevelMatches": 46
+    },
+    {
+      "session": "20261006T204954587Z-1c74bf2b83ad43f7bf160eda608d5932",
+      "automaticSession": "12944dd91d9948d09628f2bd5c02010f",
+      "mode": "previous-default",
+      "decisions": 46,
+      "commandChanges": 3,
+      "directionReversals": 2,
+      "totalVariationLevels": 3,
+      "finalLevel": 13,
+      "levelRange": [
+        12,
+        13
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T204954587Z-1c74bf2b83ad43f7bf160eda608d5932",
+      "automaticSession": "12944dd91d9948d09628f2bd5c02010f",
+      "mode": "stable-inertia-only",
+      "decisions": 46,
+      "commandChanges": 2,
+      "directionReversals": 0,
+      "totalVariationLevels": 2,
+      "finalLevel": 14,
+      "levelRange": [
+        12,
+        14
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T204954587Z-1c74bf2b83ad43f7bf160eda608d5932",
+      "automaticSession": "12944dd91d9948d09628f2bd5c02010f",
+      "mode": "stable-preset",
+      "decisions": 46,
+      "commandChanges": 1,
+      "directionReversals": 0,
+      "totalVariationLevels": 1,
+      "finalLevel": 13,
+      "levelRange": [
+        12,
+        13
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T211125739Z-bbf9dfc80a4a401e99c99bbbf2e3e4bd",
+      "automaticSession": "8a5e71ba263a42c7be6997b42fc3c0c2",
+      "mode": "recorded-settings",
+      "decisions": 25,
+      "commandChanges": 2,
+      "directionReversals": 1,
+      "totalVariationLevels": 2,
+      "finalLevel": 12,
+      "levelRange": [
+        12,
+        13
+      ],
+      "rejectedSamples": 0,
+      "recordedLevelMatches": 25
+    },
+    {
+      "session": "20261006T211125739Z-bbf9dfc80a4a401e99c99bbbf2e3e4bd",
+      "automaticSession": "8a5e71ba263a42c7be6997b42fc3c0c2",
+      "mode": "previous-default",
+      "decisions": 25,
+      "commandChanges": 0,
+      "directionReversals": 0,
+      "totalVariationLevels": 0,
+      "finalLevel": 12,
+      "levelRange": [
+        12,
+        12
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T211125739Z-bbf9dfc80a4a401e99c99bbbf2e3e4bd",
+      "automaticSession": "8a5e71ba263a42c7be6997b42fc3c0c2",
+      "mode": "stable-inertia-only",
+      "decisions": 25,
+      "commandChanges": 0,
+      "directionReversals": 0,
+      "totalVariationLevels": 0,
+      "finalLevel": 12,
+      "levelRange": [
+        12,
+        12
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T211125739Z-bbf9dfc80a4a401e99c99bbbf2e3e4bd",
+      "automaticSession": "8a5e71ba263a42c7be6997b42fc3c0c2",
+      "mode": "stable-preset",
+      "decisions": 25,
+      "commandChanges": 0,
+      "directionReversals": 0,
+      "totalVariationLevels": 0,
+      "finalLevel": 12,
+      "levelRange": [
+        12,
+        12
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T214054889Z-5e6ef5a8a24c4077bb51144fad430ba0",
+      "automaticSession": "c6a9805633ad4b798af0cb662208e0a5",
+      "mode": "recorded-settings",
+      "decisions": 15,
+      "commandChanges": 0,
+      "directionReversals": 0,
+      "totalVariationLevels": 0,
+      "finalLevel": 12,
+      "levelRange": [
+        12,
+        12
+      ],
+      "rejectedSamples": 0,
+      "recordedLevelMatches": 15
+    },
+    {
+      "session": "20261006T214054889Z-5e6ef5a8a24c4077bb51144fad430ba0",
+      "automaticSession": "c6a9805633ad4b798af0cb662208e0a5",
+      "mode": "previous-default",
+      "decisions": 15,
+      "commandChanges": 0,
+      "directionReversals": 0,
+      "totalVariationLevels": 0,
+      "finalLevel": 12,
+      "levelRange": [
+        12,
+        12
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T214054889Z-5e6ef5a8a24c4077bb51144fad430ba0",
+      "automaticSession": "c6a9805633ad4b798af0cb662208e0a5",
+      "mode": "stable-inertia-only",
+      "decisions": 15,
+      "commandChanges": 0,
+      "directionReversals": 0,
+      "totalVariationLevels": 0,
+      "finalLevel": 12,
+      "levelRange": [
+        12,
+        12
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T214054889Z-5e6ef5a8a24c4077bb51144fad430ba0",
+      "automaticSession": "c6a9805633ad4b798af0cb662208e0a5",
+      "mode": "stable-preset",
+      "decisions": 15,
+      "commandChanges": 0,
+      "directionReversals": 0,
+      "totalVariationLevels": 0,
+      "finalLevel": 12,
+      "levelRange": [
+        12,
+        12
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T215434573Z-7d6ab1d9af53426bae1c9d050a24b1a0",
+      "automaticSession": "cc3a39e2ad9d4e31a33ea12b5f167f1e",
+      "mode": "recorded-settings",
+      "decisions": 207,
+      "commandChanges": 40,
+      "directionReversals": 9,
+      "totalVariationLevels": 58,
+      "finalLevel": 46,
+      "levelRange": [
+        26,
+        50
+      ],
+      "rejectedSamples": 0,
+      "recordedLevelMatches": 207
+    },
+    {
+      "session": "20261006T215434573Z-7d6ab1d9af53426bae1c9d050a24b1a0",
+      "automaticSession": "cc3a39e2ad9d4e31a33ea12b5f167f1e",
+      "mode": "previous-default",
+      "decisions": 207,
+      "commandChanges": 45,
+      "directionReversals": 9,
+      "totalVariationLevels": 69,
+      "finalLevel": 36,
+      "levelRange": [
+        23,
+        48
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T215434573Z-7d6ab1d9af53426bae1c9d050a24b1a0",
+      "automaticSession": "cc3a39e2ad9d4e31a33ea12b5f167f1e",
+      "mode": "stable-inertia-only",
+      "decisions": 207,
+      "commandChanges": 26,
+      "directionReversals": 5,
+      "totalVariationLevels": 44,
+      "finalLevel": 45,
+      "levelRange": [
+        23,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T215434573Z-7d6ab1d9af53426bae1c9d050a24b1a0",
+      "automaticSession": "cc3a39e2ad9d4e31a33ea12b5f167f1e",
+      "mode": "stable-preset",
+      "decisions": 207,
+      "commandChanges": 29,
+      "directionReversals": 5,
+      "totalVariationLevels": 50,
+      "finalLevel": 45,
+      "levelRange": [
+        17,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T220836655Z-bf44570214cd43cab444bf4e52d22d07",
+      "automaticSession": "df8edd5831ae4367bab27f6725dd2d2a",
+      "mode": "recorded-settings",
+      "decisions": 936,
+      "commandChanges": 145,
+      "directionReversals": 37,
+      "totalVariationLevels": 174,
+      "finalLevel": 50,
+      "levelRange": [
+        29,
+        50
+      ],
+      "rejectedSamples": 0,
+      "recordedLevelMatches": 936
+    },
+    {
+      "session": "20261006T220836655Z-bf44570214cd43cab444bf4e52d22d07",
+      "automaticSession": "df8edd5831ae4367bab27f6725dd2d2a",
+      "mode": "previous-default",
+      "decisions": 936,
+      "commandChanges": 161,
+      "directionReversals": 47,
+      "totalVariationLevels": 211,
+      "finalLevel": 47,
+      "levelRange": [
+        23,
+        47
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T220836655Z-bf44570214cd43cab444bf4e52d22d07",
+      "automaticSession": "df8edd5831ae4367bab27f6725dd2d2a",
+      "mode": "stable-inertia-only",
+      "decisions": 936,
+      "commandChanges": 75,
+      "directionReversals": 20,
+      "totalVariationLevels": 104,
+      "finalLevel": 50,
+      "levelRange": [
+        26,
+        50
+      ],
+      "rejectedSamples": 0
+    },
+    {
+      "session": "20261006T220836655Z-bf44570214cd43cab444bf4e52d22d07",
+      "automaticSession": "df8edd5831ae4367bab27f6725dd2d2a",
+      "mode": "stable-preset",
+      "decisions": 936,
+      "commandChanges": 83,
+      "directionReversals": 20,
+      "totalVariationLevels": 112,
+      "finalLevel": 50,
+      "levelRange": [
+        23,
+        50
+      ],
+      "rejectedSamples": 0
+    }
+  ],
+  "proposedAc": [
+    [
+      0,
+      12
+    ],
+    [
+      40,
+      12
+    ],
+    [
+      50,
+      20
+    ],
+    [
+      65,
+      30
+    ],
+    [
+      76,
+      36
+    ],
+    [
+      90,
+      44
+    ],
+    [
+      100,
+      50
+    ]
+  ],
+  "proposedBattery": [
+    [
+      0,
+      10
+    ],
+    [
+      40,
+      10
+    ],
+    [
+      50,
+      14
+    ],
+    [
+      65,
+      26
+    ],
+    [
+      76,
+      35
+    ],
+    [
+      90,
+      44
+    ],
+    [
+      100,
+      50
+    ]
+  ],
+  "commonTuning": {
+    "riseEmaSeconds": 8,
+    "riseConfirmationSeconds": 3,
+    "shortFallEmaSeconds": 15,
+    "shortFallConfirmationSeconds": 6,
+    "longFallEmaSeconds": 35,
+    "longFallConfirmationSeconds": 18,
+    "normalDecreaseHysteresisLevels": 1,
+    "thermalDecreaseHoldSeconds": 30
+  },
+  "limits": [
+    "Fixed-temperature replay cannot predict new temperatures, measured RPM, noise or cooling capacity.",
+    "Firmware CSV has no power-source metadata or matched limiter/workload conditions.",
+    "Historical manual/experimental readings do not qualify new presets.",
+    "Battery curve is derived and awaits representative physical observation.",
+    "Fewer direction reversals may retain higher fan levels while cooling; quiet minimum is released at the curve floor."
+  ],
+  "sourceHashCanonicalization": "UTF-8 text, BOM-aware decode, CRLF-to-LF, SHA256",
+  "historicalSourceHead": "4d4b40fda1bc032bb7c563750c3f6fa403d010c3",
+  "historicalSourceSnapshots": {
+    "src/VictusFanControl/Control/Adaptive/FanConfiguration.cs": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/FanConfiguration.cs.txt",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/AdaptiveFanInertiaPolicy.cs.txt",
+    "src/VictusFanControl/Control/Adaptive/UnifiedFanDemand.cs": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/UnifiedFanDemand.cs.txt",
+    "src/VictusFanControl/Product/ProductProfiles.cs": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/ProductProfiles.cs.txt",
+    "tools/FanStabilityReplay/Program.cs": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/Program.cs.txt",
+    "tools/FanStabilityReplay/prepare-evidence.py": "tools/FanStabilityReplay/fixtures/historical-2026-10-06/prepare-evidence.py.txt"
+  }
+}

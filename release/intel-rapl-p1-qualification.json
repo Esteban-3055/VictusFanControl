@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "status": "P1_PHYSICAL_LIMITING_QUALIFIED_FOR_P2_FOUNDATION",
+  "target": {
+    "id": "HP-8C40-9D0R1LA-F18",
+    "board": "HP 8C40",
+    "boardVersion": "63.43",
+    "sku": "9D0R1LA#AKH",
+    "bios": "F.18",
+    "cpu": "Intel Core i7-13700H"
+  },
+  "source": {
+    "branch": "feature/intel-rapl-p1-explicit-limits",
+    "head": "8050be6b37513d16ff0e4c931b5aae18ee02671b",
+    "runName": "rapl-p1_2026-10-03_173801_6edde0a6",
+    "zipSha256": "ECF61F642990BB54AA38A8DAFE54924EA292957085013E1A25C0A931E3B58B3F"
+  },
+  "physicalEvidence": {
+    "baselineRaw610": "0x0042839800DF8168",
+    "requestedRaw610": "0x0042814000DF80A0",
+    "baselinePl1W": 45,
+    "baselinePl2W": 115,
+    "requestedPl1W": 20,
+    "requestedPl2W": 40,
+    "writeResult": "WRITE_ACCEPTED_AND_PERSISTED",
+    "restoreResult": "BASELINE_VERIFIED",
+    "limitedSamples": 90,
+    "maximumLimitedTemperatureC": 81,
+    "highLoadHighPowerWindow": {
+      "samples": "6-9",
+      "averageLoadPercent": 99.8835,
+      "averagePackagePowerW": 39.908
+    },
+    "highLoadLowPowerWindow": {
+      "samples": "69-72",
+      "averageLoadPercent": 99.9615,
+      "averagePackagePowerW": 19.29
+    },
+    "physicalPowerEffectObserved": true
+  },
+  "promotion": {
+    "raplWriteFeasibility": true,
+    "boundedApplyReadbackRestore": true,
+    "physicalPowerEffectQualified": true,
+    "p2SoftwareFoundationAllowed": true,
+    "productionHardwareWritesAuthorized": false,
+    "guiIntegrationAuthorized": false,
+    "startupPersistenceAuthorized": false,
+    "automaticProfileIntegrationAuthorized": false,
+    "requiresGuardianBeforeProductionHardwareBackend": true
+  }
+}

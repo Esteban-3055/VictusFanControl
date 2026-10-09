@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "version": "0.4.0-rc.1",
+  "runtimeIdentifier": "win-x64",
+  "configuration": "Release",
+  "selfContained": false,
+  "publishSingleFile": false,
+  "debugSymbolsIncluded": false,
+  "readyToRun": false,
+  "directories": {
+    "app": "app",
+    "watchdog": "watchdog",
+    "performanceGuardian": "app/performance-guardian"
+  },
+  "projects": {
+    "app": "src/VictusFanControl.App/VictusFanControl.App.csproj",
+    "watchdog": "src/VictusFanControl.Watchdog/VictusFanControl.Watchdog.csproj",
+    "performanceGuardian": "src/VictusFanControl.PerformanceGuardian/VictusFanControl.PerformanceGuardian.csproj"
+  },
+  "excludedStandaloneProjects": [
+    "src/VictusFanControl/VictusFanControl.csproj",
+    "src/VictusFanControl.ModernStandbyProbe/VictusFanControl.ModernStandbyProbe.csproj"
+  ],
+  "pawnIoModulesIncluded": false,
+  "note": "P14.2 publish layout only; P14.3 adds verified external modules, package container and SHA-256 manifest."
+}

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "kind": "VictusFanControl.ProductRelease",
+  "target": "HP-8C40-9D0R1LA-F18",
+  "releaseStage": "target-specific-release",
+  "stableReleaseAuthorized": true,
+  "normalAutomatic": "authorized-exact-target",
+  "startup": "optional-one-attempt-after-three-fresh-observations-coupled-performance",
+  "reentryAfterInterruption": "clean-exit-and-new-process-only",
+  "sessionRestart": "explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics",
+  "automaticThermalContract": "cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
+  "physicalEvidence": [
+    "product-gui-source-transition-8c40-2026-10-06.json",
+    "product-gui-sustained-load-8c40-2026-10-06.json",
+    "product-gui-live-tuning-8c40-2026-10-06.json",
+    "product-gui-live-performance-8c40-2026-10-06.json",
+    "product-gui-thermal-interruption-8c40-2026-10-06.json"
+  ],
+  "remainingPhysicalChecks": [
+    "representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return",
+    "current-gui-suspend-resume-without-fan-reentry",
+    "current-gui-clean-exit-and-session-restart-release-and-open-in-firmware",
+    "optional-quiet-ac-candidate-with-tz01-dtt3-comparable-thermal-and-measured-acoustics",
+    "current-windows-logon-startup-coupled-activation-and-clean-shutdown"
+  ],
+  "evidenceLimits": [
+    "Prior thermal observations used the previous GUI 90C confirmation contract.",
+    "The thermal-interruption record is an observed interruption, not a stability PASS.",
+    "GPU NVML acceptance does not prove exact locked-range readback.",
+    "WMI acceptance does not prove independent firmware/fan ownership.",
+    "Stable quiet presets have offline replay evidence only; actual cooling and acoustics remain pending.",
+    "Product quiet candidate and bounded TZ01/DTT3 retention are replayed on the same observed temperatures; lower simulated fan levels do not prove counterfactual cooling or acoustic improvement.",
+    "Release authorization comes from the user request for habitual exact-target use; it is not a new physical qualification PASS.",
+    "Windows logon task and unattended acquisition must still be observed on the target; CI checks use zero-hardware fixtures."
+  ],
+  "offlinePolicyEvidence": [
+    "product-fan-stability-replay-8c40-2026-10-06.json",
+    "product-quiet-curve-replay-8c40-2026-10-09.json"
+  ],
+  "experimentalPlatformRetention": {
+    "defaultEnabled": false,
+    "scope": "optional-ac-only",
+    "maximumExtraRawLevels": 2,
+    "maximumSupplementSeconds": 60,
+    "sourceAdmission": "bounded-acquisition-history-v1",
+    "normalAutomaticPromoted": true
+  },
+  "version": "1.0.0",
+  "physicalPassClaimed": false
+}

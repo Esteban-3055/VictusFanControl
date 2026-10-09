@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "version": "live-20261008",
+  "samples": 3542,
+  "sha256": "aee12beaece8f07603313b785402d47d428175481f0f531c5fd006ea95608d93",
+  "uncompressedSha256": "51d6d9bacf8041da63bce93f5ccd2a859ee86eb251f5848245f493d084d10478",
+  "originalArchiveSha256": "0d4d599c5649bdfd21dc7205dc37d23b8c641f159fa2654c8f73f6d38608e0c6",
+  "sourceRevision": "4c8049c1e74837a23896f300c885e1872fc85457",
+  "epochRule": "Original conservative query-start epochs, preserved without joining or resampling.",
+  "scope": "Only input frames; no local paths or host identifiers."
+}

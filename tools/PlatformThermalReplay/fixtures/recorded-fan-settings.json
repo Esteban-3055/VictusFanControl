@@ -1,0 +1,518 @@
+{
+  "source": "profiles-draft.json",
+  "sourceSha256": "2f8b244ec7868250d232031b1aeee9397d435d35372f024fbb15e41cc61c0444",
+  "guiRevision": "1e30e2a1893b0542505b2ac3b3f29e4895a19213",
+  "disclosure": "Diagnostic draft, not proof these preferences were active during archived OEM captures.",
+  "ac": {
+    "schemaVersion": 1,
+    "tuning": {
+      "cpuTemperatureSource": 2,
+      "hottestPerformanceCoreCount": 3,
+      "minimumLevel": 10,
+      "maximumLevel": 50,
+      "riseTimeConstantSeconds": 14,
+      "fallTimeConstantSeconds": 40,
+      "increaseConfirmationSeconds": 8,
+      "decreaseConfirmationSeconds": 26,
+      "normalMaximumUpStepLevels": 1,
+      "maximumDownStepLevels": 1,
+      "thermalMaximumUpStepLevels": 4,
+      "cpuThermalOverrideC": 85,
+      "gpuThermalOverrideC": 78,
+      "rememberThermalDemand": false,
+      "normalDecreaseHysteresisLevels": 0,
+      "thermalDecreaseHoldSeconds": 0,
+      "normalPollingDelayMilliseconds": 1000,
+      "adaptiveDescentEnabled": true,
+      "shortLoadFallTimeConstantSeconds": 32,
+      "shortLoadDecreaseConfirmationSeconds": 24,
+      "sustainedLoadSeconds": 180,
+      "loadThresholdPercent": 50,
+      "cpuLoadPowerThresholdW": 25,
+      "gpuLoadPowerThresholdW": 35,
+      "loadPauseToleranceSeconds": 30,
+      "sustainedLoadCooldownSeconds": 120
+    },
+    "profile": {
+      "schemaVersion": 1,
+      "id": "5629a2f243674123ae9e243bdd8743cc",
+      "name": "Silencioso AC",
+      "config": {
+        "schemaVersion": 1,
+        "targetProfileId": "HP-8C40-9D0R1LA-F18",
+        "purpose": "shadow-only",
+        "authorizedForProduction": false,
+        "minimumLevel": 10,
+        "maximumLevel": 50,
+        "maximumUpStepPerSample": 4,
+        "maximumDownStepPerSample": 1,
+        "decreaseConfirmationSamples": 5,
+        "decreaseDeadbandLevels": 1,
+        "maximumSampleGapSeconds": 3,
+        "cpuTemperatureCurve": [
+          {
+            "input": 35,
+            "level": 12
+          },
+          {
+            "input": 50,
+            "level": 16
+          },
+          {
+            "input": 60,
+            "level": 21
+          },
+          {
+            "input": 68,
+            "level": 26
+          },
+          {
+            "input": 77,
+            "level": 34
+          },
+          {
+            "input": 83,
+            "level": 41
+          },
+          {
+            "input": 88,
+            "level": 49
+          }
+        ],
+        "gpuTemperatureCurve": [
+          {
+            "input": 35,
+            "level": 12
+          },
+          {
+            "input": 45,
+            "level": 15
+          },
+          {
+            "input": 55,
+            "level": 20
+          },
+          {
+            "input": 65,
+            "level": 28
+          },
+          {
+            "input": 72,
+            "level": 35
+          },
+          {
+            "input": 78,
+            "level": 44
+          },
+          {
+            "input": 80,
+            "level": 50
+          }
+        ],
+        "cpuPowerCurve": [
+          {
+            "input": 0,
+            "level": 10
+          },
+          {
+            "input": 15,
+            "level": 10
+          },
+          {
+            "input": 30,
+            "level": 16
+          },
+          {
+            "input": 45,
+            "level": 23
+          },
+          {
+            "input": 65,
+            "level": 32
+          },
+          {
+            "input": 90,
+            "level": 43
+          },
+          {
+            "input": 115,
+            "level": 50
+          }
+        ],
+        "gpuPowerCurve": [
+          {
+            "input": 0,
+            "level": 10
+          },
+          {
+            "input": 20,
+            "level": 10
+          },
+          {
+            "input": 40,
+            "level": 16
+          },
+          {
+            "input": 70,
+            "level": 24
+          },
+          {
+            "input": 95,
+            "level": 34
+          },
+          {
+            "input": 115,
+            "level": 42
+          },
+          {
+            "input": 140,
+            "level": 50
+          }
+        ],
+        "cpuLoadCurve": [
+          {
+            "input": 0,
+            "level": 10
+          },
+          {
+            "input": 25,
+            "level": 10
+          },
+          {
+            "input": 50,
+            "level": 12
+          },
+          {
+            "input": 75,
+            "level": 18
+          },
+          {
+            "input": 100,
+            "level": 24
+          }
+        ],
+        "gpuLoadCurve": [
+          {
+            "input": 0,
+            "level": 10
+          },
+          {
+            "input": 25,
+            "level": 10
+          },
+          {
+            "input": 50,
+            "level": 12
+          },
+          {
+            "input": 75,
+            "level": 18
+          },
+          {
+            "input": 100,
+            "level": 24
+          }
+        ]
+      }
+    },
+    "unifiedDemand": {
+      "schemaVersion": 1,
+      "cpuTemperatureInfluence": 100,
+      "gpuTemperatureInfluence": 120,
+      "cpuPowerInfluence": 40,
+      "gpuPowerInfluence": 60,
+      "cpuLoadInfluence": 20,
+      "gpuLoadInfluence": 20,
+      "curve": [
+        {
+          "input": 0,
+          "level": 12
+        },
+        {
+          "input": 20,
+          "level": 12
+        },
+        {
+          "input": 40,
+          "level": 21
+        },
+        {
+          "input": 60,
+          "level": 28
+        },
+        {
+          "input": 76,
+          "level": 35
+        },
+        {
+          "input": 90,
+          "level": 44
+        },
+        {
+          "input": 100,
+          "level": 50
+        }
+      ]
+    }
+  },
+  "battery": {
+    "schemaVersion": 1,
+    "tuning": {
+      "cpuTemperatureSource": 2,
+      "hottestPerformanceCoreCount": 3,
+      "minimumLevel": 10,
+      "maximumLevel": 50,
+      "riseTimeConstantSeconds": 14,
+      "fallTimeConstantSeconds": 40,
+      "increaseConfirmationSeconds": 8,
+      "decreaseConfirmationSeconds": 26,
+      "normalMaximumUpStepLevels": 1,
+      "maximumDownStepLevels": 1,
+      "thermalMaximumUpStepLevels": 4,
+      "cpuThermalOverrideC": 85,
+      "gpuThermalOverrideC": 78,
+      "rememberThermalDemand": false,
+      "normalDecreaseHysteresisLevels": 0,
+      "thermalDecreaseHoldSeconds": 0,
+      "normalPollingDelayMilliseconds": 1000,
+      "adaptiveDescentEnabled": true,
+      "shortLoadFallTimeConstantSeconds": 32,
+      "shortLoadDecreaseConfirmationSeconds": 24,
+      "sustainedLoadSeconds": 180,
+      "loadThresholdPercent": 50,
+      "cpuLoadPowerThresholdW": 25,
+      "gpuLoadPowerThresholdW": 35,
+      "loadPauseToleranceSeconds": 30,
+      "sustainedLoadCooldownSeconds": 120
+    },
+    "profile": {
+      "schemaVersion": 1,
+      "id": "911be76e54814f12a56bdb8eb193cf90",
+      "name": "Silencioso Batería",
+      "config": {
+        "schemaVersion": 1,
+        "targetProfileId": "HP-8C40-9D0R1LA-F18",
+        "purpose": "shadow-only",
+        "authorizedForProduction": false,
+        "minimumLevel": 10,
+        "maximumLevel": 50,
+        "maximumUpStepPerSample": 4,
+        "maximumDownStepPerSample": 1,
+        "decreaseConfirmationSamples": 5,
+        "decreaseDeadbandLevels": 1,
+        "maximumSampleGapSeconds": 3,
+        "cpuTemperatureCurve": [
+          {
+            "input": 40,
+            "level": 10
+          },
+          {
+            "input": 50,
+            "level": 13
+          },
+          {
+            "input": 60,
+            "level": 18
+          },
+          {
+            "input": 70,
+            "level": 26
+          },
+          {
+            "input": 78,
+            "level": 35
+          },
+          {
+            "input": 85,
+            "level": 44
+          },
+          {
+            "input": 90,
+            "level": 50
+          }
+        ],
+        "gpuTemperatureCurve": [
+          {
+            "input": 35,
+            "level": 10
+          },
+          {
+            "input": 45,
+            "level": 12
+          },
+          {
+            "input": 55,
+            "level": 17
+          },
+          {
+            "input": 65,
+            "level": 26
+          },
+          {
+            "input": 72,
+            "level": 35
+          },
+          {
+            "input": 78,
+            "level": 44
+          },
+          {
+            "input": 81,
+            "level": 50
+          }
+        ],
+        "cpuPowerCurve": [
+          {
+            "input": 0,
+            "level": 10
+          },
+          {
+            "input": 10,
+            "level": 10
+          },
+          {
+            "input": 15,
+            "level": 12
+          },
+          {
+            "input": 25,
+            "level": 17
+          },
+          {
+            "input": 40,
+            "level": 24
+          },
+          {
+            "input": 60,
+            "level": 32
+          },
+          {
+            "input": 90,
+            "level": 43
+          },
+          {
+            "input": 115,
+            "level": 50
+          }
+        ],
+        "gpuPowerCurve": [
+          {
+            "input": 0,
+            "level": 10
+          },
+          {
+            "input": 10,
+            "level": 10
+          },
+          {
+            "input": 20,
+            "level": 12
+          },
+          {
+            "input": 40,
+            "level": 17
+          },
+          {
+            "input": 70,
+            "level": 26
+          },
+          {
+            "input": 95,
+            "level": 36
+          },
+          {
+            "input": 115,
+            "level": 44
+          },
+          {
+            "input": 140,
+            "level": 50
+          }
+        ],
+        "cpuLoadCurve": [
+          {
+            "input": 0,
+            "level": 10
+          },
+          {
+            "input": 25,
+            "level": 10
+          },
+          {
+            "input": 50,
+            "level": 12
+          },
+          {
+            "input": 75,
+            "level": 18
+          },
+          {
+            "input": 100,
+            "level": 24
+          }
+        ],
+        "gpuLoadCurve": [
+          {
+            "input": 0,
+            "level": 10
+          },
+          {
+            "input": 25,
+            "level": 10
+          },
+          {
+            "input": 50,
+            "level": 12
+          },
+          {
+            "input": 75,
+            "level": 18
+          },
+          {
+            "input": 100,
+            "level": 24
+          }
+        ]
+      }
+    },
+    "unifiedDemand": {
+      "schemaVersion": 1,
+      "cpuTemperatureInfluence": 100,
+      "gpuTemperatureInfluence": 100,
+      "cpuPowerInfluence": 20,
+      "gpuPowerInfluence": 35,
+      "cpuLoadInfluence": 10,
+      "gpuLoadInfluence": 10,
+      "curve": [
+        {
+          "input": 0,
+          "level": 10
+        },
+        {
+          "input": 25,
+          "level": 10
+        },
+        {
+          "input": 40,
+          "level": 12
+        },
+        {
+          "input": 60,
+          "level": 24
+        },
+        {
+          "input": 76,
+          "level": 35
+        },
+        {
+          "input": 90,
+          "level": 44
+        },
+        {
+          "input": 100,
+          "level": 50
+        }
+      ]
+    }
+  }
+}

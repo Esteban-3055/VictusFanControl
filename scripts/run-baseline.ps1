@@ -22,3 +22,5 @@ dotnet run --project .\src\VictusFanControl -c Release -- `
     --interval-ms $IntervalMs `
     --duration-seconds $seconds `
     --output $output
+
+exit $LASTEXITCODE

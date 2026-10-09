@@ -2,7 +2,7 @@ name: build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'feature/**', 'integration/**' ]
   pull_request:
     branches: [ main ]
 
@@ -18,8 +18,890 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Restore
         run: dotnet restore VictusFanControl.sln
 
+      # Hosted runners can spend more than five seconds initializing CIM's
+      # service provider. Warm only this read-only inventory query; the actual
+      # isolation guards keep their existing five-second fail-closed deadline.
+      - name: Initialize hosted Windows service inventory for bounded guards
+        shell: pwsh
+        timeout-minutes: 1
+        run: |
+          Get-CimInstance Win32_Service -Filter "Name LIKE 'VictusFanControl%'" -OperationTimeoutSec 30 -ErrorAction Stop | Out-Null
+
+      - name: Intel RAPL bounded P1 build and recovery fixtures (no hardware IO)
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "CPU probe PowerShell 5.1 build/fixtures failed." }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-intel-rapl-p1.ps1 -SelfTest -WriteTest -PL1Watts 20 -PL2Watts 40
+          if ($LASTEXITCODE -ne 0) { throw "CPU probe explicit 20/40 PowerShell 5.1 validation failed." }
+
+      - name: PowerShell syntax check
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem .\scripts -Filter *.ps1 -File | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName,
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Host ("PowerShell parse failure in {0}" -f $_.FullName) -ForegroundColor Red
+              $errors | Format-List | Out-String | Write-Host
+            }
+          }
+
+          if ($failed) {
+            exit 1
+          }
+
+      - name: Explicit GUI Performance recovery fixtures (no hardware IO)
+        shell: pwsh
+        run: |
+          dotnet build src/VictusFanControl.PerformanceGuardian -c Release -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Recovery fixture build failed.' }
+          & .\src\VictusFanControl.PerformanceGuardian\bin\Release\net8.0-windows\VictusFanControl.PerformanceGuardian.exe --gui-recovery-self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Recovery fixtures failed.' }
+
+      - name: WMI Block1 grouped harness fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\test-wmi-block1.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-wmi-block1.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Block1 PowerShell 5.1 evidence self-test failed.' }
+
+      - name: Passive Manual WMI timeout collector fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Collect-Victus-WmiTimeout.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Collect-Victus-WmiTimeout.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Collector PowerShell 5.1 self-test failed.' }
+
+      - name: GM26 response contract fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Test-Victus-AcpiGm26.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-Victus-AcpiGm26.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'GM26 PowerShell 5.1 self-test failed.' }
+
+      - name: ACPI coverage sequence fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Test-Victus-AcpiCoverage.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-Victus-AcpiCoverage.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'ACPI coverage PowerShell 5.1 self-test failed.' }
+
+      - name: ACPI broker metadata fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Export-Victus-AcpiBrokerPreflight.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Export-Victus-AcpiBrokerPreflight.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Broker preflight PowerShell 5.1 self-test failed.' }
+
+      - name: ACPI broker metadata rejection evidence on non-target Windows runner
+        shell: powershell
+        run: |
+          $probeRoot = Join-Path $env:RUNNER_TEMP ('broker-preflight-' + [Guid]::NewGuid().ToString('N'))
+          $rejected = $false
+          try { .\scripts\Export-Victus-AcpiBrokerPreflight.ps1 -RecoveryMetadata -OutputRoot $probeRoot } catch { $rejected = $true }
+          if (-not $rejected) { throw 'Non-target preflight accepted.' }
+          $folder = @(Get-ChildItem $probeRoot -Directory)
+          if ($folder.Count -ne 1) { throw 'Preflight evidence missing.' }
+          $summary = Get-Content (Join-Path $folder[0].FullName 'summary.json') -Raw | ConvertFrom-Json
+          if ($summary.MetadataCollected -or $summary.ProductionReady -or $summary.AcpiEvaluationPerformed -or $summary.DirectEcAccess -or $summary.FanSetters -or $summary.DriverInstalled) { throw 'Invalid rejected preflight summary.' }
+          if ($summary.Reason -notmatch 'probe requires HP 8C40') { throw 'Expected identity rejection missing.' }
+          if (Test-Path (Join-Path $folder[0].FullName 'pnputil.json')) { throw 'PnP listing ran before target qualification.' }
+          if (Test-Path (Join-Path $folder[0].FullName 'recovery-metadata.json')) { throw 'Recovery query ran before target qualification.' }
+          $zip = $folder[0].FullName + '.zip'
+          if ((Get-Content ($zip + '.sha256') -Raw).Trim() -ne (Get-FileHash $zip -Algorithm SHA256).Hash) { throw 'ZIP hash mismatch.' }
+          $manifest = Get-Content (Join-Path $folder[0].FullName 'manifest.json') -Raw | ConvertFrom-Json
+          foreach ($item in $manifest) {
+            $file = Get-Item (Join-Path $folder[0].FullName $item.file)
+            if ($item.bytes -ne $file.Length -or $item.sha256 -ne (Get-FileHash $file.FullName -Algorithm SHA256).Hash) { throw 'Manifest mismatch.' }
+          }
+
+      - name: GM26 parent child rejection on non-target Windows runner
+        shell: pwsh
+        run: |
+          $probeRoot = Join-Path $env:RUNNER_TEMP ('gm26-rejection-' + [Guid]::NewGuid().ToString('N'))
+          $rejected = $false
+          try { .\scripts\Test-Victus-AcpiGm26.ps1 -OutputRoot $probeRoot } catch { $rejected = $true; Write-Host ($_ | Out-String) }
+          if (-not $rejected) { throw 'Non-target probe was accepted.' }
+          $folder = @(Get-ChildItem $probeRoot -Directory)
+          if ($folder.Count -ne 1) { throw 'Probe evidence missing.' }
+          $summary = Get-Content (Join-Path $folder[0].FullName 'summary.json') -Raw | ConvertFrom-Json
+          if ($summary.Healthy -or $summary.Samples -ne 0 -or $summary.ChildExitCode -ne 1) { throw 'Rejected child summary invalid.' }
+          if (Test-Path (Join-Path $folder[0].FullName 'calls.jsonl')) { throw 'HP request began before target qualification.' }
+          $errorText = Get-Content (Join-Path $folder[0].FullName 'child-error.txt') -Raw
+          if ($errorText -notmatch 'probe requires HP 8C40') { throw 'Expected target rejection missing.' }
+          if (-not (Test-Path ($folder[0].FullName + '.zip'))) { throw 'Rejected evidence ZIP missing.' }
+
+      - name: ACPI coverage parent child rejection on non-target Windows runner
+        shell: powershell
+        run: |
+          $probeRoot = Join-Path $env:RUNNER_TEMP ('acpi-coverage-rejection-' + [Guid]::NewGuid().ToString('N'))
+          $rejected = $false
+          try { .\scripts\Test-Victus-AcpiCoverage.ps1 -Correlation -OutputRoot $probeRoot } catch { $rejected = $true; Write-Host ($_ | Out-String) }
+          if (-not $rejected) { throw 'Non-target coverage probe was accepted.' }
+          $folder = @(Get-ChildItem $probeRoot -Directory)
+          if ($folder.Count -ne 1) { throw 'Coverage evidence missing.' }
+          $summary = Get-Content (Join-Path $folder[0].FullName 'summary.json') -Raw | ConvertFrom-Json
+          if (-not $summary.CorrelationRequested -or -not $summary.FanStatusRequested -or $summary.RequestedSamples -ne 18 -or $summary.MaximumRequests -ne 109) { throw 'Correlation parent configuration invalid.' }
+          if ($summary.Healthy -or $summary.ProductionReady -or $summary.Samples -ne 0 -or $summary.ChildExitCode -ne 1) { throw 'Rejected child summary invalid.' }
+          if (Test-Path (Join-Path $folder[0].FullName 'calls.jsonl')) { throw 'HP request began before target qualification.' }
+          if ((Get-Content (Join-Path $folder[0].FullName 'child-error.txt') -Raw) -notmatch 'probe requires HP 8C40') { throw 'Expected target rejection missing.' }
+          if (-not (Test-Path ($folder[0].FullName + '.zip'))) { throw 'Rejected evidence ZIP missing.' }
+          $expectedHash = (Get-Content ($folder[0].FullName + '.zip.sha256') -Raw).Trim()
+          if ($expectedHash -ne (Get-FileHash ($folder[0].FullName + '.zip') -Algorithm SHA256).Hash) { throw 'Evidence ZIP hash mismatch.' }
+          $manifest = Get-Content (Join-Path $folder[0].FullName 'manifest.json') -Raw | ConvertFrom-Json
+          foreach ($item in $manifest) {
+            if ($item.sha256 -ne (Get-FileHash (Join-Path $folder[0].FullName $item.file) -Algorithm SHA256).Hash) { throw 'Evidence member hash mismatch.' }
+          }
+
+      - name: Scenario A passive isolation fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Start-Victus-ScenarioA.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-ScenarioA.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Scenario A PowerShell 5.1 self-test failed.' }
+
+      - name: WMI-only isolation launcher fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Start-Victus-WmiOnlyInvestigation.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-WmiOnlyInvestigation.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Isolation PowerShell 5.1 self-test failed.' }
+
+      - name: Scenario B native child fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Start-Victus-ScenarioB.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-ScenarioB.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Scenario B PowerShell 5.1 self-test failed.' }
+
+      - name: Scenario C residual EC launcher fixtures PowerShell 7 and 5.1
+        shell: pwsh
+        run: |
+          .\scripts\Start-Victus-ScenarioC.ps1 -SelfTest
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Start-Victus-ScenarioC.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Scenario C PowerShell 5.1 self-test failed.' }
+
+      - name: ACPI collector Windows smoke and ETW session cleanup
+        shell: powershell
+        run: |
+          $captureRoot = Join-Path $env:RUNNER_TEMP ('vfc-acpi-smoke-' + [Guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $captureRoot | Out-Null
+          $context = @{Started=$false;Guarded=$false;Finished=$false}
+          $start = {param($path,$state) $state.Started=$true; $state.Path=$path}
+          $guard = {param($path,$state) if (-not $state.Started -or $state.Finished -or $path -ne $state.Path) {throw 'Hook order invalid.'}; $state.Guarded=$true}
+          $finish = {param($path,$state) if (-not $state.Started -or -not $state.Guarded) {throw 'Hook order invalid.'}; $state.Finished=$true; Set-Content (Join-Path $path 'hook-finished.txt') 'finished-before-zip'}
+          .\scripts\Collect-Victus-WmiTimeout.ps1 -RepoRoot $env:GITHUB_WORKSPACE -OutputRoot $captureRoot -CaptureMinutes 0 -EventHours 1 -MaximumEvents 100 -ObservationStarted $start -ObservationGuard $guard -ObservationFinished $finish -ObservationContext $context
+          if (-not $context.Finished) { throw 'Collector observation hooks failed.' }
+          $result = @(Get-ChildItem $captureRoot -Directory)
+          if ($result.Count -ne 1) { throw 'Collector result missing.' }
+          $summary = Get-Content (Join-Path $result[0].FullName 'capture-summary.json') -Raw | ConvertFrom-Json
+          if ($summary.HardwareReads -or $summary.FanWrites -or $summary.EventChannelsEnabled) { throw 'Collector altered collection scope.' }
+          $commands = @(Get-Content (Join-Path $result[0].FullName 'commands.json') -Raw | ConvertFrom-Json)
+          $firmware = @($commands | Where-Object { $_.Destination -match 'acpi[\\/]capture.txt$' })
+          if ($firmware.Count -ne 1 -or $firmware[0].Status -ne 'ok') { throw 'Static firmware helper failed in Windows.' }
+          $tables = @(Get-Content (Join-Path $result[0].FullName 'acpi\tables\tables.json') -Raw | ConvertFrom-Json)
+          if (-not (Test-Path (Join-Path $result[0].FullName 'acpi\tables\registry-tables.json'))) { throw 'Registry ACPI coverage metadata missing.' }
+          $tables | ConvertTo-Json -Depth 8 | Write-Host
+          if (@($tables | Where-Object { $_.Status -eq 'exported-first-instance' }).Count -eq 0) { throw 'Windows firmware API exported no tables.' }
+          $enumeration = @(Get-Content (Join-Path $result[0].FullName 'acpi\tables\enumeration.json') -Raw | ConvertFrom-Json)
+          if (@($enumeration | Where-Object { $_.Signature -eq 'DSDT' }).Count -gt 0 -and @($tables | Where-Object { $_.Signature -eq 'DSDT' -and $_.Status -eq 'exported-first-instance' }).Count -ne 1) { throw 'Advertised DSDT capture missing.' }
+          $sessions = @(Get-Content (Join-Path $result[0].FullName 'etw\sessions.json') -Raw | ConvertFrom-Json)
+          foreach ($session in $sessions) {
+            if ($session.StartStatus -ne 'ok' -or $session.StopStatus -ne 'ok') { throw 'ETW start/stop failed.' }
+            logman.exe query $session.Name -ets 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { throw 'Collector ETW session leaked.' }
+          }
+          $xml = Get-Content (Join-Path $result[0].FullName 'windows-events\before\System.txt') -Raw
+          if ($xml -notmatch 'MESSAGE_JSON') { throw 'Rendered Windows messages missing.' }
+          if (-not (Test-Path (Join-Path $result[0].FullName 'windows-events\before\System.evtx'))) { throw 'EVTX export missing.' }
+          if (-not (Test-Path ($result[0].FullName + '.zip'))) { throw 'Collector ZIP missing.' }
+          $archive = [IO.Compression.ZipFile]::OpenRead($result[0].FullName + '.zip')
+          try {if (@($archive.Entries | Where-Object {$_.FullName -match 'hook-finished.txt$'}).Count -ne 1) {throw 'Observation finished after ZIP.'}} finally {$archive.Dispose()}
+          Write-Host ('PASS: Windows firmware/messages/EVTX, ZIP and cleanup; ETW sessions=' + $sessions.Count)
+          # The negative logman query above is expected; do not propagate its exit code.
+          exit 0
+
+      - name: HP WMI fan broker and reader invariants PowerShell 7
+        shell: pwsh
+        run: |
+          .\scripts\test-wmi-fan-telemetry-invariants.ps1
+          .\scripts\test-wmi-fan-control-invariants.ps1
+
+      - name: Gate E contention and causality invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-e-invariants.ps1
+
+      - name: Gate F double-death invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-f-invariants.ps1
+
+      - name: Gate G0 watchdog clock invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-g0-clock-invariants.ps1
+
+      - name: Gate G1 lifecycle invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-g1-invariants.ps1
+
+      - name: Gate G2 5/5 lifecycle invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-gate-g2-invariants.ps1
+
+      - name: HP 8C40 legacy 88F8 isolation invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-legacy-isolation-invariants.ps1
+
+      - name: HP 8C40 M5A controller-death invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-m5a-8c40-invariants.ps1
+
+      - name: HP 8C40 M5B watchdog-death invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-m5b-8c40-invariants.ps1
+
+      - name: HP 8C40 M5C no-write preflight invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-m5c-preflight-invariants.ps1
+
+      - name: HP 8C40 M5C destructive double-death invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-m5c-double-death-invariants.ps1
+
+      - name: HP 8C40 M5D WRITE_ARMED post-WMI pre-Commit invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-m5d-write-armed-invariants.ps1
+
+      - name: HP 8C40 M5E WRITE_ARMED double-death invariant self-test
+        shell: pwsh
+        run: .\scripts\test-watchdog-m5e-write-armed-double-death-invariants.ps1
+
+      - name: HP 8C40 M6 Modern Standby lifecycle invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-modern-standby-m6-invariants.ps1
+
+      - name: HP 8C40 M6 preflight/physical harness invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-modern-standby-m6-harness-invariants.ps1
+
+      - name: HP 8C40 M7 hibernation lifecycle invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-hibernation-m7-invariants.ps1
+
+      - name: HP 8C40 M7 preflight/physical harness invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-hibernation-m7-harness-invariants.ps1
+
+      - name: HP 8C40 M8 load/thermal qualification invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-load-thermal-m8-invariants.ps1
+
+      - name: HP 8C40 M8 no-write preflight invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-load-thermal-m8-preflight-invariants.ps1
+
+      - name: HP 8C40 M8A representative-load no-write harness invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-load-thermal-m8a-invariants.ps1
+
+      - name: HP 8C40 M8B watchdog-backed load harness invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-load-thermal-m8b-invariants.ps1
+
+      - name: HP 8C40 M8B native child PID and ExitCode self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-m8b-tracked-child-selftest.ps1
+
+      - name: HP 8C40 M8C native child PID and ExitCode self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-m8c-tracked-child-selftest.ps1
+
+      - name: HP 8C40 M8C automatic evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-m8c-evidence-packaging.ps1
+
+      - name: HP 8C40 M8C EC transient hardening invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m8c-ec-transient-invariants.ps1
+
+      - name: HP 8C40 M8C synthetic thermal-preemption invariant self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-load-thermal-m8c-invariants.ps1
+
+      - name: HP 8C40 M8C hard-blocked physical-controller preparation invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-load-thermal-m8c-physical-preparation-invariants.ps1
+
+      - name: HP 8C40 M8C parent physical harness preparation invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-load-thermal-m8c-harness-invariants.ps1
+
+      - name: HP 8C40 M8 production-race code/CI audit invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m8-production-race-audit-invariants.ps1
+
+      - name: HP 8C40 M9 production-watchdog preparation invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9-production-watchdog-invariants.ps1
+
+      - name: HP 8C40 M9B read-only preflight invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9b-readonly-preflight-invariants.ps1
+
+      - name: HP 8C40 M9B evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-m9b-evidence-packaging.ps1
+
+      - name: HP 8C40 M9C production-path smoke preparation invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9c-production-smoke-invariants.ps1
+
+      - name: HP 8C40 M9C parent harness/failsafe/evidence invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9c-harness-invariants.ps1
+
+      - name: HP 8C40 M9C native tracked child self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-m9c-tracked-child-selftest.ps1
+
+      - name: HP 8C40 M9C evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-m9c-evidence-packaging.ps1
+
+      - name: HP 8C40 M9 GUI watchdog service-bootstrap invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9-watchdog-service-bootstrap-invariants.ps1
+
+      - name: HP 8C40 M9D production-lifecycle preparation invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9d-production-lifecycle-invariants.ps1
+
+      - name: HP 8C40 M9D parent harness invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9d-harness-invariants.ps1
+
+      - name: HP 8C40 M9D native tracked child self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-m9d-tracked-child-selftest.ps1
+
+      - name: HP 8C40 M9D evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-8c40-m9d-evidence-packaging.ps1
+
+      - name: HP 8C40 M9 promotion-readiness invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-m9-promotion-readiness-invariants.ps1
+
+      - name: HP 8C40 P10 post-M9 software invariant
+        shell: pwsh
+        run: .\scripts\test-8c40-post-m9-software-invariants.ps1
+
+      - name: HP 8C40 P11 adaptive production adapter invariant
+        shell: pwsh
+        run: .\scripts\test-adaptive-production-integration-invariants.ps1
+
+      - name: HP 8C40 P12 adaptive candidate curve invariant
+        shell: pwsh
+        run: .\scripts\test-adaptive-candidate-v1-invariants.ps1
+
+      - name: HP 8C40 P13 final software control-surface invariant
+        shell: pwsh
+        run: .\scripts\test-p13-control-surface-invariants.ps1
+
+      - name: HP 8C40 P14 software readiness baseline invariant
+        shell: pwsh
+        run: .\scripts\test-p14-software-rc-readiness-invariants.ps1
+
+      - name: HP 8C40 P14.2 publish-layout static invariant
+        shell: pwsh
+        run: .\scripts\test-p14-publish-layout-invariants.ps1
+
+      - name: HP 8C40 P14.3 deterministic package static invariant
+        shell: pwsh
+        run: .\scripts\test-p14-package-invariants.ps1
+
+      - name: HP 8C40 P14.4 retained CI artifact static invariant
+        shell: pwsh
+        run: .\scripts\test-p14-artifact-invariants.ps1
+
+      - name: HP 8C40 P14.5 final software RC audit invariant
+        shell: pwsh
+        run: .\scripts\test-p14-final-software-rc-audit-invariants.ps1
+
+      - name: HP 8C40 P15A startup no-write preparation invariant
+        shell: pwsh
+        run: .\scripts\test-p15-startup-no-write-invariants.ps1
+
+      - name: HP 8C40 P15A RC payload layout self-test
+        shell: pwsh
+        run: .\scripts\test-p15-rc-payload-layout.ps1
+
+      - name: HP 8C40 P15A evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-p15-startup-evidence-packaging.ps1
+
+      - name: HP 8C40 P15B Manual30 preparation invariant
+        shell: pwsh
+        run: .\scripts\test-p15b-manual30-invariants.ps1
+
+      - name: HP 8C40 P15B service-baseline resolver self-test
+        shell: pwsh
+        run: .\scripts\test-p15b-service-baseline-selftest.ps1
+
+      - name: HP 8C40 P15B native tracked child self-test
+        shell: pwsh
+        run: .\scripts\test-p15b-tracked-child-selftest.ps1
+
+      - name: HP 8C40 P15B evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-p15b-evidence-packaging.ps1
+
+      - name: HP 8C40 P15C real-GUI Manual preparation invariant
+        shell: pwsh
+        run: .\scripts\test-p15c-gui-manual-invariants.ps1
+
+      - name: HP 8C40 P15C evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-p15c-evidence-packaging.ps1
+
+      - name: HP 8C40 P15D1 tray-exit lifecycle preparation invariant
+        shell: pwsh
+        run: .\scripts\test-p15d1-tray-exit-invariants.ps1
+
+      - name: HP 8C40 P15D1 evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-p15d1-evidence-packaging.ps1
+
+      - name: HP 8C40 P15D2 variable Manual preparation invariant
+        shell: pwsh
+        run: .\scripts\test-p15d2-variable-manual-invariants.ps1
+
+      - name: HP 8C40 P15D2 evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-p15d2-evidence-packaging.ps1
+
+      - name: HP 8C40 P17 curve editor isolation invariant
+        shell: pwsh
+        run: .\scripts\test-p17-curve-editor-invariants.ps1
+
+      - name: HP 8C40 P16C Manual promotion invariant
+        shell: pwsh
+        run: .\scripts\test-p16c-manual-promotion-invariants.ps1
+
+      - name: HP 8C40 P16A normal Manual preparation invariant
+        shell: pwsh
+        run: .\scripts\test-p16-normal-manual-invariants.ps1
+
+      - name: HP 8C40 P16A evidence packaging self-test
+        shell: pwsh
+        run: .\scripts\test-p16-evidence-packaging.ps1
+
+      - name: HP 8C40 P16B hardening helper self-test
+        shell: pwsh
+        run: .\scripts\test-p16-hardening-helpers.ps1
+
+      - name: HP 8C40 P16B helper Windows PowerShell 5.1 runtime self-test
+        shell: powershell
+        run: |
+          Write-Host ("Windows PowerShell version: {0}" -f $PSVersionTable.PSVersion)
+          if ($PSVersionTable.PSVersion.Major -ne 5) {
+            throw "Expected Windows PowerShell 5.x compatibility shell."
+          }
+          .\scripts\test-p16-hardening-helpers.ps1
+          .\scripts\test-wmi-fan-telemetry-invariants.ps1
+          .\scripts\test-wmi-fan-control-invariants.ps1
+
+      - name: Adaptive fan policy isolation/invariant self-test
+        shell: pwsh
+        run: .\scripts\test-adaptive-policy-invariants.ps1
+
+      - name: HP 8C40 final Automatic qualification invariants
+        shell: pwsh
+        run: .\scripts\test-automatic-final-qualification-invariants.ps1
+
+      - name: HP 8C40 M5-M8 invariants Windows PowerShell 5.1 compatibility
+        shell: powershell
+        run: |
+          Write-Host ("Windows PowerShell version: {0}" -f $PSVersionTable.PSVersion)
+          if ($PSVersionTable.PSVersion.Major -ne 5) {
+            throw "Expected Windows PowerShell 5.x compatibility shell."
+          }
+          .\scripts\test-watchdog-m5a-8c40-invariants.ps1
+          .\scripts\test-watchdog-m5b-8c40-invariants.ps1
+          .\scripts\test-watchdog-m5c-preflight-invariants.ps1
+          .\scripts\test-watchdog-m5c-double-death-invariants.ps1
+          .\scripts\test-watchdog-m5d-write-armed-invariants.ps1
+          .\scripts\test-watchdog-m5e-write-armed-double-death-invariants.ps1
+          .\scripts\test-8c40-modern-standby-m6-invariants.ps1
+          .\scripts\test-8c40-modern-standby-m6-harness-invariants.ps1
+          .\scripts\test-8c40-hibernation-m7-invariants.ps1
+          .\scripts\test-8c40-hibernation-m7-harness-invariants.ps1
+          .\scripts\test-8c40-load-thermal-m8-invariants.ps1
+          .\scripts\test-8c40-load-thermal-m8-preflight-invariants.ps1
+          .\scripts\test-8c40-load-thermal-m8a-invariants.ps1
+          .\scripts\test-8c40-load-thermal-m8b-invariants.ps1
+          .\scripts\test-8c40-m8b-tracked-child-selftest.ps1
+          .\scripts\test-8c40-m8c-tracked-child-selftest.ps1
+          .\scripts\test-8c40-m8c-evidence-packaging.ps1
+          .\scripts\test-8c40-m8c-ec-transient-invariants.ps1
+          .\scripts\test-8c40-load-thermal-m8c-invariants.ps1
+          .\scripts\test-8c40-load-thermal-m8c-physical-preparation-invariants.ps1
+          .\scripts\test-8c40-load-thermal-m8c-harness-invariants.ps1
+          .\scripts\test-8c40-m8-production-race-audit-invariants.ps1
+          .\scripts\test-8c40-m9-production-watchdog-invariants.ps1
+          .\scripts\test-8c40-m9b-readonly-preflight-invariants.ps1
+          .\scripts\test-8c40-m9b-evidence-packaging.ps1
+          .\scripts\test-8c40-m9c-production-smoke-invariants.ps1
+          .\scripts\test-8c40-m9c-harness-invariants.ps1
+          .\scripts\test-8c40-m9c-tracked-child-selftest.ps1
+          .\scripts\test-8c40-m9c-evidence-packaging.ps1
+          .\scripts\test-8c40-m9-watchdog-service-bootstrap-invariants.ps1
+          .\scripts\test-8c40-m9d-production-lifecycle-invariants.ps1
+          .\scripts\test-8c40-m9d-harness-invariants.ps1
+          .\scripts\test-8c40-m9d-tracked-child-selftest.ps1
+          .\scripts\test-8c40-m9d-evidence-packaging.ps1
+          .\scripts\test-8c40-m9-promotion-readiness-invariants.ps1
+          .\scripts\test-8c40-post-m9-software-invariants.ps1
+          .\scripts\test-adaptive-production-integration-invariants.ps1
+          .\scripts\test-adaptive-candidate-v1-invariants.ps1
+          .\scripts\test-p13-control-surface-invariants.ps1
+          .\scripts\test-p14-software-rc-readiness-invariants.ps1
+          .\scripts\test-p14-publish-layout-invariants.ps1
+          .\scripts\test-p14-package-invariants.ps1
+          .\scripts\test-p14-artifact-invariants.ps1
+          .\scripts\test-p14-final-software-rc-audit-invariants.ps1
+          .\scripts\test-p15-startup-no-write-invariants.ps1
+          .\scripts\test-p15-rc-payload-layout.ps1
+          .\scripts\test-p15-startup-evidence-packaging.ps1
+          .\scripts\test-p15b-manual30-invariants.ps1
+          .\scripts\test-p15b-service-baseline-selftest.ps1
+          .\scripts\test-p15b-tracked-child-selftest.ps1
+          .\scripts\test-p15b-evidence-packaging.ps1
+          .\scripts\test-p15c-gui-manual-invariants.ps1
+          .\scripts\test-p15c-evidence-packaging.ps1
+          .\scripts\test-p15d1-tray-exit-invariants.ps1
+          .\scripts\test-p15d1-evidence-packaging.ps1
+          .\scripts\test-p16-normal-manual-invariants.ps1
+          .\scripts\test-p16c-manual-promotion-invariants.ps1
+          .\scripts\test-p16-evidence-packaging.ps1
+          .\scripts\test-p16-hardening-helpers.ps1
+          .\scripts\test-adaptive-policy-invariants.ps1
+
       - name: Build
-        run: dotnet build VictusFanControl.sln -c Release --no-restore
+        run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
+
+      - name: HP 8C40 P14.2 build and verify win-x64 publish layout
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.2-publish'
+          .\scripts\build-p14-publish-layout.ps1 -OutputRoot $out
+          .\scripts\verify-p14-publish-layout.ps1 -OutputRoot $out
+
+      - name: HP 8C40 P14.3 build and verify deterministic RC package twice
+        shell: pwsh
+        run: |
+          $publish = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.3-publish'
+          $external = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.3-external'
+          $pkg1 = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.4-artifact'
+          $pkg2 = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.3-package-b'
+          .\scripts\build-p14-publish-layout.ps1 -OutputRoot $publish
+          .\scripts\fetch-p14-external-inputs.ps1 -OutputDirectory $external
+          $pawn = Join-Path $external 'release_0_2_11.zip'
+          .\scripts\package-p14-rc.ps1 -PublishRoot $publish -PawnIoArchivePath $pawn -OutputDirectory $pkg1 -SourceHead '${{ github.sha }}'
+          .\scripts\package-p14-rc.ps1 -PublishRoot $publish -PawnIoArchivePath $pawn -OutputDirectory $pkg2 -SourceHead '${{ github.sha }}'
+          $zip1 = Join-Path $pkg1 'VictusFanControl-0.4.0-rc.1-win-x64.zip'
+          $zip2 = Join-Path $pkg2 'VictusFanControl-0.4.0-rc.1-win-x64.zip'
+          .\scripts\verify-p14-package.ps1 -ZipPath $zip1 -Sha256Path ($zip1 + '.sha256') -ExpectedSourceHead '${{ github.sha }}'
+          .\scripts\verify-p14-package.ps1 -ZipPath $zip2 -Sha256Path ($zip2 + '.sha256') -ExpectedSourceHead '${{ github.sha }}'
+          $hash1 = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip1).Hash
+          $hash2 = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip2).Hash
+          if ($hash1 -ne $hash2) { throw "P14.3 deterministic package mismatch: $hash1 vs $hash2" }
+          Write-Host "P14.3 reproducible ZIP SHA-256: $hash1"
+
+      - name: HP 8C40 P14.4 stage retained artifact identity
+        shell: pwsh
+        run: |
+          $artifactDir = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.4-artifact'
+          $artifactName = "VictusFanControl-0.4.0-rc.1-win-x64-${{ github.sha }}"
+          .\scripts\write-p14-artifact-attestation.ps1 -ArtifactDirectory $artifactDir -SourceHead '${{ github.sha }}' -Repository '${{ github.repository }}' -Ref '${{ github.ref }}' -RunId '${{ github.run_id }}' -RunNumber '${{ github.run_number }}' -ArtifactName $artifactName
+          .\scripts\verify-p14-artifact-stage.ps1 -ArtifactDirectory $artifactDir -ExpectedSourceHead '${{ github.sha }}' -ExpectedRepository '${{ github.repository }}' -ExpectedRef '${{ github.ref }}' -ExpectedRunId '${{ github.run_id }}' -ExpectedRunNumber '${{ github.run_number }}' -ExpectedArtifactName $artifactName
+
+      - name: HP 8C40 M8A representative-load classifier self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --8c40-m8a-self-test
+
+      - name: HP 8C40 M8C synthetic thermal-preemption self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --8c40-m8c-self-test
+
+      - name: Modern Standby M0 observer self-test
+        run: dotnet run --project .\src\VictusFanControl.ModernStandbyProbe -c Release --no-build -- --self-test
+
+      - name: WMI-only GUI fan guardian integration fixtures (no hardware IO)
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --wmi-fan-gui-self-test
+
+      - name: Watchdog Gate B restore self-test
+        run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --gate-b-self-test
+
+      - name: Watchdog Gate C lease self-test
+        run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --gate-c-self-test
+
+      - name: HP 8C40 watchdog M2 read-only self-test
+        run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --m2-8c40-self-test
+
+      - name: HP 8C40 watchdog M3 restore-only self-test
+        run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --m3-8c40-self-test
+
+      - name: HP 8C40 watchdog M4 lease preparation self-test
+        run: dotnet run --project .\src\VictusFanControl.Watchdog -c Release --no-build -- --m4-8c40-self-test
+
+      - name: Scenario C residual EC policy and sampler self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --residual-ec-investigation-self-test
+
+      - name: HP WMI fan telemetry deterministic self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --fan-wmi-telemetry-self-test
+
+      - name: Opt-in investigation JSONL smoke without hardware
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:LOCALAPPDATA 'VictusFanControl\logs'
+          $before = @(Get-ChildItem $folder -Filter 'ec-wmi-*.log' -ErrorAction SilentlyContinue | ForEach-Object FullName)
+          $previous = $env:VFC_EC_WMI_DIAGNOSTICS
+          try {
+            $env:VFC_EC_WMI_DIAGNOSTICS = '1'
+            dotnet run --project .\src\VictusFanControl -c Release --no-build -- --fan-wmi-telemetry-self-test
+            if ($LASTEXITCODE -ne 0) { throw 'Instrumented software fixtures failed.' }
+          } finally { $env:VFC_EC_WMI_DIAGNOSTICS = $previous }
+          $files = @(Get-ChildItem $folder -Filter 'ec-wmi-*.log' | Where-Object { $_.FullName -notin $before })
+          if ($files.Count -ne 1) { throw 'Opt-in diagnostic session log missing.' }
+          $rows = @(Get-Content $files[0].FullName | ForEach-Object { $_ | ConvertFrom-Json })
+          if ($rows[0].kind -ne 'session' -or $rows[0].hardwareReadsAdded -or $rows[0].qpcFrequency -le 0 -or -not $rows[0].coreMvid) { throw 'Diagnostic session identity/clock missing.' }
+          if (@($rows | Where-Object { $_.Stage -eq 'selftest.fixture' -and $_.Detail -eq 'no hardware I/O' -and $_.TickMs -gt 0 -and $_.Qpc -gt 0 }).Count -ne 1) { throw 'Diagnostic original chronology missing.' }
+          if ($files[0].Length -gt 8388608) { throw 'Diagnostic log over file limit.' }
+          if ($rows[-1].Stage -ne 'selftest.finished') { throw 'Terminal diagnostic record was lost at process shutdown.' }
+          Write-Host 'PASS: opt-in JSONL, original clocks, MVID and bounded file; fixtures only.'
+
+      - name: Offline EC WMI analyzer CLI exports without hardware
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:LOCALAPPDATA 'VictusFanControl\logs'
+          $source = Get-ChildItem $folder -Filter 'ec-wmi-*.log' | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+          $before = (Get-FileHash $source.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $out = Join-Path $env:RUNNER_TEMP ('vfc-offline-report-' + [Guid]::NewGuid().ToString('N'))
+          dotnet run --project .\src\VictusFanControl -c Release --no-build -- --analyze-ec-wmi-trace $source.FullName --analysis-output-dir $out
+          if ($LASTEXITCODE -ne 0) { throw 'Offline analyzer CLI failed.' }
+          $summary = Get-Content (Join-Path $out 'summary.json') -Raw | ConvertFrom-Json
+          if (-not $summary.Analysis.ChronologyConsistent -or $summary.SourceSnapshotSha256 -ne $before -or $summary.Analysis.Pid -le 0) { throw 'Offline identity/coverage/hash failed.' }
+          foreach ($name in @('wmi-calls.csv','ec-reads.csv','report.md')) {if (-not (Test-Path (Join-Path $out $name))) {throw "Missing report $name"}}
+          if ((Get-FileHash $source.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $before) {throw 'Offline analyzer changed its source.'}
+          Write-Host 'PASS: offline CLI, original source unchanged, exact snapshot SHA-256, JSON/CSV/Markdown exports.'
+
+      - name: Safety gate self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --safety-self-test
+
+      - name: Fan authority self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --control-self-test
+
+      - name: Watchdog lease client protocol and EC contention retry self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --watchdog-lease-client-self-test
+
+      - name: Adaptive fan policy deterministic self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --adaptive-policy-self-test
+
+      - name: HP 8C40 P17 WinForms curve editor self-test
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --curve-editor-self-test
+
+      - name: Telemetry and fan acknowledgement coordination self-test
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --telemetry-coordination-self-test
+
+      - name: Configurable dashboard WinForms self-test and renders
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --dashboard-self-test
+
+      - name: Build isolated offline fan stability replay utility
+        run: dotnet build .\tools\FanStabilityReplay -c Release
+
+      - name: Definitive product GUI AC Battery bindings and Windows renders
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --product-gui-self-test
+
+      - name: Experimental physical platform Windows UI fixtures (no hardware IO)
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --platform-physical-self-test
+
+      - name: Product GUI prolonged isolated resource soak
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --product-gui-soak-self-test
+
+      - name: Performance CPU settings persistence self-test
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --performance-settings-self-test
+
+      - name: Performance GUI IPC and startup contract self-test
+        run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --performance-gui-self-test
+
+      - name: HP BIOS contract self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --bios-contract-self-test
+
+      - name: HP fan backend self-test
+        run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --hp-backend-self-test
+
+      - name: HP 8C40 P14.4 final retained artifact verification
+        shell: pwsh
+        run: |
+          $artifactDir = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.4-artifact'
+          $artifactName = "VictusFanControl-0.4.0-rc.1-win-x64-${{ github.sha }}"
+          .\scripts\verify-p14-artifact-stage.ps1 -ArtifactDirectory $artifactDir -ExpectedSourceHead '${{ github.sha }}' -ExpectedRepository '${{ github.repository }}' -ExpectedRef '${{ github.ref }}' -ExpectedRunId '${{ github.run_id }}' -ExpectedRunNumber '${{ github.run_number }}' -ExpectedArtifactName $artifactName
+
+      - name: HP 8C40 P14.4 upload retained RC artifact
+        id: p14_artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VictusFanControl-0.4.0-rc.1-win-x64-${{ github.sha }}
+          path: ${{ runner.temp }}/VictusFanControl-P14.4-artifact
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          overwrite: false
+
+      - name: HP 8C40 P14.4 report retained artifact identity
+        shell: pwsh
+        env:
+          P14_ARTIFACT_ID: ${{ steps.p14_artifact.outputs.artifact-id }}
+          P14_ARTIFACT_URL: ${{ steps.p14_artifact.outputs.artifact-url }}
+          P14_ARTIFACT_DIGEST: ${{ steps.p14_artifact.outputs.artifact-digest }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:P14_ARTIFACT_ID)) { throw 'P14.4 upload did not return an artifact ID.' }
+          if ([string]::IsNullOrWhiteSpace($env:P14_ARTIFACT_DIGEST)) { throw 'P14.4 upload did not return an artifact digest.' }
+          Write-Host "P14.4 GitHub artifact ID: $env:P14_ARTIFACT_ID"
+          Write-Host "P14.4 GitHub artifact digest: $env:P14_ARTIFACT_DIGEST"
+          Write-Host "P14.4 GitHub artifact URL: $env:P14_ARTIFACT_URL"
+
+      - name: HP 8C40 P14.5 write final audit evidence
+        shell: pwsh
+        env:
+          P14_RC_ARTIFACT_ID: ${{ steps.p14_artifact.outputs.artifact-id }}
+          P14_RC_ARTIFACT_DIGEST: ${{ steps.p14_artifact.outputs.artifact-digest }}
+        run: |
+          $evidenceDir = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.5-audit'
+          $rcStage = Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.4-artifact'
+          $rcName = "VictusFanControl-0.4.0-rc.1-win-x64-${{ github.sha }}"
+          .\scripts\write-p14-final-audit-attestation.ps1 -EvidenceDirectory $evidenceDir -RcStageDirectory $rcStage -SourceHead '${{ github.sha }}' -Repository '${{ github.repository }}' -Ref '${{ github.ref }}' -RunId '${{ github.run_id }}' -RunNumber '${{ github.run_number }}' -RcArtifactId $env:P14_RC_ARTIFACT_ID -RcArtifactName $rcName -RcArtifactDigest $env:P14_RC_ARTIFACT_DIGEST
+          .\scripts\verify-p14-final-audit-evidence.ps1 -EvidenceDirectory $evidenceDir -RcStageDirectory $rcStage -ExpectedSourceHead '${{ github.sha }}' -ExpectedRepository '${{ github.repository }}' -ExpectedRef '${{ github.ref }}' -ExpectedRunId '${{ github.run_id }}' -ExpectedRunNumber '${{ github.run_number }}' -ExpectedRcArtifactId $env:P14_RC_ARTIFACT_ID -ExpectedRcArtifactName $rcName -ExpectedRcArtifactDigest $env:P14_RC_ARTIFACT_DIGEST
+
+      - name: HP 8C40 P14.5 upload final audit evidence
+        id: p14_final_audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: VictusFanControl-P14.5-final-audit-${{ github.sha }}
+          path: ${{ runner.temp }}/VictusFanControl-P14.5-audit
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          overwrite: false
+
+      - name: HP 8C40 P14.5 report final audit evidence identity
+        shell: pwsh
+        env:
+          P14_AUDIT_ARTIFACT_ID: ${{ steps.p14_final_audit.outputs.artifact-id }}
+          P14_AUDIT_ARTIFACT_URL: ${{ steps.p14_final_audit.outputs.artifact-url }}
+          P14_AUDIT_ARTIFACT_DIGEST: ${{ steps.p14_final_audit.outputs.artifact-digest }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:P14_AUDIT_ARTIFACT_ID)) { throw 'P14.5 audit upload did not return an artifact ID.' }
+          if ([string]::IsNullOrWhiteSpace($env:P14_AUDIT_ARTIFACT_DIGEST)) { throw 'P14.5 audit upload did not return an artifact digest.' }
+          Write-Host "P14.5 audit artifact ID: $env:P14_AUDIT_ARTIFACT_ID"
+          Write-Host "P14.5 audit artifact digest: $env:P14_AUDIT_ARTIFACT_DIGEST"
+          Write-Host "P14.5 audit artifact URL: $env:P14_AUDIT_ARTIFACT_URL"
+
+      - name: Package definitive GUI for grouped Victus validation
+        shell: pwsh
+        run: |
+          $guiReview = Join-Path $env:RUNNER_TEMP 'VictusFanControl-product-gui-review'
+          .\scripts\package-product-v1.ps1 -RcArtifactDirectory (Join-Path $env:RUNNER_TEMP 'VictusFanControl-P14.4-artifact') -OutputDirectory $guiReview -SourceHead '${{ github.sha }}'
+          & (Join-Path $guiReview 'Start-ProductGui.ps1') -Mode FinalCheck
+          & (Join-Path $guiReview 'Start-PlatformThermalTest.ps1') -Mode Verify
+          & (Join-Path $guiReview 'Start-PlatformThermalTest.ps1') -Mode SelfTest
+          $manifest = Get-Content -LiteralPath (Join-Path $guiReview 'PRODUCT-GUI-MANIFEST.json') -Raw | ConvertFrom-Json
+          $actual = @(Get-ChildItem -LiteralPath $guiReview -Recurse -File | Where-Object { $_.FullName -ne (Join-Path $guiReview 'PRODUCT-GUI-MANIFEST.json') })
+          if ($actual.Count -ne $manifest.files.Count) { throw 'Packaged fixtures added unlisted files to the final candidate.' }
+          $listed = @{}
+          foreach ($entry in $manifest.files) { $listed[$entry.path] = $true }
+          foreach ($file in $actual) {
+            $relative = $file.FullName.Substring($guiReview.Length + 1).Replace('\','/')
+            if (-not $listed.ContainsKey($relative)) { throw "Unlisted final candidate file: $relative" }
+          }
+
+      - name: Verify public release archive preparation (no hardware IO)
+        shell: pwsh
+        run: |
+          python scripts/prepare-github-release.py --payload (Join-Path $env:RUNNER_TEMP 'VictusFanControl-product-gui-review') --output (Join-Path $env:RUNNER_TEMP 'VictusFanControl-public-release-assets') --source-head '${{ github.sha }}' --build-run-id '${{ github.run_id }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Public release asset verification failed.' }
+
+      - name: Upload definitive GUI review package
+        uses: actions/upload-artifact@v4
+        with:
+          name: VictusFanControl-1.0.0-win-x64-${{ github.sha }}
+          path: ${{ runner.temp }}/VictusFanControl-product-gui-review
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: HP 8C40 P17 upload curve editor render
+        uses: actions/upload-artifact@v4
+        with:
+          name: curve-editor-ui
+          path: curve-editor-ui.png
+          if-no-files-found: error
+
+      - name: Upload configurable dashboard renders
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-ui
+          path: dashboard-*-ui.png
+          if-no-files-found: error
+
+      - name: Upload product GUI soak report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-gui-soak-${{ github.sha }}
+          path: logs/product-gui-soak/report.json
+          if-no-files-found: warn
+
+      - name: Upload definitive product GUI renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-gui-renders-${{ github.sha }}
+          path: |
+            logs/product-gui-self-test/*.png
+            logs/platform-physical-self-test/*.png
+          if-no-files-found: error
+
+  acpi-field-probe:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build unsigned KMDF source-only ACPI probe and validate native contracts
+        shell: powershell
+        run: .\scripts\Build-Victus-AcpiFieldProbe.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acpi-field-probe-review-only
+          path: |
+            artifacts/acpi-field-probe/AcpiFieldProbe.sys
+            artifacts/acpi-field-probe/probe-client.exe
+            artifacts/acpi-field-probe/contract-test.exe
+            artifacts/acpi-field-probe/identity-test.exe
+            artifacts/acpi-field-probe/lifecycle-test.exe
+            artifacts/acpi-field-probe/build-manifest.json
+            artifacts/acpi-field-probe/review-package/*
+          if-no-files-found: error

@@ -1,0 +1,345 @@
+{
+  "Scope": "Static inventory of supplied DSL: declarations and text references; not a complete AML semantic analyzer or proof of absence of opaque SMM paths",
+  "SourceTables": [
+    {
+      "file": "dsdt.dsl",
+      "sha256": "f4fcd9a76b150c82771b279a0b3620f966ed4bce84aee17cdcf6acff0307a929"
+    },
+    {
+      "file": "ssdt.dsl",
+      "sha256": "80237bc151f51680dfd8d421cbe18527e71eef8656d2fc9669a60c7a2171eb6e"
+    },
+    {
+      "file": "ssdt1.dsl",
+      "sha256": "64ba1ddc2bd44f54b9a332755d4b7d789d8149e7c754c11a5692a6e583f32af4"
+    },
+    {
+      "file": "ssdt10.dsl",
+      "sha256": "840b4dc4bceb1e682c2c376fd8aa2fc205371f8899d251f1e880e8e4c8234964"
+    },
+    {
+      "file": "ssdt11.dsl",
+      "sha256": "14062085dc9e904eb344bc826375999ed2c6ea88cb22a5124acbb09e8c6d4b4b"
+    },
+    {
+      "file": "ssdt12.dsl",
+      "sha256": "76425fc56ab1c414e22366402aaecc32b3e555deb7f2e2a3adc67bbf5776ef4b"
+    },
+    {
+      "file": "ssdt13.dsl",
+      "sha256": "d54e8c939a1d5503e214ac8ea4e90b1f145974f4019cf7ca3102312f318cc7a8"
+    },
+    {
+      "file": "ssdt14.dsl",
+      "sha256": "da86395fa8dca054e80449482f8ad87a374f4136ab5b1a774231bbedcb71c5a3"
+    },
+    {
+      "file": "ssdt15.dsl",
+      "sha256": "d3f74922a8f89f4eee2eee8ad9a3fa768b813f20506b22c2a970835aa1966899"
+    },
+    {
+      "file": "ssdt2.dsl",
+      "sha256": "93de7f112249b350aaf0ebed2e39623e2de065e8415879361f23ff87323b45cb"
+    },
+    {
+      "file": "ssdt3.dsl",
+      "sha256": "ddf37b54014029691e1809478338c4bbe262d076d887e5fb5bcebdfe88148f16"
+    },
+    {
+      "file": "ssdt4.dsl",
+      "sha256": "410a1260fe8f207d9f843f2814a48ff133567ae7e3a3297f6749a61b78677bcc"
+    },
+    {
+      "file": "ssdt5.dsl",
+      "sha256": "6060ee690eca1fcc852fe2fb95d48dcf3c6793cc29c598b97f0a55d55a4400d3"
+    },
+    {
+      "file": "ssdt6.dsl",
+      "sha256": "20ebd5799f2570a7aafadc8443005e90328e9e5b690e6b1865921dbda288b2b8"
+    },
+    {
+      "file": "ssdt7.dsl",
+      "sha256": "4c298863ca51c798777339111527a261a7a5a24f2b30f75eb7b10231672284ea"
+    },
+    {
+      "file": "ssdt8.dsl",
+      "sha256": "7217ab95a65aa4cab0c6ceab9b4459e545605bcbe894cebf60f3f501fe5c27d7"
+    },
+    {
+      "file": "ssdt9.dsl",
+      "sha256": "a5265d7407c8fcf6ebf019bdaf3c3a35f6913ea1682f05ed6e90d738cb980464"
+    }
+  ],
+  "EramFields": [
+    {
+      "file": "dsdt.dsl",
+      "line": 134591,
+      "first_declared_byte": 0,
+      "last_declared_byte": 249,
+      "target_intersections": [
+        {
+          "requirement": "CpuSetpoint",
+          "byte": "34",
+          "field": "SRP1",
+          "start_bit": 416,
+          "width_bits": 8
+        },
+        {
+          "requirement": "GpuSetpoint",
+          "byte": "35",
+          "field": "SRP2",
+          "start_bit": 424,
+          "width_bits": 8
+        },
+        {
+          "requirement": "CompleteEcGuard",
+          "byte": "EC",
+          "field": "(unnamed)",
+          "start_bit": 1888,
+          "width_bits": 1
+        },
+        {
+          "requirement": "CompleteEcGuard",
+          "byte": "EC",
+          "field": "FFFF",
+          "start_bit": 1889,
+          "width_bits": 1
+        },
+        {
+          "requirement": "CompleteEcGuard",
+          "byte": "EC",
+          "field": "FFFS",
+          "start_bit": 1890,
+          "width_bits": 1
+        },
+        {
+          "requirement": "FanSwitch",
+          "byte": "F4",
+          "field": "SFAN",
+          "start_bit": 1952,
+          "width_bits": 8
+        }
+      ]
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 135282,
+      "first_declared_byte": 4,
+      "last_declared_byte": 5,
+      "target_intersections": []
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 135288,
+      "first_declared_byte": 4,
+      "last_declared_byte": 4,
+      "target_intersections": []
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 135294,
+      "first_declared_byte": 4,
+      "last_declared_byte": 11,
+      "target_intersections": []
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 135300,
+      "first_declared_byte": 4,
+      "last_declared_byte": 19,
+      "target_intersections": []
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 135306,
+      "first_declared_byte": 4,
+      "last_declared_byte": 27,
+      "target_intersections": []
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 135312,
+      "first_declared_byte": 4,
+      "last_declared_byte": 35,
+      "target_intersections": []
+    }
+  ],
+  "References": [
+    {
+      "file": "dsdt.dsl",
+      "line": 128279,
+      "names": [
+        "SFS1"
+      ],
+      "text": "SFS1 = Local3"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 128283,
+      "names": [
+        "SFS2"
+      ],
+      "text": "SFS2 = Local3"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 128287,
+      "names": [
+        "SFS1"
+      ],
+      "text": "SFS1 = Local3"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 128288,
+      "names": [
+        "SFS2"
+      ],
+      "text": "SFS2 = Local3"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 128291,
+      "names": [
+        "FFFS"
+      ],
+      "text": "^^PC00.LPCB.EC0.FFFS = One"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 128295,
+      "names": [
+        "FFFS"
+      ],
+      "text": "^^PC00.LPCB.EC0.FFFS = Zero"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 128710,
+      "names": [
+        "FFFS"
+      ],
+      "text": "DerefOf (Local0 [0x02]) [Zero] = ^^PC00.LPCB.EC0.FFFS"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 128730,
+      "names": [
+        "FFFS"
+      ],
+      "text": "^^PC00.LPCB.EC0.FFFS = HMFM"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 128918,
+      "names": [
+        "SRP1"
+      ],
+      "text": "^^PC00.LPCB.EC0.SRP1 = Local2"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 128919,
+      "names": [
+        "SRP2"
+      ],
+      "text": "^^PC00.LPCB.EC0.SRP2 = Local3"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 134495,
+      "names": [
+        "FAS1"
+      ],
+      "text": "FAS1,   8,"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 134496,
+      "names": [
+        "FAS2"
+      ],
+      "text": "FAS2,   8,"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 134498,
+      "names": [
+        "SFS1"
+      ],
+      "text": "SFS1,   8,"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 134502,
+      "names": [
+        "SFS2"
+      ],
+      "text": "SFS2,   8,"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 134608,
+      "names": [
+        "SRP1"
+      ],
+      "text": "SRP1,   8,"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 134609,
+      "names": [
+        "SRP2"
+      ],
+      "text": "SRP2,   8,"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 134801,
+      "names": [
+        "FFFF"
+      ],
+      "text": "FFFF,   1,"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 134802,
+      "names": [
+        "FFFS"
+      ],
+      "text": "FFFS,   1,"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 134812,
+      "names": [
+        "SFAN"
+      ],
+      "text": "SFAN,   8,"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 136671,
+      "names": [
+        "SFAN"
+      ],
+      "text": "\\_SB.PC00.LPCB.EC0.SFAN = Zero"
+    },
+    {
+      "file": "dsdt.dsl",
+      "line": 136675,
+      "names": [
+        "SFAN"
+      ],
+      "text": "\\_SB.PC00.LPCB.EC0.SFAN = 0x02"
+    },
+    {
+      "file": "ssdt13.dsl",
+      "line": 1010,
+      "names": [
+        "SFAN"
+      ],
+      "text": "CreateDWordField (GPSP, 0x10, SFAN)"
+    }
+  ]
+}

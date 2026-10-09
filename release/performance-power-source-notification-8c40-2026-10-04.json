@@ -1,0 +1,71 @@
+{
+  "SchemaVersion": 1,
+  "CapturedDateUtc": "2026-10-04",
+  "TargetProfileId": "HP-8C40-9D0R1LA-F18",
+  "Qualification": "Windows GUID_ACDC_POWER_SOURCE notification trigger followed by direct GetSystemPowerStatus confirmation",
+  "ToBattery": {
+    "TimeoutSeconds": 60,
+    "StartedAtUtc": "2026-10-04T07:07:03.8306285+00:00",
+    "CompletedAtUtc": "2026-10-04T07:07:25.7950006+00:00",
+    "Initial": {
+      "Source": "Ac",
+      "RawAcLineStatus": 1,
+      "Status": "WINDOWS_POWER_SOURCE_CONFIRMED_AC"
+    },
+    "Notifications": [
+      {
+        "CapturedAtUtc": "2026-10-04T07:07:03.8782354+00:00",
+        "DirectQuerySource": "Ac",
+        "RawAcLineStatus": 1
+      },
+      {
+        "CapturedAtUtc": "2026-10-04T07:07:25.656242+00:00",
+        "DirectQuerySource": "Battery",
+        "RawAcLineStatus": 0
+      }
+    ],
+    "ExpectedSourceConfirmed": true,
+    "ListenerError": null,
+    "HardwareWritesPerformed": false
+  },
+  "ToAc": {
+    "TimeoutSeconds": 60,
+    "StartedAtUtc": "2026-10-04T07:07:58.0488742+00:00",
+    "CompletedAtUtc": "2026-10-04T07:08:06.0617337+00:00",
+    "Initial": {
+      "Source": "Battery",
+      "RawAcLineStatus": 0,
+      "Status": "WINDOWS_POWER_SOURCE_CONFIRMED_BATTERY"
+    },
+    "Notifications": [
+      {
+        "CapturedAtUtc": "2026-10-04T07:07:58.0990969+00:00",
+        "DirectQuerySource": "Battery",
+        "RawAcLineStatus": 0
+      },
+      {
+        "CapturedAtUtc": "2026-10-04T07:08:06.0371884+00:00",
+        "DirectQuerySource": "Ac",
+        "RawAcLineStatus": 1
+      }
+    ],
+    "ExpectedSourceConfirmed": true,
+    "ListenerError": null,
+    "HardwareWritesPerformed": false
+  },
+  "Interpretation": {
+    "AcToBatteryNotificationQualified": true,
+    "BatteryToAcNotificationQualified": true,
+    "InitialSameSourceNotificationObserved": true,
+    "NotificationPayloadUsedAsPresetAuthority": false,
+    "DirectQueryUsedAsAuthority": true,
+    "DuplicateSuppressionRequired": true,
+    "NextGate": "Software coordinator: prime direct source, suppress same-source notifications, independently dispatch confirmed source changes to CPU and GPU domains."
+  },
+  "ProductGates": {
+    "ProductionHardwareWritesAuthorized": false,
+    "GuiIntegrationAuthorized": false,
+    "StartupPersistenceAuthorized": false,
+    "AutomaticProfileIntegrationAuthorized": false
+  }
+}

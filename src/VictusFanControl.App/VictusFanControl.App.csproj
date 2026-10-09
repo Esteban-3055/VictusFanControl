@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>VictusFanControl.App</AssemblyName>
+    <RootNamespace>VictusFanControl.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VictusFanControl\VictusFanControl.csproj" />
+    <ProjectReference Include="../../tools/PlatformThermalReplay/PlatformThermalReplay.csproj" />
+    <Compile Include="../../tools/OemShadowCapture/OemSources.cs" Link="Experimental/OemSources.cs" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "targetProfileId": "HP-8C40-9D0R1LA-F18",
+  "purpose": "shadow-only",
+  "authorizedForProduction": false,
+  "minimumLevel": 10,
+  "maximumLevel": 50,
+  "maximumUpStepPerSample": 4,
+  "maximumDownStepPerSample": 2,
+  "decreaseConfirmationSamples": 3,
+  "decreaseDeadbandLevels": 1.0,
+  "maximumSampleGapSeconds": 3.0,
+  "cpuTemperatureCurve": [
+    { "input": 40, "level": 10 },
+    { "input": 60, "level": 20 },
+    { "input": 75, "level": 35 },
+    { "input": 90, "level": 50 }
+  ],
+  "gpuTemperatureCurve": [
+    { "input": 35, "level": 10 },
+    { "input": 55, "level": 20 },
+    { "input": 70, "level": 35 },
+    { "input": 85, "level": 50 }
+  ],
+  "cpuPowerCurve": [
+    { "input": 0, "level": 10 },
+    { "input": 15, "level": 10 },
+    { "input": 30, "level": 18 },
+    { "input": 60, "level": 30 },
+    { "input": 100, "level": 45 }
+  ],
+  "gpuPowerCurve": [
+    { "input": 0, "level": 10 },
+    { "input": 15, "level": 10 },
+    { "input": 30, "level": 18 },
+    { "input": 70, "level": 32 },
+    { "input": 120, "level": 45 }
+  ],
+  "cpuLoadCurve": [
+    { "input": 0, "level": 10 },
+    { "input": 20, "level": 10 },
+    { "input": 50, "level": 20 },
+    { "input": 100, "level": 30 }
+  ],
+  "gpuLoadCurve": [
+    { "input": 0, "level": 10 },
+    { "input": 20, "level": 10 },
+    { "input": 50, "level": 20 },
+    { "input": 100, "level": 30 }
+  ]
+}

@@ -1,0 +1,287 @@
+{
+  "schemaVersion": 1,
+  "mode": "REPLAY",
+  "liveValidation": "PENDING",
+  "goForFanControl": false,
+  "fanWriteAuthority": false,
+  "parameters": {
+    "MaxSourceAgeMs": 3000,
+    "MaxGapMs": 5000,
+    "MaxHistoryGapMs": 30000,
+    "BootstrapSeconds": 10,
+    "CpuUpTemp": 95,
+    "CpuUpTz01": 85,
+    "CpuUpSeconds": 45,
+    "GpuUpSeconds": 60,
+    "MinStateSeconds": 60,
+    "DownSeconds": 30,
+    "RampSeconds": 10,
+    "ActualDebounceSeconds": 3,
+    "TransitionMatchWindowSeconds": 120,
+    "GpuUpTemp": [
+      45,
+      55,
+      75
+    ],
+    "GpuUpDtt3": [
+      50,
+      55,
+      67
+    ],
+    "BootstrapMax": [
+      75,
+      60,
+      45,
+      49
+    ],
+    "DownMax": [
+      [
+        55,
+        45,
+        40,
+        42
+      ],
+      [
+        65,
+        55,
+        48,
+        48
+      ],
+      [
+        70,
+        65,
+        55,
+        52
+      ]
+    ]
+  },
+  "samples": 1976,
+  "uniqueFreshFanAcquisitions": 372,
+  "knownStateAccuracy": 0.8676622039134912,
+  "perState": {
+    "A": {
+      "actualSupport": 1099,
+      "predictedSupport": 1011,
+      "correct": 936,
+      "recall": 0.8516833484986351,
+      "precision": 0.9258160237388724
+    },
+    "B": {
+      "actualSupport": 843,
+      "predictedSupport": 826,
+      "correct": 749,
+      "recall": 0.8884934756820878,
+      "precision": 0.9067796610169492
+    },
+    "C": {
+      "actualSupport": 0,
+      "predictedSupport": 0,
+      "correct": 0,
+      "recall": null,
+      "precision": null
+    },
+    "D": {
+      "actualSupport": 0,
+      "predictedSupport": 0,
+      "correct": 0,
+      "recall": null,
+      "precision": null
+    }
+  },
+  "confusionMatrix": {
+    "rowsActual": [
+      "Unknown",
+      "A",
+      "B",
+      "C",
+      "D",
+      "Transition"
+    ],
+    "columnsPredicted": [
+      "Unknown",
+      "A",
+      "B",
+      "C",
+      "D",
+      "Transition"
+    ],
+    "counts": [
+      [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        26,
+        936,
+        61,
+        0,
+        0,
+        76
+      ],
+      [
+        9,
+        69,
+        749,
+        0,
+        0,
+        16
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        11,
+        6,
+        16,
+        0,
+        0,
+        0
+      ]
+    ]
+  },
+  "uniqueAcquisitionConfusionMatrix": {
+    "rowsActual": [
+      "Unknown",
+      "A",
+      "B",
+      "C",
+      "D",
+      "Transition"
+    ],
+    "columnsPredicted": [
+      "Unknown",
+      "A",
+      "B",
+      "C",
+      "D",
+      "Transition"
+    ],
+    "counts": [
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        5,
+        172,
+        11,
+        0,
+        0,
+        13
+      ],
+      [
+        4,
+        15,
+        139,
+        0,
+        0,
+        6
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        2,
+        2,
+        3,
+        0,
+        0,
+        0
+      ]
+    ]
+  },
+  "observedSeconds": 577.9968341999985,
+  "unknownPredictionSeconds": 20.6014861,
+  "unobservedGapSeconds": 0,
+  "missingOrStaleFrames": {
+    "cpuPackage": 0,
+    "cpuCoreMax": 0,
+    "gpu": 0,
+    "tz01": 10,
+    "dtt3": 10
+  },
+  "transitionMetrics": {
+    "up": {
+      "actualCount": 1,
+      "predictedCount": 1,
+      "matched": 1,
+      "precision": 1,
+      "recall": 1
+    },
+    "down": {
+      "actualCount": 1,
+      "predictedCount": 1,
+      "matched": 1,
+      "precision": 1,
+      "recall": 1
+    },
+    "windowSeconds": 120,
+    "eventsTruncated": false,
+    "epochRule": "Actual: first distinct acquisition later accepted by debounce. Predicted: first plateau after ramp. Unknown or frame gap breaks continuity.",
+    "observed": [
+      {
+        "From": "A",
+        "To": "B",
+        "actualAtUtc": "2026-10-07T14:14:21.2519409+00:00",
+        "predictedAtUtc": "2026-10-07T14:14:58.5394552+00:00",
+        "errorSecondsPositiveIsLate": 37.2875143
+      },
+      {
+        "From": "B",
+        "To": "A",
+        "actualAtUtc": "2026-10-07T14:18:42.239531+00:00",
+        "predictedAtUtc": "2026-10-07T14:19:13.9115781+00:00",
+        "errorSecondsPositiveIsLate": 31.6720471
+      }
+    ],
+    "predicted": [
+      {
+        "From": "A",
+        "To": "B",
+        "AtUtc": "2026-10-07T14:14:58.5394552+00:00",
+        "matched": true
+      },
+      {
+        "From": "B",
+        "To": "A",
+        "AtUtc": "2026-10-07T14:19:13.9115781+00:00",
+        "matched": true
+      }
+    ]
+  },
+  "interpretation": "Row counts include cached frames; unique acquisition matrix is also reported. Confidence is a label, not a probability. Missing support is null, not success. Seeds are not qualified for control."
+}

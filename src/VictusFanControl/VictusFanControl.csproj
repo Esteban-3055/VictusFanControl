@@ -4,10 +4,17 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <AssemblyName>VictusFanControl</AssemblyName>
     <RootNamespace>VictusFanControl</RootNamespace>
-    <Version>0.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+    <InternalsVisibleTo Include="VictusFanControl.App" />
+    <InternalsVisibleTo Include="VictusFanControl.CpuProbe" />
+    <InternalsVisibleTo Include="VictusFanControl.GpuProbe" />
+    <InternalsVisibleTo Include="VictusFanControl.PerformanceProbe" />
+    <InternalsVisibleTo Include="VictusFanControl.PerformanceGuardian" />
+    <InternalsVisibleTo Include="VictusFanControl.OemShadowCapture" />
+    <InternalsVisibleTo Include="VictusFanControl.PlatformThermalReplay" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.Diagnostics.EventLog" Version="8.0.0" />
   </ItemGroup>
 </Project>

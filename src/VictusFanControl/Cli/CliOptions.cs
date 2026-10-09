@@ -3,10 +3,99 @@ namespace VictusFanControl.Cli;
 public sealed class CliOptions
 {
     public bool ShowHelp { get; private set; }
-    public bool ListSensors { get; private set; }
+    public bool WmiOnlyInvestigation { get; private set; }
+    public bool ResidualEcInvestigation { get; private set; }
+    public bool ResidualEcInvestigationSelfTest { get; private set; }
+    public bool ReadOnlyInvestigation => WmiOnlyInvestigation || ResidualEcInvestigation;
+    public int InvestigationEcIntervalMs { get; private set; } = 5000;
+    public string? InvestigationStopPath { get; private set; }
+    public string? InvestigationReadyPath { get; private set; }
+    public string? AnalyzeEcWmiTracePath { get; private set; }
+    public string? TraceAnalysisOutputDirectory { get; private set; }
+    public bool ProbeBackends { get; private set; }
+    public bool FanWmiTelemetrySelfTest { get; private set; }
+    public bool SafetySelfTest { get; private set; }
+    public bool Probe88F8EcState { get; private set; }
+    public bool Probe88F8Setpoint { get; private set; }
+    public bool Probe8C40Setpoint { get; private set; }
+    public bool ControlSelfTest { get; private set; }
+    public bool WatchdogLeaseClientSelfTest { get; private set; }
+    public bool AdaptivePolicySelfTest { get; private set; }
+    public bool AdaptivePolicyShadowReplay { get; private set; }
+    public string? AdaptivePolicyShadowConfigPath { get; private set; }
+    public string? AdaptivePolicyShadowInputPath { get; private set; }
+    public string? AdaptivePolicyShadowOutputPath { get; private set; }
+    public bool BiosContractSelfTest { get; private set; }
+    public bool HpBackendSelfTest { get; private set; }
+    public bool Hp8C40M8PreflightProbe { get; private set; }
+    public bool Hp8C40M8ARepresentativeLoad { get; private set; }
+    public bool Hp8C40M8ASelfTest { get; private set; }
+    public bool Hp8C40M8CSelfTest { get; private set; }
+    public string? Hp8C40M8AResultPath { get; private set; }
+    public bool Hp8C40M8BWatchdogLoad { get; private set; }
+    public string? Hp8C40M8BToken { get; private set; }
+    public string? Hp8C40M8BReadyPath { get; private set; }
+    public string? Hp8C40M8BResultPath { get; private set; }
+    public bool Hp8C40M8CPhysicalThermal { get; private set; }
+    public string? Hp8C40M8CPhysicalToken { get; private set; }
+    public string? Hp8C40M8CPhysicalCase { get; private set; }
+    public string? Hp8C40M8CPhysicalReadyPath { get; private set; }
+    public string? Hp8C40M8CPhysicalContinuePath { get; private set; }
+    public string? Hp8C40M8CPhysicalResultPath { get; private set; }
+    public bool Hp8C40M9CProductionSmoke { get; private set; }
+    public string? Hp8C40M9CToken { get; private set; }
+    public string? Hp8C40M9CReadyPath { get; private set; }
+    public string? Hp8C40M9CContinuePath { get; private set; }
+    public string? Hp8C40M9CResultPath { get; private set; }
+    public bool Hp8C40P15BManual30 { get; private set; }
+    public string? Hp8C40P15BToken { get; private set; }
+    public string? Hp8C40P15BReadyPath { get; private set; }
+    public string? Hp8C40P15BContinuePath { get; private set; }
+    public string? Hp8C40P15BResultPath { get; private set; }
+    public bool RestoreHpAuto { get; private set; }
+    public bool SkipEcSnapshots { get; private set; }
+    public bool FirstFanWriteTest { get; private set; }
+    public string? FirstFanWriteToken { get; private set; }
+    public bool IntegratedCoordinatorTest { get; private set; }
+    public bool CoreThermalCharacterization { get; private set; }
+    public bool Hp8C40FanLevelQualification { get; private set; }
+    public string? Hp8C40FanLevelQualificationToken { get; private set; }
+    public bool Hp8C40UpperFanLevelQualification { get; private set; }
+    public string? Hp8C40UpperFanLevelQualificationToken { get; private set; }
+    public bool Hp8C40HigherFanLevelQualification { get; private set; }
+    public string? Hp8C40HigherFanLevelQualificationToken { get; private set; }
+    public bool Hp8C40FullFanRangeVerification { get; private set; }
+    public string? Hp8C40FullFanRangeVerificationToken { get; private set; }
+    public bool Hp8C40ExtendedFanRangeQualification { get; private set; }
+    public string? Hp8C40ExtendedFanRangeQualificationToken { get; private set; }
+    public bool Hp8C40TransitionQualification { get; private set; }
+    public string? Hp8C40TransitionQualificationToken { get; private set; }
+    public bool Hp8C40EndpointCoordinatorQualification { get; private set; }
+    public string? Hp8C40EndpointCoordinatorQualificationToken { get; private set; }
+    public bool Hp8C40M3Arm { get; private set; }
+    public string? Hp8C40M3ArmToken { get; private set; }
+    public string? Hp8C40M3HandoffPath { get; private set; }
+    public string? Hp8C40M3ResultPath { get; private set; }
+    public bool Hp8C40M4LeaseQualification { get; private set; }
+    public int? Hp8C40M4LeaseQualificationLevel { get; private set; }
+    public string? Hp8C40M4LeaseQualificationToken { get; private set; }
+    public bool Hp8C40M5AControllerDeathArm { get; private set; }
+    public string? Hp8C40M5AControllerDeathToken { get; private set; }
+    public string? Hp8C40M5AReadyPath { get; private set; }
+    public bool Hp8C40M5BWatchdogDeathController { get; private set; }
+    public string? Hp8C40M5BWatchdogDeathToken { get; private set; }
+    public string? Hp8C40M5BReadyPath { get; private set; }
+    public string? Hp8C40M5BLocalRestorePath { get; private set; }
+    public string? Hp8C40M5BCompletionPath { get; private set; }
+    public bool Hp8C40M5DWriteArmedCrashController { get; private set; }
+    public string? Hp8C40M5DWriteArmedCrashToken { get; private set; }
+    public string? Hp8C40M5DReadyPath { get; private set; }
+    public string? IntegratedCoordinatorToken { get; private set; }
+    public int HealthTestMinutes { get; private set; }
     public int IntervalMs { get; private set; } = 1000;
     public int DurationSeconds { get; private set; }
     public string? OutputPath { get; private set; }
+    public string ModulesDirectory { get; private set; } = Path.Combine(Environment.CurrentDirectory, "modules");
 
     public static CliOptions Parse(string[] args)
     {
@@ -21,8 +110,410 @@ public sealed class CliOptions
                     options.ShowHelp = true;
                     break;
 
+                case "--probe-backends":
                 case "--list-sensors":
-                    options.ListSensors = true;
+                    options.ProbeBackends = true;
+                    break;
+
+                case "--wmi-only-investigation":
+                    options.WmiOnlyInvestigation = true;
+                    break;
+
+                case "--residual-ec-investigation":
+                    options.ResidualEcInvestigation = true;
+                    break;
+                case "--residual-ec-investigation-self-test":
+                    options.ResidualEcInvestigationSelfTest = true;
+                    break;
+                case "--ec-interval-ms":
+                    if (!int.TryParse(ReadValue(args, ref i), out var ecIntervalMs))
+                        throw new ArgumentException("EC investigation interval must be an integer.");
+                    options.InvestigationEcIntervalMs = ecIntervalMs;
+                    if (options.InvestigationEcIntervalMs is < 2000 or > 60000)
+                        throw new ArgumentException("EC investigation interval must be 2000..60000 ms.");
+                    break;
+
+                case "--analyze-ec-wmi-trace":
+                    options.AnalyzeEcWmiTracePath = Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--analysis-output-dir":
+                    options.TraceAnalysisOutputDirectory = Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--stop-file":
+                    options.InvestigationStopPath = Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--ready-file":
+                    options.InvestigationReadyPath = Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--fan-wmi-telemetry-self-test":
+                    options.FanWmiTelemetrySelfTest = true;
+                    break;
+
+                case "--safety-self-test":
+                    options.SafetySelfTest = true;
+                    break;
+
+                case "--probe-88f8-ec-state":
+                    options.Probe88F8EcState = true;
+                    break;
+
+                case "--probe-88f8-setpoint":
+                    options.Probe88F8Setpoint = true;
+                    break;
+
+                case "--probe-8c40-setpoint":
+                    options.Probe8C40Setpoint = true;
+                    break;
+
+                case "--control-self-test":
+                    options.ControlSelfTest = true;
+                    break;
+
+                case "--watchdog-lease-client-self-test":
+                    options.WatchdogLeaseClientSelfTest = true;
+                    break;
+
+                case "--adaptive-policy-self-test":
+                    options.AdaptivePolicySelfTest = true;
+                    break;
+
+                case "--adaptive-policy-shadow-replay":
+                    options.AdaptivePolicyShadowReplay = true;
+                    break;
+
+                case "--adaptive-policy-shadow-config":
+                    options.AdaptivePolicyShadowConfigPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--adaptive-policy-shadow-input":
+                    options.AdaptivePolicyShadowInputPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--adaptive-policy-shadow-output":
+                    options.AdaptivePolicyShadowOutputPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--bios-contract-self-test":
+                    options.BiosContractSelfTest = true;
+                    break;
+
+                case "--hp-backend-self-test":
+                    options.HpBackendSelfTest = true;
+                    break;
+
+                case "--8c40-m8-preflight-probe":
+                    options.Hp8C40M8PreflightProbe = true;
+                    break;
+                case "--8c40-m8a-representative-load":
+                    options.Hp8C40M8ARepresentativeLoad = true;
+                    break;
+
+                case "--8c40-m8a-self-test":
+                    options.Hp8C40M8ASelfTest = true;
+                    break;
+
+                case "--8c40-m8c-self-test":
+                    options.Hp8C40M8CSelfTest = true;
+                    break;
+
+                case "--8c40-m8a-result-path":
+                    options.Hp8C40M8AResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m8b-watchdog-load":
+                    options.Hp8C40M8BWatchdogLoad = true;
+                    break;
+
+                case "--8c40-m8b-token":
+                    options.Hp8C40M8BToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m8b-ready-path":
+                    options.Hp8C40M8BReadyPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m8b-result-path":
+                    options.Hp8C40M8BResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m8c-physical-thermal":
+                    options.Hp8C40M8CPhysicalThermal = true;
+                    break;
+
+                case "--8c40-m8c-physical-token":
+                    options.Hp8C40M8CPhysicalToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m8c-physical-case":
+                    options.Hp8C40M8CPhysicalCase =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m8c-physical-ready-path":
+                    options.Hp8C40M8CPhysicalReadyPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m8c-physical-continue-path":
+                    options.Hp8C40M8CPhysicalContinuePath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m8c-physical-result-path":
+                    options.Hp8C40M8CPhysicalResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m9c-production-smoke":
+                    options.Hp8C40M9CProductionSmoke = true;
+                    break;
+
+                case "--8c40-m9c-token":
+                    options.Hp8C40M9CToken = ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m9c-ready-path":
+                    options.Hp8C40M9CReadyPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m9c-continue-path":
+                    options.Hp8C40M9CContinuePath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m9c-result-path":
+                    options.Hp8C40M9CResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-p15b-manual30":
+                    options.Hp8C40P15BManual30 = true;
+                    break;
+
+                case "--8c40-p15b-token":
+                    options.Hp8C40P15BToken = ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-p15b-ready-path":
+                    options.Hp8C40P15BReadyPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-p15b-continue-path":
+                    options.Hp8C40P15BContinuePath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-p15b-result-path":
+                    options.Hp8C40P15BResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--restore-hp-auto":
+                    options.RestoreHpAuto = true;
+                    break;
+
+                case "--skip-ec-snapshots":
+                    options.SkipEcSnapshots = true;
+                    break;
+
+                case "--first-fan-write-test":
+                    options.FirstFanWriteTest = true;
+                    break;
+
+                case "--write-token":
+                    options.FirstFanWriteToken = ReadValue(args, ref i);
+                    break;
+
+                case "--integrated-coordinator-test":
+                    options.IntegratedCoordinatorTest = true;
+                    break;
+
+                case "--core-thermal-characterization":
+                    options.CoreThermalCharacterization = true;
+                    break;
+
+                case "--8c40-fan-level-qualification":
+                    options.Hp8C40FanLevelQualification = true;
+                    break;
+
+                case "--8c40-qualification-token":
+                    options.Hp8C40FanLevelQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-upper-fan-level-qualification":
+                    options.Hp8C40UpperFanLevelQualification = true;
+                    break;
+
+                case "--8c40-upper-qualification-token":
+                    options.Hp8C40UpperFanLevelQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-higher-fan-level-qualification":
+                    options.Hp8C40HigherFanLevelQualification = true;
+                    break;
+
+                case "--8c40-higher-qualification-token":
+                    options.Hp8C40HigherFanLevelQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-full-range-verification":
+                    options.Hp8C40FullFanRangeVerification = true;
+                    break;
+
+                case "--8c40-full-range-token":
+                    options.Hp8C40FullFanRangeVerificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-extended-range-qualification":
+                    options.Hp8C40ExtendedFanRangeQualification = true;
+                    break;
+
+                case "--8c40-extended-range-token":
+                    options.Hp8C40ExtendedFanRangeQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-transition-qualification":
+                    options.Hp8C40TransitionQualification = true;
+                    break;
+
+                case "--8c40-transition-token":
+                    options.Hp8C40TransitionQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-endpoint-coordinator-qualification":
+                    options.Hp8C40EndpointCoordinatorQualification = true;
+                    break;
+
+                case "--8c40-endpoint-coordinator-token":
+                    options.Hp8C40EndpointCoordinatorQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m3-arm":
+                    options.Hp8C40M3Arm = true;
+                    break;
+
+                case "--8c40-m3-arm-token":
+                    options.Hp8C40M3ArmToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m3-handoff-path":
+                    options.Hp8C40M3HandoffPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m3-result-path":
+                    options.Hp8C40M3ResultPath =
+                        Path.GetFullPath(ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m4-lease10":
+                    SetM4LeaseQualificationLevel(options, 10);
+                    break;
+
+                case "--8c40-m4-lease30":
+                    SetM4LeaseQualificationLevel(options, 30);
+                    break;
+
+                case "--8c40-m4-lease50":
+                    SetM4LeaseQualificationLevel(options, 50);
+                    break;
+
+                case "--8c40-m4-lease-token":
+                    options.Hp8C40M4LeaseQualificationToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m5a-controller-death-arm":
+                    options.Hp8C40M5AControllerDeathArm = true;
+                    break;
+
+                case "--8c40-m5a-token":
+                    options.Hp8C40M5AControllerDeathToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m5a-ready-path":
+                    options.Hp8C40M5AReadyPath =
+                        Path.GetFullPath(
+                            ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m5b-watchdog-death-controller":
+                    options.Hp8C40M5BWatchdogDeathController = true;
+                    break;
+
+                case "--8c40-m5b-token":
+                    options.Hp8C40M5BWatchdogDeathToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m5b-ready-path":
+                    options.Hp8C40M5BReadyPath =
+                        Path.GetFullPath(
+                            ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m5b-local-restore-path":
+                    options.Hp8C40M5BLocalRestorePath =
+                        Path.GetFullPath(
+                            ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m5b-completion-path":
+                    options.Hp8C40M5BCompletionPath =
+                        Path.GetFullPath(
+                            ReadValue(args, ref i));
+                    break;
+
+                case "--8c40-m5d-write-armed-crash-controller":
+                    options.Hp8C40M5DWriteArmedCrashController = true;
+                    break;
+
+                case "--8c40-m5d-token":
+                    options.Hp8C40M5DWriteArmedCrashToken =
+                        ReadValue(args, ref i);
+                    break;
+
+                case "--8c40-m5d-ready-path":
+                    options.Hp8C40M5DReadyPath =
+                        Path.GetFullPath(
+                            ReadValue(args, ref i));
+                    break;
+
+                case "--coordinator-write-token":
+                    options.IntegratedCoordinatorToken = ReadValue(args, ref i);
+                    break;
+
+                case "--health-test-minutes":
+                    options.HealthTestMinutes = ParsePositiveInt(
+                        ReadValue(args, ref i),
+                        "--health-test-minutes");
+                    break;
+
+                case "--modules-dir":
+                    options.ModulesDirectory = Path.GetFullPath(ReadValue(args, ref i));
                     break;
 
                 case "--interval-ms":
@@ -46,20 +537,456 @@ public sealed class CliOptions
             }
         }
 
+        if (options.WmiOnlyInvestigation && options.ResidualEcInvestigation)
+            throw new ArgumentException("B and C investigation modes are mutually exclusive.");
+        if (!options.ResidualEcInvestigation && args.Contains("--ec-interval-ms"))
+            throw new ArgumentException("--ec-interval-ms requires --residual-ec-investigation.");
+        if (options.ResidualEcInvestigationSelfTest && args.Any(a => a is not "--residual-ec-investigation-self-test" and not "--help" and not "-h"))
+            throw new ArgumentException("Residual EC self-test cannot be combined with other options.");
+        if (options.ReadOnlyInvestigation)
+        {
+            // Allow-list the entire invocation, including value-taking options.
+            for (var i = 0; i < args.Length; i++)
+            {
+                if (args[i] is "--wmi-only-investigation" or "--residual-ec-investigation" or "--help" or "-h") continue;
+                if (options.ResidualEcInvestigation && args[i] == "--ec-interval-ms") { i++; continue; }
+                if (args[i] is "--modules-dir" or "--interval-ms" or "--duration-seconds" or "--output" or "--stop-file" or "--ready-file")
+                { i++; continue; }
+                throw new ArgumentException("WMI-only investigation cannot be combined with another probe, test or control operation.");
+            }
+        }
+        else if (options.InvestigationStopPath is not null || options.InvestigationReadyPath is not null)
+            throw new ArgumentException("--stop-file/--ready-file require a read-only investigation mode.");
+
+        if (options.AnalyzeEcWmiTracePath is not null)
+        {
+            for (var i = 0; i < args.Length; i++)
+            {
+                if (args[i] is "--help" or "-h") continue;
+                if (args[i] is "--analyze-ec-wmi-trace" or "--analysis-output-dir") { i++; continue; }
+                throw new ArgumentException("Offline trace analysis cannot be combined with hardware or control options.");
+            }
+        }
+        else if (options.TraceAnalysisOutputDirectory is not null)
+            throw new ArgumentException("--analysis-output-dir requires --analyze-ec-wmi-trace.");
+
+        var exclusiveActions =
+            (options.AnalyzeEcWmiTracePath is not null ? 1 : 0) +
+            (options.ProbeBackends ? 1 : 0) +
+            (options.SafetySelfTest ? 1 : 0) +
+            (options.FanWmiTelemetrySelfTest ? 1 : 0) +
+            (options.Probe88F8EcState ? 1 : 0) +
+            (options.Probe88F8Setpoint ? 1 : 0) +
+            (options.Probe8C40Setpoint ? 1 : 0) +
+            (options.ControlSelfTest ? 1 : 0) +
+            (options.AdaptivePolicySelfTest ? 1 : 0) +
+            (options.AdaptivePolicyShadowReplay ? 1 : 0) +
+            (options.BiosContractSelfTest ? 1 : 0) +
+            (options.HpBackendSelfTest ? 1 : 0) +
+            (options.Hp8C40M8PreflightProbe ? 1 : 0) +
+            (options.Hp8C40M8ARepresentativeLoad ? 1 : 0) +
+            (options.Hp8C40M8ASelfTest ? 1 : 0) +
+            (options.Hp8C40M8CSelfTest ? 1 : 0) +
+            (options.Hp8C40M8BWatchdogLoad ? 1 : 0) +
+            (options.Hp8C40M8CPhysicalThermal ? 1 : 0) +
+            (options.Hp8C40M9CProductionSmoke ? 1 : 0) +
+            (options.Hp8C40P15BManual30 ? 1 : 0) +
+            (options.RestoreHpAuto ? 1 : 0) +
+            (options.FirstFanWriteTest ? 1 : 0) +
+            (options.IntegratedCoordinatorTest ? 1 : 0) +
+            (options.CoreThermalCharacterization ? 1 : 0) +
+            (options.Hp8C40FanLevelQualification ? 1 : 0) +
+            (options.Hp8C40UpperFanLevelQualification ? 1 : 0) +
+            (options.Hp8C40HigherFanLevelQualification ? 1 : 0) +
+            (options.Hp8C40FullFanRangeVerification ? 1 : 0) +
+            (options.Hp8C40ExtendedFanRangeQualification ? 1 : 0) +
+            (options.Hp8C40TransitionQualification ? 1 : 0) +
+            (options.Hp8C40EndpointCoordinatorQualification ? 1 : 0) +
+            (options.Hp8C40M3Arm ? 1 : 0) +
+            (options.Hp8C40M4LeaseQualification ? 1 : 0) +
+            (options.Hp8C40M5AControllerDeathArm ? 1 : 0) +
+            (options.Hp8C40M5BWatchdogDeathController ? 1 : 0) +
+            (options.Hp8C40M5DWriteArmedCrashController ? 1 : 0) +
+            (options.HealthTestMinutes > 0 ? 1 : 0);
+
+        if (exclusiveActions > 1)
+        {
+            throw new ArgumentException(
+                "Choose only one probe/test/write operation per invocation.");
+        }
+
+        if ((options.AdaptivePolicyShadowConfigPath is not null ||
+             options.AdaptivePolicyShadowInputPath is not null ||
+             options.AdaptivePolicyShadowOutputPath is not null) &&
+            !options.AdaptivePolicyShadowReplay)
+        {
+            throw new ArgumentException(
+                "--adaptive-policy-shadow-config/input/output are valid only with --adaptive-policy-shadow-replay.");
+        }
+
+        if (options.AdaptivePolicyShadowReplay &&
+            (string.IsNullOrWhiteSpace(options.AdaptivePolicyShadowConfigPath) ||
+             string.IsNullOrWhiteSpace(options.AdaptivePolicyShadowInputPath) ||
+             string.IsNullOrWhiteSpace(options.AdaptivePolicyShadowOutputPath)))
+        {
+            throw new ArgumentException(
+                "--adaptive-policy-shadow-replay requires --adaptive-policy-shadow-config, --adaptive-policy-shadow-input and --adaptive-policy-shadow-output.");
+        }
+
+        if (options.Hp8C40M8AResultPath is not null &&
+            !options.Hp8C40M8ARepresentativeLoad)
+        {
+            throw new ArgumentException(
+                "--8c40-m8a-result-path is valid only with --8c40-m8a-representative-load.");
+        }
+
+        if (options.Hp8C40M8ARepresentativeLoad &&
+            string.IsNullOrWhiteSpace(options.Hp8C40M8AResultPath))
+        {
+            throw new ArgumentException(
+                "--8c40-m8a-representative-load requires --8c40-m8a-result-path.");
+        }
+
+        if ((options.Hp8C40M8BToken is not null ||
+             options.Hp8C40M8BReadyPath is not null ||
+             options.Hp8C40M8BResultPath is not null) &&
+            !options.Hp8C40M8BWatchdogLoad)
+        {
+            throw new ArgumentException(
+                "--8c40-m8b-token/ready-path/result-path are valid only with --8c40-m8b-watchdog-load.");
+        }
+
+        if (options.Hp8C40M8BWatchdogLoad &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40M8BToken) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M8BReadyPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M8BResultPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-m8b-watchdog-load requires --8c40-m8b-token, --8c40-m8b-ready-path and --8c40-m8b-result-path.");
+        }
+
+
+        if ((options.Hp8C40M8CPhysicalToken is not null ||
+             options.Hp8C40M8CPhysicalCase is not null ||
+             options.Hp8C40M8CPhysicalReadyPath is not null ||
+             options.Hp8C40M8CPhysicalContinuePath is not null ||
+             options.Hp8C40M8CPhysicalResultPath is not null) &&
+            !options.Hp8C40M8CPhysicalThermal)
+        {
+            throw new ArgumentException(
+                "--8c40-m8c-physical-* options are valid only with --8c40-m8c-physical-thermal.");
+        }
+
+        if (options.Hp8C40M8CPhysicalThermal &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40M8CPhysicalToken) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M8CPhysicalCase) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M8CPhysicalReadyPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M8CPhysicalContinuePath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M8CPhysicalResultPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-m8c-physical-thermal requires token, case, ready-path, continue-path and result-path.");
+        }
+
+        if ((options.Hp8C40M9CToken is not null ||
+             options.Hp8C40M9CReadyPath is not null ||
+             options.Hp8C40M9CContinuePath is not null ||
+             options.Hp8C40M9CResultPath is not null) &&
+            !options.Hp8C40M9CProductionSmoke)
+        {
+            throw new ArgumentException(
+                "--8c40-m9c-token/ready-path/continue-path/result-path are valid only with --8c40-m9c-production-smoke.");
+        }
+
+        if (options.Hp8C40M9CProductionSmoke &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40M9CToken) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M9CReadyPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M9CContinuePath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M9CResultPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-m9c-production-smoke requires token, ready-path, continue-path and result-path.");
+        }
+
+        if (options.SkipEcSnapshots && !options.RestoreHpAuto)
+        {
+            throw new ArgumentException(
+                "--skip-ec-snapshots is valid only with --restore-hp-auto.");
+        }
+
+        if (options.FirstFanWriteToken is not null && !options.FirstFanWriteTest)
+        {
+            throw new ArgumentException(
+                "--write-token is valid only with --first-fan-write-test.");
+        }
+
+        if (options.IntegratedCoordinatorToken is not null &&
+            !options.IntegratedCoordinatorTest)
+        {
+            throw new ArgumentException(
+                "--coordinator-write-token is valid only with --integrated-coordinator-test.");
+        }
+
+        if (options.Hp8C40FanLevelQualificationToken is not null &&
+            !options.Hp8C40FanLevelQualification)
+        {
+            throw new ArgumentException(
+                "--8c40-qualification-token is valid only with --8c40-fan-level-qualification.");
+        }
+
+        if (options.Hp8C40UpperFanLevelQualificationToken is not null &&
+            !options.Hp8C40UpperFanLevelQualification)
+        {
+            throw new ArgumentException(
+                "--8c40-upper-qualification-token is valid only with --8c40-upper-fan-level-qualification.");
+        }
+
+        if (options.Hp8C40HigherFanLevelQualificationToken is not null &&
+            !options.Hp8C40HigherFanLevelQualification)
+        {
+            throw new ArgumentException(
+                "--8c40-higher-qualification-token is valid only with --8c40-higher-fan-level-qualification.");
+        }
+
+        if (options.Hp8C40FullFanRangeVerificationToken is not null &&
+            !options.Hp8C40FullFanRangeVerification)
+        {
+            throw new ArgumentException(
+                "--8c40-full-range-token is valid only with --8c40-full-range-verification.");
+        }
+
+        if (options.Hp8C40ExtendedFanRangeQualificationToken is not null &&
+            !options.Hp8C40ExtendedFanRangeQualification)
+        {
+            throw new ArgumentException(
+                "--8c40-extended-range-token is valid only with --8c40-extended-range-qualification.");
+        }
+
+        if (options.Hp8C40M3ArmToken is not null &&
+            !options.Hp8C40M3Arm)
+        {
+            throw new ArgumentException(
+                "--8c40-m3-arm-token is valid only with --8c40-m3-arm.");
+        }
+
+        if ((options.Hp8C40M3HandoffPath is not null ||
+             options.Hp8C40M3ResultPath is not null) &&
+            !options.Hp8C40M3Arm)
+        {
+            throw new ArgumentException(
+                "--8c40-m3-handoff-path/--8c40-m3-result-path are valid only with --8c40-m3-arm.");
+        }
+
+        if (options.Hp8C40M3Arm &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40M3HandoffPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M3ResultPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-m3-arm requires both --8c40-m3-handoff-path and --8c40-m3-result-path.");
+        }
+
+        if (options.Hp8C40M4LeaseQualificationToken is not null &&
+            !options.Hp8C40M4LeaseQualification)
+        {
+            throw new ArgumentException(
+                "--8c40-m4-lease-token is valid only with --8c40-m4-lease10/30/50.");
+        }
+
+        if (options.Hp8C40M4LeaseQualification &&
+            options.Hp8C40M4LeaseQualificationLevel is not (10 or 30 or 50))
+        {
+            throw new ArgumentException(
+                "HP 8C40 M4 lease qualification requires exactly one endpoint switch: --8c40-m4-lease10, --8c40-m4-lease30 or --8c40-m4-lease50.");
+        }
+
+        if ((options.Hp8C40M5AControllerDeathToken is not null ||
+             options.Hp8C40M5AReadyPath is not null) &&
+            !options.Hp8C40M5AControllerDeathArm)
+        {
+            throw new ArgumentException(
+                "--8c40-m5a-token/--8c40-m5a-ready-path are valid only with --8c40-m5a-controller-death-arm.");
+        }
+
+        if (options.Hp8C40M5AControllerDeathArm &&
+            string.IsNullOrWhiteSpace(
+                options.Hp8C40M5AReadyPath))
+        {
+            throw new ArgumentException(
+                "--8c40-m5a-controller-death-arm requires --8c40-m5a-ready-path.");
+        }
+
+        if ((options.Hp8C40M5BWatchdogDeathToken is not null ||
+             options.Hp8C40M5BReadyPath is not null ||
+             options.Hp8C40M5BLocalRestorePath is not null ||
+             options.Hp8C40M5BCompletionPath is not null) &&
+            !options.Hp8C40M5BWatchdogDeathController)
+        {
+            throw new ArgumentException(
+                "--8c40-m5b-token/ready/local-restore/completion paths are valid only with --8c40-m5b-watchdog-death-controller.");
+        }
+
+        if (options.Hp8C40M5BWatchdogDeathController &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40M5BReadyPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M5BLocalRestorePath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40M5BCompletionPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-m5b-watchdog-death-controller requires ready, local-restore and completion paths.");
+        }
+
+        if ((options.Hp8C40M5DWriteArmedCrashToken is not null ||
+             options.Hp8C40M5DReadyPath is not null) &&
+            !options.Hp8C40M5DWriteArmedCrashController)
+        {
+            throw new ArgumentException(
+                "--8c40-m5d-token/--8c40-m5d-ready-path are valid only with --8c40-m5d-write-armed-crash-controller.");
+        }
+
+        if (options.Hp8C40M5DWriteArmedCrashController &&
+            string.IsNullOrWhiteSpace(
+                options.Hp8C40M5DReadyPath))
+        {
+            throw new ArgumentException(
+                "--8c40-m5d-write-armed-crash-controller requires --8c40-m5d-ready-path.");
+        }
+
+        if ((options.Hp8C40P15BToken is not null ||
+             options.Hp8C40P15BReadyPath is not null ||
+             options.Hp8C40P15BContinuePath is not null ||
+             options.Hp8C40P15BResultPath is not null) &&
+            !options.Hp8C40P15BManual30)
+        {
+            throw new ArgumentException(
+                "--8c40-p15b-token/ready/continue/result paths are valid only with --8c40-p15b-manual30.");
+        }
+
+        if (options.Hp8C40P15BManual30 &&
+            (string.IsNullOrWhiteSpace(options.Hp8C40P15BReadyPath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40P15BContinuePath) ||
+             string.IsNullOrWhiteSpace(options.Hp8C40P15BResultPath)))
+        {
+            throw new ArgumentException(
+                "--8c40-p15b-manual30 requires ready, continue and result paths.");
+        }
+
         return options;
     }
 
     public static void PrintHelp()
     {
+        Console.WriteLine("  --analyze-ec-wmi-trace <p> Offline JSONL timing report; no hardware initialization.");
+        Console.WriteLine("  --analysis-output-dir <p> Directory for offline JSON/CSV/Markdown reports.");
+        Console.WriteLine("  --residual-ec-investigation  Scenario C: B telemetry plus residual EC registers only, no HP writes.");
+        Console.WriteLine("  --ec-interval-ms <ms>        C batch interval 2000..60000 (default 5000), no catch-up polling.");
+        Console.WriteLine("  --residual-ec-investigation-self-test  Hardware-free C policy and sampler fixtures.");
+        Console.WriteLine("  --wmi-only-investigation  Exact 8C40 telemetry only; prohibit direct EC and HP writes in this process.");
+        Console.WriteLine("  --stop-file <path>        Graceful stop signal for the WMI-only launcher.");
+        Console.WriteLine("  --ready-file <path>       WMI-only CLI readiness metadata (atomic file).");
         Console.WriteLine("Usage:");
         Console.WriteLine("  VictusFanControl [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
-        Console.WriteLine("  --list-sensors             Print all sensors and exit.");
+        Console.WriteLine("  --probe-backends           Probe PawnIO, Intel MSR/EC and NVIDIA NVML.");
+        Console.WriteLine("  --list-sensors             Compatibility alias for --probe-backends.");
+        Console.WriteLine("  --fan-wmi-telemetry-self-test  Test quantized WMI fan cache, timeout and lifecycle; no hardware access.");
+        Console.WriteLine("  --safety-self-test         Run synthetic SafetyGate fail-closed tests.");
+        Console.WriteLine("  --probe-88f8-ec-state     Read known 88F8 fan-control EC state (read-only).");
+        Console.WriteLine("  --probe-88f8-setpoint     Read only 88F8 ownership setpoints 0x34/0x35 (read-only).");
+        Console.WriteLine("  --probe-8c40-setpoint     Read only 8C40 ownership setpoints 0x34/0x35 (read-only).");
+        Console.WriteLine("  --control-self-test       Test authority/fallback coordinator with fake backend.");
+        Console.WriteLine("  --watchdog-lease-client-self-test  Test named-pipe watchdog client protocol/retry logic; no hardware access.");
+        Console.WriteLine("  --adaptive-policy-self-test  Test hardware-independent adaptive policy + shadow/replay logic; no fan writes.");
+        Console.WriteLine("  --adaptive-policy-shadow-replay      OFFLINE/NO-WRITE: replay telemetry CSV through SafetyGate + adaptive policy.");
+        Console.WriteLine("  --adaptive-policy-shadow-config <p>  Required shadow-only JSON config; authorizedForProduction must be false.");
+        Console.WriteLine("  --adaptive-policy-shadow-input <p>   Required existing VictusFanControl telemetry CSV.");
+        Console.WriteLine("  --adaptive-policy-shadow-output <p>  Required output CSV containing recommendations/intents only.");
+        Console.WriteLine("  --bios-contract-self-test Validate 88F8 + 8C40 BIOS/WMI request envelopes.");
+        Console.WriteLine("  --hp-backend-self-test    Test the 88F8 + 8C40 backend boundaries with synthetic hardware.");
+        Console.WriteLine("  --8c40-m8-preflight-probe READ-ONLY: exact-target telemetry + SafetyGate readiness for M8.");
+        Console.WriteLine("  --8c40-m8a-representative-load  READ-ONLY: observe the fixed 60 s M8A representative gaming/3D load window.");
+        Console.WriteLine("  --8c40-m8a-result-path <path>   Required durable JSON evidence path for M8A.");
+        Console.WriteLine("  --8c40-m8a-self-test            Synthetic self-test for M8A load/window classification.");
+        Console.WriteLine("  --8c40-m8c-self-test            Synthetic M8C thermal-preemption test; no hardware writes.");
+        Console.WriteLine("  --8c40-m8b-watchdog-load        ACTIVE M8B GATE: one watchdog-backed 50/50 write under representative load.");
+        Console.WriteLine("  --8c40-m8b-token <token>        Required exact token: 8C40-M8B-LOAD50.");
+        Console.WriteLine("  --8c40-m8b-ready-path <path>    Required durable OWNED-ready marker path for M8B.");
+        Console.WriteLine("  --8c40-m8b-result-path <path>   Required durable controller evidence path for M8B.");
+        Console.WriteLine("  --8c40-m8c-physical-thermal     ACTIVE M8C ATTEMPT-2 GATE: bounded EC-transient hardening + qualification-only thermal preemption.");
+        Console.WriteLine("  --8c40-m8c-physical-token <t>   Required exact token: 8C40-M8C-THERMAL50.");
+        Console.WriteLine("  --8c40-m8c-physical-case <c>    Qualification subcycle: cpu or gpu.");
+        Console.WriteLine("  --8c40-m8c-physical-ready-path <path>     Required real-OWNED pre-injection marker.");
+        Console.WriteLine("  --8c40-m8c-physical-continue-path <path>  Required parent verification handoff marker.");
+        Console.WriteLine("  --8c40-m8c-physical-result-path <path>    Required durable controller evidence.");
+        Console.WriteLine("  --8c40-m9c-production-smoke       HARD-BLOCKED M9C: one watchdog-backed 30/30 through normal factory/public backend construction.");
+        Console.WriteLine("  --8c40-m9c-token <token>          Required exact token: 8C40-M9C-PRODUCTION30.");
+        Console.WriteLine("  --8c40-m9c-ready-path <path>      READY marker after real 30/30 EC+tachs+watchdog COMMIT.");
+        Console.WriteLine("  --8c40-m9c-continue-path <path>   Parent continuation after journal/PID/failsafe proof.");
+        Console.WriteLine("  --8c40-m9c-result-path <path>     Durable M9C controller evidence.");
+        Console.WriteLine("  --8c40-p15b-manual30              HARD-BLOCKED P15B: one equal 30/30 through production Manual adapter, then strong restore.");
+        Console.WriteLine("  --8c40-p15b-token <token>         Required exact token: 8C40-P15B-MANUAL30.");
+        Console.WriteLine("  --8c40-p15b-ready-path <path>     READY marker after one production Manual 30/30 ownership commit.");
+        Console.WriteLine("  --8c40-p15b-continue-path <path>  Parent continuation after journal/service/EC proof.");
+        Console.WriteLine("  --8c40-p15b-result-path <path>    Durable P15B controller evidence including strong restore.");
+        Console.WriteLine("  --restore-hp-auto         EXPERIMENTAL: restore HP FanMode=LegacyDefault via WMI.");
+        Console.WriteLine("  --skip-ec-snapshots       Skip before/after EC snapshots for restore test.");
+        Console.WriteLine("  --first-fan-write-test    EXPERIMENTAL: fixed 30,30 for 15 s, monitored, then restore.");
+        Console.WriteLine("  --write-token <token>     Required acknowledgement token for the first write test.");
+        Console.WriteLine("  --integrated-coordinator-test  HARDWARE GATE: SafetyGate -> coordinator -> exact-target HP backend.");
+        Console.WriteLine("  --core-thermal-characterization  READ-ONLY fan path: sequential per-physical-core CPU thermal characterization.");
+        Console.WriteLine("  --8c40-fan-level-qualification  ACTIVE GATE: qualify equal HP 8C40 levels 30,31,32 with restore after every step.");
+        Console.WriteLine("  --8c40-qualification-token <token>  Required exact token: 8C40-QUAL32.");
+        Console.WriteLine("  --8c40-upper-fan-level-qualification  ACTIVE GATE: historical/resume qualification for equal HP 8C40 levels 33..36.");
+        Console.WriteLine("  --8c40-upper-qualification-token <token>  Required exact token: 8C40-QUAL36.");
+        Console.WriteLine("  --8c40-higher-fan-level-qualification  ACTIVE GATE: qualify equal HP 8C40 levels 37..40 with restore after every step.");
+        Console.WriteLine("  --8c40-higher-qualification-token <token>  Required exact token: 8C40-QUAL40.");
+        Console.WriteLine("  --8c40-full-range-verification  ACTIVE GATE: verify every equal HP 8C40 level 30..40 with restore after every step.");
+        Console.WriteLine("  --8c40-full-range-token <token>  Required exact token: 8C40-VERIFY40.");
+        Console.WriteLine("  --8c40-extended-range-qualification  ACTIVE GATE: guarded characterization of equal HP 8C40 levels 10..50.");
+        Console.WriteLine("  --8c40-extended-range-token <token>  Required exact token: 8C40-QUAL10-50.");
+        Console.WriteLine("  --8c40-transition-qualification  ACTIVE GATE: firmware -> 10 -> 30 -> 50 -> 30 -> 10 -> firmware.");
+        Console.WriteLine("  --8c40-transition-token <token>  Required exact token: 8C40-TRANSITION10-50.");
+        Console.WriteLine("  --8c40-endpoint-coordinator-qualification  ACTIVE GATE: coordinator/backend qualification at equal endpoints 10 and 50.");
+        Console.WriteLine("  --8c40-endpoint-coordinator-token <token>  Required exact token: 8C40-ENDPOINT10-50.");
+        Console.WriteLine("  --8c40-m3-arm             ACTIVE M3 GATE: arm one VFC-owned 30/30 and wait for LocalSystem restore.");
+        Console.WriteLine("  --8c40-m3-arm-token <token>  Required exact token: 8C40-M3-RESTORE30.");
+        Console.WriteLine("  --8c40-m3-handoff-path <path>  Durable one-shot M3 handoff path.");
+        Console.WriteLine("  --8c40-m3-result-path <path>   M3 LocalSystem service result path.");
+        Console.WriteLine("  --8c40-m4-lease10          ACTIVE M4B GATE: real target-bound watchdog lease at equal 10/10.");
+        Console.WriteLine("  --8c40-m4-lease30          ACTIVE M4A GATE: real target-bound watchdog lease at equal 30/30.");
+        Console.WriteLine("  --8c40-m4-lease50          ACTIVE M4C GATE: real target-bound watchdog lease at equal 50/50.");
+        Console.WriteLine("  --8c40-m4-lease-token <token>  Exact token matching the selected level: 8C40-M4-LEASE10/30/50.");
+        Console.WriteLine("  --8c40-m5a-controller-death-arm  ACTIVE M5A CHILD: hold watchdog-owned 30/30 until parent force-kills this process.");
+        Console.WriteLine("  --8c40-m5a-token <token>   Required exact token: 8C40-M5A-CONTROLLER-DEATH30.");
+        Console.WriteLine("  --8c40-m5a-ready-path <path>  Durable READY marker written only after EC+tachs+watchdog OWNED acknowledgement.");
+        Console.WriteLine("  --8c40-m5b-watchdog-death-controller  ACTIVE M5B CHILD: hold OWNED 30/30 and locally restore on watchdog IPC loss.");
+        Console.WriteLine("  --8c40-m5b-token <token>   Required exact token: 8C40-M5B-WATCHDOG-DEATH30.");
+        Console.WriteLine("  --8c40-m5b-ready-path <path>  READY marker after EC+tachs+watchdog OWNED acknowledgement.");
+        Console.WriteLine("  --8c40-m5b-local-restore-path <path>  Marker written only after WATCHDOG_IPC_LOSS local FF/FF restore.");
+        Console.WriteLine("  --8c40-m5b-completion-path <path>  Parent signal allowing the live controller to exit after restart recovery proof.");
+        Console.WriteLine("  --8c40-m5d-write-armed-crash-controller  ACTIVE M5D CHILD: pause after real 30/30 WMI+EC+tach ACK while watchdog journal is still WRITE_ARMED.");
+        Console.WriteLine("  --8c40-m5d-token <token>   Required exact token: 8C40-M5D-WRITE-ARMED-CRASH30.");
+        Console.WriteLine("  --8c40-m5d-ready-path <path>  Durable marker written from the qualification hook before watchdog Commit.");
+        Console.WriteLine("  --coordinator-write-token <token>  Exact token: 88F8-COORD30 or HP 8C40 production tokens 8C40-COORD10/30/32/36/50.");
+        Console.WriteLine("  --health-test-minutes <n>  Strict telemetry soak test; zero misses required.");
+        Console.WriteLine("  --modules-dir <path>       PawnIO signed module directory. Default: .\\modules");
         Console.WriteLine("  --interval-ms <n>          Sampling interval. Default: 1000 ms.");
         Console.WriteLine("  --duration-seconds <n>     Stop after N seconds. 0 = until Ctrl+C.");
         Console.WriteLine("  --output <path>            CSV output path.");
         Console.WriteLine("  -h, --help                 Show help.");
+    }
+
+    private static void SetM4LeaseQualificationLevel(
+        CliOptions options,
+        int level)
+    {
+        if (options.Hp8C40M4LeaseQualification)
+        {
+            throw new ArgumentException(
+                "Choose only one HP 8C40 M4 lease endpoint per invocation.");
+        }
+
+        options.Hp8C40M4LeaseQualification = true;
+        options.Hp8C40M4LeaseQualificationLevel = level;
     }
 
     private static string ReadValue(string[] args, ref int index)
