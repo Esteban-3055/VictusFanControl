@@ -20,6 +20,12 @@ internal static class ProductRetentionTests
         var disabled=new ProductPlatformRetention();
         Check(disabled.GetSupplement(Input(0),12,40) is null,"disabled auxiliary sources must impose no admission");
         disabled.EnsureDispatchAllowed(start,start.AddHours(1));
+        var bootstrap=new ProductPlatformRetention();bootstrap.Configure(true);
+        bootstrap.SetSources(new(),new());bootstrap.ObserveTelemetry(Snapshot(0),"Ac",false);
+        Observe(bootstrap,1);Check(!bootstrap.State.Ready,"initial absence cannot count as an acquisition");
+        Observe(bootstrap,2);Check(bootstrap.State.Ready,"two real acquisitions qualify after initially empty native slots");
+        bootstrap.SetSources(new(),new());bootstrap.ObserveTelemetry(Snapshot(3),"Ac",true);
+        Refused(()=>bootstrap.GetSupplement(Input(3),12,40),"missing source after qualification remains an active fault");
         var p=new ProductPlatformRetention();p.Configure(true);Observe(p,0);
         Refused(()=>p.GetSupplement(Input(0),12,40),"one acquisition cannot qualify");
         Observe(p,1);Check(p.State.Ready,"distinct fresh source epochs qualify");

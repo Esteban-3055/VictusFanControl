@@ -52,6 +52,10 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
             if(!_enabled)return;
             static void Add(List<Source> history, Source source)
             {
+                // Before the first native acquisition, a missing value is an
+                // unobserved slot, not an epoch. Later missing values are faults
+                // and must remain in the bounded evidence history.
+                if(history.Count==0 && source.SampledAtUtc is null)return;
                 if(history.Count==0 || history[^1]!=source)history.Add(source);
                 if(history.Count>8)history.RemoveAt(0);
             }
