@@ -22,6 +22,10 @@ internal sealed class PerformanceGuardianClient
     internal PerformanceGuiSessionConfiguration? AppliedConfiguration { get; private set; }
     internal string? GuardianReportPath { get; private set; }
     internal bool HasProcess => _process is not null;
+    internal bool HasFailedProcess
+    {
+        get { try { return _process is {HasExited:true,ExitCode:not 0}; } catch(InvalidOperationException) {return false;} }
+    }
     internal bool LastStatusFresh
     {
         get
@@ -47,6 +51,8 @@ internal sealed class PerformanceGuardianClient
         try
         {
             if (_process is not null) throw new InvalidOperationException("Libera la sesión anterior antes de aplicar otra configuración.");
+            var recovery=PerformanceRecoveryPreview.Read();
+            if(recovery.Pending)throw new InvalidOperationException(recovery.Detail);
             var executable = ResolveExecutable();
             using var owner = Process.GetCurrentProcess();
             _ownerPid = owner.Id; _ownerStart = owner.StartTime.ToUniversalTime().Ticks;
@@ -189,6 +195,8 @@ internal sealed class PerformanceGuardianClient
     {
         // Already exited: drain redirected error output before reporting the cause.
         _process!.WaitForExit();
+        var recovery=PerformanceRecoveryPreview.Read();
+        if(recovery.Pending)return new IOException(recovery.Detail+" Guardian terminó con error "+_process.ExitCode+".");
         var detail = Volatile.Read(ref _startupFailure);
         return new IOException("Performance Guardian terminó con error " + _process.ExitCode +
             "; conserva los registros pendientes y revisa la recuperación. " + (detail ?? "Revisa el informe de liberación."));

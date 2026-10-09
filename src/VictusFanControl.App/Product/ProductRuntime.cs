@@ -37,6 +37,8 @@ internal sealed record ProductRuntimeState
     internal bool PerformanceActive { get; init; }
     internal bool PerformanceProcessPresent { get; init; }
     internal bool PerformanceUpdating { get; init; }
+    internal PerformanceRecoveryPreview? PerformanceRecovery { get; init; }
+    internal VictusFanControl.PlatformThermalReplay.ProductRetentionState? PlatformRetention { get; init; }
     internal string CpuState { get; init; } = "Disabled";
     internal string GpuState { get; init; } = "Disabled";
     internal string GuardianState { get; init; } = "Sin sesión";
@@ -108,6 +110,8 @@ internal sealed class ProductRuntime : IProductRuntime
     private volatile bool _plannedFanRelease;
     private PerformanceGuiSessionConfiguration? _requestedPerformance;
     private Task? _poll;
+    private Task? _auxiliary;
+    private readonly VictusFanControl.PlatformThermalReplay.ProductPlatformRetention _retention = new();
     private volatile bool _closing, _lifecycleBlocked;
     private volatile bool _performanceUpdating;
     private long _performanceUpdateStarted;
@@ -121,6 +125,7 @@ internal sealed class ProductRuntime : IProductRuntime
         if(platformExperiment is not null && automaticReview != ProductAutomaticReviewMode.Extended)
             throw new ArgumentException("Platform experiment requires explicit extended physical review.");
         _platformExperiment=platformExperiment;
+        if(platformExperiment is null) _retention.Configure(profiles.ExperimentalPlatformRetention);
         _hardware = HardwareIdentityReader.ReadCurrent();
         _target = HpHardwareTargetResolver.Resolve(_hardware,out _);
         if (automaticReview.HasValue)
@@ -149,7 +154,7 @@ internal sealed class ProductRuntime : IProductRuntime
             automaticConfiguration: profiles.Ac.Fan,
             automaticMinimumLevel: _automaticReview is not null ? 10 : Hp8C40AutomaticPolicy.MinimumLevel,
             useRawCpuThermalResponse: _automaticReview is not null,
-            experimentalPolicy: platformExperiment);
+            experimentalPolicy: (IExperimentalFanPolicy?)platformExperiment ?? (_automaticReview is not null ? _retention : null));
         WmiFanExperimentBoundary.PlannedGuiRelease = () => _plannedFanRelease;
         _performance = new(modules);
         _worker = new(modules)
@@ -179,7 +184,30 @@ internal sealed class ProductRuntime : IProductRuntime
         _worker.EventLogged += (_, e) => AppLog.Write(e);
         Publish();
     }
-    public void Start() { _worker.Start(); _poll = PollAsync(); }
+    public void Start() { _worker.Start(); _poll = PollAsync(); _auxiliary = SampleAuxiliaryAsync(); }
+    private async Task SampleAuxiliaryAsync()
+    {
+        var tz=new VictusFanControl.OemShadowCapture.ReadSlot<VictusFanControl.OemShadow.Source>();
+        var dtt=new VictusFanControl.OemShadowCapture.ReadSlot<VictusFanControl.OemShadowCapture.DttSample>();
+        bool enabled=false;
+        try
+        {
+            while(!_lifetime.IsCancellationRequested)
+            {
+                var read=_platformExperiment is null && _target == Hp8C40TargetProfile.Instance && _retention.State.Enabled;
+                if(read!=enabled) { tz.Invalidate(); dtt.Invalidate(); enabled=read; }
+                if(read)
+                {
+                    tz.Poll(Environment.TickCount64,VictusFanControl.OemShadowCapture.OemSources.ReadTz);
+                    dtt.Poll(Environment.TickCount64,VictusFanControl.OemShadowCapture.OemSources.ReadDtt);
+                    _retention.SetSources(tz.Latest??new(),dtt.Latest?.Dtt3??new());
+                }
+                await Task.Delay(250,_lifetime.Token);
+            }
+        }
+        catch(OperationCanceledException) { }
+        finally { tz.Invalidate(); dtt.Invalidate(); }
+    }
     private SafetyGateResult Safety()
     {
         var s = SafetyGate.Evaluate(_hardware, _worker.StateMachine.State, _snapshot, DateTimeOffset.UtcNow, _fans.BackendCanWrite);
@@ -201,12 +229,17 @@ internal sealed class ProductRuntime : IProductRuntime
         {
             _snapshot = snapshot;
             _platformExperiment?.ObserveTelemetry(snapshot,new WindowsPerformancePowerSourceReader().Read().Source.ToString());
+            _retention.ObserveTelemetry(snapshot,new WindowsPerformancePowerSourceReader().Read().Source.ToString(),_controller.Mode==AdaptiveFanProductionMode.Automatic);
+            if(_retention.Enabled)AppLog.Write("PRODUCT PLATFORM SOURCES: "+System.Text.Json.JsonSerializer.Serialize(_retention.CaptureEvidence()));
             if (_closing || _lifecycleBlocked || _controller.Mode != AdaptiveFanProductionMode.Automatic || snapshot.Timestamp <= _automaticStartedUtc) return;
             if (_activeAutomaticTicket is null || !_automaticActivation.IsCurrent(_activeAutomaticTicket)) return;
             try
             {
                 var source = new WindowsPerformancePowerSourceReader().Read();
                 var expected = source.Source == PerformancePowerSourceKind.Ac ? "Ac" : source.Source == PerformancePowerSourceKind.Battery ? "Battery" : null;
+                // Auxiliary faults also close an established session while CPU/GPU
+                // updates or source reconciliation are holding the current fan level.
+                _retention.RequireReady(expected??"Unknown",DateTimeOffset.UtcNow);
                 var raw = SafetyGate.Evaluate(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
                 // Use the shared bounded 8C40 admission, rather than rejecting the
                 // unchanged raw SafetyGate's first CPU >=95 C sample here.
@@ -305,6 +338,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 });
                 _automaticDecision = decision; _automaticDecisionSnapshot = snapshot;
                 _platformExperiment?.NoteApplied(decision,snapshot.Timestamp);
+                if(_retention.Enabled)AppLog.Write("PRODUCT PLATFORM RETENTION: "+System.Text.Json.JsonSerializer.Serialize(_retention.CaptureEvidence()));
                 AppLog.Write("PRODUCT AUTOMATIC DECISION: " + System.Text.Json.JsonSerializer.Serialize(new { automaticSessionId = _automaticSessionId, snapshotTimestamp = snapshot.Timestamp, decision }));
                 if (decision.Action == AdaptiveFanProductionActionKind.Blocked || decision.Action == AdaptiveFanProductionActionKind.RestoreFirmware)
                     throw new InvalidOperationException(decision.Detail);
@@ -357,11 +391,29 @@ internal sealed class ProductRuntime : IProductRuntime
                 await _automaticActivation.RunAsync(ticket,
                     () => FanCommandAsync(() =>
                     {
-                        _automaticActivation.EnsureCurrent(ticket); slot = AutomaticAdmission(); return Task.CompletedTask;
+                        _automaticActivation.EnsureCurrent(ticket); slot = AutomaticAdmission();
+                        if(_platformExperiment is null)
+                        {
+                            if(ticket.Profiles.ExperimentalPlatformRetention && (slot!=ProductPowerProfile.Ac || _controller.Mode!=AdaptiveFanProductionMode.Firmware || _fans.Authority!=FanAuthority.Firmware))
+                                throw new InvalidOperationException("Prepara la retención experimental en Firmware y con alimentación AC.");
+                            _retention.Configure(ticket.Profiles.ExperimentalPlatformRetention);
+                        }
+                        return Task.CompletedTask;
                     }),
                     async () =>
                     {
                         _automaticActivation.EnsureCurrent(ticket);
+                        if(ticket.Profiles.ExperimentalPlatformRetention && _platformExperiment is null)
+                        {
+                            var deadline=Environment.TickCount64+8000;
+                            while(!_retention.State.Ready && Environment.TickCount64<deadline)
+                            {
+                                _automaticActivation.EnsureCurrent(ticket);
+                                await Task.Delay(250,_lifetime.Token);
+                            }
+                            _automaticActivation.EnsureCurrent(ticket);
+                            _retention.RequireReady(new WindowsPerformancePowerSourceReader().Read().Source.ToString(),DateTimeOffset.UtcNow);
+                        }
                         var configuration = ticket.Performance;
                         await ProductAutomaticActivation.PreparePerformanceAsync(configuration, _performance.HasProcess,
                             _performance.AppliedConfiguration, async () => { await _performance.StatusAsync(); },
@@ -375,6 +427,7 @@ internal sealed class ProductRuntime : IProductRuntime
                         if (!ProductAutomaticActivation.PerformanceReady(ticket.Performance, _performance.AppliedConfiguration,
                             _performance.LastStatus, _performance.LastStatusFresh, current.ToString()))
                             throw new InvalidOperationException("CPU/GPU no confirmaron ambos límites para la fuente real; Automatic permanece en Firmware.");
+                        if(_platformExperiment is null)_retention.RequireReady(current.ToString(),DateTimeOffset.UtcNow);
                         await _controller.ConfigureAutomaticAsync(ticket.Profiles.Get(current).Fan, CancellationToken.None);
                         // Configuration may await a controller lock; recheck cancellation before committing.
                         _automaticActivation.EnsureCurrent(ticket);
@@ -662,6 +715,7 @@ internal sealed class ProductRuntime : IProductRuntime
         var source = "Unknown";
         try { var reading = new WindowsPerformancePowerSourceReader().Read(); if (reading.Succeeded) source = reading.Source.ToString(); } catch { }
         var p = _performance.LastStatusFresh ? _performance.LastStatus : null;
+        var recovery=_performance.HasProcess&&!_performance.HasFailedProcess ? null : PerformanceRecoveryPreview.Read();
         ProductRuntimeState state;
         lock (_stateSync)
         {
@@ -678,13 +732,15 @@ internal sealed class ProductRuntime : IProductRuntime
                 AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic && ReferenceEquals(_automaticDecision,_controller.LastAutomaticResult) ? _automaticDecision : null,
                 AppliedAutomaticConfiguration = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _controller.AutomaticConfiguration : null,
                 PerformanceSupported = _target == Hp8C40TargetProfile.Instance,
-                CanApplyPerformance = !_performanceUpdating&&!_automaticActivation.Pending&&!_sourceTransition.Pending&&
+                PerformanceRecovery = recovery,
+                CanApplyPerformance = recovery?.Pending!=true&&!_performanceUpdating&&!_automaticActivation.Pending&&!_sourceTransition.Pending&&
                     (_target == Hp8C40TargetProfile.Instance && PerformanceAdmissionPermitted(_closing,_lifecycleBlocked,_performance.HasProcess,_worker.StateMachine.State,_fans.Authority) || CanUpdatePerformance(source)),
                 PerformanceActive = _performance.LimitsActive, PerformanceProcessPresent = _performance.HasProcess,
                 PerformanceUpdating = _performanceUpdating,
-                CpuState = p?.CpuState ?? (_performance.HasProcess ? "Recovering" : "Disabled"), GpuState = p?.GpuState ?? (_performance.HasProcess ? "Recovering" : "Disabled"),
+                PlatformRetention = _platformExperiment is null ? _retention.State : null,
+                CpuState = p?.CpuState ?? (_performance.HasProcess || recovery?.Pending==true ? "Recovering" : "Disabled"), GpuState = p?.GpuState ?? (_performance.HasProcess || recovery?.Pending==true ? "Recovering" : "Disabled"),
                 CpuStatus = p?.CpuStatus, GpuStatus = p?.GpuStatus, AppliedPerformanceSource = p?.PowerSource ?? "Unknown", AppliedPerformance = _performance.AppliedConfiguration ?? (p is { CpuState: "Active" } or { GpuState: "ActiveUnverified" } ? _requestedPerformance : null),
-                GuardianState = p?.RuntimeFailure is not null ? "Failed" : _performance.HasProcess ? p?.Phase ?? "Recovering" : "Sin sesión",
+                GuardianState = recovery?.Pending==true ? "Recuperación pendiente" : p?.RuntimeFailure is not null ? "Failed" : _performance.HasProcess ? p?.Phase ?? "Recovering" : "Sin sesión",
                 AppliedFanProfile = _fans.Authority == FanAuthority.Custom ? _selectedFanProfile : null,
                 LifecycleBlocked = _lifecycleBlocked, LifecycleBlockReason = _lifecycleBlockReason, Message = message ?? _state.Message, Failure = failure ?? _state.Failure
             }; state = _state;
@@ -701,6 +757,7 @@ internal sealed class ProductRuntime : IProductRuntime
         try { await _performance.CloseAsync(); } catch (Exception ex) { failures.Add(ex); }
         try { await _worker.DisposeAsync(); } catch (Exception ex) { failures.Add(ex); }
         if (_poll is not null) try { await _poll; } catch (OperationCanceledException) { }
+        if (_auxiliary is not null) try { await _auxiliary; } catch (OperationCanceledException) { }
         _lifetime.Dispose();
         if (failures.Count > 0) throw new AggregateException("Liberación incompleta. Conserva los journals y revisa los informes.",failures);
     }

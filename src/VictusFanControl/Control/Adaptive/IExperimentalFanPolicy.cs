@@ -8,3 +8,10 @@ public interface IExperimentalFanPolicy
     void ObserveDuringActuation(AdaptiveFanPolicyInput input);
     void Reset();
 }
+
+/// <summary>Optional floor, evaluated before the single production filter. Never owns hardware.</summary>
+public interface IExperimentalFanSupplement : IExperimentalFanPolicy
+{
+    bool Enabled { get; }
+    double? GetSupplement(AdaptiveFanPolicyInput input, double baselineRawDemand, int? lastAcknowledgedLevel);
+}

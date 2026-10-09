@@ -8,8 +8,9 @@ using VictusFanControl.PlatformThermalReplay;
 using VictusFanControl.Product;
 using VictusFanControl.Telemetry;
 
-if (args is ["--self-test"]) { PlatformTests.Run(); PhysicalExperimentSelfTest.Run(); return; }
+if (args is ["--self-test"]) { PlatformTests.Run(); ProductRetentionTests.Run(); PhysicalExperimentSelfTest.Run(); return; }
 if (args is ["--physical-fixture", var fixtureOutput]) { PhysicalExperimentSelfTest.Run(fixtureOutput); return; }
+if (args is ["--product-study", var physicalTrace, var studyOutput]) { ProductCurveStudy.Run(physicalTrace,studyOutput); return; }
 if (args.Length != 4 || args[0] is not ("--replay" or "--baseline-only"))
     throw new ArgumentException("--replay|--baseline-only OEM-fixtures platform-fixtures new-output-directory");
 bool baselineOnly = args[0] == "--baseline-only";

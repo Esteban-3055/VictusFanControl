@@ -19,7 +19,8 @@
   "remainingPhysicalChecks": [
     "representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return",
     "current-gui-suspend-resume-without-fan-reentry",
-    "current-gui-clean-exit-and-session-restart-release-and-open-in-firmware"
+    "current-gui-clean-exit-and-session-restart-release-and-open-in-firmware",
+    "optional-quiet-ac-candidate-with-tz01-dtt3-comparable-thermal-and-measured-acoustics"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -27,9 +28,19 @@
     "GPU NVML acceptance does not prove exact locked-range readback.",
     "WMI acceptance does not prove independent firmware/fan ownership.",
     "No unattended or startup hardware activation is authorized.",
-    "Stable quiet presets have offline replay evidence only; actual cooling and acoustics remain pending."
+    "Stable quiet presets have offline replay evidence only; actual cooling and acoustics remain pending.",
+    "Product quiet candidate and bounded TZ01/DTT3 retention are replayed on the same observed temperatures; lower simulated fan levels do not prove counterfactual cooling or acoustic improvement."
   ],
   "offlinePolicyEvidence": [
-    "product-fan-stability-replay-8c40-2026-10-06.json"
-  ]
+    "product-fan-stability-replay-8c40-2026-10-06.json",
+    "product-quiet-curve-001126-2026-10-09"
+  ],
+  "experimentalPlatformRetention": {
+    "defaultEnabled": false,
+    "scope": "explicit-automatic-review-ac-only",
+    "maximumExtraRawLevels": 2,
+    "maximumSupplementSeconds": 60,
+    "sourceAdmission": "bounded-acquisition-history-v1",
+    "normalAutomaticPromoted": false
+  }
 }

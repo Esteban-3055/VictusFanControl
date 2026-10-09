@@ -59,9 +59,10 @@ internal sealed partial class ProductCanvas
     {
         DrawText(g,"Avanzado",320,87,30,null,1200,true);
         DrawText(g,"Respuesta común para AC y Batería · curvas y límites siguen siendo independientes",320,132,20,Muted,1300);
-        string[] tabs=["Temperatura CPU","Suavizado e inercia","Historial de carga","Respuesta térmica","Estabilidad"];
-        for(int i=0;i<tabs.Length;i++)Button(g,"advanced-tab-"+i,tabs[i],new(320+i*267,180,250,49),AdvancedTab==i);
+        string[] tabs=["Temperatura CPU","Suavizado e inercia","Historial de carga","Respuesta térmica","Estabilidad","TZ01 / DTT3"];
+        for(int i=0;i<tabs.Length;i++)Button(g,"advanced-tab-"+i,tabs[i],new(320+i*223,180,211,49),AdvancedTab==i);
         Card(g,new(320,249,807,578));Card(g,new(1148,249,500,578));
+        if(AdvancedTab==5){RetentionPanel(g);return;}
         float y=AdvancedTab==2?331:273;
         if(AdvancedTab==0)
         {
@@ -122,7 +123,7 @@ internal sealed partial class ProductForm
     }
     private bool HandleAdvancedCommand(string id)
     {
-        if(id.StartsWith("advanced-tab-")){_canvas.AdvancedTab=Math.Clamp(int.Parse(id[13..]),0,4);_canvas.Invalidate();return true;}
+        if(id.StartsWith("advanced-tab-")){_canvas.AdvancedTab=Math.Clamp(int.Parse(id[13..]),0,5);_canvas.Invalidate();return true;}
         if(!id.StartsWith("tuning-"))return false;
         if(_canvas.Busy||_closing)return true;
         try

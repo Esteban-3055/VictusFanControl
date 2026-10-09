@@ -58,11 +58,13 @@ public class AdaptiveFanInertiaPolicy
         });
     }
 
-    public AdaptiveFanInertiaDecision Evaluate(AdaptiveFanPolicyInput input)
+    public AdaptiveFanInertiaDecision Evaluate(AdaptiveFanPolicyInput input) => EvaluateWithSupplement(input, null);
+
+    internal AdaptiveFanInertiaDecision EvaluateWithSupplement(AdaptiveFanPolicyInput input, Func<double, double?>? supplementalDemand, bool retentionOnly = false)
     {
         // Validate ORIGINAL input and continuity before smoothing. A filter
         // must not turn invalid raw sensors into an accepted policy decision.
-        var demand = _demand.Evaluate(input);
+        var demand = _demand.Evaluate(input, null, supplementalDemand);
         if (!demand.Accepted || !demand.EqualFanLevel.HasValue)
         {
             ClearConfirmation();
@@ -91,6 +93,12 @@ public class AdaptiveFanInertiaPolicy
         // raw thermal override must retain its existing conservative ceiling.
         var actuationDemand = thermalOverride ? smoothed : RoundNormalDemandToTenth(smoothed);
         var requested = Math.Clamp((int)Math.Ceiling(actuationDemand), _config.MinimumLevel, _config.MaximumLevel);
+        // A retained raw floor can slow EMA decay after a load spike. Do not let
+        // that memory finish a normal upward confirmation above the acknowledged
+        // current target. Baseline rises and raw thermal response remain free.
+        if(retentionOnly && !thermalOverride && _current is {} retainedCurrent && demand.UnifiedDemand is {} original &&
+            original.Level<=retainedCurrent && demand.RawDemandLevel>original.Level)
+            requested=Math.Min(requested,retainedCurrent);
         AdaptiveFanInertiaDecision Accepted(string detail) =>
             new(true, _current, demand.RawDemandLevel, smoothed, actuationDemand, thermalOverride, detail)
             { SustainedLoadCooling = _loadHistory.SustainedLoadCooling, ObservedLoadSeconds = _loadHistory.ObservedLoadSeconds, UnifiedDemand=demand.UnifiedDemand };

@@ -65,6 +65,8 @@ public sealed record ProductProfiles
     public bool CpuEnabled { get; init; } = true;
     public bool GpuEnabled { get; init; } = true;
     public bool StartMinimized { get; init; }
+    // Preferences only: never persists source qualification, fan authority or a running session.
+    public bool ExperimentalPlatformRetention { get; init; }
     public ProductProfile Get(ProductPowerProfile source) => source switch
     { ProductPowerProfile.Ac => Ac, ProductPowerProfile.Battery => Battery, _ => throw new ArgumentOutOfRangeException(nameof(source)) };
     public ProductProfiles With(ProductPowerProfile source, ProductProfile profile) => source switch

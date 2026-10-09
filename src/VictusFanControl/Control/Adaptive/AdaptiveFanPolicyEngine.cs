@@ -89,10 +89,12 @@ public sealed class AdaptiveFanPolicyEngine
     public AdaptiveFanPolicyDecision Evaluate(
         AdaptiveFanPolicyInput input) => Evaluate(input, null);
 
-    // Research admission only: the production caller always uses the overload
-    // above. A supplemental floor joins raw demand before the existing inertia.
+    // A supplemental floor joins raw demand before the single existing inertia.
     internal AdaptiveFanPolicyDecision Evaluate(
-        AdaptiveFanPolicyInput input, double? supplementalDemandLevel)
+        AdaptiveFanPolicyInput input, double? supplementalDemandLevel) => Evaluate(input, supplementalDemandLevel, null);
+
+    internal AdaptiveFanPolicyDecision Evaluate(
+        AdaptiveFanPolicyInput input, double? supplementalDemandLevel, Func<double, double?>? supplementalDemand)
     {
         if (!ValidateInput(input, out var inputFailure) ||
             (supplementalDemandLevel is { } extra &&
@@ -161,6 +163,9 @@ public sealed class AdaptiveFanPolicyEngine
                 input.GpuLoadPercent)
         }.Max();
 
+        supplementalDemandLevel = supplementalDemand is null ? supplementalDemandLevel : supplementalDemand(rawDemand);
+        if (supplementalDemandLevel is {} floor && (!double.IsFinite(floor) || floor is <0 or >50))
+            return new(false, null, null, "Supplemental demand is invalid.");
         if (supplementalDemandLevel.HasValue)
             rawDemand = Math.Max(rawDemand, supplementalDemandLevel.Value);
 

@@ -278,9 +278,15 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             Card(g,new(320,253,807,570));DrawText(g,PerformanceTab==2?"Fuente real y perfil aplicado":"Autoridad independiente",350,276,29,null,740,true);
             string[] lines=PerformanceTab==2?["Fuente real: "+SourceText(),"Perfil que editas: "+ProfileName,"Perfil CPU/GPU aplicado: "+(State.AppliedPerformance is null?"Ninguno":State.AppliedPerformanceSource),"CPU: "+AppliedCpu(),"GPU: "+AppliedGpu(),"La pestaña AC/Batería solo cambia la edición."]:
                 ["Performance Guardian: "+State.GuardianState,"CPU: "+State.CpuState,"GPU: "+State.GpuState,"Fan authority: "+State.FanAuthority,"Journal y recuperación pertenecen al backend.","Fan Control y CPU/GPU no forman una transacción atómica."];
-            for(int i=0;i<lines.Length;i++)DrawText(g,lines[i],350,359+i*64,24,i<3?Ink:Muted,735);
+            var lineCount=PerformanceTab==3&&State.PerformanceRecovery is {Pending:true}?4:lines.Length;
+            for(int i=0;i<lineCount;i++)DrawText(g,lines[i],350,359+i*64,24,i<3?Ink:Muted,735);
         }
         Card(g,new(1148,253,500,570));DrawText(g,"Estado y aplicación",1178,276,28,null,438,true);
+        if(PerformanceTab==3 && State.PerformanceRecovery is {Pending:true})
+        {
+            DrawText(g,"Recuperación CPU/GPU pendiente. Conserva los registros; no se puede iniciar otra sesión.",350,676,20,Yellow,735,height:55);
+            Button(g,"recovery-details","Ver recuperación / copiar comando",new(350,745,735,48));
+        }
         DrawText(g,"CPU: "+State.CpuState,1178,341,23,DomainColor(State.CpuState,Green),438);DrawText(g,"GPU: "+State.GpuState,1178,388,23,DomainColor(State.GpuState,Blue),438);
         var appliedSource=State.AppliedPerformanceSource switch{"Ac"=>"AC","Battery"=>"Batería",_=>"—"};
         DrawText(g,"CPU ("+appliedSource+"): "+AppliedCpu(),1178,438,22,Muted,438);DrawText(g,"GPU ("+appliedSource+"): "+AppliedGpu(),1178,480,22,Muted,438);

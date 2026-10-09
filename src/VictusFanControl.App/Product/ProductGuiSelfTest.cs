@@ -22,6 +22,16 @@ internal static partial class ProductGuiSelfTest
             TestLivePerformanceApply(Require);
             TestSessionLogs(Require);
             TestSessionRestart(Require);
+            PerformanceRecoveryPreviewSelfTest.Run(Require);
+            using(var retentionForm=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),fixtureProfiles:new ProductProfiles()))
+            {
+                retentionForm.HandleCommand("retention-toggle");
+                Require(retentionForm.Draft.ExperimentalPlatformRetention,"Experimental option did not enter the draft.");
+                var retentionPrior=retentionForm.Draft;retentionForm.HandleCommand("retention-quiet-candidate");
+                Require(retentionForm.Draft.Ac.CpuPl1Watts==retentionPrior.Ac.CpuPl1Watts&&retentionForm.Draft.Battery==retentionPrior.Battery,"Quiet preset changed performance limits or Battery.");
+                var stagedFan=retentionForm.Draft.Ac.Fan;retentionForm.HandleCommand("retention-quiet-candidate");Require(retentionForm.Draft.Ac.Fan==stagedFan,"Repeated preset accumulated a reduction.");
+                retentionForm.HandleCommand("retention-toggle");Require(!retentionForm.Draft.ExperimentalPlatformRetention,"Experimental option did not disable.");
+            }
             ProductAutomaticActivationSelfTest.Run(Require);
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());
             form.ClientSize=new(1672,941);form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;canvas.Size=new(1672,941);
@@ -115,10 +125,11 @@ internal static partial class ProductGuiSelfTest
                 Require(bitmap.GetPixel(bitmap.Width/2,bitmap.Height/2).A==255,"Render is transparent.");
             }
             foreach(var page in Enum.GetValues<ProductPage>()){canvas.Page=page;canvas.FanTab=0;canvas.PerformanceTab=0;Render("page-"+page);}
-            canvas.Page=ProductPage.Advanced;for(int i=0;i<5;i++){canvas.AdvancedTab=i;Render("advanced-tab-"+i);}
+            canvas.Page=ProductPage.Advanced;for(int i=0;i<6;i++){canvas.AdvancedTab=i;Render("advanced-tab-"+i);}
             Require(canvas.Hits.All(h=>!h.Id.Contains("MaximumDownStep")&&!h.Id.Contains("MinimumLevel")),"Advanced settings expose controls ignored by the protected physical envelope.");
-            canvas.Size=new(1040,660);for(int i=0;i<5;i++){canvas.AdvancedTab=i;Render("advanced-minimum-tab-"+i);}
+            canvas.Size=new(1040,660);for(int i=0;i<6;i++){canvas.AdvancedTab=i;Render("advanced-minimum-tab-"+i);}
             canvas.Size=new(1672,941);
+            canvas.Page=ProductPage.Performance;canvas.PerformanceTab=3;canvas.State=canvas.State with{PerformanceRecovery=new(true,"Fixture pending recovery",Guid.NewGuid(),Guid.NewGuid())};Render("recovery-pending");Require(canvas.Hits.Any(h=>h.Id=="recovery-details"),"Pending recovery has no actionable view.");canvas.State=canvas.State with{PerformanceRecovery=null};
             canvas.Page=ProductPage.Fans;for(int i=1;i<=2;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
             Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
             canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;Render("performance-exact-CPU");Require(canvas.Hits.Any(h=>h.Id=="pl1-text")&&canvas.Hits.Any(h=>h.Id=="pl2-text"),"CPU numeric inputs inaccessible.");

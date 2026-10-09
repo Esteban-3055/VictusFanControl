@@ -1,5 +1,10 @@
 # Candidata final — HP 8C40 / F.18
 
+La GUI incorpora [retención TZ01/DTT3 y candidata AC](PRODUCT_PLATFORM_RETENTION_2026-10-09.md)
+opcionales, desactivadas por defecto, y preflight de recuperación CPU/GPU.
+El replay conserva la base numérica. Temperatura comparable y ruido real de
+la nueva candidata continúan pendientes de medición física.
+
 Actualización de estabilidad: [estudio 8C40](FAN_STABILITY_STUDY_8C40.md). Los presets actuales incorporan meseta fría, histéresis y espera térmica; las mediciones previas y tablas históricas no certifican este ajuste físico.
 
 Esta candidata reúne la GUI, los dos perfiles AC/Batería, la curva única,

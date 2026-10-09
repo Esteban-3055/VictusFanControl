@@ -749,8 +749,12 @@ public sealed class AdaptiveFanProductionController
                 _planner.Reset();
             }
 
-            var preparedDecision = _preparedEngine?.Evaluate(input);
-            if (_experimentalPolicy is not null)
+            var preparedDecision = _experimentalPolicy is IExperimentalFanSupplement {Enabled:true} supplement
+                ? _preparedEngine?.EvaluateWithSupplement(input, raw => supplement.GetSupplement(input, raw,
+                    _lastAutomaticResult?.Action is AdaptiveFanProductionActionKind.EnterCustomAndApply or AdaptiveFanProductionActionKind.ApplyChangedLevel or AdaptiveFanProductionActionKind.HoldCustom
+                        ? _lastAutomaticResult.EqualFanLevel : null), retentionOnly:true)
+                : _preparedEngine?.Evaluate(input);
+            if (_experimentalPolicy is not null && _experimentalPolicy is not IExperimentalFanSupplement {Enabled:false})
             {
                 var baseline = preparedDecision ??
                     throw new InvalidOperationException("Experimental policy requires the prepared baseline.");

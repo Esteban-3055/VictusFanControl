@@ -116,6 +116,16 @@ internal sealed partial class ProductForm : Form
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
         if(HandleAdvancedCommand(id))return;
+        if(HandleRetentionCommand(id))return;
+        if(id=="recovery-details")
+        {
+            var preview=PerformanceRecoveryPreview.Read();
+            var instructions=preview.Instructions();
+            bool copied=false;
+            try {Clipboard.SetText(instructions);copied=true;} catch(System.Runtime.InteropServices.ExternalException) { }
+            MessageBox.Show(this,instructions+(copied?"\n\nInstrucciones copiadas al portapapeles.":"\n\nNo se pudo copiar; conserva estas instrucciones."),"Recuperación explícita CPU/GPU",MessageBoxButtons.OK,MessageBoxIcon.Information);
+            return;
+        }
         if(id is "curve-influences" or "curve-points"){_canvas.ShowCurvePoints=id=="curve-points";_canvas.Invalidate();return;}
         if(id.StartsWith("fan-tab-")){_canvas.FanTab=Math.Clamp(int.Parse(id[8..]),0,2);_canvas.Invalidate();return;}
         if(id.StartsWith("perf-tab-")){_canvas.PerformanceTab=int.Parse(id[9..]);_canvas.Invalidate();return;}

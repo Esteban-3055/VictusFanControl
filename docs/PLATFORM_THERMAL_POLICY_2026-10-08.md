@@ -1,5 +1,10 @@
 # TZ01/DTT3 sobre la politica existente: propuesta y experimento
 
+Actualización 2026-10-09: la [integración opcional en la GUI](PRODUCT_PLATFORM_RETENTION_2026-10-09.md)
+utiliza una retención de +2 niveles y hasta 60 s, con una única inercia de
+producción. El diseño y replay de abajo corresponden a la fase de investigación
+anterior; la retención acotada es una nueva candidata, no una promoción física.
+
 ## Decision
 
 La caracterizacion de sensores v4-v9 ya esta hecha. TZ01 esta trazada a RTMP
