@@ -48,6 +48,36 @@ internal static class PlatformTests
             bool failed=false;try{_ = new PlatformThermalDemand(setting,true,true);}catch(InvalidDataException){failed=true;}
             Check(failed,"invalid settings refused");
         }
+        Source[] History(params double[] epochs)=>epochs.Select(e=>new Source(40,start.AddSeconds(e))).ToArray();
+        PlatformThermalDemand QualifiedHistory()
+        {
+            var observer=Observer();observer.Evaluate(F(0),History(0),History(0));
+            Check(observer.Evaluate(F(1),History(0,1),History(0,1)).Available,"history qualifies real distinct acquisitions");
+            // Fresh cached frame, not a new acquisition.
+            Check(observer.Evaluate(F(2.747737,epoch:1),History(0,1),History(0,1)).Available,"cached source retains original age");
+            return observer;
+        }
+        var bridged=History(1,3.0788012,4.1056265);
+        var final=F(4.4269708,epoch:4.1056265);
+        Check(QualifiedHistory().Evaluate(final,bridged,bridged).Available,"real intermediate acquisition bridges observed 3.1056265-second gap");
+        Check(!QualifiedHistory().Evaluate(final,History(1,4.1056265),bridged).Available,"unproven intermediate acquisition cannot bridge real gap");
+        foreach(var bad in new Source[][]{
+            [],History(1,5,4.1056265),History(1,3.0788012,3.0788012,4.1056265),
+            History(1,4.1056265,3.0788012),History(1,3.0788012),
+            [new(41,start.AddSeconds(1)),..bridged.Skip(1)],
+            [new(40,start.AddSeconds(1)),new(null,start.AddSeconds(3)),bridged[^1]],
+            [new(40,start.AddSeconds(1)),new(double.NaN,start.AddSeconds(3)),bridged[^1]],
+            [new(40,start.AddSeconds(1)),new(),bridged[^1]],
+            History(0,.1,.2,.3,.4,.5,.6,.7,4.1056265)})
+            Check(!QualifiedHistory().Evaluate(final,bad,bridged).Available,"invalid/future/regressed/mutated/absent/unbounded history cannot bridge");
+        o=Observer();Check(!o.Evaluate(F(1,epoch:0),History(0),History(0)).Available,"history cache cannot qualify");
+        Check(!o.Evaluate(F(2,epoch:0),History(0),History(0)).Available,"history cache never advances qualification");
+        Check(!o.Evaluate(F(3,epoch:0),History(0),History(0)).Available,"history does not renew stale age");
+        Check(!QualifiedHistory().Evaluate(F(6,epoch:4.1056265),bridged,bridged).Available,"bridge does not relax primary frame continuity");
+        Check(!QualifiedHistory().Evaluate(F(3,epoch:.5),History(0,.5),History(0,.5)).Available,"history latest regression resets admission");
+        o=Observer();
+        Check(!o.Evaluate(F(10),History(0,10),History(0,10)).Available,"stale prefix cannot establish qualification");
+        Check(o.Evaluate(F(11),History(0,10,11),History(0,10,11)).Available,"fresh real acquisitions requalify after stale prefix");
         foreach(var source in Enum.GetValues<ProductPowerProfile>())
         {
             var fan=ProductProfiles.DefaultProfile(source).Fan;var config=fan.BuildPolicy();

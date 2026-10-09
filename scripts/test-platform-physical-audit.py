@@ -21,7 +21,17 @@ def wrong_close(trace):trace.append(dict(kind='closed',data=dict(reason='Unrelat
 def early_close(trace):
     del trace[next(i for i,r in enumerate(trace) if r['kind']=='completed')+1:]
     trace.append(dict(kind='closed',data=dict(reason='Cierre de ventana',atUtc='1970-01-01T00:00:00+00:00')))
-for mutate in (raw,variant,admission,dispatch,missing,truncate,post_data,wrong_close,early_close):
+def qualified_history(trace):return next(r['data'] for r in trace if r['kind']=='telemetry' and r['data']['admission']['available'])
+def missing_history(trace):del qualified_history(trace)['sourceHistory']
+def future_history(trace):qualified_history(trace)['sourceHistory']['dtt3'][0]['sampledAtUtc']='2099-01-01T00:00:00+00:00'
+def changed_history(trace):qualified_history(trace)['sourceHistory']['dtt3'][-1]['value']+=1
+def duplicate_history(trace):
+    samples=qualified_history(trace)['sourceHistory']['dtt3'];samples.insert(0,copy.deepcopy(samples[0]))
+def missing_bridge(trace):
+    data=next(r['data'] for r in trace if r['kind']=='telemetry' and r['data']['snapshot']['timestamp']=='1970-01-01T00:04:03+00:00')
+    samples=data['sourceHistory']['dtt3'];assert audit.stamp(samples[-1]['sampledAtUtc'])-audit.stamp(samples[-3]['sampledAtUtc'])>30_000_000
+    del samples[-2]
+for mutate in (raw,variant,admission,dispatch,missing,truncate,post_data,wrong_close,early_close,missing_history,future_history,changed_history,duplicate_history,missing_bridge):
     with tempfile.TemporaryDirectory(prefix='vfc-audit-negative-') as tmp:
         root=pathlib.Path(tmp);changed=copy.deepcopy(rows);mutate(changed)
         (root/'experiment.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in changed),encoding='utf-8')
@@ -29,4 +39,4 @@ for mutate in (raw,variant,admission,dispatch,missing,truncate,post_data,wrong_c
         try:audit.audit(root)
         except (AssertionError,ValueError,KeyError,TypeError):continue
         raise AssertionError('Corruption accepted: '+mutate.__name__)
-print('Independent physical audit negative controls: PASS (9 corruptions rejected).')
+print('Independent physical audit negative controls: PASS (14 corruptions rejected).')

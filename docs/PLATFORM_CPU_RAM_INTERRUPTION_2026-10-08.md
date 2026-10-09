@@ -2,12 +2,85 @@
 
 ## Conclusión
 
-El disparo registrado es pérdida de continuidad/frescura de telemetría, no un
-disparo térmico. No se ha identificado todavía el origen del retraso. La aparición
-al iniciar OCCT la refiere el operador; el ZIP no registra el proceso de carga,
-su prioridad, configuración ni tiempos internos de las consultas nativas.
-No corresponde atribuir el problema de manera definitiva a OCCT, saturación de
-CPU, WMI o una colisión entre lectores.
+La captura instrumentada de 23:46 UTC identifica el primer disparo: el
+controlador vio un salto de 3,1056265 s entre épocas de DTT3, aunque el dato
+actual tenía solo 0,3213443 s de edad. La lectura principal estaba completa,
+con CPU al 100 %, 64 °C y 29,049 W. La interrupción inicial no fue térmica
+ni el watchdog principal. Este último apareció después, durante el procesamiento
+que libera los controles tras el rechazo de DTT3.
+
+El código conservaba ocho adquisiciones auxiliares, pero evaluaba solo la última
+seleccionada por cada snapshot principal. Se corrige ese consumo para comprobar
+las adquisiciones intermedias reales, conservar sus timestamps y registrarlas
+junto al snapshot. La captura antigua no guarda esos valores intermedios; no
+permite asegurar que hubiera un puente DTT3 válido en esa ejecución. El cambio
+resuelve el caso de submuestreo demostrado en una reproducción sintética, sin
+aceptar huecos reales ni ampliar frescura. Falta comprobarlo en el equipo.
+
+Las capturas anteriores no tenían marcadores suficientes para identificar su
+primera fase de bloqueo. No se les atribuye retrospectivamente la misma causa,
+ni se concluye que OCCT, WMI o saturación de CPU fueran responsables.
+
+## Captura instrumentada: 23:46 UTC
+
+- ZIP: `Victus-Platform-physical-20261008T234633Z-bac746c3.zip`.
+- SHA-256: `198f31abb3a32f034ab471d0492cf7fc2df57ccb821ca380b38bdafa6e8e9360`.
+- Build: `d69331437fbbed2785e94edf7ef53534fba3f0a6`.
+- CPU PL1/PL2 25/30 W; GPU máxima 1950 MHz.
+- Auditoría independiente PASS: 214 snapshots, 212 cualificados, 93 decisiones
+  y 93 resultados; cinco cambios aceptados. Solo A1/baseline.
+- Máxima registrada CPU 79 °C; última CPU 64 °C, GPU 48 °C.
+- El ZIP no acredita configuración, cantidad de hilos o prioridad de OCCT.
+
+| UTC | Evidencia |
+|---|---|
+| 23:52:16.6505354 | Snapshot anterior; DTT3 seleccionado con época 23:52:14.9027984. |
+| 23:52:18.3297692 | Snapshot completo; CPU 100 %, 64 °C, 29,0493348609 W. DTT3 51 °C, época 23:52:18.0084249; edad 0,3213443 s. |
+| 23:52:18.334938 | Experimento cierra por fuente TZ01/DTT3 no disponible/requalificando. |
+| 23:52:18.343391 | Comienza restauración de ventiladores. |
+| 23:52:21.7634927 | Watchdog de 3422 ms; worker `SnapshotProcessor`, reader `SnapshotComplete`, ambos con edad 3422 ms. |
+| 23:52:26.9126206 | Liberación Firmware aceptada. |
+| 23:52:28.1709408 | Cleanup succeeded=true, failure=null. |
+
+El hueco entre snapshots principales fue 1,6792338 s. TZ01 tenía 1,3481696 s
+de edad y un salto entre épocas de 2,0776401 s; cumplía ambas barreras. El salto
+DTT3 de 3,1056265 s excedía la continuidad de canal de 3 s. Los dos valores
+actuales eran válidos y frescos. El watchdog posterior no demuestra que el
+lector nativo estuviera bloqueado cuando se produjo el rechazo inicial.
+
+Los registros de salud muestran tiempos de consultas/pending, pero no la época
+y valor de cada DTT3 intermedio. Un pending recién encolado con queue=0 en
+varios polls no prueba que sea la misma consulta ni una espera de varios segundos.
+Las escrituras WMI registradas de 1344 y 1156 ms tampoco fueron el primer disparo.
+
+## Corrección y comprobación de software
+
+La admisión física recibe secuencias inmutables de adquisiciones por snapshot, con hasta ocho
+adquisiciones TZ01/DTT3 cuya época no es posterior a ese snapshot. Exige que el
+último registro coincida con el valor seleccionado; comprueba orden, validez,
+mutación de época y continuidad de las nuevas adquisiciones. No ordena muestras,
+no inventa puentes y no renueva la edad del caché. Sin estado previo, solo
+adquisiciones actualmente frescas pueden establecer cualificación.
+
+Se mantienen edad estrictamente menor que 3 s, continuidad real máxima de 3 s,
+dos adquisiciones separadas al menos 1 s, continuidad principal y comprobación
+justo antes de dispatch. También quedan intactos curva, MAX, retención, límites
+térmicos, watchdog y Automatic normal. El replay archivado sin historial conserva
+exactamente su admisión anterior. La traza nueva identifica el esquema
+`bounded-acquisition-history-v1`; su auditor exige los historiales presentes.
+
+La reproducción ABBA incluye un snapshot omitido con una adquisición auxiliar
+real intermedia: el salto observado DTT3 es 3,1056265 s. Los controles negativos
+eliminan ese puente y alteran épocas, valores, orden y presencia de historiales;
+deben rechazarse. La validación de software no acredita que el equipo produzca
+esas adquisiciones ni demuestra beneficio térmico de los sensores.
+
+Comprobación local de la corrección: compilación Roslyn de observer/GUI;
+9283 checks de política, 8657 de experimento físico sintético, auditoría de
+2579 snapshots / 2159 decisiones y resultados, y 14 corrupciones rechazadas.
+Replay reconciliado: 323876 filas / 84 ejecuciones; baseline original intacto.
+La captura de usuario sin histories también conserva su resultado auditado.
+La verificación Windows corresponde al CI del commit que contiene este cambio.
 
 ## Procedencia y comprobaciones
 

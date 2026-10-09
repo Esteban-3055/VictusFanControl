@@ -38,6 +38,7 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
     private readonly StreamWriter _trace;
     private readonly string _directory;
     private readonly List<Source> _tz=[],_dtt1=[],_dtt2=[],_dtt3=[];
+    private Source[] _joinedTz=[],_joinedDtt=[];
     private Frame? _frame;
     private PlatformObservation? _qualified;
     private ExperimentStage _stage=ExperimentProtocol.At(0);
@@ -71,7 +72,7 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
             return(name,new PlatformThermalDemand(settings,name!="dtt3",name!="tz01"),new ResearchFanInertiaPolicy(config,_fan.Tuning));
         }).ToArray();
         Write("session",new{target="HP-8C40-9D0R1LA-F18",protocol="A-B-B-A;120s firmware + 4x540s + 300s firmware",
-            fan=_fan,settings=_settings,physicalExecution,normalAutomaticPromoted=false,performancePresets="Frozen by host in metadata.json; existing Guardian applies/releases them",
+            fan=_fan,settings=_settings,sourceAdmission="bounded-acquisition-history-v1",physicalExecution,normalAutomaticPromoted=false,performancePresets="Frozen by host in metadata.json; existing Guardian applies/releases them",
             disclosure="Shadow variants share the observed temperatures, not counterfactual thermal outcomes. HP-WMI levels*100 are nominal RPM; workload labels are scheduled instructions, not proof of load. Query epochs do not prove silicon sensor update times."});
     }
     private void Write(string kind,object data)
@@ -116,17 +117,19 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
                 if(_stage.Custom)Close("Telemetry epoch gap or regression");
             }
             _lastTelemetry=snapshot.Timestamp;
-            Source Pick(List<Source> history)=>history.LastOrDefault(s=>s.SampledAtUtc<=snapshot.Timestamp)??new();
+            Source[] Join(List<Source> history)=>history.Where(s=>s.SampledAtUtc is null||s.SampledAtUtc<=snapshot.Timestamp).ToArray();
+            _joinedTz=Join(_tz);_joinedDtt=Join(_dtt3);
+            Source Pick(Source[] history)=>history.LastOrDefault()??new();
             _frame=new(snapshot.Timestamp,new(snapshot.CpuTemperatureC,snapshot.Timestamp),new(snapshot.CpuCoreMaxTemperatureC,snapshot.Timestamp),
-                new(snapshot.GpuTemperatureC,snapshot.Timestamp),Pick(_tz),Pick(_dtt3),Pick(_dtt1),Pick(_dtt2),
+                new(snapshot.GpuTemperatureC,snapshot.Timestamp),Pick(_joinedTz),Pick(_joinedDtt),Pick(Join(_dtt1)),Pick(Join(_dtt2)),
                 snapshot.CpuFanSpeedLevel,snapshot.GpuFanSpeedLevel,snapshot.FanSampledAtUtc,
                 snapshot.CpuPackagePowerW,snapshot.GpuPowerW,snapshot.CpuLoadPercent,snapshot.GpuLoadPercent);
-            _qualified=_admission.Evaluate(_frame);
+            _qualified=_admission.Evaluate(_frame,_joinedTz,_joinedDtt);
             _telemetryRows++;if(_qualified.Available)_qualifiedRows++;
             _first??=snapshot.Timestamp;_last=snapshot.Timestamp;
             if(snapshot.CpuControlTemperatureC is {} cpu&&double.IsFinite(cpu))_cpuMaximum=Math.Max(_cpuMaximum,cpu);
             if(snapshot.GpuTemperatureC is {} gpu&&double.IsFinite(gpu))_gpuMaximum=Math.Max(_gpuMaximum,gpu);
-            Write("telemetry",new{stage=_stage,source,snapshot,frame=_frame,admission=_qualified});
+            Write("telemetry",new{stage=_stage,source,snapshot,frame=_frame,sourceHistory=new{tz01=_joinedTz,dtt3=_joinedDtt},admission=_qualified});
             if(_stage.Custom&&(source!="Ac"||!_qualified.Available))Close(source!="Ac"?"Power source changed; experiment is AC-only":"Required TZ01/DTT3 source unavailable or requalifying");
         }
     }
@@ -139,9 +142,9 @@ public sealed class PhysicalPlatformExperiment : IExperimentalFanPolicy, IDispos
             var comparisons=new List<object>();
             foreach(var v in _variants)
             {
-                var observation=v.Sources.Evaluate(_frame);
+                var observation=v.Sources.Evaluate(_frame,_joinedTz,_joinedDtt);
                 // Readiness was qualified by the common observer before custom admission.
-                // Variant observers still report their own first-acquisition unavailability.
+                // Each variant consumes the same frozen acquisitions, with its own frame continuity.
                 double? extra=observation.Available?observation.DemandLevel:null;
                 if(v.Name=="both-retention"&&extra.HasValue)extra=Math.Min(extra.Value,_variantLevels.GetValueOrDefault(v.Name,baseline.EqualFanLevel!.Value));
                 var candidate=v.Policy.Evaluate(input,extra);

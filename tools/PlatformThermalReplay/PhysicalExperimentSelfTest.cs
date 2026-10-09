@@ -43,7 +43,11 @@ public static class PhysicalExperimentSelfTest
                 // Long platform cooldown after a reproducible synthetic workload.
                 double platform=loaded?67:stage.Custom&&within>=360?67-(within-360)*.06:44;
                 var at=start.AddSeconds(seconds);
-                experiment.SetSources(new(platform+8,at),new(50,at),new(48,at),new(platform,at));
+                // Reproduce observer subsampling: the selected DTT epochs are
+                // 3.1056265s apart, but a real 241.5788012s acquisition bridges them.
+                long dttTicks=seconds switch{240 or 241=>2_395_000_000L,242=>2_415_788_012L,243=>2_426_056_265L,_=>seconds*TimeSpan.TicksPerSecond};
+                experiment.SetSources(new(platform+8,at),new(50,at),new(48,at),new(platform,start.AddTicks(dttTicks)));
+                if(seconds==242)continue; // Auxiliary acquisition without a main frame.
                 var snapshot=Sample(seconds,loaded?80:50,loaded?70:40,loaded?30:10,loaded?60:8,loaded?80:5);
                 experiment.ObserveTelemetry(snapshot,"Ac");
                 if(!stage.Custom)continue;

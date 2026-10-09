@@ -16,6 +16,15 @@ def frame_pascal(frame):
                 result[key]['Value']=float(result[key]['Value'])
     return result
 
+def source_history(data, session):
+    history=data.get('sourceHistory')
+    if session.get('sourceAdmission')=='bounded-acquisition-history-v1':
+        assert isinstance(history,dict) and set(history)=={'tz01','dtt3'}, 'Missing acquisition history'
+    if history is None:return None
+    assert isinstance(history,dict) and set(history)=={'tz01','dtt3'}
+    return {key[0].upper()+key[1:]:[frame_pascal({key:source})[key[0].upper()+key[1:]] for source in samples]
+            for key,samples in history.items()}
+
 def baseline_raw(input, fan):
     demand=fan['unifiedDemand'];tuning=fan['tuning']
     def scale(value,cold,hot):return min(100,max(0,(value-cold)/(hot-cold)*100))
@@ -85,7 +94,7 @@ def audit(directory):
             if previous is not None:
                 assert now>previous,'Non-increasing snapshots'
                 if now-previous>30_000_000:gaps.append((previous,now))
-            previous=now;available=admission.evaluate(f);assert available==d['admission']['available'],'Source admission mismatch'
+            previous=now;available=admission.evaluate(f,source_history(d,session));assert available==d['admission']['available'],'Source admission mismatch'
             qual+=available;telemetry[now]=d;b['samples']+=1
             for key,field in [('cpu','cpuControlTemperatureC'),('gpu','gpuTemperatureC')]:
                 if isinstance(s[field],(int,float)) and math.isfinite(s[field]):b[key].append(s[field])
@@ -118,7 +127,7 @@ def audit(directory):
             assert {v['name'] for v in d['comparisons']}=={'tz01','dtt3','both','both-retention','both-warmer-thresholds','both-colder-thresholds'}
             f=frame_pascal(t['frame'])
             for v in d['comparisons']:
-                name=v['name'];va,vs=variants[name];available=va.evaluate(f)
+                name=v['name'];va,vs=variants[name];available=va.evaluate(f,source_history(t,session))
                 assert v['observation']['available']==available, ('variant admission',name)
                 if available:
                     tz=replay.interpolate(vs['tz01Curve'],f['Tz01']['Value']) if name!='dtt3' else None

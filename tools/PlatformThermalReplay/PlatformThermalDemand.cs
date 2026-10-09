@@ -52,7 +52,7 @@ public sealed class PlatformThermalDemand
         _settings = settings with { Tz01Curve = settings.Tz01Curve.ToArray(), Dtt3Curve = settings.Dtt3Curve.ToArray() };
         _useTz = useTz; _useDtt = useDtt;
     }
-    public PlatformObservation Evaluate(Frame f)
+    public PlatformObservation Evaluate(Frame f, Source[]? tzHistory = null, Source[]? dttHistory = null)
     {
         if (!_useTz && !_useDtt) return new(true, null, null, null, "Disabled");
         if (_lastFrame is { } last && (f.TimestampUtc <= last ||
@@ -62,8 +62,8 @@ public sealed class PlatformThermalDemand
             return new(false, null, null, null, "FrameContinuityLost");
         }
         _lastFrame = f.TimestampUtc;
-        var tzOk = !_useTz || _tz.Admit(f.Tz01, f.TimestampUtc, _settings);
-        var dttOk = !_useDtt || _dtt.Admit(f.Dtt3, f.TimestampUtc, _settings);
+        var tzOk = !_useTz || _tz.AdmitHistory(f.Tz01, f.TimestampUtc, _settings, tzHistory);
+        var dttOk = !_useDtt || _dtt.AdmitHistory(f.Dtt3, f.TimestampUtc, _settings, dttHistory);
         if (!tzOk || !dttOk)
             return new(false, null, null, null, "SourceMissingStaleInvalidOrRequalifying");
         double? tz = _useTz ? Interpolate(_settings.Tz01Curve, f.Tz01.Value!.Value) : null;
@@ -85,6 +85,42 @@ public sealed class PlatformThermalDemand
         private DateTimeOffset? _epoch, _first;
         private double? _value;
         private int _count;
+        public bool AdmitHistory(Source source, DateTimeOffset now, PlatformSettings settings, Source[]? history)
+        {
+            // Archived replay has no acquisition history and keeps its exact admission.
+            if (history is null) return Admit(source, now, settings);
+            if (history.Length is < 1 or > 8 || history[^1] != source ||
+                !source.Fresh(now, settings.MaximumSourceAgeSeconds*1000))
+            { Reset(); return false; }
+            DateTimeOffset? previous = null;
+            foreach (var sample in history)
+            {
+                // Reject malformed, regressed, future or mutated epochs; never sort,
+                // fabricate a bridge or conceal an invalid intervening acquisition.
+                if (sample is null || sample.SampledAtUtc is not {} at || at > now ||
+                    !sample.Fresh(at, settings.MaximumSourceAgeSeconds*1000) ||
+                    (previous is {} prior && at <= prior))
+                { Reset(); return false; }
+                previous = at;
+            }
+            if (_epoch is {} latest && source.SampledAtUtc < latest)
+            { Reset(); return false; }
+            var observed = _epoch;
+            bool qualified = false;
+            foreach (var sample in history)
+            {
+                var at = sample.SampledAtUtc!.Value;
+                if (observed is {} last && at < last) continue;
+                // With no prior admission, only presently fresh acquisitions can
+                // establish qualification. Cached prefixes never renew their age.
+                if (observed is null && !sample.Fresh(now, settings.MaximumSourceAgeSeconds*1000)) continue;
+                if (_epoch is {} epoch && (at < epoch || (at == epoch && sample.Value != _value) ||
+                    (at-epoch).TotalSeconds > settings.MaximumSourceAgeSeconds))
+                { Reset(); return false; }
+                qualified = Admit(sample, at, settings);
+            }
+            return qualified && _epoch == source.SampledAtUtc;
+        }
         public bool Admit(Source? source, DateTimeOffset now, PlatformSettings settings)
         {
             if (source is null || !source.Fresh(now, settings.MaximumSourceAgeSeconds*1000))

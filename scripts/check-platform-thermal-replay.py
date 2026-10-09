@@ -31,7 +31,7 @@ class Admission:
     def __init__(self, tz, dtt, settings):
         self.enabled = [tz, dtt]; self.settings = settings
         self.last = None; self.channels = [None, None]
-    def evaluate(self, frame):
+    def evaluate(self, frame, history=None):
         if not any(self.enabled): return True
         now = stamp(frame['TimestampUtc']); s = self.settings
         if self.last is not None and (now <= self.last or now-self.last > s['maximumFrameGapSeconds']*10_000_000):
@@ -42,15 +42,34 @@ class Admission:
             src = frame[key]
             if not fresh(src, now, s['maximumSourceAgeSeconds']):
                 self.channels[i] = None; qualified.append(False); continue
-            at = stamp(src['SampledAtUtc']); value = src['Value']; state = self.channels[i]
-            if state is not None and (at < state['last'] or (at == state['last'] and value != state['value']) or
-                                      at-state['last'] > s['maximumSourceAgeSeconds']*10_000_000):
-                self.channels[i] = None; qualified.append(False); continue
-            if state is None: state = dict(first=at, last=at, value=value, count=1)
-            elif at != state['last']: state.update(last=at, value=value, count=state['count']+1)
+            state = self.channels[i]
+            samples = [src] if history is None else history[key]
+            if history is not None:
+                valid = 1 <= len(samples) <= 8 and samples[-1] == src
+                previous = None
+                for sample in samples:
+                    at = stamp(sample['SampledAtUtc']) if sample and sample.get('SampledAtUtc') else None
+                    valid = valid and at is not None and at <= now and fresh(sample, at, s['maximumSourceAgeSeconds'])
+                    valid = valid and (previous is None or at > previous)
+                    previous = at
+                if state is not None and stamp(src['SampledAtUtc']) < state['last']: valid = False
+                if not valid:
+                    self.channels[i] = None; qualified.append(False); continue
+            observed = None if state is None else state['last']
+            ok = False
+            for sample in samples:
+                at = stamp(sample['SampledAtUtc']); value = sample['Value']
+                if history is not None:
+                    if observed is not None and at < observed: continue
+                    if observed is None and not fresh(sample, now, s['maximumSourceAgeSeconds']): continue
+                if state is not None and (at < state['last'] or (at == state['last'] and value != state['value']) or
+                                          at-state['last'] > s['maximumSourceAgeSeconds']*10_000_000):
+                    state = None; ok = False; break
+                if state is None: state = dict(first=at, last=at, value=value, count=1)
+                elif at != state['last']: state.update(last=at, value=value, count=state['count']+1)
+                ok = state['count'] >= s['qualificationAcquisitions'] and at-state['first'] >= s['qualificationSeconds']*10_000_000
             self.channels[i] = state
-            qualified.append(state['count'] >= s['qualificationAcquisitions'] and
-                             at-state['first'] >= s['qualificationSeconds']*10_000_000)
+            qualified.append(ok and state['last'] == stamp(src['SampledAtUtc']))
         return all(qualified)
 
 def main():
