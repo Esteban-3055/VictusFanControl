@@ -17,7 +17,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     public string SessionDirectory { get; private set; }
     public string ReportPath => Path.Combine(SessionDirectory, "guardian-report.json");
 
-    internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null)
+    internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null, string? releasedBoundaryDirectory = null)
     {
         _fixture = fixture;
         using var owner = Process.GetCurrentProcess();
@@ -27,7 +27,14 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         Directory.CreateDirectory(SessionDirectory);
         if (!fixture)
         {
-            WmiFanExperimentBoundary.Enable(SessionDirectory, true, gui: true);
+            if(releasedBoundaryDirectory is null) WmiFanExperimentBoundary.Enable(SessionDirectory, true, gui: true);
+            else
+            {
+                if(!string.Equals(Path.GetFullPath(releasedBoundaryDirectory),WmiFanExperimentBoundary.SessionDirectory,StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("La frontera WMI liberada no coincide con el controlador anterior.");
+                WmiFanExperimentBoundary.BeginRecovery();
+                WmiFanExperimentBoundary.RearmGuiAfterSuccessfulRelease(releasedBoundaryDirectory,SessionDirectory);
+            }
             WmiFanExperimentBoundary.EnsureGuiGuardianAlive = EnsureAlive;
         }
     }

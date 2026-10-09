@@ -49,7 +49,7 @@ internal sealed partial class ProductForm
         catch(Exception ex)
         {
             AppLog.Write("PRODUCT SESSION RESTART BLOCKED: "+ex);
-            if(_runtime is not null)_runtime.Changed-=UpdateState;
+            DetachRuntime();
             // A partially disposed runtime is never reused or disposed a second time.
             _runtime=null;
             _startupFailure="No se pudo reiniciar la sesión: "+ex.Message;

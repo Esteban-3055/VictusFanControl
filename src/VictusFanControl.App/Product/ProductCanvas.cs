@@ -35,6 +35,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     internal bool StartupEnabled { get; set; }
     internal bool StartupKnown { get; set; }
     internal string Notice { get; set; } = "";
+    internal bool AutomaticRetryAvailable { get; set; }
     internal event Action<string>? Command;
     internal event Action<string,int>? ValueEdited;
     internal event Action<int,double,int>? NodeEdited;
@@ -211,10 +212,11 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         if(FanTab==1){TelemetryPage(g);return;}if(FanTab==2){SafetyPage(g);return;}
         Card(g,new(311,161,1338,268));DrawText(g,"Modo de control",333,181,26,null,1100,true);
         string[] modes=["Firmware","Manual","Automático"],captions=["Control del sistema (BIOS)","Nivel fijo para CPU y GPU","Curva + límites CPU y GPU"];
+        if(State.LifecycleBlocked&&AutomaticRetryAvailable)captions[2]="Preparar un nuevo intento";
         string[] icons=["fan","profiles","curve"];
         for(int i=0;i<3;i++){var r=new RectangleF(334+i*433,224,411,182);bool selected=State.FanMode==(i==2?"Automatic":modes[i]);Card(g,r,selected);
             Icon(g,icons[i],r.X+175,r.Y+22,48,selected?Blue:Muted);DrawText(g,modes[i],r.X+35,r.Y+90,27,null,r.Width-60,true);DrawText(g,captions[i],r.X+35,r.Y+128,20,Muted,r.Width-60);
-            bool enabled=i==0||i==1&&State.ManualAuthorized&&!State.LifecycleBlocked||i==2&&State.AutomaticAuthorized&&!State.LifecycleBlocked;
+            bool enabled=i==0||i==1&&State.ManualAuthorized&&!State.LifecycleBlocked||i==2&&State.AutomaticAuthorized&&(!State.LifecycleBlocked||AutomaticRetryAvailable);
             Hit("fan-mode-"+i,r,modes[i],enabled&&(!Busy||i==0));if(!enabled)DrawText(g,"Aplicación bloqueada",r.X+235,r.Y+18,15,Yellow,160);}
         Card(g,new(312,450,583,378));DrawText(g,"Control manual",334,468,26,null,520,true);
         Slider(g,"manual", "Nivel CPU / GPU",new(339,535,510,115),ManualLevel,10,50,"");

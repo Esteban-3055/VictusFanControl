@@ -70,7 +70,7 @@ internal sealed partial class ProductForm
         }
         catch
         {
-            if (_runtime is not null) _runtime.Changed -= UpdateState;
+            DetachRuntime();
             _runtime = null;
             _canvas.State = _canvas.State with { LifecycleBlocked = true, Runtime = "Failed", CanApplyPerformance = false, Failure = "Sesión cerrada para actualizar. Sal desde la bandeja y vuelve a abrir el programa si cancelaste la instalación." };
             _canvas.Busy = false;

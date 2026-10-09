@@ -2,7 +2,7 @@ using VictusFanControl.Product;
 
 namespace VictusFanControl.App;
 
-/// <summary>One startup request, never a retry or resume policy. Uses observations, not UI ticks.</summary>
+/// <summary>One startup or explicit manual request. Never automatically retries or arms on resume.</summary>
 internal sealed class ProductStartupAutomatic
 {
     internal const int MaximumWaitMilliseconds = 30000;
@@ -12,8 +12,10 @@ internal sealed class ProductStartupAutomatic
     private DateTimeOffset? _firstSample;
     private int _samples;
     internal bool Finished { get; private set; }
-    internal string Status { get; private set; } = "Esperando sensores para Automático al iniciar…";
-    internal ProductStartupAutomatic(long now) => _started=now;
+    private readonly bool _manualRetry;
+    private string _status="Esperando sensores para Automático al iniciar…";
+    internal string Status {get=>_manualRetry?_status.Replace("Automático al iniciar","Reintento manual de Automático",StringComparison.OrdinalIgnoreCase):_status;private set=>_status=value;}
+    internal ProductStartupAutomatic(long now,bool manualRetry=false) { _started=now;_manualRetry=manualRetry; }
     internal void Cancel(string reason) { Finished=true; Status=reason; }
     internal bool Observe(ProductRuntimeState state, DateTimeOffset now, long clock)
     {

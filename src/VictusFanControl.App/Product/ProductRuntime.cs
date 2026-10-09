@@ -58,7 +58,7 @@ internal sealed record ProductRuntimeState
         (AutomaticInterruptionSnapshot is { } s
             ? $"\nMuestra del disparo ({s.Timestamp:O}): CPU {s.CpuControlTemperatureC:0.##} °C; GPU {s.GpuTemperatureC:0.##} °C."
             : "") +
-        "\n\nUsa Reiniciar sesión: guarda un diagnóstico, libera los controles y abre una sesión nueva en Firmware. Si la liberación falla, no abre otra sesión y conserva los registros. También puedes usar Salir desde la bandeja.";
+        "\n\nEn uso habitual, pulsa Automático para preparar un reintento manual en esta ventana, después de liberar los controles y verificar sensores nuevos. Si quedan registros pendientes, resuelve la recuperación. Reiniciar sesión sigue disponible: guarda un diagnóstico, libera los controles y abre una sesión nueva en Firmware. Si la liberación falla, no abre otra sesión y conserva los registros. También puedes usar Salir desde la bandeja.";
 }
 
 internal interface IProductRuntime : IAsyncDisposable
@@ -92,6 +92,9 @@ internal sealed class ProductRuntime : IProductRuntime
     private readonly Hp8C40ThermalEmergencyConfirmation _thermal = new();
     private readonly TelemetryWorker _worker;
     private readonly PerformanceGuardianClient _performance;
+    private readonly WmiFanGuiGuardianClient? _fanGuardian;
+    private bool _releaseCompleted;
+    private int _retryBoundaryClaimed;
     private readonly SemaphoreSlim _commands = new(1,1);
     private readonly SemaphoreSlim _fanCommands = new(1,1);
     private readonly CancellationTokenSource _lifetime = new();
@@ -121,10 +124,11 @@ internal sealed class ProductRuntime : IProductRuntime
 
     private readonly VictusFanControl.PlatformThermalReplay.PhysicalPlatformExperiment? _platformExperiment;
     internal ProductRuntime(string modules, ProductProfiles profiles, ProductAutomaticReviewMode? automaticReview = null,
-        VictusFanControl.PlatformThermalReplay.PhysicalPlatformExperiment? platformExperiment = null)
+        VictusFanControl.PlatformThermalReplay.PhysicalPlatformExperiment? platformExperiment = null, ProductRuntime? releasedRuntime = null)
     {
         if(platformExperiment is not null && automaticReview != ProductAutomaticReviewMode.Extended)
             throw new ArgumentException("Platform experiment requires explicit extended physical review.");
+        var releasedBoundary=releasedRuntime?.ClaimReleasedBoundary();
         _platformExperiment=platformExperiment;
         if(platformExperiment is null) _retention.Configure(profiles.ExperimentalPlatformRetention);
         _hardware = HardwareIdentityReader.ReadCurrent();
@@ -142,12 +146,13 @@ internal sealed class ProductRuntime : IProductRuntime
         {
             if (_target == Hp8C40TargetProfile.Instance)
             {
-                _wmi = new(new WmiFanGuiGuardianClient()); backend = _wmi;
+                _fanGuardian=new WmiFanGuiGuardianClient(releasedBoundaryDirectory:releasedBoundary);
+                _wmi = new(_fanGuardian); backend = _wmi;
                 _wmi.CommandAccepted += (_, message) => AppLog.Write("PRODUCT WMI REQUEST ACCEPTED: " + message);
             }
             else backend = new DisabledFanControlBackend();
         }
-        catch (Exception ex) { backend = new DisabledFanControlBackend(); AppLog.Write("Product backend unavailable: " + ex); }
+        catch (Exception ex) { if(releasedBoundary is not null)throw;backend = new DisabledFanControlBackend(); AppLog.Write("Product backend unavailable: " + ex); }
         _fans = new(backend);
         _controller = new(_fans, Hp8C40AdaptiveCandidateV1.Create(),
             backend.CanWrite && Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(_target?.Id),
@@ -185,6 +190,12 @@ internal sealed class ProductRuntime : IProductRuntime
         };
         _worker.EventLogged += (_, e) => AppLog.Write(e);
         Publish();
+    }
+    private string ClaimReleasedBoundary()
+    {
+        if(!_releaseCompleted||_fanGuardian is null||Interlocked.CompareExchange(ref _retryBoundaryClaimed,1,0)!=0)
+            throw new IOException("El controlador anterior no tiene una liberación completa disponible para reintentar.");
+        return _fanGuardian.SessionDirectory;
     }
     public void Start() { _worker.Start(); _poll = PollAsync(); _auxiliary = SampleAuxiliaryAsync(); }
     private async Task SampleAuxiliaryAsync()
@@ -762,5 +773,6 @@ internal sealed class ProductRuntime : IProductRuntime
         if (_auxiliary is not null) try { await _auxiliary; } catch (OperationCanceledException) { }
         _lifetime.Dispose();
         if (failures.Count > 0) throw new AggregateException("Liberación incompleta. Conserva los journals y revisa los informes.",failures);
+        _releaseCompleted=true;
     }
 }
