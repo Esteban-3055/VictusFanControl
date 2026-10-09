@@ -20,6 +20,8 @@ internal sealed partial class ProductForm : Form
     private readonly System.Windows.Forms.Timer _presentationTimer = new() { Interval = 1000 };
     private TaskCompletionSource? _commandsDrained;
     private readonly NotifyIcon _tray;
+    private readonly ProductIcons _icons = new();
+    internal ProductTrayState TrayState { get; private set; }
     private bool _closing, _exitRequested, _disposedRuntime, _creating;
     private IntPtr _displayRegistration, _suspendRegistration;
     private bool _displayOff;
@@ -50,7 +52,7 @@ internal sealed partial class ProductForm : Form
             AppLog.Write("PRODUCT SESSION RESTART OPENED: previous="+restartState.PreviousSessionId+"; current="+AppLog.SessionId+"; no authority transferred.");
         }
         _presentationTimer.Tick+=(_,_)=>PresentationTick();
-        Text="VictusFanControl";FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleMode=AutoScaleMode.Dpi;
+        Text="VictusFanControl";Icon=_icons.Program;FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=new(1344,756);StartPosition=FormStartPosition.CenterScreen;
         _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
         if(restartState is not null)_canvas.Dirty=restartState.Dirty;
@@ -62,7 +64,7 @@ internal sealed partial class ProductForm : Form
         menu.Items.Add("Liberar CPU / GPU",null,async(_,_)=>{if(!_restarting)await RunAsync(()=>_runtime?.ReleasePerformanceAsync()??Task.CompletedTask);});
         menu.Items.Add("Reiniciar sesión",null,async(_,_)=>await RestartSessionAsync());
         menu.Items.Add("Salir",null,(_,_)=>{_exitRequested=true;Close();});
-        _tray=new(){Icon=SystemIcons.Application,Text="VictusFanControl · Firmware",ContextMenuStrip=menu,Visible=fixture is null&&runtimeFactory is null};
+        _tray=new(){Icon=_icons.Default,Text="VictusFanControl · Firmware",ContextMenuStrip=menu,Visible=fixture is null&&runtimeFactory is null};
         _tray.DoubleClick+=(_,_)=>ShowFromTray();
         Shown+=(_,_)=>
         {
@@ -110,10 +112,17 @@ internal sealed partial class ProductForm : Form
         if(InvokeRequired){if(IsHandleCreated)BeginInvoke(()=>UpdateState(state));return;}
         if(_startupFailure is not null&&state.Failure is null)state=state with{Failure=_startupFailure};
         _canvas.State=state;if(state.Snapshot is not null)_canvas.AddSnapshot(state.Snapshot);
-        _tray.Text=("VictusFanControl · "+state.FanMode+" · "+state.FanAuthority)[..Math.Min(63,("VictusFanControl · "+state.FanMode+" · "+state.FanAuthority).Length)];
+        UpdateTray(state);
         if(state.Failure is not null)_canvas.Notice=state.Failure;
         TryStartupAutomatic();
         _canvas.Invalidate();
+    }
+    private void UpdateTray(ProductRuntimeState state)
+    {
+        var next=ProductIcons.Select(state,TrayState);
+        if(next!=TrayState){TrayState=next;_tray.Icon=_icons.For(TrayState);}
+        var trayText="VictusFanControl · "+(TrayState==ProductTrayState.Error?"Error / sesión interrumpida":state.FanMode+" · "+state.FanAuthority);
+        _tray.Text=trayText[..Math.Min(63,trayText.Length)];
     }
     private void TryStartupAutomatic()
     {
@@ -215,6 +224,8 @@ internal sealed partial class ProductForm : Form
                     _canvas.Notice="Curva e influencias aplicadas en Automatic. Guardar conserva los cambios; CPU/GPU mantienen sus límites actuales.";});break;
             case "discard":_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=!_hasSavedBaseline;_canvas.SelectedNode=-1;_canvas.Notice=_hasSavedBaseline?"Se recuperaron las preferencias guardadas.":"Se recuperó la configuración inicial; falta guardarla.";break;
             case "updates-check":_ = CheckUpdateAsync();break;
+            case "updates-install":_ = DownloadAndInstallUpdateAsync();break;
+            case "updates-page":_canvas.Page=ProductPage.Updates;break;
             case "startup-toggle":_ = ToggleStartupAsync();break;
             case "firmware":case "fan-mode-0":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask);break;
             case "fan-mode-1":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Manual,Draft)??Task.CompletedTask);break;
@@ -343,7 +354,7 @@ internal sealed partial class ProductForm : Form
     }
     protected override void Dispose(bool disposing)
     {
-        if(disposing){DisposeUpdateCancellation();_presentationTimer.Dispose();UnregisterPowerNotifications();DetachRuntime();_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();}
+        if(disposing){DisposeUpdateCancellation();_presentationTimer.Dispose();UnregisterPowerNotifications();DetachRuntime();_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();_icons.Dispose();}
         base.Dispose(disposing);
     }
     private void ToggleMaximize()=>WindowState=WindowState==FormWindowState.Maximized?FormWindowState.Normal:FormWindowState.Maximized;
@@ -381,6 +392,7 @@ internal sealed partial class ProductForm : Form
     }
     internal Task HandlePowerEventAsync(int code,int? display=null)
     {
+        if(code==4||code==0x8013&&display==0)_updateLifecycleBoundary++;
         if(_restarting)
         {
             if(code==4||code==0x8013&&display==0)_restartLifecycleInterrupted=true;

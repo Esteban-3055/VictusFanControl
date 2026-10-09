@@ -53,7 +53,7 @@ public static class ProductUpdates
         await CopyBoundedAsync(stream, memory, 1024 * 1024, deadline.Token);
         return ParseRelease(System.Text.Encoding.UTF8.GetString(memory.ToArray()), current);
     }
-    public static async Task<string> DownloadAsync(ProductUpdate update, CancellationToken cancellation)
+    public static async Task<string> DownloadAsync(ProductUpdate update, CancellationToken cancellation, IProgress<long>? progress = null)
     {
         // Validate the public record again before using it as a filesystem/network capability.
         var tag = "v" + update.Version;
@@ -74,7 +74,7 @@ public static class ProductUpdates
             if (response.Content.Headers.ContentLength is long length && length != update.Size) throw new IOException("Tamaño de descarga incorrecto.");
             await using (var source = await response.Content.ReadAsStreamAsync(cancellation))
             await using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                await CopyBoundedAsync(source, output, update.Size, cancellation);
+                await CopyBoundedAsync(source, output, update.Size, cancellation, progress);
             await using var file = File.OpenRead(path);
             if (file.Length != update.Size || Convert.ToHexString(await SHA256.HashDataAsync(file, cancellation)).ToLowerInvariant() != update.Sha256)
                 throw new InvalidDataException("La descarga no coincide con el SHA-256 de GitHub.");
@@ -82,7 +82,7 @@ public static class ProductUpdates
         }
         catch { File.Delete(path); Directory.Delete(directory); throw; }
     }
-    internal static async Task CopyBoundedAsync(Stream input, Stream output, long maximum, CancellationToken cancellation)
+    internal static async Task CopyBoundedAsync(Stream input, Stream output, long maximum, CancellationToken cancellation, IProgress<long>? progress = null)
     {
         var buffer = new byte[81920]; long total = 0; int count;
         while ((count = await input.ReadAsync(buffer, cancellation)) != 0)
@@ -90,6 +90,7 @@ public static class ProductUpdates
             total += count;
             if (total > maximum) throw new InvalidDataException("La respuesta supera el tamaño permitido.");
             await output.WriteAsync(buffer.AsMemory(0, count), cancellation);
+            progress?.Report(total);
         }
     }
 }

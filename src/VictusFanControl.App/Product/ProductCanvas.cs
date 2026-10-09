@@ -7,7 +7,7 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
-internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced }
+internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates }
 internal sealed record ProductHit(string Id, RectangleF Bounds, string Label, bool Enabled, bool Slider = false, int Min = 0, int Max = 0);
 
 /// <summary>Owner-drawn product surface in reference coordinates. All gestures edit drafts or emit semantic commands.</summary>
@@ -36,6 +36,11 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     internal bool StartupKnown { get; set; }
     internal string Notice { get; set; } = "";
     internal bool AutomaticRetryAvailable { get; set; }
+    internal ProductUpdate? AvailableUpdate { get; set; }
+    internal bool UpdateBusy { get; set; }
+    internal string UpdateStatus { get; set; } = "Comprueba si hay una nueva versión disponible.";
+    internal DateTimeOffset? UpdateCheckedAt { get; set; }
+    internal int? UpdateProgressPercent { get; set; }
     internal event Action<string>? Command;
     internal event Action<string,int>? ValueEdited;
     internal event Action<int,double,int>? NodeEdited;
@@ -116,6 +121,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         else if(type=="cpu") {g.DrawRectangle(pen,x+size*.2f,y+size*.2f,size*.6f,size*.6f);for(int i=1;i<=3;i++){g.DrawLine(pen,x,y+size*i/4,x+size*.2f,y+size*i/4);g.DrawLine(pen,x+size*.8f,y+size*i/4,x+size,y+size*i/4);g.DrawLine(pen,x+size*i/4,y,x+size*i/4,y+size*.2f);g.DrawLine(pen,x+size*i/4,y+size*.8f,x+size*i/4,y+size);}}
         else if(type=="gpu") {g.DrawRectangle(pen,x,y+size*.15f,size*.85f,size*.6f);g.DrawEllipse(pen,x+size*.2f,y+size*.25f,size*.35f,size*.35f);g.DrawLine(pen,x+size*.85f,y+size*.25f,x+size,y+size*.25f);}
         else if(type=="settings") {var teeth=Enumerable.Range(0,32).Select(i=>{var angle=i*Math.PI/16;var radius=size*(i%4 is 1 or 2?.5:.38);return new PointF(x+size/2+(float)Math.Cos(angle)*(float)radius,y+size/2+(float)Math.Sin(angle)*(float)radius);}).ToArray();g.DrawPolygon(pen,teeth);g.DrawEllipse(pen,x+size*.35f,y+size*.35f,size*.3f,size*.3f);}
+        else if(type=="update") {g.DrawArc(pen,x,y,size,size,35,285);g.DrawLines(pen,new PointF[]{new(x+size*.73f,y),new(x+size*.94f,y+size*.17f),new(x+size*.97f,y-size*.05f)});g.DrawLine(pen,x+size*.5f,y+size*.24f,x+size*.5f,y+size*.75f);g.DrawLines(pen,new PointF[]{new(x+size*.3f,y+size*.55f),new(x+size*.5f,y+size*.75f),new(x+size*.7f,y+size*.55f)});}
         else {g.DrawRectangle(pen,x,y,size*.8f,size);g.DrawLine(pen,x+size*.15f,y+size*.3f,x+size*.65f,y+size*.3f);g.DrawLine(pen,x+size*.15f,y+size*.55f,x+size*.5f,y+size*.55f);}
     }
     private static string Value(double? value,string unit,int decimals=0) => value.HasValue && double.IsFinite(value.Value) ? value.Value.ToString("F"+decimals)+" "+unit : "— "+unit;
@@ -130,8 +136,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         using(var p=new Pen(Border)) {g.DrawLine(p,0,64,1672,64);g.DrawLine(p,279,64,279,882);g.DrawLine(p,0,882,1672,882);}
         Icon(g,"fan",24,16,36,Blue);DrawText(g,"VictusFanControl",76,17,25,null,220,true);DrawText(g,"│",288,16,26,Muted,25);DrawText(g,State.Hardware,328,18,23,Muted,1070);
         Button(g,"window-minimize","−",new(1450,8,54,45));Button(g,"window-maximize","□",new(1524,8,54,45));Button(g,"window-close","×",new(1598,8,54,45));
-        string[] names=["Inicio","Ventiladores","Rendimiento","Perfiles","Curvas","Monitorización","Configuración","Avanzado"];
-        string[] icons=["home","fan","chart","profiles","curve","pulse","settings","settings"];
+        string[] names=["Inicio","Ventiladores","Rendimiento","Perfiles","Curvas","Monitorización","Configuración","Avanzado","Actualizaciones"];
+        string[] icons=["home","fan","chart","profiles","curve","pulse","settings","settings","update"];
         for(int i=0;i<names.Length;i++)
         {
             var rect=new RectangleF(8,85+i*76,262,70);if((int)Page==i){Card(g,rect,true,12);using var b=new SolidBrush(Blue);g.FillRectangle(b,8,rect.Y+5,5,60);}
@@ -154,6 +160,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Monitoring: Monitoring(g);break;
             case ProductPage.Settings: Settings(g);break;
             case ProductPage.Advanced: Advanced(g);break;
+            case ProductPage.Updates: Updates(g);break;
         }
         using(var b=new SolidBrush(FreshSnapshot is not null?Green:Yellow))g.FillEllipse(b,24,901,20,20);
         DrawText(g,"VictusFanControl v"+ProductRelease.Version+"  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
@@ -471,7 +478,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Button(g,"minimized-toggle",Profiles.StartMinimized?"✓  Minimizar al iniciar":"○  Minimizar al iniciar",new(956,241,665,55),Profiles.StartMinimized);
         Button(g,"automatic-start-toggle",Profiles.ActivateAutomaticOnStart?"✓  Activar Automático al iniciar":"○  Activar Automático al iniciar",new(334,310,590,43),Profiles.ActivateAutomaticOnStart);
         DrawText(g,"Guardar conserva la opción. Espera sensores válidos y aplica CPU/GPU antes de controlar.",956,309,19,Muted,665,height:62);
-        Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);Button(g,"updates-check","Buscar actualizaciones",new(334,480,475,48));
+        Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);Button(g,"updates-page","Ir a Actualizaciones",new(334,480,475,48));
         Button(g,"discard","Descartar cambios",new(846,478,310,68),false,Dirty);
         Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,551,18,Dirty?Yellow:Green,475);
         Button(g,"profiles-import","Importar perfiles",new(846,555,310,40));Button(g,"profiles-export","Exportar perfiles",new(1176,555,442,40));

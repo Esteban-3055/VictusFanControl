@@ -58,6 +58,7 @@ $shortcut=$shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Progra
 $shortcut.TargetPath=Join-Path $app 'VictusFanControl.App.exe'
 $shortcut.Arguments='--modules-dir "'+(Join-Path $app 'modules')+'"'
 $shortcut.WorkingDirectory=$app
+$shortcut.IconLocation=(Join-Path $app 'VictusFanControl.App.exe')+',0'
 $shortcut.Save()
 Write-Host "Instalado en $destination"
 Write-Host 'Perfiles y preferencias anteriores conservados. Primera instalación: inicio con Windows, minimizado y Automático. La apertura mantiene los requisitos de sensores, guardianes y recuperación.'

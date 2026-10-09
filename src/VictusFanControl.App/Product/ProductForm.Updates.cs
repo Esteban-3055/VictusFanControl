@@ -10,6 +10,7 @@ internal sealed partial class ProductForm
     private bool _checkingUpdate;
     private bool _updateCancellationDisposed;
     private Task? _updateInstallTask;
+    private long _updateLifecycleBoundary;
     private void DisposeUpdateCancellation()
     {
         if (_updateCancellationDisposed) return;
@@ -20,33 +21,59 @@ internal sealed partial class ProductForm
         if (!_isolatedRuntime) throw new InvalidOperationException("Update fixture requires an isolated runtime.");
         return _updateInstallTask ??= InstallUpdateAsync("fixture://installer", ensureReleased, launch);
     }
-    private async Task CheckUpdateAsync()
+    internal async Task CheckUpdateAsync(Func<CancellationToken,Task<ProductUpdate?>>? checkFixture = null)
     {
-        if (_checkingUpdate || _closing || _restarting || _isolatedRuntime) return;
-        _checkingUpdate = true;
+        if (_checkingUpdate || _closing || _restarting || _canvas.Busy || (_isolatedRuntime && checkFixture is null)) return;
+        if (!_isolatedRuntime && checkFixture is not null) throw new InvalidOperationException("Update fixture requires an isolated runtime.");
+        _checkingUpdate = _canvas.UpdateBusy = true;
+        _canvas.AvailableUpdate = null; _canvas.UpdateProgressPercent = null;
+        _canvas.UpdateStatus = "Consultando releases estables de GitHub…"; _canvas.Invalidate();
         try
         {
-            _canvas.Notice = "Consultando releases estables de GitHub…"; _canvas.Invalidate();
-            var update = await ProductUpdates.CheckAsync(Version.Parse(ProductRelease.Version), _updateCancellation.Token);
+            var update = await (checkFixture?.Invoke(_updateCancellation.Token) ?? ProductUpdates.CheckAsync(Version.Parse(ProductRelease.Version), _updateCancellation.Token));
             if (_closing || IsDisposed) return;
-            if (update is null) { _canvas.Notice = "Ya tienes la versión estable más reciente (" + ProductRelease.Version + ")."; return; }
-            if (_canvas.Dirty) { _canvas.Notice = $"Disponible v{update.Version}. Guarda o descarta el borrador antes de actualizar."; return; }
-            if (MessageBox.Show(this, $"Disponible v{update.Version}.\n\nSe descargará y verificará el instalador. Después se liberarán ventiladores y CPU/GPU y se cerrará esta sesión. Tus preferencias se conservan.\n\n¿Descargar y abrir el instalador?", "Actualizar VictusFanControl", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
-            _canvas.Notice = "Descargando y verificando el instalador…"; _canvas.Invalidate();
-            var path = await ProductUpdates.DownloadAsync(update, _updateCancellation.Token);
+            _canvas.AvailableUpdate = update; _canvas.UpdateCheckedAt = DateTimeOffset.Now;
+            _canvas.UpdateStatus = update is null ? "No hay una versión estable más reciente que la instalada." :
+                $"Nueva versión disponible. Instalador: {update.Size / (1024d * 1024):0.0} MB. Pulsa Descargar e instalar para actualizar.";
+        }
+        catch (OperationCanceledException) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "La consulta se canceló o agotó su tiempo. Puedes volver a comprobar."; }
+        catch (Exception ex) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "No se pudo comprobar: " + ex.Message; AppLog.Write("PRODUCT UPDATE CHECK: " + ex); }
+        finally { _checkingUpdate = false; if (!IsDisposed) { _canvas.UpdateBusy = false; _canvas.Invalidate(); } }
+    }
+    internal async Task DownloadAndInstallUpdateAsync(Func<ProductUpdate,CancellationToken,Task<string>>? downloadFixture = null, Action? ensureReleasedFixture = null, Action? launchFixture = null)
+    {
+        if (_checkingUpdate || _closing || _restarting || _canvas.Busy || _canvas.Dirty || _canvas.AvailableUpdate is not { } update || (_isolatedRuntime && downloadFixture is null)) return;
+        if (!_isolatedRuntime && downloadFixture is not null) throw new InvalidOperationException("Update fixture requires an isolated runtime.");
+        if (!_isolatedRuntime && MessageBox.Show(this, $"Se descargará v{update.Version} y se verificará su SHA-256. Después se liberarán ventiladores y CPU/GPU y se cerrará esta sesión. Tus preferencias se conservan.\n\n¿Descargar y abrir el instalador?", "Actualizar VictusFanControl", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
+        _checkingUpdate = _canvas.UpdateBusy = true;
+        var lifecycleBoundary = _updateLifecycleBoundary;
+        _canvas.UpdateProgressPercent = 0;
+        _canvas.UpdateStatus = "Descargando y verificando el instalador…"; _canvas.Invalidate();
+        try
+        {
+            var progress = new Progress<long>(bytes =>
+            {
+                if (_closing || IsDisposed || !_canvas.UpdateBusy) return;
+                _canvas.UpdateProgressPercent = (int)Math.Clamp(bytes * 100 / update.Size, 0, 100);
+                _canvas.Invalidate();
+            });
+            var path = await (downloadFixture?.Invoke(update,_updateCancellation.Token) ?? ProductUpdates.DownloadAsync(update, _updateCancellation.Token, progress));
             if (_closing || IsDisposed) return;
-            // Downloading leaves the controls available; recheck after awaited work.
-            if (_canvas.Dirty || _canvas.Busy) { _canvas.Notice = "Descarga verificada. Guarda el borrador y espera a que termine la operación antes de actualizar."; return; }
-            _updateInstallTask = InstallUpdateAsync(path);
+            // Navigation/editing and power events remain available while downloading.
+            if (_canvas.Dirty || _canvas.Busy || _restarting || _displayOff || lifecycleBoundary != _updateLifecycleBoundary)
+            { _canvas.UpdateStatus = "Descarga verificada. Guarda los cambios y resuelve la interrupción antes de instalar; después vuelve a pulsar Descargar e instalar."; return; }
+            _canvas.UpdateProgressPercent = 100;
+            _canvas.UpdateStatus = "Descarga verificada. Liberando la sesión para instalar…";
+            _updateInstallTask = InstallUpdateAsync(path,ensureReleasedFixture,launchFixture);
             await _updateInstallTask;
         }
-        catch (OperationCanceledException) { if (!_closing && !IsDisposed) _canvas.Notice = "La consulta o descarga se canceló o agotó su tiempo."; }
-        catch (Exception ex) { if (!_closing && !IsDisposed) _canvas.Notice = "No se pudo actualizar: " + ex.Message; AppLog.Write("PRODUCT UPDATE: " + ex); }
-        finally { _checkingUpdate = false; if (!IsDisposed) _canvas.Invalidate(); }
+        catch (OperationCanceledException) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "La descarga se canceló o agotó su tiempo. Puedes volver a intentarlo."; }
+        catch (Exception ex) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "No se pudo instalar: " + ex.Message; AppLog.Write("PRODUCT UPDATE INSTALL: " + ex); }
+        finally { _checkingUpdate = false; if (!IsDisposed) { _canvas.UpdateBusy = false; _canvas.Invalidate(); } }
     }
     private async Task InstallUpdateAsync(string installer, Action? ensureReleased = null, Action? launchFixture = null)
     {
-        _restarting = true; _canvas.RestartAvailable = false; _canvas.Busy = true;
+        _restarting = true; _restartLifecycleInterrupted = false; _canvas.RestartAvailable = false; _canvas.Busy = true;
         _presentationTimer.Stop(); _startupAutomatic?.Cancel("Actualización solicitada.");
         try
         {
@@ -73,6 +100,7 @@ internal sealed partial class ProductForm
             DetachRuntime();
             _runtime = null;
             _canvas.State = _canvas.State with { LifecycleBlocked = true, Runtime = "Failed", CanApplyPerformance = false, Failure = "Sesión cerrada para actualizar. Sal desde la bandeja y vuelve a abrir el programa si cancelaste la instalación." };
+            UpdateTray(_canvas.State);
             _canvas.Busy = false;
             throw;
         }

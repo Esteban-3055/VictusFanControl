@@ -14,7 +14,7 @@
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
     "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "e0e395a1eab83272c3c4a38d3a77d48868f951808883fe1deb36640a98665b8f",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
-    "src/VictusFanControl.App/Product/ProductRuntime.cs": "0fcdbba3badab2599219d9921b03e6d647edbf8ed75eeaef7d4813e33b7f43e9",
+    "src/VictusFanControl.App/Product/ProductRuntime.cs": "a27316700d18e681dee3fbe9a5feb0f9eb67bd3506417682a8bc1249548d5393",
     "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "d731e33907c5ade3c328849e578a29c7442713048373c9da3d59221cfa7f5260"
   },
   "historicalReconstruction": {

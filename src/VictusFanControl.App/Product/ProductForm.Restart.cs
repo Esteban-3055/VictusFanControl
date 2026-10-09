@@ -56,6 +56,7 @@ internal sealed partial class ProductForm
             _canvas.State=_canvas.State with{LifecycleBlocked=true,LifecycleBlockReason=_startupFailure,Failure=_startupFailure,
                 Runtime="Failed",CanApplyPerformance=false,AutomaticPreparing=false,PerformanceUpdating=false};
             _canvas.Notice=_startupFailure+" Conserva el diagnóstico y los registros de recuperación. Usa Salir desde la bandeja.";
+            UpdateTray(_canvas.State);
             _canvas.Busy=false;_canvas.Invalidate();
         }
         finally{_restarting=false;}

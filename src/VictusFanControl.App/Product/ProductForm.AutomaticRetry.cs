@@ -75,6 +75,7 @@ internal sealed partial class ProductForm
             _runtime=null;_canvas.AutomaticRetryAvailable=false;_startupAutomatic?.Cancel("Reintento no completado.");
             _canvas.State=before with{LifecycleBlocked=true,Runtime="Failed",Failure="No se pudo preparar Automático: "+ex.Message,CanApplyPerformance=false,AutomaticPreparing=false};
             _canvas.Notice=_canvas.State.Failure!+" Conserva los registros de recuperación y usa Salir desde la bandeja.";
+            UpdateTray(_canvas.State);
             AppLog.Write("PRODUCT MANUAL AUTOMATIC RETRY BLOCKED: "+ex);
         }
         finally

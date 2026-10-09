@@ -6,9 +6,11 @@
     <AssemblyName>VictusFanControl.App</AssemblyName>
     <RootNamespace>VictusFanControl.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../../assets/icons/program.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="../../assets/icons/*.ico" LogicalName="VictusFanControl.Icons.%(Filename).ico" />
     <ProjectReference Include="..\VictusFanControl\VictusFanControl.csproj" />
     <ProjectReference Include="../../tools/PlatformThermalReplay/PlatformThermalReplay.csproj" />
     <Compile Include="../../tools/OemShadowCapture/OemSources.cs" Link="Experimental/OemSources.cs" />
