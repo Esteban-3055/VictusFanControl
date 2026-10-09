@@ -6,7 +6,7 @@
   "stableReleaseAuthorized": true,
   "normalAutomatic": "authorized-exact-target",
   "startup": "optional-one-attempt-after-three-fresh-observations-coupled-performance",
-  "reentryAfterInterruption": "clean-exit-and-new-process-only",
+  "reentryAfterInterruption": "explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations",
   "sessionRestart": "explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics",
   "automaticThermalContract": "cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
   "physicalEvidence": [
@@ -32,7 +32,8 @@
     "Product quiet candidate and bounded TZ01/DTT3 retention are replayed on the same observed temperatures; lower simulated fan levels do not prove counterfactual cooling or acoustic improvement.",
     "Release authorization comes from the user request for habitual exact-target use; it is not a new physical qualification PASS.",
     "Windows logon task and unattended acquisition must still be observed on the target; CI checks use zero-hardware fixtures.",
-    "Source-independent TZ01/DTT3 retention requires a target observation in Battery and during AC/Battery handoff; software checks do not prove battery cooling, runtime or acoustics."
+    "Source-independent TZ01/DTT3 retention requires a target observation in Battery and during AC/Battery handoff; software checks do not prove battery cooling, runtime or acoustics.",
+    "Same-GUI explicit Automatic retry has software fixtures; current-target hardware retry has not yet been observed."
   ],
   "offlinePolicyEvidence": [
     "product-fan-stability-replay-8c40-2026-10-06.json",
@@ -47,5 +48,6 @@
     "normalAutomaticPromoted": true
   },
   "version": "1.1.0",
-  "physicalPassClaimed": false
+  "physicalPassClaimed": false,
+  "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation"
 }

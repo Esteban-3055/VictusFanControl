@@ -55,3 +55,5 @@ Licencia MIT: [LICENSE](LICENSE). Componentes externos: [THIRD_PARTY_NOTICES.md]
 ## Instalador y actualizaciones v1.1.0
 
 La rama de desarrollo añade `VictusFanControl-1.1.0-Setup-win-x64.exe` y **Configuración → Buscar actualizaciones**. El EXE conserva preferencias y añade el acceso en el menú Inicio; la actualización verifica el digest de la release estable y libera la sesión antes de instalar. Los artefactos de Actions permiten revisar esta entrega; v1.0.0 sigue siendo la release pública hasta publicar v1.1.0. [Guía](docs/PRODUCT_V1.md).
+
+Automático puede preparar un reintento manual en la misma GUI después de una interrupción, con liberación completa, sensores frescos y límites CPU/GPU confirmados. No rearma por sí solo y no elimina recuperación pendiente.
