@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Reflection;
-using System.Security.Cryptography;
 using System.Security.Principal;
 
 namespace VictusSetup;
@@ -10,7 +8,18 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        if (args.SequenceEqual(new[] { "--self-test" })) { Environment.ExitCode = SelfTest.Run(); return; }
+        if (args.SequenceEqual(new[] { "--self-test" }))
+        {
+            Environment.ExitCode = SelfTest.Run();
+            if (Environment.ExitCode == 0 && typeof(Package).Assembly.GetManifestResourceInfo("payload.zip") is not null)
+            {
+                var directory = Path.Combine(Path.GetTempPath(), "VictusSetup-embedded-fixture-" + Guid.NewGuid().ToString("N"));
+                try { Package.ExtractEmbedded(directory); Console.WriteLine("Embedded release payload: PASS (SHA-256 and every manifest file; no install/hardware IO)."); }
+                catch (Exception ex) { Environment.ExitCode = 1; Console.Error.WriteLine(ex); }
+                finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+            }
+            return;
+        }
         ApplicationConfiguration.Initialize();
         try { Application.Run(new SetupForm(args)); }
         catch (Exception ex) { Environment.ExitCode = 1; MessageBox.Show(ex.Message, "Instalación no completada"); }
@@ -19,9 +28,9 @@ internal static class Program
 
 internal sealed class SetupForm : Form
 {
-    private readonly Label _status = new() { AutoSize = false, Left = 25, Top = 65, Width = 550, Height = 160 };
-    private readonly Button _install = new() { Text = "Instalar / actualizar", Left = 320, Top = 250, Width = 180, Height = 38 };
-    private readonly Button _cancel = new() { Text = "Cerrar", Left = 510, Top = 250, Width = 75, Height = 38 };
+    private readonly Label _status = new() { AutoSize = false, Left = 25, Top = 65, Width = 550, Height = 185 };
+    private readonly Button _install = new() { Text = "Instalar / actualizar", Left = 320, Top = 275, Width = 180, Height = 38 };
+    private readonly Button _cancel = new() { Text = "Cerrar", Left = 510, Top = 275, Width = 75, Height = 38 };
     private bool _working;
     private readonly int? _ownerPid;
     private readonly long? _ownerStart;
@@ -37,7 +46,7 @@ internal sealed class SetupForm : Form
             _ownerPid = pid; _ownerStart = ticks;
         }
         Text = "VictusFanControl v" + Package.Version + " · Instalador";
-        ClientSize = new(610, 315); FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
+        ClientSize = new(610, 345); FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
         Controls.Add(new Label { Text = "Instalar VictusFanControl", Left = 25, Top = 20, AutoSize = true, Font = new Font(Font.FontFamily, 16, FontStyle.Bold) });
         _status.Text = "Equipo: HP 8C40 / BIOS F.18.\n\nCierra VictusFanControl desde la bandeja. Se conservarán tus perfiles, registros y preferencias de inicio.\n\nPrimera instalación: inicio con Windows, minimizado y Automático. Se requiere .NET Desktop Runtime 8 x64 y PawnIO instalado. Usa tu misma cuenta de Windows.";
         Controls.AddRange(new Control[] { _status, _install, _cancel });
@@ -69,13 +78,7 @@ internal sealed class SetupForm : Form
             await RequireDesktopRuntimeAsync();
             _status.Text = "Verificando el contenido e instalando…";
             directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VictusFanControl", "setup", Guid.NewGuid().ToString("N"));
-            var assembly = Assembly.GetExecutingAssembly();
-            using var payload = assembly.GetManifestResourceStream("payload.zip") ?? throw new IOException("Este instalador no contiene un paquete de release.");
-            using var digest = new StreamReader(assembly.GetManifestResourceStream("payload.sha256") ?? throw new IOException("Falta el SHA-256 del paquete."));
-            var expected = (await digest.ReadToEndAsync()).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0];
-            if (Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant() != expected) throw new InvalidDataException("SHA-256 del paquete incorrecto.");
-            payload.Position = 0;
-            await Task.Run(() => Package.Extract(payload, directory));
+            await Task.Run(() => Package.ExtractEmbedded(directory));
             var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
             foreach (var value in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(directory, "Install-VictusFanControl.ps1"), "-NoOpen", "-InstallerProcessId", Environment.ProcessId.ToString() }) start.ArgumentList.Add(value);

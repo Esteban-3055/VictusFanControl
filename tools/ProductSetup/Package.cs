@@ -8,6 +8,16 @@ namespace VictusSetup;
 internal static class Package
 {
     internal const string Version = "1.1.0";
+    internal static void ExtractEmbedded(string destination)
+    {
+        var assembly = typeof(Package).Assembly;
+        using var payload = assembly.GetManifestResourceStream("payload.zip") ?? throw new IOException("Este instalador no contiene un paquete de release.");
+        using var digest = new StreamReader(assembly.GetManifestResourceStream("payload.sha256") ?? throw new IOException("Falta el SHA-256 del paquete."));
+        var expected = digest.ReadToEnd().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0];
+        if (Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant() != expected) throw new InvalidDataException("SHA-256 del paquete incorrecto.");
+        payload.Position = 0;
+        Extract(payload, destination);
+    }
     internal static void Extract(Stream source, string destination)
     {
         using var archive = new ZipArchive(source, ZipArchiveMode.Read, leaveOpen: true);

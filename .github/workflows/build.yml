@@ -871,6 +871,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'EXE installer publish failed.' }
           $installer = Join-Path $assets 'VictusFanControl-1.1.0-Setup-win-x64.exe'
           Copy-Item (Join-Path $setup 'VictusSetup.exe') $installer
+          if ([Diagnostics.FileVersionInfo]::GetVersionInfo($installer).FileVersion -ne '1.1.0.0') { throw 'Installer version mismatch.' }
+          $test = Start-Process -FilePath $installer -ArgumentList '--self-test' -NoNewWindow -PassThru -Wait
+          if ($test.ExitCode -ne 0) { throw 'Published EXE/embedded payload self-test failed.' }
           python scripts/prepare-installer-assets.py --installer $installer --source-head '${{ github.sha }}' --payload $payload
           if ($LASTEXITCODE -ne 0) { throw 'Installer asset verification failed.' }
 
