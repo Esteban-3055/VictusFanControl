@@ -25,6 +25,9 @@ internal static class ProductTelemetryContinuitySelfTest
         Check(!first.IsFanTelemetryFreshAt(at.AddMilliseconds(3000),3000),"startup RPM remains strict");
         var optional=continuity.Observe(Sample(6000) with{CpuLoadPercent=null,GpuLoadPercent=null});
         Check(optional.IsComplete&&optional.CpuLoadPercent is null&&optional.RetainedTelemetry is null,"missing utilization must remain visibly missing without blocking control");
+        continuity.Reset();continuity.Observe(Sample(0));
+        var invalid=continuity.Observe(Sample(1000) with{GpuTemperatureC=106,CpuPackagePowerW=501});
+        Check(invalid.GpuTemperatureC==106&&invalid.CpuPackagePowerW==501&&invalid.RetainedTelemetry is null,"implausible readings cannot be concealed behind earlier valid values");
         continuity.Reset();
         Check(!continuity.Observe(Sample(7000) with{CpuTemperatureC=null,CpuCoreTemperatures=[]}).IsComplete,"lifecycle reset cannot reuse an old thermal sample");
         var legacy=Sample(0) with{FanMaximumAgeMilliseconds=3000};
