@@ -11,6 +11,17 @@ internal static class ProductFanRecoverySelfTest
         void Require(bool ok,string message){if(!ok)throw new IOException(message);}
         try
         {
+            if(OperatingSystem.IsWindows())
+            {
+                // Exercise the real P/Invoke and read-only OS query on CI and on
+                // the packaged helper; simulated clocks alone miss DLL bindings.
+                var first=ProductFanRecovery.ReadKernelUptime100ns();
+                var actualBoot=ProductFanRecovery.ReadBoot();
+                var last=ProductFanRecovery.ReadKernelUptime100ns();
+                Require(first>0&&last>=first,"Windows kernel uptime is invalid or regressed.");
+                Require(actualBoot<DateTimeOffset.UtcNow,"Windows boot query returned a future boot.");
+                Console.WriteLine("Product fan recovery Windows boot clock: PASS (real API-set QueryInterruptTime and Win32_OperatingSystem agree; no fan/CPU/GPU hardware IO).");
+            }
             var boot=DateTimeOffset.UtcNow.AddHours(-1);
             Require(ProductFanRecovery.KernelBootAgrees(boot,boot.AddHours(1),(ulong)TimeSpan.FromHours(1).Ticks),"Matching kernel boot refused.");
             Require(!ProductFanRecovery.KernelBootAgrees(boot.AddMinutes(55),boot.AddHours(1),(ulong)TimeSpan.FromHours(1).Ticks),"New user boot over old kernel allowed.");

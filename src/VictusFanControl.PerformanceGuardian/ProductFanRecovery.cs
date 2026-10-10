@@ -79,14 +79,14 @@ internal static class ProductFanRecovery
         foreach (ManagementObject row in rows) using (row)
             if (!string.Equals(Convert.ToString(row["State"]), "Stopped", StringComparison.OrdinalIgnoreCase)) throw new IOException("El watchdog anterior sigue activo: " + row["Name"] + ". Debe cerrarse normalmente antes de recuperar.");
     }
-    private static DateTimeOffset ReadBoot()
+    internal static DateTimeOffset ReadBoot()
     {
         using var search = new ManagementObjectSearcher("SELECT LastBootUpTime FROM Win32_OperatingSystem"); using var rows = search.Get();
         foreach (ManagementObject row in rows) using (row)
         {
             var boot = new DateTimeOffset(ManagementDateTimeConverter.ToDateTime((string)row["LastBootUpTime"]).ToUniversalTime());
             if (boot >= DateTimeOffset.UtcNow || boot < DateTimeOffset.UtcNow.AddYears(-5)) break;
-            QueryInterruptTime(out var uptime);
+            var uptime = ReadKernelUptime100ns();
             if(!KernelBootAgrees(boot,DateTimeOffset.UtcNow,uptime))throw new IOException("Los relojes no acreditan un arranque nuevo del kernel. Usa Reiniciar Windows; Inicio rápido o un cambio de reloj no permiten retirar marcas inciertas.");
             return boot;
         }
@@ -95,7 +95,15 @@ internal static class ProductFanRecovery
     internal static bool PreviousBoot(DateTimeOffset marker, DateTimeOffset boot) => marker < boot.AddMinutes(-2);
     internal static bool KernelBootAgrees(DateTimeOffset boot,DateTimeOffset now,ulong uptime100ns) =>
         uptime100ns>0&&uptime100ns<(ulong)TimeSpan.FromDays(3650).Ticks&&Math.Abs((now-TimeSpan.FromTicks((long)uptime100ns)-boot).TotalSeconds)<120;
-    [DllImport("kernel32.dll")] private static extern void QueryInterruptTime(out ulong interruptTime100ns);
+    internal static ulong ReadKernelUptime100ns()
+    {
+        QueryInterruptTime(out var uptime);
+        return uptime;
+    }
+    // Bind the documented real-time API contract. Some supported Windows builds
+    // export this function through KernelBase rather than directly in kernel32.
+    [DllImport("api-ms-win-core-realtime-l1-1-1.dll", ExactSpelling = true)]
+    private static extern void QueryInterruptTime(out ulong interruptTime100ns);
     private static string SessionDirectory(ProductRecoveryRecord entry)
     {
         if(entry.Kind=="OrphanWmi")return Path.GetDirectoryName(entry.Path)!;
