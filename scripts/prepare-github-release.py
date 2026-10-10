@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import zipfile
 
 
@@ -23,6 +24,7 @@ def require(condition, detail):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checks-branch", default="main")
+    parser.add_argument("--verified-archive", type=Path, help="Publish original build ZIP after verifying every file; do not recompress on a different OS.")
     parser.add_argument("--payload", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--source-head", required=True)
@@ -86,15 +88,19 @@ def main():
             "Incomplete application package")
     args.output.mkdir(parents=True, exist_ok=False)
     archive = args.output / f"VictusFanControl-{VERSION}-win-x64.zip"
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zip_file:
-        for name in sorted(expected):
-            info = zipfile.ZipInfo(name, date_time=(2026, 10, 9, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o100644 << 16
-            zip_file.writestr(info, (root / name).read_bytes(), compresslevel=9)
+    if args.verified_archive:
+        require(args.verified_archive.name == archive.name, "Original archive filename mismatch")
+        shutil.copyfile(args.verified_archive, archive)
+    else:
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zip_file:
+            for name in sorted(expected):
+                info = zipfile.ZipInfo(name, date_time=(2026, 10, 9, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o100644 << 16
+                zip_file.writestr(info, (root / name).read_bytes(), compresslevel=9)
     with zipfile.ZipFile(archive) as zip_file:
         require(zip_file.testzip() is None, "ZIP CRC failure")
-        require(set(zip_file.namelist()) == expected, "ZIP contents mismatch")
+        require(len(zip_file.namelist()) == len(expected) and set(zip_file.namelist()) == expected, "ZIP contents mismatch")
         for name in expected:
             require(zip_file.read(name) == (root / name).read_bytes(), f"ZIP changed {name}")
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()

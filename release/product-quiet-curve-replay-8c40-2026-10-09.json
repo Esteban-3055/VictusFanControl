@@ -14,7 +14,7 @@
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
     "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "e0e395a1eab83272c3c4a38d3a77d48868f951808883fe1deb36640a98665b8f",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
-    "src/VictusFanControl.App/Product/ProductRuntime.cs": "192c2f836dc67a47b9618315ce0e7e14ef572574599fc53e5c22e5ad3c33343e",
+    "src/VictusFanControl.App/Product/ProductRuntime.cs": "1f7bc8739fc22d56b9b5dfd7dd397e83b7f93108bf3b30a48c1222611fba11a2",
     "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "a9ae9446b54f163c215f4327e98d1dc954e1cd1ceb7ac238292797a9487b53f1"
   },
   "historicalReconstruction": {
@@ -298,6 +298,6 @@
     "disclosure": "Same recorded CPU/GPU temperatures and powers for all candidates. Targets are simulated with immediate acknowledgements; levels*100 are nominal RPM, not noise/dBA. No counterfactual cooling, acoustic improvement or physical qualification is inferred."
   },
   "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification.",
-  "sourceBindingRevision": 5,
-  "sourceBindingUpdate": "Re-executed the unchanged 390-decision AC trace after adding configurable software handoffs and clean unattended resumption. Default fan numerical decisions remain identical; protection toggles and resumption use separate zero-hardware regressions and do not claim physical validation."
+  "sourceBindingRevision": 4,
+  "sourceBindingUpdate": "Re-executed the unchanged 390-decision AC trace after adding configurable software handoffs and clean unattended resumption. Default fan numerical decisions remain identical; protection toggles and resumption use separate zero-hardware regressions and do not claim physical validation. Fixed-review diagnostics now report the enforced default protections; this changes no fan decision."
 }

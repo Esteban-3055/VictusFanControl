@@ -73,9 +73,6 @@ jobs:
           path: verified-payload
           github-token: ${{ github.token }}
           run-id: ${{ github.event.workflow_run.id }}
-      - name: Verify full payload and prepare release assets
-        if: steps.admission.outputs.publish == 'true'
-        run: python scripts/prepare-github-release.py --payload verified-payload --output release-assets --source-head "$RELEASE_HEAD" --build-run-id "$BUILD_RUN" --repository "$GH_REPO" --checks-json "$RUNNER_TEMP/checks.json"
       - uses: actions/download-artifact@v4
         if: steps.admission.outputs.publish == 'true'
         with:
@@ -83,6 +80,9 @@ jobs:
           path: installer-assets
           github-token: ${{ github.token }}
           run-id: ${{ github.event.workflow_run.id }}
+      - name: Verify full payload and preserve original build ZIP
+        if: steps.admission.outputs.publish == 'true'
+        run: python scripts/prepare-github-release.py --payload verified-payload --verified-archive installer-assets/VictusFanControl-1.1.1-win-x64.zip --output release-assets --source-head "$RELEASE_HEAD" --build-run-id "$BUILD_RUN" --repository "$GH_REPO" --checks-json "$RUNNER_TEMP/checks.json"
       - name: Verify same-build installer before publication
         if: steps.admission.outputs.publish == 'true'
         run: python scripts/prepare-installer-assets.py --installer installer-assets/VictusFanControl-1.1.1-Setup-win-x64.exe --source-head "$RELEASE_HEAD" --payload release-assets/VictusFanControl-1.1.1-win-x64.zip --verify --output release-assets

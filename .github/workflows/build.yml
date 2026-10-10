@@ -886,6 +886,7 @@ jobs:
           name: VictusFanControl-1.1.1-Setup-win-x64-${{ github.sha }}
           path: |
             ${{ runner.temp }}/VictusFanControl-public-release-assets/*Setup*
+            ${{ runner.temp }}/VictusFanControl-public-release-assets/*win-x64.zip*
           if-no-files-found: error
           retention-days: 30
 
@@ -1010,14 +1011,14 @@ jobs:
         with:
           name: VictusFanControl-1.1.1-win-x64-${{ github.sha }}
           path: verified-payload
-      - name: Verify complete payload and prepare release assets
-        if: steps.admission.outputs.publish == 'true'
-        run: python scripts/prepare-github-release.py --payload verified-payload --output release-assets --source-head "$RELEASE_HEAD" --build-run-id "$BUILD_RUN" --repository "$GH_REPO" --checks-json "$RUNNER_TEMP/checks.json" --checks-branch "$RELEASE_BRANCH"
       - uses: actions/download-artifact@v4
         if: steps.admission.outputs.publish == 'true'
         with:
           name: VictusFanControl-1.1.1-Setup-win-x64-${{ github.sha }}
           path: installer-assets
+      - name: Verify complete payload and preserve original build ZIP
+        if: steps.admission.outputs.publish == 'true'
+        run: python scripts/prepare-github-release.py --payload verified-payload --verified-archive installer-assets/VictusFanControl-1.1.1-win-x64.zip --output release-assets --source-head "$RELEASE_HEAD" --build-run-id "$BUILD_RUN" --repository "$GH_REPO" --checks-json "$RUNNER_TEMP/checks.json" --checks-branch "$RELEASE_BRANCH"
       - name: Verify embedded installer payload matches this build
         if: steps.admission.outputs.publish == 'true'
         run: python scripts/prepare-installer-assets.py --installer installer-assets/VictusFanControl-1.1.1-Setup-win-x64.exe --source-head "$RELEASE_HEAD" --payload release-assets/VictusFanControl-1.1.1-win-x64.zip --verify --output release-assets
