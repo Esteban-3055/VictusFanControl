@@ -83,8 +83,8 @@ internal sealed partial class ProductForm : Form
         _canvas.MouseDown+=(_,e)=>{if(e.Button==MouseButtons.Left&&_canvas.IsHeaderDrag(e.Location)){ReleaseCapture();SendMessage(Handle,0xA1,2,0);}};
         _canvas.MouseDoubleClick+=(_,e)=>{if(_canvas.IsHeaderDrag(e.Location))ToggleMaximize();};
         var menu=new ContextMenuStrip();menu.Items.Add("Abrir VictusFanControl",null,(_,_)=>ShowFromTray());
-        menu.Items.Add("Volver a Firmware",null,async(_,_)=>{if(!_restarting)await RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask);});
-        menu.Items.Add("Liberar CPU / GPU",null,async(_,_)=>{if(!_restarting)await RunAsync(()=>_runtime?.ReleasePerformanceAsync()??Task.CompletedTask);});
+        menu.Items.Add("Volver a Firmware",null,(_,_)=>HandleCommand("firmware"));
+        menu.Items.Add("Liberar CPU / GPU",null,(_,_)=>HandleCommand("performance-release"));
         menu.Items.Add("Reiniciar sesión",null,async(_,_)=>await RestartSessionAsync());
         menu.Items.Add("Salir",null,(_,_)=>{_exitRequested=true;Close();});
         _tray=new(){Icon=_icons.Default,Text="VictusFanControl · Firmware",ContextMenuStrip=menu,Visible=fixture is null&&runtimeFactory is null};

@@ -12,6 +12,7 @@
 8. Un diálogo numérico podía aplicar al preset seleccionado después de un cambio de fuente. Se congela su destino al abrirlo.
 9. El plazo de confirmación CPU dependía de volver de una adquisición. Un monitor independiente cierra la admisión al vencer; una llamada nativa pendiente sigue conservando el mutex y la evidencia hasta terminar.
 10. Una lectura CPU parcial podía ocultar un paquete o núcleo nuevo más caliente al conservar el dominio completo. Ahora se completan únicamente los datos ausentes; las temperaturas nuevas y las identidades inválidas permanecen visibles para las protecciones.
+11. Las acciones de Firmware y liberación CPU/GPU desde la bandeja omitían la cancelación del inicio y la reanudación automáticos. Ahora pasan por el mismo comando que la ventana, evitando una reactivación posterior a una liberación explícita.
 
 ## Verificación
 
