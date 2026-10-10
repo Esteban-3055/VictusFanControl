@@ -126,6 +126,9 @@ internal sealed partial class ProductForm : Form
     }
     private void TryStartupAutomatic()
     {
+        // Retry construction can complete without a WinForms synchronization context.
+        // Observe only after queued state publications have reached the UI thread.
+        if(InvokeRequired){if(IsHandleCreated&&!IsDisposed)BeginInvoke(TryStartupAutomatic);return;}
         if(_closing||_restarting||_startupAutomatic is null||_startupAutomatic.Finished||_runtime is null)return;
         var activate=_startupAutomatic.Observe(_canvas.State,DateTimeOffset.UtcNow,Environment.TickCount64);
         _canvas.Notice=_startupAutomatic.Status;
