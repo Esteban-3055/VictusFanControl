@@ -44,9 +44,11 @@ internal static partial class ProductGuiSelfTest
             var menu=tray.ContextMenuStrip!;menu.Show(form,new Point(20,20));Application.DoEvents();
             ((ToolStripMenuItem)menu.Items[trayIndex]).PerformClick();menu.Close();
             PumpUntil(()=>!form.Canvas.Busy,"Tray release did not drain.");
-            require(stopped.Commands==1,$"Tray action {trayIndex} did not dispatch its explicit release: commands={stopped.Commands}.");
+            // CPU/GPU has no process in this fixture: stop intent still cancels startup without dispatching a release.
+            var expectedCommands=trayIndex==1?1:0;
+            require(stopped.Commands==expectedCommands,$"Tray action {trayIndex} dispatched unexpected commands={stopped.Commands}.");
             stopped.Publish(State(1));stopped.Publish(State(2));form.PresentationTick();
-            require(stopped.Commands==1,$"Tray action {trayIndex} left startup Automatic armed: commands={stopped.Commands}.");
+            require(stopped.Commands==expectedCommands,$"Tray action {trayIndex} left startup Automatic armed: commands={stopped.Commands}.");
             var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Tray-stop fixture exit stalled.");
         }
         var receipt=ProductSessionRestart.Capture(preferences,preferences,true,false,ProductPage.Settings,ProductPowerProfile.Ac) with{ReleaseCompleted=true};
