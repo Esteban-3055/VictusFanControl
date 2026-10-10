@@ -29,8 +29,9 @@ internal static class Program
 internal sealed class SetupForm : Form
 {
     private readonly Label _status = new() { AutoSize = false, Left = 25, Top = 65, Width = 550, Height = 185 };
-    private readonly Button _install = new() { Text = "Instalar / actualizar", Left = 320, Top = 275, Width = 180, Height = 38 };
-    private readonly Button _cancel = new() { Text = "Cerrar", Left = 510, Top = 275, Width = 75, Height = 38 };
+    private readonly CheckBox _startupAutomatic = new() { Text = "Iniciar con Windows y activar Automático", Checked = true, Left = 25, Top = 262, Width = 550, Height = 26 };
+    private readonly Button _install = new() { Text = "Instalar / actualizar", Left = 320, Top = 305, Width = 180, Height = 38 };
+    private readonly Button _cancel = new() { Text = "Cerrar", Left = 510, Top = 305, Width = 75, Height = 38 };
     private bool _working;
     private readonly int? _ownerPid;
     private readonly long? _ownerStart;
@@ -46,17 +47,17 @@ internal sealed class SetupForm : Form
             _ownerPid = pid; _ownerStart = ticks;
         }
         Text = "VictusFanControl v" + Package.Version + " · Instalador";
-        ClientSize = new(610, 345); FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
+        ClientSize = new(610, 370); FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
         Controls.Add(new Label { Text = "Instalar VictusFanControl", Left = 25, Top = 20, AutoSize = true, Font = new Font(Font.FontFamily, 16, FontStyle.Bold) });
         _status.Text = "Equipo: HP 8C40 / BIOS F.18.\n\nCierra VictusFanControl desde la bandeja. Se conservarán tus perfiles, registros y preferencias de inicio.\n\nPrimera instalación: inicio con Windows, minimizado y Automático. Se requiere .NET Desktop Runtime 8 x64 y PawnIO instalado. Usa tu misma cuenta de Windows.";
-        Controls.AddRange(new Control[] { _status, _install, _cancel });
+        Controls.AddRange(new Control[] { _status, _startupAutomatic, _install, _cancel });
         _cancel.Click += (_, _) => Close(); _install.Click += async (_, _) => await InstallAsync();
         FormClosing += (_, e) => { if (_working) e.Cancel = true; };
     }
     private async Task InstallAsync()
     {
         if (_working) return;
-        _working = true; _install.Enabled = _cancel.Enabled = false;
+        _working = true; _install.Enabled = _cancel.Enabled = _startupAutomatic.Enabled = false;
         string? directory = null;
         try
         {
@@ -82,6 +83,7 @@ internal sealed class SetupForm : Form
             var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
             foreach (var value in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(directory, "Install-VictusFanControl.ps1"), "-NoOpen", "-InstallerProcessId", Environment.ProcessId.ToString() }) start.ArgumentList.Add(value);
+            start.ArgumentList.Add(_startupAutomatic.Checked?"-EnableStartupAutomatic":"-PreserveStartupPreferences");
             using var process = Process.Start(start) ?? throw new IOException("No se pudo abrir el instalador interno.");
             var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
             await process.WaitForExitAsync();
@@ -93,7 +95,7 @@ internal sealed class SetupForm : Form
         catch (Exception ex) { Environment.ExitCode = 1; _status.Text = "Instalación no completada.\n\n" + ex.Message; MessageBox.Show(this, ex.Message, "Instalación no completada", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally
         {
-            _working = false; _install.Enabled = _cancel.Enabled = true;
+            _working = false; _install.Enabled = _cancel.Enabled = _startupAutomatic.Enabled = true;
             if (directory is not null && Directory.Exists(directory)) { try { Directory.Delete(directory, true); } catch { } }
         }
     }

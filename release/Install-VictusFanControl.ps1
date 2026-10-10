@@ -1,5 +1,6 @@
-param([switch]$NoOpen,[int]$InstallerProcessId=0)
+param([switch]$NoOpen,[int]$InstallerProcessId=0,[switch]$EnableStartupAutomatic,[switch]$PreserveStartupPreferences)
 $ErrorActionPreference='Stop'
+if($EnableStartupAutomatic -and $PreserveStartupPreferences){throw 'Selecciona sólo una opción de inicio.'}
 & (Join-Path $PSScriptRoot 'Start-ProductGui.ps1') -Mode Verify
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
 try {
@@ -51,6 +52,8 @@ $start=New-Object Diagnostics.ProcessStartInfo
 $start.FileName=Join-Path $app 'VictusFanControl.App.exe'
 $start.UseShellExecute=$false;$start.WorkingDirectory=$app
 $start.Arguments='--configure-product-install --modules-dir "'+(Join-Path $app 'modules')+'"'
+if($EnableStartupAutomatic){$start.Arguments+=' --enable-product-startup-automatic'}
+elseif($PreserveStartupPreferences){$start.Arguments+=' --preserve-product-startup'}
 $process=[Diagnostics.Process]::Start($start)
 try{$process.WaitForExit();if($process.ExitCode -ne 0){throw 'No se configuró el inicio. Se conservó la instalación anterior; revisa el mensaje.'}}finally{$process.Dispose()}
 $shell=New-Object -ComObject WScript.Shell

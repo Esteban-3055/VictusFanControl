@@ -13,7 +13,9 @@ internal static class Program
         {
             try
             {
-                if(args.Length!=3||(args[0]!="--configure-product-startup" && args[0]!="--configure-product-install")||args[1]!="--modules-dir")
+                var requestedStartup=args.Length==4&&args[0]=="--configure-product-install"&&args[3] is "--enable-product-startup-automatic" or "--preserve-product-startup";
+                bool? enableStartupAutomatic=requestedStartup?args[3]=="--enable-product-startup-automatic":null;
+                if((args.Length!=3&&!requestedStartup)||(args[0]!="--configure-product-startup" && args[0]!="--configure-product-install")||args[1]!="--modules-dir")
                     throw new ArgumentException("Startup configuration accepts only --configure-product-startup --modules-dir PATH.");
                 ProductSessionRestart.EnsureNoRecoveryRecords();
                 var modules=Path.GetFullPath(args[2]);
@@ -24,7 +26,7 @@ internal static class Program
                 // Persist preferences only. This entry constructs no runtime or hardware backend.
                 var freshInstall = args[0]=="--configure-product-install" && !File.Exists(VictusFanControl.Product.ProductProfilesStore.DefaultPath);
                 var preserve = args[0]=="--configure-product-install" && !freshInstall;
-                var plan = ProductInstallationPlan.Create(profiles,preserve,preserve && WindowsStartupRegistration.IsRegisteredEnabledAsync().GetAwaiter().GetResult());
+                var plan = ProductInstallationPlan.Create(profiles,preserve,preserve && WindowsStartupRegistration.IsRegisteredEnabledAsync().GetAwaiter().GetResult(),enableStartupAutomatic);
                 var configured=plan.Profiles;
                 var path=VictusFanControl.Product.ProductProfilesStore.DefaultPath;
                 var original=File.Exists(path)?File.ReadAllBytes(path):null;

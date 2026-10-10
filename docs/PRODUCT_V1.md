@@ -4,7 +4,7 @@ Esta entrega habilita el uso habitual solicitado para el destino exacto. La curv
 
 ## Instalar e iniciar con Windows
 
-1. Sal de las aplicaciones Victus anteriores desde su bandeja. Ejecuta `VictusFanControl-1.1.0-Setup-win-x64.exe` como administrador con tu misma cuenta y pulsa **Instalar / actualizar**. El instalador crea un acceso en el menú Inicio.
+1. Sal de las aplicaciones Victus anteriores desde su bandeja. Ejecuta `VictusFanControl-1.1.0-Setup-win-x64.exe` como administrador con tu misma cuenta y deja marcada **Iniciar con Windows y activar Automático**; pulsa **Instalar / actualizar**. Esa opción también habilita el arranque en una instalación anterior, conservando curvas y límites CPU/GPU. Si la desmarcas, una actualización conserva las preferencias previas; una instalación nueva no registra el inicio automático. El instalador crea un acceso en el menú Inicio.
 2. Alternativa ZIP: extrae todo el paquete.
 3. Abre PowerShell **como administrador con tu misma cuenta**, entra en la carpeta extraída y ejecuta `./Start-ProductGui.ps1 -Mode Install`.
 4. El instalador verifica hashes, copia la entrega a `%LOCALAPPDATA%/VictusFanControl/releases/1.1.0-{commit}`, conserva las preferencias previas y actualiza la ruta de la tarea si estaba habilitada. En primera instalación registra el inicio elevado y guarda **minimizado + Automático al iniciar**. El EXE no abre automáticamente el controlador: utiliza el menú Inicio. La alternativa PowerShell abre la GUI al finalizar. Requiere el controlador PawnIO y NVIDIA/NVML que ya usa la instalación anterior; .NET Desktop Runtime 8 x64.

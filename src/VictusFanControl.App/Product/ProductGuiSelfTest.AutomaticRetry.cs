@@ -30,7 +30,9 @@ internal static partial class ProductGuiSelfTest
                     Snapshot=new TelemetrySnapshot(at.AddSeconds(i),"CPU",cpu,20,50,"GPU",45,10,30,1200,1200){CpuExpectedPhysicalCoreCount=3,CpuCoreTemperatures=new[]{new CpuCoreTemperatureSample(0,0,"Performance",cpu),new CpuCoreTemperatureSample(1,2,"Performance",cpu),new CpuCoreTemperatureSample(2,4,"Performance",cpu)}}};
                 next.Publish(Ready(0,96));require(next.Commands==0,"Retry armed while CPU remained hot.");
                 next.Publish(Ready(0));next.Publish(Ready(0));next.Publish(Ready(1));require(next.Commands==0,"Retry counted duplicate/insufficient observations.");
-                next.Publish(Ready(2));PumpUntil(()=>!form.Canvas.Busy,"Manual activation did not finish.");require(next.Commands==1,"Manual retry did not use coupled normal Automatic exactly once.");
+                next.Publish(Ready(2));Application.DoEvents();
+                PumpUntil(()=>next.Commands>=1,"Manual retry did not activate: "+form.Canvas.Notice);
+                PumpUntil(()=>!form.Canvas.Busy,"Manual activation did not finish.");require(next.Commands==1,"Manual retry did not use coupled normal Automatic exactly once: "+form.Canvas.Notice);
                 form.PresentationTick();require(next.Commands==1,"UI tick repeated manual request.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Successful retry could not exit.");require(old.Disposals==1&&next.Disposals==1,"Retry shutdown duplicated disposal.");
             }

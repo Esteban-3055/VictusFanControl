@@ -30,6 +30,11 @@ internal static class ProductUpdatesSelfTest
             var prior=ProductProfilesStore.Serialize(profiles);
             var plan=ProductInstallationPlan.Create(profiles,true,startup);
             require(!plan.SaveProfiles&&plan.RegisterStartup==startup&&ProductProfilesStore.Serialize(plan.Profiles)==prior,"Update modified saved preferences or disabled/enabled startup.");
+            var requested=ProductInstallationPlan.Create(profiles,true,startup,true);
+            require(requested.SaveProfiles&&requested.RegisterStartup&&requested.Profiles.ActivateAutomaticOnStart&&
+                ProductProfilesStore.Serialize(requested.Profiles with{ActivateAutomaticOnStart=automatic})==prior,"Explicit startup option changed unrelated preferences or failed to enable Automatic.");
+            var uncheckedFresh=ProductInstallationPlan.Create(profiles,false,startup,false);
+            require(uncheckedFresh.SaveProfiles&&!uncheckedFresh.RegisterStartup&&!uncheckedFresh.Profiles.ActivateAutomaticOnStart,"Unchecked fresh install enabled startup Automatic.");
             var fresh=ProductInstallationPlan.Create(profiles,false,startup);
             require(fresh.SaveProfiles&&fresh.RegisterStartup&&fresh.Profiles.ActivateAutomaticOnStart&&fresh.Profiles.StartMinimized&&
                 fresh.Profiles.PerformanceConfiguration()==profiles.PerformanceConfiguration()&&fresh.Profiles.ExperimentalPlatformRetention==profiles.ExperimentalPlatformRetention,"Fresh installation changed fan/performance preferences.");
