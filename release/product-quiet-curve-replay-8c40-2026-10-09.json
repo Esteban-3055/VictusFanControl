@@ -8,13 +8,13 @@
   "sourceSha256": {
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "3bbd2426fc4c23f46ef8b0db80c057de94e8296c72cfad0d83e55ec51abe03fe",
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "025e9ad74f4fc22b45f88983779b82540ae00702babee2245313cab4a059dbb6",
-    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "e8500667b16522e47a9e929659efe650be96b78d38cca9f0c84c997f1daf9909",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "ad3c81903addb4952dd8e65fdef51fe291d6b8054aea193f2f838c76adc9c5f1",
     "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "7c94c2852df2ebd257c66107770d815ab46a47d7bba95edac275fe9edc1c4077",
     "src/VictusFanControl/Product/ProductProfiles.cs": "e55d79c9b5df6413c2479db31aa1998bdcef2938df28f7b41fc884f468cd4427",
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
-    "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "e0e395a1eab83272c3c4a38d3a77d48868f951808883fe1deb36640a98665b8f",
+    "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "0cb48fa8ac820636094669cd988c1163dd63f112b4d36a27e2bca32aa577e426",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
-    "src/VictusFanControl.App/Product/ProductRuntime.cs": "1f7bc8739fc22d56b9b5dfd7dd397e83b7f93108bf3b30a48c1222611fba11a2",
+    "src/VictusFanControl.App/Product/ProductRuntime.cs": "39130ffb06eaf00f6e8f29ae7bc01cdb5c4402c999367d2e40d71bdb09a38c03",
     "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "a9ae9446b54f163c215f4327e98d1dc954e1cd1ceb7ac238292797a9487b53f1"
   },
   "historicalReconstruction": {
@@ -298,6 +298,7 @@
     "disclosure": "Same recorded CPU/GPU temperatures and powers for all candidates. Targets are simulated with immediate acknowledgements; levels*100 are nominal RPM, not noise/dBA. No counterfactual cooling, acoustic improvement or physical qualification is inferred."
   },
   "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification.",
-  "sourceBindingRevision": 5,
-  "sourceBindingUpdate": "Re-executed the unchanged 390-decision AC trace after adding the saved preview-update preference. Decisions.csv remains byte-for-byte identical to the previous protection release; no fan or performance policy was changed. Update channel and installation tests use no hardware IO and do not claim physical validation."
+  "sourceBindingRevision": 6,
+  "sourceBindingUpdate": "Re-executed the original 390-decision trace with v1.1.4 sources. Decisions.csv remains identical after LF/CRLF normalization and all summary metrics match. This trace retains its historical strict acquisition contract and valid auxiliary inputs; it does not exercise missing-sensor tolerance, auxiliary fallback or physical cooling. Those new branches have separate software regressions and remain pending observation on the target. No new physical or acoustic qualification is claimed.",
+  "sourceBindingUpdateBaseHead": "9ab46644ce049befcce58aef81455d3a0c52c183"
 }
