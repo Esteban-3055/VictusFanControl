@@ -31,6 +31,7 @@ internal sealed partial class ProductForm
         _restarting = true; _restartLifecycleInterrupted = false; _canvas.Busy = true; _canvas.RestartAvailable = false;
         _presentationTimer.Stop(); _startupAutomatic?.Cancel("Recuperación explícita de CPU/GPU."); _startupAutomatic = null;
         var before = _canvas.State; var preferences = Draft; var oldRuntime = _runtime as ProductRuntime;
+        var controllerReleased = false;
         try
         {
             // The owner remains open only as an idle coordinator. Every live controller is drained first.
@@ -39,6 +40,7 @@ internal sealed partial class ProductForm
             DetachRuntime(); _canvas.Notice = "Liberando la sesión y preparando recuperación…"; _canvas.Invalidate();
             await Task.Yield();
             await ShutdownRuntimeAsync();
+            controllerReleased = true;
             _runtime = null;
             if (fenceFailure is not null) throw new IOException("No se confirmó el bloqueo del controlador anterior.", fenceFailure);
             if (_closing || _exitRequested) return;
@@ -60,6 +62,7 @@ internal sealed partial class ProductForm
             if (_displayOff || _restartLifecycleInterrupted) throw new IOException("Recuperación completada; un cambio de energía impidió abrir otra sesión. Usa Reiniciar sesión cuando el equipo esté activo.");
             var next = await (RecoveryRuntimeFactory?.Invoke(preferences) ?? Task.Run<IProductRuntime>(() => new ProductRuntime(_modules, preferences, _automaticReview, releasedRuntime: oldRuntime)));
             _runtime = next; _runtimeShutdown = null; _lifecycleRelease = Task.CompletedTask; _startupFailure = null;
+            controllerReleased = false;
             if (_closing || _exitRequested || _displayOff || _restartLifecycleInterrupted)
             {
                 await ShutdownRuntimeAsync();
@@ -76,14 +79,19 @@ internal sealed partial class ProductForm
         catch (Exception ex)
         {
             DetachRuntime();
-            try { await ShutdownRuntimeAsync(); } catch (Exception release) { AppLog.Write("Guided recovery cleanup retained: " + release); }
+            try { await ShutdownRuntimeAsync(); controllerReleased = true; } catch (Exception release) { controllerReleased = false; AppLog.Write("Guided recovery cleanup retained: " + release); }
             _runtime = null;
             await RecoveryUiAsync(() =>
             {
                 _canvas.AutomaticRetryAvailable = false; _canvas.RestartAvailable = true;
+                var preview = _isolatedRuntime ? before.PerformanceRecovery : PerformanceRecoveryPreview.Read();
                 _canvas.State = before with { LifecycleBlocked = true, Runtime = "Failed", Failure = "Recuperación no completada: " + ex.Message,
-                    PerformanceRecovery = _isolatedRuntime ? before.PerformanceRecovery : PerformanceRecoveryPreview.Read(),
-                    CanApplyPerformance = false, PerformanceProcessPresent = false, AutomaticPreparing = false };
+                    PerformanceRecovery = preview, FanMode = controllerReleased ? "Firmware" : before.FanMode,
+                    FanAuthority = controllerReleased ? "Firmware" : before.FanAuthority,
+                    CpuState = preview?.CpuSession.HasValue == true ? "Recovering" : controllerReleased && preview?.Pending != true ? "Disabled" : "Failed",
+                    GpuState = preview?.GpuSession.HasValue == true ? "Recovering" : controllerReleased && preview?.Pending != true ? "Disabled" : "Failed",
+                    GuardianState = preview?.Pending == true ? "Recuperación pendiente" : "Sin sesión",
+                    CanApplyPerformance = false, PerformanceActive = false, PerformanceUpdating = false, PerformanceProcessPresent = false, AutomaticPreparing = false };
                 _canvas.Notice = _canvas.State.Failure!; UpdateTray(_canvas.State);
             });
             AppLog.Write("PRODUCT GUIDED RECOVERY BLOCKED: " + ex);

@@ -9,7 +9,8 @@ internal static partial class ProductGuiSelfTest
     {
         var cpu = Guid.NewGuid(); var gpu = Guid.NewGuid(); var selected = new ProductRecoverySelection(cpu, gpu);
         ProductRuntimeState Pending() => new() { Target = ProductRecoverySelection.Target, LifecycleBlocked = true,
-            PerformanceRecovery = new(true, "fixture pending", cpu, gpu), AutomaticAuthorized = true };
+            PerformanceRecovery = new(true, "fixture pending", cpu, gpu), AutomaticAuthorized = true,
+            PerformanceActive = true, CpuState = "Active", GpuState = "ActiveUnverified" };
         var exitCode = Environment.ExitCode;
         try
         {
@@ -54,6 +55,7 @@ internal static partial class ProductGuiSelfTest
                 }
                 PumpUntil(() => task.IsCompleted, "Failed recovery hung.");
                 require(created == 0 && form.Canvas.State.LifecycleBlocked && form.Canvas.State.Failure is not null, "Failed/suspended recovery reopened control.");
+                require(!form.Canvas.State.PerformanceActive && form.Canvas.State.CpuState != "Active" && form.Canvas.State.GpuState != "ActiveUnverified", "Failed recovery retained a stale active presentation.");
                 require(launches == (failure is "suspend-during" or "runner" ? 1 : 0), "Unsafe cleanup/change/suspend launched recovery.");
                 var exit = form.RequestExitAsync(); PumpUntil(() => exit.IsCompleted, "Failed recovery exit hung."); require(old.Disposals == 1, "Failed recovery repeated disposal.");
             }
