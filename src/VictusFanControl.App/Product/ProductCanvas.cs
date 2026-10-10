@@ -90,7 +90,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     private void Button(Graphics g,string id,string label,RectangleF r,bool primary=false,bool enabled=true)
     {
         enabled &= !Busy || id is "session-restart" or "firmware" or "window-minimize" or "window-maximize" or "window-close"; Card(g,r,primary && enabled,10);
-        if(primary && enabled){using var b=new SolidBrush(Accent);using var p=Rounded(r,10);g.FillPath(b,p);}
+        if(primary && enabled){using var b=new SolidBrush(Accent==Yellow?Yellow:Accent==Red?Color.FromArgb(170,32,45):Color.FromArgb(0,98,198));using var p=Rounded(r,10);g.FillPath(b,p);}
         int size=23;while(size>17&&g.MeasureString(label,F(size)).Width>r.Width-24)size--;
         using(var brush=new SolidBrush(enabled?(primary && Accent==Yellow?Background:Ink):Color.FromArgb(92,115,138)))
         using(var format=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap})

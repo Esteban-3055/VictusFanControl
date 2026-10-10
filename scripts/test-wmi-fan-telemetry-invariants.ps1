@@ -63,9 +63,14 @@ Require-Text $hardware 'if (_wmiFans is null && _targetProfile is not null && _e
 Require-Text $hardware 'wmiFanSample = _wmiFans.ReadCached();'
 Require-Text $worker '_reader?.PauseFanTelemetry();'
 Require-Text $worker 'await _reader.WaitForFanTelemetryQuiescenceAsync(timeoutCts.Token)'
-Require-Text $snapshot 'FanSampleAgeMilliseconds is >= 0 and < HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds'
+Require-Text $snapshot 'FanSampleAgeMilliseconds is >= 0 && FanSampleAgeMilliseconds < FanMaximumAgeMilliseconds'
+Require-Text $snapshot 'FanMaximumAgeMilliseconds { get; init; } = HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds'
+Require-Text $reader 'AcceptedMaximumAgeMilliseconds = productTolerance ? 10000 : MaximumSampleAgeMilliseconds'
+Require-Text $worker '!ProductTelemetryTolerance && FreshFanAcquisitionRequired'
+Require-Text $snapshot 'TimeSpan.FromSeconds(ProductTelemetryTolerance ? 5 : 3)'
+Require-Text $program 'ProductTelemetryContinuitySelfTest.Run(Console.Out)'
 Require-Text $workflow '--fan-wmi-telemetry-self-test'
-Require-Text $snapshot 'IsFanTelemetryFreshAt(DateTimeOffset now)'
+Require-Text $snapshot 'IsFanTelemetryFreshAt(DateTimeOffset now, int? maximumAgeMilliseconds = null)'
 Require-Text $safety '!snapshot.IsFanTelemetryFreshAt(now)'
 $p16 = Read-Source 'release\p16-target-checkpoint.json' | ConvertFrom-Json
 # Migration closures remain historical; only a separately validated P16 generation 6 may open.
