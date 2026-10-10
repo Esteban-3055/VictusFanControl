@@ -23,7 +23,9 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         using var owner = Process.GetCurrentProcess();
         _ownerStart = owner.StartTime.ToUniversalTime().Ticks;
         if (!fixture && fixtureDirectory is not null) throw new ArgumentException("Fixture directory requires explicit fixture mode.");
-        SessionDirectory = fixtureDirectory ?? CreateSessionDirectory();
+        SessionDirectory = fixtureDirectory ?? (fixture
+            ? Path.Combine(Path.GetTempPath(), "Victus-FanWmi-fixture-" + Guid.NewGuid().ToString("N"))
+            : CreateSessionDirectory());
         Directory.CreateDirectory(SessionDirectory);
         if (!fixture)
         {

@@ -44,9 +44,9 @@ internal static class ProductRecoveryInventorySelfTest
                 Write("WmiFanGui/lease.json",new{OwnerPid=me.Id,OwnerStartUtcTicks=me.StartTime.ToUniversalTime().Ticks,GuardianPid=456,DirectEcProhibited=true,SessionDirectory=owned});
                 var marker=Path.Combine(owned,"native-inflight.json");File.WriteAllText(marker,JsonSerializer.Serialize(new{Pid=me.Id}));File.WriteAllText(Path.Combine(owned,"write-intent.json"),"{}");
                 var active=ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true);
-                Require(!active.Any(x=>x.Path==marker||x.Path==Path.Combine(common,"WmiFanGui/lease.json")),"Own active native query misclassified as orphan/pending lease.");
+                Require(!active.Any(x=>x.Path==marker||x.Path==Path.GetFullPath(Path.Combine(common,"WmiFanGui/lease.json"))),"Own active native query misclassified as orphan/pending lease.");
                 File.WriteAllText(Path.Combine(owned,"native-uncertain.signal"),"uncertain");
-                Require(ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true).Any(x=>x.Kind=="FanGui"&&x.Path==Path.Combine(common,"WmiFanGui/lease.json")),"Own uncertain lease hidden.");
+                Require(ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true).Any(x=>x.Kind=="FanGui"&&x.Path==Path.GetFullPath(Path.Combine(common,"WmiFanGui/lease.json"))),"Own uncertain lease hidden.");
             }
             Console.WriteLine("Recovery inventory: PASS (GUI/experiment/legacy, multiple/changed/malformed/foreign records, fan-only and exact report; zero hardware IO).");
         }
