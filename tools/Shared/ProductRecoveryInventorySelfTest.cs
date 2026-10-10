@@ -38,6 +38,22 @@ internal static class ProductRecoveryInventorySelfTest
             Require(ProductRecoveryFansClient.Evaluate(report,inventory,false,"evidence").Succeeded,"Valid recovery report refused.");
             Require(!ProductRecoveryFansClient.Evaluate(report,inventory,true,"evidence").Succeeded,"Remaining lease accepted.");
             Require(!ProductRecoveryFansClient.Evaluate(report,new[]{inventory[0]},false,"evidence").Succeeded,"Wrong selection accepted.");
+            using (var me = System.Diagnostics.Process.GetCurrentProcess())
+            {
+                var start = me.StartTime.ToUniversalTime().Ticks;
+                JsonElement Marker(object value) => JsonSerializer.SerializeToElement(value);
+                Require(ProductRecoveryInventory.IsCurrentNativeOwner(Marker(new { Pid = me.Id, OwnerStartUtcTicks = start }), me.Id, start), "Exact native owner refused.");
+                Require(!ProductRecoveryInventory.IsCurrentNativeOwner(Marker(new { Pid = me.Id, OwnerStartUtcTicks = start - 1 }), me.Id, start), "Reused PID treated as current owner.");
+                Require(ProductRecoveryInventory.IsCurrentNativeOwner(Marker(new { Pid = me.Id, Utc = DateTimeOffset.UtcNow }), me.Id, start), "Legacy live read refused.");
+                Require(!ProductRecoveryInventory.IsCurrentNativeOwner(Marker(new { Pid = me.Id, Utc = new DateTimeOffset(start - 1, TimeSpan.Zero) }), me.Id, start), "Old legacy marker hidden.");
+                var own = Path.Combine(local,"FanWmi","gui","own-orphan"); Directory.CreateDirectory(own);
+                var native = Path.Combine(own,"native-inflight.json");
+                File.WriteAllText(native, JsonSerializer.Serialize(new { Pid = me.Id, Utc = DateTimeOffset.UtcNow }));
+                File.SetCreationTimeUtc(native, me.StartTime.ToUniversalTime().AddHours(-1));
+                Require(!ProductRecoveryInventory.ReadFans(common,local,true).Any(x => x.Path == native), "Live orphan read uses unreliable file creation time.");
+                File.WriteAllText(Path.Combine(own,"native-uncertain.signal"),"fixture");
+                Require(ProductRecoveryInventory.ReadFans(common,local,true).Any(x => x.Path == native), "Uncertain own orphan hidden.");
+            }
             if(OperatingSystem.IsWindows())using(var me=System.Diagnostics.Process.GetCurrentProcess())
             {
                 var owned=Path.Combine(local,"FanWmi","gui","current");Directory.CreateDirectory(owned);

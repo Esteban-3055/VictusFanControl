@@ -7,7 +7,8 @@ internal static class ProductRecoveryFansClient
 {
     internal static ProcessStartInfo BuildStart(string guardian, string modules, string request, string requestHash, string evidence, ProductRecoveryOwner owner, int index = 0)
     {
-        var start = new ProcessStartInfo(guardian) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        var start = new ProcessStartInfo(guardian) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8 };
         foreach (var arg in new[] { "--recover-product-fans", "--request", request, "--request-sha", requestHash,
             "--modules", modules, "--output", evidence, "--owner-pid", owner.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--owner-start", owner.StartUtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture), "--owner-sid", owner.Sid, "--confirm-release-only", "--record-index", index.ToString(System.Globalization.CultureInfo.InvariantCulture) }) start.ArgumentList.Add(arg);

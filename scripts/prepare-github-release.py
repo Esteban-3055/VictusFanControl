@@ -11,7 +11,7 @@ import shutil
 import zipfile
 
 
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 TARGET = "HP-8C40-9D0R1LA-F18"
 MANIFEST = "PRODUCT-GUI-MANIFEST.json"
 

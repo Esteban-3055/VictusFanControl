@@ -92,7 +92,7 @@ internal static class WmiFanExperimentBoundary
 
     internal static void EnsureRequestAllowed(HpBiosRequest request)
     {
-        if (_gui && Recovering && request.CommandType == Hp8C40BiosFanControl.GetFanLevelCommandType)
+        if (_gui && (Recovering || File.Exists(StopPath)) && request.CommandType == Hp8C40BiosFanControl.GetFanLevelCommandType)
             throw new WmiFanReadAdmissionPausedException(PlannedGuiRelease?.Invoke()==true);
         if (!IsAllowed(request, Control, Recovering, File.Exists(StopPath), gui: _gui))
             throw new InvalidOperationException("Request is outside the WMI fan experiment lifecycle/whitelist.");
@@ -145,7 +145,9 @@ internal static class WmiFanExperimentBoundary
     internal static void MarkNativeStart(HpBiosRequest request)
     {
         if (!Enabled) return;
+        using var owner = System.Diagnostics.Process.GetCurrentProcess();
         WmiFanExperiment.WriteJson(InFlightPath, new { Pid = Environment.ProcessId,
+            OwnerStartUtcTicks = owner.StartTime.ToUniversalTime().Ticks,
             Utc = DateTimeOffset.UtcNow, request.CommandType });
         File.AppendAllText(Path.Combine(SessionDirectory!, "native-dispatch.jsonl"),
             System.Text.Json.JsonSerializer.Serialize(new { pid = Environment.ProcessId,
@@ -156,5 +158,38 @@ internal static class WmiFanExperimentBoundary
     internal static void MarkNativeReturned()
     {
         if (Enabled) File.Delete(InFlightPath);
+    }
+
+    // Wait for a live native call to return before inspecting its transient
+    // marker. Hold the same slot throughout recovery; nested Send calls on
+    // this synchronous thread may acquire the Windows mutex recursively.
+    internal static IDisposable EnterRecoverySlot(string directory, TimeSpan timeout, string? mutexName = null)
+    {
+        var mutex = new Mutex(false, mutexName ?? @"Global\VictusFanControl.WmiFanExperiment.Native");
+        var owned = false;
+        try
+        {
+            try { owned = mutex.WaitOne(timeout); }
+            catch (AbandonedMutexException)
+            {
+                owned = true;
+                File.WriteAllText(Path.Combine(directory, "native-uncertain.signal"), "Abandoned WMI mutex during release");
+                throw new IOException("Native completion is unknown after owner exit; lease retained.");
+            }
+            if (!owned) throw new TimeoutException("Native WMI call did not drain; no recovery call admitted and lease retained.");
+            if (File.Exists(Path.Combine(directory, "native-inflight.json")) || File.Exists(Path.Combine(directory, "native-uncertain.signal")))
+                throw new IOException("Native completion is unknown; no recovery call admitted and lease retained.");
+            return new NativeSlot(mutex);
+        }
+        catch
+        {
+            if (owned) mutex.ReleaseMutex();
+            mutex.Dispose();
+            throw;
+        }
+    }
+    private sealed class NativeSlot(Mutex mutex) : IDisposable
+    {
+        public void Dispose() { mutex.ReleaseMutex(); mutex.Dispose(); }
     }
 }

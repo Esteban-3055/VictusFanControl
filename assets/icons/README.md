@@ -1,6 +1,6 @@
 # Iconos definitivos
 
-Originales proporcionados por el usuario en `Iconos.zip` (9 de octubre de 2026). Se conserva cada PNG sin alteración. `manifest.json` registra los nombres y SHA-256 originales, y los de cada ICO derivado.
+Originales proporcionados por el usuario en `iconos.zip` (10 de octubre de 2026). Se conserva cada PNG sin alteración. `manifest.json` registra los nombres y SHA-256 originales, y los de cada ICO derivado.
 
 | Archivo | Uso |
 |---|---|

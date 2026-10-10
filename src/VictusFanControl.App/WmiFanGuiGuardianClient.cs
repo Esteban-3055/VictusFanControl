@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Runtime;
+using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
@@ -158,5 +159,25 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             "gui",
             Guid.NewGuid().ToString("N"));
 
-    public ValueTask DisposeAsync() { _child?.Dispose(); return ValueTask.CompletedTask; }
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (!_fixture)
+            {
+                // Firmware telemetry uses a fresh directory after release,
+                // even when no guardian has been started for that directory.
+                // Fence and drain it too before letting the owner exit.
+                WmiFanExperimentBoundary.BeginRecovery();
+                WmiFanGuiGuardianHost.RequestStop(SessionDirectory, "OWNER_DISPOSE");
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await HpWmiFanTelemetryReader.WaitForProductionQuiescenceAsync(deadline.Token).ConfigureAwait(false);
+                await Task.Run(() =>
+                {
+                    using var slot = WmiFanExperimentBoundary.EnterRecoverySlot(SessionDirectory, TimeSpan.FromSeconds(10));
+                }).ConfigureAwait(false);
+            }
+        }
+        finally { _child?.Dispose(); }
+    }
 }

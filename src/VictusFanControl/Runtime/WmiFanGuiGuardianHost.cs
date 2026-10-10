@@ -95,9 +95,7 @@ internal static class WmiFanGuiGuardianHost
                 try
                 {
                     RequestStop(directory, reason);
-                    if (File.Exists(Path.Combine(directory, "native-inflight.json")) ||
-                        File.Exists(Path.Combine(directory, "native-uncertain.signal")))
-                        throw new InvalidOperationException("Native completion is unknown; no recovery call admitted and lease retained.");
+                    using var nativeSlot = WmiFanExperimentBoundary.EnterRecoverySlot(directory, TimeSpan.FromSeconds(10));
                     if (File.Exists(Path.Combine(directory, "write-intent.json")))
                     {
                         var recovery = new WmiFanSession(r =>

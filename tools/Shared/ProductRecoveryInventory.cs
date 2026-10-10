@@ -106,7 +106,8 @@ internal static class ProductRecoveryInventory
             if(ignoreCurrentOwner && System.IO.Path.GetFileName(marker)=="native-inflight.json")
             {
                 using var j=JsonDocument.Parse(ReadBytes(marker));using var me=Process.GetCurrentProcess();
-                if(j.RootElement.GetProperty("Pid").GetInt32()==me.Id && File.GetCreationTimeUtc(marker)>=me.StartTime.ToUniversalTime())continue;
+                if (IsCurrentNativeOwner(j.RootElement, me.Id, me.StartTime.ToUniversalTime().Ticks) &&
+                    !Exists(System.IO.Path.Combine(directory,"native-uncertain.signal"))) continue;
             }
             result.Add(new(marker,"OrphanWmi",Hash(ReadBytes(marker)),Exists(System.IO.Path.Combine(directory,"write-intent.json"))?
                 "Hay intención de escritura sin lease. Falta evidencia de propiedad; conserva el diagnóstico y no se aplicará una liberación automática.":null));
@@ -125,6 +126,17 @@ internal static class ProductRecoveryInventory
                 }
             }
         return result.OrderBy(x => x.Path, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+    internal static bool IsCurrentNativeOwner(JsonElement marker, int pid, long startTicks)
+    {
+        if (!marker.TryGetProperty("Pid", out var p) || !p.TryGetInt32(out var value) || value != pid) return false;
+        if (marker.TryGetProperty("OwnerStartUtcTicks", out var start))
+            return start.TryGetInt64(out var ticks) && ticks == startTicks;
+        // Legacy markers have UTC but no process start identity. NTFS can
+        // reuse creation timestamps when a filename is recreated (tunneling).
+        // Never use file creation time as proof of a current process owner.
+        return marker.TryGetProperty("Utc", out var time) && time.TryGetDateTimeOffset(out var utc) &&
+            utc.UtcTicks >= startTicks && utc <= DateTimeOffset.UtcNow;
     }
     internal static bool Same(IEnumerable<ProductRecoveryRecord> a, IEnumerable<ProductRecoveryRecord> b) =>
         a.OrderBy(x => x.Path, StringComparer.OrdinalIgnoreCase).SequenceEqual(b.OrderBy(x => x.Path, StringComparer.OrdinalIgnoreCase));

@@ -49,7 +49,7 @@
     "sourceAdmission": "bounded-acquisition-history-v1",
     "normalAutomaticPromoted": true
   },
-  "version": "1.1.2",
+  "version": "1.1.3",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-gpu-power-handoffs-clean-resume-10-30-60s-three-attempts",

@@ -17,6 +17,7 @@ internal static class WmiFanExperimentSelfTest
         try
         {
             TestHeartbeats(directory);
+            TestRecoveryDrain(directory);
             TestFreshAcquisitionAsync().GetAwaiter().GetResult();
             TestDemandQuantization();
             TestInertia();
@@ -137,6 +138,41 @@ internal static class WmiFanExperimentSelfTest
         }
         catch (Exception ex) { output.WriteLine("FAIL: " + ex); return 1; }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private static void TestRecoveryDrain(string root)
+    {
+        foreach (var mode in new[] { "returned", "retained", "occupied", "abandoned" })
+        {
+            var directory = Path.Combine(root, mode); Directory.CreateDirectory(directory);
+            var name = "VFC-drain-fixture-" + Guid.NewGuid().ToString("N");
+            var marker = Path.Combine(directory, "native-inflight.json");
+            using var entered = new ManualResetEventSlim(); using var finish = new ManualResetEventSlim();
+            using var retainedMutex = new Mutex(false, name); // Keep abandoned named object alive.
+            var owner = new Thread(() =>
+            {
+                retainedMutex.WaitOne(); File.WriteAllText(marker, "fixture"); entered.Set();
+                if (!finish.Wait(TimeSpan.FromSeconds(5))) return;
+                if (mode == "returned") File.Delete(marker);
+                if (mode != "abandoned") retainedMutex.ReleaseMutex();
+            });
+            owner.Start(); Check(entered.Wait(TimeSpan.FromSeconds(5)), "Native fixture did not enter.");
+            if (mode == "occupied")
+            {
+                var timedOut = false;
+                try { using var slot = WmiFanExperimentBoundary.EnterRecoverySlot(directory, TimeSpan.Zero, name); }
+                catch (TimeoutException) { timedOut = true; }
+                finally { finish.Set(); owner.Join(); }
+                Check(timedOut && File.Exists(marker), "Occupied slot admitted recovery or erased its marker.");
+                continue;
+            }
+            finish.Set(); owner.Join();
+            var failed = false;
+            try { using var slot = WmiFanExperimentBoundary.EnterRecoverySlot(directory, TimeSpan.FromSeconds(1), name); }
+            catch (IOException) { failed = true; }
+            Check(failed == (mode != "returned"), "Recovery drain completion mismatch: " + mode);
+            if (mode == "abandoned") Check(File.Exists(Path.Combine(directory, "native-uncertain.signal")), "Abandoned slot lost uncertainty.");
+        }
     }
 
     private static void TestHeartbeats(string directory)

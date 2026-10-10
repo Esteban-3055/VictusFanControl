@@ -23,6 +23,12 @@ internal static class WmiFanGuiIntegrationSelfTest
                 !string.Equals(Path.GetFullPath(boundaryB), WmiFanExperimentBoundary.SessionDirectory, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("WMI GUI boundary did not rearm after a verified release.");
             Console.WriteLine("PASS: WMI GUI boundary recovery closes then rearms a fresh session directory.");
+            File.WriteAllText(WmiFanExperimentBoundary.StopPath, "fixture-stop");
+            var paused = false;
+            try { WmiFanExperimentBoundary.EnsureRequestAllowed(Hp8C40BiosFanControl.BuildGetFanLevelRequest()); }
+            catch (WmiFanReadAdmissionPausedException) { paused = true; }
+            if (!paused) throw new IOException("Guardian stop allowed a new GUI native read.");
+            File.Delete(WmiFanExperimentBoundary.StopPath);
 
             var client = new WmiFanGuiGuardianClient(fixture: true);
             await client.StartAsync(default);
@@ -41,6 +47,42 @@ internal static class WmiFanGuiIntegrationSelfTest
                 throw new InvalidOperationException("Detached WMI release fixture failed.");
             await client.DisposeAsync();
             Console.WriteLine("PASS: real detached guardian READY/intent/release, owner binding, lease retirement; zero hardware IO.");
+
+            var draining = new WmiFanGuiGuardianClient(fixture: true);
+            await draining.StartAsync(default); draining.PersistIntent(30);
+            using (var entered = new ManualResetEventSlim())
+            using (var finish = new ManualResetEventSlim())
+            {
+                var marker = Path.Combine(draining.SessionDirectory, "native-inflight.json");
+                var native = Task.Run(() =>
+                {
+                    using var mutex = new Mutex(false, @"Global\VictusFanControl.WmiFanExperiment.Native");
+                    mutex.WaitOne();
+                    try
+                    {
+                        File.WriteAllText(marker,"fixture-live-read"); entered.Set();
+                        if (!finish.Wait(TimeSpan.FromSeconds(10))) throw new IOException("Drain fixture timed out.");
+                        File.Delete(marker);
+                    }
+                    finally { mutex.ReleaseMutex(); }
+                });
+                if (!entered.Wait(TimeSpan.FromSeconds(5))) throw new IOException("Drain fixture did not enter.");
+                var releasing = draining.ReleaseAsync(default);
+                using var drainDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                try
+                {
+                    while (!File.Exists(Path.Combine(draining.SessionDirectory,"stop.signal"))) await Task.Delay(20,drainDeadline.Token);
+                    // The marker is still live when the guardian sees stop.
+                    await Task.Delay(350,drainDeadline.Token);
+                    if (File.Exists(draining.ReportPath)) throw new IOException("Guardian classified a live native call before draining it.");
+                }
+                finally { finish.Set(); }
+                await native;
+                var drained = await releasing;
+                if (!drained.GuardianLeaseRetired || !drained.ReleaseRequestAccepted) throw new IOException("Completed live read retained its lease.");
+            }
+            await draining.DisposeAsync();
+            Console.WriteLine("PASS: detached guardian drains a concurrent native read before release; zero hardware IO.");
 
             var unknown = new WmiFanGuiGuardianClient(fixture: true);
             await unknown.StartAsync(default);

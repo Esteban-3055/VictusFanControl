@@ -1,22 +1,22 @@
 {
-  "program": {
-    "source": "Icono Programa.png",
-    "sourceSha256": "6b501a89502d0994179fe0efc94582b3cac546f16f399635e3d3eb8d431ee060",
-    "icoSha256": "f28cc38084677449e9ed36316bd0857ab1f83eef97bf99d23daa585be461fc56"
-  },
   "tray-default": {
-    "source": "Icono Bandeja.png",
-    "sourceSha256": "a8f84fed6c60f4c2f49fef1dea1edee9c253e65858dfda3182ee34b0992e87ef",
-    "icoSha256": "c4f222303a57dcd896890d1cb3510322bd7b0d8eb058c82ed0e12e61cafc08d4"
+    "source": "Imagen de ChatGPT 10 oct 2026, 04_43_29-1.png",
+    "sourceSha256": "29fa805124e042dc2c5757468fe8f9ce40362fb61e0cb1bbcc4347e05083b36b",
+    "icoSha256": "05058a568c4c4f39a0b56b2b7617e5505b7d20dd05ab1f6895f82505b65ad228"
+  },
+  "program": {
+    "source": "Imagen de ChatGPT 10 oct 2026, 04_43_29-2.png",
+    "sourceSha256": "c6b9212fe57005cda3bea0c88ecafeadd2d0d2edde90aefc47f23925aa12baaf",
+    "icoSha256": "c87effc9d05985cd9920fe6e9824606cdb1e624561e33f673eeb23e14784d77f"
   },
   "tray-automatic": {
-    "source": "Icono Automatic aplied correctly.png",
-    "sourceSha256": "22c1cb8f600d4c684917512e0ce269964322a90e42d2a5c8db789d0a8a2e04d5",
-    "icoSha256": "58e49b890c10c8a918d5d1686043f589b15c589558089362974b93ee80aca551"
+    "source": "Imagen de ChatGPT 10 oct 2026, 04_43_30-3.png",
+    "sourceSha256": "24171824f2080c8e6a6f5ed1a1a2883ffb0417b56cb57c03061005ed7587627e",
+    "icoSha256": "a005978da16eb2fcabe4c7d96d043f2377ea843aa8180a1df13e57670f69e5ac"
   },
   "tray-error": {
-    "source": "Icono ERROR.png",
-    "sourceSha256": "6d08a9763131553f8ac15abc691bdb3d715d2f2df81353e713f70fc462a15794",
-    "icoSha256": "4ddc32ad65ff2df362e1c43e62d91b9f479676bcf4cca420707ac30ad87023ce"
+    "source": "Imagen de ChatGPT 10 oct 2026, 04_43_31-4.png",
+    "sourceSha256": "4fff9f2c0c29da51d1d7020b19a05cbd03f76bd1dd46a3ad1f67785792dbc810",
+    "icoSha256": "01d1cf3ed388ddc374deefb8856990484ce5b2f0fa96a839ed35026cc85c5570"
   }
 }

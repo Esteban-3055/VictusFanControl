@@ -7,6 +7,7 @@ internal static class Program
     public static async Task<int> Main(
         string[] args)
     {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
         try
         {
             if (args.Length > 0 && args[0] == "--recover-product-fans") return ProductFanRecovery.Run(args);
