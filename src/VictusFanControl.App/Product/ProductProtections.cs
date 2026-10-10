@@ -44,13 +44,13 @@ internal sealed partial class ProductCanvas
         {
             var y=187+i*125;Card(g,new(310,y,1337,112));
             DrawText(g,title,334,y+15,24,null,960,true);
-            DrawText(g,detail,334,y+54,19,Muted,985,height:45);
+            DrawText(g,detail,334,y+54,19,Muted,985,height:56);
             Button(g,id,enabled?"✓  Activada":"○  Desactivada",new(1370,y+28,249,53),enabled);
         }
-        Row(0,"protections-cpu","Volver a Firmware por temperatura CPU","CPU ≥99 °C: inmediato. CPU ≥95 °C: confirmación con plazo de 2 s. Desactivada: continúa la curva y el enfriamiento máximo.",p.CpuThermalHandoff);
-        Row(1,"protections-gpu","Volver a Firmware por temperatura GPU","Cancela al superar el margen de uso de 82 °C; el control térmico compartido actúa a 87 °C. Desactivada: continúa la curva.",p.GpuThermalHandoff);
-        Row(2,"protections-power","Volver a Firmware por el margen de potencia","Cancela con CPU >60 W o GPU >75 W. Desactivada: conserva los límites CPU/GPU configurados y acepta lecturas plausibles.",p.PowerEnvelopeHandoff);
-        Row(3,"protections-resume","Reanudar Automático después de una interrupción","Si estaba activo: libera la sesión anterior, espera sensores nuevos y temperaturas CPU ≤90 / GPU ≤82 °C. Hasta 3 intentos, con espera.",p.ResumeAutomatic);
+        Row(0,"protections-cpu","Volver a Firmware por temperatura CPU","Activa: CPU ≥99 °C inmediata; ≥95 °C inicia confirmación con plazo de 2 s.\nDesactivada: sigue la curva con enfriamiento máximo ante calor.",p.CpuThermalHandoff);
+        Row(1,"protections-gpu","Volver a Firmware por temperatura GPU","Activa: GPU >82 °C cancela Automático; a 87 °C actúa el control térmico compartido.\nDesactivada: Automático continúa la curva.",p.GpuThermalHandoff);
+        Row(2,"protections-power","Volver a Firmware por el margen de potencia","Activa: CPU >60 W o GPU >75 W cancela Automático.\nDesactivada: conserva tus límites CPU/GPU y acepta valores plausibles.",p.PowerEnvelopeHandoff);
+        Row(3,"protections-resume","Reanudar Automático después de una interrupción","Libera la sesión previa y espera lecturas nuevas; CPU ≤90 °C / GPU ≤82 °C.\nHasta 3 intentos con espera; se habilita si Automático ya estaba activo.",p.ResumeAutomatic);
         DrawText(g,"Siempre activos: sensores completos y recientes, identidad del equipo y exclusión de operaciones WMI inciertas. Las protecciones térmicas del firmware permanecen activas.",334,708,20,Muted,1280,height:61);
         DrawText(g,"Guardar conserva las preferencias. Aplicar libera el control actual y prepara una sesión nueva con estos ajustes.",334,782,19,Muted,815,height:52);
         Button(g,"save","Guardar",new(1163,785,175,45),enabled:!Busy);

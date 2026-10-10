@@ -50,7 +50,15 @@ def main():
     require(contract["physicalPassClaimed"] is False, "Must retain physical evidence limits")
     require(contract["experimentalPlatformRetention"]["defaultEnabled"] is False,
             "Retention must remain opt-in")
-    require(len(contract["remainingPhysicalChecks"]) == 5, "Missing pending observations")
+    required_observations = {
+        "representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return",
+        "current-gui-suspend-resume-without-fan-reentry",
+        "current-gui-clean-exit-and-session-restart-release-and-open-in-firmware",
+        "optional-quiet-ac-candidate-with-tz01-dtt3-comparable-thermal-and-measured-acoustics",
+        "current-windows-logon-startup-coupled-activation-and-clean-shutdown",
+        "configurable-protections-and-clean-unattended-resumption-on-current-target",
+    }
+    require(required_observations <= set(contract["remainingPhysicalChecks"]), "Missing pending observations")
 
     expected = {MANIFEST}
     folded = {MANIFEST.casefold()}

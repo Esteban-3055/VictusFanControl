@@ -17,6 +17,8 @@ internal static partial class ProductGuiSelfTest
             require(form.Draft.Protections==preferences.Protections&&form.Dirty,"Protection switches did not edit independent preferences.");
             form.Canvas.Page=ProductPage.Protections;form.Canvas.Size=new(1040,660);form.Canvas.Refresh();
             using var image=new Bitmap(form.Canvas.Width,form.Canvas.Height);form.Canvas.DrawToBitmap(image,new(0,0,image.Width,image.Height));
+            var renderDirectory=Path.Combine("logs","product-gui-self-test");Directory.CreateDirectory(renderDirectory);
+            image.Save(Path.Combine(renderDirectory,"protections-minimum-layout.png"));
             require(form.Canvas.Hits.Any(h=>h.Id=="protections-cpu")&&form.Canvas.Hits.Any(h=>h.Id=="page-9"),"Protection page/navigation missing at minimum resolution.");
         }
         long clock=0;var review=new ProductAutomaticReview(()=>clock,ProductAutomaticReviewMode.Habitual);review.Configure(preferences.Protections);review.Start();
