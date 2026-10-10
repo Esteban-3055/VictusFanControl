@@ -28,6 +28,18 @@ internal static class ProductTelemetryContinuitySelfTest
         continuity.Reset();continuity.Observe(Sample(0));
         var invalid=continuity.Observe(Sample(1000) with{GpuTemperatureC=106,CpuPackagePowerW=501});
         Check(invalid.GpuTemperatureC==106&&invalid.CpuPackagePowerW==501&&invalid.RetainedTelemetry is null,"implausible readings cannot be concealed behind earlier valid values");
+        continuity.Reset();continuity.Observe(Sample(0));
+        var hotPackage=continuity.Observe(Sample(1000) with{CpuTemperatureC=90,CpuCoreTemperatures=[]});
+        Check(hotPackage.CpuControlTemperatureC==90&&hotPackage.IsComplete&&hotPackage.CpuThermalSampledAtUtc==at&&hotPackage.RetainedTelemetry is not null,
+            "a fresh hot package cannot be replaced by cooler retained telemetry when cores are missing");
+        continuity.Reset();continuity.Observe(Sample(0));
+        var hotCore=continuity.Observe(Sample(1000) with{CpuTemperatureC=null,CpuCoreTemperatures=[new(0,0,"Performance",95)]});
+        Check(hotCore.CpuControlTemperatureC==95&&hotCore.IsComplete&&hotCore.CpuThermalSampledAtUtc==at,
+            "a fresh hot core cannot be hidden when the package is missing");
+        continuity.Reset();continuity.Observe(Sample(0));
+        var wrongCore=continuity.Observe(Sample(1000) with{CpuTemperatureC=null,CpuCoreTemperatures=[new(2,2,"Performance",95)]});
+        Check(!wrongCore.IsComplete&&wrongCore.CpuCoreMaxTemperatureC==95&&wrongCore.RetainedTelemetry is null,
+            "unknown core identities cannot be replaced with retained cores");
         continuity.Reset();
         Check(!continuity.Observe(Sample(7000) with{CpuTemperatureC=null,CpuCoreTemperatures=[]}).IsComplete,"lifecycle reset cannot reuse an old thermal sample");
         var legacy=Sample(0) with{FanMaximumAgeMilliseconds=3000};
