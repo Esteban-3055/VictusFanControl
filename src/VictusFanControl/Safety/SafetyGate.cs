@@ -109,7 +109,7 @@ public static class SafetyGate
         var age = snapshot is null ? TimeSpan.MaxValue : now - snapshot.Timestamp;
         var snapshotFresh = snapshot is not null &&
                             age >= TimeSpan.Zero &&
-                            age <= MaximumTelemetryAge;
+                            age <= snapshot.MaximumControlAge && snapshot.HasFreshControlSensorsAt(now);
         if (!snapshotFresh)
         {
             reasons.Add(snapshot is null
@@ -214,10 +214,10 @@ public static class SafetyGate
     {
         if (!InRange(snapshot.CpuTemperatureC, 10, 110) ||
             !InRange(snapshot.CpuPackagePowerW, 0, 500) ||
-            !InRange(snapshot.CpuLoadPercent, 0, 100) ||
+            !(snapshot.ProductTelemetryTolerance && snapshot.CpuLoadPercent is null || InRange(snapshot.CpuLoadPercent, 0, 100)) ||
             !InRange(snapshot.GpuTemperatureC, 10, 105) ||
             !InRange(snapshot.GpuPowerW, 0, 300) ||
-            !InRange(snapshot.GpuLoadPercent, 0, 100) ||
+            !(snapshot.ProductTelemetryTolerance && snapshot.GpuLoadPercent is null || InRange(snapshot.GpuLoadPercent, 0, 100)) ||
             !InRange(snapshot.CpuFanRpm, 0, 10_000) ||
             !InRange(snapshot.GpuFanRpm, 0, 10_000))
         {

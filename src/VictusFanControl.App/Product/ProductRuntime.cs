@@ -117,7 +117,8 @@ internal sealed class ProductRuntime : IProductRuntime
     private PerformanceGuiSessionConfiguration? _requestedPerformance;
     private Task? _poll;
     private Task? _auxiliary;
-    private readonly VictusFanControl.PlatformThermalReplay.ProductPlatformRetention _retention = new();
+    private Task? _thermalDeadline;
+    private readonly VictusFanControl.PlatformThermalReplay.ProductPlatformRetention _retention;
     private volatile bool _closing, _lifecycleBlocked;
     private volatile bool _performanceUpdating;
     private long _performanceUpdateStarted;
@@ -132,6 +133,7 @@ internal sealed class ProductRuntime : IProductRuntime
             throw new ArgumentException("Platform experiment requires explicit extended physical review.");
         var releasedBoundary=releasedRuntime?.ClaimReleasedBoundary();
         _platformExperiment=platformExperiment;
+        _retention=new(allowAuxiliaryFallback:automaticReview is null && platformExperiment is null);
         if(platformExperiment is null) _retention.Configure(profiles.ExperimentalPlatformRetention);
         _hardware = HardwareIdentityReader.ReadCurrent();
         _target = HpHardwareTargetResolver.Resolve(_hardware,out _);
@@ -163,17 +165,20 @@ internal sealed class ProductRuntime : IProductRuntime
             automaticConfiguration: profiles.Ac.Fan,
             automaticMinimumLevel: _target == Hp8C40TargetProfile.Instance ? 10 : Hp8C40AutomaticPolicy.MinimumLevel,
             useRawCpuThermalResponse: true,
-            experimentalPolicy: (IExperimentalFanPolicy?)platformExperiment ?? (_target == Hp8C40TargetProfile.Instance ? _retention : null));
+            experimentalPolicy: (IExperimentalFanPolicy?)platformExperiment ?? (_target == Hp8C40TargetProfile.Instance ? _retention : null),
+            productTelemetryTolerance:automaticReview is null && _target == Hp8C40TargetProfile.Instance);
         WmiFanExperimentBoundary.PlannedGuiRelease = () => _plannedFanRelease;
         _performance = new(modules);
         _worker = new(modules)
         {
+            ProductTelemetryTolerance = automaticReview is null && _target == Hp8C40TargetProfile.Instance,
             FreshFanAcquisitionRequired = () => _controller.AutomaticFreshAcquisitionRequired,
             AcquisitionBudgetMilliseconds = () => ProductAutomaticReview.AcquisitionBudget(
                 _controller.AutomaticAcquisitionBudgetMilliseconds, _automaticGuard.RemainingCpuSpikeMilliseconds),
             NormalPollingDelayMilliseconds = () => _controller.AutomaticNormalPollingDelayMilliseconds,
             SnapshotProcessor = ProcessAutomaticAsync
         };
+        if (_wmi is not null && automaticReview is null) _wmi.ProductTelemetryProvider = () => _snapshot;
         _fans.AuthorityChanged += (_, e) => { AppLog.Write("Product fan authority: " + e); Publish(e.Reason); };
         _worker.SnapshotAvailable += (_, snapshot) => { AppLog.WriteTelemetry(snapshot); _snapshot = snapshot; _ = EnforceAsync(); Publish(); };
         _worker.StateMachine.StateChanged += (_, e) =>
@@ -199,7 +204,7 @@ internal sealed class ProductRuntime : IProductRuntime
             throw new IOException("El controlador anterior no tiene una liberación completa disponible para reintentar.");
         return _fanGuardian.SessionDirectory;
     }
-    public void Start() { _worker.Start(); _poll = PollAsync(); _auxiliary = SampleAuxiliaryAsync(); }
+    public void Start() { _worker.Start(); _poll = PollAsync(); _auxiliary = SampleAuxiliaryAsync(); _thermalDeadline = MonitorThermalDeadlineAsync(); }
     private async Task SampleAuxiliaryAsync()
     {
         var tz=new VictusFanControl.OemShadowCapture.ReadSlot<VictusFanControl.OemShadow.Source>();
@@ -258,6 +263,24 @@ internal sealed class ProductRuntime : IProductRuntime
                 var raw = SafetyGate.Evaluate(_hardware,_worker.StateMachine.State,snapshot,DateTimeOffset.UtcNow,_fans.BackendCanWrite);
                 // Use the shared bounded 8C40 admission, rather than rejecting the
                 // unchanged raw SafetyGate's first CPU >=95 C sample here.
+                if (snapshot.RetainedTelemetry is not null)
+                {
+                    _automaticGuard.EnsureDispatchAllowed(snapshot);
+                    if (snapshot.CpuControlTemperatureC >= 85 || snapshot.GpuTemperatureC >= 78)
+                        throw new InvalidOperationException("Lectura necesaria retrasada con temperatura elevada; volver a Firmware sin agotar los 5 s.");
+                    if (!_controller.EvaluateAutomaticSafety(snapshot,raw,observe:true).CustomControlPermitted)
+                        throw new InvalidOperationException("Sensores necesarios fuera de su tolerancia; volver a Firmware.");
+                    await _controller.ObserveAutomaticSourceWaitAsync(snapshot, () =>
+                    {
+                        _automaticActivation.EnsureCurrent(_activeAutomaticTicket!);
+                        _automaticGuard.EnsureDispatchAllowed(snapshot);
+                        if(!snapshot.HasFreshControlSensorsAt(DateTimeOffset.UtcNow)||_closing||_lifecycleBlocked)
+                            throw new InvalidOperationException("La tolerancia de sensores venció durante la espera.");
+                    },token);
+                    _automaticDecision=null;_automaticDecisionSnapshot=null;
+                    Publish("Lectura retrasada: "+snapshot.RetainedTelemetry+". Se conserva el nivel sin descensos ni nuevas escrituras.");
+                    return;
+                }
                 var effective = _controller.EvaluateAutomaticSafety(snapshot, raw, observe: true);
                 var wasCpuPending = _automaticGuard.RemainingCpuSpikeMilliseconds.HasValue == true;
                 if (!_automaticGuard.Observe(snapshot,effective))
@@ -473,7 +496,8 @@ internal sealed class ProductRuntime : IProductRuntime
         if (_controller.Mode != AdaptiveFanProductionMode.Firmware || _fans.Authority != FanAuthority.Firmware)
             throw new InvalidOperationException("Vuelve a Firmware antes de aplicar una curva. Un clic repetido no renueva la prueba.");
         var admission = (protections ?? new()).ApplyThermalPolicy(_snapshot, SafetyGate.Evaluate(_hardware, _worker.StateMachine.State, _snapshot, DateTimeOffset.UtcNow, _fans.BackendCanWrite));
-        if (_worker.StateMachine.State != SystemState.Healthy || !admission.CustomControlPermitted)
+        if (_worker.StateMachine.State != SystemState.Healthy || !admission.CustomControlPermitted ||
+            _snapshot?.RetainedTelemetry is not null || _snapshot?.IsFanTelemetryFreshAt(DateTimeOffset.UtcNow,3000) != true)
             throw new InvalidOperationException("Espera telemetría Healthy completa y vigente antes de seleccionar Automatic.");
         var source = new WindowsPerformancePowerSourceReader().Read().Source;
         return source switch { PerformancePowerSourceKind.Ac => ProductPowerProfile.Ac,
@@ -705,6 +729,24 @@ internal sealed class ProductRuntime : IProductRuntime
         catch (Exception ex) { Publish("Recovery no resuelto",ex.Message); }
     }
     public void ResumeTelemetry(string reason) { _worker.NotifyResume(reason); Publish("Revalidando telemetría; autoridad de ventiladores permanece bloqueada."); }
+    private async Task MonitorThermalDeadlineAsync()
+    {
+        try
+        {
+            while(!_lifetime.IsCancellationRequested)
+            {
+                await Task.Delay(100,_lifetime.Token);
+                if(_automaticGuard.RemainingCpuSpikeMilliseconds!=0 || _lifecycleBlocked || _closing)continue;
+                var reason=ProductAutomaticReview.CpuSpikeDeadlineFailure;
+                _automaticActivation.Cancel();_lifecycleBlocked=true;_lifecycleBlockReason=reason;
+                _automaticInterruptionSnapshot=_snapshot;_fans.CloseCustomAdmissionForLifecycleBoundary();
+                AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: "+_automaticSessionId+" · "+reason);
+                _ = ResetInterruptedFanAsync(reason);
+                Publish(reason);
+            }
+        }
+        catch(OperationCanceledException) when(_lifetime.IsCancellationRequested) { }
+    }
     private async Task PollAsync()
     {
         while (!_lifetime.IsCancellationRequested)
@@ -728,7 +770,7 @@ internal sealed class ProductRuntime : IProductRuntime
             catch (Exception ex) { Publish("Estado Performance Guardian no disponible",ex.Message); }
         }
     }
-    private void Publish(string? message = null, string? failure = null)
+    private void Publish(string? message = null, string? failure = null, bool clearFailure = false)
     {
         var source = "Unknown";
         try { var reading = new WindowsPerformancePowerSourceReader().Read(); if (reading.Succeeded) source = reading.Source.ToString(); } catch { }
@@ -762,7 +804,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 CpuStatus = p?.CpuStatus, GpuStatus = p?.GpuStatus, AppliedPerformanceSource = p?.PowerSource ?? "Unknown", AppliedPerformance = _performance.AppliedConfiguration ?? (p is { CpuState: "Active" } or { GpuState: "ActiveUnverified" } ? _requestedPerformance : null),
                 GuardianState = recovery?.Pending==true ? "Recuperación pendiente" : p?.RuntimeFailure is not null ? "Failed" : _performance.HasProcess ? p?.Phase ?? "Recovering" : "Sin sesión",
                 AppliedFanProfile = _fans.Authority == FanAuthority.Custom ? _selectedFanProfile : null,
-                LifecycleBlocked = _lifecycleBlocked, LifecycleBlockReason = _lifecycleBlockReason, Message = message ?? _state.Message, Failure = failure ?? _state.Failure
+                LifecycleBlocked = _lifecycleBlocked, LifecycleBlockReason = _lifecycleBlockReason, Message = message ?? _state.Message, Failure = failure ?? (clearFailure ? null : _state.Failure)
             }; state = _state;
         }
         Changed?.Invoke(state);
@@ -778,6 +820,7 @@ internal sealed class ProductRuntime : IProductRuntime
         try { await _worker.DisposeAsync(); } catch (Exception ex) { failures.Add(ex); }
         if (_poll is not null) try { await _poll; } catch (OperationCanceledException) { }
         if (_auxiliary is not null) try { await _auxiliary; } catch (OperationCanceledException) { }
+        if (_thermalDeadline is not null) try { await _thermalDeadline; } catch (OperationCanceledException) { }
         _lifetime.Dispose();
         if (failures.Count > 0) throw new AggregateException("Liberación incompleta. Conserva los journals y revisa los informes.",failures);
         _releaseCompleted=true;

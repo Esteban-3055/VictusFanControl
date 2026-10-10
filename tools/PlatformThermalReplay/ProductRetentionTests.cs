@@ -51,6 +51,15 @@ internal static class ProductRetentionTests
         Refused(()=>p.GetSupplement(Input(2),12,40),"invalid auxiliary cannot be silently ignored when enabled");
         for(int i=3;i<=12;i++)Observe(p,i);
         Refused(()=>p.GetSupplement(Input(12),12,40),"fresh sources and profile changes cannot rearm a sensor fault");
+        var resilient=new ProductPlatformRetention(allowAuxiliaryFallback:true);resilient.Configure(true);
+        Observe(resilient,0);Observe(resilient,1);Check(resilient.GetSupplement(Input(1),12,40)==14,"product retention qualifies normally");
+        resilient.SetSources(new(),new());resilient.ObserveTelemetry(Snapshot(2),true);
+        Check(!resilient.State.Ready&&resilient.GetSupplement(Input(2),12,40) is null,"missing auxiliaries suspend only the optional contribution");
+        resilient.EnsureDispatchAllowed(start.AddSeconds(2),start.AddSeconds(2.1));
+        for(int i=3;i<=13;i++)Observe(resilient,i,custom:true);
+        Check(resilient.State.Ready&&resilient.GetSupplement(Input(13),12,40)==14,"auxiliaries recover after valid acquisition history");
+        for(int i=14;i<=62;i++)Observe(resilient,i,custom:true);
+        Check(resilient.GetSupplement(Input(62),12,40) is null,"auxiliary recovery cannot renew the original retention episode");
         var original=new ProductProfiles {ExperimentalPlatformRetention=true};
         Check(ProductProfilesStore.Copy(original).ExperimentalPlatformRetention,"preference survives validated serialization");
         var legacyNode=System.Text.Json.Nodes.JsonNode.Parse(ProductProfilesStore.Serialize(new ProductProfiles()))!;

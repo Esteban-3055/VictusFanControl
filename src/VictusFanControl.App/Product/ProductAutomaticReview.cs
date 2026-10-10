@@ -126,7 +126,7 @@ internal sealed class ProductAutomaticReview
                 var reasons = safety.Reasons.Count > 0 ? string.Join("; ", safety.Reasons) : "SafetyGate no permite control Custom.";
                 throw new InvalidOperationException("Prueba Automatic interrumpida por SafetyGate: " + reasons);
             }
-            if (_lastSample.HasValue && (snapshot.Timestamp <= _lastSample.Value || snapshot.Timestamp - _lastSample.Value > SafetyGate.MaximumTelemetryAge))
+            if (_lastSample.HasValue && (snapshot.Timestamp <= _lastSample.Value || snapshot.Timestamp - _lastSample.Value > snapshot.MaximumControlAge))
                 throw new InvalidOperationException("Prueba Automatic recibió una adquisición repetida o discontinua.");
             var previous = _observed;
             _observed = snapshot;

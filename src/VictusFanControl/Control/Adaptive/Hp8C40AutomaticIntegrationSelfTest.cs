@@ -538,6 +538,38 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             Check(rejected&&researchBackend.Levels.Count==0&&coordinator.Authority!=FanAuthority.Custom,
                 weaken?"research cannot lower protected raw demand":"research source loss between evaluation and native Set issues no write and restores firmware");
         }
+        clock=0;
+        var tolerantBackend=new Backend();
+        await using(var coordinator=new FanControlCoordinator(tolerantBackend))
+        {
+            var profiles=new VictusFanControl.Product.ProductProfiles();
+            var controller=new AdaptiveFanProductionController(coordinator,Hp8C40AdaptiveCandidateV1.Create(),true,true,
+                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,automaticConfiguration:profiles.Ac.Fan,
+                automaticMinimumLevel:10,useRawCpuThermalResponse:true,productTelemetryTolerance:true);
+            var continuity=new ProductTelemetryContinuity();
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,CancellationToken.None);
+            var first=continuity.Observe(Sample(Now()));
+            await controller.ProcessAutomaticAsync(first,Raw(first),CancellationToken.None);
+            var writes=tolerantBackend.Levels.Count;
+            for(var t=1;t<=4;t++)
+            {
+                clock=t*1000;
+                var held=continuity.Observe(Sample(Now()) with{CpuTemperatureC=null,CpuCoreTemperatures=[]});
+                var safety=controller.EvaluateAutomaticSafety(held,Raw(held),observe:true);
+                Check(safety.CustomControlPermitted,"retained thermal epoch remains bounded and admitted at "+t+" s");
+                await controller.ObserveAutomaticSourceWaitAsync(held,()=>{},CancellationToken.None);
+            }
+            Check(tolerantBackend.Levels.Count==writes&&tolerantBackend.Restores==0,"retained critical telemetry issues no write or descent");
+            clock=4500;
+            var recovered=continuity.Observe(Sample(Now()) with{CpuLoadPercent=null,GpuLoadPercent=null});
+            var resumed=await controller.ProcessAutomaticAsync(recovered,Raw(recovered),CancellationToken.None);
+            Check(resumed.Action!=AdaptiveFanProductionActionKind.RestoreFirmware&&coordinator.Authority==FanAuthority.Custom,
+                "fresh temperature recovery and missing utilization preserve control inside five seconds");
+            clock=10000;
+            var expired=continuity.Observe(Sample(Now()) with{CpuTemperatureC=null,CpuCoreTemperatures=[]});
+            var released=await controller.ProcessAutomaticAsync(expired,Raw(expired),CancellationToken.None);
+            Check(released.Action==AdaptiveFanProductionActionKind.RestoreFirmware&&tolerantBackend.Restores==1,"expired critical telemetry restores Firmware");
+        }
         return failures;
     }
 

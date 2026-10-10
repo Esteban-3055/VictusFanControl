@@ -70,7 +70,7 @@ public class Hp8C40AutomaticThermalAdmission
                 CloseLocked("Thermal admission refused a SafetyGate/telemetry epoch mismatch.", false);
             if (_stopReason is not null) return Decision(raw, raw, elapsed);
             if (_latest is not null && (snapshot.Timestamp <= _latest.Timestamp ||
-                (_normalEstablished && snapshot.Timestamp - _latest.Timestamp > SafetyGate.MaximumTelemetryAge)))
+                (_normalEstablished && snapshot.Timestamp - _latest.Timestamp > snapshot.MaximumControlAge)))
             {
                 CloseLocked("Thermal admission rejected a duplicate, backwards or discontinuous acquisition.", false);
                 return Decision(raw, raw, elapsed);

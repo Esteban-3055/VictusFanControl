@@ -23,6 +23,8 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
     private double? _baseline, _supplement;
     private bool _enabled;
     private string? _failure;
+    private readonly bool _allowAuxiliaryFallback;
+    public ProductPlatformRetention(bool allowAuxiliaryFallback = false) => _allowAuxiliaryFallback = allowAuxiliaryFallback;
     public bool Enabled { get { lock(_sync)return _enabled; } }
     public object CaptureEvidence()
     {
@@ -70,7 +72,7 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
             if(_frame is {} last && (snapshot.Timestamp<=last.TimestampUtc || snapshot.Timestamp-last.TimestampUtc>TimeSpan.FromSeconds(3)))
             {
                 _admission.Reset(); _qualified=null;
-                if(custom)_failure="Continuidad de telemetría perdida; reinicia en Firmware.";
+                if(custom && !_allowAuxiliaryFallback)_failure="Continuidad de telemetría perdida; reinicia en Firmware.";
             }
             Source[] Join(List<Source> history)=>history.Where(s=>s.SampledAtUtc is null || s.SampledAtUtc<=snapshot.Timestamp).ToArray();
             var tz=Join(_tz); var dtt=Join(_dtt);
@@ -78,7 +80,12 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
             _frame=new(snapshot.Timestamp,new(snapshot.CpuTemperatureC,snapshot.Timestamp),new(snapshot.CpuCoreMaxTemperatureC,snapshot.Timestamp),
                 new(snapshot.GpuTemperatureC,snapshot.Timestamp),tz.LastOrDefault()??new(),dtt.LastOrDefault()??new());
             _qualified=_admission.Evaluate(_frame,tz,dtt);
-            if(custom && !_qualified.Available)
+            if(_allowAuxiliaryFallback)
+            {
+                _failure = _qualified.Available ? null : "Retención suspendida: TZ01/DTT3 no vigentes; continúa la curva base.";
+                if (!_qualified.Available) { _supplement=null; }
+            }
+            else if(custom && !_qualified.Available)
                 _failure="TZ01/DTT3 no vigentes; reinicia en Firmware.";
         }
     }
@@ -87,6 +94,7 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
         lock(_sync)
         {
             if(!_enabled)return;
+            if(_allowAuxiliaryFallback)return;
             if(_failure is not null || _qualified is not {Available:true} || _frame is null ||
                 now<_frame.TimestampUtc || now-_frame.TimestampUtc>=TimeSpan.FromSeconds(3) ||
                 !_frame.Tz01.Fresh(now,3000) || !_frame.Dtt3.Fresh(now,3000))
@@ -100,6 +108,9 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
             _baseline=baselineRawDemand; _supplement=null;
             if(!_enabled)return null;
             RequireReady(input.Timestamp);
+            _evaluated=input.Timestamp;
+            if(_allowAuxiliaryFallback && (_qualified is not {Available:true} || _frame is null ||
+                !_frame.Tz01.Fresh(input.Timestamp,3000) || !_frame.Dtt3.Fresh(input.Timestamp,3000)))return null;
             if(_frame?.TimestampUtc!=input.Timestamp)throw new InvalidOperationException("Auxiliares no asociados a esta adquisición.");
             _evaluated=input.Timestamp;
             if(_episodeCeiling is {} ceiling && baselineRawDemand>=ceiling) { _episodeStart=null; _episodeCeiling=null; }

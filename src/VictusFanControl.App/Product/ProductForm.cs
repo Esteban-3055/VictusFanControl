@@ -31,12 +31,35 @@ internal sealed partial class ProductForm : Form
     private ProductStartupAutomatic? _startupAutomatic;
     private ProductProfiles? _startupPreferences;
     private string? _startupFailure;
+    private string? _lastEditingSource;
+    private long _startupRetryAt;
+    private int _startupAttempts;
     private readonly TaskCompletionSource _shutdown = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        FitWorkingArea();
+    }
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        FitWorkingArea();
+    }
+    private void FitWorkingArea()
+    {
+        if(WindowState!=FormWindowState.Normal)return;
+        var area=Screen.FromControl(this).WorkingArea;
+        MinimumSize=new(Math.Min(MinimumSize.Width,area.Width),Math.Min(MinimumSize.Height,area.Height));
+        _canvas.MinimumSize=Size.Empty;
+        Size=new(Math.Min(Width,area.Width),Math.Min(Height,area.Height));
+        Location=new(Math.Clamp(Left,area.Left,area.Right-Width),Math.Clamp(Top,area.Top,area.Bottom-Height));
+    }
     internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null)
     {
+        SuspendLayout();
         _retryRuntimeFactory=retryRuntimeFactory;_modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
         _isolatedRuntime=fixture is not null||runtimeFactory is not null;_restartDirectory=restartDirectory;_restartOpening=restartState is not null;
         _canvas.AutomaticRetryAvailable=automaticReview is null&&(!_isolatedRuntime||retryRuntimeFactory is not null);
@@ -52,7 +75,7 @@ internal sealed partial class ProductForm : Form
             AppLog.Write("PRODUCT SESSION RESTART OPENED: previous="+restartState.PreviousSessionId+"; current="+AppLog.SessionId+"; no authority transferred.");
         }
         _presentationTimer.Tick+=(_,_)=>PresentationTick();
-        Text="VictusFanControl";Icon=_icons.Program;FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleMode=AutoScaleMode.Dpi;
+        Text="VictusFanControl";Icon=_icons.Program;FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleDimensions=new SizeF(96,96);AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=new(1344,756);StartPosition=FormStartPosition.CenterScreen;
         _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
         if(restartState is not null)_canvas.Dirty=restartState.Dirty;
@@ -72,6 +95,7 @@ internal sealed partial class ProductForm : Form
             _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory,registerPowerNotificationsInFixture,enableStartupAutomaticInFixture,recoveryPreflight);
         };
         FormClosing+=OnClosing;FormClosed+=(_,_)=>{UnregisterPowerNotifications();_tray.Visible=false;};
+        ResumeLayout(false);PerformLayout();
     }
     private async Task InitializeAsync(bool minimized,bool isolated,Func<Task<IProductRuntime>>? runtimeFactory,bool registerPowerNotificationsInFixture,bool enableStartupAutomaticInFixture,Func<PerformanceRecoveryPreview>? recoveryPreflight=null)
     {
@@ -124,7 +148,14 @@ internal sealed partial class ProductForm : Form
         if(InvokeRequired){if(IsHandleCreated)BeginInvoke(()=>UpdateState(state));return;}
         if(_startupFailure is not null&&state.Failure is null)state=state with{Failure=_startupFailure};
         ObserveAutomaticResumption(state);
-        _canvas.State=state;if(state.Snapshot is not null)_canvas.AddSnapshot(state.Snapshot);
+        _canvas.State=state;
+        if(state.Source is "Ac" or "Battery" && _lastEditingSource!=state.Source)
+        {
+            _lastEditingSource=state.Source;
+            _canvas.Editing=state.Source=="Ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;
+            _canvas.SelectedNode=-1;ResetSimulation();
+        }
+        if(state.Snapshot is not null)_canvas.AddSnapshot(state.Snapshot);
         UpdateTray(state);
         if(state.Failure is not null)_canvas.Notice=state.Failure;
         TryStartupAutomatic();
@@ -142,12 +173,13 @@ internal sealed partial class ProductForm : Form
         // Retry construction can complete without a WinForms synchronization context.
         // Observe only after queued state publications have reached the UI thread.
         if(InvokeRequired){if(IsHandleCreated&&!IsDisposed)BeginInvoke(TryStartupAutomatic);return;}
-        if(_closing||_restarting||_startupAutomatic is null||_startupAutomatic.Finished||_runtime is null)return;
+        if(_closing||_restarting||_startupAutomatic is null||_startupAutomatic.Finished||_runtime is null||_canvas.Busy||Environment.TickCount64<_startupRetryAt)return;
         var activate=_startupAutomatic.Observe(_canvas.State,DateTimeOffset.UtcNow,Environment.TickCount64);
         _canvas.Notice=_startupAutomatic.Status;
         if(activate)
         {
             var profiles=ProductProfilesStore.Copy(_startupPreferences!);
+            var request=_startupAutomatic; ++_startupAttempts;
             _ = RunAsync(async()=>
             {
                 try { await _runtime.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,profiles); }
@@ -156,6 +188,11 @@ internal sealed partial class ProductForm : Form
                     // Release both domains after a failed unattended preparation; journals survive a release failure.
                     await _runtime.ReleasePerformanceAsync();
                     UpdateState(_runtime.State with{Failure="Preparación de Automático no completada: "+activationError.Message});
+                    if(!request.Cancelled && !_closing && !_displayOff && !_runtime.State.LifecycleBlocked && _startupAttempts<3)
+                    {
+                        _startupRetryAt=Environment.TickCount64+10000;
+                        _startupAutomatic=new(Environment.TickCount64,protections:profiles.Protections);
+                    }
                     throw;
                 }
             });
@@ -209,11 +246,11 @@ internal sealed partial class ProductForm : Form
         if(id=="performance-release"&&!_canvas.State.PerformanceProcessPresent)return;
         if(id is "pl1-text" or "pl2-text" or "gpu-text")
         {
-            var key=id[..^5];var p=_draft.Get(_canvas.Editing);var range=NumericRange(key);
+            var editSource=_canvas.Editing;var key=id[..^5];var p=_draft.Get(editSource);var range=NumericRange(key);
             var title=key switch{"pl1"=>"CPU PL1 (W)","pl2"=>"CPU PL2 (W)",_=>"GPU máximo (MHz)"};
             var value=key switch{"pl1"=>p.CpuPl1Watts,"pl2"=>p.CpuPl2Watts,_=>p.GpuMaximumMHz};
             using var dialog=new ProductNumericDialog(title+" · "+(_canvas.Editing==ProductPowerProfile.Ac?"AC":"Batería"),value,range.Min,range.Max,
-                text=>TryEditNumericValue(key,text,out var error)?null:error);
+                text=>TryEditNumericValueForProfile(key,text,editSource,out var error)?null:error);
             dialog.ShowDialog(this);_canvas.Invalidate();return;
         }
         switch(id)
@@ -300,6 +337,12 @@ internal sealed partial class ProductForm : Form
         "gpu"=>(GpuProductPreferences.MinimumMHz,GpuProductPreferences.Maximum(_canvas.Editing)),
         _=>throw new ArgumentException("Campo numérico desconocido.",nameof(key))
     };
+    internal bool TryEditNumericValueForProfile(string key,string text,ProductPowerProfile source,out string error)
+    {
+        var selected=_canvas.Editing;
+        try { _canvas.Editing=source;return TryEditNumericValue(key,text,out error); }
+        finally { _canvas.Editing=selected;ResetSimulation(); }
+    }
     internal bool TryEditNumericValue(string key,string text,out string error)
     {
         error="";
@@ -475,8 +518,9 @@ internal sealed class ProductNumericDialog : Form
     private readonly Func<string,string?> _commit;
     internal ProductNumericDialog(string title,double value,double min,double max,Func<string,string?> commit,bool integer=true,string? help=null)
     {
+        SuspendLayout();
         _commit=commit;Text=title;StartPosition=FormStartPosition.CenterParent;FormBorderStyle=FormBorderStyle.FixedDialog;
-        MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;AutoScaleMode=AutoScaleMode.Dpi;
+        MaximizeBox=false;MinimizeBox=false;ShowInTaskbar=false;AutoScaleDimensions=new SizeF(96,96);AutoScaleMode=AutoScaleMode.Dpi;
         ClientSize=new(460,245);BackColor=ProductCanvas.Background;ForeColor=ProductCanvas.Ink;Font=new("Segoe UI",10);
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,Padding=new(20),ColumnCount=1,RowCount=5};
         layout.RowStyles.Add(new(SizeType.Absolute,34));layout.RowStyles.Add(new(SizeType.Absolute,34));
@@ -489,6 +533,7 @@ internal sealed class ProductNumericDialog : Form
         var accept=new Button{Text="Aceptar",AutoSize=true};var cancel=new Button{Text="Cancelar",AutoSize=true,DialogResult=DialogResult.Cancel};
         accept.Click+=(_,_)=>TryCommit();buttons.Controls.Add(cancel);buttons.Controls.Add(accept);layout.Controls.Add(buttons,0,4);
         AcceptButton=accept;CancelButton=cancel;Controls.Add(layout);Shown+=(_,_)=>{Input.Focus();Input.SelectAll();};
+        ResumeLayout(false);PerformLayout();
     }
     internal bool TryCommit()
     {

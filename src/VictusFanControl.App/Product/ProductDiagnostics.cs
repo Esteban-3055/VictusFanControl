@@ -17,6 +17,8 @@ internal static class ProductDiagnostics
             automaticThermalContract="cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
             state.AutomaticReview,state.AutomaticReviewMaximumSeconds,state.AutomaticReviewRemainingSeconds,state.AutomaticCpuSpikeRemainingMilliseconds,state.AutomaticDecision,state.AppliedAutomaticConfiguration,state.AppliedFanProfile,
             state.AutomaticPreparing,state.AutomaticSessionId,state.AutomaticDecisionSnapshot,state.AutomaticInterruptionSnapshot,state.PerformanceActive,state.PerformanceProcessPresent,state.PerformanceUpdating,state.AppliedPerformance,
+            state.PlatformRetention,
+            telemetryTolerance="habitual-product-only:fan10s-critical5s-original-acquisition-dates-no-descent-on-retained-critical",
             state.CpuState,state.GpuState,state.CpuStatus,state.GpuStatus,state.GuardianState,state.AppliedPerformanceSource,state.Message,state.Failure,
             snapshot=state.Snapshot,physicalQualification="not-established-by-this-export"};
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);

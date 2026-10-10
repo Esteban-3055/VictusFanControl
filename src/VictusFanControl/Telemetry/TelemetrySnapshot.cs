@@ -19,6 +19,20 @@ public sealed record TelemetrySnapshot(
     double? CpuFanRpm,
     double? GpuFanRpm)
 {
+    // Opt-in product policy; historical qualification snapshots retain their original contract.
+    public bool ProductTelemetryTolerance { get; init; }
+    public DateTimeOffset? CpuThermalSampledAtUtc { get; init; }
+    public DateTimeOffset? GpuThermalSampledAtUtc { get; init; }
+    public DateTimeOffset? CpuPowerSampledAtUtc { get; init; }
+    public DateTimeOffset? GpuPowerSampledAtUtc { get; init; }
+    public string? RetainedTelemetry { get; init; }
+    public int FanMaximumAgeMilliseconds { get; init; } = HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds;
+    public TimeSpan MaximumControlAge => TimeSpan.FromSeconds(ProductTelemetryTolerance ? 5 : 3);
+    public bool HasFreshControlSensorsAt(DateTimeOffset now) =>
+        Fresh(CpuThermalSampledAtUtc ?? Timestamp, now) && Fresh(GpuThermalSampledAtUtc ?? Timestamp, now) &&
+        Fresh(CpuPowerSampledAtUtc ?? Timestamp, now) && Fresh(GpuPowerSampledAtUtc ?? Timestamp, now);
+    private bool Fresh(DateTimeOffset at, DateTimeOffset now) => now >= at &&
+        (ProductTelemetryTolerance ? now - at < MaximumControlAge : now - at <= MaximumControlAge);
     /// <summary>
     /// Read-only physical-core temperature telemetry. The collection is kept
     /// outside the positional constructor so existing synthetic tests remain
@@ -76,15 +90,15 @@ public sealed record TelemetrySnapshot(
 
     public bool IsComplete =>
         (FanTelemetrySource != "HP-WMI-ACPI-2D" ||
-         (FanSampleAgeMilliseconds is >= 0 and < HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds &&
+         (FanSampleAgeMilliseconds is >= 0 && FanSampleAgeMilliseconds < FanMaximumAgeMilliseconds &&
           FanSampledAtUtc.HasValue && FanRpmResolution == HpWmiFanTelemetrySample.ResolutionRpm)) &&
         CpuTemperatureC.HasValue &&
         CpuCoreTelemetryComplete &&
         CpuPackagePowerW.HasValue &&
-        CpuLoadPercent.HasValue &&
+        (ProductTelemetryTolerance || CpuLoadPercent.HasValue) &&
         GpuTemperatureC.HasValue &&
         GpuPowerW.HasValue &&
-        GpuLoadPercent.HasValue &&
+        (ProductTelemetryTolerance || GpuLoadPercent.HasValue) &&
         CpuFanRpm.HasValue &&
         GpuFanRpm.HasValue;
 
@@ -96,7 +110,7 @@ public sealed record TelemetrySnapshot(
     /// Using CPU/GPU sampling start would count hardware-sampling time twice.
     /// Legacy snapshots without that epoch keep the conservative old behavior.
     /// </summary>
-    public bool IsFanTelemetryFreshAt(DateTimeOffset now) =>
+    public bool IsFanTelemetryFreshAt(DateTimeOffset now, int? maximumAgeMilliseconds = null) =>
         FanTelemetrySource != "HP-WMI-ACPI-2D" ||
         (FanSampleAgeMilliseconds is >= 0 &&
          FanSampledAtUtc.HasValue &&
@@ -104,5 +118,5 @@ public sealed record TelemetrySnapshot(
          (FanAgeCapturedAtUtc ?? Timestamp) >= Timestamp &&
          now >= (FanAgeCapturedAtUtc ?? Timestamp) &&
          FanSampleAgeMilliseconds.Value + (now - (FanAgeCapturedAtUtc ?? Timestamp)).TotalMilliseconds <
-             HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds);
+             (maximumAgeMilliseconds ?? FanMaximumAgeMilliseconds));
 }

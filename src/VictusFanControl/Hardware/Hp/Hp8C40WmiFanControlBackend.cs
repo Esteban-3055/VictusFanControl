@@ -37,6 +37,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     internal string GuardianReportPath => _guardian.ReportPath;
     internal string GuardianSessionDirectory => _guardian.SessionDirectory;
     internal int? LastAcceptedLevel => _session.LastAcceptedLevel;
+    internal Func<TelemetrySnapshot?>? ProductTelemetryProvider { get; set; }
     public event EventHandler<string>? CommandAccepted;
     public string Name => "HP 8C40 WMI-only / supervised requests; hardware ownership unverified";
     public bool CanWrite => true;
@@ -65,6 +66,17 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     public async ValueTask<FanBackendStatus> GetStatusAsync(CancellationToken token)
     {
         if (_active) _guardian.EnsureAlive();
+        if (_active && ProductTelemetryProvider is not null)
+        {
+            token.ThrowIfCancellationRequested();
+            var snapshot = ProductTelemetryProvider();
+            if (snapshot is null || !snapshot.IsFanTelemetryFreshAt(DateTimeOffset.UtcNow) ||
+                snapshot.CpuFanRpm is not (>=0 and <=10000) || snapshot.GpuFanRpm is not (>=0 and <=10000))
+                throw new InvalidDataException("Lectura HP WMI de ventiladores no disponible dentro de 10 s; velocidad sin confirmar.");
+            _guardian.Heartbeat();
+            return new(Name,true,true,true,true,
+                $"Supervised session; RPM acquisition age={snapshot.FanSampleAgeMilliseconds} ms; accepted target={_session.LastAcceptedLevel}; hardware ownership/setpoint unverified.");
+        }
         var sample = await _read(token).ConfigureAwait(false);
         if (_active) { _guardian.EnsureAlive(); _guardian.Heartbeat(); }
         return new(Name, true, _active, true, true,

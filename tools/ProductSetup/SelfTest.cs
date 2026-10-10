@@ -13,7 +13,7 @@ internal static class SelfTest
         try
         {
             VictusFanControl.Recovery.ProductRecoveryClientSelfTest.Run((ok, message) => { if (!ok) throw new InvalidOperationException(message); });
-            static MemoryStream Build(string? extra=null,bool tamper=false,bool duplicate=false,string version="1.1.3")
+            static MemoryStream Build(string? extra=null,bool tamper=false,bool duplicate=false,string version="1.1.4")
             {
                 var bytes=Encoding.UTF8.GetBytes("fixture only");
                 var files=new[]{"Install-VictusFanControl.ps1","Start-ProductGui.ps1","app/VictusFanControl.App.exe"};

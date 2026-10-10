@@ -5,7 +5,7 @@
   "releaseStage": "target-specific-release",
   "stableReleaseAuthorized": true,
   "normalAutomatic": "authorized-exact-target",
-  "startup": "optional-one-attempt-after-three-fresh-observations-coupled-performance",
+  "startup": "optional-persistent-wait-three-fresh-observations-bounded-preparation-retry-coupled-performance",
   "reentryAfterInterruption": "explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations",
   "sessionRestart": "explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics",
   "automaticThermalContract": "cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
@@ -22,7 +22,9 @@
     "current-gui-clean-exit-and-session-restart-release-and-open-in-firmware",
     "optional-quiet-ac-candidate-with-tz01-dtt3-comparable-thermal-and-measured-acoustics",
     "current-windows-logon-startup-coupled-activation-and-clean-shutdown",
-    "configurable-protections-and-clean-unattended-resumption-on-current-target"
+    "configurable-protections-and-clean-unattended-resumption-on-current-target",
+    "current-target-product-10s-rpm-5s-critical-grace-and-recovery-under-load",
+    "4k-200-percent-windowed-and-per-monitor-dpi-transition"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -35,7 +37,8 @@
     "Windows logon task and unattended acquisition must still be observed on the target; CI checks use zero-hardware fixtures.",
     "Source-independent TZ01/DTT3 retention requires a target observation in Battery and during AC/Battery handoff; software checks do not prove battery cooling, runtime or acoustics.",
     "Same-GUI explicit Automatic retry has software fixtures; current-target hardware retry has not yet been observed.",
-    "Configurable software handoffs and unattended resumption have software fixtures only; firmware thermal throttling, sensor integrity and unknown native-call exclusion are unchanged."
+    "Configurable software handoffs and unattended resumption have software fixtures only; firmware thermal throttling, sensor integrity and unknown native-call exclusion are unchanged.",
+    "New telemetry grace periods have software regression coverage only; physical thermal and WMI latency behavior still requires observation on the target."
   ],
   "offlinePolicyEvidence": [
     "product-fan-stability-replay-8c40-2026-10-06.json",
@@ -47,9 +50,10 @@
     "maximumExtraRawLevels": 2,
     "maximumSupplementSeconds": 60,
     "sourceAdmission": "bounded-acquisition-history-v1",
-    "normalAutomaticPromoted": true
+    "normalAutomaticPromoted": true,
+    "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.1.3",
+  "version": "1.1.4",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-gpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -59,5 +63,14 @@
     "powerEnvelopeHandoff": true,
     "resumeAutomatic": true
   },
-  "unattendedAutomaticResumption": "previous-active-request-only-clean-release-fresh-runtime-three-new-observations-no-unknown-native-reentry"
+  "unattendedAutomaticResumption": "previous-active-request-only-clean-release-fresh-runtime-three-new-observations-no-unknown-native-reentry",
+  "telemetryTolerance": {
+    "scope": "habitual-exact-target-only",
+    "fanMaximumAgeMilliseconds": 10000,
+    "criticalMaximumAgeMilliseconds": 5000,
+    "retainedCriticalPolicy": "original-acquisition-time-no-new-fan-writes-handoff-earlier-at-cpu85-gpu78",
+    "missingLoadPolicy": "display-unavailable-conservative-100-percent-policy-input",
+    "startupFanMaximumAgeMilliseconds": 3000,
+    "auxiliaryFailure": "suspend-retention-continue-base-requalify-without-renewing-episode"
+  }
 }

@@ -54,7 +54,7 @@ public sealed class HardwareTelemetryReader : IDisposable
 
     public HardwareTelemetryReader(string modulesDirectory) : this(modulesDirectory, schedulePeriodicFanReads: true) { }
 
-    internal HardwareTelemetryReader(string modulesDirectory, bool schedulePeriodicFanReads)
+    internal HardwareTelemetryReader(string modulesDirectory, bool schedulePeriodicFanReads, bool productTolerance = false)
     {
         _schedulePeriodicFanReads = schedulePeriodicFanReads;
         _intelModulePath = Path.Combine(modulesDirectory, "IntelMSR.bin");
@@ -69,7 +69,7 @@ public sealed class HardwareTelemetryReader : IDisposable
 
         if (_targetProfile == Hp8C40TargetProfile.Instance)
         {
-            _wmiFans = new HpWmiFanTelemetryReader(_targetProfile);
+            _wmiFans = new HpWmiFanTelemetryReader(_targetProfile, productTolerance);
             _ecStatus = "Not used for periodic 8C40 RPM telemetry (HP WMI/ACPI).";
         }
 
@@ -320,6 +320,7 @@ public sealed class HardwareTelemetryReader : IDisposable
             FanRpmResolution = _wmiFans is not null ? HpWmiFanTelemetrySample.ResolutionRpm : 1,
             FanSampledAtUtc = wmiFanSample?.SampledAtUtc,
             FanSampleAgeMilliseconds = fanAgeMilliseconds,
+            FanMaximumAgeMilliseconds = _wmiFans?.AcceptedMaximumAgeMilliseconds ?? HpWmiFanTelemetryReader.MaximumSampleAgeMilliseconds,
             FanAgeCapturedAtUtc = _wmiFans is null ? null : fanAgeCapturedAtUtc,
             CpuFanSpeedLevel = wmiFanSample?.CpuSpeedLevel,
             GpuFanSpeedLevel = wmiFanSample?.GpuSpeedLevel

@@ -29,6 +29,7 @@ internal static partial class ProductGuiSelfTest
             TestLiveCurveApply(Require);
             TestAdvancedSettings(Require);
             TestStartupAutomatic(Require);
+            TestSourceTheme(Require);
             TestLivePerformanceApply(Require);
             TestSessionLogs(Require);
             TestSessionRestart(Require);
@@ -136,6 +137,11 @@ internal static partial class ProductGuiSelfTest
                 Require(bitmap.GetPixel(bitmap.Width/2,bitmap.Height/2).A==255,"Render is transparent.");
             }
             foreach(var page in Enum.GetValues<ProductPage>()){canvas.Page=page;canvas.FanTab=0;canvas.PerformanceTab=0;Render("page-"+page);}
+            canvas.Page=ProductPage.Performance;canvas.State=confirmed with{Source="Battery"};canvas.Editing=ProductPowerProfile.Battery;Render("theme-battery-performance");
+            canvas.Page=ProductPage.Curves;Render("theme-battery-curves");
+            canvas.State=canvas.State with{LifecycleBlocked=true,LifecycleBlockReason="Lectura de ventiladores sin confirmar",Failure="fixture"};Render("theme-error-curves");
+            canvas.State=confirmed;canvas.Editing=ProductPowerProfile.Ac;
+
             canvas.Page=ProductPage.Updates;canvas.AvailableUpdate=new(new Version(1,2,0),new Uri("https://github.com/Esteban-3055/VictusFanControl/releases/download/v1.2.0/VictusFanControl-1.2.0-Setup-win-x64.exe"),64000000,new string('a',64));canvas.UpdateStatus="Nueva versión disponible. Pulsa Descargar e instalar para actualizar.";canvas.UpdateCheckedAt=DateTimeOffset.Now;canvas.Dirty=false;Render("updates-available");
             canvas.UpdateBusy=true;canvas.UpdateProgressPercent=47;canvas.UpdateStatus="Descargando y verificando el instalador…";Render("updates-downloading");canvas.Size=new(1040,660);Render("updates-minimum-layout");canvas.Size=new(1672,941);canvas.UpdateBusy=false;canvas.UpdateProgressPercent=null;canvas.AvailableUpdate=null;
             canvas.Page=ProductPage.Advanced;for(int i=0;i<6;i++){canvas.AdvancedTab=i;Render("advanced-tab-"+i);}

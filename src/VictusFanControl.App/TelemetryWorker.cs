@@ -76,6 +76,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     public Func<int?>? AcquisitionBudgetMilliseconds { get; set; }
     public Func<int>? NormalPollingDelayMilliseconds { get; set; }
     public Func<TelemetrySnapshot, CancellationToken, Task>? SnapshotProcessor { get; set; }
+    public bool ProductTelemetryTolerance { get; init; }
+    private readonly ProductTelemetryContinuity _continuity = new();
 
     public event EventHandler<TelemetrySnapshot>? SnapshotAvailable;
     public event EventHandler<string>? DiagnosticsAvailable;
@@ -395,7 +397,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             }
 
             var ageMs = unchecked(Environment.TickCount64 - Interlocked.Read(ref _lastCompletedReadTick));
-            if (ageMs <= HealthySnapshotWatchdogMs)
+            if (ageMs < (ProductTelemetryTolerance ? 5000 : HealthySnapshotWatchdogMs))
             {
                 continue;
             }
@@ -473,6 +475,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
         _reader?.Dispose();
         _reader = null;
+        _continuity.Reset();
         ResetFreezeGuard();
 
         await Task.Delay(ResumeSettleMs, cancellationToken).ConfigureAwait(false);
@@ -532,7 +535,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
                     return;
                 PublishDiagnostics();
 
-                if (snapshot.IsComplete)
+                if (snapshot.IsComplete && snapshot.RetainedTelemetry is null && snapshot.HasFreshControlSensorsAt(DateTimeOffset.UtcNow))
                 {
                     consecutiveComplete++;
                     if (consecutiveComplete >= requiredComplete)
@@ -610,7 +613,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
             TelemetrySnapshot snapshot;
             MarkProgress("HardwareRead");
-            if (FreshFanAcquisitionRequired?.Invoke() == true)
+            if (!ProductTelemetryTolerance && FreshFanAcquisitionRequired?.Invoke() == true)
             {
                 using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 var remaining = AcquisitionBudgetMilliseconds?.Invoke();
@@ -620,6 +623,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             else
                 snapshot = _reader!.ReadSnapshot();
 
+            if (ProductTelemetryTolerance) snapshot = _continuity.Observe(snapshot);
             MarkProgress("HardwareReadComplete");
             TouchCompletedRead();
             return snapshot;
@@ -688,7 +692,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     private void EnsureReader()
     {
-        _reader ??= new HardwareTelemetryReader(_modulesDirectory);
+        _reader ??= new HardwareTelemetryReader(_modulesDirectory, schedulePeriodicFanReads:true, productTolerance:ProductTelemetryTolerance);
         if (!_reader.BackendsInitialized)
         {
             throw new InvalidOperationException(

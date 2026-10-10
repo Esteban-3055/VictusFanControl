@@ -18,7 +18,7 @@ internal sealed partial class ProductCanvas
         DrawText(g,"Prueba explícita desde Firmware",1178,275,26,null,438,true);
         DrawText(g,"Editar prepara el borrador. Guarda y activa Automatic desde Firmware con AC o batería. La retención continúa al cambiar de perfil. Cambiar la opción no altera una sesión activa.",1178,342,21,Muted,438,height:150);
         DrawText(g,"La retención puede prolongar el ruido. La candidata reduce la demanda intermedia y acelera el descenso; temperatura comparable y menos ruido siguen pendientes de medir.",1178,518,21,Yellow,438,height:148);
-        DrawText(g,"Cambiar entre AC y batería no interrumpe la retención. Perder frescura o continuidad de sensores solicita Firmware; no se rearma sola.",1178,686,20,Muted,438,height:83);
+        DrawText(g,"Cambiar entre AC y batería no interrumpe la retención. Si TZ01/DTT3 se retrasan, la retención se suspende y continúa la curva base. Se recupera con adquisiciones válidas.",1178,686,20,Muted,438,height:83);
         Button(g,"save","Guardar configuración",new(1178,777,438,40));
     }
 }

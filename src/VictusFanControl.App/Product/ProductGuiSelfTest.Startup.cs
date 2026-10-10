@@ -16,10 +16,11 @@ internal static partial class ProductGuiSelfTest
         require(!gate.Observe(State(0),at,0)&&!gate.Observe(State(0),at,1000),"Startup counted a repeated sample.");
         require(!gate.Observe(State(1),at.AddSeconds(1),1000)&&gate.Observe(State(2),at.AddSeconds(2),2000),"Three fresh startup acquisitions did not admit.");
         require(!gate.Observe(State(3),at.AddSeconds(3),3000),"Startup activation repeated.");
-        foreach(var blocked in new[]{State(0) with{LifecycleBlocked=true},State(0) with{Failure="fixture"},State(0) with{Target="Unsupported"},
+        foreach(var blocked in new[]{State(0) with{LifecycleBlocked=true},State(0) with{Target="Unsupported"},
             State(0) with{PerformanceRecovery=new(true,"fixture pending")},State(0) with{PerformanceProcessPresent=true},State(0) with{FanMode="Manual"}})
         {gate=new(0);require(!gate.Observe(blocked,at,0)&&gate.Finished&&!gate.Observe(State(2),at.AddSeconds(2),2000),"Startup retried a blocking failure.");}
-        gate=new(0);require(!gate.Observe(State(0),at,30000)&&gate.Finished,"Startup wait did not expire.");
+        gate=new(0);require(!gate.Observe(State(0),at.AddSeconds(30),30000)&&!gate.Finished,"Startup request expired instead of waiting for sensors.");
+        require(!gate.Observe(State(0),at,31000)&&!gate.Observe(State(1),at.AddSeconds(1),32000)&&gate.Observe(State(2),at.AddSeconds(2),33000),"Startup did not admit sensors after its former timeout.");
         gate=new(0);gate.Cancel("fixture");require(!gate.Observe(State(0),at,0),"User cancellation rearmed startup.");
         gate=new(0);require(!gate.Observe(State(0),at.AddSeconds(4),0)&&!gate.Observe(State(1),at,1000),"Stale/future startup data admitted.");
         gate=new(0);gate.Observe(State(0),at,0);gate.Observe(State(1,"Battery"),at.AddSeconds(1),1000);

@@ -48,9 +48,13 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
     private string _diagnostic = "Waiting for first HP WMI fan sample.";
     private int _recoveries;
     private bool _failed;
+    internal int AcceptedMaximumAgeMilliseconds { get; }
+    private readonly int _queryTimeout;
 
-    public HpWmiFanTelemetryReader(HardwareTargetProfile target)
+    public HpWmiFanTelemetryReader(HardwareTargetProfile target, bool productTolerance = false)
     {
+        AcceptedMaximumAgeMilliseconds = productTolerance ? 10000 : MaximumSampleAgeMilliseconds;
+        _queryTimeout = productTolerance ? 10000 : QueryTimeoutMilliseconds;
         if (target != Hp8C40TargetProfile.Instance)
         {
             throw new ArgumentException("Fan WMI telemetry is qualified only for exact HP 8C40/F.18.", nameof(target));
@@ -86,6 +90,8 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
         SemaphoreSlim admission)
     {
         _send = send;
+        AcceptedMaximumAgeMilliseconds = MaximumSampleAgeMilliseconds;
+        _queryTimeout = QueryTimeoutMilliseconds;
         _milliseconds = milliseconds;
         _utcNow = utcNow;
         _broker = HpWmiFanSampleBroker.For(admission);
@@ -117,7 +123,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
         {
             if (_disposed || _paused) return null;
             var now = _milliseconds();
-            if (_pending is { IsCompleted: false } && now - _startedAt >= QueryTimeoutMilliseconds)
+            if (_pending is { IsCompleted: false } && now - _startedAt >= _queryTimeout)
             {
                 if (!_timedOut && _pendingAcquisition is not null)
                     _acquisitionDiagnostics.MarkLogicalTimeout(_pendingAcquisition, now);
@@ -126,11 +132,11 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             }
 
             if (_sample is not null &&
-                now - _sample.StartedAtMilliseconds >= MaximumSampleAgeMilliseconds)
+                now - _sample.StartedAtMilliseconds >= AcceptedMaximumAgeMilliseconds)
             {
                 _sample = null;
                 _window.Clear();
-                _diagnostic = "HP WMI fan sample expired (age >= 3000 ms).";
+                _diagnostic = $"HP WMI fan sample expired (age >= {AcceptedMaximumAgeMilliseconds} ms).";
             }
 
             if (scheduleQuery && (_pending is null || _pending.IsCompleted) && now >= _nextAttempt)
@@ -221,7 +227,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
             if (sequence < _latestOutcomeSequence) return;
             var now = _milliseconds();
             var age = now - sample.StartedAtMilliseconds;
-            if (age < 0 || age >= MaximumSampleAgeMilliseconds) return;
+            if (age < 0 || age >= AcceptedMaximumAgeMilliseconds) return;
             if (_sample is not null && sample.StartedAtMilliseconds < _sample.StartedAtMilliseconds) return;
 
             _sample = sample;
@@ -326,7 +332,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
 
                 _latestOutcomeSequence = sequence;
                 var now = _milliseconds();
-                if (_timedOut || now - startedAt >= QueryTimeoutMilliseconds)
+                if (_timedOut || now - startedAt >= _queryTimeout)
                 {
                     Fail("Late HP WMI fan query discarded after timeout.");
                     _nextAttempt = now + FailureBackoffMilliseconds;
@@ -338,7 +344,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
                     return;
                 }
 
-                if (now - startedAt >= MaximumSampleAgeMilliseconds)
+                if (now - startedAt >= AcceptedMaximumAgeMilliseconds)
                 {
                     Fail("HP WMI fan query completed with an expired sample; discarded.");
                     _nextAttempt = now + FailureBackoffMilliseconds;
@@ -346,7 +352,7 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
                         acquisition,
                         "expired",
                         now,
-                        "Periodic sample exceeded the 3000-ms freshness boundary from query start.");
+                        $"Periodic sample exceeded the {AcceptedMaximumAgeMilliseconds}-ms freshness boundary from query start.");
                     return;
                 }
 

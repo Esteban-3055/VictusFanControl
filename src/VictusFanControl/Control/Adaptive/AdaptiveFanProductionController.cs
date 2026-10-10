@@ -53,6 +53,7 @@ public sealed class AdaptiveFanProductionController
     private AdaptiveFanInertiaPolicy? _preparedEngine;
     private readonly int _automaticMinimumLevel;
     private readonly bool _useRawCpuThermalResponse;
+    private readonly bool _productTelemetryTolerance;
     private ProductProtectionSettings _protections = new();
     public void ConfigureAutomaticProtections(ProductProtectionSettings protections)
     {
@@ -94,8 +95,10 @@ public sealed class AdaptiveFanProductionController
         FanConfiguration? automaticConfiguration = null,
         int automaticMinimumLevel = Hp8C40AutomaticPolicy.MinimumLevel,
         bool useRawCpuThermalResponse = false,
-        IExperimentalFanPolicy? experimentalPolicy = null)
+        IExperimentalFanPolicy? experimentalPolicy = null,
+        bool productTelemetryTolerance = false)
     {
+        _productTelemetryTolerance=productTelemetryTolerance;
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _engine = new AdaptiveFanPolicyEngine(
             config ?? throw new ArgumentNullException(nameof(config)));
@@ -119,7 +122,7 @@ public sealed class AdaptiveFanProductionController
             var preparedPolicy = Hp8C40AutomaticPolicy.Create(
                 _automaticConfiguration?.BuildPolicy() ?? config, _automaticMinimumLevel);
             _preparedEngine = new AdaptiveFanInertiaPolicy(
-                preparedPolicy,
+                preparedPolicy with { MaximumSampleGap=TimeSpan.FromSeconds(_productTelemetryTolerance?5:3) },
                 _automaticConfiguration?.Tuning);
         }
         _qualificationSession = qualificationSession;
@@ -530,7 +533,7 @@ public sealed class AdaptiveFanProductionController
         // HP 8C40 default Automatic path stays at 30..50. An explicit product
         // review may select the already-characterized 10..50 backend envelope.
         var engine = new AdaptiveFanInertiaPolicy(
-            Hp8C40AutomaticPolicy.Create(copy.BuildPolicy(),_automaticMinimumLevel),
+            Hp8C40AutomaticPolicy.Create(copy.BuildPolicy(),_automaticMinimumLevel) with { MaximumSampleGap=TimeSpan.FromSeconds(_productTelemetryTolerance?5:3) },
             copy.Tuning);
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -969,10 +972,10 @@ public sealed class AdaptiveFanProductionController
         if (!snapshot.IsComplete ||
             !cpuDemand.HasValue ||
             !snapshot.CpuPackagePowerW.HasValue ||
-            !snapshot.CpuLoadPercent.HasValue ||
+            (!snapshot.ProductTelemetryTolerance && !snapshot.CpuLoadPercent.HasValue) ||
             !snapshot.GpuTemperatureC.HasValue ||
             !snapshot.GpuPowerW.HasValue ||
-            !snapshot.GpuLoadPercent.HasValue)
+            (!snapshot.ProductTelemetryTolerance && !snapshot.GpuLoadPercent.HasValue))
         {
             input = default!;
             failure = "Automatic policy refused incomplete telemetry before any fan command.";
@@ -983,10 +986,10 @@ public sealed class AdaptiveFanProductionController
             snapshot.Timestamp,
             cpuDemand.Value,
             snapshot.CpuPackagePowerW.Value,
-            snapshot.CpuLoadPercent.Value,
+            snapshot.CpuLoadPercent ?? 100,
             snapshot.GpuTemperatureC.Value,
             snapshot.GpuPowerW.Value,
-            snapshot.GpuLoadPercent.Value) { CpuRawControlTemperatureC = _useRawCpuThermalResponse || _automaticConfiguration?.UnifiedDemand is not null ? snapshot.CpuControlTemperatureC : null };
+            snapshot.GpuLoadPercent ?? 100) { CpuRawControlTemperatureC = _useRawCpuThermalResponse || _automaticConfiguration?.UnifiedDemand is not null ? snapshot.CpuControlTemperatureC : null };
 
         failure = string.Empty;
         return true;

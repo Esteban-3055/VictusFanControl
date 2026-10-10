@@ -78,7 +78,7 @@ internal static class Program
 
         if (options.SafetySelfTest)
         {
-            return SafetyGateSelfTest.Run(Console.Out);
+            return SafetyGateSelfTest.Run(Console.Out) + ProductTelemetryContinuitySelfTest.Run(Console.Out);
         }
 
         if (options.ControlSelfTest)

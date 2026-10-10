@@ -27,7 +27,7 @@ internal sealed class ProductAutomaticResumption
             !state.LifecycleBlocked||state.FanAuthority!="Firmware"||state.Runtime!="Healthy"||
             state.AutomaticPreparing||state.PerformanceUpdating||!state.AutomaticAuthorized)return false;
         var s=state.Snapshot;
-        if(s is null||!s.IsComplete||!s.IsFanTelemetryFreshAt(utc)||utc<s.Timestamp||utc-s.Timestamp>=TimeSpan.FromSeconds(3)||
+        if(s is null||!s.IsComplete||!s.IsFanTelemetryFreshAt(utc,3000)||s.RetainedTelemetry is not null||utc<s.Timestamp||utc-s.Timestamp>=TimeSpan.FromSeconds(3)||
             s.CpuControlTemperatureC is not (>=0 and <=90)||s.GpuTemperatureC is not (>=0 and <=82))return false;
         ++_attempts;_interruptedAt=now;return true;
     }
