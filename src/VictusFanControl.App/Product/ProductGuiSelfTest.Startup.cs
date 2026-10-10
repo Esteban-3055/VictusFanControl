@@ -41,10 +41,12 @@ internal static partial class ProductGuiSelfTest
             using var form=new ProductForm("fixture://tray-stop",fixture:stopped,fixtureProfiles:preferences,enableStartupAutomaticInFixture:true);
             form.Show();Application.DoEvents();at=DateTimeOffset.UtcNow.AddSeconds(-2);stopped.Publish(State(0));
             var tray=(NotifyIcon)typeof(ProductForm).GetField("_tray",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(form)!;
-            ((ToolStripMenuItem)tray.ContextMenuStrip!.Items[trayIndex]).PerformClick();
+            var menu=tray.ContextMenuStrip!;menu.Show(form,new Point(20,20));Application.DoEvents();
+            ((ToolStripMenuItem)menu.Items[trayIndex]).PerformClick();menu.Close();
             PumpUntil(()=>!form.Canvas.Busy,"Tray release did not drain.");
+            require(stopped.Commands==1,$"Tray action {trayIndex} did not dispatch its explicit release: commands={stopped.Commands}.");
             stopped.Publish(State(1));stopped.Publish(State(2));form.PresentationTick();
-            require(stopped.Commands==1,"A tray Firmware/CPU-GPU release left startup Automatic armed.");
+            require(stopped.Commands==1,$"Tray action {trayIndex} left startup Automatic armed: commands={stopped.Commands}.");
             var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Tray-stop fixture exit stalled.");
         }
         var receipt=ProductSessionRestart.Capture(preferences,preferences,true,false,ProductPage.Settings,ProductPowerProfile.Ac) with{ReleaseCompleted=true};
