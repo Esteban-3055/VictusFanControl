@@ -12,6 +12,7 @@ internal static class SelfTest
         var directory=Path.Combine(Path.GetTempPath(),"VictusSetup-fixture-"+Guid.NewGuid().ToString("N"));
         try
         {
+            VictusFanControl.Recovery.ProductRecoveryClientSelfTest.Run((ok, message) => { if (!ok) throw new InvalidOperationException(message); });
             static MemoryStream Build(string? extra=null,bool tamper=false,bool duplicate=false,string version="1.1.0")
             {
                 var bytes=Encoding.UTF8.GetBytes("fixture only");

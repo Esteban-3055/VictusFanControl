@@ -80,6 +80,19 @@ internal sealed class SetupForm : Form
             _status.Text = "Verificando el contenido e instalando…";
             directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VictusFanControl", "setup", Guid.NewGuid().ToString("N"));
             await Task.Run(() => Package.ExtractEmbedded(directory));
+            var pending = VictusFanControl.Recovery.ProductRecoverySelection.Read();
+            if (pending.Pending)
+            {
+                var consent = MessageBox.Show(this, "Hay una sesión anterior de CPU/GPU pendiente de recuperación.\n\n" + pending.Summary +
+                    "\n\nCierra otros controladores de CPU/GPU y aplicaciones de VictusFanControl. Se guardarán respaldos antes de liberar. No se activará Automático durante la recuperación.\n\n¿Recuperar y continuar la instalación?",
+                    "Recuperar sesión anterior", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                if (consent != DialogResult.Yes) throw new IOException("Instalación pausada. Los registros pendientes se conservaron; puedes recuperar al volver a instalar.");
+                _status.Text = "Recuperando la sesión anterior y guardando evidencia…";
+                var app = Path.Combine(directory, "app");
+                var recovered = await VictusFanControl.Recovery.ProductRecoveryClient.RunAsync(app, Path.Combine(app, "modules"), pending);
+                if (!recovered.Succeeded) throw new IOException(recovered.Detail + "\n\nEvidencia: " + recovered.EvidenceDirectory);
+                _status.Text = recovered.Detail + "\n\nEvidencia: " + recovered.EvidenceDirectory;
+            }
             var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
             foreach (var value in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(directory, "Install-VictusFanControl.ps1"), "-NoOpen", "-InstallerProcessId", Environment.ProcessId.ToString() }) start.ArgumentList.Add(value);

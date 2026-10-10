@@ -18,7 +18,7 @@ internal static class PerformanceRecoveryPreviewSelfTest
                 new(CpuPowerConflictState.Inactive,0,5,false,null,null,0,0),null,now,now));
             var before=File.ReadAllBytes(cpu.Path);
             var preview=PerformanceRecoveryPreview.Read(directory);
-            require(preview.Pending && preview.CpuSession==cpuId && preview.GpuSession is null && !preview.Instructions().Contains("-ExpectedGpuSession"),"Partial journals generated fabricated recovery identity.");
+            require(preview.Pending && preview.CpuSession==cpuId && preview.GpuSession is null && preview.Instructions().Contains("-ExpectedGpuSession '"+Guid.Empty+"'"),"CPU-only recovery invented a GPU session identity.");
             gpu.Store(new(1,CpuPowerProductDefaults.TargetProfileId,gpuId,6,GpuClockJournalPhase.ActiveUnverified,new(210,1900),null,null,now,now));
             var gpuBefore=File.ReadAllBytes(gpu.Path);preview=PerformanceRecoveryPreview.Read(directory);
             require(preview.Pending && preview.CpuSession==cpuId && preview.GpuSession==gpuId && preview.Instructions().Contains("-ExpectedCpuSession '"+cpuId+"'") && preview.Instructions().Contains("-ExpectedGpuSession '"+gpuId+"'"),"Recovery preview lost exact journal IDs.");

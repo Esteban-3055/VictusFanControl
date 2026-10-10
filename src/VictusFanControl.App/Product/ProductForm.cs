@@ -158,6 +158,7 @@ internal sealed partial class ProductForm : Form
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
         if(HandleAdvancedCommand(id))return;
         if(HandleRetentionCommand(id))return;
+        if(id=="recovery-run"){_ = RecoverPerformanceAsync();return;}
         if(id=="recovery-details")
         {
             var preview=PerformanceRecoveryPreview.Read();
@@ -368,7 +369,7 @@ internal sealed partial class ProductForm : Form
         if(_disposedRuntime)return;
         if(e.CloseReason is not(CloseReason.WindowsShutDown or CloseReason.TaskManagerClosing)&&!_exitRequested){e.Cancel=true;Hide();return;}
         e.Cancel=true;if(_closing)return;_closing=true;_updateCancellation.Cancel();_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
-        try {if(_automaticRetryTask is not null)await _automaticRetryTask;if(_restartTask is not null)await _restartTask;if(_updateInstallTask is not null)await _updateInstallTask;await ShutdownRuntimeAsync();}
+        try {if(_automaticRetryTask is not null)await _automaticRetryTask;if(_restartTask is not null)await _restartTask;if(_recoveryTask is not null)await _recoveryTask;if(_updateInstallTask is not null)await _updateInstallTask;await ShutdownRuntimeAsync();}
         catch(Exception ex){Environment.ExitCode=171;AppLog.Write("Product shutdown unresolved: "+ex);}
         finally{_disposedRuntime=true;_tray.Visible=false;Close();_shutdown.TrySetResult();}
     }
@@ -380,7 +381,7 @@ internal sealed partial class ProductForm : Form
             bool l=p.X<edge,r=p.X>=ClientSize.Width-edge,t=p.Y<edge,b=p.Y>=ClientSize.Height-edge;
             int code=l&&t?13:r&&t?14:l&&b?16:r&&b?17:l?10:r?11:t?12:b?15:1;if(code!=1){m.Result=(IntPtr)code;return;}
         }
-        if(m.Msg==0x218&&_runtime is not null)
+        if(m.Msg==0x218&&(_runtime is not null||_restarting))
         {
             var code=m.WParam.ToInt32();int? display=null;
             if(code==0x8013&&m.LParam!=IntPtr.Zero)

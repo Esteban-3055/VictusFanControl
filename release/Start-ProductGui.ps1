@@ -27,6 +27,7 @@ if ($manifest.productPlatformRetention -ne 'optional-disabled-default-AC-Battery
     $candidate.experimentalPlatformRetention.defaultEnabled -ne $false -or $candidate.experimentalPlatformRetention.scope -ne 'optional-ac-and-battery' -or
     $candidate.experimentalPlatformRetention.maximumExtraRawLevels -ne 2 -or $candidate.experimentalPlatformRetention.maximumSupplementSeconds -ne 60) { throw 'Invalid optional platform retention contract.' }
 if($manifest.manualAutomaticRetry -ne 'explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations' -or $candidate.reentryAfterInterruption -ne 'explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations'){throw 'Invalid manual Automatic retry contract.'}
+if($manifest.guidedPerformanceRecovery -ne 'gui-installer-exact-owner-release-only'){throw 'Invalid guided recovery contract.'}
 Write-Host "Verified VictusFanControl v1.1.0 build $($manifest.sourceHead). Exact HP 8C40/F.18 release; evidence limits remain in PRODUCT-RELEASE.json."
 if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }
@@ -57,7 +58,7 @@ if ($Mode -eq 'RecoverySelfTest') {
 }
 if ($Mode -eq 'RecoverPerformance') {
     if ($manifest.performanceRecovery -ne 'explicit-release-only-exact-session-backups') { throw 'This package does not include explicit Performance recovery.' }
-    if ($ExpectedCpuSession -eq [Guid]::Empty -or $ExpectedGpuSession -eq [Guid]::Empty) { throw 'Specify both expected journal session IDs.' }
+    if ($ExpectedCpuSession -eq [Guid]::Empty -and $ExpectedGpuSession -eq [Guid]::Empty) { throw 'Specify the expected pending session IDs; use an empty GUID only for an absent domain.' }
     if (-not $ConfirmExclusiveGpuController) { throw 'Close other GPU clock controllers (Afterburner, nvidia-smi clock scripts) and specify -ConfirmExclusiveGpuController.' }
     $directory = Join-Path ([Environment]::GetFolderPath('Desktop')) ('Victus-Performance-recovery-' + [Guid]::NewGuid().ToString('N'))
     Write-Host 'Explicit release-only recovery. Close other Victus applications normally. CPU restores only still-owned PL fields; GPU requests one NVIDIA default Reset. No fan writes or Automatic activation. Original journals are backed up before release.'

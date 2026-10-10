@@ -17,6 +17,8 @@ internal static partial class ProductGuiSelfTest
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
             ProductUpdatesSelfTest.Run(Require);
+            VictusFanControl.Recovery.ProductRecoveryClientSelfTest.Run(Require);
+            TestGuidedRecovery(Require);
             TestUpdatePage(Require);
             TestProductIcons(Require);
             TestUpdateHandoff(Require);
@@ -138,7 +140,8 @@ internal static partial class ProductGuiSelfTest
             Require(canvas.Hits.All(h=>!h.Id.Contains("MaximumDownStep")&&!h.Id.Contains("MinimumLevel")),"Advanced settings expose controls ignored by the protected physical envelope.");
             canvas.Size=new(1040,660);for(int i=0;i<6;i++){canvas.AdvancedTab=i;Render("advanced-minimum-tab-"+i);}
             canvas.Size=new(1672,941);
-            canvas.Page=ProductPage.Performance;canvas.PerformanceTab=3;canvas.State=canvas.State with{PerformanceRecovery=new(true,"Fixture pending recovery",Guid.NewGuid(),Guid.NewGuid())};Render("recovery-pending");Require(canvas.Hits.Any(h=>h.Id=="recovery-details"),"Pending recovery has no actionable view.");canvas.State=canvas.State with{PerformanceRecovery=null};
+            canvas.Page=ProductPage.Performance;canvas.PerformanceTab=3;canvas.State=canvas.State with{PerformanceRecovery=new(true,"Fixture pending recovery",Guid.NewGuid(),Guid.NewGuid())};Render("recovery-pending");Require(canvas.Hits.Any(h=>h.Id=="recovery-details")&&canvas.Hits.Any(h=>h.Id=="recovery-run"&&h.Enabled),"Pending recovery has no actionable view.");
+            canvas.Size=new(1040,660);Render("recovery-pending-minimum");canvas.Page=ProductPage.Settings;Render("recovery-settings-minimum");canvas.Size=new(1672,941);canvas.State=canvas.State with{PerformanceRecovery=null};
             canvas.Page=ProductPage.Fans;for(int i=1;i<=2;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
             Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
             canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;Render("performance-exact-CPU");Require(canvas.Hits.Any(h=>h.Id=="pl1-text")&&canvas.Hits.Any(h=>h.Id=="pl2-text"),"CPU numeric inputs inaccessible.");

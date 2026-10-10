@@ -6,25 +6,34 @@ using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Nvidia;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Performance;
+using VictusFanControl.Recovery;
 
 namespace VictusFanControl.PerformanceGuardian;
 
 /// <summary>Explicit release-only entry. Never reached by normal GUI startup.</summary>
 internal static class PerformanceGuiRecovery
 {
-    internal sealed record Options(string Module, Guid CpuSession, Guid GpuSession, string Output);
+    internal sealed record Options(string Module, Guid CpuSession, Guid GpuSession, string Output, ProductRecoveryOwner? Owner = null);
     internal sealed record Result(CpuPowerRecoveryExecutionResult? Cpu, string Gpu, bool Succeeded);
 
     internal static Options Parse(string[] args)
     {
-        if (args.Length != 13 || args[0] != "--recover-gui-session" ||
+        if (args.Length is not (13 or 19) || args[0] != "--recover-gui-session" ||
             args[1] != "--confirm-target" || args[2] != CpuPowerProductDefaults.TargetProfileId ||
             args[3] != "--confirm-cpu-hardware-writes" || args[4] != "--confirm-exclusive-gpu-controller" ||
             args[5] != "--module" || args[7] != "--cpu-session" || args[9] != "--gpu-session" || args[11] != "--output-directory" ||
             !Guid.TryParse(args[8], out var cpu) || !Guid.TryParse(args[10], out var gpu) ||
-            cpu == Guid.Empty || gpu == Guid.Empty)
-            throw new ArgumentException("Explicit recovery requires exact target, CPU release authorization, exclusive GPU control, both expected session IDs, module and a new evidence directory.");
-        return new Options(Path.GetFullPath(args[6]), cpu, gpu, Path.GetFullPath(args[12]));
+            cpu == Guid.Empty && gpu == Guid.Empty)
+            throw new ArgumentException("Explicit recovery requires exact target, CPU release authorization, exclusive GPU control, expected session IDs, module and a new evidence directory.");
+        ProductRecoveryOwner? owner = null;
+        if (args.Length == 19)
+        {
+            if (args[13] != "--owner-pid" || args[15] != "--owner-start" || args[17] != "--owner-sid" ||
+                !int.TryParse(args[14], out var pid) || pid <= 0 || !long.TryParse(args[16], out var ticks) || ticks <= 0 || string.IsNullOrWhiteSpace(args[18]))
+                throw new ArgumentException("Invalid recovery coordinator identity.");
+            owner = new(pid, ticks, args[18]);
+        }
+        return new Options(Path.GetFullPath(args[6]), cpu, gpu, Path.GetFullPath(args[12]), owner);
     }
 
     internal static int Run(string[] args)
@@ -38,7 +47,7 @@ internal static class PerformanceGuiRecovery
         {
             try { ownsMutex = mutex.WaitOne(0); } catch (AbandonedMutexException) { ownsMutex = true; }
             if (!ownsMutex) throw new InvalidOperationException("A Performance Guardian still owns the target; recovery refused.");
-            EnsureNoOtherVictusProcesses();
+            EnsureNoOtherVictusProcesses(options.Owner);
             using var identity = WindowsIdentity.GetCurrent();
             if (!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))
                 throw new InvalidOperationException("Recovery requires an elevated terminal.");
@@ -70,14 +79,14 @@ internal static class PerformanceGuiRecovery
                 using var cpuBackend = cpuRecord is not null ? new PawnIoCpuPowerLimitBackend(options.Module, hardwareWritesAuthorized: true) : null;
                 using var nvml = gpuRecord is not null ? new NvmlClient("NVIDIA GeForce RTX 4060 Laptop GPU", requirePreferredDevice: true) : null;
                 var gpuBackend = nvml is not null ? new NvmlGpuClockLimitBackend(nvml, hardwareWritesAuthorized: true) : null;
-                EnsureNoOtherVictusProcesses();
+                EnsureNoOtherVictusProcesses(options.Owner);
                 if (cpuJournal.Load() != cpuRecord || gpuJournal.Load() != gpuRecord)
                     throw new IOException("Journal changed after evidence capture; no recovery authorized.");
                 result = Execute(cpuJournal, gpuJournal, options.CpuSession, options.GpuSession, cpuBackend, gpuBackend);
             }
             catch (Exception ex) { failure = ex.ToString(); }
             var report = new { kind = "VictusFanControl.ExplicitGuiPerformanceRecovery", capturedUtc = DateTimeOffset.UtcNow,
-                target = CpuPowerProductDefaults.TargetProfileId, options.CpuSession, options.GpuSession, result, failure,
+                target = CpuPowerProductDefaults.TargetProfileId, options.CpuSession, options.GpuSession, coordinator = options.Owner, result, failure,
                 automaticStarted = false, fanHardwareWrites = false, gpuExactRangeReadback = false };
             var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
             jsonOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
@@ -90,7 +99,7 @@ internal static class PerformanceGuiRecovery
 
     internal static void ValidateSessions(CpuPowerSessionJournalRecord? cpu, GpuClockSessionJournalRecord? gpu, Guid expectedCpu, Guid expectedGpu)
     {
-        if (expectedCpu == Guid.Empty || expectedGpu == Guid.Empty ||
+        if (expectedCpu == Guid.Empty && expectedGpu == Guid.Empty ||
             (cpu is not null && cpu.SessionId != expectedCpu) || (gpu is not null && gpu.SessionId != expectedGpu))
             throw new InvalidOperationException("Recovery journal session differs from the explicitly selected session; no writes authorized.");
     }
@@ -144,13 +153,14 @@ internal static class PerformanceGuiRecovery
         stream.Flush(flushToDisk: true);
     }
 
-    private static void EnsureNoOtherVictusProcesses()
+    private static void EnsureNoOtherVictusProcesses(ProductRecoveryOwner? owner)
     {
+        owner?.Validate();
         foreach (var process in Process.GetProcesses())
         {
             using (process)
             {
-                if (process.Id != Environment.ProcessId && process.ProcessName.StartsWith("VictusFanControl", StringComparison.OrdinalIgnoreCase))
+                if (process.Id != Environment.ProcessId && process.Id != owner?.Pid && process.ProcessName.StartsWith("VictusFanControl", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Close other VictusFanControl applications normally before recovery. Active process: " + process.Id);
             }
         }

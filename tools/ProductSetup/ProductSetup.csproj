@@ -12,6 +12,9 @@
     <FileVersion>1.1.0.0</FileVersion>
     <InformationalVersion>1.1.0</InformationalVersion>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/ProductRecovery*.cs" Link="Recovery/%(Filename).cs" />
+  </ItemGroup>
   <ItemGroup Condition="'$(SetupPayload)' != ''">
     <EmbeddedResource Include="$(SetupPayload)" LogicalName="payload.zip" />
     <EmbeddedResource Include="$(SetupPayload).sha256" LogicalName="payload.sha256" />

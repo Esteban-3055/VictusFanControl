@@ -293,8 +293,9 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(1148,253,500,570));DrawText(g,"Estado y aplicación",1178,276,28,null,438,true);
         if(PerformanceTab==3 && State.PerformanceRecovery is {Pending:true})
         {
-            DrawText(g,"Recuperación CPU/GPU pendiente. Conserva los registros; no se puede iniciar otra sesión.",350,676,20,Yellow,735,height:55);
-            Button(g,"recovery-details","Ver recuperación / copiar comando",new(350,745,735,48));
+            DrawText(g,"Sesión pendiente. Recuperar libera CPU/GPU, guarda respaldos y vuelve a Firmware.",350,676,20,Yellow,735,height:55);
+            Button(g,"recovery-run","Recuperar CPU/GPU",new(350,745,443,48),true,State.PerformanceRecovery.CpuSession.HasValue || State.PerformanceRecovery.GpuSession.HasValue);
+            Button(g,"recovery-details","Ver detalles",new(809,745,276,48));
         }
         DrawText(g,"CPU: "+State.CpuState,1178,341,23,DomainColor(State.CpuState,Green),438);DrawText(g,"GPU: "+State.GpuState,1178,388,23,DomainColor(State.GpuState,Blue),438);
         var appliedSource=State.AppliedPerformanceSource switch{"Ac"=>"AC","Battery"=>"Batería",_=>"—"};
@@ -429,7 +430,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,157,1337,666));DrawText(g,"Reglas de seguridad",332,177,30,null,1250,true);
         DrawText(g,"Protecciones del backend · solo lectura",332,225,23,Muted,1240);
         string[] titles=["Respuesta térmica de demanda","SafetyGate independiente","Límites reales de ventiladores","Telemetría fresca y completa","Guardian y recuperación"];
-        string[] details=["La temperatura cruda activa la respuesta térmica, aunque el filtro o las influencias indiquen menos.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >82 °C interrumpe.","Manual WMI y Automático: 10–50. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recovery no concede autoridad automáticamente. Los journals no se borran desde la GUI."];
+        string[] details=["La temperatura cruda activa la respuesta térmica, aunque el filtro o las influencias indiquen menos.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >82 °C interrumpe.","Manual WMI y Automático: 10–50. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recuperar CPU/GPU guarda respaldos y libera la sesión; no activa Automático."];
         for(int i=0;i<5;i++){var r=new RectangleF(331,282+i*103,1293,87);Card(g,r);Icon(g,i==4?"profiles":"fan",r.X+24,r.Y+24,37);DrawText(g,titles[i],r.X+99,r.Y+12,23,null,1100,true);DrawText(g,details[i],r.X+99,r.Y+47,19,Muted,1100);}
     }
     private void Monitoring(Graphics g)
@@ -485,7 +486,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,623,1337,201));DrawText(g,"Registros y estado",334,647,28,null,1250,true);
         DrawText(g,State.LifecycleBlocked?State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.":State.Failure??State.Message,334,704,21,State.LifecycleBlocked||State.Failure is not null?Yellow:Muted,880,height:57);
         if(State.LifecycleBlocked)Button(g,"interruption-details","Ver motivo completo",new(334,779,290,32));
-        Button(g,"session-restart","Reiniciar sesión",new(681,779,337,32),false,RestartAvailable);
+        if(State.PerformanceRecovery is {Pending:true})Button(g,"recovery-run","Recuperar CPU/GPU",new(681,779,337,32),true,State.PerformanceRecovery.CpuSession.HasValue || State.PerformanceRecovery.GpuSession.HasValue);
+        else Button(g,"session-restart","Reiniciar sesión",new(681,779,337,32),false,RestartAvailable);
         Button(g,"open-logs","Abrir carpeta de logs",new(1240,690,379,43));
         Button(g,"diagnostics-export","Exportar diagnóstico",new(1240,745,379,43));
         if(!State.LifecycleBlocked)DrawText(g,"Ventiladores "+State.FanAuthority+" · CPU "+State.CpuState+" · GPU "+State.GpuState,334,764,17,Muted,320,height:47);

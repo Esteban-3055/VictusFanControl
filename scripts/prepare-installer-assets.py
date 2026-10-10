@@ -30,7 +30,8 @@ record = dict(schemaVersion=1, kind='VictusFanControl.WindowsInstaller', version
               sourceHead=a.source_head, file=a.installer.name, size=len(data), sha256=digest,
               payloadSha256=hashlib.sha256(a.payload.read_bytes()).hexdigest(),
               selfContainedInstaller=True, appDesktopRuntime='Microsoft.WindowsDesktop.App 8 x64',
-              codeSigned=False, preservesProfiles=True, installHardwareWrites=False)
+              codeSigned=False, preservesProfiles=True, installHardwareWrites=False,
+              recoveryHardwareWrites='explicit-release-only-if-pending-and-confirmed', recoveryBackups=True)
 sidecar = a.installer.with_suffix('.exe.sha256')
 provenance = a.installer.with_suffix('.exe.provenance.json')
 checksum = f'{digest}  {a.installer.name}\n'

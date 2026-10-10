@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="../../tools/Shared/ProductRecovery*.cs" Link="Recovery/%(Filename).cs" />
     <EmbeddedResource Include="../../assets/icons/*.ico" LogicalName="VictusFanControl.Icons.%(Filename).ico" />
     <ProjectReference Include="..\VictusFanControl\VictusFanControl.csproj" />
     <ProjectReference Include="../../tools/PlatformThermalReplay/PlatformThermalReplay.csproj" />

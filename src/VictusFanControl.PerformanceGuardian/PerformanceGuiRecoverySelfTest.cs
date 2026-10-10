@@ -19,12 +19,24 @@ internal static class PerformanceGuiRecoverySelfTest
                 Throws(() => PerformanceGuiRecovery.Parse(invalid), "required authorization/identity refused");
             }
             Throws(() => PerformanceGuiRecovery.Parse(args[..^1]), "partial options refused");
+            var coordinated = args.Concat(new[] { "--owner-pid", "123", "--owner-start", "456", "--owner-sid", "fixture-user" }).ToArray();
+            Require(PerformanceGuiRecovery.Parse(coordinated).Owner?.Pid == 123, "coordinator options accepted");
+            foreach (var index in new[] { 13, 14, 15, 16, 17 })
+            {
+                var invalid = coordinated.ToArray(); invalid[index] = "invalid";
+                Throws(() => PerformanceGuiRecovery.Parse(invalid), "partial/invalid coordinator rejected");
+            }
+            var cpuOnlyArgs = args.ToArray(); cpuOnlyArgs[10] = Guid.Empty.ToString();
+            Require(PerformanceGuiRecovery.Parse(cpuOnlyArgs).GpuSession == Guid.Empty, "CPU-only options accepted without invented GPU ID");
+            var gpuOnlyArgs = args.ToArray(); gpuOnlyArgs[8] = Guid.Empty.ToString();
+            Require(PerformanceGuiRecovery.Parse(gpuOnlyArgs).CpuSession == Guid.Empty, "GPU-only options accepted without invented CPU ID");
             var gpuRecord = new GpuClockSessionJournalRecord(1, CpuPowerProductDefaults.TargetProfileId, gpuId, 2,
                 GpuClockJournalPhase.ActiveUnverified, new GpuClockLimitRequest(210, 1802), null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
             var cpu = new CpuJournal(); var gpu = new GpuJournal { Record = gpuRecord }; var backend = new GpuBackend(gpu);
+            Throws(() => PerformanceGuiRecovery.Execute(cpu, gpu, cpuId, Guid.Empty, null, backend), "new unselected GPU journal refused");
             Throws(() => PerformanceGuiRecovery.Execute(cpu, gpu, cpuId, Guid.NewGuid(), null, backend), "other session refused");
             Require(backend.Resets == 0 && gpu.Stores == 0 && gpu.Deletes == 0, "rejected identity causes no mutations");
-            var result = PerformanceGuiRecovery.Execute(cpu, gpu, cpuId, gpuId, null, backend);
+            var result = PerformanceGuiRecovery.Execute(cpu, gpu, Guid.Empty, gpuId, null, backend);
             Require(result.Succeeded && backend.Resets == 1 && gpu.Record is null && gpu.Deletes == 1, "one armed reset ACK then clear");
             result = PerformanceGuiRecovery.Execute(cpu, gpu, cpuId, gpuId, null, backend);
             Require(result.Succeeded && backend.Resets == 1, "already resolved retry does not reset again");
