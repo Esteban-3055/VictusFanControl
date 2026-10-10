@@ -38,6 +38,16 @@ internal static class ProductRecoveryInventorySelfTest
             Require(ProductRecoveryFansClient.Evaluate(report,inventory,false,"evidence").Succeeded,"Valid recovery report refused.");
             Require(!ProductRecoveryFansClient.Evaluate(report,inventory,true,"evidence").Succeeded,"Remaining lease accepted.");
             Require(!ProductRecoveryFansClient.Evaluate(report,new[]{inventory[0]},false,"evidence").Succeeded,"Wrong selection accepted.");
+            if(OperatingSystem.IsWindows())using(var me=System.Diagnostics.Process.GetCurrentProcess())
+            {
+                var owned=Path.Combine(local,"FanWmi","gui","current");Directory.CreateDirectory(owned);
+                Write("WmiFanGui/lease.json",new{OwnerPid=me.Id,OwnerStartUtcTicks=me.StartTime.ToUniversalTime().Ticks,GuardianPid=456,DirectEcProhibited=true,SessionDirectory=owned});
+                var marker=Path.Combine(owned,"native-inflight.json");File.WriteAllText(marker,JsonSerializer.Serialize(new{Pid=me.Id}));File.WriteAllText(Path.Combine(owned,"write-intent.json"),"{}");
+                var active=ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true);
+                Require(!active.Any(x=>x.Path==marker||x.Path==Path.Combine(common,"WmiFanGui/lease.json")),"Own active native query misclassified as orphan/pending lease.");
+                File.WriteAllText(Path.Combine(owned,"native-uncertain.signal"),"uncertain");
+                Require(ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true).Any(x=>x.Kind=="FanGui"&&x.Path==Path.Combine(common,"WmiFanGui/lease.json")),"Own uncertain lease hidden.");
+            }
             Console.WriteLine("Recovery inventory: PASS (GUI/experiment/legacy, multiple/changed/malformed/foreign records, fan-only and exact report; zero hardware IO).");
         }
         finally{Directory.Delete(root,true);}

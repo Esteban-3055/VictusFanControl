@@ -82,7 +82,9 @@ internal sealed partial class ProductForm : Form
                 var pending=recoveryPreflight?.Invoke()??PerformanceRecoveryPreview.Read();
                 if(pending.Pending)
                 {
-                    _canvas.State=_canvas.State with{PerformanceRecovery=pending,LifecycleBlocked=true,Runtime="RecoveryRequired",Failure=pending.Detail,GuardianState="Recuperación pendiente",CanApplyPerformance=false};
+                    _canvas.State=_canvas.State with{PerformanceRecovery=pending,LifecycleBlocked=true,Runtime="RecoveryRequired",Failure=pending.Detail,GuardianState="Recuperación pendiente",CanApplyPerformance=false,
+                        FanMode=pending.FanRecords?.Count>0?"RecoveryRequired":"Firmware",FanAuthority=pending.FanRecords?.Count>0?"Unknown":"Firmware",
+                        CpuState=pending.CpuSession.HasValue?"Recovering":"Disabled",GpuState=pending.GpuSession.HasValue?"Recovering":"Disabled"};
                     _canvas.Page=ProductPage.Settings;_canvas.Notice=pending.Detail;_canvas.AutomaticRetryAvailable=false;
                     if(!isolated)RegisterPowerNotifications();UpdateTray(_canvas.State);return; // No telemetry/controller is opened while retained authority is unresolved.
                 }

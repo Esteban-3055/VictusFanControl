@@ -59,7 +59,7 @@ internal static class ProductRecoveryInventory
                     throw new InvalidDataException("Identidad de ensayo WMI inválida.");
                 _ = r.GetProperty("Control").GetBoolean(); return new(path, "FanExperiment", hash);
             }
-            if (r.TryGetProperty("SchemaVersion", out var schema) && schema.GetInt32() == 2 &&
+            if (relative is "WatchdogM4/state/lease.json" or "Watchdog/state/lease.json" && r.TryGetProperty("SchemaVersion", out var schema) && schema.GetInt32() == 2 &&
                 r.GetProperty("TargetProfileId").GetString() == Target && r.GetProperty("SessionId").GetGuid() != Guid.Empty)
                 return new(path, "LegacyFan", hash);
             throw new InvalidDataException("Registro antiguo, de otro equipo o sin contrato reconocido. No se autoriza escribir hardware.");
@@ -78,21 +78,23 @@ internal static class ProductRecoveryInventory
     {
         commonRoot ??= CommonRoot; localRoot ??= LocalRoot;
         var result = new List<ProductRecoveryRecord>();
+        var referenced=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in Walk(commonRoot))
         {
             if (result.Count >= 100) throw new IOException("Demasiados registros pendientes; conserva el diagnóstico.");
             var entry = Inspect(path, commonRoot);
+            string? session=null;
+            if(entry.Kind is "FanGui" or "FanExperiment" && entry.Problem is null)
+            {
+                using var doc=JsonDocument.Parse(ReadBytes(path));session=System.IO.Path.GetFullPath(doc.RootElement.GetProperty(entry.Kind=="FanGui"?"SessionDirectory":"Directory").GetString()!);referenced.Add(session);
+            }
             if (ignoreCurrentOwner && entry.Kind == "FanGui" && entry.Problem is null)
             {
                 using var j = JsonDocument.Parse(ReadBytes(path)); using var me = Process.GetCurrentProcess();
-                if (j.RootElement.GetProperty("OwnerPid").GetInt32() == me.Id && j.RootElement.GetProperty("OwnerStartUtcTicks").GetInt64() == me.StartTime.ToUniversalTime().Ticks) continue;
+                if (j.RootElement.GetProperty("OwnerPid").GetInt32() == me.Id && j.RootElement.GetProperty("OwnerStartUtcTicks").GetInt64() == me.StartTime.ToUniversalTime().Ticks &&
+                    session is not null && !Exists(System.IO.Path.Combine(session,"native-uncertain.signal"))) continue;
             }
             result.Add(entry);
-        }
-        var referenced=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach(var record in result.Where(x=>x.Kind is "FanGui" or "FanExperiment" && x.Problem is null))
-        {
-            using var j=JsonDocument.Parse(ReadBytes(record.Path));referenced.Add(System.IO.Path.GetFullPath(j.RootElement.GetProperty(record.Kind=="FanGui"?"SessionDirectory":"Directory").GetString()!));
         }
         var guiSessions=System.IO.Path.Combine(localRoot,"FanWmi","gui");
         if(Exists(guiSessions))foreach(var directory in Directory.EnumerateDirectories(guiSessions))

@@ -1,4 +1,4 @@
-param([switch]$NoOpen,[int]$InstallerProcessId=0,[switch]$EnableStartupAutomatic,[switch]$PreserveStartupPreferences)
+﻿param([switch]$NoOpen,[int]$InstallerProcessId=0,[switch]$EnableStartupAutomatic,[switch]$PreserveStartupPreferences)
 $ErrorActionPreference='Stop'
 $OutputEncoding=[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 if($EnableStartupAutomatic -and $PreserveStartupPreferences){throw 'Selecciona sólo una opción de inicio.'}
