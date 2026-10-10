@@ -4,7 +4,7 @@ using VictusFanControl.Product;
 
 namespace VictusFanControl.App;
 
-/// <summary>Read-only diagnostic export. No recovery journal/lease enumeration or process control.</summary>
+/// <summary>Read-only diagnostic export, including bounded snapshots of unresolved records. No process control.</summary>
 internal static class ProductDiagnostics
 {
     internal static void Export(string path,ProductRuntimeState state,ProductProfiles draft,string? logPath)
@@ -41,6 +41,36 @@ internal static class ProductDiagnostics
                     }
                     IncludeLog("events-tail.log",logPath??AppLog.CurrentLogPath);
                     IncludeLog("telemetry-tail.jsonl",AppLog.TelemetryLogPath);
+                    try
+                    {
+                        var records=VictusFanControl.Recovery.ProductRecoveryInventory.ReadFans();
+                        Write("recovery/inventory.json",JsonSerializer.Serialize(records,new JsonSerializerOptions{WriteIndented=true}));
+                        int i=0;
+                        void IncludeRecord(string source,string entry)
+                        {
+                            try
+                            {
+                                if(!VictusFanControl.Recovery.ProductRecoveryInventory.Exists(source))return;
+                                VictusFanControl.Recovery.ProductRecoveryInventory.EnsurePlainPath(source);
+                                if(new FileInfo(source).Length>1024*1024){Write(entry+"-unavailable.txt","Archivo mayor que 1 MiB; original conservado.");return;}
+                                using var output=zip.CreateEntry(entry).Open();var bytes=File.ReadAllBytes(source);output.Write(bytes);
+                            }
+                            catch(Exception ex){Write(entry+"-unavailable.txt",ex.Message);}
+                        }
+                        foreach(var record in records.Take(32))
+                        {
+                            IncludeRecord(record.Path,"recovery/record-"+(i++)+".json");
+                            if(record.Kind is "FanGui" or "FanExperiment")
+                            {
+                                using var doc=JsonDocument.Parse(File.ReadAllText(record.Path));
+                                var directory=doc.RootElement.GetProperty(record.Kind=="FanGui"?"SessionDirectory":"Directory").GetString()!;
+                                foreach(var name in new[]{"ready.json","guardian.json","guardian-report.json","summary.json","native-inflight.json","native-uncertain.signal","write-intent.json","stop.signal"})
+                                    IncludeRecord(Path.Combine(directory,name),"recovery/session-"+(i-1)+"/"+name);
+                            }
+                        }
+                        foreach(var name in new[]{"cpu-power-session.json","gpu-clock-session.json"})IncludeRecord(Path.Combine(PerformanceRecoveryPreview.DirectoryPath,name),"recovery/"+name);
+                    }
+                    catch(Exception ex){Write("recovery/inventory-unavailable.txt",ex.Message);}
                 }
                 stream.Flush(flushToDisk:true);
             }

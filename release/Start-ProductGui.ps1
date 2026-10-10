@@ -28,6 +28,7 @@ if ($manifest.productPlatformRetention -ne 'optional-disabled-default-AC-Battery
     $candidate.experimentalPlatformRetention.maximumExtraRawLevels -ne 2 -or $candidate.experimentalPlatformRetention.maximumSupplementSeconds -ne 60) { throw 'Invalid optional platform retention contract.' }
 if($manifest.manualAutomaticRetry -ne 'explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations' -or $candidate.reentryAfterInterruption -ne 'explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations'){throw 'Invalid manual Automatic retry contract.'}
 if($manifest.guidedPerformanceRecovery -ne 'gui-installer-exact-owner-release-only'){throw 'Invalid guided recovery contract.'}
+if($manifest.guidedFanRecovery -ne 'wmi-gui-experiment-orphan-and-target-bound-legacy-release-only'){throw 'Invalid guided fan recovery contract.'}
 Write-Host "Verified VictusFanControl v1.1.0 build $($manifest.sourceHead). Exact HP 8C40/F.18 release; evidence limits remain in PRODUCT-RELEASE.json."
 if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }
@@ -54,6 +55,8 @@ if ($Mode -eq 'RecoverPerformance' -or $Mode -eq 'RecoverySelfTest') {
 if ($Mode -eq 'RecoverySelfTest') {
     & $guardian --gui-recovery-self-test
     if ($LASTEXITCODE -ne 0) { throw 'Packaged recovery fixtures failed.' }
+    & $guardian --product-fan-recovery-self-test
+    if ($LASTEXITCODE -ne 0) { throw 'Packaged fan recovery fixtures failed.' }
     return
 }
 if ($Mode -eq 'RecoverPerformance') {

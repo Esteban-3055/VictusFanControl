@@ -14,6 +14,27 @@ internal static partial class ProductGuiSelfTest
         var exitCode = Environment.ExitCode;
         try
         {
+            var fanRecords=new[]{new ProductRecoveryRecord("fixture/lease.json","FanGui",new string('a',64))};
+            int blockedFactoryCalls=0;
+            using(var blocked=new ProductForm("fixture://pending-startup",fixtureProfiles:new(){ActivateAutomaticOnStart=true},
+                runtimeFactory:()=>{blockedFactoryCalls++;throw new IOException("Pending recovery opened a controller");},recoveryPreflight:()=>new(true,"Pending fan-only",FanRecords:fanRecords)))
+            {
+                blocked.Show();Application.DoEvents();
+                require(blockedFactoryCalls==0&&blocked.Canvas.State.Runtime=="RecoveryRequired"&&blocked.Canvas.State.LifecycleBlocked,"Fan pending startup opened controller/telemetry.");
+                using var bitmap=new Bitmap(blocked.Canvas.Width,blocked.Canvas.Height);blocked.Canvas.DrawToBitmap(bitmap,new(Point.Empty,bitmap.Size));
+                require(blocked.Canvas.Hits.Any(x=>x.Id=="recovery-run"&&x.Enabled),"Fan-only startup recovery has no actionable button.");
+                var exit=blocked.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Pending startup exit hung.");
+            }
+            var fanPending=new ProductRecoverySelection(Guid.Empty,Guid.Empty,fanRecords);int fanRuns=0;
+            using(var fanForm=new ProductForm("fixture://fan-only",fixture:new RecordingRuntime(),fixtureProfiles:new()))
+            {
+                fanForm.RecoverySelectionReader=()=>fanPending;
+                fanForm.RecoveryRunner=s=>{require(s.Fans?.Count==1,"Fan-only selection lost.");fanRuns++;fanPending=new(Guid.Empty,Guid.Empty);return Task.FromResult(new ProductRecoveryResult(true,"fixture-fan-evidence","resolved"));};
+                fanForm.RecoveryRuntimeFactory=_=>Task.FromResult<IProductRuntime>(new RecordingRuntime());fanForm.Show();Application.DoEvents();
+                var task=fanForm.RecoverPerformanceAsync(true);PumpUntil(()=>task.IsCompleted,"Fan-only recovery hung.");task.GetAwaiter().GetResult();
+                require(fanRuns==1&&fanForm.Canvas.State.FanMode=="Firmware","Fan-only recovery did not reopen Firmware.");
+                var exit=fanForm.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Fan-only exit hung.");
+            }
             var pending = selected; var old = new RecordingRuntime { DisposeGate = new(TaskCreationOptions.RunContinuationsAsynchronously) };
             var next = new RecordingRuntime(); int launches = 0, created = 0;
             using (var form = new ProductForm("fixture://recovery", fixture: old, fixtureProfiles: new ProductProfiles { ActivateAutomaticOnStart = true }))

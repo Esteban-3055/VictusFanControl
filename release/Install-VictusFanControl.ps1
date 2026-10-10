@@ -1,5 +1,6 @@
 param([switch]$NoOpen,[int]$InstallerProcessId=0,[switch]$EnableStartupAutomatic,[switch]$PreserveStartupPreferences)
 $ErrorActionPreference='Stop'
+$OutputEncoding=[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 if($EnableStartupAutomatic -and $PreserveStartupPreferences){throw 'Selecciona sólo una opción de inicio.'}
 & (Join-Path $PSScriptRoot 'Start-ProductGui.ps1') -Mode Verify
 $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
@@ -24,6 +25,16 @@ foreach($name in @('cpu-power-session.json','gpu-clock-session.json')) {
 }
 foreach($lease in @('WmiFanGui\lease.json','WatchdogM4\state\lease.json','WmiFanExperiment\lease.json')) {
     if(Test-Path -LiteralPath (Join-Path (Join-Path $env:ProgramData 'VictusFanControl') $lease)){throw "Resuelve la sesión de ventiladores pendiente antes de instalar: $lease"}
+}
+$common=Join-Path $env:ProgramData 'VictusFanControl'
+if(Test-Path -LiteralPath $common) {
+    foreach($file in Get-ChildItem -LiteralPath $common -Filter 'lease.json' -File -Recurse -ErrorAction Stop) {throw "Recupera la sesión anterior desde el instalador o la aplicación: $($file.FullName)"}
+}
+$performanceRoot=Join-Path $root 'Performance'
+if(Test-Path -LiteralPath $performanceRoot) {
+    foreach($file in Get-ChildItem -LiteralPath $performanceRoot -Recurse -File -ErrorAction Stop) {
+        if($file.Name -in @('cpu-power-session.json','gpu-clock-session.json')){throw "Hay un registro pendiente o de otro equipo: $($file.FullName). Conserva el diagnóstico."}
+    }
 }
 # A build-specific path leaves the previous executable/task available until registration succeeds.
 $destination=Join-Path $root ('releases\'+$manifest.version+'-'+$manifest.sourceHead)

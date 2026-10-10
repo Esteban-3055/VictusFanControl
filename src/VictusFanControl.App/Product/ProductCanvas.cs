@@ -293,8 +293,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(1148,253,500,570));DrawText(g,"Estado y aplicación",1178,276,28,null,438,true);
         if(PerformanceTab==3 && State.PerformanceRecovery is {Pending:true})
         {
-            DrawText(g,"Sesión pendiente. Recuperar libera CPU/GPU, guarda respaldos y vuelve a Firmware.",350,676,20,Yellow,735,height:55);
-            Button(g,"recovery-run","Recuperar CPU/GPU",new(350,745,443,48),true,State.PerformanceRecovery.CpuSession.HasValue || State.PerformanceRecovery.GpuSession.HasValue);
+            DrawText(g,"Sesión pendiente. Recuperar libera los controles, guarda respaldos y vuelve a Firmware.",350,676,20,Yellow,735,height:55);
+            Button(g,"recovery-run","Recuperar sesiones",new(350,745,443,48),true,State.PerformanceRecovery.Actionable);
             Button(g,"recovery-details","Ver detalles",new(809,745,276,48));
         }
         DrawText(g,"CPU: "+State.CpuState,1178,341,23,DomainColor(State.CpuState,Green),438);DrawText(g,"GPU: "+State.GpuState,1178,388,23,DomainColor(State.GpuState,Blue),438);
@@ -486,7 +486,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,623,1337,201));DrawText(g,"Registros y estado",334,647,28,null,1250,true);
         DrawText(g,State.LifecycleBlocked?State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.":State.Failure??State.Message,334,704,21,State.LifecycleBlocked||State.Failure is not null?Yellow:Muted,880,height:57);
         if(State.LifecycleBlocked)Button(g,"interruption-details","Ver motivo completo",new(334,779,290,32));
-        if(State.PerformanceRecovery is {Pending:true})Button(g,"recovery-run","Recuperar CPU/GPU",new(681,779,337,32),true,State.PerformanceRecovery.CpuSession.HasValue || State.PerformanceRecovery.GpuSession.HasValue);
+        if(State.PerformanceRecovery is {Pending:true})Button(g,"recovery-run","Recuperar sesiones",new(681,779,337,32),true,State.PerformanceRecovery.Actionable);
         else Button(g,"session-restart","Reiniciar sesión",new(681,779,337,32),false,RestartAvailable);
         Button(g,"open-logs","Abrir carpeta de logs",new(1240,690,379,43));
         Button(g,"diagnostics-export","Exportar diagnóstico",new(1240,745,379,43));

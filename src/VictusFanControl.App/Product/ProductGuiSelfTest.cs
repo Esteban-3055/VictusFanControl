@@ -142,6 +142,11 @@ internal static partial class ProductGuiSelfTest
             canvas.Size=new(1672,941);
             canvas.Page=ProductPage.Performance;canvas.PerformanceTab=3;canvas.State=canvas.State with{PerformanceRecovery=new(true,"Fixture pending recovery",Guid.NewGuid(),Guid.NewGuid())};Render("recovery-pending");Require(canvas.Hits.Any(h=>h.Id=="recovery-details")&&canvas.Hits.Any(h=>h.Id=="recovery-run"&&h.Enabled),"Pending recovery has no actionable view.");
             canvas.Size=new(1040,660);Render("recovery-pending-minimum");canvas.Page=ProductPage.Settings;Render("recovery-settings-minimum");canvas.Size=new(1672,941);canvas.State=canvas.State with{PerformanceRecovery=null};
+            var beforeFanRecovery=canvas.State;
+            canvas.State=canvas.State with{Runtime="RecoveryRequired",LifecycleBlocked=true,FanMode="Firmware",FanAuthority="Firmware",CpuState="Disabled",GpuState="Disabled",PerformanceActive=false,AppliedPerformance=null,CanApplyPerformance=false,
+                GuardianState="Recuperación pendiente",PerformanceRecovery=new(true,"Sesión de ventiladores pendiente",FanRecords:new[]{new VictusFanControl.Recovery.ProductRecoveryRecord("WmiFanGui/lease.json","FanGui",new string('a',64))})};
+            canvas.Size=new(1040,660);canvas.Page=ProductPage.Settings;Render("recovery-fan-only-settings-minimum");Require(canvas.Hits.Any(h=>h.Id=="recovery-run"&&h.Enabled),"Fan-only pending lacks recovery action.");
+            canvas.Page=ProductPage.Performance;canvas.PerformanceTab=3;Render("recovery-fan-only-guardian-minimum");canvas.State=beforeFanRecovery;canvas.Size=new(1672,941);
             canvas.Page=ProductPage.Fans;for(int i=1;i<=2;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
             Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
             canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;Render("performance-exact-CPU");Require(canvas.Hits.Any(h=>h.Id=="pl1-text")&&canvas.Hits.Any(h=>h.Id=="pl2-text"),"CPU numeric inputs inaccessible.");
@@ -513,7 +518,7 @@ internal static partial class ProductGuiSelfTest
                 var bundle=form.ExportDiagnosticsAsync(diagnostic,log);PumpUntil(()=>bundle.IsCompleted,"Diagnostic export blocked.");bundle.GetAwaiter().GetResult();
                 using(var zip=System.IO.Compression.ZipFile.OpenRead(diagnostic))
                 {
-                    require(zip.Entries.Count==5+(zip.GetEntry("telemetry-tail.jsonl") is null?0:1)&&zip.GetEntry("profiles-draft.json") is not null&&zip.GetEntry("events-tail.log")!.Length<=2*1024*1024,"Diagnostic leaked extra files or exceeded log bounds.");
+                    require(zip.Entries.Count(e=>!e.FullName.StartsWith("recovery/"))==5+(zip.GetEntry("telemetry-tail.jsonl") is null?0:1)&&zip.Entries.Where(e=>e.FullName.StartsWith("recovery/")).All(e=>e.Length<=1024*1024)&&zip.GetEntry("profiles-draft.json") is not null&&zip.GetEntry("events-tail.log")!.Length<=2*1024*1024,"Diagnostic leaked extra files or exceeded log bounds.");
                     using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
                     require(state.RootElement.GetProperty("sessionId").GetString()==AppLog.SessionId&&state.RootElement.GetProperty("sessionStartedUtc").GetDateTimeOffset()==AppLog.SessionStartedUtc,"Diagnostic session identity mismatch.");
                     require(state.RootElement.GetProperty("physicalQualification").GetString()=="not-established-by-this-export","Diagnostic fabricated physical qualification.");

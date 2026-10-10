@@ -17,10 +17,10 @@ internal sealed partial class ProductForm
         try
         {
             var selected = RecoverySelectionReader();
-            if (!selected.Pending) { _canvas.Notice = "No hay registros CPU/GPU pendientes. Puedes reiniciar la sesión o preparar Automático manualmente."; _canvas.Invalidate(); return Task.CompletedTask; }
+            if (!selected.Pending) { _canvas.Notice = "No hay sesiones pendientes. Puedes reiniciar la sesión o preparar Automático manualmente."; _canvas.Invalidate(); return Task.CompletedTask; }
             if (!confirmed && MessageBox.Show(this, selected.Summary +
-                "\n\nCierra otros controladores de CPU/GPU. Se liberará esta sesión y se guardarán respaldos de los registros. Al terminar, la aplicación permanecerá en Firmware y conservará tus perfiles y cambios sin guardar.\n\n¿Recuperar CPU/GPU?",
-                "Recuperar sesión anterior", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return Task.CompletedTask;
+                "\n\nCierra otros controladores de CPU/GPU. Se liberará esta sesión y se guardarán respaldos de los registros. Al terminar, la aplicación permanecerá en Firmware y conservará tus perfiles y cambios sin guardar.\n\n¿Recuperar sesiones pendientes?",
+                "Recuperar sesiones anteriores", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return Task.CompletedTask;
             return _recoveryTask = RecoverPerformanceCoreAsync(selected);
         }
         catch (Exception ex) { _canvas.Notice = "No se pudo leer la recuperación: " + ex.Message; _canvas.Invalidate(); return Task.CompletedTask; }
@@ -48,9 +48,9 @@ internal sealed partial class ProductForm
             var pending = RecoverySelectionReader();
             // A normal cleanup may have resolved these exact records already.
             if (pending.CpuSession != Guid.Empty && pending.CpuSession != selected.CpuSession ||
-                pending.GpuSession != Guid.Empty && pending.GpuSession != selected.GpuSession)
+                pending.GpuSession != Guid.Empty && pending.GpuSession != selected.GpuSession || !ProductRecoveryInventory.AllowsRemaining(selected.Fans,pending.Fans))
                 throw new IOException("Los identificadores pendientes cambiaron. No se recuperó otra sesión.");
-            await RecoveryUiAsync(() => { _canvas.Notice = "Recuperando CPU/GPU y guardando respaldos…"; _canvas.Invalidate(); });
+            await RecoveryUiAsync(() => { _canvas.Notice = "Recuperando sesiones y guardando respaldos…"; _canvas.Invalidate(); });
             var recovered = pending.Pending
                 ? await (RecoveryRunner?.Invoke(pending) ?? ProductRecoveryClient.RunAsync(AppContext.BaseDirectory, _modules, pending))
                 : new ProductRecoveryResult(true, "", "La liberación normal resolvió los registros pendientes.");

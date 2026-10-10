@@ -73,6 +73,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Recovery fixture build failed.' }
           & .\src\VictusFanControl.PerformanceGuardian\bin\Release\net8.0-windows\VictusFanControl.PerformanceGuardian.exe --gui-recovery-self-test
           if ($LASTEXITCODE -ne 0) { throw 'Recovery fixtures failed.' }
+          & .\src\VictusFanControl.PerformanceGuardian\bin\Release\net8.0-windows\VictusFanControl.PerformanceGuardian.exe --product-fan-recovery-self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Fan recovery fixtures failed.' }
 
       - name: WMI Block1 grouped harness fixtures PowerShell 7 and 5.1
         shell: pwsh

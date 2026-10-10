@@ -35,7 +35,7 @@ internal sealed partial class ProductForm : Form
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null)
     {
         _retryRuntimeFactory=retryRuntimeFactory;_modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
         _isolatedRuntime=fixture is not null||runtimeFactory is not null;_restartDirectory=restartDirectory;_restartOpening=restartState is not null;
@@ -69,14 +69,24 @@ internal sealed partial class ProductForm : Form
         Shown+=(_,_)=>
         {
             if(_creating)return;_creating=true;
-            _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory,registerPowerNotificationsInFixture,enableStartupAutomaticInFixture);
+            _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory,registerPowerNotificationsInFixture,enableStartupAutomaticInFixture,recoveryPreflight);
         };
         FormClosing+=OnClosing;FormClosed+=(_,_)=>{UnregisterPowerNotifications();_tray.Visible=false;};
     }
-    private async Task InitializeAsync(bool minimized,bool isolated,Func<Task<IProductRuntime>>? runtimeFactory,bool registerPowerNotificationsInFixture,bool enableStartupAutomaticInFixture)
+    private async Task InitializeAsync(bool minimized,bool isolated,Func<Task<IProductRuntime>>? runtimeFactory,bool registerPowerNotificationsInFixture,bool enableStartupAutomaticInFixture,Func<PerformanceRecoveryPreview>? recoveryPreflight=null)
     {
         try
         {
+            if(!isolated||recoveryPreflight is not null)
+            {
+                var pending=recoveryPreflight?.Invoke()??PerformanceRecoveryPreview.Read();
+                if(pending.Pending)
+                {
+                    _canvas.State=_canvas.State with{PerformanceRecovery=pending,LifecycleBlocked=true,Runtime="RecoveryRequired",Failure=pending.Detail,GuardianState="Recuperación pendiente",CanApplyPerformance=false};
+                    _canvas.Page=ProductPage.Settings;_canvas.Notice=pending.Detail;_canvas.AutomaticRetryAvailable=false;
+                    if(!isolated)RegisterPowerNotifications();UpdateTray(_canvas.State);return; // No telemetry/controller is opened while retained authority is unresolved.
+                }
+            }
             if(_runtime is null)_runtime=await (runtimeFactory?.Invoke()??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,Draft,_automaticReview)));
             // A close during construction waits for this task, then disposes the returned service without starting it.
             if(_closing||_restarting||IsDisposed)return;

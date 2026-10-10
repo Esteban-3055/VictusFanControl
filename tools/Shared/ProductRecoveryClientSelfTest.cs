@@ -6,6 +6,7 @@ internal static class ProductRecoveryClientSelfTest
 {
     internal static void Run(Action<bool, string> require)
     {
+        ProductRecoveryInventorySelfTest.Run();
         var directory = Path.Combine(Path.GetTempPath(), "vfc-recovery-client-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try

@@ -8,6 +8,15 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../tools/Shared/ProductRecoveryOwner.cs" Link="Recovery/ProductRecoveryOwner.cs" />
+    <Compile Include="../../tools/Shared/ProductRecoveryInventory.cs" Link="Recovery/ProductRecoveryInventory.cs" />
+    <Compile Include="../VictusFanControl.Watchdog/JsonLeaseJournal.cs" Link="Recovery/JsonLeaseJournal.cs" />
+    <Compile Include="../VictusFanControl.Watchdog/WatchdogTargetPolicy.cs" Link="Recovery/WatchdogTargetPolicy.cs" />
+    <Compile Include="../VictusFanControl.Watchdog/GateCLeaseState.cs" Link="Recovery/GateCLeaseState.cs" />
+    <Compile Include="../VictusFanControl.Watchdog/ILeaseRecoveryHardware.cs" Link="Recovery/ILeaseRecoveryHardware.cs" />
+    <Compile Include="../VictusFanControl.Watchdog/LeaseProtocolException.cs" Link="Recovery/LeaseProtocolException.cs" />
+    <Compile Include="../VictusFanControl.Watchdog/MonotonicClock.cs" Link="Recovery/MonotonicClock.cs" />
+    <Compile Include="../VictusFanControl.Watchdog/WatchdogLeaseManager.cs" Link="Recovery/WatchdogLeaseManager.cs" />
+    <Compile Include="../VictusFanControl.Watchdog/M4Hp8C40LeaseHardware.cs" Link="Recovery/M4Hp8C40LeaseHardware.cs" />
     <ProjectReference Include="..\VictusFanControl\VictusFanControl.csproj" />
   </ItemGroup>
 </Project>

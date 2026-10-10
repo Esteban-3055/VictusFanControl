@@ -83,8 +83,8 @@ internal sealed class SetupForm : Form
             var pending = VictusFanControl.Recovery.ProductRecoverySelection.Read();
             if (pending.Pending)
             {
-                var consent = MessageBox.Show(this, "Hay una sesión anterior de CPU/GPU pendiente de recuperación.\n\n" + pending.Summary +
-                    "\n\nCierra otros controladores de CPU/GPU y aplicaciones de VictusFanControl. Se guardarán respaldos antes de liberar. No se activará Automático durante la recuperación.\n\n¿Recuperar y continuar la instalación?",
+                var consent = MessageBox.Show(this, "Hay sesiones anteriores pendientes de recuperación.\n\n" + pending.Summary +
+                    "\n\nCierra otros controladores de CPU/GPU/ventiladores y aplicaciones de VictusFanControl. Se guardarán respaldos antes de liberar. No se activará Automático durante la recuperación. Si una llamada quedó incierta, será necesario Reiniciar Windows.\n\n¿Recuperar y continuar la instalación?",
                     "Recuperar sesión anterior", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
                 if (consent != DialogResult.Yes) throw new IOException("Instalación pausada. Los registros pendientes se conservaron; puedes recuperar al volver a instalar.");
                 _status.Text = "Recuperando la sesión anterior y guardando evidencia…";
@@ -95,6 +95,7 @@ internal sealed class SetupForm : Form
             }
             var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            start.StandardOutputEncoding=start.StandardErrorEncoding=new System.Text.UTF8Encoding(false);
             foreach (var value in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(directory, "Install-VictusFanControl.ps1"), "-NoOpen", "-InstallerProcessId", Environment.ProcessId.ToString() }) start.ArgumentList.Add(value);
             start.ArgumentList.Add(_startupAutomatic.Checked?"-EnableStartupAutomatic":"-PreserveStartupPreferences");
             using var process = Process.Start(start) ?? throw new IOException("No se pudo abrir el instalador interno.");
