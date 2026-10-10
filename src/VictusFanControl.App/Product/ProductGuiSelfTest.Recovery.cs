@@ -21,6 +21,7 @@ internal static partial class ProductGuiSelfTest
             {
                 blocked.Show();Application.DoEvents();
                 require(blockedFactoryCalls==0&&blocked.Canvas.State.Runtime=="RecoveryRequired"&&blocked.Canvas.State.LifecycleBlocked,"Fan pending startup opened controller/telemetry.");
+                require(blocked.Canvas.State.FanMode=="RecoveryRequired"&&blocked.Canvas.State.FanAuthority=="Unknown","Pending startup claimed restored Firmware ownership.");
                 using var bitmap=new Bitmap(blocked.Canvas.Width,blocked.Canvas.Height);blocked.Canvas.DrawToBitmap(bitmap,new(Point.Empty,bitmap.Size));
                 require(blocked.Canvas.Hits.Any(x=>x.Id=="recovery-run"&&x.Enabled),"Fan-only startup recovery has no actionable button.");
                 var exit=blocked.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Pending startup exit hung.");
@@ -34,6 +35,19 @@ internal static partial class ProductGuiSelfTest
                 var task=fanForm.RecoverPerformanceAsync(true);PumpUntil(()=>task.IsCompleted,"Fan-only recovery hung.");task.GetAwaiter().GetResult();
                 require(fanRuns==1&&fanForm.Canvas.State.FanMode=="Firmware","Fan-only recovery did not reopen Firmware.");
                 var exit=fanForm.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Fan-only exit hung.");
+            }
+            var retainedFans=new ProductRecoverySelection(Guid.Empty,Guid.Empty,fanRecords);var failedFanRuntime=new RecordingRuntime();int failedFanFactoryCalls=0;
+            using(var failedFanForm=new ProductForm("fixture://fan-only-failed",fixture:failedFanRuntime,fixtureProfiles:new()))
+            {
+                failedFanForm.RecoverySelectionReader=()=>retainedFans;
+                failedFanForm.RecoveryRunner=_=>Task.FromResult(new ProductRecoveryResult(false,"fixture-fan-failure","native return remains uncertain"));
+                failedFanForm.RecoveryRuntimeFactory=_=>{failedFanFactoryCalls++;return Task.FromResult<IProductRuntime>(new RecordingRuntime());};
+                failedFanForm.Show();Application.DoEvents();
+                failedFanRuntime.Publish(new(){LifecycleBlocked=true,FanMode="RecoveryRequired",FanAuthority="Unknown",PerformanceRecovery=new(true,"Pending fans",FanRecords:fanRecords)});
+                var task=failedFanForm.RecoverPerformanceAsync(true);PumpUntil(()=>task.IsCompleted,"Failed fan-only recovery hung.");task.GetAwaiter().GetResult();
+                require(failedFanFactoryCalls==0&&failedFanForm.Canvas.State.LifecycleBlocked&&failedFanForm.Canvas.State.Failure is not null,"Failed fan recovery reopened a controller.");
+                require(failedFanForm.Canvas.State.FanMode=="RecoveryRequired"&&failedFanForm.Canvas.State.FanAuthority=="Unknown"&&failedFanForm.Canvas.State.PerformanceRecovery?.Actionable==true,"Retained fan lease claimed restored Firmware ownership or lost recovery action.");
+                var exit=failedFanForm.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Failed fan-only exit hung.");
             }
             var pending = selected; var old = new RecordingRuntime { DisposeGate = new(TaskCreationOptions.RunContinuationsAsynchronously) };
             var next = new RecordingRuntime(); int launches = 0, created = 0;

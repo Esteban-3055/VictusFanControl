@@ -86,8 +86,8 @@ internal sealed partial class ProductForm
                 _canvas.AutomaticRetryAvailable = false; _canvas.RestartAvailable = true;
                 var preview = _isolatedRuntime ? before.PerformanceRecovery : PerformanceRecoveryPreview.Read();
                 _canvas.State = before with { LifecycleBlocked = true, Runtime = "Failed", Failure = "Recuperación no completada: " + ex.Message,
-                    PerformanceRecovery = preview, FanMode = controllerReleased ? "Firmware" : before.FanMode,
-                    FanAuthority = controllerReleased ? "Firmware" : before.FanAuthority,
+                    PerformanceRecovery = preview, FanMode = preview?.FanRecords?.Count > 0 ? "RecoveryRequired" : controllerReleased ? "Firmware" : before.FanMode,
+                    FanAuthority = preview?.FanRecords?.Count > 0 ? "Unknown" : controllerReleased ? "Firmware" : before.FanAuthority,
                     CpuState = preview?.CpuSession.HasValue == true ? "Recovering" : controllerReleased && preview?.Pending != true ? "Disabled" : "Failed",
                     GpuState = preview?.GpuSession.HasValue == true ? "Recovering" : controllerReleased && preview?.Pending != true ? "Disabled" : "Failed",
                     GuardianState = preview?.Pending == true ? "Recuperación pendiente" : "Sin sesión",
