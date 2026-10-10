@@ -354,7 +354,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             Button(g,"node-add","+  Añadir punto",new(331,767,226,44),true,points.Count<64);Button(g,"node-remove","−  Quitar",new(567,767,116,44),false,SelectedNode>0&&SelectedNode<points.Count-1&&points.Count>2);Button(g,"curve-reset","Restablecer",new(693,767,131,44));
         }
         DrawText(g,"Una curva · arrastra los puntos",889,201,27,null,735,true);
-        DrawText(g,"Azul: edición · gris: preset inicial del perfil, solo lectura.",892,231,17,Muted,737);DrawCurve(g,new(958,298,634,350),true);
+        DrawText(g,"Color activo: edición · gris: preset inicial, solo lectura.",892,231,17,Muted,737);DrawCurve(g,new(958,298,634,350),true);
         var selected=SelectedNode>=0&&SelectedNode<points.Count?points[SelectedNode]:null;
         DrawText(g,selected is null?"Selecciona un nodo; flechas ajustan demanda/nivel.":$"Punto {SelectedNode+1}: demanda {selected.Input:0} % · nivel {selected.Level:0}",892,728,18,Muted,737);
         Button(g,"save","Guardar curva e influencias",new(894,763,325,48),true);
