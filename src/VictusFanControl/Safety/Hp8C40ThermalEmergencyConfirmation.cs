@@ -26,6 +26,9 @@ public sealed class Hp8C40ThermalEmergencyConfirmation
         SafetyGate.MaximumTelemetryAge;
 
     private readonly object _gate = new();
+    private readonly bool _cpuThermalHandoff, _gpuThermalHandoff;
+    public Hp8C40ThermalEmergencyConfirmation(bool cpuThermalHandoff = true, bool gpuThermalHandoff = true)
+    { _cpuThermalHandoff = cpuThermalHandoff; _gpuThermalHandoff = gpuThermalHandoff; }
 
     private DateTimeOffset? _lastCountedHighTimestamp;
     private DateTimeOffset? _lastObservedSnapshotTimestamp;
@@ -139,7 +142,7 @@ public sealed class Hp8C40ThermalEmergencyConfirmation
             return raw;
         }
 
-        if (gpuTemperature.Value >= SafetyGate.GpuEmergencyC)
+        if (_gpuThermalHandoff && gpuTemperature.Value >= SafetyGate.GpuEmergencyC)
         {
             if (mutate)
             {
@@ -151,7 +154,7 @@ public sealed class Hp8C40ThermalEmergencyConfirmation
                 $"HP 8C40 immediate GPU thermal handoff: {gpuTemperature.Value:0.0} C >= {SafetyGate.GpuEmergencyC:0} C.");
         }
 
-        if (effectiveCpu.Value >= CpuHardEmergencyC)
+        if (_cpuThermalHandoff && effectiveCpu.Value >= CpuHardEmergencyC)
         {
             if (mutate)
             {
@@ -163,7 +166,7 @@ public sealed class Hp8C40ThermalEmergencyConfirmation
                 $"HP 8C40 immediate CPU hard thermal handoff: {effectiveCpu.Value:0.0} C >= {CpuHardEmergencyC:0} C.");
         }
 
-        if (effectiveCpu.Value < SafetyGate.CpuEmergencyC)
+        if (!_cpuThermalHandoff || effectiveCpu.Value < SafetyGate.CpuEmergencyC)
         {
             if (mutate)
             {

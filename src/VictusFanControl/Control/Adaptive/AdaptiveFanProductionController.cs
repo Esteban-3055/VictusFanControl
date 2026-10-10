@@ -1,6 +1,7 @@
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
 using VictusFanControl.Safety;
+using VictusFanControl.Product;
 using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.Control.Adaptive;
@@ -52,6 +53,13 @@ public sealed class AdaptiveFanProductionController
     private AdaptiveFanInertiaPolicy? _preparedEngine;
     private readonly int _automaticMinimumLevel;
     private readonly bool _useRawCpuThermalResponse;
+    private ProductProtectionSettings _protections = new();
+    public void ConfigureAutomaticProtections(ProductProtectionSettings protections)
+    {
+        ArgumentNullException.ThrowIfNull(protections);
+        if (_mode != AdaptiveFanProductionMode.Firmware) throw new InvalidOperationException("Configure protections from Firmware.");
+        _protections = protections;
+    }
     private readonly IExperimentalFanPolicy? _experimentalPolicy;
     private FanConfiguration? _automaticConfiguration;
     public FanConfiguration? AutomaticConfiguration => _automaticConfiguration is null ? null : FanConfigurationStore.Copy(_automaticConfiguration);
@@ -253,7 +261,7 @@ public sealed class AdaptiveFanProductionController
             }
             _mode = requestedMode;
             _automaticAdmission = requestedMode == AdaptiveFanProductionMode.Automatic && _automaticHardware is not null
-                ? new Hp8C40AutomaticThermalAdmission(_automaticHardware, _automaticMilliseconds)
+                ? new Hp8C40AutomaticThermalAdmission(_automaticHardware, _automaticMilliseconds, _protections)
                 : null;
 
             if (customToCustom)

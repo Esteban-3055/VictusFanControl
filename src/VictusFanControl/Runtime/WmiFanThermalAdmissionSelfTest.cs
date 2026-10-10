@@ -1,4 +1,5 @@
 using VictusFanControl.Control;
+using VictusFanControl.Product;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Safety;
@@ -37,6 +38,22 @@ internal static class WmiFanThermalAdmissionSelfTest
             Check(guard.Observe(Sample(Now()), Now()).EffectiveSafety.CustomControlPermitted, "Healthy startup denied.");
             clock = 100;
             return guard;
+        }
+        // Software handoffs are independent. Disabling them preserves real acquisition identity/freshness.
+        foreach(var cpuEnabled in new[]{false,true}) foreach(var gpuEnabled in new[]{false,true})
+        {
+            clock=0;
+            var adjustable=new Hp8C40AutomaticThermalAdmission(Hardware,()=>clock,new(){CpuThermalHandoff=cpuEnabled,GpuThermalHandoff=gpuEnabled});
+            adjustable.Observe(Sample(Now()),Now());clock=100;
+            var critical=Sample(Now(),100,90);
+            var admission=adjustable.Observe(critical,Now());
+            Check(admission.EffectiveSafety.CustomControlPermitted==(!cpuEnabled&&!gpuEnabled),"Configured CPU/GPU handoff mismatch.");
+            if(!cpuEnabled&&!gpuEnabled)
+            {
+                for(int i=0;i<5;i++){clock+=1000;critical=Sample(Now(),100,90);Check(adjustable.Observe(critical,Now()).EffectiveSafety.CustomControlPermitted,"Disabled CPU deadline closed admission.");}
+                Check(adjustable.RemainingConfirmationMilliseconds is null,"Disabled thermal protection retained a confirmation budget.");
+                clock+=4000;Check(!adjustable.Preview(critical,Now()).EffectiveSafety.CustomControlPermitted,"Disabled thermal protection accepted stale telemetry.");
+            }
         }
         var guard = Ready();
         var high = Sample(Now(), 98, power: 35.284);

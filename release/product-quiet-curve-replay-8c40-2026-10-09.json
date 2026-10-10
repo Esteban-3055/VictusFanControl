@@ -8,13 +8,13 @@
   "sourceSha256": {
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "3bbd2426fc4c23f46ef8b0db80c057de94e8296c72cfad0d83e55ec51abe03fe",
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "025e9ad74f4fc22b45f88983779b82540ae00702babee2245313cab4a059dbb6",
-    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "dd8211878873bf4af1efd874251108561a05e96a5f4b1af522eb3392a30f68c2",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "e8500667b16522e47a9e929659efe650be96b78d38cca9f0c84c997f1daf9909",
     "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "7c94c2852df2ebd257c66107770d815ab46a47d7bba95edac275fe9edc1c4077",
-    "src/VictusFanControl/Product/ProductProfiles.cs": "573b41d27b0928f3f452c875c8044292209cd05dc4105503a1ef9a1c166937c4",
+    "src/VictusFanControl/Product/ProductProfiles.cs": "b4878e994e7bd3918839fbbf954481d9fcfb64361f23d38fa05939c4ad119348",
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
     "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "e0e395a1eab83272c3c4a38d3a77d48868f951808883fe1deb36640a98665b8f",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
-    "src/VictusFanControl.App/Product/ProductRuntime.cs": "a27316700d18e681dee3fbe9a5feb0f9eb67bd3506417682a8bc1249548d5393",
+    "src/VictusFanControl.App/Product/ProductRuntime.cs": "192c2f836dc67a47b9618315ce0e7e14ef572574599fc53e5c22e5ad3c33343e",
     "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "a9ae9446b54f163c215f4327e98d1dc954e1cd1ceb7ac238292797a9487b53f1"
   },
   "historicalReconstruction": {
@@ -298,6 +298,6 @@
     "disclosure": "Same recorded CPU/GPU temperatures and powers for all candidates. Targets are simulated with immediate acknowledgements; levels*100 are nominal RPM, not noise/dBA. No counterfactual cooling, acoustic improvement or physical qualification is inferred."
   },
   "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification.",
-  "sourceBindingRevision": 4,
-  "sourceBindingUpdate": "Original published binding remains in tag v1.0.0 (43a8d19c3b743db2ad9c184e34c356f14251edcc). Re-executed the unchanged 390-decision AC input with source-independent retention and the applied-request reference correction; all numerical outputs remain identical. AC/Battery startup and round trips are synthetic software regressions, not new physical observations. Guided recovery revision: the preview now offers the GUI action and an empty GUID only for an absent domain. Re-executed the same 390-decision input; decisions.csv and all numerical summary fields remain identical. No controller/policy changes or new physical observations. Unified recovery revision: preview inventories retained fan sessions and orphan native markers as well as CPU/GPU. The unchanged 390-decision replay was executed again; decisions.csv and the complete numerical summary are identical. No curve/controller change or new physical observation."
+  "sourceBindingRevision": 5,
+  "sourceBindingUpdate": "Re-executed the unchanged 390-decision AC trace after adding configurable software handoffs and clean unattended resumption. Default fan numerical decisions remain identical; protection toggles and resumption use separate zero-hardware regressions and do not claim physical validation."
 }

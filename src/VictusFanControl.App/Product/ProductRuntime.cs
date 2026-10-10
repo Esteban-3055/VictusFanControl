@@ -24,6 +24,8 @@ internal sealed record ProductRuntimeState
     internal bool AutomaticReview { get; init; }
     internal int? AutomaticReviewMaximumSeconds { get; init; }
     internal bool AutomaticPreparing { get; init; }
+    internal ProductProtectionSettings? AppliedProtections { get; init; }
+    internal ProductProfiles? AutomaticResumeProfiles { get; init; }
     internal string? AutomaticSourceTransition { get; init; }
     internal TelemetrySnapshot? AutomaticInterruptionSnapshot { get; init; }
     internal string? AutomaticSessionId { get; init; }
@@ -393,7 +395,7 @@ internal sealed class ProductRuntime : IProductRuntime
             return Task.CompletedTask;
         }
         // Reject unavailable modes before a new generation could supersede a running session.
-        AutomaticAdmission();
+        AutomaticAdmission(_automaticReview is null ? profiles.Protections : new());
         var ticket = _automaticActivation.Begin(profiles);
         ProductPowerProfile? slot = null;
         Publish("Preparando Automatic: primero CPU/GPU, después la curva. Firmware cancela la entrada.");
@@ -404,7 +406,9 @@ internal sealed class ProductRuntime : IProductRuntime
                 await _automaticActivation.RunAsync(ticket,
                     () => FanCommandAsync(() =>
                     {
-                        _automaticActivation.EnsureCurrent(ticket); slot = AutomaticAdmission();
+                        _automaticActivation.EnsureCurrent(ticket); slot = AutomaticAdmission(_automaticReview is null ? ticket.Profiles.Protections : new());
+                        var protections = _automaticReview is null ? ticket.Profiles.Protections : new ProductProtectionSettings();
+                        _controller.ConfigureAutomaticProtections(protections); _automaticGuard.Configure(protections);
                         if(_platformExperiment is null)
                         {
                             if(ticket.Profiles.ExperimentalPlatformRetention && (_controller.Mode!=AdaptiveFanProductionMode.Firmware || _fans.Authority!=FanAuthority.Firmware))
@@ -435,7 +439,7 @@ internal sealed class ProductRuntime : IProductRuntime
                     () => FanCommandAsync(async () =>
                     {
                         _automaticActivation.EnsureCurrent(ticket);
-                        var current = AutomaticAdmission();
+                        var current = AutomaticAdmission(_automaticReview is null ? ticket.Profiles.Protections : new());
                         if (current != slot) throw new InvalidOperationException("La fuente cambió durante la preparación; selecciona Automatic de nuevo con la fuente estable.");
                         if (!ProductAutomaticActivation.PerformanceReady(ticket.Performance, _performance.AppliedConfiguration,
                             _performance.LastStatus, _performance.LastStatusFresh, current.ToString()))
@@ -444,7 +448,7 @@ internal sealed class ProductRuntime : IProductRuntime
                         await _controller.ConfigureAutomaticAsync(ticket.Profiles.Get(current).Fan, CancellationToken.None);
                         // Configuration may await a controller lock; recheck cancellation before committing.
                         _automaticActivation.EnsureCurrent(ticket);
-                        if (AutomaticAdmission() != current || !ProductAutomaticActivation.PerformanceReady(ticket.Performance,
+                        if (AutomaticAdmission(_automaticReview is null ? ticket.Profiles.Protections : new()) != current || !ProductAutomaticActivation.PerformanceReady(ticket.Performance,
                             _performance.AppliedConfiguration, _performance.LastStatus, _performance.LastStatusFresh, current.ToString()))
                             throw new InvalidOperationException("Fuente o estado CPU/GPU cambiaron durante la preparación; Automatic permanece en Firmware.");
                         _selectedFanProfile = current.ToString(); _automaticPerformance = ticket.Performance;
@@ -462,13 +466,14 @@ internal sealed class ProductRuntime : IProductRuntime
             finally { Publish(); }
         });
     }
-    private ProductPowerProfile AutomaticAdmission()
+    private ProductPowerProfile AutomaticAdmission(ProductProtectionSettings? protections = null)
     {
         if (_closing || _lifecycleBlocked) throw new InvalidOperationException("Sesión interrumpida; Automatic no puede rearmarse.");
         if (!_controller.AutomaticExecutionAuthorized) throw new InvalidOperationException("Automático no está autorizado para este equipo.");
         if (_controller.Mode != AdaptiveFanProductionMode.Firmware || _fans.Authority != FanAuthority.Firmware)
             throw new InvalidOperationException("Vuelve a Firmware antes de aplicar una curva. Un clic repetido no renueva la prueba.");
-        if (_worker.StateMachine.State != SystemState.Healthy || !Safety().CustomControlPermitted)
+        var admission = (protections ?? new()).ApplyThermalPolicy(_snapshot, SafetyGate.Evaluate(_hardware, _worker.StateMachine.State, _snapshot, DateTimeOffset.UtcNow, _fans.BackendCanWrite));
+        if (_worker.StateMachine.State != SystemState.Healthy || !admission.CustomControlPermitted)
             throw new InvalidOperationException("Espera telemetría Healthy completa y vigente antes de seleccionar Automatic.");
         var source = new WindowsPerformancePowerSourceReader().Read().Source;
         return source switch { PerformancePowerSourceKind.Ac => ProductPowerProfile.Ac,
@@ -740,6 +745,8 @@ internal sealed class ProductRuntime : IProductRuntime
                 ManualAuthorized = _controller.ManualExecutionAuthorized, AutomaticAuthorized = _controller.AutomaticExecutionAuthorized,
                 AutomaticReview = _automaticReview is not null, AutomaticReviewMaximumSeconds = _automaticReview?.MaximumDurationSeconds, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
                 AutomaticCpuSpikeRemainingMilliseconds = _automaticGuard.RemainingCpuSpikeMilliseconds,
+                AppliedProtections = _automaticProfiles?.Protections,
+                AutomaticResumeProfiles = _automaticProfiles is null ? null : ProductProfilesStore.Copy(_automaticProfiles),
                 AutomaticPreparing = _automaticActivation.Pending, AutomaticSessionId = _automaticSessionId, AutomaticDecisionSnapshot = _automaticDecisionSnapshot, AutomaticInterruptionSnapshot = _automaticInterruptionSnapshot,
                 AutomaticSourceTransition = _sourceTransition.Pending ? _sourceTransition.Candidate : null,
                 AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic && ReferenceEquals(_automaticDecision,_controller.LastAutomaticResult) ? _automaticDecision : null,

@@ -93,7 +93,7 @@ internal sealed partial class ProductForm : Form
             // A close during construction waits for this task, then disposes the returned service without starting it.
             if(_closing||_restarting||IsDisposed)return;
             if((!isolated||enableStartupAutomaticInFixture)&&_automaticReview is null&&!_restartOpening&&_saved.ActivateAutomaticOnStart)
-            { _startupPreferences=ProductProfilesStore.Copy(_saved); _startupAutomatic=new(Environment.TickCount64); }
+            { _startupPreferences=ProductProfilesStore.Copy(_saved); _startupAutomatic=new(Environment.TickCount64,protections:_saved.Protections); }
             AttachRuntime(_runtime);UpdateState(_runtime.State);
             if(!isolated||registerPowerNotificationsInFixture)RegisterPowerNotifications();
             _runtime.Start();_presentationTimer.Start();
@@ -123,6 +123,7 @@ internal sealed partial class ProductForm : Form
         if(IsDisposed||_closing)return;
         if(InvokeRequired){if(IsHandleCreated)BeginInvoke(()=>UpdateState(state));return;}
         if(_startupFailure is not null&&state.Failure is null)state=state with{Failure=_startupFailure};
+        ObserveAutomaticResumption(state);
         _canvas.State=state;if(state.Snapshot is not null)_canvas.AddSnapshot(state.Snapshot);
         UpdateTray(state);
         if(state.Failure is not null)_canvas.Notice=state.Failure;
@@ -165,12 +166,14 @@ internal sealed partial class ProductForm : Form
         if(_closing||_restarting||IsDisposed)return;
         if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1" or "fan-mode-2" or "performance-apply" or "performance-release")
             _startupAutomatic?.Cancel("Automático al iniciar cancelado por el usuario.");
+        if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")_automaticResumption.Cancel();
         if(id=="session-restart"){_ = RestartSessionAsync();return;}
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
         if(HandleAdvancedCommand(id))return;
         if(HandleRetentionCommand(id))return;
-        if(id=="recovery-run"){_ = RecoverPerformanceAsync();return;}
+        if(id=="recovery-run"){_automaticResumption.Cancel();_ = RecoverPerformanceAsync();return;}
+        if(HandleProtectionCommand(id)){_canvas.Invalidate();return;}
         if(id=="recovery-details")
         {
             var preview=PerformanceRecoveryPreview.Read();
@@ -198,6 +201,7 @@ internal sealed partial class ProductForm : Form
         }
         if(_canvas.Busy&&id is not("firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close"))return;
         if(id=="fan-mode-1"&&(!_canvas.State.ManualAuthorized||_canvas.State.LifecycleBlocked))return;
+        if(id=="fan-mode-2")_automaticResumption.Arm();
         if(id=="fan-mode-2"&&_canvas.State.LifecycleBlocked){_ = RetryAutomaticAsync();return;}
         if(id=="manual-apply"&&(!_canvas.State.ManualAuthorized||_canvas.State.FanMode!="Manual"||_canvas.State.Runtime!="Healthy"||_canvas.State.LifecycleBlocked))return;
         if(id=="performance-apply"&&!_canvas.CanApplyPerformance)return;
@@ -348,7 +352,7 @@ internal sealed partial class ProductForm : Form
     internal void PresentationTick()
     {
         if(_closing||IsDisposed)return;
-        TryStartupAutomatic();
+        TryStartupAutomatic();TryAutomaticResumption();
         // Only the visible offline simulator consumes virtual time. No catch-up
         // on returning from the tray, another page or the editor.
         if(Visible&&WindowState!=FormWindowState.Minimized&&!_canvas.Busy&&_canvas.Page==ProductPage.Curves&&_canvas.SimulationVisible&&_canvas.SimulationRunning)

@@ -1,4 +1,5 @@
 using VictusFanControl.Hardware.Hp;
+using VictusFanControl.Product;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
 using VictusFanControl.Telemetry;
@@ -37,7 +38,8 @@ public class Hp8C40AutomaticThermalAdmission
     private readonly object _gate = new();
     private readonly HardwareIdentity _hardware;
     private readonly Func<long> _milliseconds;
-    private readonly Hp8C40ThermalEmergencyConfirmation _confirmation = new();
+    private readonly Hp8C40ThermalEmergencyConfirmation _confirmation;
+    private readonly ProductProtectionSettings _protections;
     private TelemetrySnapshot? _latest;
     private long? _firstHighMilliseconds;
     private long? _lastMilliseconds;
@@ -45,10 +47,12 @@ public class Hp8C40AutomaticThermalAdmission
     private bool _thermalStop;
     private string? _stopReason;
 
-    public Hp8C40AutomaticThermalAdmission(HardwareIdentity hardware, Func<long>? milliseconds = null)
+    public Hp8C40AutomaticThermalAdmission(HardwareIdentity hardware, Func<long>? milliseconds = null, ProductProtectionSettings? protections = null)
     {
         if (!Hp8C40TargetProfile.Matches(hardware, out _))
             throw new ArgumentException("Thermal admission requires exact HP 8C40/F.18.", nameof(hardware));
+        _protections = protections ?? new();
+        _confirmation = new(_protections.CpuThermalHandoff, _protections.GpuThermalHandoff);
         _hardware = hardware;
         _milliseconds = milliseconds ?? (() => Environment.TickCount64);
     }
@@ -60,6 +64,7 @@ public class Hp8C40AutomaticThermalAdmission
     {
         lock (_gate)
         {
+            raw = _protections.ApplyThermalPolicy(snapshot, raw);
             var elapsed = CheckClock(); // Check expiry BEFORE a late cool sample could reset it.
             if (raw.SnapshotTimestamp != snapshot.Timestamp)
                 CloseLocked("Thermal admission refused a SafetyGate/telemetry epoch mismatch.", false);
@@ -72,8 +77,8 @@ public class Hp8C40AutomaticThermalAdmission
             }
             _latest = snapshot;
 
-            if (snapshot.CpuControlTemperatureC >= Settings.CpuImmediateHandoffC ||
-                snapshot.GpuTemperatureC >= Settings.GpuImmediateHandoffC)
+            if (_protections.CpuThermalHandoff && snapshot.CpuControlTemperatureC >= Settings.CpuImmediateHandoffC ||
+                _protections.GpuThermalHandoff && snapshot.GpuTemperatureC >= Settings.GpuImmediateHandoffC)
             {
                 CloseLocked("Immediate thermal handoff: CPU >=99 C or GPU >=87 C.", true);
                 return Decision(raw, raw, elapsed);
@@ -94,7 +99,7 @@ public class Hp8C40AutomaticThermalAdmission
                 return Decision(raw, effective, elapsed);
             }
             _normalEstablished = true;
-            if (raw.ThermalEmergency)
+            if (_protections.CpuThermalHandoff && raw.ThermalEmergency && snapshot.CpuControlTemperatureC >= Settings.CpuConfirmationC)
                 _firstHighMilliseconds ??= _lastMilliseconds!.Value;
             else
                 _firstHighMilliseconds = null;
@@ -110,6 +115,7 @@ public class Hp8C40AutomaticThermalAdmission
     {
         lock (_gate)
         {
+            raw = _protections.ApplyThermalPolicy(snapshot, raw);
             var elapsed = CheckClock();
             if (raw.SnapshotTimestamp != snapshot.Timestamp)
                 CloseLocked("Thermal preview refused a SafetyGate/telemetry epoch mismatch.", false);

@@ -21,7 +21,8 @@
     "current-gui-suspend-resume-without-fan-reentry",
     "current-gui-clean-exit-and-session-restart-release-and-open-in-firmware",
     "optional-quiet-ac-candidate-with-tz01-dtt3-comparable-thermal-and-measured-acoustics",
-    "current-windows-logon-startup-coupled-activation-and-clean-shutdown"
+    "current-windows-logon-startup-coupled-activation-and-clean-shutdown",
+    "configurable-protections-and-clean-unattended-resumption-on-current-target"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -33,7 +34,8 @@
     "Release authorization comes from the user request for habitual exact-target use; it is not a new physical qualification PASS.",
     "Windows logon task and unattended acquisition must still be observed on the target; CI checks use zero-hardware fixtures.",
     "Source-independent TZ01/DTT3 retention requires a target observation in Battery and during AC/Battery handoff; software checks do not prove battery cooling, runtime or acoustics.",
-    "Same-GUI explicit Automatic retry has software fixtures; current-target hardware retry has not yet been observed."
+    "Same-GUI explicit Automatic retry has software fixtures; current-target hardware retry has not yet been observed.",
+    "Configurable software handoffs and unattended resumption have software fixtures only; firmware thermal throttling, sensor integrity and unknown native-call exclusion are unchanged."
   ],
   "offlinePolicyEvidence": [
     "product-fan-stability-replay-8c40-2026-10-06.json",
@@ -47,7 +49,15 @@
     "sourceAdmission": "bounded-acquisition-history-v1",
     "normalAutomaticPromoted": true
   },
-  "version": "1.1.0",
+  "version": "1.1.1",
   "physicalPassClaimed": false,
-  "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation"
+  "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
+  "automaticProtectionControls": "independent-cpu-gpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
+  "automaticProtectionDefaults": {
+    "cpuThermalHandoff": true,
+    "gpuThermalHandoff": true,
+    "powerEnvelopeHandoff": true,
+    "resumeAutomatic": true
+  },
+  "unattendedAutomaticResumption": "previous-active-request-only-clean-release-fresh-runtime-three-new-observations-no-unknown-native-reentry"
 }

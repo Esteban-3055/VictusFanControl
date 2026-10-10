@@ -2,10 +2,34 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using VictusFanControl.Control.Adaptive;
 using VictusFanControl.Performance;
+using VictusFanControl.Safety;
+using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.Product;
 
 public enum ProductPowerProfile { Ac, Battery }
+
+/// <summary>Software handoff preferences; never alters firmware throttling or sensor/ownership admission.</summary>
+public sealed record ProductProtectionSettings
+{
+    public bool CpuThermalHandoff { get; init; } = true;
+    public bool GpuThermalHandoff { get; init; } = true;
+    public bool PowerEnvelopeHandoff { get; init; } = true;
+    public bool ResumeAutomatic { get; init; } = true;
+
+    public SafetyGateResult ApplyThermalPolicy(TelemetrySnapshot? snapshot, SafetyGateResult raw)
+    {
+        if (snapshot is null || !raw.ThermalEmergency) return raw;
+        var thermal = CpuThermalHandoff && snapshot.CpuControlTemperatureC >= SafetyGate.CpuEmergencyC ||
+            GpuThermalHandoff && snapshot.GpuTemperatureC >= SafetyGate.GpuEmergencyC;
+        if (thermal) return raw;
+        var ready = raw.BoardAllowed && raw.RuntimeHealthy && raw.SnapshotComplete && raw.SnapshotFresh &&
+            raw.TelemetryDeviceIdentityValid && raw.SensorsPlausible && snapshot.CpuCoreTelemetryComplete;
+        return raw with { ThermalEmergency = false, PreconditionsReady = ready,
+            CustomControlPermitted = ready && raw.FanWritePathPresent,
+            Reasons = raw.Reasons.Where(r => !r.StartsWith("Thermal handoff threshold reached", StringComparison.Ordinal)).ToArray() };
+    }
+}
 
 /// <summary>Configuration only. No session, authority, source observation or execution gate is persisted.</summary>
 public sealed record ProductProfile
@@ -66,6 +90,7 @@ public sealed record ProductProfiles
     public bool GpuEnabled { get; init; } = true;
     public bool StartMinimized { get; init; }
     public bool ActivateAutomaticOnStart { get; init; }
+    public ProductProtectionSettings Protections { get; init; } = new();
     public int DefaultCurveRevision { get; init; } = 2;
     // Preferences only: never persists source qualification, fan authority or a running session.
     public bool ExperimentalPlatformRetention { get; init; }
@@ -75,7 +100,7 @@ public sealed record ProductProfiles
     { ProductPowerProfile.Ac => this with { Ac = profile }, ProductPowerProfile.Battery => this with { Battery = profile }, _ => throw new ArgumentOutOfRangeException(nameof(source)) };
     public void Validate()
     {
-        if (DefaultCurveRevision is not (1 or 2) || SchemaVersion is not(1 or 2) || Ac is null || Battery is null) throw new InvalidDataException("Esquema de perfiles incompatible.");
+        if (DefaultCurveRevision is not (1 or 2) || SchemaVersion is not(1 or 2) || Ac is null || Battery is null || Protections is null) throw new InvalidDataException("Esquema de perfiles incompatible.");
         Ac.Validate(ProductPowerProfile.Ac); Battery.Validate(ProductPowerProfile.Battery);
         if(SchemaVersion==2&&(Ac.Fan.UnifiedDemand is null||Battery.Fan.UnifiedDemand is null))throw new InvalidDataException("Cada fuente requiere su curva única de demanda.");
     }

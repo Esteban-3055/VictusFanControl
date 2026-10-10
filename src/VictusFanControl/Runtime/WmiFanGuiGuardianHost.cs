@@ -9,6 +9,18 @@ namespace VictusFanControl.Runtime;
 
 internal static class WmiFanGuiGuardianHost
 {
+    public static void RequestStop(string directory, string reason)
+    {
+        var path = Path.Combine(directory, "stop.signal");
+        if (File.Exists(path)) return;
+        try
+        {
+            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            var bytes = System.Text.Encoding.UTF8.GetBytes(reason); stream.Write(bytes); stream.Flush(true);
+        }
+        catch (IOException) when (File.Exists(path)) { /* An existing durable fence is already a stop request. */ }
+    }
+
     internal static string LeasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "VictusFanControl", "WmiFanGui", "lease.json");
     internal static string LegacyLeasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
@@ -82,7 +94,7 @@ internal static class WmiFanGuiGuardianHost
             {
                 try
                 {
-                    File.WriteAllText(Path.Combine(directory, "stop.signal"), reason);
+                    RequestStop(directory, reason);
                     if (File.Exists(Path.Combine(directory, "native-inflight.json")) ||
                         File.Exists(Path.Combine(directory, "native-uncertain.signal")))
                         throw new InvalidOperationException("Native completion is unknown; no recovery call admitted and lease retained.");

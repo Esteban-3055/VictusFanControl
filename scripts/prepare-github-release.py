@@ -10,7 +10,7 @@ import re
 import zipfile
 
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 TARGET = "HP-8C40-9D0R1LA-F18"
 MANIFEST = "PRODUCT-GUI-MANIFEST.json"
 
@@ -22,6 +22,7 @@ def require(condition, detail):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--checks-branch", default="main")
     parser.add_argument("--payload", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--source-head", required=True)
@@ -107,7 +108,7 @@ def main():
         evidence = []
         for name in ("oem-shadow", "wmi-fan-experiment", "cpu-rapl"):
             matches = [r for r in checks if r["name"] == name and r["head_sha"] == args.source_head
-                       and r["event"] == "push" and r["head_branch"] == "main"]
+                       and r["event"] == "push" and r["head_branch"] == args.checks_branch]
             require(matches, f"Missing same-commit check: {name}")
             latest = max(matches, key=lambda r: r["id"])
             require(latest["status"] == "completed" and latest["conclusion"] == "success",

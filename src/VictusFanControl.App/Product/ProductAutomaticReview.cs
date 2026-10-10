@@ -1,4 +1,5 @@
 using VictusFanControl.Control.Adaptive;
+using VictusFanControl.Product;
 using VictusFanControl.Safety;
 using VictusFanControl.Telemetry;
 
@@ -13,6 +14,9 @@ internal sealed class ProductAutomaticReview
     internal const int ExtendedMaximumSeconds = 2700;
     internal int MaximumDurationSeconds { get; }
     private readonly bool _bounded;
+    private ProductProtectionSettings _protections = new();
+    internal void Configure(ProductProtectionSettings protections)
+    { lock (_sync) { if (_started.HasValue) throw new InvalidOperationException("Libera Automático antes de cambiar protecciones."); _protections = _bounded ? new() : protections; } }
     internal const int MaximumCpuSpikeMilliseconds = 2000;
     internal const double CpuSpikeThresholdC = SafetyGate.CpuEmergencyC;
     internal const string CpuSpikeDeadlineFailure = "Confirmación de pico CPU vencida: sin adquisición fresca de recuperación <95 °C en 2000 ms; volver a Firmware.";
@@ -74,31 +78,32 @@ internal sealed class ProductAutomaticReview
             var cpuSpikeAdmitted = _healthySamples >= Hp8C40AutomaticFinalQualificationGate.RequiredHealthyPreWriteSamples &&
                 ReferenceEquals(snapshot, _observed);
             if (!snapshot.IsComplete ||
-                !Within(snapshot.CpuControlTemperatureC, 110) || snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC ||
-                (snapshot.CpuControlTemperatureC > Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC &&
-                    !cpuSpikeAdmitted) ||
-                !Within(snapshot.GpuTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC) ||
-                !Within(snapshot.CpuPackagePowerW, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW) ||
-                !Within(snapshot.GpuPowerW, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW))
-                throw new InvalidOperationException(EnvelopeFailure(snapshot, cpuSpikeAdmitted));
+                !Within(snapshot.CpuControlTemperatureC, 110) ||
+                (_protections.CpuThermalHandoff && (snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC ||
+                    snapshot.CpuControlTemperatureC > Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC && !cpuSpikeAdmitted)) ||
+                !Within(snapshot.GpuTemperatureC, _protections.GpuThermalHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC : 105) ||
+                !Within(snapshot.CpuPackagePowerW, _protections.PowerEnvelopeHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW : 500) ||
+                !Within(snapshot.GpuPowerW, _protections.PowerEnvelopeHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW : 300))
+                throw new InvalidOperationException(EnvelopeFailure(snapshot, cpuSpikeAdmitted, _protections));
         }
     }
-    internal static string EnvelopeFailure(TelemetrySnapshot snapshot, bool cpuSpikeAdmitted = false)
+    internal static string EnvelopeFailure(TelemetrySnapshot snapshot, bool cpuSpikeAdmitted = false, ProductProtectionSettings? protections = null)
     {
+        protections ??= new();
         var failures = new List<string>();
         void Check(string name, double? value, double maximum, string unit)
         {
             if (!value.HasValue || !double.IsFinite(value.Value) || value.Value < 0) failures.Add(name + " no disponible o inválido");
             else if (value.Value > maximum) failures.Add($"{name} {value.Value:0.##} {unit} > {maximum:0.##} {unit}");
         }
-        if (snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC)
+        if (protections.CpuThermalHandoff && snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC)
             failures.Add($"CPU temperatura de control {snapshot.CpuControlTemperatureC:0.##} °C >= {CpuImmediateHandoffC:0} °C " +
                 $"(paquete {snapshot.CpuTemperatureC:0.##} °C; núcleo más caliente {snapshot.CpuCoreMaxTemperatureC:0.##} °C; retorno inmediato a Firmware)");
         else Check("CPU temperatura", snapshot.CpuControlTemperatureC,
-            cpuSpikeAdmitted ? CpuImmediateHandoffC : Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC, "°C");
-        Check("CPU potencia", snapshot.CpuPackagePowerW, Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW, "W");
-        Check("GPU temperatura", snapshot.GpuTemperatureC, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC, "°C");
-        Check("GPU potencia", snapshot.GpuPowerW, Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW, "W");
+            !protections.CpuThermalHandoff ? 110 : cpuSpikeAdmitted ? CpuImmediateHandoffC : Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC, "°C");
+        Check("CPU potencia", snapshot.CpuPackagePowerW, protections.PowerEnvelopeHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW : 500, "W");
+        Check("GPU temperatura", snapshot.GpuTemperatureC, protections.GpuThermalHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC : 105, "°C");
+        Check("GPU potencia", snapshot.GpuPowerW, protections.PowerEnvelopeHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW : 300, "W");
         if (!snapshot.IsComplete) failures.Add("telemetría incompleta");
         return "Prueba Automatic fuera de su margen: " + string.Join("; ", failures) + ".";
     }
@@ -130,7 +135,7 @@ internal sealed class ProductAutomaticReview
             // The <=90 C envelope is for startup, not a second emergency threshold.
             // Established control follows the same >=95 C confirmation as the core;
             // 90..94.x C keeps raw maximum cooling without starting a false deadline.
-            if (snapshot.CpuControlTemperatureC >= CpuSpikeThresholdC)
+            if (_protections.CpuThermalHandoff && snapshot.CpuControlTemperatureC >= CpuSpikeThresholdC)
                 _cpuHighSince ??= _milliseconds();
             else _cpuHighSince = null;
             _lastSample = snapshot.Timestamp;

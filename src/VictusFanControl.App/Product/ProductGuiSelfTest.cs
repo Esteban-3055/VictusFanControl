@@ -23,6 +23,8 @@ internal static partial class ProductGuiSelfTest
             TestProductIcons(Require);
             TestUpdateHandoff(Require);
             TestManualAutomaticRetry(Require);
+            TestProtections(Require);
+            TestUnattendedAutomaticRetry(Require);
             TestAutomaticReview(Require);
             TestLiveCurveApply(Require);
             TestAdvancedSettings(Require);

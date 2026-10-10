@@ -106,7 +106,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         if (_child is null)
             return new(false, false, !File.Exists(releasedLeasePath), false, releasedReportPath, "NO_SESSION");
 
-        File.WriteAllText(Path.Combine(releasedDirectory, "stop.signal"), "CLIENT_RELEASE");
+        WmiFanGuiGuardianHost.RequestStop(releasedDirectory, "CLIENT_RELEASE");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(20));
         await _child.WaitForExitAsync(deadline.Token).ConfigureAwait(false);

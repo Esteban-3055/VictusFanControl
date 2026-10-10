@@ -7,7 +7,7 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
-internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates }
+internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates, Protections }
 internal sealed record ProductHit(string Id, RectangleF Bounds, string Label, bool Enabled, bool Slider = false, int Min = 0, int Max = 0);
 
 /// <summary>Owner-drawn product surface in reference coordinates. All gestures edit drafts or emit semantic commands.</summary>
@@ -136,8 +136,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         using(var p=new Pen(Border)) {g.DrawLine(p,0,64,1672,64);g.DrawLine(p,279,64,279,882);g.DrawLine(p,0,882,1672,882);}
         Icon(g,"fan",24,16,36,Blue);DrawText(g,"VictusFanControl",76,17,25,null,220,true);DrawText(g,"│",288,16,26,Muted,25);DrawText(g,State.Hardware,328,18,23,Muted,1070);
         Button(g,"window-minimize","−",new(1450,8,54,45));Button(g,"window-maximize","□",new(1524,8,54,45));Button(g,"window-close","×",new(1598,8,54,45));
-        string[] names=["Inicio","Ventiladores","Rendimiento","Perfiles","Curvas","Monitorización","Configuración","Avanzado","Actualizaciones"];
-        string[] icons=["home","fan","chart","profiles","curve","pulse","settings","settings","update"];
+        string[] names=["Inicio","Ventiladores","Rendimiento","Perfiles","Curvas","Monitorización","Configuración","Avanzado","Actualizaciones","Protecciones"];
+        string[] icons=["home","fan","chart","profiles","curve","pulse","settings","settings","update","settings"];
         for(int i=0;i<names.Length;i++)
         {
             var rect=new RectangleF(8,85+i*76,262,70);if((int)Page==i){Card(g,rect,true,12);using var b=new SolidBrush(Blue);g.FillRectangle(b,8,rect.Y+5,5,60);}
@@ -161,6 +161,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Settings: Settings(g);break;
             case ProductPage.Advanced: Advanced(g);break;
             case ProductPage.Updates: Updates(g);break;
+            case ProductPage.Protections: Protections(g);break;
         }
         using(var b=new SolidBrush(FreshSnapshot is not null?Green:Yellow))g.FillEllipse(b,24,901,20,20);
         DrawText(g,"VictusFanControl v"+ProductRelease.Version+"  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
