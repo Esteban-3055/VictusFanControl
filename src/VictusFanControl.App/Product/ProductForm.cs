@@ -242,8 +242,9 @@ internal sealed partial class ProductForm : Form
                 var source=_canvas.Editing;var demand=Draft.Get(source).Fan.UnifiedDemand!;
                 _ = RunAsync(async()=>{if(_runtime is null)throw new InvalidOperationException("Runtime no disponible.");await _runtime.ApplyFanCurveAsync(source,demand);
                     _canvas.Notice="Curva e influencias aplicadas en Automatic. Guardar conserva los cambios; CPU/GPU mantienen sus límites actuales.";});break;
-            case "discard":_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=!_hasSavedBaseline;_canvas.SelectedNode=-1;_canvas.Notice=_hasSavedBaseline?"Se recuperaron las preferencias guardadas.":"Se recuperó la configuración inicial; falta guardarla.";break;
+            case "discard":if(_draft.IncludePrereleaseUpdates!=_saved.IncludePrereleaseUpdates)ResetUpdateSelection();_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=!_hasSavedBaseline;_canvas.SelectedNode=-1;_canvas.Notice=_hasSavedBaseline?"Se recuperaron las preferencias guardadas.":"Se recuperó la configuración inicial; falta guardarla.";break;
             case "updates-check":_ = CheckUpdateAsync();break;
+            case "updates-prerelease-toggle":if(!_canvas.UpdateBusy)Change(_draft with{IncludePrereleaseUpdates=!_draft.IncludePrereleaseUpdates});break;
             case "updates-install":_ = DownloadAndInstallUpdateAsync();break;
             case "updates-page":_canvas.Page=ProductPage.Updates;break;
             case "startup-toggle":_ = ToggleStartupAsync();break;
@@ -269,7 +270,7 @@ internal sealed partial class ProductForm : Form
     }
     private void Change(ProductProfiles next)
     {
-        if(_canvas.Busy||_closing||IsDisposed)return;_startupAutomatic?.Cancel("Automático al iniciar cancelado al editar preferencias.");next.Validate();_draft=next;_canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=true;_canvas.Notice="Cambios en edición; no aplicados al hardware.";_canvas.Invalidate();
+        if(_canvas.Busy||_closing||IsDisposed)return;_startupAutomatic?.Cancel("Automático al iniciar cancelado al editar preferencias.");next.Validate();if(next.IncludePrereleaseUpdates!=_draft.IncludePrereleaseUpdates)ResetUpdateSelection();_draft=next;_canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=true;_canvas.Notice="Cambios en edición; no aplicados al hardware.";_canvas.Invalidate();
     }
     internal void EditValue(string key,int value)
     {
@@ -346,7 +347,7 @@ internal sealed partial class ProductForm : Form
     internal Task ImportProfilesAsync(string path)=>RunAsync(async()=>
     {
         var imported=await Task.Run(()=>{if(new FileInfo(path).Length>1024*1024)throw new InvalidDataException("El archivo de perfiles supera 1 MiB.");return ProductProfilesStore.Parse(File.ReadAllText(path));});
-        if(_closing)return;imported.Validate();_draft=imported;_canvas.Profiles=_draft;ResetSimulation();_canvas.SelectedNode=-1;_canvas.Dirty=true;_canvas.Notice="Perfiles importados en edición; falta Guardar. No se aplicó hardware.";
+        if(_closing)return;imported.Validate();if(imported.IncludePrereleaseUpdates!=_draft.IncludePrereleaseUpdates)ResetUpdateSelection();_draft=imported;_canvas.Profiles=_draft;ResetSimulation();_canvas.SelectedNode=-1;_canvas.Dirty=true;_canvas.Notice="Perfiles importados en edición; falta Guardar. No se aplicó hardware.";
     });
     internal Task ExportDiagnosticsAsync(string path,string? fixtureLog=null)=>RunAsync(async()=>{var state=_canvas.State;var draft=Draft;await Task.Run(()=>ProductDiagnostics.Export(path,state,draft,fixtureLog??AppLog.CurrentLogPath));_canvas.Notice="Diagnóstico exportado. Revisa rutas locales antes de compartirlo.";});
     internal void PresentationTick()

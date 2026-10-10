@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $manifest = Get-Content -LiteralPath (Join-Path $root 'PRODUCT-GUI-MANIFEST.json') -Raw | ConvertFrom-Json
-if ($manifest.schemaVersion -ne 1 -or $manifest.kind -ne 'VictusFanControl.ProductGuiRelease' -or $manifest.version -ne '1.1.1' -or $manifest.appDirectory -ne 'app') { throw 'Invalid v1.0 product manifest.' }
+if ($manifest.schemaVersion -ne 1 -or $manifest.kind -ne 'VictusFanControl.ProductGuiRelease' -or $manifest.version -ne '1.1.2' -or $manifest.appDirectory -ne 'app') { throw 'Invalid v1.0 product manifest.' }
 $listed = @{}
 foreach ($entry in $manifest.files) {
     $relative = [string]$entry.path
@@ -22,7 +22,7 @@ if($actual.Count -ne $listed.Count){throw 'Unexpected package files.'}
 foreach($file in $actual){if(-not $listed.ContainsKey($file.FullName.Substring($root.Length+1).Replace('\','/'))){throw 'Unlisted package file.'}}
 $candidate = Get-Content -LiteralPath (Join-Path $root 'PRODUCT-RELEASE.json') -Raw | ConvertFrom-Json
 if ($manifest.releaseStage -ne 'target-specific-release' -or $manifest.finalReleaseReady -ne $true -or $manifest.normalAutomatic -ne 'authorized-exact-target' -or
-    $candidate.kind -ne 'VictusFanControl.ProductRelease' -or $candidate.version -ne '1.1.1' -or $candidate.sourceHead -ne $manifest.sourceHead -or $candidate.stableReleaseAuthorized -ne $true -or $candidate.physicalPassClaimed -ne $false) { throw 'Invalid target release authorization.' }
+    $candidate.kind -ne 'VictusFanControl.ProductRelease' -or $candidate.version -ne '1.1.2' -or $candidate.sourceHead -ne $manifest.sourceHead -or $candidate.stableReleaseAuthorized -ne $true -or $candidate.physicalPassClaimed -ne $false) { throw 'Invalid target release authorization.' }
 if ($manifest.productPlatformRetention -ne 'optional-disabled-default-AC-Battery-plus2-60s-fresh3s' -or
     $candidate.experimentalPlatformRetention.defaultEnabled -ne $false -or $candidate.experimentalPlatformRetention.scope -ne 'optional-ac-and-battery' -or
     $candidate.experimentalPlatformRetention.maximumExtraRawLevels -ne 2 -or $candidate.experimentalPlatformRetention.maximumSupplementSeconds -ne 60) { throw 'Invalid optional platform retention contract.' }
@@ -30,7 +30,7 @@ if($manifest.automaticProtectionControls -ne 'independent-cpu-gpu-power-handoffs
 if($manifest.manualAutomaticRetry -ne 'explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations' -or $candidate.reentryAfterInterruption -ne 'explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations'){throw 'Invalid manual Automatic retry contract.'}
 if($manifest.guidedPerformanceRecovery -ne 'gui-installer-exact-owner-release-only'){throw 'Invalid guided recovery contract.'}
 if($manifest.guidedFanRecovery -ne 'wmi-gui-experiment-orphan-and-target-bound-legacy-release-only'){throw 'Invalid guided fan recovery contract.'}
-Write-Host "Verified VictusFanControl v1.1.1 build $($manifest.sourceHead). Exact HP 8C40/F.18 release; evidence limits remain in PRODUCT-RELEASE.json."
+Write-Host "Verified VictusFanControl v1.1.2 build $($manifest.sourceHead). Exact HP 8C40/F.18 release; evidence limits remain in PRODUCT-RELEASE.json."
 if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }
 if ($Mode -eq 'FinalCheck') {

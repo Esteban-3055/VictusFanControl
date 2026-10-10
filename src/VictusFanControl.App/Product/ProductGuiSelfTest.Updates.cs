@@ -7,11 +7,12 @@ internal static partial class ProductGuiSelfTest
     private static void TestUpdatePage(Action<bool,string> require)
     {
         var exitCode=Environment.ExitCode;
+        var preferencePath=Path.Combine(Path.GetTempPath(),"Victus-update-fixture-"+Guid.NewGuid().ToString("N"),"profiles.json");
         var update=new ProductUpdate(new Version(1,2,0),new Uri("https://github.com/Esteban-3055/VictusFanControl/releases/download/v1.2.0/VictusFanControl-1.2.0-Setup-win-x64.exe"),1024,new string('a',64));
         try
         {
             var runtime=new RecordingRuntime();
-            using(var form=new ProductForm("fixture://updates",fixture:runtime,fixtureProfiles:new ProductProfiles()))
+            using(var form=new ProductForm("fixture://updates",fixture:runtime,fixtureProfiles:new ProductProfiles(),profilesPath:preferencePath))
             {
                 form.Show();Application.DoEvents();form.HandleCommand("page-"+(int)ProductPage.Updates);form.Canvas.Refresh();
                 require(form.Canvas.Hits.Single(h=>h.Id=="page-"+(int)ProductPage.Updates).Label=="Actualizaciones"&&!form.Canvas.Hits.Single(h=>h.Id=="updates-install").Enabled,"Updates navigation/install admission missing.");
@@ -21,6 +22,25 @@ internal static partial class ProductGuiSelfTest
                 form.HandleCommand("page-0");gate.SetResult(update);PumpUntil(()=>check.IsCompleted,"Update query hung.");check.GetAwaiter().GetResult();
                 require(form.Canvas.AvailableUpdate==update&&form.Canvas.UpdateCheckedAt is not null&&runtime.Commands==0&&!form.Canvas.UpdateBusy,"Update check lost result or wrote hardware.");
                 form.HandleCommand("updates-page");form.Canvas.Refresh();require(form.Canvas.Hits.Single(h=>h.Id=="updates-install").Enabled,"Available update install button disabled.");
+                form.HandleCommand("updates-prerelease-toggle");form.Canvas.Refresh();
+                require(form.Draft.IncludePrereleaseUpdates&&form.Canvas.Dirty&&form.Canvas.AvailableUpdate is null&&runtime.Commands==0,"Channel toggle did not invalidate result or touched hardware.");
+                var channelGate=new TaskCompletionSource<ProductUpdate?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var channelCheck=form.CheckUpdateAsync(_=>channelGate.Task);
+                form.HandleCommand("updates-prerelease-toggle");require(form.Draft.IncludePrereleaseUpdates,"Busy channel toggle was admitted.");
+                form.HandleCommand("discard");channelGate.SetResult(update with{IsPrerelease=true});PumpUntil(()=>channelCheck.IsCompleted,"Channel query hung.");
+                require(!form.Draft.IncludePrereleaseUpdates&&form.Canvas.AvailableUpdate is null&&!form.Canvas.UpdateBusy,"Query from discarded preview channel was published.");
+                form.Canvas.AvailableUpdate=update with{IsPrerelease=true};int blockedPreviewDownloads=0;
+                form.DownloadAndInstallUpdateAsync((_,_)=>{blockedPreviewDownloads++;return Task.FromResult("fixture");}).GetAwaiter().GetResult();
+                require(blockedPreviewDownloads==0&&form.Canvas.AvailableUpdate is null,"Stable channel downloaded stale preview result.");
+                form.HandleCommand("updates-prerelease-toggle");form.HandleCommand("save");
+                PumpUntil(()=>!form.Canvas.Busy&&!form.Canvas.Dirty,"Preview preference save hung.");
+                require(ProductProfilesStore.Parse(File.ReadAllText(preferencePath)).IncludePrereleaseUpdates&&runtime.Commands==0,"Saved preview channel lost preference or touched hardware.");
+                form.ClientSize=new Size(1040,660);form.PerformLayout();form.Canvas.Refresh();
+                require(form.Canvas.Hits.Single(h=>h.Id=="updates-prerelease-toggle").Enabled,"Minimum layout hid preview control.");
+                Directory.CreateDirectory(Path.Combine("logs","product-gui-self-test"));
+                using(var bitmap=new Bitmap(form.Canvas.Width,form.Canvas.Height))
+                {form.Canvas.DrawToBitmap(bitmap,new Rectangle(Point.Empty,bitmap.Size));bitmap.Save(Path.Combine("logs","product-gui-self-test","updates-preview-minimum-layout.png"));}
+                form.Canvas.AvailableUpdate=update;
                 form.EditValue("pl1",38);form.Canvas.Refresh();require(!form.Canvas.Hits.Single(h=>h.Id=="updates-install").Enabled,"Dirty draft can install.");
                 int downloads=0;form.DownloadAndInstallUpdateAsync((_,_)=>{downloads++;return Task.FromResult("fixture");}).GetAwaiter().GetResult();require(downloads==0,"Dirty draft downloaded installer.");
                 form.HandleCommand("discard");
@@ -38,15 +58,15 @@ internal static partial class ProductGuiSelfTest
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Update page could not exit.");
             }
             runtime=new RecordingRuntime();
-            using(var form=new ProductForm("fixture://updates",fixture:runtime,fixtureProfiles:new ProductProfiles()))
+            using(var form=new ProductForm("fixture://updates",fixture:runtime,fixtureProfiles:new ProductProfiles{IncludePrereleaseUpdates=true}))
             {
-                form.Show();Application.DoEvents();form.Canvas.AvailableUpdate=update;bool released=false,launched=false;
+                form.Show();Application.DoEvents();form.Canvas.AvailableUpdate=update with{IsPrerelease=true};bool released=false,launched=false;
                 var install=form.DownloadAndInstallUpdateAsync((_,_)=>Task.FromResult("fixture"),()=>{released=true;require(runtime.Disposals==1,"Download skipped cleanup.");},()=>{require(released,"Download launch preceded release.");launched=true;});
                 PumpUntil(()=>install.IsCompleted,"Download/install hung.");require(launched&&form.IsDisposed,"Page download did not hand off to installer.");
             }
-            Console.WriteLine("Updates page: PASS (query-only, separate install, no-update/offline/digest failures, duplicate/dirty guards, navigation, suspend during download and clean handoff; no network/hardware IO).");
+            Console.WriteLine("Updates page: PASS (query-only, preview opt-in/stale-channel guards, separate preview install, no-update/offline/digest failures, duplicate/dirty guards, navigation, suspend during download and clean handoff; no network/hardware IO).");
         }
-        finally{Environment.ExitCode=exitCode;}
+        finally{Environment.ExitCode=exitCode;if(File.Exists(preferencePath))File.Delete(preferencePath);if(Directory.Exists(Path.GetDirectoryName(preferencePath)!))Directory.Delete(Path.GetDirectoryName(preferencePath)!);}
     }
     private static void TestUpdateHandoff(Action<bool,string> require)
     {

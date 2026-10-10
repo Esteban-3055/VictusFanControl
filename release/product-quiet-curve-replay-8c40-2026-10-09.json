@@ -10,7 +10,7 @@
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "025e9ad74f4fc22b45f88983779b82540ae00702babee2245313cab4a059dbb6",
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "e8500667b16522e47a9e929659efe650be96b78d38cca9f0c84c997f1daf9909",
     "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "7c94c2852df2ebd257c66107770d815ab46a47d7bba95edac275fe9edc1c4077",
-    "src/VictusFanControl/Product/ProductProfiles.cs": "b4878e994e7bd3918839fbbf954481d9fcfb64361f23d38fa05939c4ad119348",
+    "src/VictusFanControl/Product/ProductProfiles.cs": "e55d79c9b5df6413c2479db31aa1998bdcef2938df28f7b41fc884f468cd4427",
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
     "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "e0e395a1eab83272c3c4a38d3a77d48868f951808883fe1deb36640a98665b8f",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
@@ -298,6 +298,6 @@
     "disclosure": "Same recorded CPU/GPU temperatures and powers for all candidates. Targets are simulated with immediate acknowledgements; levels*100 are nominal RPM, not noise/dBA. No counterfactual cooling, acoustic improvement or physical qualification is inferred."
   },
   "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification.",
-  "sourceBindingRevision": 4,
-  "sourceBindingUpdate": "Re-executed the unchanged 390-decision AC trace after adding configurable software handoffs and clean unattended resumption. Default fan numerical decisions remain identical; protection toggles and resumption use separate zero-hardware regressions and do not claim physical validation. Fixed-review diagnostics now report the enforced default protections; this changes no fan decision."
+  "sourceBindingRevision": 5,
+  "sourceBindingUpdate": "Re-executed the unchanged 390-decision AC trace after adding the saved preview-update preference. Decisions.csv remains byte-for-byte identical to the previous protection release; no fan or performance policy was changed. Update channel and installation tests use no hardware IO and do not claim physical validation."
 }

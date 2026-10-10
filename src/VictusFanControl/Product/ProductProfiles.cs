@@ -90,6 +90,7 @@ public sealed record ProductProfiles
     public bool GpuEnabled { get; init; } = true;
     public bool StartMinimized { get; init; }
     public bool ActivateAutomaticOnStart { get; init; }
+    public bool IncludePrereleaseUpdates { get; init; }
     public ProductProtectionSettings Protections { get; init; } = new();
     public int DefaultCurveRevision { get; init; } = 2;
     // Preferences only: never persists source qualification, fan authority or a running session.

@@ -11,6 +11,11 @@ internal sealed partial class ProductForm
     private bool _updateCancellationDisposed;
     private Task? _updateInstallTask;
     private long _updateLifecycleBoundary;
+    private void ResetUpdateSelection()
+    {
+        _canvas.AvailableUpdate = null; _canvas.UpdateCheckedAt = null; _canvas.UpdateProgressPercent = null;
+        _canvas.UpdateStatus = "Canal cambiado. Guarda la preferencia y vuelve a buscar actualizaciones.";
+    }
     private void DisposeUpdateCancellation()
     {
         if (_updateCancellationDisposed) return;
@@ -26,15 +31,17 @@ internal sealed partial class ProductForm
         if (_checkingUpdate || _closing || _restarting || _canvas.Busy || (_isolatedRuntime && checkFixture is null)) return;
         if (!_isolatedRuntime && checkFixture is not null) throw new InvalidOperationException("Update fixture requires an isolated runtime.");
         _checkingUpdate = _canvas.UpdateBusy = true;
+        var includePrereleases = _draft.IncludePrereleaseUpdates;
         _canvas.AvailableUpdate = null; _canvas.UpdateProgressPercent = null;
-        _canvas.UpdateStatus = "Consultando releases estables de GitHub…"; _canvas.Invalidate();
+        _canvas.UpdateStatus = includePrereleases ? "Consultando releases estables y preliminares de GitHub…" : "Consultando releases estables de GitHub…"; _canvas.Invalidate();
         try
         {
-            var update = await (checkFixture?.Invoke(_updateCancellation.Token) ?? ProductUpdates.CheckAsync(Version.Parse(ProductRelease.Version), _updateCancellation.Token));
+            var update = await (checkFixture?.Invoke(_updateCancellation.Token) ?? ProductUpdates.CheckAsync(Version.Parse(ProductRelease.Version), _updateCancellation.Token, includePrereleases));
             if (_closing || IsDisposed) return;
+            if (includePrereleases != _draft.IncludePrereleaseUpdates) { ResetUpdateSelection(); return; }
             _canvas.AvailableUpdate = update; _canvas.UpdateCheckedAt = DateTimeOffset.Now;
-            _canvas.UpdateStatus = update is null ? "No hay una versión estable más reciente que la instalada." :
-                $"Nueva versión disponible. Instalador: {update.Size / (1024d * 1024):0.0} MB. Pulsa Descargar e instalar para actualizar.";
+            _canvas.UpdateStatus = update is null ? (includePrereleases ? "No hay una versión estable o preliminar más reciente que la instalada." : "No hay una versión estable más reciente que la instalada.") :
+                $"Nueva versión {(update.IsPrerelease ? "preliminar" : "estable")} disponible. Instalador: {update.Size / (1024d * 1024):0.0} MB. Pulsa Descargar e instalar para actualizar.";
         }
         catch (OperationCanceledException) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "La consulta se canceló o agotó su tiempo. Puedes volver a comprobar."; }
         catch (Exception ex) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "No se pudo comprobar: " + ex.Message; AppLog.Write("PRODUCT UPDATE CHECK: " + ex); }
@@ -43,8 +50,9 @@ internal sealed partial class ProductForm
     internal async Task DownloadAndInstallUpdateAsync(Func<ProductUpdate,CancellationToken,Task<string>>? downloadFixture = null, Action? ensureReleasedFixture = null, Action? launchFixture = null)
     {
         if (_checkingUpdate || _closing || _restarting || _canvas.Busy || _canvas.Dirty || _canvas.AvailableUpdate is not { } update || (_isolatedRuntime && downloadFixture is null)) return;
+        if (update.IsPrerelease && !_draft.IncludePrereleaseUpdates) { ResetUpdateSelection(); return; }
         if (!_isolatedRuntime && downloadFixture is not null) throw new InvalidOperationException("Update fixture requires an isolated runtime.");
-        if (!_isolatedRuntime && MessageBox.Show(this, $"Se descargará v{update.Version} y se verificará su SHA-256. Después se liberarán ventiladores y CPU/GPU y se cerrará esta sesión. Tus preferencias se conservan.\n\n¿Descargar y abrir el instalador?", "Actualizar VictusFanControl", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
+        if (!_isolatedRuntime && MessageBox.Show(this, $"Se descargará v{update.Version}{(update.IsPrerelease ? " (preliminar)" : "")} y se verificará su SHA-256. Después se liberarán ventiladores y CPU/GPU y se cerrará esta sesión. Tus preferencias se conservan.\n\n¿Descargar y abrir el instalador?", "Actualizar VictusFanControl", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
         _checkingUpdate = _canvas.UpdateBusy = true;
         var lifecycleBoundary = _updateLifecycleBoundary;
         _canvas.UpdateProgressPercent = 0;
@@ -60,7 +68,7 @@ internal sealed partial class ProductForm
             var path = await (downloadFixture?.Invoke(update,_updateCancellation.Token) ?? ProductUpdates.DownloadAsync(update, _updateCancellation.Token, progress));
             if (_closing || IsDisposed) return;
             // Navigation/editing and power events remain available while downloading.
-            if (_canvas.Dirty || _canvas.Busy || _restarting || _displayOff || lifecycleBoundary != _updateLifecycleBoundary)
+            if (_canvas.Dirty || (update.IsPrerelease && !_draft.IncludePrereleaseUpdates) || _canvas.Busy || _restarting || _displayOff || lifecycleBoundary != _updateLifecycleBoundary)
             { _canvas.UpdateStatus = "Descarga verificada. Guarda los cambios y resuelve la interrupción antes de instalar; después vuelve a pulsar Descargar e instalar."; return; }
             _canvas.UpdateProgressPercent = 100;
             _canvas.UpdateStatus = "Descarga verificada. Liberando la sesión para instalar…";
