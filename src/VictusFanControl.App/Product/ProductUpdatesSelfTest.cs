@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using VictusFanControl.Product;
 
 namespace VictusFanControl.App;
@@ -27,8 +28,8 @@ internal static class ProductUpdatesSelfTest
         bool invalidNewest=false;try{ProductUpdates.ParseReleases(List(Release("v1.4.0",prerelease:true,digest:"bad"),Release("v1.2.0")),current,true);}catch(InvalidDataException){invalidNewest=true;}
         require(invalidNewest,"Preview channel silently bypassed invalid newest installer metadata.");
         var defaults=ProductProfilesStore.Serialize(new ProductProfiles());
-        var legacy=defaults.Replace("  \"includePrereleaseUpdates\": false,\n", "");
-        require(!legacy.Contains("includePrereleaseUpdates")&&!ProductProfilesStore.Parse(legacy).IncludePrereleaseUpdates,"Legacy preferences opted into previews.");
+        var legacy=JsonNode.Parse(defaults)!.AsObject();
+        require(legacy.Remove("includePrereleaseUpdates")&&!ProductProfilesStore.Parse(legacy.ToJsonString()).IncludePrereleaseUpdates,"Legacy preferences opted into previews.");
         require(ProductProfilesStore.Parse(ProductProfilesStore.Serialize(new ProductProfiles{IncludePrereleaseUpdates=true})).IncludePrereleaseUpdates,"Preview preference did not survive save/load.");
         foreach(var json in new[]{Release("v1.2.0-beta"),Release(url:"https://evil.example/setup.exe"),Release(url:"http://github.com/setup.exe"),Release(digest:"sha256:"),Release(size:0),Release(size:ProductUpdates.MaximumInstallerBytes+1),Release(state:"new"),Release(count:0),Release(count:2)})
         {
