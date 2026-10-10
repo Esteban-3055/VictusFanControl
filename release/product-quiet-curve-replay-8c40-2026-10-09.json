@@ -15,7 +15,7 @@
     "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "e0e395a1eab83272c3c4a38d3a77d48868f951808883fe1deb36640a98665b8f",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
     "src/VictusFanControl.App/Product/ProductRuntime.cs": "a27316700d18e681dee3fbe9a5feb0f9eb67bd3506417682a8bc1249548d5393",
-    "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "d731e33907c5ade3c328849e578a29c7442713048373c9da3d59221cfa7f5260"
+    "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "303d062f936dfc010213d39c4c621beb07519d44df84d6ba0ea193649f2d6f69"
   },
   "historicalReconstruction": {
     "expectedDecisions": 390,
@@ -298,6 +298,6 @@
     "disclosure": "Same recorded CPU/GPU temperatures and powers for all candidates. Targets are simulated with immediate acknowledgements; levels*100 are nominal RPM, not noise/dBA. No counterfactual cooling, acoustic improvement or physical qualification is inferred."
   },
   "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification.",
-  "sourceBindingRevision": 2,
-  "sourceBindingUpdate": "Original published binding remains in tag v1.0.0 (43a8d19c3b743db2ad9c184e34c356f14251edcc). Re-executed the unchanged 390-decision AC input with source-independent retention and the applied-request reference correction; all numerical outputs remain identical. AC/Battery startup and round trips are synthetic software regressions, not new physical observations."
+  "sourceBindingRevision": 3,
+  "sourceBindingUpdate": "Original published binding remains in tag v1.0.0 (43a8d19c3b743db2ad9c184e34c356f14251edcc). Re-executed the unchanged 390-decision AC input with source-independent retention and the applied-request reference correction; all numerical outputs remain identical. AC/Battery startup and round trips are synthetic software regressions, not new physical observations. Guided recovery revision: the preview now offers the GUI action and an empty GUID only for an absent domain. Re-executed the same 390-decision input; decisions.csv and all numerical summary fields remain identical. No controller/policy changes or new physical observations."
 }
