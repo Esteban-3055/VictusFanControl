@@ -11,6 +11,7 @@ internal static partial class ProductGuiSelfTest
         var runtime = new RecordingRuntime();
         using var form = new ProductForm("fixture://display", fixture: runtime, fixtureProfiles: new(), displayMetricsInFixture: () => display);
         form.Show(); Application.DoEvents();
+        Console.WriteLine($"Display fixture open: size={form.Size}; dpi={form.DeviceDpi}; nativeDesktop={Screen.FromControl(form).Bounds}; diagnostic={System.Text.Json.JsonSerializer.Serialize(form.DisplayDiagnostic())}");
         var directory = Path.Combine("logs", "product-gui-self-test"); Directory.CreateDirectory(directory);
         void Render(string name)
         {
@@ -26,7 +27,7 @@ internal static partial class ProductGuiSelfTest
             display = display with { Dpi = 192 };
             SendMessage(form.Handle, 0x2E0, (IntPtr)(192 | 192 << 16), rect);
             Application.DoEvents();
-            require(form.Size == new Size(2688, 1512), "Native DPI notification applied a second scale or failed to refresh.");
+            require(form.Size == new Size(2688, 1512), "Native DPI notification applied a second scale or failed to refresh: " + System.Text.Json.JsonSerializer.Serialize(form.DisplayDiagnostic()));
         }
         finally { Marshal.FreeHGlobal(rect); }
         Render("display-4k-200-before");

@@ -14,7 +14,13 @@ internal sealed partial class ProductForm
     {
         base.OnLoad(e);
         var display = ReadDisplayMetrics();
-        _windowLayout.Capture(Bounds, display, initial: true);
+        // Windows may already have clamped the opening window to a smaller desktop.
+        // Keep the design reference, rather than treating that automatic clamp as a user resize.
+        var dpiScale = display.Dpi / 96d;
+        var size = new Size((int)Math.Round(DesignWindowSize.Width * dpiScale), (int)Math.Round(DesignWindowSize.Height * dpiScale));
+        var reference = new Rectangle(Bounds.Left + (Bounds.Width - size.Width) / 2,
+            Bounds.Top + (Bounds.Height - size.Height) / 2, size.Width, size.Height);
+        _windowLayout.Capture(reference, display, initial: true);
         RefreshDisplayLayout("open");
     }
     protected override void OnDpiChanged(DpiChangedEventArgs e)
@@ -58,14 +64,14 @@ internal sealed partial class ProductForm
             _canvas.MinimumSize = Size.Empty;
             MinimumSize = placement.MinimumSize;
             MaximizedBounds = display.WorkingArea;
-            if (WindowState == FormWindowState.Normal) Bounds = placement.Bounds;
-            else if (WindowState == FormWindowState.Maximized && Bounds != display.WorkingArea)
+            if (WindowState == FormWindowState.Normal || WindowState == FormWindowState.Maximized)
             {
-                var area = display.WorkingArea;
-                // Resize the visible maximized window without restoring it, taking focus,
-                // changing z-order or overwriting the preferred normal placement.
-                if (!SetWindowPos(Handle, IntPtr.Zero, area.Left, area.Top, area.Width, area.Height, 0x14))
-                    AppLog.Write("Product maximized display fit: " + Marshal.GetLastWin32Error());
+                var area = WindowState == FormWindowState.Normal ? placement.Bounds : display.WorkingArea;
+                // Form.SetBoundsCore caps against SystemInformation.MaxWindowTrackSize,
+                // which can still describe the old desktop. Use the fresh monitor rectangle
+                // without restoring, activating or changing the window's z-order.
+                if (Bounds != area && !SetWindowPos(Handle, IntPtr.Zero, area.Left, area.Top, area.Width, area.Height, 0x14))
+                    AppLog.Write("Product display fit: " + Marshal.GetLastWin32Error());
             }
             _lastDisplay = display;
             PerformLayout(); _canvas.Invalidate();

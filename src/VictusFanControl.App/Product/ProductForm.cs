@@ -9,6 +9,7 @@ namespace VictusFanControl.App;
 /// <summary>New normal product GUI. Legacy MainForm is reachable only through explicit qualification entries.</summary>
 internal sealed partial class ProductForm : Form
 {
+    private static readonly Size DesignWindowSize = new(1344,756);
     private readonly ProductCanvas _canvas = new();
     private readonly string _modules;
     private readonly ProductAutomaticReviewMode? _automaticReview;
@@ -61,7 +62,7 @@ internal sealed partial class ProductForm : Form
         }
         _presentationTimer.Tick+=(_,_)=>PresentationTick();
         Text="VictusFanControl";Icon=_icons.Program;FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleDimensions=new SizeF(96,96);AutoScaleMode=AutoScaleMode.Dpi;
-        MinimumSize=new(1040,660);ClientSize=new(1344,756);StartPosition=FormStartPosition.CenterScreen;
+        MinimumSize=new(1040,660);ClientSize=DesignWindowSize;StartPosition=FormStartPosition.CenterScreen;
         _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
         if(restartState is not null)_canvas.Dirty=restartState.Dirty;
         _canvas.Command+=HandleCommand;_canvas.ValueEdited+=EditValue;_canvas.NodeEdited+=EditNode;
