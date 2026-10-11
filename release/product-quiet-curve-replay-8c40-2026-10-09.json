@@ -10,11 +10,11 @@
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "025e9ad74f4fc22b45f88983779b82540ae00702babee2245313cab4a059dbb6",
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "ad3c81903addb4952dd8e65fdef51fe291d6b8054aea193f2f838c76adc9c5f1",
     "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "7c94c2852df2ebd257c66107770d815ab46a47d7bba95edac275fe9edc1c4077",
-    "src/VictusFanControl/Product/ProductProfiles.cs": "e55d79c9b5df6413c2479db31aa1998bdcef2938df28f7b41fc884f468cd4427",
+    "src/VictusFanControl/Product/ProductProfiles.cs": "ca5aefce4cd30161d2414e65fe5b1a62e76f5ed4b50ad4ac1b5e218b45a6279a",
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
     "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "0cb48fa8ac820636094669cd988c1163dd63f112b4d36a27e2bca32aa577e426",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
-    "src/VictusFanControl.App/Product/ProductRuntime.cs": "3a5c62a69a9770cd714d37a11c4af8235b369217810bb1c365e2c549d138668b",
+    "src/VictusFanControl.App/Product/ProductRuntime.cs": "27001e0933030c6d8af5348918f30a7d1dd14f63f1dd133476fd11893ae6a6c3",
     "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "a9ae9446b54f163c215f4327e98d1dc954e1cd1ceb7ac238292797a9487b53f1"
   },
   "historicalReconstruction": {
@@ -298,7 +298,7 @@
     "disclosure": "Same recorded CPU/GPU temperatures and powers for all candidates. Targets are simulated with immediate acknowledgements; levels*100 are nominal RPM, not noise/dBA. No counterfactual cooling, acoustic improvement or physical qualification is inferred."
   },
   "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification.",
-  "sourceBindingRevision": 7,
-  "sourceBindingUpdate": "v1.1.5: updater cache and recovery/retry review; live CPU/GPU updates require current unretained critical telemetry. Re-executed the original 390-decision trace: all decision CSV fields and numerical metrics match the archived study. Separate synthetic regressions cover retained-telemetry update admission; no new physical pass is claimed.",
-  "sourceBindingUpdateBaseHead": "4a9efbe0db80ef22d4ab147ffae328c6c90e7082"
+  "sourceBindingRevision": 8,
+  "sourceBindingUpdate": "v1.1.6: removed product GPU consumption handoff and added exact-snapshot admission diagnoses. Re-executed the original 390-decision trace: all decision CSV fields and numerical metrics match the archived study. Separate synthetic regressions cover high-GPU-power entry/operation and concrete rejection causes; no new physical pass is claimed.",
+  "sourceBindingUpdateBaseHead": "7cfab91e93e55ee5d79ed9f7b861789f957c4177"
 }

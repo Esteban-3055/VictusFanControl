@@ -1,6 +1,6 @@
 # VictusFanControl v1.1.0 (desarrollo)
 
-[English](README.md) · [Estable v1.0.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.0.0) · [Preliminar v1.1.5](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.1.5) · [Instalación y uso](docs/PRODUCT_V1.md) · [Estado de validación](docs/PRODUCT_VALIDATION_STATUS.md)
+[English](README.md) · [Estable v1.0.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.0.0) · [Preliminar v1.1.6](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.1.6) · [Instalación y uso](docs/PRODUCT_V1.md) · [Estado de validación](docs/PRODUCT_VALIDATION_STATUS.md)
 
 Control de ventiladores y preferencias CPU/GPU para Windows, limitado al destino exacto **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, placa revisión 63.43, Intel Core i7-13700H y NVIDIA RTX 4060 Laptop GPU. v1.0.0 habilita Automático habitual para este equipo. Otros modelos o BIOS quedan fuera de esta autorización; HP 88F8 se conserva como histórico.
 
@@ -32,7 +32,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 ## Protecciones y evidencia
 
-Automático comienza en Firmware. La admisión requiere telemetría completa y fresca, fuente estable, CPU ≤90 °C y GPU ≤82 °C. En control, CPU ≥95 °C tiene hasta 2000 ms de confirmación; CPU ≥99 °C solicita Firmware inmediatamente. GPU >82 °C, CPU >60 W, GPU >75 W, datos caducados o fallos de lifecycle interrumpen. Se mantienen el watchdog y la transición acotada AC/Batería.
+Automático comienza en Firmware. La admisión requiere telemetría completa y fresca, fuente estable, CPU ≤90 °C y GPU ≤82 °C. En control, CPU ≥95 °C tiene hasta 2000 ms de confirmación; CPU ≥99 °C solicita Firmware inmediatamente. GPU >82 °C, CPU >60 W, datos caducados o fallos de lifecycle interrumpen. Se mantienen el watchdog y la transición acotada AC/Batería.
 
 El producto usa comandos HP WMI acotados y watchdog, lecturas Intel/ACPI mediante PawnIO, NVIDIA NVML y Performance Guardian. La aceptación WMI **no demuestra propiedad independiente del firmware ni readback exacto del nivel**. La aceptación NVML **no verifica el rango exacto de clocks GPU**.
 
@@ -46,7 +46,7 @@ Con .NET 8 SDK, usa la propiedad explícita de entrega:
 dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
 ```
 
-El pipeline empaqueta todos los binarios del producto como **1.1.5.0**. Una compilación de `main` correcta puede publicar v1.1.5 tras pasar las verificaciones OEM, WMI y CPU/GPU del mismo commit. Se comprueba cada archivo contra el manifiesto y se adjuntan SHA-256 y procedencia. No se sobrescribe una release existente.
+El pipeline empaqueta todos los binarios del producto como **1.1.6.0**. Una compilación de `main` correcta puede publicar v1.1.6 tras pasar las verificaciones OEM, WMI y CPU/GPU del mismo commit. Se comprueba cada archivo contra el manifiesto y se adjuntan SHA-256 y procedencia. No se sobrescribe una release existente.
 
 Los arneses históricos conservan versión RC y gates originales: `control.enabledByDefault=false` y `automaticPolicyEnabled=false`. Esos registros describen la cualificación antigua; el producto tiene autorización separada para este destino exacto. Los planes anteriores se mantienen como historial.
 
@@ -54,4 +54,6 @@ Licencia MIT: [LICENSE](LICENSE). Componentes externos: [THIRD_PARTY_NOTICES.md]
 
 ## Instalador y actualizaciones v1.1.0
 
-La preliminar v1.1.5 separa **Descargar** de **Instalar** y conserva el instalador verificado entre aperturas y cuando falla la instalación. Actualizaciones permite recuperar sesiones pendientes antes de volver a pulsar Instalar. El instalador conserva por defecto las preferencias de inicio anteriores. El canal estable es el predeterminado; guarda **Incluir versiones preliminares** para recibir previews. [Guía](docs/PRODUCT_V1.md) · [Revisión funcional](docs/PRODUCT_1_1_5_REVIEW.md).
+La preliminar v1.1.6 separa **Descargar** de **Instalar** y conserva el instalador verificado entre aperturas y cuando falla la instalación. Actualizaciones permite recuperar sesiones pendientes antes de volver a pulsar Instalar. El instalador conserva por defecto las preferencias de inicio anteriores. El canal estable es el predeterminado; guarda **Incluir versiones preliminares** para recibir previews. [Guía](docs/PRODUCT_V1.md) · [Revisión funcional](docs/PRODUCT_1_1_5_REVIEW.md).
+
+La v1.1.6 elimina el corte por consumo GPU y añade causas concretas de espera/rechazo de Automático. El consumo GPU sigue participando en la curva; se mantienen los cortes CPU y térmicos seleccionados. [Cambios y pruebas](docs/PRODUCT_1_1_6_CHANGES.md).

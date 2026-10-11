@@ -14,6 +14,7 @@ public sealed record ProductProtectionSettings
 {
     public bool CpuThermalHandoff { get; init; } = true;
     public bool GpuThermalHandoff { get; init; } = true;
+    // Persisted name retained for existing profiles; now controls CPU power only.
     public bool PowerEnvelopeHandoff { get; init; } = true;
     public bool ResumeAutomatic { get; init; } = true;
 

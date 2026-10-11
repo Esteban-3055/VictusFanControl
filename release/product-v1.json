@@ -53,10 +53,10 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.1.5",
+  "version": "1.1.6",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
-  "automaticProtectionControls": "independent-cpu-gpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
+  "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
   "automaticProtectionDefaults": {
     "cpuThermalHandoff": true,
     "gpuThermalHandoff": true,
@@ -72,5 +72,16 @@
     "missingLoadPolicy": "display-unavailable-conservative-100-percent-policy-input",
     "startupFanMaximumAgeMilliseconds": 3000,
     "auxiliaryFailure": "suspend-retention-continue-base-requalify-without-renewing-episode"
-  }
+  },
+  "automaticPowerContract": {
+    "cpuHandoffWatts": 60,
+    "cpuHandoffSelectable": true,
+    "gpuConsumptionHandoff": false,
+    "gpuTelemetryCoherenceWatts": [
+      0,
+      300
+    ],
+    "gpuPowerStillContributesToDemand": true
+  },
+  "automaticAdmissionDiagnostics": "exact-snapshot-and-evaluation-instant-specific-codes-startup-progress-wait-log-every-10s"
 }

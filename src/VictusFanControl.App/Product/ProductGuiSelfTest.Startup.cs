@@ -29,6 +29,20 @@ internal static partial class ProductGuiSelfTest
         using(var form=new ProductForm("fixture://startup",fixture:runtime,fixtureProfiles:new ProductProfiles{ActivateAutomaticOnStart=true},enableStartupAutomaticInFixture:true))
         {
             form.Show();Application.DoEvents();at=DateTimeOffset.UtcNow.AddSeconds(-2);
+            var missing=State(0) with{Snapshot=State(0).Snapshot! with{CpuTemperatureC=null}};
+            runtime.Publish(missing);Application.DoEvents();
+            require(runtime.Commands==0&&form.Canvas.Notice?.Contains("Temperatura de paquete CPU sin lectura",StringComparison.Ordinal)==true,
+                "Startup did not display the actual missing sensor.");
+            var prefix="PRODUCT AUTOMATIC WAIT: ";
+            var wait=AppLog.ReadTail(AppLog.CurrentLogPath).Split('\n',StringSplitOptions.RemoveEmptyEntries)
+                .Last(x=>x.Contains(prefix,StringComparison.Ordinal));
+            using(var diagnostic=System.Text.Json.JsonDocument.Parse(wait[(wait.IndexOf(prefix,StringComparison.Ordinal)+prefix.Length)..]))
+            {
+                require(diagnostic.RootElement.GetProperty("phase").GetString()=="startup"&&
+                    diagnostic.RootElement.GetProperty("issues").EnumerateArray().Any(i=>i.GetProperty("Code").GetString()=="cpu-temperature-missing")&&
+                    diagnostic.RootElement.GetProperty("snapshot").GetProperty("Timestamp").GetDateTimeOffset()==missing.Snapshot!.Timestamp,
+                    "Startup diagnostic lost the phase, sensor cause or exact sample.");
+            }
             runtime.Publish(State(0));runtime.Publish(State(1));runtime.Publish(State(2));Application.DoEvents();
             require(runtime.Commands==1,"Startup did not use the normal runtime command exactly once.");
             runtime.Publish(State(2));form.PresentationTick();require(runtime.Commands==1,"UI ticks repeated startup hardware activation.");

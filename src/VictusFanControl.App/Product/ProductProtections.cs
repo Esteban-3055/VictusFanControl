@@ -49,7 +49,7 @@ internal sealed partial class ProductCanvas
         }
         Row(0,"protections-cpu","Volver a Firmware por temperatura CPU","Activa: CPU ≥99 °C inmediata; ≥95 °C inicia confirmación con plazo de 2 s.\nDesactivada: sigue la curva con enfriamiento máximo ante calor.",p.CpuThermalHandoff);
         Row(1,"protections-gpu","Volver a Firmware por temperatura GPU","Activa: GPU >82 °C cancela Automático; a 87 °C actúa el control térmico compartido.\nDesactivada: Automático continúa la curva.",p.GpuThermalHandoff);
-        Row(2,"protections-power","Volver a Firmware por el margen de potencia","Activa: CPU >60 W o GPU >75 W cancela Automático.\nDesactivada: conserva tus límites CPU/GPU y acepta valores plausibles.",p.PowerEnvelopeHandoff);
+        Row(2,"protections-power","Volver a Firmware por consumo de CPU","Activa: CPU >60 W cancela Automático. GPU sin corte por consumo.\nDesactivada: acepta potencia CPU dentro del rango de coherencia.",p.PowerEnvelopeHandoff);
         Row(3,"protections-resume","Reanudar Automático después de una interrupción","Libera la sesión previa y espera lecturas nuevas; CPU ≤90 °C / GPU ≤82 °C.\nHasta 3 intentos con espera; se habilita si Automático ya estaba activo.",p.ResumeAutomatic);
         DrawText(g,"Siempre activos: sensores completos y recientes, identidad del equipo y exclusión de operaciones WMI inciertas. Las protecciones térmicas del firmware permanecen activas.",334,708,20,Muted,1280,height:61);
         DrawText(g,"Guardar conserva las preferencias. Aplicar libera el control actual y prepara una sesión nueva con estos ajustes.",334,782,19,Muted,815,height:52);

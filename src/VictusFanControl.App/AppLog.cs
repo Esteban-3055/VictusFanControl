@@ -101,6 +101,12 @@ internal static class AppLog
         catch { /* Preserve control even if the diagnostic disk is unavailable. */ }
     }
 
+    internal static void WriteStructured(string eventName, object data)
+    {
+        try { Write(eventName + ": " + JsonSerializer.Serialize(data, Json)); }
+        catch { /* Serialization and disk failures must never alter control admission. */ }
+    }
+
     private static void Append(string path, string text)
     {
         if (File.Exists(path) && new FileInfo(path).Length >= _maxFileBytes)

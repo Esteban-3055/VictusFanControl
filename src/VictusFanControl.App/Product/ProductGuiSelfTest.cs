@@ -17,6 +17,7 @@ internal static partial class ProductGuiSelfTest
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
             ProductUpdatesSelfTest.Run(Require);
+            ProductAutomaticAdmissionSelfTest.Run(Require);
             VictusFanControl.Recovery.ProductRecoveryClientSelfTest.Run(Require);
             TestGuidedRecovery(Require);
             TestUpdatePage(Require);
@@ -265,6 +266,16 @@ internal static partial class ProductGuiSelfTest
             var rows=AppLog.ReadTail(AppLog.TelemetryLogPath).Split('\n',StringSplitOptions.RemoveEmptyEntries);
             using var row=System.Text.Json.JsonDocument.Parse(rows[^1]);
             require(row.RootElement.GetProperty("sessionId").GetString()==id&&row.RootElement.GetProperty("snapshot").GetProperty("GpuPowerW").GetString()=="NaN","Telemetry lost session identity or invalid values.");
+            var evaluatedAt=sample.Timestamp;
+            var issues=ProductAutomaticAdmission.TelemetryIssues(sample,evaluatedAt);
+            AppLog.WriteStructured("PRODUCT AUTOMATIC ADMISSION REJECTED",new{evaluatedAt,issues,snapshot=sample});
+            var entry=AppLog.ReadTail(AppLog.CurrentLogPath).Split('\n',StringSplitOptions.RemoveEmptyEntries)[^1];
+            var prefix="PRODUCT AUTOMATIC ADMISSION REJECTED: ";
+            using var diagnostic=System.Text.Json.JsonDocument.Parse(entry[(entry.IndexOf(prefix,StringComparison.Ordinal)+prefix.Length)..]);
+            require(diagnostic.RootElement.GetProperty("issues").EnumerateArray().Any(i=>i.GetProperty("Code").GetString()=="gpu-power-invalid")&&
+                diagnostic.RootElement.GetProperty("evaluatedAt").GetDateTimeOffset()==evaluatedAt&&
+                diagnostic.RootElement.GetProperty("snapshot").GetProperty("GpuPowerW").GetString()=="NaN",
+                "Admission diagnostic lost the exact cause, evaluation instant or nonfinite triggering sample.");
         }
         finally{Directory.Delete(directory,true);}
     }

@@ -491,17 +491,29 @@ internal sealed class ProductRuntime : IProductRuntime
     }
     private ProductPowerProfile AutomaticAdmission(ProductProtectionSettings? protections = null)
     {
-        if (_closing || _lifecycleBlocked) throw new InvalidOperationException("Sesión interrumpida; Automatic no puede rearmarse.");
-        if (!_controller.AutomaticExecutionAuthorized) throw new InvalidOperationException("Automático no está autorizado para este equipo.");
+        // One immutable acquisition and one instant explain exactly the check made here.
+        var snapshot=_snapshot;var evaluatedAt=DateTimeOffset.UtcNow;var runtime=_worker.StateMachine.State;
+        var settings=protections??new ProductProtectionSettings();
+        var admission=settings.ApplyThermalPolicy(snapshot,SafetyGate.Evaluate(_hardware,runtime,snapshot,evaluatedAt,_fans.BackendCanWrite));
+        var issues=ProductAutomaticAdmission.RuntimeIssues(snapshot,evaluatedAt,admission,settings,runtime.ToString()).ToList();
+        if (_closing || _lifecycleBlocked) issues.Add(new("lifecycle", "Sesión interrumpida: "+(_lifecycleBlockReason??"cierre del controlador")+"."));
+        if (!_controller.AutomaticExecutionAuthorized) issues.Add(new("authorization", "Automático no está autorizado para este equipo."));
         if (_controller.Mode != AdaptiveFanProductionMode.Firmware || _fans.Authority != FanAuthority.Firmware)
-            throw new InvalidOperationException("Vuelve a Firmware antes de aplicar una curva. Un clic repetido no renueva la prueba.");
-        var admission = (protections ?? new()).ApplyThermalPolicy(_snapshot, SafetyGate.Evaluate(_hardware, _worker.StateMachine.State, _snapshot, DateTimeOffset.UtcNow, _fans.BackendCanWrite));
-        if (_worker.StateMachine.State != SystemState.Healthy || !admission.CustomControlPermitted ||
-            _snapshot?.RetainedTelemetry is not null || _snapshot?.IsFanTelemetryFreshAt(DateTimeOffset.UtcNow,3000) != true)
-            throw new InvalidOperationException("Espera telemetría Healthy completa y vigente antes de seleccionar Automatic.");
-        var source = new WindowsPerformancePowerSourceReader().Read().Source;
+            issues.Add(new("authority", $"Se requiere Firmware antes de entrar: modo {_controller.Mode}, autoridad {_fans.Authority}."));
+        PerformancePowerSourceKind? source=null;
+        if(issues.Count==0)
+        {
+            source=new WindowsPerformancePowerSourceReader().Read().Source;
+            if(source is not (PerformancePowerSourceKind.Ac or PerformancePowerSourceKind.Battery))
+                issues.Add(new("source", "La fuente real de energía no está confirmada: "+source+"."));
+        }
+        if(issues.Count>0)
+        {
+            AppLog.WriteStructured("PRODUCT AUTOMATIC ADMISSION REJECTED",new {evaluatedAt,runtime,source,issues,admission,snapshot});
+            throw new InvalidOperationException("Automático bloqueado: "+string.Join(" ",issues.Select(i=>i.Detail)));
+        }
         return source switch { PerformancePowerSourceKind.Ac => ProductPowerProfile.Ac,
-            PerformancePowerSourceKind.Battery => ProductPowerProfile.Battery, _ => throw new InvalidOperationException("Fuente real desconocida.") };
+            PerformancePowerSourceKind.Battery => ProductPowerProfile.Battery, _ => throw new InvalidOperationException("La entrada requiere una fuente confirmada.") };
     }
     private async Task SetFanModeAsync(AdaptiveFanProductionMode mode)
     {

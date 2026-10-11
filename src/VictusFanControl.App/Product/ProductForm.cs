@@ -34,6 +34,8 @@ internal sealed partial class ProductForm : Form
     private string? _lastEditingSource;
     private long _startupRetryAt;
     private int _startupAttempts;
+    private string? _startupWaitCodes;
+    private long _startupWaitLoggedAt;
     private readonly TaskCompletionSource _shutdown = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
@@ -178,8 +180,18 @@ internal sealed partial class ProductForm : Form
         // Observe only after queued state publications have reached the UI thread.
         if(InvokeRequired){if(IsHandleCreated&&!IsDisposed)BeginInvoke(TryStartupAutomatic);return;}
         if(_closing||_restarting||_displayOff||_startupAutomatic is null||_startupAutomatic.Finished||_runtime is null||_canvas.Busy||Environment.TickCount64<_startupRetryAt)return;
-        var activate=_startupAutomatic.Observe(_canvas.State,DateTimeOffset.UtcNow,Environment.TickCount64);
+        var observedAt=DateTimeOffset.UtcNow;var clock=Environment.TickCount64;
+        var activate=_startupAutomatic.Observe(_canvas.State,observedAt,clock);
         _canvas.Notice=_startupAutomatic.Status;
+        var waitCodes=string.Join(";",_startupAutomatic.Issues.Select(i=>i.Code));
+        if(waitCodes.Length>0&&(waitCodes!=_startupWaitCodes||clock<_startupWaitLoggedAt||clock-_startupWaitLoggedAt>=10000))
+        {
+            _startupWaitCodes=waitCodes;_startupWaitLoggedAt=clock;
+            AppLog.WriteStructured("PRODUCT AUTOMATIC WAIT",new
+                {phase=_startupAutomatic.Phase,evaluatedAt=observedAt,issues=_startupAutomatic.Issues,
+                    _canvas.State.Runtime,_canvas.State.Source,_canvas.State.Target,snapshot=_canvas.State.Snapshot});
+        }
+        if(waitCodes.Length==0)_startupWaitCodes=null;
         if(activate)
         {
             var profiles=ProductProfilesStore.Copy(_startupPreferences!);

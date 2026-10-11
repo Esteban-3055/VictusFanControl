@@ -1,6 +1,6 @@
 # VictusFanControl v1.1.0 (desarrollo)
 
-[Español](README.es.md) · [Stable v1.0.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.0.0) · [Preview v1.1.5](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.1.5) · [Installation and operation](docs/PRODUCT_V1.md) · [Validation status](docs/PRODUCT_VALIDATION_STATUS.md)
+[Español](README.es.md) · [Stable v1.0.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.0.0) · [Preview v1.1.6](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.1.6) · [Installation and operation](docs/PRODUCT_V1.md) · [Validation status](docs/PRODUCT_VALIDATION_STATUS.md)
 
 Windows fan control and CPU/GPU preferences for the exact target **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, board revision 63.43, Intel Core i7-13700H and NVIDIA RTX 4060 Laptop GPU. v1.0.0 enables habitual Automatic on this target. Other models and BIOS versions are outside this release's control authorization; HP 88F8 material remains historical.
 
@@ -32,7 +32,7 @@ Use `-Mode Verify` or `-Mode FinalCheck` to check the package without hardware c
 
 ## Protection and evidence
 
-Automatic begins in Firmware. Admission requires complete fresh telemetry, a stable source, CPU ≤90 °C and GPU ≤82 °C. During operation, CPU ≥95 °C has at most 2000 ms confirmation; CPU ≥99 °C triggers immediate handoff. GPU >82 °C, CPU >60 W, GPU >75 W, stale data or lifecycle faults interrupt control. The watchdog and bounded AC/Battery handoff remain active.
+Automatic begins in Firmware. Admission requires complete fresh telemetry, a stable source, CPU ≤90 °C and GPU ≤82 °C. During operation, CPU ≥95 °C has at most 2000 ms confirmation; CPU ≥99 °C triggers immediate handoff. GPU >82 °C, CPU >60 W, stale data or lifecycle faults interrupt control. The watchdog and bounded AC/Battery handoff remain active.
 
 The product uses bounded HP WMI fan commands and watchdog, PawnIO Intel/ACPI readings, NVIDIA NVML and Performance Guardian. WMI acceptance **does not prove independent firmware ownership or exact setpoint readback**. NVML acceptance **does not prove the exact locked GPU clock range**.
 
@@ -46,7 +46,7 @@ Use .NET 8 SDK and the explicit product release property:
 dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
 ```
 
-The pipeline packages current product binaries as **1.1.5.0**. A successful `main` build can publish v1.1.5 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
+The pipeline packages current product binaries as **1.1.6.0**. A successful `main` build can publish v1.1.6 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
 
 Historical qualification builds retain their RC version and gates, including `control.enabledByDefault=false` and `automaticPolicyEnabled=false`. These describe the legacy harness; the product's separate authorization covers only the exact target above. Earlier plans remain development history.
 
@@ -54,4 +54,6 @@ MIT: [LICENSE](LICENSE). External components: [THIRD_PARTY_NOTICES.md](THIRD_PAR
 
 ## Instalador y actualizaciones v1.1.0
 
-The v1.1.5 preview separates **Download** from **Install** and keeps a verified installer across application restarts and failed installation attempts. Pending sessions can be recovered from the Updates page before retrying Install. The installer preserves existing startup preferences by default. Stable is the default update channel; save **Include prereleases** to receive previews. [Guide](docs/PRODUCT_V1.md) · [Functional review](docs/PRODUCT_1_1_5_REVIEW.md).
+The v1.1.6 preview separates **Download** from **Install** and keeps a verified installer across application restarts and failed installation attempts. Pending sessions can be recovered from the Updates page before retrying Install. The installer preserves existing startup preferences by default. Stable is the default update channel; save **Include prereleases** to receive previews. [Guide](docs/PRODUCT_V1.md) · [Functional review](docs/PRODUCT_1_1_5_REVIEW.md).
+
+Version 1.1.6 removes the GPU consumption handoff and identifies concrete Automatic wait/admission failures. GPU power still contributes to fan demand; selected CPU power and thermal protections remain. [Changes and tests](docs/PRODUCT_1_1_6_CHANGES.md).

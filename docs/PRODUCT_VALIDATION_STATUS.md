@@ -88,7 +88,7 @@ Firmware con Automatic normal cerrado. La duración no se guarda en preferencias
 Ambas entradas comparten los mismos límites, preparación CPU/GPU, fuente real,
 telemetría, protección térmica, cancelación, liberación y bloqueo tras lifecycle.
 CPU ≥95 y <99 °C dispone de 2000 ms tras establecimiento; CPU ≥99 °C vuelve
-inmediatamente. GPU >82 °C, CPU >60 W, GPU >75 W o datos inválidos interrumpen.
+inmediatamente. GPU >82 °C, CPU >60 W o datos inválidos interrumpen con las protecciones correspondientes activas. Desde v1.1.6 se elimina el corte de consumo GPU; su lectura sigue alimentando la demanda. Las esperas/rechazos registran la causa, muestra e instante exactos ([regresiones](PRODUCT_1_1_6_CHANGES.md)).
 El paso de fuente sigue limitado a 4 s y no renueva el plazo ni la inercia.
 Aplicar una curva y repetir Automatic tampoco renuevan el reloj.
 Al expirar se solicita Firmware; los límites mantienen su sesión independiente

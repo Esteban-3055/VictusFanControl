@@ -83,7 +83,7 @@ internal sealed class ProductAutomaticReview
                     snapshot.CpuControlTemperatureC > Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC && !cpuSpikeAdmitted)) ||
                 !Within(snapshot.GpuTemperatureC, _protections.GpuThermalHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC : 105) ||
                 !Within(snapshot.CpuPackagePowerW, _protections.PowerEnvelopeHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW : 500) ||
-                !Within(snapshot.GpuPowerW, _protections.PowerEnvelopeHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW : 300))
+                !Within(snapshot.GpuPowerW, 300))
                 throw new InvalidOperationException(EnvelopeFailure(snapshot, cpuSpikeAdmitted, _protections));
         }
     }
@@ -103,7 +103,7 @@ internal sealed class ProductAutomaticReview
             !protections.CpuThermalHandoff ? 110 : cpuSpikeAdmitted ? CpuImmediateHandoffC : Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC, "°C");
         Check("CPU potencia", snapshot.CpuPackagePowerW, protections.PowerEnvelopeHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW : 500, "W");
         Check("GPU temperatura", snapshot.GpuTemperatureC, protections.GpuThermalHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC : 105, "°C");
-        Check("GPU potencia", snapshot.GpuPowerW, protections.PowerEnvelopeHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPowerW : 300, "W");
+        Check("GPU potencia", snapshot.GpuPowerW, 300, "W");
         if (!snapshot.IsComplete) failures.Add("telemetría incompleta");
         return "Prueba Automatic fuera de su margen: " + string.Join("; ", failures) + ".";
     }
