@@ -392,7 +392,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         var live=FreshSnapshot;var sample=State.AutomaticDecisionSnapshot;
         var active=live is not null&&State.FanMode=="Automatic"&&State.FanAuthority=="Custom"&&!State.LifecycleBlocked&&State.AppliedFanProfile==Editing.ToString()&&State.Source==State.AppliedFanProfile&&
             State.AutomaticDecision is{ExecutionAuthorized:true,EqualFanLevel:not null}&&State.AutomaticDecision.EqualFanLevel==State.FanLevel&&sample is not null&&sample.Timestamp<=DateTimeOffset.UtcNow&&DateTimeOffset.UtcNow-sample.Timestamp<=VictusFanControl.Safety.SafetyGate.MaximumTelemetryAge;
-        return ProductCurveMarkers.BuildUnified(Profile.Fan,live,active?State.AppliedAutomaticConfiguration:null,active?sample:null,active?State.FanLevel:null);
+        return ProductCurveMarkers.BuildUnified(Profile.Fan,live,active?State.AppliedAutomaticConfiguration:null,active?sample:null,active?State.FanLevel:null,
+            active?State.AutomaticDecision?.UnifiedDemand:null,active?State.AutomaticDecision?.CpuThermalDemand:null);
     }
     private void DrawCurve(Graphics g,RectangleF plot,bool editable,IReadOnlyList<ProductDemandMarker>? simulated=null)
     {
@@ -418,6 +419,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         var applied=markers.FirstOrDefault(m=>m.IsApplied);var preview=markers.FirstOrDefault(m=>!m.IsApplied);
         DrawText(g,(simulated is not null?"● Simulado":applied is null?"● Solicitud: —":$"● Solicitud: {applied.Level:0}")+" · ○ Objetivo"+(preview is null?"":$" {preview.Input:0.0} %")+(preview?.Observation.ThermalProtection==true?" · Protección térmica":""),plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
         DrawText(g,"Demanda (%)",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300,height:26);DrawText(g,"Nivel común · 10–50",plot.Left,plot.Top-41,19,Muted,275);
+        if(editable&&applied is not null&&State.AutomaticDecision?.CpuThermalDemand is {SpikeSuppressed:true} filtered)
+            DrawText(g,$"Filtro de pico CPU: {filtered.RawControlC:0} → {filtered.ControlC:0} °C · confirma 2 s",plot.Left,plot.Bottom+83,16,Yellow,plot.Width);
         if(editable){DrawText(g,"● Curva editable",plot.Left+275,plot.Top-41,16,Accent,170);DrawText(g,"┄ Preset inicial",plot.Left+449,plot.Top-41,16,Muted,185);}
     }
     private void TelemetryPage(Graphics g)
@@ -436,7 +439,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,157,1337,666));DrawText(g,"Reglas de seguridad",332,177,30,null,1250,true);
         DrawText(g,"Protecciones del backend · solo lectura",332,225,23,Muted,1240);
         string[] titles=["Respuesta térmica de demanda","SafetyGate independiente","Límites reales de ventiladores","Telemetría fresca y completa","Guardian y recuperación"];
-        string[] details=["La temperatura cruda activa la respuesta térmica, aunque el filtro o las influencias indiquen menos.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >82 °C interrumpe.","Manual WMI y Automático: 10–50. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recuperar CPU/GPU guarda respaldos y libera la sesión; no activa Automático."];
+        string[] details=["CPU habitual: confirma subidas 2 s; ≥99 °C responde de inmediato. Sensores y protecciones conservan lecturas reales.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >82 °C interrumpe.","Manual WMI y Automático: 10–50. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recuperar CPU/GPU guarda respaldos y libera la sesión; no activa Automático."];
         for(int i=0;i<5;i++){var r=new RectangleF(331,282+i*103,1293,87);Card(g,r);Icon(g,i==4?"profiles":"fan",r.X+24,r.Y+24,37);DrawText(g,titles[i],r.X+99,r.Y+12,23,null,1100,true);DrawText(g,details[i],r.X+99,r.Y+47,19,Muted,1100);}
     }
     private void Monitoring(Graphics g)

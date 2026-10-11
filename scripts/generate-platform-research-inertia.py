@@ -2,7 +2,7 @@
 """Generate the research adapter from pinned production inertia with a reviewed shared product entry."""
 import argparse, hashlib, pathlib, re
 
-EXPECTED_SOURCE_SHA256 = '3bbd2426fc4c23f46ef8b0db80c057de94e8296c72cfad0d83e55ec51abe03fe'
+EXPECTED_SOURCE_SHA256 = 'b25b39786fde51d01dc8aaa99cae668ce6c26dafe5fe8d84a541e7d8d3c7dbff'
 
 def generate(source, output):
     text = source.read_text(encoding='utf-8-sig').replace('\r\n', '\n')

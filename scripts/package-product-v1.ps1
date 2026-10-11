@@ -19,12 +19,12 @@ try {
     Copy-Item -LiteralPath (Join-Path $prior 'app/modules') -Destination (Join-Path $OutputDirectory 'app/modules') -Recurse
     Copy-Item -LiteralPath (Join-Path $prior 'watchdog/modules') -Destination (Join-Path $OutputDirectory 'watchdog/modules') -Recurse
     foreach($file in Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File -Filter 'VictusFanControl*.dll') {
-        if([Diagnostics.FileVersionInfo]::GetVersionInfo($file.FullName).FileVersion -ne '1.1.7.0'){throw "Version mismatch: $($file.Name)"}
+        if([Diagnostics.FileVersionInfo]::GetVersionInfo($file.FullName).FileVersion -ne '1.1.8.0'){throw "Version mismatch: $($file.Name)"}
     }
     foreach($file in @('Start-ProductGui.ps1','Start-PlatformThermalTest.ps1','Install-VictusFanControl.ps1')) {
         Copy-Item -LiteralPath (Join-Path $repo ('release/'+$file)) -Destination $OutputDirectory
     }
-    foreach($file in @('PRODUCT_V1.md','PRODUCT_1_1_6_CHANGES.md','PRODUCT_1_1_7_DISPLAY.md','PRODUCT_PLATFORM_RETENTION_2026-10-09.md','PERFORMANCE_GUI_RECOVERY.md','PLATFORM_PHYSICAL_TEST_2026-10-08.md')) {
+    foreach($file in @('PRODUCT_V1.md','PRODUCT_1_1_6_CHANGES.md','PRODUCT_1_1_7_DISPLAY.md','PRODUCT_1_1_8_CPU_SPIKES.md','PRODUCT_PLATFORM_RETENTION_2026-10-09.md','PERFORMANCE_GUI_RECOVERY.md','PLATFORM_PHYSICAL_TEST_2026-10-08.md')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
     foreach($file in @('LICENSE','THIRD_PARTY_NOTICES.md')){Copy-Item -LiteralPath (Join-Path $repo $file) -Destination $OutputDirectory}
@@ -40,7 +40,7 @@ try {
         [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
     })
     [ordered]@{
-        schemaVersion=1;kind='VictusFanControl.ProductGuiRelease';version='1.1.7';appDirectory='app';sourceHead=$SourceHead
+        schemaVersion=1;kind='VictusFanControl.ProductGuiRelease';version='1.1.8';appDirectory='app';sourceHead=$SourceHead
         inheritedModulesZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
         releaseStage='target-specific-release';finalReleaseReady=$true;normalAutomatic='authorized-exact-target';physicalGuiValidation='partial-pending-current-target-observations'
         productPlatformRetention='optional-disabled-default-AC-Battery-plus2-60s-fresh3s';platformThermalExperiment='explicit-physical-AC-ABBA-2580s-TZ01-DTT3-retention'

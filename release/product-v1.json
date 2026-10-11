@@ -25,7 +25,8 @@
     "configurable-protections-and-clean-unattended-resumption-on-current-target",
     "current-target-product-10s-rpm-5s-critical-grace-and-recovery-under-load",
     "4k-200-percent-windowed-and-per-monitor-dpi-transition",
-    "game-resolution-4k-to-1440p-and-return-with-unchanged-200-percent-dpi"
+    "game-resolution-4k-to-1440p-and-return-with-unchanged-200-percent-dpi",
+    "cpu-spike-filter-2s-fresh-continuity-extreme-bypass-and-actual-cooling"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -39,7 +40,8 @@
     "Source-independent TZ01/DTT3 retention requires a target observation in Battery and during AC/Battery handoff; software checks do not prove battery cooling, runtime or acoustics.",
     "Same-GUI explicit Automatic retry has software fixtures; current-target hardware retry has not yet been observed.",
     "Configurable software handoffs and unattended resumption have software fixtures only; firmware thermal throttling, sensor integrity and unknown native-call exclusion are unchanged.",
-    "New telemetry grace periods have software regression coverage only; physical thermal and WMI latency behavior still requires observation on the target."
+    "New telemetry grace periods have software regression coverage only; physical thermal and WMI latency behavior still requires observation on the target.",
+    "CPU spike suppression is verified in software fixtures; its actual cooling and acoustic effect still requires observation on the target."
   ],
   "offlinePolicyEvidence": [
     "product-fan-stability-replay-8c40-2026-10-06.json",
@@ -54,7 +56,7 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.1.7",
+  "version": "1.1.8",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -85,5 +87,14 @@
     "gpuPowerStillContributesToDemand": true
   },
   "automaticAdmissionDiagnostics": "exact-snapshot-and-evaluation-instant-specific-codes-startup-progress-wait-log-every-10s",
-  "windowDisplayContract": "preferred-normal-size-current-resolution-and-dpi-recompute-no-cumulative-scaling-work-area-fit-hidden-minimized-maximized"
+  "windowDisplayContract": "preferred-normal-size-current-resolution-and-dpi-recompute-no-cumulative-scaling-work-area-fit-hidden-minimized-maximized",
+  "cpuSpikeDemandFilter": {
+    "scope": "habitual-exact-target-automatic-and-product-simulator",
+    "confirmationMilliseconds": 2000,
+    "immediateRawCpuC": 99,
+    "aggregation": "minimum-in-continuous-window-retain-preceding-acquisition",
+    "retainedCpuPolicy": "break-confirmation-hold-accepted-demand-until-fresh-recovery",
+    "rawTelemetryAndSafetyUnchanged": true,
+    "gpuPowerLoadUnchanged": true
+  }
 }

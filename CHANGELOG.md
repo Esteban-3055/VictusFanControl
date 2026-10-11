@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.8
+
+- Filter brief CPU temperature rises for two seconds in habitual exact-target Automatic and its simulator; preserve immediate raw ≥99 °C response and all raw safety/handoff thresholds. Retained CPU acquisitions cannot confirm heat. Keep GPU, power and load contributions unchanged.
+- Expose raw versus filtered CPU demand in decisions/diagnostics and match accepted curve markers to the filtered demand. Preserve profiles and the v1.1.7 display fix.
+- Add deterministic spike, continuity, ACK, cooling-hold and marker regression checks. Physical cooling and acoustics remain pending.
+
 ## Unreleased
 
 - Allow optional TZ01/DTT3 retention to start on Battery and continue through AC/Battery profile changes without resetting its episode. Preserve its two-level/60-second bounds, fresh sensor admission, coupled CPU/GPU handoff and thermal/watchdog protections. Battery behavior remains pending a target observation.

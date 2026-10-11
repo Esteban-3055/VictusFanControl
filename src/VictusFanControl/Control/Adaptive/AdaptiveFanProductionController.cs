@@ -38,6 +38,7 @@ public sealed record AdaptiveFanProductionResult(
     public bool? SustainedLoadCooling { get; init; }
     public double? ObservedLoadSeconds { get; init; }
     public UnifiedDemandObservation? UnifiedDemand { get; init; }
+    public CpuThermalDemandObservation? CpuThermalDemand { get; init; }
 }
 
 /// <summary>
@@ -123,7 +124,7 @@ public sealed class AdaptiveFanProductionController
                 _automaticConfiguration?.BuildPolicy() ?? config, _automaticMinimumLevel);
             _preparedEngine = new AdaptiveFanInertiaPolicy(
                 preparedPolicy with { MaximumSampleGap=TimeSpan.FromSeconds(_productTelemetryTolerance?5:3) },
-                _automaticConfiguration?.Tuning);
+                _automaticConfiguration?.Tuning, cpuSpikeFilterEnabled: _productTelemetryTolerance);
         }
         _qualificationSession = qualificationSession;
         _manualExecutionAuthorized = manualExecutionAuthorized;
@@ -534,7 +535,7 @@ public sealed class AdaptiveFanProductionController
         // review may select the already-characterized 10..50 backend envelope.
         var engine = new AdaptiveFanInertiaPolicy(
             Hp8C40AutomaticPolicy.Create(copy.BuildPolicy(),_automaticMinimumLevel) with { MaximumSampleGap=TimeSpan.FromSeconds(_productTelemetryTolerance?5:3) },
-            copy.Tuning);
+            copy.Tuning, cpuSpikeFilterEnabled: _productTelemetryTolerance);
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -883,7 +884,8 @@ public sealed class AdaptiveFanProductionController
                 ThermalOverride = preparedDecision?.ThermalOverride ?? false,
                 SustainedLoadCooling = preparedDecision?.SustainedLoadCooling,
                 ObservedLoadSeconds = preparedDecision?.ObservedLoadSeconds,
-                UnifiedDemand = preparedDecision?.UnifiedDemand ?? decision.UnifiedDemand
+                UnifiedDemand = preparedDecision?.UnifiedDemand ?? decision.UnifiedDemand,
+                CpuThermalDemand = preparedDecision?.CpuThermalDemand
             };
             Volatile.Write(ref _lastAutomaticResult, result);
             return result;
@@ -989,7 +991,11 @@ public sealed class AdaptiveFanProductionController
             snapshot.CpuLoadPercent ?? 100,
             snapshot.GpuTemperatureC.Value,
             snapshot.GpuPowerW.Value,
-            snapshot.GpuLoadPercent ?? 100) { CpuRawControlTemperatureC = _useRawCpuThermalResponse || _automaticConfiguration?.UnifiedDemand is not null ? snapshot.CpuControlTemperatureC : null };
+            snapshot.GpuLoadPercent ?? 100)
+        {
+            CpuRawControlTemperatureC = _useRawCpuThermalResponse || _automaticConfiguration?.UnifiedDemand is not null ? snapshot.CpuControlTemperatureC : null,
+            CpuThermalRetained = snapshot.CpuThermalSampledAtUtc is { } acquired && acquired != snapshot.Timestamp
+        };
 
         failure = string.Empty;
         return true;

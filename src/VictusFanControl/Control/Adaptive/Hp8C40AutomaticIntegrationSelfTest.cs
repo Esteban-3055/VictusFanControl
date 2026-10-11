@@ -570,6 +570,37 @@ internal static class Hp8C40AutomaticIntegrationSelfTest
             var released=await controller.ProcessAutomaticAsync(expired,Raw(expired),CancellationToken.None);
             Check(released.Action==AdaptiveFanProductionActionKind.RestoreFirmware&&tolerantBackend.Restores==1,"expired critical telemetry restores Firmware");
         }
+        clock=0;
+        var spikeBackend=new Backend();
+        await using(var coordinator=new FanControlCoordinator(spikeBackend))
+        {
+            var fan=VictusFanControl.Product.ProductProfiles.DefaultProfile(VictusFanControl.Product.ProductPowerProfile.Ac).Fan;
+            var controller=new AdaptiveFanProductionController(coordinator,Hp8C40AdaptiveCandidateV1.Create(),true,true,
+                automaticHardware:Hardware,automaticMilliseconds:()=>clock,utcNow:Now,automaticConfiguration:fan,
+                automaticMinimumLevel:10,useRawCpuThermalResponse:true,productTelemetryTolerance:true);
+            await controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,default);
+            var sample=Sample(Now());
+            var cold=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            clock=1000;sample=Sample(Now(),91);
+            var spike=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(spike.CpuThermalDemand is{SpikeSuppressed:true,RawControlC:91,ControlC:45}&&
+                !spike.ThermalOverride&&spike.UnifiedDemand!.Percent<100&&spike.EqualFanLevel==cold.EqualFanLevel&&spikeBackend.Levels.Count==1,
+                "habitual controller discards a brief raw CPU spike before demand and native actuation");
+            clock=2000;sample=Sample(Now());await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            AdaptiveFanProductionResult? sustained=null;
+            for(var t=3;t<=5;t++)
+            {
+                clock=t*1000;sample=Sample(Now(),91);
+                sustained=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            }
+            Check(sustained is{ThermalOverride:true}&&sustained.UnifiedDemand!.Percent==100&&
+                sustained.EqualFanLevel==cold.EqualFanLevel+4&&spikeBackend.Levels.Count==2,
+                "habitual controller confirms sustained CPU heat at 2s and preserves protected native rise");
+            clock=6000;sample=Sample(Now(),99);
+            var released=await controller.ProcessAutomaticAsync(sample,Raw(sample),default);
+            Check(released.Action==AdaptiveFanProductionActionKind.RestoreFirmware&&spikeBackend.Restores==1&&spikeBackend.Levels.Count==2,
+                "raw 99C handoff runs before filtered demand and issues no extra fan write");
+        }
         return failures;
     }
 

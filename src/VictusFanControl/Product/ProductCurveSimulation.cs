@@ -26,7 +26,7 @@ public sealed class ProductCurveSimulation
     public ProductCurveSimulation(FanConfiguration configuration)
     {
         var copy=FanConfigurationStore.Copy(configuration);
-        _engine=new(copy.BuildPolicy(),copy.Tuning);
+        _engine=new(copy.BuildPolicy(),copy.Tuning,cpuSpikeFilterEnabled:true);
     }
     public void Advance(ProductSimulationInputs inputs,int seconds)
     {

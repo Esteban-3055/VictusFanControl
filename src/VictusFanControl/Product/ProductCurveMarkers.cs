@@ -9,19 +9,24 @@ public sealed record ProductDemandMarker(double Input,double Level,bool IsApplie
 
 public static class ProductCurveMarkers
 {
-    public static UnifiedDemandObservation? Demand(FanConfiguration configuration,TelemetrySnapshot snapshot)
+    public static UnifiedDemandObservation? Demand(FanConfiguration configuration,TelemetrySnapshot snapshot,CpuThermalDemandObservation? cpuFilter=null)
     {
         if(configuration.UnifiedDemand is null||CpuDemandTemperature.Select(snapshot,configuration.Tuning.CpuTemperatureSource,configuration.Tuning.HottestPerformanceCoreCount) is not { } cpu||
             snapshot.CpuPackagePowerW is not { } cpuW||(snapshot.CpuLoadPercent ?? (snapshot.ProductTelemetryTolerance ? 100 : (double?)null)) is not { } cpuLoad||snapshot.GpuTemperatureC is not { } gpu||snapshot.GpuPowerW is not { } gpuW||(snapshot.GpuLoadPercent ?? (snapshot.ProductTelemetryTolerance ? 100 : (double?)null)) is not { } gpuLoad||snapshot.CpuControlTemperatureC is not { } rawCpu)return null;
         var input=new AdaptiveFanPolicyInput(snapshot.Timestamp,cpu,cpuW,cpuLoad,gpu,gpuW,gpuLoad){CpuRawControlTemperatureC=rawCpu};
         if(!AdaptiveFanPolicyEngine.ValidateInput(input,out _))return null;
+        if(cpuFilter?.Timestamp==snapshot.Timestamp)
+            input=input with{CpuEffectiveTemperatureC=cpuFilter.DemandC,CpuRawControlTemperatureC=cpuFilter.ControlC};
         return configuration.UnifiedDemand.Evaluate(input);
     }
-    public static IReadOnlyList<ProductDemandMarker> BuildUnified(FanConfiguration draft,TelemetrySnapshot? live,FanConfiguration? applied,TelemetrySnapshot? decisionSnapshot,int? requestedLevel)
+    public static IReadOnlyList<ProductDemandMarker> BuildUnified(FanConfiguration draft,TelemetrySnapshot? live,FanConfiguration? applied,TelemetrySnapshot? decisionSnapshot,int? requestedLevel,
+        UnifiedDemandObservation? acceptedObservation=null,CpuThermalDemandObservation? cpuFilter=null)
     {
         var markers=new List<ProductDemandMarker>();
-        if(live is not null&&Demand(draft,live) is { } preview)markers.Add(new(preview.Percent,preview.Level,false,preview));
-        if(applied is not null&&decisionSnapshot is not null&&requestedLevel is >=10 and <=50&&Demand(applied,decisionSnapshot) is { } accepted)
+        var sameSource=applied is not null&&draft.Tuning.CpuTemperatureSource==applied.Tuning.CpuTemperatureSource&&draft.Tuning.HottestPerformanceCoreCount==applied.Tuning.HottestPerformanceCoreCount;
+        if(live is not null&&Demand(draft,live,sameSource?cpuFilter:null) is { } preview)markers.Add(new(preview.Percent,preview.Level,false,preview));
+        if(applied is not null&&decisionSnapshot is not null&&requestedLevel is >=10 and <=50&&
+            (acceptedObservation??Demand(applied,decisionSnapshot,cpuFilter)) is { } accepted)
             markers.Add(new(accepted.Percent,requestedLevel.Value,true,accepted));
         return markers;
     }

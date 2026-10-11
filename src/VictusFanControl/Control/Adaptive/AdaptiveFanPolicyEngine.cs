@@ -34,6 +34,7 @@ public sealed record AdaptiveFanPolicyInput(
     // Demand aggregation is independent of the raw hottest/package guard.
     // Legacy callers without per-core telemetry retain their original input.
     public double? CpuRawControlTemperatureC { get; init; }
+    public bool CpuThermalRetained { get; init; }
 }
 
 public sealed record AdaptiveFanPolicyDecision(

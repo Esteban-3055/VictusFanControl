@@ -139,6 +139,14 @@ internal static class ProductProfilesSelfTest
         if(fallback is null||expectedFallback is null||fallback.Percent!=expectedFallback.Percent||fallback.Level!=expectedFallback.Level||
             ProductCurveMarkers.Demand(original.Ac.Fan,missingLoad with{ProductTelemetryTolerance=false}) is not null||missingLoad.CpuLoadPercent is not null)
             throw new InvalidOperationException("Product marker diverged from the conservative missing-load policy or invented observed utilization.");
+        var spikeFilter=new CpuThermalDemandObservation(sample.Timestamp,70,90,50,50,true,false);
+        var filteredDemand=ProductCurveMarkers.Demand(original.Ac.Fan,sample,spikeFilter)!;
+        var filteredMarkers=ProductCurveMarkers.BuildUnified(original.Ac.Fan,sample,original.Ac.Fan,sample,31,filteredDemand,spikeFilter);
+        if(filteredDemand.Percent>=100||filteredMarkers.Count!=2||filteredMarkers.Any(m=>m.Input!=filteredDemand.Percent)||
+            filteredMarkers.Single(m=>m.IsApplied).Level!=31||
+            ProductCurveMarkers.Demand(original.Ac.Fan,sample,spikeFilter with{Timestamp=sample.Timestamp.AddSeconds(-1)})!.Percent!=100||
+            ProductCurveMarkers.BuildUnified(liveDraft,sample,original.Ac.Fan,sample,31,filteredDemand,spikeFilter).Single(m=>!m.IsApplied).Input!=100)
+            throw new InvalidOperationException("CPU filter marker lost accepted demand or contaminated a stale epoch/different draft source.");
         var expandedProfiles=original with{Ac=original.Ac with{GpuMaximumMHz=2500},Battery=original.Battery with{GpuMaximumMHz=210}};
         var expandedRoundtrip=ProductProfilesStore.Parse(ProductProfilesStore.Serialize(expandedProfiles));
         if(expandedRoundtrip.Ac.GpuMaximumMHz!=2500||expandedRoundtrip.Battery.GpuMaximumMHz!=210||original.Ac.GpuMaximumMHz!=1850||original.Battery.GpuMaximumMHz!=1200)
@@ -181,7 +189,7 @@ internal static class ProductProfilesSelfTest
         if(lowSimulation.Current?.EqualFanLevel!=10||low.Ac.Fan.BuildPolicy().CpuTemperatureCurve[0].Level!=10||Hp8C40AutomaticPolicy.Create(low.Ac.Fan.BuildPolicy()).MinimumLevel!=30)throw new InvalidOperationException("Offline 10-level curve lost range or changed production envelope.");
         var legacy=ProductProfilesStore.Parse(ProductProfilesStore.Serialize(original with { Ac=original.Ac with { Fan=original.Ac.Fan with { Tuning=original.Ac.Fan.Tuning with { MinimumLevel=30 } } } }));
         if(legacy.Ac.Fan.Tuning.MinimumLevel!=10||AdaptiveCurveProfiles.Validate(legacy.Ac.Fan.Profile).CpuTemperatureCurve[0].Level!=AdaptiveCurveProfiles.Validate(original.Ac.Fan.Profile).CpuTemperatureCurve[0].Level)throw new InvalidOperationException("Legacy editor range migration lost stored curve.");
-        var fan=original.Ac.Fan;var simulator=new ProductCurveSimulation(fan);var reference=new AdaptiveFanInertiaPolicy(fan.BuildPolicy(),fan.Tuning);
+        var fan=original.Ac.Fan;var simulator=new ProductCurveSimulation(fan);var reference=new AdaptiveFanInertiaPolicy(fan.BuildPolicy(),fan.Tuning,cpuSpikeFilterEnabled:true);
         var unchanged=ProductProfilesStore.Serialize(original);var elapsed=0;
         foreach(var phase in new[]{(new ProductSimulationInputs(),1),(new ProductSimulationInputs(80,70,40,110,100,100),1201),(new ProductSimulationInputs(),180),(new ProductSimulationInputs(90,80,60,130,100,100),10)})
         {

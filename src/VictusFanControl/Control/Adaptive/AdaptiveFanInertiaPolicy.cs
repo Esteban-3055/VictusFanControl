@@ -19,6 +19,7 @@ public sealed record AdaptiveFanInertiaDecision(
     public bool SustainedLoadCooling { get; init; }
     public double ObservedLoadSeconds { get; init; }
     public UnifiedDemandObservation? UnifiedDemand { get; init; }
+    public CpuThermalDemandObservation? CpuThermalDemand { get; init; }
 }
 
 /// <summary>
@@ -39,9 +40,11 @@ public class AdaptiveFanInertiaPolicy
     private DateTimeOffset? _decreaseSince;
     private DateTimeOffset? _lastThermalResponse;
     private double _normalFloor;
+    private readonly CpuThermalDemandFilter? _cpuSpikeFilter;
 
-    public AdaptiveFanInertiaPolicy(AdaptiveFanPolicyConfig config, AdaptiveFanTuning? tuning = null)
+    public AdaptiveFanInertiaPolicy(AdaptiveFanPolicyConfig config, AdaptiveFanTuning? tuning = null, bool cpuSpikeFilterEnabled = false)
     {
+        _cpuSpikeFilter = cpuSpikeFilterEnabled ? new() : null;
         tuning?.Validate();
         _tuning = tuning;
         _finalFilter = new(tuning);
@@ -62,6 +65,11 @@ public class AdaptiveFanInertiaPolicy
 
     internal AdaptiveFanInertiaDecision EvaluateWithSupplement(AdaptiveFanPolicyInput input, Func<double, double?>? supplementalDemand, bool retentionOnly = false)
     {
+        if (_cpuSpikeFilter is not null && !_cpuSpikeFilter.TryApply(input, _config.MaximumSampleGap, out input, out var filterFailure))
+        {
+            ClearConfirmation(); _finalFilter.Reset(); _loadHistory.BreakContinuity();
+            return new(false, null, null, null, null, false, filterFailure);
+        }
         // Validate ORIGINAL input and continuity before smoothing. A filter
         // must not turn invalid raw sensors into an accepted policy decision.
         var demand = _demand.Evaluate(input, null, supplementalDemand);
@@ -70,6 +78,7 @@ public class AdaptiveFanInertiaPolicy
             ClearConfirmation();
             _finalFilter.Reset();
             _loadHistory.BreakContinuity();
+            _cpuSpikeFilter?.Reset();
             return new(false, null, demand.RawDemandLevel, null, null, false, demand.Detail);
         }
 
@@ -101,7 +110,8 @@ public class AdaptiveFanInertiaPolicy
             requested=Math.Min(requested,retainedCurrent);
         AdaptiveFanInertiaDecision Accepted(string detail) =>
             new(true, _current, demand.RawDemandLevel, smoothed, actuationDemand, thermalOverride, detail)
-            { SustainedLoadCooling = _loadHistory.SustainedLoadCooling, ObservedLoadSeconds = _loadHistory.ObservedLoadSeconds, UnifiedDemand=demand.UnifiedDemand };
+            { SustainedLoadCooling = _loadHistory.SustainedLoadCooling, ObservedLoadSeconds = _loadHistory.ObservedLoadSeconds, UnifiedDemand=demand.UnifiedDemand,
+                CpuThermalDemand = _cpuSpikeFilter?.Observation };
         if (!_current.HasValue)
         {
             _current = requested;
@@ -191,6 +201,8 @@ public class AdaptiveFanInertiaPolicy
             tuning.GpuLoadPowerThresholdW != _tuning.GpuLoadPowerThresholdW)
             _loadHistory.Reset();
         _finalFilter.UpdateTuning(tuning);
+        if (tuning.CpuTemperatureSource != _tuning.CpuTemperatureSource || tuning.HottestPerformanceCoreCount != _tuning.HottestPerformanceCoreCount)
+            _cpuSpikeFilter?.Reset();
         _tuning = tuning;
         ClearConfirmation();
     }
@@ -203,6 +215,8 @@ public class AdaptiveFanInertiaPolicy
             failure = "Actuation observation requires an existing policy target.";
             return false;
         }
+        if (_cpuSpikeFilter is not null && !_cpuSpikeFilter.TryApply(input, _config.MaximumSampleGap, out input, out failure))
+            return false;
         var demand = _demand.Evaluate(input);
         if (!demand.Accepted || !demand.RawDemandLevel.HasValue)
         {
@@ -238,6 +252,7 @@ public class AdaptiveFanInertiaPolicy
         _demand.Reset();
         _finalFilter.Reset();
         _loadHistory.Reset();
+        _cpuSpikeFilter?.Reset();
         _current = null;
         _lastThermalResponse = null;
         ClearConfirmation();

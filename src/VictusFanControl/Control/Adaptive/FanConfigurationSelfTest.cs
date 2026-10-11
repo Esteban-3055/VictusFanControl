@@ -7,7 +7,7 @@ internal static class FanConfigurationSelfTest
 {
     internal static int Run(TextWriter output)
     {
-        var failures = 0;
+        var failures = CpuThermalDemandFilterSelfTest.Run(output);
         void Check(string name, Action test)
         {
             try { test(); output.WriteLine("PASS: fan settings — " + name); }

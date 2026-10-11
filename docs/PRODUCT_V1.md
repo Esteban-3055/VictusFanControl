@@ -65,3 +65,5 @@ Validación software: inventario compartido; casos de liberación/rechazo, marca
 Desde v1.1.6, la espera o el rechazo de Automático muestra la causa concreta y registra la misma muestra e instante de evaluación. Al iniciar, también se muestra el progreso de las tres adquisiciones nuevas. [Cambios y pruebas](PRODUCT_1_1_6_CHANGES.md).
 
 Desde v1.1.7 estable, la ventana responde al cambiar resolución, DPI o área de trabajo y recupera su tamaño normal al volver al escritorio. El diagnóstico incluye los datos de pantalla y ventana. [Ajuste y verificación](PRODUCT_1_1_7_DISPLAY.md).
+
+Desde v1.1.8, Automático habitual confirma las subidas CPU durante dos segundos antes de incorporarlas a la demanda y a la espera de descenso. ≥99 °C responde de inmediato; los sensores y las protecciones conservan las temperaturas crudas. Potencia, carga y temperatura GPU siguen influyendo. [Filtro y verificación](PRODUCT_1_1_8_CPU_SPIKES.md).
