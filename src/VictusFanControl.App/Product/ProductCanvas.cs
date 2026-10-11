@@ -417,10 +417,9 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             if(marker.IsApplied){using var fill=new SolidBrush(Green);g.FillEllipse(fill,point.X-5,point.Y-5,10,10);}
         }
         var applied=markers.FirstOrDefault(m=>m.IsApplied);var preview=markers.FirstOrDefault(m=>!m.IsApplied);
-        DrawText(g,(simulated is not null?"● Simulado":applied is null?"● Solicitud: —":$"● Solicitud: {applied.Level:0}")+" · ○ Objetivo"+(preview is null?"":$" {preview.Input:0.0} %")+(preview?.Observation.ThermalProtection==true?" · Protección térmica":""),plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
+        var cpuSpike=editable&&applied is not null&&State.AutomaticDecision?.CpuThermalDemand is {SpikeSuppressed:true};
+        DrawText(g,(simulated is not null?"● Simulado":applied is null?"● Solicitud: —":$"● Solicitud: {applied.Level:0}")+" · ○ Objetivo"+(preview is null?"":$" {preview.Input:0.0} %")+(preview?.Observation.ThermalProtection==true?" · Protección térmica":cpuSpike?" · Filtro CPU":""),plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
         DrawText(g,"Demanda (%)",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300,height:26);DrawText(g,"Nivel común · 10–50",plot.Left,plot.Top-41,19,Muted,275);
-        if(editable&&applied is not null&&State.AutomaticDecision?.CpuThermalDemand is {SpikeSuppressed:true} filtered)
-            DrawText(g,$"Filtro de pico CPU: {filtered.RawControlC:0} → {filtered.ControlC:0} °C · confirma 2 s",plot.Left,plot.Bottom+83,16,Yellow,plot.Width);
         if(editable){DrawText(g,"● Curva editable",plot.Left+275,plot.Top-41,16,Accent,170);DrawText(g,"┄ Preset inicial",plot.Left+449,plot.Top-41,16,Muted,185);}
     }
     private void TelemetryPage(Graphics g)
