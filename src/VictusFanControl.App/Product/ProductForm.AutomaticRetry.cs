@@ -69,13 +69,14 @@ internal sealed partial class ProductForm
         }
         catch(Exception ex)
         {
-            _automaticResumption.Cancel();
             DetachRuntime();
             // If construction/start failed, release any new instance before leaving it unusable.
             try{await ShutdownRuntimeAsync();}catch(Exception release){AppLog.Write("Automatic retry cleanup unresolved: "+release);}
             var failedState=_runtime?.State??before;
+            var pending = _isolatedRuntime ? failedState.PerformanceRecovery : await Task.Run(() => PerformanceRecoveryPreview.Read());
+            if (!unattended || pending?.Pending != true) _automaticResumption.Cancel();
             _runtime=null;_canvas.AutomaticRetryAvailable=false;_startupAutomatic?.Cancel("Reintento no completado.");
-            _canvas.State=failedState with{LifecycleBlocked=true,Runtime="Failed",Failure="No se pudo preparar Automático: "+ex.Message,CanApplyPerformance=false,AutomaticPreparing=false};
+            _canvas.State=failedState with{LifecycleBlocked=true,Runtime="Failed",Failure="No se pudo preparar Automático: "+ex.Message,PerformanceRecovery=pending,CanApplyPerformance=false,AutomaticPreparing=false};
             _canvas.Notice=_canvas.State.Failure!+" Conserva los registros de recuperación y usa Salir desde la bandeja.";
             UpdateTray(_canvas.State);
             AppLog.Write("PRODUCT MANUAL AUTOMATIC RETRY BLOCKED: "+ex);
@@ -83,7 +84,7 @@ internal sealed partial class ProductForm
         finally
         {
             _restarting=false;_automaticRetryTask=null;_canvas.Busy=_pendingCommands>0;
-            if(!IsDisposed){TryStartupAutomatic();_canvas.Invalidate();}
+            if(!IsDisposed){if(!_closing)_presentationTimer.Start();TryStartupAutomatic();_canvas.Invalidate();}
         }
     }
 }

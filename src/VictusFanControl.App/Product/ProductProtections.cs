@@ -8,6 +8,7 @@ internal sealed class ProductAutomaticResumption
     private bool _wanted, _suppressed;
     private long? _interruptedAt, _healthyAt;
     private int _attempts;
+    internal bool Wanted => _wanted && !_suppressed;
     internal void Cancel() { _suppressed=true; _wanted=false; _interruptedAt=null; _healthyAt=null; _attempts=0; }
     internal void Arm() { Cancel(); _suppressed=false; }
     internal void Observe(ProductRuntimeState state, long now)

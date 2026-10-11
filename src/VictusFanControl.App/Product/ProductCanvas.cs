@@ -486,7 +486,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Button(g,"startup-toggle",StartupEnabled?"✓  Iniciar con Windows":"○  Iniciar con Windows",new(334,241,590,55),StartupEnabled,StartupKnown);
         Button(g,"minimized-toggle",Profiles.StartMinimized?"✓  Minimizar al iniciar":"○  Minimizar al iniciar",new(956,241,665,55),Profiles.StartMinimized);
         Button(g,"automatic-start-toggle",Profiles.ActivateAutomaticOnStart?"✓  Activar Automático al iniciar":"○  Activar Automático al iniciar",new(334,310,590,43),Profiles.ActivateAutomaticOnStart);
-        DrawText(g,"Guardar conserva la opción. Espera sensores válidos y aplica CPU/GPU antes de controlar.",956,309,19,Muted,665,height:62);
+        Button(g,"recovery-auto-toggle",Profiles.RecoverSessionsAutomatically?"✓  Recuperar sesiones automáticamente":"○  Recuperación automática desactivada",new(956,310,665,43),Profiles.RecoverSessionsAutomatically);
         Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);Button(g,"updates-page","Ir a Actualizaciones",new(334,480,475,48));
         Button(g,"discard","Descartar cambios",new(846,478,310,68),false,Dirty);
         Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,551,18,Dirty?Yellow:Green,475);

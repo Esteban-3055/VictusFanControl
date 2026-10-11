@@ -26,7 +26,8 @@
     "current-target-product-10s-rpm-5s-critical-grace-and-recovery-under-load",
     "4k-200-percent-windowed-and-per-monitor-dpi-transition",
     "game-resolution-4k-to-1440p-and-return-with-unchanged-200-percent-dpi",
-    "cpu-spike-filter-2s-fresh-continuity-extreme-bypass-and-actual-cooling"
+    "cpu-spike-filter-2s-fresh-continuity-extreme-bypass-and-actual-cooling",
+    "background-session-recovery-and-qualified-resumption-on-current-target"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -41,7 +42,8 @@
     "Same-GUI explicit Automatic retry has software fixtures; current-target hardware retry has not yet been observed.",
     "Configurable software handoffs and unattended resumption have software fixtures only; firmware thermal throttling, sensor integrity and unknown native-call exclusion are unchanged.",
     "New telemetry grace periods have software regression coverage only; physical thermal and WMI latency behavior still requires observation on the target.",
-    "CPU spike suppression is verified in software fixtures; its actual cooling and acoustic effect still requires observation on the target."
+    "CPU spike suppression is verified in software fixtures; its actual cooling and acoustic effect still requires observation on the target.",
+    "Background session recovery and cancellation are verified with zero-hardware Windows fixtures; the current-target hardware recovery remains to be observed."
   ],
   "offlinePolicyEvidence": [
     "product-fan-stability-replay-8c40-2026-10-06.json",
@@ -56,7 +58,7 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.1.8",
+  "version": "1.1.9",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -96,5 +98,16 @@
     "retainedCpuPolicy": "break-confirmation-hold-accepted-demand-until-fresh-recovery",
     "rawTelemetryAndSafetyUnchanged": true,
     "gpuPowerLoadUnchanged": true
+  },
+  "automaticSessionRecovery": {
+    "defaultEnabled": true,
+    "stableInventoryMilliseconds": 10000,
+    "oneAttemptPerInventory": true,
+    "maximumEpisodesBeforeHealthyReset": 3,
+    "healthyAutomaticResetMilliseconds": 60000,
+    "resume": "previous-applied-profile-or-saved-startup-intent-three-new-observations",
+    "userFirmwareCancelsResume": true,
+    "scope": "running-gui-including-startup-and-minimized",
+    "nativeUncertaintyPolicy": "retain-existing-recovery-blocks"
   }
 }

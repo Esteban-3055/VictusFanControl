@@ -1,4 +1,10 @@
-# Estado consolidado del producto — v1.0.0, 9 de octubre de 2026
+# Estado del producto — v1.1.9, 11 de octubre de 2026
+
+Destino: **HP 8C40 / 9D0R1LA / BIOS F.18**. La entrega incorpora recuperación automática en segundo plano y diagnósticos CPU/TZ01/DTT3. Las pruebas Windows cubren recuperación, liberación previa, perfiles, lecturas nuevas, cancelación, suspensión, salida y recursos de la GUI. Los 84 escenarios térmicos y la traza de 390 decisiones conservan sus resultados; no se afirma nueva validación física.
+
+El inventario completo de pruebas físicas pendientes y límites sigue en `release/product-v1.json`. La reanudación automática se permite bajo sus preferencias y comprobaciones; las descripciones de ausencia de reentrada que siguen pertenecen a las versiones históricas indicadas. [Guía vigente](PRODUCT_V1.md) · [Notas v1.1.9](../release/RELEASE-NOTES-v1.1.9.md) · [Recuperación](AUTOMATIC_SESSION_RECOVERY.md).
+
+## Estado histórico de v1.0.0 — 9 de octubre de 2026
 
 Destino: **HP 8C40 / 9D0R1LA / BIOS F.18**, i7-13700H y RTX 4060 Laptop.
 v1.0.0 habilita Automático habitual, la nueva curva AC y el inicio con Windows

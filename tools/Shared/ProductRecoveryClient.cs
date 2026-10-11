@@ -12,11 +12,11 @@ internal sealed record ProductRecoverySelection(Guid CpuSession, Guid GpuSession
     internal string Summary => "CPU: " + (CpuSession == Guid.Empty ? "sin registro pendiente" : "restaurar sólo los límites aún propios de la sesión") +
         "\nGPU: " + (GpuSession == Guid.Empty ? "sin registro pendiente" : "solicitar el reset de frecuencias de NVIDIA") +
         (Fans?.Count > 0 ? "\nVentiladores y registros anteriores: " + Fans.Count + ". Liberación a Firmware; no se aplican niveles manuales. Los casos inciertos requieren Reiniciar Windows." : "");
-    internal static ProductRecoverySelection Read(string? directory = null)
+    internal static ProductRecoverySelection Read(string? directory = null, bool ignoreCurrentOwner = false)
     {
         var includeFans = directory is null;
         directory ??= JournalDirectory;
-        return new(ReadId(Path.Combine(directory, "cpu-power-session.json")), ReadId(Path.Combine(directory, "gpu-clock-session.json")), includeFans ? ProductRecoveryInventory.ReadFans() : null);
+        return new(ReadId(Path.Combine(directory, "cpu-power-session.json")), ReadId(Path.Combine(directory, "gpu-clock-session.json")), includeFans ? ProductRecoveryInventory.ReadFans(ignoreCurrentOwner:ignoreCurrentOwner) : null);
     }
     private static Guid ReadId(string path)
     {

@@ -5,7 +5,11 @@ using VictusFanControl.Telemetry;
 namespace VictusFanControl.PlatformThermalReplay;
 
 public sealed record ProductRetentionState(bool Enabled, bool Ready, string Status, Source Tz01, Source Dtt3,
-    double? SourceDemand, double? BaselineDemand, double? SupplementalDemand, double? RemainingSeconds);
+    double? SourceDemand, double? BaselineDemand, double? SupplementalDemand, double? RemainingSeconds)
+{
+    public string ReasonCode { get; init; } = "Disabled";
+    public double ExtraDemand => SupplementalDemand is {} supplement && BaselineDemand is {} baseline ? Math.Max(0, supplement-baseline) : 0;
+}
 
 /// <summary>Power-source-independent experimental retention. Fresh auxiliary sources cannot request a new higher fan level.</summary>
 public sealed class ProductPlatformRetention : IExperimentalFanSupplement
@@ -23,6 +27,7 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
     private double? _baseline, _supplement;
     private bool _enabled;
     private string? _failure;
+    private string _reason = "Disabled";
     private readonly bool _allowAuxiliaryFallback;
     public ProductPlatformRetention(bool allowAuxiliaryFallback = false) => _allowAuxiliaryFallback = allowAuxiliaryFallback;
     public bool Enabled { get { lock(_sync)return _enabled; } }
@@ -35,7 +40,8 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
         get { lock(_sync) return new(_enabled, _qualified?.Available == true && _failure is null,
             !_enabled ? "Desactivada" : _failure ?? (_qualified?.Available == true ? "Cualificada · experimental" : "Cualificando TZ01/DTT3"),
             _frame?.Tz01 ?? new(), _frame?.Dtt3 ?? new(), _qualified?.DemandLevel, _baseline, _supplement,
-            _episodeStart is {} start && _frame is {} frame ? Math.Max(0, MaximumRetentionSeconds-(frame.TimestampUtc-start).TotalSeconds) : null); }
+            _episodeStart is {} start && _frame is {} frame ? Math.Max(0, MaximumRetentionSeconds-(frame.TimestampUtc-start).TotalSeconds) : null)
+            { ReasonCode = _enabled ? _reason : "Disabled" }; }
     }
     // Host calls only in Firmware, before preparing performance or admitting Custom.
     public void Configure(bool enabled)
@@ -83,7 +89,7 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
             if(_allowAuxiliaryFallback)
             {
                 _failure = _qualified.Available ? null : "Retención suspendida: TZ01/DTT3 no vigentes; continúa la curva base.";
-                if (!_qualified.Available) { _supplement=null; }
+                if (!_qualified.Available) { _supplement=null; _reason="AuxiliaryUnavailable"; }
             }
             else if(custom && !_qualified.Available)
                 _failure="TZ01/DTT3 no vigentes; reinicia en Firmware.";
@@ -106,21 +112,23 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
         lock(_sync)
         {
             _baseline=baselineRawDemand; _supplement=null;
+            _reason = !_enabled ? "Disabled" : "WaitingForQualifiedSources";
             if(!_enabled)return null;
             RequireReady(input.Timestamp);
             _evaluated=input.Timestamp;
             if(_allowAuxiliaryFallback && (_qualified is not {Available:true} || _frame is null ||
-                !_frame.Tz01.Fresh(input.Timestamp,3000) || !_frame.Dtt3.Fresh(input.Timestamp,3000)))return null;
+                !_frame.Tz01.Fresh(input.Timestamp,3000) || !_frame.Dtt3.Fresh(input.Timestamp,3000))) { _reason="AuxiliaryUnavailable"; return null; }
             if(_frame?.TimestampUtc!=input.Timestamp)throw new InvalidOperationException("Auxiliares no asociados a esta adquisición.");
             _evaluated=input.Timestamp;
             if(_episodeCeiling is {} ceiling && baselineRawDemand>=ceiling) { _episodeStart=null; _episodeCeiling=null; }
-            if(lastAcknowledgedLevel is not {} level)return null;
+            if(lastAcknowledgedLevel is not {} level) { _reason="NoAcknowledgedLevel"; return null; }
             var floor=Math.Min(_qualified!.DemandLevel!.Value,Math.Min(44,level));
-            if(floor<=baselineRawDemand)return null;
+            if(floor<=baselineRawDemand) { _reason="BaselineDominates"; return null; }
             _episodeStart??=input.Timestamp; _episodeCeiling??=floor;
             // Expired warm sources cannot continually renew the same retention episode.
-            if(input.Timestamp-_episodeStart.Value>=TimeSpan.FromSeconds(MaximumRetentionSeconds))return null;
+            if(input.Timestamp-_episodeStart.Value>=TimeSpan.FromSeconds(MaximumRetentionSeconds)) { _reason="EpisodeExpired"; return null; }
             _supplement=Math.Min(floor,baselineRawDemand+MaximumExtraLevels);
+            _reason="RetainingDescent";
             return _supplement;
         }
     }
@@ -138,6 +146,6 @@ public sealed class ProductPlatformRetention : IExperimentalFanSupplement
     public void ObserveDuringActuation(AdaptiveFanPolicyInput input) { }
     public void Reset()
     {
-        lock(_sync) { _evaluated=null; _episodeStart=null; _episodeCeiling=null; _baseline=null; _supplement=null; }
+        lock(_sync) { _evaluated=null; _episodeStart=null; _episodeCeiling=null; _baseline=null; _supplement=null; _reason=_enabled?"WaitingForQualifiedSources":"Disabled"; }
     }
 }

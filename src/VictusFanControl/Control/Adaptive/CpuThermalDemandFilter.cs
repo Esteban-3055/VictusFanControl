@@ -1,7 +1,12 @@
 namespace VictusFanControl.Control.Adaptive;
 
 public sealed record CpuThermalDemandObservation(DateTimeOffset Timestamp, double RawDemandC, double RawControlC,
-    double DemandC, double ControlC, bool SpikeSuppressed, bool ExtremeBypass);
+    double DemandC, double ControlC, bool SpikeSuppressed, bool ExtremeBypass)
+{
+    public long FreshAcquisitions { get; init; }
+    public long SuppressedFreshAcquisitions { get; init; }
+    public long ExtremeBypassAcquisitions { get; init; }
+}
 
 /// <summary>Demand only. Raw telemetry, thermal admission and firmware remain independent.</summary>
 internal sealed class CpuThermalDemandFilter
@@ -12,6 +17,7 @@ internal sealed class CpuThermalDemandFilter
     private DateTimeOffset? _last;
     private AdaptiveFanPolicyInput? _lastFiltered;
     private bool _restartConfirmation;
+    private long _freshAcquisitions, _suppressedAcquisitions, _extremeAcquisitions;
     internal CpuThermalDemandObservation? Observation { get; private set; }
 
     internal bool TryApply(AdaptiveFanPolicyInput input, TimeSpan maximumGap,
@@ -54,10 +60,18 @@ internal sealed class CpuThermalDemandFilter
         // A first hot acquisition has no cold evidence: never invent a cold start.
         filtered = input with { CpuEffectiveTemperatureC = demand, CpuRawControlTemperatureC = control };
         _lastFiltered = filtered;
-        Observation = new(input.Timestamp, input.CpuEffectiveTemperatureC, rawControl, demand, control,
-            !extreme && (demand < input.CpuEffectiveTemperatureC || control < rawControl), extreme);
+        var suppressed = !extreme && (demand < input.CpuEffectiveTemperatureC || control < rawControl);
+        if (!input.CpuThermalRetained)
+        {
+            _freshAcquisitions++;
+            if (suppressed) _suppressedAcquisitions++;
+            if (extreme) _extremeAcquisitions++;
+        }
+        Observation = new(input.Timestamp, input.CpuEffectiveTemperatureC, rawControl, demand, control, suppressed, extreme)
+        { FreshAcquisitions = _freshAcquisitions, SuppressedFreshAcquisitions = _suppressedAcquisitions, ExtremeBypassAcquisitions = _extremeAcquisitions };
         failure = string.Empty;
         return true;
     }
-    internal void Reset() { _history.Clear(); _last = null; _lastFiltered = null; _restartConfirmation = false; Observation = null; }
+    internal void Reset() { _history.Clear(); _last = null; _lastFiltered = null; _restartConfirmation = false; Observation = null;
+        _freshAcquisitions = _suppressedAcquisitions = _extremeAcquisitions = 0; }
 }
