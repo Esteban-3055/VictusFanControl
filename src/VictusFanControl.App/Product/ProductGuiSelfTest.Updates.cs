@@ -73,7 +73,7 @@ internal static partial class ProductGuiSelfTest
             runtime=new RecordingRuntime();
             using(var form=new ProductForm("fixture://retry-install",fixture:runtime,fixtureProfiles:new()))
             {
-                form.Show();Application.DoEvents();form.Canvas.AvailableUpdate=update;int downloads=0,attempts=0;
+                form.Show();Application.DoEvents();form.HandleCommand("updates-page");form.Canvas.AvailableUpdate=update;int downloads=0,attempts=0;
                 var download=form.DownloadUpdateAsync((_,_)=>{downloads++;return Task.FromResult("fixture");});PumpUntil(()=>download.IsCompleted,"Retry download hung.");
                 var first=form.InstallDownloadedUpdateAsync(()=>{},()=>{attempts++;throw new IOException("UAC cancelled");},_=>Task.CompletedTask);
                 PumpUntil(()=>first.IsCompleted,"First install failed to finish.");
@@ -92,7 +92,7 @@ internal static partial class ProductGuiSelfTest
                 form.RecoverySelectionReader=()=>pending;
                 form.RecoveryRunner=_=>{pending=new(Guid.Empty,Guid.Empty);return Task.FromResult(new ProductRecoveryResult(true,"fixture-evidence","recovered"));};
                 form.RecoveryRuntimeFactory=_=>Task.FromResult<IProductRuntime>(recoveredRuntime);
-                form.Show();Application.DoEvents();form.Canvas.AvailableUpdate=update;int downloads=0;bool launched=false;
+                form.Show();Application.DoEvents();form.HandleCommand("updates-page");form.Canvas.AvailableUpdate=update;int downloads=0;bool launched=false;
                 var download=form.DownloadUpdateAsync((_,_)=>{downloads++;return Task.FromResult("fixture");});PumpUntil(()=>download.IsCompleted,"Pending-session download hung.");
                 runtime.Publish(runtime.State with{LifecycleBlocked=true,PerformanceRecovery=new(true,"previous session",pending.CpuSession),Runtime="RecoveryRequired"});
                 form.HandleCommand("updates-page");form.Canvas.Refresh();require(form.Canvas.Hits.Single(h=>h.Id=="recovery-run").Enabled,"Update page omitted pending-session recovery.");

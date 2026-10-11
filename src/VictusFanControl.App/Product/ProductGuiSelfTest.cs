@@ -678,7 +678,7 @@ internal static partial class ProductGuiSelfTest
         form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Page=ProductPage.Performance;
         var active=runtime.State with{Target="HP-8C40-9D0R1LA-F18",Runtime="Healthy",Source="Ac",FanMode="Automatic",FanAuthority="Custom",
             PerformanceSupported=true,CanApplyPerformance=true,PerformanceProcessPresent=true,PerformanceActive=true,CpuState="Active",GpuState="ActiveUnverified",
-            AppliedPerformance=profiles.PerformanceConfiguration(),AppliedPerformanceSource="Ac",Snapshot=Snapshot(DateTimeOffset.UtcNow,45,40,10,5)};
+            AppliedPerformance=profiles.PerformanceConfiguration(),AppliedPerformanceSource="Ac",Snapshot=Snapshot(DateTimeOffset.UtcNow,45,40,10,5) with{CpuExpectedPhysicalCoreCount=1}};
         runtime.Publish(active);canvas.Refresh();require(!canvas.CanApplyPerformance,"Unchanged limits enabled Apply.");
         form.EditValue("pl2",38);canvas.Refresh();
         require(canvas.CanApplyPerformance&&canvas.Hits.Single(h=>h.Id=="performance-apply").Enabled&&canvas.AppliedCpu()=="35 / 60 W",
