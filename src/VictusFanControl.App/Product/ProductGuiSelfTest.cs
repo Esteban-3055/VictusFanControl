@@ -278,7 +278,7 @@ internal static partial class ProductGuiSelfTest
         require(!Hp8C40PostM9UserControlGate.AutomaticExecutionAuthorized,"Review promoted the normal Automatic gate.");
         require(!ProductAutomaticReview.IsAuthorized(false,target)&&!ProductAutomaticReview.IsAuthorized(true,"Unsupported")&&ProductAutomaticReview.IsAuthorized(true,target),"Review target/explicit admission failed.");
         long clock=1000;var review=new ProductAutomaticReview(()=>clock);
-        var snapshot=Snapshot(DateTimeOffset.UtcNow,40,35,5,5) with{CpuExpectedPhysicalCoreCount=1};
+        var snapshot=Snapshot(DateTimeOffset.UtcNow,40,35,5,5);
         SafetyGateResult Safety(TelemetrySnapshot s)=>new(true,true,true,true,true,true,false,true,true,true,s.Timestamp,s.Timestamp,1,Array.Empty<string>());
         void Rejected(Action action,string message){bool failed=false;try{action();}catch(InvalidOperationException){failed=true;}require(failed,message);}
         Rejected(()=>review.EnsureDispatchAllowed(snapshot),"Inactive review admitted a dispatch.");
@@ -639,7 +639,7 @@ internal static partial class ProductGuiSelfTest
     }
     [System.Runtime.InteropServices.DllImport("user32.dll")]private static extern uint GetGuiResources(IntPtr process,uint flags);
     private static TelemetrySnapshot Snapshot(DateTimeOffset timestamp,double cpu,double gpu,double cpuLoad,double gpuLoad)=>new(timestamp,"Intel i7-13700H",cpu,18,cpuLoad,"RTX 4060 Laptop",gpu,42,gpuLoad,3020,2980)
-    {CpuCoreTemperatures=[new(0,0,"Performance",cpu+3)]};
+    {CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",cpu+3)]};
     private static void TestLiveCurveApply(Action<bool,string> require)
     {
         var dir=Path.Combine(Path.GetTempPath(),"vfc-live-curve-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(dir);
@@ -678,7 +678,7 @@ internal static partial class ProductGuiSelfTest
         form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Page=ProductPage.Performance;
         var active=runtime.State with{Target="HP-8C40-9D0R1LA-F18",Runtime="Healthy",Source="Ac",FanMode="Automatic",FanAuthority="Custom",
             PerformanceSupported=true,CanApplyPerformance=true,PerformanceProcessPresent=true,PerformanceActive=true,CpuState="Active",GpuState="ActiveUnverified",
-            AppliedPerformance=profiles.PerformanceConfiguration(),AppliedPerformanceSource="Ac",Snapshot=Snapshot(DateTimeOffset.UtcNow,45,40,10,5) with{CpuExpectedPhysicalCoreCount=1}};
+            AppliedPerformance=profiles.PerformanceConfiguration(),AppliedPerformanceSource="Ac",Snapshot=Snapshot(DateTimeOffset.UtcNow,45,40,10,5)};
         runtime.Publish(active);canvas.Refresh();require(!canvas.CanApplyPerformance,"Unchanged limits enabled Apply.");
         form.EditValue("pl2",38);canvas.Refresh();
         require(canvas.CanApplyPerformance&&canvas.Hits.Single(h=>h.Id=="performance-apply").Enabled&&canvas.AppliedCpu()=="35 / 60 W",
@@ -691,6 +691,7 @@ internal static partial class ProductGuiSelfTest
         form.EditValue("gpu",1801);require(canvas.CanApplyPerformance,"Exact GPU edit did not enable Apply.");
         foreach(var blocked in new[]{active with{AppliedPerformance=expected,PerformanceUpdating=true},active with{AppliedPerformance=expected,LifecycleBlocked=true},
             active with{AppliedPerformance=expected,AutomaticSourceTransition="Battery"},active with{AppliedPerformance=expected,AutomaticPreparing=true},
+            active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{CpuExpectedPhysicalCoreCount=null}},
             active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-10)}},
             active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{ProductTelemetryTolerance=true,RetainedTelemetry="temperatura CPU",CpuThermalSampledAtUtc=DateTimeOffset.UtcNow.AddSeconds(-4)}},
             active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{GpuPowerSampledAtUtc=DateTimeOffset.UtcNow.AddSeconds(-5)}}})
