@@ -68,6 +68,19 @@ internal static partial class ProductGuiSelfTest
             require(suspended.Commands==0,"Suspension did not cancel a pending startup request.");
             var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Suspended startup fixture exit stalled.");
         }
+        foreach(var displayOff in new[]{false,true})
+        {
+            var ready=new TaskCompletionSource<IProductRuntime>(TaskCreationOptions.RunContinuationsAsynchronously);var delayed=new RecordingRuntime();
+            using var form=new ProductForm("fixture://delayed-startup-power",fixtureProfiles:preferences,runtimeFactory:()=>ready.Task,enableStartupAutomaticInFixture:true);
+            form.Show();Application.DoEvents();
+            form.HandlePowerEventAsync(displayOff?0x8013:4,displayOff?0:null).GetAwaiter().GetResult();
+            if(displayOff)form.HandlePowerEventAsync(0x8013,1).GetAwaiter().GetResult();
+            else form.HandlePowerEventAsync(18).GetAwaiter().GetResult();
+            ready.SetResult(delayed);PumpUntil(()=>delayed.Starts==1,"Power-interrupted construction did not finish.");
+            at=DateTimeOffset.UtcNow.AddSeconds(-2);delayed.Publish(State(0));delayed.Publish(State(1));delayed.Publish(State(2));form.PresentationTick();
+            require(delayed.Fences==1&&delayed.Commands==0,"Power boundary during construction was forgotten and startup Automatic activated.");
+            var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Delayed startup power fixture exit hung.");require(delayed.Disposals==1,"Power-interrupted construction leaked its runtime.");
+        }
         var legacy=System.Text.Json.Nodes.JsonNode.Parse(ProductProfilesStore.Serialize(new ProductProfiles{Ac=ProductProfiles.LegacyDefaultProfile(ProductPowerProfile.Ac)}))!;
         legacy.AsObject().Remove("defaultCurveRevision");legacy.AsObject().Remove("activateAutomaticOnStart");
         var migrated=ProductProfilesStore.Parse(legacy.ToJsonString());

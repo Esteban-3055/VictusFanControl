@@ -100,6 +100,7 @@ internal sealed partial class ProductForm : Form
     }
     private async Task InitializeAsync(bool minimized,bool isolated,Func<Task<IProductRuntime>>? runtimeFactory,bool registerPowerNotificationsInFixture,bool enableStartupAutomaticInFixture,Func<PerformanceRecoveryPreview>? recoveryPreflight=null)
     {
+        var initialPowerBoundary=_updateLifecycleBoundary;
         try
         {
             if(!isolated||recoveryPreflight is not null)
@@ -117,7 +118,9 @@ internal sealed partial class ProductForm : Form
             if(_runtime is null)_runtime=await (runtimeFactory?.Invoke()??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,Draft,_automaticReview)));
             // A close during construction waits for this task, then disposes the returned service without starting it.
             if(_closing||_restarting||IsDisposed)return;
-            if((!isolated||enableStartupAutomaticInFixture)&&_automaticReview is null&&!_restartOpening&&_saved.ActivateAutomaticOnStart)
+            if(_displayOff||initialPowerBoundary!=_updateLifecycleBoundary)
+                _runtime.FenceLifecycle("Cambio de energía durante la creación de la sesión");
+            if((!isolated||enableStartupAutomaticInFixture)&&_automaticReview is null&&!_restartOpening&&!_displayOff&&initialPowerBoundary==_updateLifecycleBoundary&&_saved.ActivateAutomaticOnStart)
             { _startupPreferences=ProductProfilesStore.Copy(_saved); _startupAutomatic=new(Environment.TickCount64,protections:_saved.Protections); }
             AttachRuntime(_runtime);UpdateState(_runtime.State);
             if(!isolated||registerPowerNotificationsInFixture)RegisterPowerNotifications();
@@ -174,7 +177,7 @@ internal sealed partial class ProductForm : Form
         // Retry construction can complete without a WinForms synchronization context.
         // Observe only after queued state publications have reached the UI thread.
         if(InvokeRequired){if(IsHandleCreated&&!IsDisposed)BeginInvoke(TryStartupAutomatic);return;}
-        if(_closing||_restarting||_startupAutomatic is null||_startupAutomatic.Finished||_runtime is null||_canvas.Busy||Environment.TickCount64<_startupRetryAt)return;
+        if(_closing||_restarting||_displayOff||_startupAutomatic is null||_startupAutomatic.Finished||_runtime is null||_canvas.Busy||Environment.TickCount64<_startupRetryAt)return;
         var activate=_startupAutomatic.Observe(_canvas.State,DateTimeOffset.UtcNow,Environment.TickCount64);
         _canvas.Notice=_startupAutomatic.Status;
         if(activate)
