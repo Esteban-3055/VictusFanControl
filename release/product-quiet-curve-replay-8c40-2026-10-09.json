@@ -6,9 +6,9 @@
   "physicalPassClaimed": false,
   "normalAutomaticAuthorized": false,
   "sourceSha256": {
-    "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "3bbd2426fc4c23f46ef8b0db80c057de94e8296c72cfad0d83e55ec51abe03fe",
-    "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "025e9ad74f4fc22b45f88983779b82540ae00702babee2245313cab4a059dbb6",
-    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "ad3c81903addb4952dd8e65fdef51fe291d6b8054aea193f2f838c76adc9c5f1",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "b25b39786fde51d01dc8aaa99cae668ce6c26dafe5fe8d84a541e7d8d3c7dbff",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "d75d6e6c3ad2b1190fa660924ace428527d16ed59cab05ed802120a0cdc4c5b6",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "c92133becfb98aa2e0b61121caa32119f73f1a2ed8bea4c094f475d9c6f95b86",
     "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "7c94c2852df2ebd257c66107770d815ab46a47d7bba95edac275fe9edc1c4077",
     "src/VictusFanControl/Product/ProductProfiles.cs": "ca5aefce4cd30161d2414e65fe5b1a62e76f5ed4b50ad4ac1b5e218b45a6279a",
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
@@ -298,7 +298,7 @@
     "disclosure": "Same recorded CPU/GPU temperatures and powers for all candidates. Targets are simulated with immediate acknowledgements; levels*100 are nominal RPM, not noise/dBA. No counterfactual cooling, acoustic improvement or physical qualification is inferred."
   },
   "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification.",
-  "sourceBindingRevision": 8,
-  "sourceBindingUpdate": "v1.1.6: removed product GPU consumption handoff and added exact-snapshot admission diagnoses. Re-executed the original 390-decision trace: all decision CSV fields and numerical metrics match the archived study. Separate synthetic regressions cover high-GPU-power entry/operation and concrete rejection causes; no new physical pass is claimed.",
-  "sourceBindingUpdateBaseHead": "7cfab91e93e55ee5d79ed9f7b861789f957c4177"
+  "sourceBindingRevision": 9,
+  "sourceBindingUpdate": "v1.1.8: re-executed the original 390-decision trace with the reviewed sources. Decision CSV bytes and all study summary fields match the archived baseline exactly. Historical research/study constructors keep CPU spike filtering disabled by default; habitual Automatic enables it explicitly. Separate tracked filter and native controller fixtures validate 2s CPU spike suppression, fresh/retained continuity and raw 99C handoff. No new physical pass is claimed.",
+  "sourceBindingUpdateBaseHead": "c7de8656a7dbf0557c78c3f889382283498641b8"
 }
