@@ -8,7 +8,7 @@ namespace VictusFanControl.Product;
 public sealed record ProductUpdate(Version Version, Uri Download, long Size, string Sha256, bool IsPrerelease = false);
 
 /// <summary>Public releases with an explicit preview opt-in. No tokens, background installation or hardware IO.</summary>
-public static class ProductUpdates
+public static partial class ProductUpdates
 {
     public const string Repository = "Esteban-3055/VictusFanControl";
     public const long MaximumInstallerBytes = 256L * 1024 * 1024;
@@ -69,34 +69,16 @@ public static class ProductUpdates
         await CopyBoundedAsync(stream, memory, 4 * 1024 * 1024, deadline.Token);
         return ParseReleases(System.Text.Encoding.UTF8.GetString(memory.ToArray()), current, includePrereleases);
     }
-    public static async Task<string> DownloadAsync(ProductUpdate update, CancellationToken cancellation, IProgress<long>? progress = null)
+    public static Task<string> DownloadAsync(ProductUpdate update, CancellationToken cancellation, IProgress<long>? progress = null) =>
+        DownloadCachedAsync(update, cancellation, progress);
+
+    private static async Task FetchInstallerAsync(ProductUpdate update, Stream output, CancellationToken cancellation, IProgress<long>? progress)
     {
-        // Validate the public record again before using it as a filesystem/network capability.
-        var tag = "v" + update.Version;
-        var name = $"VictusFanControl-{update.Version}-Setup-win-x64.exe";
-        if (update.Download.AbsoluteUri != $"https://github.com/{Repository}/releases/download/{tag}/{name}" ||
-            update.Size <= 0 || update.Size > MaximumInstallerBytes || !Regex.IsMatch(update.Sha256, "^[0-9a-f]{64}$"))
-            throw new InvalidDataException("Solicitud de actualización no válida.");
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        deadline.CancelAfter(TimeSpan.FromMinutes(10));
-        cancellation = deadline.Token;
-        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VictusFanControl", "updates", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, name);
-        try
-        {
-            using var response = await Client.GetAsync(update.Download, HttpCompletionOption.ResponseHeadersRead, cancellation);
-            response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength is long length && length != update.Size) throw new IOException("Tamaño de descarga incorrecto.");
-            await using (var source = await response.Content.ReadAsStreamAsync(cancellation))
-            await using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                await CopyBoundedAsync(source, output, update.Size, cancellation, progress);
-            await using var file = File.OpenRead(path);
-            if (file.Length != update.Size || Convert.ToHexString(await SHA256.HashDataAsync(file, cancellation)).ToLowerInvariant() != update.Sha256)
-                throw new InvalidDataException("La descarga no coincide con el SHA-256 de GitHub.");
-            return path;
-        }
-        catch { File.Delete(path); Directory.Delete(directory); throw; }
+        using var response = await Client.GetAsync(update.Download, HttpCompletionOption.ResponseHeadersRead, cancellation).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        if (response.Content.Headers.ContentLength is long length && length != update.Size) throw new IOException("Tamaño de descarga incorrecto.");
+        await using var source = await response.Content.ReadAsStreamAsync(cancellation).ConfigureAwait(false);
+        await CopyBoundedAsync(source, output, update.Size, cancellation, progress).ConfigureAwait(false);
     }
     internal static async Task CopyBoundedAsync(Stream input, Stream output, long maximum, CancellationToken cancellation, IProgress<long>? progress = null)
     {

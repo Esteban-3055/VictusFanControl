@@ -142,7 +142,7 @@ internal static partial class ProductGuiSelfTest
             canvas.State=canvas.State with{LifecycleBlocked=true,LifecycleBlockReason="Lectura de ventiladores sin confirmar",Failure="fixture"};Render("theme-error-curves");
             canvas.State=confirmed;canvas.Editing=ProductPowerProfile.Ac;
 
-            canvas.Page=ProductPage.Updates;canvas.AvailableUpdate=new(new Version(1,2,0),new Uri("https://github.com/Esteban-3055/VictusFanControl/releases/download/v1.2.0/VictusFanControl-1.2.0-Setup-win-x64.exe"),64000000,new string('a',64));canvas.UpdateStatus="Nueva versión disponible. Pulsa Descargar e instalar para actualizar.";canvas.UpdateCheckedAt=DateTimeOffset.Now;canvas.Dirty=false;Render("updates-available");
+            canvas.Page=ProductPage.Updates;canvas.AvailableUpdate=new(new Version(1,2,0),new Uri("https://github.com/Esteban-3055/VictusFanControl/releases/download/v1.2.0/VictusFanControl-1.2.0-Setup-win-x64.exe"),64000000,new string('a',64));canvas.UpdateStatus="Nueva versión disponible. Pulsa Descargar; después podrás instalar.";canvas.UpdateCheckedAt=DateTimeOffset.Now;canvas.Dirty=false;Render("updates-available");canvas.DownloadedUpdate=canvas.AvailableUpdate;canvas.UpdateStatus="Instalador descargado y verificado. Pulsa Instalar cuando estés listo.";Render("updates-downloaded");
             canvas.UpdateBusy=true;canvas.UpdateProgressPercent=47;canvas.UpdateStatus="Descargando y verificando el instalador…";Render("updates-downloading");canvas.Size=new(1040,660);Render("updates-minimum-layout");canvas.Size=new(1672,941);canvas.UpdateBusy=false;canvas.UpdateProgressPercent=null;canvas.AvailableUpdate=null;
             canvas.Page=ProductPage.Advanced;for(int i=0;i<6;i++){canvas.AdvancedTab=i;Render("advanced-tab-"+i);}
             Require(canvas.Hits.All(h=>!h.Id.Contains("MaximumDownStep")&&!h.Id.Contains("MinimumLevel")),"Advanced settings expose controls ignored by the protected physical envelope.");
@@ -691,7 +691,9 @@ internal static partial class ProductGuiSelfTest
         form.EditValue("gpu",1801);require(canvas.CanApplyPerformance,"Exact GPU edit did not enable Apply.");
         foreach(var blocked in new[]{active with{AppliedPerformance=expected,PerformanceUpdating=true},active with{AppliedPerformance=expected,LifecycleBlocked=true},
             active with{AppliedPerformance=expected,AutomaticSourceTransition="Battery"},active with{AppliedPerformance=expected,AutomaticPreparing=true},
-            active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-10)}}})
+            active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-10)}},
+            active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{ProductTelemetryTolerance=true,RetainedTelemetry="temperatura CPU",CpuThermalSampledAtUtc=DateTimeOffset.UtcNow.AddSeconds(-4)}},
+            active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{GpuPowerSampledAtUtc=DateTimeOffset.UtcNow.AddSeconds(-5)}}})
         {runtime.Publish(blocked);form.HandleCommand("performance-apply");require(!canvas.CanApplyPerformance&&runtime.Commands==1,"Unsafe/pending performance edit dispatched.");}
         var frozen=ProductPerformanceUpdate.WithPerformance(profiles,expected);
         require(ReferenceEquals(frozen.Ac.Fan,profiles.Ac.Fan)&&ReferenceEquals(frozen.Battery.Fan,profiles.Battery.Fan)&&frozen.PerformanceConfiguration()==expected,
@@ -746,14 +748,14 @@ internal static partial class ProductGuiSelfTest
         internal int? LastManualLevel;
         internal PerformanceGuiSessionConfiguration? LastPerformance;
         internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate,DisposeGate;
-        internal string? CommandFailure,StartFailure,DisposeFailure;
+        internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure;
         internal void Publish(ProductRuntimeState state)=>Changed?.Invoke(state);
         public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
         public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
         public Task ApplyManualAsync(int level){Commands++;LastManualLevel=level;return Task.CompletedTask;}
         public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;LastPerformance=p.PerformanceConfiguration();return CommandFailure is null?PerformanceGate?.Task??Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public Task ReleasePerformanceAsync(){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
-        public void FenceLifecycle(string r){Interlocked.Increment(ref Fences);}
+        public void FenceLifecycle(string r){Interlocked.Increment(ref Fences);if(FenceFailure is not null)throw new IOException(FenceFailure);}
         public Task ReleaseForLifecycleAsync(string r){Interlocked.Increment(ref Releases);return ReleaseGate?.Task??Task.CompletedTask;}
         public void ResumeTelemetry(string r){Resumes++;}
         public async ValueTask DisposeAsync(){Interlocked.Increment(ref Disposals);if(DisposeGate is not null)await DisposeGate.Task;if(DisposeFailure is not null)throw new IOException(DisposeFailure);}

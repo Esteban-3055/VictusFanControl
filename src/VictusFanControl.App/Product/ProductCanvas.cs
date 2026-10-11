@@ -37,6 +37,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     internal string Notice { get; set; } = "";
     internal bool AutomaticRetryAvailable { get; set; }
     internal ProductUpdate? AvailableUpdate { get; set; }
+    internal ProductUpdate? DownloadedUpdate { get; set; }
     internal bool UpdateBusy { get; set; }
     internal string UpdateStatus { get; set; } = "Comprueba si hay una nueva versión disponible.";
     internal DateTimeOffset? UpdateCheckedAt { get; set; }
@@ -217,7 +218,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     internal bool PerformancePending => State.AppliedPerformance != PerformanceDraft.PerformanceConfiguration();
     internal bool CanApplyPerformance => !Busy&&!State.LifecycleBlocked&&!State.PerformanceUpdating&&!State.AutomaticPreparing&&
         State.AutomaticSourceTransition is null&&State.PerformanceSupported&&State.CanApplyPerformance&&PerformancePending&&
-        (PerformanceDraft.CpuEnabled||PerformanceDraft.GpuEnabled)&&(!State.PerformanceProcessPresent||State.AppliedPerformance is not null&&FreshSnapshot is not null);
+        (PerformanceDraft.CpuEnabled||PerformanceDraft.GpuEnabled)&&(!State.PerformanceProcessPresent||State.AppliedPerformance is not null&&ProductPerformanceUpdate.HasCurrentTelemetry(FreshSnapshot,DateTimeOffset.UtcNow));
     private void Fans(Graphics g)
     {
         Tabs(g,"fan-tab-",["Control de ventiladores","Estado y telemetría","Reglas y seguridad"],FanTab);

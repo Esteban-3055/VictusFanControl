@@ -12,7 +12,7 @@ public static class ProductCurveMarkers
     public static UnifiedDemandObservation? Demand(FanConfiguration configuration,TelemetrySnapshot snapshot)
     {
         if(configuration.UnifiedDemand is null||CpuDemandTemperature.Select(snapshot,configuration.Tuning.CpuTemperatureSource,configuration.Tuning.HottestPerformanceCoreCount) is not { } cpu||
-            snapshot.CpuPackagePowerW is not { } cpuW||snapshot.CpuLoadPercent is not { } cpuLoad||snapshot.GpuTemperatureC is not { } gpu||snapshot.GpuPowerW is not { } gpuW||snapshot.GpuLoadPercent is not { } gpuLoad||snapshot.CpuControlTemperatureC is not { } rawCpu)return null;
+            snapshot.CpuPackagePowerW is not { } cpuW||(snapshot.CpuLoadPercent ?? (snapshot.ProductTelemetryTolerance ? 100 : (double?)null)) is not { } cpuLoad||snapshot.GpuTemperatureC is not { } gpu||snapshot.GpuPowerW is not { } gpuW||(snapshot.GpuLoadPercent ?? (snapshot.ProductTelemetryTolerance ? 100 : (double?)null)) is not { } gpuLoad||snapshot.CpuControlTemperatureC is not { } rawCpu)return null;
         var input=new AdaptiveFanPolicyInput(snapshot.Timestamp,cpu,cpuW,cpuLoad,gpu,gpuW,gpuLoad){CpuRawControlTemperatureC=rawCpu};
         if(!AdaptiveFanPolicyEngine.ValidateInput(input,out _))return null;
         return configuration.UnifiedDemand.Evaluate(input);

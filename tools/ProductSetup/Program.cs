@@ -11,6 +11,11 @@ internal static class Program
         if (args.SequenceEqual(new[] { "--self-test" }))
         {
             Environment.ExitCode = SelfTest.Run();
+            if (Environment.ExitCode == 0)
+            {
+                ApplicationConfiguration.Initialize();
+                Environment.ExitCode = SetupForm.TestStartupChoice();
+            }
             if (Environment.ExitCode == 0 && typeof(Package).Assembly.GetManifestResourceInfo("payload.zip") is not null)
             {
                 var directory = Path.Combine(Path.GetTempPath(), "VictusSetup-embedded-fixture-" + Guid.NewGuid().ToString("N"));
@@ -29,13 +34,14 @@ internal static class Program
 internal sealed class SetupForm : Form
 {
     private readonly Label _status = new() { AutoSize = false, Left = 25, Top = 65, Width = 550, Height = 185 };
-    private readonly CheckBox _startupAutomatic = new() { Text = "Iniciar con Windows y activar Automático", Checked = true, Left = 25, Top = 262, Width = 550, Height = 26 };
+    private readonly CheckBox _startupAutomatic = new() { Text = "Iniciar con Windows y activar Automático", Checked = false, Left = 25, Top = 262, Width = 550, Height = 26 };
     private readonly Button _install = new() { Text = "Instalar / actualizar", Left = 320, Top = 305, Width = 180, Height = 38 };
     private readonly Button _cancel = new() { Text = "Cerrar", Left = 510, Top = 305, Width = 75, Height = 38 };
     private bool _working;
     private readonly int? _ownerPid;
     private readonly long? _ownerStart;
-    internal SetupForm(string[] args)
+    internal bool StartupAutomaticSelected => _startupAutomatic.Checked;
+    internal SetupForm(string[] args, string? profilesPath = null)
     {
         if (args.Length != 0)
         {
@@ -50,9 +56,30 @@ internal sealed class SetupForm : Form
         ClientSize = new(610, 370); FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
         Controls.Add(new Label { Text = "Instalar VictusFanControl", Left = 25, Top = 20, AutoSize = true, Font = new Font(Font.FontFamily, 16, FontStyle.Bold) });
         _status.Text = "Equipo: HP 8C40 / BIOS F.18.\n\nCierra VictusFanControl desde la bandeja. Se conservarán tus perfiles, registros y preferencias de inicio.\n\nPrimera instalación: inicio con Windows, minimizado y Automático. Se requiere .NET Desktop Runtime 8 x64 y PawnIO instalado. Usa tu misma cuenta de Windows.";
+        var profilesExist=File.Exists(profilesPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"VictusFanControl","product-profiles.json"));
+        _startupAutomatic.Checked=!profilesExist;
+        if(profilesExist)_startupAutomatic.Text="Activar inicio con Windows y Automático (opcional al actualizar)";
         Controls.AddRange(new Control[] { _status, _startupAutomatic, _install, _cancel });
         _cancel.Click += (_, _) => Close(); _install.Click += async (_, _) => await InstallAsync();
         FormClosing += (_, e) => { if (_working) e.Cancel = true; };
+    }
+    internal static int TestStartupChoice()
+    {
+        var directory=Path.Combine(Path.GetTempPath(),"VictusSetup-ui-fixture-"+Guid.NewGuid().ToString("N"));
+        var path=Path.Combine(directory,"profiles.json");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            using(var fresh=new SetupForm([],path))
+                if(!fresh.StartupAutomaticSelected)throw new InvalidOperationException("Fresh installer lost its startup default.");
+            // An existing preference file must select preservation, independent of what its saved Boolean says.
+            File.WriteAllText(path,"{\"activateAutomaticOnStart\":false}");
+            using(var update=new SetupForm([],path))
+                if(update.StartupAutomaticSelected)throw new InvalidOperationException("Update installer silently enabled Windows startup/Automatic.");
+            Console.WriteLine("Installer UI startup choice: PASS (fresh default and preservation of existing preferences; no install/registration/hardware IO).");return 0;
+        }
+        catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
+        finally{if(Directory.Exists(directory))Directory.Delete(directory,true);}
     }
     private async Task InstallAsync()
     {
@@ -104,7 +131,7 @@ internal sealed class SetupForm : Form
             var message = (await output) + (await error);
             if (process.ExitCode != 0) throw new IOException(message);
             _status.Text = "Instalación completada.\n\nAbre VictusFanControl desde el menú Inicio. Tus preferencias anteriores se conservaron.\n\n" + message;
-            _install.Visible = false;
+            _install.Visible = false; Environment.ExitCode = 0;
         }
         catch (Exception ex) { Environment.ExitCode = 1; _status.Text = "Instalación no completada.\n\n" + ex.Message; MessageBox.Show(this, ex.Message, "Instalación no completada", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally

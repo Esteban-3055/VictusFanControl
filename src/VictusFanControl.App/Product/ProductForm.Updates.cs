@@ -14,7 +14,7 @@ internal sealed partial class ProductForm
     private void ResetUpdateSelection()
     {
         _canvas.AvailableUpdate = null; _canvas.UpdateCheckedAt = null; _canvas.UpdateProgressPercent = null;
-        _canvas.UpdateStatus = "Canal cambiado. Guarda la preferencia y vuelve a buscar actualizaciones.";
+        _canvas.UpdateStatus = "Canal cambiado. Guarda la preferencia y vuelve a buscar actualizaciones. El instalador descargado se conserva.";
     }
     private void DisposeUpdateCancellation()
     {
@@ -41,55 +41,104 @@ internal sealed partial class ProductForm
             if (includePrereleases != _draft.IncludePrereleaseUpdates) { ResetUpdateSelection(); return; }
             _canvas.AvailableUpdate = update; _canvas.UpdateCheckedAt = DateTimeOffset.Now;
             _canvas.UpdateStatus = update is null ? (includePrereleases ? "No hay una versión estable o preliminar más reciente que la instalada." : "No hay una versión estable más reciente que la instalada.") :
-                $"Nueva versión {(update.IsPrerelease ? "preliminar" : "estable")} disponible. Instalador: {update.Size / (1024d * 1024):0.0} MB. Pulsa Descargar e instalar para actualizar.";
+                $"Nueva versión {(update.IsPrerelease ? "preliminar" : "estable")} disponible. Instalador: {update.Size / (1024d * 1024):0.0} MB. Pulsa Descargar; después podrás instalar sin volver a descargar.";
         }
         catch (OperationCanceledException) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "La consulta se canceló o agotó su tiempo. Puedes volver a comprobar."; }
         catch (Exception ex) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "No se pudo comprobar: " + ex.Message; AppLog.Write("PRODUCT UPDATE CHECK: " + ex); }
         finally { _checkingUpdate = false; if (!IsDisposed) { _canvas.UpdateBusy = false; _canvas.Invalidate(); } }
     }
-    internal async Task DownloadAndInstallUpdateAsync(Func<ProductUpdate,CancellationToken,Task<string>>? downloadFixture = null, Action? ensureReleasedFixture = null, Action? launchFixture = null)
+    private async Task RestoreDownloadedUpdateAsync()
     {
-        if (_checkingUpdate || _closing || _restarting || _canvas.Busy || _canvas.Dirty || _canvas.AvailableUpdate is not { } update || (_isolatedRuntime && downloadFixture is null)) return;
+        if (_isolatedRuntime || _checkingUpdate || _closing || IsDisposed) return;
+        _checkingUpdate = _canvas.UpdateBusy = true;
+        var previews = _draft.IncludePrereleaseUpdates;
+        try
+        {
+            var cached = await ProductUpdates.FindCachedAsync(Version.Parse(ProductRelease.Version), previews, _updateCancellation.Token);
+            if (!_closing && !IsDisposed && previews == _draft.IncludePrereleaseUpdates && cached is not null)
+            {
+                _canvas.DownloadedUpdate = cached; _canvas.UpdateProgressPercent = 100;
+                _canvas.UpdateStatus = $"v{cached.Version} descargada y verificada. Pulsa Instalar cuando estés listo.";
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { AppLog.Write("PRODUCT UPDATE CACHE: " + ex); }
+        finally { _checkingUpdate = false; if (!IsDisposed) { _canvas.UpdateBusy = false; _canvas.Invalidate(); } }
+    }
+    internal async Task DownloadUpdateAsync(Func<ProductUpdate,CancellationToken,Task<string>>? downloadFixture = null)
+    {
+        if (_checkingUpdate || _closing || _restarting || _canvas.Busy || _canvas.AvailableUpdate is not { } update || (_isolatedRuntime && downloadFixture is null)) return;
         if (update.IsPrerelease && !_draft.IncludePrereleaseUpdates) { ResetUpdateSelection(); return; }
         if (!_isolatedRuntime && downloadFixture is not null) throw new InvalidOperationException("Update fixture requires an isolated runtime.");
-        if (!_isolatedRuntime && MessageBox.Show(this, $"Se descargará v{update.Version}{(update.IsPrerelease ? " (preliminar)" : "")} y se verificará su SHA-256. Después se liberarán ventiladores y CPU/GPU y se cerrará esta sesión. Tus preferencias se conservan.\n\n¿Descargar y abrir el instalador?", "Actualizar VictusFanControl", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
         _checkingUpdate = _canvas.UpdateBusy = true;
-        var lifecycleBoundary = _updateLifecycleBoundary;
-        _canvas.UpdateProgressPercent = 0;
-        _canvas.UpdateStatus = "Descargando y verificando el instalador…"; _canvas.Invalidate();
+        _canvas.UpdateProgressPercent = 0; _canvas.UpdateStatus = "Descargando y verificando el instalador…"; _canvas.Invalidate();
         try
         {
             var progress = new Progress<long>(bytes =>
             {
                 if (_closing || IsDisposed || !_canvas.UpdateBusy) return;
-                _canvas.UpdateProgressPercent = (int)Math.Clamp(bytes * 100 / update.Size, 0, 100);
-                _canvas.Invalidate();
+                _canvas.UpdateProgressPercent = (int)Math.Clamp(bytes * 100 / update.Size, 0, 100); _canvas.Invalidate();
             });
-            var path = await (downloadFixture?.Invoke(update,_updateCancellation.Token) ?? ProductUpdates.DownloadAsync(update, _updateCancellation.Token, progress));
+            await (downloadFixture?.Invoke(update,_updateCancellation.Token) ?? ProductUpdates.DownloadAsync(update, _updateCancellation.Token, progress));
             if (_closing || IsDisposed) return;
-            // Navigation/editing and power events remain available while downloading.
-            if (_canvas.Dirty || (update.IsPrerelease && !_draft.IncludePrereleaseUpdates) || _canvas.Busy || _restarting || _displayOff || lifecycleBoundary != _updateLifecycleBoundary)
-            { _canvas.UpdateStatus = "Descarga verificada. Guarda los cambios y resuelve la interrupción antes de instalar; después vuelve a pulsar Descargar e instalar."; return; }
-            _canvas.UpdateProgressPercent = 100;
-            _canvas.UpdateStatus = "Descarga verificada. Liberando la sesión para instalar…";
-            _updateInstallTask = InstallUpdateAsync(path,ensureReleasedFixture,launchFixture);
-            await _updateInstallTask;
+            _canvas.DownloadedUpdate = update; _canvas.UpdateProgressPercent = 100;
+            _canvas.UpdateStatus = $"v{update.Version} descargada y verificada. Pulsa Instalar; los errores de instalación no borrarán la descarga.";
         }
         catch (OperationCanceledException) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "La descarga se canceló o agotó su tiempo. Puedes volver a intentarlo."; }
-        catch (Exception ex) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "No se pudo instalar: " + ex.Message; AppLog.Write("PRODUCT UPDATE INSTALL: " + ex); }
+        catch (Exception ex) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "No se pudo descargar: " + ex.Message; AppLog.Write("PRODUCT UPDATE DOWNLOAD: " + ex); }
         finally { _checkingUpdate = false; if (!IsDisposed) { _canvas.UpdateBusy = false; _canvas.Invalidate(); } }
+    }
+    internal async Task InstallDownloadedUpdateAsync(Action? ensureReleasedFixture = null, Action? launchFixture = null, Func<CancellationToken,Task>? verifyFixture = null)
+    {
+        if (_checkingUpdate || _closing || _restarting || _displayOff || _canvas.Busy || _canvas.Dirty || _canvas.DownloadedUpdate is not { } update || (_isolatedRuntime && verifyFixture is null)) return;
+        if (update.Version <= Version.Parse(ProductRelease.Version)) { _canvas.DownloadedUpdate = null; return; }
+        if (update.IsPrerelease && !_draft.IncludePrereleaseUpdates) { ResetUpdateSelection(); return; }
+        if (!_isolatedRuntime && (verifyFixture is not null || ensureReleasedFixture is not null || launchFixture is not null)) throw new InvalidOperationException("Update fixture requires an isolated runtime.");
+        // A retained prior session is recovered from the visible recovery action, before destroying a usable runtime.
+        bool pending;
+        try { pending = (_runtime is null || _canvas.State.PerformanceRecovery?.Pending == true) && RecoverySelectionReader().Pending; }
+        catch (Exception ex) { _canvas.UpdateStatus = "No se pudo comprobar la sesión anterior: " + ex.Message + " La descarga se conserva."; _canvas.Invalidate(); return; }
+        if (pending)
+        { _canvas.UpdateStatus = "Hay una sesión anterior pendiente. Pulsa Recuperar sesiones y luego Instalar. La descarga se conserva."; _canvas.Invalidate(); return; }
+        if (!_isolatedRuntime && MessageBox.Show(this, $"Se instalará v{update.Version}{(update.IsPrerelease ? " (preliminar)" : "")} desde la descarga guardada. Se verificará su SHA-256 y se liberarán ventiladores y CPU/GPU antes de cerrar. Tus preferencias se conservan.\n\n¿Abrir el instalador?", "Instalar actualización", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
+        _checkingUpdate = _canvas.UpdateBusy = true;
+        var boundary = _updateLifecycleBoundary;
+        FileStream? verified = null;
+        try
+        {
+            _canvas.UpdateStatus = "Verificando el instalador guardado…"; _canvas.Invalidate();
+            if (_isolatedRuntime) await verifyFixture!(_updateCancellation.Token);
+            else verified = await ProductUpdates.OpenVerifiedInstallerAsync(update, _updateCancellation.Token);
+            if (_closing || IsDisposed) return;
+            if (_canvas.Dirty || update.IsPrerelease && !_draft.IncludePrereleaseUpdates || _canvas.Busy || _restarting || _displayOff || boundary != _updateLifecycleBoundary)
+            { _canvas.UpdateStatus = "El instalador se conserva. Guarda los cambios y resuelve la interrupción antes de volver a pulsar Instalar."; return; }
+            _canvas.UpdateStatus = "Instalador verificado. Liberando la sesión para instalar…";
+            _updateInstallTask = InstallUpdateAsync(verified?.Name ?? "fixture://installer",ensureReleasedFixture,launchFixture);
+            await _updateInstallTask;
+        }
+        catch (InvalidDataException ex)
+        { if (!_closing && !IsDisposed) { _canvas.DownloadedUpdate = null; _canvas.UpdateStatus = ex.Message; } AppLog.Write("PRODUCT UPDATE INTEGRITY: " + ex); }
+        catch (FileNotFoundException)
+        { if (!_closing && !IsDisposed) { _canvas.DownloadedUpdate = null; _canvas.UpdateStatus = "El instalador guardado ya no está disponible. Vuelve a descargarlo."; } }
+        catch (OperationCanceledException) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "Instalación cancelada. La descarga se conserva; puedes volver a pulsar Instalar."; }
+        catch (Exception ex) { if (!_closing && !IsDisposed) _canvas.UpdateStatus = "No se pudo instalar: " + ex.Message + " La descarga se conserva; resuelve el problema y pulsa Instalar."; AppLog.Write("PRODUCT UPDATE INSTALL: " + ex); }
+        finally { if (verified is not null) await verified.DisposeAsync(); _updateInstallTask = null; _checkingUpdate = false; if (!IsDisposed) { _canvas.UpdateBusy = false; _canvas.Invalidate(); } }
     }
     private async Task InstallUpdateAsync(string installer, Action? ensureReleased = null, Action? launchFixture = null)
     {
         _restarting = true; _restartLifecycleInterrupted = false; _canvas.RestartAvailable = false; _canvas.Busy = true;
         _presentationTimer.Stop(); _startupAutomatic?.Cancel("Actualización solicitada.");
+        var releaseCompleted = false; var recordsCleared = false;
         try
         {
-            _runtime?.FenceLifecycle("Actualización de producto");
+            Exception? fenceFailure = null;
+            try { _runtime?.FenceLifecycle("Actualización de producto"); } catch (Exception ex) { fenceFailure = ex; }
             _canvas.Notice = "Liberando la sesión antes de actualizar…"; _canvas.Invalidate();
-            await ShutdownRuntimeAsync();
+            await ShutdownRuntimeAsync(); releaseCompleted = true;
+            if (fenceFailure is not null) throw new IOException("No se confirmó el bloqueo del controlador anterior.", fenceFailure);
             if (_isolatedRuntime) (ensureReleased ?? throw new InvalidOperationException("Fixture release fence missing."))();
             else ProductSessionRestart.EnsureNoRecoveryRecords();
+            recordsCleared = true;
             if (_closing || _exitRequested || _displayOff || _restartLifecycleInterrupted) throw new IOException("Actualización cancelada por cierre o cambio de energía. La sesión quedó liberada.");
             if (_isolatedRuntime) (launchFixture ?? throw new InvalidOperationException("Fixture launcher missing."))();
             else
@@ -103,13 +152,20 @@ internal sealed partial class ProductForm
             }
             _disposedRuntime = true; _exitRequested = true; Close(); _shutdown.TrySetResult();
         }
-        catch
+        catch (Exception ex)
         {
             DetachRuntime();
             _runtime = null;
-            _canvas.State = _canvas.State with { LifecycleBlocked = true, Runtime = "Failed", CanApplyPerformance = false, Failure = "Sesión cerrada para actualizar. Sal desde la bandeja y vuelve a abrir el programa si cancelaste la instalación." };
+            var released = releaseCompleted && recordsCleared;
+            var preview = _canvas.State.PerformanceRecovery;
+            if (!_isolatedRuntime) try { preview = PerformanceRecoveryPreview.Read(); } catch (Exception read) { AppLog.Write("PRODUCT UPDATE RECOVERY PREVIEW: " + read); }
+            _canvas.State = _canvas.State with { LifecycleBlocked = true, Runtime = "Failed", CanApplyPerformance = false,
+                PerformanceRecovery = preview, PerformanceActive = false, PerformanceProcessPresent = false, PerformanceUpdating = false, AutomaticPreparing = false,
+                CpuState = released ? "Disabled" : "Recovering", GpuState = released ? "Disabled" : "Recovering",
+                GuardianState = released ? "Sin sesión" : "Liberación no confirmada", FanMode = released ? "Firmware" : "RecoveryRequired", FanAuthority = released ? "Firmware" : "Unknown",
+                Failure = "Actualización detenida: " + ex.Message + " El instalador descargado se conserva." };
             UpdateTray(_canvas.State);
-            _canvas.Busy = false;
+            _canvas.RestartAvailable = true; _canvas.Busy = false;
             throw;
         }
         finally { _restarting = false; }

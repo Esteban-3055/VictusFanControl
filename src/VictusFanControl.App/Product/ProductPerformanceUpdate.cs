@@ -1,10 +1,16 @@
 using VictusFanControl.Performance;
 using VictusFanControl.Product;
+using VictusFanControl.Telemetry;
+using VictusFanControl.Safety;
 
 namespace VictusFanControl.App;
 
 internal static class ProductPerformanceUpdate
 {
+    internal static bool HasCurrentTelemetry(TelemetrySnapshot? snapshot, DateTimeOffset now) => snapshot is { IsComplete: true, RetainedTelemetry: null } &&
+        now >= snapshot.Timestamp && now - snapshot.Timestamp <= SafetyGate.MaximumTelemetryAge &&
+        snapshot.HasFreshControlSensorsAt(now) && snapshot.IsFanTelemetryFreshAt(now);
+
     internal static void EnsureWaitAllowed(long started,long now,string actualSource,string selectedSource,double? cpuC,double? gpuC)
     {
         if(now<started||now-started>=4000||actualSource!=selectedSource||actualSource is not ("Ac" or "Battery")||

@@ -92,6 +92,7 @@ internal sealed partial class ProductForm : Form
         Shown+=(_,_)=>
         {
             if(_creating)return;_creating=true;
+            _ = RestoreDownloadedUpdateAsync();
             _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory,registerPowerNotificationsInFixture,enableStartupAutomaticInFixture,recoveryPreflight);
         };
         FormClosing+=OnClosing;FormClosed+=(_,_)=>{UnregisterPowerNotifications();_tray.Visible=false;};
@@ -282,7 +283,8 @@ internal sealed partial class ProductForm : Form
             case "discard":if(_draft.IncludePrereleaseUpdates!=_saved.IncludePrereleaseUpdates)ResetUpdateSelection();_draft=ProductProfilesStore.Copy(_saved);_canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=!_hasSavedBaseline;_canvas.SelectedNode=-1;_canvas.Notice=_hasSavedBaseline?"Se recuperaron las preferencias guardadas.":"Se recuperó la configuración inicial; falta guardarla.";break;
             case "updates-check":_ = CheckUpdateAsync();break;
             case "updates-prerelease-toggle":if(!_canvas.UpdateBusy)Change(_draft with{IncludePrereleaseUpdates=!_draft.IncludePrereleaseUpdates});break;
-            case "updates-install":_ = DownloadAndInstallUpdateAsync();break;
+            case "updates-download":_ = DownloadUpdateAsync();break;
+            case "updates-install":_ = InstallDownloadedUpdateAsync();break;
             case "updates-page":_canvas.Page=ProductPage.Updates;break;
             case "startup-toggle":_ = ToggleStartupAsync();break;
             case "firmware":case "fan-mode-0":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask);break;
@@ -441,7 +443,7 @@ internal sealed partial class ProductForm : Form
             bool l=p.X<edge,r=p.X>=ClientSize.Width-edge,t=p.Y<edge,b=p.Y>=ClientSize.Height-edge;
             int code=l&&t?13:r&&t?14:l&&b?16:r&&b?17:l?10:r?11:t?12:b?15:1;if(code!=1){m.Result=(IntPtr)code;return;}
         }
-        if(m.Msg==0x218&&(_runtime is not null||_restarting))
+        if(m.Msg==0x218)
         {
             var code=m.WParam.ToInt32();int? display=null;
             if(code==0x8013&&m.LParam!=IntPtr.Zero)
@@ -456,7 +458,10 @@ internal sealed partial class ProductForm : Form
     }
     internal Task HandlePowerEventAsync(int code,int? display=null)
     {
+        var wasDisplayOff=_displayOff;
         if(code==4||code==0x8013&&display==0)_updateLifecycleBoundary++;
+        if(code==0x8013&&display==0)_displayOff=true;
+        else if(code==0x8013&&display==1)_displayOff=false;
         if(_restarting)
         {
             if(code==4||code==0x8013&&display==0)_restartLifecycleInterrupted=true;
@@ -467,8 +472,8 @@ internal sealed partial class ProductForm : Form
         if(code==4||code==0x8013&&display==0)_startupAutomatic?.Cancel("Automático al iniciar cancelado por suspensión o pantalla apagada.");
         if(code==0x8013)
         {
-            if(display==0&&!_displayOff){_displayOff=true;_runtime.FenceLifecycle("SESSION_DISPLAY_STATUS/Off");return QueueLifecycleRelease("Display Off lifecycle");}
-            if(display==1&&_displayOff){_displayOff=false;return ResumeAfterReleaseAsync();}
+            if(display==0&&!wasDisplayOff){_displayOff=true;_runtime.FenceLifecycle("SESSION_DISPLAY_STATUS/Off");return QueueLifecycleRelease("Display Off lifecycle");}
+            if(display==1&&wasDisplayOff){_displayOff=false;return ResumeAfterReleaseAsync();}
         }
         else if(code==4){_runtime.FenceLifecycle("PBT_APMSUSPEND");return QueueLifecycleRelease("System suspend");}
         else if(code is 6 or 7 or 18){if(!_displayOff)return ResumeAfterReleaseAsync();}

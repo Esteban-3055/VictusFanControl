@@ -691,7 +691,7 @@ internal sealed class ProductRuntime : IProductRuntime
         !_automaticActivation.Pending&&!_sourceTransition.Pending&&_target==Hp8C40TargetProfile.Instance&&
         _worker.StateMachine.State==SystemState.Healthy&&_performance.LimitsActive&&_performance.LastStatus?.PowerSource==source&&
         source is "Ac" or "Battery"&&_fans.Authority is not (FanAuthority.Restoring or FanAuthority.Faulted)&&
-        _snapshot is { } s&&s.Timestamp<=DateTimeOffset.UtcNow&&DateTimeOffset.UtcNow-s.Timestamp<=SafetyGate.MaximumTelemetryAge;
+        ProductPerformanceUpdate.HasCurrentTelemetry(_snapshot,DateTimeOffset.UtcNow);
     public Task ReleasePerformanceAsync() => _automaticActivation.ReleaseLimitsAsync(
         // Restore fans before removing the prerequisite limits; do not hold the Performance queue while releasing WMI.
         () => FanCommandAsync(async () =>

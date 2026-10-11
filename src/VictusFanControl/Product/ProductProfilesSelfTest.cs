@@ -133,6 +133,12 @@ internal static class ProductProfilesSelfTest
         if(ProductCurveMarkers.Build(liveDraft,sample with{GpuPowerW=double.NaN},null,null,null,AdaptiveCurveAxis.GpuPower).Count!=0||
             ProductCurveMarkers.Build(liveDraft,null,null,null,null,AdaptiveCurveAxis.CpuTemperature).Count!=0)
             throw new InvalidOperationException("Invalid/missing sensor produced a live marker.");
+        var missingLoad=sample with{ProductTelemetryTolerance=true,CpuLoadPercent=null,GpuLoadPercent=null};
+        var fallback=ProductCurveMarkers.Demand(original.Ac.Fan,missingLoad);
+        var expectedFallback=ProductCurveMarkers.Demand(original.Ac.Fan,sample with{CpuLoadPercent=100,GpuLoadPercent=100});
+        if(fallback is null||expectedFallback is null||fallback.Percent!=expectedFallback.Percent||fallback.Level!=expectedFallback.Level||
+            ProductCurveMarkers.Demand(original.Ac.Fan,missingLoad with{ProductTelemetryTolerance=false}) is not null||missingLoad.CpuLoadPercent is not null)
+            throw new InvalidOperationException("Product marker diverged from the conservative missing-load policy or invented observed utilization.");
         var expandedProfiles=original with{Ac=original.Ac with{GpuMaximumMHz=2500},Battery=original.Battery with{GpuMaximumMHz=210}};
         var expandedRoundtrip=ProductProfilesStore.Parse(ProductProfilesStore.Serialize(expandedProfiles));
         if(expandedRoundtrip.Ac.GpuMaximumMHz!=2500||expandedRoundtrip.Battery.GpuMaximumMHz!=210||original.Ac.GpuMaximumMHz!=1850||original.Battery.GpuMaximumMHz!=1200)

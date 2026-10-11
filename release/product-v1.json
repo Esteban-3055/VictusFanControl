@@ -53,7 +53,7 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.1.4",
+  "version": "1.1.5",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-gpu-power-handoffs-clean-resume-10-30-60s-three-attempts",

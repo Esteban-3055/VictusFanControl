@@ -1,6 +1,6 @@
 # VictusFanControl v1.1.0 (desarrollo)
 
-[English](README.md) · [Descargar v1.0.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.0.0) · [Instalación y uso](docs/PRODUCT_V1.md) · [Estado de validación](docs/PRODUCT_VALIDATION_STATUS.md)
+[English](README.md) · [Estable v1.0.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.0.0) · [Preliminar v1.1.5](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.1.5) · [Instalación y uso](docs/PRODUCT_V1.md) · [Estado de validación](docs/PRODUCT_VALIDATION_STATUS.md)
 
 Control de ventiladores y preferencias CPU/GPU para Windows, limitado al destino exacto **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, placa revisión 63.43, Intel Core i7-13700H y NVIDIA RTX 4060 Laptop GPU. v1.0.0 habilita Automático habitual para este equipo. Otros modelos o BIOS quedan fuera de esta autorización; HP 88F8 se conserva como histórico.
 
@@ -46,7 +46,7 @@ Con .NET 8 SDK, usa la propiedad explícita de entrega:
 dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
 ```
 
-El pipeline empaqueta todos los binarios del producto como **1.0.0.0**. Una compilación de `main` correcta puede publicar v1.0.0 tras pasar las verificaciones OEM, WMI y CPU/GPU del mismo commit. Se comprueba cada archivo contra el manifiesto y se adjuntan SHA-256 y procedencia. No se sobrescribe una release existente.
+El pipeline empaqueta todos los binarios del producto como **1.1.5.0**. Una compilación de `main` correcta puede publicar v1.1.5 tras pasar las verificaciones OEM, WMI y CPU/GPU del mismo commit. Se comprueba cada archivo contra el manifiesto y se adjuntan SHA-256 y procedencia. No se sobrescribe una release existente.
 
 Los arneses históricos conservan versión RC y gates originales: `control.enabledByDefault=false` y `automaticPolicyEnabled=false`. Esos registros describen la cualificación antigua; el producto tiene autorización separada para este destino exacto. Los planes anteriores se mantienen como historial.
 
@@ -54,6 +54,4 @@ Licencia MIT: [LICENSE](LICENSE). Componentes externos: [THIRD_PARTY_NOTICES.md]
 
 ## Instalador y actualizaciones v1.1.0
 
-La rama de desarrollo añade `VictusFanControl-1.1.0-Setup-win-x64.exe` y **Actualizaciones → Buscar actualizaciones**. El EXE conserva preferencias y añade el acceso en el menú Inicio; la actualización verifica el digest de la release estable y libera la sesión antes de instalar. Los artefactos de Actions permiten revisar esta entrega; v1.0.0 sigue siendo la release pública hasta publicar v1.1.0. [Guía](docs/PRODUCT_V1.md).
-
-Automático puede preparar un reintento manual en la misma GUI después de una interrupción, con liberación completa, sensores frescos y límites CPU/GPU confirmados. No rearma por sí solo y no elimina recuperación pendiente.
+La preliminar v1.1.5 separa **Descargar** de **Instalar** y conserva el instalador verificado entre aperturas y cuando falla la instalación. Actualizaciones permite recuperar sesiones pendientes antes de volver a pulsar Instalar. El instalador conserva por defecto las preferencias de inicio anteriores. El canal estable es el predeterminado; guarda **Incluir versiones preliminares** para recibir previews. [Guía](docs/PRODUCT_V1.md) · [Revisión funcional](docs/PRODUCT_1_1_5_REVIEW.md).
