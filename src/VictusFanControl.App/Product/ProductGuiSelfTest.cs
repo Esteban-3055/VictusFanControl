@@ -517,10 +517,13 @@ internal static partial class ProductGuiSelfTest
                 form.HandleCommand("curve-simulator");var initialTime=canvas.Simulation.ElapsedSeconds;
                 form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==initialTime+1,"Visible simulator did not advance automatically.");
                 form.HandleCommand("sim-run");form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==initialTime+1,"Paused simulator advanced.");
-                form.EditValue("sim-input-0",90);form.HandleCommand("sim-run");form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==initialTime+2&&canvas.Simulation.Current?.ThermalOverride==true,"Live simulation did not use changed inputs.");
+                form.EditValue("sim-input-0",90);form.HandleCommand("sim-run");form.PresentationTick();
+                require(canvas.Simulation.ElapsedSeconds==initialTime+2&&canvas.Simulation.Current is{ThermalOverride:false,CpuThermalDemand:{RawDemandC:90,SpikeSuppressed:true}},"Live simulation did not filter the first CPU spike.");
                 form.Hide();form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==initialTime+2,"Hidden simulator advanced.");form.Show();
-                form.HandleCommand("curve-editor");form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==initialTime+2,"Editor advanced simulation.");
-                form.HandleCommand("curve-simulator");canvas.Page=ProductPage.Settings;form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==initialTime+2,"Other page advanced simulation.");
+                form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==initialTime+3&&canvas.Simulation.Current?.ThermalOverride==false,"Live simulation confirmed CPU heat before two seconds.");
+                form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==initialTime+4&&canvas.Simulation.Current is{ThermalOverride:true,CpuThermalDemand:{ControlC:90,SpikeSuppressed:false}},"Live simulation did not confirm sustained CPU heat after two seconds.");
+                form.HandleCommand("curve-editor");form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==initialTime+4,"Editor advanced simulation.");
+                form.HandleCommand("curve-simulator");canvas.Page=ProductPage.Settings;form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==initialTime+4,"Other page advanced simulation.");
                 canvas.Page=ProductPage.Curves;form.HandleCommand("sim-reset");require(canvas.Simulation.ElapsedSeconds==0,"Reset failed.");
                 form.PresentationTick();require(canvas.Simulation.ElapsedSeconds==1,"Reset did not retain running playback.");
                 form.HandleCommand("curve-editor");
