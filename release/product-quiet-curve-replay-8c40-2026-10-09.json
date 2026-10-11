@@ -10,9 +10,9 @@
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "d75d6e6c3ad2b1190fa660924ace428527d16ed59cab05ed802120a0cdc4c5b6",
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "c92133becfb98aa2e0b61121caa32119f73f1a2ed8bea4c094f475d9c6f95b86",
     "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "7c94c2852df2ebd257c66107770d815ab46a47d7bba95edac275fe9edc1c4077",
-    "src/VictusFanControl/Product/ProductProfiles.cs": "ca5aefce4cd30161d2414e65fe5b1a62e76f5ed4b50ad4ac1b5e218b45a6279a",
+    "src/VictusFanControl/Product/ProductProfiles.cs": "69dab3cb9868f0a15a2b2179a8d03ac5c8c7cbe3e5f36e86acf5af35cae6d860",
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
-    "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "0cb48fa8ac820636094669cd988c1163dd63f112b4d36a27e2bca32aa577e426",
+    "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "76284ec97b6f0a0a25d10f1fb1e7f758f8817a2e4cd28ca06d5ae145a90476bb",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
     "src/VictusFanControl.App/Product/ProductRuntime.cs": "27001e0933030c6d8af5348918f30a7d1dd14f63f1dd133476fd11893ae6a6c3",
     "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "a9ae9446b54f163c215f4327e98d1dc954e1cd1ceb7ac238292797a9487b53f1"
@@ -298,7 +298,7 @@
     "disclosure": "Same recorded CPU/GPU temperatures and powers for all candidates. Targets are simulated with immediate acknowledgements; levels*100 are nominal RPM, not noise/dBA. No counterfactual cooling, acoustic improvement or physical qualification is inferred."
   },
   "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification.",
-  "sourceBindingRevision": 9,
-  "sourceBindingUpdate": "v1.1.8: re-executed the original 390-decision trace with the reviewed sources. Decision CSV bytes and all study summary fields match the archived baseline exactly. Historical research/study constructors keep CPU spike filtering disabled by default; habitual Automatic enables it explicitly. Separate tracked filter and native controller fixtures validate 2s CPU spike suppression, fresh/retained continuity and raw 99C handoff. No new physical pass is claimed.",
-  "sourceBindingUpdateBaseHead": "c7de8656a7dbf0557c78c3f889382283498641b8"
+  "sourceBindingRevision": 10,
+  "sourceBindingUpdate": "Background session recovery development, no version/release change: re-executed the original 390-decision trace. Decision CSV bytes and all summary fields match the archived study exactly; the 84 platform replay variants also match their archived results. Updated ProductProfiles (recovery preference) and ProductPlatformRetention (diagnostic reason/extra demand) source bindings only. CPU smoothing, retention decisions and historical evidence remain unchanged; fresh diagnostic counters have separate filter fixtures. No new physical pass is claimed.",
+  "sourceBindingUpdateBaseHead": "2c832a315c607d673d100ffca9471c228fe188c1"
 }
