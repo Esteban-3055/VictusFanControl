@@ -26,7 +26,12 @@ if ($manifest.releaseStage -ne 'target-specific-release' -or $manifest.finalRele
 if ($manifest.productPlatformRetention -ne 'optional-disabled-default-AC-Battery-plus2-60s-fresh3s' -or
     $candidate.experimentalPlatformRetention.defaultEnabled -ne $false -or $candidate.experimentalPlatformRetention.scope -ne 'optional-ac-and-battery' -or
     $candidate.experimentalPlatformRetention.maximumExtraRawLevels -ne 2 -or $candidate.experimentalPlatformRetention.maximumSupplementSeconds -ne 60) { throw 'Invalid optional platform retention contract.' }
-if($manifest.automaticProtectionControls -ne 'independent-cpu-gpu-power-handoffs-clean-resume-10-30-60s-three-attempts' -or $candidate.automaticProtectionControls -ne $manifest.automaticProtectionControls){throw 'Invalid configurable protections contract.'}
+if($manifest.automaticProtectionControls -ne 'independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts' -or $candidate.automaticProtectionControls -ne $manifest.automaticProtectionControls){throw 'Invalid configurable protections contract.'}
+foreach($power in @($manifest.automaticPowerContract,$candidate.automaticPowerContract)) {
+    if($power.cpuHandoffWatts -ne 60 -or $power.cpuHandoffSelectable -ne $true -or $power.gpuConsumptionHandoff -ne $false -or
+        $power.gpuTelemetryCoherenceWatts.Count -ne 2 -or $power.gpuTelemetryCoherenceWatts[0] -ne 0 -or $power.gpuTelemetryCoherenceWatts[1] -ne 300 -or
+        $power.gpuPowerStillContributesToDemand -ne $true){throw 'Invalid CPU-only power handoff contract.'}
+}
 if($manifest.manualAutomaticRetry -ne 'explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations' -or $candidate.reentryAfterInterruption -ne 'explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations'){throw 'Invalid manual Automatic retry contract.'}
 if($manifest.guidedPerformanceRecovery -ne 'gui-installer-exact-owner-release-only'){throw 'Invalid guided recovery contract.'}
 if($manifest.guidedFanRecovery -ne 'wmi-gui-experiment-orphan-and-target-bound-legacy-release-only'){throw 'Invalid guided fan recovery contract.'}

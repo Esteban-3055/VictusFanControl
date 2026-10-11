@@ -50,6 +50,13 @@ def main():
     require(contract["target"] == TARGET and contract["stableReleaseAuthorized"] is True,
             "Wrong target or missing release authorization")
     require(contract["physicalPassClaimed"] is False, "Must retain physical evidence limits")
+    require(manifest["automaticProtectionControls"] == contract["automaticProtectionControls"] ==
+            "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
+            "Wrong configurable protection contract")
+    require(manifest["automaticPowerContract"] == contract["automaticPowerContract"] == {
+        "cpuHandoffWatts": 60, "cpuHandoffSelectable": True, "gpuConsumptionHandoff": False,
+        "gpuTelemetryCoherenceWatts": [0, 300], "gpuPowerStillContributesToDemand": True,
+    }, "Wrong CPU-only power handoff contract")
     require(contract["experimentalPlatformRetention"]["defaultEnabled"] is False,
             "Retention must remain opt-in")
     required_observations = {
