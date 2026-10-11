@@ -106,9 +106,14 @@ internal sealed partial class ProductForm
         FileStream? verified = null;
         try
         {
-            _canvas.UpdateStatus = "Verificando el instalador guardado…"; _canvas.Invalidate();
+            _canvas.UpdateStatus = "Comprobando la release de GitHub y el instalador guardado…"; _canvas.Invalidate();
             if (_isolatedRuntime) await verifyFixture!(_updateCancellation.Token);
-            else verified = await ProductUpdates.OpenVerifiedInstallerAsync(update, _updateCancellation.Token);
+            else
+            {
+                update = await ProductUpdates.ConfirmPublishedInstallerAsync(update, Version.Parse(ProductRelease.Version), _draft.IncludePrereleaseUpdates, _updateCancellation.Token);
+                verified = await ProductUpdates.OpenVerifiedInstallerAsync(update, _updateCancellation.Token);
+                _canvas.DownloadedUpdate = update;
+            }
             if (_closing || IsDisposed) return;
             if (_canvas.Dirty || update.IsPrerelease && !_draft.IncludePrereleaseUpdates || _canvas.Busy || _restarting || _displayOff || boundary != _updateLifecycleBoundary)
             { _canvas.UpdateStatus = "El instalador se conserva. Guarda los cambios y resuelve la interrupción antes de volver a pulsar Instalar."; return; }

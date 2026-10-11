@@ -69,6 +69,28 @@ public static partial class ProductUpdates
         await CopyBoundedAsync(stream, memory, 4 * 1024 * 1024, deadline.Token);
         return ParseReleases(System.Text.Encoding.UTF8.GetString(memory.ToArray()), current, includePrereleases);
     }
+    internal static ProductUpdate ConfirmPublishedInstaller(ProductUpdate cached, ProductUpdate? published)
+    {
+        ValidateDownload(cached);
+        if (published is null || published.Version != cached.Version || published.Download != cached.Download ||
+            published.Size != cached.Size || published.Sha256 != cached.Sha256)
+            throw new InvalidDataException("El instalador guardado ya no coincide con la release publicada. Busca actualizaciones y vuelve a descargar.");
+        return published;
+    }
+    // A local receipt is a cache index, never independent authorization to elevate a local EXE.
+    internal static async Task<ProductUpdate> ConfirmPublishedInstallerAsync(ProductUpdate cached, Version current, bool includePrereleases, CancellationToken cancellation)
+    {
+        ValidateDownload(cached);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        using var response = await Client.GetAsync($"https://api.github.com/repos/{Repository}/releases/tags/v{cached.Version}", HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(deadline.Token).ConfigureAwait(false);
+        using var memory = new MemoryStream();
+        await CopyBoundedAsync(stream, memory, 4 * 1024 * 1024, deadline.Token).ConfigureAwait(false);
+        var published = ParseRelease(System.Text.Encoding.UTF8.GetString(memory.ToArray()), current, includePrereleases);
+        return ConfirmPublishedInstaller(cached, published);
+    }
     public static Task<string> DownloadAsync(ProductUpdate update, CancellationToken cancellation, IProgress<long>? progress = null) =>
         DownloadCachedAsync(update, cancellation, progress);
 

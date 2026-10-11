@@ -6,7 +6,7 @@ Base revisada: `4a9efbe0db80ef22d4ab147ffae328c6c90e7082` (v1.1.4). Se revisaron
 
 | Hallazgo | Comportamiento corregido | Regresión |
 | --- | --- | --- |
-| Cada descarga usaba otra carpeta y la GUI perdía el archivo ante un bloqueo | Caché por versión y digest; recibo durable; Descarga e Instalación separados | Un solo transporte para descarga inicial/reintento; reapertura sin red |
+| Cada descarga usaba otra carpeta y la GUI perdía el archivo ante un bloqueo | Caché por versión y digest; recibo durable como índice; Descarga e Instalación separados | Un solo transporte para descarga inicial/reintento; reapertura sin red |
 | Descargar cerraba el controlador como parte de una sola acción | Descargar sólo escribe el archivo y su recibo; instalar requiere acción explícita | Borrador/navegación/suspensión durante descarga sin instalación ni disposal |
 | Un journal previo bloqueaba la actualización sin conservar una selección reutilizable | Recuperación visible desde Actualizaciones; mismo instalador después de recuperar | Pendiente → recuperar → instalar, una descarga y un cierre por runtime |
 | Cancelar UAC o fallar al abrir obligaba a usar otra descarga | Reintentar Instalar con el archivo conservado | Dos aperturas, una descarga, un único disposal |
@@ -17,6 +17,8 @@ Base revisada: `4a9efbe0db80ef22d4ab147ffae328c6c90e7082` (v1.1.4). Se revisaron
 | Sin runtime, se ignoraban los eventos de pantalla | WndProc observa energía y conserva display-off antes del retorno | Tras cancelar UAC, pantalla apagada bloquea otro intento |
 | La actualización de límites podía usar una muestra reciente con temperaturas/potencias conservadas | Admisión común para GUI/runtime exige datos completos, actuales y no conservados | Campo conservado de 4 s y fecha crítica caducada bloquean Apply |
 | Marcadores de demanda exigían utilización aunque el producto ya la toleraba ausente | Misma entrada conservadora de 100 % que el motor; sensor sigue ausente | Demanda idéntica al input conservador; contrato histórico permanece estricto |
+
+Antes de abrir un EXE local, se consulta de nuevo la release exacta en GitHub y se exige la misma versión, URL, tamaño y digest; después se verifica el archivo. El recibo local permite encontrar/reutilizar la descarga, pero por sí solo no autoriza su ejecución. La comprobación de metadata requiere red; si falla, se conserva el archivo y no se cierra el controlador. Las regresiones rechazan metadata local/publicada discrepante.
 
 ## Matriz de revisión y validación
 
@@ -47,4 +49,4 @@ Se reejecutó la traza original de 390 decisiones / 593,2 s. El CSV de decisione
 
 Las tolerancias habituales siguen siendo RPM <10 s y campos críticos <5 s, con antigüedad original; inicio estricto y estudios históricos mantienen sus contratos. Un ACK de WMI no es prueba independiente de RPM o propiedad del firmware. Un instalador válido se conserva ante fallo de instalación; uno corrupto/incompleto debe descargarse de nuevo. No se reutiliza hardware parcialmente liberado ni se borran journals para forzar una actualización.
 
-Quedan por observar en el HP real: arranque de Windows, actualización desde una sesión fallida del usuario, cancelación/elevación real de UAC, carga de juego/CPU al 100 %, cambios entre monitores/DPI y suspensión. La caché usa un recibo local de la metadata verificada de GitHub y revalida el archivo; no añade firma Authenticode ni una cadena de firma independiente.
+Quedan por observar en el HP real: arranque de Windows, actualización desde una sesión fallida del usuario, cancelación/elevación real de UAC, carga de juego/CPU al 100 %, cambios entre monitores/DPI y suspensión. La caché usa un recibo local como índice, confirma la metadata publicada al instalar y revalida el archivo; no añade firma Authenticode ni una cadena de firma independiente.

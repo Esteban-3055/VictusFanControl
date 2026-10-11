@@ -25,6 +25,13 @@ internal static class ProductUpdatesSelfTest
         require(ProductUpdates.ParseReleases(mixed,current,true) is {IsPrerelease:true,Version:var latestPreview}&&latestPreview==new Version(1,3,0),"Preview channel failed to choose highest eligible version.");
         require(ProductUpdates.ParseReleases(List(Release("v1.3.0"),Release("v1.2.0",prerelease:true)),current,true) is {IsPrerelease:false,Version:var stableVersion}&&stableVersion==new Version(1,3,0),"Preview channel hid a newer stable version.");
         require(ProductUpdates.ParseReleases("[]",current,true)is null&&ProductUpdates.ParseReleases(List(Release("v1.1.0",prerelease:true)),current,true)is null,"Preview channel accepted equal/downgrade or mishandled empty releases.");
+        var published=ProductUpdates.ParseRelease(Release(),current)!;
+        require(ProductUpdates.ConfirmPublishedInstaller(published,published)==published,"Published cache confirmation rejected matching metadata.");
+        foreach(var changed in new[]{published with{Sha256=new string('b',64)},published with{Size=published.Size+1},published with{Version=new Version(1,2,1)},null})
+        {
+            bool rejected=false;try{ProductUpdates.ConfirmPublishedInstaller(published,changed);}catch(InvalidDataException){rejected=true;}
+            require(rejected,"Local cache metadata bypassed confirmation against the published GitHub installer.");
+        }
         bool invalidNewest=false;try{ProductUpdates.ParseReleases(List(Release("v1.4.0",prerelease:true,digest:"bad"),Release("v1.2.0")),current,true);}catch(InvalidDataException){invalidNewest=true;}
         require(invalidNewest,"Preview channel silently bypassed invalid newest installer metadata.");
         var defaults=ProductProfilesStore.Serialize(new ProductProfiles());

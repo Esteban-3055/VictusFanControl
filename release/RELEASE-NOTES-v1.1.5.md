@@ -2,7 +2,7 @@
 
 - Actualizador con **Descargar** e **Instalar v…** separados. La descarga verificada se conserva entre aperturas y al fallar la instalación; no se descarga otra vez para reintentar.
 - **Recuperar sesiones** accesible desde Actualizaciones. Se conserva el instalador mientras se resuelven registros anteriores. No se omiten las comprobaciones de liberación.
-- Nueva verificación de tamaño/SHA-256 antes de cada instalación; parciales, archivos alterados, versiones iguales/anteriores y previews sin selección explícita permanecen bloqueados. Adopción de descargas completas de v1.1.4 tras comprobarlas con la metadata solicitada.
+- Consulta breve de la release exacta en GitHub y nueva verificación de tamaño/SHA-256 antes de cada instalación, sin volver a descargar el EXE; parciales, archivos alterados, versiones iguales/anteriores y previews sin selección explícita permanecen bloqueados. Adopción de descargas completas de v1.1.4 tras comprobarlas con la metadata solicitada.
 - El instalador preserva por defecto las preferencias anteriores de inicio con Windows y Automático. Un reintento exitoso limpia el código de error previo.
 - La apertura del instalador drena la sesión incluso si falla el bloqueo inicial, y deja de presentar CPU/GPU como activos tras liberar o perder el controlador.
 - Las notificaciones de pantalla se conservan también sin un runtime abierto. Una verificación interrumpida por energía conserva el archivo y requiere volver a pulsar Instalar.
