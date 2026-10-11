@@ -1,4 +1,4 @@
-# Recuperación automática de sesiones (desarrollo sin nueva release)
+# Recuperación automática de sesiones — v1.1.9
 
 La GUI supervisa los registros pendientes también al iniciar y mientras está
 minimizada. La preferencia `recoverSessionsAutomatically`, activada por defecto,
@@ -50,4 +50,5 @@ Los fixtures cubren espera/inventario/presupuesto, rechazo de sesiones activas,
 liberación previa, cambios de registros, preferencias, borrador, arranque,
 reentrada fresca, parada del usuario, fallo del recuperador, suspensión y salida.
 Las pruebas no escriben hardware; la experiencia térmica y acústica futura
-requiere observación física. No se cambia número de versión ni publicación.
+requiere observación física. Esta funcionalidad se publica en v1.1.9; las
+evidencias históricas y los límites de validación permanecen vigentes.
