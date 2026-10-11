@@ -7,12 +7,12 @@ namespace VictusFanControl.App;
 /// <summary>Read-only diagnostic export, including bounded snapshots of unresolved records. No process control.</summary>
 internal static class ProductDiagnostics
 {
-    internal static void Export(string path,ProductRuntimeState state,ProductProfiles draft,string? logPath)
+    internal static void Export(string path,ProductRuntimeState state,ProductProfiles draft,string? logPath,object? window=null)
     {
         var full=Path.GetFullPath(path);var temporary=full+"."+Guid.NewGuid().ToString("N")+".tmp";
         var maximumLogBytes=state.AutomaticReviewMaximumSeconds == ProductAutomaticReview.ExtendedMaximumSeconds
             ? AppLog.ExtendedReviewTailBytes : AppLog.DefaultTailBytes;
-        var summary=new{diagnosticMaximumBytesPerStream=maximumLogBytes,kind="VictusFanControl.GuiDiagnostic",capturedUtc=DateTimeOffset.UtcNow,version=typeof(ProductDiagnostics).Assembly.GetName().Version?.ToString(),sessionId=AppLog.SessionId,sessionStartedUtc=AppLog.SessionStartedUtc,
+        var summary=new{diagnosticMaximumBytesPerStream=maximumLogBytes,kind="VictusFanControl.GuiDiagnostic",capturedUtc=DateTimeOffset.UtcNow,version=typeof(ProductDiagnostics).Assembly.GetName().Version?.ToString(),sessionId=AppLog.SessionId,sessionStartedUtc=AppLog.SessionStartedUtc,window,
             state.Hardware,state.Target,state.Source,state.Runtime,state.FanMode,state.FanAuthority,state.FanLevel,state.LifecycleBlocked,state.LifecycleBlockReason,state.InterruptionDetails,
             automaticThermalContract="cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
             state.AutomaticReview,state.AutomaticReviewMaximumSeconds,state.AutomaticReviewRemainingSeconds,state.AutomaticCpuSpikeRemainingMilliseconds,state.AutomaticDecision,state.AppliedAutomaticConfiguration,state.AppliedFanProfile,

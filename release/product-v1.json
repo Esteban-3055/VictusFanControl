@@ -24,7 +24,8 @@
     "current-windows-logon-startup-coupled-activation-and-clean-shutdown",
     "configurable-protections-and-clean-unattended-resumption-on-current-target",
     "current-target-product-10s-rpm-5s-critical-grace-and-recovery-under-load",
-    "4k-200-percent-windowed-and-per-monitor-dpi-transition"
+    "4k-200-percent-windowed-and-per-monitor-dpi-transition",
+    "game-resolution-4k-to-1440p-and-return-with-unchanged-200-percent-dpi"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -53,7 +54,7 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.1.6",
+  "version": "1.1.7",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -83,5 +84,6 @@
     ],
     "gpuPowerStillContributesToDemand": true
   },
-  "automaticAdmissionDiagnostics": "exact-snapshot-and-evaluation-instant-specific-codes-startup-progress-wait-log-every-10s"
+  "automaticAdmissionDiagnostics": "exact-snapshot-and-evaluation-instant-specific-codes-startup-progress-wait-log-every-10s",
+  "windowDisplayContract": "preferred-normal-size-current-resolution-and-dpi-recompute-no-cumulative-scaling-work-area-fit-hidden-minimized-maximized"
 }

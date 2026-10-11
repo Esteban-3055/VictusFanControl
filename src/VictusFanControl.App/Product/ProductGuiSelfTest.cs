@@ -18,6 +18,8 @@ internal static partial class ProductGuiSelfTest
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
             ProductUpdatesSelfTest.Run(Require);
             ProductAutomaticAdmissionSelfTest.Run(Require);
+            ProductWindowLayoutSelfTest.Run(Require);
+            TestDisplayChanges(Require);
             VictusFanControl.Recovery.ProductRecoveryClientSelfTest.Run(Require);
             TestGuidedRecovery(Require);
             TestUpdatePage(Require);

@@ -40,30 +40,13 @@ internal sealed partial class ProductForm : Form
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    protected override void OnLoad(EventArgs e)
-    {
-        base.OnLoad(e);
-        FitWorkingArea();
-    }
-    protected override void OnDpiChanged(DpiChangedEventArgs e)
-    {
-        base.OnDpiChanged(e);
-        FitWorkingArea();
-    }
-    private void FitWorkingArea()
-    {
-        if(WindowState!=FormWindowState.Normal)return;
-        var area=Screen.FromControl(this).WorkingArea;
-        MinimumSize=new(Math.Min(MinimumSize.Width,area.Width),Math.Min(MinimumSize.Height,area.Height));
-        _canvas.MinimumSize=Size.Empty;
-        Size=new(Math.Min(Width,area.Width),Math.Min(Height,area.Height));
-        Location=new(Math.Clamp(Left,area.Left,area.Right-Width),Math.Clamp(Top,area.Top,area.Bottom-Height));
-    }
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null,Func<ProductDisplayMetrics>? displayMetricsInFixture=null)
     {
         SuspendLayout();
         _retryRuntimeFactory=retryRuntimeFactory;_modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
         _isolatedRuntime=fixture is not null||runtimeFactory is not null;_restartDirectory=restartDirectory;_restartOpening=restartState is not null;
+        if(displayMetricsInFixture is not null&&!_isolatedRuntime)throw new ArgumentException("La geometría simulada requiere un runtime aislado.");
+        _displayMetricsInFixture=displayMetricsInFixture;
         _canvas.AutomaticRetryAvailable=automaticReview is null&&(!_isolatedRuntime||retryRuntimeFactory is not null);
         string? notice=null;
         _draft=fixtureProfiles is null?ProductProfilesStore.Load(profilesPath,out notice,Migrate):ProductProfilesStore.Copy(fixtureProfiles);
@@ -409,7 +392,7 @@ internal sealed partial class ProductForm : Form
         var imported=await Task.Run(()=>{if(new FileInfo(path).Length>1024*1024)throw new InvalidDataException("El archivo de perfiles supera 1 MiB.");return ProductProfilesStore.Parse(File.ReadAllText(path));});
         if(_closing)return;imported.Validate();if(imported.IncludePrereleaseUpdates!=_draft.IncludePrereleaseUpdates)ResetUpdateSelection();_draft=imported;_canvas.Profiles=_draft;ResetSimulation();_canvas.SelectedNode=-1;_canvas.Dirty=true;_canvas.Notice="Perfiles importados en edición; falta Guardar. No se aplicó hardware.";
     });
-    internal Task ExportDiagnosticsAsync(string path,string? fixtureLog=null)=>RunAsync(async()=>{var state=_canvas.State;var draft=Draft;await Task.Run(()=>ProductDiagnostics.Export(path,state,draft,fixtureLog??AppLog.CurrentLogPath));_canvas.Notice="Diagnóstico exportado. Revisa rutas locales antes de compartirlo.";});
+    internal Task ExportDiagnosticsAsync(string path,string? fixtureLog=null)=>RunAsync(async()=>{var state=_canvas.State;var draft=Draft;var display=DisplayDiagnostic();await Task.Run(()=>ProductDiagnostics.Export(path,state,draft,fixtureLog??AppLog.CurrentLogPath,display));_canvas.Notice="Diagnóstico exportado. Revisa rutas locales antes de compartirlo.";});
     internal void PresentationTick()
     {
         if(_closing||IsDisposed)return;
@@ -470,6 +453,7 @@ internal sealed partial class ProductForm : Form
             if(code==4)operation.GetAwaiter().GetResult();
         }
         base.WndProc(ref m);
+        if(m.Msg==0x7E||m.Msg==0x1A)QueueDisplayRefresh(m.Msg==0x7E?"resolution":"desktop-settings");
     }
     internal Task HandlePowerEventAsync(int code,int? display=null)
     {

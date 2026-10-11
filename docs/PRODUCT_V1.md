@@ -63,3 +63,5 @@ Referencias de Windows: [estados de energía e Inicio rápido](https://learn.mic
 Validación software: inventario compartido; casos de liberación/rechazo, marca del mismo/otro arranque, huellas cambiadas, intención huérfana y cierre/suspensión; ninguna fixture escribe hardware real. La comprobación física de esta nueva interfaz en el Victus sigue pendiente.
 
 Desde v1.1.6, la espera o el rechazo de Automático muestra la causa concreta y registra la misma muestra e instante de evaluación. Al iniciar, también se muestra el progreso de las tres adquisiciones nuevas. [Cambios y pruebas](PRODUCT_1_1_6_CHANGES.md).
+
+Desde v1.1.7 estable, la ventana responde al cambiar resolución, DPI o área de trabajo y recupera su tamaño normal al volver al escritorio. El diagnóstico incluye los datos de pantalla y ventana. [Ajuste y verificación](PRODUCT_1_1_7_DISPLAY.md).
