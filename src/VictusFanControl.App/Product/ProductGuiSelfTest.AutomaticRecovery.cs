@@ -64,8 +64,9 @@ internal static partial class ProductGuiSelfTest
                 exit??=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Background recovery fixture exit hung.");
                 require(old.Disposals==1,"Background recovery disposed the previous runtime twice.");
             }
-            foreach (var activate in new[]{false,true})
+            foreach (var scenario in new[]{"firmware","activate","stop-before"})
             {
+                var activate=scenario!="firmware";
                 var pending=new ProductRecoverySelection(Guid.NewGuid(),Guid.Empty);var next=new RecordingRuntime();int initial=0,runs=0;
                 using var form=new ProductForm("fixture://startup-recovery",fixtureProfiles:new(){ActivateAutomaticOnStart=activate},
                     runtimeFactory:()=>{initial++;throw new IOException("Pending startup opened the normal controller.");},
@@ -74,6 +75,7 @@ internal static partial class ProductGuiSelfTest
                 form.RecoveryRunner=_=>{runs++;pending=new(Guid.Empty,Guid.Empty);return Task.FromResult(new ProductRecoveryResult(true,"fixture","released"));};
                 form.RecoveryRuntimeFactory=_=>Task.FromResult<IProductRuntime>(next);
                 form.Show();Application.DoEvents();var clock=Environment.TickCount64;
+                if(scenario=="stop-before")form.HandleCommand("firmware");
                 form.TryAutomaticRecovery(clock);form.TryAutomaticRecovery(clock+10000);
                 PumpUntil(()=>runs==1 && !form.Canvas.Busy,"Pending startup did not recover in background.");
                 require(initial==0 && next.Starts==1 && next.Commands==0,"Startup recovered by opening an unresolved controller or activating early.");
@@ -82,7 +84,7 @@ internal static partial class ProductGuiSelfTest
                     FanAuthority="Firmware",CanApplyPerformance=true,Snapshot=new TelemetrySnapshot(at.AddSeconds(i),"CPU",55,20,30,"GPU",45,15,20,2000,2000)
                     {CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",55)]}});
                 PumpUntil(()=>!form.Canvas.Busy,"Startup recovery activation hung.");
-                require(next.Commands==(activate?1:0),"Startup recovery ignored the saved start preference.");
+                require(next.Commands==(scenario=="activate"?1:0),"Startup recovery ignored the saved start preference or user stop during its wait.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Startup recovery exit hung.");
             }
             Console.WriteLine("Background GUI recovery: PASS (release drain, exact inventory, saved/applied profiles, fresh reentry, user stop, disabled preferences, unconfirmed reset, suspend and exit; zero hardware IO).");

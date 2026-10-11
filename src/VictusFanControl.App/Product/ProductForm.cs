@@ -203,6 +203,8 @@ internal sealed partial class ProductForm : Form
     }
     internal void HandleCommand(string id)
     {
+        if (id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release" or "session-restart")
+            _automaticRecoveryResumeSuppressed = true;
         if (_recoveryTask is not null && id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")
         {
             _recoveryResumeCancelled = true; _automaticResumption.Cancel();
@@ -211,6 +213,10 @@ internal sealed partial class ProductForm : Form
             _canvas.Invalidate(); return;
         }
         if(_closing||_restarting||IsDisposed)return;
+        if (_runtime is null && _canvas.State.PerformanceRecovery?.Pending == true && id is "firmware" or "fan-mode-0")
+        {
+            _automaticResumption.Cancel(); _canvas.Notice="Se recuperará la sesión sin activar Automático."; _canvas.Invalidate(); return;
+        }
         if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1" or "fan-mode-2" or "performance-apply" or "performance-release")
             _startupAutomatic?.Cancel("Automático al iniciar cancelado por el usuario.");
         if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")_automaticResumption.Cancel();
@@ -248,7 +254,7 @@ internal sealed partial class ProductForm : Form
         }
         if(_canvas.Busy&&id is not("firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close"))return;
         if(id=="fan-mode-1"&&(!_canvas.State.ManualAuthorized||_canvas.State.LifecycleBlocked))return;
-        if(id=="fan-mode-2")_automaticResumption.Arm();
+        if(id=="fan-mode-2") { _automaticRecoveryResumeSuppressed=false; _automaticResumption.Arm(); }
         if(id=="fan-mode-2"&&_canvas.State.LifecycleBlocked){_ = RetryAutomaticAsync();return;}
         if(id=="manual-apply"&&(!_canvas.State.ManualAuthorized||_canvas.State.FanMode!="Manual"||_canvas.State.Runtime!="Healthy"||_canvas.State.LifecycleBlocked))return;
         if(id=="performance-apply"&&!_canvas.CanApplyPerformance)return;

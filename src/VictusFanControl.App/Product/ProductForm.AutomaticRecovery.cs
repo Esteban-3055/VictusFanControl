@@ -6,7 +6,7 @@ namespace VictusFanControl.App;
 internal sealed partial class ProductForm
 {
     private readonly ProductAutomaticRecovery _automaticRecovery = new();
-    private bool _recoveryAtStartup, _recoveryResumeCancelled;
+    private bool _recoveryAtStartup, _recoveryResumeCancelled, _automaticRecoveryResumeSuppressed;
 
     internal void TryAutomaticRecovery(long? clock = null)
     {
@@ -17,12 +17,12 @@ internal sealed partial class ProductForm
             _isolatedRuntime && RecoveryRunner is null)
         { _automaticRecovery.Pause(); return; }
         if (!_automaticRecovery.TakeRequest(_canvas.State, now)) return;
-        var resume = Draft.Protections.ResumeAutomatic &&
+        var resume = !_automaticRecoveryResumeSuppressed && Draft.Protections.ResumeAutomatic &&
             (_automaticResumption.Wanted && _resumptionProfiles?.Protections.ResumeAutomatic == true ||
              _recoveryAtStartup && !_restartOpening && _saved.ActivateAutomaticOnStart && _saved.Protections.ResumeAutomatic);
         var preferences = ProductProfilesStore.Copy(_automaticResumption.Wanted && _resumptionProfiles is not null
             ? _resumptionProfiles : _recoveryAtStartup ? _saved : Draft);
-        _recoveryResumeCancelled = false;
+        _recoveryResumeCancelled = _automaticRecoveryResumeSuppressed;
         _restarting = true; _restartLifecycleInterrupted = false; _canvas.Busy = true;
         // Reserve the operation before the first background inventory read; exit drains this same task.
         _recoveryTask = RecoverInBackgroundAsync(preferences, resume, _canvas.State.PerformanceRecovery!);
