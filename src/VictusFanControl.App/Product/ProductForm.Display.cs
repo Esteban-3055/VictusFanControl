@@ -93,6 +93,23 @@ internal sealed partial class ProductForm
         var screen = Screen.FromControl(this);
         return new(screen.DeviceName, screen.Bounds, screen.WorkingArea, DeviceDpi);
     }
+    private void ApplyFixtureTrackingLimits(IntPtr pointer)
+    {
+        if (_displayMetricsInFixture is null || pointer == IntPtr.Zero) return;
+        // The isolated display fixture supplies both monitor geometry and its native
+        // tracking limits. Hosted CI otherwise constrains a simulated 4K window to
+        // its physical 1024x768 desktop, before any product layout can be observed.
+        var display = _displayMetricsInFixture();
+        var minimum = _windowLayout.Initialized ? _windowLayout.Calculate(display).MinimumSize : new Size(1, 1);
+        Marshal.WriteInt32(pointer, 8, display.WorkingArea.Width);
+        Marshal.WriteInt32(pointer, 12, display.WorkingArea.Height);
+        Marshal.WriteInt32(pointer, 16, display.WorkingArea.Left - display.Bounds.Left);
+        Marshal.WriteInt32(pointer, 20, display.WorkingArea.Top - display.Bounds.Top);
+        Marshal.WriteInt32(pointer, 24, minimum.Width);
+        Marshal.WriteInt32(pointer, 28, minimum.Height);
+        Marshal.WriteInt32(pointer, 32, display.Bounds.Width);
+        Marshal.WriteInt32(pointer, 36, display.Bounds.Height);
+    }
     internal object DisplayDiagnostic() => new { deviceDpi = DeviceDpi, display = ReadDisplayMetrics(),
         bounds = Bounds, restoreBounds = RestoreBounds, minimumSize = MinimumSize,
         windowState = WindowState.ToString(), preferred = _windowLayout.PreferredSize };

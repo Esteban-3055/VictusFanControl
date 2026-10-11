@@ -454,6 +454,7 @@ internal sealed partial class ProductForm : Form
             if(code==4)operation.GetAwaiter().GetResult();
         }
         base.WndProc(ref m);
+        if(m.Msg==0x24)ApplyFixtureTrackingLimits(m.LParam); // WM_GETMINMAXINFO; isolated display fixtures only.
         if(m.Msg==0x7E||m.Msg==0x1A)QueueDisplayRefresh(m.Msg==0x7E?"resolution":"desktop-settings");
     }
     internal Task HandlePowerEventAsync(int code,int? display=null)
