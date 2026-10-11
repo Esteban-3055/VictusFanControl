@@ -13,7 +13,11 @@ internal sealed partial class ProductCanvas
         DrawText(g,"Observador: "+(r?.Status??"Sin observador"),342,515,22,r?.Ready==true?Green:Muted,750);
         DrawText(g,$"TZ01: {r?.Tz01.Value?.ToString("0.0")??"—"} °C · DTT3: {r?.Dtt3.Value?.ToString("0.0")??"—"} °C",342,563,22,null,750);
         DrawText(g,$"Demanda auxiliar: {r?.SourceDemand?.ToString("0.0")??"—"} · demanda acotada: {r?.SupplementalDemand?.ToString("0.0")??"—"}",342,607,21,Muted,750);
-        DrawText(g,"Son fuentes ACPI/DTT; no se les asigna una ubicación física no comprobada. Vigencia <3 s y dos adquisiciones distintas durante ≥1 s.",342,654,20,Muted,750,height:77);
+        var reason = r?.ReasonCode switch { "RetainingDescent" => "Reteniendo el descenso", "EpisodeExpired" => "Plazo agotado; continúa la curva base",
+            "BaselineDominates" => "La curva base cubre la demanda auxiliar", "AuxiliaryUnavailable" => "Fuentes no vigentes; continúa la curva base",
+            "NoAcknowledgedLevel" => "Esperando el primer nivel aplicado", "Disabled" => "Desactivada", _ => "Cualificando fuentes" };
+        DrawText(g,$"{reason} · aporte +{r?.ExtraDemand.ToString("0.0")??"0"} · plazo {r?.RemainingSeconds?.ToString("0")??"—"} s",342,650,19,Muted,750,height:44);
+        DrawText(g,"Fuentes ACPI/DTT sin ubicación física comprobada. Vigencia <3 s; dos adquisiciones distintas durante ≥1 s.",342,695,18,Muted,750,height:54);
         Button(g,"retention-quiet-candidate","Restaurar curva predeterminada AC v1.0",new(342,761,751,48));
         DrawText(g,"Prueba explícita desde Firmware",1178,275,26,null,438,true);
         DrawText(g,"Editar prepara el borrador. Guarda y activa Automatic desde Firmware con AC o batería. La retención continúa al cambiar de perfil. Cambiar la opción no altera una sesión activa.",1178,342,21,Muted,438,height:150);

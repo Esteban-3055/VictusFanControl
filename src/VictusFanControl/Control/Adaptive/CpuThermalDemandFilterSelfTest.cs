@@ -19,6 +19,8 @@ internal static class CpuThermalDemandFilterSelfTest
             Apply(Input(0));
             Check(Apply(Input(1, 91, 80)).CpuRawControlTemperatureC == 50, "Single package/core spike reached demand.");
             Check(Apply(Input(2)).CpuEffectiveTemperatureC == 50, "Cooling did not pass immediately.");
+            Check(filter.Observation is { FreshAcquisitions:3, SuppressedFreshAcquisitions:1, ExtremeBypassAcquisitions:0 },
+                "Diagnostic counters did not preserve fresh versus suppressed acquisitions.");
             for (var s = 3; s < 20; s++)
                 Check(Apply(Input(s, s % 2 == 1 ? 94 : 70, s % 2 == 1 ? 85 : 60)).CpuRawControlTemperatureC < 85,
                     "Separated spikes accumulated into sustained heat.");
@@ -32,6 +34,7 @@ internal static class CpuThermalDemandFilterSelfTest
             filter.Reset(); Apply(Input(0));
             Check(Apply(Input(1, 99, 85)).CpuRawControlTemperatureC == 99 && filter.Observation!.ExtremeBypass,
                 "99C was hidden by the spike window.");
+            Check(filter.Observation is { FreshAcquisitions:2, SuppressedFreshAcquisitions:0, ExtremeBypassAcquisitions:1 }, "Extreme bypass counter is incorrect.");
             Check(!filter.TryApply(Input(1, 100), TimeSpan.FromSeconds(3), out _, out _), "Duplicate raw epoch accepted.");
             Check(!filter.TryApply(Input(2) with { CpuEffectiveTemperatureC = double.NaN }, TimeSpan.FromSeconds(3), out _, out _),
                 "Invalid raw telemetry was turned into valid filtered data.");
@@ -41,6 +44,8 @@ internal static class CpuThermalDemandFilterSelfTest
             filter.Reset(); Apply(Input(0)); Apply(Input(1, 91, 80));
             Check(Apply(Input(2, 91, 80) with { CpuThermalRetained = true }).CpuRawControlTemperatureC == 50,
                 "Retained CPU acquisition confirmed heat.");
+            Check(filter.Observation!.FreshAcquisitions == 2 && filter.Observation.SuppressedFreshAcquisitions == 1,
+                "Cached telemetry was counted as a new CPU acquisition.");
             Check(Apply(Input(3, 91, 80)).CpuRawControlTemperatureC == 50 &&
                 Apply(Input(4, 91, 80)).CpuRawControlTemperatureC == 50 &&
                 Apply(Input(5, 91, 80)).CpuRawControlTemperatureC == 91,

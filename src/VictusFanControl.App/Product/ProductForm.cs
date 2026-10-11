@@ -98,7 +98,10 @@ internal sealed partial class ProductForm : Form
                         FanMode=pending.FanRecords?.Count>0?"RecoveryRequired":"Firmware",FanAuthority=pending.FanRecords?.Count>0?"Unknown":"Firmware",
                         CpuState=pending.CpuSession.HasValue?"Recovering":"Disabled",GpuState=pending.GpuSession.HasValue?"Recovering":"Disabled"};
                     _canvas.Page=ProductPage.Settings;_canvas.Notice=pending.Detail;_canvas.AutomaticRetryAvailable=false;
-                    if(!isolated)RegisterPowerNotifications();UpdateTray(_canvas.State);return; // No telemetry/controller is opened while retained authority is unresolved.
+                    _recoveryAtStartup = true;
+                    if(!isolated)RegisterPowerNotifications();UpdateTray(_canvas.State);_presentationTimer.Start();
+                    if((minimized||_draft.StartMinimized)&&!_restartOpening)Hide();
+                    return; // The recovery monitor opens no telemetry/controller until release succeeds.
                 }
             }
             if(_runtime is null)_runtime=await (runtimeFactory?.Invoke()??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,Draft,_automaticReview)));
@@ -200,6 +203,13 @@ internal sealed partial class ProductForm : Form
     }
     internal void HandleCommand(string id)
     {
+        if (_recoveryTask is not null && id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")
+        {
+            _recoveryResumeCancelled = true; _automaticResumption.Cancel();
+            _startupAutomatic?.Cancel("Reanudación cancelada por el usuario.");
+            _canvas.Notice = "Reanudación cancelada. La recuperación terminará liberando el control.";
+            _canvas.Invalidate(); return;
+        }
         if(_closing||_restarting||IsDisposed)return;
         if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1" or "fan-mode-2" or "performance-apply" or "performance-release")
             _startupAutomatic?.Cancel("Automático al iniciar cancelado por el usuario.");
@@ -272,6 +282,7 @@ internal sealed partial class ProductForm : Form
             case "cpu-toggle":Change(_draft with{CpuEnabled=!_draft.CpuEnabled});break;
             case "gpu-toggle":Change(_draft with{GpuEnabled=!_draft.GpuEnabled});break;
             case "automatic-start-toggle":Change(_draft with{ActivateAutomaticOnStart=!_draft.ActivateAutomaticOnStart});break;
+            case "recovery-auto-toggle":Change(_draft with{RecoverSessionsAutomatically=!_draft.RecoverSessionsAutomatically});break;
             case "minimized-toggle":Change(_draft with{StartMinimized=!_draft.StartMinimized});break;
             case "save":_ = SaveAsync();break;
             case "curve-apply":
@@ -397,7 +408,7 @@ internal sealed partial class ProductForm : Form
     internal void PresentationTick()
     {
         if(_closing||IsDisposed)return;
-        TryStartupAutomatic();TryAutomaticResumption();
+        TryStartupAutomatic();TryAutomaticRecovery();TryAutomaticResumption();
         // Only the visible offline simulator consumes virtual time. No catch-up
         // on returning from the tray, another page or the editor.
         if(Visible&&WindowState!=FormWindowState.Minimized&&!_canvas.Busy&&_canvas.Page==ProductPage.Curves&&_canvas.SimulationVisible&&_canvas.SimulationRunning)

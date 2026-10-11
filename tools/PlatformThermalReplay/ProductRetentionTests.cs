@@ -31,12 +31,14 @@ internal static class ProductRetentionTests
         Observe(p,1);Check(p.State.Ready,"distinct fresh source epochs qualify");
         Check(p.GetSupplement(Input(1),12,null) is null,"no acknowledged target means no retention");
         Check(p.GetSupplement(Input(1),12,40)==14,"auxiliary contribution is limited to two raw levels");
+        Check(p.State.ReasonCode=="RetainingDescent" && p.State.ExtraDemand==2,"retention evidence must distinguish qualification from actual contribution");
         p.EnsureDispatchAllowed(start.AddSeconds(1),start.AddSeconds(1.2));
         Refused(()=>p.EnsureDispatchAllowed(start.AddSeconds(1),start.AddSeconds(4)),"dispatch source at three seconds is stale");
         for(int i=2;i<=80;i++)
         {
             Observe(p,i);var extra=p.GetSupplement(Input(i),12,40);
             Check(i<61 ? extra==14 : extra is null,"continuous warm sources must not renew expired retention");
+            Check(i<61 ? p.State.ReasonCode=="RetainingDescent" : p.State.ReasonCode=="EpisodeExpired","expiry must be visible without changing the episode");
         }
         Observe(p,81);Check(p.GetSupplement(Input(81),40,40) is null,"baseline catches retention ceiling");
         Observe(p,82);Check(p.GetSupplement(Input(82),12,13)==13,"cannot request a target above the acknowledged level");

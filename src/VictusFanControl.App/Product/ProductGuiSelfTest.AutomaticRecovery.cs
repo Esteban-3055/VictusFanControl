@@ -1,0 +1,92 @@
+using VictusFanControl.Product;
+using VictusFanControl.Recovery;
+using VictusFanControl.Telemetry;
+
+namespace VictusFanControl.App;
+
+internal static partial class ProductGuiSelfTest
+{
+    private static void TestBackgroundRecovery(Action<bool,string> require)
+    {
+        var exitCode=Environment.ExitCode;
+        try
+        {
+            foreach(var scenario in new[]{"resume","stop","disabled-resume","runner-failure","suspend","close","changed","disabled-recovery"})
+            {
+                var selected=new ProductRecoverySelection(Guid.NewGuid(),Guid.NewGuid()); var pending=selected;
+                var old=new RecordingRuntime{DisposeGate=new(TaskCreationOptions.RunContinuationsAsynchronously)};
+                var next=new RecordingRuntime();int runs=0,created=0;
+                var released=new TaskCompletionSource<ProductRecoveryResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var profiles=new ProductProfiles {RecoverSessionsAutomatically=scenario!="disabled-recovery",
+                    Protections=new(){ResumeAutomatic=scenario!="disabled-resume"}};
+                using var form=new ProductForm("fixture://automatic-recovery",fixture:old,fixtureProfiles:profiles);
+                form.RecoverySelectionReader=()=>scenario=="changed" ? selected with{GpuSession=Guid.NewGuid()} : pending;
+                form.RecoveryRunner=s=>{runs++;require(old.Disposals==1 && s==selected,"Background recovery bypassed release or exact selection.");return released.Task;};
+                form.RecoveryRuntimeFactory=p=>{created++;require(p.Ac.CpuPl1Watts==profiles.Ac.CpuPl1Watts,"Background recovery applied an unsaved draft.");return Task.FromResult<IProductRuntime>(next);};
+                form.Show();Application.DoEvents();
+                var at=DateTimeOffset.UtcNow.AddSeconds(-2);
+                ProductRuntimeState Ready(int i)=>new(){Target=ProductRecoverySelection.Target,AutomaticAuthorized=true,Runtime="Healthy",Source="Ac",
+                    FanAuthority="Firmware",CanApplyPerformance=true,Snapshot=new TelemetrySnapshot(at.AddSeconds(i),"CPU",55,20,30,"GPU",45,15,20,2000,2000)
+                    {CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",55)]}};
+                old.Publish(Ready(2) with{FanMode="Automatic"});form.EditValue("pl1",38);
+                old.Publish(Ready(2) with{LifecycleBlocked=true,Runtime="Failed",PerformanceRecovery=new(true,"pending",selected.CpuSession,selected.GpuSession)});
+                var clock=Environment.TickCount64;form.TryAutomaticRecovery(clock);form.TryAutomaticRecovery(clock+10000);
+                if(scenario=="disabled-recovery")
+                {
+                    require(!form.Canvas.Busy && runs==0,"Disabled recovery launched unattended work.");
+                    old.DisposeGate.SetResult();var disabledExit=form.RequestExitAsync();PumpUntil(()=>disabledExit.IsCompleted,"Disabled fixture exit hung.");continue;
+                }
+                if(scenario=="changed")
+                {
+                    PumpUntil(()=>!form.Canvas.Busy,"Changed background inventory hung.");
+                    require(runs==0 && created==0 && old.Disposals==0,"Changed inventory launched hardware recovery.");
+                    old.DisposeGate.SetResult();var changedExit=form.RequestExitAsync();PumpUntil(()=>changedExit.IsCompleted,"Changed fixture exit hung.");continue;
+                }
+                PumpUntil(()=>old.Disposals==1,"Background recovery did not drain the old runtime.");
+                require(runs==0 && created==0,"Background recovery passed an unresolved disposal.");
+                old.DisposeGate.SetResult();PumpUntil(()=>runs==1,"Background recovery runner did not launch.");
+                if(scenario=="stop")form.HandleCommand("firmware");
+                if(scenario=="suspend")form.HandlePowerEventAsync(4).GetAwaiter().GetResult();
+                Task? exit=scenario=="close"?form.RequestExitAsync():null;
+                if(exit is not null)require(!exit.IsCompleted,"Exit did not retain the idle recovery coordinator.");
+                if(scenario!="runner-failure")pending=new(Guid.Empty,Guid.Empty);
+                released.SetResult(new(scenario!="runner-failure","fixture-evidence",scenario=="runner-failure"?"unconfirmed reset":"released"));
+                PumpUntil(()=>!form.Canvas.Busy||exit?.IsCompleted==true,"Background recovery never completed.");
+                if(scenario is "runner-failure" or "suspend" or "close")require(created==0,"Failed/interrupted recovery recreated a controller.");
+                else
+                {
+                    require(created==1 && next.Commands==0 && form.Draft.Ac.CpuPl1Watts==38,"Recovery activated early or lost unsaved preferences.");
+                    next.Publish(Ready(0));next.Publish(Ready(1));next.Publish(Ready(2));PumpUntil(()=>!form.Canvas.Busy,"Recovery activation hung.");
+                    require(next.Commands==(scenario=="resume"?1:0),"Recovery ignored prior Automatic intent, stop or disabled resumption.");
+                }
+                form.TryAutomaticRecovery(clock+120000);
+                require(runs==1,"Background recovery repeated an unconfirmed hardware operation.");
+                exit??=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Background recovery fixture exit hung.");
+                require(old.Disposals==1,"Background recovery disposed the previous runtime twice.");
+            }
+            foreach (var activate in new[]{false,true})
+            {
+                var pending=new ProductRecoverySelection(Guid.NewGuid(),Guid.Empty);var next=new RecordingRuntime();int initial=0,runs=0;
+                using var form=new ProductForm("fixture://startup-recovery",fixtureProfiles:new(){ActivateAutomaticOnStart=activate},
+                    runtimeFactory:()=>{initial++;throw new IOException("Pending startup opened the normal controller.");},
+                    recoveryPreflight:()=>new(true,"pending",pending.CpuSession));
+                form.RecoverySelectionReader=()=>pending;
+                form.RecoveryRunner=_=>{runs++;pending=new(Guid.Empty,Guid.Empty);return Task.FromResult(new ProductRecoveryResult(true,"fixture","released"));};
+                form.RecoveryRuntimeFactory=_=>Task.FromResult<IProductRuntime>(next);
+                form.Show();Application.DoEvents();var clock=Environment.TickCount64;
+                form.TryAutomaticRecovery(clock);form.TryAutomaticRecovery(clock+10000);
+                PumpUntil(()=>runs==1 && !form.Canvas.Busy,"Pending startup did not recover in background.");
+                require(initial==0 && next.Starts==1 && next.Commands==0,"Startup recovered by opening an unresolved controller or activating early.");
+                var at=DateTimeOffset.UtcNow.AddSeconds(-2);
+                for(int i=0;i<3;i++)next.Publish(new(){Target=ProductRecoverySelection.Target,Source="Ac",Runtime="Healthy",AutomaticAuthorized=true,
+                    FanAuthority="Firmware",CanApplyPerformance=true,Snapshot=new TelemetrySnapshot(at.AddSeconds(i),"CPU",55,20,30,"GPU",45,15,20,2000,2000)
+                    {CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",55)]}});
+                PumpUntil(()=>!form.Canvas.Busy,"Startup recovery activation hung.");
+                require(next.Commands==(activate?1:0),"Startup recovery ignored the saved start preference.");
+                var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Startup recovery exit hung.");
+            }
+            Console.WriteLine("Background GUI recovery: PASS (release drain, exact inventory, saved/applied profiles, fresh reentry, user stop, disabled preferences, unconfirmed reset, suspend and exit; zero hardware IO).");
+        }
+        finally{Environment.ExitCode=exitCode;}
+    }
+}

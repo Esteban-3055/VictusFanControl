@@ -21,16 +21,18 @@ internal sealed partial class ProductForm
             if (!confirmed && MessageBox.Show(this, selected.Summary +
                 "\n\nCierra otros controladores de CPU/GPU. Se liberará esta sesión y se guardarán respaldos de los registros. Al terminar, la aplicación permanecerá en Firmware y conservará tus perfiles y cambios sin guardar.\n\n¿Recuperar sesiones pendientes?",
                 "Recuperar sesiones anteriores", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return Task.CompletedTask;
+            _recoveryResumeCancelled = true;
             return _recoveryTask = RecoverPerformanceCoreAsync(selected);
         }
         catch (Exception ex) { _canvas.Notice = "No se pudo leer la recuperación: " + ex.Message; _canvas.Invalidate(); return Task.CompletedTask; }
     }
 
-    private async Task RecoverPerformanceCoreAsync(ProductRecoverySelection selected)
+    private async Task RecoverPerformanceCoreAsync(ProductRecoverySelection selected, ProductProfiles? automaticPreferences = null, bool resume = false)
     {
         _restarting = true; _restartLifecycleInterrupted = false; _canvas.Busy = true; _canvas.RestartAvailable = false;
         _presentationTimer.Stop(); _startupAutomatic?.Cancel("Recuperación explícita de CPU/GPU."); _startupAutomatic = null;
-        var before = _canvas.State; var preferences = Draft; var oldRuntime = _runtime as ProductRuntime;
+        var unattended = automaticPreferences is not null;
+        var before = _canvas.State; var preferences = automaticPreferences ?? Draft; var oldRuntime = _runtime as ProductRuntime;
         var controllerReleased = false;
         try
         {
@@ -45,19 +47,19 @@ internal sealed partial class ProductForm
             if (fenceFailure is not null) throw new IOException("No se confirmó el bloqueo del controlador anterior.", fenceFailure);
             if (_closing || _exitRequested) return;
             if (_displayOff || _restartLifecycleInterrupted) throw new IOException("Recuperación cancelada por suspensión o pantalla apagada. No se abrió el recuperador.");
-            var pending = RecoverySelectionReader();
+            var pending = await Task.Run(RecoverySelectionReader);
             // A normal cleanup may have resolved these exact records already.
             if (pending.CpuSession != Guid.Empty && pending.CpuSession != selected.CpuSession ||
                 pending.GpuSession != Guid.Empty && pending.GpuSession != selected.GpuSession || !ProductRecoveryInventory.AllowsRemaining(selected.Fans,pending.Fans))
                 throw new IOException("Los identificadores pendientes cambiaron. No se recuperó otra sesión.");
             await RecoveryUiAsync(() => { _canvas.Notice = "Recuperando sesiones y guardando respaldos…"; _canvas.Invalidate(); });
             var recovered = pending.Pending
-                ? await (RecoveryRunner?.Invoke(pending) ?? ProductRecoveryClient.RunAsync(AppContext.BaseDirectory, _modules, pending))
+                ? await Task.Run(() => RecoveryRunner?.Invoke(pending) ?? ProductRecoveryClient.RunAsync(AppContext.BaseDirectory, _modules, pending))
                 : new ProductRecoveryResult(true, "", "La liberación normal resolvió los registros pendientes.");
             AppLog.Write("PRODUCT GUIDED RECOVERY: " + recovered.Detail + "; evidence=" + recovered.EvidenceDirectory);
-            if (!recovered.Succeeded || RecoverySelectionReader().Pending)
+            if (!recovered.Succeeded || (await Task.Run(RecoverySelectionReader)).Pending)
                 throw new IOException(recovered.Detail + "\nEvidencia: " + recovered.EvidenceDirectory);
-            if (!_isolatedRuntime) ProductSessionRestart.EnsureNoRecoveryRecords();
+            if (!_isolatedRuntime) await Task.Run(ProductSessionRestart.EnsureNoRecoveryRecords);
             if (_closing || _exitRequested) return;
             if (_displayOff || _restartLifecycleInterrupted) throw new IOException("Recuperación completada; un cambio de energía impidió abrir otra sesión. Usa Reiniciar sesión cuando el equipo esté activo.");
             var next = await (RecoveryRuntimeFactory?.Invoke(preferences) ?? Task.Run<IProductRuntime>(() => new ProductRuntime(_modules, preferences, _automaticReview, releasedRuntime: oldRuntime)));
@@ -70,9 +72,16 @@ internal sealed partial class ProductForm
             }
             await RecoveryUiAsync(() =>
             {
+                _recoveryAtStartup = false;
+                if (unattended && resume && !_recoveryResumeCancelled && Draft.Protections.ResumeAutomatic)
+                {
+                    _startupPreferences = ProductProfilesStore.Copy(preferences);
+                    _startupRetryAt = 0; _startupAttempts = 0;
+                    _startupAutomatic = new(Environment.TickCount64, protections:preferences.Protections, resumption:true);
+                }
                 AttachRuntime(next); UpdateState(next.State); next.Start(); _presentationTimer.Start();
                 _canvas.RestartAvailable = true; _canvas.AutomaticRetryAvailable = _automaticReview is null && (!_isolatedRuntime || _retryRuntimeFactory is not null);
-                _canvas.Notice = "Recuperación completada. Sesión nueva en Firmware; Automático requiere activación manual. " +
+                _canvas.Notice = (_startupAutomatic is not null ? "Recuperación completada. Esperando sensores nuevos para reanudar Automático. " : "Recuperación completada. Sesión nueva en Firmware. ") +
                     (recovered.EvidenceDirectory.Length == 0 ? "" : "Respaldos: " + recovered.EvidenceDirectory);
             });
         }
@@ -81,10 +90,12 @@ internal sealed partial class ProductForm
             DetachRuntime();
             try { await ShutdownRuntimeAsync(); controllerReleased = true; } catch (Exception release) { controllerReleased = false; AppLog.Write("Guided recovery cleanup retained: " + release); }
             _runtime = null;
+            var recoveryPreview = _isolatedRuntime ? before.PerformanceRecovery : await Task.Run(() => PerformanceRecoveryPreview.Read());
             await RecoveryUiAsync(() =>
             {
+                if (unattended) { _automaticResumption.Cancel(); NotifyRecoveryFailure("No se pudo recuperar la sesión. " + ex.Message); }
                 _canvas.AutomaticRetryAvailable = false; _canvas.RestartAvailable = true;
-                var preview = _isolatedRuntime ? before.PerformanceRecovery : PerformanceRecoveryPreview.Read();
+                var preview = recoveryPreview;
                 _canvas.State = before with { LifecycleBlocked = true, Runtime = "Failed", Failure = "Recuperación no completada: " + ex.Message,
                     PerformanceRecovery = preview, FanMode = preview?.FanRecords?.Count > 0 ? "RecoveryRequired" : controllerReleased ? "Firmware" : before.FanMode,
                     FanAuthority = preview?.FanRecords?.Count > 0 ? "Unknown" : controllerReleased ? "Firmware" : before.FanAuthority,
