@@ -46,7 +46,7 @@ internal static partial class ProductGuiSelfTest
             canvas.State=feedbackState with{Snapshot=delayedFeedback};
             canvas.AdvanceHomeAnimation(clock+i*100,heldNow);
         }
-        require(canvas.HomeAnimationRunning&&canvas.HomeFanAnimationSpeeds.Cpu>13&&
+        require(canvas.HomeAnimationRunning&&canvas.HomeFanAnimationSpeeds.Cpu>40&&
             canvas.HomeFanAnimationSpeeds.Cpu==canvas.HomeFanAnimationSpeeds.Gpu,
             "RPM updates restarted demand inertia or independently changed blade speed.");
         canvas.State=feedbackState;

@@ -116,7 +116,7 @@
     "fanAnimation": {
       "input": "accepted-automatic-demand-percent",
       "intervalMilliseconds": 33,
-      "maximumDegreesPerSecond": 24,
+      "maximumDegreesPerSecond": 72,
       "accelerationTimeConstantSeconds": 1.2,
       "decelerationTimeConstantSeconds": 1.8,
       "maximumFrameSeconds": 0.1,

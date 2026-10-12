@@ -3,7 +3,7 @@ namespace VictusFanControl.App;
 // Presentation only: accepted controller demand drives rotation; RPM is only the hub readout.
 internal sealed class ProductFanAnimation
 {
-    private const double MaximumDegreesPerSecond = 24;
+    private const double MaximumDegreesPerSecond = 72;
     private const double RestSpeed = 0.1;
     internal double Phase { get; private set; }
     internal double Speed { get; private set; }
