@@ -1,5 +1,8 @@
 # HP 8C40 / Victus 15-fa1013la port status
 
+> **Historical, chronological qualification record.** Earlier sections below describe the EC-acknowledged Manual phase and may say Automatic is still disabled. Those statements are scoped to their original experiments; they are not the current product status. For the 2026-10-12 research synthesis see the [8C40 atlas](HP_8C40_RESEARCH_ATLAS.md) / [atlas en español](HP_8C40_RESEARCH_ATLAS.es.md). Current 8C40 production uses HP WMI rather than direct EC I/O; WMI `0x2D` reports nominal fan **levels**, not independent physical tachometer RPM. The latest packaged release at this cut is [v1.2.3](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.3).
+
+
 ## Exact qualified target
 
 - Board manufacturer/product/version: `HP / 8C40 / 63.43`

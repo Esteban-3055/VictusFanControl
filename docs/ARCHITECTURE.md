@@ -1,5 +1,8 @@
 # Architecture
 
+> **Historical architecture (v0.4 / HP 88F8).** This diagram and its future-tense implementation notes are retained for design history, **not** as an authoritative description of the current HP 8C40 release. For the exact 8C40, WMI-only production path and CPU/GPU Performance Guardian, start at the [research atlas](HP_8C40_RESEARCH_ATLAS.md) and [current product validation](PRODUCT_VALIDATION_STATUS.md). Do not implement the 88F8 direct-EC or independent RPM-compensation concept as an assumed 8C40 feature.
+
+
 ## Design goal
 
 VictusFanControl is being built as an adaptive, observable and fail-safe controller. Fan speed is not intended to be a direct temperature-only lookup.

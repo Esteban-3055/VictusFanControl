@@ -4,6 +4,14 @@
 
 Windows fan control and CPU/GPU preferences for the exact target **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, board revision 63.43, Intel Core i7-13700H and NVIDIA RTX 4060 Laptop GPU. v1.0.0 enables habitual Automatic on this target. Other models and BIOS versions are outside this release's control authorization; HP 88F8 material remains historical.
 
+## HP 8C40 hardware and firmware research
+
+**[Research atlas (English)](docs/HP_8C40_RESEARCH_ATLAS.md)** · [Atlas técnico (Español)](docs/HP_8C40_RESEARCH_ATLAS.es.md) · [Original target documentation](docs/HARDWARE_8C40.md) · [OEM model comparison](docs/OEM_SHADOW_MODEL_COMPARISON_2026-10-08.md)
+
+The atlas consolidates evidence for the exact Victus 15-fa1013la, ACPI/DTT/EC thermal mapping, HP BIOS/WMI fan levels, observed OEM plateaus and hysteresis, CPU RAPL, GPU NVML and experimental **NO-GO** results. Hypotheses are not official HP specifications. **Direct EC access is excluded from the production fan-control loop.**
+
+**Version boundary:** this `main` README describes the **v1.0.0** source snapshot. The latest stable release on 2026-10-12 is **[v1.2.3](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.3)**, tagged from a different commit. For that release consult its [tagged README](https://github.com/Esteban-3055/VictusFanControl/blob/v1.2.3/README.md); do not infer one branch's qualification from another.
+
 ## Install
 
 Requires Windows 11 x64, .NET Desktop Runtime 8 x64, the PawnIO driver and NVIDIA/NVML. The ZIP includes the application's PawnIO modules; it does not install those prerequisites.
