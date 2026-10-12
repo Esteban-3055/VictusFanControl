@@ -149,4 +149,6 @@ El controlador de VFC utiliza una **política propia**: seis demandas (temperatu
 
 Para una nueva hipótesis, registrar: target exacto, BIOS, commit, fuente de cada sensor, época de **adquisición** frente a época de consulta, carga, condiciones iniciales, número de muestras realmente independientes, umbrales de aborto, hashes de los datos y diferencias entre predicción y observación. Los tests deben ser **read-only de fábrica** salvo una cualificación física explícita, acotada y supervisada.
 
+**Plantilla y buenas prácticas para publicar resultados:** [protocolo de reproducibilidad e issues](RESEARCH_REPORTING_GUIDE.es.md).
+
 **Pendientes de investigación:** describir el régimen alto Unmapped con sesiones independientes; correlacionar señales térmicas sin atribuirles causalidad automática; cualificar acústica/temperatura/lifecycle en la versión distribuida exacta; y mejorar la visibilidad de versión entre `main` y las releases etiquetadas. Los issues técnicos mantienen el seguimiento; no son autorización para escrituras EC o pruebas destructivas.
