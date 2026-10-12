@@ -58,7 +58,7 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.1.9",
+  "version": "1.2.0",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -109,5 +109,27 @@
     "userFirmwareCancelsResume": true,
     "scope": "running-gui-including-startup-and-minimized",
     "nativeUncertaintyPolicy": "retain-existing-recovery-blocks"
+  },
+  "homeDashboard": {
+    "animatedFans": "independent-current-feedback-visible-home-only",
+    "fanFreshnessMilliseconds": 3000,
+    "demandSource": "accepted-automatic-observation-percent",
+    "demandHistorySeconds": 300,
+    "maximumDemandSamples": 600,
+    "breakHistoryOn": "interruption-source-session-change-and-gaps-over-three-seconds",
+    "displayedCurve": "applied-configuration-and-real-power-source-independent-of-draft",
+    "fanCurvePlotMatchesEditor": true,
+    "navigationOrder": [
+      "Home",
+      "Fans",
+      "Performance",
+      "Curves",
+      "Profiles",
+      "Monitoring",
+      "Protections",
+      "Settings",
+      "Advanced",
+      "Updates"
+    ]
   }
 }
