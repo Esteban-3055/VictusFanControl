@@ -42,11 +42,24 @@ internal sealed partial class ProductCanvas
         double Next(double phase,double? rpm) => (phase+elapsed*Math.Clamp(rpm??0,0,6000)/6000*240)%360;
         _cpuFanPhase=Next(_cpuFanPhase,sample.CpuFanRpm);_gpuFanPhase=Next(_gpuFanPhase,sample.GpuFanRpm);
         if(sample.CpuFanRpm is not >0 && sample.GpuFanRpm is not >0) { _fanAnimationTimer.Stop(); _fanAnimationLastTick=null; }
-        Invalidate();
+        Invalidate(Rectangle.Ceiling(new RectangleF(_offsetX+334*_scale,_offsetY+169*_scale,818*_scale,242*_scale)));
     }
     protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e);SynchronizeFanAnimation(); }
     protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e);SynchronizeFanAnimation(); }
     protected override void OnHandleDestroyed(EventArgs e) { _fanAnimationTimer.Stop();_fanAnimationLastTick=null;base.OnHandleDestroyed(e); }
+
+    private bool PaintHomeAnimation(Graphics g,Rectangle clip)
+    {
+        var region=new RectangleF((clip.Left-_offsetX)/_scale,(clip.Top-_offsetY)/_scale,clip.Width/_scale,clip.Height/_scale);
+        if(Page!=ProductPage.Home||!new RectangleF(332,167,822,246).Contains(region))return false;
+        Card(g,new(310,150,1337,281));DrawHomeFans(g);return true;
+    }
+    private void DrawHomeFans(Graphics g)
+    {
+        var s=FreshSnapshot;var fan=ProductHomeTelemetry.FanSnapshot(State,DateTimeOffset.UtcNow);
+        HomeFan(g,new(335,170,397,239),"CPU",fan?.CpuFanRpm,s?.CpuControlTemperatureC,s?.CpuLoadPercent,_cpuFanPhase);
+        HomeFan(g,new(754,170,397,239),"GPU",fan?.GpuFanRpm,s?.GpuTemperatureC,s?.GpuLoadPercent,_gpuFanPhase);
+    }
 
     private void Home(Graphics g)
     {
@@ -54,8 +67,7 @@ internal sealed partial class ProductCanvas
         DrawText(g,State.LifecycleBlocked?"Sesión interrumpida":State.FanMode=="Automatic"?"Automático · "+SourceText():State.FanMode+" · "+SourceText(),850,93,21,State.LifecycleBlocked?Yellow:Muted,770,centered:false);
         Card(g,new(310,150,1337,281));
         var now=DateTimeOffset.UtcNow;var s=FreshSnapshot;var fan=ProductHomeTelemetry.FanSnapshot(State,now);
-        HomeFan(g,new(335,170,397,239),"CPU",fan?.CpuFanRpm,s?.CpuControlTemperatureC,s?.CpuLoadPercent,_cpuFanPhase);
-        HomeFan(g,new(754,170,397,239),"GPU",fan?.GpuFanRpm,s?.GpuTemperatureC,s?.GpuLoadPercent,_gpuFanPhase);
+        DrawHomeFans(g);
         DrawText(g,"Estado del sistema",1200,174,24,null,421,true);
         DrawText(g,s is not null?"Telemetría disponible":State.Runtime=="Healthy"?"Esperando datos vigentes":State.Runtime,1200,219,22,s is not null?Green:Yellow,420);
         DrawText(g,"CPU · "+AppliedCpu(),1200,260,19,DomainColor(State.CpuState,Green),420);

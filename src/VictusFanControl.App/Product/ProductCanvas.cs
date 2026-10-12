@@ -149,7 +149,9 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     {
         base.OnPaint(e); var g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;g.TextRenderingHint=TextRenderingHint.ClearTypeGridFit;
         _scale=Math.Min(Width/1672f,Height/941f);_offsetX=(Width-1672*_scale)/2;_offsetY=(Height-941*_scale)/2;
-        g.TranslateTransform(_offsetX,_offsetY);g.ScaleTransform(_scale,_scale);_hits.Clear();_plot=RectangleF.Empty;RenderedCurveBounds=RectangleF.Empty;SynchronizeFanAnimation();
+        g.TranslateTransform(_offsetX,_offsetY);g.ScaleTransform(_scale,_scale);
+        if(PaintHomeAnimation(g,e.ClipRectangle))return;
+        _hits.Clear();_plot=RectangleF.Empty;RenderedCurveBounds=RectangleF.Empty;SynchronizeFanAnimation();
         using(var b=new SolidBrush(Background))g.FillRectangle(b,0,0,1672,941);
         using(var p=new Pen(Border)) {g.DrawLine(p,0,64,1672,64);g.DrawLine(p,279,64,279,882);g.DrawLine(p,0,882,1672,882);}
         Icon(g,"fan",24,16,36,Accent);DrawText(g,"VictusFanControl",76,17,25,null,220,true);DrawText(g,"│",288,16,26,Muted,25);DrawText(g,State.Hardware,328,18,23,Muted,1070);
