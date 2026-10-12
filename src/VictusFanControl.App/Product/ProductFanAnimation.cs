@@ -1,6 +1,6 @@
 namespace VictusFanControl.App;
 
-// Presentation only: reported RPM remains the source for the number shown in the hub.
+// Presentation only: accepted controller demand drives rotation; RPM is only the hub readout.
 internal sealed class ProductFanAnimation
 {
     private const double MaximumDegreesPerSecond = 24;
@@ -11,12 +11,12 @@ internal sealed class ProductFanAnimation
 
     internal void Pause() => Speed = 0;
 
-    internal void Advance(double elapsed, double? rpm)
+    internal void Advance(double elapsed, double? demandPercent)
     {
-        if (rpm is null || !double.IsFinite(rpm.Value)) { Pause(); return; }
+        if (demandPercent is null || !double.IsFinite(demandPercent.Value)) { Pause(); return; }
         if (!double.IsFinite(elapsed) || elapsed <= 0) return;
         elapsed = Math.Min(elapsed, 0.1); // Never catch up a delayed or hidden frame.
-        var target = Math.Clamp(rpm.Value, 0, 6000) / 6000 * MaximumDegreesPerSecond;
+        var target = Math.Clamp(demandPercent.Value, 0, 100) / 100 * MaximumDegreesPerSecond;
         var inertia = target > Speed ? 1.2 : 1.8;
         var decay = Math.Exp(-elapsed / inertia);
         // Integrate the easing analytically so irregular frame times do not change the motion.

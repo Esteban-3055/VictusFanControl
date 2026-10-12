@@ -111,16 +111,17 @@
     "nativeUncertaintyPolicy": "retain-existing-recovery-blocks"
   },
   "homeDashboard": {
-    "animatedFans": "independent-current-feedback-visible-home-only",
+    "animatedFans": "shared-accepted-automatic-demand-visible-home-only",
     "fanFreshnessMilliseconds": 3000,
     "fanAnimation": {
+      "input": "accepted-automatic-demand-percent",
       "intervalMilliseconds": 33,
       "maximumDegreesPerSecond": 24,
       "accelerationTimeConstantSeconds": 1.2,
       "decelerationTimeConstantSeconds": 1.8,
       "maximumFrameSeconds": 0.1,
-      "zeroRpmPolicy": "finite-coast-down-then-stop-timer",
-      "pausePolicy": "discard-inertia-on-hidden-minimized-other-page-or-stale-feedback",
+      "zeroDemandPolicy": "finite-coast-down-then-stop-timer",
+      "pausePolicy": "discard-inertia-on-hidden-minimized-other-page-or-unavailable-demand",
       "displayedRpm": "current-feedback-without-visual-smoothing"
     },
     "demandSource": "accepted-automatic-observation-percent",

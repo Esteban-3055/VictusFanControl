@@ -34,8 +34,22 @@ internal static partial class ProductGuiSelfTest
             "Requested navigation order was not rendered.");
         var phase=canvas.HomeFanPhases;var clock=Environment.TickCount64;
         canvas.AdvanceHomeAnimation(clock+100,DateTimeOffset.UtcNow);var moving=canvas.HomeFanPhases;
-        require(canvas.HomeAnimationRunning&&moving.Cpu>phase.Cpu&&moving.Gpu>phase.Gpu&&moving.Cpu-phase.Cpu>moving.Gpu-phase.Gpu,
-            "Fan animation did not use independent current CPU/GPU feedback.");
+        require(canvas.HomeAnimationRunning&&moving.Cpu>phase.Cpu&&moving.Gpu>phase.Gpu&&
+            Math.Abs((moving.Cpu-phase.Cpu)-(moving.Gpu-phase.Gpu))<1e-8,
+            "Fan animation did not use shared controller demand despite different RPM.");
+        // Reproduce UI publications while RPM is unavailable and the accepted decision remains current.
+        var feedbackState=canvas.State;
+        var heldNow=DateTimeOffset.UtcNow;
+        var delayedFeedback=feedbackState.Snapshot! with{CpuFanRpm=null,GpuFanRpm=null};
+        for(int i=2;i<=50;i++)
+        {
+            canvas.State=feedbackState with{Snapshot=delayedFeedback};
+            canvas.AdvanceHomeAnimation(clock+i*100,heldNow);
+        }
+        require(canvas.HomeAnimationRunning&&canvas.HomeFanAnimationSpeeds.Cpu>13&&
+            canvas.HomeFanAnimationSpeeds.Cpu==canvas.HomeFanAnimationSpeeds.Gpu,
+            "RPM updates restarted demand inertia or independently changed blade speed.");
+        canvas.State=feedbackState;
         canvas.Page=ProductPage.Fans;canvas.Refresh();var fanPlot=canvas.RenderedCurveBounds;
         require(!canvas.HomeAnimationRunning,"Fan animation consumed resources on another page.");
         var stopped=canvas.HomeFanPhases;canvas.AdvanceHomeAnimation(clock+200,DateTimeOffset.UtcNow);
@@ -55,17 +69,19 @@ internal static partial class ProductGuiSelfTest
         canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow);
         var coastClock=Environment.TickCount64;
         canvas.AdvanceHomeAnimation(coastClock+100,DateTimeOffset.UtcNow);
-        canvas.State=canvas.State with{Snapshot=canvas.State.Snapshot! with{CpuFanRpm=0,GpuFanRpm=0}};
+        canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow,0);
         var coastNow=DateTimeOffset.UtcNow;var coastPhase=canvas.HomeFanPhases;
-        require(canvas.HomeAnimationRunning,"Zero-speed feedback skipped fan inertia.");
+        require(canvas.HomeAnimationRunning,"Zero demand skipped fan inertia.");
         canvas.AdvanceHomeAnimation(coastClock+200,coastNow);
-        require(canvas.HomeFanPhases.Cpu>coastPhase.Cpu,"Zero-speed fan did not coast down.");
+        require(canvas.HomeFanPhases.Cpu>coastPhase.Cpu,"Zero-demand fan did not coast down.");
         for(int i=3;i<160;i++)canvas.AdvanceHomeAnimation(coastClock+i*100,coastNow);
-        require(!canvas.HomeAnimationRunning,"Settled zero-speed fans retained an animation timer.");
+        require(!canvas.HomeAnimationRunning,"Settled zero-demand fans retained an animation timer.");
+        canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow) with{FanMode="Firmware"};
+        require(!canvas.HomeAnimationRunning,"Firmware RPM fabricated automatic demand animation.");
         canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow,55,"Battery");Render("home-dashboard-battery");
         require(canvas.HomeCurveSource==ProductPowerProfile.Battery,"Home did not follow the real Battery source.");
         require(runtime.Commands==0&&ProductProfilesStore.Serialize(form.Draft)==originalDraft,"Dashboard rendering, animation or history wrote hardware or preferences.");
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Dashboard fixture exit stalled.");
-        Console.WriteLine("Home dashboard: PASS (navigation, applied curve, real demand, independent blades with inertia, hidden/minimized/stale pause, finite zero-speed coast-down, equal-size fan plot and Windows renders; zero hardware IO).");
+        Console.WriteLine("Home dashboard: PASS (navigation, applied curve, real demand drives both blades, uninterrupted inertia across RPM updates, hidden/minimized/stale pause, finite zero-demand coast-down, equal-size fan plot and Windows renders; zero hardware IO).");
     }
 }

@@ -43,6 +43,22 @@ internal static class ProductHomeTelemetrySelfTest
             state with{AppliedAutomaticConfiguration=null},StateAt(now, double.NaN),StateAt(now,101),StateAt(now.AddMinutes(1))})
             require(ProductHomeTelemetry.CurrentDemand(invalid,now) is null,"Unconfirmed, invalid or future demand appeared as current.");
         require(ProductHomeTelemetry.CurrentDemand(state,now.AddSeconds(10)) is null,"Expired demand remained current.");
+        var delayedFan=state.Snapshot! with{FanSampleAgeMilliseconds=4000,FanSampledAtUtc=now.AddSeconds(-4),FanMaximumAgeMilliseconds=10000};
+        var delayedState=state with{Snapshot=delayedFan,AutomaticDecisionSnapshot=delayedFan};
+        require(ProductHomeTelemetry.FanSnapshot(delayedState,now) is null&&
+            ProductHomeTelemetry.AnimationDemand(delayedState,now)?.Percent==60,
+            "Delayed RPM restarted an otherwise current accepted demand animation.");
+        var missingLiveRpm=state with{Snapshot=state.Snapshot! with{CpuFanRpm=null,GpuFanRpm=null}};
+        require(ProductHomeTelemetry.CurrentDemand(missingLiveRpm,now) is null&&
+            ProductHomeTelemetry.AnimationDemand(missingLiveRpm,now)?.Percent==60,
+            "Animation required live RPM instead of its accepted decision, or weakened graph admission.");
+        require(ProductHomeTelemetry.AnimationDemand(state,now.AddSeconds(6)) is null&&
+            ProductHomeTelemetry.AnimationDemand(state with{Snapshot=StateAt(now.AddSeconds(6)).Snapshot},now.AddSeconds(6)) is null,
+            "CPU/RPM refresh renewed an expired demand observation.");
+        foreach(var inactive in new[]{state with{FanMode="Firmware"},state with{FanMode="Manual"},
+            state with{LifecycleBlocked=true},state with{AutomaticPreparing=true},state with{AppliedFanProfile="Battery"},
+            state with{AutomaticDecision=null},state with{AutomaticDecisionSnapshot=null},StateAt(now.AddMinutes(1))})
+            require(ProductHomeTelemetry.AnimationDemand(inactive,now) is null,"Unavailable/inactive demand animated fan blades.");
         history.Observe(state,now.AddSeconds(10));require(history.Samples.Count==prior,"Out-of-order decision entered history.");
         var bounded=new ProductHomeTelemetry();
         for(int i=0;i<700;i++){var at=now.AddMilliseconds(i*100);bounded.Observe(StateAt(at),at);}
