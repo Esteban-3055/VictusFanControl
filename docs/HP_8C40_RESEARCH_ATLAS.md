@@ -110,6 +110,8 @@ Sources: [CPU RAPL](INTEL_RAPL_P1.md), [Performance Guardian](INTEL_RAPL_P2B_GUA
 | Current distribution and validation limits | [PRODUCT_VALIDATION_STATUS.md](PRODUCT_VALIDATION_STATUS.md) |
 | Latest tagged release instructions | [v1.2.3 README](https://github.com/Esteban-3055/VictusFanControl/blob/v1.2.3/README.md) |
 
+**How to report reproducible findings:** [research and issue-reporting protocol (Spanish)](RESEARCH_REPORTING_GUIDE.es.md).
+
 **Research backlog:** independently characterize stable Unmapped/high fan regimes; test whole-session held-out OEM hypotheses; validate the *exact distributed build* under comparable thermal/acoustic and lifecycle conditions; distinguish WMI fan levels from independently measured tachometers; and keep `main` documentation discoverable without silently rewriting release provenance.
 
 **Safe publication practice:** remove identifying machine/user paths and raw personal data from logs; preserve checksums, timestamps and exact commit provenance. Treat EC register maps as research findings only. No physical write tests or destructive failure tests are authorized merely by listing them in this atlas.
