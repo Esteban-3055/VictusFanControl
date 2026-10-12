@@ -8,6 +8,7 @@ internal static partial class ProductGuiSelfTest
     private static void TestHomeDashboard(Action<bool,string> require)
     {
         ProductHomeTelemetrySelfTest.Run(require);
+        ProductFanAnimationSelfTest.Run(require);
         var output=Path.GetFullPath("logs/product-gui-self-test");Directory.CreateDirectory(output);
         var runtime=new RecordingRuntime();
         using var form=new ProductForm("fixture://home",fixture:runtime,fixtureProfiles:new ProductProfiles());
@@ -52,12 +53,19 @@ internal static partial class ProductGuiSelfTest
         var stale=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow.AddMinutes(-1));canvas.State=stale;Render("home-dashboard-stale");
         require(!canvas.HomeAnimationRunning,"Stale feedback showed moving fans.");
         canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow);
+        var coastClock=Environment.TickCount64;
+        canvas.AdvanceHomeAnimation(coastClock+100,DateTimeOffset.UtcNow);
         canvas.State=canvas.State with{Snapshot=canvas.State.Snapshot! with{CpuFanRpm=0,GpuFanRpm=0}};
-        require(!canvas.HomeAnimationRunning,"Zero-speed fans retained rotation.");
+        var coastNow=DateTimeOffset.UtcNow;var coastPhase=canvas.HomeFanPhases;
+        require(canvas.HomeAnimationRunning,"Zero-speed feedback skipped fan inertia.");
+        canvas.AdvanceHomeAnimation(coastClock+200,coastNow);
+        require(canvas.HomeFanPhases.Cpu>coastPhase.Cpu,"Zero-speed fan did not coast down.");
+        for(int i=3;i<160;i++)canvas.AdvanceHomeAnimation(coastClock+i*100,coastNow);
+        require(!canvas.HomeAnimationRunning,"Settled zero-speed fans retained an animation timer.");
         canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow,55,"Battery");Render("home-dashboard-battery");
         require(canvas.HomeCurveSource==ProductPowerProfile.Battery,"Home did not follow the real Battery source.");
         require(runtime.Commands==0&&ProductProfilesStore.Serialize(form.Draft)==originalDraft,"Dashboard rendering, animation or history wrote hardware or preferences.");
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Dashboard fixture exit stalled.");
-        Console.WriteLine("Home dashboard: PASS (navigation, applied curve, real demand, independent blades, hidden/minimized/stale/zero-speed pause, equal-size fan plot and Windows renders; zero hardware IO).");
+        Console.WriteLine("Home dashboard: PASS (navigation, applied curve, real demand, independent blades with inertia, hidden/minimized/stale pause, finite zero-speed coast-down, equal-size fan plot and Windows renders; zero hardware IO).");
     }
 }

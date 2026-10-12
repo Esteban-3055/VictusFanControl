@@ -7,11 +7,11 @@ namespace VictusFanControl.App;
 internal sealed partial class ProductCanvas
 {
     private readonly ProductHomeTelemetry _homeTelemetry = new();
-    private readonly System.Windows.Forms.Timer _fanAnimationTimer = new() { Interval=50 };
+    private readonly System.Windows.Forms.Timer _fanAnimationTimer = new() { Interval=33 };
     private long? _fanAnimationLastTick;
-    private double _cpuFanPhase, _gpuFanPhase;
+    private readonly ProductFanAnimation _cpuFanAnimation = new(), _gpuFanAnimation = new();
     internal bool HomeAnimationRunning => _fanAnimationTimer.Enabled;
-    internal (double Cpu,double Gpu) HomeFanPhases => (_cpuFanPhase,_gpuFanPhase);
+    internal (double Cpu,double Gpu) HomeFanPhases => (_cpuFanAnimation.Phase,_gpuFanAnimation.Phase);
     internal IReadOnlyList<ProductHomeDemandSample> HomeDemandSamples => _homeTelemetry.Samples;
     internal void ObserveHomeDemand(ProductRuntimeState state,DateTimeOffset now) => _homeTelemetry.Observe(state,now);
     internal RectangleF RenderedCurveBounds { get; private set; }
@@ -28,25 +28,30 @@ internal sealed partial class ProductCanvas
     private void SynchronizeFanAnimation()
     {
         var sample=ProductHomeTelemetry.FanSnapshot(State,DateTimeOffset.UtcNow);
-        var running=HomeIsVisible && (sample?.CpuFanRpm is >0 || sample?.GpuFanRpm is >0);
+        var running=HomeIsVisible && sample is not null &&
+            (sample.CpuFanRpm is >0 || sample.GpuFanRpm is >0 || _cpuFanAnimation.IsMoving || _gpuFanAnimation.IsMoving);
         if(running) { _fanAnimationLastTick ??= Environment.TickCount64; _fanAnimationTimer.Start(); }
-        else { _fanAnimationTimer.Stop(); _fanAnimationLastTick=null; }
+        else PauseFanAnimation();
+    }
+    private void PauseFanAnimation()
+    {
+        _fanAnimationTimer.Stop(); _fanAnimationLastTick=null;
+        _cpuFanAnimation.Pause(); _gpuFanAnimation.Pause();
     }
     internal void AdvanceHomeAnimation(long clock,DateTimeOffset now)
     {
         var sample=ProductHomeTelemetry.FanSnapshot(State,now);
-        if(!HomeIsVisible || sample is null) { _fanAnimationTimer.Stop(); _fanAnimationLastTick=null; return; }
+        if(!HomeIsVisible || sample is null) { PauseFanAnimation(); return; }
         var elapsed=_fanAnimationLastTick is {} previous && clock>=previous ? Math.Min(0.1,(clock-previous)/1000d) : 0;
         _fanAnimationLastTick=clock;
-        // A readable visual rotation proportional to the reported speed; no catch-up after a hidden window.
-        double Next(double phase,double? rpm) => (phase+elapsed*Math.Clamp(rpm??0,0,6000)/6000*240)%360;
-        _cpuFanPhase=Next(_cpuFanPhase,sample.CpuFanRpm);_gpuFanPhase=Next(_gpuFanPhase,sample.GpuFanRpm);
-        if(sample.CpuFanRpm is not >0 && sample.GpuFanRpm is not >0) { _fanAnimationTimer.Stop(); _fanAnimationLastTick=null; }
+        _cpuFanAnimation.Advance(elapsed,sample.CpuFanRpm);_gpuFanAnimation.Advance(elapsed,sample.GpuFanRpm);
+        if(sample.CpuFanRpm is not >0 && sample.GpuFanRpm is not >0 &&
+            !_cpuFanAnimation.IsMoving && !_gpuFanAnimation.IsMoving) PauseFanAnimation();
         Invalidate(Rectangle.Ceiling(new RectangleF(_offsetX+334*_scale,_offsetY+169*_scale,818*_scale,242*_scale)));
     }
     protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e);SynchronizeFanAnimation(); }
     protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e);SynchronizeFanAnimation(); }
-    protected override void OnHandleDestroyed(EventArgs e) { _fanAnimationTimer.Stop();_fanAnimationLastTick=null;base.OnHandleDestroyed(e); }
+    protected override void OnHandleDestroyed(EventArgs e) { PauseFanAnimation();base.OnHandleDestroyed(e); }
 
     private bool PaintHomeAnimation(Graphics g,Rectangle clip)
     {
@@ -57,8 +62,8 @@ internal sealed partial class ProductCanvas
     private void DrawHomeFans(Graphics g)
     {
         var s=FreshSnapshot;var fan=ProductHomeTelemetry.FanSnapshot(State,DateTimeOffset.UtcNow);
-        HomeFan(g,new(335,170,397,239),"CPU",fan?.CpuFanRpm,s?.CpuControlTemperatureC,s?.CpuLoadPercent,_cpuFanPhase);
-        HomeFan(g,new(754,170,397,239),"GPU",fan?.GpuFanRpm,s?.GpuTemperatureC,s?.GpuLoadPercent,_gpuFanPhase);
+        HomeFan(g,new(335,170,397,239),"CPU",fan?.CpuFanRpm,s?.CpuControlTemperatureC,s?.CpuLoadPercent,_cpuFanAnimation.Phase);
+        HomeFan(g,new(754,170,397,239),"GPU",fan?.GpuFanRpm,s?.GpuTemperatureC,s?.GpuLoadPercent,_gpuFanAnimation.Phase);
     }
 
     private void Home(Graphics g)
