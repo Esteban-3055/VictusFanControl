@@ -1,16 +1,16 @@
-# VictusFanControl v1.1.9
+# VictusFanControl v1.2.0
 
-[Español](README.es.md) · [Stable v1.1.9](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.1.9) · [Installation and operation](docs/PRODUCT_V1.md) · [Validation status](docs/PRODUCT_VALIDATION_STATUS.md)
+[Español](README.es.md) · [Stable v1.2.0](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.0) · [Installation and operation](docs/PRODUCT_V1.md) · [Validation status](docs/PRODUCT_VALIDATION_STATUS.md)
 
 Windows fan control and CPU/GPU preferences for the exact target **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, board revision 63.43, Intel Core i7-13700H and NVIDIA RTX 4060 Laptop GPU. v1.0.0 enables habitual Automatic on this target. Other models and BIOS versions are outside this release's control authorization; HP 88F8 material remains historical.
 
 ## Install
 
-Download **VictusFanControl-1.1.9-Setup-win-x64.exe** from the stable release and run it. The ZIP and PowerShell alternative is described below.
+Download **VictusFanControl-1.2.0-Setup-win-x64.exe** from the stable release and run it. The ZIP and PowerShell alternative is described below.
 
 Requires Windows 11 x64, .NET Desktop Runtime 8 x64, the PawnIO driver and NVIDIA/NVML. The ZIP includes the application's PawnIO modules; it does not install those prerequisites.
 
-1. Download **VictusFanControl-1.1.9-win-x64.zip** from Releases and extract all files. Exit older Victus applications normally from their tray menus.
+1. Download **VictusFanControl-1.2.0-win-x64.zip** from Releases and extract all files. Exit older Victus applications normally from their tray menus.
 2. Open PowerShell **as administrator using the same Windows account**, in the extracted folder.
 3. Run:
 
@@ -48,7 +48,7 @@ Use .NET 8 SDK and the explicit product release property:
 dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
 ```
 
-The pipeline packages current product binaries as **1.1.9.0**. A successful `main` or rebuilt product-branch build can publish v1.1.9 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
+The pipeline packages current product binaries as **1.2.0.0**. A successful `main` or rebuilt product-branch build can publish v1.2.0 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
 
 Historical qualification builds retain their RC version and gates, including `control.enabledByDefault=false` and `automaticPolicyEnabled=false`. These describe the legacy harness; the product's separate authorization covers only the exact target above. Earlier plans remain development history.
 
@@ -56,7 +56,7 @@ MIT: [LICENSE](LICENSE). External components: [THIRD_PARTY_NOTICES.md](THIRD_PAR
 
 ## Instalador y actualizaciones v1.1.0
 
-The stable v1.1.9 release separates **Download** from **Install** and keeps a verified installer across application restarts and failed installation attempts. Pending sessions can be recovered from the Updates page before retrying Install. The installer preserves existing startup preferences by default. Stable is the default update channel; save **Include prereleases** to receive previews. [Guide](docs/PRODUCT_V1.md) · [Functional review](docs/PRODUCT_1_1_5_REVIEW.md).
+The stable v1.2.0 release separates **Download** from **Install** and keeps a verified installer across application restarts and failed installation attempts. Pending sessions can be recovered from the Updates page before retrying Install. The installer preserves existing startup preferences by default. Stable is the default update channel; save **Include prereleases** to receive previews. [Guide](docs/PRODUCT_V1.md) · [Functional review](docs/PRODUCT_1_1_5_REVIEW.md).
 
 Version 1.1.6 removes the GPU consumption handoff and identifies concrete Automatic wait/admission failures. GPU power still contributes to fan demand; selected CPU power and thermal protections remain. [Changes and tests](docs/PRODUCT_1_1_6_CHANGES.md).
 
@@ -65,3 +65,5 @@ Version 1.1.7 adapts the window to resolution and DPI changes, including 4K → 
 Version 1.1.8 filters brief CPU temperature rises before fan demand: a rise must persist for two seconds; ≥99 °C bypasses the filter. Raw sensors and protection handoffs remain independent. GPU temperature, power and load contributions keep their behavior. [Scope and checks](docs/PRODUCT_1_1_8_CPU_SPIKES.md).
 
 Version 1.1.9 can recover pending sessions automatically in the background, including startup and minimized operation. Settings can disable it. Resumption preserves the applied profile and requires fresh readings; a user Firmware request cancels it. CPU and TZ01/DTT3 contribution diagnostics are added without changing thermal behavior. [Details](docs/AUTOMATIC_SESSION_RECOVERY.md).
+
+Version 1.2.0 refreshes Home with two animated fans, temperature/load readings, the applied curve and real-time controller demand. Fans uses the same curve plot size as the editor. Navigation follows the requested order; animation pauses outside Home, when hidden/minimized or when feedback expires. [Interface and checks](docs/HOME_DASHBOARD.md).

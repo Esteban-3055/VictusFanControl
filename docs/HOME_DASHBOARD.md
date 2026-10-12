@@ -1,6 +1,6 @@
-# Inicio y curva ampliada de Ventiladores
+# Inicio y curva ampliada de Ventiladores — v1.2.0
 
-La nueva interfaz se desarrolla después de v1.1.9 y no cambia su número de versión ni publica otra release por sí sola.
+Esta interfaz se publica en v1.2.0 estable. Conserva perfiles, control térmico y recuperación automática de las versiones anteriores.
 
 Inicio presenta dos ventiladores con 28 aspas, lectura CPU/GPU independiente, temperaturas, uso y estado de rendimiento. La rotación visual es proporcional a la velocidad informada; se detiene con lecturas no vigentes, velocidad cero, otra página, ventana oculta o minimizada. Un temporizador de presentación de 50 ms no consulta hardware. La animación no tiene autoridad sobre los ventiladores y conserva la semántica de las lecturas HP existentes.
 
