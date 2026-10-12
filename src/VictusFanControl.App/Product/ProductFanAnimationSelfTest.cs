@@ -5,11 +5,11 @@ internal static class ProductFanAnimationSelfTest
     internal static void Run(Action<bool,string> require)
     {
         var fan=new ProductFanAnimation();fan.Advance(0.1,100);
-        require(fan.Speed>0&&fan.Speed<3&&fan.Phase>0&&fan.Phase<0.2,"Fan start snapped to full speed.");
+        require(fan.Speed>0&&fan.Speed<10&&fan.Phase>0&&fan.Phase<0.4,"Fan start snapped to full speed.");
         for(int i=0;i<100;i++)fan.Advance(0.1,100);
-        require(fan.Speed>23&&fan.Speed<=24,"Fan did not settle at a slow bounded speed.");
+        require(fan.Speed>70&&fan.Speed<=72,"Fan did not settle at the more visible bounded speed.");
         var fast=fan.Speed;fan.Advance(0.1,25);
-        require(fan.Speed<fast&&fan.Speed>6,"Lower demand removed the fan's inertia.");
+        require(fan.Speed<fast&&fan.Speed>18,"Lower demand removed the fan's inertia.");
         var slowing=fan.Speed;fan.Advance(0.1,0);
         require(fan.IsMoving&&fan.Speed<slowing,"Zero demand skipped gradual deceleration.");
         for(int i=0;i<120;i++)fan.Advance(0.1,0);
@@ -32,7 +32,7 @@ internal static class ProductFanAnimationSelfTest
         var phase=delayed.Phase;delayed.Pause();
         require(!delayed.IsMoving&&delayed.Phase==phase,"Pause rotated or retained momentum.");
         delayed.Advance(0.1,100);
-        require(delayed.Speed<3,"Resume skipped the soft start.");
+        require(delayed.Speed<10,"Resume skipped the soft start.");
         foreach(var invalid in new double?[]{null,double.NaN,double.PositiveInfinity})
         {
             delayed.Advance(0.1,100);phase=delayed.Phase;delayed.Advance(0.1,invalid);
