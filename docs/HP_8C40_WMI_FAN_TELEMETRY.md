@@ -1,5 +1,8 @@
 # HP 8C40/F.18 WMI fan telemetry
 
+> **Migration-era report.** The original ACPI/AML investigation and its nominal RPM-bin representation are preserved below as historical implementation context. Subsequent OEM research distinguishes HP WMI `0x2D` **effective fan level** from an independently measured physical tachometer. Its `level*100` compatibility field is nominal, not proof of exact physical RPM or hardware ownership. Normal current 8C40 fan control/telemetry is WMI-only, without direct EC access. See the [research atlas](HP_8C40_RESEARCH_ATLAS.md), [Spanish atlas](HP_8C40_RESEARCH_ATLAS.es.md) and [WMI-only investigation](WMI_ONLY_EC_ISOLATION.md).
+
+
 Software migration from baseline `5ad0821b0e7a4272abdc31f4a7d0d8fcb716332c`
 (CI #1199 / run 37075117009 SUCCESS). P16 remains fail-closed; this work
 performs no hardware execution and creates no physical authorization.
