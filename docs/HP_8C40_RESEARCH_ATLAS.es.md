@@ -151,4 +151,6 @@ Para una nueva hipótesis, registrar: target exacto, BIOS, commit, fuente de cad
 
 **Plantilla y buenas prácticas para publicar resultados:** [protocolo de reproducibilidad e issues](RESEARCH_REPORTING_GUIDE.es.md).
 
+**Seguimiento público:** [#32 Modelo OEM y regímenes Unmapped](https://github.com/Esteban-3055/VictusFanControl/issues/32) · [#33 Validación térmica/acústica v1.2.3](https://github.com/Esteban-3055/VictusFanControl/issues/33) · [#34 Fan level frente a RPM](https://github.com/Esteban-3055/VictusFanControl/issues/34) · [#35 Coherencia README/main/releases](https://github.com/Esteban-3055/VictusFanControl/issues/35).
+
 **Pendientes de investigación:** describir el régimen alto Unmapped con sesiones independientes; correlacionar señales térmicas sin atribuirles causalidad automática; cualificar acústica/temperatura/lifecycle en la versión distribuida exacta; y mejorar la visibilidad de versión entre `main` y las releases etiquetadas. Los issues técnicos mantienen el seguimiento; no son autorización para escrituras EC o pruebas destructivas.
