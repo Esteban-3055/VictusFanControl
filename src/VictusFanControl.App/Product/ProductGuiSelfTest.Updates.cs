@@ -5,11 +5,17 @@ namespace VictusFanControl.App;
 
 internal static partial class ProductGuiSelfTest
 {
+    private static ProductUpdate FutureUpdate(long size)
+    {
+        var installed=Version.Parse(ProductRelease.Version);
+        var version=new Version(installed.Major,installed.Minor+1,0);
+        return new(version,new Uri($"https://github.com/Esteban-3055/VictusFanControl/releases/download/v{version}/VictusFanControl-{version}-Setup-win-x64.exe"),size,new string('a',64));
+    }
     private static void TestUpdatePage(Action<bool,string> require)
     {
         var exitCode=Environment.ExitCode;
         var preferencePath=Path.Combine(Path.GetTempPath(),"Victus-update-fixture-"+Guid.NewGuid().ToString("N"),"profiles.json");
-        var update=new ProductUpdate(new Version(1,2,0),new Uri("https://github.com/Esteban-3055/VictusFanControl/releases/download/v1.2.0/VictusFanControl-1.2.0-Setup-win-x64.exe"),1024,new string('a',64));
+        var update=FutureUpdate(1024);
         try
         {
             var runtime=new RecordingRuntime();
