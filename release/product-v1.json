@@ -58,7 +58,7 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.2.0",
+  "version": "1.2.1",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -113,6 +113,16 @@
   "homeDashboard": {
     "animatedFans": "independent-current-feedback-visible-home-only",
     "fanFreshnessMilliseconds": 3000,
+    "fanAnimation": {
+      "intervalMilliseconds": 33,
+      "maximumDegreesPerSecond": 24,
+      "accelerationTimeConstantSeconds": 1.2,
+      "decelerationTimeConstantSeconds": 1.8,
+      "maximumFrameSeconds": 0.1,
+      "zeroRpmPolicy": "finite-coast-down-then-stop-timer",
+      "pausePolicy": "discard-inertia-on-hidden-minimized-other-page-or-stale-feedback",
+      "displayedRpm": "current-feedback-without-visual-smoothing"
+    },
     "demandSource": "accepted-automatic-observation-percent",
     "demandHistorySeconds": 300,
     "maximumDemandSamples": 600,
