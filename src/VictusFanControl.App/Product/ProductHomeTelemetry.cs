@@ -16,13 +16,22 @@ internal sealed class ProductHomeTelemetry
         now-s.Timestamp <= s.MaximumControlAge && s.HasFreshControlSensorsAt(now) && s.IsFanTelemetryFreshAt(now,3000) ? s : null;
 
     internal static ProductHomeDemandSample? CurrentDemand(ProductRuntimeState state, DateTimeOffset now)
+        => ReadDemand(state,now,requireLiveSnapshot:true);
+
+    // Keep the last accepted decision between acquisitions. A delayed/missing live RPM
+    // must not restart presentation inertia; the decision's own age still expires it.
+    internal static ProductHomeDemandSample? AnimationDemand(ProductRuntimeState state, DateTimeOffset now)
+        => ReadDemand(state,now,requireLiveSnapshot:false);
+
+    private static ProductHomeDemandSample? ReadDemand(ProductRuntimeState state, DateTimeOffset now, bool requireLiveSnapshot)
     {
         if (state.Runtime != "Healthy" || state.FanMode != "Automatic" || state.FanAuthority != "Custom" ||
             state.LifecycleBlocked || state.AutomaticPreparing || state.AutomaticSourceTransition is not null ||
             state.Source is not ("Ac" or "Battery") || state.AppliedFanProfile != state.Source ||
             string.IsNullOrWhiteSpace(state.AutomaticSessionId) || state.AppliedAutomaticConfiguration is null ||
-            state.Snapshot is not { IsComplete:true } live || now < live.Timestamp || now-live.Timestamp > live.MaximumControlAge ||
-            !live.HasFreshControlSensorsAt(now) || state.AutomaticDecisionSnapshot is not { IsComplete:true } sample ||
+            (requireLiveSnapshot && (state.Snapshot is not { IsComplete:true } live || now < live.Timestamp ||
+                now-live.Timestamp > live.MaximumControlAge || !live.HasFreshControlSensorsAt(now))) ||
+            state.AutomaticDecisionSnapshot is not { IsComplete:true } sample ||
             now < sample.Timestamp || now-sample.Timestamp > sample.MaximumControlAge || !sample.HasFreshControlSensorsAt(now) ||
             state.AutomaticDecision is not { ExecutionAuthorized:true, EqualFanLevel:not null, UnifiedDemand: {} demand } decision ||
             decision.EqualFanLevel != state.FanLevel || !double.IsFinite(demand.Percent) || demand.Percent is <0 or >100) return null;

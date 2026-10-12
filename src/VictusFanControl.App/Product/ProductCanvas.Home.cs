@@ -12,6 +12,7 @@ internal sealed partial class ProductCanvas
     private readonly ProductFanAnimation _cpuFanAnimation = new(), _gpuFanAnimation = new();
     internal bool HomeAnimationRunning => _fanAnimationTimer.Enabled;
     internal (double Cpu,double Gpu) HomeFanPhases => (_cpuFanAnimation.Phase,_gpuFanAnimation.Phase);
+    internal (double Cpu,double Gpu) HomeFanAnimationSpeeds => (_cpuFanAnimation.Speed,_gpuFanAnimation.Speed);
     internal IReadOnlyList<ProductHomeDemandSample> HomeDemandSamples => _homeTelemetry.Samples;
     internal void ObserveHomeDemand(ProductRuntimeState state,DateTimeOffset now) => _homeTelemetry.Observe(state,now);
     internal RectangleF RenderedCurveBounds { get; private set; }
@@ -27,9 +28,9 @@ internal sealed partial class ProductCanvas
         FindForm()?.WindowState != FormWindowState.Minimized;
     private void SynchronizeFanAnimation()
     {
-        var sample=ProductHomeTelemetry.FanSnapshot(State,DateTimeOffset.UtcNow);
-        var running=HomeIsVisible && sample is not null &&
-            (sample.CpuFanRpm is >0 || sample.GpuFanRpm is >0 || _cpuFanAnimation.IsMoving || _gpuFanAnimation.IsMoving);
+        var demand=ProductHomeTelemetry.AnimationDemand(State,DateTimeOffset.UtcNow);
+        var running=HomeIsVisible && demand is not null &&
+            (demand.Percent>0 || _cpuFanAnimation.IsMoving || _gpuFanAnimation.IsMoving);
         if(running) { _fanAnimationLastTick ??= Environment.TickCount64; _fanAnimationTimer.Start(); }
         else PauseFanAnimation();
     }
@@ -40,12 +41,12 @@ internal sealed partial class ProductCanvas
     }
     internal void AdvanceHomeAnimation(long clock,DateTimeOffset now)
     {
-        var sample=ProductHomeTelemetry.FanSnapshot(State,now);
-        if(!HomeIsVisible || sample is null) { PauseFanAnimation(); return; }
+        var demand=ProductHomeTelemetry.AnimationDemand(State,now);
+        if(!HomeIsVisible || demand is null) { PauseFanAnimation(); return; }
         var elapsed=_fanAnimationLastTick is {} previous && clock>=previous ? Math.Min(0.1,(clock-previous)/1000d) : 0;
         _fanAnimationLastTick=clock;
-        _cpuFanAnimation.Advance(elapsed,sample.CpuFanRpm);_gpuFanAnimation.Advance(elapsed,sample.GpuFanRpm);
-        if(sample.CpuFanRpm is not >0 && sample.GpuFanRpm is not >0 &&
+        _cpuFanAnimation.Advance(elapsed,demand.Percent);_gpuFanAnimation.Advance(elapsed,demand.Percent);
+        if(demand.Percent==0 &&
             !_cpuFanAnimation.IsMoving && !_gpuFanAnimation.IsMoving) PauseFanAnimation();
         Invalidate(Rectangle.Ceiling(new RectangleF(_offsetX+334*_scale,_offsetY+169*_scale,818*_scale,242*_scale)));
     }
@@ -62,8 +63,9 @@ internal sealed partial class ProductCanvas
     private void DrawHomeFans(Graphics g)
     {
         var s=FreshSnapshot;var fan=ProductHomeTelemetry.FanSnapshot(State,DateTimeOffset.UtcNow);
-        HomeFan(g,new(335,170,397,239),"CPU",fan?.CpuFanRpm,s?.CpuControlTemperatureC,s?.CpuLoadPercent,_cpuFanAnimation.Phase);
-        HomeFan(g,new(754,170,397,239),"GPU",fan?.GpuFanRpm,s?.GpuTemperatureC,s?.GpuLoadPercent,_gpuFanAnimation.Phase);
+        var demand=ProductHomeTelemetry.AnimationDemand(State,DateTimeOffset.UtcNow);
+        HomeFan(g,new(335,170,397,239),"CPU",fan?.CpuFanRpm,s?.CpuControlTemperatureC,s?.CpuLoadPercent,_cpuFanAnimation.Phase,demand is not null);
+        HomeFan(g,new(754,170,397,239),"GPU",fan?.GpuFanRpm,s?.GpuTemperatureC,s?.GpuLoadPercent,_gpuFanAnimation.Phase,demand is not null);
     }
 
     private void Home(Graphics g)
@@ -71,14 +73,14 @@ internal sealed partial class ProductCanvas
         DrawText(g,"Inicio",319,87,31,null,800,true);
         DrawText(g,State.LifecycleBlocked?"Sesión interrumpida":State.FanMode=="Automatic"?"Automático · "+SourceText():State.FanMode+" · "+SourceText(),850,93,21,State.LifecycleBlocked?Yellow:Muted,770,centered:false);
         Card(g,new(310,150,1337,281));
-        var now=DateTimeOffset.UtcNow;var s=FreshSnapshot;var fan=ProductHomeTelemetry.FanSnapshot(State,now);
+        var now=DateTimeOffset.UtcNow;var s=FreshSnapshot;
         DrawHomeFans(g);
         DrawText(g,"Estado del sistema",1200,174,24,null,421,true);
         DrawText(g,s is not null?"Telemetría disponible":State.Runtime=="Healthy"?"Esperando datos vigentes":State.Runtime,1200,219,22,s is not null?Green:Yellow,420);
         DrawText(g,"CPU · "+AppliedCpu(),1200,260,19,DomainColor(State.CpuState,Green),420);
         DrawText(g,"GPU · "+AppliedGpu(),1200,299,19,DomainColor(State.GpuState,Accent),420);
         DrawText(g,"Ventiladores · "+State.FanAuthority,1200,338,19,Muted,420);
-        DrawText(g,fan is null?"Velocidad actual sin confirmar":"Nivel informado CPU / GPU · "+fan.CpuFanSpeedLevel+" / "+fan.GpuFanSpeedLevel,1200,377,17,fan is null?Yellow:Muted,420);
+        DrawText(g,ProductHomeTelemetry.AnimationDemand(State,now) is not null?"Giro visual según demanda · RPM informadas":"Sin demanda automática · RPM informadas",1200,377,17,Muted,420);
 
         Card(g,new(310,451,655,379));Card(g,new(985,451,662,379));
         var source=HomeCurveSource;
@@ -91,13 +93,13 @@ internal sealed partial class ProductCanvas
         DrawText(g,applied?"Perfil en uso; Curvas permite editar y aplicar cambios.":"Automático mostrará aquí su curva aplicada.",334,807,15,Muted,610,height:20);
         HomeDemandGraph(g,new(985,451,662,379),current,now);
     }
-    private void HomeFan(Graphics g,RectangleF r,string title,double? rpm,double? temperature,double? load,double phase)
+    private void HomeFan(Graphics g,RectangleF r,string title,double? rpm,double? temperature,double? load,double phase,bool demandAvailable)
     {
         DrawText(g,title+" · Ventilador",r.X,r.Y,23,null,r.Width,true,true);
         var cx=r.X+r.Width/2;var cy=r.Y+123;
         using(var ring=new Pen(Border,2))g.DrawEllipse(ring,cx-88,cy-88,176,176);
         var saved=g.Save();g.TranslateTransform(cx,cy);g.RotateTransform((float)phase);
-        using(var bladeBrush=new SolidBrush(rpm.HasValue?Accent:Muted))
+        using(var bladeBrush=new SolidBrush(demandAvailable?Accent:Muted))
         using(var blade=new GraphicsPath())
         {
             blade.AddBezier(0,-53,-7,-62,-19,-75,-15,-85);
