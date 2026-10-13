@@ -58,7 +58,7 @@ public static partial class ProductUpdates
                 var cached = JsonSerializer.Deserialize<CacheReceipt>(file);
                 if (cached is not { Schema: 1 } || cached.Update is null) continue;
                 ValidateDownload(cached.Update);
-                if (Path.GetFullPath(directory) != Path.GetFullPath(CacheDirectory(cached.Update, root)) || cached.Update.Version <= current || cached.Update.IsPrerelease && !includePrereleases) continue;
+                if (Path.GetFullPath(directory) != Path.GetFullPath(CacheDirectory(cached.Update, root)) || !IsNewer(cached.Update.Version,cached.Update.IsPrerelease,current) || cached.Update.IsPrerelease && !includePrereleases) continue;
                 candidates.Add(cached.Update);
             }
             catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or JsonException or ArgumentException) { /* An incomplete receipt never grants install admission. */ }

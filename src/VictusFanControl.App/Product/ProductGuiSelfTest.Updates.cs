@@ -7,7 +7,7 @@ internal static partial class ProductGuiSelfTest
 {
     private static ProductUpdate FutureUpdate(long size)
     {
-        var installed=Version.Parse(ProductRelease.Version.Split('-')[0].Split('+')[0]);
+        var installed=ProductRelease.NumericVersion;
         var version=new Version(installed.Major,installed.Minor+1,0);
         return new(version,new Uri($"https://github.com/Esteban-3055/VictusFanControl/releases/download/v{version}/VictusFanControl-{version}-Setup-win-x64.exe"),size,new string('a',64));
     }
