@@ -12,7 +12,7 @@ internal sealed partial class ProductForm
     {
         var now = clock ?? Environment.TickCount64;
         _automaticRecovery.Observe(_canvas.State, now);
-        if (_closing || _exitRequested || _restarting || IsDisposed || _canvas.Busy || _displayOff ||
+        if (ProductFanRangePreview.Enabled || _closing || _exitRequested || _restarting || IsDisposed || _canvas.Busy || _displayOff ||
             _automaticReview is not null || !Draft.RecoverSessionsAutomatically ||
             _isolatedRuntime && RecoveryRunner is null)
         { _automaticRecovery.Pause(); return; }
@@ -34,7 +34,7 @@ internal sealed partial class ProductForm
         try
         {
             var selected = await Task.Run(() => _isolatedRuntime ? RecoverySelectionReader() : ProductRecoverySelection.Read(ignoreCurrentOwner:true));
-            if (_closing || _exitRequested || _displayOff || _restartLifecycleInterrupted) return;
+            if (ProductFanRangePreview.Enabled || _closing || _exitRequested || _displayOff || _restartLifecycleInterrupted) return;
             if (!selected.Pending) return; // Normal cleanup won the race; no recovery writes.
             if (selected.CpuSession != (expected.CpuSession ?? Guid.Empty) || selected.GpuSession != (expected.GpuSession ?? Guid.Empty) ||
                 !ProductRecoveryInventory.AllowsRemaining(expected.FanRecords, selected.Fans))

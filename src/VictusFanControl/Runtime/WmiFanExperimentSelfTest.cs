@@ -16,6 +16,7 @@ internal static class WmiFanExperimentSelfTest
         Directory.CreateDirectory(directory);
         try
         {
+            Hp8C40FanPreviewTargetsSelfTest.Run();
             TestHeartbeats(directory);
             TestRecoveryDrain(directory);
             TestFreshAcquisitionAsync().GetAwaiter().GetResult();

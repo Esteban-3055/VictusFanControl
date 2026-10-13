@@ -20,6 +20,7 @@ internal static partial class ProductGuiSelfTest
             ProductAutomaticAdmissionSelfTest.Run(Require);
             ProductWindowLayoutSelfTest.Run(Require);
             TestDisplayChanges(Require);
+            TestSelectedCurveInsertion(Require);
             TestHomeDashboard(Require);
             TestLiveAnimationSettings(Require);
             TestHomeAnimationCadence(Require);

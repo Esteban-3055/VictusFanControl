@@ -9,6 +9,7 @@ namespace VictusFanControl.App;
 internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
 {
     private readonly bool _fixture;
+    private readonly bool _upperRangePreview;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private Process? _child;
     private readonly int _ownerPid = Environment.ProcessId;
@@ -18,9 +19,10 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     public string SessionDirectory { get; private set; }
     public string ReportPath => Path.Combine(SessionDirectory, "guardian-report.json");
 
-    internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null, string? releasedBoundaryDirectory = null)
+    internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null, string? releasedBoundaryDirectory = null, bool upperRangePreview = false)
     {
         _fixture = fixture;
+        _upperRangePreview = upperRangePreview;
         using var owner = Process.GetCurrentProcess();
         _ownerStart = owner.StartTime.ToUniversalTime().Ticks;
         if (!fixture && fixtureDirectory is not null) throw new ArgumentException("Fixture directory requires explicit fixture mode.");
@@ -30,7 +32,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         Directory.CreateDirectory(SessionDirectory);
         if (!fixture)
         {
-            if(releasedBoundaryDirectory is null) WmiFanExperimentBoundary.Enable(SessionDirectory, true, gui: true);
+            if(releasedBoundaryDirectory is null) WmiFanExperimentBoundary.Enable(SessionDirectory, true, gui: true, upperRangePreview: upperRangePreview);
             else
             {
                 if(!string.Equals(Path.GetFullPath(releasedBoundaryDirectory),WmiFanExperimentBoundary.SessionDirectory,StringComparison.OrdinalIgnoreCase))
@@ -87,11 +89,12 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         new { Pid = _ownerPid, ElapsedMs = _clock.ElapsedMilliseconds });
     public void PersistIntent(int level)
     {
-        if (level < Hp8C40TargetProfile.MinimumValidatedFanLevel || level > Hp8C40TargetProfile.MaximumPhysicallyQualifiedFanLevel)
+        if (level < Hp8C40TargetProfile.MinimumValidatedFanLevel || level > (_upperRangePreview ? Hp8C40FanPreviewTargets.MaximumLogicalLevel : Hp8C40TargetProfile.MaximumPhysicallyQualifiedFanLevel))
             throw new ArgumentOutOfRangeException(nameof(level));
         EnsureAlive();
+        var target = _upperRangePreview ? Hp8C40FanPreviewTargets.FromLogical(level) : (Cpu:level,Gpu:level);
         WmiFanExperiment.WriteJson(Path.Combine(SessionDirectory, "write-intent.json"), new
-        { OwnerPid = _ownerPid, OwnerStartUtcTicks = _ownerStart, Level = level, Utc = DateTimeOffset.UtcNow });
+        { OwnerPid = _ownerPid, OwnerStartUtcTicks = _ownerStart, Level = level, CpuLevel = target.Cpu, GpuLevel = target.Gpu, UpperRangePreview = _upperRangePreview, Utc = DateTimeOffset.UtcNow });
         EnsureAlive();
     }
 

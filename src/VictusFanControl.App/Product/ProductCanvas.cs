@@ -76,7 +76,9 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
         AccessibleName = "VictusFanControl"; AccessibleRole = AccessibleRole.Pane;
         BackColor = Background; MinimumSize = new(1000,560);
-        _fanAnimationPump=new(this,()=>{AdvanceHomeAnimation(AnimationClockMilliseconds,DateTimeOffset.UtcNow);Update();});
+        _fanAnimationPump=new(this,()=>
+        {var begin=AnimationClockMilliseconds;AdvanceHomeAnimation(begin,DateTimeOffset.UtcNow);
+            if(HomeAnimationRunning)_fanAnimationTiming.Paint(begin,AnimationClockMilliseconds-begin);});
     }
     internal void AddSnapshot(TelemetrySnapshot s)
     {
@@ -243,8 +245,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             Hit("fan-mode-"+i,r,modes[i],enabled&&(!Busy||i==0));if(!enabled)DrawText(g,"Bloqueado",r.Right-102,r.Y+16,15,Yellow,94,height:24);
         }
         DrawText(g,"Control manual",331,562,25,null,490,true);
-        Slider(g,"manual","Nivel CPU / GPU",new(331,613,490,86),ManualLevel,10,50,"",true);
-        DrawText(g,"Editar el nivel no escribe en el hardware.",331,705,17,Muted,490,height:30);
+        Slider(g,"manual","Nivel CPU / GPU",new(331,613,490,86),ManualLevel,10,State.ManualMaximumLevel,"",true);
+        DrawText(g,State.FanUpperRangePreview ? $"Prueba: CPU {ManualLevel} / GPU {Math.Min(ManualLevel,52)} · requiere Aplicar" : "Editar el nivel no escribe en el hardware.",331,705,17,Muted,490,height:30);
         Button(g,"manual-apply","Aplicar nivel",new(331,761,219,50),true,State.ManualAuthorized&&State.FanMode=="Manual"&&State.Runtime=="Healthy"&&!State.LifecycleBlocked);
         Button(g,"firmware","Volver a Firmware",new(565,761,258,50));
         DrawText(g,"Curva del perfil · "+ProfileName,889,201,27,null,735,true);
@@ -365,7 +367,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             using(var grid=new Pen(Border)){g.DrawLine(grid,390,table.Top,390,table.Bottom);g.DrawLine(grid,621,table.Top,621,table.Bottom);for(int row=1;row<8;row++)g.DrawLine(grid,333,357+row*47,822,357+row*47);}
             for(int i=0;i<count;i++){var index=start+i;var rect=new RectangleF(334,404+i*47,487,46);if(index==SelectedNode)Card(g,rect,true,6);
                 DrawText(g,(index+1).ToString(),345,rect.Y+10,21,Muted,43);DrawText(g,points[index].Input.ToString("0"),445,rect.Y+10,21,Muted,168);DrawText(g,points[index].Level.ToString("0"),669,rect.Y+10,21,Muted,130);Hit("node-"+index,rect,"Punto "+(index+1));}
-            Button(g,"node-add","+  Añadir punto",new(331,767,226,44),true,points.Count<64);Button(g,"node-remove","−  Quitar",new(567,767,116,44),false,SelectedNode>0&&SelectedNode<points.Count-1&&points.Count>2);Button(g,"curve-reset","Restablecer",new(693,767,131,44));
+            Button(g,"node-add","+  Añadir punto",new(331,767,226,44),true,ProductCurveInsertion.CanInsert(points,SelectedNode));Button(g,"node-remove","−  Quitar",new(567,767,116,44),false,SelectedNode>0&&SelectedNode<points.Count-1&&points.Count>2);Button(g,"curve-reset","Restablecer",new(693,767,131,44));
         }
         DrawText(g,"Una curva · arrastra los puntos",889,201,27,null,735,true);
         DrawText(g,"Color activo: edición · gris: preset inicial, solo lectura.",892,231,17,Muted,737);DrawCurve(g,EditorCurveBounds,true);
@@ -463,7 +465,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         if(MonitorTab==0){History(g,new(390,308,804,177),s=>s.CpuControlTemperatureC,s=>s.GpuTemperatureC,110,"Temperatura (°C)");History(g,new(390,597,804,144),s=>s.CpuLoadPercent,s=>s.GpuLoadPercent,100,"Uso (%)");}
         else if(MonitorTab==1){History(g,new(390,308,804,177),s=>s.CpuLoadPercent,s=>s.GpuLoadPercent,100,"Uso (%)");History(g,new(390,597,804,144),s=>s.CpuPackagePowerW,s=>s.GpuPowerW,150,"Potencia (W)");}
         else if(MonitorTab==2)History(g,new(390,325,804,375),s=>s.CpuFanRpm,s=>s.GpuFanRpm,6000,"RPM");
-        else{DrawText(g,"Nivel aceptado: "+(State.FanLevel?.ToString()??"—"),350,352,33,Accent,830);DrawText(g,"Autoridad: "+State.FanAuthority,350,417,27,null,830);DrawText(g,"Las RPM son realimentación; no prueban el setpoint ni ownership.",350,492,25,Muted,830);}
+        else{DrawText(g,"Comando CPU / GPU: "+(State.CommandedCpuLevel?.ToString()??State.FanLevel?.ToString()??"—")+" / "+(State.CommandedGpuLevel?.ToString()??State.FanLevel?.ToString()??"—"),350,352,33,Accent,830);DrawText(g,"Autoridad: "+State.FanAuthority,350,417,27,null,830);DrawText(g,"Las RPM son realimentación; no prueban el setpoint ni ownership.",350,492,25,Muted,830);}
         Card(g,new(1270,144,378,674));DrawText(g,"Valores actuales",1290,165,27,null,340,true);var s=FreshSnapshot;
         string[] names=["CPU Temp","GPU Temp","CPU Uso","GPU Uso","CPU Potencia","GPU Potencia","CPU Fan","GPU Fan"];
         var now=DateTimeOffset.UtcNow;var cpuFan=CpuFanReading(now);var gpuFan=GpuFanReading(now);

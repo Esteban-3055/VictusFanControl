@@ -16,7 +16,7 @@ internal sealed class ProductAnimationTiming
     internal object Snapshot(string scheduler,long coalesced)
     {
         double P(Queue<double> samples,double fraction){var a=samples.Order().ToArray();return a.Length==0?0:a[(int)Math.Round((a.Length-1)*fraction)];}
-        return new{clock="Stopwatch",requestedFramesPerSecond=ProductAnimationFramePump.RequestedFramesPerSecond,scheduler,
+        return new{renderer="opaque-child-fan-surfaces",clock="Stopwatch",requestedFramesPerSecond=ProductAnimationFramePump.RequestedFramesPerSecond,scheduler,
             paintedFrames=PaintedFrames,paintedFramesPerSecond=_intervals.Count==0?0:1000/_intervals.Average(),
             frameIntervalMedianMs=P(_intervals,.5),frameIntervalP95Ms=P(_intervals,.95),frameIntervalP99Ms=P(_intervals,.99),
             paintMedianMs=P(_paintTimes,.5),paintP95Ms=P(_paintTimes,.95),coalescedRequests=coalesced,

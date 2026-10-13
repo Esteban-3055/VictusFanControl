@@ -58,7 +58,7 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.2.7",
+  "version": "1.2.8-preview.1",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -161,5 +161,14 @@
       "acquisitionOrdering": "strictly-newer-fan-timestamp-no-refresh-from-cpu-timestamp",
       "snapshotControlAndHistoryUnchanged": true
     }
+  },
+  "channel": "preview",
+  "upperRangePreview": {
+    "entry": "--fan-upper-range-preview",
+    "cpuMaximumCommandLevel": 54,
+    "gpuMaximumCommandLevel": 52,
+    "defaultNormalMaximumLevel": 50,
+    "mode": "manual-only-explicit-apply",
+    "physicalQualification": "pending-target-directed-test"
   }
 }

@@ -12,6 +12,7 @@ internal sealed partial class ProductCanvas
     private readonly ProductAnimationTiming _fanAnimationTiming=new();
     internal static double AnimationClockMilliseconds => System.Diagnostics.Stopwatch.GetTimestamp()*1000d/System.Diagnostics.Stopwatch.Frequency;
     private ProductFanRotor? _fanRotor;
+    private ProductFanSurface? _cpuFanSurface,_gpuFanSurface;
     private Bitmap? _homeFanBackground,_homeFanOverlay;
     private string? _homeFanLayerKey;
     private static readonly RectangleF HomeFanLayerBounds=new(332,167,822,246);
@@ -48,6 +49,8 @@ internal sealed partial class ProductCanvas
             (CpuFanReading(now)?.Rpm>0 || GpuFanReading(now)?.Rpm>0 || _cpuFanAnimation.IsMoving || _gpuFanAnimation.IsMoving);
         if(running) { _fanAnimationLastTick ??= AnimationClockMilliseconds; _fanAnimationPump?.Start(); }
         else PauseFanAnimation();
+        if(_cpuFanSurface is not null)_cpuFanSurface.Visible=Page==ProductPage.Home;
+        if(_gpuFanSurface is not null)_gpuFanSurface.Visible=Page==ProductPage.Home;
     }
     private void PauseFanAnimation()
     {
@@ -63,7 +66,9 @@ internal sealed partial class ProductCanvas
         _cpuFanAnimation.Advance(elapsed,cpu?.Rpm);_gpuFanAnimation.Advance(elapsed,gpu?.Rpm);
         if(cpu?.Rpm is not >0 && gpu?.Rpm is not >0 &&
             !_cpuFanAnimation.IsMoving && !_gpuFanAnimation.IsMoving) PauseFanAnimation();
-        Invalidate(Rectangle.Ceiling(new RectangleF(_offsetX+334*_scale,_offsetY+169*_scale,818*_scale,242*_scale)));
+        // Each child owns a small opaque back buffer. Do not invalidate the parent canvas.
+        if(_cpuFanSurface is not null){_cpuFanSurface.Phase=_cpuFanAnimation.Phase;_cpuFanSurface.Invalidate();_cpuFanSurface.Update();}
+        if(_gpuFanSurface is not null){_gpuFanSurface.Phase=_gpuFanAnimation.Phase;_gpuFanSurface.Invalidate();_gpuFanSurface.Update();}
     }
     protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e);SynchronizeFanAnimation(); }
     protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e);SynchronizeFanAnimation(); }
@@ -82,7 +87,8 @@ internal sealed partial class ProductCanvas
         var s=FreshSnapshot;var now=DateTimeOffset.UtcNow;
         var cpu=CpuFanReading(now);var gpu=GpuFanReading(now);
         var key=$"{_scale:R}|{Accent.ToArgb()}|{cpu?.Rpm}|{gpu?.Rpm}|{s?.CpuControlTemperatureC}|{s?.CpuLoadPercent}|{s?.GpuTemperatureC}|{s?.GpuLoadPercent}";
-        if(_homeFanBackground is null||_homeFanLayerKey!=key)
+        var changed=_homeFanBackground is null||_homeFanLayerKey!=key;
+        if(changed)
         {
             _homeFanBackground?.Dispose();_homeFanOverlay?.Dispose();
             var width=(int)Math.Ceiling(HomeFanLayerBounds.Width*_scale);var height=(int)Math.Ceiling(HomeFanLayerBounds.Height*_scale);
@@ -96,14 +102,30 @@ internal sealed partial class ProductCanvas
             HomeFanStatic(bg,overlay,new(335,170,397,239),"CPU",cpu,s?.CpuControlTemperatureC,s?.CpuLoadPercent);
             HomeFanStatic(bg,overlay,new(754,170,397,239),"GPU",gpu,s?.GpuTemperatureC,s?.GpuLoadPercent);
         }
-        g.DrawImage(_homeFanBackground,HomeFanLayerBounds);
+        g.DrawImage(_homeFanBackground!,HomeFanLayerBounds);
         _fanRotor??=new();
-        _fanRotor.Draw(g,533.5f,293,_cpuFanAnimation.Phase,_scale,Accent);
-        _fanRotor.Draw(g,952.5f,293,_gpuFanAnimation.Phase,_scale,Accent);
+        _cpuFanSurface??=CreateFanSurface();_gpuFanSurface??=CreateFanSurface();
+        PrepareFanSurface(_cpuFanSurface,533.5f,changed,_cpuFanAnimation.Phase);
+        PrepareFanSurface(_gpuFanSurface,952.5f,changed,_gpuFanAnimation.Phase);
         g.DrawImage(_homeFanOverlay!,HomeFanLayerBounds);
 
     }
 
+    private ProductFanSurface CreateFanSurface()
+    {
+        var surface=new ProductFanSurface(_fanRotor!);Controls.Add(surface);surface.BringToFront();return surface;
+    }
+    private void PrepareFanSurface(ProductFanSurface surface,float cx,bool changed,double phase)
+    {
+        // Pixel registration uses the same cached layer origin as static text/hub.
+        var source=new Rectangle((int)Math.Round((cx-90-HomeFanLayerBounds.X)*_scale),
+            (int)Math.Round((293-90-HomeFanLayerBounds.Y)*_scale),(int)Math.Ceiling(180*_scale),(int)Math.Ceiling(180*_scale));
+        var bounds=new Rectangle((int)Math.Round(_offsetX+HomeFanLayerBounds.X*_scale)+source.X,
+            (int)Math.Round(_offsetY+HomeFanLayerBounds.Y*_scale)+source.Y,source.Width,source.Height);
+        var resized=surface.Bounds!=bounds;surface.Bounds=bounds;
+        if(changed||resized)surface.SetLayers(_homeFanBackground!,_homeFanOverlay!,source,_scale,Accent);
+        surface.Phase=phase;surface.Visible=Page==ProductPage.Home;
+    }
     private void Home(Graphics g)
     {
         DrawText(g,"Inicio",319,87,31,null,800,true);

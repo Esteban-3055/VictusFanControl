@@ -19,6 +19,10 @@ internal sealed record ProductRuntimeState
     internal string FanMode { get; init; } = "Firmware";
     internal string FanAuthority { get; init; } = "Firmware";
     internal int? FanLevel { get; init; }
+    internal int ManualMaximumLevel { get; init; } = 50;
+    internal bool FanUpperRangePreview { get; init; }
+    internal int? CommandedCpuLevel { get; init; }
+    internal int? CommandedGpuLevel { get; init; }
     internal bool ManualAuthorized { get; init; }
     internal bool AutomaticAuthorized { get; init; }
     internal bool AutomaticReview { get; init; }
@@ -150,17 +154,17 @@ internal sealed class ProductRuntime : IProductRuntime
         {
             if (_target == Hp8C40TargetProfile.Instance)
             {
-                _fanGuardian=new WmiFanGuiGuardianClient(releasedBoundaryDirectory:releasedBoundary);
-                _wmi = new(_fanGuardian); backend = _wmi;
+                _fanGuardian=new WmiFanGuiGuardianClient(releasedBoundaryDirectory:releasedBoundary,upperRangePreview:ProductFanRangePreview.Enabled);
+                _wmi = new(_fanGuardian,upperRangePreview:ProductFanRangePreview.Enabled); backend = _wmi;
                 _wmi.CommandAccepted += (_, message) => AppLog.Write("PRODUCT WMI REQUEST ACCEPTED: " + message);
             }
             else backend = new DisabledFanControlBackend();
         }
         catch (Exception ex) { if(releasedBoundary is not null)throw;backend = new DisabledFanControlBackend(); AppLog.Write("Product backend unavailable: " + ex); }
         _fans = new(backend);
-        _controller = new(_fans, Hp8C40AdaptiveCandidateV1.Create(),
+        _controller = new(_fans, Hp8C40AdaptiveCandidateV1.Create() with { MaximumLevel = ProductFanRangePreview.Enabled ? Hp8C40FanPreviewTargets.MaximumLogicalLevel : 50 },
             backend.CanWrite && Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(_target?.Id),
-            backend.CanWrite && (ProductRelease.IsAutomaticAuthorized(_target?.Id) || _automaticReview is not null),
+            !ProductFanRangePreview.Enabled && backend.CanWrite && (ProductRelease.IsAutomaticAuthorized(_target?.Id) || _automaticReview is not null),
             automaticHardware: _target == Hp8C40TargetProfile.Instance ? _hardware : null,
             automaticConfiguration: profiles.Ac.Fan,
             automaticMinimumLevel: _target == Hp8C40TargetProfile.Instance ? 10 : Hp8C40AutomaticPolicy.MinimumLevel,
@@ -796,6 +800,9 @@ internal sealed class ProductRuntime : IProductRuntime
                 Hardware = _hardware.SystemProductName + " (" + _hardware.BoardProduct + ")", Target = _target?.Id ?? "Unsupported",
                 Source = source, Runtime = _worker.StateMachine.State.ToString(), Snapshot = _snapshot,
                 FanMode = _controller.Mode.ToString(), FanAuthority = _fans.Authority.ToString(), FanLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedLevel : null,
+                ManualMaximumLevel = _controller.ManualMaximumLevel, FanUpperRangePreview = ProductFanRangePreview.Enabled,
+                CommandedCpuLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedTargets?.Cpu : null,
+                CommandedGpuLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedTargets?.Gpu : null,
                 ManualAuthorized = _controller.ManualExecutionAuthorized, AutomaticAuthorized = _controller.AutomaticExecutionAuthorized,
                 AutomaticReview = _automaticReview is not null, AutomaticReviewMaximumSeconds = _automaticReview?.MaximumDurationSeconds, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
                 AutomaticCpuSpikeRemainingMilliseconds = _automaticGuard.RemainingCpuSpikeMilliseconds,

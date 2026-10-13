@@ -18,6 +18,7 @@ internal static class WmiFanExperimentBoundary
     internal static bool Control { get; private set; }
     private static int _recovering;
     private static bool _gui;
+    private static bool _upperRangePreview;
     private static readonly object SessionGate = new();
     internal static Func<bool>? PlannedGuiRelease { get; set; }
     internal static Action? EnsureGuiGuardianAlive { get; set; }
@@ -29,8 +30,9 @@ internal static class WmiFanExperimentBoundary
     private static string InFlightPath => Path.Combine(SessionDirectory!, "native-inflight.json");
     private static string UncertainPath => Path.Combine(SessionDirectory!, "native-uncertain.signal");
 
-    internal static void Enable(string directory, bool control, bool gui = false)
+    internal static void Enable(string directory, bool control, bool gui = false, bool upperRangePreview = false)
     {
+        if(upperRangePreview && !gui) throw new ArgumentException("Upper range is a GUI trial only.");
         lock (SessionGate)
         {
             if (Enabled) throw new InvalidOperationException("Experiment boundary is already installed.");
@@ -38,6 +40,7 @@ internal static class WmiFanExperimentBoundary
             Directory.CreateDirectory(SessionDirectory);
             Control = control;
             _gui = gui;
+            _upperRangePreview = upperRangePreview;
             Volatile.Write(ref _admission, null);
             Interlocked.Exchange(ref _recovering, 0);
             // Reuse the existing hard prohibition before EC module loading / I/O.
@@ -78,7 +81,7 @@ internal static class WmiFanExperimentBoundary
     internal static void SetAdmission(TelemetrySnapshot snapshot, Action ensureThermalAllowed) =>
         Volatile.Write(ref _admission, new(snapshot, ensureThermalAllowed));
 
-    internal static bool IsAllowed(HpBiosRequest r, bool control, bool recovering, bool stopped, bool gui = false)
+    internal static bool IsAllowed(HpBiosRequest r, bool control, bool recovering, bool stopped, bool gui = false, bool upperRangePreview = false)
     {
         if (r.Command != Hp8C40BiosFanControl.DefaultCommand || r.Payload is not { Length: 4 }) return false;
         if (r.CommandType == 0x2D && r.OutputSize == 128 && r.Payload.All(b => b == 0)) return true;
@@ -86,6 +89,8 @@ internal static class WmiFanExperimentBoundary
         if (recovering)
             return (r.CommandType == 0x2E && r.Payload.SequenceEqual(new byte[] { 255, 255, 0, 0 })) ||
                 (r.CommandType == 0x1A && r.Payload.SequenceEqual(new byte[] { 255, 0, 0, 0 }));
+        if (gui && upperRangePreview)
+            return !stopped && r.CommandType == 0x2E && Hp8C40FanPreviewTargets.IsPair(r.Payload[0],r.Payload[1]) && r.Payload[2] == 0 && r.Payload[3] == 0;
         return !stopped && r.CommandType == 0x2E && r.Payload[0] >= (gui ? Hp8C40TargetProfile.MinimumValidatedFanLevel : 30) && r.Payload[0] <= 50 &&
             r.Payload[1] == r.Payload[0] && r.Payload[2] == 0 && r.Payload[3] == 0;
     }
@@ -94,7 +99,7 @@ internal static class WmiFanExperimentBoundary
     {
         if (_gui && (Recovering || File.Exists(StopPath)) && request.CommandType == Hp8C40BiosFanControl.GetFanLevelCommandType)
             throw new WmiFanReadAdmissionPausedException(PlannedGuiRelease?.Invoke()==true);
-        if (!IsAllowed(request, Control, Recovering, File.Exists(StopPath), gui: _gui))
+        if (!IsAllowed(request, Control, Recovering, File.Exists(StopPath), gui: _gui, upperRangePreview: _upperRangePreview))
             throw new InvalidOperationException("Request is outside the WMI fan experiment lifecycle/whitelist.");
         if (request.CommandType == 0x2E && request.Payload[0] != 255)
         {
