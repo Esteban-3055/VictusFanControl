@@ -1,16 +1,16 @@
-# VictusFanControl v1.2.6
+# VictusFanControl v1.2.7
 
-[Español](README.es.md) · [Stable v1.2.6](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.6) · [Installation and operation](docs/PRODUCT_V1.md) · [Validation status](docs/PRODUCT_VALIDATION_STATUS.md)
+[Español](README.es.md) · [Stable v1.2.7](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.7) · [Installation and operation](docs/PRODUCT_V1.md) · [Validation status](docs/PRODUCT_VALIDATION_STATUS.md)
 
 Windows fan control and CPU/GPU preferences for the exact target **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, board revision 63.43, Intel Core i7-13700H and NVIDIA RTX 4060 Laptop GPU. v1.0.0 enables habitual Automatic on this target. Other models and BIOS versions are outside this release's control authorization; HP 88F8 material remains historical.
 
 ## Install
 
-Download **VictusFanControl-1.2.6-Setup-win-x64.exe** from the stable release and run it. The ZIP and PowerShell alternative is described below.
+Download **VictusFanControl-1.2.7-Setup-win-x64.exe** from the stable release and run it. The ZIP and PowerShell alternative is described below.
 
 Requires Windows 11 x64, .NET Desktop Runtime 8 x64, the PawnIO driver and NVIDIA/NVML. The ZIP includes the application's PawnIO modules; it does not install those prerequisites.
 
-1. Download **VictusFanControl-1.2.6-win-x64.zip** from Releases and extract all files. Exit older Victus applications normally from their tray menus.
+1. Download **VictusFanControl-1.2.7-win-x64.zip** from Releases and extract all files. Exit older Victus applications normally from their tray menus.
 2. Open PowerShell **as administrator using the same Windows account**, in the extracted folder.
 3. Run:
 
@@ -48,7 +48,7 @@ Use .NET 8 SDK and the explicit product release property:
 dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
 ```
 
-The pipeline packages current product binaries as **1.2.6.0**. A successful `main` or rebuilt product-branch build can publish v1.2.6 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
+The pipeline packages current product binaries as **1.2.7.0**. A successful `main` or rebuilt product-branch build can publish v1.2.7 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
 
 Historical qualification builds retain their RC version and gates, including `control.enabledByDefault=false` and `automaticPolicyEnabled=false`. These describe the legacy harness; the product's separate authorization covers only the exact target above. Earlier plans remain development history.
 
@@ -56,7 +56,7 @@ MIT: [LICENSE](LICENSE). External components: [THIRD_PARTY_NOTICES.md](THIRD_PAR
 
 ## Instalador y actualizaciones v1.1.0
 
-The stable v1.2.6 release separates **Download** from **Install** and keeps a verified installer across application restarts and failed installation attempts. Pending sessions can be recovered from the Updates page before retrying Install. The installer preserves existing startup preferences by default. Stable is the default update channel; save **Include prereleases** to receive previews. [Guide](docs/PRODUCT_V1.md) · [Functional review](docs/PRODUCT_1_1_5_REVIEW.md).
+The stable v1.2.7 release separates **Download** from **Install** and keeps a verified installer across application restarts and failed installation attempts. Pending sessions can be recovered from the Updates page before retrying Install. The installer preserves existing startup preferences by default. Stable is the default update channel; save **Include prereleases** to receive previews. [Guide](docs/PRODUCT_V1.md) · [Functional review](docs/PRODUCT_1_1_5_REVIEW.md).
 
 Version 1.1.6 removes the GPU consumption handoff and identifies concrete Automatic wait/admission failures. GPU power still contributes to fan demand; selected CPU power and thermal protections remain. [Changes and tests](docs/PRODUCT_1_1_6_CHANGES.md).
 
@@ -74,6 +74,8 @@ Since v1.2.2, both Home animations follow accepted controller demand rather than
 
 In v1.2.3, Home fans rotate three times faster while preserving demand-driven motion and inertia: one visual revolution every 5 seconds at 100 % demand and every 10 seconds at 50 %, once settled. Reported RPM and physical fan control remain unchanged.
 
-Version 1.2.6 animates each Home fan from its last valid measured RPM, with one visual revolution per second at 3000 RPM once inertia settles. Acquisition gaps retain the number and momentum without labels or color changes; all blades are identical. Hidden/minimized windows and other pages stop the animation timer while preserving phase and speed. A measured zero gradually stops the corresponding fan. [Details](docs/HOME_DASHBOARD.md).
+Version 1.2.7 animates each Home fan from its last valid measured RPM, with one visual revolution per second at 3000 RPM once inertia settles. Acquisition gaps retain the number and momentum without labels or color changes; all blades are identical. Hidden/minimized windows and other pages stop the animation timer while preserving phase and speed. A measured zero gradually stops the corresponding fan. [Details](docs/HOME_DASHBOARD.md).
 
-From v1.2.6, edit `%LOCALAPPDATA%/VictusFanControl/fan-animation.json` and save `segundosPorVueltaA3000Rpm` to tune the visual pace without rebuilding or restarting. Visible Home reloads it once per second while retaining inertia. The default is 1, with a 0.1–60 second range. [Guide](docs/FAN_ANIMATION_SETTINGS.md).
+From v1.2.7, edit `%LOCALAPPDATA%/VictusFanControl/fan-animation.json` and save `segundosPorVueltaA3000Rpm` to tune the visual pace without rebuilding or restarting. Visible Home reloads it once per second while retaining inertia. The default is 1, with a 0.1–60 second range. [Guide](docs/FAN_ANIMATION_SETTINGS.md).
+
+From v1.2.7, Home uses the supplied preloaded PNG rotor, cached static layers, Stopwatch and a bounded high-resolution frame producer. Diagnostic exports report actual UI paint intervals and costs; requested cadence is not monitor presentation FPS. [Detalles](docs/PNG_FAN_ANIMATION.md).

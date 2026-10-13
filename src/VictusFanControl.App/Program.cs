@@ -44,6 +44,8 @@ internal static class Program
         }
         if(args.Length==3&&args[0]=="--product-restart-fixture-child")
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunRestartFixtureChild(args[1],args[2]);return;}
+        if(args.Length==1&&args[0]=="--product-home-animation-self-test")
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunHomeAnimationChecks();return;}
         if(args.Length==1&&args[0]=="--product-gui-soak-self-test")
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSoak();return;}
         if(args.Length==1&&args[0]=="--platform-physical-self-test")

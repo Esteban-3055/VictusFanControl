@@ -118,7 +118,7 @@ internal sealed partial class ProductForm
     }
     internal object DisplayDiagnostic() => new { deviceDpi = DeviceDpi, display = ReadDisplayMetrics(),
         bounds = Bounds, restoreBounds = RestoreBounds, minimumSize = MinimumSize,
-        windowState = WindowState.ToString(), preferred = _windowLayout.PreferredSize };
+        windowState = WindowState.ToString(), preferred = _windowLayout.PreferredSize, homeAnimation=_canvas.HomeAnimationDiagnostic() };
     [StructLayout(LayoutKind.Sequential)]
     private struct DisplayRect
     {

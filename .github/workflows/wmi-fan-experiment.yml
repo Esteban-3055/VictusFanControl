@@ -14,6 +14,17 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Build CLI and GUI
         run: dotnet build VictusFanControl.sln -c Release
+      - name: PNG Home animation live cadence, RPM, JSON and pause fixtures
+        run: dotnet run --project src/VictusFanControl.App -c Release --no-build -- --product-home-animation-self-test
+      - name: Upload Home animation measurements and renders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: home-animation-measurements-${{ github.sha }}
+          path: |
+            logs/product-gui-self-test/animation-cadence.json
+            logs/product-gui-self-test/home-*.png
+          if-no-files-found: warn
       - name: Real WinForms dashboard fixtures and viewport renders
         run: dotnet run --project src/VictusFanControl.App -c Release --no-build -- --dashboard-self-test
       - name: Upload dashboard viewport renders

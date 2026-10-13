@@ -33,7 +33,7 @@ internal static partial class ProductGuiSelfTest
         var names=canvas.Hits.Where(h=>h.Id.StartsWith("page-")).OrderBy(h=>h.Bounds.Y).Select(h=>h.Label).ToArray();
         require(names.SequenceEqual(new[]{"Inicio","Ventiladores","Rendimiento","Curvas","Perfiles","Monitorización","Protecciones","Configuración","Avanzado","Actualizaciones"}),
             "Requested navigation order was not rendered.");
-        var phase=canvas.HomeFanPhases;var clock=Environment.TickCount64;
+        var phase=canvas.HomeFanPhases;var clock=ProductCanvas.AnimationClockMilliseconds;
         canvas.AdvanceHomeAnimation(clock+100,DateTimeOffset.UtcNow);var moving=canvas.HomeFanPhases;
         require(canvas.HomeAnimationRunning&&moving.Cpu>phase.Cpu&&moving.Gpu>phase.Gpu&&
             moving.Cpu-phase.Cpu>moving.Gpu-phase.Gpu,
@@ -70,7 +70,7 @@ internal static partial class ProductGuiSelfTest
         canvas.Page=ProductPage.Home;
         require(canvas.HomeAnimationRunning&&canvas.HomeFanAnimationSpeeds==pausedSpeeds&&canvas.HomeFanPhases==stopped,
             "Returning to Home reset position or momentum.");
-        canvas.AdvanceHomeAnimation(Environment.TickCount64,DateTimeOffset.UtcNow);
+        canvas.AdvanceHomeAnimation(ProductCanvas.AnimationClockMilliseconds,DateTimeOffset.UtcNow);
         require(Math.Abs(canvas.HomeFanAnimationSpeeds.Cpu-pausedSpeeds.Cpu)<1,
             "Returning to Home caught up hidden elapsed time.");
         canvas.Size=new(1040,660);Render("home-dashboard-minimum");
@@ -87,7 +87,7 @@ internal static partial class ProductGuiSelfTest
         var stale=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow.AddMinutes(-1));canvas.State=stale;Render("home-dashboard-stale");
         require(canvas.HomeAnimationRunning,"Stale feedback stopped fans with retained measured RPM.");
         canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow,0);
-        var rpmClock=Environment.TickCount64;var rpmNow=DateTimeOffset.UtcNow;
+        var rpmClock=ProductCanvas.AnimationClockMilliseconds;var rpmNow=DateTimeOffset.UtcNow;
         for(int i=1;i<=120;i++)canvas.AdvanceHomeAnimation(rpmClock+i*100,rpmNow);
         require(canvas.HomeAnimationRunning&&Math.Abs(canvas.HomeFanAnimationSpeeds.Cpu-360)<0.1&&
             Math.Abs(canvas.HomeFanAnimationSpeeds.Gpu-180)<0.1,
@@ -99,7 +99,7 @@ internal static partial class ProductGuiSelfTest
         var stoppedAt=DateTimeOffset.UtcNow;
         var zero=ProductHomeTelemetrySelfTest.StateAt(stoppedAt);
         canvas.State=zero with{Snapshot=zero.Snapshot! with{CpuFanRpm=0,GpuFanRpm=1500}};
-        var zeroClock=Environment.TickCount64;var zeroNow=DateTimeOffset.UtcNow;
+        var zeroClock=ProductCanvas.AnimationClockMilliseconds;var zeroNow=DateTimeOffset.UtcNow;
         for(int i=1;i<=200;i++)canvas.AdvanceHomeAnimation(zeroClock+i*100,zeroNow);
         require(canvas.HomeAnimationRunning&&canvas.HomeFanAnimationSpeeds.Cpu==0&&canvas.HomeFanAnimationSpeeds.Gpu>179,
             "A measured CPU stop also stopped the running GPU fan.");
@@ -127,7 +127,7 @@ internal static partial class ProductGuiSelfTest
             form.Show();Application.DoEvents();var canvas=form.Canvas;
             var draft=ProductProfilesStore.Serialize(form.Draft);
             canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow);
-            var clock=Environment.TickCount64;var now=DateTimeOffset.UtcNow;
+            var clock=ProductCanvas.AnimationClockMilliseconds;var now=DateTimeOffset.UtcNow;
             for(int i=1;i<=120;i++)canvas.AdvanceHomeAnimation(clock+i*100,now);
             var speeds=canvas.HomeFanAnimationSpeeds;var phases=canvas.HomeFanPhases;
             void Save(string value)=>File.WriteAllText(path,"{\"segundosPorVueltaA3000Rpm\":"+value+"}");
