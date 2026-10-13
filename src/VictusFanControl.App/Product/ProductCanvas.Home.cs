@@ -34,7 +34,7 @@ internal sealed partial class ProductCanvas
     internal FanConfiguration HomeCurveConfiguration => HomeCurveUsesApplied?State.AppliedAutomaticConfiguration!:Profiles.Get(HomeCurveSource).Fan;
 
     private bool HomeIsVisible => !IsDisposed && IsHandleCreated && Visible && Page == ProductPage.Home &&
-        FindForm()?.WindowState != FormWindowState.Minimized;
+        FindForm() is { Visible:true } form && form.WindowState != FormWindowState.Minimized;
     internal void SynchronizeFanAnimation()
     {
         var now=DateTimeOffset.UtcNow;

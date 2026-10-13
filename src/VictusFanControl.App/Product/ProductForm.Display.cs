@@ -38,6 +38,11 @@ internal sealed partial class ProductForm
         _displayWindowState = WindowState;
         QueueDisplayRefresh("window-state");
     }
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        _canvas?.SynchronizeFanAnimation();
+    }
     protected override void OnResizeEnd(EventArgs e)
     {
         base.OnResizeEnd(e);
