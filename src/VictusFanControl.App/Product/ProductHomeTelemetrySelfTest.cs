@@ -7,23 +7,32 @@ namespace VictusFanControl.App;
 
 internal static class ProductHomeTelemetrySelfTest
 {
-    internal static ProductRuntimeState StateAt(DateTimeOffset stamp,double percent=60,string source="Ac",string session="session-a")
+    internal static ProductRuntimeState StateAt(DateTimeOffset stamp,double percent=60,string source="Ac",string session="session-a",int level=30)
     {
         var snapshot=new TelemetrySnapshot(stamp,"CPU",60,20,35,"GPU",50,30,45,3000,1500)
         {CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",60)],ProductTelemetryTolerance=true,
             FanTelemetrySource="HP-WMI-ACPI-2D",FanSampledAtUtc=stamp,FanSampleAgeMilliseconds=0,FanAgeCapturedAtUtc=stamp,FanRpmResolution=100,
             CpuFanSpeedLevel=30,GpuFanSpeedLevel=15};
-        return new(){Runtime="Healthy",Source=source,FanMode="Automatic",FanAuthority="Custom",FanLevel=30,
+        return new(){Runtime="Healthy",Source=source,FanMode="Automatic",FanAuthority="Custom",FanLevel=level,
             ManualAuthorized=true,AutomaticAuthorized=true,PerformanceSupported=true,CpuState="Active",GpuState="ActiveUnverified",
             AppliedPerformance=new ProductProfiles().PerformanceConfiguration(),AppliedPerformanceSource=source,
             AppliedFanProfile=source,AutomaticSessionId=session,Snapshot=snapshot,AutomaticDecisionSnapshot=snapshot,
             AppliedAutomaticConfiguration=new ProductProfiles().Ac.Fan,
-            AutomaticDecision=new(AdaptiveFanProductionMode.Automatic,AdaptiveFanProductionActionKind.HoldCustom,true,30,30,FanAuthority.Custom,"fixture")
-            {UnifiedDemand=new(percent,30,0,false,percent,40,30,20,10,15)}};
+            AutomaticDecision=new(AdaptiveFanProductionMode.Automatic,AdaptiveFanProductionActionKind.HoldCustom,true,level,level,FanAuthority.Custom,"fixture")
+            {UnifiedDemand=new(percent,level,0,false,percent,40,30,20,10,15)}};
     }
     internal static void Run(Action<bool,string> require)
     {
         var now=DateTimeOffset.UtcNow;var history=new ProductHomeTelemetry();var state=StateAt(now);
+        require(ProductHomeTelemetry.AnimationRequest(state,now)==30&&
+            ProductHomeTelemetry.AnimationRequest(StateAt(now,0),now)==30&&
+            ProductHomeTelemetry.AnimationRequest(StateAt(now,100,level:20),now)==20,
+            "Animation followed demand percentage instead of the accepted request level.");
+        require(ProductHomeTelemetry.AnimationRequest(state with{FanLevel=31},now) is null&&
+            ProductHomeTelemetry.AnimationRequest(StateAt(now,level:51),now) is null&&
+            ProductHomeTelemetry.AnimationRequest(StateAt(now,level:0),now) is null&&
+            ProductHomeTelemetry.AnimationRequest(state,now.AddSeconds(6)) is null,
+            "Unaccepted, out-of-range or expired request animated fans.");
         history.Observe(state,now);history.Observe(state,now);
         require(history.Samples.Count==1&&history.Samples[0].Percent==60,"Demand history duplicated an observation or evaluated a different demand.");
         history.Observe(StateAt(now.AddSeconds(1),65),now.AddSeconds(1));
