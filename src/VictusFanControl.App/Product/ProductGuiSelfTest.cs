@@ -21,6 +21,7 @@ internal static partial class ProductGuiSelfTest
             ProductWindowLayoutSelfTest.Run(Require);
             TestDisplayChanges(Require);
             TestHomeDashboard(Require);
+            TestLiveAnimationSettings(Require);
             VictusFanControl.Recovery.ProductRecoveryClientSelfTest.Run(Require);
             TestGuidedRecovery(Require);
             ProductAutomaticRecoverySelfTest.Run(Require);

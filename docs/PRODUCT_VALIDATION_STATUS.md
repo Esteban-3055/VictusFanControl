@@ -1,4 +1,13 @@
-# Estado del producto — v1.2.5, 13 de octubre de 2026
+# Estado del producto — v1.2.6, 13 de octubre de 2026
+
+Esta actualización añade un archivo de presentación para ajustar en vivo la velocidad visual de Inicio, conservando las RPM medidas y la inercia. El archivo permanece fuera del payload de instalación y de los perfiles de control.
+
+Verificación local: compilación Roslyn y ejecución real de fixtures de animación y archivo JSON sobre .NET 8.0.25, incluyendo cambios de velocidad durante retrasos, datos inválidos, guardados incompletos, UTF-8 BOM, límites, persistencia y almacenamiento no disponible. La publicación exige las suites Windows y el paquete/instalador del commit final; la procedencia adjunta registra los resultados definitivos. No se afirma nueva validación física.
+
+[Guía](FAN_ANIMATION_SETTINGS.md) · [Notas v1.2.6](../release/RELEASE-NOTES-v1.2.6.md)
+
+## Estado histórico de v1.2.5
+
 
 Destino: **HP 8C40 / 9D0R1LA / BIOS F.18**. Esta actualización solo cambia la presentación de RPM y la animación. Cada ventilador sigue sus propias RPM medidas, a una vuelta por segundo con 3000 RPM. Conserva la inercia y las cifras durante retrasos, elimina marcas y avisos de retención y pausa el temporizador fuera de Inicio o al ocultar/minimizar, conservando fase y velocidad.
 

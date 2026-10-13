@@ -1,16 +1,16 @@
-# VictusFanControl v1.2.5
+# VictusFanControl v1.2.6
 
-[English](README.md) · [Estable v1.2.5](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.5) · [Instalación y uso](docs/PRODUCT_V1.md) · [Estado de validación](docs/PRODUCT_VALIDATION_STATUS.md)
+[English](README.md) · [Estable v1.2.6](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.6) · [Instalación y uso](docs/PRODUCT_V1.md) · [Estado de validación](docs/PRODUCT_VALIDATION_STATUS.md)
 
 Control de ventiladores y preferencias CPU/GPU para Windows, limitado al destino exacto **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, placa revisión 63.43, Intel Core i7-13700H y NVIDIA RTX 4060 Laptop GPU. v1.0.0 habilita Automático habitual para este equipo. Otros modelos o BIOS quedan fuera de esta autorización; HP 88F8 se conserva como histórico.
 
 ## Instalar
 
-Descarga el instalador **VictusFanControl-1.2.5-Setup-win-x64.exe** desde la release estable y ejecútalo. También puedes usar el ZIP y PowerShell como se describe a continuación.
+Descarga el instalador **VictusFanControl-1.2.6-Setup-win-x64.exe** desde la release estable y ejecútalo. También puedes usar el ZIP y PowerShell como se describe a continuación.
 
 Requiere Windows 11 x64, .NET Desktop Runtime 8 x64, controlador PawnIO y NVIDIA/NVML. El ZIP incluye los módulos PawnIO de la aplicación; no instala estos requisitos.
 
-1. Descarga **VictusFanControl-1.2.5-win-x64.zip** desde Releases y extrae todos los archivos. Sal de las aplicaciones Victus anteriores desde la bandeja.
+1. Descarga **VictusFanControl-1.2.6-win-x64.zip** desde Releases y extrae todos los archivos. Sal de las aplicaciones Victus anteriores desde la bandeja.
 2. Abre PowerShell **como administrador con tu misma cuenta de Windows**, en la carpeta extraída.
 3. Ejecuta:
 
@@ -48,7 +48,7 @@ Con .NET 8 SDK, usa la propiedad explícita de entrega:
 dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
 ```
 
-El pipeline empaqueta todos los binarios del producto como **1.2.5.0**. Una compilación correcta de `main` o de la rama reconstruida del producto puede publicar v1.2.5 tras pasar las verificaciones OEM, WMI y CPU/GPU del mismo commit. Se comprueba cada archivo contra el manifiesto y se adjuntan SHA-256 y procedencia. No se sobrescribe una release existente.
+El pipeline empaqueta todos los binarios del producto como **1.2.6.0**. Una compilación correcta de `main` o de la rama reconstruida del producto puede publicar v1.2.6 tras pasar las verificaciones OEM, WMI y CPU/GPU del mismo commit. Se comprueba cada archivo contra el manifiesto y se adjuntan SHA-256 y procedencia. No se sobrescribe una release existente.
 
 Los arneses históricos conservan versión RC y gates originales: `control.enabledByDefault=false` y `automaticPolicyEnabled=false`. Esos registros describen la cualificación antigua; el producto tiene autorización separada para este destino exacto. Los planes anteriores se mantienen como historial.
 
@@ -56,7 +56,7 @@ Licencia MIT: [LICENSE](LICENSE). Componentes externos: [THIRD_PARTY_NOTICES.md]
 
 ## Instalador y actualizaciones v1.1.0
 
-La versión estable v1.2.5 separa **Descargar** de **Instalar** y conserva el instalador verificado entre aperturas y cuando falla la instalación. Actualizaciones permite recuperar sesiones pendientes antes de volver a pulsar Instalar. El instalador conserva por defecto las preferencias de inicio anteriores. El canal estable es el predeterminado; guarda **Incluir versiones preliminares** para recibir previews. [Guía](docs/PRODUCT_V1.md) · [Revisión funcional](docs/PRODUCT_1_1_5_REVIEW.md).
+La versión estable v1.2.6 separa **Descargar** de **Instalar** y conserva el instalador verificado entre aperturas y cuando falla la instalación. Actualizaciones permite recuperar sesiones pendientes antes de volver a pulsar Instalar. El instalador conserva por defecto las preferencias de inicio anteriores. El canal estable es el predeterminado; guarda **Incluir versiones preliminares** para recibir previews. [Guía](docs/PRODUCT_V1.md) · [Revisión funcional](docs/PRODUCT_1_1_5_REVIEW.md).
 
 La v1.1.6 elimina el corte por consumo GPU y añade causas concretas de espera/rechazo de Automático. El consumo GPU sigue participando en la curva; se mantienen los cortes CPU y térmicos seleccionados. [Cambios y pruebas](docs/PRODUCT_1_1_6_CHANGES.md).
 
@@ -74,4 +74,6 @@ Desde v1.2.2, ambas animaciones de Inicio siguen la demanda aceptada del control
 
 En v1.2.3, los ventiladores de Inicio giran tres veces más rápido conservando el movimiento por demanda y la inercia: una vuelta visual cada 5 segundos a 100 % de demanda y cada 10 segundos a 50 %, una vez estabilizados. Las RPM informadas y el control físico conservan su comportamiento.
 
-La v1.2.5 anima cada ventilador de Inicio según sus últimas RPM válidas medidas, con una vuelta por segundo a 3000 RPM una vez estabilizada la inercia. Los retrasos conservan el número y el movimiento sin etiquetas ni cambios de color; todas las aspas son iguales. Al ocultar/minimizar o cambiar de página, el temporizador se detiene y conserva fase y velocidad. Un cero medido detiene gradualmente el ventilador correspondiente. [Detalles](docs/HOME_DASHBOARD.md).
+La v1.2.6 anima cada ventilador de Inicio según sus últimas RPM válidas medidas, con una vuelta por segundo a 3000 RPM una vez estabilizada la inercia. Los retrasos conservan el número y el movimiento sin etiquetas ni cambios de color; todas las aspas son iguales. Al ocultar/minimizar o cambiar de página, el temporizador se detiene y conserva fase y velocidad. Un cero medido detiene gradualmente el ventilador correspondiente. [Detalles](docs/HOME_DASHBOARD.md).
+
+Desde v1.2.6 puedes ajustar el ritmo sin recompilar ni reiniciar: abre `%LOCALAPPDATA%/VictusFanControl/fan-animation.json`, cambia `segundosPorVueltaA3000Rpm` y guarda. Inicio aplica el ajuste en su siguiente comprobación de un segundo, conservando la inercia. El valor predeterminado es 1; acepta 0.1–60 segundos. [Guía](docs/FAN_ANIMATION_SETTINGS.md).

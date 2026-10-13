@@ -14,6 +14,12 @@ internal sealed partial class ProductCanvas
     internal bool HomeAnimationRunning => _fanAnimationTimer.Enabled;
     internal (double Cpu,double Gpu) HomeFanPhases => (_cpuFanAnimation.Phase,_gpuFanAnimation.Phase);
     internal (double Cpu,double Gpu) HomeFanAnimationSpeeds => (_cpuFanAnimation.Speed,_gpuFanAnimation.Speed);
+    internal double HomeAnimationSecondsPerRevolution => _cpuFanAnimation.SecondsPerRevolution;
+    internal void SetHomeAnimationSecondsPerRevolution(double seconds)
+    {
+        _cpuFanAnimation.TrySetSecondsPerRevolution(seconds);
+        _gpuFanAnimation.TrySetSecondsPerRevolution(seconds);
+    }
     internal IReadOnlyList<ProductHomeDemandSample> HomeDemandSamples => _homeTelemetry.Samples;
     internal ProductFanReading? CpuFanReading(DateTimeOffset now) => _fanReadouts.Cpu(State,now);
     internal ProductFanReading? GpuFanReading(DateTimeOffset now) => _fanReadouts.Gpu(State,now);

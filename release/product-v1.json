@@ -58,7 +58,7 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.2.5",
+  "version": "1.2.6",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",

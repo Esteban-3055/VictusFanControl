@@ -114,4 +114,48 @@ internal static partial class ProductGuiSelfTest
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Dashboard fixture exit stalled.");
         Console.WriteLine("Home dashboard: PASS (navigation, applied curve, independent measured RPM drives blades, gaps retain RPM and inertia, measured zero coast-down, firmware/manual operation, hidden/minimized freeze and resume, equal-size fan plot and Windows renders; zero hardware IO).");
     }
+    private static void TestLiveAnimationSettings(Action<bool,string> require)
+    {
+        ProductFanAnimationSettingsSelfTest.Run(require);
+        var root=Path.Combine(Path.GetTempPath(),"vfc-animation-gui-"+Guid.NewGuid().ToString("N"));
+        var path=Path.Combine(root,"fan-animation.json");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var runtime=new RecordingRuntime();
+            using var form=new ProductForm("fixture://animation",fixture:runtime,fixtureProfiles:new ProductProfiles(),fanAnimationPath:path);
+            form.Show();Application.DoEvents();var canvas=form.Canvas;
+            var draft=ProductProfilesStore.Serialize(form.Draft);
+            canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow);
+            var clock=Environment.TickCount64;var now=DateTimeOffset.UtcNow;
+            for(int i=1;i<=120;i++)canvas.AdvanceHomeAnimation(clock+i*100,now);
+            var speeds=canvas.HomeFanAnimationSpeeds;var phases=canvas.HomeFanPhases;
+            void Save(string value)=>File.WriteAllText(path,"{\"segundosPorVueltaA3000Rpm\":"+value+"}");
+            Save("2");form.PresentationTick();
+            require(canvas.HomeAnimationSecondsPerRevolution==2&&canvas.HomeFanAnimationSpeeds==speeds&&canvas.HomeFanPhases==phases,
+                "Live file reload did not reach both animations without resetting inertia.");
+            for(int i=1;i<=200;i++)canvas.AdvanceHomeAnimation(clock+12000+i*100,now);
+            require(Math.Abs(canvas.HomeFanAnimationSpeeds.Cpu-180)<0.1&&Math.Abs(canvas.HomeFanAnimationSpeeds.Gpu-90)<0.1,
+                "Live setting did not scale each fan's own measured RPM.");
+            File.WriteAllText(path,"{");form.PresentationTick();
+            require(canvas.HomeAnimationSecondsPerRevolution==2,"Partial save interrupted the active setting.");
+            canvas.Page=ProductPage.Fans;Save("0.5");form.PresentationTick();
+            require(canvas.HomeAnimationSecondsPerRevolution==2&&!canvas.HomeAnimationRunning,"Another page reloaded/animated hidden Home.");
+            canvas.Page=ProductPage.Home;form.PresentationTick();
+            require(canvas.HomeAnimationSecondsPerRevolution==0.5&&canvas.HomeAnimationRunning,"Returning to Home did not pick up the pending edit.");
+            form.WindowState=FormWindowState.Minimized;Save("3");form.PresentationTick();
+            require(canvas.HomeAnimationSecondsPerRevolution==0.5&&!canvas.HomeAnimationRunning,"Minimized Home kept animation/settings work alive.");
+            form.WindowState=FormWindowState.Normal;form.PresentationTick();
+            require(canvas.HomeAnimationSecondsPerRevolution==3&&canvas.HomeAnimationRunning,"Restore failed to apply the pending edit.");
+            form.Hide();Save("1");form.PresentationTick();
+            require(canvas.HomeAnimationSecondsPerRevolution==3&&!canvas.HomeAnimationRunning,"Tray-hidden Home kept animation/settings work alive.");
+            form.Show();form.PresentationTick();
+            require(canvas.HomeAnimationSecondsPerRevolution==1&&canvas.CpuFanReading(now)?.Rpm==3000&&canvas.GpuFanReading(now)?.Rpm==1500&&
+                runtime.Commands==0&&ProductProfilesStore.Serialize(form.Draft)==draft,"Visual edits changed RPM, hardware or profiles.");
+            var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Live animation fixture exit stalled.");
+        }
+        finally {Directory.Delete(root,true);}
+        Console.WriteLine("Live animation GUI: PASS (file reload, independent RPM scale, unchanged inertia/readouts, partial-save recovery, hidden/minimized/page pause and return; zero hardware/profile writes).");
+    }
+
 }
