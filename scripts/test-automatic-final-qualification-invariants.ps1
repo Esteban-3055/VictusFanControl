@@ -155,4 +155,9 @@ Write-Host 'PASS: offline stability evidence binds source and retains physical p
 $productGate=Get-Content (Join-Path $repoRoot 'src/VictusFanControl/Product/ProductRelease.cs') -Raw
 Require ($productGate.Contains('Hp8C40TargetProfile.Instance.Id') -and $productGate.Contains('StringComparison.Ordinal')) 'v1 authority must require the exact target'
 $runtime=Get-Content (Join-Path $repoRoot 'src/VictusFanControl.App/Product/ProductRuntime.cs') -Raw
-Require ($runtime.Contains('ProductRelease.IsAutomaticAuthorized(_target?.Id)') -and $runtime.Contains('ProductAutomaticReviewMode.Habitual') -and $runtime.Contains('_automaticGuard.EnsureDispatchAllowed(snapshot)')) 'normal release must use the existing coupled and thermal guarded path'
+$controllerFactory=Get-Content (Join-Path $repoRoot 'src/VictusFanControl.App/Product/ProductFanControllerFactory.cs') -Raw
+Require ($runtime.Contains('ProductFanControllerFactory.Create(_fans,profiles,_hardware,_target,') -and
+    $controllerFactory.Contains('ProductRelease.IsAutomaticAuthorized(target?.Id)') -and
+    $controllerFactory.Contains('!upperRangePreview && fans.BackendCanWrite') -and
+    $runtime.Contains('ProductAutomaticReviewMode.Habitual') -and $runtime.Contains('_automaticGuard.EnsureDispatchAllowed(snapshot)')) 'normal release must use the existing coupled and thermal guarded path'
+Require ($controllerFactory.Contains('experimentalPolicy:automaticAuthorized?experimentalPolicy:null')) 'Manual preview and closed backend must not attach an unauthorized experimental Automatic policy'
