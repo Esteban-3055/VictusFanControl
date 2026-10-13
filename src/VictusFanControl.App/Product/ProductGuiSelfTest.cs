@@ -489,12 +489,18 @@ internal static partial class ProductGuiSelfTest
                     form.EditNode(0,-999,-999);form.EditNode(1,999,999);form.Draft.Validate();
                     var afterPeer=ProductProfilesStore.Serialize(form.Draft.With(slot,ProductProfiles.DefaultProfile(slot)));
                     require(peer==afterPeer,"Curve editing changed its peer profile.");
-                    form.HandleCommand("node-add");form.HandleCommand("node-remove");form.HandleCommand("curve-reset");form.Draft.Validate();
+                    canvas.SelectedNode=2;form.HandleCommand("node-add");form.HandleCommand("node-remove");form.HandleCommand("curve-reset");form.Draft.Validate();
                 }
                 form.HandleCommand("discard");require(!form.Dirty&&original==ProductProfilesStore.Serialize(form.Draft),"Discard did not restore the saved draft.");
                 form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.ShowCurvePoints=true;
-                for(int i=0;i<70;i++)form.HandleCommand("node-add");
+                for(int i=0;i<70;i++)
+                {
+                    var points=form.Draft.Ac.Fan.UnifiedDemand!.Curve;
+                    canvas.SelectedNode=Enumerable.Range(0,points.Count-1).FirstOrDefault(n=>points[n+1].Input-points[n].Input>=2,-1);
+                    form.HandleCommand("node-add");
+                }
                 require(form.Draft.Ac.Fan.UnifiedDemand!.Curve.Count==64,"Curve count cap is inaccessible or not enforced.");
+                canvas.Refresh();require(!canvas.Hits.Single(h=>h.Id=="node-add").Enabled,"Add remained enabled at the curve count cap.");
                 canvas.Refresh();canvas.HandleKey(Keys.End);canvas.Refresh();
                 require(canvas.SelectedNode==63&&canvas.Hits.Any(h=>h.Id=="node-63"),"Last of 64 nodes is not reachable by keyboard/table.");
                 canvas.HandleKey(Keys.Home);canvas.Refresh();require(canvas.SelectedNode==0,"Home failed to select first node.");

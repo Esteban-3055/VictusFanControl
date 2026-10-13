@@ -35,6 +35,16 @@ internal static partial class ProductGuiSelfTest
         canvas.SelectedNode=changed.Count-1;canvas.Refresh();require(!canvas.Hits.Single(h=>h.Id=="node-add").Enabled,"Last endpoint allowed insertion.");
         require(!ProductCurveInsertion.CanInsert([new(0,10),new(1,20),new(100,50)],0),"One-percent gap allowed duplicate position.");
         require(!ProductCurveInsertion.CanInsert(Enumerable.Range(0,64).Select(i=>new AdaptiveFanCurvePoint(i,10)).ToArray(),1),"64-node limit escaped.");
+        while(form.Draft.Ac.Fan.UnifiedDemand!.Curve.Count<64)
+        {
+            var points=form.Draft.Ac.Fan.UnifiedDemand!.Curve;
+            canvas.SelectedNode=Enumerable.Range(0,points.Count-1).FirstOrDefault(n=>points[n+1].Input-points[n].Input>=2,-1);
+            require(canvas.SelectedNode>=0,"Selected insertion could not reach the 64-node cap.");
+            form.HandleCommand("node-add");
+        }
+        canvas.Refresh();require(!canvas.Hits.Single(h=>h.Id=="node-add").Enabled,"Add enabled at the 64-node cap.");
+        var capped=form.Draft.Ac.Fan.UnifiedDemand!.Curve.ToArray();form.HandleCommand("node-add");
+        require(form.Draft.Ac.Fan.UnifiedDemand!.Curve.SequenceEqual(capped),"Insertion changed a capped curve.");
         form.HandleCommand("profile-battery");require(canvas.SelectedNode==-1,"Source switch retained a stale selected point.");
         form.Draft.Validate();require(runtime.Commands==0,"Curve insertion issued hardware commands.");
         Console.WriteLine("Selected curve insertion: PASS (selected right interval, interpolation, old points preserved, no-selection/last/no-space/64-node guards, source switch; zero hardware IO).");
