@@ -1,16 +1,16 @@
-# VictusFanControl v1.2.3
+# VictusFanControl v1.2.4
 
-[Español](README.es.md) · [Stable v1.2.3](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.3) · [Installation and operation](docs/PRODUCT_V1.md) · [Validation status](docs/PRODUCT_VALIDATION_STATUS.md)
+[Español](README.es.md) · [Stable v1.2.4](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.4) · [Installation and operation](docs/PRODUCT_V1.md) · [Validation status](docs/PRODUCT_VALIDATION_STATUS.md)
 
 Windows fan control and CPU/GPU preferences for the exact target **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, board revision 63.43, Intel Core i7-13700H and NVIDIA RTX 4060 Laptop GPU. v1.0.0 enables habitual Automatic on this target. Other models and BIOS versions are outside this release's control authorization; HP 88F8 material remains historical.
 
 ## Install
 
-Download **VictusFanControl-1.2.3-Setup-win-x64.exe** from the stable release and run it. The ZIP and PowerShell alternative is described below.
+Download **VictusFanControl-1.2.4-Setup-win-x64.exe** from the stable release and run it. The ZIP and PowerShell alternative is described below.
 
 Requires Windows 11 x64, .NET Desktop Runtime 8 x64, the PawnIO driver and NVIDIA/NVML. The ZIP includes the application's PawnIO modules; it does not install those prerequisites.
 
-1. Download **VictusFanControl-1.2.3-win-x64.zip** from Releases and extract all files. Exit older Victus applications normally from their tray menus.
+1. Download **VictusFanControl-1.2.4-win-x64.zip** from Releases and extract all files. Exit older Victus applications normally from their tray menus.
 2. Open PowerShell **as administrator using the same Windows account**, in the extracted folder.
 3. Run:
 
@@ -48,7 +48,7 @@ Use .NET 8 SDK and the explicit product release property:
 dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
 ```
 
-The pipeline packages current product binaries as **1.2.3.0**. A successful `main` or rebuilt product-branch build can publish v1.2.3 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
+The pipeline packages current product binaries as **1.2.4.0**. A successful `main` or rebuilt product-branch build can publish v1.2.4 after same-commit OEM, WMI and CPU/GPU checks pass. Publication verifies each file against the manifest and attaches SHA-256 and build provenance. Existing releases are never overwritten.
 
 Historical qualification builds retain their RC version and gates, including `control.enabledByDefault=false` and `automaticPolicyEnabled=false`. These describe the legacy harness; the product's separate authorization covers only the exact target above. Earlier plans remain development history.
 
@@ -56,7 +56,7 @@ MIT: [LICENSE](LICENSE). External components: [THIRD_PARTY_NOTICES.md](THIRD_PAR
 
 ## Instalador y actualizaciones v1.1.0
 
-The stable v1.2.3 release separates **Download** from **Install** and keeps a verified installer across application restarts and failed installation attempts. Pending sessions can be recovered from the Updates page before retrying Install. The installer preserves existing startup preferences by default. Stable is the default update channel; save **Include prereleases** to receive previews. [Guide](docs/PRODUCT_V1.md) · [Functional review](docs/PRODUCT_1_1_5_REVIEW.md).
+The stable v1.2.4 release separates **Download** from **Install** and keeps a verified installer across application restarts and failed installation attempts. Pending sessions can be recovered from the Updates page before retrying Install. The installer preserves existing startup preferences by default. Stable is the default update channel; save **Include prereleases** to receive previews. [Guide](docs/PRODUCT_V1.md) · [Functional review](docs/PRODUCT_1_1_5_REVIEW.md).
 
 Version 1.1.6 removes the GPU consumption handoff and identifies concrete Automatic wait/admission failures. GPU power still contributes to fan demand; selected CPU power and thermal protections remain. [Changes and tests](docs/PRODUCT_1_1_6_CHANGES.md).
 
@@ -72,4 +72,6 @@ Since v1.2.1, Home fans rotate ten times more slowly, with independent accelerat
 
 Since v1.2.2, both Home animations follow accepted controller demand rather than RPM. Delayed or temporarily unavailable RPM no longer restarts visual inertia; the hub numbers still show reported RPM. Firmware/Manual or expired demand pauses animation.
 
-Since v1.2.3, Home fans rotate three times faster while preserving demand-driven motion and inertia: one visual revolution every 5 seconds at 100 % demand and every 10 seconds at 50 %, once settled. Reported RPM and physical fan control remain unchanged.
+In v1.2.3, Home fans rotate three times faster while preserving demand-driven motion and inertia: one visual revolution every 5 seconds at 100 % demand and every 10 seconds at 50 %, once settled. Reported RPM and physical fan control remain unchanged.
+
+Version 1.2.4 drives Home animation from the accepted request level (Request × 100 simulated RPM), with one visual revolution every 0.5 seconds at request 30 once inertia settles. A marked blade makes motion recognizable. Current fan readouts retain each fan's last valid reported RPM during delays and label it as the last reading; before the first reading they show Waiting. Measured-RPM graphs and physical fan control retain their behavior. [Details](docs/HOME_DASHBOARD.md).

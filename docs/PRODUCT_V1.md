@@ -1,13 +1,13 @@
-# VictusFanControl v1.2.3 — HP 8C40 / 9D0R1LA / BIOS F.18
+# VictusFanControl v1.2.4 — HP 8C40 / 9D0R1LA / BIOS F.18
 
 Esta entrega habilita el uso habitual solicitado para el destino exacto. La curva AC predeterminada es la candidata de menor demanda intermedia: 12, 12, 18, 28, 34, 44, 50 para entradas 0, 40, 50, 65, 76, 90, 100. Conserva las protecciones térmicas crudas, subida e histéresis; descenso normal 25 s/confirmación 12 s y descenso corto 10 s/confirmación 4 s. Batería conserva su curva y tiempos de descenso. La transición usa el mismo motor, cambia los tiempos compatibles del perfil de destino y reinicia las confirmaciones, conservando el nivel aplicado y el filtro; los rangos y pasos protegidos no pueden cambiar en vivo. Se migran solamente los presets AC anteriores intactos; se conservan curvas personalizadas y límites CPU/GPU. Guardar crea un respaldo exacto previo a v1.0.
 
 ## Instalar e iniciar con Windows
 
-1. Sal de las aplicaciones Victus anteriores desde su bandeja. Ejecuta `VictusFanControl-1.2.3-Setup-win-x64.exe` como administrador con tu misma cuenta y deja marcada **Iniciar con Windows y activar Automático**; pulsa **Instalar / actualizar**. Esa opción también habilita el arranque en una instalación anterior, conservando curvas y límites CPU/GPU. Si la desmarcas, una actualización conserva las preferencias previas; una instalación nueva no registra el inicio automático. El instalador crea un acceso en el menú Inicio.
+1. Sal de las aplicaciones Victus anteriores desde su bandeja. Ejecuta `VictusFanControl-1.2.4-Setup-win-x64.exe` como administrador con tu misma cuenta y deja marcada **Iniciar con Windows y activar Automático**; pulsa **Instalar / actualizar**. Esa opción también habilita el arranque en una instalación anterior, conservando curvas y límites CPU/GPU. Si la desmarcas, una actualización conserva las preferencias previas; una instalación nueva no registra el inicio automático. El instalador crea un acceso en el menú Inicio.
 2. Alternativa ZIP: extrae todo el paquete.
 3. Abre PowerShell **como administrador con tu misma cuenta**, entra en la carpeta extraída y ejecuta `./Start-ProductGui.ps1 -Mode Install`.
-4. El instalador verifica hashes, copia la entrega a `%LOCALAPPDATA%/VictusFanControl/releases/1.2.3-{commit}`, conserva las preferencias previas y actualiza la ruta de la tarea si estaba habilitada. En primera instalación registra el inicio elevado y guarda **minimizado + Automático al iniciar**. El EXE no abre automáticamente el controlador: utiliza el menú Inicio. La alternativa PowerShell abre la GUI al finalizar. Requiere el controlador PawnIO y NVIDIA/NVML que ya usa la instalación anterior; .NET Desktop Runtime 8 x64.
+4. El instalador verifica hashes, copia la entrega a `%LOCALAPPDATA%/VictusFanControl/releases/1.2.4-{commit}`, conserva las preferencias previas y actualiza la ruta de la tarea si estaba habilitada. En primera instalación registra el inicio elevado y guarda **minimizado + Automático al iniciar**. El EXE no abre automáticamente el controlador: utiliza el menú Inicio. La alternativa PowerShell abre la GUI al finalizar. Requiere el controlador PawnIO y NVIDIA/NVML que ya usa la instalación anterior; .NET Desktop Runtime 8 x64.
 
 La instalación conserva tus perfiles CPU/GPU y sus journals. No cierra procesos a la fuerza. La GUI v1.1.9 puede recuperar sesiones pendientes en segundo plano según la preferencia guardada. Se puede verificar sin activar hardware con `./Start-ProductGui.ps1 -Mode FinalCheck`.
 
@@ -39,7 +39,7 @@ TZ01/DTT3 permanece experimental y desactivado de fábrica. El desarrollo poster
 
 Las pruebas de software y replay verifican contratos, migración, arranque, cancelación, emergencia y recuperación. Las evidencias físicas previas conservan su identidad histórica. El replay de 390 decisiones produjo menos demanda y menos cambios de nivel, pero **no demuestra menos dBA ni temperaturas equivalentes con la curva nueva**. Tampoco una aceptación NVML demuestra lectura exacta del rango de clocks, ni WMI propiedad independiente del firmware. Las observaciones restantes del arranque real, uso representativo, suspensión y salida de esta compilación se conservan en `PRODUCT-RELEASE.json`; no se convierten en PASS por cambiar la versión.
 
-Compilar la entrega: `dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true`. El pipeline conserva el versionado original del arnés P14 por separado y publica todos los binarios Victus de esta entrega con versión 1.2.3.0.
+Compilar la entrega: `dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true`. El pipeline conserva el versionado original del arnés P14 por separado y publica todos los binarios Victus de esta entrega con versión 1.2.4.0.
 
 ## Iconos definitivos
 
@@ -80,4 +80,10 @@ Desde v1.2.1, las aspas giran lentamente, con inercia propia por ventilador y tr
 
 Desde v1.2.2, las dos animaciones siguen la demanda automática aceptada, de 0 a 100 %, y mantienen la inercia entre actualizaciones de RPM. Las cifras del centro siguen mostrando las RPM informadas. Una decisión caducada, Firmware, Manual o una interrupción pausa el giro; cero demanda desacelera hasta detenerse. Los retrasos de RPM no renuevan la edad de la demanda ni modifican el control físico.
 
-Desde v1.2.3, el máximo visual aumenta de 24 a 72 grados por segundo: giro tres veces más rápido, una vuelta cada 5 segundos a 100 % de demanda. Conserva la fuente en la demanda aceptada, la inercia, las pausas y las cifras de RPM.
+En v1.2.3, el máximo visual aumenta de 24 a 72 grados por segundo: giro tres veces más rápido, una vuelta cada 5 segundos a 100 % de demanda. Conserva la fuente en la demanda aceptada, la inercia, las pausas y las cifras de RPM.
+
+## Inicio y RPM desde v1.2.4
+
+Las aspas siguen la **Solicitud aceptada** del controlador, en el rango 10–50. La referencia simulada es Solicitud × 100; el giro visual se escala para dar una vuelta cada **0,5 segundos con solicitud 30**, cada 1,5 segundos con solicitud 10 y cada 0,3 segundos con solicitud 50, una vez estabilizada la inercia. La aceleración y la desaceleración siguen siendo graduales. Una aspa marcada facilita reconocer la velocidad y el sentido. Para pedir otro ritmo basta indicar «con solicitud 30, una vuelta cada X segundos».
+
+Las cifras de Inicio y los valores actuales de ventiladores conservan por separado la última lectura válida de CPU y GPU cuando faltan datos o hay retardo. La cifra retenida aparece en amarillo con la indicación **última lectura** y se reemplaza cuando llega una lectura válida nueva, incluido un cero informado. Antes de recibir la primera lectura aparece **Esperando**. Las RPM simuladas solo determinan el giro; los números del centro siguen siendo las RPM informadas por el equipo. El historial de RPM conserva sus huecos de adquisición y la caché de presentación conserva las comprobaciones de seguridad del controlador.

@@ -58,7 +58,7 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.2.3",
+  "version": "1.2.4",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -111,18 +111,25 @@
     "nativeUncertaintyPolicy": "retain-existing-recovery-blocks"
   },
   "homeDashboard": {
-    "animatedFans": "shared-accepted-automatic-demand-visible-home-only",
+    "animatedFans": "shared-accepted-automatic-request-visible-home-only",
     "fanFreshnessMilliseconds": 3000,
     "fanAnimation": {
-      "input": "accepted-automatic-demand-percent",
-      "intervalMilliseconds": 33,
-      "maximumDegreesPerSecond": 72,
+      "input": "accepted-automatic-request-level",
+      "intervalMilliseconds": 16,
+      "maximumDegreesPerSecond": 1200,
       "accelerationTimeConstantSeconds": 1.2,
       "decelerationTimeConstantSeconds": 1.8,
       "maximumFrameSeconds": 0.1,
-      "zeroDemandPolicy": "finite-coast-down-then-stop-timer",
-      "pausePolicy": "discard-inertia-on-hidden-minimized-other-page-or-unavailable-demand",
-      "displayedRpm": "current-feedback-without-visual-smoothing"
+      "zeroDemandPolicy": "accepted-request-keeps-rotating",
+      "pausePolicy": "discard-inertia-on-hidden-minimized-other-page-or-unavailable-request",
+      "displayedRpm": "last-valid-reported-feedback-independent-per-fan-mark-held-without-visual-smoothing",
+      "minimumRequestLevel": 10,
+      "maximumRequestLevel": 50,
+      "simulatedRpmPerRequestLevel": 100,
+      "referenceRequestLevel": 30,
+      "referenceSecondsPerRevolution": 0.5,
+      "visualRpmDivisor": 25,
+      "directionMarker": "one-marked-blade-and-rim-dot"
     },
     "demandSource": "accepted-automatic-observation-percent",
     "demandHistorySeconds": 300,
@@ -141,6 +148,18 @@
       "Settings",
       "Advanced",
       "Updates"
-    ]
+    ],
+    "fanReadouts": {
+      "scope": "current-value-presentation-window-lifetime",
+      "maximumAdmissionAgeMilliseconds": 3000,
+      "validReportedRpmRange": [
+        0,
+        10000
+      ],
+      "heldPolicy": "retain-last-valid-independent-rpm-mark-last-reading-until-new-valid-acquisition",
+      "initialDisplay": "waiting-before-first-valid-reading",
+      "acquisitionOrdering": "strictly-newer-fan-timestamp-no-refresh-from-cpu-timestamp",
+      "snapshotControlAndHistoryUnchanged": true
+    }
   }
 }

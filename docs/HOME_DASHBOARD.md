@@ -1,6 +1,6 @@
 # Inicio y curva ampliada de Ventiladores
 
-## Cambio preparado sobre v1.2.3: solicitud y últimas RPM
+## v1.2.4: solicitud y últimas RPM
 
 La animación utiliza el nivel **Solicitud** que ya aceptó el controlador (`FanLevel`, confirmado por `AutomaticDecision.EqualFanLevel`), en lugar de `UnifiedDemand.Percent`. Se conservan las comprobaciones de Automático, sesión, fuente, autoridad, transición y vigencia de la decisión. El rango aceptado continúa siendo 10–50. Un 0 % de demanda con solicitud 10 todavía hace girar la animación: el nivel aceptado sigue siendo 10. Firmware, Manual o una decisión interrumpida/caducada pausan el giro; no se toma el borrador ni se usa la lectura retenida para autorizarlo.
 
@@ -8,7 +8,7 @@ La referencia simulada es `Solicitud × 100`. Las RPM simuladas se dividen por 2
 
 Las cifras de Inicio y de los valores actuales de Monitorización conservan, por separado, la **última lectura válida** de CPU y GPU durante los retrasos. Una nueva lectura válida la reemplaza; un cero medido también la reemplaza. Se rechazan valores negativos, no finitos, muestras futuras o anteriores y adquisiciones de ventiladores vencidas, aunque lleguen temperaturas nuevas. La edad se comprueba al dibujar, sin renovar la adquisición por repintar. Una cifra retenida se marca en amarillo como «última lectura» y se conserva durante la vida de la ventana; antes de la primera lectura se muestra «Esperando». La caché no modifica snapshots, admisión de seguridad, gráficos de RPM ni historial de demanda.
 
-La verificación incluye RPM ausentes, retrasadas y parciales, recuperación con un cero medido, datos fuera de orden o inválidos, demanda distinta de la solicitud, inercia, pausas y renders Windows con RPM retenidas. Este apartado describe el cambio propuesto; las secciones siguientes documentan las versiones ya publicadas.
+La verificación incluye RPM ausentes, retrasadas y parciales, recuperación con un cero medido, datos fuera de orden o inválidos, demanda distinta de la solicitud, inercia, pausas y renders Windows con RPM retenidas. Este apartado describe v1.2.4; las secciones siguientes conservan el comportamiento histórico de las versiones anteriores.
 
 ## Historial publicado hasta v1.2.3
 
