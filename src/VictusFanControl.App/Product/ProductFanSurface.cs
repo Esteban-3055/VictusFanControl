@@ -39,7 +39,7 @@ internal sealed class ProductFanSurface : System.Windows.Forms.Control
     internal void RenderFrame(Graphics graphics)
     {
         if(_frame is null)return;
-        var size=Math.Clamp((int)Math.Ceiling(176*_scale),96,1024);
+        var size=Math.Clamp((int)Math.Ceiling(176*_scale),16,1024);
         var rotor=_rotor.Rasterize(size,Phase,_color);
         var ox=(Width-size)/2;var oy=(Height-size)/2;
         for(int y=0,k=0;y<Height;y++)for(int x=0;x<Width;x++,k++)

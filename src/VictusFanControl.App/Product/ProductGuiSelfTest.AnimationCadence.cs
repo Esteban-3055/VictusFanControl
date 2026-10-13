@@ -77,7 +77,7 @@ internal static partial class ProductGuiSelfTest
                     costs.Add(new{deviceRotorPixels=size,pngMeanMs=pngMs,previousVectorMeanMs=watch.Elapsed.TotalMilliseconds/200});
                 }
                 var surfaceCosts=new List<object>();
-                foreach(var scale in new[]{1f,2f})
+                foreach(var scale in new[]{0.4f,1f,2f})
                 {
                     var size=(int)(180*scale);
                     using var background=new Bitmap(size,size);using(var paint=Graphics.FromImage(background))paint.Clear(ProductCanvas.Background);
@@ -85,7 +85,9 @@ internal static partial class ProductGuiSelfTest
                     using var target=new Bitmap(size,size);using var graphics=Graphics.FromImage(target);
                     using var surface=new ProductFanSurface(rotor){Size=new(size,size)};
                     surface.SetLayers(background,overlay,new(0,0,size,size),scale,ProductCanvas.Blue);
-                    surface.RenderFrame(graphics);var watch=Stopwatch.StartNew();
+                    surface.RenderFrame(graphics);
+                    require(Enumerable.Range(0,size).All(y=>target.GetPixel(0,y).ToArgb()==ProductCanvas.Background.ToArgb()),"Small viewport clipped rotor blades at the surface edge.");
+                    var watch=Stopwatch.StartNew();
                     for(int f=0;f<200;f++){surface.Phase=f*3;surface.RenderFrame(graphics);}
                     var ms=watch.Elapsed.TotalMilliseconds/200;
                     surfaceCosts.Add(new{scale,deviceSurfacePixels=size,opaqueSurfaceMeanMs=ms});

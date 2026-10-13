@@ -14,7 +14,7 @@
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
     "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "76284ec97b6f0a0a25d10f1fb1e7f758f8817a2e4cd28ca06d5ae145a90476bb",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
-    "src/VictusFanControl.App/Product/ProductRuntime.cs": "27001e0933030c6d8af5348918f30a7d1dd14f63f1dd133476fd11893ae6a6c3",
+    "src/VictusFanControl.App/Product/ProductRuntime.cs": "8c9a2b3e01885d1f5bc21f2de3678832cd056e1a58247569220076014599c831",
     "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "a9ae9446b54f163c215f4327e98d1dc954e1cd1ceb7ac238292797a9487b53f1"
   },
   "historicalReconstruction": {
@@ -300,5 +300,11 @@
   "releaseUse": "AC candidate promoted to product default by explicit user request; historical baselines use LegacyDefaultProfile, and this replay does not itself confer authority or physical qualification.",
   "sourceBindingRevision": 10,
   "sourceBindingUpdate": "Background session recovery development, no version/release change: re-executed the original 390-decision trace. Decision CSV bytes and all summary fields match the archived study exactly; the 84 platform replay variants also match their archived results. Updated ProductProfiles (recovery preference) and ProductPlatformRetention (diagnostic reason/extra demand) source bindings only. CPU smoothing, retention decisions and historical evidence remain unchanged; fresh diagnostic counters have separate filter fixtures. No new physical pass is claimed.",
-  "sourceBindingUpdateBaseHead": "2c832a315c607d673d100ffca9471c228fe188c1"
+  "sourceBindingUpdateBaseHead": "2c832a315c607d673d100ffca9471c228fe188c1",
+  "previewRuntimeSourceRebinding": {
+    "previousSha256": "27001e0933030c6d8af5348918f30a7d1dd14f63f1dd133476fd11893ae6a6c3",
+    "currentSha256": "8c9a2b3e01885d1f5bc21f2de3678832cd056e1a58247569220076014599c831",
+    "reason": "Explicit process-only Manual 54/52 trial plus effective-command diagnostics; default entry and Automatic prepared policy remain 10..50. Core policy/replay sources and numerical evidence are unchanged.",
+    "validation": "Current-source independent replay and complete Windows product fixtures required by CI; physical upper-range test pending."
+  }
 }

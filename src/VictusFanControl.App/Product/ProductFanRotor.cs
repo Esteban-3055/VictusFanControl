@@ -20,7 +20,7 @@ internal sealed class ProductFanRotor : IDisposable
     }
     internal void Draw(Graphics g,float x,float y,double phase,float scale,Color color)
     {
-        var size=Math.Clamp((int)Math.Ceiling(176*scale),96,1024);
+        var size=Math.Clamp((int)Math.Ceiling(176*scale),16,1024);
         Rasterize(size,phase,color);
         var frame=_rotated!.LockBits(new(0,0,size,size),ImageLockMode.WriteOnly,PixelFormat.Format32bppPArgb);
         try{Marshal.Copy(_output,0,frame.Scan0,_output.Length);}finally{_rotated.UnlockBits(frame);}
@@ -30,7 +30,7 @@ internal sealed class ProductFanRotor : IDisposable
     }
     internal int[] Rasterize(int size,double phase,Color color)
     {
-        if(size is <96 or >1024)throw new ArgumentOutOfRangeException(nameof(size));
+        if(size is <16 or >1024)throw new ArgumentOutOfRangeException(nameof(size));
         if(_scaled is null||_key!=(size,color.ToArgb()))
         {
             _scaled?.Dispose();_rotated?.Dispose();_scaled=new(size,size,PixelFormat.Format32bppPArgb);
