@@ -3,7 +3,7 @@ using VictusFanControl.Runtime;
 
 namespace VictusFanControl.Hardware.Hp;
 
-internal static class Hp8C40FanPreviewTargetsSelfTest
+internal static class Hp8C40ProductFanTargetsSelfTest
 {
     internal static void Run()
     {
@@ -13,20 +13,20 @@ internal static class Hp8C40FanPreviewTargetsSelfTest
         var session=new WmiFanSession(r=>{calls.Add(r);return 0;},intents.Add,10,true);
         foreach(var level in new[]{10,50,51,52,53,54,53,52,50})
         {
-            var pair=Hp8C40FanPreviewTargets.FromLogical(level);
+            var pair=Hp8C40ProductFanTargets.FromLogical(level);
             Check(session.Apply(level,true),"Preview target change lost.");
             Check(calls[^1].Payload.SequenceEqual(new byte[]{(byte)pair.Cpu,(byte)pair.Gpu,0,0}),"Wrong physical preview pair.");
             Check(pair.Gpu<=52,"GPU preview exceeded 52.");
-            Check(WmiFanExperimentBoundary.IsAllowed(calls[^1],true,false,false,gui:true,upperRangePreview:true),"Preview whitelist denied permitted pair.");
+            Check(WmiFanExperimentBoundary.IsAllowed(calls[^1],true,false,false,gui:true,productUpperRange:true),"Preview whitelist denied permitted pair.");
             Check(!session.Apply(level,true),"Unchanged preview target retransmitted.");
         }
         Check(calls.Count==intents.Count,"Intent did not precede every changed setter.");
         foreach(var cpu in Enumerable.Range(0,57))foreach(var gpu in Enumerable.Range(0,57))
         {
-            var request=Hp8C40FanPreviewTargets.BuildRequest(54) with{Payload=[(byte)cpu,(byte)gpu,0,0]};
-            Check(WmiFanExperimentBoundary.IsAllowed(request,true,false,false,true,true)==Hp8C40FanPreviewTargets.IsPair(cpu,gpu),"Preview admitted an arbitrary pair.");
+            var request=Hp8C40ProductFanTargets.BuildRequest(54) with{Payload=[(byte)cpu,(byte)gpu,0,0]};
+            Check(WmiFanExperimentBoundary.IsAllowed(request,true,false,false,true,true)==Hp8C40ProductFanTargets.IsPair(cpu,gpu),"Preview admitted an arbitrary pair.");
         }
-        var upper=Hp8C40FanPreviewTargets.BuildRequest(54);
+        var upper=Hp8C40ProductFanTargets.BuildRequest(54);
         foreach(var allowed in new[]{WmiFanExperimentBoundary.IsAllowed(upper,true,false,false),
             WmiFanExperimentBoundary.IsAllowed(upper,true,false,false,true),WmiFanExperimentBoundary.IsAllowed(upper,false,false,false,true,true),
             WmiFanExperimentBoundary.IsAllowed(upper,true,true,false,true,true),WmiFanExperimentBoundary.IsAllowed(upper,true,false,true,true,true)})

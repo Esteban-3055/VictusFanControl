@@ -63,7 +63,7 @@ internal static class Hp8C40WmiFanControlBackendSelfTest
         await output.WriteLineAsync("PASS: GUI WMI equal Manual 10/29/50, invalid/asymmetric refusal before intent, duplicate suppression and low-end rearm; no hardware IO.");
 
         var previewGuardian=new FakeGuardian();var previewCalls=new List<HpBiosRequest>();
-        var preview=new Hp8C40WmiFanControlBackend(previewGuardian,r=>{previewCalls.Add(r);return 0;},Read,upperRangePreview:true);
+        var preview=new Hp8C40WmiFanControlBackend(previewGuardian,r=>{previewCalls.Add(r);return 0;},Read,productUpperRange:true);
         Require(preview.Capabilities.MaximumLevel==54&&!preview.Capabilities.SupportsIndependentLevels,"Preview lost its logical-only capability.");
         await preview.EnterCustomModeAsync(default);
         foreach(var level in new[]{51,52,53,54})await preview.ApplyAsync(new(level,level,"upper-range preview"),default);

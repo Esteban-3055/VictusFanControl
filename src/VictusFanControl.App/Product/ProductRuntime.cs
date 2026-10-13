@@ -154,8 +154,8 @@ internal sealed class ProductRuntime : IProductRuntime
         {
             if (_target == Hp8C40TargetProfile.Instance)
             {
-                _fanGuardian=new WmiFanGuiGuardianClient(releasedBoundaryDirectory:releasedBoundary,upperRangePreview:ProductFanRangePreview.Enabled);
-                _wmi = new(_fanGuardian,upperRangePreview:ProductFanRangePreview.Enabled); backend = _wmi;
+                _fanGuardian=new WmiFanGuiGuardianClient(releasedBoundaryDirectory:releasedBoundary,productUpperRange:true);
+                _wmi = new(_fanGuardian,productUpperRange:true); backend = _wmi;
                 _wmi.CommandAccepted += (_, message) => AppLog.Write("PRODUCT WMI REQUEST ACCEPTED: " + message);
             }
             else backend = new DisabledFanControlBackend();
@@ -524,7 +524,7 @@ internal sealed class ProductRuntime : IProductRuntime
         finally { _plannedFanRelease = false; }
         if (!result.ExecutionAuthorized) throw new InvalidOperationException(result.Detail);
         if (mode != AdaptiveFanProductionMode.Automatic) { _selectedFanProfile = null; _automaticPerformance = null; _activeAutomaticTicket = null; _automaticProfiles = null; _sourceTransition.Reset(); _automaticGuard.Stop(); }
-        Publish(result.Detail);
+        Publish(FanDecisionMessage(result));
     }
     public Task ApplyFanCurveAsync(ProductPowerProfile source, UnifiedFanDemand demand)
     {
@@ -609,8 +609,15 @@ internal sealed class ProductRuntime : IProductRuntime
         if (_lifecycleBlocked || _controller.Mode != AdaptiveFanProductionMode.Manual) throw new InvalidOperationException("Selecciona Manual antes de aplicar; una sesión interrumpida no puede rearmarse.");
         var result = await _controller.ApplyManualAsync(level,Safety(),() => Safety(),CancellationToken.None);
         if (!result.ExecutionAuthorized || result.Action == AdaptiveFanProductionActionKind.Blocked) throw new InvalidOperationException(result.Detail);
-        Publish(result.Detail);
+        Publish(FanDecisionMessage(result));
     });
+    private string FanDecisionMessage(AdaptiveFanProductionResult result)
+    {
+        if(result.EqualFanLevel is {} level && _fans.Authority==FanAuthority.Custom && _wmi?.LastAcceptedLevel==level &&
+            _wmi.LastAcceptedTargets is {} pair && pair.Cpu!=pair.Gpu)
+            return $"Comando aceptado · nivel {level}: CPU {pair.Cpu} / GPU {pair.Gpu}.";
+        return result.Detail;
+    }
     internal static bool PerformanceAdmissionPermitted(bool closing,bool lifecycleBlocked,bool hasProcess,SystemState runtime,FanAuthority authority) =>
         !closing && !lifecycleBlocked && !hasProcess && runtime == SystemState.Healthy && authority is not (FanAuthority.Faulted or FanAuthority.Restoring);
     public Task ApplyPerformanceAsync(ProductProfiles profiles) => CommandAsync(async () =>

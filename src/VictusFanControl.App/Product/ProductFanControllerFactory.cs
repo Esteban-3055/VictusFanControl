@@ -11,21 +11,24 @@ internal static class ProductFanControllerFactory
 {
     internal static AdaptiveFanProductionController Create(FanControlCoordinator fans, ProductProfiles profiles,
         HardwareIdentity hardware, HardwareTargetProfile? target, bool automaticReview, bool upperRangePreview,
-        IExperimentalFanPolicy? experimentalPolicy)
+        IExperimentalFanPolicy? experimentalPolicy, Func<long>? automaticMilliseconds=null, Func<DateTimeOffset>? utcNow=null)
     {
         var exactTarget=target==Hp8C40TargetProfile.Instance;
+        var maximum=exactTarget && !automaticReview || upperRangePreview ? Hp8C40ProductFanTargets.MaximumLogicalLevel : 50;
         var automaticAuthorized=!upperRangePreview && fans.BackendCanWrite &&
             (ProductRelease.IsAutomaticAuthorized(target?.Id) || automaticReview);
         return new(fans,Hp8C40AdaptiveCandidateV1.Create() with
-            {MaximumLevel=upperRangePreview?Hp8C40FanPreviewTargets.MaximumLogicalLevel:50},
+            {MaximumLevel=maximum},
             fans.BackendCanWrite && Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(target?.Id),
             automaticAuthorized,
             automaticHardware:exactTarget?hardware:null,
+            automaticMilliseconds:automaticMilliseconds,utcNow:utcNow,
             automaticConfiguration:profiles.Ac.Fan,
             automaticMinimumLevel:exactTarget?10:Hp8C40AutomaticPolicy.MinimumLevel,
             useRawCpuThermalResponse:true,
             // Manual preview and closed-backend startup cannot host an Automatic policy.
             experimentalPolicy:automaticAuthorized?experimentalPolicy:null,
-            productTelemetryTolerance:!automaticReview && exactTarget);
+            productTelemetryTolerance:!automaticReview && exactTarget,
+            automaticMaximumLevel:exactTarget && !automaticReview ? Hp8C40ProductFanTargets.MaximumLogicalLevel : 50);
     }
 }

@@ -13,16 +13,16 @@ internal sealed class WmiFanSession
     private readonly Func<HpBiosRequest, int> _send;
     private readonly Action<int> _persistIntent;
     private readonly int _minimumLevel;
-    private readonly bool _upperRangePreview;
+    private readonly bool _productUpperRange;
     internal WmiFanSessionPhase Phase { get; private set; }
     internal int? LastAcceptedLevel { get; private set; }
     internal bool MayHaveWritten { get; private set; }
 
-    internal WmiFanSession(Func<HpBiosRequest, int> send, Action<int> persistIntent, int minimumLevel = 30, bool upperRangePreview = false)
+    internal WmiFanSession(Func<HpBiosRequest, int> send, Action<int> persistIntent, int minimumLevel = 30, bool productUpperRange = false)
     {
         if (minimumLevel is not (10 or 30)) throw new ArgumentOutOfRangeException(nameof(minimumLevel));
-        if (upperRangePreview && minimumLevel != 10) throw new ArgumentException("Upper-range trial requires the exact-target GUI envelope.");
-        _upperRangePreview = upperRangePreview;
+        if (productUpperRange && minimumLevel != 10) throw new ArgumentException("Upper-range trial requires the exact-target GUI envelope.");
+        _productUpperRange = productUpperRange;
         _minimumLevel = minimumLevel;
         _send = send;
         _persistIntent = persistIntent;
@@ -34,13 +34,13 @@ internal sealed class WmiFanSession
             throw new InvalidOperationException("Normal WMI fan command admission is closed.");
         // The supervised experiment keeps 30..50; the exact-target GUI uses
         // the previously characterized equal Manual range 10..50.
-        if (level < _minimumLevel || level > (_upperRangePreview ? Hp8C40FanPreviewTargets.MaximumLogicalLevel : 50)) throw new ArgumentOutOfRangeException(nameof(level));
+        if (level < _minimumLevel || level > (_productUpperRange ? Hp8C40ProductFanTargets.MaximumLogicalLevel : 50)) throw new ArgumentOutOfRangeException(nameof(level));
         if (LastAcceptedLevel == level) return false;
         _persistIntent(level); // Failure here prevents hardware dispatch.
         MayHaveWritten = true; // Even a failed WMI call may have changed hardware.
         try
         {
-            var rc = _send(_upperRangePreview ? Hp8C40FanPreviewTargets.BuildRequest(level) : Hp8C40BiosFanControl.BuildSetFanLevelRequest((byte)level, (byte)level));
+            var rc = _send(_productUpperRange ? Hp8C40ProductFanTargets.BuildRequest(level) : Hp8C40BiosFanControl.BuildSetFanLevelRequest((byte)level, (byte)level));
             if (rc != 0) throw new HpBiosCallException($"WMI fan command rejected: rc={rc}.");
             LastAcceptedLevel = level;
             return true;

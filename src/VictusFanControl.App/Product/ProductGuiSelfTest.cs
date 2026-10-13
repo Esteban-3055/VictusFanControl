@@ -516,11 +516,11 @@ internal static partial class ProductGuiSelfTest
                 canvas.Refresh();canvas.PointerDown(right);form.HandleCommand("profile-battery");canvas.Refresh();var priorBattery=form.Draft.Battery.CpuPl1Watts;canvas.PointerMove(left);canvas.PointerUp(left);
                 require(form.Draft.Battery.CpuPl1Watts==priorBattery,"A captured drag leaked into a newly selected profile.");
                 form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.ShowCurvePoints=true;canvas.Refresh();
-                var point=form.Draft.Ac.Fan.UnifiedDemand!.Curve[3];var from=ScreenPoint(958+(float)(point.Input/100)*634,648-(float)((point.Level-10)/40)*350);var to=ScreenPoint(958+(float)(71d/100)*634,648);
+                var point=form.Draft.Ac.Fan.UnifiedDemand!.Curve[3];var from=ScreenPoint(958+(float)(point.Input/100)*634,648-(float)((point.Level-10)/44)*350);var to=ScreenPoint(958+(float)(71d/100)*634,648);
                 canvas.PointerDown(from);canvas.PointerMove(to);canvas.PointerUp(to);require(form.Draft.Ac.Fan.UnifiedDemand!.Curve[3].Input==71,"Pointer node drag failed.");
                 form.HandleCommand("discard");
                 canvas.Refresh();var modeDraft=ProductProfilesStore.Serialize(form.Draft);var modePoint=form.Draft.Ac.Fan.UnifiedDemand!.Curve[3];
-                var modeStart=ScreenPoint(958+(float)(modePoint.Input/100)*634,648-(float)((modePoint.Level-10)/40)*350);
+                var modeStart=ScreenPoint(958+(float)(modePoint.Input/100)*634,648-(float)((modePoint.Level-10)/44)*350);
                 canvas.PointerDown(modeStart);require(canvas.Capture,"Editor/simulator transition fixture did not capture a node.");form.HandleCommand("curve-simulator");canvas.Refresh();canvas.PointerMove(to);canvas.PointerUp(to);
                 require(modeDraft==ProductProfilesStore.Serialize(form.Draft),"Captured node drag edited a hidden curve after switching to simulation.");
                 canvas.Refresh();var synthetic=canvas.Hits.Last(h=>h.Id=="sim-input-0");var syntheticStart=ScreenPoint(synthetic.Bounds.Left+2,synthetic.Bounds.Top+15);

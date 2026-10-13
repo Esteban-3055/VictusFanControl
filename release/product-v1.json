@@ -14,7 +14,8 @@
     "product-gui-sustained-load-8c40-2026-10-06.json",
     "product-gui-live-tuning-8c40-2026-10-06.json",
     "product-gui-live-performance-8c40-2026-10-06.json",
-    "product-gui-thermal-interruption-8c40-2026-10-06.json"
+    "product-gui-thermal-interruption-8c40-2026-10-06.json",
+    "product-fan-54-52-response-8c40-2026-10-13.json"
   ],
   "remainingPhysicalChecks": [
     "representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return",
@@ -27,7 +28,9 @@
     "4k-200-percent-windowed-and-per-monitor-dpi-transition",
     "game-resolution-4k-to-1440p-and-return-with-unchanged-200-percent-dpi",
     "cpu-spike-filter-2s-fresh-continuity-extreme-bypass-and-actual-cooling",
-    "background-session-recovery-and-qualified-resumption-on-current-target"
+    "background-session-recovery-and-qualified-resumption-on-current-target",
+    "extended-30s-per-level-54-52-manual-plateau-and-firmware-return",
+    "current-automatic-54-52-under-load-and-source-lifecycle-transitions"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -58,7 +61,7 @@
     "normalAutomaticPromoted": true,
     "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
   },
-  "version": "1.2.8-preview.2",
+  "version": "1.2.8",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -162,13 +165,25 @@
       "snapshotControlAndHistoryUnchanged": true
     }
   },
-  "channel": "preview",
+  "channel": "stable",
   "upperRangePreview": {
     "entry": "--fan-upper-range-preview",
     "cpuMaximumCommandLevel": 54,
     "gpuMaximumCommandLevel": 52,
-    "defaultNormalMaximumLevel": 50,
+    "defaultNormalMaximumLevel": 54,
     "mode": "manual-only-explicit-apply",
-    "physicalQualification": "pending-target-directed-test"
+    "physicalQualification": "short-target-manual-response-observed-extended-checks-pending"
+  },
+  "fanCommandLimits": {
+    "minimumLogicalLevel": 10,
+    "cpuMaximumCommandLevel": 54,
+    "gpuMaximumCommandLevel": 52,
+    "mapping": "CPU=logical;GPU=min(logical,52)",
+    "normalModes": [
+      "Manual",
+      "Automatic"
+    ],
+    "existingCurvePoints": "preserved;50-to-54-final-point-editable",
+    "evidence": "product-fan-54-52-response-8c40-2026-10-13.json"
   }
 }

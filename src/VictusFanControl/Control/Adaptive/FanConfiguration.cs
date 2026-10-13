@@ -154,7 +154,7 @@ public sealed record FanConfiguration
             points.Select(p => p with { Level = Math.Clamp(p.Level, Tuning.MinimumLevel, Tuning.MaximumLevel) }).ToArray();
         return c with
         {
-            MinimumLevel = Tuning.MinimumLevel, MaximumLevel = Tuning.MaximumLevel, UnifiedDemand=UnifiedDemand,
+            MinimumLevel = Tuning.MinimumLevel, MaximumLevel = Math.Max(Tuning.MaximumLevel,(int)(UnifiedDemand?.Curve[^1].Level??Tuning.MaximumLevel)), UnifiedDemand=UnifiedDemand,
             MaximumUpStepPerSample = Tuning.ThermalMaximumUpStepLevels,
             MaximumDownStepPerSample = Tuning.MaximumDownStepLevels,
             CpuTemperatureCurve = Clamp(c.CpuTemperatureCurve), GpuTemperatureCurve = Clamp(c.GpuTemperatureCurve),

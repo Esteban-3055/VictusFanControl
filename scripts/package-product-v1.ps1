@@ -36,14 +36,14 @@ try {
         Copy-Item -LiteralPath (Join-Path $repo ('release/'+$file)) -Destination (Join-Path $OutputDirectory 'evidence')
     }
     Copy-Item -LiteralPath (Join-Path $repo 'docs/evidence/product-quiet-curve-001126-2026-10-09') -Destination (Join-Path $OutputDirectory 'evidence') -Recurse
-    Copy-Item -LiteralPath (Join-Path $repo 'docs/FAN_UPPER_RANGE_PREVIEW.md') -Destination (Join-Path $OutputDirectory 'FAN_UPPER_RANGE_PREVIEW.md')
+    Copy-Item -LiteralPath (Join-Path $repo 'docs/FAN_LIMITS_54_52.md') -Destination (Join-Path $OutputDirectory 'FAN_LIMITS_54_52.md')
     $entries=@(Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Sort-Object FullName | ForEach-Object {
         [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
     })
     [ordered]@{
-        schemaVersion=1;kind='VictusFanControl.ProductGuiRelease';version='1.2.8-preview.2';appDirectory='app';sourceHead=$SourceHead
+        schemaVersion=1;kind='VictusFanControl.ProductGuiRelease';version='1.2.8';appDirectory='app';sourceHead=$SourceHead
         inheritedModulesZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
-        upperRangePreview=$release.upperRangePreview;releaseChannel='preview';releaseStage='target-specific-release';finalReleaseReady=$true;normalAutomatic='authorized-exact-target';physicalGuiValidation='partial-pending-current-target-observations'
+        upperRangePreview=$release.upperRangePreview;fanCommandLimits=$release.fanCommandLimits;releaseChannel='stable';releaseStage='target-specific-release';finalReleaseReady=$true;normalAutomatic='authorized-exact-target';physicalGuiValidation='partial-pending-current-target-observations'
         productPlatformRetention='optional-disabled-default-AC-Battery-plus2-60s-fresh3s';platformThermalExperiment='explicit-physical-AC-ABBA-2580s-TZ01-DTT3-retention'
         automaticProtectionControls=$release.automaticProtectionControls;automaticPowerContract=$release.automaticPowerContract;automaticAdmissionDiagnostics=$release.automaticAdmissionDiagnostics;unattendedAutomaticResumption='previous-active-request-only-clean-release-fresh-runtime-three-new-observations-no-unknown-native-reentry'
         manualAutomaticRetry='explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations';startup=$release.startup;sessionRestart='explicit-clean-release-new-process-firmware';guidedPerformanceRecovery='gui-installer-exact-owner-release-only';guidedFanRecovery='wmi-gui-experiment-orphan-and-target-bound-legacy-release-only'

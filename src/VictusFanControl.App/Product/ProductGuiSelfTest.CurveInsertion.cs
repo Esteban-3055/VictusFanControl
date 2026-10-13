@@ -46,6 +46,10 @@ internal static partial class ProductGuiSelfTest
         canvas.Refresh();require(!canvas.Hits.Single(h=>h.Id=="node-add").Enabled,"Add enabled at the 64-node cap.");
         var capped=form.Draft.Ac.Fan.UnifiedDemand!.Curve.ToArray();form.HandleCommand("node-add");
         require(form.Draft.Ac.Fan.UnifiedDemand!.Curve.SequenceEqual(capped),"Insertion changed a capped curve.");
+        form.EditNode(capped.Length-1,100,99);require(form.Draft.Ac.Fan.UnifiedDemand!.Curve[^1].Level==54,"Editor denied the 54-level endpoint.");
+        var restored=ProductProfilesStore.Parse(ProductProfilesStore.Serialize(form.Draft));
+        require(restored.Ac.Fan.UnifiedDemand!.Curve[^1].Level==54 && restored.Battery.Fan.UnifiedDemand!.Curve[^1].Level==50,
+            "54-level editor endpoint failed persistence or changed Battery.");
         form.HandleCommand("profile-battery");require(canvas.SelectedNode==-1,"Source switch retained a stale selected point.");
         form.Draft.Validate();require(runtime.Commands==0,"Curve insertion issued hardware commands.");
         Console.WriteLine("Selected curve insertion: PASS (selected right interval, interpolation, old points preserved, no-selection/last/no-space/64-node guards, source switch; zero hardware IO).");

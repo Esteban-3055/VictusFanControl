@@ -1,7 +1,7 @@
 namespace VictusFanControl.Hardware.Hp;
 
-/// <summary>Explicit upper-range trial. This is not a physically qualified range.</summary>
-public static class Hp8C40FanPreviewTargets
+/// <summary>Product command limits: CPU 54, GPU 52. Historical equal-only qualification constants remain unchanged.</summary>
+public static class Hp8C40ProductFanTargets
 {
     public const int MaximumLogicalLevel = 54;
     public const int MaximumGpuLevel = 52;

@@ -53,6 +53,7 @@ public sealed class AdaptiveFanProductionController
     private readonly AdaptiveFanPolicyEngine _engine;
     private AdaptiveFanInertiaPolicy? _preparedEngine;
     private readonly int _automaticMinimumLevel;
+    private readonly int _automaticMaximumLevel;
     private readonly bool _useRawCpuThermalResponse;
     private readonly bool _productTelemetryTolerance;
     private ProductProtectionSettings _protections = new();
@@ -97,7 +98,8 @@ public sealed class AdaptiveFanProductionController
         int automaticMinimumLevel = Hp8C40AutomaticPolicy.MinimumLevel,
         bool useRawCpuThermalResponse = false,
         IExperimentalFanPolicy? experimentalPolicy = null,
-        bool productTelemetryTolerance = false)
+        bool productTelemetryTolerance = false,
+        int automaticMaximumLevel = Hp8C40AutomaticPolicy.MaximumLevel)
     {
         _productTelemetryTolerance=productTelemetryTolerance;
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
@@ -110,6 +112,11 @@ public sealed class AdaptiveFanProductionController
             (automaticMinimumLevel == 10 && (automaticHardware is null || coordinator.BackendCapabilities.MinimumLevel > 10)))
             throw new ArgumentException("Low Automatic envelope requires exact-target telemetry and a qualified 10-level backend.",nameof(automaticMinimumLevel));
         _automaticMinimumLevel = automaticMinimumLevel;
+        if (automaticMaximumLevel is not (50 or 54) || automaticMaximumLevel == 54 &&
+            (automaticMinimumLevel != 10 || automaticHardware is null ||
+             coordinator.BackendCanWrite && coordinator.BackendCapabilities.MaximumLevel < 54))
+            throw new ArgumentException("Product 54/52 Automatic requires exact-target telemetry and a 54-level backend.",nameof(automaticMaximumLevel));
+        _automaticMaximumLevel = automaticMaximumLevel;
         _useRawCpuThermalResponse = useRawCpuThermalResponse;
         if (experimentalPolicy is not null && (!automaticExecutionAuthorized || automaticHardware is null ||
             automaticConfiguration is null || automaticMinimumLevel != 10 || !useRawCpuThermalResponse))
@@ -121,7 +128,7 @@ public sealed class AdaptiveFanProductionController
             _ = new Hp8C40AutomaticThermalAdmission(automaticHardware, automaticMilliseconds);
             _automaticConfiguration = automaticConfiguration is null ? null : FanConfigurationStore.Copy(automaticConfiguration);
             var preparedPolicy = Hp8C40AutomaticPolicy.Create(
-                _automaticConfiguration?.BuildPolicy() ?? config, _automaticMinimumLevel);
+                _automaticConfiguration?.BuildPolicy() ?? config, _automaticMinimumLevel, _automaticMaximumLevel);
             _preparedEngine = new AdaptiveFanInertiaPolicy(
                 preparedPolicy with { MaximumSampleGap=TimeSpan.FromSeconds(_productTelemetryTolerance?5:3) },
                 _automaticConfiguration?.Tuning, cpuSpikeFilterEnabled: _productTelemetryTolerance);
@@ -534,7 +541,7 @@ public sealed class AdaptiveFanProductionController
         // HP 8C40 default Automatic path stays at 30..50. An explicit product
         // review may select the already-characterized 10..50 backend envelope.
         var engine = new AdaptiveFanInertiaPolicy(
-            Hp8C40AutomaticPolicy.Create(copy.BuildPolicy(),_automaticMinimumLevel) with { MaximumSampleGap=TimeSpan.FromSeconds(_productTelemetryTolerance?5:3) },
+            Hp8C40AutomaticPolicy.Create(copy.BuildPolicy(),_automaticMinimumLevel,_automaticMaximumLevel) with { MaximumSampleGap=TimeSpan.FromSeconds(_productTelemetryTolerance?5:3) },
             copy.Tuning, cpuSpikeFilterEnabled: _productTelemetryTolerance);
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -775,7 +782,7 @@ public sealed class AdaptiveFanProductionController
                 var baseline = preparedDecision ??
                     throw new InvalidOperationException("Experimental policy requires the prepared baseline.");
                 var experimental = _experimentalPolicy.Evaluate(input, baseline);
-                if (!baseline.Accepted || !experimental.Accepted || experimental.EqualFanLevel is not (>=10 and <=50) ||
+                if (!baseline.Accepted || !experimental.Accepted || experimental.EqualFanLevel is null || experimental.EqualFanLevel < 10 || experimental.EqualFanLevel > _automaticMaximumLevel ||
                     experimental.RawDemandLevel is null || !double.IsFinite(experimental.RawDemandLevel.Value) ||
                     experimental.RawDemandLevel < baseline.RawDemandLevel || experimental.ThermalOverride != baseline.ThermalOverride)
                     throw new InvalidOperationException("Experimental policy weakened the protected baseline or returned an invalid target.");

@@ -385,9 +385,9 @@ internal sealed partial class ProductForm : Form
         var slot=_canvas.Editing;var p=_draft.Get(slot);var model=p.Fan.UnifiedDemand!;var points=model.Curve.ToArray();
         if(index<0||index>=points.Length)return;
         var lo=index==0?0:points[index-1].Input+1;var hi=index==points.Length-1?100:points[index+1].Input-1;
-        var lowLevel=index==0?10:points[index-1].Level;var highLevel=index==points.Length-1?50:points[index+1].Level;
+        var lowLevel=index==0?10:points[index-1].Level;var highLevel=index==points.Length-1?54:points[index+1].Level;
         var x=index==0?0:index==points.Length-1?100:Math.Clamp(Math.Round(input),lo,hi);
-        var y=index==points.Length-1?50:Math.Clamp(level,(int)lowLevel,(int)highLevel);
+        var y=Math.Clamp(level,(int)Math.Max(index==points.Length-1?50:10,lowLevel),(int)highLevel);
         points[index]=new(x,y);
         Change(_draft.With(slot,p with{Fan=p.Fan with{UnifiedDemand=model with{Curve=points}}}));
     }

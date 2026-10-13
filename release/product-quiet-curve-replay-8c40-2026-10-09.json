@@ -8,15 +8,18 @@
   "sourceSha256": {
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "b25b39786fde51d01dc8aaa99cae668ce6c26dafe5fe8d84a541e7d8d3c7dbff",
     "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "d75d6e6c3ad2b1190fa660924ace428527d16ed59cab05ed802120a0cdc4c5b6",
-    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "c92133becfb98aa2e0b61121caa32119f73f1a2ed8bea4c094f475d9c6f95b86",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "414e38f249b2981ed72022fc0b9ce8a04d93d92f5926e0dc9025e7eb7994ae3f",
     "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "7c94c2852df2ebd257c66107770d815ab46a47d7bba95edac275fe9edc1c4077",
-    "src/VictusFanControl/Product/ProductProfiles.cs": "69dab3cb9868f0a15a2b2179a8d03ac5c8c7cbe3e5f36e86acf5af35cae6d860",
+    "src/VictusFanControl/Product/ProductProfiles.cs": "5d97fe39faf0af90f5a034f5415896b3bb6922bae6a482a60bf68b3e3c1581b5",
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
     "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "76284ec97b6f0a0a25d10f1fb1e7f758f8817a2e4cd28ca06d5ae145a90476bb",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
-    "src/VictusFanControl.App/Product/ProductRuntime.cs": "e2a43fa775a0965b843c25909ee9ee55c2de8df31821ecb1bcc782dcaf5c6ff0",
+    "src/VictusFanControl.App/Product/ProductRuntime.cs": "d2bad72fab4847c51538452cfd24dba777a6d60cc5f789fe3012938ead23781a",
     "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "a9ae9446b54f163c215f4327e98d1dc954e1cd1ceb7ac238292797a9487b53f1",
-    "src/VictusFanControl.App/Product/ProductFanControllerFactory.cs": "afc50a4b6ac90ad8a3ecf138d45f0faf82220e5e6a34d7c1f5919efd3a66ee46"
+    "src/VictusFanControl.App/Product/ProductFanControllerFactory.cs": "3d9a2ce367745cc88d27c13fb51094121fcbdb1b77a7eefb13fe557429d28d92",
+    "src/VictusFanControl/Control/Adaptive/Hp8C40AutomaticPolicy.cs": "1b1a85aff4176f74f26e2b86d3e14ca3d5397f27165e80fff9a00a221b1e0673",
+    "src/VictusFanControl/Control/Adaptive/UnifiedFanDemand.cs": "368264b32746fd4705e09586374bd29c204b6871b5f31247c69cddb748cf67b5",
+    "src/VictusFanControl/Control/Adaptive/FanConfiguration.cs": "7aaebdfbf1bfadd82ad4d6d5859e6268c2371ba55ac376c44bc34649611c4d5b"
   },
   "historicalReconstruction": {
     "expectedDecisions": 390,
@@ -304,7 +307,7 @@
   "sourceBindingUpdateBaseHead": "2c832a315c607d673d100ffca9471c228fe188c1",
   "previewRuntimeSourceRebinding": {
     "previousSha256": "27001e0933030c6d8af5348918f30a7d1dd14f63f1dd133476fd11893ae6a6c3",
-    "currentSha256": "e2a43fa775a0965b843c25909ee9ee55c2de8df31821ecb1bcc782dcaf5c6ff0",
+    "currentSha256": "d2bad72fab4847c51538452cfd24dba777a6d60cc5f789fe3012938ead23781a",
     "reason": "Explicit process-only Manual 54/52 trial plus effective-command diagnostics; default entry and Automatic prepared policy remain 10..50. Core policy/replay sources and numerical evidence are unchanged.",
     "validation": "Current-source independent replay and complete Windows product fixtures required by CI; physical upper-range test pending."
   },
@@ -314,5 +317,22 @@
     "factorySha256": "afc50a4b6ac90ad8a3ecf138d45f0faf82220e5e6a34d7c1f5919efd3a66ee46",
     "reason": "Shared runtime controller construction; attach experimental Automatic policy only when Automatic execution is authorized. Fixes Manual-preview and closed-backend initialization without changing core admission or numerical policies.",
     "validation": "Real production controller constructor regression with fake backend, enabled/disabled retention, preview/normal entry and writable/closed backend; same-commit independent replay and full Windows package fixtures required. No physical upper-range pass is claimed."
+  },
+  "product54SourceRebinding": {
+    "previousSourceSha256": {
+      "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "b25b39786fde51d01dc8aaa99cae668ce6c26dafe5fe8d84a541e7d8d3c7dbff",
+      "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "d75d6e6c3ad2b1190fa660924ace428527d16ed59cab05ed802120a0cdc4c5b6",
+      "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "c92133becfb98aa2e0b61121caa32119f73f1a2ed8bea4c094f475d9c6f95b86",
+      "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "7c94c2852df2ebd257c66107770d815ab46a47d7bba95edac275fe9edc1c4077",
+      "src/VictusFanControl/Product/ProductProfiles.cs": "69dab3cb9868f0a15a2b2179a8d03ac5c8c7cbe3e5f36e86acf5af35cae6d860",
+      "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
+      "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "76284ec97b6f0a0a25d10f1fb1e7f758f8817a2e4cd28ca06d5ae145a90476bb",
+      "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
+      "src/VictusFanControl.App/Product/ProductRuntime.cs": "e2a43fa775a0965b843c25909ee9ee55c2de8df31821ecb1bcc782dcaf5c6ff0",
+      "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "a9ae9446b54f163c215f4327e98d1dc954e1cd1ceb7ac238292797a9487b53f1",
+      "src/VictusFanControl.App/Product/ProductFanControllerFactory.cs": "afc50a4b6ac90ad8a3ecf138d45f0faf82220e5e6a34d7c1f5919efd3a66ee46"
+    },
+    "reason": "Product opts into explicit exact-target Automatic ceiling 54 and mapped GPU cap 52. Historical policy default remains 50. Existing preset/curve points and recorded 390-decision replay remain unchanged; editor supports final level 50..54. New product 54/52 controller/session fixtures cover the additional range.",
+    "validation": "Same-source independent historical and product replay plus complete Windows GUI/packaged/installer checks required; no new numerical or extended physical pass is claimed."
   }
 }
