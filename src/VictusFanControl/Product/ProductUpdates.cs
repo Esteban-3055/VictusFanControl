@@ -10,6 +10,8 @@ public sealed record ProductUpdate(Version Version, Uri Download, long Size, str
 /// <summary>Public releases with an explicit preview opt-in. No tokens, background installation or hardware IO.</summary>
 public static partial class ProductUpdates
 {
+    public static bool IsNewer(Version version,bool prerelease,Version current) =>
+        version > current || version == current && !prerelease && ProductRelease.IsPreview && current == ProductRelease.NumericVersion;
     public const string Repository = "Esteban-3055/VictusFanControl";
     public const long MaximumInstallerBytes = 256L * 1024 * 1024;
     private static readonly HttpClient Client = CreateClient();
@@ -30,7 +32,7 @@ public static partial class ProductUpdates
         var tag = root.GetProperty("tag_name").GetString() ?? "";
         if (!Regex.IsMatch(tag, "^v[0-9]+\\.[0-9]+\\.[0-9]+$")) throw new InvalidDataException("Versión de release no válida.");
         var version = Version.Parse(tag[1..]);
-        if (version <= current) return null;
+        if (!IsNewer(version,prerelease,current)) return null;
         var name = $"VictusFanControl-{version}-Setup-win-x64.exe";
         var assets = root.GetProperty("assets").EnumerateArray().Where(a => a.GetProperty("name").GetString() == name).ToArray();
         if (assets.Length != 1) throw new InvalidDataException("La release no tiene un instalador único compatible.");
@@ -53,8 +55,8 @@ public static partial class ProductUpdates
             .Select(r => new { Release = r, Tag = r.GetProperty("tag_name").GetString() ?? "" })
             .Where(r => Regex.IsMatch(r.Tag, "^v[0-9]+\\.[0-9]+\\.[0-9]+$") && Version.TryParse(r.Tag[1..], out _))
             .Select(r => new { r.Release, Version = Version.Parse(r.Tag[1..]) })
-            .Where(r => r.Version > current)
-            .OrderByDescending(r => r.Version).ToArray();
+            .Where(r => IsNewer(r.Version,r.Release.GetProperty("prerelease").GetBoolean(),current))
+            .OrderByDescending(r => r.Version).ThenBy(r=>r.Release.GetProperty("prerelease").GetBoolean()).ToArray();
         // An invalid newest installer is an error, never a reason to silently offer an older release.
         return candidates.Length == 0 ? null : ParseRelease(candidates[0].Release.GetRawText(), current, includePrereleases);
     }

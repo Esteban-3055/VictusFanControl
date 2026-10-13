@@ -13,6 +13,13 @@ internal static class ProductUpdatesSelfTest
             var name=$"VictusFanControl-{tag[1..]}-Setup-win-x64.exe";
             return JsonSerializer.Serialize(new {tag_name=tag,draft,prerelease,assets=Enumerable.Range(0,count).Select(_=>new{name,size,state,digest=digest??"sha256:"+new string('a',64),browser_download_url=url??$"https://github.com/{ProductUpdates.Repository}/releases/download/{tag}/{name}"})});
         }
+        require(ProductRelease.NumericVersion==Version.Parse(ProductRelease.Version.Split('-')[0].Split('+')[0]),"Preview numeric version could not be read.");
+        if(ProductRelease.IsPreview)
+        {
+            require(ProductUpdates.IsNewer(ProductRelease.NumericVersion,false,ProductRelease.NumericVersion),"Preview cannot promote to the same stable numeric version.");
+            require(ProductUpdates.ParseRelease(Release("v"+ProductRelease.NumericVersion),ProductRelease.NumericVersion) is {IsPrerelease:false},"Same-version stable promotion was rejected by release parsing.");
+            require(!ProductUpdates.IsNewer(ProductRelease.NumericVersion,true,ProductRelease.NumericVersion),"Same-number preview bypassed the no-downgrade fence.");
+        }
         var current=new Version(1,1,0);
         require(ProductUpdates.ParseRelease(Release(),current)?.Version==new Version(1,2,0),"Stable newer release rejected.");
         require(ProductUpdates.ParseRelease(Release("v1.1.0"),current)is null&&ProductUpdates.ParseRelease(Release("v1.0.0"),current)is null,"Updater accepted equal version or downgrade.");

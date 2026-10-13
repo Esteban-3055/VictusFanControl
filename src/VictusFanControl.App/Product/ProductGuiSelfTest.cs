@@ -20,6 +20,7 @@ internal static partial class ProductGuiSelfTest
             ProductAutomaticAdmissionSelfTest.Run(Require);
             ProductWindowLayoutSelfTest.Run(Require);
             TestDisplayChanges(Require);
+            TestSelectedCurveInsertion(Require);
             TestHomeDashboard(Require);
             TestLiveAnimationSettings(Require);
             TestHomeAnimationCadence(Require);
@@ -488,12 +489,18 @@ internal static partial class ProductGuiSelfTest
                     form.EditNode(0,-999,-999);form.EditNode(1,999,999);form.Draft.Validate();
                     var afterPeer=ProductProfilesStore.Serialize(form.Draft.With(slot,ProductProfiles.DefaultProfile(slot)));
                     require(peer==afterPeer,"Curve editing changed its peer profile.");
-                    form.HandleCommand("node-add");form.HandleCommand("node-remove");form.HandleCommand("curve-reset");form.Draft.Validate();
+                    canvas.SelectedNode=2;form.HandleCommand("node-add");form.HandleCommand("node-remove");form.HandleCommand("curve-reset");form.Draft.Validate();
                 }
                 form.HandleCommand("discard");require(!form.Dirty&&original==ProductProfilesStore.Serialize(form.Draft),"Discard did not restore the saved draft.");
                 form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.ShowCurvePoints=true;
-                for(int i=0;i<70;i++)form.HandleCommand("node-add");
+                for(int i=0;i<70;i++)
+                {
+                    var points=form.Draft.Ac.Fan.UnifiedDemand!.Curve;
+                    canvas.SelectedNode=Enumerable.Range(0,points.Count-1).FirstOrDefault(n=>points[n+1].Input-points[n].Input>=2,-1);
+                    form.HandleCommand("node-add");
+                }
                 require(form.Draft.Ac.Fan.UnifiedDemand!.Curve.Count==64,"Curve count cap is inaccessible or not enforced.");
+                canvas.Refresh();require(!canvas.Hits.Single(h=>h.Id=="node-add").Enabled,"Add remained enabled at the curve count cap.");
                 canvas.Refresh();canvas.HandleKey(Keys.End);canvas.Refresh();
                 require(canvas.SelectedNode==63&&canvas.Hits.Any(h=>h.Id=="node-63"),"Last of 64 nodes is not reachable by keyboard/table.");
                 canvas.HandleKey(Keys.Home);canvas.Refresh();require(canvas.SelectedNode==0,"Home failed to select first node.");
@@ -509,11 +516,11 @@ internal static partial class ProductGuiSelfTest
                 canvas.Refresh();canvas.PointerDown(right);form.HandleCommand("profile-battery");canvas.Refresh();var priorBattery=form.Draft.Battery.CpuPl1Watts;canvas.PointerMove(left);canvas.PointerUp(left);
                 require(form.Draft.Battery.CpuPl1Watts==priorBattery,"A captured drag leaked into a newly selected profile.");
                 form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.ShowCurvePoints=true;canvas.Refresh();
-                var point=form.Draft.Ac.Fan.UnifiedDemand!.Curve[3];var from=ScreenPoint(958+(float)(point.Input/100)*634,648-(float)((point.Level-10)/40)*350);var to=ScreenPoint(958+(float)(71d/100)*634,648);
+                var point=form.Draft.Ac.Fan.UnifiedDemand!.Curve[3];var from=ScreenPoint(958+(float)(point.Input/100)*634,648-(float)((point.Level-10)/44)*350);var to=ScreenPoint(958+(float)(71d/100)*634,648);
                 canvas.PointerDown(from);canvas.PointerMove(to);canvas.PointerUp(to);require(form.Draft.Ac.Fan.UnifiedDemand!.Curve[3].Input==71,"Pointer node drag failed.");
                 form.HandleCommand("discard");
                 canvas.Refresh();var modeDraft=ProductProfilesStore.Serialize(form.Draft);var modePoint=form.Draft.Ac.Fan.UnifiedDemand!.Curve[3];
-                var modeStart=ScreenPoint(958+(float)(modePoint.Input/100)*634,648-(float)((modePoint.Level-10)/40)*350);
+                var modeStart=ScreenPoint(958+(float)(modePoint.Input/100)*634,648-(float)((modePoint.Level-10)/44)*350);
                 canvas.PointerDown(modeStart);require(canvas.Capture,"Editor/simulator transition fixture did not capture a node.");form.HandleCommand("curve-simulator");canvas.Refresh();canvas.PointerMove(to);canvas.PointerUp(to);
                 require(modeDraft==ProductProfilesStore.Serialize(form.Draft),"Captured node drag edited a hidden curve after switching to simulation.");
                 canvas.Refresh();var synthetic=canvas.Hits.Last(h=>h.Id=="sim-input-0");var syntheticStart=ScreenPoint(synthetic.Bounds.Left+2,synthetic.Bounds.Top+15);

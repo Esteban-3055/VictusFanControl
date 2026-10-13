@@ -27,13 +27,13 @@ public sealed record UnifiedFanDemand
         if(SchemaVersion!=1)throw new InvalidDataException("Versión de demanda incompatible.");
         for(int i=0;i<6;i++)if(Influence(i)<(i<2?100:0)||Influence(i)>MaximumInfluencePercent)
             throw new InvalidDataException("Influencia térmica 100–200 %; potencia/carga 0–200 %.");
-        if(Curve is null||Curve.Count is <2 or >64||Curve.Any(p=>p is null)||Curve[0].Input!=0||Curve[^1].Input!=100||Curve[^1].Level!=50)
-            throw new InvalidDataException("Curva de demanda: 2–64 puntos, extremos 0/100 % y nivel final 50.");
+        if(Curve is null||Curve.Count is <2 or >64||Curve.Any(p=>p is null)||Curve[0].Input!=0||Curve[^1].Input!=100||Curve[^1].Level is <50 or >54)
+            throw new InvalidDataException("Curva de demanda: 2–64 puntos, extremos 0/100 % y nivel final 50–54.");
         double previous=-1,previousLevel=10;
         foreach(var p in Curve)
         {
-            if(!double.IsFinite(p.Input)||!double.IsFinite(p.Level)||p.Input!=Math.Truncate(p.Input)||p.Level!=Math.Truncate(p.Level)||p.Input<=previous||p.Input>100||p.Level<previousLevel||p.Level>50)
-                throw new InvalidDataException("Demanda creciente 0–100 %, niveles no decrecientes 10–50.");
+            if(!double.IsFinite(p.Input)||!double.IsFinite(p.Level)||p.Input!=Math.Truncate(p.Input)||p.Level!=Math.Truncate(p.Level)||p.Input<=previous||p.Input>100||p.Level<previousLevel||p.Level>54)
+                throw new InvalidDataException("Demanda creciente 0–100 %, niveles no decrecientes 10–54.");
             previous=p.Input;previousLevel=p.Level;
         }
     }

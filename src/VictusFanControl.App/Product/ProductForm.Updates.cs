@@ -36,7 +36,7 @@ internal sealed partial class ProductForm
         _canvas.UpdateStatus = includePrereleases ? "Consultando releases estables y preliminares de GitHub…" : "Consultando releases estables de GitHub…"; _canvas.Invalidate();
         try
         {
-            var update = await (checkFixture?.Invoke(_updateCancellation.Token) ?? ProductUpdates.CheckAsync(Version.Parse(ProductRelease.Version), _updateCancellation.Token, includePrereleases));
+            var update = await (checkFixture?.Invoke(_updateCancellation.Token) ?? ProductUpdates.CheckAsync(ProductRelease.NumericVersion, _updateCancellation.Token, includePrereleases));
             if (_closing || IsDisposed) return;
             if (includePrereleases != _draft.IncludePrereleaseUpdates) { ResetUpdateSelection(); return; }
             _canvas.AvailableUpdate = update; _canvas.UpdateCheckedAt = DateTimeOffset.Now;
@@ -54,7 +54,7 @@ internal sealed partial class ProductForm
         var previews = _draft.IncludePrereleaseUpdates;
         try
         {
-            var cached = await ProductUpdates.FindCachedAsync(Version.Parse(ProductRelease.Version), previews, _updateCancellation.Token);
+            var cached = await ProductUpdates.FindCachedAsync(ProductRelease.NumericVersion, previews, _updateCancellation.Token);
             if (!_closing && !IsDisposed && previews == _draft.IncludePrereleaseUpdates && cached is not null)
             {
                 _canvas.DownloadedUpdate = cached; _canvas.UpdateProgressPercent = 100;
@@ -91,7 +91,7 @@ internal sealed partial class ProductForm
     internal async Task InstallDownloadedUpdateAsync(Action? ensureReleasedFixture = null, Action? launchFixture = null, Func<CancellationToken,Task>? verifyFixture = null)
     {
         if (_checkingUpdate || _closing || _restarting || _displayOff || _canvas.Busy || _canvas.Dirty || _canvas.DownloadedUpdate is not { } update || (_isolatedRuntime && verifyFixture is null)) return;
-        if (update.Version <= Version.Parse(ProductRelease.Version)) { _canvas.DownloadedUpdate = null; return; }
+        if (!ProductUpdates.IsNewer(update.Version,update.IsPrerelease,ProductRelease.NumericVersion)) { _canvas.DownloadedUpdate = null; return; }
         if (update.IsPrerelease && !_draft.IncludePrereleaseUpdates) { ResetUpdateSelection(); return; }
         if (!_isolatedRuntime && (verifyFixture is not null || ensureReleasedFixture is not null || launchFixture is not null)) throw new InvalidOperationException("Update fixture requires an isolated runtime.");
         // A retained prior session is recovered from the visible recovery action, before destroying a usable runtime.
@@ -110,7 +110,7 @@ internal sealed partial class ProductForm
             if (_isolatedRuntime) await verifyFixture!(_updateCancellation.Token);
             else
             {
-                update = await ProductUpdates.ConfirmPublishedInstallerAsync(update, Version.Parse(ProductRelease.Version), _draft.IncludePrereleaseUpdates, _updateCancellation.Token);
+                update = await ProductUpdates.ConfirmPublishedInstallerAsync(update, ProductRelease.NumericVersion, _draft.IncludePrereleaseUpdates, _updateCancellation.Token);
                 verified = await ProductUpdates.OpenVerifiedInstallerAsync(update, _updateCancellation.Token);
                 _canvas.DownloadedUpdate = update;
             }

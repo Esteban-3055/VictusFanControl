@@ -62,6 +62,18 @@ internal static class Hp8C40WmiFanControlBackendSelfTest
         await manualRange.RestoreFirmwareAutoAsync(default);
         await output.WriteLineAsync("PASS: GUI WMI equal Manual 10/29/50, invalid/asymmetric refusal before intent, duplicate suppression and low-end rearm; no hardware IO.");
 
+        var previewGuardian=new FakeGuardian();var previewCalls=new List<HpBiosRequest>();
+        var preview=new Hp8C40WmiFanControlBackend(previewGuardian,r=>{previewCalls.Add(r);return 0;},Read,productUpperRange:true);
+        Require(preview.Capabilities.MaximumLevel==54&&!preview.Capabilities.SupportsIndependentLevels,"Preview lost its logical-only capability.");
+        await preview.EnterCustomModeAsync(default);
+        foreach(var level in new[]{51,52,53,54})await preview.ApplyAsync(new(level,level,"upper-range preview"),default);
+        Require(previewCalls.Select(r=>((int)r.Payload[0],(int)r.Payload[1])).SequenceEqual(new[]{(51,51),(52,52),(53,52),(54,52)})&&previewGuardian.Intents==4,
+            "Backend preview mapping or durable intents mismatch.");
+        Require(preview.LastAcceptedTargets==(54,52),"Diagnostic exposed the logical GPU target instead of the capped command.");
+        await preview.ApplyAsync(new(54,54,"hold logical target"),default);Require(previewCalls.Count==4,"Preview backend retransmitted a held pair.");
+        await preview.RestoreFirmwareAutoAsync(default);Require(preview.LastAcceptedTargets is null,"Released preview exposed a stale command.");
+        await output.WriteLineAsync("PASS: WMI preview backend 51/51, 52/52, 53/52, 54/52, pair diagnostics, deduplication and release; fake IO only.");
+
         var failing = new FakeGuardian { RejectIntent = true };
         var dispatches = 0;
         var b = new Hp8C40WmiFanControlBackend(failing, _ => { dispatches++; return 0; }, Read);

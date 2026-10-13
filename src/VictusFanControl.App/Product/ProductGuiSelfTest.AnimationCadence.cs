@@ -12,7 +12,7 @@ internal static partial class ProductGuiSelfTest
         try
         {
             void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
-            TestHomeDashboard(Require);TestLiveAnimationSettings(Require);TestHomeAnimationCadence(Require);return 0;
+            TestSelectedCurveInsertion(Require);TestHomeDashboard(Require);TestLiveAnimationSettings(Require);TestHomeAnimationCadence(Require);return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }
@@ -76,8 +76,25 @@ internal static partial class ProductGuiSelfTest
                     {var saved=g.Save();g.TranslateTransform(88,88);g.RotateTransform(f*3);for(int b=0;b<28;b++){g.FillPath(brush,blade);g.RotateTransform(360f/28);}g.Restore(saved);}
                     costs.Add(new{deviceRotorPixels=size,pngMeanMs=pngMs,previousVectorMeanMs=watch.Elapsed.TotalMilliseconds/200});
                 }
+                var surfaceCosts=new List<object>();
+                foreach(var scale in new[]{0.4f,1f,2f})
+                {
+                    var size=(int)(180*scale);
+                    using var background=new Bitmap(size,size);using(var paint=Graphics.FromImage(background))paint.Clear(ProductCanvas.Background);
+                    using var overlay=new Bitmap(size,size,System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                    using var target=new Bitmap(size,size);using var graphics=Graphics.FromImage(target);
+                    using var surface=new ProductFanSurface(rotor){Size=new(size,size)};
+                    surface.SetLayers(background,overlay,new(0,0,size,size),scale,ProductCanvas.Blue);
+                    surface.RenderFrame(graphics);
+                    require(Enumerable.Range(0,size).All(y=>target.GetPixel(0,y).ToArgb()==ProductCanvas.Background.ToArgb()),"Small viewport clipped rotor blades at the surface edge.");
+                    var watch=Stopwatch.StartNew();
+                    for(int f=0;f<200;f++){surface.Phase=f*3;surface.RenderFrame(graphics);}
+                    var ms=watch.Elapsed.TotalMilliseconds/200;
+                    surfaceCosts.Add(new{scale,deviceSurfacePixels=size,opaqueSurfaceMeanMs=ms});
+                    require(ms<15,"Opaque surface render cost exceeded the isolated 4K budget.");
+                }
                 Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-                File.WriteAllText(output,JsonSerializer.Serialize(new{kind="isolated-home-animation-cadence",live,drawCosts=costs,
+                File.WriteAllText(output,JsonSerializer.Serialize(new{kind="isolated-home-animation-cadence",live,drawCosts=costs,opaqueSurfaceCosts=surfaceCosts,
                     hardwareCommands=runtime.Commands,limits="CI UI paint intervals and isolated GDI draw costs; not user-device or monitor presentation FPS"},new JsonSerializerOptions{WriteIndented=true}));
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Cadence fixture exit stalled.");
                 Console.WriteLine("Animation cadence: PASS (real Windows message loop, high-resolution native timer, Stopwatch UI paint intervals, bounded pending callback, hidden/tab/minimize pause and PNG/vector draw-cost measurement; zero hardware IO).");

@@ -35,6 +35,8 @@ jobs:
           if-no-files-found: error
       - name: WMI lifecycle and direct EC prohibition fault fixtures
         run: dotnet run --project src/VictusFanControl -c Release --no-build -- --wmi-fan-experiment-self-test
+      - name: Upper-range backend mapping, intent, deduplication and release fixtures
+        run: dotnet run --project src/VictusFanControl -c Release --no-build -- --wmi-fan-backend-self-test
       - name: Existing WMI telemetry and safety regressions
         shell: pwsh
         run: |

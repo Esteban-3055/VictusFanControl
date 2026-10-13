@@ -55,7 +55,7 @@ internal sealed partial class ProductForm : Form
         }
         if(displayMetricsInFixture is not null&&!_isolatedRuntime)throw new ArgumentException("La geometría simulada requiere un runtime aislado.");
         _displayMetricsInFixture=displayMetricsInFixture;
-        _canvas.AutomaticRetryAvailable=automaticReview is null&&(!_isolatedRuntime||retryRuntimeFactory is not null);
+        _canvas.AutomaticRetryAvailable=!ProductFanRangePreview.Enabled&&automaticReview is null&&(!_isolatedRuntime||retryRuntimeFactory is not null);
         string? notice=null;
         _draft=fixtureProfiles is null?ProductProfilesStore.Load(profilesPath,out notice,Migrate):ProductProfilesStore.Copy(fixtureProfiles);
         _saved=ProductProfilesStore.Copy(_draft);
@@ -107,7 +107,7 @@ internal sealed partial class ProductForm : Form
                     _canvas.Page=ProductPage.Settings;_canvas.Notice=pending.Detail;_canvas.AutomaticRetryAvailable=false;
                     _recoveryAtStartup = true;
                     if(!isolated)RegisterPowerNotifications();UpdateTray(_canvas.State);_presentationTimer.Start();
-                    if((minimized||_draft.StartMinimized)&&!_restartOpening)Hide();
+                    if((minimized||_draft.StartMinimized)&&!ProductFanRangePreview.Enabled&&!_restartOpening)Hide();
                     return; // The recovery monitor opens no telemetry/controller until release succeeds.
                 }
             }
@@ -116,13 +116,13 @@ internal sealed partial class ProductForm : Form
             if(_closing||_restarting||IsDisposed)return;
             if(_displayOff||initialPowerBoundary!=_updateLifecycleBoundary)
                 _runtime.FenceLifecycle("Cambio de energía durante la creación de la sesión");
-            if((!isolated||enableStartupAutomaticInFixture)&&_automaticReview is null&&!_restartOpening&&!_displayOff&&initialPowerBoundary==_updateLifecycleBoundary&&_saved.ActivateAutomaticOnStart)
+            if((!isolated||enableStartupAutomaticInFixture)&&_automaticReview is null&&!ProductFanRangePreview.Enabled&&!_restartOpening&&!_displayOff&&initialPowerBoundary==_updateLifecycleBoundary&&_saved.ActivateAutomaticOnStart)
             { _startupPreferences=ProductProfilesStore.Copy(_saved); _startupAutomatic=new(Environment.TickCount64,protections:_saved.Protections); }
             AttachRuntime(_runtime);UpdateState(_runtime.State);
             if(!isolated||registerPowerNotificationsInFixture)RegisterPowerNotifications();
             _runtime.Start();_presentationTimer.Start();
             if(!isolated){_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.StartupKnown=true;}
-            if(!_closing&&!IsDisposed&&(minimized||_draft.StartMinimized)&&!_restartOpening)Hide();
+            if(!_closing&&!IsDisposed&&(minimized||_draft.StartMinimized)&&!ProductFanRangePreview.Enabled&&!_restartOpening)Hide();
         }
         catch(Exception ex)
         {
@@ -261,6 +261,7 @@ internal sealed partial class ProductForm : Form
         }
         if(_canvas.Busy&&id is not("firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close"))return;
         if(id=="fan-mode-1"&&(!_canvas.State.ManualAuthorized||_canvas.State.LifecycleBlocked))return;
+        if(ProductFanRangePreview.Enabled&&id=="fan-mode-2")return;
         if(id=="fan-mode-2") { _automaticRecoveryResumeSuppressed=false; _automaticResumption.Arm(); }
         if(id=="fan-mode-2"&&_canvas.State.LifecycleBlocked){_ = RetryAutomaticAsync();return;}
         if(id=="manual-apply"&&(!_canvas.State.ManualAuthorized||_canvas.State.FanMode!="Manual"||_canvas.State.Runtime!="Healthy"||_canvas.State.LifecycleBlocked))return;
@@ -345,7 +346,7 @@ internal sealed partial class ProductForm : Form
             var model=p.Fan.UnifiedDemand!;var nextModel=model.WithInfluence(axis,Math.Clamp(value,axis<2?100:0,UnifiedFanDemand.MaximumInfluencePercent));
             Change(_draft.With(slot,p with{Fan=p.Fan with{UnifiedDemand=nextModel}}));return;
         }
-        if(key=="manual") {_canvas.ManualLevel=Math.Clamp(value,10,50);_canvas.Invalidate();return;}
+        if(key=="manual") {_canvas.ManualLevel=Math.Clamp(value,10,_canvas.State.ManualMaximumLevel);_canvas.Invalidate();return;}
         var next=key switch
         {
             "pl1"=>p with{CpuPl1Watts=Math.Clamp(value,CpuPowerProductDefaults.MinimumPl1Watts,CpuPowerProductDefaults.MaximumConfigurablePl1Watts),CpuPl2Watts=Math.Max(p.CpuPl2Watts,Math.Clamp(value,8,44))},
@@ -384,19 +385,21 @@ internal sealed partial class ProductForm : Form
         var slot=_canvas.Editing;var p=_draft.Get(slot);var model=p.Fan.UnifiedDemand!;var points=model.Curve.ToArray();
         if(index<0||index>=points.Length)return;
         var lo=index==0?0:points[index-1].Input+1;var hi=index==points.Length-1?100:points[index+1].Input-1;
-        var lowLevel=index==0?10:points[index-1].Level;var highLevel=index==points.Length-1?50:points[index+1].Level;
+        var lowLevel=index==0?10:points[index-1].Level;var highLevel=index==points.Length-1?54:points[index+1].Level;
         var x=index==0?0:index==points.Length-1?100:Math.Clamp(Math.Round(input),lo,hi);
-        var y=index==points.Length-1?50:Math.Clamp(level,(int)lowLevel,(int)highLevel);
+        var y=Math.Clamp(level,(int)Math.Max(index==points.Length-1?50:10,lowLevel),(int)highLevel);
         points[index]=new(x,y);
         Change(_draft.With(slot,p with{Fan=p.Fan with{UnifiedDemand=model with{Curve=points}}}));
     }
     private void AddNode()
     {
-        var p=_draft.Get(_canvas.Editing);var model=p.Fan.UnifiedDemand!;var points=model.Curve.ToList();if(points.Count>=64)return;
-        var gap=Enumerable.Range(0,points.Count-1).OrderByDescending(i=>points[i+1].Input-points[i].Input).First();
-        if(points[gap+1].Input-points[gap].Input<2){_canvas.Notice="No queda espacio entre puntos.";return;}
-        var x=Math.Floor((points[gap].Input+points[gap+1].Input)/2);var y=Math.Round(AdaptiveCurveProfiles.Interpolate(points,x));points.Insert(gap+1,new(x,y));
-        Change(_draft.With(_canvas.Editing,p with{Fan=p.Fan with{UnifiedDemand=model with{Curve=points.ToArray()}}}));_canvas.SelectedNode=gap+1;_canvas.ShowCurvePoints=true;
+        var p=_draft.Get(_canvas.Editing);var model=p.Fan.UnifiedDemand!;
+        if(!ProductCurveInsertion.CanInsert(model.Curve,_canvas.SelectedNode))
+        {_canvas.Notice="Selecciona un punto con espacio a su derecha para añadir otro.";_canvas.Invalidate();return;}
+        var selected=_canvas.SelectedNode;
+        var points=ProductCurveInsertion.Insert(model.Curve,selected);
+        Change(_draft.With(_canvas.Editing,p with{Fan=p.Fan with{UnifiedDemand=model with{Curve=points}}}));
+        _canvas.SelectedNode=selected+1;_canvas.ShowCurvePoints=true;
     }
     private void RemoveNode()
     {

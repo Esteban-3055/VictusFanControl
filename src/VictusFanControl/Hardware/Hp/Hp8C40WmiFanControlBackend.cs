@@ -30,6 +30,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     private readonly Func<CancellationToken, ValueTask<HpWmiFanProofSample>> _read;
     private readonly Func<HpBiosRequest, int> _send;
     private WmiFanSession _session;
+    private readonly bool _productUpperRange;
     private bool _active;
     private bool _releaseInProgress;
     private bool _reentryBlocked;
@@ -37,21 +38,23 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     internal string GuardianReportPath => _guardian.ReportPath;
     internal string GuardianSessionDirectory => _guardian.SessionDirectory;
     internal int? LastAcceptedLevel => _session.LastAcceptedLevel;
+    internal (int Cpu,int Gpu)? LastAcceptedTargets => _session.LastAcceptedLevel is {} level ? (_productUpperRange ? Hp8C40ProductFanTargets.FromLogical(level) : (level,level)) : null;
     internal Func<TelemetrySnapshot?>? ProductTelemetryProvider { get; set; }
     public event EventHandler<string>? CommandAccepted;
     public string Name => "HP 8C40 WMI-only / supervised requests; hardware ownership unverified";
     public bool CanWrite => true;
-    public FanBackendCapabilities Capabilities => new("8C40", Hp8C40TargetProfile.MinimumValidatedFanLevel, Hp8C40TargetProfile.MaximumPhysicallyQualifiedFanLevel, false);
+    public FanBackendCapabilities Capabilities => new("8C40", Hp8C40TargetProfile.MinimumValidatedFanLevel, _productUpperRange ? Hp8C40ProductFanTargets.MaximumLogicalLevel : Hp8C40TargetProfile.MaximumPhysicallyQualifiedFanLevel, false);
     public FanFirmwareRestoreEvidence LastRestoreEvidence { get; private set; }
 
     internal Hp8C40WmiFanControlBackend(IWmiFanGuiGuardian guardian,
         Func<HpBiosRequest, int>? send = null,
-        Func<CancellationToken, ValueTask<HpWmiFanProofSample>>? read = null)
+        Func<CancellationToken, ValueTask<HpWmiFanProofSample>>? read = null, bool productUpperRange = false)
     {
         _guardian = guardian;
+        _productUpperRange = productUpperRange;
         HpOmenBiosWmiClient? client = null;
         _send = send ?? (r => (client ??= new HpOmenBiosWmiClient()).Send(r));
-        _session = new WmiFanSession(_send, guardian.PersistIntent, Capabilities.MinimumLevel);
+        _session = new WmiFanSession(_send, guardian.PersistIntent, Capabilities.MinimumLevel, _productUpperRange);
         var fans = new HpWmiFanProofReader();
         _read = read ?? fans.ReadFreshAsync;
     }
@@ -120,7 +123,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
         token.ThrowIfCancellationRequested();
         _guardian.EnsureAlive();
         if (sent) CommandAccepted?.Invoke(this,
-            $"target={command.CpuLevel}/{command.GpuLevel}; WMI return=0; " +
+            $"logical={command.CpuLevel}; target={LastAcceptedTargets!.Value.Cpu}/{LastAcceptedTargets!.Value.Gpu}; productUpperRange={_productUpperRange}; WMI return=0; " +
             "setpoint readback=false; hardware completion/ownership unverified");
     }
 
@@ -172,7 +175,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
         }
 
         _active = false;
-        _session = new WmiFanSession(_send, _guardian.PersistIntent, Capabilities.MinimumLevel);
+        _session = new WmiFanSession(_send, _guardian.PersistIntent, Capabilities.MinimumLevel, _productUpperRange);
         _releaseInProgress = false;
         _reentryBlocked = false;
         LastRestoreEvidence = new(false, true, true, DateTimeOffset.UtcNow,

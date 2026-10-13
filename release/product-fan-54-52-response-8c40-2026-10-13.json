@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "kind": "VictusFanControl.TargetManualFanResponse",
+  "target": "HP-8C40-9D0R1LA-F18",
+  "sourceHead": "caed4b1f2522ac4dc9675321ac9456fb5f2f582f",
+  "diagnosticSha256": "957e141277e30a115135255d642384a8d4bc50547ac70252a4337bce619e895c",
+  "sessionId": "20261013T211838943Z-790d255590174d729e0669347cf16fd8",
+  "physicalPassClaimed": false,
+  "observations": [
+    {
+      "logical": 51,
+      "cpuCommand": 51,
+      "gpuCommand": 51,
+      "maximumObservedCpuRpm": 5000,
+      "maximumObservedGpuRpm": 5000,
+      "heldSeconds": 9.94
+    },
+    {
+      "logical": 52,
+      "cpuCommand": 52,
+      "gpuCommand": 52,
+      "maximumObservedCpuRpm": 5200,
+      "maximumObservedGpuRpm": 5200,
+      "heldSeconds": 8.95
+    },
+    {
+      "logical": 53,
+      "cpuCommand": 53,
+      "gpuCommand": 52,
+      "maximumObservedCpuRpm": 5300,
+      "maximumObservedGpuRpm": 5200,
+      "heldSeconds": 9.62
+    },
+    {
+      "logical": 54,
+      "cpuCommand": 54,
+      "gpuCommand": 52,
+      "maximumObservedCpuRpm": 5400,
+      "maximumObservedGpuRpm": 5200,
+      "heldSeconds": 20.11
+    }
+  ],
+  "allWmiReturns": 0,
+  "snapshotCount": 82,
+  "distinctFanAcquisitions": 41,
+  "incompleteSnapshots": 0,
+  "release": "accepted-guardian-retired;observed-rpm-decline-to-2900-2500",
+  "fanRpmResolution": 100,
+  "limits": "Short Manual response observation only; not 30-second plateaus, Automatic high-range physical qualification, independent firmware ownership or absolute mechanical speed rating."
+}

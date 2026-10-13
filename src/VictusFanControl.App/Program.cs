@@ -779,6 +779,9 @@ internal static class Program
                 Path.GetFullPath(p15d2VariableManualMarkerRoot);
         }
 
+        ProductFanRangePreview.Enabled=args.Contains("--fan-upper-range-preview");
+        if(ProductFanRangePreview.Enabled && (hardwareTestModeCount!=0 || productAutomaticReview is not null || args.Contains("--platform-thermal-experiment") || args.Contains("--product-restart-state")))
+            throw new ArgumentException("Upper-range preview cannot be combined with other hardware/review entries.");
         var modulesDirectory = ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
@@ -885,7 +888,7 @@ internal static class Program
             {
                 var statePath=ReadOptionValue(args,"--product-restart-state");
                 var restartState=statePath is null?null:ProductSessionRestart.ReadReleasedState(statePath);
-                using(var product = new ProductForm(modulesDirectory,args.Contains("--start-minimized"),automaticReview:productAutomaticReview,restartState:restartState))
+                using(var product = new ProductForm(modulesDirectory,!ProductFanRangePreview.Enabled&&args.Contains("--start-minimized"),automaticReview:productAutomaticReview,restartState:restartState))
                 {Application.Run(product);restart=product.RestartRequest;}
                 AppLog.Write("Product GUI exited.");
                 if(restart is not null&&Environment.ExitCode==0)

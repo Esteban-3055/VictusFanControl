@@ -58,7 +58,7 @@ public sealed record ProductProfile
             _ = LegacyFan.BuildPolicy();
         }
         if (Fan.Tuning.MinimumLevel is not (10 or 30) || Fan.Tuning.MaximumLevel != Hp8C40AutomaticPolicy.MaximumLevel)
-            throw new InvalidDataException("El editor admite niveles 10–50; el control físico conserva su rango validado.");
+            throw new InvalidDataException("El editor admite niveles CPU 10–54; la GPU se limita a 52 en el backend de producto.");
         if (GpuMaximumMHz < GpuProductPreferences.MinimumMHz || GpuMaximumMHz > GpuProductPreferences.Maximum(source))
             throw new InvalidDataException("Límite GPU fuera del rango configurable 210–2500 MHz.");
         foreach (var axis in Enum.GetValues<AdaptiveCurveAxis>())
