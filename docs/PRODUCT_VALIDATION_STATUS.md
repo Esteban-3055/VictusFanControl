@@ -1,4 +1,13 @@
-# Estado del producto — v1.2.4, 13 de octubre de 2026
+# Estado del producto — v1.2.5, 13 de octubre de 2026
+
+Destino: **HP 8C40 / 9D0R1LA / BIOS F.18**. Esta actualización solo cambia la presentación de RPM y la animación. Cada ventilador sigue sus propias RPM medidas, a una vuelta por segundo con 3000 RPM. Conserva la inercia y las cifras durante retrasos, elimina marcas y avisos de retención y pausa el temporizador fuera de Inicio o al ocultar/minimizar, conservando fase y velocidad.
+
+PASS local: compilación Roslyn y ejecución de los fixtures matemáticos de animación sobre .NET 8.0.25. La publicación exige compilación, fixtures WinForms, recursos, regresiones y verificación del paquete/instalador en Windows, además de los checks OEM y CPU/GPU del mismo commit. Los resultados definitivos están en la procedencia adjunta a la release. No se afirma nueva validación física.
+
+[Notas v1.2.5](../release/RELEASE-NOTES-v1.2.5.md) · [Detalles](HOME-MEASURED-RPM-ANIMATION.md)
+
+## Estado histórico de v1.2.4
+
 
 Destino: **HP 8C40 / 9D0R1LA / BIOS F.18**. La entrega conserva recuperación automática, diagnósticos CPU/TZ01/DTT3 e interfaz de v1.2.0. Las animaciones de Inicio siguen la solicitud aceptada, con una vuelta cada 0,5 segundos a nivel 30 una vez estabilizada la inercia; las cifras conservan las últimas RPM válidas informadas durante los retrasos y señalan la retención. La interfaz pasó fixtures Windows de solicitud distinta de demanda, inercia, intervalos irregulares, pausa/reanudación, RPM ausentes/parciales/vencidas, orden de publicaciones, valores inválidos/futuros y recuperación con cero medido, así como renders mínimo/4K. El soak de 924 renders y 30 aperturas conserva recursos GDI/USER acotados. Las pruebas Windows cubren recuperación, liberación previa, perfiles, lecturas nuevas, cancelación, suspensión, salida y recursos de la GUI. Se conservan los resultados de los escenarios térmicos y replays; no se afirma nueva validación física.
 

@@ -200,7 +200,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         for(int i=0;i<names.Length;i++){var x=300+i*265;DrawText(g,names[i],x+18,92,22,selected==i?Ink:Muted,248);Hit(prefix+i,new(x,76,265,61),names[i]);if(selected==i){using var b=new SolidBrush(Accent);g.FillRectangle(b,x,132,265,4);}}
     }
     private void Rpm(Graphics g,RectangleF r,string title,ProductFanReading? reading)
-    {var color=reading is {Held:true}?Yellow:Accent;Card(g,r);Icon(g,"fan",r.X+30,r.Y+16,55);DrawText(g,title+(reading is {Held:true}?" · última lectura":""),r.X+124,r.Y+9,21,Muted,r.Width-140);DrawText(g,reading is null?"Esperando lectura":Value(reading.Rpm,"RPM"),r.X+124,r.Y+36,32,color,r.Width-140,true);Bar(g,new(r.X+124,r.Bottom-14,r.Width-155,8),reading?.Rpm,6000,color);}
+    {var color=Accent;Card(g,r);Icon(g,"fan",r.X+30,r.Y+16,55);DrawText(g,title,r.X+124,r.Y+9,21,Muted,r.Width-140);DrawText(g,reading is null?"Esperando lectura":Value(reading.Rpm,"RPM"),r.X+124,r.Y+36,32,color,r.Width-140,true);Bar(g,new(r.X+124,r.Bottom-14,r.Width-155,8),reading?.Rpm,6000,color);}
     internal string AppliedCpu()
     {
         if(State.CpuState=="Disabled")return "Sin límite aplicado";
@@ -462,7 +462,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         string[] names=["CPU Temp","GPU Temp","CPU Uso","GPU Uso","CPU Potencia","GPU Potencia","CPU Fan","GPU Fan"];
         var now=DateTimeOffset.UtcNow;var cpuFan=CpuFanReading(now);var gpuFan=GpuFanReading(now);
         string[] vals=[Value(s?.CpuControlTemperatureC,"°C"),Value(s?.GpuTemperatureC,"°C"),Value(s?.CpuLoadPercent,"%"),Value(s?.GpuLoadPercent,"%"),Value(s?.CpuPackagePowerW,"W"),Value(s?.GpuPowerW,"W"),cpuFan is null?"Esperando":Value(cpuFan.Rpm,"RPM"),gpuFan is null?"Esperando":Value(gpuFan.Rpm,"RPM")];
-        for(int i=0;i<8;i++){var held=i==6?cpuFan is {Held:true}:i==7&&gpuFan is {Held:true};Card(g,new(1288,215+i*72,342,61),false,11);DrawText(g,names[i]+(held?" · última":""),1304,229+i*72,held?16:19,Muted,150);DrawText(g,vals[i],1454,224+i*72,26,held?Yellow:i%2==0?Red:Accent,167,true);}
+        for(int i=0;i<8;i++){Card(g,new(1288,215+i*72,342,61),false,11);DrawText(g,names[i],1304,229+i*72,19,Muted,150);DrawText(g,vals[i],1454,224+i*72,26,i%2==0?Red:Accent,167,true);}
     }
     private void History(Graphics g,RectangleF plot,Func<TelemetrySnapshot,double?> cpu,Func<TelemetrySnapshot,double?> gpu,double max,string title)
     {
