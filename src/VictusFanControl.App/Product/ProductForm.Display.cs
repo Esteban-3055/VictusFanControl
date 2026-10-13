@@ -33,6 +33,7 @@ internal sealed partial class ProductForm
     protected override void OnSizeChanged(EventArgs e)
     {
         base.OnSizeChanged(e);
+        _canvas?.SynchronizeFanAnimation();
         if (_displayWindowState == WindowState) return;
         _displayWindowState = WindowState;
         QueueDisplayRefresh("window-state");

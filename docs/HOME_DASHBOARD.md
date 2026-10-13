@@ -1,6 +1,13 @@
 # Inicio y curva ampliada de Ventiladores
 
-## v1.2.4: solicitud y últimas RPM
+## v1.2.5: RPM medidas e inercia continua
+
+Cada ventilador sigue sus propias últimas RPM válidas medidas, independientemente de demanda, solicitud y modo de control. La escala es **3000 RPM = una vuelta por segundo**, con aceleración de 1,2 s y desaceleración de 1,8 s. Las adquisiciones ausentes, vencidas o inválidas conservan la cifra y el objetivo visual sin reiniciar la inercia. Un cero medido desacelera el ventilador correspondiente hasta detenerse; cuando ambos terminan, se apaga el temporizador.
+
+Todas las aspas son iguales, sin marca blanca ni punto. Inicio y los valores actuales muestran las RPM sin texto de retención ni cambio de color por retraso. Antes de la primera lectura muestran Esperando. Al cambiar de pestaña, ocultar o minimizar, se detiene el temporizador y se conservan fase y velocidad; al regresar no se integra tiempo oculto. La caché sigue siendo exclusiva de presentación. [Implementación y comprobaciones](HOME-MEASURED-RPM-ANIMATION.md).
+
+
+## Historial v1.2.4: solicitud y últimas RPM
 
 La animación utiliza el nivel **Solicitud** que ya aceptó el controlador (`FanLevel`, confirmado por `AutomaticDecision.EqualFanLevel`), en lugar de `UnifiedDemand.Percent`. Se conservan las comprobaciones de Automático, sesión, fuente, autoridad, transición y vigencia de la decisión. El rango aceptado continúa siendo 10–50. Un 0 % de demanda con solicitud 10 todavía hace girar la animación: el nivel aceptado sigue siendo 10. Firmware, Manual o una decisión interrumpida/caducada pausan el giro; no se toma el borrador ni se usa la lectura retenida para autorizarlo.
 
