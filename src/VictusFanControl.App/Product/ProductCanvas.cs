@@ -20,7 +20,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     internal ProductRuntimeState State
     {
         get => _state;
-        set { _state=value;_homeTelemetry.Observe(value,DateTimeOffset.UtcNow);SynchronizeFanAnimation(); }
+        set { _state=value;var now=DateTimeOffset.UtcNow;_homeTelemetry.Observe(value,now);_fanReadouts.Observe(value,now);SynchronizeFanAnimation(); }
     }
     internal ProductPowerProfile Editing { get; set; }
     private ProductPage _page;
@@ -199,8 +199,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     {
         for(int i=0;i<names.Length;i++){var x=300+i*265;DrawText(g,names[i],x+18,92,22,selected==i?Ink:Muted,248);Hit(prefix+i,new(x,76,265,61),names[i]);if(selected==i){using var b=new SolidBrush(Accent);g.FillRectangle(b,x,132,265,4);}}
     }
-    private void Rpm(Graphics g,RectangleF r,string title,double? rpm)
-    {Card(g,r);Icon(g,"fan",r.X+30,r.Y+16,55);DrawText(g,title,r.X+124,r.Y+9,21,Muted,r.Width-140);DrawText(g,Value(rpm,"RPM"),r.X+124,r.Y+36,32,Accent,r.Width-140,true);Bar(g,new(r.X+124,r.Bottom-14,r.Width-155,8),rpm,6000,Accent);}
+    private void Rpm(Graphics g,RectangleF r,string title,ProductFanReading? reading)
+    {var color=reading is {Held:true}?Yellow:Accent;Card(g,r);Icon(g,"fan",r.X+30,r.Y+16,55);DrawText(g,title+(reading is {Held:true}?" · última lectura":""),r.X+124,r.Y+9,21,Muted,r.Width-140);DrawText(g,reading is null?"Esperando lectura":Value(reading.Rpm,"RPM"),r.X+124,r.Y+36,32,color,r.Width-140,true);Bar(g,new(r.X+124,r.Bottom-14,r.Width-155,8),reading?.Rpm,6000,color);}
     internal string AppliedCpu()
     {
         if(State.CpuState=="Disabled")return "Sin límite aplicado";
@@ -438,7 +438,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,376,1337,207));DrawText(g,"Uso y potencia",332,394,27,null,1200,true);
         Metric(g,"CPU Uso",Value(s?.CpuLoadPercent,"%"),new(332,444,310,135),Accent,s?.CpuLoadPercent);Metric(g,"GPU Uso",Value(s?.GpuLoadPercent,"%"),new(659,444,310,135),Accent,s?.GpuLoadPercent);
         Metric(g,"CPU Potencia",Value(s?.CpuPackagePowerW,"W"),new(985,444,310,135),Yellow,s?.CpuPackagePowerW,115);Metric(g,"GPU Potencia",Value(s?.GpuPowerW,"W"),new(1311,444,313,135),Yellow,s?.GpuPowerW,140);
-        Card(g,new(310,604,1337,217));DrawText(g,"Ventiladores y estado",332,623,27,null,1200,true);Rpm(g,new(332,676,625,119),"CPU Fan",s?.CpuFanRpm);Rpm(g,new(976,676,648,119),"GPU Fan",s?.GpuFanRpm);
+        var now=DateTimeOffset.UtcNow;Card(g,new(310,604,1337,217));DrawText(g,"Ventiladores y estado",332,623,27,null,1200,true);Rpm(g,new(332,676,625,119),"CPU Fan",CpuFanReading(now));Rpm(g,new(976,676,648,119),"GPU Fan",GpuFanReading(now));
     }
     private void SafetyPage(Graphics g)
     {
@@ -460,8 +460,9 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         else{DrawText(g,"Nivel aceptado: "+(State.FanLevel?.ToString()??"—"),350,352,33,Accent,830);DrawText(g,"Autoridad: "+State.FanAuthority,350,417,27,null,830);DrawText(g,"Las RPM son realimentación; no prueban el setpoint ni ownership.",350,492,25,Muted,830);}
         Card(g,new(1270,144,378,674));DrawText(g,"Valores actuales",1290,165,27,null,340,true);var s=FreshSnapshot;
         string[] names=["CPU Temp","GPU Temp","CPU Uso","GPU Uso","CPU Potencia","GPU Potencia","CPU Fan","GPU Fan"];
-        string[] vals=[Value(s?.CpuControlTemperatureC,"°C"),Value(s?.GpuTemperatureC,"°C"),Value(s?.CpuLoadPercent,"%"),Value(s?.GpuLoadPercent,"%"),Value(s?.CpuPackagePowerW,"W"),Value(s?.GpuPowerW,"W"),Value(s?.CpuFanRpm,"RPM"),Value(s?.GpuFanRpm,"RPM")];
-        for(int i=0;i<8;i++){Card(g,new(1288,215+i*72,342,61),false,11);DrawText(g,names[i],1304,229+i*72,19,Muted,160);DrawText(g,vals[i],1454,224+i*72,26,i%2==0?Red:Accent,167,true);}
+        var now=DateTimeOffset.UtcNow;var cpuFan=CpuFanReading(now);var gpuFan=GpuFanReading(now);
+        string[] vals=[Value(s?.CpuControlTemperatureC,"°C"),Value(s?.GpuTemperatureC,"°C"),Value(s?.CpuLoadPercent,"%"),Value(s?.GpuLoadPercent,"%"),Value(s?.CpuPackagePowerW,"W"),Value(s?.GpuPowerW,"W"),cpuFan is null?"Esperando":Value(cpuFan.Rpm,"RPM"),gpuFan is null?"Esperando":Value(gpuFan.Rpm,"RPM")];
+        for(int i=0;i<8;i++){var held=i==6?cpuFan is {Held:true}:i==7&&gpuFan is {Held:true};Card(g,new(1288,215+i*72,342,61),false,11);DrawText(g,names[i]+(held?" · última":""),1304,229+i*72,held?16:19,Muted,150);DrawText(g,vals[i],1454,224+i*72,26,held?Yellow:i%2==0?Red:Accent,167,true);}
     }
     private void History(Graphics g,RectangleF plot,Func<TelemetrySnapshot,double?> cpu,Func<TelemetrySnapshot,double?> gpu,double max,string title)
     {

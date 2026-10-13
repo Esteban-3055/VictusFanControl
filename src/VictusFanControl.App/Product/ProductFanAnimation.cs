@@ -1,9 +1,13 @@
 namespace VictusFanControl.App;
 
-// Presentation only: accepted controller demand drives rotation; RPM is only the hub readout.
+// Presentation only: accepted request drives rotation; measured RPM is only the hub readout.
 internal sealed class ProductFanAnimation
 {
-    private const double MaximumDegreesPerSecond = 72;
+    internal const double ReferenceRequest = 30;
+    internal const double ReferenceSecondsPerRevolution = 0.5;
+    internal const double SimulatedRpmPerLevel = 100;
+    // 3000 simulated RPM / 25 = 120 visual RPM: one revolution every 0.5 s.
+    private const double VisualRpmDivisor = ReferenceRequest * SimulatedRpmPerLevel * ReferenceSecondsPerRevolution / 60;
     private const double RestSpeed = 0.1;
     internal double Phase { get; private set; }
     internal double Speed { get; private set; }
@@ -11,12 +15,15 @@ internal sealed class ProductFanAnimation
 
     internal void Pause() => Speed = 0;
 
-    internal void Advance(double elapsed, double? demandPercent)
+    internal static double SimulatedRpm(double requestLevel) => requestLevel * SimulatedRpmPerLevel;
+    internal static double TargetDegreesPerSecond(double requestLevel) => SimulatedRpm(requestLevel) / VisualRpmDivisor * 6;
+
+    internal void Advance(double elapsed, double? requestLevel)
     {
-        if (demandPercent is null || !double.IsFinite(demandPercent.Value)) { Pause(); return; }
+        if (requestLevel is null || !double.IsFinite(requestLevel.Value) || requestLevel is <0 or >50) { Pause(); return; }
         if (!double.IsFinite(elapsed) || elapsed <= 0) return;
         elapsed = Math.Min(elapsed, 0.1); // Never catch up a delayed or hidden frame.
-        var target = Math.Clamp(demandPercent.Value, 0, 100) / 100 * MaximumDegreesPerSecond;
+        var target = TargetDegreesPerSecond(requestLevel.Value);
         var inertia = target > Speed ? 1.2 : 1.8;
         var decay = Math.Exp(-elapsed / inertia);
         // Integrate the easing analytically so irregular frame times do not change the motion.

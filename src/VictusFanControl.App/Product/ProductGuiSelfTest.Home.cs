@@ -9,6 +9,7 @@ internal static partial class ProductGuiSelfTest
     {
         ProductHomeTelemetrySelfTest.Run(require);
         ProductFanAnimationSelfTest.Run(require);
+        ProductFanReadoutsSelfTest.Run(require);
         var output=Path.GetFullPath("logs/product-gui-self-test");Directory.CreateDirectory(output);
         var runtime=new RecordingRuntime();
         using var form=new ProductForm("fixture://home",fixture:runtime,fixtureProfiles:new ProductProfiles());
@@ -36,7 +37,7 @@ internal static partial class ProductGuiSelfTest
         canvas.AdvanceHomeAnimation(clock+100,DateTimeOffset.UtcNow);var moving=canvas.HomeFanPhases;
         require(canvas.HomeAnimationRunning&&moving.Cpu>phase.Cpu&&moving.Gpu>phase.Gpu&&
             Math.Abs((moving.Cpu-phase.Cpu)-(moving.Gpu-phase.Gpu))<1e-8,
-            "Fan animation did not use shared controller demand despite different RPM.");
+            "Fan animation did not use the shared accepted request despite different RPM.");
         // Reproduce UI publications while RPM is unavailable and the accepted decision remains current.
         var feedbackState=canvas.State;
         var heldNow=DateTimeOffset.UtcNow;
@@ -46,9 +47,12 @@ internal static partial class ProductGuiSelfTest
             canvas.State=feedbackState with{Snapshot=delayedFeedback};
             canvas.AdvanceHomeAnimation(clock+i*100,heldNow);
         }
-        require(canvas.HomeAnimationRunning&&canvas.HomeFanAnimationSpeeds.Cpu>40&&
+        require(canvas.HomeAnimationRunning&&canvas.HomeFanAnimationSpeeds.Cpu>700&&
             canvas.HomeFanAnimationSpeeds.Cpu==canvas.HomeFanAnimationSpeeds.Gpu,
-            "RPM updates restarted demand inertia or independently changed blade speed.");
+            "RPM updates restarted request inertia or independently changed blade speed.");
+        require(canvas.CpuFanReading(heldNow) is {Rpm:3000,Held:true}&&canvas.GpuFanReading(heldNow) is {Rpm:1500,Held:true},
+            "Missing RPM replaced independent measured readouts with blanks or simulated RPM.");
+        Render("home-dashboard-held-rpm");
         canvas.State=feedbackState;
         canvas.Page=ProductPage.Fans;canvas.Refresh();var fanPlot=canvas.RenderedCurveBounds;
         require(!canvas.HomeAnimationRunning,"Fan animation consumed resources on another page.");
@@ -66,22 +70,24 @@ internal static partial class ProductGuiSelfTest
         form.WindowState=FormWindowState.Normal;
         var stale=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow.AddMinutes(-1));canvas.State=stale;Render("home-dashboard-stale");
         require(!canvas.HomeAnimationRunning,"Stale feedback showed moving fans.");
-        canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow);
-        var coastClock=Environment.TickCount64;
-        canvas.AdvanceHomeAnimation(coastClock+100,DateTimeOffset.UtcNow);
         canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow,0);
-        var coastNow=DateTimeOffset.UtcNow;var coastPhase=canvas.HomeFanPhases;
-        require(canvas.HomeAnimationRunning,"Zero demand skipped fan inertia.");
-        canvas.AdvanceHomeAnimation(coastClock+200,coastNow);
-        require(canvas.HomeFanPhases.Cpu>coastPhase.Cpu,"Zero-demand fan did not coast down.");
-        for(int i=3;i<160;i++)canvas.AdvanceHomeAnimation(coastClock+i*100,coastNow);
-        require(!canvas.HomeAnimationRunning,"Settled zero-demand fans retained an animation timer.");
+        var requestClock=Environment.TickCount64;var requestNow=DateTimeOffset.UtcNow;
+        for(int i=1;i<=120;i++)canvas.AdvanceHomeAnimation(requestClock+i*100,requestNow);
+        require(canvas.HomeAnimationRunning&&canvas.HomeFanAnimationSpeeds.Cpu>719,
+            "Zero demand stopped a still-accepted request 30 instead of keeping its half-second rotation.");
+        canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow,100,level:10);
+        var slowerNow=DateTimeOffset.UtcNow;
+        canvas.AdvanceHomeAnimation(Environment.TickCount64+100,slowerNow);
+        require(canvas.HomeFanAnimationSpeeds.Cpu>240,"Changing request snapped instead of decelerating with inertia.");
+        for(int i=1;i<=200;i++)canvas.AdvanceHomeAnimation(Environment.TickCount64+100+i*100,slowerNow);
+        require(canvas.HomeAnimationRunning&&Math.Abs(canvas.HomeFanAnimationSpeeds.Cpu-240)<0.1,
+            "Demand 100 overrode accepted request 10 or changed its 1.5-second visual revolution.");
         canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow) with{FanMode="Firmware"};
         require(!canvas.HomeAnimationRunning,"Firmware RPM fabricated automatic demand animation.");
         canvas.State=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow,55,"Battery");Render("home-dashboard-battery");
         require(canvas.HomeCurveSource==ProductPowerProfile.Battery,"Home did not follow the real Battery source.");
         require(runtime.Commands==0&&ProductProfilesStore.Serialize(form.Draft)==originalDraft,"Dashboard rendering, animation or history wrote hardware or preferences.");
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Dashboard fixture exit stalled.");
-        Console.WriteLine("Home dashboard: PASS (navigation, applied curve, real demand drives both blades, uninterrupted inertia across RPM updates, hidden/minimized/stale pause, finite zero-demand coast-down, equal-size fan plot and Windows renders; zero hardware IO).");
+        Console.WriteLine("Home dashboard: PASS (navigation, applied curve, accepted request drives both blades, retained measured RPM, uninterrupted inertia across RPM updates, request independent of demand, hidden/minimized/stale pause, equal-size fan plot and Windows renders; zero hardware IO).");
     }
 }

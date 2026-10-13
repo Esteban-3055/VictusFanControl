@@ -23,6 +23,11 @@ internal sealed class ProductHomeTelemetry
     internal static ProductHomeDemandSample? AnimationDemand(ProductRuntimeState state, DateTimeOffset now)
         => ReadDemand(state,now,requireLiveSnapshot:false);
 
+    // The request is the level already accepted by the controller, not the demand
+    // percentage or a draft curve. Keep the existing decision/lifecycle admission.
+    internal static int? AnimationRequest(ProductRuntimeState state, DateTimeOffset now)
+        => AnimationDemand(state,now) is not null && state.FanLevel is >=10 and <=50 ? state.FanLevel : null;
+
     private static ProductHomeDemandSample? ReadDemand(ProductRuntimeState state, DateTimeOffset now, bool requireLiveSnapshot)
     {
         if (state.Runtime != "Healthy" || state.FanMode != "Automatic" || state.FanAuthority != "Custom" ||
