@@ -23,7 +23,7 @@ internal sealed class ProductFanReadouts
 
     private static void Remember(ref ProductFanReading? last, double? rpm, DateTimeOffset stamp)
     {
-        if (rpm is {} value && double.IsFinite(value) && value >= 0 && (last is null || stamp > last.SampledAt))
+        if (rpm is {} value && double.IsFinite(value) && value is >=0 and <=10000 && (last is null || stamp > last.SampledAt))
             last = new(value,stamp,false);
     }
 

@@ -27,7 +27,7 @@ internal static class ProductFanReadoutsSelfTest
             FanSampleAgeMilliseconds=4000,FanMaximumAgeMilliseconds=10000}};
         display.Observe(refreshed,now.AddSeconds(4));
         require(display.Cpu(refreshed,now.AddSeconds(4)) is {Rpm:3200,Held:true},"A new CPU timestamp renewed an old fan acquisition.");
-        foreach(var invalid in new[]{double.NaN,double.PositiveInfinity,-100})
+        foreach(var invalid in new[]{double.NaN,double.PositiveInfinity,-100,10001})
         {
             var bad=ProductHomeTelemetrySelfTest.StateAt(now.AddSeconds(2));
             bad=bad with{Snapshot=bad.Snapshot! with{CpuFanRpm=invalid,GpuFanRpm=invalid}};
