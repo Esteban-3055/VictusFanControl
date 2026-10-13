@@ -8,10 +8,16 @@ internal sealed partial class ProductCanvas
 {
     private readonly ProductHomeTelemetry _homeTelemetry = new();
     private readonly ProductFanReadouts _fanReadouts = new();
-    private readonly System.Windows.Forms.Timer _fanAnimationTimer = new() { Interval=16 };
-    private long? _fanAnimationLastTick;
+    private readonly ProductAnimationFramePump _fanAnimationPump;
+    private readonly ProductAnimationTiming _fanAnimationTiming=new();
+    internal static double AnimationClockMilliseconds => System.Diagnostics.Stopwatch.GetTimestamp()*1000d/System.Diagnostics.Stopwatch.Frequency;
+    private ProductFanRotor? _fanRotor;
+    private Bitmap? _homeFanBackground,_homeFanOverlay;
+    private string? _homeFanLayerKey;
+    private static readonly RectangleF HomeFanLayerBounds=new(332,167,822,246);
+    private double? _fanAnimationLastTick;
     private readonly ProductFanAnimation _cpuFanAnimation = new(), _gpuFanAnimation = new();
-    internal bool HomeAnimationRunning => _fanAnimationTimer.Enabled;
+    internal bool HomeAnimationRunning => _fanAnimationPump?.IsRunning==true;
     internal (double Cpu,double Gpu) HomeFanPhases => (_cpuFanAnimation.Phase,_gpuFanAnimation.Phase);
     internal (double Cpu,double Gpu) HomeFanAnimationSpeeds => (_cpuFanAnimation.Speed,_gpuFanAnimation.Speed);
     internal double HomeAnimationSecondsPerRevolution => _cpuFanAnimation.SecondsPerRevolution;
@@ -40,15 +46,15 @@ internal sealed partial class ProductCanvas
         var now=DateTimeOffset.UtcNow;
         var running=HomeIsVisible &&
             (CpuFanReading(now)?.Rpm>0 || GpuFanReading(now)?.Rpm>0 || _cpuFanAnimation.IsMoving || _gpuFanAnimation.IsMoving);
-        if(running) { _fanAnimationLastTick ??= Environment.TickCount64; _fanAnimationTimer.Start(); }
+        if(running) { _fanAnimationLastTick ??= AnimationClockMilliseconds; _fanAnimationPump?.Start(); }
         else PauseFanAnimation();
     }
     private void PauseFanAnimation()
     {
-        _fanAnimationTimer.Stop(); _fanAnimationLastTick=null;
+        _fanAnimationPump?.Stop(); _fanAnimationLastTick=null;_fanAnimationTiming.Pause();
         // Freeze position and momentum; resume without hidden-time catch-up or a new soft start.
     }
-    internal void AdvanceHomeAnimation(long clock,DateTimeOffset now)
+    internal void AdvanceHomeAnimation(double clock,DateTimeOffset now)
     {
         if(!HomeIsVisible) { PauseFanAnimation(); return; }
         var elapsed=_fanAnimationLastTick is {} previous && clock>=previous ? Math.Min(0.1,(clock-previous)/1000d) : 0;
@@ -67,13 +73,35 @@ internal sealed partial class ProductCanvas
     {
         var region=new RectangleF((clip.Left-_offsetX)/_scale,(clip.Top-_offsetY)/_scale,clip.Width/_scale,clip.Height/_scale);
         if(Page!=ProductPage.Home||!new RectangleF(332,167,822,246).Contains(region))return false;
-        Card(g,new(310,150,1337,281));DrawHomeFans(g);return true;
+        DrawHomeFans(g);return true;
     }
+    internal long HomePaintedFrames => _fanAnimationTiming.PaintedFrames;
+    internal object HomeAnimationDiagnostic()=>_fanAnimationTiming.Snapshot(_fanAnimationPump.Scheduler,_fanAnimationPump.CoalescedRequests);
     private void DrawHomeFans(Graphics g)
     {
         var s=FreshSnapshot;var now=DateTimeOffset.UtcNow;
-        HomeFan(g,new(335,170,397,239),"CPU",CpuFanReading(now),s?.CpuControlTemperatureC,s?.CpuLoadPercent,_cpuFanAnimation.Phase);
-        HomeFan(g,new(754,170,397,239),"GPU",GpuFanReading(now),s?.GpuTemperatureC,s?.GpuLoadPercent,_gpuFanAnimation.Phase);
+        var cpu=CpuFanReading(now);var gpu=GpuFanReading(now);
+        var key=$"{_scale:R}|{Accent.ToArgb()}|{cpu?.Rpm}|{gpu?.Rpm}|{s?.CpuControlTemperatureC}|{s?.CpuLoadPercent}|{s?.GpuTemperatureC}|{s?.GpuLoadPercent}";
+        if(_homeFanBackground is null||_homeFanLayerKey!=key)
+        {
+            _homeFanBackground?.Dispose();_homeFanOverlay?.Dispose();
+            var width=(int)Math.Ceiling(HomeFanLayerBounds.Width*_scale);var height=(int)Math.Ceiling(HomeFanLayerBounds.Height*_scale);
+            _homeFanBackground=new(width,height,System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            _homeFanOverlay=new(width,height,System.Drawing.Imaging.PixelFormat.Format32bppPArgb);_homeFanLayerKey=key;
+            using var bg=Graphics.FromImage(_homeFanBackground);using var overlay=Graphics.FromImage(_homeFanOverlay);
+            foreach(var layer in new[]{bg,overlay})
+            {layer.Clear(Color.Transparent);layer.SmoothingMode=SmoothingMode.AntiAlias;layer.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                layer.ScaleTransform(_scale,_scale);layer.TranslateTransform(-HomeFanLayerBounds.X,-HomeFanLayerBounds.Y);}
+            Card(bg,new(310,150,1337,281));
+            HomeFanStatic(bg,overlay,new(335,170,397,239),"CPU",cpu,s?.CpuControlTemperatureC,s?.CpuLoadPercent);
+            HomeFanStatic(bg,overlay,new(754,170,397,239),"GPU",gpu,s?.GpuTemperatureC,s?.GpuLoadPercent);
+        }
+        g.DrawImage(_homeFanBackground,HomeFanLayerBounds);
+        _fanRotor??=new();
+        _fanRotor.Draw(g,533.5f,293,_cpuFanAnimation.Phase,_scale,Accent);
+        _fanRotor.Draw(g,952.5f,293,_gpuFanAnimation.Phase,_scale,Accent);
+        g.DrawImage(_homeFanOverlay!,HomeFanLayerBounds);
+
     }
 
     private void Home(Graphics g)
@@ -101,25 +129,16 @@ internal sealed partial class ProductCanvas
         DrawText(g,applied?"Perfil en uso; Curvas permite editar y aplicar cambios.":"Automático mostrará aquí su curva aplicada.",334,807,15,Muted,610,height:20);
         HomeDemandGraph(g,new(985,451,662,379),current,now);
     }
-    private void HomeFan(Graphics g,RectangleF r,string title,ProductFanReading? reading,double? temperature,double? load,double phase)
+    private void HomeFanStatic(Graphics background,Graphics g,RectangleF r,string title,ProductFanReading? reading,double? temperature,double? load)
     {
-        DrawText(g,title+" · Ventilador",r.X,r.Y,23,null,r.Width,true,true);
+        DrawText(background,title+" · Ventilador",r.X,r.Y,23,null,r.Width,true,true);
         var cx=r.X+r.Width/2;var cy=r.Y+123;
-        using(var ring=new Pen(Border,2))g.DrawEllipse(ring,cx-88,cy-88,176,176);
-        var saved=g.Save();g.TranslateTransform(cx,cy);g.RotateTransform((float)phase);
-        using(var bladeBrush=new SolidBrush(Accent))
-        using(var blade=new GraphicsPath())
-        {
-            blade.AddBezier(0,-53,-7,-62,-19,-75,-15,-85);
-            blade.AddBezier(-15,-85,-5,-81,4,-65,4,-53);blade.CloseFigure();
-            for(int i=0;i<28;i++){g.FillPath(bladeBrush,blade);g.RotateTransform(360f/28);}
-        }
-        g.Restore(saved);
+        using(var ring=new Pen(Border,2))background.DrawEllipse(ring,cx-88,cy-88,176,176);
         using(var hub=new SolidBrush(Background))g.FillEllipse(hub,cx-55,cy-55,110,110);
         using(var outline=new Pen(Accent,2))g.DrawEllipse(outline,cx-55,cy-55,110,110);
         DrawText(g,reading?.Rpm.ToString("0")??"Esperando",cx-54,cy-23,reading is null?18:30,Ink,108,true,true,height:40);
         DrawText(g,"RPM",cx-48,cy+17,15,Muted,96,centered:true,height:25);
-        DrawText(g,Value(temperature,"°C")+"  ·  Uso "+Value(load,"%"),r.X,r.Bottom-23,18,Muted,r.Width,centered:true,height:25);
+        DrawText(background,Value(temperature,"°C")+"  ·  Uso "+Value(load,"%"),r.X,r.Bottom-23,18,Muted,r.Width,centered:true,height:25);
     }
     private void HomeDemandGraph(Graphics g,RectangleF card,ProductHomeDemandSample? current,DateTimeOffset now)
     {

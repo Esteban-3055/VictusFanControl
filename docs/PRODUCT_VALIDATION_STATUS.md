@@ -1,4 +1,13 @@
-# Estado del producto — v1.2.6, 13 de octubre de 2026
+# Estado del producto — v1.2.7, 13 de octubre de 2026
+
+Esta entrega cambia la presentación: rotor PNG suministrado por el usuario, precarga y raster adaptado al tamaño/color, capas estáticas, reloj Stopwatch y productor de cuadros de alta resolución con una sola devolución pendiente a la interfaz. Conserva las RPM medidas, la inercia, la edición del JSON y las pausas.
+
+La validación añade un bucle real de mensajes Windows de tres segundos, mediciones acotadas de intervalos/duración de pintado, solicitud de pausa y costes de dibujo PNG/vector a 176/352 píxeles. La publicación exige suites del commit final, recursos y paquete/instalador; la procedencia registra resultados definitivos. Las mediciones de CI no prueban la cadencia presentada en el monitor del usuario ni una nueva validación física.
+
+[Detalles](PNG_FAN_ANIMATION.md) · [Notas v1.2.7](../release/RELEASE-NOTES-v1.2.7.md)
+
+## Estado histórico de v1.2.6
+
 
 Esta actualización añade un archivo de presentación para ajustar en vivo la velocidad visual de Inicio, conservando las RPM medidas y la inercia. El archivo permanece fuera del payload de instalación y de los perfiles de control.
 

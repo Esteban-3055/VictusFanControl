@@ -76,7 +76,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
         AccessibleName = "VictusFanControl"; AccessibleRole = AccessibleRole.Pane;
         BackColor = Background; MinimumSize = new(1000,560);
-        _fanAnimationTimer.Tick+=(_,_)=>AdvanceHomeAnimation(Environment.TickCount64,DateTimeOffset.UtcNow);
+        _fanAnimationPump=new(this,()=>{AdvanceHomeAnimation(AnimationClockMilliseconds,DateTimeOffset.UtcNow);Update();});
     }
     internal void AddSnapshot(TelemetrySnapshot s)
     {
@@ -146,6 +146,12 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     internal Color Accent => ProductIcons.Select(State,ProductTrayState.Default)==ProductTrayState.Error || State.FanAuthority=="Faulted" || State.CpuState=="Failed" || State.GpuState=="Failed" ? Red : State.Source=="Battery" ? Yellow : Blue;
     private Color AccentShade(float strength) => Color.FromArgb((int)(Background.R+(Accent.R-Background.R)*strength),(int)(Background.G+(Accent.G-Background.G)*strength),(int)(Background.B+(Accent.B-Background.B)*strength));
     protected override void OnPaint(PaintEventArgs e)
+    {
+        var begin=AnimationClockMilliseconds;
+        try {PaintCanvas(e);}
+        finally {if(Page==ProductPage.Home&&HomeAnimationRunning)_fanAnimationTiming.Paint(begin,AnimationClockMilliseconds-begin);}
+    }
+    private void PaintCanvas(PaintEventArgs e)
     {
         base.OnPaint(e); var g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;g.TextRenderingHint=TextRenderingHint.ClearTypeGridFit;
         _scale=Math.Min(Width/1672f,Height/941f);_offsetX=(Width-1672*_scale)/2;_offsetY=(Height-941*_scale)/2;
@@ -605,5 +611,5 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         }
         public override void DoDefaultAction(){if(Current is { Slider:false } current&&owner.CanInteract(current))owner.Command?.Invoke(current.Id);}
     }
-    protected override void Dispose(bool disposing){if(disposing){_fanAnimationTimer.Dispose();foreach(var f in _fonts.Values)f.Dispose();}base.Dispose(disposing);}
+    protected override void Dispose(bool disposing){if(disposing){_fanAnimationPump.Dispose();_fanRotor?.Dispose();_homeFanBackground?.Dispose();_homeFanOverlay?.Dispose();foreach(var f in _fonts.Values)f.Dispose();}base.Dispose(disposing);}
 }

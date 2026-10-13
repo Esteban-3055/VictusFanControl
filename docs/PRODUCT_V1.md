@@ -1,13 +1,13 @@
-# VictusFanControl v1.2.6 — HP 8C40 / 9D0R1LA / BIOS F.18
+# VictusFanControl v1.2.7 — HP 8C40 / 9D0R1LA / BIOS F.18
 
 Esta entrega habilita el uso habitual solicitado para el destino exacto. La curva AC predeterminada es la candidata de menor demanda intermedia: 12, 12, 18, 28, 34, 44, 50 para entradas 0, 40, 50, 65, 76, 90, 100. Conserva las protecciones térmicas crudas, subida e histéresis; descenso normal 25 s/confirmación 12 s y descenso corto 10 s/confirmación 4 s. Batería conserva su curva y tiempos de descenso. La transición usa el mismo motor, cambia los tiempos compatibles del perfil de destino y reinicia las confirmaciones, conservando el nivel aplicado y el filtro; los rangos y pasos protegidos no pueden cambiar en vivo. Se migran solamente los presets AC anteriores intactos; se conservan curvas personalizadas y límites CPU/GPU. Guardar crea un respaldo exacto previo a v1.0.
 
 ## Instalar e iniciar con Windows
 
-1. Sal de las aplicaciones Victus anteriores desde su bandeja. Ejecuta `VictusFanControl-1.2.6-Setup-win-x64.exe` como administrador con tu misma cuenta y deja marcada **Iniciar con Windows y activar Automático**; pulsa **Instalar / actualizar**. Esa opción también habilita el arranque en una instalación anterior, conservando curvas y límites CPU/GPU. Si la desmarcas, una actualización conserva las preferencias previas; una instalación nueva no registra el inicio automático. El instalador crea un acceso en el menú Inicio.
+1. Sal de las aplicaciones Victus anteriores desde su bandeja. Ejecuta `VictusFanControl-1.2.7-Setup-win-x64.exe` como administrador con tu misma cuenta y deja marcada **Iniciar con Windows y activar Automático**; pulsa **Instalar / actualizar**. Esa opción también habilita el arranque en una instalación anterior, conservando curvas y límites CPU/GPU. Si la desmarcas, una actualización conserva las preferencias previas; una instalación nueva no registra el inicio automático. El instalador crea un acceso en el menú Inicio.
 2. Alternativa ZIP: extrae todo el paquete.
 3. Abre PowerShell **como administrador con tu misma cuenta**, entra en la carpeta extraída y ejecuta `./Start-ProductGui.ps1 -Mode Install`.
-4. El instalador verifica hashes, copia la entrega a `%LOCALAPPDATA%/VictusFanControl/releases/1.2.6-{commit}`, conserva las preferencias previas y actualiza la ruta de la tarea si estaba habilitada. En primera instalación registra el inicio elevado y guarda **minimizado + Automático al iniciar**. El EXE no abre automáticamente el controlador: utiliza el menú Inicio. La alternativa PowerShell abre la GUI al finalizar. Requiere el controlador PawnIO y NVIDIA/NVML que ya usa la instalación anterior; .NET Desktop Runtime 8 x64.
+4. El instalador verifica hashes, copia la entrega a `%LOCALAPPDATA%/VictusFanControl/releases/1.2.7-{commit}`, conserva las preferencias previas y actualiza la ruta de la tarea si estaba habilitada. En primera instalación registra el inicio elevado y guarda **minimizado + Automático al iniciar**. El EXE no abre automáticamente el controlador: utiliza el menú Inicio. La alternativa PowerShell abre la GUI al finalizar. Requiere el controlador PawnIO y NVIDIA/NVML que ya usa la instalación anterior; .NET Desktop Runtime 8 x64.
 
 La instalación conserva tus perfiles CPU/GPU y sus journals. No cierra procesos a la fuerza. La GUI v1.1.9 puede recuperar sesiones pendientes en segundo plano según la preferencia guardada. Se puede verificar sin activar hardware con `./Start-ProductGui.ps1 -Mode FinalCheck`.
 
@@ -39,7 +39,7 @@ TZ01/DTT3 permanece experimental y desactivado de fábrica. El desarrollo poster
 
 Las pruebas de software y replay verifican contratos, migración, arranque, cancelación, emergencia y recuperación. Las evidencias físicas previas conservan su identidad histórica. El replay de 390 decisiones produjo menos demanda y menos cambios de nivel, pero **no demuestra menos dBA ni temperaturas equivalentes con la curva nueva**. Tampoco una aceptación NVML demuestra lectura exacta del rango de clocks, ni WMI propiedad independiente del firmware. Las observaciones restantes del arranque real, uso representativo, suspensión y salida de esta compilación se conservan en `PRODUCT-RELEASE.json`; no se convierten en PASS por cambiar la versión.
 
-Compilar la entrega: `dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true`. El pipeline conserva el versionado original del arnés P14 por separado y publica todos los binarios Victus de esta entrega con versión 1.2.6.0.
+Compilar la entrega: `dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true`. El pipeline conserva el versionado original del arnés P14 por separado y publica todos los binarios Victus de esta entrega con versión 1.2.7.0.
 
 ## Iconos definitivos
 
@@ -97,3 +97,9 @@ Al cambiar de pestaña, ocultar o minimizar, el temporizador se detiene conserva
 ## Ajuste visual editable desde v1.2.6
 
 Edita `%LOCALAPPDATA%/VictusFanControl/fan-animation.json` con Bloc de notas y guarda el campo `segundosPorVueltaA3000Rpm`. Inicio lo comprueba cada segundo mientras está visible, sin reiniciar, recompilar ni perder la inercia. El archivo se crea en la primera apertura y se conserva entre actualizaciones. Valores inválidos o guardados incompletos conservan el último ajuste válido. [Guía y ejemplos](FAN_ANIMATION_SETTINGS.md).
+
+## Animación con rotor PNG desde v1.2.7
+
+Inicio usa un rotor PNG precargado, con el eje registrado al centro del disco, y capas estáticas para los textos y cifras. El reloj de avance es Stopwatch y un productor de cuadros de alta resolución solicita hasta 120 cuadros/s, con una sola devolución pendiente a la interfaz. Al ocultar/minimizar o cambiar de pestaña se pausa y no recupera tiempo oculto. El archivo de ritmo de v1.2.6 conserva su formato y valor guardado.
+
+Exportar diagnóstico incluye en `window.homeAnimation` los intervalos de cuadros dibujados, FPS de pintado, duración de dibujo y solicitudes agrupadas. Estas cifras miden la interfaz y no la presentación del monitor. [Detalles](PNG_FAN_ANIMATION.md).
