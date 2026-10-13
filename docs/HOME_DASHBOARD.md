@@ -1,6 +1,10 @@
 # Inicio y curva ampliada de Ventiladores
 
-## v1.2.5: RPM medidas e inercia continua
+## v1.2.6: ritmo editable en vivo
+
+El archivo `%LOCALAPPDATA%/VictusFanControl/fan-animation.json` permite editar `segundosPorVueltaA3000Rpm` sin recompilar ni reiniciar. El valor inicial es 1 y el rango admitido es 0.1–60 segundos. Inicio relee el archivo cada segundo mientras está visible y escala las RPM de cada ventilador sin reiniciar fase ni inercia. Los errores, archivos ausentes, bloqueados, demasiado grandes o guardados parciales conservan el último ajuste válido. Otra página o una ventana oculta/minimizada no releen el archivo ni mantienen el temporizador de animación. [Guía](FAN_ANIMATION_SETTINGS.md).
+
+## Desde v1.2.5: RPM medidas e inercia continua
 
 Cada ventilador sigue sus propias últimas RPM válidas medidas, independientemente de demanda, solicitud y modo de control. La escala es **3000 RPM = una vuelta por segundo**, con aceleración de 1,2 s y desaceleración de 1,8 s. Las adquisiciones ausentes, vencidas o inválidas conservan la cifra y el objetivo visual sin reiniciar la inercia. Un cero medido desacelera el ventilador correspondiente hasta detenerse; cuando ambos terminan, se apaga el temporizador.
 

@@ -18,6 +18,7 @@ internal sealed partial class ProductForm : Form
     private ProductProfiles _saved;
     private bool _hasSavedBaseline;
     private readonly string? _profilesPath;
+    private readonly ProductFanAnimationSettings? _fanAnimationSettings;
     private readonly System.Windows.Forms.Timer _presentationTimer = new() { Interval = 1000 };
     private TaskCompletionSource? _commandsDrained;
     private readonly NotifyIcon _tray;
@@ -41,11 +42,17 @@ internal sealed partial class ProductForm : Form
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null,Func<ProductDisplayMetrics>? displayMetricsInFixture=null)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null,Func<ProductDisplayMetrics>? displayMetricsInFixture=null,string? fanAnimationPath=null)
     {
         SuspendLayout();
         _retryRuntimeFactory=retryRuntimeFactory;_modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
         _isolatedRuntime=fixture is not null||runtimeFactory is not null;_restartDirectory=restartDirectory;_restartOpening=restartState is not null;
+        // Isolated fixtures never read or create the real user's presentation file.
+        if (!_isolatedRuntime || fanAnimationPath is not null)
+        {
+            _fanAnimationSettings = new(fanAnimationPath ?? ProductFanAnimationSettings.DefaultPath);
+            _canvas.SetHomeAnimationSecondsPerRevolution(_fanAnimationSettings.SecondsPerRevolution);
+        }
         if(displayMetricsInFixture is not null&&!_isolatedRuntime)throw new ArgumentException("La geometría simulada requiere un runtime aislado.");
         _displayMetricsInFixture=displayMetricsInFixture;
         _canvas.AutomaticRetryAvailable=automaticReview is null&&(!_isolatedRuntime||retryRuntimeFactory is not null);
@@ -414,6 +421,8 @@ internal sealed partial class ProductForm : Form
     internal void PresentationTick()
     {
         if(_closing||IsDisposed)return;
+        if(Visible&&WindowState!=FormWindowState.Minimized&&_canvas.Page==ProductPage.Home&&_fanAnimationSettings?.Reload()==true)
+            _canvas.SetHomeAnimationSecondsPerRevolution(_fanAnimationSettings.SecondsPerRevolution);
         TryStartupAutomatic();TryAutomaticRecovery();TryAutomaticResumption();
         // Only the visible offline simulator consumes virtual time. No catch-up
         // on returning from the tray, another page or the editor.

@@ -41,6 +41,22 @@ internal static class ProductFanAnimationSelfTest
         require(delayed.Phase==bounded.Phase&&delayed.Speed==bounded.Speed,"Delayed frame jumped forward to catch up.");
         var savedPhase=fan.Phase;var savedSpeed=fan.Speed;fan.Advance(0,3000);
         require(fan.Phase==savedPhase&&fan.Speed==savedSpeed,"A zero elapsed resume frame changed position or inertia.");
+        var live=new ProductFanAnimation();
+        for(int i=0;i<120;i++)live.Advance(0.1,3000);
+        var livePhase=live.Phase;var liveSpeed=live.Speed;
+        require(live.TrySetSecondsPerRevolution(2)&&live.Phase==livePhase&&live.Speed==liveSpeed,
+            "Live speed edit reset the phase or momentum.");
+        live.Advance(0.1,null);
+        require(live.Speed<liveSpeed&&live.Speed>180,"Speed edit snapped or lost its cached RPM during a gap.");
+        for(int i=0;i<200;i++)live.Advance(0.1,null);
+        require(Math.Abs(live.Speed-180)<0.01,"Two-second reference did not converge while RPM was delayed.");
+        livePhase=live.Phase;liveSpeed=live.Speed;
+        foreach(var bad in new[]{0d,-1,0.09,61,double.NaN,double.PositiveInfinity})
+            require(!live.TrySetSecondsPerRevolution(bad)&&live.SecondsPerRevolution==2&&live.Phase==livePhase&&live.Speed==liveSpeed,
+                "Invalid live setting changed the animation.");
+        require(live.TrySetSecondsPerRevolution(0.5),"Valid faster reference was rejected.");
+        for(int i=0;i<120;i++)live.Advance(0.1,3000);
+        require(Math.Abs(live.Speed-720)<0.1,"Half-second reference did not converge smoothly.");
         Console.WriteLine("Fan animation: PASS (measured RPM, one-second revolution at 3000 RPM, soft start, retained target across gaps, genuine zero coast-down, irregular frames and bounded delays; presentation only).");
     }
 }
