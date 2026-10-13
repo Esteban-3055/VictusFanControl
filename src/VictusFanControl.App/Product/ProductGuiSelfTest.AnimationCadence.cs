@@ -18,6 +18,7 @@ internal static partial class ProductGuiSelfTest
     }
     private static void TestHomeAnimationCadence(Action<bool,string> require)
     {
+        ProductRotorRasterSelfTest.Run(require);
         var runtime=new RecordingRuntime();
         using var form=new ProductForm("fixture://cadence",fixture:runtime,fixtureProfiles:new ProductProfiles());
         form.Show();Application.DoEvents();var canvas=form.Canvas;
