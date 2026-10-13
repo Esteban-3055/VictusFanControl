@@ -1,6 +1,8 @@
-# Prueba dirigida CPU 54 / GPU 52 — 1.2.8-preview.1
+# Prueba dirigida CPU 54 / GPU 52 — 1.2.8-preview.2
 
 La observación con OMEN mostró CPU 5400 y GPU 5200 RPM nominales. Es evidencia del modo Máx. del firmware, no una calificación de nuestro comando 54/52. Esta versión permite comprobar esa combinación sin ampliar todavía el uso habitual.
+
+Esta revisión corrige el fallo de inicialización de preview.1. Extrae preview.2 en una carpeta nueva; no mezcles sus archivos.
 
 ## Abrir la prueba
 

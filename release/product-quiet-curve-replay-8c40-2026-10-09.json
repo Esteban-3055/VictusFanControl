@@ -14,8 +14,9 @@
     "src/VictusFanControl/Product/ProductQuietCandidate.cs": "280e91095550f0f1b161498c7fbb643dd479217e20e305b5f324c2471c637a31",
     "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "76284ec97b6f0a0a25d10f1fb1e7f758f8817a2e4cd28ca06d5ae145a90476bb",
     "tools/PlatformThermalReplay/ProductCurveStudy.cs": "f6c9ca9b87edd2fa62fd85c75db7c6218bf64398ead6c2e9e167dcb2cff2519c",
-    "src/VictusFanControl.App/Product/ProductRuntime.cs": "8c9a2b3e01885d1f5bc21f2de3678832cd056e1a58247569220076014599c831",
-    "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "a9ae9446b54f163c215f4327e98d1dc954e1cd1ceb7ac238292797a9487b53f1"
+    "src/VictusFanControl.App/Product/ProductRuntime.cs": "e2a43fa775a0965b843c25909ee9ee55c2de8df31821ecb1bcc782dcaf5c6ff0",
+    "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "a9ae9446b54f163c215f4327e98d1dc954e1cd1ceb7ac238292797a9487b53f1",
+    "src/VictusFanControl.App/Product/ProductFanControllerFactory.cs": "afc50a4b6ac90ad8a3ecf138d45f0faf82220e5e6a34d7c1f5919efd3a66ee46"
   },
   "historicalReconstruction": {
     "expectedDecisions": 390,
@@ -303,8 +304,15 @@
   "sourceBindingUpdateBaseHead": "2c832a315c607d673d100ffca9471c228fe188c1",
   "previewRuntimeSourceRebinding": {
     "previousSha256": "27001e0933030c6d8af5348918f30a7d1dd14f63f1dd133476fd11893ae6a6c3",
-    "currentSha256": "8c9a2b3e01885d1f5bc21f2de3678832cd056e1a58247569220076014599c831",
+    "currentSha256": "e2a43fa775a0965b843c25909ee9ee55c2de8df31821ecb1bcc782dcaf5c6ff0",
     "reason": "Explicit process-only Manual 54/52 trial plus effective-command diagnostics; default entry and Automatic prepared policy remain 10..50. Core policy/replay sources and numerical evidence are unchanged.",
     "validation": "Current-source independent replay and complete Windows product fixtures required by CI; physical upper-range test pending."
+  },
+  "previewStartupRepair": {
+    "previousRuntimeSha256": "8c9a2b3e01885d1f5bc21f2de3678832cd056e1a58247569220076014599c831",
+    "currentRuntimeSha256": "e2a43fa775a0965b843c25909ee9ee55c2de8df31821ecb1bcc782dcaf5c6ff0",
+    "factorySha256": "afc50a4b6ac90ad8a3ecf138d45f0faf82220e5e6a34d7c1f5919efd3a66ee46",
+    "reason": "Shared runtime controller construction; attach experimental Automatic policy only when Automatic execution is authorized. Fixes Manual-preview and closed-backend initialization without changing core admission or numerical policies.",
+    "validation": "Real production controller constructor regression with fake backend, enabled/disabled retention, preview/normal entry and writable/closed backend; same-commit independent replay and full Windows package fixtures required. No physical upper-range pass is claimed."
   }
 }

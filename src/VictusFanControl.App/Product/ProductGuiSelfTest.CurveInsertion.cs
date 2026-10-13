@@ -7,6 +7,7 @@ internal static partial class ProductGuiSelfTest
 {
     private static void TestSelectedCurveInsertion(Action<bool,string> require)
     {
+        ProductFanControllerFactorySelfTest.Run(require);
         ProductFanRangePreview.Enabled=true;
         try
         {

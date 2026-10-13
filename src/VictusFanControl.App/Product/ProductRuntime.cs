@@ -162,15 +162,9 @@ internal sealed class ProductRuntime : IProductRuntime
         }
         catch (Exception ex) { if(releasedBoundary is not null)throw;backend = new DisabledFanControlBackend(); AppLog.Write("Product backend unavailable: " + ex); }
         _fans = new(backend);
-        _controller = new(_fans, Hp8C40AdaptiveCandidateV1.Create() with { MaximumLevel = ProductFanRangePreview.Enabled ? Hp8C40FanPreviewTargets.MaximumLogicalLevel : 50 },
-            backend.CanWrite && Hp8C40PostM9UserControlGate.IsManualAuthorizedForTarget(_target?.Id),
-            !ProductFanRangePreview.Enabled && backend.CanWrite && (ProductRelease.IsAutomaticAuthorized(_target?.Id) || _automaticReview is not null),
-            automaticHardware: _target == Hp8C40TargetProfile.Instance ? _hardware : null,
-            automaticConfiguration: profiles.Ac.Fan,
-            automaticMinimumLevel: _target == Hp8C40TargetProfile.Instance ? 10 : Hp8C40AutomaticPolicy.MinimumLevel,
-            useRawCpuThermalResponse: true,
-            experimentalPolicy: (IExperimentalFanPolicy?)platformExperiment ?? (_target == Hp8C40TargetProfile.Instance ? _retention : null),
-            productTelemetryTolerance:automaticReview is null && _target == Hp8C40TargetProfile.Instance);
+        _controller = ProductFanControllerFactory.Create(_fans,profiles,_hardware,_target,
+            _automaticReview is not null,ProductFanRangePreview.Enabled,
+            (IExperimentalFanPolicy?)platformExperiment ?? (_target == Hp8C40TargetProfile.Instance ? _retention : null));
         WmiFanExperimentBoundary.PlannedGuiRelease = () => _plannedFanRelease;
         _performance = new(modules);
         _worker = new(modules)
