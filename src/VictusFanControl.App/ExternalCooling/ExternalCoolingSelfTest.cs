@@ -31,6 +31,40 @@ internal static class ExternalCoolingSelfTest
         var ram=new WindowsPhysicalMemoryUsage().ReadPercent();
         Require(ram is >=0 and <=100,"GlobalMemoryStatusEx did not return real RAM usage.");
         Console.WriteLine($"PASS export: modes, authority, retention, transition, nulls, age, 54/52; real Windows physical RAM={ram:0.0}%.");
-        await Task.CompletedTask;
+        await ExportOverTcpAsync();
+    }
+    private static async Task ExportOverTcpAsync()
+    {
+        var state=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow) with{CommandedCpuLevel=30,CommandedGpuLevel=30};
+        var key=ExternalCoolingProtocol.ParsePairingKey(ExternalCoolingProtocol.NewPairingKey());
+        var listener=new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback,0);listener.Start();
+        using var cancel=new CancellationTokenSource(TimeSpan.FromSeconds(12));
+        var observed=new List<ExportTelemetry>();
+        var server=Task.Run(async()=>
+        {
+            using var tcp=await listener.AcceptTcpClientAsync(cancel.Token);
+            await using var wire=new FramedConnection(tcp.GetStream());
+            using var session=await AuthenticatedSession.ServerAsync(wire,key,cancel.Token);
+            long previous=0;
+            for(int i=0;i<3;i++)
+            {
+                var frame=await wire.ReadAsync(cancel.Token);ExternalCoolingProtocol.Verify(frame,session.ReceiveKey,session.Id,previous);previous=frame.Sequence;
+                var t=ExternalCoolingProtocol.Telemetry(frame);lock(observed)observed.Add(t);
+                var fresh=ProductHomeTelemetrySelfTest.StateAt(DateTimeOffset.UtcNow) with{CommandedCpuLevel=54,CommandedGpuLevel=52,FanMode="Manual",FanLevel=54};
+                Volatile.Write(ref state,i==0?fresh:fresh with{FanMode="Firmware",FanAuthority="Firmware",FanLevel=null});
+                await wire.WriteAsync(ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("deviceStatus",session.Id,i+1,new DeviceStatus
+                {AckSequence=previous,AmbientTempC=24,AppliedPwmPct=30,Mode="Local",Communication="Ready",Extensions=new(){Slot1=null,Slot2=null}}),session.SendKey),cancel.Token);
+            }
+        });
+        await using var manager=new ExternalCoolingManager(new TelemetryExportService(()=>Volatile.Read(ref state),new WindowsPhysicalMemoryUsage()),()=>key.ToArray());
+        try
+        {
+            await manager.ConfigureAsync(new(){Mode=ExternalCoolingMode.MonitorAndRequest,UseSimulator=true,Port=((System.Net.IPEndPoint)listener.LocalEndpoint).Port,AutoReconnect=false});
+            await server.WaitAsync(TimeSpan.FromSeconds(10));
+            lock(observed)Require(observed.Count==3&&observed[0] is{Solicitud:30,DemandaPct:60}&&observed[1] is{Solicitud:54,DemandaPct:null}&&observed[2] is{Solicitud:null,ModoSolicitado:"Firmware"},"Exporter TCP mode transition mismatch.");
+            await manager.DisconnectAsync();
+            Console.WriteLine("PASS real exporter -> authenticated loopback: Automatic demand/request, Manual 54/52, Firmware null, received device status; zero hardware commands.");
+        }
+        finally{cancel.Cancel();listener.Stop();}
     }
 }

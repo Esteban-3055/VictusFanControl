@@ -64,6 +64,7 @@ internal sealed partial class ProductForm
     private Task ShutdownRuntimeAsync()=>_runtimeShutdown??= ShutdownRuntimeCoreAsync();
     private async Task ShutdownRuntimeCoreAsync()
     {
+        _externalCooling?.Suspend();
         await _startup;
         if(_commandsDrained is not null)await _commandsDrained.Task;
         await _lifecycleRelease;

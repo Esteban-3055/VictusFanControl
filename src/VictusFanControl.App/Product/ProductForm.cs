@@ -90,6 +90,7 @@ internal sealed partial class ProductForm : Form
             if(_creating)return;_creating=true;
             _ = RestoreDownloadedUpdateAsync();
             _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory,registerPowerNotificationsInFixture,enableStartupAutomaticInFixture,recoveryPreflight);
+            _=InitializeExternalCoolingAsync();
         };
         FormClosing+=OnClosing;FormClosed+=(_,_)=>{UnregisterPowerNotifications();_tray.Visible=false;};
         ResumeLayout(false);PerformLayout();
@@ -451,6 +452,7 @@ internal sealed partial class ProductForm : Form
     }
     protected override void Dispose(bool disposing)
     {
+        if(disposing){_externalCooling?.Suspend();_=DisposeExternalCoolingAsync();}
         if(disposing){DisposeUpdateCancellation();_presentationTimer.Dispose();UnregisterPowerNotifications();DetachRuntime();_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();_icons.Dispose();}
         base.Dispose(disposing);
     }
@@ -464,7 +466,7 @@ internal sealed partial class ProductForm : Form
         e.Cancel=true;if(_closing)return;_closing=true;_updateCancellation.Cancel();_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
         try {if(_automaticRetryTask is not null)await _automaticRetryTask;if(_restartTask is not null)await _restartTask;if(_recoveryTask is not null)await _recoveryTask;if(_updateInstallTask is not null)await _updateInstallTask;await ShutdownRuntimeAsync();}
         catch(Exception ex){Environment.ExitCode=171;AppLog.Write("Product shutdown unresolved: "+ex);}
-        finally{_disposedRuntime=true;_tray.Visible=false;Close();_shutdown.TrySetResult();}
+        finally{await DisposeExternalCoolingAsync();_disposedRuntime=true;_tray.Visible=false;Close();_shutdown.TrySetResult();}
     }
     protected override void WndProc(ref Message m)
     {
@@ -491,6 +493,7 @@ internal sealed partial class ProductForm : Form
     }
     internal Task HandlePowerEventAsync(int code,int? display=null)
     {
+        ExternalCoolingPowerEvent(code);
         var wasDisplayOff=_displayOff;
         if(code==4||code==0x8013&&display==0)_updateLifecycleBoundary++;
         if(code==0x8013&&display==0)_displayOff=true;
