@@ -42,9 +42,10 @@ internal sealed partial class ProductForm : Form
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null,Func<ProductDisplayMetrics>? displayMetricsInFixture=null,string? fanAnimationPath=null)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null,Func<ProductDisplayMetrics>? displayMetricsInFixture=null,string? fanAnimationPath=null,string? externalCoolingPath=null)
     {
         SuspendLayout();
+        _externalCoolingPath=externalCoolingPath;
         _retryRuntimeFactory=retryRuntimeFactory;_modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
         _isolatedRuntime=fixture is not null||runtimeFactory is not null;_restartDirectory=restartDirectory;_restartOpening=restartState is not null;
         // Recovery fixtures must not inspect the user's real ownership records.
@@ -90,7 +91,7 @@ internal sealed partial class ProductForm : Form
             if(_creating)return;_creating=true;
             _ = RestoreDownloadedUpdateAsync();
             _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory,registerPowerNotificationsInFixture,enableStartupAutomaticInFixture,recoveryPreflight);
-            _=InitializeExternalCoolingAsync();
+            _externalCoolingStartup=InitializeExternalCoolingAsync();
         };
         FormClosing+=OnClosing;FormClosed+=(_,_)=>{UnregisterPowerNotifications();_tray.Visible=false;};
         ResumeLayout(false);PerformLayout();
@@ -283,6 +284,7 @@ internal sealed partial class ProductForm : Form
         }
         switch(id)
         {
+            case "external-cooling":ShowExternalCooling();break;
             case "interruption-details":
                 if(_canvas.State.InterruptionDetails is { } details)
                     MessageBox.Show(this,details,"Sesión interrumpida",MessageBoxButtons.OK,MessageBoxIcon.Information);

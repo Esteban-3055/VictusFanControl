@@ -503,9 +503,10 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Button(g,"minimized-toggle",Profiles.StartMinimized?"✓  Minimizar al iniciar":"○  Minimizar al iniciar",new(956,241,665,55),Profiles.StartMinimized);
         Button(g,"automatic-start-toggle",Profiles.ActivateAutomaticOnStart?"✓  Activar Automático al iniciar":"○  Activar Automático al iniciar",new(334,310,590,43),Profiles.ActivateAutomaticOnStart);
         Button(g,"recovery-auto-toggle",Profiles.RecoverSessionsAutomatically?"✓  Recuperar sesiones automáticamente":"○  Recuperación automática desactivada",new(956,310,665,43),Profiles.RecoverSessionsAutomatically);
-        Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);Button(g,"updates-page","Ir a Actualizaciones",new(334,480,475,48));
+        Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);Button(g,"external-cooling","Base externa / ESP32",new(334,480,475,48));
+        Button(g,"updates-page","Ir a Actualizaciones",new(334,543,300,40));
         Button(g,"discard","Descartar cambios",new(846,478,310,68),false,Dirty);
-        Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,551,18,Dirty?Yellow:Green,475);
+        Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,590,16,Dirty?Yellow:Green,475);
         Button(g,"profiles-import","Importar perfiles",new(846,555,310,40));Button(g,"profiles-export","Exportar perfiles",new(1176,555,442,40));
         Card(g,new(310,623,1337,201));DrawText(g,"Registros y estado",334,647,28,null,1250,true);
         DrawText(g,State.LifecycleBlocked?State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.":State.Failure??State.Message,334,704,21,State.LifecycleBlocked||State.Failure is not null?Yellow:Muted,880,height:57);

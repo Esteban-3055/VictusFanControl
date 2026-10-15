@@ -9,6 +9,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.Length==1&&args[0]=="--external-cooling-ui-self-test")
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunExternalCoolingChecks();return;}
         if(args.Length==1&&args[0]=="--external-cooling-self-test")
         {
             try { ExternalCoolingSelfTest.RunAsync().GetAwaiter().GetResult(); }
