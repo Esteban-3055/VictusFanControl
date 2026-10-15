@@ -6,6 +6,7 @@ public enum ExternalCoolingConnectionState { Disabled, Disconnected, Connecting,
 /// <summary>Nullable measurements are unavailable, invalid or expired, never fabricated zeroes.</summary>
 public sealed record ExportTelemetry
 {
+    public int ValidForMs { get; init; } = ExternalCoolingProtocol.RequestValidForMilliseconds;
     public required DateTimeOffset CapturedAtUtc { get; init; }
     public DateTimeOffset? SampledAtUtc { get; init; }
     public DateTimeOffset? DecisionAtUtc { get; init; }

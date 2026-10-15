@@ -10,8 +10,8 @@ internal static partial class Program
     private static async Task Main()
     {
         ProtocolTests();
-        await Task.CompletedTask;
-        Console.WriteLine("PASS ExternalCooling tests (protocol).");
+        await TransportTests();
+        Console.WriteLine("PASS ExternalCooling tests (protocol and real loopback TCP).");
     }
     private static void ProtocolTests()
     {

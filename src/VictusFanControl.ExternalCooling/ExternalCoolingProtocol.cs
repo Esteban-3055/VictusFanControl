@@ -79,7 +79,7 @@ public static class ExternalCoolingProtocol
         var f=doc.RootElement.Deserialize<ProtocolFrame>(Json)??throw new InvalidDataException("Missing frame.");
         if(f.ProtocolVersion!=Version||!Guid.TryParseExact(f.SessionId,"N",out _)||f.Sequence<0||
             f.Type is not("hello" or "challenge" or "authenticate" or "authenticated" or "telemetry" or "deviceStatus")||
-            f.Payload.ValueKind!=JsonValueKind.Object||f.Mac.Length>44)
+            f.Payload.ValueKind!=JsonValueKind.Object||f.Mac is null||f.Mac.Length>44)
             throw new InvalidDataException("Unsupported or invalid envelope.");
         return f;
     }
@@ -97,12 +97,12 @@ public static class ExternalCoolingProtocol
     public static ExportTelemetry Telemetry(ProtocolFrame frame)
     {
         if(frame.Type!="telemetry")throw new InvalidDataException("Expected telemetry.");
-        foreach(var key in new[]{"capturedAtUtc","sampledAtUtc","decisionAtUtc","cpuUsagePct","gpuUsagePct","ramUsagePct","demandaPct",
+        foreach(var key in new[]{"validForMs","capturedAtUtc","sampledAtUtc","decisionAtUtc","cpuUsagePct","gpuUsagePct","ramUsagePct","demandaPct",
             "solicitud","solicitudValida","modoSolicitado","modoEfectivo","cpuTempC","gpuTempC","powerSource","requestEvidence",
             "cpuTargetLevel","gpuTargetLevel","cpuTempSampledAtUtc","gpuTempSampledAtUtc","ramSampledAtUtc"})
             if(!frame.Payload.TryGetProperty(key,out _))throw new InvalidDataException("Missing telemetry field.");
         var t=Payload<ExportTelemetry>(frame);
-        if(t.CapturedAtUtc==default||t.ModoSolicitado is not("Firmware" or "Manual" or "Automatic")||
+        if(t.ValidForMs!=RequestValidForMilliseconds||t.CapturedAtUtc==default||t.ModoSolicitado is not("Firmware" or "Manual" or "Automatic")||
             t.ModoEfectivo is not("Firmware" or "Manual" or "Automatic" or "Transition" or "Interrupted" or "Unavailable")||
             t.PowerSource is not("AC" or "Battery" or "Unknown")||t.RequestEvidence is not("Unavailable" or "MonitorOnly" or "WmiAcceptedSupervised"))
             throw new InvalidDataException("Invalid telemetry enum/date.");
