@@ -63,13 +63,18 @@ def main():
         "cpuHandoffWatts": 60, "cpuHandoffSelectable": True, "gpuConsumptionHandoff": False,
         "gpuTelemetryCoherenceWatts": [0, 300], "gpuPowerStillContributesToDemand": True,
     }, "Wrong CPU-only power handoff contract")
-    require(contract["experimentalPlatformRetention"]["defaultEnabled"] is False,
-            "Retention must remain opt-in")
+    retention = contract["experimentalPlatformRetention"]
+    require(manifest["productPlatformRetention"] == "removed-no-platform-sensor-acquisition" and
+            manifest["platformThermalExperiment"] == "retired-no-live-entry" and
+            retention["defaultEnabled"] is False and retention["scope"] == "removed" and
+            retention["maximumExtraRawLevels"] == retention["maximumSupplementSeconds"] == 0 and
+            retention["normalAutomaticPromoted"] is False,
+            "Retired platform sensor contract is missing")
     required_observations = {
         "representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return",
         "current-gui-suspend-resume-without-fan-reentry",
         "current-gui-clean-exit-and-session-restart-release-and-open-in-firmware",
-        "optional-quiet-ac-candidate-with-tz01-dtt3-comparable-thermal-and-measured-acoustics",
+        "sensor-isolation-without-tz01-dtt3-under-comparable-load",
         "current-windows-logon-startup-coupled-activation-and-clean-shutdown",
         "configurable-protections-and-clean-unattended-resumption-on-current-target",
     }

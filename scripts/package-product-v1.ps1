@@ -24,7 +24,7 @@ try {
     foreach($file in @('Start-ProductGui.ps1','Start-PlatformThermalTest.ps1','Install-VictusFanControl.ps1')) {
         Copy-Item -LiteralPath (Join-Path $repo ('release/'+$file)) -Destination $OutputDirectory
     }
-    foreach($file in @('PRODUCT_V1.md','PRODUCT_1_1_6_CHANGES.md','PRODUCT_1_1_7_DISPLAY.md','PRODUCT_1_1_8_CPU_SPIKES.md','PRODUCT_PLATFORM_RETENTION_2026-10-09.md','PRODUCT_SENSOR_ISOLATION_STEP1.md','PERFORMANCE_GUI_RECOVERY.md','PLATFORM_PHYSICAL_TEST_2026-10-08.md')) {
+    foreach($file in @('PRODUCT_V1.md','PRODUCT_1_1_6_CHANGES.md','PRODUCT_1_1_7_DISPLAY.md','PRODUCT_1_1_8_CPU_SPIKES.md','PRODUCT_PLATFORM_RETENTION_2026-10-09.md','PRODUCT_SENSOR_ISOLATION_STEP1.md','PRODUCT_WMI_COORDINATION_STEP2.md','PERFORMANCE_GUI_RECOVERY.md','PLATFORM_PHYSICAL_TEST_2026-10-08.md')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
     foreach($file in @('LICENSE','THIRD_PARTY_NOTICES.md')){Copy-Item -LiteralPath (Join-Path $repo $file) -Destination $OutputDirectory}

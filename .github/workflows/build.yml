@@ -1029,5 +1029,5 @@ jobs:
         run: |
           set -euo pipefail
           test "$(gh api "repos/$GH_REPO/branches/$RELEASE_BRANCH" --jq '.commit.sha')" = "$RELEASE_HEAD"
-          gh release create v1.2.9 release-assets/* --target "$RELEASE_HEAD" --title 'VictusFanControl v1.2.9 · Límites 54/52 y animación 4K' --notes-file release/RELEASE-NOTES-v1.2.9.md --latest=true
+          gh release create v1.2.9 release-assets/* --target "$RELEASE_HEAD" --title 'VictusFanControl v1.2.9 · Sin TZ01/DTT3 y coordinación WMI' --notes-file release/RELEASE-NOTES-v1.2.9.md --latest=true
           gh release view v1.2.9 --json url,isDraft,isPrerelease,assets
