@@ -102,7 +102,8 @@ public sealed class HpWmiFanTelemetryReader : IDisposable
 
     public string Diagnostic { get { lock (_gate) return _diagnostic; } }
     public int Recoveries { get { lock (_gate) return _recoveries; } }
-    internal string AcquisitionDiagnostic => _acquisitionDiagnostics.Describe();
+    internal string AcquisitionDiagnostic => _acquisitionDiagnostics.Describe() +
+        $"; controlCallers={_broker.ControlRequests}; coalescedControlCallers={_broker.CoalescedControlRequests}";
     internal IReadOnlyList<string> DrainAcquisitionNotices() => _acquisitionDiagnostics.DrainNotices();
 
     // Descriptive only for now. Does not schedule I/O, renew age or replace

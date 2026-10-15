@@ -11,7 +11,7 @@ internal static class ProductFanControllerFactory
 {
     internal static AdaptiveFanProductionController Create(FanControlCoordinator fans, ProductProfiles profiles,
         HardwareIdentity hardware, HardwareTargetProfile? target, bool automaticReview, bool upperRangePreview,
-        IExperimentalFanPolicy? experimentalPolicy, Func<long>? automaticMilliseconds=null, Func<DateTimeOffset>? utcNow=null)
+        Func<long>? automaticMilliseconds=null, Func<DateTimeOffset>? utcNow=null)
     {
         var exactTarget=target==Hp8C40TargetProfile.Instance;
         var maximum=exactTarget && !automaticReview || upperRangePreview ? Hp8C40ProductFanTargets.MaximumLogicalLevel : 50;
@@ -26,8 +26,8 @@ internal static class ProductFanControllerFactory
             automaticConfiguration:profiles.Ac.Fan,
             automaticMinimumLevel:exactTarget?10:Hp8C40AutomaticPolicy.MinimumLevel,
             useRawCpuThermalResponse:true,
-            // Manual preview and closed-backend startup cannot host an Automatic policy.
-            experimentalPolicy:automaticAuthorized?experimentalPolicy:null,
+            // Product control uses only the CPU/GPU baseline; no auxiliary sensor policy.
+            experimentalPolicy:null,
             productTelemetryTolerance:!automaticReview && exactTarget,
             automaticMaximumLevel:exactTarget && !automaticReview ? Hp8C40ProductFanTargets.MaximumLogicalLevel : 50);
     }

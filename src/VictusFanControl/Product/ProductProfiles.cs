@@ -95,7 +95,7 @@ public sealed record ProductProfiles
     public bool IncludePrereleaseUpdates { get; init; }
     public ProductProtectionSettings Protections { get; init; } = new();
     public int DefaultCurveRevision { get; init; } = 2;
-    // Preferences only: never persists source qualification, fan authority or a running session.
+    // Compatibility with older profile files. The retired option is cleared on import/save.
     public bool ExperimentalPlatformRetention { get; init; }
     public ProductProfile Get(ProductPowerProfile source) => source switch
     { ProductPowerProfile.Ac => Ac, ProductPowerProfile.Battery => Battery, _ => throw new ArgumentOutOfRangeException(nameof(source)) };
@@ -165,7 +165,7 @@ public static class ProductProfilesStore
     private static readonly JsonSerializerOptions Json = new()
     { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
     public static string DefaultPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VictusFanControl", "product-profiles.json");
-    public static string Serialize(ProductProfiles profiles) { profiles.Validate(); return JsonSerializer.Serialize(profiles, Json); }
+    public static string Serialize(ProductProfiles profiles) { profiles.Validate(); return JsonSerializer.Serialize(profiles with { ExperimentalPlatformRetention=false }, Json); }
     public static ProductProfiles Parse(string text)
     {
         using var document=JsonDocument.Parse(text);
@@ -182,6 +182,7 @@ public static class ProductProfilesStore
         if(document.RootElement.ValueKind!=JsonValueKind.Object||!document.RootElement.TryGetProperty("schemaVersion",out _)||!document.RootElement.TryGetProperty("ac",out _)||!document.RootElement.TryGetProperty("battery",out _))throw new InvalidDataException("Falta la versión o uno de los perfiles AC/Batería.");
         var profiles = JsonSerializer.Deserialize<ProductProfiles>(text, Json) ?? throw new InvalidDataException("Perfiles vacíos.");
         profiles.Validate();
+        profiles=profiles with { ExperimentalPlatformRetention=false };
         // Older GUI files used the prepared Automatic minimum for editing too.
         // Preserve every stored curve point; expand only the offline editor envelope.
         ProductProfile Expand(ProductProfile p) => p with { Fan = p.Fan with { Tuning = p.Fan.Tuning with { MinimumLevel = 10 } } };

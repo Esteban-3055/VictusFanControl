@@ -97,13 +97,13 @@ $candidate = Get-Content (Join-Path $repoRoot 'release/product-v1.json') -Raw | 
 Require ($candidate.stableReleaseAuthorized -eq $true -and $candidate.normalAutomatic -eq 'authorized-exact-target' -and $candidate.physicalPassClaimed -eq $false) 'target release must distinguish user authorization from physical qualification'
 foreach ($pending in @('representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return',
     'current-gui-suspend-resume-without-fan-reentry','current-gui-clean-exit-and-session-restart-release-and-open-in-firmware',
-    'optional-quiet-ac-candidate-with-tz01-dtt3-comparable-thermal-and-measured-acoustics')) {
+    'sensor-isolation-without-tz01-dtt3-under-comparable-load')) {
     Require ($candidate.remainingPhysicalChecks -contains $pending) 'candidate must retain every thermal/lifecycle/exit and optional quiet-curve regression'
 }
-Require ($candidate.experimentalPlatformRetention.defaultEnabled -eq $false -and $candidate.experimentalPlatformRetention.normalAutomaticPromoted -eq $true -and
-    $candidate.experimentalPlatformRetention.scope -eq 'optional-ac-and-battery' -and
-    $candidate.experimentalPlatformRetention.maximumExtraRawLevels -eq 2 -and $candidate.experimentalPlatformRetention.maximumSupplementSeconds -eq 60) 'optional retention must remain bounded and default-off'
-Require ($launcher.Contains('optional-disabled-default-AC-Battery-plus2-60s-fresh3s') -and $package.Contains('optional-disabled-default-AC-Battery-plus2-60s-fresh3s')) 'launcher and package must bind the optional AC/Battery retention contract'
+Require ($candidate.experimentalPlatformRetention.defaultEnabled -eq $false -and $candidate.experimentalPlatformRetention.normalAutomaticPromoted -eq $false -and
+    $candidate.experimentalPlatformRetention.scope -eq 'removed' -and
+    $candidate.experimentalPlatformRetention.maximumExtraRawLevels -eq 0 -and $candidate.experimentalPlatformRetention.maximumSupplementSeconds -eq 0) 'retired retention must not be available to product control'
+Require ($launcher.Contains('removed-no-platform-sensor-acquisition') -and $package.Contains('removed-no-platform-sensor-acquisition')) 'launcher and package must bind the retired platform sensor contract'
 Require ($candidate.sessionRestart -eq 'explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics') 'candidate restart must retain clean-release and explicit Firmware reentry'
 Require ($candidate.automaticThermalContract -eq 'cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response') 'candidate thermal contract drifted'
 Require ($launcher.Contains($candidate.automaticThermalContract) -and $package.Contains($candidate.automaticThermalContract)) 'launcher and package must bind the current thermal contract'
@@ -142,14 +142,17 @@ foreach ($evidence in $candidate.offlinePolicyEvidence) {
         $sourcePath = Join-Path $repoRoot $binding.Name
         if ($offline.PSObject.Properties.Name -contains 'historicalSourceSnapshots') {
             $snapshot = $offline.historicalSourceSnapshots.PSObject.Properties[$binding.Name].Value
-            Require ($snapshot -and $snapshot.StartsWith('tools/FanStabilityReplay/fixtures/historical-2026-10-06/') -and $snapshot -notmatch '\.\.') 'historical source snapshot missing or unsafe'
+            $quietHistory=$evidence -eq 'product-quiet-curve-replay-8c40-2026-10-09.json'
+            $snapshotRoot=if($quietHistory){'tools/FanStabilityReplay/fixtures/historical-v1.2.8/'}else{'tools/FanStabilityReplay/fixtures/historical-2026-10-06/'}
+            $snapshotHead=if($quietHistory){'195550945824cb0398eafff2be59db22893e2fc4'}else{'4d4b40fda1bc032bb7c563750c3f6fa403d010c3'}
+            Require ($snapshot -and $snapshot.StartsWith($snapshotRoot) -and $snapshot -notmatch '\.\.') 'historical source snapshot missing or unsafe'
             $sourcePath = Join-Path $repoRoot $snapshot
-            Require ($offline.historicalSourceHead -eq '4d4b40fda1bc032bb7c563750c3f6fa403d010c3') 'historical evidence head drifted'
+            Require ($offline.historicalSourceHead -eq $snapshotHead) 'historical evidence head drifted'
         }
         Require ((Get-CanonicalSourceSha256 $sourcePath) -eq $binding.Value) 'offline comparison source hash drifted'
     }
 }
-Require ($candidate.offlinePolicyEvidence -contains 'product-quiet-curve-replay-8c40-2026-10-09.json') 'current quiet candidate must bind the current controller sources separately from historical evidence'
+Require ($candidate.offlinePolicyEvidence -contains 'product-quiet-curve-replay-8c40-2026-10-09.json') 'historical quiet comparison must retain its original source bindings'
 Write-Host 'PASS: offline stability evidence binds source and retains physical pending status.'
 
 $productGate=Get-Content (Join-Path $repoRoot 'src/VictusFanControl/Product/ProductRelease.cs') -Raw
@@ -160,4 +163,5 @@ Require ($runtime.Contains('ProductFanControllerFactory.Create(_fans,profiles,_h
     $controllerFactory.Contains('ProductRelease.IsAutomaticAuthorized(target?.Id)') -and
     $controllerFactory.Contains('!upperRangePreview && fans.BackendCanWrite') -and
     $runtime.Contains('ProductAutomaticReviewMode.Habitual') -and $runtime.Contains('_automaticGuard.EnsureDispatchAllowed(snapshot)')) 'normal release must use the existing coupled and thermal guarded path'
-Require ($controllerFactory.Contains('experimentalPolicy:automaticAuthorized?experimentalPolicy:null')) 'Manual preview and closed backend must not attach an unauthorized experimental Automatic policy'
+Require ($controllerFactory.Contains('experimentalPolicy:null') -and -not $runtime.Contains('SampleAuxiliaryAsync') -and
+    -not $runtime.Contains('OemSources.ReadTz') -and -not $runtime.Contains('OemSources.ReadDtt')) 'product must not attach or acquire retired platform sensors'

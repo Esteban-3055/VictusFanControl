@@ -14,6 +14,8 @@ internal static class Program
     public static async Task<int> Main(string[] args)
     {
         EcWmiInvestigationTrace.Initialize();
+        if (args.Length == 1 && args[0] == "--fan-wmi-coalescing-self-test")
+            return await HpWmiFanCoalescingSelfTest.RunAsync(Console.Out);
         if (args.Length == 1 && args[0] == "--wmi-fan-backend-self-test")
             return await Hp8C40WmiFanControlBackendSelfTest.RunAsync(Console.Out);
         if (args.Length > 0 && args[0] == "--wmi-fan-experiment-self-test")
@@ -65,6 +67,7 @@ internal static class Program
             EcWmiInvestigationTrace.Record(0, "selftest.fixture", "no hardware I/O");
             var window = await HpWmiFanSampleWindowSelfTest.RunAsync(Console.Out);
             var broker = await HpWmiFanSampleBrokerSelfTest.RunAsync(Console.Out);
+            var coalescing = await HpWmiFanCoalescingSelfTest.RunAsync(Console.Out);
             var diagnostics = await HpWmiFanAcquisitionDiagnosticsSelfTest.RunAsync(Console.Out);
             var investigation = EcWmiInvestigationTraceSelfTest.Run(Console.Out);
             var telemetry = await HpWmiFanTelemetryReaderSelfTest.RunAsync(Console.Out);
@@ -73,7 +76,7 @@ internal static class Program
             var isolation = WmiOnlyInvestigationPolicySelfTest.Run(Console.Out);
             EcWmiInvestigationTrace.Record(0, "selftest.finished", "no hardware I/O");
             if (!EcWmiInvestigationTrace.StopAndFlush()) return 1;
-            return window != 0 ? window : broker != 0 ? broker : diagnostics != 0 ? diagnostics : investigation != 0 ? investigation : telemetry != 0 ? telemetry : proof != 0 ? proof : traceAnalysis != 0 ? traceAnalysis : isolation;
+            return window != 0 ? window : broker != 0 ? broker : coalescing != 0 ? coalescing : diagnostics != 0 ? diagnostics : investigation != 0 ? investigation : telemetry != 0 ? telemetry : proof != 0 ? proof : traceAnalysis != 0 ? traceAnalysis : isolation;
         }
 
         if (options.SafetySelfTest)

@@ -16,6 +16,7 @@ internal static partial class ProductGuiSelfTest
         try
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
+            ProductSensorPolicySelfTest.Run(Require);
             ProductUpdatesSelfTest.Run(Require);
             ProductAutomaticAdmissionSelfTest.Run(Require);
             ProductWindowLayoutSelfTest.Run(Require);
@@ -46,12 +47,18 @@ internal static partial class ProductGuiSelfTest
             using(var retentionForm=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),fixtureProfiles:new ProductProfiles{Ac=ProductProfiles.LegacyDefaultProfile(ProductPowerProfile.Ac)}))
             {
                 retentionForm.HandleCommand("retention-toggle");
-                Require(retentionForm.Draft.ExperimentalPlatformRetention,"Experimental option did not enter the draft.");
+                Require(!retentionForm.Draft.ExperimentalPlatformRetention,"Retired option entered the draft.");
                 var retentionPrior=retentionForm.Draft;retentionForm.HandleCommand("retention-quiet-candidate");
                 var candidateDraft=retentionForm.Draft;
                 Require(ProductProfilesStore.Serialize(candidateDraft with{Ac=candidateDraft.Ac with{Fan=retentionPrior.Ac.Fan}})==ProductProfilesStore.Serialize(retentionPrior),"Quiet preset changed performance limits or Battery.");
                 var stagedPreferences=ProductProfilesStore.Serialize(candidateDraft);retentionForm.HandleCommand("retention-quiet-candidate");Require(ProductProfilesStore.Serialize(retentionForm.Draft)==stagedPreferences,"Repeated preset accumulated a reduction.");
                 retentionForm.HandleCommand("retention-toggle");Require(!retentionForm.Draft.ExperimentalPlatformRetention,"Experimental option did not disable.");
+                retentionForm.Canvas.Page=ProductPage.Advanced;retentionForm.Canvas.AdvancedTab=5;
+                retentionForm.ClientSize=new(1040,660);retentionForm.PerformLayout();
+                using var sensorPanel=new Bitmap(retentionForm.Canvas.Width,retentionForm.Canvas.Height);
+                retentionForm.Canvas.DrawToBitmap(sensorPanel,new(0,0,sensorPanel.Width,sensorPanel.Height));
+                Require(!retentionForm.Canvas.Hits.Any(h=>h.Id.StartsWith("retention-")),"Retired sensor controls remain actionable.");
+                Directory.CreateDirectory("logs/product-gui-self-test");sensorPanel.Save("logs/product-gui-self-test/sensors-removed.png");
             }
             ProductAutomaticActivationSelfTest.Run(Require);
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());

@@ -63,7 +63,7 @@ internal static class ProductRetentionTests
         for(int i=14;i<=62;i++)Observe(resilient,i,custom:true);
         Check(resilient.GetSupplement(Input(62),12,40) is null,"auxiliary recovery cannot renew the original retention episode");
         var original=new ProductProfiles {ExperimentalPlatformRetention=true};
-        Check(ProductProfilesStore.Copy(original).ExperimentalPlatformRetention,"preference survives validated serialization");
+        Check(!ProductProfilesStore.Copy(original).ExperimentalPlatformRetention,"retired preference cannot survive validated serialization");
         var legacyNode=System.Text.Json.Nodes.JsonNode.Parse(ProductProfilesStore.Serialize(new ProductProfiles()))!;
         legacyNode.AsObject().Remove("experimentalPlatformRetention");
         var legacy=legacyNode.ToJsonString();

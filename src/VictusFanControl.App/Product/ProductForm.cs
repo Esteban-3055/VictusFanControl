@@ -47,6 +47,9 @@ internal sealed partial class ProductForm : Form
         SuspendLayout();
         _retryRuntimeFactory=retryRuntimeFactory;_modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
         _isolatedRuntime=fixture is not null||runtimeFactory is not null;_restartDirectory=restartDirectory;_restartOpening=restartState is not null;
+        // Recovery fixtures must not inspect the user's real ownership records.
+        // Tests that exercise pending recovery supply their own selection reader.
+        if (_isolatedRuntime) RecoverySelectionReader = () => new(Guid.Empty, Guid.Empty);
         // Isolated fixtures never read or create the real user's presentation file.
         if (!_isolatedRuntime || fanAnimationPath is not null)
         {

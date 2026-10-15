@@ -9,6 +9,19 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.Contains("--platform-thermal-experiment"))
+        {
+            Console.Error.WriteLine("TZ01/DTT3 y la prueba de retención térmica se han retirado. No se inicia ninguna adquisición.");
+            Environment.ExitCode=2;return;
+        }
+        if(args.Length==1&&args[0]=="--product-sensor-policy-self-test")
+        {
+            try{ProductSensorPolicySelfTest.Run((ok,message)=>{if(!ok)throw new InvalidOperationException(message);});}
+            catch(Exception ex){Console.Error.WriteLine(ex);Environment.ExitCode=1;}
+            return;
+        }
+        if(args.Length==1&&args[0]=="--product-sensor-ui-self-test")
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSensorChecks();return;}
         if(args.Contains("--configure-product-startup") || args.Contains("--configure-product-install"))
         {
             try
@@ -875,14 +888,6 @@ internal static class Program
 
         if (hardwareTestModeCount == 0)
         {
-            if(args.Contains("--platform-thermal-experiment"))
-            {
-                if(productAutomaticReview is not null||args.Contains("--product-restart-state")||args.Contains("--start-minimized"))
-                    throw new ArgumentException("Experimental entry cannot be combined with other review/restart modes.");
-                var output=ReadOptionValue(args,"--experimental-output")??throw new ArgumentException("--experimental-output is required.");
-                PlatformThermalExperimentForm.Run(modulesDirectory,output);
-                return;
-            }
             ProductRestartRequest? restart;
             try
             {

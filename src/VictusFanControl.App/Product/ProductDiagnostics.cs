@@ -12,6 +12,8 @@ internal static class ProductDiagnostics
         var full=Path.GetFullPath(path);var temporary=full+"."+Guid.NewGuid().ToString("N")+".tmp";
         var maximumLogBytes=state.AutomaticReviewMaximumSeconds == ProductAutomaticReview.ExtendedMaximumSeconds
             ? AppLog.ExtendedReviewTailBytes : AppLog.DefaultTailBytes;
+        var fanReads=VictusFanControl.Telemetry.HpWmiFanSampleBroker.Production;
+        var nativeReads=fanReads.Diagnostics.Counters;
         var summary=new{diagnosticMaximumBytesPerStream=maximumLogBytes,kind="VictusFanControl.GuiDiagnostic",capturedUtc=DateTimeOffset.UtcNow,version=typeof(ProductDiagnostics).Assembly.GetName().Version?.ToString(),sessionId=AppLog.SessionId,sessionStartedUtc=AppLog.SessionStartedUtc,window,
             state.Hardware,state.Target,state.Source,state.Runtime,state.FanMode,state.FanAuthority,state.FanLevel,
             state.ManualMaximumLevel,state.FanUpperRangePreview,state.CommandedCpuLevel,state.CommandedGpuLevel,
@@ -20,6 +22,9 @@ internal static class ProductDiagnostics
             state.AutomaticReview,state.AutomaticReviewMaximumSeconds,state.AutomaticReviewRemainingSeconds,state.AutomaticCpuSpikeRemainingMilliseconds,state.AutomaticDecision,state.AppliedAutomaticConfiguration,state.AppliedFanProfile,
             state.AutomaticPreparing,state.AutomaticSessionId,state.AutomaticDecisionSnapshot,state.AutomaticInterruptionSnapshot,state.PerformanceActive,state.PerformanceProcessPresent,state.PerformanceUpdating,state.AppliedPerformance,
             state.PlatformRetention,
+            fanReadCoordination=new{scope="current-process;queued-control-sharing-only",controlCallers=fanReads.ControlRequests,
+                combinedQueuedCallers=fanReads.CoalescedControlRequests,nativeControlReads=nativeReads.ControlNativeStarts,nativePeriodicReads=nativeReads.PeriodicNativeStarts},
+            telemetrySources=new{cpu="Intel-MSR/PawnIO-RAPL",gpu="NVIDIA-NVML",cpuLoad="GetSystemTimes",powerSource="GetSystemPowerStatus",fans="HP-WMI-ACPI-2D",platformSensors="removed",directEc="prohibited"},
             telemetryTolerance="habitual-product-only:fan10s-critical5s-original-acquisition-dates-no-descent-on-retained-critical",
             state.CpuState,state.GpuState,state.CpuStatus,state.GpuStatus,state.GuardianState,state.AppliedPerformanceSource,state.Message,state.Failure,
             snapshot=state.Snapshot,physicalQualification="not-established-by-this-export"};

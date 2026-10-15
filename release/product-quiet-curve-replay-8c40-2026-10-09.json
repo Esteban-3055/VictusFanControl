@@ -334,5 +334,22 @@
     },
     "reason": "Product opts into explicit exact-target Automatic ceiling 54 and mapped GPU cap 52. Historical policy default remains 50. Existing preset/curve points and recorded 390-decision replay remain unchanged; editor supports final level 50..54. New product 54/52 controller/session fixtures cover the additional range.",
     "validation": "Same-source independent historical and product replay plus complete Windows GUI/packaged/installer checks required; no new numerical or extended physical pass is claimed."
+  },
+  "historicalSourceHead": "195550945824cb0398eafff2be59db22893e2fc4",
+  "historicalSourceSnapshots": {
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl/Control/Adaptive/AdaptiveFanInertiaPolicy.cs.txt",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl/Control/Adaptive/AdaptiveFanPolicyEngine.cs.txt",
+    "src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl/Control/Adaptive/AdaptiveFanProductionController.cs.txt",
+    "src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl/Control/Adaptive/IExperimentalFanPolicy.cs.txt",
+    "src/VictusFanControl/Product/ProductProfiles.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl/Product/ProductProfiles.cs.txt",
+    "src/VictusFanControl/Product/ProductQuietCandidate.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl/Product/ProductQuietCandidate.cs.txt",
+    "tools/PlatformThermalReplay/ProductPlatformRetention.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/tools/PlatformThermalReplay/ProductPlatformRetention.cs.txt",
+    "tools/PlatformThermalReplay/ProductCurveStudy.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/tools/PlatformThermalReplay/ProductCurveStudy.cs.txt",
+    "src/VictusFanControl.App/Product/ProductRuntime.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl.App/Product/ProductRuntime.cs.txt",
+    "src/VictusFanControl.App/PerformanceRecoveryPreview.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl.App/PerformanceRecoveryPreview.cs.txt",
+    "src/VictusFanControl.App/Product/ProductFanControllerFactory.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl.App/Product/ProductFanControllerFactory.cs.txt",
+    "src/VictusFanControl/Control/Adaptive/Hp8C40AutomaticPolicy.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl/Control/Adaptive/Hp8C40AutomaticPolicy.cs.txt",
+    "src/VictusFanControl/Control/Adaptive/UnifiedFanDemand.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl/Control/Adaptive/UnifiedFanDemand.cs.txt",
+    "src/VictusFanControl/Control/Adaptive/FanConfiguration.cs": "tools/FanStabilityReplay/fixtures/historical-v1.2.8/src/VictusFanControl/Control/Adaptive/FanConfiguration.cs.txt"
   }
 }

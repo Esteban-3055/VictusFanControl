@@ -112,7 +112,9 @@ internal static partial class ProductGuiSelfTest
             {
                 form.RecoveryRunner = _ => throw new InvalidOperationException("Malformed selection must not launch.");
                 form.RecoverySelectionReader = () => throw new IOException("invalid record");
-                form.Show(); Application.DoEvents(); form.RecoverPerformanceAsync(true).GetAwaiter().GetResult();
+                form.Show(); Application.DoEvents();
+                var invalidRecovery=form.RecoverPerformanceAsync(true);
+                PumpUntil(()=>invalidRecovery.IsCompleted,"Invalid record recovery hung.");invalidRecovery.GetAwaiter().GetResult();
                 require(!form.Canvas.Busy && form.Canvas.Notice.Contains("invalid record"), "Invalid record was ignored.");
                 var exit = form.RequestExitAsync(); PumpUntil(() => exit.IsCompleted, "Invalid recovery exit hung.");
             }

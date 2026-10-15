@@ -22,11 +22,10 @@ internal static class ProductFanControllerFactorySelfTest
         foreach(var writable in new[]{false,true})
         {
             var profiles=new ProductProfiles{ExperimentalPlatformRetention=retentionEnabled};
-            var retention=new ProductPlatformRetention();retention.Configure(retentionEnabled);
             var backend=new NoIoBackend(writable,54);
             var fans=new FanControlCoordinator(backend);
             var controller=ProductFanControllerFactory.Create(fans,profiles,hardware,Hp8C40TargetProfile.Instance,
-                automaticReview:false,upperRangePreview:preview,experimentalPolicy:retention);
+                automaticReview:false,upperRangePreview:preview);
             require(controller.Mode==AdaptiveFanProductionMode.Firmware && fans.Authority==FanAuthority.Firmware && backend.Calls==0,
                 "Product controller startup acquired hardware authority.");
             require(controller.ManualMaximumLevel==54 && controller.ManualExecutionAuthorized==writable,
@@ -43,7 +42,7 @@ internal static class ProductFanControllerFactorySelfTest
             fans.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
         var fallback=new FanControlCoordinator(new DisabledFanControlBackend());
-        var unsupported=ProductFanControllerFactory.Create(fallback,new ProductProfiles(),hardware,null,false,true,null);
+        var unsupported=ProductFanControllerFactory.Create(fallback,new ProductProfiles(),hardware,null,false,true);
         require(!unsupported.ManualExecutionAuthorized && !unsupported.AutomaticExecutionAuthorized,
             "Unsupported target gained control through preview startup.");
         fallback.DisposeAsync().AsTask().GetAwaiter().GetResult();
@@ -72,8 +71,9 @@ internal static class ProductFanControllerFactorySelfTest
         require(profiles.Ac.Fan.BuildPolicy().MaximumLevel==54 && profiles.Battery.Fan.UnifiedDemand!.Curve[^1].Level==50,
             "54-level profile lost its range or changed its peer.");
         var backend=new ProductBackend();var fans=new FanControlCoordinator(backend);
-        var retention=new ProductPlatformRetention();retention.Configure(false);
-        var controller=ProductFanControllerFactory.Create(fans,profiles,hardware,Hp8C40TargetProfile.Instance,false,false,retention,()=>clock,Now);
+        // Even an in-memory legacy flag cannot attach an auxiliary policy or require TZ01/DTT3.
+        profiles=profiles with{ExperimentalPlatformRetention=true};
+        var controller=ProductFanControllerFactory.Create(fans,profiles,hardware,Hp8C40TargetProfile.Instance,false,false,()=>clock,Now);
         TelemetrySnapshot Sample(double cpu=45)=>new(Now(),"Intel Core i7-13700H",cpu,5,17,Hp8C40TargetProfile.ExpectedGpuName,47,14,0,3000,3000)
         {CpuExpectedPhysicalCoreCount=14,CpuCoreTemperatures=Enumerable.Range(0,14).Select(i=>new CpuCoreTemperatureSample(i,i,i<6?"Performance":"Efficiency",cpu)).ToArray()};
         SafetyGateResult Raw(TelemetrySnapshot s)=>SafetyGate.Evaluate(hardware,SystemState.Healthy,s,Now(),true);

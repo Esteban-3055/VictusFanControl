@@ -11,8 +11,10 @@ internal static partial class ProductGuiSelfTest
     {
         var preferences=new ProductProfiles{Protections=new(){CpuThermalHandoff=false,GpuThermalHandoff=false,PowerEnvelopeHandoff=false,ResumeAutomatic=false}};
         require(ProductProfilesStore.Copy(preferences).Protections==preferences.Protections,"Protection preferences did not persist.");
-        using(var form=new ProductForm("fixture://protections",fixture:new RecordingRuntime(),fixtureProfiles:new()))
+        using(var form=new ProductForm("fixture://protections",fixture:new RecordingRuntime(),fixtureProfiles:new(),
+            displayMetricsInFixture:()=>new("fixture",new(0,0,1920,1080),new(0,0,1920,1040),96)))
         {
+            form.Show();Application.DoEvents();
             foreach(var id in new[]{"protections-cpu","protections-gpu","protections-power","protections-resume"})form.HandleCommand(id);
             require(form.Draft.Protections==preferences.Protections&&form.Dirty,"Protection switches did not edit independent preferences.");
             form.Canvas.Page=ProductPage.Protections;form.ClientSize=new(1040,660);form.PerformLayout();form.Canvas.Refresh();

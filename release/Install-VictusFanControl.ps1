@@ -37,9 +37,13 @@ if(Test-Path -LiteralPath $performanceRoot) {
     }
 }
 # A build-specific path leaves the previous executable/task available until registration succeeds.
+if($manifest.version -notmatch '^\d+\.\d+\.\d+$' -or $manifest.sourceHead -notmatch '^[0-9a-f]{40}$'){throw 'Identidad de destino no válida.'}
+$releasesRoot=[IO.Path]::GetFullPath((Join-Path $root 'releases'))
 $destination=Join-Path $root ('releases\'+$manifest.version+'-'+$manifest.sourceHead)
+if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($destination)) -ne $releasesRoot){throw 'Destino fuera de la carpeta de versiones.'}
 if(-not (Test-Path -LiteralPath $destination)) {
     $stage=$destination+'.staging-'+[Guid]::NewGuid().ToString('N')
+    if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($stage)) -ne $releasesRoot){throw 'Preparación fuera de la carpeta de versiones.'}
     try {
         New-Item -ItemType Directory -Path $stage -Force | Out-Null
         Copy-Item -Path (Join-Path $PSScriptRoot '*') -Destination $stage -Recurse

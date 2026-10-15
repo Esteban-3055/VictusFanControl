@@ -5,7 +5,7 @@ namespace VictusFanControl.Telemetry;
 internal sealed record HpWmiFanProofSample(HpWmiFanTelemetrySample Speeds, long Sequence);
 
 /// <summary>
-/// On-demand control proof, with no cache or EC fallback. Queue + native await
+/// On-demand control proof, with no completed-sample cache or EC fallback. Queue + native await
 /// is bounded; a timed-out/canceled native read retains the shared telemetry
 /// slot until it really returns. No replacement worker can overlap it.
 /// </summary>
@@ -48,6 +48,19 @@ internal sealed class HpWmiFanProofReader
 
     public async ValueTask<HpWmiFanProofSample> ReadFreshAsync(CancellationToken cancellationToken)
     {
+        var sample = await _broker.ReadControlAsync((starting, lifetime) => ReadFreshCoreAsync(starting, lifetime),
+            _maximumWait, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        // A follower can resume later than the batch owner. Never renew the
+        // sample timestamp or return a proof that expired while it was waiting.
+        var age = _milliseconds() - sample.Speeds.StartedAtMilliseconds;
+        if (age < 0 || age >= MaximumWaitMilliseconds)
+            throw new InvalidDataException("Shared HP WMI proof expired from query start before delivery.");
+        return sample;
+    }
+
+    private async Task<HpWmiFanProofSample> ReadFreshCoreAsync(Action nativeStarting, CancellationToken cancellationToken)
+    {
         var waitStarted = _milliseconds();
         var acquisition = _acquisitionDiagnostics.Begin(HpWmiFanAcquisitionPurpose.Control, waitStarted);
 
@@ -86,6 +99,10 @@ internal sealed class HpWmiFanProofReader
             {
                 try
                 {
+                    // A later caller must not join after this acquisition begins,
+                    // even when its current value would still be within the age limit.
+                    nativeStarting();
+                    cancellationToken.ThrowIfCancellationRequested();
                     var publish = HpWmiFanSamplePublication.Capture(_admission);
                     var started = _milliseconds();
                     _acquisitionDiagnostics.MarkNativeStarted(acquisition, started);

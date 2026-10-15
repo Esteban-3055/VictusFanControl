@@ -90,7 +90,7 @@ internal static partial class ProductGuiSelfTest
                 require(!verifiedWhileOff&&attempts==1,"A released runtime forgot display-off state and installed.");
                 form.HandlePowerEventAsync(0x8013,1).GetAwaiter().GetResult();
                 var retry=form.InstallDownloadedUpdateAsync(()=>{},()=>attempts++,_=>Task.CompletedTask);PumpUntil(()=>retry.IsCompleted,"Install retry hung.");
-                require(form.IsDisposed&&downloads==1&&attempts==2&&runtime.Disposals==1,"Install retry re-downloaded or disposed twice.");
+                require(form.IsDisposed&&downloads==1&&attempts==2&&runtime.Disposals==1,$"Install retry failed: disposed={form.IsDisposed}; downloads={downloads}; attempts={attempts}; disposals={runtime.Disposals}; status={form.Canvas.UpdateStatus}.");
             }
             var pending=new ProductRecoverySelection(Guid.NewGuid(),Guid.Empty);runtime=new RecordingRuntime();var recoveredRuntime=new RecordingRuntime();
             using(var form=new ProductForm("fixture://pending-update",fixture:runtime,fixtureProfiles:new()))

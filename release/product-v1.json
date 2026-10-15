@@ -21,7 +21,7 @@
     "representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return",
     "current-gui-suspend-resume-without-fan-reentry",
     "current-gui-clean-exit-and-session-restart-release-and-open-in-firmware",
-    "optional-quiet-ac-candidate-with-tz01-dtt3-comparable-thermal-and-measured-acoustics",
+    "sensor-isolation-without-tz01-dtt3-under-comparable-load",
     "current-windows-logon-startup-coupled-activation-and-clean-shutdown",
     "configurable-protections-and-clean-unattended-resumption-on-current-target",
     "current-target-product-10s-rpm-5s-critical-grace-and-recovery-under-load",
@@ -41,7 +41,7 @@
     "Product quiet candidate and bounded TZ01/DTT3 retention are replayed on the same observed temperatures; lower simulated fan levels do not prove counterfactual cooling or acoustic improvement.",
     "Release authorization comes from the user request for habitual exact-target use; it is not a new physical qualification PASS.",
     "Windows logon task and unattended acquisition must still be observed on the target; CI checks use zero-hardware fixtures.",
-    "Source-independent TZ01/DTT3 retention requires a target observation in Battery and during AC/Battery handoff; software checks do not prove battery cooling, runtime or acoustics.",
+    "TZ01/DTT3 acquisition and platform retention are retired. Historical retention evidence does not qualify this sensor-isolation candidate; a comparable-load observation remains pending.",
     "Same-GUI explicit Automatic retry has software fixtures; current-target hardware retry has not yet been observed.",
     "Configurable software handoffs and unattended resumption have software fixtures only; firmware thermal throttling, sensor integrity and unknown native-call exclusion are unchanged.",
     "New telemetry grace periods have software regression coverage only; physical thermal and WMI latency behavior still requires observation on the target.",
@@ -54,14 +54,13 @@
   ],
   "experimentalPlatformRetention": {
     "defaultEnabled": false,
-    "scope": "optional-ac-and-battery",
-    "maximumExtraRawLevels": 2,
-    "maximumSupplementSeconds": 60,
-    "sourceAdmission": "bounded-acquisition-history-v1",
-    "normalAutomaticPromoted": true,
-    "auxiliaryFault": "optional-supplement-suspended-base-curve-continues"
+    "scope": "removed",
+    "maximumExtraRawLevels": 0,
+    "maximumSupplementSeconds": 0,
+    "normalAutomaticPromoted": false,
+    "auxiliaryFault": "not-applicable-no-acquisition"
   },
-  "version": "1.2.8",
+  "version": "1.2.9",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -79,7 +78,7 @@
     "retainedCriticalPolicy": "original-acquisition-time-no-new-fan-writes-handoff-earlier-at-cpu85-gpu78",
     "missingLoadPolicy": "display-unavailable-conservative-100-percent-policy-input",
     "startupFanMaximumAgeMilliseconds": 3000,
-    "auxiliaryFailure": "suspend-retention-continue-base-requalify-without-renewing-episode"
+    "auxiliaryFailure": "not-applicable-no-platform-sensor-acquisition"
   },
   "automaticPowerContract": {
     "cpuHandoffWatts": 60,
@@ -185,5 +184,14 @@
     ],
     "existingCurvePoints": "preserved;50-to-54-final-point-editable",
     "evidence": "product-fan-54-52-response-8c40-2026-10-13.json"
+  },
+  "sensorSources": {
+    "cpu": "Intel-MSR/PawnIO-RAPL",
+    "gpu": "NVIDIA-NVML",
+    "cpuLoad": "GetSystemTimes",
+    "powerSource": "GetSystemPowerStatus",
+    "fans": "HP-WMI-ACPI-2D",
+    "platformSensors": "removed",
+    "directEc": "prohibited"
   }
 }

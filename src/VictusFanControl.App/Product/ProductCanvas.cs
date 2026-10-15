@@ -193,7 +193,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         using(var b=new SolidBrush(FreshSnapshot is not null?Green:Yellow))g.FillEllipse(b,24,901,20,20);
         DrawText(g,"VictusFanControl v"+ProductRelease.Version+"  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
         DrawText(g,State.LifecycleBlocked?"Sesión bloqueada por interrupción":FreshSnapshot is not null?"Telemetría validada":State.Runtime=="Healthy"?"Sin datos actuales":"Telemetría: "+State.Runtime,1210,901,18,State.LifecycleBlocked?Yellow:Muted,430);
-        var telemetryNotice=State.Snapshot?.RetainedTelemetry is {} retained ? "Lectura retrasada: "+retained+" · se conserva el nivel de ventilación." : State.PlatformRetention is {Enabled:true,Ready:false} retention ? retention.Status : "";
+        var telemetryNotice=State.Snapshot?.RetainedTelemetry is {} retained ? "Lectura retrasada: "+retained+" · se conserva el nivel de ventilación." : "";
         if(Busy || !string.IsNullOrWhiteSpace(Notice) || telemetryNotice.Length>0) {DrawText(g,Busy?"Operación en curso…":telemetryNotice.Length>0?telemetryNotice:Notice,305,849,18,Yellow,1330);}
         if(KeyboardHit is { } focused&&Focused){using var p=new Pen(Ink,2){DashStyle=DashStyle.Dot};g.DrawRectangle(p,focused.Bounds.X,focused.Bounds.Y,focused.Bounds.Width,focused.Bounds.Height);}
     }

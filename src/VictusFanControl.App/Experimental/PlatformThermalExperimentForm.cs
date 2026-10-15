@@ -40,7 +40,7 @@ internal sealed class PlatformThermalExperimentForm : Form
     [StructLayout(LayoutKind.Sequential)]private struct PowerSetting{internal Guid Id;internal uint Length;}
     internal static void Run(string modules,string output)
     {
-        using var form=new PlatformThermalExperimentForm(modules,output);Application.Run(form);
+        throw new NotSupportedException("La prueba física TZ01/DTT3 se ha retirado. No se inicia ninguna adquisición.");
     }
     internal PlatformThermalExperimentForm(string modules,string output,ProductProfiles? fixtureProfiles=null)
     {
