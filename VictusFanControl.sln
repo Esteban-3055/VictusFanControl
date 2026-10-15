@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -17,6 +17,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.PerformanceProbe", "src\VictusFanControl.PerformanceProbe\VictusFanControl.PerformanceProbe.csproj", "{D9185CA4-5FE0-44AA-9D54-1E953B31D887}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.PerformanceGuardian", "src\VictusFanControl.PerformanceGuardian\VictusFanControl.PerformanceGuardian.csproj", "{51B8B1B4-66AD-4CFB-8C7C-1A55C4C8A9C1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{2CA7DBAD-3EEE-4CDC-BE41-5FE79478C2AB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.ExternalCooling", "src\VictusFanControl.ExternalCooling\VictusFanControl.ExternalCooling.csproj", "{085585A6-36B8-4BCB-B76E-FD7E429FAC42}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -56,5 +60,12 @@ Global
 		{6F0DBA38-7E08-4B4C-9027-1A57A8B187B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6F0DBA38-7E08-4B4C-9027-1A57A8B187B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6F0DBA38-7E08-4B4C-9027-1A57A8B187B2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{085585A6-36B8-4BCB-B76E-FD7E429FAC42}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{085585A6-36B8-4BCB-B76E-FD7E429FAC42}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{085585A6-36B8-4BCB-B76E-FD7E429FAC42}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{085585A6-36B8-4BCB-B76E-FD7E429FAC42}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{085585A6-36B8-4BCB-B76E-FD7E429FAC42} = {2CA7DBAD-3EEE-4CDC-BE41-5FE79478C2AB}
 	EndGlobalSection
 EndGlobal
