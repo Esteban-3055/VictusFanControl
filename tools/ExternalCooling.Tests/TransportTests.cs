@@ -46,6 +46,8 @@ internal static partial class Program
     private static async Task TransportTests()
     {
         var key=ExternalCoolingProtocol.ParsePairingKey(ExternalCoolingProtocol.NewPairingKey());
+        var disabled=new Esp32TcpClient();await disabled.RunAsync(new(){Mode=ExternalCoolingMode.Disabled},key.ToArray(),new Source(),default);
+        Require(disabled.Diagnostics is{State:ExternalCoolingConnectionState.Disabled,Sent:0,Connections:0},"Disabled client opened a connection.");
         // Coalesced NDJSON frames, exact size rejection and whole-message parsing.
         var f=ExternalCoolingProtocol.Create("hello",Guid.NewGuid().ToString("N"),0,new ClientHello{ClientNonce=ExternalCoolingProtocol.NewNonce()});
         var line=ExternalCoolingProtocol.Encode(f).Concat(new byte[]{10}).ToArray();

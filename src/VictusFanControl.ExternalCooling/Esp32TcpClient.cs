@@ -38,6 +38,8 @@ public sealed class Esp32TcpClient
         var failures=0;
         try
         {
+            settings.Validate();
+            if(settings.Mode==ExternalCoolingMode.Disabled){SetIdle(true);return;}
             while(!token.IsCancellationRequested)
             {
                 Update(d=>d with{State=failures==0?ExternalCoolingConnectionState.Connecting:ExternalCoolingConnectionState.Reconnecting,

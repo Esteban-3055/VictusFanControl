@@ -77,7 +77,7 @@ internal sealed class ExternalCoolingSettingsForm : Form
         var age=d.LastValidReceivedUtc is{} at?$"{Math.Max(0,(DateTimeOffset.UtcNow-at).TotalSeconds):0} s":"Sin comunicación válida";
         _status.Text=$"Estado: {d.State} · {d.Detail}\r\nÚltima recepción válida: {age}\r\nEnviados: {d.Sent} · Recibidos: {d.Received} · Fallos: {d.Failures} · Sesiones: {d.Connections}\r\n"+
             $"ESP32: {d.Device?.Mode??"—"} · {d.Device?.Communication??"—"} · Ambiente: {d.Device?.AmbientTempC?.ToString("0.0")??"—"} °C · PWM: {d.Device?.AppliedPwmPct?.ToString("0.0")??"—"}%\r\n\r\n"+
-            $"Último mensaje enviado (sin autenticación):\r\n{d.LastSent??"—"}\r\n\r\nÚltimo recibido (campos operativos):\r\n{d.LastReceived??"—"}";
+            $"Último mensaje enviado (datos):\r\n{d.LastSent??"—"}\r\n\r\nÚltimo recibido (campos operativos):\r\n{d.LastReceived??"—"}";
     }
     protected override void Dispose(bool disposing){if(disposing){_timer.Dispose();_key.Clear();}base.Dispose(disposing);}
 }

@@ -26,6 +26,10 @@ La restauración local utilizó paquetes ya disponibles y NuGetAudit=false por f
 al servicio de vulnerabilidades; CI utiliza la restauración normal. Python se tomó del runtime
 incluido en el entorno. Los tests de procesos/DPAPI/TCP requieren ejecución local permitida
 fuera del aislamiento; TCP se limita a loopback. No se desactivaron protecciones del producto.
+La regresión local Performance GUI encontró acceso denegado a la carpeta de recuperación
+`C:\ProgramData\VictusFanControl\WatchdogM2`. Se conservaron permisos y registros; esa prueba
+se comprueba también en el Windows limpio de CI. Las restantes regresiones locales de
+Performance/recuperación, WMI, SafetyGate, autoridad, políticas y backend se ejecutaron y pasaron.
 
 ## Auditoría de independencia
 

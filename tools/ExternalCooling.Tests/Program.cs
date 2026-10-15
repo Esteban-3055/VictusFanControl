@@ -10,6 +10,7 @@ internal static partial class Program
     private static async Task Main()
     {
         ProtocolTests();
+        GoldenVectors();
         await TransportTests();
         Console.WriteLine("PASS ExternalCooling tests (protocol and real loopback TCP).");
     }
@@ -45,5 +46,19 @@ internal static partial class Program
         var cn=ExternalCoolingProtocol.NewNonce();var sn=ExternalCoolingProtocol.NewNonce();
         Require(!ExternalCoolingProtocol.EqualProof(ExternalCoolingProtocol.Proof(key,"server",session,cn,sn),ExternalCoolingProtocol.Proof(key,"client",session,cn,sn)),"Reflection accepted.");
         Require(!Encoding.UTF8.GetString(bytes).Contains(Convert.ToBase64String(key),StringComparison.Ordinal),"Pairing key leaked.");
+    }
+    private static void GoldenVectors()
+    {
+        using var stream=typeof(Program).Assembly.GetManifestResourceStream("protocol-v1-vectors.json")!;
+        using var doc=JsonDocument.Parse(stream);var v=doc.RootElement;
+        string S(string name)=>v.GetProperty(name).GetString()!;
+        var key=ExternalCoolingProtocol.ParsePairingKey(S("pairingKey"));
+        foreach(var role in new[]{"server","client","ready","client-to-device","device-to-client"})
+            Require(ExternalCoolingProtocol.Proof(key,role,S("sessionId"),S("clientNonce"),S("serverNonce"))==v.GetProperty("proofs").GetProperty(role).GetString(),"Independent HMAC vector mismatch: "+role);
+        using var payload=JsonDocument.Parse(S("deviceStatusPayloadRaw"));
+        var frame=new ProtocolFrame{ProtocolVersion=1,Type="deviceStatus",SessionId=S("sessionId"),Sequence=1,Payload=payload.RootElement.Clone(),Mac=""};
+        var derived=ExternalCoolingProtocol.SessionKey(key,"device-to-client",S("sessionId"),S("clientNonce"),S("serverNonce"));
+        Require(ExternalCoolingProtocol.Sign(frame,derived).Mac==S("deviceStatusMac"),"Independent operational MAC vector mismatch.");
+        Console.WriteLine("PASS independent public HMAC-SHA256 golden vectors for future firmware interoperability.");
     }
 }

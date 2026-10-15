@@ -28,7 +28,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
     foreach($file in @('LICENSE','THIRD_PARTY_NOTICES.md')){Copy-Item -LiteralPath (Join-Path $repo $file) -Destination $OutputDirectory}
-    foreach($file in @('EXTERNAL-COOLING-PROTOCOL.md','EXTERNAL-COOLING-USAGE.md')) {
+    foreach($file in @('EXTERNAL-COOLING-PROTOCOL.md','EXTERNAL-COOLING-USAGE.md','EXTERNAL-COOLING-V1-VECTORS.json')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
     $release=Get-Content -LiteralPath (Join-Path $repo 'release/product-v1.json') -Raw | ConvertFrom-Json

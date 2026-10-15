@@ -75,6 +75,11 @@ Windows' encoder preserves the payload bytes used to compute the signature. HMAC
 integrity and origin; telemetry is not encrypted. Use on a trusted LAN. Key strength is mandatory:
 this is not a password protocol and a human password would permit offline guessing.
 
+Independent deterministic [HMAC test vectors](EXTERNAL-COOLING-V1-VECTORS.json) include all
+roles, directional key derivations and an operational deviceStatus MAC. They were calculated
+independently with Python's standard hmac/hashlib and are checked by the C# suite. The fixture
+key is public and **must never be provisioned** on a device or used as a pairing default.
+
 ## Telemetry payload
 
 Every field is present. Null means unavailable/invalid/expired; never substitute zero.
