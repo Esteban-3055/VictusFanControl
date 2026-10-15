@@ -97,14 +97,14 @@ public static class ExternalCoolingProtocol
     public static ExportTelemetry Telemetry(ProtocolFrame frame)
     {
         if(frame.Type!="telemetry")throw new InvalidDataException("Expected telemetry.");
-        foreach(var key in new[]{"validForMs","capturedAtUtc","sampledAtUtc","decisionAtUtc","cpuUsagePct","gpuUsagePct","ramUsagePct","demandaPct",
+        foreach(var key in new[]{"validForMs","replyToDeviceSequence","capturedAtUtc","sampledAtUtc","decisionAtUtc","cpuUsagePct","gpuUsagePct","ramUsagePct","demandaPct",
             "solicitud","solicitudValida","modoSolicitado","modoEfectivo","cpuTempC","gpuTempC","powerSource","requestEvidence",
             "cpuTargetLevel","gpuTargetLevel","cpuTempSampledAtUtc","gpuTempSampledAtUtc","ramSampledAtUtc"})
             if(!frame.Payload.TryGetProperty(key,out _))throw new InvalidDataException("Missing telemetry field.");
         var t=Payload<ExportTelemetry>(frame);
         if(t.ValidForMs!=RequestValidForMilliseconds||t.CapturedAtUtc==default||t.ModoSolicitado is not("Firmware" or "Manual" or "Automatic")||
             t.ModoEfectivo is not("Firmware" or "Manual" or "Automatic" or "Transition" or "Interrupted" or "Unavailable")||
-            t.PowerSource is not("AC" or "Battery" or "Unknown")||t.RequestEvidence is not("Unavailable" or "MonitorOnly" or "WmiAcceptedSupervised"))
+            t.PowerSource is not("AC" or "Battery" or "Unknown")||t.RequestEvidence is not("Unavailable" or "MonitorOnly" or "AwaitingDevice" or "WmiAcceptedSupervised"))
             throw new InvalidDataException("Invalid telemetry enum/date.");
         void Range(double? value,double min,double max)
         {if(value.HasValue&&ExportTelemetry.Range(value,min,max) is null)throw new InvalidDataException("Invalid measurement.");}
@@ -114,9 +114,10 @@ public static class ExternalCoolingProtocol
             if(level is <0 or >65535)throw new InvalidDataException("Invalid logical/target level.");
         if(t.SolicitudValida != t.Solicitud.HasValue || (!t.SolicitudValida&&(t.CpuTargetLevel.HasValue||t.GpuTargetLevel.HasValue))||
             (t.SolicitudValida&&(t.ModoSolicitado is not("Manual" or "Automatic")||t.ModoEfectivo!=t.ModoSolicitado||
-                t.CpuTargetLevel is null||t.GpuTargetLevel is null||t.RequestEvidence!="WmiAcceptedSupervised"))||
+                t.CpuTargetLevel is null||t.GpuTargetLevel is null||t.ReplyToDeviceSequence is not >0||t.RequestEvidence!="WmiAcceptedSupervised"))||
             (t.ModoSolicitado!="Automatic"&&t.DemandaPct.HasValue))
             throw new InvalidDataException("Inconsistent control validity.");
+        if(t.ReplyToDeviceSequence is <=0)throw new InvalidDataException("Invalid reply sequence.");
         foreach(var at in new[]{t.SampledAtUtc,t.DecisionAtUtc,t.CpuTempSampledAtUtc,t.GpuTempSampledAtUtc,t.RamSampledAtUtc})
             if(at>t.CapturedAtUtc)throw new InvalidDataException("Future acquisition.");
         return t;
@@ -132,7 +133,7 @@ public static class ExternalCoolingProtocol
         return d;
     }
     public static void ValidateNonce(string nonce)
-    {if(Convert.FromBase64String(nonce).Length!=32)throw new InvalidDataException("Invalid nonce.");}
+    {if(string.IsNullOrWhiteSpace(nonce)||Convert.FromBase64String(nonce).Length!=32)throw new InvalidDataException("Invalid nonce.");}
     public static string Proof(byte[] key,string role,string session,string clientNonce,string serverNonce)
         =>Mac(key,$"VictusExternalCooling/v1/auth\n{role}\n{session}\n{clientNonce}\n{serverNonce}");
     public static byte[] SessionKey(byte[] key,string direction,string session,string clientNonce,string serverNonce)
@@ -142,6 +143,7 @@ public static class ExternalCoolingProtocol
     public static ProtocolFrame Sign(ProtocolFrame frame,byte[] key)=>frame with{Mac=Mac(key,Transcript(frame))};
     public static bool EqualProof(string expected,string received)
     {
+        if(string.IsNullOrWhiteSpace(expected)||string.IsNullOrWhiteSpace(received))return false;
         try { var a=Convert.FromBase64String(expected);var b=Convert.FromBase64String(received);return a.Length==32&&b.Length==32&&CryptographicOperations.FixedTimeEquals(a,b); }
         catch(FormatException){return false;}
     }

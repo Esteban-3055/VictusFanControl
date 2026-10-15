@@ -82,6 +82,7 @@ Every field is present. Null means unavailable/invalid/expired; never substitute
 | Field | Type / units | Nullability / meaning |
 |---|---|---|
 | validForMs | integer | 2000; maximum lifetime from receipt, never renewed by duplicate frames |
+| replyToDeviceSequence | integer or null | Latest validated device reply; device checks its own send timestamp |
 | capturedAtUtc | ISO 8601 timestamp | Required; Windows export time |
 | sampledAtUtc | timestamp or null | Original current CPU/GPU snapshot time |
 | decisionAtUtc | timestamp or null | Original accepted automatic decision |
@@ -96,7 +97,7 @@ Every field is present. Null means unavailable/invalid/expired; never substitute
 | modoEfectivo | string | Firmware, Manual, Automatic, Transition, Interrupted, Unavailable |
 | cpuTempC, gpuTempC | number or null, °C | Finite -20..130, acquisition independently expires |
 | powerSource | string | AC, Battery, Unknown |
-| requestEvidence | string | WmiAcceptedSupervised, Unavailable, MonitorOnly |
+| requestEvidence | string | WmiAcceptedSupervised, Unavailable, MonitorOnly, AwaitingDevice |
 
 Integer wire bounds are 0..65535, **not** the controller's operating limits. Current controller
 is a single logical request with separate physical destinations (up to 54/52 in v1.2.9).
@@ -107,13 +108,21 @@ in a live supervised session; it is not independent physical setpoint/ownership 
 Windows invalidates requests in Firmware, unhealthy/expired telemetry, retained critical samples,
 preparation, source/performance transition, recovery or loss of authority. Automatic additionally
 requires the accepted decision to match the accepted level, current profile and active session.
-Manual requires a real accepted level and current healthy supervised state, not the UI slider.
+Manual requires an explicit accepted Manual Apply in the current mode and current healthy
+supervised state, not the UI slider or an Automatic target retained across a mode change.
 MonitorOnly always clears solicitud, solicitudValida and physical targets; demand remains data.
 
 Device must stop applying a remote request on EOF, failed authentication, invalid message,
 session change, explicit null/false request, or **2000 ms without a new valid telemetry frame**.
+Additionally, **before applying** any valid remote request, look up `replyToDeviceSequence` in
+the last 16 device reply send timestamps. That reply must have been sent less than 2000 ms ago
+on the device's monotonic clock. Unknown/null/expired reply references force Local fallback.
+This bounds the age of commands delayed inside TCP buffers without clock synchronization.
+Windows sends no request in its first telemetry, and clears requests as AwaitingDevice if no
+valid device reply arrived in the preceding 2000 ms. MonitorOnly uses its own suppression reason.
 Use a monotonic local timer, not Windows wall time, for the remote lease. A duplicate or invalid
-frame must not renew it. Select a safe local fallback in the future firmware specification.
+frame must not renew it. The simulator implements and tests this reply-reference admission;
+future firmware must also implement a timer-driven physical PWM fallback on silence/EOF.
 
 ## Device response payload
 
@@ -144,4 +153,5 @@ Suspend cancels immediately; resume drains the old worker and authenticates a ne
 Minimize/close-to-tray does not suspend this service. Application exit disposes it separately.
 
 Limits and deadlines keep ESP32-C3 memory bounded. Minimum device resources: <=4096 byte input
-frame, one output frame, SHA256/HMAC context, 2 nonces and 2 derived keys, sequence counters.
+frame, one output frame, SHA256/HMAC context, 2 nonces and 2 derived keys, sequence counters,
+and 16 device reply sequence/send-time pairs for the monotonic request lease.

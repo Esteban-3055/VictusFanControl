@@ -18,13 +18,14 @@ internal static partial class Program
     }
     private sealed class Server : IAsyncDisposable
     {
-        private readonly TcpListener _listener=new(IPAddress.Loopback,0);
+        private readonly TcpListener _listener;
         private readonly CancellationTokenSource _cancel=new();
         private readonly Task _run;
         public readonly List<(string Session,ExportTelemetry Telemetry)> Observations=[];
         public int Port=>((IPEndPoint)_listener.LocalEndpoint).Port;
-        public Server(byte[] key,SimulatorOptions options)
+        public Server(byte[] key,SimulatorOptions options,int port=0)
         {
+            _listener=new(IPAddress.Loopback,port);
             _listener.Start();
             _run=Task.Run(async()=>
             {
@@ -98,5 +99,53 @@ internal static partial class Program
         var unavailable=new Esp32TcpClient();using(var cancel=new CancellationTokenSource(TimeSpan.FromSeconds(7)))
         {await unavailable.RunAsync(new(){Mode=ExternalCoolingMode.MonitorOnly,UseSimulator=true,Port=port,AutoReconnect=false},key.ToArray(),new Source(),cancel.Token);Require(unavailable.Diagnostics.Failures==1,"Unreachable server not reported.");}
         Console.WriteLine("PASS authentication rejection, automatic reconnect/new sessions, manager concurrency, suspend/resume, clean shutdown, unavailable server.");
+        await RemoteLeaseTest(key);
+        await RestartServerTest(key);
+        await ResourceTest(key);
+    }
+    private static async Task RemoteLeaseTest(byte[] key)
+    {
+        await using var server=new Server(key,new());using var cancel=new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var tcp=new TcpClient();await tcp.ConnectAsync(IPAddress.Loopback,server.Port,cancel.Token);
+        await using var wire=new FramedConnection(tcp.GetStream());using var auth=await AuthenticatedSession.ClientAsync(wire,key,cancel.Token);
+        var source=new Source();
+        await wire.WriteAsync(ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("telemetry",auth.Id,1,source.Capture(DateTimeOffset.UtcNow).WithoutRequest("AwaitingDevice")),auth.SendKey),cancel.Token);
+        var first=await wire.ReadAsync(cancel.Token);ExternalCoolingProtocol.Verify(first,auth.ReceiveKey,auth.Id,0);
+        Require(ExternalCoolingProtocol.Status(first).Mode=="Local","First request enabled remote before device confirmation.");
+        await Task.Delay(2200,cancel.Token);
+        await wire.WriteAsync(ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("telemetry",auth.Id,2,source.Capture(DateTimeOffset.UtcNow) with{ReplyToDeviceSequence=first.Sequence}),auth.SendKey),cancel.Token);
+        var old=await wire.ReadAsync(cancel.Token);ExternalCoolingProtocol.Verify(old,auth.ReceiveKey,auth.Id,first.Sequence);
+        Require(ExternalCoolingProtocol.Status(old).Mode=="Local","Stale reply reference enabled remote control.");
+        await wire.WriteAsync(ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("telemetry",auth.Id,3,source.Capture(DateTimeOffset.UtcNow) with{ReplyToDeviceSequence=old.Sequence}),auth.SendKey),cancel.Token);
+        var fresh=await wire.ReadAsync(cancel.Token);ExternalCoolingProtocol.Verify(fresh,auth.ReceiveKey,auth.Id,old.Sequence);
+        Require(ExternalCoolingProtocol.Status(fresh).Mode=="Remote","Fresh confirmed request not accepted by simulator.");
+        Console.WriteLine("PASS device monotonic 2 s lease: first/unconfirmed and delayed request Local; fresh request Remote.");
+    }
+    private static async Task RestartServerTest(byte[] key)
+    {
+        var server=new Server(key,new());var port=server.Port;
+        await using var manager=new ExternalCoolingManager(new Source(),()=>key.ToArray());
+        try
+        {
+            await manager.ConfigureAsync(new(){Mode=ExternalCoolingMode.MonitorOnly,UseSimulator=true,Port=port});await Until(()=>manager.Diagnostics.Received>=1);
+            var session=manager.Diagnostics.SessionId;await server.DisposeAsync();
+            server=new Server(key,new(),port);
+            await Until(()=>manager.Diagnostics.State==ExternalCoolingConnectionState.Connected&&manager.Diagnostics.SessionId!=session);
+            Console.WriteLine("PASS actual server stop/restart on same TCP port and new authenticated session.");
+        }
+        finally{await manager.DisconnectAsync();await server.DisposeAsync();}
+    }
+    private static async Task ResourceTest(byte[] key)
+    {
+        await using var server=new Server(key,new());await using var manager=new ExternalCoolingManager(new Source(),()=>key.ToArray());
+        await manager.ConfigureAsync(new(){Mode=ExternalCoolingMode.MonitorOnly,UseSimulator=true,Port=server.Port});await Until(()=>manager.Diagnostics.Received>=2);
+        using var process=Process.GetCurrentProcess();process.Refresh();var cpu=process.TotalProcessorTime;var memory=GC.GetTotalMemory(true);var start=manager.Diagnostics;
+        var timer=Stopwatch.StartNew();await Task.Delay(TimeSpan.FromSeconds(10));process.Refresh();var elapsed=timer.Elapsed.TotalSeconds;
+        var end=manager.Diagnostics;var cpuSeconds=(process.TotalProcessorTime-cpu).TotalSeconds;var memoryDelta=GC.GetTotalMemory(true)-memory;
+        var metrics=new{seconds=elapsed,cpuOneCorePct=100*cpuSeconds/elapsed,managedBytesDelta=memoryDelta,bytesPerSecond=(end.BytesSent-start.BytesSent+end.BytesReceived-start.BytesReceived)/elapsed,
+            framesSent=end.Sent-start.Sent,framesReceived=end.Received-start.Received,scope="10-second in-process localhost simulator; includes client/server test process; not a physical benchmark"};
+        Directory.CreateDirectory("logs/external-cooling-self-test");File.WriteAllText("logs/external-cooling-self-test/performance.json",System.Text.Json.JsonSerializer.Serialize(metrics,new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));
+        Require(metrics.framesSent is >=8 and <=12&&metrics.bytesPerSecond<8192&&cpuSeconds<5&&memoryDelta<32*1024*1024,"Network worker cadence/resources exceeded test bounds.");
+        Console.WriteLine($"PASS resources {elapsed:0.0}s: one-core CPU={metrics.cpuOneCorePct:0.00}%, managed delta={memoryDelta} B, traffic={metrics.bytesPerSecond:0} B/s.");
     }
 }

@@ -19,6 +19,8 @@ internal sealed record ProductRuntimeState
     internal string FanMode { get; init; } = "Firmware";
     internal string FanAuthority { get; init; } = "Firmware";
     internal int? FanLevel { get; init; }
+    // Observation only: an explicit Manual Apply accepted in this mode, never a retained Automatic target.
+    internal int? ManualAppliedLevel { get; init; }
     internal int ManualMaximumLevel { get; init; } = 50;
     internal bool FanUpperRangePreview { get; init; }
     internal int? CommandedCpuLevel { get; init; }
@@ -108,6 +110,7 @@ internal sealed class ProductRuntime : IProductRuntime
     private ProductRuntimeState _state = new();
     private TelemetrySnapshot? _snapshot;
     private string? _selectedFanProfile;
+    private int _manualAppliedLevel=-1;
     private string? _lifecycleBlockReason;
     private AdaptiveFanProductionResult? _automaticDecision;
     private TelemetrySnapshot? _automaticInterruptionSnapshot;
@@ -460,6 +463,11 @@ internal sealed class ProductRuntime : IProductRuntime
     }
     private async Task SetFanModeAsync(AdaptiveFanProductionMode mode)
     {
+        if(mode!=_controller.Mode)
+        {
+            _manualAppliedLevel=-1;
+            lock(_stateSync)_state=_state with{ManualAppliedLevel=null};
+        }
         if (mode != AdaptiveFanProductionMode.Firmware && _lifecycleBlocked)
             throw new InvalidOperationException("Sesión interrumpida. La reapertura tras lifecycle permanece cerrada; usa Firmware y reinicia después de una liberación limpia.");
         if (mode == AdaptiveFanProductionMode.Automatic) { _automaticSessionId = Guid.NewGuid().ToString("N"); _automaticDecision = null; _automaticDecisionSnapshot = null; _automaticInterruptionSnapshot = null; _automaticStartedUtc = DateTimeOffset.UtcNow; _automaticGuard.Start(); }
@@ -552,8 +560,12 @@ internal sealed class ProductRuntime : IProductRuntime
     public Task ApplyManualAsync(int level) => FanCommandAsync(async () =>
     {
         if (_lifecycleBlocked || _controller.Mode != AdaptiveFanProductionMode.Manual) throw new InvalidOperationException("Selecciona Manual antes de aplicar; una sesión interrumpida no puede rearmarse.");
+        _manualAppliedLevel=-1;
+        lock(_stateSync)_state=_state with{ManualAppliedLevel=null};
         var result = await _controller.ApplyManualAsync(level,Safety(),() => Safety(),CancellationToken.None);
         if (!result.ExecutionAuthorized || result.Action == AdaptiveFanProductionActionKind.Blocked) throw new InvalidOperationException(result.Detail);
+        if(result.Authority==FanAuthority.Custom&&result.EqualFanLevel==level&&_wmi?.LastAcceptedLevel==level)
+            _manualAppliedLevel=level;
         Publish(FanDecisionMessage(result));
     });
     private string FanDecisionMessage(AdaptiveFanProductionResult result)
@@ -747,6 +759,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 Source = source, Runtime = _worker.StateMachine.State.ToString(), Snapshot = _snapshot,
                 FanMode = _controller.Mode.ToString(), FanAuthority = _fans.Authority.ToString(), FanLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedLevel : null,
                 ManualMaximumLevel = _controller.ManualMaximumLevel, FanUpperRangePreview = ProductFanRangePreview.Enabled,
+                ManualAppliedLevel = _controller.Mode==AdaptiveFanProductionMode.Manual&&_manualAppliedLevel>=0?_manualAppliedLevel:null,
                 CommandedCpuLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedTargets?.Cpu : null,
                 CommandedGpuLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedTargets?.Gpu : null,
                 ManualAuthorized = _controller.ManualExecutionAuthorized, AutomaticAuthorized = _controller.AutomaticExecutionAuthorized,

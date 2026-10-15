@@ -15,6 +15,7 @@ public static class Simulator
         await using var wire=new FramedConnection(tcp.GetStream());
         using var session=await AuthenticatedSession.ServerAsync(wire,key,token);
         long previous=0,sequence=0;ProtocolFrame? last=null;
+        var replyTimes=new Dictionary<long,long>();
         while(true)
         {
             var frame=await wire.ReadAsync(token);
@@ -34,14 +35,18 @@ public static class Simulator
                     case SimulatorFault.Silence:await Task.Delay(Timeout.InfiniteTimeSpan,token);return;
                 }
             }
+            var remote=telemetry.SolicitudValida&&telemetry.ReplyToDeviceSequence is{} referencedReply&&replyTimes.TryGetValue(referencedReply,out var replyAt)&&
+                System.Diagnostics.Stopwatch.GetElapsedTime(replyAt).TotalMilliseconds<telemetry.ValidForMs;
             var status=new DeviceStatus
             {
                 AckSequence=previous,AmbientTempC=23.0+Math.Sin(previous/30.0),
                 // An illustrative simulator policy, not a firmware requirement or Windows mapping.
-                AppliedPwmPct=telemetry.SolicitudValida?Math.Clamp(telemetry.Solicitud!.Value,0,100):25,
-                Mode=telemetry.SolicitudValida?"Remote":"Local",Communication="Ready",Extensions=new(){Slot1=null,Slot2=null}
+                AppliedPwmPct=remote?Math.Clamp(telemetry.Solicitud!.Value,0,100):25,
+                Mode=remote?"Remote":"Local",Communication="Ready",Extensions=new(){Slot1=null,Slot2=null}
             };
             var reply=ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("deviceStatus",session.Id,++sequence,status),session.SendKey);last=reply;
+            replyTimes[sequence]=System.Diagnostics.Stopwatch.GetTimestamp();
+            foreach(var old in replyTimes.Keys.Where(k=>k<sequence-15).ToArray())replyTimes.Remove(old);
             if(options.Fault==SimulatorFault.Fragmented)
             {
                 var bytes=ExternalCoolingProtocol.Encode(reply).Concat(new byte[]{10}).ToArray();

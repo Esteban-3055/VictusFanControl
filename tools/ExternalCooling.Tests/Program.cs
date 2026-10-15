@@ -29,6 +29,9 @@ internal static partial class Program
         Reject(()=>ExternalCoolingProtocol.Decode(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(bytes).Replace("\"protocolVersion\":1","\"protocolVersion\":1,\"protocolVersion\":1"))),"Duplicate field accepted.");
         Reject(()=>ExternalCoolingProtocol.Decode(new byte[4097]),"Oversized input accepted.");
         Reject(()=>ExternalCoolingProtocol.Decode(bytes[..^1]),"Incomplete JSON accepted.");
+        Reject(()=>ExternalCoolingProtocol.Decode(ExternalCoolingProtocol.Encode(f with{Mac=null!})),"Null MAC accepted.");
+        Reject(()=>ExternalCoolingProtocol.ValidateNonce(null!),"Null nonce accepted.");
+        Require(!ExternalCoolingProtocol.EqualProof("x",null!),"Null proof accepted.");
         Reject(()=>ExternalCoolingProtocol.Telemetry(f with{Payload=JsonSerializer.SerializeToElement(new{capturedAtUtc=DateTimeOffset.UtcNow})}),"Missing fields accepted.");
         foreach(var bad in new[]{t with{CpuUsagePct=101},t with{GpuUsagePct=-1},t with{CpuTempC=999},t with{Solicitud=30},
             t with{ModoSolicitado="other"},t with{PowerSource="other"},t with{DemandaPct=30},t with{SampledAtUtc=t.CapturedAtUtc.AddSeconds(1)}})

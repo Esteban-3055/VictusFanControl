@@ -76,7 +76,7 @@ public sealed class Esp32TcpClient
     private async Task CommunicateAsync(FramedConnection wire,AuthenticatedSession session,ExternalCoolingSettings settings,ITelemetryExportSource source,CancellationToken token)
     {
         using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(token);
-        var sync=new object();var sentAt=new Dictionary<long,long>();long next=0;
+        var sync=new object();var sentAt=new Dictionary<long,long>();long next=0,lastDeviceSequence=0,lastDeviceReceived=0;
         async Task Send()
         {
             using var timer=new PeriodicTimer(TimeSpan.FromSeconds(1));
@@ -85,6 +85,12 @@ public sealed class Esp32TcpClient
                 // Pull the newest snapshot only at the instant of sending. Capacity is one in flight,
                 // zero pending: a slow write never accumulates old telemetry.
                 var value=source.Capture(DateTimeOffset.UtcNow);
+                lock(sync)
+                {
+                    value=value with{ReplyToDeviceSequence=lastDeviceSequence>0?lastDeviceSequence:null};
+                    if(lastDeviceSequence==0||Stopwatch.GetElapsedTime(lastDeviceReceived).TotalMilliseconds>=ExternalCoolingProtocol.RequestValidForMilliseconds)
+                        value=value.WithoutRequest("AwaitingDevice");
+                }
                 if(settings.Mode!=ExternalCoolingMode.MonitorAndRequest)value=value.WithoutRequest();
                 var frame=ExternalCoolingProtocol.Create("telemetry",session.Id,++next,value);
                 ExternalCoolingProtocol.Telemetry(frame);
@@ -115,6 +121,7 @@ public sealed class Esp32TcpClient
                 if(Stopwatch.GetElapsedTime(stamp)>TimeSpan.FromSeconds(5))throw new InvalidDataException("Expired acknowledgement.");
                 ack=status.AckSequence;
                 lifetime.Token.ThrowIfCancellationRequested();
+                lock(sync){lastDeviceSequence=frame.Sequence;lastDeviceReceived=Stopwatch.GetTimestamp();}
                 // Diagnostics hold only a projection of operational fields, never opaque peer extensions.
                 var safe=status with{Extensions=new(){Slot1=null,Slot2=null}};
                 Update(d=>d with{State=ExternalCoolingConnectionState.Connected,Detail="Autenticado; recepción válida",Device=safe,

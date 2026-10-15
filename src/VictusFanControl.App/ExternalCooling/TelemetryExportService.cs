@@ -55,7 +55,7 @@ internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IP
                 accepted &= demand.HasValue;
             }
         }
-        else if (s.FanMode=="Manual") accepted &= s.ManualAuthorized;
+        else if (s.FanMode=="Manual") accepted &= s.ManualAuthorized && s.ManualAppliedLevel.HasValue && s.ManualAppliedLevel==s.FanLevel;
         else accepted=false;
         var ram=ExportTelemetry.Range(memory.ReadPercent(),0,100);
         var cpuAt=sample?.CpuThermalSampledAtUtc ?? sample?.Timestamp;
@@ -75,7 +75,7 @@ internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IP
             ModoSolicitado=s.AutomaticPreparing?"Automatic":s.FanMode,
             ModoEfectivo=s.LifecycleBlocked?"Interrupted":s.AutomaticPreparing||s.AutomaticSourceTransition is not null||s.PerformanceUpdating?"Transition":
                 s.FanMode=="Firmware"&&s.FanAuthority=="Firmware"?"Firmware":accepted?s.FanMode:"Unavailable",
-            PowerSource=s.Source=="Ac"?"AC":s.Source=="Battery"?"Battery":"Unknown",
+            PowerSource=!live?"Unknown":s.Source=="Ac"?"AC":s.Source=="Battery"?"Battery":"Unknown",
             RequestEvidence=accepted?"WmiAcceptedSupervised":"Unavailable"
         };
     }

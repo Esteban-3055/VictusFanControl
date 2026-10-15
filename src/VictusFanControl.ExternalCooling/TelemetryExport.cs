@@ -7,6 +7,7 @@ public enum ExternalCoolingConnectionState { Disabled, Disconnected, Connecting,
 public sealed record ExportTelemetry
 {
     public int ValidForMs { get; init; } = ExternalCoolingProtocol.RequestValidForMilliseconds;
+    public long? ReplyToDeviceSequence { get; init; }
     public required DateTimeOffset CapturedAtUtc { get; init; }
     public DateTimeOffset? SampledAtUtc { get; init; }
     public DateTimeOffset? DecisionAtUtc { get; init; }
@@ -28,8 +29,8 @@ public sealed record ExportTelemetry
     public string PowerSource { get; init; } = "Unknown";
     public string RequestEvidence { get; init; } = "Unavailable";
 
-    public ExportTelemetry WithoutRequest() => this with
-    { Solicitud=null, SolicitudValida=false, CpuTargetLevel=null, GpuTargetLevel=null, RequestEvidence="MonitorOnly" };
+    public ExportTelemetry WithoutRequest(string reason="MonitorOnly") => this with
+    { Solicitud=null, SolicitudValida=false, CpuTargetLevel=null, GpuTargetLevel=null, RequestEvidence=reason };
 
     public static double? Range(double? value, double min, double max) =>
         value is {} v && double.IsFinite(v) && v >= min && v <= max ? v : null;
