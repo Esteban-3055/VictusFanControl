@@ -35,6 +35,8 @@ internal static class ExternalCoolingSelfTest
         Require(exporter.Capture(now) is{Solicitud:54,CpuTargetLevel:54,GpuTargetLevel:52,DemandaPct:null},"Manual logical request/physical targets lost or historical cap used.");
         state=state with{FanMode="Firmware"};
         Require(exporter.Capture(now) is{Solicitud:null,DemandaPct:null},"Firmware manufactured control.");
+        Require(new TelemetryExportService(()=>new(){Runtime="Unavailable",FanAuthority="Unknown"},new Memory(null)).Capture(now) is
+            {ModoEfectivo:"Unavailable",Solicitud:null,PowerSource:"Unknown"},"Missing/recovering runtime invented effective Firmware authority.");
         var ram=new WindowsPhysicalMemoryUsage().ReadPercent();
         Require(ram is >=0 and <=100,"GlobalMemoryStatusEx did not return real RAM usage.");
         Console.WriteLine($"PASS export: modes, authority, retention, transition, nulls, age, 54/52; real Windows physical RAM={ram:0.0}%.");

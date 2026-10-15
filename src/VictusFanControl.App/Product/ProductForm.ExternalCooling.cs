@@ -20,7 +20,7 @@ internal sealed partial class ProductForm
         _externalCoolingStore=new(_externalCoolingPath);
         _externalCoolingSettings=_externalCoolingStore.Load(out _externalCoolingError);
         _externalPairingReader=_externalCoolingStore.ReadKey;
-        _externalCooling=new(new TelemetryExportService(()=>Volatile.Read(ref _runtime)?.State??new(),new WindowsPhysicalMemoryUsage()),()=>_externalPairingReader());
+        _externalCooling=new(new TelemetryExportService(()=>Volatile.Read(ref _runtime)?.State??new(){Runtime="Unavailable",FanAuthority="Unknown"},new WindowsPhysicalMemoryUsage()),()=>_externalPairingReader());
         await ExternalCoolingOperationAsync(()=>_externalCooling.ConfigureAsync(_externalCoolingSettings));
     }
     private async Task ExternalCoolingOperationAsync(Func<Task> operation)
