@@ -30,6 +30,8 @@ internal static partial class Program
         Reject(()=>ExternalCoolingProtocol.Decode(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(bytes).Replace("\"protocolVersion\":1","\"protocolVersion\":1,\"protocolVersion\":1"))),"Duplicate field accepted.");
         Reject(()=>ExternalCoolingProtocol.Decode(new byte[4097]),"Oversized input accepted.");
         Reject(()=>ExternalCoolingProtocol.Decode(bytes[..^1]),"Incomplete JSON accepted.");
+        Reject(()=>ExternalCoolingProtocol.Decode(ExternalCoolingProtocol.Encode(f with{Type="futureCommand"})),"Unknown message type accepted.");
+        Reject(()=>ExternalCoolingProtocol.Decode(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(bytes).Replace("\"cpuUsagePct\":0","\"cpuUsagePct\":0,\"cpuUsagePct\":1"))),"Nested duplicate JSON accepted.");
         Reject(()=>ExternalCoolingProtocol.Decode(ExternalCoolingProtocol.Encode(f with{Mac=null!})),"Null MAC accepted.");
         Reject(()=>ExternalCoolingProtocol.ValidateNonce(null!),"Null nonce accepted.");
         Require(!ExternalCoolingProtocol.EqualProof("x",null!),"Null proof accepted.");

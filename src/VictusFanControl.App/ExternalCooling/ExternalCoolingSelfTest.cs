@@ -17,6 +17,11 @@ internal static class ExternalCoolingSelfTest
             state with{AutomaticPreparing=true},state with{AutomaticSourceTransition="Battery"},state with{PerformanceUpdating=true},
             state with{Runtime="Degraded"},state with{FanLevel=31},state with{AppliedFanProfile="Battery"},state with{AutomaticDecisionSnapshot=null},
             state with{Snapshot=state.Snapshot! with{RetainedTelemetry="CPU"}},state with{CommandedGpuLevel=null},
+            state with{Snapshot=state.Snapshot! with{CpuTemperatureC=double.NaN}},
+            state with{Snapshot=state.Snapshot! with{GpuTemperatureC=double.PositiveInfinity}},
+            state with{Snapshot=state.Snapshot! with{CpuPackagePowerW=double.NaN}},
+            state with{Snapshot=state.Snapshot! with{GpuPowerW=-1}},
+            state with{Snapshot=state.Snapshot! with{CpuCoreTemperatures=[new(0,0,"Performance",double.NaN)]}},
             state with{AutomaticDecision=state.AutomaticDecision! with{UnifiedDemand=state.AutomaticDecision!.UnifiedDemand! with{Percent=double.NaN}}}})
         {
             var result=new TelemetryExportService(()=>invalid,new Memory(null)).Capture(now);

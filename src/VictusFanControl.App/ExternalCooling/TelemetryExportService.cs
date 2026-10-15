@@ -33,8 +33,13 @@ internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IP
         var s=state(); var sample=s.Snapshot;
         bool Fresh(DateTimeOffset? at, TimeSpan age) => at is {} t && now >= t && now-t <= age;
         var live=sample is not null && Fresh(sample.Timestamp, sample.MaximumControlAge);
+        static bool NonNegative(double? value)=>value is{} v&&double.IsFinite(v)&&v>=0;
         var control=live && sample!.IsComplete && sample.RetainedTelemetry is null &&
-            sample.HasFreshControlSensorsAt(now) && sample.IsFanTelemetryFreshAt(now);
+            sample.HasFreshControlSensorsAt(now) && sample.IsFanTelemetryFreshAt(now) &&
+            ExportTelemetry.Range(sample.CpuControlTemperatureC,-20,130).HasValue &&
+            ExportTelemetry.Range(sample.GpuTemperatureC,-20,130).HasValue &&
+            NonNegative(sample.CpuPackagePowerW) && NonNegative(sample.GpuPowerW) &&
+            sample.CpuCoreTemperatures.All(c=>ExportTelemetry.Range(c.TemperatureC,-20,130).HasValue);
         var ready=s.Runtime=="Healthy" && !s.LifecycleBlocked && !s.AutomaticPreparing &&
             s.AutomaticSourceTransition is null && !s.PerformanceUpdating && s.PerformanceRecovery?.Pending!=true;
         var accepted=ready && control && s.FanAuthority=="Custom" && s.FanLevel is >=0 &&
