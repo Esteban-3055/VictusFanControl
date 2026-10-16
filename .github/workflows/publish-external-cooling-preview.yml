@@ -12,7 +12,7 @@ jobs:
   publish:
     if: github.repository == 'Esteban-3055/VictusFanControl' && github.ref == 'refs/heads/release/external-cooling-preview-1'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     permissions:
       contents: write
       actions: read
@@ -20,143 +20,50 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       SOURCE_SHA: bf79edb0fae55c1635dc52aad74d61f10320ff46
-      PREVIEW_TAG: v1.2.10-preview.1
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: bf79edb0fae55c1635dc52aad74d61f10320ff46
-          persist-credentials: false
-      - name: Require exact source, successful CI and unused tag
+      - name: Verify staged preview by release ID and exact uploaded digests
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-          gh api "repos/$GH_REPO/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
-          gh api "repos/$GH_REPO/git/matching-refs/tags/$PREVIEW_TAG" > "$RUNNER_TEMP/tags.json"
+          gh api "repos/$GH_REPO/releases/414446440" > "$RUNNER_TEMP/preview.json"
           gh api "repos/$GH_REPO/actions/runs?head_sha=$SOURCE_SHA&event=push&per_page=100" > "$RUNNER_TEMP/checks.json"
           python - <<'PY'
           import json, os
           from pathlib import Path
           tmp=Path(os.environ["RUNNER_TEMP"])
-          tag=os.environ["PREVIEW_TAG"]
-          assert not any(r["tag_name"]==tag for r in json.loads((tmp/"releases.json").read_text()))
-          assert not any(r["ref"]=="refs/tags/"+tag for r in json.loads((tmp/"tags.json").read_text()))
+          r=json.loads((tmp/"preview.json").read_text())
+          assert r["id"]==414446440 and r["tag_name"]=="v1.2.10-preview.1"
+          assert r["draft"] is True and r["prerelease"] is True
+          assert r["target_commitish"]==os.environ["SOURCE_SHA"]
+          expected={"Esp32Simulator-v1.2.10-preview.1-win-x64.zip":{"size":132124,"digest":"sha256:8866ce6da94c7e9f5c8b4ae6a1c0dd45e9d1c38470f92a7b0bdc8977b4461961"},"Esp32Simulator-v1.2.10-preview.1-win-x64.zip.sha256":{"size":111,"digest":"sha256:63e9cdf344037ef790f0a08598e9205984c66f2e70375b60437c63bdc4e6c47c"},"EXTERNAL-COOLING-AUDIT.md":{"size":3273,"digest":"sha256:d08373cdbf1497aaf71d747b447a2ff0563877c55c644ba6874ee99394bf92ad"},"EXTERNAL-COOLING-CI-VALIDATION.json":{"size":1607,"digest":"sha256:72051363d567dad730872ba4e6d18db58996b82c18dd9cb9b5098d61de2b7c05"},"EXTERNAL-COOLING-PROTOCOL.md":{"size":9790,"digest":"sha256:e23491f9073c98cfb56809ee1d53eb5da99cae691265418d4521498214d112ab"},"EXTERNAL-COOLING-USAGE.md":{"size":6526,"digest":"sha256:c9a95599bed55666fb64cc009e40948237ed78a927afa9e006e54921e5cf6d06"},"EXTERNAL-COOLING-VALIDATION.md":{"size":5722,"digest":"sha256:0fd6af6317c456f774e4bff55c71d07510e742891eb2b2749fc3ca5b54ba66e1"},"PREVIEW-PROVENANCE.json":{"size":2542,"digest":"sha256:15c6e1f984550ccb1c46ea99c62c9cbfa32b29711fb7fb9fcff02c6f5c766281"},"VictusFanControl-1.2.9-provenance.json":{"size":4268,"digest":"sha256:a2036307e1d40a704f28850f310fc00ac9e7c69a14d2701e1fa89d0c1328832a"},"VictusFanControl-1.2.9-Setup-win-x64.exe":{"size":168578066,"digest":"sha256:eff46812c317bd383bfb68225a9a1ef83d425ba1f4f1bef460cb514cd32ae089"},"VictusFanControl-1.2.9-Setup-win-x64.exe.provenance.json":{"size":699,"digest":"sha256:c9754cdd84b45dfb8514c71ce0af5322060e61006b1a7e27b7748447646e1d39"},"VictusFanControl-1.2.9-Setup-win-x64.exe.sha256":{"size":108,"digest":"sha256:ec9e5254ebb2923f9778a9f358622b931c230681d4232b3d2ad39aac11fd9043"},"VictusFanControl-1.2.9-win-x64.zip":{"size":6739012,"digest":"sha256:0b0a428c42892438e7078a78623f8d149f4141357f677b371dd2f4b4574ad66c"},"VictusFanControl-1.2.9-win-x64.zip.sha256":{"size":101,"digest":"sha256:8fe4f0c7f889a8a0e0e36cba0268c13657a9fb506e2c7fe40ec0149aa395af83"}}
+          assets={a["name"]:a for a in r["assets"]}
+          assert assets.keys()==expected.keys()
+          for name,e in expected.items():
+              a=assets[name]
+              assert a["state"]=="uploaded" and a["size"]==e["size"] and a["digest"]==e["digest"], name
           runs=json.loads((tmp/"checks.json").read_text())["workflow_runs"]
           for name in ("build","external-cooling","oem-shadow","cpu-rapl","wmi-fan-experiment"):
-              matches=[r for r in runs if r["name"]==name and r["head_sha"]==os.environ["SOURCE_SHA"] and r["head_branch"]=="feature/external-cooling-wifi" and r["event"]=="push"]
+              matches=[x for x in runs if x["name"]==name and x["head_sha"]==os.environ["SOURCE_SHA"] and x["head_branch"]=="feature/external-cooling-wifi" and x["event"]=="push"]
               assert matches, name
-              r=max(matches,key=lambda x:x["id"])
-              assert r["status"]=="completed" and r["conclusion"]=="success", name
+              x=max(matches,key=lambda x:x["id"])
+              assert x["status"]=="completed" and x["conclusion"]=="success", name
+          print("14 uploaded assets and all five same-commit workflows verified.")
           PY
-      - uses: actions/download-artifact@v4
-        with:
-          name: VictusFanControl-1.2.9-win-x64-bf79edb0fae55c1635dc52aad74d61f10320ff46
-          path: verified-payload
-          github-token: ${{ github.token }}
-          run-id: 38813973727
-      - uses: actions/download-artifact@v4
-        with:
-          name: VictusFanControl-1.2.9-Setup-win-x64-bf79edb0fae55c1635dc52aad74d61f10320ff46
-          path: installer-assets
-          github-token: ${{ github.token }}
-          run-id: 38813973727
-      - uses: actions/download-artifact@v4
-        with:
-          name: external-cooling-validation-bf79edb0fae55c1635dc52aad74d61f10320ff46
-          path: validation-evidence
-          github-token: ${{ github.token }}
-          run-id: 38813973870
-      - name: Verify original product archive and installer
+      - name: Publish verified preview and preserve latest stable
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/prepare-github-release.py --payload verified-payload --verified-archive installer-assets/VictusFanControl-1.2.9-win-x64.zip --output release-assets --source-head "$SOURCE_SHA" --build-run-id 38813973727 --checks-json "$RUNNER_TEMP/checks.json" --checks-branch feature/external-cooling-wifi
-          python scripts/prepare-installer-assets.py --installer installer-assets/VictusFanControl-1.2.9-Setup-win-x64.exe --source-head "$SOURCE_SHA" --payload release-assets/VictusFanControl-1.2.9-win-x64.zip --verify --output release-assets
-          cd release-assets
-          echo 'eff46812c317bd383bfb68225a9a1ef83d425ba1f4f1bef460cb514cd32ae089  VictusFanControl-1.2.9-Setup-win-x64.exe' | sha256sum --check -
-          echo '0b0a428c42892438e7078a78623f8d149f4141357f677b371dd2f4b4574ad66c  VictusFanControl-1.2.9-win-x64.zip' | sha256sum --check -
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-      - name: Publish separate simulator and prepare documentation
-        shell: bash
-        run: |
-          set -euo pipefail
-          dotnet publish tools/Esp32Simulator/Esp32Simulator.csproj -c Release -r win-x64 --self-contained false -warnaserror -o "$RUNNER_TEMP/simulator"
-          cp docs/EXTERNAL-COOLING-USAGE.md docs/EXTERNAL-COOLING-PROTOCOL.md docs/EXTERNAL-COOLING-V1-VECTORS.json "$RUNNER_TEMP/simulator/"
-          (cd "$RUNNER_TEMP/simulator" && zip -r "$GITHUB_WORKSPACE/release-assets/Esp32Simulator-$PREVIEW_TAG-win-x64.zip" .)
-          cp docs/EXTERNAL-COOLING-{USAGE,PROTOCOL,AUDIT,VALIDATION}.md release-assets/
+          gh api --method PATCH "repos/$GH_REPO/releases/414446440" -F draft=false -F prerelease=true -f make_latest=false > "$RUNNER_TEMP/published.json"
+          gh api "repos/$GH_REPO/git/ref/tags/v1.2.10-preview.1" > "$RUNNER_TEMP/tag.json"
+          gh api "repos/$GH_REPO/releases/latest" > "$RUNNER_TEMP/latest.json"
           python - <<'PY'
-          import json, os, hashlib
+          import json, os
           from pathlib import Path
-          reports=list(Path("validation-evidence").rglob("validation.json"))
-          assert len(reports)==1, "Expected a single validation report"
-          report=json.loads(reports[0].read_text(encoding="utf-8-sig"))
-          assert report["sourceHead"]==os.environ["SOURCE_SHA"]
-          assert report["physicalEsp32Pass"] is False and report["physicalNotebookWrites"] is False
-          assert report["offlinePackageAuditSkipped"] is False
-          assert len(report["checks"])==18 and all(c["exitCode"]==0 for c in report["checks"])
-          root=Path("release-assets")
-          (root/"EXTERNAL-COOLING-CI-VALIDATION.json").write_text(json.dumps(report,indent=2)+"\n")
-          simulator=root/("Esp32Simulator-"+os.environ["PREVIEW_TAG"]+"-win-x64.zip")
-          (root/(simulator.name+".sha256")).write_text(hashlib.sha256(simulator.read_bytes()).hexdigest()+"  "+simulator.name+"\n")
-          files=[{"name":p.name,"size":p.stat().st_size,"sha256":hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(root.iterdir()) if p.is_file()]
-          (root/"PREVIEW-PROVENANCE.json").write_text(json.dumps({"tag":os.environ["PREVIEW_TAG"],"sourceHead":os.environ["SOURCE_SHA"],"internalProductVersion":"1.2.9","prerelease":True,"physicalEsp32Pass":False,"productBuildRun":38813973727,"validationRun":38813973870,"publicationRun":os.environ["GITHUB_RUN_ID"],"files":files},indent=2)+"\n")
+          tmp=Path(os.environ["RUNNER_TEMP"])
+          r=json.loads((tmp/"published.json").read_text())
+          assert r["draft"] is False and r["prerelease"] is True
+          assert r["tag_name"]=="v1.2.10-preview.1" and r["target_commitish"]==os.environ["SOURCE_SHA"]
+          assert json.loads((tmp/"tag.json").read_text())["object"]["sha"]==os.environ["SOURCE_SHA"]
+          assert json.loads((tmp/"latest.json").read_text())["tag_name"]=="v1.2.9"
+          print(r["html_url"])
           PY
-      - name: Stage draft with verified downloads
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > "$RUNNER_TEMP/preview-notes.md" <<'NOTES'
-          # VictusFanControl v1.2.10-preview.1 — Base externa / ESP32
-          
-          Preliminar de la fase Windows para una futura base refrigeradora ESP32-C3 por Wi-Fi. Código del [PR #41](https://github.com/Esteban-3055/VictusFanControl/pull/41), commit `bf79edb0fae55c1635dc52aad74d61f10320ff46`.
-          
-          ## Descargas y prueba
-          - **Instalador:** `VictusFanControl-1.2.9-Setup-win-x64.exe`. Es el archivo original del CI validado; esta preliminar conserva la versión interna 1.2.9 y se distingue de la estable por el SHA y estas notas.
-          - **Paquete Windows:** `VictusFanControl-1.2.9-win-x64.zip`.
-          - **Simulador separado:** `Esp32Simulator-v1.2.10-preview.1-win-x64.zip`. Extraer y ejecutar `Esp32Simulator.exe --port 8765`; requiere .NET 8 Runtime x64.
-          - Abrir **Configuración → Base externa / ESP32**, elegir monitorización, activar simulador local (127.0.0.1:8765), generar una clave y escribirla en la entrada oculta del simulador. Guardar y conectar.
-          - El módulo comienza deshabilitado. El instalador preserva perfiles y preferencias. Las actualizaciones estables no distribuyen automáticamente esta preliminar.
-          
-          ## Incluye
-          - TCP bidireccional asíncrono con autenticación mutua HMAC, sesiones, secuencias, límites y reconexión.
-          - CPU/GPU/RAM, Demanda y Solicitud diferenciadas, modos y validez/antigüedad.
-          - Configuración integrada, emparejamiento protegido con DPAPI y funcionamiento en bandeja.
-          - Simulador con fallos de red y mensajes fragmentados, inválidos, retrasados y duplicados.
-          - Contrato extensible con `extensions.slot1` y `slot2` nulos.
-          
-          ## Validación y límites
-          Los cinco workflows del SHA de producto terminaron correctamente, incluidas 18 comprobaciones de integración y regresión. [Compilación e instalador](https://github.com/Esteban-3055/VictusFanControl/actions/runs/38813973727) · [Pruebas ExternalCooling](https://github.com/Esteban-3055/VictusFanControl/actions/runs/38813973870).
-          
-          Validado mediante simulador TCP. **No incluye firmware ni acredita funcionamiento físico del ESP32, NTC, LCD o PWM.** Quedan pendientes Wi-Fi/mDNS y suspensión real del equipo. La integración externa no añade escrituras a los controladores internos del notebook. El instalador no dispone de firma Authenticode.
-          
-          La etiqueta identifica una preliminar; la release estable v1.2.9 permanece vigente y el PR sigue pendiente de revisión.
-          
-          ## Documentación
-          Se adjuntan guía de uso, protocolo, auditoría y resultados. Los archivos `.sha256` y `PREVIEW-PROVENANCE.json` permiten comprobar las descargas y su origen.
-          NOTES
-          gh release create "$PREVIEW_TAG" release-assets/* --target "$SOURCE_SHA" --title 'VictusFanControl v1.2.10-preview.1 · Base externa / ESP32' --notes-file "$RUNNER_TEMP/preview-notes.md" --prerelease --latest=false --draft
-      - name: Verify uploaded bytes before publishing preliminary release
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh api "repos/$GH_REPO/releases/tags/$PREVIEW_TAG" > "$RUNNER_TEMP/release.json"
-          python - <<'PY'
-          import json, os, hashlib
-          from pathlib import Path
-          release=json.loads((Path(os.environ["RUNNER_TEMP"])/"release.json").read_text())
-          assert release["draft"] is True and release["prerelease"] is True
-          assert release["target_commitish"]==os.environ["SOURCE_SHA"]
-          assets={a["name"]:a for a in release["assets"]}
-          files={p.name:p for p in Path("release-assets").iterdir() if p.is_file()}
-          assert assets.keys()==files.keys()
-          for name,p in files.items():
-              a=assets[name]
-              assert a["state"]=="uploaded" and a["size"]==p.stat().st_size, name
-              assert a["digest"]=="sha256:"+hashlib.sha256(p.read_bytes()).hexdigest(), name
-          PY
-          gh release edit "$PREVIEW_TAG" --draft=false --prerelease --latest=false
-          test "$(gh api "repos/$GH_REPO/git/ref/tags/$PREVIEW_TAG" --jq '.object.sha')" = "$SOURCE_SHA"
-          test "$(gh api "repos/$GH_REPO/releases/latest" --jq '.tag_name')" = 'v1.2.9'
-          gh release view "$PREVIEW_TAG" --json url,isDraft,isPrerelease,assets
