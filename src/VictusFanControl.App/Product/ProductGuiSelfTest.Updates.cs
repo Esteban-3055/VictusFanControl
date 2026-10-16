@@ -146,7 +146,7 @@ internal static partial class ProductGuiSelfTest
     }
     private static void TestUpdateRecovery(Action<bool,string> require)
     {
-        foreach(var scenario in new[]{"success","runner-failure","changed","invalid","suspend","close","verify-failure"})
+        foreach(var scenario in new[]{"success","read-retry","read-exhausted","read-suspend","runner-failure","changed","invalid","suspend","close","verify-failure"})
         {
             Console.WriteLine("Automatic update recovery fixture: " + scenario);
             var selected=new ProductRecoverySelection(Guid.NewGuid(),Guid.Empty);
@@ -155,7 +155,15 @@ internal static partial class ProductGuiSelfTest
             var old=new RecordingRuntime();
             var recovery=new TaskCompletionSource<ProductRecoveryResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var form=new ProductForm("fixture://update-recovery",fixture:old,fixtureProfiles:new(){RecoverSessionsAutomatically=true});
-            form.RecoverySelectionReader=()=>{reads++;return scenario=="changed"&&reads>1?selected with{CpuSession=Guid.NewGuid()}:pending;};
+            var delays=new List<double>();
+            var delayGate=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            form.UpdateRecoveryReadDelayFixture=(delay,_)=>{delays.Add(delay.TotalSeconds);return scenario=="read-suspend"?delayGate.Task:Task.CompletedTask;};
+            form.RecoverySelectionReader=()=>
+            {
+                reads++;
+                if(scenario=="read-exhausted"||(scenario is "read-retry" or "read-suspend")&&reads==1)throw new IOException("temporary inventory read failure");
+                return scenario=="changed"&&reads>1?selected with{CpuSession=Guid.NewGuid()}:pending;
+            };
             form.RecoveryRunner=s=>{runs++;require(old.Disposals==1&&s==selected,"Update recovery bypassed release or changed selection.");return recovery.Task;};
             form.RecoveryRuntimeFactory=_=>{factories++;throw new IOException("Update recovery must not reopen telemetry.");};
             form.Show();Application.DoEvents();
@@ -171,12 +179,21 @@ internal static partial class ProductGuiSelfTest
                 duplicate.GetAwaiter().GetResult();
                 var clock=Environment.TickCount64;form.TryAutomaticRecovery(clock);form.TryAutomaticRecovery(clock+10000);
             }
-            if(scenario is "invalid" or "verify-failure" or "changed")
+            if(scenario=="read-suspend")
+            {
+                PumpUntil(()=>delays.Count==1,"Update did not wait after its inventory read failure.");
+                CompleteGuiTask(form.HandlePowerEventAsync(4),"Suspend while waiting for inventory hung.");
+                CompleteGuiTask(form.HandlePowerEventAsync(18),"Resume while waiting for inventory hung.");
+                delayGate.SetResult();
+            }
+            if(scenario is "invalid" or "verify-failure" or "changed" or "read-exhausted" or "read-suspend")
             {
                 PumpUntil(()=>install.IsCompleted,"Rejected automatic update recovery hung.");
                 require(runs==0&&launches==0&&factories==0,"Invalid selection/installer or changed records reached recovery/launch.");
                 require(old.Disposals==(scenario=="changed"?1:0),"Read/verification rejection shut down a usable runtime.");
                 require((form.Canvas.DownloadedUpdate is null)==(scenario=="verify-failure"),"A rejected recovery lost the valid installer.");
+                if(scenario=="read-exhausted")require(reads==3&&delays.SequenceEqual(new double[]{30,60}),"Update inventory retry was unbounded or skipped progressive delay.");
+                if(scenario=="read-suspend")require(reads==1,"Interrupted update performed another inventory read.");
             }
             else
             {
@@ -190,8 +207,10 @@ internal static partial class ProductGuiSelfTest
                 if(scenario!="runner-failure")pending=new(Guid.Empty,Guid.Empty);
                 recovery.SetResult(new(scenario!="runner-failure","fixture-evidence",scenario=="runner-failure"?"native completion unknown":"released"));
                 PumpUntil(()=>install.IsCompleted,"Automatic update recovery never completed.");
-                require(runs==1&&factories==0&&launches==(scenario=="success"?1:0)&&old.Disposals==1,"Update duplicated recovery, reacquired hardware or launched after an interruption/failure.");
-                if(scenario!="success")require(form.Canvas.DownloadedUpdate==update,"Interrupted/failed recovery lost the downloaded installer.");
+                var success=scenario is "success" or "read-retry";
+                require(runs==1&&factories==0&&launches==(success?1:0)&&old.Disposals==1,"Update duplicated recovery, reacquired hardware or launched after an interruption/failure.");
+                if(scenario=="read-retry")require(delays.SequenceEqual(new double[]{30}),"Transient update read did not recover automatically after its delay.");
+                if(!success)require(form.Canvas.DownloadedUpdate==update,"Interrupted/failed recovery lost the downloaded installer.");
                 if(exit is not null)PumpUntil(()=>exit.IsCompleted,"Exit failed to finish after update recovery.");
             }
             if(!form.IsDisposed){var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Update recovery fixture exit hung.");}

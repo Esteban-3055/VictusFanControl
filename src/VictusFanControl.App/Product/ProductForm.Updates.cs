@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Principal;
 using VictusFanControl.Product;
+using VictusFanControl.Recovery;
 
 namespace VictusFanControl.App;
 
@@ -11,6 +12,27 @@ internal sealed partial class ProductForm
     private bool _updateCancellationDisposed;
     private Task? _updateInstallTask;
     private long _updateLifecycleBoundary;
+    internal Func<TimeSpan,CancellationToken,Task>? UpdateRecoveryReadDelayFixture { get; set; }
+
+    private async Task<ProductRecoverySelection> ReadUpdateRecoveryAsync(long boundary)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { return await Task.Run(RecoverySelectionReader); }
+            catch (Exception ex) when (attempt < 2 && Draft.RecoverSessionsAutomatically && (ex is IOException or UnauthorizedAccessException))
+            {
+                if (_closing || IsDisposed || _displayOff || boundary != _updateLifecycleBoundary)
+                    throw new OperationCanceledException("La actualización se interrumpió durante la lectura de recuperación.");
+                var delay = TimeSpan.FromSeconds(attempt == 0 ? 30 : 60);
+                _canvas.UpdateStatus = $"No se pudo leer la sesión anterior. Reintentando automáticamente en {delay.TotalSeconds:0} s; la descarga se conserva.";
+                _canvas.Invalidate(); AppLog.Write("PRODUCT UPDATE RECOVERY READ: attempt=" + (attempt + 1) + "; " + ex);
+                await (_isolatedRuntime && UpdateRecoveryReadDelayFixture is { } fixture
+                    ? fixture(delay, _updateCancellation.Token) : Task.Delay(delay, _updateCancellation.Token));
+                if (_closing || IsDisposed || _displayOff || boundary != _updateLifecycleBoundary)
+                    throw new OperationCanceledException("La actualización se interrumpió durante la espera de recuperación.");
+            }
+        }
+    }
     private void ResetUpdateSelection()
     {
         _canvas.AvailableUpdate = null; _canvas.UpdateCheckedAt = null; _canvas.UpdateProgressPercent = null;
@@ -113,7 +135,7 @@ internal sealed partial class ProductForm
             { _canvas.UpdateStatus = "El instalador se conserva. Guarda los cambios y resuelve la interrupción antes de volver a pulsar Instalar."; return; }
             if (_runtime is null || _canvas.State.PerformanceRecovery?.Pending == true)
             {
-                var pending = await Task.Run(RecoverySelectionReader);
+                var pending = await ReadUpdateRecoveryAsync(boundary);
                 if (_closing || IsDisposed) return;
                 if (_displayOff || _canvas.Dirty || _canvas.Busy || _restarting || boundary != _updateLifecycleBoundary) return;
                 if (pending.Pending)

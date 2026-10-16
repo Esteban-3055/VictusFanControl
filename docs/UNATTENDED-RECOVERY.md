@@ -12,6 +12,7 @@ Recuperar una sesión no equivale a obtener autoridad nueva para controlar venti
 | Sesión anterior reconocida y estable | Espera inicial de 10 s y recuperación con el cliente y Guardian existentes. |
 | Error de E/S o permisos al leer la selección, antes de liberar o ejecutar un recuperador | Hasta dos reintentos de lectura, con espera de 30 y 60 s. No se actúa sobre hardware con una selección no validada. |
 | Recuperación necesaria al pulsar Instalar | Tras la confirmación normal de instalación y verificar el instalador, recupera la selección exacta y continúa sin pedir Recuperar sesiones por separado. |
+| Error transitorio al leer la selección durante esa instalación | Relecturas a 30 y 60 s, con máximo tres intentos y sin liberar mientras no exista una selección válida. Una suspensión/cierre interrumpe la espera. |
 | Recuperación completada para instalar | No se crea otra instancia de telemetría/controlador entre recuperación e instalación. |
 | Recuperación o instalación fallida | El monitor vuelve a funcionar. Se conserva la descarga válida y la evidencia. |
 | Respuesta WMI nula después del retorno de InvokeMethod | Se registra la finalización antes de validar el contenido; la respuesta sigue rechazándose. |
