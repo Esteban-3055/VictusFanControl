@@ -4,7 +4,7 @@ using System.Text;
 namespace VictusFanControl.Hardware.Nvidia;
 
 internal sealed class NvmlClient :
-    IDisposable,
+    INvmlTelemetryReader,
     INvmlGpuClockControlTransport,
     INvmlGpuPowerLimitReadTransport,
     INvmlGpuPowerFieldReadTransport

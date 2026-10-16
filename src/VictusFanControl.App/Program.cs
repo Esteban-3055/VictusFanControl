@@ -9,6 +9,16 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        // Dispatch before GUI/log/runtime startup. This child can only acquire NVIDIA telemetry.
+        if (args.Length > 0 && args[0] is "--nvml-telemetry-worker" or "--nvml-telemetry-fixture")
+        { Environment.ExitCode = NvmlTelemetryWorkerHost.Run(args); return; }
+        if (args.Length == 1 && args[0] == "--nvml-telemetry-self-test")
+        { Environment.ExitCode = NvmlTelemetryIsolationSelfTest.Run(); return; }
+        if (args.Length == 1 && args[0] == "--nvml-telemetry-fixture-parent")
+        {
+            var reader = new NvmlTelemetryProcessClient("fixture-GPU", true, () => NvmlTelemetryProcessClient.CreateStartInfo("healthy"));
+            Console.WriteLine(reader.ChildProcessId); Console.Out.Flush(); GC.KeepAlive(reader); return;
+        }
         if(args.Length==1&&args[0]=="--external-cooling-ui-self-test")
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunExternalCoolingChecks();return;}
         if(args.Length==1&&args[0]=="--external-cooling-self-test")

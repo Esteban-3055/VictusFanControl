@@ -20,7 +20,8 @@ public sealed class HardwareTelemetryReader : IDisposable
     private readonly HpWmiFanTelemetryReader? _wmiFans;
     private readonly bool _schedulePeriodicFanReads;
     private HpWmiFanProofReader? _freshFans;
-    private NvmlClient? _nvml;
+    private INvmlTelemetryReader? _nvml;
+    private readonly Func<string?, bool, INvmlTelemetryReader> _gpuTelemetryFactory;
     private readonly WindowsCpuLoadReader _cpuLoad = new();
 
     // Passive, lock-free progress for a watchdog running while a native call is
@@ -54,8 +55,10 @@ public sealed class HardwareTelemetryReader : IDisposable
 
     public HardwareTelemetryReader(string modulesDirectory) : this(modulesDirectory, schedulePeriodicFanReads: true) { }
 
-    internal HardwareTelemetryReader(string modulesDirectory, bool schedulePeriodicFanReads, bool productTolerance = false)
+    internal HardwareTelemetryReader(string modulesDirectory, bool schedulePeriodicFanReads, bool productTolerance = false,
+        Func<string?, bool, INvmlTelemetryReader>? gpuTelemetryFactory = null)
     {
+        _gpuTelemetryFactory = gpuTelemetryFactory ?? ((name, exact) => new NvmlClient(name, exact));
         _schedulePeriodicFanReads = schedulePeriodicFanReads;
         _intelModulePath = Path.Combine(modulesDirectory, "IntelMSR.bin");
         _ecModulePath = Path.Combine(modulesDirectory, "LpcACPIEC.bin");
@@ -227,7 +230,7 @@ public sealed class HardwareTelemetryReader : IDisposable
             {
                 _lastNvmlReadError = ex.Message;
                 MarkReadPhase("NvmlRecoveryAndRetry");
-                if (RecoverNvml())
+                if (ex is not NvmlTelemetryUnavailableException && RecoverNvml())
                 {
                     try
                     {
@@ -513,9 +516,9 @@ public sealed class HardwareTelemetryReader : IDisposable
     {
         try
         {
-            _nvml = new NvmlClient(
+            _nvml = _gpuTelemetryFactory(
                 _targetProfile?.ExpectedGpuName,
-                requirePreferredDevice: _targetProfile is not null);
+                _targetProfile is not null);
             _nvmlStatus = $"OK ({_nvml.DeviceName})";
             _nextNvmlInitAttempt = DateTimeOffset.MinValue;
         }
@@ -605,9 +608,9 @@ public sealed class HardwareTelemetryReader : IDisposable
         try
         {
             _nvml?.Dispose();
-            _nvml = new NvmlClient(
+            _nvml = _gpuTelemetryFactory(
                 _targetProfile?.ExpectedGpuName,
-                requirePreferredDevice: _targetProfile is not null);
+                _targetProfile is not null);
             _nvmlStatus = $"OK (recovered, {_nvml.DeviceName})";
             _nextNvmlInitAttempt = DateTimeOffset.MinValue;
             NvmlRecoveries++;
