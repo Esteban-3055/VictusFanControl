@@ -4,9 +4,10 @@ Implementación para VictusFanControl basada en v1.2.9. No incluye firmware ni p
 del ESP32. El módulo comienza deshabilitado; el programa puede iniciar sin dispositivo.
 Es independiente de WMI, SafetyGate, ventiladores internos y Performance Control.
 
-La preliminar 2 se distribuye como **v1.2.10**, con instalador y versión interna 1.2.10.
-Para actualizar desde 1.2.9, activar **Incluir versiones preliminares** en Actualizaciones
-y buscar, descargar e instalar. Véanse las [notas de publicación](../release/RELEASE-NOTES-v1.2.10.md).
+La preliminar 3 se distribuye como **v1.2.11**, con instalador y versión interna 1.2.11.
+Para actualizar desde 1.2.9 o 1.2.10, activar **Incluir versiones preliminares** en Actualizaciones,
+guardar esa preferencia en Configuración y volver a buscar, descargar e instalar.
+Véanse las [notas de publicación](../release/RELEASE-NOTES-v1.2.11.md).
 
 ## Probar con el simulador
 
@@ -21,8 +22,8 @@ Requisitos: Windows, .NET 8 SDK y los requisitos de compilación existentes del 
 
 2. Abrir VictusFanControl de la forma habitual. Ir a **Base externa** en la barra lateral,
    entre **Avanzado** y **Actualizaciones**. Las opciones se editan dentro de esa página.
-   Elegir **Monitorización únicamente**, marcar **Simulador local**, puerto 8765.
-3. Pulsar **Generar clave**, marcar **Mostrar clave nueva** y copiarla para aprovisionar
+   Elegir **Monitorización**, activar **Simulador local**, puerto 8765.
+3. Pulsar **Generar clave**, pulsar **Mostrar clave nueva** y copiarla para aprovisionar
    el simulador. La clave solo se muestra mientras se configura; una clave ya guardada no
    se vuelve a revelar. Guardar una clave nueva reemplaza el emparejamiento anterior.
 4. En otra terminal, ejecutar:
@@ -36,10 +37,10 @@ Requisitos: Windows, .NET 8 SDK y los requisitos de compilación existentes del 
    La clave generada tiene 44 caracteres y termina en `=`. Una entrada incorrecta permite
    reintentar; Escape o Ctrl+C cancelan la entrada. Se requiere una terminal interactiva.
    Los argumentos incorrectos y un puerto ocupado generan un mensaje breve y salida controlada.
-5. Pulsar **Conectar** en la aplicación; guarda preferencias y emparejamiento. El campo de
-   clave se vacía. Esperar **Connected / recepción válida**. TCP abierto o autenticado sin
-   respuesta válida todavía no se presenta como Connected.
-6. Revisar el estado y los contadores; activar **Mostrar mensajes enviados y recibidos**
+5. Pulsar **Guardar y conectar** en la aplicación; guarda preferencias y emparejamiento. El campo de
+   clave se vacía. Esperar **Conectada / recepción válida**. TCP abierto o autenticado sin
+   respuesta válida todavía no se presenta como Conectada.
+6. Revisar el estado y los contadores; abrir **Diagnóstico**, elegir **Último enviado** o **Último recibido**
    para ver CPU/GPU/RAM, Demanda, Solicitud y estados. Los valores
    ausentes aparecen como null. Firmware no genera Solicitud. Demanda solo existe cuando
    hay una decisión automática aceptada y vigente; no se recalcula desde las curvas editadas.
@@ -53,11 +54,18 @@ Requisitos: Windows, .NET 8 SDK y los requisitos de compilación existentes del 
    la reconexión hasta otra orden Conectar. **Deshabilitado + Guardar** no abre sockets.
    Guardar por sí solo conserva configuración y deja la comunicación desconectada.
 
-El interruptor **Habilitar conexión** y el selector de modo preparan cambios; pulsar
-**Guardar** o **Conectar** los aplica. Desactivar el interruptor selecciona Deshabilitado;
-volver a activarlo recupera el último modo preparado. Cambiar de pestaña conserva los
-cambios pendientes y la conexión activa. La clave nueva vuelve a ocultarse al salir de
-la página. La página permite desplazarse cuando el tamaño de ventana reduce el espacio.
+Los tres botones de modo preparan cambios; **Guardar cambios** los aplica y deja la comunicación
+desconectada. **Conectar** inicia una sesión; si hay cambios se presenta como **Guardar y conectar**.
+Mientras exista una conexión o intento activo, la acción es **Desconectar**.
+**Descartar cambios** restaura solo el borrador de la base externa, sin reiniciar su conexión
+ni cambiar los perfiles del notebook. **Olvidar emparejamiento** prepara una eliminación;
+se ejecuta al guardar y puede cancelarse mediante Descartar.
+
+La tarjeta superior muestra el estado real y el modo guardado. Los modos en edición no cambian
+la comunicación hasta guardarlos. Cambiar de pestaña conserva borrador y conexión; salir o abrir
+Diagnóstico vuelve a ocultar la clave nueva. Configuración y Diagnóstico comparten el diseño,
+escala y acentos de las demás pestañas. Los valores del dispositivo caducados se muestran como —.
+**Copiar mensaje** copia únicamente el mensaje operativo seleccionado, sin datos de emparejamiento.
 
 La clave DPAPI se conserva en `%LOCALAPPDATA%\VictusFanControl\external-cooling.json`;
 está ligada al usuario y equipo de Windows. No editar ese archivo para trasladar una clave:

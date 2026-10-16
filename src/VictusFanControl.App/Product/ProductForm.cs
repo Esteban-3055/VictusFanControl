@@ -216,6 +216,7 @@ internal sealed partial class ProductForm : Form
     }
     internal void HandleCommand(string id)
     {
+        if(id.StartsWith("external-",StringComparison.Ordinal)&&_externalCoolingPage is{} external){_=external.ExecuteAsync(id);return;}
         if (id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release" or "session-restart")
             _automaticRecoveryResumeSuppressed = true;
         if (_recoveryTask is not null && id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")
@@ -455,7 +456,7 @@ internal sealed partial class ProductForm : Form
     }
     protected override void Dispose(bool disposing)
     {
-        if(disposing){_externalCooling?.Suspend();_=DisposeExternalCoolingAsync();}
+        if(disposing){_externalCoolingPage?.Dispose();_externalCooling?.Suspend();_=DisposeExternalCoolingAsync();}
         if(disposing){DisposeUpdateCancellation();_presentationTimer.Dispose();UnregisterPowerNotifications();DetachRuntime();_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();_icons.Dispose();}
         base.Dispose(disposing);
     }

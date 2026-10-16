@@ -193,9 +193,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Updates: Updates(g);break;
             case ProductPage.Protections: Protections(g);break;
             case ProductPage.ExternalCooling:
-                DrawText(g,"Base externa / ESP32",320,88,31,null,1300,true);
-                DrawText(g,"Conexión con base externa de ventilación (ESP32)",320,140,22,Muted,1300);
-                break;
+                ExternalCooling(g);break;
         }
         using(var b=new SolidBrush(FreshSnapshot is not null?Green:Yellow))g.FillEllipse(b,24,901,20,20);
         DrawText(g,"VictusFanControl v"+ProductRelease.DisplayVersion+"  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
