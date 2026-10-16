@@ -6,6 +6,7 @@ namespace VictusFanControl.App;
 internal sealed partial class ProductForm
 {
     private Task? _recoveryTask;
+    internal bool RecoveryMonitorActive => _presentationTimer.Enabled;
     internal Func<ProductRecoverySelection> RecoverySelectionReader { get; set; } = () => ProductRecoverySelection.Read();
     internal Func<ProductRecoverySelection, Task<ProductRecoveryResult>>? RecoveryRunner { get; set; }
     internal Func<ProductProfiles, Task<IProductRuntime>>? RecoveryRuntimeFactory { get; set; }
@@ -13,7 +14,7 @@ internal sealed partial class ProductForm
     internal Task RecoverPerformanceAsync(bool confirmed = false)
     {
         if (_recoveryTask is not null) return _recoveryTask;
-        if (_closing || _restarting || IsDisposed || _canvas.Busy || _displayOff || _isolatedRuntime && RecoveryRunner is null) return Task.CompletedTask;
+        if (_closing || _restarting || IsDisposed || _canvas.Busy || _displayOff || _checkingUpdate || _canvas.UpdateBusy || _isolatedRuntime && RecoveryRunner is null) return Task.CompletedTask;
         try
         {
             var selected = RecoverySelectionReader();
@@ -27,8 +28,10 @@ internal sealed partial class ProductForm
         catch (Exception ex) { _canvas.Notice = "No se pudo leer la recuperación: " + ex.Message; _canvas.Invalidate(); return Task.CompletedTask; }
     }
 
-    private async Task RecoverPerformanceCoreAsync(ProductRecoverySelection selected, ProductProfiles? automaticPreferences = null, bool resume = false)
+    private async Task<bool> RecoverPerformanceCoreAsync(ProductRecoverySelection selected, ProductProfiles? automaticPreferences = null, bool resume = false, bool reopenRuntime = true)
     {
+        _automaticRecovery.RecordAttempt(new(true, "", selected.CpuSession == Guid.Empty ? null : selected.CpuSession,
+            selected.GpuSession == Guid.Empty ? null : selected.GpuSession, selected.Fans));
         _restarting = true; _restartLifecycleInterrupted = false; _canvas.Busy = true; _canvas.RestartAvailable = false;
         _presentationTimer.Stop(); _startupAutomatic?.Cancel("Recuperación explícita de CPU/GPU."); _startupAutomatic = null;
         var unattended = automaticPreferences is not null;
@@ -45,7 +48,7 @@ internal sealed partial class ProductForm
             controllerReleased = true;
             _runtime = null;
             if (fenceFailure is not null) throw new IOException("No se confirmó el bloqueo del controlador anterior.", fenceFailure);
-            if (_closing || _exitRequested) return;
+            if (_closing || _exitRequested) return false;
             if (_displayOff || _restartLifecycleInterrupted) throw new IOException("Recuperación cancelada por suspensión o pantalla apagada. No se abrió el recuperador.");
             var pending = await Task.Run(RecoverySelectionReader);
             // A normal cleanup may have resolved these exact records already.
@@ -60,8 +63,21 @@ internal sealed partial class ProductForm
             if (!recovered.Succeeded || (await Task.Run(RecoverySelectionReader)).Pending)
                 throw new IOException(recovered.Detail + "\nEvidencia: " + recovered.EvidenceDirectory);
             if (!_isolatedRuntime) await Task.Run(ProductSessionRestart.EnsureNoRecoveryRecords);
-            if (_closing || _exitRequested) return;
+            if (_closing || _exitRequested) return false;
             if (_displayOff || _restartLifecycleInterrupted) throw new IOException("Recuperación completada; un cambio de energía impidió abrir otra sesión. Usa Reiniciar sesión cuando el equipo esté activo.");
+            if (!reopenRuntime)
+            {
+                // The user already requested installation. Do not acquire new
+                // telemetry or reopen a controller between recovery and handoff.
+                _runtimeShutdown = Task.CompletedTask; _lifecycleRelease = Task.CompletedTask;
+                _startupFailure = null; _recoveryAtStartup = false;
+                _canvas.State = new() { Hardware = before.Hardware, Target = before.Target,
+                    Runtime = "Stopped", FanMode = "Firmware", FanAuthority = "Firmware",
+                    PerformanceRecovery = new(false, "Recuperación completada antes de instalar."),
+                    GuardianState = "Sin sesión" };
+                _canvas.Notice = "Recuperación completada. Continuando la actualización…";
+                return true;
+            }
             var next = await (RecoveryRuntimeFactory?.Invoke(preferences) ?? Task.Run<IProductRuntime>(() => new ProductRuntime(_modules, preferences, _automaticReview, releasedRuntime: oldRuntime)));
             _runtime = next; _runtimeShutdown = null; _lifecycleRelease = Task.CompletedTask; _startupFailure = null;
             controllerReleased = false;
@@ -84,6 +100,7 @@ internal sealed partial class ProductForm
                 _canvas.Notice = (_startupAutomatic is not null ? "Recuperación completada. Esperando sensores nuevos para reanudar Automático. " : "Recuperación completada. Sesión nueva en Firmware. ") +
                     (recovered.EvidenceDirectory.Length == 0 ? "" : "Respaldos: " + recovered.EvidenceDirectory);
             });
+            return true;
         }
         catch (Exception ex)
         {
@@ -106,10 +123,17 @@ internal sealed partial class ProductForm
                 _canvas.Notice = _canvas.State.Failure!; UpdateTray(_canvas.State);
             });
             AppLog.Write("PRODUCT GUIDED RECOVERY BLOCKED: " + ex);
+            return false;
         }
         finally
         {
-            await RecoveryUiAsync(() => { _restarting = false; _recoveryTask = null; _canvas.Busy = _pendingCommands > 0; _canvas.Invalidate(); });
+            await RecoveryUiAsync(() =>
+            {
+                _restarting = false; _recoveryTask = null; _canvas.Busy = _pendingCommands > 0;
+                // A manual failure must not stop background monitoring forever.
+                if (!_closing && !_exitRequested) _presentationTimer.Start();
+                _canvas.Invalidate();
+            });
         }
     }
     private Task RecoveryUiAsync(Action action)

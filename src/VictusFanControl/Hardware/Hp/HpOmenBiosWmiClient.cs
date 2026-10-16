@@ -136,12 +136,11 @@ public sealed class HpOmenBiosWmiClient
             EcWmiInvestigationTrace.Record(trace, "wmi.invoke.begin", methodName);
             if (WmiFanExperimentBoundary.Enabled) WmiFanExperimentBoundary.EnsureRequestAllowed(request);
             FanDispatchAdmissionScope.EnsureNativeRequestAllowed(request);
-            WmiFanExperimentBoundary.MarkNativeStart(request);
-            using var methodOutput = target.InvokeMethod(methodName, methodInput, invokeOptions)
+            using var methodOutput = WmiFanExperimentBoundary.InvokeNative(request,
+                () => target.InvokeMethod(methodName, methodInput, invokeOptions))
                 ?? throw new HpBiosCallException(
                     $"HP WMI method {methodName} returned no output.");
 
-            WmiFanExperimentBoundary.MarkNativeReturned();
             EcWmiInvestigationTrace.Record(trace, "wmi.invoke.end", methodName);
             var resultData = methodOutput["OutData"] as ManagementBaseObject
                 ?? throw new HpBiosCallException(

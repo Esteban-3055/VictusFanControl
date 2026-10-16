@@ -165,6 +165,17 @@ internal static class WmiFanExperimentBoundary
         if (Enabled) File.Delete(InFlightPath);
     }
 
+    internal static T InvokeNative<T>(HpBiosRequest request, Func<T> invoke)
+    {
+        MarkNativeStart(request);
+        var result = invoke();
+        // A returned null/invalid response is still a completed invocation. Keep
+        // response validation outside this boundary; exceptions from Invoke keep
+        // the marker because their native completion has not been established.
+        MarkNativeReturned();
+        return result;
+    }
+
     // Wait for a live native call to return before inspecting its transient
     // marker. Hold the same slot throughout recovery; nested Send calls on
     // this synchronous thread may acquire the Windows mutex recursively.

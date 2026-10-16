@@ -407,6 +407,11 @@ internal static partial class ProductGuiSelfTest
     private static void PumpUntil(Func<bool> completed,string failure)
     {
         var timer=System.Diagnostics.Stopwatch.StartNew();
+        // Lifecycle tests deliberately stop the form timer. Keep the nested
+        // DoEvents pump awake even when there are no other window messages.
+        using var wake = new System.Windows.Forms.Timer { Interval = 50 };
+        wake.Tick += (_,_) => { if(timer.Elapsed>TimeSpan.FromSeconds(10)) Application.ExitThread(); };
+        wake.Start();
         while(!completed()){if(timer.Elapsed>TimeSpan.FromSeconds(10))throw new InvalidOperationException(failure);Application.DoEvents();Thread.Sleep(1);}
         Application.DoEvents();
     }
@@ -433,6 +438,7 @@ internal static partial class ProductGuiSelfTest
                 var path=Path.Combine(dir,"diagnostic.zip");var export=form.ExportDiagnosticsAsync(path);PumpUntil(()=>export.IsCompleted,"Startup failure export did not finish.");export.GetAwaiter().GetResult();
                 using var zip=System.IO.Compression.ZipFile.OpenRead(path);using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());
                 using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());require(state.RootElement.GetProperty("Failure").GetString()?.Contains("fixture startup failure")==true,"Export omitted startup failure.");
+                require(state.RootElement.GetProperty("updater").GetProperty("automaticRecoveryEnabled").GetBoolean(),"Export omitted updater/recovery context.");
             }
             finally{Directory.Delete(dir,true);}
             var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Failed-startup fixture shutdown failed.");require(broken.Disposals==1&&broken.Commands==0,"Failed startup acquired authority or leaked its runtime.");

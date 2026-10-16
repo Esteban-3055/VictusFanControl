@@ -12,7 +12,7 @@ internal sealed partial class ProductForm
     {
         var now = clock ?? Environment.TickCount64;
         _automaticRecovery.Observe(_canvas.State, now);
-        if (ProductFanRangePreview.Enabled || _closing || _exitRequested || _restarting || IsDisposed || _canvas.Busy || _displayOff ||
+        if (ProductFanRangePreview.Enabled || _closing || _exitRequested || _restarting || IsDisposed || _canvas.Busy || _displayOff || _checkingUpdate || _canvas.UpdateBusy ||
             _automaticReview is not null || !Draft.RecoverSessionsAutomatically ||
             _isolatedRuntime && RecoveryRunner is null)
         { _automaticRecovery.Pause(); return; }
@@ -33,7 +33,20 @@ internal sealed partial class ProductForm
         await Task.Yield();
         try
         {
-            var selected = await Task.Run(() => _isolatedRuntime ? RecoverySelectionReader() : ProductRecoverySelection.Read(ignoreCurrentOwner:true));
+            ProductRecoverySelection selected;
+            try { selected = await Task.Run(() => _isolatedRuntime ? RecoverySelectionReader() : ProductRecoverySelection.Read(ignoreCurrentOwner:true)); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                await RecoveryUiAsync(() =>
+                {
+                    var retry = _automaticRecovery.DeferInventoryRead(expected, Environment.TickCount64);
+                    _canvas.Notice = retry ? "No se pudo leer la recuperación. Se reintentará automáticamente con espera progresiva." :
+                        "Se alcanzó el límite de reintentos de lectura. Conserva el diagnóstico. " + ex.Message;
+                    AppLog.Write("PRODUCT RECOVERY INVENTORY READ: retry=" + retry + "; " + ex);
+                    if (!retry) NotifyRecoveryFailure(_canvas.Notice);
+                });
+                return;
+            }
             if (ProductFanRangePreview.Enabled || _closing || _exitRequested || _displayOff || _restartLifecycleInterrupted) return;
             if (!selected.Pending) return; // Normal cleanup won the race; no recovery writes.
             if (selected.CpuSession != (expected.CpuSession ?? Guid.Empty) || selected.GpuSession != (expected.GpuSession ?? Guid.Empty) ||

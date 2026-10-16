@@ -129,6 +129,16 @@ internal static class WmiFanExperimentSelfTest
             Reject(() => WmiFanExperimentBoundary.Serialize(level, () => throw new Exception("native call admitted")));
             Check(File.Exists(Path.Combine(directory, "native-inflight.json")), "Unknown native completion erased.");
             WmiFanExperimentBoundary.MarkNativeReturned();
+            var nullReply = WmiFanExperimentBoundary.InvokeNative<object?>(rpm, () =>
+            {
+                Check(File.Exists(Path.Combine(directory, "native-inflight.json")), "Native invocation was not tracked.");
+                return null;
+            });
+            Check(nullReply is null && !File.Exists(Path.Combine(directory, "native-inflight.json")),
+                "A returned null response was confused with unfinished native execution.");
+            Reject(() => WmiFanExperimentBoundary.InvokeNative<object?>(rpm, () => throw new IOException("native timeout")));
+            Check(File.Exists(Path.Combine(directory, "native-inflight.json")), "A native exception lost its uncertainty marker.");
+            WmiFanExperimentBoundary.MarkNativeReturned(); // Fixture teardown only; no real call was made.
             File.WriteAllText(WmiFanExperimentBoundary.StopPath, "stop");
             Reject(() => WmiFanExperimentBoundary.EnsureRequestAllowed(level));
             WmiFanExperimentBoundary.BeginRecovery();
