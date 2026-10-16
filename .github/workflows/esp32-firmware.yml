@@ -2,7 +2,7 @@ name: esp32-firmware
 on:
   push:
     branches: ['feature/**', main]
-    paths: ['firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
+    paths: ['Directory.Build.props', 'firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
   pull_request:
     paths: ['firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
 permissions:
