@@ -774,6 +774,14 @@ jobs:
       - name: Isolated NVML telemetry failures (no hardware IO)
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --nvml-telemetry-self-test
 
+      - name: Upload NVML isolation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvml-telemetry-isolation-${{ github.sha }}
+          path: logs/nvml-telemetry-self-test/report.json
+          if-no-files-found: warn
+
       - name: HP fan backend self-test
         run: dotnet run --project .\src\VictusFanControl -c Release --no-build -- --hp-backend-self-test
 

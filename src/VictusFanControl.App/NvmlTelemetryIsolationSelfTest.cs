@@ -75,6 +75,7 @@ internal static class NvmlTelemetryIsolationSelfTest
             {
                 using var reader = Reader("stderr-flood"); children.Add(reader.ChildProcessId!.Value);
                 Require(reader.ReadSample().LoadPercent == 12, "Stderr blocked telemetry.");
+                Require(reader.NativeDiagnosticCharacterCount <= 8192, "Native diagnostics retained an unbounded flood.");
             });
             Case("concurrent reads and disposal are serialized", () =>
             {
@@ -102,7 +103,8 @@ internal static class NvmlTelemetryIsolationSelfTest
             Console.WriteLine("NVML telemetry isolation: PASS; synthetic process failures, zero hardware IO.");
             return 0;
         }
-        catch (Exception ex) { results.Add(new { passed = false, error = ex.ToString() }); Console.Error.WriteLine(ex); return 1; }
+        catch (Exception ex) { results.Add(new { passed = false, error = ex.ToString(),
+            helperDiagnostics = AppLog.ReadTail(AppLog.CurrentLogPath, 16384) }); Console.Error.WriteLine(ex); return 1; }
         finally
         {
             var directory = Path.Combine("logs", "nvml-telemetry-self-test"); Directory.CreateDirectory(directory);

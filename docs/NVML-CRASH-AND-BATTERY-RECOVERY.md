@@ -37,8 +37,11 @@ Normal disposal closes stdin, allows bounded orderly shutdown, and terminates
 only the owned read-only child if it does not exit. A separate child thread
 checks its owner's process identity and a 20 s inactivity limit, including
 while native code is blocked. stderr is drained without unbounded buffering.
-Structured failure records contain helper PID/exit code, failure category and
-invalid-sample status; they carry no external-cooling credentials.
+Structured failure records contain helper PID/exit code, failure category,
+invalid-sample status and at most 8192 characters of native stderr stack tail;
+the helper receives no external-cooling credentials. The installed .NET console
+host launches the helper DLL even when the GUI uses a WinExe apphost: private
+console streams must work in both development and the packaged application.
 
 After recovery returns, only the loop scheduling origin is reset. Acquisition,
 completed-read watchdog, authority and source timestamps are not renewed.
