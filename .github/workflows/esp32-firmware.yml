@@ -1,0 +1,48 @@
+name: esp32-firmware
+on:
+  push:
+    branches: ['feature/**', main]
+    paths: ['firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
+  pull_request:
+    paths: ['firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
+permissions:
+  contents: read
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install pinned build tool
+        run: python -m pip install platformio==6.1.18
+      - name: Compile ESP32-C3 monitoring and inverted-PWM bench images (no flashing)
+        run: python -m platformio run -d firmware/esp32-c3 -e supermini -e supermini-bench
+      - name: Compile same protocol and policy as a native host harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 https://github.com/bblanchon/ArduinoJson/archive/refs/tags/v6.21.5.zip -o "$RUNNER_TEMP/arduinojson.zip"
+          echo "4593d22d83a0c687ec5ab60f5ffbb80c2145f6e739983b38ee59da85df5467df  $RUNNER_TEMP/arduinojson.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/arduinojson.zip" -d "$RUNNER_TEMP"
+          clang++ -std=c++17 -O2 -Wall -Wextra -Werror -I "$RUNNER_TEMP/ArduinoJson-6.21.5/src" -I firmware/esp32-c3/lib/VictusProtocol \
+            firmware/esp32-c3/test/host.cpp firmware/esp32-c3/lib/VictusProtocol/*.cpp -lcrypto -o "$RUNNER_TEMP/firmware-host"
+      - name: Protocol vectors, hostile frames, NOT inversion and independent lease
+        run: python firmware/esp32-c3/test/test_protocol.py "$RUNNER_TEMP/firmware-host" --report "$RUNNER_TEMP/protocol-tests.json"
+      - name: Production Windows protocol client interoperates with actual C++ firmware engine
+        run: dotnet run --project tools/FirmwareInterop.Tests -c Release -- python firmware/esp32-c3/test/tcp_bridge.py "$RUNNER_TEMP/firmware-host"
+      - name: Upload unqualified firmware and software evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-c3-unqualified-${{ github.sha }}
+          path: |
+            firmware/esp32-c3/.pio/build/supermini/*.bin
+            firmware/esp32-c3/.pio/build/supermini-bench/*.bin
+            firmware/esp32-c3/README.md
+            ${{ runner.temp }}/protocol-tests.json
+          if-no-files-found: error
