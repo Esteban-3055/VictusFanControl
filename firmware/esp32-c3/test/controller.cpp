@@ -1,0 +1,51 @@
+#include "ExternalController.h"
+#include <cstring>
+#include <iostream>
+#include <stdexcept>
+namespace {
+void require(bool b,const char* s){if(!b)throw std::runtime_error(s);}
+victus::ExternalConfig config(){victus::ExternalConfig c;std::strcpy(c.revision,"0123456789abcdef0123456789abcdef");return c;}
+}
+int controllerTests() {
+    auto c=config();require(c.valid(),"default config");
+    require(c.evaluate(0)==30&&c.evaluate(100)==255&&c.evaluate(50)==130,"curve interpolation");
+    auto bad=c;bad.points[2].input=25;require(!bad.valid(),"duplicate input");
+    bad=c;bad.points[2].output=29;require(!bad.valid(),"below min");
+    bad=c;bad.points[4].output=256;require(!bad.valid(),"above max");
+    bad=c;bad.points[3].output=100;require(!bad.valid(),"decreasing output");
+    bad=c;bad.requestMaximum=bad.requestMinimum;require(!bad.valid(),"bad request calibration");
+    require(victus::ExternalController::electrical(30)==225&&victus::ExternalController::electrical(255)==0,"NOT 8-bit polarity");
+    victus::ExternalController fan;fan.configure(c);
+    fan.receive(true,27,0,false,0);require(fan.tick(0,24)==255,"startup pulse");
+    require(fan.tick(799,24)==255,"startup hold");
+    int previous=255;
+    for(uint32_t t=800;t<30000;t+=20) {
+        if(t%1000==0)fan.receive(true,27,0,false,t);
+        int duty=fan.tick(t,24);require(duty<=previous&&duty>=30,"monotone ramp down");require(previous-duty<=1,"bounded fall step");previous=duty;
+    }
+    require(previous<=34,"settles near floor inside hysteresis");
+    fan.receive(true,27,100,false,30000);
+    previous=fan.tick(30000,24);
+    for(uint32_t t=30020;t<=40000;t+=20) {
+        if(t%1000==0)fan.receive(true,27,100,false,t);
+        int duty=fan.tick(t,24);require(duty>=previous&&duty-previous<=1,"bounded monotone rise");previous=duty;
+    }
+    require(previous>=250,"settles near maximum");
+    require(fan.remote(),"remote active");fan.tick(41999,24);require(fan.remote(),"lease before deadline");
+    fan.tick(42000,24);require(!fan.remote(),"lease exactly 2s");
+    fan.receive(true,27,50,false,43000);require(fan.tick(43000,NAN)==255&&!fan.remote(),"sensor fault immediate max");
+    fan.receive(true,27,0,false,44000);require(fan.tick(44000,45)==255,"hot ambient bypass");
+    fan.receive(false,27,50,false,45000);fan.tick(45000,24);require(!fan.remote(),"MonitorOnly cannot grant control");
+    fan.receive(true,27,NAN,false,45020);fan.tick(45020,24);require(!fan.remote(),"invalid demand");
+    c.input=1;fan.configure(c); // same revision is immutable and ignored by the controller
+    std::strcpy(c.revision,"1123456789abcdef0123456789abcdef");fan.configure(c);
+    fan.receive(true,65535,50,false,46000);fan.tick(46000,24);require(!fan.remote(),"out of explicit calibration");
+    fan.receive(true,27,-1,true,47000);fan.tick(47000,24);require(fan.remote(),"request input supports Manual without demand");
+    fan.receive(true,27,50,false,UINT32_MAX-1000);fan.tick(998,24);require(fan.remote(),"millis wrap live");
+    fan.tick(999,24);require(!fan.remote(),"millis wrap deadline");
+    victus::AmbientFilter ntc;require(ntc.update(25)==25&&ntc.update(29)==26,"NTC filter");
+    require(std::isnan(ntc.update(NAN))&&ntc.update(24)==24,"NTC fault not masked");
+    require(ntc.update(45)==45,"hot NTC bypasses smoothing");
+    std::cout<<"PASS external controller: curve bounds, interpolation, startup, inertia, hysteresis, ramp rates, sensor fault, hot ambient, lease, authority, calibration and rollover\n";
+    return 0;
+}

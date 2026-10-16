@@ -121,11 +121,15 @@ bool Session::accept(const std::string& line,uint32_t now,double ambient,int app
     if (type!="telemetry" || sequence<=previous || !equalProof(mac,base64(crypto.hmac(receiveKey,
         "VictusExternalCooling/v1/frame\ntelemetry\n"+id+"\n"+std::to_string(sequence)+"\n"+raw))) || !telemetry(p,now)) return false;
     previous=sequence; if (outgoing==INT64_MAX) return false;
-    StaticJsonDocument<512> status;
+    StaticJsonDocument<1024> status;
     status["ackSequence"]=sequence;
     if (std::isfinite(ambient) && ambient>=-40 && ambient<=100) status["ambientTempC"]=ambient; else status["ambientTempC"]=nullptr;
     if (applied>=0&&applied<=100) status["appliedPwmPct"]=applied; else status["appliedPwmPct"]=nullptr;
     status["mode"]=remote?"Remote":"Local"; status["communication"]=std::isfinite(ambient)?"Ready":"Fault";
+    status["externalCurveVersion"]=1;
+    if(appliedConfigRevision.empty()) status["appliedConfigRevision"]=nullptr; else status["appliedConfigRevision"]=appliedConfigRevision;
+    if(appliedDuty>=30&&appliedDuty<=255) status["appliedDuty"]=appliedDuty; else status["appliedDuty"]=nullptr;
+    if(externalRequest>=30&&externalRequest<=255) status["externalRequest"]=externalRequest; else status["externalRequest"]=nullptr;
     auto extensions=status.createNestedObject("extensions"); extensions["slot1"]=nullptr; extensions["slot2"]=nullptr;
     std::string payload; serializeJson(status,payload); response=frame("deviceStatus",++outgoing,payload,true); return true;
 }
@@ -152,6 +156,40 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
         for (auto k : {"sampledAtUtc","cpuTempSampledAtUtc","gpuTempSampledAtUtc"}) { int64_t at; if (!timestamp(p[k],at) || captured-at>=5000) return false; }
         if (mode=="Automatic") { int64_t at; if (p["demandaPct"].isNull() || !timestamp(p["decisionAtUtc"],at) || captured-at>=5000) return false; }
     }
+    ExternalConfig candidate;
+    bool configPresent=!p["externalConfiguration"].isNull();
+    if(configPresent) {
+        auto c=p["externalConfiguration"].as<JsonObjectConst>();
+        if(c.isNull()||!integer(c["schemaVersion"],1,1)||!c["revision"].is<const char*>())return false;
+        auto revision=c["revision"].as<std::string>();if(revision.size()!=32)return false;
+        std::copy(revision.begin(),revision.end(),candidate.revision);
+        struct Field {const char* name;int* value;int min,max;};
+        for(auto f:{Field{"input",&candidate.input,0,1},{"requestMinimum",&candidate.requestMinimum,0,65534},
+            {"requestMaximum",&candidate.requestMaximum,1,65535},{"manualOutput",&candidate.manualOutput,30,255},
+            {"rise",&candidate.rise,1,100},{"fall",&candidate.fall,1,100},{"filterMs",&candidate.filterMs,0,10000},
+            {"hysteresis",&candidate.hysteresis,0,30},{"downHoldMs",&candidate.downHoldMs,0,30000},
+            {"startMs",&candidate.startMs,0,3000},{"startOutput",&candidate.startOutput,30,255}}) {
+            if(!integer(c[f.name],f.min,f.max))return false;*f.value=c[f.name].as<int>();
+        }
+        auto points=c["points"].as<JsonArrayConst>();
+        if(points.isNull()||points.size()<2||points.size()>16)return false;
+        candidate.count=static_cast<int>(points.size());int i=0;
+        for(auto point:points) {
+            if(!integer(point["input"],0,100)||!integer(point["output"],30,255))return false;
+            candidate.points[i++]={point["input"].as<int>(),point["output"].as<int>()};
+        }
+        if(!candidate.valid())return false;
+        // A revision identifies immutable configuration within this authenticated session.
+        if(hasConfiguration&&std::string(configuration.revision)==candidate.revision) {
+            if(configuration.count!=candidate.count||configuration.input!=candidate.input||configuration.requestMinimum!=candidate.requestMinimum||
+                configuration.requestMaximum!=candidate.requestMaximum||configuration.manualOutput!=candidate.manualOutput||configuration.rise!=candidate.rise||
+                configuration.fall!=candidate.fall||configuration.filterMs!=candidate.filterMs||configuration.hysteresis!=candidate.hysteresis||
+                configuration.downHoldMs!=candidate.downHoldMs||configuration.startMs!=candidate.startMs||configuration.startOutput!=candidate.startOutput)return false;
+            for(int j=0;j<candidate.count;++j)if(configuration.points[j].input!=candidate.points[j].input||configuration.points[j].output!=candidate.points[j].output)return false;
+        }
+    }
+    if(configPresent) {configuration=candidate;hasConfiguration=true;}
+    latest.manual=mode=="Manual";
     latest.cpu=p["cpuUsagePct"].isNull()?-1:p["cpuUsagePct"].as<double>(); latest.gpu=p["gpuUsagePct"].isNull()?-1:p["gpuUsagePct"].as<double>();
     latest.ram=p["ramUsagePct"].isNull()?-1:p["ramUsagePct"].as<double>(); latest.demand=p["demandaPct"].isNull()?-1:p["demandaPct"].as<double>();
     latest.request=valid?p["solicitud"].as<int>():-1; latest.valid=valid; latest.source=p["powerSource"].as<std::string>();

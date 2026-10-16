@@ -4,6 +4,7 @@
 #include <string>
 #include <stdint.h>
 #include <cmath>
+#include "ExternalController.h"
 
 namespace victus {
 using Key = std::array<uint8_t, 32>;
@@ -22,6 +23,7 @@ struct Measurement {
     int request = -1;
     bool valid = false;
     std::string source = "Unknown";
+    bool manual = false;
 };
 struct ControlPolicy {
     int minimum = 0, maximum = 54, minimumRunningPwm = 25;
@@ -54,6 +56,10 @@ public:
     bool authenticated() const { return phase == 2; }
     bool remoteRequest = false;
     Measurement latest;
+    ExternalConfig configuration;
+    bool hasConfiguration = false;
+    std::string appliedConfigRevision;
+    int appliedDuty = -1, externalRequest = -1;
 private:
     Key pairing, receiveKey{}, sendKey{};
     Crypto& crypto;
