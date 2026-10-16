@@ -49,9 +49,10 @@ public sealed record ExternalCoolingSettings
     public string EffectiveHost => UseSimulator ? "127.0.0.1" : Host;
     public void Validate()
     {
-        if (SchemaVersion != 1 || !Enum.IsDefined(Mode) || Port is <1 or >65535 ||
-            string.IsNullOrWhiteSpace(Host) || Host.Length > 253 || Host.Any(char.IsWhiteSpace) ||
-            Uri.CheckHostName(Host) == UriHostNameType.Unknown)
+        if (SchemaVersion != 1 || !Enum.IsDefined(Mode) || Port is <1 or >65535 || Host is null || Host.Length>253 ||
+            Mode!=ExternalCoolingMode.Disabled && !UseSimulator &&
+            (string.IsNullOrWhiteSpace(Host) || Host.Any(char.IsWhiteSpace) ||
+             Uri.CheckHostName(Host) == UriHostNameType.Unknown))
             throw new ArgumentException("Host, puerto o modo de base externa no válido.");
     }
 }

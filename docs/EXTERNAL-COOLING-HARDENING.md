@@ -29,6 +29,9 @@ simulador siguen sin firmware ni acceso a hardware externo físico.
   invalida una reanudación pendiente. Desconectar continúa revocando la reconexión y las
   llamadas tardías tras Dispose no cambian el estado final Disabled.
 - Una lectura cancelada tampoco devuelve mensajes que ya estaban en el buffer.
+- Un host vacío o inválido no impide deshabilitar el módulo ni elegir simulador local.
+  Se valida cuando realmente se utiliza para conectar; esquema, modo y puerto conservan
+  sus límites también al guardar configuración deshabilitada. Hay regresión antes/después.
 
 ## Investigación adicional
 

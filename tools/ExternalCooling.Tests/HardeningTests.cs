@@ -9,6 +9,11 @@ internal static partial class Program
 {
     private static void HardeningProtocolTests()
     {
+        new ExternalCoolingSettings{Mode=ExternalCoolingMode.Disabled,Host=""}.Validate();
+        new ExternalCoolingSettings{Mode=ExternalCoolingMode.MonitorOnly,UseSimulator=true,Host="invalid host"}.Validate();
+        Reject(()=>new ExternalCoolingSettings{Mode=ExternalCoolingMode.MonitorOnly,Host="invalid host"}.Validate(),"An active manual endpoint accepted an invalid host.");
+        Reject(()=>new ExternalCoolingSettings{Mode=ExternalCoolingMode.Disabled,Port=0}.Validate(),"Invalid persisted port bypassed bounds.");
+        Reject(()=>new ExternalCoolingSettings{Mode=ExternalCoolingMode.Disabled,Host=new string('x',254)}.Validate(),"Ignored host bypassed persistence size bounds.");
         var now=DateTimeOffset.UtcNow;
         var request=new Source().Capture(now) with{ReplyToDeviceSequence=1};
         void Check(ExportTelemetry t)=>ExternalCoolingProtocol.Telemetry(ExternalCoolingProtocol.Create("telemetry",Guid.NewGuid().ToString("N"),1,t));

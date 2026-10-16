@@ -6,7 +6,7 @@ namespace VictusFanControl.App;
 internal sealed class ExternalCoolingSettingsForm : Form
 {
     private readonly ComboBox _mode=new(){DropDownStyle=ComboBoxStyle.DropDownList,Dock=DockStyle.Fill};
-    private readonly TextBox _host=new(){Dock=DockStyle.Fill};
+    private readonly TextBox _host=new(){Dock=DockStyle.Fill,MaxLength=253};
     private readonly NumericUpDown _port=new(){Minimum=1,Maximum=65535,Dock=DockStyle.Fill};
     private readonly CheckBox _reconnect=new(){Text="Reconexión automática",AutoSize=true};
     private readonly CheckBox _simulator=new(){Text="Simulador local (127.0.0.1)",AutoSize=true};
@@ -28,8 +28,9 @@ internal sealed class ExternalCoolingSettingsForm : Form
         StartPosition=FormStartPosition.CenterParent;ShowInTaskbar=false;
         _mode.Items.AddRange(["Deshabilitado","Monitorización únicamente","Monitorización y transmisión de Solicitud"]);
         _mode.SelectedIndex=(int)settings.Mode;_host.Text=settings.Host;_port.Value=settings.Port;
-        _reconnect.Checked=settings.AutoReconnect;_simulator.Checked=settings.UseSimulator;_host.Enabled=!_simulator.Checked;
-        _simulator.CheckedChanged+=(_,_)=>_host.Enabled=!_simulator.Checked;
+        _reconnect.Checked=settings.AutoReconnect;_simulator.Checked=settings.UseSimulator;
+        void HostAvailability()=>_host.Enabled=!_simulator.Checked&&_mode.SelectedIndex!=(int)ExternalCoolingMode.Disabled;
+        HostAvailability();_simulator.CheckedChanged+=(_,_)=>HostAvailability();_mode.SelectedIndexChanged+=(_,_)=>HostAvailability();
         var scroll=new Panel{Dock=DockStyle.Fill,AutoScroll=true};
         var root=new TableLayoutPanel{Dock=DockStyle.Top,ColumnCount=2,RowCount=11,Padding=new(18),AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink};
         var labelWidth=Math.Max(185,TextRenderer.MeasureText("Host o dirección IP",Font).Width+20);
