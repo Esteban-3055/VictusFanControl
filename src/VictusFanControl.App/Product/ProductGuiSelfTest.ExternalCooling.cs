@@ -109,8 +109,8 @@ internal static partial class ProductGuiSelfTest
                 form.HandleCommand("page-"+(int)ProductPage.Updates);Application.DoEvents();
                 ExternalCoolingSelfTest.Require(!page.Host.Visible&&page.Key.UseSystemPasswordChar,"Editors overlay another page or reveal leaked on navigation.");
                 PumpUntil(()=>Volatile.Read(ref received)>beforePageChange,"Leaving the page stopped communication.");
-                form.HandleCommand("page-"+(int)ProductPage.ExternalCooling);Application.DoEvents();
-                ExternalCoolingSelfTest.Require(page.Port.Text=="8766"&&page.Key.Text==newKey&&form.ExternalCoolingStatus?.SessionId==oldSession&&form.Canvas.Controls.OfType<TextBox>().Count(c=>c.Name.StartsWith("external-"))==3,"Navigation lost the draft or restarted/duplicated the connection.");
+                form.HandleCommand("external-cooling");Application.DoEvents();
+                ExternalCoolingSelfTest.Require(form.Canvas.Page==ProductPage.ExternalCooling&&page.Host.Visible&&page.Port.Text=="8766"&&page.Key.Text==newKey&&form.ExternalCoolingStatus?.SessionId==oldSession&&form.Canvas.Controls.OfType<TextBox>().Count(c=>c.Name.StartsWith("external-"))==3,"Legacy navigation lost the draft or restarted/duplicated the connection.");
                 form.HandleCommand("external-discard");page.Port.Text="0";form.HandleCommand("external-save");
                 PumpUntil(()=>!page.Busy,"Invalid port blocked GUI.");
                 ExternalCoolingSelfTest.Require(page.Dirty&&form.ExternalCoolingStatus?.SessionId==oldSession,"Invalid port disconnected or overwrote saved configuration.");

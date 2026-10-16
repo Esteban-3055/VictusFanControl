@@ -216,7 +216,7 @@ internal sealed partial class ProductForm : Form
     }
     internal void HandleCommand(string id)
     {
-        if(id.StartsWith("external-",StringComparison.Ordinal)&&_externalCoolingPage is{} external){_=external.ExecuteAsync(id);return;}
+        if(id!="external-cooling"&&id.StartsWith("external-",StringComparison.Ordinal)&&_externalCoolingPage is{} external){_=external.ExecuteAsync(id);return;}
         if (id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release" or "session-restart")
             _automaticRecoveryResumeSuppressed = true;
         if (_recoveryTask is not null && id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")
