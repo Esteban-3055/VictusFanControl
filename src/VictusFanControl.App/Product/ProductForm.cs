@@ -216,6 +216,7 @@ internal sealed partial class ProductForm : Form
     }
     internal void HandleCommand(string id)
     {
+        if(id.StartsWith("external-curve-",StringComparison.Ordinal)&&_canvas.ExternalCurve is{} curve){_=curve.ExecuteAsync(id[15..]);return;}
         if(id!="external-cooling"&&id.StartsWith("external-",StringComparison.Ordinal)&&_externalCoolingPage is{} external){_=external.ExecuteAsync(id);return;}
         if (id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release" or "session-restart")
             _automaticRecoveryResumeSuppressed = true;
@@ -345,6 +346,7 @@ internal sealed partial class ProductForm : Form
     }
     internal void EditValue(string key,int value)
     {
+        if(key.StartsWith("external-curve-value-",StringComparison.Ordinal)){if(!_closing&&!IsDisposed&&!_canvas.Busy)_canvas.ExternalCurve?.EditValue(key[21..],value);return;}
         if(_canvas.Busy||_closing||IsDisposed)return;
         if(key.StartsWith("sim-input-")){_canvas.SimulationInputs=_canvas.SimulationInputs.With(int.Parse(key[10..]),value);_canvas.Invalidate();return;}
         var slot=_canvas.Editing;var p=_draft.Get(slot);

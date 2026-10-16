@@ -43,11 +43,12 @@ public static class Simulator
                 }
                 var remote=telemetry.SolicitudValida&&telemetry.ReplyToDeviceSequence is{} referencedReply&&replyTimes.TryGetValue(referencedReply,out var replyAt)&&
                     System.Diagnostics.Stopwatch.GetElapsedTime(replyAt).TotalMilliseconds<telemetry.ValidForMs;
-                device.Apply(remote,telemetry.Solicitud);
+                device.Apply(remote,telemetry.Solicitud,telemetry.ExternalConfiguration,telemetry.DemandaPct,telemetry.ModoSolicitado=="Manual");
                 var operating=device.Snapshot;
                 var status=new DeviceStatus
                 {
                     AckSequence=previous,AmbientTempC=23.0+Math.Sin(previous/30.0),
+                    ExternalCurveVersion=1,AppliedConfigRevision=operating.Revision,AppliedDuty=operating.Duty,ExternalRequest=operating.Request,
                     // An illustrative simulator policy, not a firmware requirement or Windows mapping.
                     AppliedPwmPct=operating.PwmPct,
                     Mode=operating.Mode,Communication=operating.Communication,Extensions=new(){Slot1=null,Slot2=null}

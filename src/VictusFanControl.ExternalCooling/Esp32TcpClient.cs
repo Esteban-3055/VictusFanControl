@@ -99,6 +99,7 @@ public sealed class Esp32TcpClient
     {
         using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(token);
         var sync=new object();var sentAt=new Dictionary<long,long>();long next=0,lastDeviceSequence=0,lastDeviceReceived=0;
+        bool curveCapable=false;
         async Task Send()
         {
             using var timer=new PeriodicTimer(TimeSpan.FromSeconds(1));
@@ -110,6 +111,7 @@ public sealed class Esp32TcpClient
                 lock(sync)
                 {
                     value=value with{ReplyToDeviceSequence=lastDeviceSequence>0?lastDeviceSequence:null};
+                    value=value with{ExternalConfiguration=curveCapable?settings.Curve:null};
                     if(lastDeviceSequence==0||Stopwatch.GetElapsedTime(lastDeviceReceived).TotalMilliseconds>=ExternalCoolingProtocol.RequestValidForMilliseconds)
                         value=value.WithoutRequest("AwaitingDevice");
                 }
@@ -143,7 +145,7 @@ public sealed class Esp32TcpClient
                 if(Stopwatch.GetElapsedTime(stamp)>TimeSpan.FromSeconds(5))throw new InvalidDataException("Expired acknowledgement.");
                 ack=status.AckSequence;
                 lifetime.Token.ThrowIfCancellationRequested();
-                lock(sync){lastDeviceSequence=frame.Sequence;lastDeviceReceived=Stopwatch.GetTimestamp();}
+                lock(sync){lastDeviceSequence=frame.Sequence;lastDeviceReceived=Stopwatch.GetTimestamp();curveCapable=status.ExternalCurveVersion==1;}
                 // Diagnostics hold only a projection of operational fields, never opaque peer extensions.
                 var safe=status with{Extensions=new(){Slot1=null,Slot2=null}};
                 Update(d=>d with{State=ExternalCoolingConnectionState.Connected,Detail="Autenticado; recepción válida",Device=safe,

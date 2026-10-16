@@ -28,6 +28,8 @@ public sealed record ExportTelemetry
     public double? GpuTempC { get; init; }
     public string PowerSource { get; init; } = "Unknown";
     public string RequestEvidence { get; init; } = "Unavailable";
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public ExternalCurveConfiguration? ExternalConfiguration {get;init;}
 
     public ExportTelemetry WithoutRequest(string reason="MonitorOnly") => this with
     { Solicitud=null, SolicitudValida=false, CpuTargetLevel=null, GpuTargetLevel=null, RequestEvidence=reason };
@@ -46,9 +48,12 @@ public sealed record ExternalCoolingSettings
     public int Port { get; init; } = 8765;
     public bool AutoReconnect { get; init; } = true;
     public bool UseSimulator { get; init; }
+    public ExternalCurveConfiguration Curve {get;init;}=new();
     public string EffectiveHost => UseSimulator ? "127.0.0.1" : Host;
     public void Validate()
     {
+        if(Curve is null)throw new ArgumentException("Curva externa ausente.");
+        Curve.Validate();
         if (SchemaVersion != 1 || !Enum.IsDefined(Mode) || Port is <1 or >65535 || Host is null || Host.Length>253 ||
             Mode!=ExternalCoolingMode.Disabled && !UseSimulator &&
             (string.IsNullOrWhiteSpace(Host) || Host.Any(char.IsWhiteSpace) ||

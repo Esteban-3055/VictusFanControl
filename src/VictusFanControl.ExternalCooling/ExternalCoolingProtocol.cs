@@ -30,6 +30,10 @@ public sealed record DeviceExtensions
 }
 public sealed record DeviceStatus
 {
+    public int? ExternalCurveVersion {get;init;}
+    public string? AppliedConfigRevision {get;init;}
+    public int? AppliedDuty {get;init;}
+    public int? ExternalRequest {get;init;}
     public required long AckSequence { get; init; }
     public required double? AmbientTempC { get; init; }
     public required double? AppliedPwmPct { get; init; }
@@ -104,6 +108,7 @@ public static class ExternalCoolingProtocol
             "cpuTargetLevel","gpuTargetLevel","cpuTempSampledAtUtc","gpuTempSampledAtUtc","ramSampledAtUtc"})
             if(!frame.Payload.TryGetProperty(key,out _))throw new InvalidDataException("Missing telemetry field.");
         var t=Payload<ExportTelemetry>(frame);
+        t.ExternalConfiguration?.Validate();
         if(t.ValidForMs!=RequestValidForMilliseconds||t.CapturedAtUtc==default||t.ModoSolicitado is not("Firmware" or "Manual" or "Automatic")||
             t.ModoEfectivo is not("Firmware" or "Manual" or "Automatic" or "Transition" or "Interrupted" or "Unavailable")||
             t.PowerSource is not("AC" or "Battery" or "Unknown")||t.RequestEvidence is not("Unavailable" or "MonitorOnly" or "AwaitingDevice" or "WmiAcceptedSupervised"))
@@ -134,6 +139,9 @@ public static class ExternalCoolingProtocol
     {
         if(frame.Type!="deviceStatus")throw new InvalidDataException("Expected deviceStatus.");
         var d=Payload<DeviceStatus>(frame);
+        if(d.ExternalCurveVersion is <1 or >65535||d.AppliedDuty is <30 or >255||d.ExternalRequest is <30 or >255||
+            d.AppliedConfigRevision is{} revision&&(revision.Length!=32||revision.Any(c=>!char.IsAsciiDigit(c)&&c is not(>='a' and <='f'))))
+            throw new InvalidDataException("Invalid external curve status.");
         if(d.AckSequence<=0||d.Mode is not("Local" or "Remote")||d.Communication is not("Ready" or "Timeout" or "Fault")||d.Extensions is null||
             d.AmbientTempC.HasValue&&ExportTelemetry.Range(d.AmbientTempC,-40,100) is null||
             d.AppliedPwmPct.HasValue&&ExportTelemetry.Range(d.AppliedPwmPct,0,100) is null)

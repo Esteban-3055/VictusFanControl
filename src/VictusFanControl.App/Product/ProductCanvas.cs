@@ -7,7 +7,7 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
-internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates, Protections, ExternalCooling }
+internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates, Protections, ExternalCooling, ExternalCurve }
 internal sealed record ProductHit(string Id, RectangleF Bounds, string Label, bool Enabled, bool Slider = false, int Min = 0, int Max = 0);
 
 /// <summary>Owner-drawn product surface in reference coordinates. All gestures edit drafts or emit semantic commands.</summary>
@@ -33,6 +33,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         (ProductPage.Profiles,"Perfiles","profiles"),(ProductPage.Monitoring,"Monitorización","pulse"),
         (ProductPage.Protections,"Protecciones","settings"),(ProductPage.Settings,"Configuración","settings"),
         (ProductPage.Advanced,"Avanzado","settings"),(ProductPage.ExternalCooling,"Base externa","cpu"),
+        (ProductPage.ExternalCurve,"Curva Externa","curve"),
         (ProductPage.Updates,"Actualizaciones","update")
     });
     internal bool ShowCurvePoints { get; set; }
@@ -187,6 +188,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Performance: Performance(g);break;
             case ProductPage.Profiles: ProfilePage(g);break;
             case ProductPage.Curves: Curves(g);break;
+            case ProductPage.ExternalCurve: ExternalCurveView(g);break;
             case ProductPage.Monitoring: Monitoring(g);break;
             case ProductPage.Settings: Settings(g);break;
             case ProductPage.Advanced: Advanced(g);break;
@@ -526,6 +528,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);if(e.Button!=MouseButtons.Left)return;Focus();var p=Virtual(e.Location);
+        if(!Busy&&ExternalPointerDown(p))return;
         if(!_plot.IsEmpty&&!Busy)
         {
             var points=Profile.Fan.UnifiedDemand!.Curve;var xmax=100;
@@ -544,16 +547,17 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);var p=Virtual(e.Location);
+        if(ExternalPointerMove(p))return;
         if(_dragContext.HasValue&&(_dragContext.Value!=DragContext||Busy)){_dragSlider=null;_dragNode=-1;_dragContext=null;Capture=false;return;}
         if(_dragSlider is not null){EditSlider(_dragSlider,p);return;}
         if(_dragNode>=0){var x=Math.Round(Math.Clamp((p.X-_plot.Left)/_plot.Width,0,1)*100);var level=(int)Math.Round(10+Math.Clamp((_plot.Bottom-p.Y)/_plot.Height,0,1)*44);NodeEdited?.Invoke(_dragNode,x,level);return;}
         Cursor=_hits.Any(h=>CanInteract(h)&&h.Bounds.Contains(p))?Cursors.Hand:Cursors.Default;
     }
-    protected override void OnMouseUp(MouseEventArgs e){base.OnMouseUp(e);_dragSlider=null;_dragNode=-1;_dragContext=null;Capture=false;}
-    protected override void OnMouseCaptureChanged(EventArgs e){base.OnMouseCaptureChanged(e);if(!Capture){_dragSlider=null;_dragNode=-1;_dragContext=null;}}
+    protected override void OnMouseUp(MouseEventArgs e){base.OnMouseUp(e);_externalDrag=-1;_dragSlider=null;_dragNode=-1;_dragContext=null;Capture=false;}
+    protected override void OnMouseCaptureChanged(EventArgs e){base.OnMouseCaptureChanged(e);if(!Capture){_externalDrag=-1;_dragSlider=null;_dragNode=-1;_dragContext=null;}}
     private bool CanInteract(ProductHit hit) => hit.Enabled&&(!Busy||hit.Id is "firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close");
     private ProductHit? KeyboardHit=>_hits.LastOrDefault(h=>h.Id==_keyboardId&&CanInteract(h));
-    private int SliderValue(string id) => id.StartsWith("influence-")?Profile.Fan.UnifiedDemand!.Influence(int.Parse(id[10..])):id.StartsWith("sim-input-")?SimulationInputs.Value(int.Parse(id[10..])):id switch{"manual"=>ManualLevel,"pl1"=>Profile.CpuPl1Watts,"pl2"=>Profile.CpuPl2Watts,"gpu"=>Profile.GpuMaximumMHz,_=>0};
+    private int SliderValue(string id) => id.StartsWith("external-curve-value-",StringComparison.Ordinal)?ExternalCurve?.Value(id[21..])??0:id.StartsWith("influence-")?Profile.Fan.UnifiedDemand!.Influence(int.Parse(id[10..])):id.StartsWith("sim-input-")?SimulationInputs.Value(int.Parse(id[10..])):id switch{"manual"=>ManualLevel,"pl1"=>Profile.CpuPl1Watts,"pl2"=>Profile.CpuPl2Watts,"gpu"=>Profile.GpuMaximumMHz,_=>0};
     internal void HandleKey(Keys keyData)=>OnKeyDown(new KeyEventArgs(keyData));
     protected override bool IsInputKey(Keys keyData)=>(keyData&Keys.KeyCode) is Keys.Left or Keys.Right or Keys.Up or Keys.Down or Keys.Tab or Keys.PageDown or Keys.PageUp or Keys.Home or Keys.End || base.IsInputKey(keyData);
     protected override bool ProcessDialogKey(Keys keyData)
@@ -578,6 +582,11 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             var count=Profile.Fan.UnifiedDemand!.Curve.Count;
             var index=e.KeyCode==Keys.Home?0:e.KeyCode==Keys.End?count-1:Math.Clamp(SelectedNode+(e.KeyCode==Keys.PageDown?1:-1),0,count-1);
             ShowCurvePoints=true;_keyboardId="node-"+index;Command?.Invoke(_keyboardId);e.Handled=true;return;
+        }
+        if(!Busy&&Page==ProductPage.ExternalCurve&&ExternalCurve is {Busy:false,Tuning:false} external&&e.KeyCode is Keys.Left or Keys.Right or Keys.Up or Keys.Down&&
+            (KeyboardHit is null||_keyboardId=="external-curve-node-"+external.Selected))
+        {
+            var p=external.Draft.Points[external.Selected];external.EditNode(external.Selected,p.Input+(e.KeyCode==Keys.Right?1:e.KeyCode==Keys.Left?-1:0),p.Output+(e.KeyCode==Keys.Up?1:e.KeyCode==Keys.Down?-1:0));e.Handled=true;return;
         }
         if(Busy||e.KeyCode is not(Keys.Left or Keys.Right or Keys.Up or Keys.Down))return;
         if(KeyboardHit is { Slider:true } slider)

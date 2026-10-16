@@ -16,6 +16,7 @@ internal sealed partial class ProductForm
     internal ExternalCoolingPage? ExternalPage=>_externalCoolingPage;
     private readonly string? _externalCoolingPath;
     private Task _externalCoolingStartup=Task.CompletedTask;
+    private readonly SemaphoreSlim _externalSettingsGate=new(1,1);
     private async Task InitializeExternalCoolingAsync()
     {
         if((_isolatedRuntime&&_externalCoolingPath is null)||_externalCooling is not null)return;
@@ -46,20 +47,42 @@ internal sealed partial class ProductForm
     {
         _canvas.Page=ProductPage.ExternalCooling;LayoutExternalCoolingPage();_canvas.Invalidate();
     }
+    private async Task SaveExternalCurveAsync(ExternalCurveConfiguration curve)
+    {
+        if(_externalCoolingStore is null||_externalCooling is null)throw new InvalidOperationException();
+        await _externalSettingsGate.WaitAsync();
+        try
+        {
+            var next=_externalCoolingSettings with{Curve=curve};
+            var connect=_externalCooling.Diagnostics.State is ExternalCoolingConnectionState.Connected or ExternalCoolingConnectionState.Connecting or ExternalCoolingConnectionState.Authenticating or ExternalCoolingConnectionState.Reconnecting;
+            await Task.Run(()=>_externalCoolingStore.Save(next));_externalCoolingSettings=next;
+            _externalCoolingPage?.UpdateSavedCurve(curve);
+            if(!_closing)await _externalCooling.ConfigureAsync(next,connect);
+        }
+        finally{_externalSettingsGate.Release();}
+    }
     private void LayoutExternalCoolingPage()
     {
         if(IsDisposed||_closing||_canvas.IsDisposed)return;
         var selected=_canvas.Page==ProductPage.ExternalCooling;
+        if(_canvas.Page==ProductPage.ExternalCurve&&_canvas.ExternalCurve is null&&_externalCoolingStore is not null)
+            _canvas.ExternalCurve=new(_canvas,()=>_externalCoolingSettings,SaveExternalCurveAsync,()=>ExternalCoolingStatus);
         if(selected&&_externalCoolingPage is null&&_externalCooling is not null&&_externalCoolingStore is not null)
         {
             _externalCoolingPage=new(_canvas,_externalCoolingSettings,_externalCooling,()=>_externalCoolingStore.Paired,async(settings,key,remove,connect)=>
             {
-                await _externalCooling.DisconnectAsync();
-                await Task.Run(()=>_externalCoolingStore.Save(settings,key,remove));
-                _externalCoolingLoadNotice=null;
-                _externalCoolingSettings=settings;
-                await _externalCooling.ConfigureAsync(settings,connect);
+                await _externalSettingsGate.WaitAsync();
+                try
+                {
+                    settings=settings with{Curve=_externalCoolingSettings.Curve};
+                    await _externalCooling.DisconnectAsync();
+                    await Task.Run(()=>_externalCoolingStore.Save(settings,key,remove));
+                    _externalCoolingLoadNotice=null;_externalCoolingSettings=settings;
+                    if(!_closing)await _externalCooling.ConfigureAsync(settings,connect);
+                }
+                finally{_externalSettingsGate.Release();}
             },ExternalCoolingError);
+            _externalCoolingPage.CurrentCurve=()=>_externalCoolingSettings.Curve;
             _canvas.CoolingPage=_externalCoolingPage;
         }
         _externalCoolingPage?.Layout(selected);
