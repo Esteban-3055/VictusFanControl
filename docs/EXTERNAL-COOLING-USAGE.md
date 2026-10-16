@@ -4,6 +4,10 @@ Implementación para VictusFanControl basada en v1.2.9. No incluye firmware ni p
 del ESP32. El módulo comienza deshabilitado; el programa puede iniciar sin dispositivo.
 Es independiente de WMI, SafetyGate, ventiladores internos y Performance Control.
 
+La preliminar 2 se distribuye como **v1.2.10**, con instalador y versión interna 1.2.10.
+Para actualizar desde 1.2.9, activar **Incluir versiones preliminares** en Actualizaciones
+y buscar, descargar e instalar. Véanse las [notas de publicación](../release/RELEASE-NOTES-v1.2.10.md).
+
 ## Probar con el simulador
 
 Requisitos: Windows, .NET 8 SDK y los requisitos de compilación existentes del repositorio

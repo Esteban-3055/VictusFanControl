@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(UpdaterBaselineRoot)' != ''">
+    <Compile Include="$(UpdaterBaselineRoot)/ProductUpdates.cs" Link="Baseline/ProductUpdates.cs" />
+    <Compile Include="$(UpdaterBaselineRoot)/ProductUpdates.Cache.cs" Link="Baseline/ProductUpdates.Cache.cs" />
+    <Compile Include="$(UpdaterBaselineRoot)/ProductRelease.cs" Link="Baseline/ProductRelease.cs" />
+  </ItemGroup>
+  <Target Name="RequireBaseline" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(UpdaterBaselineRoot)' == ''" Text="Run scripts/test-updater-129-compatibility.ps1 to provide the pinned 1.2.9 sources." />
+  </Target>
+</Project>
