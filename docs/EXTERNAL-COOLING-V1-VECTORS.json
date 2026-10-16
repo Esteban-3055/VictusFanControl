@@ -1,0 +1,17 @@
+{
+  "purpose": "PUBLIC deterministic test fixture ONLY; never provision this key",
+  "pairingKey": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+  "sessionId": "00112233445566778899aabbccddeeff",
+  "clientNonce": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=",
+  "serverNonce": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8=",
+  "proofs": {
+    "server": "6NtZy1b4dp9vM5cSNLiqwiR8ttnnTh2PzuziGYNBOTw=",
+    "client": "bjgvPHG65aUZMuzl2hygLQrJ2jkda4Ze5xA0NSzqnq0=",
+    "ready": "k/eRnLES56hz+KBibuSRqv0mCkSjNduMCgWGW/nlrzk=",
+    "client-to-device": "WfQYsa6TJGPKQy1KyuYKKlx/EFa9gxzFV0HXneZABVw=",
+    "device-to-client": "PP+K0jegPXaS7zO828X4gKuk5pxADFZWAfIIVzGyCuM="
+  },
+  "deviceStatusPayloadRaw": "{\"ackSequence\":1,\"ambientTempC\":23.5,\"appliedPwmPct\":25,\"mode\":\"Local\",\"communication\":\"Ready\",\"extensions\":{\"slot1\":null,\"slot2\":null}}",
+  "deviceStatusSequence": 1,
+  "deviceStatusMac": "tPDqL9TVcPl8Tei8RWSe/R78z5rD1edAbkziOTHc7FI="
+}

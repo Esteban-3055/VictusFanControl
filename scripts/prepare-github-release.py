@@ -11,7 +11,7 @@ import shutil
 import zipfile
 
 
-VERSION = "1.2.9"
+VERSION = "1.2.11"
 TARGET = "HP-8C40-9D0R1LA-F18"
 MANIFEST = "PRODUCT-GUI-MANIFEST.json"
 
@@ -50,7 +50,7 @@ def main():
     require(contract["target"] == TARGET and contract["stableReleaseAuthorized"] is True,
             "Wrong target or missing release authorization")
     require(contract["physicalPassClaimed"] is False, "Must retain physical evidence limits")
-    require(manifest["releaseChannel"] == contract["channel"] == "stable", "Wrong release channel")
+    require(manifest["releaseChannel"] == contract["channel"] == "preview", "Wrong release channel")
     require(manifest["fanCommandLimits"] == contract["fanCommandLimits"] and
             contract["fanCommandLimits"]["minimumLogicalLevel"] == 10 and
             contract["fanCommandLimits"]["cpuMaximumCommandLevel"] == 54 and

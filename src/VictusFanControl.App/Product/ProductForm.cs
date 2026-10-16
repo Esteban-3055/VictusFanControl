@@ -42,9 +42,10 @@ internal sealed partial class ProductForm : Form
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null,Func<ProductDisplayMetrics>? displayMetricsInFixture=null,string? fanAnimationPath=null)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null,Func<ProductDisplayMetrics>? displayMetricsInFixture=null,string? fanAnimationPath=null,string? externalCoolingPath=null)
     {
         SuspendLayout();
+        _externalCoolingPath=externalCoolingPath;
         _retryRuntimeFactory=retryRuntimeFactory;_modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
         _isolatedRuntime=fixture is not null||runtimeFactory is not null;_restartDirectory=restartDirectory;_restartOpening=restartState is not null;
         // Recovery fixtures must not inspect the user's real ownership records.
@@ -74,6 +75,7 @@ internal sealed partial class ProductForm : Form
         Text="VictusFanControl";Icon=_icons.Program;FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleDimensions=new SizeF(96,96);AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=DesignWindowSize;StartPosition=FormStartPosition.CenterScreen;
         _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
+        _canvas.PageChanged+=(_,_)=>LayoutExternalCoolingPage();_canvas.SizeChanged+=(_,_)=>LayoutExternalCoolingPage();
         if(restartState is not null)_canvas.Dirty=restartState.Dirty;
         _canvas.Command+=HandleCommand;_canvas.ValueEdited+=EditValue;_canvas.NodeEdited+=EditNode;
         _canvas.MouseDown+=(_,e)=>{if(e.Button==MouseButtons.Left&&_canvas.IsHeaderDrag(e.Location)){ReleaseCapture();SendMessage(Handle,0xA1,2,0);}};
@@ -90,6 +92,7 @@ internal sealed partial class ProductForm : Form
             if(_creating)return;_creating=true;
             _ = RestoreDownloadedUpdateAsync();
             _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory,registerPowerNotificationsInFixture,enableStartupAutomaticInFixture,recoveryPreflight);
+            _externalCoolingStartup=InitializeExternalCoolingAsync();
         };
         FormClosing+=OnClosing;FormClosed+=(_,_)=>{UnregisterPowerNotifications();_tray.Visible=false;};
         ResumeLayout(false);PerformLayout();
@@ -213,6 +216,7 @@ internal sealed partial class ProductForm : Form
     }
     internal void HandleCommand(string id)
     {
+        if(id!="external-cooling"&&id.StartsWith("external-",StringComparison.Ordinal)&&_externalCoolingPage is{} external){_=external.ExecuteAsync(id);return;}
         if (id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release" or "session-restart")
             _automaticRecoveryResumeSuppressed = true;
         if (_recoveryTask is not null && id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")
@@ -282,6 +286,7 @@ internal sealed partial class ProductForm : Form
         }
         switch(id)
         {
+            case "external-cooling":ShowExternalCooling();break;
             case "interruption-details":
                 if(_canvas.State.InterruptionDetails is { } details)
                     MessageBox.Show(this,details,"Sesión interrumpida",MessageBoxButtons.OK,MessageBoxIcon.Information);
@@ -451,6 +456,7 @@ internal sealed partial class ProductForm : Form
     }
     protected override void Dispose(bool disposing)
     {
+        if(disposing){_externalCoolingPage?.Dispose();_externalCooling?.Suspend();_=DisposeExternalCoolingAsync();}
         if(disposing){DisposeUpdateCancellation();_presentationTimer.Dispose();UnregisterPowerNotifications();DetachRuntime();_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();_icons.Dispose();}
         base.Dispose(disposing);
     }
@@ -464,7 +470,7 @@ internal sealed partial class ProductForm : Form
         e.Cancel=true;if(_closing)return;_closing=true;_updateCancellation.Cancel();_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
         try {if(_automaticRetryTask is not null)await _automaticRetryTask;if(_restartTask is not null)await _restartTask;if(_recoveryTask is not null)await _recoveryTask;if(_updateInstallTask is not null)await _updateInstallTask;await ShutdownRuntimeAsync();}
         catch(Exception ex){Environment.ExitCode=171;AppLog.Write("Product shutdown unresolved: "+ex);}
-        finally{_disposedRuntime=true;_tray.Visible=false;Close();_shutdown.TrySetResult();}
+        finally{await DisposeExternalCoolingAsync();_disposedRuntime=true;_tray.Visible=false;Close();_shutdown.TrySetResult();}
     }
     protected override void WndProc(ref Message m)
     {
@@ -491,6 +497,7 @@ internal sealed partial class ProductForm : Form
     }
     internal Task HandlePowerEventAsync(int code,int? display=null)
     {
+        ExternalCoolingPowerEvent(code);
         var wasDisplayOff=_displayOff;
         if(code==4||code==0x8013&&display==0)_updateLifecycleBoundary++;
         if(code==0x8013&&display==0)_displayOff=true;

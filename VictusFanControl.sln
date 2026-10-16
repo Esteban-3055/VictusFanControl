@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -17,6 +17,16 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.PerformanceProbe", "src\VictusFanControl.PerformanceProbe\VictusFanControl.PerformanceProbe.csproj", "{D9185CA4-5FE0-44AA-9D54-1E953B31D887}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.PerformanceGuardian", "src\VictusFanControl.PerformanceGuardian\VictusFanControl.PerformanceGuardian.csproj", "{51B8B1B4-66AD-4CFB-8C7C-1A55C4C8A9C1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{2CA7DBAD-3EEE-4CDC-BE41-5FE79478C2AB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VictusFanControl.ExternalCooling", "src\VictusFanControl.ExternalCooling\VictusFanControl.ExternalCooling.csproj", "{085585A6-36B8-4BCB-B76E-FD7E429FAC42}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{44DBCB2D-AE95-4E85-99D9-23D18AFE8E05}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Esp32Simulator", "tools\Esp32Simulator\Esp32Simulator.csproj", "{DC794B1F-B9EB-47CE-A569-1F9D2835CA8F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExternalCooling.Tests", "tools\ExternalCooling.Tests\ExternalCooling.Tests.csproj", "{90E74BCA-045C-411B-B743-D0D10B48D620}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -56,5 +66,22 @@ Global
 		{6F0DBA38-7E08-4B4C-9027-1A57A8B187B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6F0DBA38-7E08-4B4C-9027-1A57A8B187B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6F0DBA38-7E08-4B4C-9027-1A57A8B187B2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{085585A6-36B8-4BCB-B76E-FD7E429FAC42}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{085585A6-36B8-4BCB-B76E-FD7E429FAC42}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{085585A6-36B8-4BCB-B76E-FD7E429FAC42}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{085585A6-36B8-4BCB-B76E-FD7E429FAC42}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DC794B1F-B9EB-47CE-A569-1F9D2835CA8F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DC794B1F-B9EB-47CE-A569-1F9D2835CA8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DC794B1F-B9EB-47CE-A569-1F9D2835CA8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DC794B1F-B9EB-47CE-A569-1F9D2835CA8F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{90E74BCA-045C-411B-B743-D0D10B48D620}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{90E74BCA-045C-411B-B743-D0D10B48D620}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{90E74BCA-045C-411B-B743-D0D10B48D620}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{90E74BCA-045C-411B-B743-D0D10B48D620}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{085585A6-36B8-4BCB-B76E-FD7E429FAC42} = {2CA7DBAD-3EEE-4CDC-BE41-5FE79478C2AB}
+		{DC794B1F-B9EB-47CE-A569-1F9D2835CA8F} = {44DBCB2D-AE95-4E85-99D9-23D18AFE8E05}
+		{90E74BCA-045C-411B-B743-D0D10B48D620} = {44DBCB2D-AE95-4E85-99D9-23D18AFE8E05}
 	EndGlobalSection
 EndGlobal

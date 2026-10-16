@@ -15,6 +15,7 @@ TestResults/
 logs/*.csv
 logs/*.jsonl
 logs/*.log
+logs/external-cooling-self-test/
 !logs/README.md
 
 # Runtime PawnIO signed modules (downloaded by setup script)

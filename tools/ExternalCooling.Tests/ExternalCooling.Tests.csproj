@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/VictusFanControl.ExternalCooling/VictusFanControl.ExternalCooling.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../Esp32Simulator/Esp32Simulator.csproj" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../../docs/EXTERNAL-COOLING-V1-VECTORS.json" LogicalName="protocol-v1-vectors.json" /></ItemGroup>
+</Project>

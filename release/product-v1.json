@@ -60,7 +60,7 @@
     "normalAutomaticPromoted": false,
     "auxiliaryFault": "not-applicable-no-acquisition"
   },
-  "version": "1.2.9",
+  "version": "1.2.11",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -164,7 +164,7 @@
       "snapshotControlAndHistoryUnchanged": true
     }
   },
-  "channel": "stable",
+  "channel": "preview",
   "upperRangePreview": {
     "entry": "--fan-upper-range-preview",
     "cpuMaximumCommandLevel": 54,

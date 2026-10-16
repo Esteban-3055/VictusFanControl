@@ -621,6 +621,10 @@ jobs:
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
+      - name: Original 1.2.9 updater preview compatibility (no installation)
+        shell: pwsh
+        run: ./scripts/test-updater-129-compatibility.ps1
+
       - name: HP 8C40 P14.2 build and verify win-x64 publish layout
         shell: pwsh
         run: |
@@ -865,16 +869,16 @@ jobs:
         shell: pwsh
         run: |
           $assets = Join-Path $env:RUNNER_TEMP 'VictusFanControl-public-release-assets'
-          $payload = Join-Path $assets 'VictusFanControl-1.2.9-win-x64.zip'
+          $payload = Join-Path $assets 'VictusFanControl-1.2.11-win-x64.zip'
           $setup = Join-Path $env:RUNNER_TEMP 'VictusFanControl-setup-publish'
           dotnet run --project tools/ProductSetup -c Release -- --self-test
           if ($LASTEXITCODE -ne 0) { throw 'Installer security fixtures failed.' }
           dotnet publish tools/ProductSetup -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false "-p:SetupPayload=$payload" -o $setup
           if ($LASTEXITCODE -ne 0) { throw 'EXE installer publish failed.' }
-          $installer = Join-Path $assets 'VictusFanControl-1.2.9-Setup-win-x64.exe'
+          $installer = Join-Path $assets 'VictusFanControl-1.2.11-Setup-win-x64.exe'
           Copy-Item (Join-Path $setup 'VictusSetup.exe') $installer
           $identity = [Diagnostics.FileVersionInfo]::GetVersionInfo($installer)
-          if ($identity.FileVersion -ne '1.2.9.0' -or $identity.FileDescription -ne 'VictusSetup') { throw 'Installer identity mismatch.' }
+          if ($identity.FileVersion -ne '1.2.11.0' -or $identity.FileDescription -ne 'VictusSetup') { throw 'Installer identity mismatch.' }
           $test = Start-Process -FilePath $installer -ArgumentList '--self-test' -NoNewWindow -PassThru -Wait
           if ($test.ExitCode -ne 0) { throw 'Published EXE/embedded payload self-test failed.' }
           python scripts/prepare-installer-assets.py --installer $installer --source-head '${{ github.sha }}' --payload $payload
@@ -883,7 +887,7 @@ jobs:
       - name: Upload Windows EXE installer
         uses: actions/upload-artifact@v4
         with:
-          name: VictusFanControl-1.2.9-Setup-win-x64-${{ github.sha }}
+          name: VictusFanControl-1.2.11-Setup-win-x64-${{ github.sha }}
           path: |
             ${{ runner.temp }}/VictusFanControl-public-release-assets/*Setup*
             ${{ runner.temp }}/VictusFanControl-public-release-assets/*win-x64.zip*
@@ -893,7 +897,7 @@ jobs:
       - name: Upload definitive GUI review package
         uses: actions/upload-artifact@v4
         with:
-          name: VictusFanControl-1.2.9-win-x64-${{ github.sha }}
+          name: VictusFanControl-1.2.11-win-x64-${{ github.sha }}
           path: ${{ runner.temp }}/VictusFanControl-product-gui-review
           if-no-files-found: error
           retention-days: 30
@@ -1029,5 +1033,5 @@ jobs:
         run: |
           set -euo pipefail
           test "$(gh api "repos/$GH_REPO/branches/$RELEASE_BRANCH" --jq '.commit.sha')" = "$RELEASE_HEAD"
-          gh release create v1.2.9 release-assets/* --target "$RELEASE_HEAD" --title 'VictusFanControl v1.2.9 · Sin TZ01/DTT3 y coordinación WMI' --notes-file release/RELEASE-NOTES-v1.2.9.md --latest=true
+          gh release create v1.2.9 release-assets/* --target "$RELEASE_HEAD" --title 'VictusFanControl v1.2.9 Â· Sin TZ01/DTT3 y coordinaciÃ³n WMI' --notes-file release/RELEASE-NOTES-v1.2.9.md --latest=true
           gh release view v1.2.9 --json url,isDraft,isPrerelease,assets

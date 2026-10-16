@@ -7,7 +7,7 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
-internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates, Protections }
+internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates, Protections, ExternalCooling }
 internal sealed record ProductHit(string Id, RectangleF Bounds, string Label, bool Enabled, bool Slider = false, int Min = 0, int Max = 0);
 
 /// <summary>Owner-drawn product surface in reference coordinates. All gestures edit drafts or emit semantic commands.</summary>
@@ -24,14 +24,16 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     }
     internal ProductPowerProfile Editing { get; set; }
     private ProductPage _page;
-    internal ProductPage Page { get=>_page;set { _page=value;SynchronizeFanAnimation(); } }
+    internal ProductPage Page { get=>_page;set { if(_page==value)return;_page=value;SynchronizeFanAnimation();PageChanged?.Invoke(this,EventArgs.Empty); } }
+    internal event EventHandler? PageChanged;
     internal static IReadOnlyList<(ProductPage Page,string Name,string Icon)> Navigation { get; } = Array.AsReadOnly(new[]
     {
         (ProductPage.Home,"Inicio","home"),(ProductPage.Fans,"Ventiladores","fan"),
         (ProductPage.Performance,"Rendimiento","chart"),(ProductPage.Curves,"Curvas","curve"),
         (ProductPage.Profiles,"Perfiles","profiles"),(ProductPage.Monitoring,"Monitorización","pulse"),
         (ProductPage.Protections,"Protecciones","settings"),(ProductPage.Settings,"Configuración","settings"),
-        (ProductPage.Advanced,"Avanzado","settings"),(ProductPage.Updates,"Actualizaciones","update")
+        (ProductPage.Advanced,"Avanzado","settings"),(ProductPage.ExternalCooling,"Base externa","cpu"),
+        (ProductPage.Updates,"Actualizaciones","update")
     });
     internal bool ShowCurvePoints { get; set; }
     internal int FanTab { get; set; }
@@ -164,10 +166,11 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         using(var p=new Pen(Border)) {g.DrawLine(p,0,64,1672,64);g.DrawLine(p,279,64,279,882);g.DrawLine(p,0,882,1672,882);}
         Icon(g,"fan",24,16,36,Accent);DrawText(g,"VictusFanControl",76,17,25,null,220,true);DrawText(g,"│",288,16,26,Muted,25);DrawText(g,State.Hardware,328,18,23,Muted,1070);
         Button(g,"window-minimize","−",new(1450,8,54,45));Button(g,"window-maximize","□",new(1524,8,54,45));Button(g,"window-close","×",new(1598,8,54,45));
+        var navigationStep=Math.Min(76f,(882f-85)/Navigation.Count);
         for(int i=0;i<Navigation.Count;i++)
         {
             var item=Navigation[i];var selected=Page==item.Page;
-            var rect=new RectangleF(8,85+i*76,262,70);if(selected){Card(g,rect,true,12);using var b=new SolidBrush(Accent);g.FillRectangle(b,8,rect.Y+5,5,60);}
+            var rect=new RectangleF(8,85+i*navigationStep,262,Math.Min(70,navigationStep-4));if(selected){Card(g,rect,true,12);using var b=new SolidBrush(Accent);g.FillRectangle(b,8,rect.Y+5,5,rect.Height-10);}
             Icon(g,item.Icon,36,rect.Y+20,35,selected?Ink:Muted);DrawText(g,item.Name,100,rect.Y+22,22,selected?Ink:Muted,168);
             Hit("page-"+(int)item.Page,rect,item.Name);
         }
@@ -189,9 +192,11 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Advanced: Advanced(g);break;
             case ProductPage.Updates: Updates(g);break;
             case ProductPage.Protections: Protections(g);break;
+            case ProductPage.ExternalCooling:
+                ExternalCooling(g);break;
         }
         using(var b=new SolidBrush(FreshSnapshot is not null?Green:Yellow))g.FillEllipse(b,24,901,20,20);
-        DrawText(g,"VictusFanControl v"+ProductRelease.Version+"  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
+        DrawText(g,"VictusFanControl v"+ProductRelease.DisplayVersion+"  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
         DrawText(g,State.LifecycleBlocked?"Sesión bloqueada por interrupción":FreshSnapshot is not null?"Telemetría validada":State.Runtime=="Healthy"?"Sin datos actuales":"Telemetría: "+State.Runtime,1210,901,18,State.LifecycleBlocked?Yellow:Muted,430);
         var telemetryNotice=State.Snapshot?.RetainedTelemetry is {} retained ? "Lectura retrasada: "+retained+" · se conserva el nivel de ventilación." : "";
         if(Busy || !string.IsNullOrWhiteSpace(Notice) || telemetryNotice.Length>0) {DrawText(g,Busy?"Operación en curso…":telemetryNotice.Length>0?telemetryNotice:Notice,305,849,18,Yellow,1330);}
@@ -503,9 +508,10 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Button(g,"minimized-toggle",Profiles.StartMinimized?"✓  Minimizar al iniciar":"○  Minimizar al iniciar",new(956,241,665,55),Profiles.StartMinimized);
         Button(g,"automatic-start-toggle",Profiles.ActivateAutomaticOnStart?"✓  Activar Automático al iniciar":"○  Activar Automático al iniciar",new(334,310,590,43),Profiles.ActivateAutomaticOnStart);
         Button(g,"recovery-auto-toggle",Profiles.RecoverSessionsAutomatically?"✓  Recuperar sesiones automáticamente":"○  Recuperación automática desactivada",new(956,310,665,43),Profiles.RecoverSessionsAutomatically);
-        Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);Button(g,"updates-page","Ir a Actualizaciones",new(334,480,475,48));
+        Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);
+        Button(g,"updates-page","Ir a Actualizaciones",new(334,543,300,40));
         Button(g,"discard","Descartar cambios",new(846,478,310,68),false,Dirty);
-        Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,551,18,Dirty?Yellow:Green,475);
+        Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,590,16,Dirty?Yellow:Green,475);
         Button(g,"profiles-import","Importar perfiles",new(846,555,310,40));Button(g,"profiles-export","Exportar perfiles",new(1176,555,442,40));
         Card(g,new(310,623,1337,201));DrawText(g,"Registros y estado",334,647,28,null,1250,true);
         DrawText(g,State.LifecycleBlocked?State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.":State.Failure??State.Message,334,704,21,State.LifecycleBlocked||State.Failure is not null?Yellow:Muted,880,height:57);

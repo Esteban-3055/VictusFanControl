@@ -9,6 +9,14 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.Length==1&&args[0]=="--external-cooling-ui-self-test")
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunExternalCoolingChecks();return;}
+        if(args.Length==1&&args[0]=="--external-cooling-self-test")
+        {
+            try { ExternalCoolingSelfTest.RunAsync().GetAwaiter().GetResult(); }
+            catch(Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode=1; }
+            return;
+        }
         if(args.Contains("--platform-thermal-experiment"))
         {
             Console.Error.WriteLine("TZ01/DTT3 y la prueba de retención térmica se han retirado. No se inicia ninguna adquisición.");

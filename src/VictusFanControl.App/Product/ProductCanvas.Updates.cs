@@ -9,7 +9,7 @@ internal sealed partial class ProductCanvas
         DrawText(g,"Actualizaciones",320,88,31,null,1300,true);
         Card(g,new(310,153,1337,176));
         DrawText(g,"Versión instalada",334,177,24,Muted,550);
-        DrawText(g,"v"+ProductRelease.Version,334,218,39,Accent,550,true);
+        DrawText(g,"v"+ProductRelease.DisplayVersion,334,218,39,Accent,550,true);
         DrawText(g,Profiles.IncludePrereleaseUpdates?"Estables + preliminares · GitHub":"Canal estable · GitHub",900,178,25,null,725,true);
         DrawText(g,ProductUpdates.Repository,900,218,20,Muted,725);
         Button(g,"updates-prerelease-toggle",Profiles.IncludePrereleaseUpdates?"✓  Incluir versiones preliminares":"○  Incluir versiones preliminares",new(900,265,716,43),Profiles.IncludePrereleaseUpdates,!UpdateBusy);

@@ -9,6 +9,7 @@ internal sealed partial class ProductForm
     private Action<ProductRuntimeState>? _runtimeChanged;
     private void AttachRuntime(IProductRuntime runtime)
     {
+        if(_externalCooling is not null)_=ExternalCoolingOperationAsync(()=>_externalCooling.ResumeAsync());
         _runtimeChanged=state=>
         {
             if(IsDisposed||_closing)return;
