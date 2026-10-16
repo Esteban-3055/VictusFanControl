@@ -30,3 +30,8 @@ modules/*.bin
 # OS
 Thumbs.db
 .DS_Store
+
+# Firmware toolchains, output and provisioning secrets
+.pio/
+firmware/**/secrets.h
+logs/nvml-telemetry-self-test/

@@ -1,6 +1,8 @@
 # Victus external cooling protocol v1
 
-Development target: ESP32-C3 TCP server; Windows TCP client. Firmware is **not** supplied.
+Development target: ESP32-C3 TCP server; Windows TCP client. The initial
+[SuperMini firmware](../firmware/esp32-c3/README.md) implements this contract;
+its compilation and host tests do not constitute physical qualification.
 TCP port 8765 by default; hostname `victus-base.local`, manual IPv4/IPv6 or DNS hostname.
 Local LAN only; no discovery broadcast, cloud, HTTP API, port forwarding or server dependency.
 

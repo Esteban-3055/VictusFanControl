@@ -300,8 +300,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             }
 
             var nowTick = Environment.TickCount64;
-            var gap = unchecked(nowTick - _lastLoopTick);
-            _lastLoopTick = nowTick;
+            var gap = ObserveLoopTick(nowTick);
 
             if (gap > GapThresholdMs && !RecoveryRequested())
             {
@@ -313,6 +312,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             if (RecoveryRequested())
             {
                 await RecoverAndValidateAsync(cancellationToken).ConfigureAwait(false);
+                CompleteRecoveryClock(Environment.TickCount64);
 
                 // Recovery validation ends immediately after its final complete
                 // snapshot. Reading again on the next loop iteration can happen
@@ -411,6 +411,15 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             Log("TELEMETRY WATCHDOG PROGRESS: " + System.Text.Json.JsonSerializer.Serialize(progress));
         }
     }
+
+    internal long ObserveLoopTick(long now)
+    {
+        var gap = unchecked(now - _lastLoopTick); _lastLoopTick = now; return gap;
+    }
+
+    // Backend cleanup, settling and consecutive validation samples are deliberate work,
+    // not a missed resume. Do not renew any sample, watchdog or hardware-authority clock.
+    internal void CompleteRecoveryClock(long now) => _lastLoopTick = now;
 
     private void HandleNormalSnapshotHealth(TelemetrySnapshot snapshot)
     {
@@ -692,7 +701,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     private void EnsureReader()
     {
-        _reader ??= new HardwareTelemetryReader(_modulesDirectory, schedulePeriodicFanReads:true, productTolerance:ProductTelemetryTolerance);
+        _reader ??= new HardwareTelemetryReader(_modulesDirectory, schedulePeriodicFanReads:true, productTolerance:ProductTelemetryTolerance,
+            gpuTelemetryFactory: ProductTelemetryTolerance ? ((name, exact) => new NvmlTelemetryProcessClient(name, exact)) : null);
         if (!_reader.BackendsInitialized)
         {
             throw new InvalidOperationException(
