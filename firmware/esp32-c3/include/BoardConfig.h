@@ -5,7 +5,7 @@ namespace board {
 constexpr int PwmPin = 3, SdaPin = 6, SclPin = 7, NtcPin = 0;
 constexpr uint8_t LcdAddress = 0x27; // Change to 0x3F for a different PCF8574 backpack.
 constexpr bool PwmActiveLow = true; // User's external NOT stage inverts the GPIO waveform.
-constexpr uint32_t PwmFrequencyHz = 25000;
+constexpr uint32_t PwmFrequencyHz = 18000;
 constexpr int PwmResolutionBits = 8;
 #ifndef VICTUS_ENABLE_PWM
 #define VICTUS_ENABLE_PWM 0

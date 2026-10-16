@@ -34,4 +34,5 @@ Thumbs.db
 # Firmware toolchains, output and provisioning secrets
 .pio/
 firmware/**/secrets.h
+**/config.local.h
 logs/nvml-telemetry-self-test/

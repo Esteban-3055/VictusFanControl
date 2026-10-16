@@ -11,6 +11,9 @@
 #include <memory>
 #include "BoardConfig.h"
 #include "VictusProtocol.h"
+#if __has_include("config.local.h")
+#include "config.local.h"
+#endif
 
 namespace {
 struct EspCrypto : victus::Crypto {
@@ -29,27 +32,44 @@ int listener=-1,peer=-1;
 std::string input,output; size_t sentBytes=0;
 uint32_t frameAt=0,acceptedAt=0,lastFrameAt=0,writeAt=0,nextConnect=0,nextAccept=0;
 bool reading=false,configured=false,networkReady=false;
-unsigned wifiFailures=0;
+bool wifiStarted=false;
 std::atomic<float> ambient{NAN};
 std::atomic<uint32_t> ambientAt{0};
 std::atomic<int> applied{100};
 std::atomic<bool> remote{false};
-struct Command { bool valid; int request; uint32_t at; };
+std::atomic<int> externalRequest{255};
+portMUX_TYPE configLock=portMUX_INITIALIZER_UNLOCKED;
+char appliedRevision[33]{};
+victus::AmbientFilter ambientFilter;
+struct Command { bool valid; int request; uint32_t at; double demand=-1; bool manual=false,hasConfig=false; victus::ExternalConfig config; };
 QueueHandle_t commands;
 String ssid,password;
+std::string storedCurveRevision;
+uint32_t lastCurveSave=0;
+bool curveSavedThisBoot=false;
 std::string serialLine,stagedSsid,stagedPassword;
 int provision=0;
 bool overflow=false;
 float currentAmbient(uint32_t now) { return static_cast<uint32_t>(now-ambientAt.load())<3000 ? ambient.load() : NAN; }
 
 void controlTask(void*) {
-    victus::Lease lease({board::RequestMinimum,board::RequestMaximum,board::MinimumRunningPwm});
+    victus::ExternalController controller;
     for (;;) {
         Command command{};
-        if (xQueueReceive(commands,&command,0)==pdTRUE) lease.command(command.valid,command.request,command.at);
-        int pwm=lease.tick(millis(),currentAmbient(millis()));
-        if (board::EnablePwm) ledcWrite(0,victus::ControlPolicy::electricalDuty(pwm,board::PwmActiveLow));
-        applied.store(pwm); remote.store(lease.remote());
+        if (xQueueReceive(commands,&command,0)==pdTRUE) {
+            if(command.hasConfig) controller.configure(command.config);
+            controller.receive(command.valid,command.request,command.demand,command.manual,command.at);
+        }
+        int duty=controller.tick(millis(),currentAmbient(millis()));
+        if (board::EnablePwm) {
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+            ledcWrite(board::PwmPin,victus::ExternalController::electrical(duty));
+#else
+            ledcWrite(0,victus::ExternalController::electrical(duty));
+#endif
+        }
+        applied.store(duty); remote.store(controller.remote());externalRequest.store(controller.requested());
+        portENTER_CRITICAL(&configLock);snprintf(appliedRevision,sizeof(appliedRevision),"%s",controller.revision());portEXIT_CRITICAL(&configLock);
         vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
@@ -75,13 +95,16 @@ void network(uint32_t now) {
     if (!configured || provision) return;
     if (WiFi.status()!=WL_CONNECTED) {
         if (networkReady || listener>=0 || peer>=0) stopNetwork();
-        if (static_cast<int32_t>(now-nextConnect)>=0) {
+        if (!wifiStarted) {
+            WiFi.setAutoReconnect(true);WiFi.setSleep(false);
             WiFi.begin(ssid.c_str(),password.c_str());
-            nextConnect=now+std::min(30000u,1000u<<(std::min(++wifiFailures,5u)));
+            wifiStarted=true;
+            if(!WiFi.setTxPower(WIFI_POWER_8_5dBm)) Serial.println("No se pudo aplicar potencia WiFi 8.5 dBm.");
         }
         return;
     }
-    wifiFailures=0;
+    // Readback after association; retain the physically validated reduced TX power.
+    if(WiFi.getTxPower()!=WIFI_POWER_8_5dBm) WiFi.setTxPower(WIFI_POWER_8_5dBm);
     if (listener<0) { if (static_cast<int32_t>(now-nextConnect)>=0) { startServer(); nextConnect=now+5000; } return; }
     int incoming=accept(listener,nullptr,nullptr);
     if (incoming>=0) {
@@ -111,10 +134,15 @@ void network(uint32_t now) {
         if (!reading) { reading=true;frameAt=now; }
         if (c=='\n') {
             std::string response;
-            if (!session->accept(input,millis(),currentAmbient(millis()),board::EnablePwm?applied.load():-1,board::EnablePwm&&remote.load(),response)) {
+            char revision[33];portENTER_CRITICAL(&configLock);memcpy(revision,appliedRevision,33);portEXIT_CRITICAL(&configLock);
+            session->appliedConfigRevision=revision;session->appliedDuty=board::EnablePwm?applied.load():-1;
+            session->externalRequest=board::EnablePwm?externalRequest.load():-1;
+            if (!session->accept(input,millis(),currentAmbient(millis()),board::EnablePwm?static_cast<int>(lround(applied.load()*100.0/255)):-1,board::EnablePwm&&remote.load(),response)) {
                 disconnectPeer();nextAccept=now+1000;Serial.println("Sesion rechazada o terminada.");return;
             }
             Command command{session->remoteRequest && board::EnablePwm,session->latest.request,millis()};
+            command.demand=session->latest.demand;command.manual=session->latest.manual;
+            command.hasConfig=session->hasConfiguration;command.config=session->configuration;
             xQueueOverwrite(commands,&command);
             input.clear();reading=false;lastFrameAt=millis();output=std::move(response)+"\n";writeAt=millis();return;
         }
@@ -126,19 +154,29 @@ void readAmbient() {
     unsigned raw=0,mv=0;
     for (int i=0;i<8;++i) { raw+=analogRead(board::NtcPin);mv+=analogReadMilliVolts(board::NtcPin); }
     raw/=8;mv/=8;
-    if (raw<8 || raw>4087 || mv<20 || mv>2450) { ambient.store(NAN);ambientAt.store(millis());return; }
+    if (raw<8 || raw>4087 || mv<20 || mv>2450) { ambient.store(ambientFilter.update(NAN));ambientAt.store(millis());return; }
     double resistance=board::FixedResistorOhms*mv/(board::SupplyMilliVolts-mv);
     double kelvin=1.0/(1.0/298.15+log(resistance/board::NtcNominalOhms)/board::NtcBeta);
-    double c=kelvin-273.15; ambient.store(std::isfinite(c)&&c>=-40&&c<=100 ? c : NAN);ambientAt.store(millis());
+    double c=kelvin-273.15; ambient.store(ambientFilter.update(c));ambientAt.store(millis());
 }
 // PCF8574 mapping P0=RS,P1=RW,P2=E,P3=backlight,P4..7=data. No third-party LCD dependency.
 bool lcd=false;
+uint8_t lcdAddress=board::LcdAddress;
 void lcdNibble(uint8_t data) {
-    Wire.beginTransmission(board::LcdAddress);Wire.write(data|8);Wire.write(data|12);Wire.write(data|8);
+    Wire.beginTransmission(lcdAddress);Wire.write(data|8);Wire.write(data|12);Wire.write(data|8);
     if (Wire.endTransmission()!=0) lcd=false;
 }
 void lcdByte(uint8_t value,bool text=false) { lcdNibble((value&0xF0)|(text?1:0));lcdNibble((value<<4)|(text?1:0)); }
 void lcdRow(uint8_t address,const char* text) { lcdByte(address);for (int i=0;i<16;++i) lcdByte(text[i]?text[i]:' ',true); }
+void probeLcd() {
+    for(uint8_t address=0x20;address<=0x3f;++address) {
+        if(address>0x27&&address<0x38)continue;
+        Wire.beginTransmission(address);if(Wire.endTransmission()!=0)continue;
+        lcdAddress=address;lcd=true;delay(60);lcdNibble(0x30);delay(5);lcdNibble(0x30);delay(1);
+        lcdNibble(0x30);lcdNibble(0x20);lcdByte(0x28);lcdByte(0x0C);lcdByte(0x06);lcdByte(0x01);delay(2);
+        if(lcd) {Serial.printf("LCD detectado: 0x%02X\n",address);return;}
+    }
+}
 void display(uint32_t now) {
     if (!lcd) return;
     char first[17]={},second[17]={};
@@ -150,8 +188,8 @@ void display(uint32_t now) {
     } else {
         auto a=currentAmbient(now);
         if (!board::EnablePwm) snprintf(first,sizeof(first),"PWM desactivado");
-        else if (std::isfinite(a)) snprintf(first,sizeof(first),"Amb:%4.1fC %3d%%",a,applied.load());
-        else snprintf(first,sizeof(first),"NTC Fault %3d%%",applied.load());
+        else if (std::isfinite(a)) snprintf(first,sizeof(first),"Amb:%4.1fC %3d",a,applied.load());
+        else snprintf(first,sizeof(first),"NTC Fault %3d",applied.load());
         snprintf(second,sizeof(second),"%s %s",board::EnablePwm?(remote.load()?"Remote":"Local"):"PWM off",WiFi.status()==WL_CONNECTED?"WiFi":"Offline");
     }
     // Pad explicitly; never read beyond a short C string.
@@ -161,9 +199,9 @@ void display(uint32_t now) {
 void wipe(std::string& s) { volatile char* p=s.empty()?nullptr:&s[0]; for(size_t i=0;i<s.size();++i)p[i]=0;s.clear(); }
 void provisioningLine(std::string& line) {
     if (!provision) {
-        if (line=="setup") { stopNetwork(); WiFi.disconnect(); provision=1;Serial.println("SSID (sin eco):"); }
+        if (line=="setup") { stopNetwork(); WiFi.setAutoReconnect(false);WiFi.disconnect();wifiStarted=false; provision=1;Serial.println("SSID (sin eco):"); }
         else if (line=="status") { Serial.printf("Configurado=%s PWM=%s Modo=%s\n",configured?"si":"no",board::EnablePwm?"activo":"desactivado",remote.load()?"Remote":"Local"); }
-        else if (line=="erase CONFIRM") { stopNetwork();WiFi.disconnect(true,true);preferences.clear();configured=false;pairing.fill(0);ssid="";password="";Serial.println("Configuracion borrada."); }
+        else if (line=="erase CONFIRM") { stopNetwork();WiFi.setAutoReconnect(false);WiFi.disconnect(true,true);wifiStarted=false;preferences.clear();configured=false;pairing.fill(0);ssid="";password="";Serial.println("Configuracion borrada."); }
         else Serial.println("Comandos USB: setup | status | erase CONFIRM");
     } else if (provision==1) {
         if (line.empty()||line.size()>32) {Serial.println("SSID invalido; reintenta.");return;}
@@ -195,22 +233,45 @@ void setup() {
     Serial.begin(115200); commands=xQueueCreate(1,sizeof(Command));if(!commands)abort();
     if(board::EnablePwm) {
         pinMode(board::PwmPin,OUTPUT);digitalWrite(board::PwmPin,board::PwmActiveLow?LOW:HIGH);
-        ledcSetup(0,board::PwmFrequencyHz,board::PwmResolutionBits);ledcWrite(0,victus::ControlPolicy::electricalDuty(100,board::PwmActiveLow));ledcAttachPin(board::PwmPin,0);
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+        if(!ledcAttach(board::PwmPin,board::PwmFrequencyHz,board::PwmResolutionBits))abort();
+        ledcWrite(board::PwmPin,0);
+#else
+        if(ledcSetup(0,board::PwmFrequencyHz,board::PwmResolutionBits)==0)abort();
+        ledcWrite(0,0);ledcAttachPin(board::PwmPin,0);
+#endif
     }
-    if(xTaskCreate(controlTask,"fan-lease",3072,nullptr,2,nullptr)!=pdPASS)abort();
+    preferences.begin("victus-base",false);
+    victus::ExternalConfig restored;
+    if(preferences.getBytesLength("curve-v1")==sizeof(restored)&&preferences.getBytes("curve-v1",&restored,sizeof(restored))==sizeof(restored)&&restored.valid()) {
+        Command boot{false,0,millis()};boot.hasConfig=true;boot.config=restored;xQueueOverwrite(commands,&boot);storedCurveRevision=restored.revision;
+    }
+    if(xTaskCreate(controlTask,"fan-lease",4096,nullptr,2,nullptr)!=pdPASS)abort();
     analogReadResolution(12);analogSetPinAttenuation(board::NtcPin,ADC_11db);
-    Wire.begin(board::SdaPin,board::SclPin);Wire.setTimeOut(20);Wire.beginTransmission(board::LcdAddress);lcd=Wire.endTransmission()==0;
-    if(lcd) {delay(50);lcdNibble(0x30);delay(5);lcdNibble(0x30);delay(1);lcdNibble(0x30);lcdNibble(0x20);lcdByte(0x28);lcdByte(0x0C);lcdByte(0x06);lcdByte(0x01);delay(2);}
-    preferences.begin("victus-base",false);ssid=preferences.getString("ssid","");password=preferences.getString("password","");
+    Wire.begin(board::SdaPin,board::SclPin);Wire.setTimeOut(20);probeLcd();
+    ssid=preferences.getString("ssid","");password=preferences.getString("password","");
     configured=preferences.getBool("valid",false)&&ssid.length()>0&&preferences.getBytesLength("pairing")==pairing.size();
     if(configured)preferences.getBytes("pairing",pairing.data(),pairing.size());
-    WiFi.persistent(false);WiFi.mode(WIFI_STA);WiFi.setHostname(board::Hostname);WiFi.setAutoReconnect(false);
+#if defined(WIFI_SSID) && defined(WIFI_PASSWORD) && defined(PAIRING_KEY_B64)
+    // Optional private Work 0.4 credentials. Existing USB/NVS pairing takes precedence.
+    if(!configured&&victus::decodeKey(PAIRING_KEY_B64,pairing)&&std::string(PAIRING_KEY_B64)!="AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=") {
+        ssid=WIFI_SSID;password=WIFI_PASSWORD;configured=ssid.length()>0&&ssid.length()<=32;
+    }
+#endif
+    WiFi.persistent(false);WiFi.mode(WIFI_STA);WiFi.setHostname(board::Hostname);WiFi.setAutoReconnect(true);WiFi.setSleep(false);
     Serial.println("Victus Base v1. Comandos USB: setup | status. Sin firmware fisico validado.");
 }
 void loop() {
     auto now=millis();serialInput();network(now);
-    static uint32_t sensorAt=0,displayAt=0;
+    static uint32_t sensorAt=0,displayAt=0,probeAt=0;
+    if(!lcd&&static_cast<uint32_t>(now-probeAt)>=5000) {probeAt=now;probeLcd();}
     if(static_cast<uint32_t>(now-sensorAt)>=1000) {sensorAt=now;readAmbient();}
     if(static_cast<uint32_t>(now-displayAt)>=1000) {displayAt=now;display(now);}
+    if(session&&session->hasConfiguration&&storedCurveRevision!=session->configuration.revision&&
+        (!curveSavedThisBoot||static_cast<uint32_t>(now-lastCurveSave)>=30000)) {
+        curveSavedThisBoot=true;lastCurveSave=now;
+        if(preferences.putBytes("curve-v1",&session->configuration,sizeof(victus::ExternalConfig))==sizeof(victus::ExternalConfig))storedCurveRevision=session->configuration.revision;
+        else Serial.println("No se pudo persistir la curva externa; se conserva en RAM.");
+    }
     delay(2);
 }
