@@ -28,6 +28,9 @@ Requisitos: Windows, .NET 8 SDK y los requisitos de compilación existentes del 
 
    Introducir la misma clave en la entrada oculta y pulsar Enter. No pasar claves como
    argumentos ni guardarlas en scripts. El simulador escucha solo en 127.0.0.1 por defecto.
+   La clave generada tiene 44 caracteres y termina en `=`. Una entrada incorrecta permite
+   reintentar; Escape o Ctrl+C cancelan la entrada. Se requiere una terminal interactiva.
+   Los argumentos incorrectos y un puerto ocupado generan un mensaje breve y salida controlada.
 5. Pulsar **Conectar** en la aplicación; guarda preferencias y emparejamiento. El campo de
    clave se vacía. Esperar **Connected / recepción válida**. TCP abierto o autenticado sin
    respuesta válida todavía no se presenta como Connected.
@@ -70,10 +73,17 @@ distinta debe producir error de autenticación y cero telemetría enviada. Para 
 otro Windows de la LAN se puede usar `--bind DIRECCION_IP_LOCAL`; configurar esa IP en la
 aplicación y desmarcar simulador local. No se cambian reglas del firewall automáticamente.
 
+Los paquetes de protocolo rechazados cierran solo esa conexión; el servidor continúa aceptando
+sesiones. En Silence consume entrada sin responder y detecta EOF para permitir otra conexión.
+El diagnóstico de Windows conserva la categoría y fecha del último fallo (conexión,
+autenticación, timeout, protocolo o emparejamiento), sin registrar secretos ni texto del par.
+
 El simulador calcula un PWM ilustrativo para sus respuestas, con fallback Local=25%. Esa
 política no se instala en Windows ni define el firmware futuro. Su comprobación de referencia
 a una respuesta propia reciente evita aplicar solicitudes retrasadas por TCP. Las pruebas
 físicas de PWM, arranque, pérdida de red, temporizador de fallback, NTC y LCD quedan para fase 2.
+El estado simulado dispone además de un temporizador independiente que vuelve a Local y 25%
+al caducar la Solicitud, aunque no lleguen más mensajes. No acredita el fallback físico del ESP32.
 
 ## Pruebas reproducibles
 

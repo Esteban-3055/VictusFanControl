@@ -10,49 +10,59 @@ public sealed record SimulatorOptions(SimulatorFault Fault=SimulatorFault.None,i
 /// <summary>Development tool only. PWM is simulated locally, never converted by Windows product code.</summary>
 public static class Simulator
 {
-    public static async Task HandleAsync(TcpClient tcp,byte[] key,SimulatorOptions options,Action<string,ExportTelemetry>? observed,CancellationToken token)
+    public static async Task HandleAsync(TcpClient tcp,byte[] key,SimulatorOptions options,Action<string,ExportTelemetry>? observed,CancellationToken token,SimulatorDeviceState? device=null)
     {
-        await using var wire=new FramedConnection(tcp.GetStream());
-        using var session=await AuthenticatedSession.ServerAsync(wire,key,token);
-        long previous=0,sequence=0;ProtocolFrame? last=null;
-        var replyTimes=new Dictionary<long,long>();
-        while(true)
+        device??=new();device.Disconnect();
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(token);
+        var watchdog=device.WatchAsync(lifetime.Token);
+        try
         {
-            var frame=await wire.ReadAsync(token);
-            ExternalCoolingProtocol.Verify(frame,session.ReceiveKey,session.Id,previous);
-            var telemetry=ExternalCoolingProtocol.Telemetry(frame);previous=frame.Sequence;observed?.Invoke(session.Id,telemetry);
-            if(previous>=options.AfterMessages)
+            await using var wire=new FramedConnection(tcp.GetStream());
+            using var session=await AuthenticatedSession.ServerAsync(wire,key,token);
+            long previous=0,sequence=0;ProtocolFrame? last=null;
+            var replyTimes=new Dictionary<long,long>();
+            while(true)
             {
-                switch(options.Fault)
+                var frame=await wire.ReadAsync(token);
+                ExternalCoolingProtocol.Verify(frame,session.ReceiveKey,session.Id,previous);
+                var telemetry=ExternalCoolingProtocol.Telemetry(frame);previous=frame.Sequence;observed?.Invoke(session.Id,telemetry);
+                if(previous>=options.AfterMessages)
                 {
-                    case SimulatorFault.Disconnect:return;
-                    case SimulatorFault.Invalid:await tcp.GetStream().WriteAsync(Encoding.UTF8.GetBytes("{invalid}\n"),token);return;
-                    case SimulatorFault.Partial:
-                        await tcp.GetStream().WriteAsync(Encoding.UTF8.GetBytes("{\"protocolVersion\":1"),token);
-                        await Task.Delay(TimeSpan.FromSeconds(10),token);return;
-                    case SimulatorFault.Delayed:await Task.Delay(TimeSpan.FromSeconds(6),token);break;
-                    case SimulatorFault.Duplicate:if(last is not null){await wire.WriteAsync(last,token);continue;}break;
-                    case SimulatorFault.Silence:await Task.Delay(Timeout.InfiniteTimeSpan,token);return;
+                    switch(options.Fault)
+                    {
+                        case SimulatorFault.Disconnect:return;
+                        case SimulatorFault.Invalid:await tcp.GetStream().WriteAsync(Encoding.UTF8.GetBytes("{invalid}\n"),token);return;
+                        case SimulatorFault.Partial:
+                            await tcp.GetStream().WriteAsync(Encoding.UTF8.GetBytes("{\"protocolVersion\":1"),token);
+                            await Task.Delay(TimeSpan.FromSeconds(10),token);return;
+                        case SimulatorFault.Delayed:await Task.Delay(TimeSpan.FromSeconds(6),token);break;
+                        case SimulatorFault.Duplicate:if(last is not null){await wire.WriteAsync(last,token);continue;}break;
+                        // Keep consuming input so EOF releases the one-client server; send no replies.
+                        case SimulatorFault.Silence:continue;
+                    }
                 }
+                var remote=telemetry.SolicitudValida&&telemetry.ReplyToDeviceSequence is{} referencedReply&&replyTimes.TryGetValue(referencedReply,out var replyAt)&&
+                    System.Diagnostics.Stopwatch.GetElapsedTime(replyAt).TotalMilliseconds<telemetry.ValidForMs;
+                device.Apply(remote,telemetry.Solicitud);
+                var operating=device.Snapshot;
+                var status=new DeviceStatus
+                {
+                    AckSequence=previous,AmbientTempC=23.0+Math.Sin(previous/30.0),
+                    // An illustrative simulator policy, not a firmware requirement or Windows mapping.
+                    AppliedPwmPct=operating.PwmPct,
+                    Mode=operating.Mode,Communication=operating.Communication,Extensions=new(){Slot1=null,Slot2=null}
+                };
+                var reply=ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("deviceStatus",session.Id,++sequence,status),session.SendKey);last=reply;
+                replyTimes[sequence]=System.Diagnostics.Stopwatch.GetTimestamp();
+                foreach(var old in replyTimes.Keys.Where(k=>k<sequence-15).ToArray())replyTimes.Remove(old);
+                if(options.Fault==SimulatorFault.Fragmented)
+                {
+                    var bytes=ExternalCoolingProtocol.Encode(reply).Concat(new byte[]{10}).ToArray();
+                    for(int i=0;i<bytes.Length;i+=7)await tcp.GetStream().WriteAsync(bytes.AsMemory(i,Math.Min(7,bytes.Length-i)),token);
+                }
+                else await wire.WriteAsync(reply,token);
             }
-            var remote=telemetry.SolicitudValida&&telemetry.ReplyToDeviceSequence is{} referencedReply&&replyTimes.TryGetValue(referencedReply,out var replyAt)&&
-                System.Diagnostics.Stopwatch.GetElapsedTime(replyAt).TotalMilliseconds<telemetry.ValidForMs;
-            var status=new DeviceStatus
-            {
-                AckSequence=previous,AmbientTempC=23.0+Math.Sin(previous/30.0),
-                // An illustrative simulator policy, not a firmware requirement or Windows mapping.
-                AppliedPwmPct=remote?Math.Clamp(telemetry.Solicitud!.Value,0,100):25,
-                Mode=remote?"Remote":"Local",Communication="Ready",Extensions=new(){Slot1=null,Slot2=null}
-            };
-            var reply=ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("deviceStatus",session.Id,++sequence,status),session.SendKey);last=reply;
-            replyTimes[sequence]=System.Diagnostics.Stopwatch.GetTimestamp();
-            foreach(var old in replyTimes.Keys.Where(k=>k<sequence-15).ToArray())replyTimes.Remove(old);
-            if(options.Fault==SimulatorFault.Fragmented)
-            {
-                var bytes=ExternalCoolingProtocol.Encode(reply).Concat(new byte[]{10}).ToArray();
-                for(int i=0;i<bytes.Length;i+=7)await tcp.GetStream().WriteAsync(bytes.AsMemory(i,Math.Min(7,bytes.Length-i)),token);
-            }
-            else await wire.WriteAsync(reply,token);
         }
+        finally{device.Disconnect();lifetime.Cancel();await watchdog.ConfigureAwait(false);}
     }
 }

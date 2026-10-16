@@ -117,6 +117,13 @@ Manual requires an explicit accepted Manual Apply in the current mode and curren
 supervised state, not the UI slider or an Automatic target retained across a mode change.
 MonitorOnly always clears solicitud, solicitudValida and physical targets; demand remains data.
 
+For a valid request, sampledAtUtc and both thermal timestamps must be non-null, non-default,
+not after capturedAtUtc, and less than 5000 ms before it. Both temperatures must be present.
+Automatic also requires a non-null demand and a decisionAtUtc meeting that same age bound.
+This v1 defensive upper bound does not replace the Windows adapter's shorter sensor/controller
+age limits. Compare timestamps within the message; do not compare them with the device's UTC
+clock. A fresh MAC, sequence or reply reference never makes old source evidence current.
+
 Device must stop applying a remote request on EOF, failed authentication, invalid message,
 session change, explicit null/false request, or **2000 ms without a new valid telemetry frame**.
 Additionally, **before applying** any valid remote request, look up `replyToDeviceSequence` in
@@ -126,8 +133,11 @@ This bounds the age of commands delayed inside TCP buffers without clock synchro
 Windows sends no request in its first telemetry, and clears requests as AwaitingDevice if no
 valid device reply arrived in the preceding 2000 ms. MonitorOnly uses its own suppression reason.
 Use a monotonic local timer, not Windows wall time, for the remote lease. A duplicate or invalid
-frame must not renew it. The simulator implements and tests this reply-reference admission;
-future firmware must also implement a timer-driven physical PWM fallback on silence/EOF.
+frame must not renew it. The simulator implements this reply-reference admission and an
+independent 100 ms timer that expires its simulated Remote state after 2000 ms without a
+new admitted request. EOF, cancellation and rejected sessions reset that state to Local.
+It does not emit unsolicited status frames. Future firmware must implement and physically
+validate its own timer-driven PWM fallback on silence/EOF; simulation is not physical proof.
 
 ## Device response payload
 

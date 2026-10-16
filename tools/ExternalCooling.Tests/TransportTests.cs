@@ -8,7 +8,7 @@ internal static partial class Program
 {
     private sealed class Source : ITelemetryExportSource
     {
-        public ExportTelemetry Capture(DateTimeOffset now)=>new(){CapturedAtUtc=now,CpuUsagePct=40,GpuUsagePct=80,RamUsagePct=50,
+        public ExportTelemetry Capture(DateTimeOffset now)=>new(){CapturedAtUtc=now,SampledAtUtc=now,CpuTempSampledAtUtc=now,GpuTempSampledAtUtc=now,CpuTempC=55,GpuTempC=50,CpuUsagePct=40,GpuUsagePct=80,RamUsagePct=50,
             ModoSolicitado="Manual",ModoEfectivo="Manual",Solicitud=54,SolicitudValida=true,CpuTargetLevel=54,GpuTargetLevel=52,RequestEvidence="WmiAcceptedSupervised"};
     }
     private static async Task Until(Func<bool> condition,int milliseconds=10000)
@@ -27,19 +27,7 @@ internal static partial class Program
         {
             _listener=new(IPAddress.Loopback,port);
             _listener.Start();
-            _run=Task.Run(async()=>
-            {
-                try
-                {
-                    while(true)
-                    {
-                        using var tcp=await _listener.AcceptTcpClientAsync(_cancel.Token);
-                        try{await Simulator.HandleAsync(tcp,key,options,(id,t)=>{lock(Observations)Observations.Add((id,t));},_cancel.Token);}
-                        catch(Exception ex)when(ex is IOException or OperationCanceledException or System.Text.Json.JsonException or FormatException){}
-                    }
-                }
-                catch(Exception ex)when(_cancel.IsCancellationRequested&&ex is OperationCanceledException or InvalidOperationException or SocketException){}
-            });
+            _run=SimulatorServer.RunAsync(_listener,key,options,(id,t)=>{lock(Observations)Observations.Add((id,t));},_=>{},_cancel.Token);
         }
         public async ValueTask DisposeAsync(){_cancel.Cancel();_listener.Stop();await _run;_cancel.Dispose();}
     }
@@ -63,7 +51,13 @@ internal static partial class Program
                 await Until(()=>client.Diagnostics.Received>=3);cancel.Cancel();
                 lock(server.Observations)Require(server.Observations.All(o=>!o.Telemetry.SolicitudValida&&o.Telemetry.Solicitud is null),"MonitorOnly sent control.");
             }
-            else await Until(()=>client.Diagnostics.Failures>0);
+            else
+            {
+                await Until(()=>client.Diagnostics.Failures>0);
+                var expected=fault is SimulatorFault.Partial or SimulatorFault.Delayed or SimulatorFault.Silence?ExternalCoolingFailureKind.Timeout:
+                    fault==SimulatorFault.Disconnect?ExternalCoolingFailureKind.Connection:ExternalCoolingFailureKind.Protocol;
+                Require(client.Diagnostics.LastFailureKind==expected&&client.Diagnostics.LastFailureUtc.HasValue,"Failure category/time missing or incorrect.");
+            }
             cancel.Cancel();await task.WaitAsync(TimeSpan.FromSeconds(2));
             Require(client.Diagnostics.LastSent?.Contains(Convert.ToBase64String(key),StringComparison.Ordinal)!=true,"Secret in diagnostics.");
             Console.WriteLine($"PASS TCP {fault}: sent={client.Diagnostics.Sent}, received={client.Diagnostics.Received}, failures={client.Diagnostics.Failures}");
@@ -74,7 +68,7 @@ internal static partial class Program
             var wrong=ExternalCoolingProtocol.ParsePairingKey(ExternalCoolingProtocol.NewPairingKey());
             var task=client.RunAsync(new(){Mode=ExternalCoolingMode.MonitorAndRequest,UseSimulator=true,Port=server.Port,AutoReconnect=false},wrong,new Source(),cancel.Token);
             await task.WaitAsync(TimeSpan.FromSeconds(7));
-            Require(client.Diagnostics.Failures==1&&client.Diagnostics.Sent==0&&client.Diagnostics.Received==0,"Authentication failure enabled telemetry/control.");
+            Require(client.Diagnostics.Failures==1&&client.Diagnostics.Sent==0&&client.Diagnostics.Received==0&&client.Diagnostics.LastFailureKind==ExternalCoolingFailureKind.Authentication,"Authentication failure enabled telemetry/control or lost its category.");
         }
         await using(var server=new Server(key,new(SimulatorFault.Disconnect,2)))
         {

@@ -14,6 +14,17 @@ internal static partial class ProductGuiSelfTest
         try
         {
             var root=Path.GetFullPath("logs/external-cooling-self-test");Directory.CreateDirectory(root);
+            var corruptPath=Path.Combine(root,"corrupt-"+Guid.NewGuid().ToString("N")+".json");
+            File.WriteAllText(corruptPath,"{invalid");
+            var corruptRuntime=new RecordingRuntime();
+            using(var corrupt=new ProductForm("fixture://external-corrupt",fixture:corruptRuntime,fixtureProfiles:new ProductProfiles(),externalCoolingPath:corruptPath))
+            {
+                corrupt.Show();PumpUntil(()=>corrupt.ExternalCoolingStatus?.State==ExternalCoolingConnectionState.Disabled,"Corrupt settings were not disabled.");
+                ExternalCoolingSelfTest.Require(corrupt.ExternalCoolingError?.Contains("Configuración de base externa no válida")==true,"Corrupt settings notice was cleared by disabled startup.");
+                corrupt.HandlePowerEventAsync(18).GetAwaiter().GetResult();Application.DoEvents();
+                ExternalCoolingSelfTest.Require(corrupt.ExternalCoolingError is not null&&File.ReadAllText(corruptPath)=="{invalid"&&corruptRuntime.Commands==0,"Resume hid corrupt settings or changed source/control.");
+                var closing=corrupt.RequestExitAsync();PumpUntil(()=>closing.IsCompleted,"Corrupt fixture did not close.");closing.GetAwaiter().GetResult();
+            }
             var path=Path.Combine(root,"preferences-"+Guid.NewGuid().ToString("N")+".json");
             var key=ExternalCoolingProtocol.NewPairingKey();var raw=ExternalCoolingProtocol.ParsePairingKey(key);
             var listener=new TcpListener(IPAddress.Loopback,0);listener.Start();
@@ -44,7 +55,7 @@ internal static partial class ProductGuiSelfTest
                                 {AckSequence=previous,AmbientTempC=23,AppliedPwmPct=25,Mode="Local",Communication="Ready",Extensions=new(){Slot1=null,Slot2=null}}),auth.SendKey),cancel.Token);
                             }
                         }
-                        catch(Exception ex)when(ex is IOException or OperationCanceledException){}
+                        catch(Exception ex)when(ex is IOException or InvalidDataException or OperationCanceledException){}
                     }
                 }
                 catch(Exception ex)when(cancel.IsCancellationRequested&&ex is OperationCanceledException or SocketException or InvalidOperationException){}

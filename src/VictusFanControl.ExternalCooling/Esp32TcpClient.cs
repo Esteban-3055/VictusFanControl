@@ -5,6 +5,8 @@ using System.Text.Json;
 
 namespace VictusFanControl.ExternalCooling;
 
+public enum ExternalCoolingFailureKind { Connection, Authentication, Timeout, Protocol, Pairing, Internal }
+
 public sealed record ExternalCoolingDiagnostics
 {
     public ExternalCoolingConnectionState State { get; init; }=ExternalCoolingConnectionState.Disabled;
@@ -21,6 +23,8 @@ public sealed record ExternalCoolingDiagnostics
     public string? LastSent { get; init; }
     public string? LastReceived { get; init; }
     public DeviceStatus? Device { get; init; }
+    public ExternalCoolingFailureKind? LastFailureKind { get; init; }
+    public DateTimeOffset? LastFailureUtc { get; init; }
 }
 
 /// <summary>Independent network worker. No hardware/control dependencies, no UI callbacks.</summary>
@@ -32,6 +36,15 @@ public sealed class Esp32TcpClient
     private void Update(Func<ExternalCoolingDiagnostics,ExternalCoolingDiagnostics> change) {lock(_sync)_diagnostics=change(_diagnostics);}
     public void SetIdle(bool disabled)=>Update(d=>d with{State=disabled?ExternalCoolingConnectionState.Disabled:ExternalCoolingConnectionState.Disconnected,
         Detail=disabled?"Deshabilitado":"Desconectado",SessionId=null,Device=null});
+    public void SetPairingFailure()=>Fail(ExternalCoolingFailureKind.Pairing);
+    private void Fail(ExternalCoolingFailureKind kind)=>Update(d=>d with{State=ExternalCoolingConnectionState.Error,
+        Detail="No se pudo comunicar; consulta el último fallo",Failures=d.Failures+1,Device=null,SessionId=null,
+        LastFailureKind=kind,LastFailureUtc=DateTimeOffset.UtcNow});
+    public static TimeSpan ReconnectDelay(int consecutiveFailures,int jitterMilliseconds=0)
+    {
+        if(consecutiveFailures<1||jitterMilliseconds is <0 or >249)throw new ArgumentOutOfRangeException();
+        return TimeSpan.FromMilliseconds(Math.Min(30000,500*Math.Pow(2,Math.Min(consecutiveFailures,7)-1))+jitterMilliseconds);
+    }
 
     public async Task RunAsync(ExternalCoolingSettings settings,byte[] pairingKey,ITelemetryExportSource source,CancellationToken token)
     {
@@ -44,6 +57,7 @@ public sealed class Esp32TcpClient
             {
                 Update(d=>d with{State=failures==0?ExternalCoolingConnectionState.Connecting:ExternalCoolingConnectionState.Reconnecting,
                     Detail="Conectando",Device=null,SessionId=null});
+                var authenticating=false;
                 try
                 {
                     using var tcp=new TcpClient{NoDelay=true};
@@ -54,20 +68,26 @@ public sealed class Esp32TcpClient
                     }
                     await using var wire=new FramedConnection(tcp.GetStream());
                     Update(d=>d with{State=ExternalCoolingConnectionState.Authenticating,Detail="Autenticando"});
+                    authenticating=true;
                     using var session=await AuthenticatedSession.ClientAsync(wire,pairingKey,token).ConfigureAwait(false);
+                    authenticating=false;
                     Update(d=>d with{Connections=d.Connections+1,SessionId=session.Id,Detail="Autenticado; esperando respuesta válida"});
                     await CommunicateAsync(wire,session,settings,source,token).ConfigureAwait(false);
                 }
-                catch(Exception)
+                catch(Exception ex)
                 {
                     if(token.IsCancellationRequested)break;
                     if(Diagnostics.State==ExternalCoolingConnectionState.Connected)failures=0;
                     // Deliberately exclude peer data, keys, proofs, host strings and exception messages.
-                    Update(d=>d with{State=ExternalCoolingConnectionState.Error,Detail="Conexión, autenticación o mensaje no válido",Failures=d.Failures+1,Device=null,SessionId=null});
+                    var kind=ex is OperationCanceledException?ExternalCoolingFailureKind.Timeout:
+                        authenticating?ExternalCoolingFailureKind.Authentication:
+                        ex is InvalidDataException or JsonException or FormatException?ExternalCoolingFailureKind.Protocol:
+                        ex is SocketException or IOException?ExternalCoolingFailureKind.Connection:ExternalCoolingFailureKind.Internal;
+                    Fail(kind);
                 }
                 if(!settings.AutoReconnect)break;
-                failures=Diagnostics.State==ExternalCoolingConnectionState.Connected?1:Math.Min(failures+1,6);
-                var delay=TimeSpan.FromMilliseconds(Math.Min(30000,500*Math.Pow(2,failures-1))+Random.Shared.Next(0,250));
+                failures=Diagnostics.State==ExternalCoolingConnectionState.Connected?1:Math.Min(failures+1,7);
+                var delay=ReconnectDelay(failures,Random.Shared.Next(0,250));
                 Update(d=>d with{State=ExternalCoolingConnectionState.Reconnecting,Detail="Esperando reconexión"});
                 await Task.Delay(delay,token).ConfigureAwait(false);
             }

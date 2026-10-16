@@ -41,6 +41,8 @@ public sealed record DeviceStatus
 public static class ExternalCoolingProtocol
 {
     public const int Version=1, MaximumFrameBytes=4096, RequestValidForMilliseconds=2000;
+    // Protocol v1 upper bound; the Windows adapter can impose a shorter controller-specific age.
+    public const int MaximumSourceAgeMilliseconds=5000;
     public static JsonSerializerOptions Json { get; }=new()
     {
         PropertyNamingPolicy=JsonNamingPolicy.CamelCase, MaxDepth=8,
@@ -50,7 +52,7 @@ public static class ExternalCoolingProtocol
     public static byte[] ParsePairingKey(string key)
     {
         var bytes=Convert.FromBase64String(key);
-        if(bytes.Length!=32)throw new ArgumentException("El emparejamiento requiere una clave aleatoria de 32 bytes en Base64.");
+        if(bytes.Length!=32){CryptographicOperations.ZeroMemory(bytes);throw new ArgumentException("El emparejamiento requiere una clave aleatoria de 32 bytes en Base64.");}
         return bytes;
     }
     public static string NewPairingKey()=>NewNonce();
@@ -120,6 +122,12 @@ public static class ExternalCoolingProtocol
         if(t.ReplyToDeviceSequence is <=0)throw new InvalidDataException("Invalid reply sequence.");
         foreach(var at in new[]{t.SampledAtUtc,t.DecisionAtUtc,t.CpuTempSampledAtUtc,t.GpuTempSampledAtUtc,t.RamSampledAtUtc})
             if(at>t.CapturedAtUtc)throw new InvalidDataException("Future acquisition.");
+        bool Fresh(DateTimeOffset? at)=>at is {} value && value!=default &&
+            t.CapturedAtUtc>=value && (t.CapturedAtUtc-value).TotalMilliseconds<MaximumSourceAgeMilliseconds;
+        if(t.SolicitudValida && (!Fresh(t.SampledAtUtc)||!Fresh(t.CpuTempSampledAtUtc)||!Fresh(t.GpuTempSampledAtUtc)||
+            t.CpuTempC is null||t.GpuTempC is null||
+            t.ModoSolicitado=="Automatic"&&(!Fresh(t.DecisionAtUtc)||t.DemandaPct is null)))
+            throw new InvalidDataException("Missing or expired control evidence.");
         return t;
     }
     public static DeviceStatus Status(ProtocolFrame frame)

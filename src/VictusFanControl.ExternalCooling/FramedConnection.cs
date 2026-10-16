@@ -15,6 +15,7 @@ public sealed class FramedConnection(Stream stream) : IAsyncDisposable
         using var line=new MemoryStream();
         while(true)
         {
+            deadline.Token.ThrowIfCancellationRequested();
             if(_position==_available)
             {
                 _available=await stream.ReadAsync(_buffer,deadline.Token).ConfigureAwait(false);_position=0;
@@ -28,6 +29,7 @@ public sealed class FramedConnection(Stream stream) : IAsyncDisposable
     }
     public async Task WriteAsync(ProtocolFrame frame,CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
         using var deadline=CancellationTokenSource.CreateLinkedTokenSource(token);deadline.CancelAfter(TimeSpan.FromSeconds(3));
         var bytes=ExternalCoolingProtocol.Encode(frame);
         await stream.WriteAsync(bytes,deadline.Token).ConfigureAwait(false);
