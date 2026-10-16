@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Principal;
 using VictusFanControl.Product;
+using VictusFanControl.Recovery;
 
 namespace VictusFanControl.App;
 
@@ -11,6 +12,27 @@ internal sealed partial class ProductForm
     private bool _updateCancellationDisposed;
     private Task? _updateInstallTask;
     private long _updateLifecycleBoundary;
+    internal Func<TimeSpan,CancellationToken,Task>? UpdateRecoveryReadDelayFixture { get; set; }
+
+    private async Task<ProductRecoverySelection> ReadUpdateRecoveryAsync(long boundary)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { return await Task.Run(RecoverySelectionReader); }
+            catch (Exception ex) when (attempt < 2 && Draft.RecoverSessionsAutomatically && (ex is IOException or UnauthorizedAccessException))
+            {
+                if (_closing || IsDisposed || _displayOff || boundary != _updateLifecycleBoundary)
+                    throw new OperationCanceledException("La actualización se interrumpió durante la lectura de recuperación.");
+                var delay = TimeSpan.FromSeconds(attempt == 0 ? 30 : 60);
+                _canvas.UpdateStatus = $"No se pudo leer la sesión anterior. Reintentando automáticamente en {delay.TotalSeconds:0} s; la descarga se conserva.";
+                _canvas.Invalidate(); AppLog.Write("PRODUCT UPDATE RECOVERY READ: attempt=" + (attempt + 1) + "; " + ex);
+                await (_isolatedRuntime && UpdateRecoveryReadDelayFixture is { } fixture
+                    ? fixture(delay, _updateCancellation.Token) : Task.Delay(delay, _updateCancellation.Token));
+                if (_closing || IsDisposed || _displayOff || boundary != _updateLifecycleBoundary)
+                    throw new OperationCanceledException("La actualización se interrumpió durante la espera de recuperación.");
+            }
+        }
+    }
     private void ResetUpdateSelection()
     {
         _canvas.AvailableUpdate = null; _canvas.UpdateCheckedAt = null; _canvas.UpdateProgressPercent = null;
@@ -94,13 +116,7 @@ internal sealed partial class ProductForm
         if (!ProductUpdates.IsNewer(update.Version,update.IsPrerelease,ProductRelease.NumericVersion)) { _canvas.DownloadedUpdate = null; return; }
         if (update.IsPrerelease && !_draft.IncludePrereleaseUpdates) { ResetUpdateSelection(); return; }
         if (!_isolatedRuntime && (verifyFixture is not null || ensureReleasedFixture is not null || launchFixture is not null)) throw new InvalidOperationException("Update fixture requires an isolated runtime.");
-        // A retained prior session is recovered from the visible recovery action, before destroying a usable runtime.
-        bool pending;
-        try { pending = (_runtime is null || _canvas.State.PerformanceRecovery?.Pending == true) && RecoverySelectionReader().Pending; }
-        catch (Exception ex) { _canvas.UpdateStatus = "No se pudo comprobar la sesión anterior: " + ex.Message + " La descarga se conserva."; _canvas.Invalidate(); return; }
-        if (pending)
-        { _canvas.UpdateStatus = "Hay una sesión anterior pendiente. Pulsa Recuperar sesiones y luego Instalar. La descarga se conserva."; _canvas.Invalidate(); return; }
-        if (!_isolatedRuntime && MessageBox.Show(this, $"Se instalará v{update.Version}{(update.IsPrerelease ? " (preliminar)" : "")} desde la descarga guardada. Se verificará su SHA-256 y se liberarán ventiladores y CPU/GPU antes de cerrar. Tus preferencias se conservan.\n\n¿Abrir el instalador?", "Instalar actualización", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
+        if (!_isolatedRuntime && MessageBox.Show(this, $"Se instalará v{update.Version}{(update.IsPrerelease ? " (preliminar)" : "")} desde la descarga guardada. Se verificará su SHA-256 y se liberarán ventiladores y CPU/GPU antes de cerrar. Si está habilitada la recuperación automática, se resolverán las sesiones pendientes antes de continuar. Tus preferencias se conservan.\n\n¿Abrir el instalador?", "Instalar actualización", MessageBoxButtons.YesNo, MessageBoxIcon.Information) != DialogResult.Yes) return;
         _checkingUpdate = _canvas.UpdateBusy = true;
         var boundary = _updateLifecycleBoundary;
         FileStream? verified = null;
@@ -117,6 +133,27 @@ internal sealed partial class ProductForm
             if (_closing || IsDisposed) return;
             if (_canvas.Dirty || update.IsPrerelease && !_draft.IncludePrereleaseUpdates || _canvas.Busy || _restarting || _displayOff || boundary != _updateLifecycleBoundary)
             { _canvas.UpdateStatus = "El instalador se conserva. Guarda los cambios y resuelve la interrupción antes de volver a pulsar Instalar."; return; }
+            if (_runtime is null || _canvas.State.PerformanceRecovery?.Pending == true)
+            {
+                var pending = await ReadUpdateRecoveryAsync(boundary);
+                if (_closing || IsDisposed) return;
+                if (_displayOff || _canvas.Dirty || _canvas.Busy || _restarting || boundary != _updateLifecycleBoundary) return;
+                if (pending.Pending)
+                {
+                    if (!Draft.RecoverSessionsAutomatically)
+                    { _canvas.UpdateStatus = "La recuperación automática está desactivada. Usa Recuperar sesiones y luego Instalar. La descarga se conserva."; return; }
+                    if (pending.Fans?.Any(r => !r.Recoverable) == true)
+                    { _canvas.UpdateStatus = "Registro de propiedad inválida o incierta. La actualización se conserva y no se modifica el hardware."; return; }
+                    _canvas.UpdateStatus = "Recuperando la sesión pendiente para continuar la instalación…"; _canvas.Invalidate();
+                    var recovery = RecoverPerformanceCoreAsync(pending, ProductProfilesStore.Copy(Draft), resume: false, reopenRuntime: false);
+                    _recoveryTask = recovery;
+                    if (!await recovery)
+                    { if (!_closing && !IsDisposed) _canvas.UpdateStatus = (_canvas.State.Failure ?? "No se confirmó la recuperación.") + " La descarga se conserva."; return; }
+                    if (_closing || IsDisposed) return;
+                    if (_exitRequested || _displayOff || boundary != _updateLifecycleBoundary)
+                    { _canvas.UpdateStatus = "Sesión recuperada. La instalación se detuvo por cierre o cambio de energía; la descarga se conserva."; return; }
+                }
+            }
             _canvas.UpdateStatus = "Instalador verificado. Liberando la sesión para instalar…";
             _updateInstallTask = InstallUpdateAsync(verified?.Name ?? "fixture://installer",ensureReleasedFixture,launchFixture);
             await _updateInstallTask;
@@ -173,6 +210,10 @@ internal sealed partial class ProductForm
             _canvas.RestartAvailable = true; _canvas.Busy = false;
             throw;
         }
-        finally { _restarting = false; }
+        finally
+        {
+            _restarting = false;
+            if (!_closing && !_exitRequested && !IsDisposed) _presentationTimer.Start();
+        }
     }
 }

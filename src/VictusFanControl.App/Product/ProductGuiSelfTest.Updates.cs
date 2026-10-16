@@ -5,6 +5,20 @@ namespace VictusFanControl.App;
 
 internal static partial class ProductGuiSelfTest
 {
+    private static void CompleteGuiTask(Task task, string failure)
+    { PumpUntil(() => task.IsCompleted, failure); task.GetAwaiter().GetResult(); }
+
+    internal static int RunRecoveryChecks()
+    {
+        try
+        {
+            static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
+            TestGuidedRecovery(Require); ProductAutomaticRecoverySelfTest.Run(Require);
+            TestBackgroundRecovery(Require); TestUpdatePage(Require); TestUpdateHandoff(Require);
+            return 0;
+        }
+        catch(Exception ex){Console.WriteLine("FAIL recovery checks: " + ex);return 1;}
+    }
     private static ProductUpdate FutureUpdate(long size)
     {
         var installed=ProductRelease.NumericVersion;
@@ -61,12 +75,13 @@ internal static partial class ProductGuiSelfTest
                 PumpUntil(()=>bad.IsCompleted,"Bad download hung.");require(!form.IsDisposed&&runtime.Disposals==0&&form.Canvas.UpdateStatus.Contains("SHA-256")&&!form.Canvas.UpdateBusy,"Bad download released runtime or lost error.");
                 var downloadGate=new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);bool launched=false;
                 var interrupted=form.DownloadUpdateAsync((_,_)=>downloadGate.Task);
-                form.HandlePowerEventAsync(4).GetAwaiter().GetResult();form.HandlePowerEventAsync(18).GetAwaiter().GetResult();
+                CompleteGuiTask(form.HandlePowerEventAsync(4),"Power event fixture hung.");CompleteGuiTask(form.HandlePowerEventAsync(18),"Power event fixture hung.");
                 downloadGate.SetResult("fixture");PumpUntil(()=>interrupted.IsCompleted,"Interrupted download hung.");
                 require(!launched&&runtime.Disposals==0&&!form.IsDisposed&&form.Canvas.DownloadedUpdate==update,"Suspend during download lost the saved installer or launched it.");
                 form.HandleCommand("updates-page");form.Canvas.Refresh();require(form.Canvas.Hits.Single(h=>h.Id=="updates-install").Enabled,"Resume did not retain explicit install action.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Update page could not exit.");
             }
+            Console.WriteLine("Updates fixture: verified download and clean handoff");
             runtime=new RecordingRuntime();
             using(var form=new ProductForm("fixture://updates",fixture:runtime,fixtureProfiles:new ProductProfiles{IncludePrereleaseUpdates=true}))
             {
@@ -76,6 +91,7 @@ internal static partial class ProductGuiSelfTest
                 var install=form.InstallDownloadedUpdateAsync(()=>{released=true;require(runtime.Disposals==1,"Install skipped cleanup.");},()=>{require(released,"Install launch preceded release.");launched=true;},_=>Task.CompletedTask);
                 PumpUntil(()=>install.IsCompleted,"Download/install hung.");require(launched&&form.IsDisposed,"Page download did not hand off to installer.");
             }
+            Console.WriteLine("Updates fixture: cancelled installer retry");
             runtime=new RecordingRuntime();
             using(var form=new ProductForm("fixture://retry-install",fixture:runtime,fixtureProfiles:new()))
             {
@@ -85,15 +101,16 @@ internal static partial class ProductGuiSelfTest
                 PumpUntil(()=>first.IsCompleted,"First install failed to finish.");
                 require(!form.IsDisposed&&form.Canvas.DownloadedUpdate==update&&form.Canvas.UpdateStatus.Contains("se conserva")&&runtime.Disposals==1,"Launch failure discarded cache or repeated cleanup.");
                 form.Canvas.Refresh();require(form.Canvas.Hits.Single(h=>h.Id=="updates-install").Enabled,"Failed launch lost install retry.");
-                form.HandlePowerEventAsync(0x8013,0).GetAwaiter().GetResult();bool verifiedWhileOff=false;
+                CompleteGuiTask(form.HandlePowerEventAsync(0x8013,0),"Power event fixture hung.");bool verifiedWhileOff=false;
                 form.InstallDownloadedUpdateAsync(()=>{},()=>attempts++,_=>{verifiedWhileOff=true;return Task.CompletedTask;}).GetAwaiter().GetResult();
                 require(!verifiedWhileOff&&attempts==1,"A released runtime forgot display-off state and installed.");
-                form.HandlePowerEventAsync(0x8013,1).GetAwaiter().GetResult();
+                CompleteGuiTask(form.HandlePowerEventAsync(0x8013,1),"Power event fixture hung.");
                 var retry=form.InstallDownloadedUpdateAsync(()=>{},()=>attempts++,_=>Task.CompletedTask);PumpUntil(()=>retry.IsCompleted,"Install retry hung.");
                 require(form.IsDisposed&&downloads==1&&attempts==2&&runtime.Disposals==1,$"Install retry failed: disposed={form.IsDisposed}; downloads={downloads}; attempts={attempts}; disposals={runtime.Disposals}; status={form.Canvas.UpdateStatus}.");
             }
+            Console.WriteLine("Updates fixture: disabled automatic recovery");
             var pending=new ProductRecoverySelection(Guid.NewGuid(),Guid.Empty);runtime=new RecordingRuntime();var recoveredRuntime=new RecordingRuntime();
-            using(var form=new ProductForm("fixture://pending-update",fixture:runtime,fixtureProfiles:new()))
+            using(var form=new ProductForm("fixture://pending-update",fixture:runtime,fixtureProfiles:new(){RecoverSessionsAutomatically=false}))
             {
                 form.RecoverySelectionReader=()=>pending;
                 form.RecoveryRunner=_=>{pending=new(Guid.Empty,Guid.Empty);return Task.FromResult(new ProductRecoveryResult(true,"fixture-evidence","recovered"));};
@@ -111,12 +128,13 @@ internal static partial class ProductGuiSelfTest
                 install=form.InstallDownloadedUpdateAsync(()=>{},()=>launched=true,_=>Task.CompletedTask);PumpUntil(()=>install.IsCompleted,"Recovered install hung.");
                 require(launched&&form.IsDisposed&&downloads==1&&runtime.Disposals==1&&recoveredRuntime.Disposals==1,"Recovered update re-downloaded or repeated release.");
             }
+            TestUpdateRecovery(require);
             using(var form=new ProductForm("fixture://verify-install",fixture:new RecordingRuntime(),fixtureProfiles:new()))
             {
                 form.Show();Application.DoEvents();form.Canvas.DownloadedUpdate=update;bool launched=false;
                 var gate=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var install=form.InstallDownloadedUpdateAsync(()=>{},()=>launched=true,_=>gate.Task);
-                form.HandlePowerEventAsync(4).GetAwaiter().GetResult();form.HandlePowerEventAsync(18).GetAwaiter().GetResult();gate.SetResult();
+                CompleteGuiTask(form.HandlePowerEventAsync(4),"Power event fixture hung.");CompleteGuiTask(form.HandlePowerEventAsync(18),"Power event fixture hung.");gate.SetResult();
                 PumpUntil(()=>install.IsCompleted,"Verify/suspend hung.");require(!launched&&form.Canvas.DownloadedUpdate==update,"Suspend during verification auto-installed or lost the cache.");
                 var corrupt=form.InstallDownloadedUpdateAsync(()=>{},()=>launched=true,_=>Task.FromException(new InvalidDataException("SHA-256 mismatch")));
                 PumpUntil(()=>corrupt.IsCompleted,"Corrupt verification hung.");require(!launched&&form.Canvas.DownloadedUpdate is null,"Changed saved EXE was admitted.");
@@ -125,6 +143,79 @@ internal static partial class ProductGuiSelfTest
             Console.WriteLine("Updates page: PASS (query-only, saved installer retained on offline checks, preview opt-in/stale-channel guards, separate download/install, no-update/offline/digest failures, duplicate/dirty guards, navigation, suspend during download and clean handoff; no network/hardware IO).");
         }
         finally{Environment.ExitCode=exitCode;if(File.Exists(preferencePath))File.Delete(preferencePath);if(Directory.Exists(Path.GetDirectoryName(preferencePath)!))Directory.Delete(Path.GetDirectoryName(preferencePath)!);}
+    }
+    private static void TestUpdateRecovery(Action<bool,string> require)
+    {
+        foreach(var scenario in new[]{"success","read-retry","read-exhausted","read-suspend","runner-failure","changed","invalid","suspend","close","verify-failure"})
+        {
+            Console.WriteLine("Automatic update recovery fixture: " + scenario);
+            var selected=new ProductRecoverySelection(Guid.NewGuid(),Guid.Empty);
+            if(scenario=="invalid") selected=selected with{Fans=[new("fixture-foreign","Unknown","hash","invalid ownership")]};
+            var pending=selected; int reads=0,runs=0,factories=0,launches=0;
+            var old=new RecordingRuntime();
+            var recovery=new TaskCompletionSource<ProductRecoveryResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var form=new ProductForm("fixture://update-recovery",fixture:old,fixtureProfiles:new(){RecoverSessionsAutomatically=true});
+            var delays=new List<double>();
+            var delayGate=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            form.UpdateRecoveryReadDelayFixture=(delay,_)=>{delays.Add(delay.TotalSeconds);return scenario=="read-suspend"?delayGate.Task:Task.CompletedTask;};
+            form.RecoverySelectionReader=()=>
+            {
+                reads++;
+                if(scenario=="read-exhausted"||(scenario is "read-retry" or "read-suspend")&&reads==1)throw new IOException("temporary inventory read failure");
+                return scenario=="changed"&&reads>1?selected with{CpuSession=Guid.NewGuid()}:pending;
+            };
+            form.RecoveryRunner=s=>{runs++;require(old.Disposals==1&&s==selected,"Update recovery bypassed release or changed selection.");return recovery.Task;};
+            form.RecoveryRuntimeFactory=_=>{factories++;throw new IOException("Update recovery must not reopen telemetry.");};
+            form.Show();Application.DoEvents();
+            old.Publish(old.State with{LifecycleBlocked=true,Runtime="RecoveryRequired",PerformanceRecovery=new(true,"pending",selected.CpuSession,FanRecords:selected.Fans)});
+            var update=FutureUpdate(1024);form.Canvas.DownloadedUpdate=update;
+            var install=form.InstallDownloadedUpdateAsync(()=>{},()=>launches++,
+                _=>scenario=="verify-failure"?Task.FromException(new InvalidDataException("invalid installer")):Task.CompletedTask);
+            // Verification/pending reads and the recovery coordinator all share one installation request.
+            if(!install.IsCompleted)
+            {
+                var duplicate=form.InstallDownloadedUpdateAsync(()=>{},()=>launches++,_=>Task.CompletedTask);
+                require(duplicate.IsCompleted,"A duplicate installation was not rejected immediately.");
+                duplicate.GetAwaiter().GetResult();
+                var clock=Environment.TickCount64;form.TryAutomaticRecovery(clock);form.TryAutomaticRecovery(clock+10000);
+            }
+            if(scenario=="read-suspend")
+            {
+                PumpUntil(()=>delays.Count==1,"Update did not wait after its inventory read failure.");
+                CompleteGuiTask(form.HandlePowerEventAsync(4),"Suspend while waiting for inventory hung.");
+                CompleteGuiTask(form.HandlePowerEventAsync(18),"Resume while waiting for inventory hung.");
+                delayGate.SetResult();
+            }
+            if(scenario is "invalid" or "verify-failure" or "changed" or "read-exhausted" or "read-suspend")
+            {
+                PumpUntil(()=>install.IsCompleted,"Rejected automatic update recovery hung.");
+                require(runs==0&&launches==0&&factories==0,"Invalid selection/installer or changed records reached recovery/launch.");
+                require(old.Disposals==(scenario=="changed"?1:0),"Read/verification rejection shut down a usable runtime.");
+                require((form.Canvas.DownloadedUpdate is null)==(scenario=="verify-failure"),"A rejected recovery lost the valid installer.");
+                if(scenario=="read-exhausted")require(reads==3&&delays.SequenceEqual(new double[]{30,60}),"Update inventory retry was unbounded or skipped progressive delay.");
+                if(scenario=="read-suspend")require(reads==1,"Interrupted update performed another inventory read.");
+            }
+            else
+            {
+                PumpUntil(()=>runs==1,"Update did not recover its pending session automatically.");
+                require(launches==0&&factories==0&&!install.IsCompleted,"Update passed an unfinished recovery or reopened telemetry.");
+                Task? exit=null;
+                if(scenario=="suspend")
+                {CompleteGuiTask(form.HandlePowerEventAsync(4),"Power event fixture hung.");CompleteGuiTask(form.HandlePowerEventAsync(18),"Power event fixture hung.");}
+                if(scenario=="close")
+                {exit=form.RequestExitAsync();require(!exit.IsCompleted,"Close did not drain update recovery.");}
+                if(scenario!="runner-failure")pending=new(Guid.Empty,Guid.Empty);
+                recovery.SetResult(new(scenario!="runner-failure","fixture-evidence",scenario=="runner-failure"?"native completion unknown":"released"));
+                PumpUntil(()=>install.IsCompleted,"Automatic update recovery never completed.");
+                var success=scenario is "success" or "read-retry";
+                require(runs==1&&factories==0&&launches==(success?1:0)&&old.Disposals==1,"Update duplicated recovery, reacquired hardware or launched after an interruption/failure.");
+                if(scenario=="read-retry")require(delays.SequenceEqual(new double[]{30}),"Transient update read did not recover automatically after its delay.");
+                if(!success)require(form.Canvas.DownloadedUpdate==update,"Interrupted/failed recovery lost the downloaded installer.");
+                if(exit is not null)PumpUntil(()=>exit.IsCompleted,"Exit failed to finish after update recovery.");
+            }
+            if(!form.IsDisposed){var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Update recovery fixture exit hung.");}
+        }
+        Console.WriteLine("Automatic update recovery: PASS (one confirmed install, verify before recovery, exact inventory, no controller reacquisition, failed release/invalid records/suspend/close fences and retained installer; zero hardware IO).");
     }
     private static void TestUpdateHandoff(Action<bool,string> require)
     {
@@ -149,10 +240,11 @@ internal static partial class ProductGuiSelfTest
                 form.Show();Application.DoEvents();bool launched=false;
                 var install=form.InstallUpdateFixtureAsync(()=>{if(failure=="journal")throw new IOException("retained journal");},()=>{if(failure=="launch")throw new IOException("UAC cancelled");launched=true;});
                 PumpUntil(()=>runtime.Disposals==1,"Failed update cleanup did not begin.");
-                if(failure=="suspend")form.HandlePowerEventAsync(4).GetAwaiter().GetResult();
+                if(failure=="suspend")CompleteGuiTask(form.HandlePowerEventAsync(4),"Power event fixture hung.");
                 runtime.DisposeGate.SetResult();PumpUntil(()=>install.IsCompleted,"Failed update handoff hung.");
                 require(!form.Canvas.State.PerformanceActive&&!form.Canvas.State.PerformanceProcessPresent&&!form.Canvas.State.AutomaticPreparing,"Failed update retained active presentation.");
                 require(install.IsFaulted&&!launched&&!form.IsDisposed&&form.Canvas.State.LifecycleBlocked,"Failed release/journal/UAC/lifecycle opened installer or reused runtime.");
+                require(form.RecoveryMonitorActive,"Failed installation stopped background monitoring permanently.");
                 form.HandleCommand("performance-apply");require(runtime.Commands==0,"Failed update reused disposed runtime.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Failed update could not exit.");
                 require(runtime.Disposals==1,"Failed update repeated cleanup on exit.");

@@ -25,6 +25,9 @@ internal sealed partial class ProductCanvas
         if(State.PerformanceRecovery is {Pending:true} recovery)
             Button(g,"recovery-run","Recuperar sesiones",new(1120,689,496,43),true,!UpdateBusy&&recovery.Actionable);
         DrawText(g,"La descarga se conserva hasta que puedas instalar",334,689,24,null,780,true);
-        DrawText(g,Dirty?"Guarda o descarta los cambios antes de instalar la actualización.":State.PerformanceRecovery is {Pending:true}?"Recupera la sesión anterior y vuelve a pulsar Instalar. El archivo descargado se conserva.":"Puedes descargar mientras usas el programa. Instalar comprobará la release de GitHub y el archivo guardado, y liberará ventiladores y límites CPU/GPU antes de cerrar.",334,738,22,Dirty?Yellow:Muted,1260,height:70);
+        DrawText(g,Dirty?"Guarda o descarta los cambios antes de instalar la actualización.":State.PerformanceRecovery is {Pending:true}?
+            Profiles.RecoverSessionsAutomatically?"Al instalar, se recuperará la sesión pendiente y se continuará automáticamente si la liberación queda confirmada. La descarga se conserva.":
+            "Recupera la sesión anterior y vuelve a pulsar Instalar. El archivo descargado se conserva.":
+            "Puedes descargar mientras usas el programa. Instalar comprobará la release de GitHub y el archivo guardado, y liberará ventiladores y límites CPU/GPU antes de cerrar.",334,738,22,Dirty?Yellow:Muted,1260,height:70);
     }
 }

@@ -428,7 +428,16 @@ internal sealed partial class ProductForm : Form
         var imported=await Task.Run(()=>{if(new FileInfo(path).Length>1024*1024)throw new InvalidDataException("El archivo de perfiles supera 1 MiB.");return ProductProfilesStore.Parse(File.ReadAllText(path));});
         if(_closing)return;imported.Validate();if(imported.IncludePrereleaseUpdates!=_draft.IncludePrereleaseUpdates)ResetUpdateSelection();_draft=imported;_canvas.Profiles=_draft;ResetSimulation();_canvas.SelectedNode=-1;_canvas.Dirty=true;_canvas.Notice="Perfiles importados en edición; falta Guardar. No se aplicó hardware.";
     });
-    internal Task ExportDiagnosticsAsync(string path,string? fixtureLog=null)=>RunAsync(async()=>{var state=_canvas.State;var draft=Draft;var display=DisplayDiagnostic();await Task.Run(()=>ProductDiagnostics.Export(path,state,draft,fixtureLog??AppLog.CurrentLogPath,display));_canvas.Notice="Diagnóstico exportado. Revisa rutas locales antes de compartirlo.";});
+    internal Task ExportDiagnosticsAsync(string path,string? fixtureLog=null)=>RunAsync(async()=>
+    {
+        var state=_canvas.State;var draft=Draft;var display=DisplayDiagnostic();
+        var updater=new{status=_canvas.UpdateStatus,checkedAt=_canvas.UpdateCheckedAt,progressPercent=_canvas.UpdateProgressPercent,
+            availableVersion=_canvas.AvailableUpdate?.Version.ToString(),downloadedVersion=_canvas.DownloadedUpdate?.Version.ToString(),
+            operationInProgress=_canvas.UpdateBusy,recoveryInProgress=_recoveryTask is not null,
+            recoveryMonitorActive=RecoveryMonitorActive,automaticRecoveryEnabled=draft.RecoverSessionsAutomatically};
+        await Task.Run(()=>ProductDiagnostics.Export(path,state,draft,fixtureLog??AppLog.CurrentLogPath,display,updater));
+        _canvas.Notice="Diagnóstico exportado. Revisa rutas locales antes de compartirlo.";
+    });
     internal void PresentationTick()
     {
         if(_closing||IsDisposed)return;

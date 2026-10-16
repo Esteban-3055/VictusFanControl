@@ -13,6 +13,7 @@ internal static partial class ProductGuiSelfTest
         {
             foreach(var scenario in new[]{"resume","stop","disabled-resume","runner-failure","suspend","close","changed","disabled-recovery"})
             {
+                Console.WriteLine("Background recovery fixture: " + scenario);
                 var selected=new ProductRecoverySelection(Guid.NewGuid(),Guid.NewGuid()); var pending=selected;
                 var old=new RecordingRuntime{DisposeGate=new(TaskCreationOptions.RunContinuationsAsynchronously)};
                 var next=new RecordingRuntime();int runs=0,created=0;
@@ -46,7 +47,7 @@ internal static partial class ProductGuiSelfTest
                 require(runs==0 && created==0,"Background recovery passed an unresolved disposal.");
                 old.DisposeGate.SetResult();PumpUntil(()=>runs==1,"Background recovery runner did not launch.");
                 if(scenario=="stop")form.HandleCommand("firmware");
-                if(scenario=="suspend")form.HandlePowerEventAsync(4).GetAwaiter().GetResult();
+                if(scenario=="suspend")CompleteGuiTask(form.HandlePowerEventAsync(4),"Power event fixture hung.");
                 Task? exit=scenario=="close"?form.RequestExitAsync():null;
                 if(exit is not null)require(!exit.IsCompleted,"Exit did not retain the idle recovery coordinator.");
                 if(scenario!="runner-failure")pending=new(Guid.Empty,Guid.Empty);
@@ -66,6 +67,7 @@ internal static partial class ProductGuiSelfTest
             }
             foreach (var scenario in new[]{"firmware","activate","stop-before"})
             {
+                Console.WriteLine("Startup recovery fixture: " + scenario);
                 var activate=scenario!="firmware";
                 var pending=new ProductRecoverySelection(Guid.NewGuid(),Guid.Empty);var next=new RecordingRuntime();int initial=0,runs=0;
                 using var form=new ProductForm("fixture://startup-recovery",fixtureProfiles:new(){ActivateAutomaticOnStart=activate},
@@ -87,8 +89,43 @@ internal static partial class ProductGuiSelfTest
                 require(next.Commands==(scenario=="activate"?1:0),"Startup recovery ignored the saved start preference or user stop during its wait.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Startup recovery exit hung.");
             }
+            TestBackgroundInventoryRetry(require);
             Console.WriteLine("Background GUI recovery: PASS (release drain, exact inventory, saved/applied profiles, fresh reentry, user stop, disabled preferences, unconfirmed reset, suspend and exit; zero hardware IO).");
         }
         finally{Environment.ExitCode=exitCode;}
+    }
+    private static void TestBackgroundInventoryRetry(Action<bool,string> require)
+    {
+        foreach(var malformed in new[]{false,true})
+        {
+            var selected=new ProductRecoverySelection(Guid.NewGuid(),Guid.Empty);var pending=selected;
+            var old=new RecordingRuntime();var next=new RecordingRuntime();int reads=0,runs=0;
+            using var form=new ProductForm("fixture://inventory-retry",fixture:old,fixtureProfiles:new(){RecoverSessionsAutomatically=true});
+            form.RecoverySelectionReader=()=>
+            {
+                reads++;
+                if(malformed)throw new InvalidDataException("malformed record");
+                if(reads==1)throw new IOException("temporary sharing failure");
+                return pending;
+            };
+            form.RecoveryRunner=_=>{runs++;pending=new(Guid.Empty,Guid.Empty);return Task.FromResult(new ProductRecoveryResult(true,"fixture","released"));};
+            form.RecoveryRuntimeFactory=_=>Task.FromResult<IProductRuntime>(next);
+            form.Show();Application.DoEvents();
+            old.Publish(old.State with{LifecycleBlocked=true,Runtime="RecoveryRequired",PerformanceRecovery=new(true,"pending",selected.CpuSession)});
+            var clock=Environment.TickCount64;form.TryAutomaticRecovery(clock);form.TryAutomaticRecovery(clock+10000);
+            PumpUntil(()=>!form.Canvas.Busy,"Inventory read failure left the recovery coordinator busy.");
+            require(reads==1&&runs==0&&old.Disposals==0&&form.RecoveryMonitorActive,"Read failure reached release or stopped monitoring.");
+            form.TryAutomaticRecovery(clock+20000);
+            require(reads==1&&runs==0,"Inventory read retried without progressive delay.");
+            form.TryAutomaticRecovery(clock+40000);
+            if(malformed)require(reads==1&&runs==0&&old.Disposals==0,"Malformed records were retried as transient IO.");
+            else
+            {
+                PumpUntil(()=>runs==1&&!form.Canvas.Busy,"Transient read failure did not recover automatically.");
+                require(old.Disposals==1&&next.Starts==1&&next.Commands==0,"Read retry duplicated release or acquired control.");
+            }
+            var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Inventory retry fixture exit hung.");
+        }
+        Console.WriteLine("Recovery inventory retry: PASS (transient read resumes after backoff, malformed record retained, no release before valid exact inventory; zero hardware IO).");
     }
 }

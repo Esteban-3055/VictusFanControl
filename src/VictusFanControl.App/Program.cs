@@ -86,6 +86,8 @@ internal static class Program
             ApplicationConfiguration.Initialize();
             Environment.ExitCode = ProductGuiSelfTest.Run(); return;
         }
+        if (args.Length == 1 && args[0] == "--product-recovery-self-test")
+        { ApplicationConfiguration.Initialize(); Environment.ExitCode = ProductGuiSelfTest.RunRecoveryChecks(); return; }
         if (args.Length == 1 && args[0] == "--wmi-fan-gui-self-test")
         {
             Environment.ExitCode = WmiFanGuiIntegrationSelfTest.RunAsync().GetAwaiter().GetResult();

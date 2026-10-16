@@ -46,6 +46,10 @@ internal static partial class ProductGuiSelfTest
                 failedFanRuntime.Publish(new(){LifecycleBlocked=true,FanMode="RecoveryRequired",FanAuthority="Unknown",PerformanceRecovery=new(true,"Pending fans",FanRecords:fanRecords)});
                 var task=failedFanForm.RecoverPerformanceAsync(true);PumpUntil(()=>task.IsCompleted,"Failed fan-only recovery hung.");task.GetAwaiter().GetResult();
                 require(failedFanFactoryCalls==0&&failedFanForm.Canvas.State.LifecycleBlocked&&failedFanForm.Canvas.State.Failure is not null,"Failed fan recovery reopened a controller.");
+                require(failedFanForm.RecoveryMonitorActive, "Failed manual recovery permanently stopped background monitoring.");
+                var clock = Environment.TickCount64;
+                failedFanForm.TryAutomaticRecovery(clock); failedFanForm.TryAutomaticRecovery(clock + 10000);
+                require(!failedFanForm.Canvas.Busy, "An unconfirmed manual release was retried automatically.");
                 require(failedFanForm.Canvas.State.FanMode=="RecoveryRequired"&&failedFanForm.Canvas.State.FanAuthority=="Unknown"&&failedFanForm.Canvas.State.PerformanceRecovery?.Actionable==true,"Retained fan lease claimed restored Firmware ownership or lost recovery action.");
                 var exit=failedFanForm.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Failed fan-only exit hung.");
             }
