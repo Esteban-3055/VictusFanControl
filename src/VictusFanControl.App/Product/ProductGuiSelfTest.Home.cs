@@ -31,7 +31,7 @@ internal static partial class ProductGuiSelfTest
         }
         canvas.Page=ProductPage.Home;Render("home-dashboard-live");
         var names=canvas.Hits.Where(h=>h.Id.StartsWith("page-")).OrderBy(h=>h.Bounds.Y).Select(h=>h.Label).ToArray();
-        require(names.SequenceEqual(new[]{"Inicio","Ventiladores","Rendimiento","Curvas","Perfiles","Monitorización","Protecciones","Configuración","Avanzado","Actualizaciones"}),
+        require(names.SequenceEqual(new[]{"Inicio","Ventiladores","Rendimiento","Curvas","Perfiles","Monitorización","Protecciones","Configuración","Avanzado","Base externa","Actualizaciones"}),
             "Requested navigation order was not rendered.");
         var phase=canvas.HomeFanPhases;var clock=ProductCanvas.AnimationClockMilliseconds;
         canvas.AdvanceHomeAnimation(clock+100,DateTimeOffset.UtcNow);var moving=canvas.HomeFanPhases;

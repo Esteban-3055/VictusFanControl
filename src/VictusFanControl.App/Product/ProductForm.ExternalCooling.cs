@@ -12,7 +12,7 @@ internal sealed partial class ProductForm
     internal string? ExternalCoolingError=>_externalCoolingError??_externalCoolingLoadNotice;
     internal ExternalCoolingDiagnostics? ExternalCoolingStatus=>_externalCooling?.Diagnostics;
     private ExternalCoolingSettingsStore? _externalCoolingStore;
-    private ExternalCoolingSettingsForm? _externalCoolingForm;
+    private ExternalCoolingSettingsPanel? _externalCoolingPanel;
     private readonly string? _externalCoolingPath;
     private Task _externalCoolingStartup=Task.CompletedTask;
     private async Task InitializeExternalCoolingAsync()
@@ -23,6 +23,7 @@ internal sealed partial class ProductForm
         _externalPairingReader=_externalCoolingStore.ReadKey;
         _externalCooling=new(new TelemetryExportService(()=>Volatile.Read(ref _runtime)?.State??new(){Runtime="Unavailable",FanAuthority="Unknown"},new WindowsPhysicalMemoryUsage()),()=>_externalPairingReader());
         await ExternalCoolingOperationAsync(()=>_externalCooling.ConfigureAsync(_externalCoolingSettings));
+        if(!_closing&&!IsDisposed)LayoutExternalCoolingPage();
     }
     private async Task ExternalCoolingOperationAsync(Func<Task> operation)
     {
@@ -42,16 +43,31 @@ internal sealed partial class ProductForm
     }
     private void ShowExternalCooling()
     {
-        if(_externalCoolingForm is{IsDisposed:false}){_externalCoolingForm.Show();_externalCoolingForm.Activate();return;}
-        if(_externalCooling is null||_externalCoolingStore is null){_canvas.Notice="Base externa todavía no disponible.";return;}
-        _externalCoolingForm=new(_externalCoolingSettings,_externalCooling,()=>_externalCoolingStore.Paired,async(settings,key,remove,connect)=>
+        _canvas.Page=ProductPage.ExternalCooling;LayoutExternalCoolingPage();_canvas.Invalidate();
+    }
+    private void LayoutExternalCoolingPage()
+    {
+        if(IsDisposed||_closing||_canvas.IsDisposed)return;
+        var selected=_canvas.Page==ProductPage.ExternalCooling;
+        if(selected&&_externalCoolingPanel is null&&_externalCooling is not null&&_externalCoolingStore is not null)
         {
-            await _externalCooling.DisconnectAsync();
-            await Task.Run(()=>_externalCoolingStore.Save(settings,key,remove));
-            _externalCoolingLoadNotice=null;
-            _externalCoolingSettings=settings;
-            await _externalCooling.ConfigureAsync(settings,connect);
-        },ExternalCoolingError);
-        _externalCoolingForm.Show(this);
+            _externalCoolingPanel=new(_externalCoolingSettings,_externalCooling,()=>_externalCoolingStore.Paired,async(settings,key,remove,connect)=>
+            {
+                await _externalCooling.DisconnectAsync();
+                await Task.Run(()=>_externalCoolingStore.Save(settings,key,remove));
+                _externalCoolingLoadNotice=null;
+                _externalCoolingSettings=settings;
+                await _externalCooling.ConfigureAsync(settings,connect);
+            },ExternalCoolingError);
+            _canvas.Controls.Add(_externalCoolingPanel);
+        }
+        if(_externalCoolingPanel is null)return;
+        var scale=Math.Min(_canvas.ClientSize.Width/1672f,_canvas.ClientSize.Height/941f);
+        var x=(_canvas.ClientSize.Width-1672*scale)/2;
+        var y=(_canvas.ClientSize.Height-941*scale)/2;
+        _externalCoolingPanel.SetCanvasScale(scale);
+        _externalCoolingPanel.Bounds=Rectangle.Round(new RectangleF(x+310*scale,y+78*scale,1337*scale,790*scale));
+        _externalCoolingPanel.SetPageSelected(selected);
+        if(selected)_externalCoolingPanel.BringToFront();
     }
 }

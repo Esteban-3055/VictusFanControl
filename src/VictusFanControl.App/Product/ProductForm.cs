@@ -75,6 +75,7 @@ internal sealed partial class ProductForm : Form
         Text="VictusFanControl";Icon=_icons.Program;FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleDimensions=new SizeF(96,96);AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=DesignWindowSize;StartPosition=FormStartPosition.CenterScreen;
         _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
+        _canvas.PageChanged+=(_,_)=>LayoutExternalCoolingPage();_canvas.SizeChanged+=(_,_)=>LayoutExternalCoolingPage();
         if(restartState is not null)_canvas.Dirty=restartState.Dirty;
         _canvas.Command+=HandleCommand;_canvas.ValueEdited+=EditValue;_canvas.NodeEdited+=EditNode;
         _canvas.MouseDown+=(_,e)=>{if(e.Button==MouseButtons.Left&&_canvas.IsHeaderDrag(e.Location)){ReleaseCapture();SendMessage(Handle,0xA1,2,0);}};

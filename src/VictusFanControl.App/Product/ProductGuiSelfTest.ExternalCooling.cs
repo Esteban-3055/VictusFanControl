@@ -66,16 +66,54 @@ internal static partial class ProductGuiSelfTest
             {
                 form.Show();PumpUntil(()=>form.ExternalCoolingStatus?.State==ExternalCoolingConnectionState.Connected,"Base connection did not complete.");
                 form.Canvas.Page=ProductPage.Settings;form.Canvas.Refresh();
-                ExternalCoolingSelfTest.Require(form.Canvas.Hits.Any(h=>h.Id=="external-cooling"&&h.Enabled),"Configuration entry missing.");
+                var navigation=form.Canvas.Hits.Where(h=>h.Id.StartsWith("page-")).OrderBy(h=>h.Bounds.Y).ToArray();
+                var externalIndex=Array.FindIndex(navigation,h=>h.Id=="page-"+(int)ProductPage.ExternalCooling);
+                ExternalCoolingSelfTest.Require(externalIndex>0&&navigation[externalIndex-1].Label=="Avanzado"&&navigation[externalIndex+1].Label=="Actualizaciones"&&
+                    navigation.All(h=>h.Bounds.Bottom<882)&&!form.Canvas.Hits.Any(h=>h.Id=="external-cooling"),"External cooling navigation order/fit missing or obsolete Settings entry retained.");
                 using(var image=new Bitmap(form.Width,form.Height)){form.DrawToBitmap(image,new(Point.Empty,form.Size));image.Save(Path.Combine(root,"settings.png"),ImageFormat.Png);}
-                form.HandleCommand("external-cooling");Application.DoEvents();
-                var panel=Application.OpenForms.OfType<ExternalCoolingSettingsForm>().Single();
-                foreach(var size in new[]{new Size(790,700),new Size(650,520)})
+                var formCount=Application.OpenForms.Count;
+                form.HandleCommand("page-"+(int)ProductPage.ExternalCooling);Application.DoEvents();
+                var panel=form.Canvas.Controls.OfType<ExternalCoolingSettingsPanel>().Single();
+                void RenderPage(string filename)
                 {
-                    panel.ClientSize=new(size.Width*panel.DeviceDpi/96,size.Height*panel.DeviceDpi/96);panel.PerformLayout();Application.DoEvents();
-                    using var image=new Bitmap(panel.Width,panel.Height);panel.DrawToBitmap(image,new(Point.Empty,panel.Size));image.Save(Path.Combine(root,$"panel-{size.Width}.png"),ImageFormat.Png);
+                    using var image=new Bitmap(form.Canvas.Width,form.Canvas.Height);
+                    // DrawToBitmap can paint nested native controls outside a scroll viewport.
+                    // Composite the page at its real bounds to preserve HWND clipping in captures.
+                    form.Canvas.Controls.Remove(panel);
+                    try{form.Canvas.DrawToBitmap(image,new(Point.Empty,form.Canvas.Size));}
+                    finally{form.Canvas.Controls.Add(panel);panel.SetPageSelected(true);}
+                    using var pageImage=new Bitmap(panel.Width,panel.Height);
+                    panel.DrawToBitmap(pageImage,new(Point.Empty,panel.Size));
+                    using(var g=Graphics.FromImage(image))g.DrawImageUnscaled(pageImage,panel.Location);
+                    image.Save(Path.Combine(root,filename),ImageFormat.Png);
                 }
-                panel.Close();var before=Volatile.Read(ref received);form.Hide();
+                ExternalCoolingSelfTest.Require(panel.Visible&&panel.Parent==form.Canvas&&Application.OpenForms.Count==formCount,"Base externa opened a separate window or did not embed its controls.");
+                ExternalCoolingSelfTest.Require(panel.Controls.Find("external-status",true).Single().Text.Contains("Connected"),"Initial navigation did not render current diagnostics.");
+                form.Canvas.Dock=DockStyle.None;
+                foreach(var size in new[]{new Size(1672,941),new Size(1280,800),new Size(1040,660),new Size(1000,560)})
+                {
+                    form.Canvas.Size=size;form.Canvas.Refresh();Application.DoEvents();
+                    ExternalCoolingSelfTest.Require(panel.Bounds.Left>0&&panel.Bounds.Right<=form.Canvas.Width&&panel.Bounds.Bottom<=form.Canvas.Height,"Embedded page escaped canvas bounds.");
+                    RenderPage($"external-page-{size.Width}.png");
+                }
+                form.Canvas.Size=new(1280,800);Application.DoEvents();
+                var mode=(ComboBox)panel.Controls.Find("external-mode",true).Single();
+                var enabled=(CheckBox)panel.Controls.Find("external-enabled",true).Single();
+                enabled.Checked=false;ExternalCoolingSelfTest.Require(mode.SelectedIndex==0,"Disable switch did not update the draft mode.");
+                enabled.Checked=true;ExternalCoolingSelfTest.Require(mode.SelectedIndex==(int)ExternalCoolingMode.MonitorOnly,"Enable switch did not restore the monitoring draft.");
+                var portDraft=(NumericUpDown)panel.Controls.Find("external-port",true).Single();var oldPort=portDraft.Value;portDraft.Value=8766;
+                var oldSession=form.ExternalCoolingStatus?.SessionId;var beforePageChange=Volatile.Read(ref received);
+                form.HandleCommand("page-"+(int)ProductPage.Updates);Application.DoEvents();
+                ExternalCoolingSelfTest.Require(!panel.Visible,"External controls overlay another page.");
+                PumpUntil(()=>Volatile.Read(ref received)>beforePageChange,"Leaving the page stopped communication.");
+                form.HandleCommand("page-"+(int)ProductPage.ExternalCooling);Application.DoEvents();
+                ExternalCoolingSelfTest.Require(panel.Visible&&portDraft.Value==8766&&form.ExternalCoolingStatus?.SessionId==oldSession&&form.Canvas.Controls.OfType<ExternalCoolingSettingsPanel>().Count()==1,"Navigation lost editor draft or restarted/duplicated its connection.");
+                portDraft.Value=oldPort;
+                var details=(CheckBox)panel.Controls.Find("external-details",true).Single();details.Checked=true;Application.DoEvents();
+                var messages=panel.Controls.Find("external-messages",true).Single();
+                ExternalCoolingSelfTest.Require(messages.Visible&&messages.Text.Contains("ackSequence"),"Operational message details are unavailable.");
+                RenderPage("external-page-details.png");
+                var before=Volatile.Read(ref received);form.Hide();
                 PumpUntil(()=>Volatile.Read(ref received)>=before+2,"Minimize/tray stopped telemetry.");
                 var watch=System.Diagnostics.Stopwatch.StartNew();var suspend=form.HandlePowerEventAsync(4);
                 ExternalCoolingSelfTest.Require(watch.ElapsedMilliseconds<200,"Network blocked suspend GUI.");
@@ -85,7 +123,7 @@ internal static partial class ProductGuiSelfTest
                 ExternalCoolingSelfTest.Require(runtime.Commands==0,"External module issued internal commands.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"External cooling exit did not complete.");exit.GetAwaiter().GetResult();
                 ExternalCoolingSelfTest.Require(form.ExternalCoolingStatus?.State==ExternalCoolingConnectionState.Disabled&&runtime.Disposals==1,"Network or runtime remained after exit.");
-                Console.WriteLine("PASS ExternalCooling WinForms: DPAPI, persistence, settings entry, responsive layout renders, real authenticated TCP, hidden/tray transmission, suspend/resume/new session, exit; zero internal control commands.");
+                Console.WriteLine("PASS ExternalCooling WinForms: DPAPI, persistence, sidebar order, embedded responsive page, enable draft, details, navigation/session isolation, real authenticated TCP, hidden/tray transmission, suspend/resume/new session, exit; zero internal control commands.");
             }
             finally{cancel.Cancel();listener.Stop();server.GetAwaiter().GetResult();CryptographicOperations.ZeroMemory(raw);}
             return 0;

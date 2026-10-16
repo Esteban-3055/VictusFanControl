@@ -15,7 +15,8 @@ Requisitos: Windows, .NET 8 SDK y los requisitos de compilación existentes del 
    dotnet build VictusFanControl.sln -c Release -m:1 -warnaserror
    ```
 
-2. Abrir VictusFanControl de la forma habitual. Ir a **Configuración → Base externa / ESP32**.
+2. Abrir VictusFanControl de la forma habitual. Ir a **Base externa** en la barra lateral,
+   entre **Avanzado** y **Actualizaciones**. Las opciones se editan dentro de esa página.
    Elegir **Monitorización únicamente**, marcar **Simulador local**, puerto 8765.
 3. Pulsar **Generar clave**, marcar **Mostrar clave nueva** y copiarla para aprovisionar
    el simulador. La clave solo se muestra mientras se configura; una clave ya guardada no
@@ -34,10 +35,11 @@ Requisitos: Windows, .NET 8 SDK y los requisitos de compilación existentes del 
 5. Pulsar **Conectar** en la aplicación; guarda preferencias y emparejamiento. El campo de
    clave se vacía. Esperar **Connected / recepción válida**. TCP abierto o autenticado sin
    respuesta válida todavía no se presenta como Connected.
-6. Revisar CPU/GPU/RAM, Demanda, Solicitud y estados en los mensajes mostrados. Los valores
+6. Revisar el estado y los contadores; activar **Mostrar mensajes enviados y recibidos**
+   para ver CPU/GPU/RAM, Demanda, Solicitud y estados. Los valores
    ausentes aparecen como null. Firmware no genera Solicitud. Demanda solo existe cuando
    hay una decisión automática aceptada y vigente; no se recalcula desde las curvas editadas.
-7. Para probar Solicitud, elegir **Monitorización y transmisión de Solicitud** y conectar.
+7. Para probar Solicitud, elegir **Monitorización + Solicitud** y conectar.
    Seleccionar/aplicar Manual o Automático en los controles internos habituales únicamente
    si el equipo está autorizado. Conectar el módulo externo nunca aplica esos modos.
    Sin una aplicación Manual aceptada en ese modo, Solicitud permanece null aunque el
@@ -46,6 +48,12 @@ Requisitos: Windows, .NET 8 SDK y los requisitos de compilación existentes del 
 8. Minimizar a bandeja u ocultar con la X mantiene la transmisión. **Desconectar** detiene
    la reconexión hasta otra orden Conectar. **Deshabilitado + Guardar** no abre sockets.
    Guardar por sí solo conserva configuración y deja la comunicación desconectada.
+
+El interruptor **Habilitar conexión** y el selector de modo preparan cambios; pulsar
+**Guardar** o **Conectar** los aplica. Desactivar el interruptor selecciona Deshabilitado;
+volver a activarlo recupera el último modo preparado. Cambiar de pestaña conserva los
+cambios pendientes y la conexión activa. La clave nueva vuelve a ocultarse al salir de
+la página. La página permite desplazarse cuando el tamaño de ventana reduce el espacio.
 
 La clave DPAPI se conserva en `%LOCALAPPDATA%\VictusFanControl\external-cooling.json`;
 está ligada al usuario y equipo de Windows. No editar ese archivo para trasladar una clave:
