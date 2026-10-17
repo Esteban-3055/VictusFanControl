@@ -53,9 +53,36 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
         if(id=="preview")Preview=Math.Clamp(value,0,100);
         canvas.Invalidate();
     }
+    internal static (int Min,int Max) Range(string id)=>id switch
+    {
+        "rise" or "fall"=>(1,100),"filter"=>(0,10000),"hysteresis"=>(0,30),"hold"=>(0,30000),
+        "start"=>(0,3000),"start-output" or "manual"=>(30,255),_=>throw new ArgumentException("Ajuste desconocido.")
+    };
+    internal string? EditNumeric(string id,string text)
+    {
+        if(Busy)return "Espera a que termine el guardado.";
+        var range=Range(id);
+        if(!int.TryParse(text,NumberStyles.None,CultureInfo.InvariantCulture,out var value)||value<range.Min||value>range.Max)
+            return $"Introduce un entero entre {range.Min} y {range.Max}.";
+        EditValue(id,value);return null;
+    }
     internal async Task ExecuteAsync(string id)
     {
         if(Busy)return;
+        if(id.StartsWith("value-",StringComparison.Ordinal))
+        {
+            if(id.EndsWith("-plus",StringComparison.Ordinal)||id.EndsWith("-minus",StringComparison.Ordinal))
+            {
+                var plus=id.EndsWith("-plus",StringComparison.Ordinal);var key=id[6..^(plus?5:6)];
+                var range=Range(key);EditValue(key,Math.Clamp(Value(key)+(plus?1:-1),range.Min,range.Max));return;
+            }
+            if(id.EndsWith("-text",StringComparison.Ordinal))
+            {
+                var key=id[6..^5];var range=Range(key);
+                using var dialog=new ProductNumericDialog("Ajuste de curva externa",Value(key),range.Min,range.Max,text=>EditNumeric(key,text));
+                dialog.ShowDialog(canvas.FindForm());canvas.Invalidate();return;
+            }
+        }
         if(id.StartsWith("node-",StringComparison.Ordinal)&&int.TryParse(id[5..],out var node))Selected=Math.Clamp(node,0,Draft.Points.Length-1);
         else switch(id)
         {

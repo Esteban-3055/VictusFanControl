@@ -28,6 +28,17 @@ internal static partial class ProductGuiSelfTest
         form.HandleCommand("external-curve-add");Require(curve.Draft.Points.Length==6,"Point insertion failed");
         form.HandleCommand("external-curve-remove");Require(curve.Draft.Points.Length==5,"Point removal failed");
         form.HandleCommand("external-curve-tuning");form.EditValue("external-curve-value-rise",18);Require(curve.Draft.Rise==18,"External tuning dispatched incorrectly");
+        form.Canvas.Refresh();
+        void Click(string id)
+        {
+            var hit=form.Canvas.Hits.Single(h=>h.Id==id);var scale=Math.Min(form.Canvas.Width/1672f,form.Canvas.Height/941f);
+            var point=new Point((int)((form.Canvas.Width-1672*scale)/2+(hit.Bounds.X+hit.Bounds.Width/2)*scale),(int)((form.Canvas.Height-941*scale)/2+(hit.Bounds.Y+hit.Bounds.Height/2)*scale));
+            form.Canvas.PointerDown(point);form.Canvas.PointerUp(point);
+        }
+        Click("external-curve-value-rise-plus");Require(curve.Draft.Rise==19,"Visible + did not edit external setting");
+        Click("external-curve-value-rise-minus");Require(curve.Draft.Rise==18,"Visible - did not edit external setting");
+        Require(curve.EditNumeric("filter","1650") is null&&curve.Draft.FilterMs==1650,"Exact external numeric edit failed");
+        Require(curve.EditNumeric("filter","NaN") is not null&&curve.Draft.FilterMs==1650,"Invalid numeric edit changed curve");
         form.HandleCommand("external-curve-save");PumpUntil(()=>!curve.Busy,"Curve save blocked");
         var saved=new ExternalCoolingSettingsStore(path).Load(out _);Require(saved.Curve==curve.Draft&&saved.Curve.Rise==18&&!curve.Dirty,"External curve did not persist");
         form.HandleCommand("page-"+(int)ProductPage.ExternalCooling);form.HandleCommand("external-save");PumpUntil(()=>!basePage.Busy,"Base save blocked");
@@ -41,8 +52,14 @@ internal static partial class ProductGuiSelfTest
             {
                 form.Canvas.Size=size;form.Canvas.Refresh();Application.DoEvents();
                 Require(form.Canvas.Hits.Where(h=>h.Id.StartsWith("page-")).All(h=>h.Bounds.Bottom<882),"Sidebar overflow");
-                using var image=new Bitmap(size.Width,size.Height);form.Canvas.DrawToBitmap(image,new(Point.Empty,size));
-                image.Save(Path.Combine(root,$"external-curve-{tuning}-{size.Width}.png"));
+                // DrawToBitmap includes invisible native children; omit the Base page editors for this capture.
+                var editors=new[]{basePage.Host,basePage.Port,basePage.Key};foreach(var editor in editors)form.Canvas.Controls.Remove(editor);
+                try
+                {
+                    using var image=new Bitmap(size.Width,size.Height);form.Canvas.DrawToBitmap(image,new(Point.Empty,size));
+                    image.Save(Path.Combine(root,$"external-curve-{tuning}-{size.Width}.png"));
+                }
+                finally{foreach(var editor in editors)form.Canvas.Controls.Add(editor);basePage.Layout(false);}
             }
         }
         curve.EditNode(2,99,999);curve.Draft.Validate();

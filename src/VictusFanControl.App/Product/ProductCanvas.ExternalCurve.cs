@@ -20,7 +20,12 @@ internal sealed partial class ProductCanvas
             Card(g,new(308,252,654,507));Card(g,new(980,252,667,507));
             var labels=new[]{("rise","Subida (%/s)",1,100),("fall","Bajada (%/s)",1,100),("filter","Filtro EMA (ms)",0,10000),("hysteresis","Histéresis (niveles externos)",0,30),("hold","Confirmar descenso (ms)",0,30000),
                 ("start","Duración de arranque (ms)",0,3000),("start-output","Salida de arranque",30,255),("manual","Salida externa en Manual",30,255)};
-            for(int i=0;i<labels.Length;i++) {var l=labels[i];var x=i<5?334:1004;var y=271+(i<5?i:i-5)*91;Slider(g,"external-curve-value-"+l.Item1,l.Item2,new(x,y,i<5?604:617,83),p.Value(l.Item1),l.Item3,l.Item4,"",true);}
+            for(int i=0;i<labels.Length;i++)
+            {
+                var l=labels[i];var x=i<5?334:1004;var y=271+(i<5?i:i-5)*91;var width=i<5?604:617;
+                Slider(g,"external-curve-value-"+l.Item1,l.Item2,new(x,y,width,83),p.Value(l.Item1),l.Item3,l.Item4,"",true);
+                Hit("external-curve-value-"+l.Item1+"-text",new(x+width-220,y-9,155,34),"Escribir "+l.Item2,!p.Busy);
+            }
             DrawText(g,"Arranque al encender · NTC inválida o ≥45 °C: máximo.",1004,570,18,Yellow,610,height:52);
             DrawText(g,"La salida aplicada se suaviza en el ESP32. Sin RPM, el duty no confirma que el ventilador esté girando.",1004,640,19,Muted,610,height:80);
         }

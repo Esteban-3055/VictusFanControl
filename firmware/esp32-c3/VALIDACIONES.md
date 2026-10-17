@@ -45,6 +45,8 @@ inválida o una revisión reutilizada termina solo su conexión y el simulador
 continúa aceptando sesiones. Esto también se verifica por TCP real.
 Las capturas del editor y de los ajustes se revisan visualmente; la tabla usa
 columnas explícitas para conservar la alineación al escalar la ventana.
+También se ejercitan clics reales en +/− y la edición numérica exacta de ajustes;
+no basta con invocar directamente el modelo de configuración.
 
 En el ensayo local de recursos TCP de 10 s no hubo acumulación de mensajes;
 las cifras medidas están en el informe de pruebas de ExternalCooling. La RAM
