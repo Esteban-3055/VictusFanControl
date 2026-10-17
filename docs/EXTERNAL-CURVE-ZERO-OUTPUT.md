@@ -47,3 +47,18 @@ remotos mediante los workflows existentes de la rama/PR:
 Resultados y enlaces del commit actual se documentan en el PR #44. La revisión
 física de parada/arranque y señal invertida queda pendiente; no se deduce de los
 tests host ni del simulador.
+
+## Corrección visual interna 1.2.13
+
+Se encontró en `ProductCurveMarkers` un límite de presentación antiguo de 50.
+Una Solicitud aplicada entre 51 y 54 desaparecía de la gráfica y solo quedaba
+el objetivo. Se amplía únicamente el rango de lectura del marcador a 10–54,
+con pruebas para 51/52/53/54 y rechazo de 55. No cambia la política HP, su límite
+CPU/GPU, autoridad ni puertas de seguridad.
+
+Además, objetivo y aplicado se dibujaban con el mismo radio. Si coincidían,
+el aplicado tapaba el objetivo. Ahora las curvas interna y externa comparten
+un renderer: objetivo amarillo exterior, aplicado verde interior y centro
+verde. Conservan las coordenadas reales; la prueba gráfica verifica que los
+dos colores sigan visibles al coincidir. La referencia verde externa es la
+salida aplicada reportada por ESP32, no un punto editado ni un valor inventado.

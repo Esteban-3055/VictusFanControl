@@ -147,6 +147,14 @@ internal static class ProductProfilesSelfTest
             ProductCurveMarkers.Demand(original.Ac.Fan,sample,spikeFilter with{Timestamp=sample.Timestamp.AddSeconds(-1)})!.Percent!=100||
             ProductCurveMarkers.BuildUnified(liveDraft,sample,original.Ac.Fan,sample,31,filteredDemand,spikeFilter).Single(m=>!m.IsApplied).Input!=100)
             throw new InvalidOperationException("CPU filter marker lost accepted demand or contaminated a stale epoch/different draft source.");
+        foreach(var level in new[]{51,52,53,54})
+        {
+            var high=ProductCurveMarkers.BuildUnified(original.Ac.Fan,sample,original.Ac.Fan,sample,level,filteredDemand,spikeFilter);
+            if(high.Count!=2||high.Single(m=>m.IsApplied).Level!=level)
+                throw new InvalidOperationException("Extended 51-54 applied marker disappeared.");
+        }
+        if(ProductCurveMarkers.BuildUnified(original.Ac.Fan,sample,original.Ac.Fan,sample,55,filteredDemand,spikeFilter).Any(m=>m.IsApplied))
+            throw new InvalidOperationException("Out-of-range level invented an applied marker.");
         var expandedProfiles=original with{Ac=original.Ac with{GpuMaximumMHz=2500},Battery=original.Battery with{GpuMaximumMHz=210}};
         var expandedRoundtrip=ProductProfilesStore.Parse(ProductProfilesStore.Serialize(expandedProfiles));
         if(expandedRoundtrip.Ac.GpuMaximumMHz!=2500||expandedRoundtrip.Battery.GpuMaximumMHz!=210||original.Ac.GpuMaximumMHz!=1850||original.Battery.GpuMaximumMHz!=1200)

@@ -58,9 +58,7 @@ internal sealed partial class ProductCanvas
             foreach(var marker in markers.OrderBy(m=>m.IsApplied)) {
                 var pos=new PointF(ExternalPlot.Left+(float)marker.Input*ExternalPlot.Width/100,
                     ExternalPlot.Bottom-(float)marker.Output*ExternalPlot.Height/255);
-                using var halo=new Pen(Background,6);g.DrawEllipse(halo,pos.X-9,pos.Y-9,18,18);
-                using var ring=new Pen(marker.IsApplied?Green:Yellow,3);g.DrawEllipse(ring,pos.X-9,pos.Y-9,18,18);
-                if(marker.IsApplied){using var fill=new SolidBrush(Green);g.FillEllipse(fill,pos.X-5,pos.Y-5,10,10);}
+                DrawDemandMarker(g,pos,marker.IsApplied);
             }
             var objective=markers.FirstOrDefault(m=>!m.IsApplied);var applied=markers.FirstOrDefault(m=>m.IsApplied);
             DrawText(g,objective is null?"Sin entrada reciente para esta curva":

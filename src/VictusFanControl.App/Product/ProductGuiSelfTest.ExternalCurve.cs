@@ -97,6 +97,13 @@ internal static partial class ProductGuiSelfTest
         var zeroDiagnostics=diagnostics with{AcknowledgedTelemetry=telemetry with{DemandaPct=0,ExternalConfiguration=zero},Device=status with{AppliedDuty=0}};
         var zeroPoints=ExternalCurveMarkers.Build(zero,zero,zeroDiagnostics,now);
         Require(zeroPoints.Count==2&&zeroPoints.All(p=>p.Input==0&&p.Output==0),"Real zero marker missing");
+        using(var canvas=new ProductCanvas{Size=new(1672,941),Page=ProductPage.ExternalCurve}) {
+            canvas.ExternalCurve=new(canvas,()=>new ExternalCoolingSettings{Curve=zero},_=>Task.CompletedTask,()=>zeroDiagnostics);
+            using var image=new Bitmap(canvas.Width,canvas.Height);
+            canvas.DrawToBitmap(image,new(Point.Empty,canvas.Size));
+            Directory.CreateDirectory("logs/external-cooling-self-test");
+            image.Save("logs/external-cooling-self-test/external-curve-live-zero.png");
+        }
         var requestCurve=curve with{Input=1};
         Require(ExternalCurveMarkers.Build(requestCurve,requestCurve,diagnostics,now)[0].Input==50,"Accepted request marker not normalized");
         Require(ExternalCurveMarkers.Build(requestCurve,requestCurve,diagnostics with{AcknowledgedTelemetry=telemetry with{SolicitudValida=false}},now).Count==0,"Unaccepted request plotted");

@@ -434,9 +434,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         var markers=simulated??CurrentDemandMarkers();
         foreach(var marker in markers.OrderBy(m=>m.IsApplied))
         {
-            var point=Position(new(marker.Input,marker.Level));using var halo=new Pen(Background,6);g.DrawEllipse(halo,point.X-9,point.Y-9,18,18);
-            using var ring=new Pen(marker.IsApplied?Green:Yellow,3);g.DrawEllipse(ring,point.X-9,point.Y-9,18,18);
-            if(marker.IsApplied){using var fill=new SolidBrush(Green);g.FillEllipse(fill,point.X-5,point.Y-5,10,10);}
+            DrawDemandMarker(g,Position(new(marker.Input,marker.Level)),marker.IsApplied);
         }
         var applied=markers.FirstOrDefault(m=>m.IsApplied);var preview=markers.FirstOrDefault(m=>!m.IsApplied);
         var cpuSpike=editable&&applied is not null&&State.AutomaticDecision?.CpuThermalDemand is {SpikeSuppressed:true};
