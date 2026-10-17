@@ -7,8 +7,19 @@ internal static partial class Program
         var c=new ExternalCurveConfiguration();c.Validate();
         var copy=JsonSerializer.Deserialize<ExternalCurveConfiguration>(JsonSerializer.Serialize(c,ExternalCoolingProtocol.Json),ExternalCoolingProtocol.Json)!;
         Require(copy==c,"Curve preferences did not roundtrip by value.");
+        var zero=c with{Points=[new(0,0),new(20,0),new(100,255)],ManualOutput=0,StartOutput=0};zero.Validate();
+        Require(zero.Evaluate(0)==0&&zero.Evaluate(20)==0&&zero.Evaluate(100)==255,"Zero plateau preview mapping.");
+        Require(zero.RequiresFullOutputRange&&!zero.CanSendTo(null),"Zero sent without negotiated capability.");
+        var legacyDevice=new DeviceStatus{ExternalCurveVersion=1,AckSequence=1,AmbientTempC=24,AppliedPwmPct=0,
+            Mode="Remote",Communication="Ready",Extensions=new(){Slot1=null,Slot2=null}};
+        Require(c.CanSendTo(legacyDevice)&&!zero.CanSendTo(legacyDevice),"Legacy firmware range negotiation.");
+        var fullDevice=legacyDevice with{ExternalMinimumOutput=0,AppliedDuty=0,ExternalRequest=0};
+        Require(zero.CanSendTo(fullDevice),"Full range firmware not recognized.");
+        Require(ExternalCoolingProtocol.Status(ExternalCoolingProtocol.Create("deviceStatus",Guid.NewGuid().ToString("N"),1,fullDevice)).AppliedDuty==0,"Zero status became null.");
+        Reject(()=>ExternalCoolingProtocol.Status(ExternalCoolingProtocol.Create("deviceStatus",Guid.NewGuid().ToString("N"),1,fullDevice with{ExternalMinimumOutput=-1})),"Invalid capability accepted.");
         foreach(var bad in new[]{c with{Rise=0},c with{StartMs=3001},c with{RequestMaximum=0},c with{Points=[new(0,30),new(0,255)]},
-            c with{Points=[new(1,30),new(100,255)]},c with{Points=[new(0,256),new(100,255)]},c with{Revision="bad"},c with{Points=null!}})
+            c with{Points=[new(1,30),new(100,255)]},c with{Points=[new(0,256),new(100,255)]},c with{Points=[new(0,-1),new(100,255)]},
+            c with{ManualOutput=-1},c with{StartOutput=-1},c with{Revision="bad"},c with{Points=null!}})
             Reject(bad.Validate,"Bad external config accepted.");
         var legacy=JsonSerializer.Deserialize<ExternalCoolingSettings>("{\"mode\":\"Disabled\",\"host\":\"victus-base.local\"}",ExternalCoolingProtocol.Json)!;
         legacy.Validate();Require(legacy.Curve==c,"Legacy settings did not acquire safe default curve.");

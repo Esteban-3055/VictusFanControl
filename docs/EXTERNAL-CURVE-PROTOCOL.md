@@ -37,15 +37,15 @@ Ejemplo de configuración (todos sus campos son obligatorios si se incluye):
 | Campo | Regla/unidad |
 |---|---|
 | revision | 32 caracteres hexadecimales minúsculos; nueva revisión por guardado |
-| points | 2–16 puntos, extremos X=0/100, X enteros estrictamente crecientes, Y enteros 30–255 no decrecientes |
+| points | 2–16 puntos, extremos X=0/100, X enteros estrictamente crecientes, Y enteros 0–255 no decrecientes |
 | input | 0 = Demanda del notebook; 1 = Solicitud aceptada normalizada por calibración explícita |
 | requestMinimum / Maximum | 0≤mínimo<máximo≤65535; 0/54 es calibración inicial, no límite permanente del protocolo |
-| manualOutput | 30–255, salida externa independiente en modo Manual cuando input=0 |
+| manualOutput | 0–255, salida externa independiente en modo Manual cuando input=0 |
 | rise / fall | 1–100 % de escala completa por segundo; 12/6 iniciales |
 | filterMs | 0–10000 ms; constante del filtro EMA (0 desactiva) |
 | hysteresis | 0–30 niveles externos |
 | downHoldMs | 0–30000 ms, confirmación sostenida de descenso |
-| startMs / Output | 0–3000 ms; 30–255; arranque al encender, no pulso por cada reconexión |
+| startMs / Output | 0–3000 ms; 0–255; arranque al encender y al salir de parada real, no por cada reconexión |
 
 El receptor valida la configuración completa antes de modificar el estado.
 Dentro de una sesión, reutilizar una revisión con contenido distinto se rechaza.
@@ -69,7 +69,7 @@ El dispositivo responde además:
 
 `appliedConfigRevision` es nulo hasta que la tarea de control ha aceptado la
 configuración, y no significa que esté habilitada la salida ni que exista giro.
-`externalRequest`/`appliedDuty` son 30–255 o nulos (salida deshabilitada).
+`externalRequest`/`appliedDuty` son 0–255 o nulos (salida deshabilitada).
 `appliedPwmPct` se conserva como porcentaje 0–100 o nulo. La revisión se confirma
 en una respuesta posterior, nunca antes de entregar la configuración al control.
 Windows verifica ACK y antigüedad, y muestra datos recientes. Al abrir una sesión
@@ -79,13 +79,13 @@ Fallback local: NTC válida, 89 a 255 entre 25 y 45 °C (mínimo 89 por debajo d
 25 °C); piso ambiental creciente desde 35 °C incluso en Remote; ≥45 °C o fallo
 de sensor da 255 inmediatamente. Promedio ADC y EMA ambiental; fallos y ambiente
 alto no quedan ocultos por el filtro. No se usa el ambiente como carga CPU/GPU.
-La salida lógica siempre permanece en **30–255**. GPIO3 utiliza una etapa
+La salida lógica siempre permanece en **0–255**. GPIO3 utiliza una etapa
 NOT (2N7000 → BC337): el valor eléctrico conceptual es **255 − salida**,
 en escala de 8 bits. El hardware LEDC del ESP32-C3 funciona a **18 Hz con
 resolución de 14 bits**, por lo que el firmware convierte el duty eléctrico
 mediante `round((255 − salida) × 16383 / 255)`. Esa conversión no altera
 el contrato del protocolo, la curva editable, los estados ni la realimentación
-lógica de 30–255. La combinación anterior de 18 Hz / 8 bits falló al
+lógica de 0–255. La combinación anterior de 18 Hz / 8 bits falló al
 configurar el temporizador y provocó un reinicio antes de Wi-Fi.
 Caducidad por reloj monotónico con rollover de millis soportado.
 
@@ -116,7 +116,7 @@ El controlador real es `firmware/esp32-c3/lib/VictusProtocol/ExternalController.
    permanecer debajo del umbral durante `downHoldMs`.
 4. El duty aplicado avanza hacia `target` como máximo `rise*2,55*dt` al subir y
    `fall*2,55*dt` al bajar (porcentajes de escala completa por segundo). El pulso
-   `startOutput`/`startMs` solo ocurre al arrancar el controlador.
+   `startOutput`/`startMs` ocurre al arrancar el controlador y al salir de una parada real; no por renovar el lease.
 5. NTC inválida o vencida impone 255; ambiente ≥45 °C impone 255; el piso
    ambiental y el mínimo Local evitan que la inercia rebaje las protecciones.
    Un NTC inválido también retira Remote. El lease sigue siendo 2000 ms.
@@ -142,3 +142,44 @@ se ejecutan en Windows con su supervisor y backend HP/WMI. Producen la Demanda y
 la Solicitud aceptada que puede usar la base; no son los ajustes de Curva Externa.
 El ESP32 nunca escribe niveles HP ni cambia la seguridad del notebook. Tampoco
 el mero guardado de la curva externa concede autoridad Remote.
+
+## Rango completo y parada externa
+
+El estado firmado añade `externalMinimumOutput:0` conservando
+`externalCurveVersion:1` y schemaVersion 1. Su ausencia significa firmware
+anterior con mínimo 30. Windows solo envía configuraciones con algún punto,
+salida Manual o arranque <30 después del anuncio explícito de mínimo cero.
+Si falta, mantiene monitorización, retira Solicitud y pide actualizar firmware.
+Las curvas existentes con mínimo 30 siguen funcionando sin alterarse.
+No cambia el formato ni namespace NVS; las curvas guardadas no se convierten
+ni se sustituyen automáticamente por otras con mínimo cero.
+
+En Remote autorizado, una salida cero puede apagar la base cuando el NTC está
+válido, vigente y ≤35 °C. El EMA y la confirmación de descenso siguen activos;
+al asentarse dentro de la banda de histéresis, una petición explícita de cero
+ancla el objetivo a cero exacto para no dejar un residuo indefinido. La rampa
+de bajada llega entonces a cero. Al salir de parada, se reinicia el estado de
+objetivo/filtro de esa transición y se aplica el pulso configurado si su salida
+y duración son positivas. Sin pulso también se admite una salida positiva
+menor que la histéresis. Esto evita quedar atrapado en cero o reiniciar el
+arranque en cada iteración.
+
+Por encima de 35 °C se conserva el piso previo `30+(ambiente-35)*22,5` limitado
+al máximo. ≥45 °C o NTC inválida/vencida fuerza 255; pérdida de autoridad o lease
+vuelve a Local, mínimo 89. El circuito invertido recibe 16383/16383 para salida
+lógica 0 y 0 para salida lógica 255. El LCD informa `PWM: 0% (0)` cuando se aplica
+cero; un nulo sigue siendo `--`. El programa no puede confirmar giro o parada
+mecánica sin tacómetro.
+
+La gráfica usa escala Y 0–255. ○ amarillo indica el objetivo de la curva
+editable a la entrada reciente; ● verde indica el duty aplicado informado por
+el ESP32. Se emparejan el estado autenticado y la telemetría del ACK exacto,
+no la última trama enviada si todavía no tiene respuesta. El marcador aplicado
+exige Remote, revisión confirmada y el mismo tipo/calibración de entrada; puede
+quedar fuera de la curva por los filtros y protecciones. En edición, el objetivo
+se rotula Borrador. Ambos marcadores desaparecen al vencer trama/respuesta a
+2000 ms o fuente de demanda a 5000 ms; cero válido se muestra y nulos no se
+inventan. Con entrada Solicitud se muestra su normalización, no Demanda.
+
+La implementación y la validación remota se describen en
+[análisis de parada y marcadores](EXTERNAL-CURVE-ZERO-OUTPUT.md).

@@ -31,6 +31,7 @@ public sealed record DeviceExtensions
 public sealed record DeviceStatus
 {
     public int? ExternalCurveVersion {get;init;}
+    public int? ExternalMinimumOutput {get;init;}
     public string? AppliedConfigRevision {get;init;}
     public int? AppliedDuty {get;init;}
     public int? ExternalRequest {get;init;}
@@ -150,7 +151,8 @@ public static class ExternalCoolingProtocol
     {
         if(frame.Type!="deviceStatus")throw new InvalidDataException("Expected deviceStatus.");
         var d=Payload<DeviceStatus>(frame);
-        if(d.ExternalCurveVersion is <1 or >65535||d.AppliedDuty is <30 or >255||d.ExternalRequest is <30 or >255||
+        if(d.ExternalCurveVersion is <1 or >65535||d.AppliedDuty is <0 or >255||d.ExternalRequest is <0 or >255||
+            d.ExternalMinimumOutput is not(null or 0 or 30)||
             d.AppliedConfigRevision is{} revision&&(revision.Length!=32||revision.Any(c=>!char.IsAsciiDigit(c)&&c is not(>='a' and <='f'))))
             throw new InvalidDataException("Invalid external curve status.");
         if(d.AckSequence<=0||d.Mode is not("Local" or "Remote")||d.Communication is not("Ready" or "Timeout" or "Fault")||d.Extensions is null||

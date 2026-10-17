@@ -31,6 +31,8 @@ inline void presentationTests() {
     check(std::string(top)=="CPU:100%GPU:  0%" && std::strstr(bottom,"RAM: 65%"),"CPU GPU RAM in one page");
     renderLcd(LcdPage::Ambient,data,top,bottom);
     check(std::strstr(top,"21.2C") && std::strstr(bottom,"38% (96)"),"applied logical PWM percent and duty");
+    data.pwmDuty=0;renderLcd(LcdPage::Ambient,data,top,bottom);
+    check(std::strstr(bottom,"0% (0)"),"real applied zero is not OFF or null");data.pwmDuty=96;
     renderLcd(LcdPage::Connection,data,top,bottom);
     check(std::strstr(top,"PC: conectado") && std::strstr(bottom,"WiFi: conectado"),"PC and WiFi independent");
     for(double value:{-20.0,0.0,99.0,100.0,130.0,131.0,static_cast<double>(NAN),static_cast<double>(INFINITY)}) {

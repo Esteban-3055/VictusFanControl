@@ -14,6 +14,7 @@ def message(config,valid=False,seq=1):
 results=run(HOST,[hello(),auth(),message(CONFIG),message(CONFIG,True,2),message(CONFIG,True,3)])
 assert results[-1]['payload']['appliedConfigRevision']==CONFIG['revision']
 assert results[-1]['payload']['externalCurveVersion']==1
+assert results[-1]['payload']['externalMinimumOutput']==0
 assert results[-1]['payload']['mode']=='Remote'
 print('PASS authenticated config, applied revision, capability and remote lease')
 
@@ -26,7 +27,7 @@ for name,change in {
     'duplicate x':lambda c:c['points'][1].update(input=0),
     'missing endpoint':lambda c:c['points'][0].update(input=1),
     'decreasing y':lambda c:c['points'][2].update(output=100),
-    'below min':lambda c:c['points'][0].update(output=29),
+    'below min':lambda c:c['points'][0].update(output=-1),
     'above max':lambda c:c['points'][2].update(output=256),
     'too many':lambda c:c.update(points=[dict(input=i*5,output=30+i) for i in range(21)]),
     'calibration':lambda c:c.update(requestMinimum=54),
@@ -40,3 +41,8 @@ print('PASS reject reused revision with modified contents')
 results=run(HOST,[hello(),auth(),message(CONFIG),message(CONFIG,False,2),message(CONFIG,False,3)])
 assert results[-1]['payload']['mode']=='Local'
 print('PASS MonitorOnly config does not grant authority')
+zero=copy.deepcopy(CONFIG)
+zero.update(points=[dict(input=0,output=0),dict(input=100,output=255)],manualOutput=0,startOutput=0,startMs=0,filterMs=0,hysteresis=0,downHoldMs=0)
+results=run(HOST,[hello(),auth(),message(zero),message(zero,True,2),message(zero,True,3)])
+assert results[-1]['payload']['appliedConfigRevision']==zero['revision']
+print('PASS authenticated full 0-255 config with zero Manual/start output')

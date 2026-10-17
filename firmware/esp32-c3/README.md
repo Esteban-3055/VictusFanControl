@@ -10,7 +10,7 @@ placa ni validado físicamente su LCD, NTC, PWM o etapa de potencia**.
 
 | Función | GPIO | Configuración |
 |---|---:|---|
-| PWM invertido | 3 | **18 Hz**, temporizador LEDC **14 bits**, salida lógica 30–255 |
+| PWM invertido | 3 | **18 Hz**, temporizador LEDC **14 bits**, salida lógica 0–255 |
 | LCD SDA | 6 | PCF8574: 0x20–0x27 o 0x38–0x3F, detección automática |
 | LCD SCL | 7 | LCD1602, P0=RS/P1=RW/P2=EN/P3=luz/P4..7=datos |
 | NTC ambiente | 0 | 10 kΩ, B3950; resistencia fija 10 kΩ |
@@ -28,7 +28,7 @@ Se escala ese duty eléctrico al rango LEDC de 14 bits mediante
 `round(duty8 * 16383 / 255)`. Así, una salida lógica de 30 produce
 225 en escala eléctrica de 8 bits y **14456 en LEDC**; una salida lógica
 de 255 produce **0 en LEDC**. La Curva Externa de Windows y el protocolo
-siguen trabajando con salidas **30–255**. No se reinterpretan como 14 bits.
+siguen trabajando con salidas **0–255**. No se reinterpretan como 14 bits.
 No conectar el motor a un GPIO. GPIO flotante/reset con ese pull-down puede
 significar **ventilación máxima**, también con firmware de monitorización.
 
@@ -123,7 +123,7 @@ Monitorización + Solicitud y tener una Solicitud interna aceptada y vigente.
 **Curva Externa** aparece después de Base externa y antes de Actualizaciones.
 Editar puntos arrastrando, con flechas o entrada numérica; añadir/quitar puntos,
 restablecer y descartar. Guardar no modifica los perfiles internos del notebook.
-Se conservan los extremos 0 y 100, 2–16 puntos y salidas crecientes de 30–255.
+Se conservan los extremos 0 y 100, 2–16 puntos y salidas crecientes de 0–255.
 
 Entrada **Demanda**: X demanda 0–100 del notebook, Y solicitud externa. En Manual
 usa la salida externa fija configurable en Respuesta y arranque.
@@ -134,12 +134,12 @@ Un valor fuera de la calibración deja Remote y vuelve al control ambiental.
 Respuesta configurable: EMA, histéresis, confirmación de descenso, subida/bajada
 independientes, salida/duración de arranque. Iniciales: 1500 ms, 3 niveles, 3000 ms,
 12 %/s arriba, 6 %/s abajo y 255 durante 800 ms al encender.
-No hay pulso por reconectar. La configuración se confirma por revisión aplicada
+El pulso se repite al pasar de parada real a demanda positiva; no se repite por reconectar. La configuración se confirma por revisión aplicada
 desde la tarea de control; el estado de la pestaña distingue guardado de confirmado.
 Se conserva en NVS, con escrituras espaciadas al menos 30 s y comprobación al cargar.
 
-La NTC es ambiental: fallback local 89→255 entre 25 y 45 °C. En Remote hay piso
-ambiental desde 35 °C. NTC inválida, sin renovar durante 3 s o ≥45 °C fuerza 255;
+La NTC es ambiental: fallback local 89→255 entre 25 y 45 °C. En Remote el apagado se permite hasta 35 °C; por encima se conserva el piso
+ambiental creciente original (30→255 hasta 45 °C). NTC inválida, sin renovar durante 3 s o ≥45 °C fuerza 255;
 no espera a EMA/rampas. Al arrancar sin NTC válida también fuerza máximo.
 La tarea de control corre cada 20 ms separada de TCP, LCD y provisión. La orden
 remota caduca a los 2000 ms. Volver a Firmware, perder autoridad o desconectar
@@ -203,7 +203,7 @@ el LCD.
 |---|---:|---|---|
 | Temperaturas | **30 s** | CPU °C y GPU °C | DEMANDA: porcentaje |
 | Uso | **5 s** | CPU y GPU: porcentajes | RAM: porcentaje |
-| Ambiente/ventilador | **5 s** | Ambiente: °C | PWM: porcentaje (salida lógica 30–255) |
+| Ambiente/ventilador | **5 s** | Ambiente: °C | PWM: porcentaje (salida lógica 0–255) |
 | Conexión | **5 s** | PC: conectado/sin datos/desconectado | WiFi: conectado/sin red |
 
 Se eligieron **5 s para las vistas 3 y 4**, cuyas duraciones no estaban

@@ -126,10 +126,10 @@ bool Session::accept(const std::string& line,uint32_t now,double ambient,int app
     if (std::isfinite(ambient) && ambient>=-40 && ambient<=100) status["ambientTempC"]=ambient; else status["ambientTempC"]=nullptr;
     if (applied>=0&&applied<=100) status["appliedPwmPct"]=applied; else status["appliedPwmPct"]=nullptr;
     status["mode"]=remote?"Remote":"Local"; status["communication"]=std::isfinite(ambient)?"Ready":"Fault";
-    status["externalCurveVersion"]=1;
+    status["externalCurveVersion"]=1;status["externalMinimumOutput"]=0;
     if(appliedConfigRevision.empty()) status["appliedConfigRevision"]=nullptr; else status["appliedConfigRevision"]=appliedConfigRevision;
-    if(appliedDuty>=30&&appliedDuty<=255) status["appliedDuty"]=appliedDuty; else status["appliedDuty"]=nullptr;
-    if(externalRequest>=30&&externalRequest<=255) status["externalRequest"]=externalRequest; else status["externalRequest"]=nullptr;
+    if(appliedDuty>=0&&appliedDuty<=255) status["appliedDuty"]=appliedDuty; else status["appliedDuty"]=nullptr;
+    if(externalRequest>=0&&externalRequest<=255) status["externalRequest"]=externalRequest; else status["externalRequest"]=nullptr;
     auto extensions=status.createNestedObject("extensions"); extensions["slot1"]=nullptr; extensions["slot2"]=nullptr;
     std::string payload; serializeJson(status,payload); response=frame("deviceStatus",++outgoing,payload,true); return true;
 }
@@ -165,17 +165,17 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
         std::copy(revision.begin(),revision.end(),candidate.revision);
         struct Field {const char* name;int* value;int min,max;};
         for(auto f:{Field{"input",&candidate.input,0,1},{"requestMinimum",&candidate.requestMinimum,0,65534},
-            {"requestMaximum",&candidate.requestMaximum,1,65535},{"manualOutput",&candidate.manualOutput,30,255},
+            {"requestMaximum",&candidate.requestMaximum,1,65535},{"manualOutput",&candidate.manualOutput,0,255},
             {"rise",&candidate.rise,1,100},{"fall",&candidate.fall,1,100},{"filterMs",&candidate.filterMs,0,10000},
             {"hysteresis",&candidate.hysteresis,0,30},{"downHoldMs",&candidate.downHoldMs,0,30000},
-            {"startMs",&candidate.startMs,0,3000},{"startOutput",&candidate.startOutput,30,255}}) {
+            {"startMs",&candidate.startMs,0,3000},{"startOutput",&candidate.startOutput,0,255}}) {
             if(!integer(c[f.name],f.min,f.max))return false;*f.value=c[f.name].as<int>();
         }
         auto points=c["points"].as<JsonArrayConst>();
         if(points.isNull()||points.size()<2||points.size()>16)return false;
         candidate.count=static_cast<int>(points.size());int i=0;
         for(auto point:points) {
-            if(!integer(point["input"],0,100)||!integer(point["output"],30,255))return false;
+            if(!integer(point["input"],0,100)||!integer(point["output"],0,255))return false;
             candidate.points[i++]={point["input"].as<int>(),point["output"].as<int>()};
         }
         if(!candidate.valid())return false;

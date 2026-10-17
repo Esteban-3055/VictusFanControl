@@ -13,6 +13,7 @@ internal static partial class ProductGuiSelfTest
     private static void TestExternalCurve()
     {
         static void Require(bool ok,string message)=>ExternalCoolingSelfTest.Require(ok,message);
+        TestExternalMarkers();
         var root=Path.GetFullPath("logs/external-cooling-self-test");Directory.CreateDirectory(root);
         var path=Path.Combine(root,"curve-"+Guid.NewGuid().ToString("N")+".json");
         var store=new ExternalCoolingSettingsStore(path);store.Save(new());
@@ -24,6 +25,7 @@ internal static partial class ProductGuiSelfTest
         form.HandleCommand("page-"+(int)ProductPage.ExternalCurve);Application.DoEvents();
         var curve=form.Canvas.ExternalCurve??throw new InvalidOperationException("Curve page missing");
         var original=ProductProfilesStore.Serialize(form.Draft);var notebookDirty=form.Canvas.Dirty;
+        curve.EditNode(0,0,0);Require(curve.Draft.Points[0].Output==0,"Editor denied zero output");
         curve.EditNode(2,55,145);Require(curve.Dirty&&curve.Draft.Points[2]==new ExternalCurvePoint(55,145),"Point edit failed");
         form.HandleCommand("external-curve-add");Require(curve.Draft.Points.Length==6,"Point insertion failed");
         form.HandleCommand("external-curve-remove");Require(curve.Draft.Points.Length==5,"Point removal failed");
@@ -39,6 +41,8 @@ internal static partial class ProductGuiSelfTest
         Click("external-curve-value-rise-minus");Require(curve.Draft.Rise==18,"Visible - did not edit external setting");
         Require(curve.EditNumeric("filter","1650") is null&&curve.Draft.FilterMs==1650,"Exact external numeric edit failed");
         Require(curve.EditNumeric("filter","NaN") is not null&&curve.Draft.FilterMs==1650,"Invalid numeric edit changed curve");
+        Require(curve.EditNumeric("manual","0") is null&&curve.Draft.ManualOutput==0,"Manual zero denied");
+        Require(curve.EditNumeric("start-output","0") is null&&curve.Draft.StartOutput==0,"Start zero denied");
         form.HandleCommand("external-curve-save");PumpUntil(()=>!curve.Busy,"Curve save blocked");
         var saved=new ExternalCoolingSettingsStore(path).Load(out _);Require(saved.Curve==curve.Draft&&saved.Curve.Rise==18&&!curve.Dirty,"External curve did not persist");
         form.HandleCommand("page-"+(int)ProductPage.ExternalCooling);form.HandleCommand("external-save");PumpUntil(()=>!basePage.Busy,"Base save blocked");
@@ -67,4 +71,35 @@ internal static partial class ProductGuiSelfTest
         var close=form.RequestExitAsync();PumpUntil(()=>close.IsCompleted,"Curve fixture did not close");close.GetAwaiter().GetResult();
         Console.WriteLine("PASS external curve UI: points, tuning, independent saves, preferences, DPI/sidebar, no notebook writes.");
     }
+    private static void TestExternalMarkers()
+    {
+        static void Require(bool ok,string message)=>ExternalCoolingSelfTest.Require(ok,message);
+        var now=DateTimeOffset.UtcNow;var curve=new ExternalCurveConfiguration();
+        var telemetry=new ExportTelemetry{CapturedAtUtc=now,DecisionAtUtc=now,SampledAtUtc=now,DemandaPct=50,
+            ModoSolicitado="Automatic",Solicitud=27,SolicitudValida=true,ExternalConfiguration=curve};
+        var status=new DeviceStatus{AckSequence=3,ExternalCurveVersion=1,ExternalMinimumOutput=0,AppliedConfigRevision=curve.Revision,
+            AppliedDuty=64,ExternalRequest=130,AmbientTempC=24,AppliedPwmPct=25,Mode="Remote",Communication="Ready",Extensions=new(){Slot1=null,Slot2=null}};
+        var diagnostics=new ExternalCoolingDiagnostics{State=ExternalCoolingConnectionState.Connected,
+            LastValidReceivedUtc=now,Device=status,AcknowledgedTelemetry=telemetry};
+        IReadOnlyList<ExternalCurveMarker> Build(ExternalCoolingDiagnostics? d)=>ExternalCurveMarkers.Build(curve,curve,d,now);
+        var points=Build(diagnostics);
+        Require(points.Count==2&&points[0]==new ExternalCurveMarker(50,130,false)&&points[1]==new ExternalCurveMarker(50,64,true),"Live target/applied markers mixed");
+        Require(Build(diagnostics with{LastSent="a newer unacknowledged frame"}).SequenceEqual(points),"Marker used unacknowledged source");
+        Require(Build(diagnostics with{LastValidReceivedUtc=now.AddMilliseconds(-2000)}).Count==0,"Stale device marker retained");
+        Require(Build(diagnostics with{LastValidReceivedUtc=now.AddSeconds(1)}).Count==0,"Future marker retained");
+        Require(Build(diagnostics with{AcknowledgedTelemetry=telemetry with{CapturedAtUtc=now.AddMilliseconds(-2000)}}).Count==0,"Stale frame marker retained");
+        Require(Build(diagnostics with{AcknowledgedTelemetry=telemetry with{DecisionAtUtc=now.AddMilliseconds(-5000)}}).Count==0,"Stale demand marker retained");
+        Require(Build(diagnostics with{AcknowledgedTelemetry=telemetry with{DemandaPct=null}}).Count==0,"Null demand became zero");
+        Require(Build(diagnostics with{Device=status with{Mode="Local"}}).Count==1,"Local fallback claimed applied curve");
+        Require(Build(diagnostics with{Device=status with{AppliedConfigRevision=null}}).Count==1,"Unconfirmed revision claimed applied curve");
+        Require(Build(diagnostics with{State=ExternalCoolingConnectionState.Disconnected}).Count==0,"Disconnected marker retained");
+        var zero=curve with{Points=[new(0,0),new(100,255)]};
+        var zeroDiagnostics=diagnostics with{AcknowledgedTelemetry=telemetry with{DemandaPct=0,ExternalConfiguration=zero},Device=status with{AppliedDuty=0}};
+        var zeroPoints=ExternalCurveMarkers.Build(zero,zero,zeroDiagnostics,now);
+        Require(zeroPoints.Count==2&&zeroPoints.All(p=>p.Input==0&&p.Output==0),"Real zero marker missing");
+        var requestCurve=curve with{Input=1};
+        Require(ExternalCurveMarkers.Build(requestCurve,requestCurve,diagnostics,now)[0].Input==50,"Accepted request marker not normalized");
+        Require(ExternalCurveMarkers.Build(requestCurve,requestCurve,diagnostics with{AcknowledgedTelemetry=telemetry with{SolicitudValida=false}},now).Count==0,"Unaccepted request plotted");
+    }
+
 }

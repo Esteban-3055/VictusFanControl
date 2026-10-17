@@ -1,6 +1,7 @@
 #include "ExternalController.h"
 #include "../include/BoardConfig.h"
 #include "presentation.h"
+#include "zero_output.h"
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -10,6 +11,7 @@ victus::ExternalConfig config(){victus::ExternalConfig c;std::strcpy(c.revision,
 }
 int controllerTests() {
     presentationTests();
+    zeroOutputTests();
     // Regression: 18 Hz with 8-bit LEDC caused ledcAttach() to fail and
     // abort() before Wi-Fi/TCP could start. ESP32-C3 requires 14-bit timing.
     require(board::PwmFrequencyHz==18&&board::PwmResolutionBits==14,"18 Hz / 14-bit LEDC profile");
@@ -24,7 +26,7 @@ int controllerTests() {
     auto c=config();require(c.valid(),"default config");
     require(c.evaluate(0)==30&&c.evaluate(100)==255&&c.evaluate(50)==130,"curve interpolation");
     auto bad=c;bad.points[2].input=25;require(!bad.valid(),"duplicate input");
-    bad=c;bad.points[2].output=29;require(!bad.valid(),"below min");
+    bad=c;bad.points[0].output=-1;require(!bad.valid(),"below min");
     bad=c;bad.points[4].output=256;require(!bad.valid(),"above max");
     bad=c;bad.points[3].output=100;require(!bad.valid(),"decreasing output");
     bad=c;bad.requestMaximum=bad.requestMinimum;require(!bad.valid(),"bad request calibration");

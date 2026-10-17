@@ -55,7 +55,7 @@ public static class Simulator
                 var status=new DeviceStatus
                 {
                     AckSequence=previous,AmbientTempC=23.0+Math.Sin(previous/30.0),
-                    ExternalCurveVersion=1,AppliedConfigRevision=operating.Revision,AppliedDuty=operating.Duty,ExternalRequest=operating.Request,
+                    ExternalCurveVersion=1,ExternalMinimumOutput=0,AppliedConfigRevision=operating.Revision,AppliedDuty=operating.Duty,ExternalRequest=operating.Request,
                     // An illustrative simulator policy, not a firmware requirement or Windows mapping.
                     AppliedPwmPct=operating.PwmPct,
                     Mode=operating.Mode,Communication=operating.Communication,Extensions=new(){Slot1=null,Slot2=null}

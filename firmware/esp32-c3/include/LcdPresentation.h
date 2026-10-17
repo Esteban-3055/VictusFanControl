@@ -63,7 +63,7 @@ inline void renderLcd(LcdPage page, const LcdReadings& data,
         case LcdPage::Ambient:
             if (std::isfinite(data.ambientC) && data.ambientC >= -40 && data.ambientC <= 100) {
                 std::snprintf(first, sizeof(first), "Ambiente:%.1fC", data.ambientC);
-                if (data.pwmEnabled && data.pwmDuty >= 30 && data.pwmDuty <= 255)
+                if (data.pwmEnabled && data.pwmDuty >= 0 && data.pwmDuty <= 255)
                     std::snprintf(second, sizeof(second), "PWM:%3d%% (%d)",
                                   static_cast<int>(std::lround(data.pwmDuty * 100.0 / 255)), data.pwmDuty);
                 else std::snprintf(second, sizeof(second), "PWM:-- (OFF)");

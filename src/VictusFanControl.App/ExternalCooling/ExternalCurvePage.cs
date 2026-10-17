@@ -14,7 +14,7 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
     internal bool Busy {get;private set;}
     internal bool Dirty=>Draft!=_saved;
     internal int Preview {get;private set;}=50;
-    internal string Notice {get;private set;}="Configuración independiente del notebook · 18 Hz · salida lógica 30–255.";
+    internal string Notice {get;private set;}="Configuración independiente del notebook · 18 Hz · salida lógica 0–255.";
     internal string AppliedState
     {
         get
@@ -22,9 +22,12 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
             var d=diagnostics();
             if(d?.State!=ExternalCoolingConnectionState.Connected||d.LastValidReceivedUtc is not{} at||DateTimeOffset.UtcNow-at>TimeSpan.FromSeconds(3))return "Sin confirmación actual del ESP32";
             if(d.Device?.ExternalCurveVersion!=1)return "El dispositivo requiere firmware compatible con Curva Externa";
+            if(_saved.RequiresFullOutputRange&&!_saved.CanSendTo(d.Device))return "Actualiza el firmware ESP32 para usar salidas de 0 a 29";
             return d.Device.AppliedConfigRevision==_saved.Revision?"Configuración confirmada por el ESP32":"Guardada · esperando confirmación del ESP32";
         }
     }
+    internal IReadOnlyList<ExternalCurveMarker> Markers(DateTimeOffset now) =>
+        ExternalCurveMarkers.Build(Draft,_saved,diagnostics(),now);
     internal void EditNode(int index,double input,int output)
     {
         if(Busy||index<0||index>=Draft.Points.Length||!double.IsFinite(input))return;
@@ -32,7 +35,7 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
         var min=index==0?0:points[index-1].Input+1;var max=index==points.Length-1?100:points[index+1].Input-1;
         if(min>max)return;
         points[index]=new(index==0?0:index==points.Length-1?100:Math.Clamp((int)Math.Round(input),min,max),
-            Math.Clamp(output,index==0?30:points[index-1].Output,index==points.Length-1?255:points[index+1].Output));
+            Math.Clamp(output,index==0?0:points[index-1].Output,index==points.Length-1?255:points[index+1].Output));
         Draft=Draft with{Points=points};Selected=index;canvas.Invalidate();
     }
     internal int Value(string id)=>id switch
@@ -56,7 +59,7 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
     internal static (int Min,int Max) Range(string id)=>id switch
     {
         "rise" or "fall"=>(1,100),"filter"=>(0,10000),"hysteresis"=>(0,30),"hold"=>(0,30000),
-        "start"=>(0,3000),"start-output" or "manual"=>(30,255),_=>throw new ArgumentException("Ajuste desconocido.")
+        "start"=>(0,3000),"start-output" or "manual"=>(0,255),_=>throw new ArgumentException("Ajuste desconocido.")
     };
     internal string? EditNumeric(string id,string text)
     {
@@ -105,8 +108,8 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
             case "discard":Draft=_saved;Selected=0;Notice="Se recuperó la curva externa guardada.";break;
             case "x":case "y":case "minimum":case "maximum":
                 var value=id=="x"?Draft.Points[Selected].Input:id=="y"?Draft.Points[Selected].Output:id=="minimum"?Draft.RequestMinimum:Draft.RequestMaximum;
-                using(var dialog=new ProductNumericDialog(id=="x"?"Entrada del punto (%)":id=="y"?"Solicitud externa (30–255)":"Calibración de Solicitud del notebook",value,
-                    id=="y"?30:0,id=="y"?255:id=="x"?100:65535,text=>
+                using(var dialog=new ProductNumericDialog(id=="x"?"Entrada del punto (%)":id=="y"?"Solicitud externa (0–255)":"Calibración de Solicitud del notebook",value,
+                    0,id=="y"?255:id=="x"?100:65535,text=>
                     {
                         if(!int.TryParse(text,NumberStyles.None,CultureInfo.InvariantCulture,out var n))return "Introduce un entero.";
                         if(id is "minimum" or "maximum")
@@ -118,7 +121,7 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
                         {
                             var p=Draft.Points[Selected];
                             var arr=Draft.Points.ToArray();arr[Selected]=id=="x"?p with{Input=n}:p with{Output=n};
-                            var next=Draft with{Points=arr};try{next.Validate();Draft=next;}catch(ArgumentException){return "Conserva extremos, orden ascendente y salida 30–255.";}
+                            var next=Draft with{Points=arr};try{next.Validate();Draft=next;}catch(ArgumentException){return "Conserva extremos, orden ascendente y salida 0–255.";}
                         }
                         return null;
                     }))dialog.ShowDialog(canvas.FindForm());

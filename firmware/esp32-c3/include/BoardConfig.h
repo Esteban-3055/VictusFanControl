@@ -13,7 +13,7 @@ static_assert(PwmResolutionBits >= 1 && PwmResolutionBits <= 14,
               "ESP32-C3 supports LEDC resolutions from 1 to 14 bits.");
 
 // The configurable external curve, control policy and protocol keep 8-bit
-// logical outputs (30..255). Convert only the inverted ELECTRICAL duty
+// logical outputs (0..255). Convert only the inverted ELECTRICAL duty
 // to the full LEDC timer range, preserving 0%=0 and 100%=all counts.
 constexpr uint32_t LedcMaximumDuty = (1u << PwmResolutionBits) - 1u;
 constexpr uint32_t LedcDutyFrom8Bit(uint32_t duty8) {
