@@ -30,7 +30,9 @@ diagnósticos también podía abrir ese archivo sin compartir eliminación.
 
 La corrección evita una causa reproducible de bloqueo persistente durante la
 recuperación. No demuestra la causa de un watchdog anterior ni resuelve por sí
-sola un marcador ya incierto en una instalación abierta.
+sola un marcador ya incierto en una instalación abierta. La recuperación adicional
+con prueba de retorno en memoria y la opción manual se describen en
+[Recuperación forzosa de sesión](FORCED-SESSION-RECOVERY.md).
 
 ## Pruebas Windows sin hardware
 

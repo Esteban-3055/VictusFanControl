@@ -27,6 +27,7 @@ internal static partial class ProductGuiSelfTest
             TestHomeAnimationCadence(Require);
             VictusFanControl.Recovery.ProductRecoveryClientSelfTest.Run(Require);
             TestGuidedRecovery(Require);
+            TestForcedSessionRecovery(Require);
             ProductAutomaticRecoverySelfTest.Run(Require);
             TestBackgroundRecovery(Require);
             TestUpdatePage(Require);

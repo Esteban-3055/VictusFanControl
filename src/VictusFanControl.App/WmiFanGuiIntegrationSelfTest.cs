@@ -30,6 +30,28 @@ internal static class WmiFanGuiIntegrationSelfTest
             if (!paused) throw new IOException("Guardian stop allowed a new GUI native read.");
             File.Delete(WmiFanExperimentBoundary.StopPath);
 
+            // The live owner can prove return even when tracking cleanup failed.
+            // Drain that proof before the detached guardian observes stop.
+            var returnedMarker = Path.Combine(boundaryB, "native-inflight.json");
+            FileStream? trackingReader = null;
+            var trackingPending = false;
+            try
+            {
+                WmiFanExperimentBoundary.InvokeNative<object?>(Hp8C40BiosFanControl.BuildGetFanLevelRequest(), () =>
+                {
+                    trackingReader = new FileStream(returnedMarker, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    return null;
+                });
+            }
+            catch (WmiNativeTrackingCleanupPendingException) { trackingPending = true; }
+            finally { trackingReader?.Dispose(); }
+            if (!trackingPending) throw new IOException("Tracking fixture did not retain known-return evidence.");
+            WmiFanExperimentBoundary.PrepareGuiReleaseStop(boundaryB, TimeSpan.FromSeconds(1));
+            if (File.Exists(returnedMarker) || !File.Exists(Path.Combine(boundaryB, "stop.signal")))
+                throw new IOException("GUI release notified guardian before retiring its confirmed-return marker.");
+            WmiFanExperimentBoundary.RearmGuiAfterSuccessfulRelease(boundaryB, Path.Combine(boundaryRoot, "c"));
+            Console.WriteLine("PASS: owner-confirmed native return drains before guardian stop; fresh GUI boundary opens without Windows reboot (zero hardware IO).");
+
             var client = new WmiFanGuiGuardianClient(fixture: true);
             await client.StartAsync(default);
             client.EnsureAlive();

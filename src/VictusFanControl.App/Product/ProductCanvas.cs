@@ -513,13 +513,14 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Button(g,"discard","Descartar cambios",new(846,478,310,68),false,Dirty);
         Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,590,16,Dirty?Yellow:Green,475);
         Button(g,"profiles-import","Importar perfiles",new(846,555,310,40));Button(g,"profiles-export","Exportar perfiles",new(1176,555,442,40));
-        Card(g,new(310,623,1337,201));DrawText(g,"Registros y estado",334,647,28,null,1250,true);
+        Card(g,new(310,623,1337,222));DrawText(g,"Registros y estado",334,647,28,null,1250,true);
         DrawText(g,State.LifecycleBlocked?State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.":State.Failure??State.Message,334,704,21,State.LifecycleBlocked||State.Failure is not null?Yellow:Muted,880,height:57);
         if(State.LifecycleBlocked)Button(g,"interruption-details","Ver motivo completo",new(334,779,290,32));
         if(State.PerformanceRecovery is {Pending:true})Button(g,"recovery-run","Recuperar sesiones",new(681,779,337,32),true,State.PerformanceRecovery.Actionable);
         else Button(g,"session-restart","Reiniciar sesión",new(681,779,337,32),false,RestartAvailable);
         Button(g,"open-logs","Abrir carpeta de logs",new(1240,690,379,43));
         Button(g,"diagnostics-export","Exportar diagnóstico",new(1240,745,379,43));
+        Button(g,"session-force-recovery","Recuperación forzosa de sesión",new(1240,795,379,32),false,!State.AutomaticReview && !UpdateBusy);
         if(!State.LifecycleBlocked)DrawText(g,"Ventiladores "+State.FanAuthority+" · CPU "+State.CpuState+" · GPU "+State.GpuState,334,764,17,Muted,320,height:47);
     }
     private PointF Virtual(Point point)=>new((point.X-_offsetX)/_scale,(point.Y-_offsetY)/_scale);

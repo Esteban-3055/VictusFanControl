@@ -236,6 +236,7 @@ internal sealed partial class ProductForm : Form
             _startupAutomatic?.Cancel("Automático al iniciar cancelado por el usuario.");
         if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")_automaticResumption.Cancel();
         if(id=="session-restart"){_ = RestartSessionAsync();return;}
+        if(id=="session-force-recovery"){_ = ForceSessionRecoveryAsync();return;}
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
         if(HandleAdvancedCommand(id))return;

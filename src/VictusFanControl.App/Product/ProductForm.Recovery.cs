@@ -28,9 +28,9 @@ internal sealed partial class ProductForm
         catch (Exception ex) { _canvas.Notice = "No se pudo leer la recuperación: " + ex.Message; _canvas.Invalidate(); return Task.CompletedTask; }
     }
 
-    private async Task<bool> RecoverPerformanceCoreAsync(ProductRecoverySelection selected, ProductProfiles? automaticPreferences = null, bool resume = false, bool reopenRuntime = true)
+    private async Task<bool> RecoverPerformanceCoreAsync(ProductRecoverySelection selected, ProductProfiles? automaticPreferences = null, bool resume = false, bool reopenRuntime = true, bool forceSession = false)
     {
-        _automaticRecovery.RecordAttempt(new(true, "", selected.CpuSession == Guid.Empty ? null : selected.CpuSession,
+        if (!forceSession) _automaticRecovery.RecordAttempt(new(true, "", selected.CpuSession == Guid.Empty ? null : selected.CpuSession,
             selected.GpuSession == Guid.Empty ? null : selected.GpuSession, selected.Fans));
         _restarting = true; _restartLifecycleInterrupted = false; _canvas.Busy = true; _canvas.RestartAvailable = false;
         _presentationTimer.Stop(); _startupAutomatic?.Cancel("Recuperación explícita de CPU/GPU."); _startupAutomatic = null;
@@ -51,6 +51,8 @@ internal sealed partial class ProductForm
             if (_closing || _exitRequested) return false;
             if (_displayOff || _restartLifecycleInterrupted) throw new IOException("Recuperación cancelada por suspensión o pantalla apagada. No se abrió el recuperador.");
             var pending = await Task.Run(RecoverySelectionReader);
+            if (forceSession && pending.Pending)
+                throw new IOException("La sesión anterior cerró, pero quedan registros pendientes. Usa Recuperar sesiones para revisarlos; no se abrió otro controlador.");
             // A normal cleanup may have resolved these exact records already.
             if (pending.CpuSession != Guid.Empty && pending.CpuSession != selected.CpuSession ||
                 pending.GpuSession != Guid.Empty && pending.GpuSession != selected.GpuSession || !ProductRecoveryInventory.AllowsRemaining(selected.Fans,pending.Fans))
@@ -107,15 +109,15 @@ internal sealed partial class ProductForm
             DetachRuntime();
             try { await ShutdownRuntimeAsync(); controllerReleased = true; } catch (Exception release) { controllerReleased = false; AppLog.Write("Guided recovery cleanup retained: " + release); }
             _runtime = null;
-            var recoveryPreview = _isolatedRuntime ? before.PerformanceRecovery : await Task.Run(() => PerformanceRecoveryPreview.Read());
+            var recoveryPreview = _isolatedRuntime ? before.PerformanceRecovery : await Task.Run(() => PerformanceRecoveryPreview.Read(ignoreCurrentOwner: !forceSession));
             await RecoveryUiAsync(() =>
             {
                 if (unattended) { _automaticResumption.Cancel(); NotifyRecoveryFailure("No se pudo recuperar la sesión. " + ex.Message); }
                 _canvas.AutomaticRetryAvailable = false; _canvas.RestartAvailable = true;
                 var preview = recoveryPreview;
                 _canvas.State = before with { LifecycleBlocked = true, Runtime = "Failed", Failure = "Recuperación no completada: " + ex.Message,
-                    PerformanceRecovery = preview, FanMode = preview?.FanRecords?.Count > 0 ? "RecoveryRequired" : controllerReleased ? "Firmware" : before.FanMode,
-                    FanAuthority = preview?.FanRecords?.Count > 0 ? "Unknown" : controllerReleased ? "Firmware" : before.FanAuthority,
+                    PerformanceRecovery = preview, FanMode = preview?.FanRecords?.Count > 0 ? "RecoveryRequired" : controllerReleased ? "Firmware" : forceSession ? "RecoveryRequired" : before.FanMode,
+                    FanAuthority = preview?.FanRecords?.Count > 0 ? "Unknown" : controllerReleased ? "Firmware" : forceSession ? "Unknown" : before.FanAuthority,
                     CpuState = preview?.CpuSession.HasValue == true ? "Recovering" : controllerReleased && preview?.Pending != true ? "Disabled" : "Failed",
                     GpuState = preview?.GpuSession.HasValue == true ? "Recovering" : controllerReleased && preview?.Pending != true ? "Disabled" : "Failed",
                     GuardianState = preview?.Pending == true ? "Recuperación pendiente" : "Sin sesión",
