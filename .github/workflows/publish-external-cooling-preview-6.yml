@@ -19,13 +19,13 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      SOURCE_SHA: f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+      SOURCE_SHA: 4d9b74cf7553cf6c1e213785c0d2b42d54675813
       PREVIEW_TAG: v1.2.14
-      BUILD_RUN: 39004825342
+      BUILD_RUN: 39005199421
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+          ref: 4d9b74cf7553cf6c1e213785c0d2b42d54675813
           fetch-depth: 0
           persist-credentials: false
       - name: Wait for exact-source software checks before preparing public assets
@@ -81,22 +81,22 @@ jobs:
           PY
       - uses: actions/download-artifact@v4
         with:
-          name: VictusFanControl-1.2.14-win-x64-f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+          name: VictusFanControl-1.2.14-win-x64-4d9b74cf7553cf6c1e213785c0d2b42d54675813
           path: verified-payload
           github-token: ${{ github.token }}
-          run-id: 39004825342
+          run-id: 39005199421
       - uses: actions/download-artifact@v4
         with:
-          name: VictusFanControl-1.2.14-Setup-win-x64-f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+          name: VictusFanControl-1.2.14-Setup-win-x64-4d9b74cf7553cf6c1e213785c0d2b42d54675813
           path: installer-assets
           github-token: ${{ github.token }}
-          run-id: 39004825342
+          run-id: 39005199421
       - uses: actions/download-artifact@v4
         with:
-          name: external-cooling-validation-f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+          name: external-cooling-validation-4d9b74cf7553cf6c1e213785c0d2b42d54675813
           path: validation-evidence
           github-token: ${{ github.token }}
-          run-id: 39004825323
+          run-id: 39005199515
       - name: Verify original product archive, installer and 19 exact-commit fixtures
         shell: bash
         run: |
@@ -128,7 +128,7 @@ jobs:
           cp docs/EXTERNAL-CURVE-ZERO-OUTPUT.md docs/NVML-CRASH-AND-BATTERY-RECOVERY.md docs/UNATTENDED-RECOVERY.md docs/EXTERNAL-CURVE-PROTOCOL.md docs/ESP32-WORK04-AUDIT.md release-assets/
           cp firmware/esp32-c3/README.md release-assets/FIRMWARE-INSTALL.md
           cp firmware/esp32-c3/VALIDACIONES.md release-assets/FIRMWARE-VALIDACIONES.md
-          git archive --format=zip --prefix=VictusBase-v1.2.14/ --output=release-assets/VictusBase-ESP32C3-v1.2.14-source.zip "$SOURCE_SHA" firmware/esp32-c3 docs/EXTERNAL-COOLING-PROTOCOL.md docs/EXTERNAL-COOLING-V1-VECTORS.json docs/EXTERNAL-CURVE-PROTOCOL.md
+          git archive --format=zip --prefix=VictusBase-v1.2.14/ --output=release-assets/VictusBase-ESP32C3-v1.2.14-source.zip "$SOURCE_SHA" firmware/esp32-c3 docs/EXTERNAL-COOLING-PROTOCOL.md docs/EXTERNAL-COOLING-V1-VECTORS.json docs/EXTERNAL-CURVE-PROTOCOL.md docs/EXTERNAL-CURVE-ZERO-OUTPUT.md docs/ESP32-WORK04-AUDIT.md
           test -z "$(git ls-files '*/config.local.h')"
           python firmware/esp32-c3/tools/export_arduino.py "$RUNNER_TEMP/arduino-sketch"
           (cd "$RUNNER_TEMP/arduino-sketch" && zip -r "$GITHUB_WORKSPACE/release-assets/VictusBase-ESP32C3-v1.2.14-Arduino-sketch.zip" VictusBaseESP32C3)
@@ -142,7 +142,7 @@ jobs:
           (root/(simulator.name+'.sha256')).write_text(hashlib.sha256(simulator.read_bytes()).hexdigest()+'  '+simulator.name+'\n')
           manifest=json.loads(Path('verified-payload/PRODUCT-GUI-MANIFEST.json').read_text(encoding='utf-8-sig'))
           assert manifest['version']=='1.2.14' and manifest['releaseChannel']=='preview'
-          record=dict(tag=os.environ['PREVIEW_TAG'],version='1.2.14',prerelease=True,sourceHead=os.environ['SOURCE_SHA'],buildRunId=int(os.environ['BUILD_RUN']),externalCoolingRunId=39004825323,firmwareRunId=39004825351,
+          record=dict(tag=os.environ['PREVIEW_TAG'],version='1.2.14',prerelease=True,sourceHead=os.environ['SOURCE_SHA'],buildRunId=int(os.environ['BUILD_RUN']),externalCoolingRunId=39005199515,firmwareRunId=39005199357,
               physicalEsp32Pass=False,physicalNotebookWrites=False,stableReleasePreserved='v1.2.9',updater129RequiresPreviewOptIn=True,
               assets={p.name:dict(size=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in root.iterdir() if p.is_file()})
           (root/'PREVIEW-PROVENANCE.json').write_text(json.dumps(record,indent=2)+'\n')
@@ -203,12 +203,12 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      SOURCE_SHA: f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+      SOURCE_SHA: 4d9b74cf7553cf6c1e213785c0d2b42d54675813
       PREVIEW_TAG: v1.2.14
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+          ref: 4d9b74cf7553cf6c1e213785c0d2b42d54675813
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
