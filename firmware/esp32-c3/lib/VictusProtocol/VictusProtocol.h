@@ -20,6 +20,9 @@ bool equalProof(const std::string&, const std::string&);
 bool validateJson(const std::string& line, std::string& rawPayload);
 struct Measurement {
     double cpu = -1, gpu = -1, ram = -1, demand = -1;
+    // Signed, validated telemetry from Windows, nullable when not available.
+    // Never substitute 0 C for unavailable or expired thermal samples.
+    double cpuTempC = NAN, gpuTempC = NAN;
     int request = -1;
     bool valid = false;
     std::string source = "Unknown";
