@@ -39,7 +39,8 @@ int controllerTests() {
     require(std::strstr(top,"CPU:--C") && std::strstr(top,"GPU:--C"),"LCD no stale telemetry");
     screen.ambientC=NAN;
     victus::renderLcd(LcdPage::FanStatus,screen,0,top,bottom);
-    require(std::strstr(top,"NTC Fault") && std::strstr(bottom,"REMOTE WIFI"),"LCD true sensor faults");
+    require(std::strstr(top,"NTC Fault") && std::strstr(bottom,"SENSOR INVALIDO") &&
+            !std::strstr(bottom,"REMOTE"),"LCD fault never claims stale remote state");
     // Regression: 18 Hz with 8-bit LEDC caused ledcAttach() to fail and
     // abort() before Wi-Fi/TCP could start. ESP32-C3 requires 14-bit timing.
     require(board::PwmFrequencyHz==18&&board::PwmResolutionBits==14,"18 Hz / 14-bit LEDC profile");
