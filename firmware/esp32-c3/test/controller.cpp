@@ -1,5 +1,6 @@
 #include "ExternalController.h"
 #include "../include/BoardConfig.h"
+#include "../include/LcdPresentation.h"
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -8,6 +9,37 @@ void require(bool b,const char* s){if(!b)throw std::runtime_error(s);}
 victus::ExternalConfig config(){victus::ExternalConfig c;std::strcpy(c.revision,"0123456789abcdef0123456789abcdef");return c;}
 }
 int controllerTests() {
+    // 16x2 display must cycle even when telemetry is absent. Temperatures
+    // occupy 30 seconds exactly and no stale Windows data is presented.
+    using victus::LcdPage;
+    require(victus::LcdCycleMs==45000,"LCD cycle 5+5+5+30 seconds");
+    require(victus::lcdPage(0)==LcdPage::CpuGpu && victus::lcdPage(4999)==LcdPage::CpuGpu,"LCD CPU/GPU first five seconds");
+    require(victus::lcdPage(5000)==LcdPage::RamDemand && victus::lcdPage(9999)==LcdPage::RamDemand,"LCD RAM/DEMANDA page");
+    require(victus::lcdPage(10000)==LcdPage::FanStatus && victus::lcdPage(14999)==LcdPage::FanStatus,"LCD PWM status page");
+    require(victus::lcdPage(15000)==LcdPage::Temperatures && victus::lcdPage(44999)==LcdPage::Temperatures,"LCD temperature exactly 30 seconds");
+    require(victus::lcdPage(45000)==LcdPage::CpuGpu,"LCD cycle returns to first page");
+    require(victus::lcdTemperatureRemaining(15000)==30000 && victus::lcdTemperatureRemaining(44999)==1,
+            "temperature time-to-next-page");
+    victus::LcdReadings screen{};
+    screen.telemetryFresh=true;screen.cpuPct=100;screen.gpuPct=0;screen.ramPct=65;screen.demandPct=42;
+    screen.cpuTempC=130;screen.gpuTempC=120;screen.ambientC=21.2;
+    screen.pwmEnabled=true;screen.remote=true;screen.wifi=true;screen.pwmDuty=96;
+    char top[17]{},bottom[17]{};
+    victus::renderLcd(LcdPage::CpuGpu,screen,0,top,bottom);
+    require(std::strlen(top)==16 && std::strstr(top,"100%") && std::strstr(bottom,"GPU:"),"LCD load formatting");
+    victus::renderLcd(LcdPage::RamDemand,screen,0,top,bottom);
+    require(std::strstr(bottom,"DEMANDA: 42%"),"LCD full demand label");
+    victus::renderLcd(LcdPage::FanStatus,screen,0,top,bottom);
+    require(std::strstr(top,"21.2") && std::strstr(bottom,"REMOTE WIFI"),"LCD ambient/PWM status");
+    victus::renderLcd(LcdPage::Temperatures,screen,30000,top,bottom);
+    require(std::strlen(top)==16 && std::strstr(top,"CPU:130C") &&
+            std::strstr(top,"GPU:120C") && std::strstr(bottom,"30s"),"LCD thermal formatting");
+    screen.telemetryFresh=false;
+    victus::renderLcd(LcdPage::Temperatures,screen,1000,top,bottom);
+    require(std::strstr(top,"CPU:--C") && std::strstr(top,"GPU:--C"),"LCD no stale telemetry");
+    screen.ambientC=NAN;
+    victus::renderLcd(LcdPage::FanStatus,screen,0,top,bottom);
+    require(std::strstr(top,"NTC Fault") && std::strstr(bottom,"REMOTE WIFI"),"LCD true sensor faults");
     // Regression: 18 Hz with 8-bit LEDC caused ledcAttach() to fail and
     // abort() before Wi-Fi/TCP could start. ESP32-C3 requires 14-bit timing.
     require(board::PwmFrequencyHz==18&&board::PwmResolutionBits==14,"18 Hz / 14-bit LEDC profile");
