@@ -10,7 +10,7 @@ placa ni validado físicamente su LCD, NTC, PWM o etapa de potencia**.
 
 | Función | GPIO | Configuración |
 |---|---:|---|
-| PWM invertido | 3 | 18 kHz, 8 bits, salida lógica 30–255 |
+| PWM invertido | 3 | **18 Hz**, temporizador LEDC **14 bits**, salida lógica 30–255 |
 | LCD SDA | 6 | PCF8574: 0x20–0x27 o 0x38–0x3F, detección automática |
 | LCD SCL | 7 | LCD1602, P0=RS/P1=RW/P2=EN/P3=luz/P4..7=datos |
 | NTC ambiente | 0 | 10 kΩ, B3950; resistencia fija 10 kΩ |
@@ -23,13 +23,17 @@ Cambiar valores físicos en `include/BoardConfig.h` si la NTC real difiere.
 Se mantiene la etapa del paquete: GPIO3 → 220 Ω → gate 2N7000; gate con pull-down
 100 kΩ; source a GND; drain a base BC337; resistencia de base a +5 V; emisor a GND,
 colector al negativo del ventilador, positivo del ventilador a +5 V.
-HIGH en GPIO3 apaga BC337: **duty eléctrico = 255 − salida lógica**.
-Así, solicitud externa 30 produce 225 en LEDC, y 255 produce 0.
+HIGH en GPIO3 apaga BC337: **duty eléctrico de 8 bits = 255 − salida lógica**.
+Se escala ese duty eléctrico al rango LEDC de 14 bits mediante
+`round(duty8 * 16383 / 255)`. Así, una salida lógica de 30 produce
+225 en escala eléctrica de 8 bits y **14456 en LEDC**; una salida lógica
+de 255 produce **0 en LEDC**. La Curva Externa de Windows y el protocolo
+siguen trabajando con salidas **30–255**. No se reinterpretan como 14 bits.
 No conectar el motor a un GPIO. GPIO flotante/reset con ese pull-down puede
 significar **ventilación máxima**, también con firmware de monitorización.
 
 El usuario informa ~500 mA de marcha y ~700 mA de arranque. Quedan sin medir el
-margen del BC337, saturación, temperatura, conmutación a 18 kHz y transitorios.
+margen del BC337, saturación, temperatura, conmutación a 18 Hz y transitorios.
 La resistencia de base del circuito inicial también necesita revisar disipación;
 el paquete propone dos de 47 Ω en serie o resistencia con potencia suficiente.
 Estas conexiones conservadas no constituyen aprobación eléctrica del circuito.
@@ -141,6 +145,24 @@ Contratos: [v1](../../docs/EXTERNAL-COOLING-PROTOCOL.md) y
 [extensión Curva Externa](../../docs/EXTERNAL-CURVE-PROTOCOL.md).
 [Auditoría y comparación con Work 0.4](../../docs/ESP32-WORK04-AUDIT.md).
 
+## Corrección LEDC 18 Hz / 14 bits (2026-10-16)
+
+Tras seleccionar 18 Hz y mantener por error 8 bits, el usuario observó al
+arrancar: `ledc: requested frequency 18 and duty resolution 8 can not be achieved`.
+La inicialización fallaba y el `abort()` impedía que arrancaran Wi-Fi y TCP;
+el fallo no era de clave Base64 ni del router. Se corrigió
+`include/BoardConfig.h` a **18 Hz / 14 bits** y la salida de
+`src/main.cpp` en ambos caminos Arduino 2.x y 3.x: `ledcWrite()`
+recibe el duty eléctrico invertido convertido de 0–255 a 0–16383.
+El sketch exportado se genera desde esas mismas fuentes. El perfil
+no modifica las curvas ni la lógica de seguridad del notebook.
+
+La documentación de Arduino-ESP32 para ESP32-C3 admite 1–14 bits de
+resolución LEDC. La combinación 18 Hz / 14 bits y la señal física aún
+requieren comprobación en la placa: el test de conversión y la compilación
+no sustituyen medición con osciloscopio. Con PWM deshabilitado no debe
+asumirse que el motor se detiene, debido a la inversión 2N7000 → BC337.
+
 ## Validación pendiente de banco
 
 La prueba C++ ejecuta el mismo parser, autenticación y controlador que la placa,
@@ -150,7 +172,7 @@ Los resultados de software y las limitaciones constan en
 [VALIDACIONES](VALIDACIONES.md). El código anterior de tres NTC no estaba en el
 ZIP: se adaptó un perfil autorizado, no se afirma recuperar sus constantes exactas.
 
-Antes de activar motor: medir 18 kHz e inversión para salidas 30/64/128/192/255,
+Antes de activar motor: medir 18 Hz e inversión para salidas 30/64/128/192/255,
 arranque, corriente, temperatura del BC337/2N7000/resistencias, LCD con niveles
 correctos, NTC con termómetro/abierto/corto, Wi-Fi ausente y reinicios, retirada de
 Windows, silencio y retorno Local tras 2000 ms + periodo de tarea. Sin tacómetro,
