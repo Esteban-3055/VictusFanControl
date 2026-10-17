@@ -25,6 +25,11 @@ jobs:
       - name: Restore
         run: dotnet restore VictusFanControl.sln
 
+      - name: Original 1.2.9 updater preview compatibility (no installation)
+        shell: pwsh
+        run: ./scripts/test-updater-129-compatibility.ps1
+
+
       # Hosted runners can spend more than five seconds initializing CIM's
       # service provider. Warm only this read-only inventory query; the actual
       # isolation guards keep their existing five-second fail-closed deadline.
@@ -621,9 +626,6 @@ jobs:
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
-      - name: Original 1.2.9 updater preview compatibility (no installation)
-        shell: pwsh
-        run: ./scripts/test-updater-129-compatibility.ps1
 
       - name: HP 8C40 P14.2 build and verify win-x64 publish layout
         shell: pwsh

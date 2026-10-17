@@ -12,12 +12,13 @@ string Release(string tag,bool preview,bool draft=false)=>JsonSerializer.Seriali
 });
 var metadata="["+Release("v1.2.14",true)+"]";
 if(ProductUpdates.ParseReleases(metadata,current) is not null)throw new Exception("Stable channel admitted preview.");
-if(ProductUpdates.ParseReleases(metadata,current,true) is not {Version:var version,IsPrerelease:true}||version!=new Version(1,2,13))throw new Exception("1.2.9 cannot discover numeric preview.");
+if(ProductUpdates.ParseReleases(metadata,current,true) is not {Version:var version,IsPrerelease:true}||version!=new Version(1,2,14))throw new Exception("1.2.9 cannot discover numeric preview.");
 if(ProductUpdates.ParseReleases("["+Release("v1.2.14-preview.6",true)+"]",current,true) is not null)throw new Exception("Baseline tag filter changed.");
 if(ProductUpdates.ParseReleases("["+Release("v1.2.14",true,true)+"]",current,true) is not null)throw new Exception("Draft became eligible.");
-if(ProductUpdates.ParseReleases(metadata,new Version(1,2,10),true)?.Version!=new Version(1,2,13))throw new Exception("1.2.10 cannot discover the next preview.");
-if(ProductUpdates.ParseReleases(metadata,new Version(1,2,11),true)?.Version!=new Version(1,2,13))throw new Exception("1.2.11 cannot discover the next preview.");
-if(ProductUpdates.ParseReleases(metadata,new Version(1,2,12),true)?.Version!=new Version(1,2,13))throw new Exception("1.2.12 cannot discover the next preview.");
+if(ProductUpdates.ParseReleases(metadata,new Version(1,2,10),true)?.Version!=new Version(1,2,14))throw new Exception("1.2.10 cannot discover the next preview.");
+if(ProductUpdates.ParseReleases(metadata,new Version(1,2,11),true)?.Version!=new Version(1,2,14))throw new Exception("1.2.11 cannot discover the next preview.");
+if(ProductUpdates.ParseReleases(metadata,new Version(1,2,12),true)?.Version!=new Version(1,2,14))throw new Exception("1.2.12 cannot discover the next preview.");
+if(ProductUpdates.ParseReleases(metadata,new Version(1,2,13),true)?.Version!=new Version(1,2,14))throw new Exception("1.2.13 cannot discover the next preview.");
 Console.WriteLine("PASS original 1.2.9 updater: numeric v1.2.14 preview accepted with opt-in; stable channel, draft and suffix-tag fences preserved.");
 if(args.Length==2&&args[0]=="--live")
 {
