@@ -36,6 +36,14 @@ La prueba GUI general necesitó actualizar su lista esperada de navegación para
 incluir Curva Externa; después pasó. No se cambiaron las implementaciones de
 Control, Safety, Performance ni Runtime del notebook respecto a la base.
 
+Otra ejecución CI encontró un timeout al cerrar el fixture de configuración
+corrupta después del ensayo gráfico de Curva Externa. El ensayo nuevo se ejecuta
+ahora en un proceso WinForms propio, separado del de red/ciclo de vida. Ambos
+pasaron por separado sin ampliar los plazos ni cambiar el cierre del programa.
+La validación de curvas en C# exige los mismos campos que C++; una configuración
+inválida o una revisión reutilizada termina solo su conexión y el simulador
+continúa aceptando sesiones. Esto también se verifica por TCP real.
+
 En el ensayo local de recursos TCP de 10 s no hubo acumulación de mensajes;
 las cifras medidas están en el informe de pruebas de ExternalCooling. La RAM
 estática/flash del firmware se informan al compilar; no son una medición de

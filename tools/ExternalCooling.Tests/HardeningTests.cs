@@ -121,6 +121,28 @@ internal static partial class Program
                 await wire.WriteAsync(f,cancel.Token);await wire.ReadAsync(cancel.Token);
                 await wire.WriteAsync(f,cancel.Token);await Until(()=>Volatile.Read(ref errors)>=3);
             }
+            using(var tcp=new TcpClient())
+            {
+                await tcp.ConnectAsync(IPAddress.Loopback,port,cancel.Token);
+                await using var wire=new FramedConnection(tcp.GetStream());
+                using var auth=await AuthenticatedSession.ClientAsync(wire,key,cancel.Token);
+                var valid=new Source().Capture(DateTimeOffset.UtcNow).WithoutRequest() with{ExternalConfiguration=new()};
+                await wire.WriteAsync(ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("telemetry",auth.Id,1,valid),auth.SendKey),cancel.Token);
+                await wire.ReadAsync(cancel.Token);
+                var reused=valid with{ExternalConfiguration=new(){Rise=13}};
+                await wire.WriteAsync(ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("telemetry",auth.Id,2,reused),auth.SendKey),cancel.Token);
+                await Until(()=>Volatile.Read(ref errors)>=4);
+            }
+            using(var tcp=new TcpClient())
+            {
+                await tcp.ConnectAsync(IPAddress.Loopback,port,cancel.Token);
+                await using var wire=new FramedConnection(tcp.GetStream());
+                using var auth=await AuthenticatedSession.ClientAsync(wire,key,cancel.Token);
+                var bad=new Source().Capture(DateTimeOffset.UtcNow).WithoutRequest() with{ExternalConfiguration=new(){Rise=0}};
+                var f=ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("telemetry",auth.Id,1,bad),auth.SendKey);
+                await wire.WriteAsync(f,cancel.Token);await Until(()=>Volatile.Read(ref errors)>=5);
+                Require(!server.IsCompleted,"Malformed curve terminated the production simulator server.");
+            }
             await using(var manager=new ExternalCoolingManager(new Source(),()=>key.ToArray()))
             {
                 await manager.ConfigureAsync(new(){Mode=ExternalCoolingMode.MonitorAndRequest,UseSimulator=true,Port=port});

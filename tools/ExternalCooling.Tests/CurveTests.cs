@@ -15,6 +15,15 @@ internal static partial class Program
         var t=new ExportTelemetry{CapturedAtUtc=DateTimeOffset.UtcNow,ExternalConfiguration=c};
         var f=ExternalCoolingProtocol.Create("telemetry",Guid.NewGuid().ToString("N"),1,t);
         Require(ExternalCoolingProtocol.Encode(f).Length<4096&&ExternalCoolingProtocol.Telemetry(f).ExternalConfiguration==c,"External config changed on wire.");
+        foreach(var key in new[]{"schemaVersion","revision","points","input","requestMinimum","requestMaximum","manualOutput","rise","fall","filterMs","hysteresis","downHoldMs","startMs","startOutput"})
+        {
+            var payload=System.Text.Json.Nodes.JsonNode.Parse(f.Payload.GetRawText())!;
+            payload["externalConfiguration"]!.AsObject().Remove(key);
+            Reject(()=>ExternalCoolingProtocol.Telemetry(f with{Payload=JsonSerializer.SerializeToElement(payload)}),"Missing required config field accepted: "+key);
+        }
+        var invalid=f with{Payload=JsonSerializer.SerializeToElement(t with{ExternalConfiguration=c with{Rise=0}},ExternalCoolingProtocol.Json)};
+        try{ExternalCoolingProtocol.Telemetry(invalid);throw new InvalidOperationException("Invalid config admitted");}
+        catch(InvalidDataException){} // Network decoders must reject without escaping the production server loop.
         var max=c with{Points=Enumerable.Range(0,16).Select(i=>new ExternalCurvePoint(i==15?100:i*6,30+i*15)).ToArray()};max.Validate();
         Require(ExternalCoolingProtocol.Encode(ExternalCoolingProtocol.Create("telemetry",f.SessionId,1,t with{ExternalConfiguration=max})).Length<4096,"Maximum external curve exceeds frame limit.");
         Console.WriteLine("PASS external curve schema/ranges, legacy settings, value equality and bounded wire size.");

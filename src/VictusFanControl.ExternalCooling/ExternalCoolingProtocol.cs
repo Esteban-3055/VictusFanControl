@@ -103,12 +103,23 @@ public static class ExternalCoolingProtocol
     public static ExportTelemetry Telemetry(ProtocolFrame frame)
     {
         if(frame.Type!="telemetry")throw new InvalidDataException("Expected telemetry.");
+        if(frame.Payload.TryGetProperty("externalConfiguration",out var config)&&config.ValueKind!=JsonValueKind.Null)
+        {
+            if(config.ValueKind!=JsonValueKind.Object)throw new InvalidDataException("Invalid external configuration object.");
+            foreach(var key in new[]{"schemaVersion","revision","points","input","requestMinimum","requestMaximum","manualOutput","rise","fall","filterMs","hysteresis","downHoldMs","startMs","startOutput"})
+                if(!config.TryGetProperty(key,out _))throw new InvalidDataException("Missing external configuration field.");
+            if(config.GetProperty("points").ValueKind!=JsonValueKind.Array)throw new InvalidDataException("Invalid external points.");
+            foreach(var point in config.GetProperty("points").EnumerateArray())
+                if(point.ValueKind!=JsonValueKind.Object||!point.TryGetProperty("input",out _)||!point.TryGetProperty("output",out _))
+                    throw new InvalidDataException("Missing external point field.");
+        }
         foreach(var key in new[]{"validForMs","replyToDeviceSequence","capturedAtUtc","sampledAtUtc","decisionAtUtc","cpuUsagePct","gpuUsagePct","ramUsagePct","demandaPct",
             "solicitud","solicitudValida","modoSolicitado","modoEfectivo","cpuTempC","gpuTempC","powerSource","requestEvidence",
             "cpuTargetLevel","gpuTargetLevel","cpuTempSampledAtUtc","gpuTempSampledAtUtc","ramSampledAtUtc"})
             if(!frame.Payload.TryGetProperty(key,out _))throw new InvalidDataException("Missing telemetry field.");
         var t=Payload<ExportTelemetry>(frame);
-        t.ExternalConfiguration?.Validate();
+        try{t.ExternalConfiguration?.Validate();}
+        catch(ArgumentException ex){throw new InvalidDataException("Invalid external configuration.",ex);}
         if(t.ValidForMs!=RequestValidForMilliseconds||t.CapturedAtUtc==default||t.ModoSolicitado is not("Firmware" or "Manual" or "Automatic")||
             t.ModoEfectivo is not("Firmware" or "Manual" or "Automatic" or "Transition" or "Interrupted" or "Unavailable")||
             t.PowerSource is not("AC" or "Battery" or "Unknown")||t.RequestEvidence is not("Unavailable" or "MonitorOnly" or "AwaitingDevice" or "WmiAcceptedSupervised"))

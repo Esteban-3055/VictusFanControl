@@ -13,7 +13,6 @@ internal static partial class ProductGuiSelfTest
     {
         try
         {
-            TestExternalCurve();
             var root=Path.GetFullPath("logs/external-cooling-self-test");Directory.CreateDirectory(root);
             var corruptPath=Path.Combine(root,"corrupt-"+Guid.NewGuid().ToString("N")+".json");
             File.WriteAllText(corruptPath,"{invalid");

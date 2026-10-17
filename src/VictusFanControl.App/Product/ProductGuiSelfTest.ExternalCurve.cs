@@ -3,6 +3,13 @@ using VictusFanControl.Product;
 namespace VictusFanControl.App;
 internal static partial class ProductGuiSelfTest
 {
+    // Own process/context: rendering and closing this fixture must not change the message pump
+    // used by the separate network suspend/resume fixtures.
+    internal static int RunExternalCurveChecks()
+    {
+        try{TestExternalCurve();return 0;}
+        catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
+    }
     private static void TestExternalCurve()
     {
         static void Require(bool ok,string message)=>ExternalCoolingSelfTest.Require(ok,message);
