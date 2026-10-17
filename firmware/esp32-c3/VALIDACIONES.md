@@ -80,6 +80,25 @@ pero la causa de `NTC Fault` no podrá conocerse hasta observar RAW/mV
 del dispositivo. Falta comprobar en hardware y validar Arduino/PlatformIO
 en el SHA posterior a este cambio.
 
+## Pantalla LCD 16x2 / telemetría (2026-10-16)
+
+La nueva vista conserva medidas firmadas de CPU/GPU, RAM, Demanda y añade las
+temperaturas CPU/GPU recibidas del payload TCP sin modificar el protocolo.
+Dos pantallas de carga (5 s cada una), estado ambiente/PWM (5 s) y una
+pantalla térmica de **30 s** se suceden en ciclos de 45 s. Se muestra `--`
+ante campos nulos, datos caducados o ausencia de conexión autenticada.
+La presentación quedó aislada en `include/LcdPresentation.h` y está cubierta
+por pruebas nativas C++ de límites de páginas, 16 columnas, valores extremos,
+datos ausentes y temperatura ambiental.
+
+Ante el reporte de `NTC Fault` en el LCD pese a muestra NTC válida
+(`raw=2439`, `1792 mV`, `21.2 C`), se añadieron contadores de lectura
+válida/inválida en `ntc` y el comando `lcd` con errores I²C y antigüedad
+de la última escritura terminada. Una pantalla puede retener texto viejo si
+I²C falla. No se afirma que ésa sea la causa sin observar ambos comandos.
+No se alteró el rechazo de NTC inválida ni la ventilación máxima de respaldo.
+Quedan pendientes compilación de nuevo SHA y verificación física de LCD/NTC.
+
 ## Estado físico
 
 Solo se conserva como antecedente **informado por el usuario** que Wi-Fi a
