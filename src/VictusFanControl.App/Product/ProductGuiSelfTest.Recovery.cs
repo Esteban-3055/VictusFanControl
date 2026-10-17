@@ -23,7 +23,7 @@ internal static partial class ProductGuiSelfTest
                 require(blockedFactoryCalls==0&&blocked.Canvas.State.Runtime=="RecoveryRequired"&&blocked.Canvas.State.LifecycleBlocked,"Fan pending startup opened controller/telemetry.");
                 require(blocked.Canvas.State.FanMode=="RecoveryRequired"&&blocked.Canvas.State.FanAuthority=="Unknown","Pending startup claimed restored Firmware ownership.");
                 using var bitmap=new Bitmap(blocked.Canvas.Width,blocked.Canvas.Height);blocked.Canvas.DrawToBitmap(bitmap,new(Point.Empty,bitmap.Size));
-                require(blocked.Canvas.Hits.Any(x=>x.Id=="recovery-run"&&x.Enabled),"Fan-only startup recovery has no actionable button.");
+                require(blocked.Canvas.Hits.Any(x=>x.Id=="session-force-recovery"&&x.Enabled),"Fan-only startup recovery has no definitive recovery button.");
                 var exit=blocked.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Pending startup exit hung.");
             }
             var fanPending=new ProductRecoverySelection(Guid.Empty,Guid.Empty,fanRecords);int fanRuns=0;

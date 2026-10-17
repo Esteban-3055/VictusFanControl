@@ -170,7 +170,7 @@ internal static partial class ProductGuiSelfTest
             var beforeFanRecovery=canvas.State;
             canvas.State=canvas.State with{Runtime="RecoveryRequired",LifecycleBlocked=true,FanMode="RecoveryRequired",FanAuthority="Unknown",CpuState="Disabled",GpuState="Disabled",PerformanceActive=false,AppliedPerformance=null,CanApplyPerformance=false,
                 GuardianState="Recuperación pendiente",PerformanceRecovery=new(true,"Sesión de ventiladores pendiente",FanRecords:new[]{new VictusFanControl.Recovery.ProductRecoveryRecord("WmiFanGui/lease.json","FanGui",new string('a',64))})};
-            canvas.Size=new(1040,660);canvas.Page=ProductPage.Settings;Render("recovery-fan-only-settings-minimum");Require(canvas.Hits.Any(h=>h.Id=="recovery-run"&&h.Enabled),"Fan-only pending lacks recovery action.");
+            canvas.Size=new(1040,660);canvas.Page=ProductPage.Settings;Render("recovery-fan-only-settings-minimum");Require(canvas.Hits.Any(h=>h.Id=="session-force-recovery"&&h.Enabled),"Fan-only pending lacks definitive recovery action.");
             canvas.Page=ProductPage.Performance;canvas.PerformanceTab=3;Render("recovery-fan-only-guardian-minimum");canvas.State=beforeFanRecovery;canvas.Size=new(1672,941);
             canvas.Page=ProductPage.Fans;for(int i=1;i<=2;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
             Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
