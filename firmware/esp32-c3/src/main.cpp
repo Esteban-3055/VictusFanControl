@@ -42,6 +42,14 @@ std::atomic<int> externalRequest{255};
 portMUX_TYPE configLock=portMUX_INITIALIZER_UNLOCKED;
 char appliedRevision[33]{};
 victus::AmbientFilter ambientFilter;
+// Last ADC read is owned by loop()/serialInput(); only the filtered
+// ambient measurement crosses to the independent FreeRTOS control task.
+struct NtcDiagnostic {
+    unsigned raw = 0, millivolts = 0;
+    double unfilteredC = NAN;
+    uint32_t sampledAt = 0;
+    const char* reason = "NO_SAMPLE";
+} ntcDiagnostic;
 struct Command { bool valid; int request; uint32_t at; double demand=-1; bool manual=false,hasConfig=false; victus::ExternalConfig config; };
 QueueHandle_t commands;
 String ssid,password;
@@ -158,10 +166,53 @@ void readAmbient() {
     unsigned raw=0,mv=0;
     for (int i=0;i<8;++i) { raw+=analogRead(board::NtcPin);mv+=analogReadMilliVolts(board::NtcPin); }
     raw/=8;mv/=8;
-    if (raw<8 || raw>4087 || mv<20 || mv>2450) { ambient.store(ambientFilter.update(NAN));ambientAt.store(millis());return; }
-    double resistance=board::FixedResistorOhms*mv/(board::SupplyMilliVolts-mv);
-    double kelvin=1.0/(1.0/298.15+log(resistance/board::NtcNominalOhms)/board::NtcBeta);
-    double c=kelvin-273.15; ambient.store(ambientFilter.update(c));ambientAt.store(millis());
+
+    // Preserve the existing fail-safe limits until the actual ADC values
+    // have been measured on the ESP32-C3. Expose individual rejection reasons.
+    ntcDiagnostic.raw=raw;
+    ntcDiagnostic.millivolts=mv;
+    ntcDiagnostic.unfilteredC=NAN;
+    ntcDiagnostic.sampledAt=millis();
+    const char* reason="OK";
+    if(raw<8) reason="RAW_LOW";
+    else if(raw>4087) reason="RAW_HIGH";
+    else if(mv<20) reason="MV_LOW";
+    else if(mv>2450) reason="MV_HIGH";
+
+    double c=NAN;
+    if(strcmp(reason,"OK")==0) {
+        double resistance=board::FixedResistorOhms*mv/(board::SupplyMilliVolts-mv);
+        if(!std::isfinite(resistance)||resistance<=0) reason="BAD_RESISTANCE";
+        else {
+            double kelvin=1.0/(1.0/298.15+log(resistance/board::NtcNominalOhms)/board::NtcBeta);
+            c=kelvin-273.15;
+            if(!std::isfinite(c)||c< -40||c>100) reason="TEMP_RANGE";
+        }
+    }
+
+    ntcDiagnostic.reason=reason;
+    if(strcmp(reason,"OK")==0) ntcDiagnostic.unfilteredC=c;
+    ambient.store(ambientFilter.update(strcmp(reason,"OK")==0?c:NAN));
+    ambientAt.store(ntcDiagnostic.sampledAt);
+}
+void printNtcDiagnostic() {
+    uint32_t now=millis();
+    Serial.printf("NTC GPIO%d raw=%u adc=%u mV motivo=%s",
+                  board::NtcPin,ntcDiagnostic.raw,ntcDiagnostic.millivolts,ntcDiagnostic.reason);
+    if(ntcDiagnostic.sampledAt==0) Serial.print(" muestra=pendiente");
+    else Serial.printf(" antiguedad=%lu ms",
+                       static_cast<unsigned long>(static_cast<uint32_t>(now-ntcDiagnostic.sampledAt)));
+    if(std::isfinite(ntcDiagnostic.unfilteredC)) {
+        Serial.print(" temperatura=");
+        Serial.print(ntcDiagnostic.unfilteredC,1);
+        Serial.print(" C");
+    }
+    double current=currentAmbient(now);
+    if(std::isfinite(current)) {
+        Serial.print(" filtrada=");
+        Serial.print(current,1);
+        Serial.println(" C");
+    } else Serial.println(" filtrada=INVALIDA (NTC Fault)");
 }
 // PCF8574 mapping P0=RS,P1=RW,P2=E,P3=backlight,P4..7=data. No third-party LCD dependency.
 bool lcd=false;
@@ -205,8 +256,9 @@ void provisioningLine(std::string& line) {
     if (!provision) {
         if (line=="setup") { stopNetwork(); WiFi.setAutoReconnect(false);WiFi.disconnect();wifiStarted=false; provision=1;Serial.println("SSID (sin eco):"); }
         else if (line=="status") { Serial.printf("Configurado=%s PWM=%s Modo=%s\n",configured?"si":"no",board::EnablePwm?"activo":"desactivado",remote.load()?"Remote":"Local"); }
+        else if (line=="ntc") printNtcDiagnostic();
         else if (line=="erase CONFIRM") { stopNetwork();WiFi.setAutoReconnect(false);WiFi.disconnect(true,true);wifiStarted=false;preferences.clear();configured=false;pairing.fill(0);ssid="";password="";Serial.println("Configuracion borrada."); }
-        else Serial.println("Comandos USB: setup | status | erase CONFIRM");
+        else Serial.println("Comandos USB: setup | status | ntc | erase CONFIRM");
     } else if (provision==1) {
         if (line.empty()||line.size()>32) {Serial.println("SSID invalido; reintenta.");return;}
         stagedSsid=line;provision=2;Serial.println("Clave WiFi (sin eco; vacia para red abierta):");
@@ -269,7 +321,7 @@ void setup() {
     }
 #endif
     WiFi.persistent(false);WiFi.mode(WIFI_STA);WiFi.setHostname(board::Hostname);WiFi.setAutoReconnect(true);WiFi.setSleep(false);
-    Serial.println("Victus Base v1. Comandos USB: setup | status. Sin firmware fisico validado.");
+    Serial.println("Victus Base v1. Comandos USB: setup | status | ntc. Sin firmware fisico validado.");
 }
 void loop() {
     auto now=millis();serialInput();network(now);
