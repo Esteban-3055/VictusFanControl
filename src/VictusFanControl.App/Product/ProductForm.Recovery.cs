@@ -65,6 +65,7 @@ internal sealed partial class ProductForm
                 _canvas.Notice = "Recuperación completada. Continuando la actualización…";
                 return true;
             }
+            if (_isolatedRuntime && RecoveryRuntimeFactory is null) throw new IOException("El fixture aislado no tiene fábrica de runtime; no se abrirá hardware.");
             var next = await (RecoveryRuntimeFactory?.Invoke(preferences) ?? Task.Run<IProductRuntime>(() => new ProductRuntime(_modules, preferences, _automaticReview, releasedRuntime: oldRuntime)));
             _runtime = next; _runtimeShutdown = null; _lifecycleRelease = Task.CompletedTask; _startupFailure = null;
             controllerReleased = false;

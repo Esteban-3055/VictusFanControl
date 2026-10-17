@@ -9,7 +9,7 @@ internal sealed partial class ProductForm
     {
         if (_recoveryTask is not null) return _recoveryTask;
         if (_closing || _exitRequested || _restarting || IsDisposed || _canvas.Busy || _displayOff || _checkingUpdate || _canvas.UpdateBusy ||
-            _automaticReview is not null || _isolatedRuntime && RecoveryRuntimeFactory is null) return Task.CompletedTask;
+            _automaticReview is not null || _isolatedRuntime && RecoveryRuntimeFactory is null && RecoveryRunner is null) return Task.CompletedTask;
         if (!confirmed && MessageBox.Show(this,
             "Se guardará un diagnóstico y se cerrará la sesión actual, incluidos sus controles de ventiladores y límites CPU/GPU. " +
             "Se abrirá una sesión nueva en Firmware y se conservarán tus perfiles y cambios sin guardar. Automático quedará desactivado.\n\n" +
