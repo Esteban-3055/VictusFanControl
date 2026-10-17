@@ -189,6 +189,14 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
         }
     }
     if(configPresent) {configuration=candidate;hasConfiguration=true;}
+    auto age=[&](const char* field)->uint32_t {
+        int64_t at;
+        return timestamp(p[field],at) ? static_cast<uint32_t>(std::min<int64_t>(5000,captured-at)) : 5000;
+    };
+    latest.received=true;latest.receivedAt=now;
+    latest.usageAge=age("sampledAtUtc");latest.ramAge=age("ramSampledAtUtc");
+    latest.demandAge=age("decisionAtUtc");
+    latest.cpuTempAge=age("cpuTempSampledAtUtc");latest.gpuTempAge=age("gpuTempSampledAtUtc");
     latest.manual=mode=="Manual";
     latest.cpu=p["cpuUsagePct"].isNull()?-1:p["cpuUsagePct"].as<double>(); latest.gpu=p["gpuUsagePct"].isNull()?-1:p["gpuUsagePct"].as<double>();
     latest.ram=p["ramUsagePct"].isNull()?-1:p["ramUsagePct"].as<double>(); latest.demand=p["demandaPct"].isNull()?-1:p["demandaPct"].as<double>();

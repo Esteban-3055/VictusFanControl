@@ -99,3 +99,46 @@ debe revisarse flash encryption y el proceso de provisión.
 
 Esta especificación está probada por software. Arranque, estabilidad mecánica,
 ruido, frecuencia real y disipación de transistores necesitan pruebas físicas.
+
+## Dónde se ejecutan histéresis, filtros y rampas
+
+El controlador real es `firmware/esp32-c3/lib/VictusProtocol/ExternalController.cpp`.
+`controlTask()` en `src/main.cpp` lo llama cada 20 ms, independiente de TCP/LCD:
+
+1. `receive()` interpola la curva externa con Demanda, o normaliza la Solicitud
+   interna aceptada según calibración; con entrada Demanda y modo Manual usa
+   `manualOutput`. El mínimo ambiental se calcula aparte con el NTC.
+2. `tick()` aplica EMA **a la salida externa deseada**, no directamente a las
+   temperaturas CPU/GPU: `filtered += (desired-filtered) * dt/(filterMs/1000+dt)`.
+   `filterMs=0` equivale a aplicación directa. `dt` se limita a 0,1 s.
+3. La histéresis compara esa salida filtrada con `target`, en **niveles lógicos
+   externos 0–255**. Se actualiza al alcanzar ±`hysteresis`; los descensos exigen
+   permanecer debajo del umbral durante `downHoldMs`.
+4. El duty aplicado avanza hacia `target` como máximo `rise*2,55*dt` al subir y
+   `fall*2,55*dt` al bajar (porcentajes de escala completa por segundo). El pulso
+   `startOutput`/`startMs` solo ocurre al arrancar el controlador.
+5. NTC inválida o vencida impone 255; ambiente ≥45 °C impone 255; el piso
+   ambiental y el mínimo Local evitan que la inercia rebaje las protecciones.
+   Un NTC inválido también retira Remote. El lease sigue siendo 2000 ms.
+6. Finalmente se invierte el duty y se escala a LEDC 14 bits / 18 Hz en GPIO3.
+
+Hay **otro EMA ambiental** (`AmbientFilter`), aplicado a la lectura NTC: factor
+0,25 por muestra (lectura cada segundo). Una muestra inválida lo borra de inmediato;
+una lectura ≥45 °C lo atraviesa sin suavizado. Es distinto de `filterMs` de la curva.
+
+Windows presenta los controles en Curva Externa → Respuesta y arranque
+(`ExternalCurvePage.cs` / `ProductCanvas.ExternalCurve.cs`). Valida y guarda
+`ExternalCurveConfiguration`, con nueva revisión, en sus preferencias.
+`Esp32TcpClient.CommunicateAsync()` captura telemetría cada segundo y, después del
+anuncio de capacidad `externalCurveVersion=1`, añade `externalConfiguration` al
+payload autenticado con HMAC. El ESP32 vuelve a validar y lo entrega por cola a
+la tarea de control; `appliedConfigRevision` confirma después su aplicación.
+Guardar en Windows y recibir esa confirmación son estados diferentes. El ESP32
+conserva `curve-v1` en el mismo namespace NVS `victus-base`; el emparejamiento
+`ssid`/`password`/`pairing`/`valid` mantiene su esquema.
+
+La **curva de ventiladores internos HP** y sus propias histéresis/filtros/rampas
+se ejecutan en Windows con su supervisor y backend HP/WMI. Producen la Demanda y
+la Solicitud aceptada que puede usar la base; no son los ajustes de Curva Externa.
+El ESP32 nunca escribe niveles HP ni cambia la seguridad del notebook. Tampoco
+el mero guardado de la curva externa concede autoridad Remote.

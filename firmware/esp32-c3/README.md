@@ -199,19 +199,45 @@ el LCD.
 
 ### LCD 1602 — ciclo de pantallas
 
-| Vista | Duración | Fila 1 | Fila 2 |
+| Vista (en este orden) | Duración | Fila 1 | Fila 2 |
 |---|---:|---|---|
-| Carga | 5 s | CPU: porcentaje | GPU: porcentaje |
-| Memoria/curva | 5 s | RAM: porcentaje | DEMANDA: porcentaje |
-| Ventilación | 5 s | Ambiente y PWM lógico | LOCAL/REMOTE y Wi-Fi |
-| Temperaturas | **30 s** | CPU °C y GPU °C | Ambiente °C, segundos restantes |
+| Temperaturas | **30 s** | CPU °C y GPU °C | DEMANDA: porcentaje |
+| Uso | **5 s** | CPU y GPU: porcentajes | RAM: porcentaje |
+| Ambiente/ventilador | **5 s** | Ambiente: °C | PWM: porcentaje (salida lógica 30–255) |
+| Conexión | **5 s** | PC: conectado/sin datos/desconectado | WiFi: conectado/sin red |
 
-El ciclo dura **45 segundos** y comienza de nuevo automáticamente.
-CPU/GPU/RAM/Demanda/temperaturas CPU/GPU son lecturas **firmadas de
-VictusFanControl**, no sensores físicos del ESP32. Si se desconecta la sesión,
-supera los 2 s de frescura o un campo llega nulo, se muestra `--` y nunca 0
-inventado. El ambiente es una lectura local del NTC. Las temperaturas se
-muestran en °C redondeadas; el ambiente conserva una decimal.
+Se eligieron **5 s para las vistas 3 y 4**, cuyas duraciones no estaban
+especificadas. El ciclo de **45 s empieza por temperaturas** y se repite aunque
+no haya PC, Wi-Fi o NTC válida. Las filas tienen exactamente 16 caracteres más
+terminador; no hay desplazamiento ni telemetría ambiental en la página térmica.
+Por ejemplo, `CPU:55C GPU:42C` / `DEMANDA: 35%`, y la página de uso muestra
+`CPU:100%GPU:  0%` / `RAM: 65%`. Temperaturas CPU/GPU redondeadas a °C enteros;
+ambiente con una decimal. El refresco es cada 250 ms; los cambios de página
+ocurren en el primer refresco posterior al límite. El reloj conserva fase al
+desbordar `millis()` y al recuperarse el LCD.
+
+CPU/GPU/RAM/DEMANDA/temperaturas CPU/GPU proceden de la telemetría **firmada de
+Windows**. La presentación exige sesión autenticada y telemetría recibida hace
+menos de 2000 ms. Además suma la edad de la fuente al capturar con el tiempo
+monotónico transcurrido en el ESP32: cada valor vence a los **5000 ms**.
+CPU/GPU uso emplean `sampledAtUtc`; RAM, `ramSampledAtUtc`; temperaturas,
+`cpuTempSampledAtUtc`/`gpuTempSampledAtUtc`; DEMANDA, `decisionAtUtc`.
+Campo o fecha nulos, valor fuera de rango o vencido se muestran `--`; cero válido
+se conserva. Una trama nueva no rejuvenece una muestra de origen vieja.
+El ESP32 no tiene reloj UTC sincronizado: compara fechas dentro del payload
+firmado y mide su residencia local; no puede medir por sí solo un retraso
+unidireccional anterior a recibir la trama. La autoridad remota conserva los
+controles originales y su referencia a respuesta/lease de 2000 ms.
+
+La NTC es exclusivamente ambiente. Si falla, la vista ambiental muestra
+`Ambiente:--C` / `PWM:-- NTC FAULT`, para no presentar la orden del ciclo de
+control anterior como actual. La tarea de control fuerza 255 ante el fallo.
+Las páginas de CPU/GPU conservan sus datos propios si están frescos. Con PWM
+inhabilitado se muestra `PWM:-- (OFF)`. El porcentaje corresponde a la salida
+lógica aplicada: 96/255 = 38%; no es duty invertido de GPIO3 ni medición de RPM.
+PC conectado significa sesión autenticada con telemetría reciente, incluso en
+monitorización; `sin datos` indica sesión autenticada sin telemetría reciente.
+Esto no afirma autoridad Remote. Wi-Fi se muestra de forma independiente.
 
 Si la pantalla sigue mostrando `NTC Fault` mientras `ntc` marca `OK`,
 podría tratarse de un **mensaje antiguo congelado por un error I²C** o un
@@ -225,14 +251,23 @@ en el monitor serie a 115200 baudios enviar `lcd` y `ntc`:
   fallidas desde el arranque
 
 Si falla la comunicación I²C, el firmware reintenta detectar el LCD cada
-5 s; los caracteres físicos pueden quedar congelados hasta que el bus
-responda y se inicialice de nuevo. El diagnóstico no altera el PWM ni
+5 s. Al recuperar ACK se fuerza EN bajo y se ejecuta la inicialización completa
+HD44780, con esperas explícitas entre instrucciones, antes de reescribir ambas
+filas con datos actuales. Una transacción fallida detiene el resto de nibbles y
+caracteres hasta ese reinicio. I²C se fija a 100 kHz y timeout 20 ms. Los
+caracteres físicos pueden quedar congelados mientras el bus no responda. El diagnóstico no altera el PWM ni
 deshabilita protecciones. Alimentar el backpack a 5 V exige conversor
 de niveles en SDA/SCL para proteger al ESP32-C3.
 
 Este diagnóstico **no relaja** el fail-safe: si la medición sigue inválida,
 el ventilador continúa con la petición máxima. No se afirma que el hardware
 esté defectuoso o que la lectura del ADC sea fiable hasta observar datos reales.
+La lectura filtrada del NTC y su fecha se publican juntas bajo una sección
+crítica corta. El consumidor obtiene la hora después de la instantánea para
+evitar una falsa caducidad si fue interrumpido durante una nueva muestra.
+No se retiene la última lectura buena ante un fallo: siguen vigentes RAW
+8–4087, 20–2450 mV, −40..100 °C y caducidad a 3000 ms. No se atribuye el
+reporte físico a esta carrera ni al bus sin contrastar `ntc` y `lcd` en placa.
 El comando no muestra SSID, contraseña Wi-Fi ni clave de emparejamiento.
 
 ## Validación pendiente de banco

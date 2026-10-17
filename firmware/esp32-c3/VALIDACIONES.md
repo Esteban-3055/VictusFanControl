@@ -80,24 +80,63 @@ pero la causa de `NTC Fault` no podrá conocerse hasta observar RAW/mV
 del dispositivo. Falta comprobar en hardware y validar Arduino/PlatformIO
 en el SHA posterior a este cambio.
 
-## Pantalla LCD 16x2 / telemetría (2026-10-16)
+## LCD1602: ciclo solicitado y recuperación (2026-10-16)
 
-La nueva vista conserva medidas firmadas de CPU/GPU, RAM, Demanda y añade las
-temperaturas CPU/GPU recibidas del payload TCP sin modificar el protocolo.
-Dos pantallas de carga (5 s cada una), estado ambiente/PWM (5 s) y una
-pantalla térmica de **30 s** se suceden en ciclos de 45 s. Se muestra `--`
-ante campos nulos, datos caducados o ausencia de conexión autenticada.
-La presentación quedó aislada en `include/LcdPresentation.h` y está cubierta
-por pruebas nativas C++ de límites de páginas, 16 columnas, valores extremos,
-datos ausentes y temperatura ambiental.
+El ciclo vigente reemplaza el anterior: **temperaturas CPU/GPU + DEMANDA 30 s**,
+**uso CPU/GPU/RAM 5 s**, **ambiente + PWM aplicado 5 s**, **PC + Wi-Fi 5 s**.
+Las duraciones 3 y 4 no fueron especificadas; se adoptan 5 s. Se conserva la
+fase del ciclo al recuperar LCD y al desbordar `millis()`, con refresco 250 ms.
 
-Ante el reporte de `NTC Fault` en el LCD pese a muestra NTC válida
-(`raw=2439`, `1792 mV`, `21.2 C`), se añadieron contadores de lectura
-válida/inválida en `ntc` y el comando `lcd` con errores I²C y antigüedad
-de la última escritura terminada. Una pantalla puede retener texto viejo si
-I²C falla. No se afirma que ésa sea la causa sin observar ambos comandos.
-No se alteró el rechazo de NTC inválida ni la ventilación máxima de respaldo.
-Quedan pendientes compilación de nuevo SHA y verificación física de LCD/NTC.
+Pruebas host en `test/presentation.h`, invocadas por `--controller` y la suite
+`test_protocol.py`, contra las mismas cabeceras compiladas para la placa:
+
+- Cada milisegundo de dos ciclos completos: orden y límites 30000/35000/40000/45000.
+- Rollover del reloj de páginas y de vencimientos a 2000/3000/5000 ms.
+- Filas de 16 caracteres, máximos/mínimos, cero, NaN/inf, campos ausentes,
+  PWM deshabilitado, desconexión PC, Wi-Fi independiente, separación CPU/GPU/NTC.
+- Inyección de fallo en cada una de las **81 transacciones** de inicialización
+  y escritura de dos filas: se detiene en el primer error, no escribe más,
+  reinicia EN bajo, resincroniza por completo y reescribe las dos filas actuales.
+- Conversión del reporte `2439 / 1792 mV` a 21,2 °C; divisor nominal a 25 °C;
+  límites RAW/mV intactos; NTC válida → inválida → recuperada sin conservar EMA
+  vieja; salto caliente sin suavizar. NTC inválida sigue forzando 255 en control.
+
+`test_presentation.py` usa el parser C++ real con autenticación/HMAC y telemetría
+firmada de monitorización: verifica por campo la edad de origen más residencia
+local, fechas ausentes, cero válido y nulos. También compara byte por byte todas
+las cabeceras/fuentes exportadas a Arduino y comprueba ausencia de config privada.
+No se modifica el esquema de red ni el formato persistido `ExternalConfig`/NVS.
+
+Ejecución local: **34/34 casos de protocolo**, **17/17 escenarios de configuración**
+y **presentación/frescura/exportación PASS**. Compilador host Zig/Clang 0.13,
+C++17, `-Wall -Wextra -Werror`, ArduinoJson 6.21.5; se utiliza BCrypt de Windows
+para HMAC. El runtime de Zig emite avisos propios de atributos de libunwind;
+no hay errores ni avisos de las fuentes del proyecto.
+
+Reproducir después de compilar el host como indica el workflow:
+
+```text
+python firmware/esp32-c3/test/test_protocol.py firmware-host --report protocol-tests.json
+python firmware/esp32-c3/test/test_external_config.py firmware-host
+python firmware/esp32-c3/test/test_presentation.py firmware-host
+```
+
+PlatformIO local: **ambas variantes PASS**, usando una unidad temporal de ruta
+corta al mismo proyecto para resolver la limitación de rutas largas GCC en Windows.
+
+El workflow `esp32-firmware.yml` compila PlatformIO `supermini` y
+`supermini-bench` (Arduino 2.0.17, espressif32 6.12.0) y el sketch exportado
+con **core Arduino-ESP32 3.3.2 + ArduinoJson 6.21.5**, PWM habilitado.
+3.3.2 es la versión del paquete de placas ESP32, no del programa Arduino IDE.
+Los resultados del commit actual se enlazan en el PR #44; la compilación del
+sketch verifica la misma implementación que se abre desde Arduino IDE 2.x.
+No se cargó ninguna placa ni se usaron credenciales privadas.
+
+La instantánea NTC ahora publica valor y fecha juntos bajo sección crítica,
+con reloj obtenido después de copiar la muestra. Evita mezclar publicaciones
+y una edad negativa por preempción. Los diagnósticos USB `ntc` y `lcd` se
+conservan. Las pruebas inyectadas verifican el comportamiento del software;
+no establecen la causa física del reporte de pantalla congelada.
 
 ## Estado físico
 

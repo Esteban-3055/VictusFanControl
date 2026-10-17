@@ -27,6 +27,16 @@ struct Measurement {
     bool valid = false;
     std::string source = "Unknown";
     bool manual = false;
+    // Source age at capture plus monotonic residence on the ESP32. Missing
+    // timestamps never become fresh merely because a signed frame arrived.
+    uint32_t receivedAt = 0;
+    bool received = false;
+    uint32_t usageAge = 5000, ramAge = 5000, demandAge = 5000;
+    uint32_t cpuTempAge = 5000, gpuTempAge = 5000;
+    bool linkFresh(uint32_t now) const { return received && static_cast<uint32_t>(now-receivedAt)<2000; }
+    double fresh(double value, uint32_t sourceAge, uint32_t now) const {
+        return linkFresh(now) && sourceAge<5000 && static_cast<uint32_t>(now-receivedAt)<5000-sourceAge ? value : NAN;
+    }
 };
 struct ControlPolicy {
     int minimum = 0, maximum = 54, minimumRunningPwm = 25;

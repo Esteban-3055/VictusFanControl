@@ -64,6 +64,8 @@ jobs:
         run: dotnet run --project tools/FirmwareInterop.Tests -c Release -- python firmware/esp32-c3/test/tcp_bridge.py "$RUNNER_TEMP/firmware-host"
       - name: Authenticated external configuration and hostile curve messages
         run: python firmware/esp32-c3/test/test_external_config.py "$RUNNER_TEMP/firmware-host"
+      - name: LCD source freshness and canonical Arduino export
+        run: python firmware/esp32-c3/test/test_presentation.py "$RUNNER_TEMP/firmware-host"
       - name: Upload unqualified firmware and software evidence
         uses: actions/upload-artifact@v4
         with:

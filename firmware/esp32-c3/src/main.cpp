@@ -12,6 +12,8 @@
 #include "BoardConfig.h"
 #include "VictusProtocol.h"
 #include "LcdPresentation.h"
+#include "LcdTransport.h"
+#include "NtcSensor.h"
 #if __has_include("config.local.h")
 #include "config.local.h"
 #endif
@@ -35,8 +37,8 @@ uint32_t frameAt=0,acceptedAt=0,lastFrameAt=0,writeAt=0,nextConnect=0,nextAccept
 bool reading=false,configured=false,networkReady=false;
 bool wifiStarted=false;
 uint32_t lastPowerCheck=0;
-std::atomic<float> ambient{NAN};
-std::atomic<uint32_t> ambientAt{0};
+victus::AmbientSample ambient;
+portMUX_TYPE ambientLock=portMUX_INITIALIZER_UNLOCKED;
 std::atomic<int> applied{100};
 std::atomic<bool> remote{false};
 std::atomic<int> externalRequest{255};
@@ -62,7 +64,15 @@ bool curveSavedThisBoot=false;
 std::string serialLine,stagedSsid,stagedPassword;
 int provision=0;
 bool overflow=false;
-float currentAmbient(uint32_t now) { return static_cast<uint32_t>(now-ambientAt.load())<3000 ? ambient.load() : NAN; }
+double currentAmbient() {
+    // Snapshot value+time together; take time after publication to avoid a
+    // false expired sample if the control task was preempted by the ADC reader.
+    portENTER_CRITICAL(&ambientLock);
+    auto sample=ambient;
+    uint32_t now=millis();
+    portEXIT_CRITICAL(&ambientLock);
+    return sample.current(now);
+}
 
 void controlTask(void*) {
     victus::ExternalController controller;
@@ -72,7 +82,7 @@ void controlTask(void*) {
             if(command.hasConfig) controller.configure(command.config);
             controller.receive(command.valid,command.request,command.demand,command.manual,command.at);
         }
-        int duty=controller.tick(millis(),currentAmbient(millis()));
+        int duty=controller.tick(millis(),currentAmbient());
         if (board::EnablePwm) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
             ledcWrite(board::PwmPin,board::LedcDutyFrom8Bit(victus::ExternalController::electrical(duty)));
@@ -152,7 +162,7 @@ void network(uint32_t now) {
             char revision[33];portENTER_CRITICAL(&configLock);memcpy(revision,appliedRevision,33);portEXIT_CRITICAL(&configLock);
             session->appliedConfigRevision=revision;session->appliedDuty=board::EnablePwm?applied.load():-1;
             session->externalRequest=board::EnablePwm?externalRequest.load():-1;
-            if (!session->accept(input,millis(),currentAmbient(millis()),board::EnablePwm?static_cast<int>(lround(applied.load()*100.0/255)):-1,board::EnablePwm&&remote.load(),response)) {
+            if (!session->accept(input,millis(),currentAmbient(),board::EnablePwm?static_cast<int>(lround(applied.load()*100.0/255)):-1,board::EnablePwm&&remote.load(),response)) {
                 disconnectPeer();nextAccept=now+1000;Serial.println("Sesion rechazada o terminada.");return;
             }
             Command command{session->remoteRequest && board::EnablePwm,session->latest.request,millis()};
@@ -176,22 +186,9 @@ void readAmbient() {
     ntcDiagnostic.millivolts=mv;
     ntcDiagnostic.unfilteredC=NAN;
     ntcDiagnostic.sampledAt=millis();
-    const char* reason="OK";
-    if(raw<8) reason="RAW_LOW";
-    else if(raw>4087) reason="RAW_HIGH";
-    else if(mv<20) reason="MV_LOW";
-    else if(mv>2450) reason="MV_HIGH";
-
-    double c=NAN;
-    if(strcmp(reason,"OK")==0) {
-        double resistance=board::FixedResistorOhms*mv/(board::SupplyMilliVolts-mv);
-        if(!std::isfinite(resistance)||resistance<=0) reason="BAD_RESISTANCE";
-        else {
-            double kelvin=1.0/(1.0/298.15+log(resistance/board::NtcNominalOhms)/board::NtcBeta);
-            c=kelvin-273.15;
-            if(!std::isfinite(c)||c< -40||c>100) reason="TEMP_RANGE";
-        }
-    }
+    auto result=victus::convertNtc(raw,mv);
+    const char* reason=result.reason;
+    double c=result.c;
 
     ntcDiagnostic.reason=reason;
     if(strcmp(reason,"OK")==0) {
@@ -202,8 +199,10 @@ void readAmbient() {
         ntcLastInvalidAt=ntcDiagnostic.sampledAt;
         ntcLastInvalidReason=reason;
     }
-    ambient.store(ambientFilter.update(strcmp(reason,"OK")==0?c:NAN));
-    ambientAt.store(ntcDiagnostic.sampledAt);
+    double filtered=ambientFilter.update(c);
+    portENTER_CRITICAL(&ambientLock);
+    ambient={filtered,ntcDiagnostic.sampledAt};
+    portEXIT_CRITICAL(&ambientLock);
 }
 void printNtcDiagnostic() {
     uint32_t now=millis();
@@ -217,7 +216,7 @@ void printNtcDiagnostic() {
         Serial.print(ntcDiagnostic.unfilteredC,1);
         Serial.print(" C");
     }
-    double current=currentAmbient(now);
+    double current=currentAmbient();
     if(std::isfinite(current)) {
         Serial.print(" filtrada=");
         Serial.print(current,1);
@@ -234,47 +233,28 @@ void printNtcDiagnostic() {
 // LCD1602 with PCF8574 (P0=RS,P1=RW,P2=E,P3=backlight,P4..7=data).
 // Display errors are never fed back into fan control. An I2C write failure
 // can leave OLD characters on the physical display even when the NTC recovers.
-bool lcd=false;
 uint8_t lcdAddress=board::LcdAddress;
 uint8_t lcdLastI2cError=0;
 uint32_t lcdErrorCount=0, lcdLastErrorAt=0, lcdLastRefreshAt=0;
 uint32_t lcdCycleStartedAt=0;
 
-void lcdNibble(uint8_t data) {
-    Wire.beginTransmission(lcdAddress);
-    Wire.write(data|8);
-    Wire.write(data|12);
-    Wire.write(data|8);
-    uint8_t error=Wire.endTransmission();
-    if(error!=0) {
-        lcd=false;
-        lcdLastI2cError=error;
-        lcdLastErrorAt=millis();
-        ++lcdErrorCount;
+struct LcdBus {
+    uint8_t write(const uint8_t* data,size_t count) {
+        Wire.beginTransmission(lcdAddress);Wire.write(data,count);
+        uint8_t error=Wire.endTransmission();
+        if(error) {lcdLastI2cError=error;lcdLastErrorAt=millis();++lcdErrorCount;}
+        return error;
     }
-}
-void lcdByte(uint8_t value,bool text=false) {
-    if(!lcd) return;
-    lcdNibble((value&0xF0)|(text?1:0));
-    if(lcd) lcdNibble((value<<4)|(text?1:0));
-}
-void lcdRow(uint8_t address,const char* text) {
-    if(!lcd) return;
-    lcdByte(address);
-    for(int i=0;i<16&&lcd;++i) lcdByte(text[i],true);
-}
+    void wait(uint32_t us) { if(us>=1000) delay(us/1000);else delayMicroseconds(us); }
+} lcdBus;
+victus::LcdTransport<LcdBus> lcdDriver(lcdBus);
 void probeLcd() {
     for(uint8_t address=0x20;address<=0x3f;++address) {
         if(address>0x27&&address<0x38)continue;
         Wire.beginTransmission(address);
         if(Wire.endTransmission()!=0)continue;
-        lcdAddress=address;lcd=true;
-        delay(60);
-        lcdNibble(0x30);delay(5);
-        lcdNibble(0x30);delay(1);
-        lcdNibble(0x30);lcdNibble(0x20);
-        lcdByte(0x28);lcdByte(0x0C);lcdByte(0x06);lcdByte(0x01);delay(2);
-        if(lcd) {
+        lcdAddress=address;
+        if(lcdDriver.initialize()) {
             Serial.printf("LCD detectado: 0x%02X (I2C activo)\n",address);
             return;
         }
@@ -283,7 +263,7 @@ void probeLcd() {
 void printLcdDiagnostic() {
     uint32_t now=millis();
     Serial.printf("LCD activo=%s direccion=0x%02X errores_I2C=%lu ultimo_error=%u",
-                  lcd?"si":"no",lcdAddress,static_cast<unsigned long>(lcdErrorCount),lcdLastI2cError);
+                  lcdDriver.ready()?"si":"no",lcdAddress,static_cast<unsigned long>(lcdErrorCount),lcdLastI2cError);
     if(lcdLastRefreshAt)
         Serial.printf(" ultima_pantalla_hace=%lu ms",
                       static_cast<unsigned long>(static_cast<uint32_t>(now-lcdLastRefreshAt)));
@@ -294,32 +274,32 @@ void printLcdDiagnostic() {
     Serial.println();
 }
 void display(uint32_t now) {
-    if(!lcd) return;
+    if(!lcdDriver.ready()) return;
     // All 4 pages fit 16x2. This is presentation only: nothing here can
     // renew a remote request or change the fan controller's fail-safe.
     victus::LcdReadings view;
-    view.ambientC=currentAmbient(now);
+    view.ambientC=currentAmbient();
     view.pwmEnabled=board::EnablePwm;
     view.pwmDuty=board::EnablePwm?applied.load():-1;
-    view.remote=board::EnablePwm&&remote.load();
     view.wifi=WiFi.status()==WL_CONNECTED;
-    if(session&&session->authenticated()&&static_cast<uint32_t>(now-lastFrameAt)<2000) {
+    view.pcAuthenticated=session&&session->authenticated();
+    if(view.pcAuthenticated&&session->latest.linkFresh(now)) {
         const auto& m=session->latest;
         view.telemetryFresh=true;
-        view.cpuPct=m.cpu;
-        view.gpuPct=m.gpu;
-        view.ramPct=m.ram;
-        view.demandPct=m.demand;
-        view.cpuTempC=m.cpuTempC;
-        view.gpuTempC=m.gpuTempC;
+        view.cpuPct=m.fresh(m.cpu,m.usageAge,now);
+        view.gpuPct=m.fresh(m.gpu,m.usageAge,now);
+        view.ramPct=m.fresh(m.ram,m.ramAge,now);
+        view.demandPct=m.fresh(m.demand,m.demandAge,now);
+        view.cpuTempC=m.fresh(m.cpuTempC,m.cpuTempAge,now);
+        view.gpuTempC=m.fresh(m.gpuTempC,m.gpuTempAge,now);
     }
-    uint32_t elapsed=static_cast<uint32_t>(now-lcdCycleStartedAt);
+    uint32_t elapsed=victus::lcdElapsed(now,lcdCycleStartedAt);
     victus::LcdPage page=victus::lcdPage(elapsed);
     char first[17]{},second[17]{};
-    victus::renderLcd(page,view,victus::lcdTemperatureRemaining(elapsed),first,second);
-    lcdRow(0x80,first);
-    lcdRow(0xC0,second);
-    if(lcd) lcdLastRefreshAt=millis();
+    victus::renderLcd(page,view,first,second);
+    lcdDriver.row(0x80,first);
+    lcdDriver.row(0xC0,second);
+    if(lcdDriver.ready()) lcdLastRefreshAt=millis();
     else Serial.printf("LCD: fallo I2C codigo=%u; imagen anterior puede quedar congelada.\n",lcdLastI2cError);
 }
 void wipe(std::string& s) { volatile char* p=s.empty()?nullptr:&s[0]; for(size_t i=0;i<s.size();++i)p[i]=0;s.clear(); }
@@ -382,8 +362,7 @@ void setup() {
     }
     if(xTaskCreate(controlTask,"fan-lease",4096,nullptr,2,nullptr)!=pdPASS)abort();
     analogReadResolution(12);analogSetPinAttenuation(board::NtcPin,ADC_11db);
-    Wire.begin(board::SdaPin,board::SclPin);Wire.setTimeOut(20);probeLcd();
-    lcdCycleStartedAt=millis();
+    Wire.begin(board::SdaPin,board::SclPin);Wire.setClock(100000);Wire.setTimeOut(20);probeLcd();
     ssid=preferences.getString("ssid","");password=preferences.getString("password","");
     configured=preferences.getBool("valid",false)&&ssid.length()>0&&preferences.getBytesLength("pairing")==pairing.size();
     if(configured)preferences.getBytes("pairing",pairing.data(),pairing.size());
@@ -395,13 +374,22 @@ void setup() {
 #endif
     WiFi.persistent(false);WiFi.mode(WIFI_STA);WiFi.setHostname(board::Hostname);WiFi.setAutoReconnect(true);WiFi.setSleep(false);
     Serial.println("Victus Base v1. Comandos USB: setup | status | ntc | lcd. Sin firmware fisico validado.");
+    lcdCycleStartedAt=millis();
+    display(lcdCycleStartedAt);
 }
 void loop() {
-    auto now=millis();serialInput();network(now);
+    serialInput();network(millis());
+    auto now=millis();
     static uint32_t sensorAt=0,displayAt=0,probeAt=0;
-    if(!lcd&&static_cast<uint32_t>(now-probeAt)>=5000) {probeAt=now;probeLcd();}
     if(static_cast<uint32_t>(now-sensorAt)>=1000) {sensorAt=now;readAmbient();}
-    if(static_cast<uint32_t>(now-displayAt)>=1000) {displayAt=now;display(now);}
+    // Read the NTC before any LCD power-up wait. Re-read time after IO.
+    if(!lcdDriver.ready()&&static_cast<uint32_t>(now-probeAt)>=5000) {
+        probeAt=now;probeLcd();
+        if(lcdDriver.ready()) display(millis());
+    }
+    now=millis();
+    victus::lcdElapsed(now,lcdCycleStartedAt); // Also roll the clock while disconnected.
+    if(static_cast<uint32_t>(now-displayAt)>=250) {displayAt=now;display(now);}
     if(session&&session->hasConfiguration&&storedCurveRevision!=session->configuration.revision&&
         (!curveSavedThisBoot||static_cast<uint32_t>(now-lastCurveSave)>=30000)) {
         curveSavedThisBoot=true;lastCurveSave=now;

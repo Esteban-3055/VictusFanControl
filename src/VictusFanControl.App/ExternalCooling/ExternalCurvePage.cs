@@ -14,7 +14,7 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
     internal bool Busy {get;private set;}
     internal bool Dirty=>Draft!=_saved;
     internal int Preview {get;private set;}=50;
-    internal string Notice {get;private set;}="Configuración independiente del notebook · 18 kHz · salida lógica 30–255.";
+    internal string Notice {get;private set;}="Configuración independiente del notebook · 18 Hz · salida lógica 30–255.";
     internal string AppliedState
     {
         get
