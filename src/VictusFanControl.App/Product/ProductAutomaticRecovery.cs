@@ -12,17 +12,35 @@ internal sealed class ProductAutomaticRecovery
     private string? _lastRequest;
     private int _readDeferralCount;
     private int _attempts;
+    private long? _sessionSince;
+    private int _sessionAttempts;
+    private bool _sessionRequested;
+    // Failed release stays latched. Only a successfully opened replacement or
+    // a full minute of healthy operation permits a new session episode.
+    internal void SessionOpened() { _sessionRequested = false; _sessionSince = null; }
+    internal bool TakeSessionRequest(ProductRuntimeState state, long now)
+    {
+        if (state.PerformanceRecovery?.Pending == true || state.AutomaticReview ||
+            state.Runtime is not ("Degraded" or "Failed" or "Recovering") ||
+            state.FanMode == "Automatic" && !state.LifecycleBlocked ||
+            state.AutomaticPreparing || state.PerformanceUpdating)
+        { _sessionSince = null; return false; }
+        if (_sessionSince is null || now < _sessionSince) { _sessionSince = now; return false; }
+        if (_sessionRequested || _sessionAttempts >= 3 || now - _sessionSince < new[] { 15000, 30000, 60000 }[_sessionAttempts]) return false;
+        _sessionRequested = true; _sessionAttempts++; return true;
+    }
     internal void Observe(ProductRuntimeState state, long now)
     {
-        if (state.Runtime == "Healthy" && state.FanMode == "Automatic" && !state.LifecycleBlocked && state.PerformanceRecovery?.Pending != true)
+        if (state.Runtime == "Healthy" && !state.LifecycleBlocked && state.PerformanceRecovery?.Pending != true)
         {
             _healthySince ??= now;
             if (now >= _healthySince && now - _healthySince >= 60000)
-            { _attempts = 0; _attempted.Clear(); _readDeferrals.Clear(); _readRetryAt.Clear(); _lastRequest = null; _readDeferralCount = 0; }
+            { _attempts = 0; _attempted.Clear(); _readDeferrals.Clear(); _readRetryAt.Clear(); _lastRequest = null; _readDeferralCount = 0;
+                _sessionAttempts = 0; _sessionRequested = false; _sessionSince = null; }
         }
         else _healthySince = null;
     }
-    internal void Pause() { _candidate = null; }
+    internal void Pause() { _candidate = null; _sessionSince = null; }
     internal void RecordAttempt(PerformanceRecoveryPreview expected)
     {
         var key = InventoryKey(expected);

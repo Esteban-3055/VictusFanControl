@@ -63,7 +63,7 @@ internal static partial class ProductGuiSelfTest
                 form.Show(); Application.DoEvents(); form.EditValue("pl1", 38); var draft = ProductProfilesStore.Serialize(form.Draft); old.Publish(Pending());
                 form.Canvas.Page = ProductPage.Performance; form.Canvas.PerformanceTab = 3; form.Canvas.Refresh();
                 require(form.Canvas.Hits.Single(h => h.Id == "recovery-run").Enabled, "Pending recovery is not actionable in Guardian.");
-                form.Canvas.Page = ProductPage.Settings; form.Canvas.Refresh(); require(form.Canvas.Hits.Any(h => h.Id == "recovery-run"), "Settings lacks recovery.");
+                form.Canvas.Page = ProductPage.Settings; form.Canvas.Refresh(); require(form.Canvas.Hits.Count(h => h.Id is "session-force-recovery" or "recovery-run") == 1, "Settings must have exactly one definitive recovery action.");
                 var task = form.RecoverPerformanceAsync(confirmed: true); require(ReferenceEquals(task, form.RecoverPerformanceAsync(true)), "Double click duplicated recovery.");
                 PumpUntil(() => old.Disposals == 1, "Recovery did not begin shutdown."); require(launches == 0 && created == 0, "Recovery ran before cleanup drain.");
                 old.DisposeGate.SetResult(); PumpUntil(() => task.IsCompleted, "Recovery hung."); task.GetAwaiter().GetResult();

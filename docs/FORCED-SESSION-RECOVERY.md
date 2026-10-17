@@ -1,61 +1,91 @@
-# Recuperación forzosa de sesión
+# Recuperar sesión definitiva
 
-**Configuración → Registros y estado → Recuperación forzosa de sesión** permite
-cerrar la sesión actual y abrir otra dentro de la misma ventana, aunque el
-inventario no muestre registros pendientes. Es una acción manual con confirmación.
+Disponible en Configuración → Registros y estado, Rendimiento → Guardián,
+Actualizaciones cuando hay registros pendientes y el menú de la bandeja.
+Sustituye la antigua recuperación manual y la opción forzosa separada.
+Funciona aunque no haya registros pendientes.
 
-1. Reserva una sola tarea de recuperación y guarda un diagnóstico previo.
-2. Cancela la reanudación automática, bloquea nuevas órdenes y espera el cierre
-   del controlador, telemetría, límites CPU/GPU y procesos propios.
-3. Comprueba que no quedan registros pendientes. Esta acción no selecciona ni
-   recupera registros de otros propietarios; para ello se conserva el flujo
-   explícito **Recuperar sesiones**, con identidad, respaldos y hashes.
-4. Sólo tras confirmar la liberación abre un runtime nuevo en **Firmware**.
-   Conserva perfiles guardados y cambios sin guardar. Automático requiere otra
-   acción del usuario; su preferencia de inicio no lo reactiva por esta recuperación.
+## Proceso común
 
-Si falla el diagnóstico previo, no empieza el cierre. Si falla la liberación,
-cambian las condiciones de energía o quedan registros, no abre otro controlador.
-La monitorización de recuperación sigue disponible. Un cierre no confirmado se
-muestra con autoridad desconocida, sin afirmar propiedad física de Firmware.
+1. Captura los identificadores y hashes de los registros anteriores al cierre.
+2. Guarda un diagnóstico previo y conserva perfiles y cambios sin guardar.
+3. Cierra la admisión de órdenes, drena el runtime anterior y libera los controles
+   de ventiladores, CPU y GPU. Nunca abre un segundo controlador antes del cierre.
+4. Revisa el inventario restante: sólo puede recuperar el subconjunto exacto
+   capturado. Cambios, rutas redirigidas, propietarios activos o registros inválidos
+   detienen el proceso. El ayudante conserva sus verificaciones de identidad,
+   exclusión WMI, respaldos y autorización de liberación, sin niveles normales.
+5. Abre un runtime nuevo en Firmware dentro de la misma ventana. La recuperación
+   manual deja Automático desactivado. Un fallo mantiene el monitor de recuperación.
 
-## Recuperación del marcador sin reiniciar Windows
+La recuperación automática usa este mismo proceso. Está activada por defecto,
+respetando la preferencia guardada. Además de registros pendientes estables durante
+10 s, cubre un runtime Degraded, Failed o Recovering persistente sin inventario.
+Espera 15 s en el primer episodio, 30 s en el segundo y 60 s en el tercero.
+No actúa durante preparación, actualización de rendimiento, uso de revisión,
+suspensión ni Automático activo sin interrupción. No ejecuta un bucle de cierres:
+un cierre no confirmado queda enclavado; sólo una sesión nueva confirmada permite
+otro episodio, hasta tres antes de un minuto de funcionamiento sano, también en
+Firmware. Los reintentos de lectura de inventario anteriores mantienen sus límites.
 
-Cada operación nativa recibe un identificador único en `native-inflight.json`.
-El proceso conserva una prueba privada en memoria únicamente después de que el
-delegado nativo retorne, o si el journal de despacho falla antes de invocarlo.
-La prueba contiene la ruta de sesión y los bytes exactos del marcador, incluido
-identificador, PID e inicio del propietario. No se reconstruye desde un archivo
-ni por el tiempo que haya transcurrido.
+Sólo reanuda Automático si existía intención previa, la preferencia lo permite,
+el usuario no ha pedido Firmware y tres observaciones nuevas superan la admisión
+existente. No usa RPM retenidas para autorizar control. Un reinicio automático de
+sesión en Firmware no activa la preferencia de Automático al iniciar Windows.
 
-Si falla la retirada del marcador por uso compartido, se hacen como máximo cuatro
-intentos con tres esperas de 25 ms. La adquisición se rechaza y su objeto de
-respuesta se libera; no se publica como dato fresco. El siguiente despacho o el
-drenaje de cierre puede reintentar esa retirada, siempre bajo el mutex nativo y
-comparando los mismos bytes. Después se adquieren datos nuevos; nunca se repite
-automáticamente el comando anterior ni se renueva una muestra antigua.
+## Recuperación de seguimiento WMI sin reiniciar Windows
 
-El propietario drena la prueba antes de avisar al guardián separado para que éste
-no clasifique el marcador conocido como incierto. La parada cierra la admisión
-antes de esperar al slot y se publica mientras se mantiene el mutex.
+Cada llamada recibe un identificador único. El propietario conserva una prueba
+privada en memoria únicamente tras retornar el delegado nativo, o si el journal
+falla antes de invocarlo. La prueba contiene carpeta y bytes exactos del marcador,
+incluidos identificador, PID e inicio del proceso. Un archivo o su antigüedad no
+permiten reconstruir esa prueba. Una respuesta nula o inválida no convierte una
+llamada ya retornada en una llamada pendiente.
 
-Una excepción nativa, un slot ocupado/abandonado, una marca de incertidumbre, un
-marcador modificado o una sesión distinta no autorizan esta limpieza. Los registros
-de versiones anteriores o de un propietario que murió no tienen esta prueba en
-memoria. En esos casos puede seguir siendo necesario un arranque nuevo de Windows
-verificado por el recuperador. La opción no termina procesos nativos a la fuerza,
-no reinicia servicios/controladores del sistema y no borra leases inciertos.
+Las lecturas de diagnóstico permiten eliminar el marcador transitorio sin bloquear
+su retirada. Si otra aplicación lo mantiene abierto, su retirada realiza cuatro
+intentos con tres esperas de 25 ms. Rechaza y libera la respuesta de esa adquisición;
+no la publica como fresca. Una siguiente lectura puede retirar el marcador conocido
+antes de adquirir una muestra nueva, sin repetir el comando anterior.
 
-## Verificación
+El cierre de sesión espera automáticamente la desaparición de un bloqueo transitorio
+sólo cuando tiene esa prueba de retorno, dentro del plazo total de 10 s. Mantiene
+cerrada la admisión, usa el mismo mutex y avisa al guardián después de retirar el
+marcador. No trata un plazo vencido como cancelación de firmware. Si el bloqueo no
+cede, conserva el marcador y el estado de propiedad desconocida.
 
-Pruebas remotas de Windows, sin hardware: bloqueo real de archivos tras retorno,
-reintentos acotados, liberación de respuesta rechazada, limpieza antes de nueva
-lectura y antes del guardián, identidad de operación/sesión, negativa ante marcas
-antiguas/modificadas/inciertas y fallo de journal antes del despacho. Los fixtures
-WinForms verifican diagnóstico previo, tarea única, conservación del borrador,
-runtime nuevo sin Automático y rechazo ante cierre incierto, suspensión, fallo
-de diagnóstico o registros pendientes. Se exporta una captura de Configuración.
+## Límite documentado: no existe garantía universal de recuperación
 
-Se mantienen la serialización WMI, frescura original, publicación tardía aislada,
-contratos HP de ventiladores internos y prohibición de acceso EC. Esta mejora no
-cambia firmware ESP32, HMAC, credenciales ni la curva externa.
+La aplicación nunca reinicia Windows automáticamente. Tampoco termina WmiPrvSE,
+reinicia Winmgmt/controladores ni elimina marcadores inciertos como atajo.
+Microsoft documenta que CancelAsyncCall en métodos cancela el extremo cliente:
+el proveedor no recibe la cancelación y continúa ejecutándose. CancelIoEx tampoco
+garantiza cancelación de un controlador. Un proceso aislado o terminado no demuestra
+que una operación de firmware haya finalizado.
+
+Si un proveedor/controlador queda bloqueado permanentemente, el proceso muere en
+una llamada, surge una excepción nativa incierta, cambia el marcador o existen
+marcas de 1.2.13 sin prueba de retorno, la recuperación conserva los registros y
+no admite nuevas llamadas. Este paquete NO promete restaurar control en esos casos
+sin reiniciar Windows. El mecanismo previo de verificación de arranque sigue
+siendo una vía de recuperación si el usuario decide utilizarla; no se ejecuta ni
+se fuerza desde esta opción. No se sustituye por acceso directo EC.
+
+Fuentes primarias:
+- https://learn.microsoft.com/en-us/windows/win32/api/wbemcli/nf-wbemcli-iwbemservices-cancelasynccall
+- https://learn.microsoft.com/en-us/windows/win32/fileio/canceling-pending-i-o-operations
+
+## Pruebas
+
+Fixtures Windows sin acceso físico: bloqueo real de archivos después del retorno,
+espera automática hasta liberación del lector, identidad exacta de llamada y sesión,
+rechazo de marcadores antiguos/modificados/inciertos, excepción nativa sin prueba,
+fallo de journal antes de despacho, respuesta rechazada liberada, sin repetición de
+órdenes. La GUI verifica proceso único, inventario previo y subconjunto exacto,
+diagnóstico antes del drenaje, recuperación automática de fallo sin registros,
+conservación del borrador, tres observaciones nuevas, intención anterior, petición
+Firmware, opción desactivada, suspensión y cierre incierto. Se exporta una captura.
+
+Se conservan aislamiento CPU/GPU directo, exclusión WMI, frescura y barreras contra
+publicación tardía. ESP32, HMAC, NVS, credenciales, GPIO, PWM y límites internos HP
+no cambian. La validación física de esta recuperación sigue pendiente.

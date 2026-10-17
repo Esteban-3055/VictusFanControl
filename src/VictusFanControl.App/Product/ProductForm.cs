@@ -83,6 +83,7 @@ internal sealed partial class ProductForm : Form
         var menu=new ContextMenuStrip();menu.Items.Add("Abrir VictusFanControl",null,(_,_)=>ShowFromTray());
         menu.Items.Add("Volver a Firmware",null,(_,_)=>HandleCommand("firmware"));
         menu.Items.Add("Liberar CPU / GPU",null,(_,_)=>HandleCommand("performance-release"));
+        menu.Items.Add("Recuperar sesión definitiva",null,async(_,_)=>await ForceSessionRecoveryAsync());
         menu.Items.Add("Reiniciar sesión",null,async(_,_)=>await RestartSessionAsync());
         menu.Items.Add("Salir",null,(_,_)=>{_exitRequested=true;Close();});
         _tray=new(){Icon=_icons.Default,Text="VictusFanControl · Firmware",ContextMenuStrip=menu,Visible=fixture is null&&runtimeFactory is null};

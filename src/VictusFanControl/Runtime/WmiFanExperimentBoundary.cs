@@ -263,8 +263,9 @@ internal static class WmiFanExperimentBoundary
     // Wait for a live native call to return before inspecting its transient
     // marker. Hold the same slot throughout recovery; nested Send calls on
     // this synchronous thread may acquire the Windows mutex recursively.
-    internal static IDisposable EnterRecoverySlot(string directory, TimeSpan timeout, string? mutexName = null)
+    internal static IDisposable EnterRecoverySlot(string directory, TimeSpan timeout, string? mutexName = null, bool waitForConfirmedCleanup = false)
     {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         var mutex = new Mutex(false, mutexName ?? @"Global\VictusFanControl.WmiFanExperiment.Native");
         var owned = false;
         try
@@ -277,7 +278,18 @@ internal static class WmiFanExperimentBoundary
                 throw new IOException("Native completion is unknown after owner exit; lease retained.");
             }
             if (!owned) throw new TimeoutException("Native WMI call did not drain; no recovery call admitted and lease retained.");
-            RetireConfirmedCompletion(directory);
+            while (true)
+            {
+                try { RetireConfirmedCompletion(directory); break; }
+                catch (WmiNativeTrackingCleanupPendingException ex) when (waitForConfirmedCleanup &&
+                    ex.InnerException is IOException io && ((io.HResult & 0xffff) is 32 or 33) && clock.Elapsed < timeout)
+                {
+                    // Keep the mutex across retries so neither a caller nor the
+                    // detached guardian can classify this known-return marker
+                    // between attempts. This never retries native execution.
+                    Thread.Sleep((int)Math.Min(100, Math.Max(1, (timeout - clock.Elapsed).TotalMilliseconds)));
+                }
+            }
             if (File.Exists(Path.Combine(directory, "native-inflight.json")) || File.Exists(Path.Combine(directory, "native-uncertain.signal")))
                 throw new IOException("Native completion is unknown; no recovery call admitted and lease retained.");
             return new NativeSlot(mutex);
@@ -296,9 +308,9 @@ internal static class WmiFanExperimentBoundary
         BeginRecovery(); // Close admission before waiting for the outstanding call.
         try
         {
-            using var slot = EnterRecoverySlot(directory, timeout);
-            // The owner's in-memory return receipt must be drained before the
-            // detached guardian inspects this directory without that evidence.
+            using var slot = EnterRecoverySlot(directory, timeout, waitForConfirmedCleanup: true);
+            // Drain only proven returned tracking before the detached guardian
+            // inspects this directory without the owner's in-memory evidence.
             WmiFanGuiGuardianHost.RequestStop(directory, "CLIENT_RELEASE");
         }
         catch

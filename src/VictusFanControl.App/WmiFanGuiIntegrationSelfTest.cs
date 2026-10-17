@@ -44,13 +44,15 @@ internal static class WmiFanGuiIntegrationSelfTest
                 });
             }
             catch (WmiNativeTrackingCleanupPendingException) { trackingPending = true; }
-            finally { trackingReader?.Dispose(); }
             if (!trackingPending) throw new IOException("Tracking fixture did not retain known-return evidence.");
-            WmiFanExperimentBoundary.PrepareGuiReleaseStop(boundaryB, TimeSpan.FromSeconds(1));
+            var delayedReader = trackingReader!;
+            var unblock = Task.Run(async () => { await Task.Delay(500); delayedReader.Dispose(); });
+            try { WmiFanExperimentBoundary.PrepareGuiReleaseStop(boundaryB, TimeSpan.FromSeconds(3)); }
+            finally { await unblock; trackingReader?.Dispose(); }
             if (File.Exists(returnedMarker) || !File.Exists(Path.Combine(boundaryB, "stop.signal")))
                 throw new IOException("GUI release notified guardian before retiring its confirmed-return marker.");
             WmiFanExperimentBoundary.RearmGuiAfterSuccessfulRelease(boundaryB, Path.Combine(boundaryRoot, "c"));
-            Console.WriteLine("PASS: owner-confirmed native return drains before guardian stop; fresh GUI boundary opens without Windows reboot (zero hardware IO).");
+            Console.WriteLine("PASS: owner-confirmed native return automatically waits for transient sharing lock before guardian stop; fresh GUI boundary opens without Windows reboot (zero hardware IO).");
 
             var client = new WmiFanGuiGuardianClient(fixture: true);
             await client.StartAsync(default);
