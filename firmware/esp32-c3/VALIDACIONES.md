@@ -69,6 +69,17 @@ punto medio, monotonicidad e inversión. Las compilaciones del nuevo SHA
 se deben verificar mediante GitHub Actions; todavía **no hay PASS físico**
 de señal de 18 Hz, arranque ni temperatura.
 
+## Diagnóstico adicional NTC / ADC (2026-10-16)
+
+Se incorporó el comando USB `ntc`, que imprime lecturas RAW de GPIO0,
+milivoltios calibrados, temperatura calculada, antigüedad, temperatura
+filtrada y la causa exacta de rechazo. Se mantiene la misma validación y
+fallback seguro; **no se modificó la conversión eléctrica ni se eliminó
+ningún límite del ADC**. El usuario informa tensión aparentemente correcta,
+pero la causa de `NTC Fault` no podrá conocerse hasta observar RAW/mV
+del dispositivo. Falta comprobar en hardware y validar Arduino/PlatformIO
+en el SHA posterior a este cambio.
+
 ## Estado físico
 
 Solo se conserva como antecedente **informado por el usuario** que Wi-Fi a
