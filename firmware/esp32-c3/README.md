@@ -163,6 +163,34 @@ requieren comprobación en la placa: el test de conversión y la compilación
 no sustituyen medición con osciloscopio. Con PWM deshabilitado no debe
 asumirse que el motor se detiene, debido a la inversión 2N7000 → BC337.
 
+## Diagnóstico ADC / NTC ambiental
+
+El ESP32-C3 usa **GPIO0** con ADC 12 bits, atenuación 11 dB y lectura
+`analogReadMilliVolts()` promediada ocho veces. El divisor físico es
+`3V3 → 10 kΩ fija → GPIO0 → NTC 10 kΩ → GND`: alrededor de
+**1650 mV a 25 °C**, si el NTC es B3950 y las resistencias son nominales.
+
+Ante el mensaje `NTC Fault`, abrir el monitor serie a **115200 baudios**,
+activar **Nueva línea** y enviar `ntc`. El firmware muestra sin secretos:
+
+```text
+NTC GPIO0 raw=... adc=... mV motivo=... antiguedad=... ms temperatura=... C filtrada=... C
+```
+
+`motivo=NO_SAMPLE` significa que todavía no se adquirió la primera muestra;
+`RAW_LOW/RAW_HIGH` indica lectura sin calibrar cerca de los extremos;
+`MV_LOW/MV_HIGH` indica milivoltios fuera del intervalo de protección
+20–2450 mV; `BAD_RESISTANCE` y `TEMP_RANGE` señalan error numérico
+o temperatura implausible; `OK` indica una lectura válida.
+`filtrada=INVALIDA` pese a `motivo=OK` sugiere muestra vencida (>3 s)
+o lectura todavía no propagada. Comparar `adc=... mV` con un multímetro
+**midiendo GPIO0 respecto a GND**, no con la caída sobre el NTC.
+
+Este diagnóstico **no relaja** el fail-safe: si la medición sigue inválida,
+el ventilador continúa con la petición máxima. No se afirma que el hardware
+esté defectuoso o que la lectura del ADC sea fiable hasta observar datos reales.
+El comando no muestra SSID, contraseña Wi-Fi ni clave de emparejamiento.
+
 ## Validación pendiente de banco
 
 La prueba C++ ejecuta el mismo parser, autenticación y controlador que la placa,
