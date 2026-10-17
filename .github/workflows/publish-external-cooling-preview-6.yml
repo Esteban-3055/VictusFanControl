@@ -1,0 +1,269 @@
+name: publish-external-cooling-preview-6
+on:
+  push:
+    branches: [release/external-cooling-preview-6]
+    paths: [.github/workflows/publish-external-cooling-preview-6.yml]
+permissions:
+  contents: read
+concurrency:
+  group: external-cooling-preview-6-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'Esteban-3055/VictusFanControl' && github.ref == 'refs/heads/release/external-cooling-preview-6'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_SHA: f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+      PREVIEW_TAG: v1.2.14
+      BUILD_RUN: 39004825342
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Wait for exact-source software checks before preparing public assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            gh api "repos/$GH_REPO/actions/runs?head_sha=$SOURCE_SHA&event=push&per_page=100" > "$RUNNER_TEMP/pending-checks.json"
+            if python - <<'PY'
+          import json,os,sys
+          from pathlib import Path
+          runs=json.loads((Path(os.environ['RUNNER_TEMP'])/'pending-checks.json').read_text())['workflow_runs']
+          waiting=[]
+          for name in ('build','external-cooling','oem-shadow','cpu-rapl','wmi-fan-experiment','esp32-firmware'):
+              matches=[r for r in runs if r['name']==name and r['head_sha']==os.environ['SOURCE_SHA'] and r['head_branch']=='feature/external-curve-firmware' and r['event']=='push']
+              if not matches: waiting.append(name);continue
+              r=max(matches,key=lambda r:r['id'])
+              if r['status']!='completed': waiting.append(name)
+              elif r['conclusion']!='success': print('Release blocked:',name,r['conclusion']);sys.exit(1)
+          print('Waiting for: '+', '.join(waiting) if waiting else 'Six exact-source software checks: PASS')
+          sys.exit(2 if waiting else 0)
+          PY
+            then break
+            else
+              result=$?
+              if [ "$result" -ne 2 ] || [ "$attempt" -eq 120 ]; then exit 1; fi
+              sleep 15
+            fi
+          done
+      - name: Require exact source, successful CI, stable preservation and unused tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          gh api "repos/$GH_REPO/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
+          gh api "repos/$GH_REPO/git/matching-refs/tags/$PREVIEW_TAG" > "$RUNNER_TEMP/tags.json"
+          gh api "repos/$GH_REPO/actions/runs?head_sha=$SOURCE_SHA&event=push&per_page=100" > "$RUNNER_TEMP/checks.json"
+          test "$(gh api "repos/$GH_REPO/releases/latest" --jq '.tag_name')" = 'v1.2.9'
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          tmp=Path(os.environ['RUNNER_TEMP'])
+          tag=os.environ['PREVIEW_TAG']
+          assert not any(r['tag_name']==tag for r in json.loads((tmp/'releases.json').read_text()))
+          assert not any(r['ref']=='refs/tags/'+tag for r in json.loads((tmp/'tags.json').read_text()))
+          runs=json.loads((tmp/'checks.json').read_text())['workflow_runs']
+          for name in ('build','external-cooling','oem-shadow','cpu-rapl','wmi-fan-experiment','esp32-firmware'):
+              matches=[r for r in runs if r['name']==name and r['head_sha']==os.environ['SOURCE_SHA'] and r['head_branch']=='feature/external-curve-firmware' and r['event']=='push']
+              assert matches,name
+              run=max(matches,key=lambda r:r['id'])
+              assert run['status']=='completed' and run['conclusion']=='success',name
+              if name=='build': assert run['id']==int(os.environ['BUILD_RUN'])
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: VictusFanControl-1.2.14-win-x64-f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+          path: verified-payload
+          github-token: ${{ github.token }}
+          run-id: 39004825342
+      - uses: actions/download-artifact@v4
+        with:
+          name: VictusFanControl-1.2.14-Setup-win-x64-f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+          path: installer-assets
+          github-token: ${{ github.token }}
+          run-id: 39004825342
+      - uses: actions/download-artifact@v4
+        with:
+          name: external-cooling-validation-f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+          path: validation-evidence
+          github-token: ${{ github.token }}
+          run-id: 39004825323
+      - name: Verify original product archive, installer and 19 exact-commit fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/prepare-github-release.py --payload verified-payload --verified-archive installer-assets/VictusFanControl-1.2.14-win-x64.zip --output release-assets --source-head "$SOURCE_SHA" --build-run-id "$BUILD_RUN" --checks-json "$RUNNER_TEMP/checks.json" --checks-branch feature/external-curve-firmware
+          python scripts/prepare-installer-assets.py --installer installer-assets/VictusFanControl-1.2.14-Setup-win-x64.exe --source-head "$SOURCE_SHA" --payload release-assets/VictusFanControl-1.2.14-win-x64.zip --verify --output release-assets
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report=json.loads(Path('validation-evidence/validation.json').read_text(encoding='utf-8-sig'))
+          assert report['sourceHead']==os.environ['SOURCE_SHA']
+          assert len(report['checks'])==19 and all(c['exitCode']==0 for c in report['checks'])
+          assert report['offlinePackageAuditSkipped'] is False
+          assert report['physicalEsp32Pass'] is False and report['physicalNotebookWrites'] is False
+          assert 'PASS external curve UI' in Path('validation-evidence/external-curve-ui-self-test.log').read_text(encoding='utf-8-sig')
+          assert 'shared canvas/theme, mode segments, independent save/discard' in Path('validation-evidence/external-cooling-ui-self-test.log').read_text(encoding='utf-8-sig')
+          PY
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Prepare separate simulator, documentation and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet publish tools/Esp32Simulator/Esp32Simulator.csproj -c Release -r win-x64 --self-contained false -warnaserror -p:VictusProductRelease=true -o "$RUNNER_TEMP/simulator"
+          cp docs/EXTERNAL-COOLING-USAGE.md docs/EXTERNAL-COOLING-PROTOCOL.md docs/EXTERNAL-COOLING-V1-VECTORS.json "$RUNNER_TEMP/simulator/"
+          (cd "$RUNNER_TEMP/simulator" && zip -r "$GITHUB_WORKSPACE/release-assets/Esp32Simulator-$PREVIEW_TAG-win-x64.zip" .)
+          cp docs/EXTERNAL-COOLING-{USAGE,PROTOCOL,AUDIT,VALIDATION,HARDENING}.md docs/EXTERNAL-COOLING-V1-VECTORS.json release-assets/
+          cp docs/EXTERNAL-CURVE-ZERO-OUTPUT.md docs/NVML-CRASH-AND-BATTERY-RECOVERY.md docs/UNATTENDED-RECOVERY.md docs/EXTERNAL-CURVE-PROTOCOL.md docs/ESP32-WORK04-AUDIT.md release-assets/
+          cp firmware/esp32-c3/README.md release-assets/FIRMWARE-INSTALL.md
+          cp firmware/esp32-c3/VALIDACIONES.md release-assets/FIRMWARE-VALIDACIONES.md
+          git archive --format=zip --prefix=VictusBase-v1.2.14/ --output=release-assets/VictusBase-ESP32C3-v1.2.14-source.zip "$SOURCE_SHA" firmware/esp32-c3 docs/EXTERNAL-COOLING-PROTOCOL.md docs/EXTERNAL-COOLING-V1-VECTORS.json docs/EXTERNAL-CURVE-PROTOCOL.md
+          test -z "$(git ls-files '*/config.local.h')"
+          python firmware/esp32-c3/tools/export_arduino.py "$RUNNER_TEMP/arduino-sketch"
+          (cd "$RUNNER_TEMP/arduino-sketch" && zip -r "$GITHUB_WORKSPACE/release-assets/VictusBase-ESP32C3-v1.2.14-Arduino-sketch.zip" VictusBaseESP32C3)
+          cp release/RELEASE-NOTES-v1.2.14.md release-assets/
+          cp validation-evidence/validation.json release-assets/EXTERNAL-COOLING-CI-VALIDATION.json
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path('release-assets')
+          simulator=root/f"Esp32Simulator-{os.environ['PREVIEW_TAG']}-win-x64.zip"
+          (root/(simulator.name+'.sha256')).write_text(hashlib.sha256(simulator.read_bytes()).hexdigest()+'  '+simulator.name+'\n')
+          manifest=json.loads(Path('verified-payload/PRODUCT-GUI-MANIFEST.json').read_text(encoding='utf-8-sig'))
+          assert manifest['version']=='1.2.14' and manifest['releaseChannel']=='preview'
+          record=dict(tag=os.environ['PREVIEW_TAG'],version='1.2.14',prerelease=True,sourceHead=os.environ['SOURCE_SHA'],buildRunId=int(os.environ['BUILD_RUN']),externalCoolingRunId=39004825323,firmwareRunId=39004825351,
+              physicalEsp32Pass=False,physicalNotebookWrites=False,stableReleasePreserved='v1.2.9',updater129RequiresPreviewOptIn=True,
+              assets={p.name:dict(size=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in root.iterdir() if p.is_file()})
+          (root/'PREVIEW-PROVENANCE.json').write_text(json.dumps(record,indent=2)+'\n')
+          notes=Path('release/RELEASE-NOTES-v1.2.14.md').read_text()
+          (Path(os.environ['RUNNER_TEMP'])/'preview-notes.md').write_text(notes)
+          PY
+      - name: Exercise pinned original 1.2.9 updater before publication
+        shell: pwsh
+        run: ./scripts/test-updater-129-compatibility.ps1 -OutputDirectory (Join-Path $env:RUNNER_TEMP 'updater129')
+      - name: Write checksums for every prepared file
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root=Path('release-assets')
+          files=sorted(p for p in root.iterdir() if p.is_file() and p.name!='SHA256SUMS.txt')
+          (root/'SHA256SUMS.txt').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in files))
+          PY
+      - name: Stage draft with all assets and verify uploaded bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$PREVIEW_TAG" release-assets/* --target "$SOURCE_SHA" --title 'VictusFanControl v1.2.14 · Preliminar 6 · Parada externa y marcadores en vivo' --notes-file "$RUNNER_TEMP/preview-notes.md" --draft --prerelease --latest=false
+          gh api "repos/$GH_REPO/releases?per_page=100" > "$RUNNER_TEMP/staged-releases.json"
+          python - <<'PY'
+          import json,os,hashlib
+          from pathlib import Path
+          tmp=Path(os.environ['RUNNER_TEMP'])
+          matches=[r for r in json.loads((tmp/'staged-releases.json').read_text()) if r['tag_name']==os.environ['PREVIEW_TAG']]
+          assert len(matches)==1
+          r=matches[0]
+          assert r['draft'] is True and r['prerelease'] is True and r['target_commitish']==os.environ['SOURCE_SHA']
+          assets={a['name']:a for a in r['assets']}
+          files={p.name:p for p in Path('release-assets').iterdir() if p.is_file()}
+          assert assets.keys()==files.keys()
+          for name,p in files.items():
+              a=assets[name]
+              assert a['state']=='uploaded' and a['size']==p.stat().st_size and a['digest']=='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest(),name
+          (tmp/'release-id.txt').write_text(str(r['id']))
+          PY
+      - name: Publish verified preview while preserving stable latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          id=$(cat "$RUNNER_TEMP/release-id.txt")
+          gh api --method PATCH "repos/$GH_REPO/releases/$id" -F draft=false -F prerelease=true -f make_latest=false > "$RUNNER_TEMP/published.json"
+          test "$(gh api "repos/$GH_REPO/git/ref/tags/$PREVIEW_TAG" --jq '.object.sha')" = "$SOURCE_SHA"
+          test "$(gh api "repos/$GH_REPO/releases/latest" --jq '.tag_name')" = 'v1.2.9'
+
+  verify-public-update:
+    needs: publish
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_SHA: f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+      PREVIEW_TAG: v1.2.14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f8ee73b408f9f8deb7830bc7c3c7f7dc62552b58
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Check published source and preview metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $release=gh api "repos/$env:GH_REPO/releases/tags/$env:PREVIEW_TAG" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $release.draft -or -not $release.prerelease -or $release.target_commitish -ne $env:SOURCE_SHA){throw 'Release identity mismatch'}
+          $stable=gh api "repos/$env:GH_REPO/releases/latest" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $stable.tag_name -ne 'v1.2.9'){throw 'Stable release changed'}
+          $tag=gh api "repos/$env:GH_REPO/git/ref/tags/$env:PREVIEW_TAG" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $tag.object.sha -ne $env:SOURCE_SHA){throw 'Tag mismatch'}
+          if($release.assets.Where({$_.state -ne 'uploaded' -or -not $_.digest.StartsWith('sha256:')}).Count -ne 0){throw 'Incomplete uploaded assets'}
+      - name: Original 1.2.9 updater discovers and downloads 1.2.14 without installing
+        shell: pwsh
+        run: |
+          for($attempt=1;$attempt -le 4;$attempt++) {
+            try {
+              ./scripts/test-updater-129-compatibility.ps1 -Live -OutputDirectory (Join-Path $env:RUNNER_TEMP 'updater129')
+              break
+            } catch {
+              if($attempt -eq 4){throw}
+              Write-Host 'Retrying bounded public metadata check after transient service error.'
+              Start-Sleep -Seconds 15
+            }
+          }
+      - name: Publish and verify updater evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $evidence=Join-Path $env:RUNNER_TEMP 'updater129/cache/compatibility.json'
+          $record=Get-Content -LiteralPath $evidence -Raw | ConvertFrom-Json
+          if($record.version -ne '1.2.14' -or -not $record.IsPrerelease -or $record.installerExecuted -ne $false -or $record.verifiedSha256 -ne $record.Sha256){throw 'Updater evidence mismatch'}
+          Copy-Item -LiteralPath $evidence -Destination UPDATER-1.2.9-COMPATIBILITY.json
+          $file=Get-Item UPDATER-1.2.9-COMPATIBILITY.json
+          $digest='sha256:'+(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $release=gh api "repos/$env:GH_REPO/releases/tags/$env:PREVIEW_TAG" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0){throw 'Cannot read release'}
+          $existing=@($release.assets | Where-Object {$_.name -eq $file.Name})
+          if($existing.Count -eq 0){
+            gh release upload $env:PREVIEW_TAG UPDATER-1.2.9-COMPATIBILITY.json
+            if($LASTEXITCODE -ne 0){throw 'Evidence upload failed'}
+          }
+          $release=gh api "repos/$env:GH_REPO/releases/tags/$env:PREVIEW_TAG" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0){throw 'Cannot verify release'}
+          $uploaded=@($release.assets | Where-Object {$_.name -eq $file.Name})
+          if($uploaded.Count -ne 1 -or $uploaded[0].size -ne $file.Length -or $uploaded[0].digest -ne $digest){throw 'Evidence integrity mismatch'}
+          if($release.draft -or -not $release.prerelease -or $release.target_commitish -ne $env:SOURCE_SHA){throw 'Final metadata mismatch'}
+          Write-Host $release.html_url
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preview-1.2.14-public-updater-${{ github.run_id }}
+          path: ${{ runner.temp }}/updater129/cache/compatibility.json
+          if-no-files-found: warn
