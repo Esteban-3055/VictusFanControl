@@ -19,7 +19,8 @@ try
         while(client.Diagnostics.Received<4&&!connection.IsCompleted)await Task.Delay(50,cancellation.Token);
         var d=client.Diagnostics;
         if(d.State!=ExternalCoolingConnectionState.Connected || d.Failures!=0 || d.Received<4 ||
-            d.Device is not {Mode:"Remote",AppliedPwmPct:50} || d.Device.Extensions is null)
+            d.Device is not {Mode:"Remote",ExternalCurveVersion:1,AppliedConfigRevision:not null,AppliedDuty:>=30 and <=255,ExternalRequest:>=90 and <=100} || d.Device.Extensions is null||
+            d.Device.AppliedConfigRevision!=new ExternalCurveConfiguration().Revision)
             throw new InvalidOperationException($"Firmware interoperability failed: state={d.State}, failures={d.Failures}, received={d.Received}, device={d.Device}");
         Console.WriteLine("PASS production Windows TCP client <-> actual C++ firmware engine: mutual authentication, directional MACs, fragmented replies, Battery telemetry, remote request mapping and reserved extensions; no hardware IO.");
         var before=d.Received;source.Firmware=true;

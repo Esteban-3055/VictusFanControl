@@ -141,7 +141,7 @@ internal sealed partial class ProductForm
                 if (pending.Pending)
                 {
                     if (!Draft.RecoverSessionsAutomatically)
-                    { _canvas.UpdateStatus = "La recuperación automática está desactivada. Usa Recuperar sesiones y luego Instalar. La descarga se conserva."; return; }
+                    { _canvas.UpdateStatus = "La recuperación automática está desactivada. Usa Recuperar sesión definitiva y luego Instalar. La descarga se conserva."; return; }
                     if (pending.Fans?.Any(r => !r.Recoverable) == true)
                     { _canvas.UpdateStatus = "Registro de propiedad inválida o incierta. La actualización se conserva y no se modifica el hardware."; return; }
                     _canvas.UpdateStatus = "Recuperando la sesión pendiente para continuar la instalación…"; _canvas.Invalidate();

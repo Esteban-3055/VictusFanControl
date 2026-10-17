@@ -16,12 +16,20 @@ internal sealed partial class ProductForm
             _automaticReview is not null || !Draft.RecoverSessionsAutomatically ||
             _isolatedRuntime && RecoveryRunner is null)
         { _automaticRecovery.Pause(); return; }
-        if (!_automaticRecovery.TakeRequest(_canvas.State, now)) return;
         var resume = !_automaticRecoveryResumeSuppressed && Draft.Protections.ResumeAutomatic &&
             (_automaticResumption.Wanted && _resumptionProfiles?.Protections.ResumeAutomatic == true ||
              _recoveryAtStartup && !_restartOpening && _saved.ActivateAutomaticOnStart && _saved.Protections.ResumeAutomatic);
         var preferences = ProductProfilesStore.Copy(_automaticResumption.Wanted && _resumptionProfiles is not null
             ? _resumptionProfiles : _recoveryAtStartup ? _saved : Draft);
+        if (_canvas.State.PerformanceRecovery?.Pending != true)
+        {
+            if (_runtime is null || _isolatedRuntime && RecoveryRuntimeFactory is null ||
+                !_automaticRecovery.TakeSessionRequest(_canvas.State, now)) return;
+            _recoveryResumeCancelled = _automaticRecoveryResumeSuppressed;
+            _recoveryTask = ForceSessionRecoveryCoreAsync(preferences, resume);
+            return;
+        }
+        if (!_automaticRecovery.TakeRequest(_canvas.State, now)) return;
         _recoveryResumeCancelled = _automaticRecoveryResumeSuppressed;
         _restarting = true; _restartLifecycleInterrupted = false; _canvas.Busy = true;
         // Reserve the operation before the first background inventory read; exit drains this same task.
@@ -54,7 +62,7 @@ internal sealed partial class ProductForm
                 throw new IOException("Los registros cambiaron durante la espera; no se recuperó otra sesión.");
             if (selected.Fans?.Any(r => !r.Recoverable) == true)
                 throw new IOException("Registro inválido o de propiedad incierta; conserva el diagnóstico.");
-            await RecoverPerformanceCoreAsync(selected, preferences, resume);
+            await ForceSessionRecoveryCoreAsync(preferences, resume, selected);
         }
         catch (Exception ex)
         {

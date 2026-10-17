@@ -22,7 +22,7 @@ try {
     }
     $results+=Invoke-Fixture 'tools/ExternalCooling.Tests/bin/Release/net8.0/ExternalCooling.Tests.dll' '' 'protocol-transport-resources'
     $app='src/VictusFanControl.App/bin/Release/net8.0-windows/VictusFanControl.App.dll'
-    foreach($flag in @('external-cooling-self-test','external-cooling-ui-self-test','product-gui-self-test','telemetry-coordination-self-test','performance-settings-self-test','performance-gui-self-test','wmi-fan-gui-self-test')) {
+    foreach($flag in @('external-cooling-self-test','external-cooling-ui-self-test','external-curve-ui-self-test','product-gui-self-test','telemetry-coordination-self-test','performance-settings-self-test','performance-gui-self-test','wmi-fan-gui-self-test')) {
         $results+=Invoke-Fixture $app ('--'+$flag) $flag
     }
     $cli='src/VictusFanControl/bin/Release/net8.0-windows/VictusFanControl.dll'

@@ -1,0 +1,6 @@
+#pragma once
+// Optional PRIVATE bootstrap, compatible with Work 0.4. Prefer USB setup + NVS.
+// Copy as config.local.h; this file is ignored by git. Never share an image built with real secrets.
+#define WIFI_SSID "YOUR_SSID"
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#define PAIRING_KEY_B64 "YOUR_SAVED_32_BYTE_BASE64_KEY"

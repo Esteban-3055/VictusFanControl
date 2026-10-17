@@ -23,7 +23,7 @@ internal static partial class ProductGuiSelfTest
                 require(blockedFactoryCalls==0&&blocked.Canvas.State.Runtime=="RecoveryRequired"&&blocked.Canvas.State.LifecycleBlocked,"Fan pending startup opened controller/telemetry.");
                 require(blocked.Canvas.State.FanMode=="RecoveryRequired"&&blocked.Canvas.State.FanAuthority=="Unknown","Pending startup claimed restored Firmware ownership.");
                 using var bitmap=new Bitmap(blocked.Canvas.Width,blocked.Canvas.Height);blocked.Canvas.DrawToBitmap(bitmap,new(Point.Empty,bitmap.Size));
-                require(blocked.Canvas.Hits.Any(x=>x.Id=="recovery-run"&&x.Enabled),"Fan-only startup recovery has no actionable button.");
+                require(blocked.Canvas.Hits.Any(x=>x.Id=="session-force-recovery"&&x.Enabled),"Fan-only startup recovery has no definitive recovery button.");
                 var exit=blocked.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Pending startup exit hung.");
             }
             var fanPending=new ProductRecoverySelection(Guid.Empty,Guid.Empty,fanRecords);int fanRuns=0;
@@ -63,7 +63,7 @@ internal static partial class ProductGuiSelfTest
                 form.Show(); Application.DoEvents(); form.EditValue("pl1", 38); var draft = ProductProfilesStore.Serialize(form.Draft); old.Publish(Pending());
                 form.Canvas.Page = ProductPage.Performance; form.Canvas.PerformanceTab = 3; form.Canvas.Refresh();
                 require(form.Canvas.Hits.Single(h => h.Id == "recovery-run").Enabled, "Pending recovery is not actionable in Guardian.");
-                form.Canvas.Page = ProductPage.Settings; form.Canvas.Refresh(); require(form.Canvas.Hits.Any(h => h.Id == "recovery-run"), "Settings lacks recovery.");
+                form.Canvas.Page = ProductPage.Settings; form.Canvas.Refresh(); require(form.Canvas.Hits.Count(h => h.Id is "session-force-recovery" or "recovery-run") == 1, "Settings must have exactly one definitive recovery action.");
                 var task = form.RecoverPerformanceAsync(confirmed: true); require(ReferenceEquals(task, form.RecoverPerformanceAsync(true)), "Double click duplicated recovery.");
                 PumpUntil(() => old.Disposals == 1, "Recovery did not begin shutdown."); require(launches == 0 && created == 0, "Recovery ran before cleanup drain.");
                 old.DisposeGate.SetResult(); PumpUntil(() => task.IsCompleted, "Recovery hung."); task.GetAwaiter().GetResult();

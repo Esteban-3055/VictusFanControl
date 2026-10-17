@@ -27,6 +27,7 @@ internal static partial class ProductGuiSelfTest
             TestHomeAnimationCadence(Require);
             VictusFanControl.Recovery.ProductRecoveryClientSelfTest.Run(Require);
             TestGuidedRecovery(Require);
+            TestForcedSessionRecovery(Require);
             ProductAutomaticRecoverySelfTest.Run(Require);
             TestBackgroundRecovery(Require);
             TestUpdatePage(Require);
@@ -169,7 +170,7 @@ internal static partial class ProductGuiSelfTest
             var beforeFanRecovery=canvas.State;
             canvas.State=canvas.State with{Runtime="RecoveryRequired",LifecycleBlocked=true,FanMode="RecoveryRequired",FanAuthority="Unknown",CpuState="Disabled",GpuState="Disabled",PerformanceActive=false,AppliedPerformance=null,CanApplyPerformance=false,
                 GuardianState="Recuperación pendiente",PerformanceRecovery=new(true,"Sesión de ventiladores pendiente",FanRecords:new[]{new VictusFanControl.Recovery.ProductRecoveryRecord("WmiFanGui/lease.json","FanGui",new string('a',64))})};
-            canvas.Size=new(1040,660);canvas.Page=ProductPage.Settings;Render("recovery-fan-only-settings-minimum");Require(canvas.Hits.Any(h=>h.Id=="recovery-run"&&h.Enabled),"Fan-only pending lacks recovery action.");
+            canvas.Size=new(1040,660);canvas.Page=ProductPage.Settings;Render("recovery-fan-only-settings-minimum");Require(canvas.Hits.Any(h=>h.Id=="session-force-recovery"&&h.Enabled),"Fan-only pending lacks definitive recovery action.");
             canvas.Page=ProductPage.Performance;canvas.PerformanceTab=3;Render("recovery-fan-only-guardian-minimum");canvas.State=beforeFanRecovery;canvas.Size=new(1672,941);
             canvas.Page=ProductPage.Fans;for(int i=1;i<=2;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
             Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
@@ -222,6 +223,21 @@ internal static partial class ProductGuiSelfTest
                 Snapshot=markerSample,AutomaticDecisionSnapshot=markerSample,AutomaticDecision=new(AdaptiveFanProductionMode.Automatic,AdaptiveFanProductionActionKind.HoldCustom,true,31,35,FanAuthority.Custom,"fixture")};
             var curveMarkers=canvas.CurrentDemandMarkers();
             Require(curveMarkers.Count==2&&curveMarkers.Single(m=>m.IsApplied).Level==31,"Accepted request marker was replaced by draft interpolation.");
+            var originalMarkerState=canvas.State;
+            foreach(var level in new[]{51,52,53,54}) {
+                canvas.State=originalMarkerState with{FanLevel=level,
+                    AutomaticDecision=originalMarkerState.AutomaticDecision! with{EqualFanLevel=level}};
+                Require(canvas.CurrentDemandMarkers().Any(m=>m.IsApplied&&m.Level==level),"Upper-range applied GUI marker disappeared");
+            }
+            canvas.State=originalMarkerState;
+            using(var markerImage=new Bitmap(64,64)) {
+                using var graphics=Graphics.FromImage(markerImage);graphics.Clear(ProductCanvas.Background);
+                ProductCanvas.DrawDemandMarker(graphics,new(32,32),false);
+                ProductCanvas.DrawDemandMarker(graphics,new(32,32),true);
+                var outer=markerImage.GetPixel(32,20);var center=markerImage.GetPixel(32,32);
+                Require(outer.R>200&&outer.G>150&&outer.B<100&&center.R<50&&center.G>180,
+                    "Coincident target/applied markers hid one another");
+            }
             canvas.Page=ProductPage.Fans;canvas.FanTab=0;Render("fans-live-demand-marker");
             var markerState=canvas.State;
             canvas.State=markerState with{AutomaticReview=true,AutomaticReviewMaximumSeconds=2700,AutomaticReviewRemainingSeconds=2633,

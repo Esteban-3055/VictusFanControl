@@ -68,7 +68,7 @@ internal static partial class ProductGuiSelfTest
                 form.Canvas.Page=ProductPage.Settings;form.Canvas.Refresh();
                 var navigation=form.Canvas.Hits.Where(h=>h.Id.StartsWith("page-")).OrderBy(h=>h.Bounds.Y).ToArray();
                 var externalIndex=Array.FindIndex(navigation,h=>h.Id=="page-"+(int)ProductPage.ExternalCooling);
-                ExternalCoolingSelfTest.Require(externalIndex>0&&navigation[externalIndex-1].Label=="Avanzado"&&navigation[externalIndex+1].Label=="Actualizaciones"&&
+                ExternalCoolingSelfTest.Require(externalIndex>0&&navigation[externalIndex-1].Label=="Avanzado"&&navigation[externalIndex+1].Label=="Curva Externa"&&navigation[externalIndex+2].Label=="Actualizaciones"&&
                     navigation.All(h=>h.Bounds.Bottom<882)&&!form.Canvas.Hits.Any(h=>h.Id=="external-cooling"),"External cooling navigation order/fit missing or obsolete Settings entry retained.");
                 using(var image=new Bitmap(form.Width,form.Height)){form.DrawToBitmap(image,new(Point.Empty,form.Size));image.Save(Path.Combine(root,"settings.png"),ImageFormat.Png);}
                 var formCount=Application.OpenForms.Count;

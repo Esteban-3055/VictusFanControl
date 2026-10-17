@@ -23,6 +23,7 @@ public sealed record ExternalCoolingDiagnostics
     public string? LastSent { get; init; }
     public string? LastReceived { get; init; }
     public DeviceStatus? Device { get; init; }
+    public ExportTelemetry? AcknowledgedTelemetry {get;init;}
     public ExternalCoolingFailureKind? LastFailureKind { get; init; }
     public DateTimeOffset? LastFailureUtc { get; init; }
 }
@@ -98,7 +99,8 @@ public sealed class Esp32TcpClient
     private async Task CommunicateAsync(FramedConnection wire,AuthenticatedSession session,ExternalCoolingSettings settings,ITelemetryExportSource source,CancellationToken token)
     {
         using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(token);
-        var sync=new object();var sentAt=new Dictionary<long,long>();long next=0,lastDeviceSequence=0,lastDeviceReceived=0;
+        var sync=new object();var sentAt=new Dictionary<long,(long At,ExportTelemetry Telemetry)>();long next=0,lastDeviceSequence=0,lastDeviceReceived=0;
+        DeviceStatus? capability=null;
         async Task Send()
         {
             using var timer=new PeriodicTimer(TimeSpan.FromSeconds(1));
@@ -110,6 +112,11 @@ public sealed class Esp32TcpClient
                 lock(sync)
                 {
                     value=value with{ReplyToDeviceSequence=lastDeviceSequence>0?lastDeviceSequence:null};
+                    value=value with{ExternalConfiguration=settings.Curve.CanSendTo(capability)?settings.Curve:null};
+                    // Old firmware rejects outputs below 30. Keep monitoring but
+                    // withdraw authority rather than using an old saved curve.
+                    if(settings.Curve.RequiresFullOutputRange&&!settings.Curve.CanSendTo(capability))
+                        value=value.WithoutRequest("AwaitingDevice");
                     if(lastDeviceSequence==0||Stopwatch.GetElapsedTime(lastDeviceReceived).TotalMilliseconds>=ExternalCoolingProtocol.RequestValidForMilliseconds)
                         value=value.WithoutRequest("AwaitingDevice");
                 }
@@ -119,7 +126,7 @@ public sealed class Esp32TcpClient
                 frame=ExternalCoolingProtocol.Sign(frame,session.SendKey);
                 lock(sync)
                 {
-                    sentAt[next]=Stopwatch.GetTimestamp();
+                    sentAt[next]=(Stopwatch.GetTimestamp(),value);
                     foreach(var old in sentAt.Keys.Where(x=>x<next-15).ToArray())sentAt.Remove(old);
                 }
                 await wire.WriteAsync(frame,lifetime.Token).ConfigureAwait(false);
@@ -135,18 +142,18 @@ public sealed class Esp32TcpClient
                 var frame=await wire.ReadAsync(lifetime.Token).ConfigureAwait(false);
                 ExternalCoolingProtocol.Verify(frame,session.ReceiveKey,session.Id,previous);
                 var status=ExternalCoolingProtocol.Status(frame);previous=frame.Sequence;
-                long stamp;
+                (long At,ExportTelemetry Telemetry) sent;
                 lock(sync)
                 {
-                    if(status.AckSequence<=ack||!sentAt.TryGetValue(status.AckSequence,out stamp))throw new InvalidDataException("Invalid acknowledgement.");
+                    if(status.AckSequence<=ack||!sentAt.TryGetValue(status.AckSequence,out sent))throw new InvalidDataException("Invalid acknowledgement.");
                 }
-                if(Stopwatch.GetElapsedTime(stamp)>TimeSpan.FromSeconds(5))throw new InvalidDataException("Expired acknowledgement.");
+                if(Stopwatch.GetElapsedTime(sent.At)>TimeSpan.FromSeconds(5))throw new InvalidDataException("Expired acknowledgement.");
                 ack=status.AckSequence;
                 lifetime.Token.ThrowIfCancellationRequested();
-                lock(sync){lastDeviceSequence=frame.Sequence;lastDeviceReceived=Stopwatch.GetTimestamp();}
+                lock(sync){lastDeviceSequence=frame.Sequence;lastDeviceReceived=Stopwatch.GetTimestamp();capability=status;}
                 // Diagnostics hold only a projection of operational fields, never opaque peer extensions.
                 var safe=status with{Extensions=new(){Slot1=null,Slot2=null}};
-                Update(d=>d with{State=ExternalCoolingConnectionState.Connected,Detail="Autenticado; recepción válida",Device=safe,
+                Update(d=>d with{State=ExternalCoolingConnectionState.Connected,Detail="Autenticado; recepción válida",Device=safe,AcknowledgedTelemetry=sent.Telemetry,
                     Received=d.Received+1,BytesReceived=d.BytesReceived+ExternalCoolingProtocol.Encode(frame).Length+1,
                     LastValidReceivedUtc=DateTimeOffset.UtcNow,LastReceived=JsonSerializer.Serialize(safe,ExternalCoolingProtocol.Json)});
             }

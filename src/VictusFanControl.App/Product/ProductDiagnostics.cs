@@ -62,7 +62,7 @@ internal static class ProductDiagnostics
                                 if(!VictusFanControl.Recovery.ProductRecoveryInventory.Exists(source))return;
                                 VictusFanControl.Recovery.ProductRecoveryInventory.EnsurePlainPath(source);
                                 if(new FileInfo(source).Length>1024*1024){Write(entry+"-unavailable.txt","Archivo mayor que 1 MiB; original conservado.");return;}
-                                using var output=zip.CreateEntry(entry).Open();var bytes=File.ReadAllBytes(source);output.Write(bytes);
+                                using var output=zip.CreateEntry(entry).Open();var bytes=VictusFanControl.Recovery.ProductRecoveryInventory.ReadBytes(source);output.Write(bytes);
                             }
                             catch(Exception ex){Write(entry+"-unavailable.txt",ex.Message);}
                         }

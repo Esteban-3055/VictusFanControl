@@ -54,6 +54,21 @@ internal static class ProductAutomaticRecoverySelfTest
         check(p.TakeRequest(last,240000),"A minute of healthy Automatic must reset the episode budget.");
         var preferences=new Product.ProductProfiles{RecoverSessionsAutomatically=false};
         check(!Product.ProductProfilesStore.Copy(preferences).RecoverSessionsAutomatically,"Automatic recovery preference did not persist.");
+        var broken = new ProductRuntimeState { Runtime="Degraded", LifecycleBlocked=true };
+        p=new();
+        check(!p.TakeSessionRequest(broken,0)&&!p.TakeSessionRequest(broken,14999)&&p.TakeSessionRequest(broken,15000),"Live degraded session must wait 15 seconds.");
+        check(!p.TakeSessionRequest(broken,100000),"Unconfirmed live release was retried.");
+        p.SessionOpened();check(!p.TakeSessionRequest(broken,100000)&&!p.TakeSessionRequest(broken,129999)&&p.TakeSessionRequest(broken,130000),"Second session episode bypassed 30 second backoff.");
+        p.SessionOpened();check(!p.TakeSessionRequest(broken,200000)&&!p.TakeSessionRequest(broken,259999)&&p.TakeSessionRequest(broken,260000),"Third session episode bypassed 60 second backoff.");
+        p.SessionOpened();p.TakeSessionRequest(broken,300000);check(!p.TakeSessionRequest(broken,400000),"Live recovery exceeded three episodes.");
+        var healthyFirmware=new ProductRuntimeState{Runtime="Healthy",FanMode="Firmware"};
+        p.Observe(healthyFirmware,500000);p.Observe(healthyFirmware,560000);
+        check(!p.TakeSessionRequest(broken,560000)&&p.TakeSessionRequest(broken,575000),"Healthy Firmware did not reset session recovery budget.");
+        foreach(var excluded in new[]{broken with{Runtime="Healthy"},broken with{Runtime="Initializing"},broken with{AutomaticPreparing=true},broken with{PerformanceUpdating=true},
+            broken with{AutomaticReview=true},broken with{FanMode="Automatic",LifecycleBlocked=false},pending})
+        { p=new();check(!p.TakeSessionRequest(excluded,0)&&!p.TakeSessionRequest(excluded,100000),"Live reset admitted an active, pending or transitioning session."); }
+        p=new();p.TakeSessionRequest(broken,0);p.Pause();check(!p.TakeSessionRequest(broken,100000)&&!p.TakeSessionRequest(broken,100001),"Paused recovery accumulated disabled time.");
+        Console.WriteLine("PASS definitive live-session recovery policy: persistent degraded/failed/recovering sessions without inventory, 15/30/60s backoff, three episodes, unconfirmed-release latch, healthy Firmware reset and active/transition exclusion.");
         Console.WriteLine("Background recovery policy: PASS (stable inventory, bounded 30/60s pre-operation read retries, one release per inventory including manual/update attempts, bounded episodes, active-session exclusion, invalid ownership, pause and healthy reset).");
     }
 }

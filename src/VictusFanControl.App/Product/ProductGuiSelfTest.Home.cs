@@ -31,7 +31,7 @@ internal static partial class ProductGuiSelfTest
         }
         canvas.Page=ProductPage.Home;Render("home-dashboard-live");
         var names=canvas.Hits.Where(h=>h.Id.StartsWith("page-")).OrderBy(h=>h.Bounds.Y).Select(h=>h.Label).ToArray();
-        require(names.SequenceEqual(new[]{"Inicio","Ventiladores","Rendimiento","Curvas","Perfiles","Monitorización","Protecciones","Configuración","Avanzado","Base externa","Actualizaciones"}),
+        require(names.SequenceEqual(new[]{"Inicio","Ventiladores","Rendimiento","Curvas","Perfiles","Monitorización","Protecciones","Configuración","Avanzado","Base externa","Curva Externa","Actualizaciones"}),
             "Requested navigation order was not rendered.");
         var phase=canvas.HomeFanPhases;var clock=ProductCanvas.AnimationClockMilliseconds;
         canvas.AdvanceHomeAnimation(clock+100,DateTimeOffset.UtcNow);var moving=canvas.HomeFanPhases;
@@ -52,6 +52,9 @@ internal static partial class ProductGuiSelfTest
             "RPM gaps restarted inertia or lost the independent measured speeds.");
         require(canvas.CpuFanReading(heldNow) is {Rpm:3000,Held:true}&&canvas.GpuFanReading(heldNow) is {Rpm:1500,Held:true},
             "Missing RPM replaced independent measured readouts with blanks or simulated RPM.");
+        require(ProductCanvas.HomeFanRpmCaption(canvas.CpuFanReading(heldNow))=="Última RPM"&&
+            ProductCanvas.HomeFanRpmCaption(canvas.GpuFanReading(heldNow))=="Última RPM",
+            "Retained readings were presented as current RPM.");
         Render("home-dashboard-held-rpm");
         var beforeFailure=canvas.HomeFanAnimationSpeeds;
         canvas.State=feedbackState with{Runtime="Failed"};

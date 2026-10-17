@@ -30,7 +30,8 @@
     "cpu-spike-filter-2s-fresh-continuity-extreme-bypass-and-actual-cooling",
     "background-session-recovery-and-qualified-resumption-on-current-target",
     "extended-30s-per-level-54-52-manual-plateau-and-firmware-return",
-    "current-automatic-54-52-under-load-and-source-lifecycle-transitions"
+    "current-automatic-54-52-under-load-and-source-lifecycle-transitions",
+    "definitive-session-recovery-current-target-without-windows-restart"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -46,7 +47,8 @@
     "Configurable software handoffs and unattended resumption have software fixtures only; firmware thermal throttling, sensor integrity and unknown native-call exclusion are unchanged.",
     "New telemetry grace periods have software regression coverage only; physical thermal and WMI latency behavior still requires observation on the target.",
     "CPU spike suppression is verified in software fixtures; its actual cooling and acoustic effect still requires observation on the target.",
-    "Background session recovery and cancellation are verified with zero-hardware Windows fixtures; the current-target hardware recovery remains to be observed."
+    "Background session recovery and cancellation are verified with zero-hardware Windows fixtures; the current-target hardware recovery remains to be observed.",
+    "Definitive session recovery has zero-hardware fixtures only. Permanent provider/driver hangs and old unknown native markers cannot be proven completed by cancelling a client or closing its process; no unconditional no-reboot recovery is claimed."
   ],
   "offlinePolicyEvidence": [
     "product-fan-stability-replay-8c40-2026-10-06.json",
@@ -60,7 +62,7 @@
     "normalAutomaticPromoted": false,
     "auxiliaryFault": "not-applicable-no-acquisition"
   },
-  "version": "1.2.12",
+  "version": "1.2.15",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -193,5 +195,20 @@
     "fans": "HP-WMI-ACPI-2D",
     "platformSensors": "removed",
     "directEc": "prohibited"
+  },
+  "sessionRecovery": {
+    "manualAction": "Recuperar sesión definitiva",
+    "pipeline": "diagnostic-exact-inventory-drain-release-only-fresh-runtime",
+    "persistentTelemetryFaultDelayMilliseconds": [
+      15000,
+      30000,
+      60000
+    ],
+    "maximumSessionEpisodesBeforeHealthyReset": 3,
+    "healthyResetMilliseconds": 60000,
+    "automaticResume": "previous-intent-only-three-fresh-observations-protections-and-user-stop",
+    "nativeCompletionEvidence": "process-local-exact-invocation-return-receipt",
+    "unknownNativePolicy": "retain-records-no-new-dispatch-no-forced-process-or-system-restart",
+    "physicalValidation": "pending-current-target-observation"
   }
 }

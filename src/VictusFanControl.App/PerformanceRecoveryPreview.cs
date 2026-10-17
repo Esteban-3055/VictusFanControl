@@ -9,14 +9,14 @@ internal sealed record PerformanceRecoveryPreview(bool Pending, string Detail, G
     internal bool Actionable => CpuSession.HasValue || GpuSession.HasValue || FanRecords?.Count > 0;
     internal static string DirectoryPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "VictusFanControl","Performance",CpuPowerProductDefaults.TargetProfileId);
-    internal static PerformanceRecoveryPreview Read(string? directory=null)
+    internal static PerformanceRecoveryPreview Read(string? directory=null, bool ignoreCurrentOwner=true)
     {
         var includeFans=directory is null;
         directory??=DirectoryPath;
         var cpuPath=Path.Combine(directory,"cpu-power-session.json"); var gpuPath=Path.Combine(directory,"gpu-clock-session.json");
         try
         {
-            var fans=includeFans?ProductRecoveryInventory.ReadFans(ignoreCurrentOwner:true):null;
+            var fans=includeFans?ProductRecoveryInventory.ReadFans(ignoreCurrentOwner:ignoreCurrentOwner):null;
             if(!ProductRecoveryInventory.Exists(cpuPath)&&!ProductRecoveryInventory.Exists(gpuPath)&&fans?.Count is not >0)return new(false,"Sin registros pendientes.");
             var cpu=new JsonCpuPowerSessionJournal(cpuPath,CpuPowerProductDefaults.TargetProfileId).Load();
             var gpu=new JsonGpuClockSessionJournal(gpuPath,CpuPowerProductDefaults.TargetProfileId).Load();

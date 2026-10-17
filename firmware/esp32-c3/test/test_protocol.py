@@ -44,11 +44,12 @@ def main():
     cases=[]
     def case(name, action): action();cases.append({'name':name,'passed':True});print('PASS',name)
     case('device calibration, inverted NOT duty, independent lease and wraparound',lambda:subprocess.run([args.host,'--policy'],check=True,timeout=5))
+    case('external controller dynamics and safety',lambda:subprocess.run([args.host,'--controller'],check=True,timeout=5))
     for role,value in V['proofs'].items(): assert proof(role)==value
     base=[hello(),auth(),frame('telemetry',1,telemetry(),RX)]
     def healthy():
         results=run(args.host,base+[frame('telemetry',2,telemetry(True),RX),frame('telemetry',3,telemetry(True),RX)])
-        assert results[-1]['payload']['mode']=='Remote' and results[-1]['payload']['appliedPwmPct']==50
+        assert results[-1]['payload']['mode']=='Remote' and results[-1]['payload']['appliedDuty']==255
     case('real C++ mutual auth, directional MACs and accepted request',healthy)
     case('Firmware null request',lambda:run(args.host,[hello(),auth(),frame('telemetry',1,telemetry(False,'Firmware'),RX)]))
     case('Manual accepted request',lambda:run(args.host,base+[frame('telemetry',2,telemetry(True,'Manual'),RX)]))

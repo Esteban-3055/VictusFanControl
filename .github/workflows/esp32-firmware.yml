@@ -1,13 +1,39 @@
 name: esp32-firmware
 on:
+  workflow_dispatch:
   push:
     branches: ['feature/**', main]
-    paths: ['Directory.Build.props', 'firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
+    paths: ['Directory.Build.props', '.github/workflows/build.yml', 'firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
   pull_request:
     paths: ['firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
 permissions:
   contents: read
 jobs:
+  arduino3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: '1.3.1'
+      - name: Install official pinned Arduino 3.x core and JSON library
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib install ArduinoJson@6.21.5
+      - name: Generate IDE sketch from canonical sources and compile inverted PWM image
+        run: |
+          python firmware/esp32-c3/tools/export_arduino.py "$RUNNER_TEMP/sketch"
+          arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc,FlashSize=4M --build-property compiler.cpp.extra_flags=-DVICTUS_ENABLE_PWM=1 --output-dir "$RUNNER_TEMP/arduino3-image" "$RUNNER_TEMP/sketch/VictusBaseESP32C3"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: esp32-c3-arduino3-unqualified-${{ github.sha }}
+          path: ${{ runner.temp }}/arduino3-image/*.bin
+          if-no-files-found: error
   firmware:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -31,11 +57,16 @@ jobs:
           echo "4593d22d83a0c687ec5ab60f5ffbb80c2145f6e739983b38ee59da85df5467df  $RUNNER_TEMP/arduinojson.zip" | sha256sum -c -
           unzip -q "$RUNNER_TEMP/arduinojson.zip" -d "$RUNNER_TEMP"
           clang++ -std=c++17 -O2 -Wall -Wextra -Werror -I "$RUNNER_TEMP/ArduinoJson-6.21.5/src" -I firmware/esp32-c3/lib/VictusProtocol \
-            firmware/esp32-c3/test/host.cpp firmware/esp32-c3/lib/VictusProtocol/*.cpp -lcrypto -o "$RUNNER_TEMP/firmware-host"
+            firmware/esp32-c3/test/host.cpp firmware/esp32-c3/test/controller.cpp firmware/esp32-c3/lib/VictusProtocol/*.cpp -lcrypto -o "$RUNNER_TEMP/firmware-host"
       - name: Protocol vectors, hostile frames, NOT inversion and independent lease
         run: python firmware/esp32-c3/test/test_protocol.py "$RUNNER_TEMP/firmware-host" --report "$RUNNER_TEMP/protocol-tests.json"
       - name: Production Windows protocol client interoperates with actual C++ firmware engine
+        # The host links the same controller and parser as the board image.
         run: dotnet run --project tools/FirmwareInterop.Tests -c Release -- python firmware/esp32-c3/test/tcp_bridge.py "$RUNNER_TEMP/firmware-host"
+      - name: Authenticated external configuration and hostile curve messages
+        run: python firmware/esp32-c3/test/test_external_config.py "$RUNNER_TEMP/firmware-host"
+      - name: LCD source freshness and canonical Arduino export
+        run: python firmware/esp32-c3/test/test_presentation.py "$RUNNER_TEMP/firmware-host"
       - name: Upload unqualified firmware and software evidence
         uses: actions/upload-artifact@v4
         with:

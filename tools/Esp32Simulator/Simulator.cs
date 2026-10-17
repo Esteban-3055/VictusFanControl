@@ -20,12 +20,19 @@ public static class Simulator
             await using var wire=new FramedConnection(tcp.GetStream());
             using var session=await AuthenticatedSession.ServerAsync(wire,key,token);
             long previous=0,sequence=0;ProtocolFrame? last=null;
+            ExternalCurveConfiguration? curve=null;
             var replyTimes=new Dictionary<long,long>();
             while(true)
             {
                 var frame=await wire.ReadAsync(token);
                 ExternalCoolingProtocol.Verify(frame,session.ReceiveKey,session.Id,previous);
-                var telemetry=ExternalCoolingProtocol.Telemetry(frame);previous=frame.Sequence;observed?.Invoke(session.Id,telemetry);
+                var telemetry=ExternalCoolingProtocol.Telemetry(frame);
+                if(telemetry.ExternalConfiguration is{} configuration)
+                {
+                    if(curve?.Revision==configuration.Revision&&curve!=configuration)throw new InvalidDataException("External revision reused.");
+                    curve=configuration;
+                }
+                previous=frame.Sequence;observed?.Invoke(session.Id,telemetry);
                 if(previous>=options.AfterMessages)
                 {
                     switch(options.Fault)
@@ -43,11 +50,12 @@ public static class Simulator
                 }
                 var remote=telemetry.SolicitudValida&&telemetry.ReplyToDeviceSequence is{} referencedReply&&replyTimes.TryGetValue(referencedReply,out var replyAt)&&
                     System.Diagnostics.Stopwatch.GetElapsedTime(replyAt).TotalMilliseconds<telemetry.ValidForMs;
-                device.Apply(remote,telemetry.Solicitud);
+                device.Apply(remote,telemetry.Solicitud,curve,telemetry.DemandaPct,telemetry.ModoSolicitado=="Manual");
                 var operating=device.Snapshot;
                 var status=new DeviceStatus
                 {
                     AckSequence=previous,AmbientTempC=23.0+Math.Sin(previous/30.0),
+                    ExternalCurveVersion=1,ExternalMinimumOutput=0,AppliedConfigRevision=operating.Revision,AppliedDuty=operating.Duty,ExternalRequest=operating.Request,
                     // An illustrative simulator policy, not a firmware requirement or Windows mapping.
                     AppliedPwmPct=operating.PwmPct,
                     Mode=operating.Mode,Communication=operating.Communication,Extensions=new(){Slot1=null,Slot2=null}

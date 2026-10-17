@@ -83,6 +83,7 @@ internal sealed partial class ProductForm : Form
         var menu=new ContextMenuStrip();menu.Items.Add("Abrir VictusFanControl",null,(_,_)=>ShowFromTray());
         menu.Items.Add("Volver a Firmware",null,(_,_)=>HandleCommand("firmware"));
         menu.Items.Add("Liberar CPU / GPU",null,(_,_)=>HandleCommand("performance-release"));
+        menu.Items.Add("Recuperar sesión definitiva",null,async(_,_)=>await ForceSessionRecoveryAsync());
         menu.Items.Add("Reiniciar sesión",null,async(_,_)=>await RestartSessionAsync());
         menu.Items.Add("Salir",null,(_,_)=>{_exitRequested=true;Close();});
         _tray=new(){Icon=_icons.Default,Text="VictusFanControl · Firmware",ContextMenuStrip=menu,Visible=fixture is null&&runtimeFactory is null};
@@ -216,6 +217,7 @@ internal sealed partial class ProductForm : Form
     }
     internal void HandleCommand(string id)
     {
+        if(id.StartsWith("external-curve-",StringComparison.Ordinal)&&_canvas.ExternalCurve is{} curve){_=curve.ExecuteAsync(id[15..]);return;}
         if(id!="external-cooling"&&id.StartsWith("external-",StringComparison.Ordinal)&&_externalCoolingPage is{} external){_=external.ExecuteAsync(id);return;}
         if (id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release" or "session-restart")
             _automaticRecoveryResumeSuppressed = true;
@@ -235,6 +237,7 @@ internal sealed partial class ProductForm : Form
             _startupAutomatic?.Cancel("Automático al iniciar cancelado por el usuario.");
         if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")_automaticResumption.Cancel();
         if(id=="session-restart"){_ = RestartSessionAsync();return;}
+        if(id=="session-force-recovery"){_ = ForceSessionRecoveryAsync();return;}
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
         if(HandleAdvancedCommand(id))return;
@@ -345,6 +348,7 @@ internal sealed partial class ProductForm : Form
     }
     internal void EditValue(string key,int value)
     {
+        if(key.StartsWith("external-curve-value-",StringComparison.Ordinal)){if(!_closing&&!IsDisposed&&!_canvas.Busy)_canvas.ExternalCurve?.EditValue(key[21..],value);return;}
         if(_canvas.Busy||_closing||IsDisposed)return;
         if(key.StartsWith("sim-input-")){_canvas.SimulationInputs=_canvas.SimulationInputs.With(int.Parse(key[10..]),value);_canvas.Invalidate();return;}
         var slot=_canvas.Editing;var p=_draft.Get(slot);
