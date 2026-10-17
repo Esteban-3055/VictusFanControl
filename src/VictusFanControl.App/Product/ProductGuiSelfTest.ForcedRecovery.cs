@@ -67,7 +67,7 @@ internal static partial class ProductGuiSelfTest
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Forced failure fixture exit hung.");
             }
             Console.WriteLine("PASS forced session recovery: visible without pending records, diagnostic before drain, one task, fresh Firmware runtime, preserved draft, no Automatic, no foreign recovery, uncertainty/suspend/evidence-failure fences (zero hardware IO).");
-            TestDefinitiveAutomaticSessionRecovery(root, require);
+            TestDefinitiveAutomaticSessionRecovery(Path.Combine(root,"automatic"), require);
         }
         finally { Environment.ExitCode=exitCode;Directory.Delete(root,true); }
     }
@@ -76,6 +76,7 @@ internal static partial class ProductGuiSelfTest
     {
         foreach(var scenario in new[]{"resume","firmware","stop","disabled","uncertain","suspend","pending"})
         {
+            Console.WriteLine("Definitive automatic recovery fixture: " + scenario);
             var old=new RecordingRuntime{DisposeGate=new(TaskCreationOptions.RunContinuationsAsynchronously),DisposeFailure=scenario=="uncertain"?"unknown native completion":null};
             var next=new RecordingRuntime();var creates=0;var runs=0;
             var pending=scenario=="pending"?new ProductRecoverySelection(Guid.NewGuid(),Guid.Empty):new(Guid.Empty,Guid.Empty);

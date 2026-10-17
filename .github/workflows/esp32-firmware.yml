@@ -1,5 +1,6 @@
 name: esp32-firmware
 on:
+  workflow_dispatch:
   push:
     branches: ['feature/**', main]
     paths: ['Directory.Build.props', '.github/workflows/build.yml', 'firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
