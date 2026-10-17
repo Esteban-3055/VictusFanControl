@@ -72,7 +72,8 @@ inline void renderLcd(LcdPage page, const LcdReadings& data,
             lcdNumber(left, data.telemetryFresh ? data.cpuTempC : NAN, -20, 130);
             lcdNumber(right, data.telemetryFresh ? data.gpuTempC : NAN, -20, 130);
             // Maximal CPU and GPU values both fit in 16 characters.
-            std::snprintf(first, sizeof(first), "CPU:%sC GPU:%sC", left, right);
+            if (std::snprintf(first, sizeof(first), "CPU:%sC GPU:%sC", left, right) > 16)
+                std::snprintf(first, sizeof(first), "CPU:%sCGPU:%sC", left, right);
             if (std::isfinite(data.ambientC))
                 std::snprintf(second, sizeof(second), "AMB:%.1fC %lus", data.ambientC,
                               static_cast<unsigned long>((msRemainingOnTemperaturePage + 999) / 1000));
