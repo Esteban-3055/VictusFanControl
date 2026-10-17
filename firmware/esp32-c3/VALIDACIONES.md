@@ -43,6 +43,8 @@ pasaron por separado sin ampliar los plazos ni cambiar el cierre del programa.
 La validación de curvas en C# exige los mismos campos que C++; una configuración
 inválida o una revisión reutilizada termina solo su conexión y el simulador
 continúa aceptando sesiones. Esto también se verifica por TCP real.
+Las capturas del editor y de los ajustes se revisan visualmente; la tabla usa
+columnas explícitas para conservar la alineación al escalar la ventana.
 
 En el ensayo local de recursos TCP de 10 s no hubo acumulación de mensajes;
 las cifras medidas están en el informe de pruebas de ExternalCooling. La RAM

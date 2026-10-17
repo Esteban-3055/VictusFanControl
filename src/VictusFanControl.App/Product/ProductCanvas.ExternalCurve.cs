@@ -29,9 +29,15 @@ internal sealed partial class ProductCanvas
             Card(g,new(308,252,539,507));Card(g,new(867,252,780,507));
             Action("demand","Demanda",new(331,270,235,40),p.Draft.Input==0);Action("request","Solicitud aceptada",new(581,270,242,40),p.Draft.Input==1);
             var points=p.Draft.Points;var start=Math.Clamp(p.Selected-2,0,Math.Max(0,points.Length-5));
-            DrawText(g,"#       Entrada (%)       Solicitud externa",331,329,20,Muted,490);
+            DrawText(g,"#",345,329,20,Muted,43);DrawText(g,"Entrada (%)",404,329,20,Muted,192);DrawText(g,"Salida",669,329,20,Muted,130);
             for(int i=start;i<Math.Min(points.Length,start+5);i++)
-                Action("node-"+i,$"{i+1}             {points[i].Input}                       {points[i].Output}",new(331,366+(i-start)*45,492,40),p.Selected==i);
+            {
+                var row=new RectangleF(331,366+(i-start)*45,492,40);Card(g,row,p.Selected==i,7);
+                DrawText(g,(i+1).ToString(),345,row.Y+7,20,Muted,43);
+                DrawText(g,points[i].Input.ToString(),445,row.Y+7,20,Ink,168);
+                DrawText(g,points[i].Output.ToString(),669,row.Y+7,20,Ink,130);
+                Hit("external-curve-node-"+i,row,"Punto externo "+(i+1),!p.Busy);
+            }
             Action("previous","‹",new(331,604,52,38),enabled:p.Selected>0);Action("next","›",new(395,604,52,38),enabled:p.Selected<points.Length-1);
             Action("x","Editar entrada",new(463,604,175,38));Action("y","Editar salida",new(650,604,173,38));
             Action("add","+ Añadir punto",new(331,657,236,38),enabled:points.Length<16);Action("remove","− Quitar",new(582,657,241,38),enabled:p.Selected>0&&p.Selected<points.Length-1);
