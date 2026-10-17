@@ -44,3 +44,13 @@ transitorios y 18 kHz sin medir. GPIO flotante con pull-down puede significar
 ventilador al máximo incluso en imagen de monitorización. No confundir ACK I²C
 con caracteres visibles ni PWM aplicado con giro real. No se realizaron cargas
 en la placa ni mediciones eléctricas durante esta auditoría.
+
+## Nota posterior (2026-10-16): selección física de 18 Hz
+
+Esta auditoría describe históricamente la decisión inicial de 18 kHz/8 bits
+en el PR #44; no debe tomarse como la configuración vigente. El usuario
+restauró 18 Hz, pero una combinación inicial 18 Hz/8 bits hizo fallar LEDC
+y reiniciar el dispositivo antes de establecer Wi-Fi. La revisión posterior
+mantiene la curva externa de 8 bits lógicos, configura LEDC a 18 Hz/14 bits
+y escala el duty invertido al rango físico 0–16383. La validación física
+del ventilador y la electrónica continúa pendiente.
