@@ -79,8 +79,15 @@ Fallback local: NTC válida, 89 a 255 entre 25 y 45 °C (mínimo 89 por debajo d
 25 °C); piso ambiental creciente desde 35 °C incluso en Remote; ≥45 °C o fallo
 de sensor da 255 inmediatamente. Promedio ADC y EMA ambiental; fallos y ambiente
 alto no quedan ocultos por el filtro. No se usa el ambiente como carga CPU/GPU.
-La salida lógica siempre permanece en 30–255; señal GPIO3 = **255 − salida**,
-18 kHz, 8 bits. Caducidad por reloj monotónico con rollover de millis soportado.
+La salida lógica siempre permanece en **30–255**. GPIO3 utiliza una etapa
+NOT (2N7000 → BC337): el valor eléctrico conceptual es **255 − salida**,
+en escala de 8 bits. El hardware LEDC del ESP32-C3 funciona a **18 Hz con
+resolución de 14 bits**, por lo que el firmware convierte el duty eléctrico
+mediante `round((255 − salida) × 16383 / 255)`. Esa conversión no altera
+el contrato del protocolo, la curva editable, los estados ni la realimentación
+lógica de 30–255. La combinación anterior de 18 Hz / 8 bits falló al
+configurar el temporizador y provocó un reinicio antes de Wi-Fi.
+Caducidad por reloj monotónico con rollover de millis soportado.
 
 La configuración validada se conserva en RAM y en una entrada NVS versionada
 con comprobación CRC de NVS y rangos al cargar. Las escrituras se limitan a una
