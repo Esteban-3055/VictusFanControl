@@ -192,6 +192,8 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
     latest.manual=mode=="Manual";
     latest.cpu=p["cpuUsagePct"].isNull()?-1:p["cpuUsagePct"].as<double>(); latest.gpu=p["gpuUsagePct"].isNull()?-1:p["gpuUsagePct"].as<double>();
     latest.ram=p["ramUsagePct"].isNull()?-1:p["ramUsagePct"].as<double>(); latest.demand=p["demandaPct"].isNull()?-1:p["demandaPct"].as<double>();
+    latest.cpuTempC=p["cpuTempC"].isNull()?NAN:p["cpuTempC"].as<double>();
+    latest.gpuTempC=p["gpuTempC"].isNull()?NAN:p["gpuTempC"].as<double>();
     latest.request=valid?p["solicitud"].as<int>():-1; latest.valid=valid; latest.source=p["powerSource"].as<std::string>();
     if (valid) for (auto stamp:replies) if (stamp.sequence==p["replyToDeviceSequence"].as<int64_t>() && static_cast<uint32_t>(now-stamp.at)<2000) remoteRequest=true;
     return true;
