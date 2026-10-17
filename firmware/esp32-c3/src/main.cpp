@@ -64,9 +64,9 @@ void controlTask(void*) {
         int duty=controller.tick(millis(),currentAmbient(millis()));
         if (board::EnablePwm) {
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
-            ledcWrite(board::PwmPin,victus::ExternalController::electrical(duty));
+            ledcWrite(board::PwmPin,board::LedcDutyFrom8Bit(victus::ExternalController::electrical(duty)));
 #else
-            ledcWrite(0,victus::ExternalController::electrical(duty));
+            ledcWrite(0,board::LedcDutyFrom8Bit(victus::ExternalController::electrical(duty)));
 #endif
         }
         applied.store(duty); remote.store(controller.remote());externalRequest.store(controller.requested());
@@ -244,6 +244,12 @@ void setup() {
         if(ledcSetup(0,board::PwmFrequencyHz,board::PwmResolutionBits)==0)abort();
         ledcWrite(0,0);ledcAttachPin(board::PwmPin,0);
 #endif
+        // GPIO3 is active-low via 2N7000 -> BC337. Initial electrical duty 0
+        // therefore requests maximum fan output until controlTask takes over.
+        Serial.printf("PWM LEDC: %lu Hz, %d bits, GPIO%d; 8-bit external curve scaled to %lu.\n",
+                      static_cast<unsigned long>(board::PwmFrequencyHz),
+                      board::PwmResolutionBits,board::PwmPin,
+                      static_cast<unsigned long>(board::LedcMaximumDuty));
     }
     preferences.begin("victus-base",false);
     victus::ExternalConfig restored;
