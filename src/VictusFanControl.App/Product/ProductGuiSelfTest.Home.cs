@@ -52,6 +52,9 @@ internal static partial class ProductGuiSelfTest
             "RPM gaps restarted inertia or lost the independent measured speeds.");
         require(canvas.CpuFanReading(heldNow) is {Rpm:3000,Held:true}&&canvas.GpuFanReading(heldNow) is {Rpm:1500,Held:true},
             "Missing RPM replaced independent measured readouts with blanks or simulated RPM.");
+        require(ProductCanvas.HomeFanRpmCaption(canvas.CpuFanReading(heldNow))=="Última RPM"&&
+            ProductCanvas.HomeFanRpmCaption(canvas.GpuFanReading(heldNow))=="Última RPM",
+            "Retained readings were presented as current RPM.");
         Render("home-dashboard-held-rpm");
         var beforeFailure=canvas.HomeFanAnimationSpeeds;
         canvas.State=feedbackState with{Runtime="Failed"};
