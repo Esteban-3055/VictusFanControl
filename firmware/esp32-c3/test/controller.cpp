@@ -1,4 +1,5 @@
 #include "ExternalController.h"
+#include "../include/BoardConfig.h"
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -7,6 +8,17 @@ void require(bool b,const char* s){if(!b)throw std::runtime_error(s);}
 victus::ExternalConfig config(){victus::ExternalConfig c;std::strcpy(c.revision,"0123456789abcdef0123456789abcdef");return c;}
 }
 int controllerTests() {
+    // Regression: 18 Hz with 8-bit LEDC caused ledcAttach() to fail and
+    // abort() before Wi-Fi/TCP could start. ESP32-C3 requires 14-bit timing.
+    require(board::PwmFrequencyHz==18&&board::PwmResolutionBits==14,"18 Hz / 14-bit LEDC profile");
+    require(board::LedcMaximumDuty==16383,"14-bit duty range");
+    require(board::LedcDutyFrom8Bit(0)==0&&board::LedcDutyFrom8Bit(255)==16383,"LEDC endpoints");
+    require(board::LedcDutyFrom8Bit(225)==14456,"NOT: logical 30 -> electrical 225 -> LEDC");
+    require(board::LedcDutyFrom8Bit(0)==0,"NOT: logical 255 -> electrical zero");
+    require(board::LedcDutyFrom8Bit(128)==8224,"LEDC midpoint rounding");
+    require(board::LedcDutyFrom8Bit(300)==16383,"out-of-range duty saturation");
+    for(uint32_t v=1;v<=255;++v)
+        require(board::LedcDutyFrom8Bit(v)>board::LedcDutyFrom8Bit(v-1),"strictly increasing LEDC scale");
     auto c=config();require(c.valid(),"default config");
     require(c.evaluate(0)==30&&c.evaluate(100)==255&&c.evaluate(50)==130,"curve interpolation");
     auto bad=c;bad.points[2].input=25;require(!bad.valid(),"duplicate input");
@@ -16,6 +28,9 @@ int controllerTests() {
     bad=c;bad.requestMaximum=bad.requestMinimum;require(!bad.valid(),"bad request calibration");
     bad=c;for(auto& ch:bad.revision)ch='a';require(!bad.valid(),"unterminated persisted revision");
     require(victus::ExternalController::electrical(30)==225&&victus::ExternalController::electrical(255)==0,"NOT 8-bit polarity");
+    require(board::LedcDutyFrom8Bit(victus::ExternalController::electrical(30))==14456
+         && board::LedcDutyFrom8Bit(victus::ExternalController::electrical(255))==0,
+            "physical LEDC 14-bit polarity");
     victus::ExternalController fan;fan.configure(c);
     fan.receive(true,27,0,false,0);require(fan.tick(0,24)==255,"startup pulse");
     require(fan.tick(799,24)==255,"startup hold");
