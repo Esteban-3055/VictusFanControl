@@ -1,0 +1,95 @@
+name: finalize-external-cooling-preview-5
+on:
+  push:
+    branches: [release/external-cooling-preview-5]
+    paths: [.github/workflows/finalize-external-cooling-preview-5.yml]
+permissions:
+  contents: read
+concurrency:
+  group: external-cooling-preview-5-publication
+  cancel-in-progress: false
+jobs:
+  verify-public-update:
+    if: github.repository == 'Esteban-3055/VictusFanControl' && github.ref == 'refs/heads/release/external-cooling-preview-5'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_SHA: 2709cae82cbc0db0685271a16331e84126a5ab74
+      PREVIEW_TAG: v1.2.13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2709cae82cbc0db0685271a16331e84126a5ab74
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Verify unchanged published assets and exact-source CI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $release=gh api "repos/$env:GH_REPO/releases/tags/$env:PREVIEW_TAG" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0){throw 'Cannot read release metadata'}
+          if($release.id -ne 415498878 -or $release.draft -or -not $release.prerelease -or $release.target_commitish -ne $env:SOURCE_SHA){throw 'Release identity mismatch'}
+          $expected='{"ESP32-WORK04-AUDIT.md":{"size":2894,"digest":"sha256:3ed519feedd4617022d7b5a8bd4e831170a08ef6afa64c20bb5c68f442240363"},"Esp32Simulator-v1.2.13-win-x64.zip":{"size":146179,"digest":"sha256:23daa741757aa83cd0dc623682f1d01aa624dbc5bfa573445164ebce1ca6ba0e"},"Esp32Simulator-v1.2.13-win-x64.zip.sha256":{"size":101,"digest":"sha256:bb0f9b8dc38825112bcb42636b7066ec293d67914e151c65bb3c1046044e390c"},"EXTERNAL-COOLING-AUDIT.md":{"size":3273,"digest":"sha256:d08373cdbf1497aaf71d747b447a2ff0563877c55c644ba6874ee99394bf92ad"},"EXTERNAL-COOLING-CI-VALIDATION.json":{"size":1770,"digest":"sha256:0520af64b6a69509ef84a2e2e2e3832025f5603167b35b85927ecb6ddb743745"},"EXTERNAL-COOLING-HARDENING.md":{"size":4670,"digest":"sha256:6d2a20e80d04b2696b9ca867e78b5ec476c022bc0e8a93ac5235088209acae19"},"EXTERNAL-COOLING-PROTOCOL.md":{"size":10747,"digest":"sha256:b3151eac7bcc278675a67efb9250d522b7a1408cabec92693ea5940beb0b8d03"},"EXTERNAL-COOLING-USAGE.md":{"size":8902,"digest":"sha256:408f99a05c2cd55f262f8367e1bf65396fdd006b0e08b9b69c7cd862837cb98a"},"EXTERNAL-COOLING-V1-VECTORS.json":{"size":962,"digest":"sha256:80f8893ed3db105136c55ba3e22ae130d9c1b8be3f5db1ed7db084f3f7040c36"},"EXTERNAL-COOLING-VALIDATION.md":{"size":5722,"digest":"sha256:0fd6af6317c456f774e4bff55c71d07510e742891eb2b2749fc3ca5b54ba66e1"},"EXTERNAL-CURVE-PROTOCOL.md":{"size":5074,"digest":"sha256:7fa0cc621927eead489cb61cf7109774af8c066799316fb70b2c57c88eaa4f83"},"FIRMWARE-INSTALL.md":{"size":8822,"digest":"sha256:5adb14102d17e9cb164aedfc74c8b900f773cbedf3f9d82c60ae10344c52597b"},"FIRMWARE-VALIDACIONES.md":{"size":5203,"digest":"sha256:c767f86e9309e3f14daebf20bc8346c7ca37cbdd040917ffabdfdc5aa2fd2da8"},"NVML-CRASH-AND-BATTERY-RECOVERY.md":{"size":4444,"digest":"sha256:9fda1730a713dea09ab5da94a78aa1ee078d719673844cf8fc98e1b45847f1f8"},"PREVIEW-PROVENANCE.json":{"size":3762,"digest":"sha256:3e5817acbbc315fcb0d8b82bf8779726d7afe27fcaa0cac45024e920365c5ea3"},"UNATTENDED-RECOVERY.md":{"size":4290,"digest":"sha256:9c527e495695049d99d162d674a99003affd0e27f932a5b351ceefb82359dfdb"},"VictusBase-ESP32C3-v1.2.13-source.zip":{"size":45069,"digest":"sha256:104a6183691bfa6e176c861a9e11bf76d05047d12bfcdcaac1114a6419e570a5"},"VictusFanControl-1.2.13-provenance.json":{"size":4270,"digest":"sha256:54ab4e410e34d2451e0df767b2c1dac497323c18f919cdb1eb07344287558bd1"},"VictusFanControl-1.2.13-Setup-win-x64.exe":{"size":168623124,"digest":"sha256:a9816d077c88cd73d1de7b9b463fe1aee2a34a3b25de463c5ddfa9b89e82b0d0"},"VictusFanControl-1.2.13-Setup-win-x64.exe.provenance.json":{"size":701,"digest":"sha256:8838274f51677ed78adfab16fe494753290396714805a075a20fb14ed32245d7"},"VictusFanControl-1.2.13-Setup-win-x64.exe.sha256":{"size":109,"digest":"sha256:768930c9613c32322833d5265c1b5a62ac60228a77c1b923c2f6b4e004f4877b"},"VictusFanControl-1.2.13-win-x64.zip":{"size":6783243,"digest":"sha256:6657429c36e83ba2778d9ebbea40d25112788bdbf41e9e303fd3e9aa36f0bbbf"},"VictusFanControl-1.2.13-win-x64.zip.sha256":{"size":102,"digest":"sha256:2aee50a0ee112fc2712a393ebb75a026fac302b6b21cbe3fc235394ab5d77054"}}' | ConvertFrom-Json -AsHashtable
+          if($release.assets.Count -ne $expected.Count){throw 'Unexpected published asset set'}
+          foreach($asset in $release.assets){
+            $entry=$expected[$asset.name]
+            if($null -eq $entry -or $asset.state -ne 'uploaded' -or $asset.size -ne $entry.size -or $asset.digest -ne $entry.digest){throw ('Asset mismatch: '+$asset.name)}
+          }
+          $checks=gh api "repos/$env:GH_REPO/actions/runs?head_sha=$env:SOURCE_SHA&event=push&per_page=100" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0){throw 'Cannot read CI'}
+          foreach($name in @('build','external-cooling','oem-shadow','cpu-rapl','wmi-fan-experiment','esp32-firmware')){
+            $matchingRuns=@($checks.workflow_runs | Where-Object {$_.name -eq $name -and $_.head_sha -eq $env:SOURCE_SHA -and $_.head_branch -eq 'feature/external-curve-firmware' -and $_.event -eq 'push'} | Sort-Object id -Descending)
+            if($matchingRuns.Count -eq 0 -or $matchingRuns[0].status -ne 'completed' -or $matchingRuns[0].conclusion -ne 'success'){throw ('CI gate failed: '+$name)}
+          }
+          $tag=gh api "repos/$env:GH_REPO/git/ref/tags/$env:PREVIEW_TAG" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $tag.object.sha -ne $env:SOURCE_SHA){throw 'Tag mismatch'}
+          $stable=gh api "repos/$env:GH_REPO/releases/latest" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $stable.id -ne 413381820 -or $stable.tag_name -ne 'v1.2.9'){throw 'Stable release changed'}
+          Write-Host 'PASS: exact published source, all six CI gates, all 23 original asset hashes and stable preservation.'
+      - name: Original 1.2.9 updater discovers and downloads public 1.2.13 on Windows
+        shell: pwsh
+        run: |
+          for($attempt=1;$attempt -le 4;$attempt++){
+            try{
+              ./scripts/test-updater-129-compatibility.ps1 -Live -OutputDirectory (Join-Path $env:RUNNER_TEMP 'updater129')
+              break
+            }catch{
+              if($attempt -eq 4){throw}
+              Write-Host 'Retrying bounded public-metadata verification after a transient service error.'
+              Start-Sleep -Seconds 15
+            }
+          }
+      - name: Attach and verify public updater evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $evidence=Join-Path $env:RUNNER_TEMP 'updater129/cache/compatibility.json'
+          $record=Get-Content -LiteralPath $evidence -Raw | ConvertFrom-Json
+          if($record.version -ne '1.2.13' -or -not $record.IsPrerelease -or $record.installerExecuted -ne $false -or $record.Sha256 -ne 'a9816d077c88cd73d1de7b9b463fe1aee2a34a3b25de463c5ddfa9b89e82b0d0' -or $record.verifiedSha256 -ne $record.Sha256){throw 'Updater evidence mismatch'}
+          Copy-Item -LiteralPath $evidence -Destination UPDATER-1.2.9-COMPATIBILITY.json
+          gh release upload $env:PREVIEW_TAG UPDATER-1.2.9-COMPATIBILITY.json
+          if($LASTEXITCODE -ne 0){throw 'Evidence upload failed'}
+          $release=gh api "repos/$env:GH_REPO/releases/tags/$env:PREVIEW_TAG" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0){throw 'Metadata verification failed'}
+          $uploaded=@($release.assets | Where-Object {$_.name -eq 'UPDATER-1.2.9-COMPATIBILITY.json'})
+          $file=Get-Item UPDATER-1.2.9-COMPATIBILITY.json
+          $digest='sha256:'+(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($uploaded.Count -ne 1 -or $uploaded[0].size -ne $file.Length -or $uploaded[0].digest -ne $digest){throw 'Evidence integrity mismatch'}
+          $stable=gh api "repos/$env:GH_REPO/releases/latest" | ConvertFrom-Json
+          if($LASTEXITCODE -ne 0 -or $stable.tag_name -ne 'v1.2.9' -or $release.draft -or -not $release.prerelease -or $release.target_commitish -ne $env:SOURCE_SHA){throw 'Final metadata mismatch'}
+          Write-Host $release.html_url
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: preview-1.2.13-public-updater-${{ github.run_id }}
+          path: ${{ runner.temp }}/updater129/cache/compatibility.json
+          if-no-files-found: warn
+
