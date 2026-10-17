@@ -29,6 +29,14 @@ jobs:
         shell: pwsh
         run: ./scripts/test-updater-129-compatibility.ps1
 
+      - name: Installer shared recovery fixtures before long checks (no installation)
+        shell: pwsh
+        run: |
+          dotnet build tools/ProductSetup -c Release -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Installer shared recovery build failed.' }
+          dotnet run --project tools/ProductSetup -c Release --no-build -- --self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Installer shared recovery fixtures failed.' }
+
       # Hosted runners can spend more than five seconds initializing CIM's
       # service provider. Warm only this read-only inventory query; the actual
       # isolation guards keep their existing five-second fail-closed deadline.

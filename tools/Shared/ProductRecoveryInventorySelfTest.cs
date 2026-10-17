@@ -94,7 +94,9 @@ internal static class ProductRecoveryInventorySelfTest
         File.WriteAllText(path,original);
         using(var observer=ProductRecoveryInventory.OpenReadSnapshot(path))
         {
-            VictusFanControl.Runtime.WmiFanExperiment.WriteJson(path,new{Pid=456,CommandType=45});
+            var replacement=path+".tmp";
+            File.WriteAllText(replacement,JsonSerializer.Serialize(new{Pid=456,CommandType=45}));
+            File.Replace(replacement,path,destinationBackupFileName:null);
             using var current=JsonDocument.Parse(ProductRecoveryInventory.ReadBytes(path));
             require(current.RootElement.GetProperty("Pid").GetInt32()==456,"Observer blocked atomic marker publication.");
             using var reader=new StreamReader(observer,leaveOpen:true);
