@@ -1,149 +1,157 @@
-# Victus Base — ESP32-C3 SuperMini, primera implementación
+# Victus Base ESP32-C3 SuperMini — consolidación Work 0.4
 
-Servidor TCP local compatible con el cliente Windows y el
-[protocolo v1](../../docs/EXTERNAL-COOLING-PROTOCOL.md). No utiliza nube, HTTP,
-OTA ni cambios en el controlador del notebook. **Código compilado y probado
-en PC; ninguna prueba física del ESP32, sensor, pantalla o ventilador realizada.**
+Implementación única compatible con VictusFanControl y su pestaña **Curva Externa**.
+Conserva la corrección Wi-Fi de **8,5 dBm** informada como funcional por el usuario.
+Servidor TCP local 8765, mDNS `victus-base.local`, autenticación mutua y sin nube.
+El código se compila y prueba en PC; **no se ha cargado esta consolidación en la
+placa ni validado físicamente su LCD, NTC, PWM o etapa de potencia**.
 
-## Pines propuestos
+## Conexiones que se conservan
 
-| Función | GPIO | Conexión |
+| Función | GPIO | Configuración |
 |---|---:|---|
-| PWM | 3 | Entrada de tu etapa NOT; salida lógica de 3,3 V |
-| LCD SDA | 6 | SDA a través de adaptación de nivel si el backpack usa 5 V |
-| LCD SCL | 7 | SCL a través de adaptación de nivel si el backpack usa 5 V |
-| NTC ambiente | 0 | Centro del divisor descrito abajo; ADC1 |
-| Referencia | GND | Masa común de ESP32, control y alimentación |
+| PWM invertido | 3 | 18 kHz, 8 bits, salida lógica 30–255 |
+| LCD SDA | 6 | PCF8574: 0x20–0x27 o 0x38–0x3F, detección automática |
+| LCD SCL | 7 | LCD1602, P0=RS/P1=RW/P2=EN/P3=luz/P4..7=datos |
+| NTC ambiente | 0 | 10 kΩ, B3950; resistencia fija 10 kΩ |
+| Alimentación motor | externa 5 V | Masa común con ESP32 y etapa |
 
-El perfil utiliza un ESP32-C3 genérico con flash de 4 MB. La inscripción
-SuperMini V1601 no identifica por sí sola un esquema oficial verificado:
-comprueba que la serigrafía de tu placa expone esos GPIO antes de cablear.
-Se evitan GPIO2/8/9 de arranque y GPIO18/19 de USB. GPIO6/7 dejan de estar
-disponibles para JTAG externo al usarlos como I²C. La selección se basa en
-la [tabla de GPIO del fabricante](https://docs.espressif.com/projects/esp-idf/en/v4.4.2/esp32c3/api-reference/peripherals/gpio.html)
-y el [datasheet ESP32-C3](https://documentation.espressif.com/esp32-c3_datasheet_en.html).
+Divisor NTC: `3V3 → fija 10k → GPIO0 → NTC → GND`, 100 nF opcional a GND.
+Promedio de 8 lecturas ADC en mV calibrados, EMA ambiental y validación de rango.
+Cambiar valores físicos en `include/BoardConfig.h` si la NTC real difiere.
 
-El GPIO no alimenta el motor. Tu etapa NOT debe recibir niveles de 3,3 V y
-accionar un circuito adecuado al ventilador. `PwmActiveLow=true` compensa la
-inversión: 25 % solicitado produce aproximadamente 75 % HIGH en GPIO3 y
-25 % HIGH después de la NOT; 100 % produce GPIO bajo. Usa un pull-down externo
-en esa entrada para fijar el estado durante reset; con esta polaridad el
-estado de fallo previsto después de NOT es ventilación máxima. Verifica que
-eso corresponde a tu circuito real. Frecuencia inicial configurable: 25 kHz;
-su idoneidad para el motor/etapa y el arranque a bajo duty quedan pendientes.
+Se mantiene la etapa del paquete: GPIO3 → 220 Ω → gate 2N7000; gate con pull-down
+100 kΩ; source a GND; drain a base BC337; resistencia de base a +5 V; emisor a GND,
+colector al negativo del ventilador, positivo del ventilador a +5 V.
+HIGH en GPIO3 apaga BC337: **duty eléctrico = 255 − salida lógica**.
+Así, solicitud externa 30 produce 225 en LEDC, y 255 produce 0.
+No conectar el motor a un GPIO. GPIO flotante/reset con ese pull-down puede
+significar **ventilación máxima**, también con firmware de monitorización.
 
-Los GPIO del ESP32-C3 no aceptan 5 V. Para un LCD1602 con PCF8574 alimentado
-a 5 V y pull-ups a 5 V, utiliza adaptación bidireccional 3,3↔5 V en SDA/SCL.
-Dirección inicial `0x27`, modificable a `0x3F`. Mapeo soportado del backpack:
-P0=RS, P1=RW, P2=E, P3=luz, P4..7=datos. No se da por probado otro mapeo.
+El usuario informa ~500 mA de marcha y ~700 mA de arranque. Quedan sin medir el
+margen del BC337, saturación, temperatura, conmutación a 18 kHz y transitorios.
+La resistencia de base del circuito inicial también necesita revisar disipación;
+el paquete propone dos de 47 Ω en serie o resistencia con potencia suficiente.
+Estas conexiones conservadas no constituyen aprobación eléctrica del circuito.
+Para LCD a 5 V con pull-ups a 5 V, usar adaptación bidireccional 3,3↔5 V en I²C;
+el ESP32 no admite 5 V en sus GPIO. Un ACK no demuestra caracteres visibles.
 
-NTC propuesta: **10 kΩ a 25 °C, B3950**, con resistencia fija 10 kΩ/1 %:
-`3V3 → resistencia fija → GPIO0 → NTC → GND`. Coloca 100 nF de GPIO0 a GND
-cerca de la placa. Si tu NTC tiene otros valores, cambia `BoardConfig.h`.
-El ADC usa milivoltios calibrados, atenuación de 11 dB y promedio de 8 lecturas;
-detecta cortocircuito, saturación y valores no plausibles. La alimentación real,
-tolerancias y autocalentamiento requieren calibración con termómetro.
+## Compilar con PlatformIO (entorno reproducible)
 
-## Compilación y carga
-
-Instala Python y PlatformIO Core 6.1.18 en un entorno de desarrollo:
+Python + PlatformIO Core 6.1.18, plataforma espressif32 6.12.0, Arduino 2.0.17 y
+ArduinoJson 6.21.5 fijados. Dos imágenes, ninguna incluye credenciales:
 
 ```powershell
 python -m pip install platformio==6.1.18
 cd firmware/esp32-c3
 python -m platformio run -e supermini
-```
-
-La variante normal deja **GPIO3 sin accionar**, devuelve PWM aplicado `null`
-y nunca informa Remote. No equivale a aislar eléctricamente una etapa externa:
-su pull-down puede llevarla al estado máximo. Comprueba primero la electrónica.
-La variante de banco habilita salida y control local/remoto:
-
-```powershell
 python -m platformio run -e supermini-bench
 ```
 
-Ambas generan `.pio/build/NOMBRE/firmware.bin` y los archivos necesarios para
-carga. No se ha programado ninguna placa en este desarrollo. Una vez revisado
-el cableado y seleccionada su conexión USB, la carga es explícita:
+`supermini`: monitorización, GPIO3 sin accionar, PWM aplicado nulo y modo Local.
+**No aísla el motor**: desconectar alimentación del motor para revisar el circuito.
+`supermini-bench`: PWM y control local/remoto habilitados, pendiente de banco.
+Imágenes en `.pio/build/NOMBRE/firmware.bin`, con bootloader y particiones.
+En Windows conviene una ruta corta para proyecto y herramientas (limitación GCC).
+
+Carga explícita, solo después de revisar el circuito y seleccionar el USB real:
 
 ```powershell
-python -m platformio run -e supermini -t upload --upload-port COM7
+python -m platformio run -e supermini-bench -t upload --upload-port COM7
 python -m platformio device monitor --port COM7 --baud 115200
 ```
 
-Sustituye COM7 por el puerto real; confirma USB/BOOT de tu revisión. En Windows
-usa una ruta de proyecto/toolchain corta: GCC de esta plataforma puede fallar
-con `CreateProcess: No such file or directory` en rutas excesivamente largas.
+COM7 es un ejemplo. No se ha ejecutado ninguna carga en este desarrollo.
+No borrar toda la flash al actualizar si se quiere conservar el emparejamiento.
 
-## Aprovisionamiento, sin credenciales en el código
+## Arduino IDE 2.x y core ESP32 3.x
 
-Conecta por USB y abre un terminal **sin eco local ni registro de entradas**.
-Envía `setup` y Enter. El firmware solicita, por líneas:
+No hay un segundo controlador: se genera el sketch a partir de las mismas fuentes.
+Desde la raíz del repositorio:
 
-1. SSID Wi-Fi de 2,4 GHz.
-2. Contraseña Wi-Fi, sin eco.
-3. Clave compartida Base64 de 32 bytes, generada en Base externa de Windows.
+```powershell
+python firmware/esp32-c3/tools/export_arduino.py artifacts/arduino
+```
 
-Guarda la misma clave en Windows. No uses una contraseña humana como clave
-compartida; no se admite la clave pública de los vectores de pruebas. Nunca
-se imprime ni se transmite por TCP la clave. `status` muestra estado sin
-secretos; al conectar se informa la IP para usarla si `.local` no resuelve.
+Abrir `artifacts/arduino/VictusBaseESP32C3/VictusBaseESP32C3.ino`. Instalar placa
+**esp32 by Espressif Systems 3.3.2**, biblioteca **ArduinoJson 6.21.5**, seleccionar
+ESP32C3 Dev Module, flash 4 MB, USB CDC On Boot habilitado y puerto real.
+En `BoardConfig.h` del sketch generado, cambiar `VICTUS_ENABLE_PWM` de 0 a 1
+para la variante de banco. Antes de regenerar, conservar fuera del repositorio
+cualquier configuración privada; el exportador nunca la copia.
+
+El código selecciona la API LEDC de Arduino 2.x o 3.x por versión. La documentación
+de referencia de Espressif explica la [migración de LEDC](https://docs.espressif.com/projects/arduino-esp32/en/latest/migration_guides/2.x_to_3.0.html).
+El CI compila también el sketch generado con core 3.3.2, además de PlatformIO.
+
+## Emparejamiento y conexión
+
+Preferido: USB 115200, terminal sin eco local ni registro de entradas. Enviar
+`setup`, luego por líneas SSID de 2,4 GHz, contraseña Wi-Fi y **la misma clave
+Base64 de 32 bytes guardada en Windows**. No usar una contraseña humana ni el
+vector público de pruebas. `status` informa estado sin secretos.
 `erase CONFIRM` borra las preferencias del dispositivo y desconecta.
 
-En Windows: desmarca Simulador, host `victus-base.local` o la IP mostrada,
-puerto 8765, clave compartida y modo deseado. Guarda y conecta.
+SSID, contraseña y clave persisten en NVS: no se necesita cambiarlos al reiniciar.
+La clave permanece fija mientras no se reprovisione o borre la flash. Alternativa
+compatible con Work 0.4: copiar `include/config.local.h.example` como
+`include/config.local.h` (en Arduino, junto al sketch), con WIFI_SSID,
+WIFI_PASSWORD y PAIRING_KEY_B64. NVS ya aprovisionada tiene prioridad.
+El archivo privado está ignorado por Git. **Una imagen compilada con él contiene
+secretos**; no compartirla. NVS tampoco está cifrada en este perfil.
 
-**Limitación de almacenamiento:** Preferences/NVS de esta configuración Arduino
-no cifra la flash. No ofrece la protección DPAPI de Windows. Protege físicamente
-la placa; cifrado de flash/NVS y secure boot requieren un proceso de producción
-aparte. No se guardan credenciales en archivos del repositorio o binarios de CI.
+Se llama WiFi.begin una vez por inicio/provisión, se conserva AutoReconnect y
+se fija 8,5 dBm, con verificación al asociar. No se reconfigura la estación cada
+10 s mientras intenta conectar. Al perder IP se cierran sockets y mDNS.
+No se fija 192.168.100.133: una reserva DHCP depende de la MAC y del router.
 
-## Comportamiento
+En Windows: Base externa → desmarcar Simulador → host `victus-base.local` o IP
+mostrada por USB → puerto 8765 → guardar la misma clave → guardar y conectar.
+Monitorización no habilita control remoto. Para usar la curva, seleccionar
+Monitorización + Solicitud y tener una Solicitud interna aceptada y vigente.
 
-Autenticación mutua HMAC-SHA256, nonces aleatorios, claves por dirección, sesión
-nueva por conexión y secuencias crecientes. Se verifica el MAC contra los bytes
-originales del payload, sin reserializarlos. Mensajes de 4096 bytes, profundidad
-8, máximo 256 valores, rechazo de claves duplicadas —incluidas escapadas—,
-UTF-8 inválido, tipos, rangos, fechas antiguas y campos obligatorios ausentes.
-Los campos desconocidos son aditivos, sin efecto en control.
+## Configurar la curva
 
-Un único cliente activo; sockets no bloqueantes, entrada acotada y espera de
-5 s por mensaje/autenticación, 3 s para completar una respuesta. Reconexión Wi-Fi
-progresiva. La tarea de ventilación comprueba su lease cada 20 ms, separada
-del socket, LCD y aprovisionamiento. Una Solicitud válida necesita una respuesta
-del dispositivo enviada hace menos de 2000 ms entre las últimas 16. EOF, mensaje
-rechazado, solicitud nula, sesión nueva, sensor inválido o lease de 2000 ms agotado
-devuelven Local. Los duplicados no renuevan la vigencia.
+**Curva Externa** aparece después de Base externa y antes de Actualizaciones.
+Editar puntos arrastrando, con flechas o entrada numérica; añadir/quitar puntos,
+restablecer y descartar. Guardar no modifica los perfiles internos del notebook.
+Se conservan los extremos 0 y 100, 2–16 puntos y salidas crecientes de 30–255.
 
-La conversión Solicitud→PWM pertenece al ESP32. Escala inicial explícita en
-`BoardConfig.h`: **0–54**, propia del controlador actual, modificable. Un valor
-fuera de la calibración vuelve a Local; no se recorta silenciosamente.
-Duty positivo mínimo inicial 25 %. Demanda, Solicitud y PWM son distintos.
-No se usa Demanda como orden. En Local: 35 % hasta 25 °C, rampa hasta 100 % a
-45 °C; NTC inválida o sin renovación durante 3 s fuerza 100 %. Son ajustes
-iniciales que requieren banco.
+Entrada **Demanda**: X demanda 0–100 del notebook, Y solicitud externa. En Manual
+usa la salida externa fija configurable en Respuesta y arranque.
+Entrada **Solicitud aceptada**: normaliza según los extremos de calibración
+visibles y editables. 0–54 es el valor inicial, no una regla permanente.
+Un valor fuera de la calibración deja Remote y vuelve al control ambiental.
 
-Respuestas `deviceStatus`: ambiente, duty lógico que el firmware ordenó después
-de compensar NOT, modo y comunicación, `extensions.slot1/slot2` siempre nulos.
-**No existe tacómetro: aplicado no demuestra giro ni un PWM físico medido.**
-El estado enviado refleja la última ejecución de la tarea de control y puede
-confirmar un cambio en la siguiente respuesta, no su finalización física.
-LCD alterna ambiente/salida y CPU/GPU/RAM/Demanda/Solicitud. Sin datos muestra `--`.
+Respuesta configurable: EMA, histéresis, confirmación de descenso, subida/bajada
+independientes, salida/duración de arranque. Iniciales: 1500 ms, 3 niveles, 3000 ms,
+12 %/s arriba, 6 %/s abajo y 255 durante 800 ms al encender.
+No hay pulso por reconectar. La configuración se confirma por revisión aplicada
+desde la tarea de control; el estado de la pestaña distingue guardado de confirmado.
+Se conserva en NVS, con escrituras espaciadas al menos 30 s y comprobación al cargar.
 
-## Pruebas y límites
+La NTC es ambiental: fallback local 89→255 entre 25 y 45 °C. En Remote hay piso
+ambiental desde 35 °C. NTC inválida, sin renovar durante 3 s o ≥45 °C fuerza 255;
+no espera a EMA/rampas. Al arrancar sin NTC válida también fuerza máximo.
+La tarea de control corre cada 20 ms separada de TCP, LCD y provisión. La orden
+remota caduca a los 2000 ms. Volver a Firmware, perder autoridad o desconectar
+Windows devuelve Local. No se restaura ninguna autoridad del notebook desde ESP32.
 
-El harness `test/host.cpp` compila el mismo parser, autenticación, validación,
-calibración y lease usados por la placa. Utiliza exclusivamente vectores públicos
-y valores simulados. `test/test_protocol.py` verifica las firmas, entradas
-inválidas, políticas, inversión y rollover del reloj. `tools/FirmwareInterop.Tests`
-conecta el **cliente TCP de producción de Windows** con ese motor C++ mediante
-un puente local de pruebas; comprueba respuestas fragmentadas y cambio a Firmware.
-El CI compila además las dos imágenes reales ESP32-C3. El harness no es firmware
-de producción y su clave/nonce públicos nunca deben aprovisionarse.
+Contratos: [v1](../../docs/EXTERNAL-COOLING-PROTOCOL.md) y
+[extensión Curva Externa](../../docs/EXTERNAL-CURVE-PROTOCOL.md).
+[Auditoría y comparación con Work 0.4](../../docs/ESP32-WORK04-AUDIT.md).
 
-Antes de uso físico: medir GPIO y salida NOT a 0/25/50/100 %, verificar frecuencia,
-arranque del ventilador, LCD/niveles I²C, NTC con termómetro y fallo abierto/corto,
-Wi-Fi ausente, PC apagado, conexión parcialmente abierta, silencio y reinicio de
-ambos extremos. Medir el retorno a Local en la salida real tras 2000 ms más el
-periodo de tarea. No se afirma que esas pruebas hayan pasado.
+## Validación pendiente de banco
+
+La prueba C++ ejecuta el mismo parser, autenticación y controlador que la placa,
+con valores simulados y claves públicas exclusivas de pruebas. La integración
+conecta el cliente Windows real por TCP local, sin acceso a hardware.
+Los resultados de software y las limitaciones constan en
+[VALIDACIONES](VALIDACIONES.md). El código anterior de tres NTC no estaba en el
+ZIP: se adaptó un perfil autorizado, no se afirma recuperar sus constantes exactas.
+
+Antes de activar motor: medir 18 kHz e inversión para salidas 30/64/128/192/255,
+arranque, corriente, temperatura del BC337/2N7000/resistencias, LCD con niveles
+correctos, NTC con termómetro/abierto/corto, Wi-Fi ausente y reinicios, retirada de
+Windows, silencio y retorno Local tras 2000 ms + periodo de tarea. Sin tacómetro,
+appliedDuty y appliedPwmPct son órdenes eléctricas calculadas, no prueba de giro.
