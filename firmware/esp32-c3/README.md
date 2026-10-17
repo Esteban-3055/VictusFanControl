@@ -84,6 +84,10 @@ En `BoardConfig.h` del sketch generado, cambiar `VICTUS_ENABLE_PWM` de 0 a 1
 para la variante de banco. Antes de regenerar, conservar fuera del repositorio
 cualquier configuración privada; el exportador nunca la copia.
 
+El exportador copia también `include/LcdPresentation.h`, que contiene
+el formato y la secuencia de pantallas compartidos entre Arduino IDE,
+PlatformIO y los tests C++.
+
 El código selecciona la API LEDC de Arduino 2.x o 3.x por versión. La documentación
 de referencia de Espressif explica la [migración de LEDC](https://docs.espressif.com/projects/arduino-esp32/en/latest/migration_guides/2.x_to_3.0.html).
 El CI compila también el sketch generado con core 3.3.2, además de PlatformIO.
@@ -185,6 +189,46 @@ o temperatura implausible; `OK` indica una lectura válida.
 `filtrada=INVALIDA` pese a `motivo=OK` sugiere muestra vencida (>3 s)
 o lectura todavía no propagada. Comparar `adc=... mV` con un multímetro
 **midiendo GPIO0 respecto a GND**, no con la caída sobre el NTC.
+
+El comando `ntc` también imprime `lecturas_ok`, `lecturas_fallo`
+y `ultima_falla` para detectar un fallo intermitente aunque la última
+muestra sea correcta. Ejemplo reportado por el usuario:
+`raw=2439 adc=1792 mV motivo=OK temperatura=21.2 C filtrada=21.2 C`.
+La lectura es válida; por sí sola no explica un `NTC Fault` persistente en
+el LCD.
+
+### LCD 1602 — ciclo de pantallas
+
+| Vista | Duración | Fila 1 | Fila 2 |
+|---|---:|---|---|
+| Carga | 5 s | CPU: porcentaje | GPU: porcentaje |
+| Memoria/curva | 5 s | RAM: porcentaje | DEMANDA: porcentaje |
+| Ventilación | 5 s | Ambiente y PWM lógico | LOCAL/REMOTE y Wi-Fi |
+| Temperaturas | **30 s** | CPU °C y GPU °C | Ambiente °C, segundos restantes |
+
+El ciclo dura **45 segundos** y comienza de nuevo automáticamente.
+CPU/GPU/RAM/Demanda/temperaturas CPU/GPU son lecturas **firmadas de
+VictusFanControl**, no sensores físicos del ESP32. Si se desconecta la sesión,
+supera los 2 s de frescura o un campo llega nulo, se muestra `--` y nunca 0
+inventado. El ambiente es una lectura local del NTC. Las temperaturas se
+muestran en °C redondeadas; el ambiente conserva una decimal.
+
+Si la pantalla sigue mostrando `NTC Fault` mientras `ntc` marca `OK`,
+podría tratarse de un **mensaje antiguo congelado por un error I²C** o un
+fallo transitorio de lectura previo al comando. No es posible determinar la
+causa sin medir la pantalla y consultar ambos diagnósticos. Para distinguirlos,
+en el monitor serie a 115200 baudios enviar `lcd` y `ntc`:
+
+- `lcd` muestra dirección I²C, si está activa, errores de escritura,
+  código de error y tiempo transcurrido desde la última actualización
+- `ntc` muestra la lectura actual y los contadores de muestras correctas y
+  fallidas desde el arranque
+
+Si falla la comunicación I²C, el firmware reintenta detectar el LCD cada
+5 s; los caracteres físicos pueden quedar congelados hasta que el bus
+responda y se inicialice de nuevo. El diagnóstico no altera el PWM ni
+deshabilita protecciones. Alimentar el backpack a 5 V exige conversor
+de niveles en SDA/SCL para proteger al ESP32-C3.
 
 Este diagnóstico **no relaja** el fail-safe: si la medición sigue inválida,
 el ventilador continúa con la petición máxima. No se afirma que el hardware
