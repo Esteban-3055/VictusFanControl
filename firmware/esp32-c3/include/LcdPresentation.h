@@ -64,9 +64,15 @@ inline void renderLcd(LcdPage page, const LcdReadings& data,
                     std::snprintf(first, sizeof(first), "AMB:%.1fC P:%d", data.ambientC, data.pwmDuty);
                 else std::snprintf(first, sizeof(first), "AMB:%.1fC PWM OFF", data.ambientC);
             } else std::snprintf(first, sizeof(first), "NTC Fault");
-            std::snprintf(second, sizeof(second), "%s %s",
-                          !data.pwmEnabled ? "PWM OFF" : (data.remote ? "REMOTE" : "LOCAL"),
-                          data.wifi ? "WIFI" : "OFFLINE");
+            // A new invalid sample can reach the UI before the 20 ms fan
+            // task updates its mode and commanded duty. Do not mix
+            // "NTC Fault" with stale REMOTE/PWM values on the same screen.
+            if (!std::isfinite(data.ambientC))
+                std::snprintf(second, sizeof(second), "SENSOR INVALIDO");
+            else
+                std::snprintf(second, sizeof(second), "%s %s",
+                              !data.pwmEnabled ? "PWM OFF" : (data.remote ? "REMOTE" : "LOCAL"),
+                              data.wifi ? "WIFI" : "OFFLINE");
             break;
         case LcdPage::Temperatures:
             lcdNumber(left, data.telemetryFresh ? data.cpuTempC : NAN, -20, 130);
