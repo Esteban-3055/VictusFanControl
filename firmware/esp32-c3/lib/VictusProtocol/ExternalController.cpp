@@ -43,6 +43,7 @@ int ExternalController::tick(uint32_t now,double ambient) {
     double dt=std::min(0.1,static_cast<uint32_t>(now-previous)/1000.0);previous=now;
     if(static_cast<uint32_t>(now-admitted)>=2000) active=false;
     if(!std::isfinite(ambient)||ambient < -40||ambient > 100) { active=false;duty=target=255;filterReady=false;falling=false;return 255; }
+    const bool wasStopped=!first&&duty<0.5&&target==0;
     double desired=active?command:std::clamp(89.0+(ambient-25)*8.3,89.0,255.0);
     // A high ambient temperature is an independent local floor; a cool NTC is not a notebook load sensor.
     const double ambientFloor=ambient>35?std::clamp(30.0+(ambient-35)*22.5,30.0,255.0):0.0;
@@ -61,7 +62,7 @@ int ExternalController::tick(uint32_t now,double ambient) {
     } else falling=false;
     if(first) duty=config.startOutput;
     // Restart assistance after an actual stop, not on network reconnection.
-    if(!first&&active&&duty<0.5&&desired>0&&target==0) {
+    if(wasStopped&&active&&desired>0) {
         // A demand smaller than the hysteresis must still leave the stopped
         // state. Reset only this stopped -> running transition, not each tick.
         target=filtered=desired;falling=false;

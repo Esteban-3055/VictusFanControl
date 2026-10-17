@@ -27,6 +27,11 @@ inline void zeroOutputTests() {
     auto hot=fan;check(hot.tick(60000,35.01)>=30,"warm ambient retains original floor above 35C");
     check(hot.tick(60020,40)>=143 && hot.tick(60040,45)==255,"ambient floors bypass stop");
     auto fault=fan;check(fault.tick(60000,NAN)==255 && !fault.remote(),"sensor failure overrides stop immediately");
+    auto abrupt=config;abrupt.filterMs=0;abrupt.hysteresis=0;
+    std::strcpy(abrupt.revision,"2123456789abcdef0123456789abcdef");
+    auto instantRestart=fan;instantRestart.configure(abrupt);
+    instantRestart.receive(true,27,50,false,60000);
+    check(instantRestart.tick(60000,24)==255,"restart pulse also works without EMA or hysteresis");
     fan.receive(true,27,50,false,60000);
     check(fan.tick(60000,24)==255,"stopped fan gets configured restart pulse");
     fan.receive(true,27,50,false,60100);fan.tick(60100,24);
