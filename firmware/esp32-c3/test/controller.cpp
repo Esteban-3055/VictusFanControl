@@ -14,6 +14,7 @@ int controllerTests() {
     bad=c;bad.points[4].output=256;require(!bad.valid(),"above max");
     bad=c;bad.points[3].output=100;require(!bad.valid(),"decreasing output");
     bad=c;bad.requestMaximum=bad.requestMinimum;require(!bad.valid(),"bad request calibration");
+    bad=c;for(auto& ch:bad.revision)ch='a';require(!bad.valid(),"unterminated persisted revision");
     require(victus::ExternalController::electrical(30)==225&&victus::ExternalController::electrical(255)==0,"NOT 8-bit polarity");
     victus::ExternalController fan;fan.configure(c);
     fan.receive(true,27,0,false,0);require(fan.tick(0,24)==255,"startup pulse");
@@ -37,6 +38,10 @@ int controllerTests() {
     fan.receive(true,27,0,false,44000);require(fan.tick(44000,45)==255,"hot ambient bypass");
     fan.receive(false,27,50,false,45000);fan.tick(45000,24);require(!fan.remote(),"MonitorOnly cannot grant control");
     fan.receive(true,27,NAN,false,45020);fan.tick(45020,24);require(!fan.remote(),"invalid demand");
+    victus::ExternalController floor;floor.configure(c);
+    for(uint32_t t=0;t<30000;t+=20){if(t%1000==0)floor.receive(true,27,0,false,t);floor.tick(t,24);}
+    require(floor.tick(30000,40)>=143,"ambient floor bypasses inertia");
+    floor.receive(false,27,0,false,30020);require(floor.tick(30020,24)>=89,"Local minimum bypasses old remote low duty");
     c.input=1;fan.configure(c); // same revision is immutable and ignored by the controller
     std::strcpy(c.revision,"1123456789abcdef0123456789abcdef");fan.configure(c);
     fan.receive(true,65535,50,false,46000);fan.tick(46000,24);require(!fan.remote(),"out of explicit calibration");

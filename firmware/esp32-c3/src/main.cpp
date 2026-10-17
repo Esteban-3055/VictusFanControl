@@ -33,6 +33,7 @@ std::string input,output; size_t sentBytes=0;
 uint32_t frameAt=0,acceptedAt=0,lastFrameAt=0,writeAt=0,nextConnect=0,nextAccept=0;
 bool reading=false,configured=false,networkReady=false;
 bool wifiStarted=false;
+uint32_t lastPowerCheck=0;
 std::atomic<float> ambient{NAN};
 std::atomic<uint32_t> ambientAt{0};
 std::atomic<int> applied{100};
@@ -93,6 +94,11 @@ void startServer() {
 }
 void network(uint32_t now) {
     if (!configured || provision) return;
+    // Bounded readback, including while associating. Never poll driver power at loop frequency.
+    if(wifiStarted&&static_cast<uint32_t>(now-lastPowerCheck)>=5000) {
+        lastPowerCheck=now;
+        if(WiFi.getTxPower()!=WIFI_POWER_8_5dBm) WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    }
     if (WiFi.status()!=WL_CONNECTED) {
         if (networkReady || listener>=0 || peer>=0) stopNetwork();
         if (!wifiStarted) {
@@ -103,8 +109,6 @@ void network(uint32_t now) {
         }
         return;
     }
-    // Readback after association; retain the physically validated reduced TX power.
-    if(WiFi.getTxPower()!=WIFI_POWER_8_5dBm) WiFi.setTxPower(WIFI_POWER_8_5dBm);
     if (listener<0) { if (static_cast<int32_t>(now-nextConnect)>=0) { startServer(); nextConnect=now+5000; } return; }
     int incoming=accept(listener,nullptr,nullptr);
     if (incoming>=0) {
@@ -180,11 +184,11 @@ void probeLcd() {
 void display(uint32_t now) {
     if (!lcd) return;
     char first[17]={},second[17]={};
-    if ((now/4000)%2 && session && session->authenticated()) {
+    if ((now/4000)%2 && session && session->authenticated()&&static_cast<uint32_t>(now-lastFrameAt)<2000) {
         auto m=session->latest;
         auto percent=[](double v)->std::string { return v<0?"--":std::to_string(static_cast<int>(lround(v))); };
         snprintf(first,sizeof(first),"C:%s%% G:%s%%",percent(m.cpu).c_str(),percent(m.gpu).c_str());
-        snprintf(second,sizeof(second),"R:%s D:%s S:%s",percent(m.ram).c_str(),percent(m.demand).c_str(),m.valid?std::to_string(m.request).c_str():"--");
+        snprintf(second,sizeof(second),"R:%s D:%s S:%s",percent(m.ram).c_str(),percent(m.demand).c_str(),m.valid&&remote.load()?std::to_string(m.request).c_str():"--");
     } else {
         auto a=currentAmbient(now);
         if (!board::EnablePwm) snprintf(first,sizeof(first),"PWM desactivado");

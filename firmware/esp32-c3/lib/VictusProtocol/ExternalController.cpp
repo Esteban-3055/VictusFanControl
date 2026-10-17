@@ -58,6 +58,8 @@ int ExternalController::tick(uint32_t now,double ambient) {
     else duty+=std::clamp(target-duty,-config.fall*2.55*dt,config.rise*2.55*dt);
     // Sensor fault and very hot ambient bypass inertia. No tachometer: this is duty, not proven rotation.
     if(ambient>=45) duty=target=255;
+    duty=std::max(duty,std::clamp(30.0+(ambient-35)*22.5,30.0,255.0));
+    if(!active)duty=std::max(duty,89.0);
     return std::clamp(static_cast<int>(std::lround(duty)),30,255);
 }
 }
