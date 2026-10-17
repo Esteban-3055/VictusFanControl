@@ -57,6 +57,18 @@ El informe de entrega identifica el SHA final y los enlaces del CI de ese SHA.
 Consultar también Actions/esp32-firmware, external-cooling, build, cpu-rapl,
 wmi-fan-experiment y oem-shadow. Un resultado de otro SHA no sustituye ese control.
 
+## Regresión LEDC: 18 Hz y 14 bits (2026-10-16)
+
+El usuario capturó el error físico `requested frequency 18 and duty resolution 8 can not be achieved`
+en el ESP32-C3 con PWM habilitado: el `abort()` de inicio impedía abrir
+Wi-Fi/TCP. Corrección en fuentes canónicas: temporizador LEDC 18 Hz /
+14 bits, y conversión del duty eléctrico invertido 0–255 → 0–16383
+en caminos Arduino 2.x y Arduino 3.x. El controlador, las curvas y el
+protocolo conservan 30–255. La prueba portátil comprueba extremos,
+punto medio, monotonicidad e inversión. Las compilaciones del nuevo SHA
+se deben verificar mediante GitHub Actions; todavía **no hay PASS físico**
+de señal de 18 Hz, arranque ni temperatura.
+
 ## Estado físico
 
 Solo se conserva como antecedente **informado por el usuario** que Wi-Fi a
@@ -65,7 +77,7 @@ No se ha programado el ESP32 ni enviado órdenes al hardware real en este trabaj
 
 Pendiente de medir en banco:
 
-1. GPIO3 y etapa invertida a 18 kHz, salidas 30/64/128/192/255 y estado durante reset.
+1. GPIO3 y etapa invertida a 18 Hz / 14 bits, salidas 30/64/128/192/255 y estado durante reset.
 2. Arranque mecánico y corriente, particularmente el mínimo 30; no hay tacómetro.
 3. Disipación/saturación/conmutación BC337 y 2N7000, resistencias y transitorios.
 4. LCD: tensión de pull-ups, adaptación I²C, contraste, dirección y caracteres visibles.
