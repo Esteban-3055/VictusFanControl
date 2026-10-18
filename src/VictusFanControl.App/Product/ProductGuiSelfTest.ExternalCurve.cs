@@ -43,8 +43,13 @@ internal static partial class ProductGuiSelfTest
         Require(curve.EditNumeric("filter","NaN") is not null&&curve.Draft.FilterMs==1650,"Invalid numeric edit changed curve");
         Require(curve.EditNumeric("manual","0") is null&&curve.Draft.ManualOutput==0,"Manual zero denied");
         Require(curve.EditNumeric("start-output","0") is null&&curve.Draft.StartOutput==0,"Start zero denied");
+        foreach(var (id,value) in new[]{("rise",17),("fall",23),("filter",2345),("hysteresis",7),("hold",4567),("start",1234),("start-output",201),("manual",87)})
+            form.EditValue("external-curve-value-"+id,value);
+        var expected=curve.Draft with{Rise=17,Fall=23,FilterMs=2345,Hysteresis=7,DownHoldMs=4567,StartMs=1234,StartOutput=201,ManualOutput=87};
+        Require(curve.Draft==expected,"Response/startup control dispatch changed a field or its units");
         form.HandleCommand("external-curve-save");PumpUntil(()=>!curve.Busy,"Curve save blocked");
-        var saved=new ExternalCoolingSettingsStore(path).Load(out _);Require(saved.Curve==curve.Draft&&saved.Curve.Rise==18&&!curve.Dirty,"External curve did not persist");
+        var saved=new ExternalCoolingSettingsStore(path).Load(out _);
+        Require(saved.Curve==expected with{Revision=curve.Draft.Revision}&&!curve.Dirty,"Response/startup settings did not persist");
         form.HandleCommand("page-"+(int)ProductPage.ExternalCooling);form.HandleCommand("external-save");PumpUntil(()=>!basePage.Busy,"Base save blocked");
         saved=new ExternalCoolingSettingsStore(path).Load(out _);Require(saved.Curve==curve.Draft&&saved.Host=="base.example.local","Base draft overwrote saved curve");
         Require(runtime.Commands==0&&original==ProductProfilesStore.Serialize(form.Draft)&&form.Canvas.Dirty==notebookDirty,"External editor affected notebook authority/settings");

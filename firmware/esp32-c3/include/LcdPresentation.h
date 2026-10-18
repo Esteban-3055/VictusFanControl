@@ -6,15 +6,15 @@
 #include <cstring>
 
 namespace victus {
-enum class LcdPage : uint8_t { Temperatures, Usage, Ambient, Connection };
+enum class LcdPage : uint8_t { Temperatures, Usage, Demand, Connection };
 constexpr uint32_t LcdTemperaturesMs = 30000;
-constexpr uint32_t LcdUsageMs = 5000, LcdAmbientMs = 5000, LcdConnectionMs = 5000;
-constexpr uint32_t LcdCycleMs = LcdTemperaturesMs + LcdUsageMs + LcdAmbientMs + LcdConnectionMs;
+constexpr uint32_t LcdUsageMs = 5000, LcdDemandMs = 5000, LcdConnectionMs = 5000;
+constexpr uint32_t LcdCycleMs = LcdTemperaturesMs + LcdUsageMs + LcdDemandMs + LcdConnectionMs;
 inline LcdPage lcdPage(uint32_t elapsed) {
     auto offset = elapsed % LcdCycleMs;
     if (offset < LcdTemperaturesMs) return LcdPage::Temperatures;
     if (offset < LcdTemperaturesMs + LcdUsageMs) return LcdPage::Usage;
-    if (offset < LcdTemperaturesMs + LcdUsageMs + LcdAmbientMs) return LcdPage::Ambient;
+    if (offset < LcdTemperaturesMs + LcdUsageMs + LcdDemandMs) return LcdPage::Demand;
     return LcdPage::Connection;
 }
 // Advance by complete cycles: preserves the page across millis() rollover.
@@ -44,14 +44,16 @@ inline void renderLcd(LcdPage page, const LcdReadings& data,
                       char (&first)[17], char (&second)[17]) {
     first[0] = '\0'; second[0] = '\0';
     char left[8]{}, right[8]{};
+    // Ambient freshness is established by currentAmbient(), independently of PC telemetry.
+    const bool ambientValid = std::isfinite(data.ambientC) && data.ambientC >= -40 && data.ambientC <= 100;
     switch (page) {
         case LcdPage::Temperatures:
             lcdNumber(left, data.telemetryFresh ? data.cpuTempC : NAN, -20, 130);
             lcdNumber(right, data.telemetryFresh ? data.gpuTempC : NAN, -20, 130);
             if (std::snprintf(first, sizeof(first), "CPU:%sC GPU:%sC", left, right) > 16)
                 std::snprintf(first, sizeof(first), "CPU:%sCGPU:%sC", left, right);
-            lcdNumber(left, data.telemetryFresh ? data.demandPct : NAN, 0, 100);
-            std::snprintf(second, sizeof(second), "DEMANDA: %s%%", left);
+            if (ambientValid) std::snprintf(second, sizeof(second), "Ambiente:%.1fC", data.ambientC);
+            else std::snprintf(second, sizeof(second), "Ambiente:--C");
             break;
         case LcdPage::Usage:
             lcdNumber(left, data.telemetryFresh ? data.cpuPct : NAN, 0, 100);
@@ -60,15 +62,15 @@ inline void renderLcd(LcdPage page, const LcdReadings& data,
             lcdNumber(left, data.telemetryFresh ? data.ramPct : NAN, 0, 100);
             std::snprintf(second, sizeof(second), "RAM: %s%%", left);
             break;
-        case LcdPage::Ambient:
-            if (std::isfinite(data.ambientC) && data.ambientC >= -40 && data.ambientC <= 100) {
-                std::snprintf(first, sizeof(first), "Ambiente:%.1fC", data.ambientC);
+        case LcdPage::Demand:
+            lcdNumber(left, data.telemetryFresh ? data.demandPct : NAN, 0, 100);
+            std::snprintf(first, sizeof(first), "DEMANDA: %s%%", left);
+            if (ambientValid) {
                 if (data.pwmEnabled && data.pwmDuty >= 0 && data.pwmDuty <= 255)
                     std::snprintf(second, sizeof(second), "PWM:%3d%% (%d)",
                                   static_cast<int>(std::lround(data.pwmDuty * 100.0 / 255)), data.pwmDuty);
                 else std::snprintf(second, sizeof(second), "PWM:-- (OFF)");
             } else {
-                std::snprintf(first, sizeof(first), "Ambiente:--C");
                 // Do not pair a new fault with duty from the previous control tick.
                 std::snprintf(second, sizeof(second), "PWM:-- NTC FAULT");
             }

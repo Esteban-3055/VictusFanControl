@@ -14,7 +14,7 @@ inline void presentationTests() {
     for(uint32_t t=0;t<90000;++t) {
         uint32_t offset=t%45000;
         LcdPage expected=offset<30000?LcdPage::Temperatures:offset<35000?LcdPage::Usage:
-                         offset<40000?LcdPage::Ambient:LcdPage::Connection;
+                         offset<40000?LcdPage::Demand:LcdPage::Connection;
         check(lcdPage(t)==expected,"LCD exact 30/5/5/5 boundaries, two cycles");
     }
     uint32_t start=UINT32_MAX-20000, origin=start;
@@ -26,30 +26,36 @@ inline void presentationTests() {
     data.cpuTempC=130;data.gpuTempC=-20;data.ambientC=21.2;data.pwmDuty=96;
     char top[17]{},bottom[17]{};
     renderLcd(LcdPage::Temperatures,data,top,bottom);
-    check(std::string(top)=="CPU:130CGPU:-20C" && std::strstr(bottom,"DEMANDA: 42%"),"exclusive thermal+demand layout");
+    check(std::string(top)=="CPU:130CGPU:-20C" && std::strstr(bottom,"Ambiente:21.2C"),"component and ambient temperatures on first page");
     renderLcd(LcdPage::Usage,data,top,bottom);
     check(std::string(top)=="CPU:100%GPU:  0%" && std::strstr(bottom,"RAM: 65%"),"CPU GPU RAM in one page");
-    renderLcd(LcdPage::Ambient,data,top,bottom);
-    check(std::strstr(top,"21.2C") && std::strstr(bottom,"38% (96)"),"applied logical PWM percent and duty");
-    data.pwmDuty=0;renderLcd(LcdPage::Ambient,data,top,bottom);
+    renderLcd(LcdPage::Demand,data,top,bottom);
+    check(std::strstr(top,"DEMANDA: 42%") && std::strstr(bottom,"38% (96)"),"demand and applied logical PWM percent and duty");
+    data.pwmDuty=0;renderLcd(LcdPage::Demand,data,top,bottom);
     check(std::strstr(bottom,"0% (0)"),"real applied zero is not OFF or null");data.pwmDuty=96;
     renderLcd(LcdPage::Connection,data,top,bottom);
     check(std::strstr(top,"PC: conectado") && std::strstr(bottom,"WiFi: conectado"),"PC and WiFi independent");
     for(double value:{-20.0,0.0,99.0,100.0,130.0,131.0,static_cast<double>(NAN),static_cast<double>(INFINITY)}) {
         data.cpuTempC=data.gpuTempC=data.cpuPct=data.gpuPct=data.ramPct=data.demandPct=value;
-        for(auto page:{LcdPage::Temperatures,LcdPage::Usage,LcdPage::Ambient,LcdPage::Connection}) {
+        data.ambientC=value;
+        for(auto page:{LcdPage::Temperatures,LcdPage::Usage,LcdPage::Demand,LcdPage::Connection}) {
             renderLcd(page,data,top,bottom);
             check(std::strlen(top)==16 && std::strlen(bottom)==16,"every row exactly 16 plus NUL");
         }
     }
     data.telemetryFresh=false;
+    data.ambientC=21.2;
     renderLcd(LcdPage::Temperatures,data,top,bottom);
-    check(std::strstr(top,"CPU:--C") && std::strstr(top,"GPU:--C") && std::strstr(bottom,"DEMANDA: --%"),"no stale temperatures or demand");
+    check(std::strstr(top,"CPU:--C") && std::strstr(top,"GPU:--C") && std::strstr(bottom,"21.2C"),"stale PC does not hide fresh independent ambient");
+    renderLcd(LcdPage::Demand,data,top,bottom);
+    check(std::strstr(top,"DEMANDA: --%") && std::strstr(bottom,"38% (96)"),"stale demand hidden while applied PWM remains visible");
     renderLcd(LcdPage::Usage,data,top,bottom);
     check(std::strstr(top,"--%") && std::strstr(bottom,"--%"),"no stale usage");
     data.ambientC=NAN;
-    renderLcd(LcdPage::Ambient,data,top,bottom);
-    check(std::strstr(top,"--C") && std::strstr(bottom,"NTC FAULT"),"fault hides prior applied duty");
+    renderLcd(LcdPage::Temperatures,data,top,bottom);
+    check(std::strstr(bottom,"Ambiente:--C"),"ambient null on first page");
+    renderLcd(LcdPage::Demand,data,top,bottom);
+    check(std::strstr(top,"DEMANDA: --%") && std::strstr(bottom,"NTC FAULT"),"fault hides prior applied duty");
     renderLcd(LcdPage::Connection,data,top,bottom);
     check(std::strstr(top,"sin datos") && std::strstr(bottom,"conectado"),"stale PC with connected WiFi");
     data.pcAuthenticated=false;data.wifi=false;
@@ -57,10 +63,12 @@ inline void presentationTests() {
     check(std::strstr(top,"desconectado") && std::strstr(bottom,"sin red"),"disconnected labels fit");
     data.telemetryFresh=true;data.cpuTempC=55;data.gpuTempC=42;data.demandPct=35;
     renderLcd(LcdPage::Temperatures,data,top,bottom);
-    check(std::strstr(top,"55C") && !std::strstr(bottom,"NTC"),"NTC failure does not replace notebook telemetry");
+    check(std::strstr(top,"55C") && std::strstr(top,"42C") && std::strstr(bottom,"Ambiente:--C"),"NTC failure does not replace notebook telemetry");
+    renderLcd(LcdPage::Demand,data,top,bottom);
+    check(std::strstr(top,"DEMANDA: 35%") && std::strstr(bottom,"NTC FAULT"),"NTC failure does not replace fresh demand");
     data.ambientC=21.2;data.pwmEnabled=false;
-    renderLcd(LcdPage::Ambient,data,top,bottom);
-    check(std::strstr(top,"21.2C") && std::strstr(bottom,"PWM:-- (OFF)"),"monitor image does not claim applied PWM");
+    renderLcd(LcdPage::Demand,data,top,bottom);
+    check(std::strstr(top,"DEMANDA: 35%") && std::strstr(bottom,"PWM:-- (OFF)"),"monitor image does not claim applied PWM");
 
     Measurement m;
     check(!m.linkFresh(0) && std::isnan(m.fresh(55,0,0)),"handshake alone is not telemetry");

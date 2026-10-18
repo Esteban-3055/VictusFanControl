@@ -2,6 +2,7 @@
 #include "../include/BoardConfig.h"
 #include "presentation.h"
 #include "zero_output.h"
+#include "response.h"
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -12,6 +13,7 @@ victus::ExternalConfig config(){victus::ExternalConfig c;std::strcpy(c.revision,
 int controllerTests() {
     presentationTests();
     zeroOutputTests();
+    responseTests();
     // Regression: 18 Hz with 8-bit LEDC caused ledcAttach() to fail and
     // abort() before Wi-Fi/TCP could start. ESP32-C3 requires 14-bit timing.
     require(board::PwmFrequencyHz==18&&board::PwmResolutionBits==14,"18 Hz / 14-bit LEDC profile");

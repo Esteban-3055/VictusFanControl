@@ -68,6 +68,19 @@ int main(int argc,char** argv) {
         }
         if(session.hasConfiguration)controller.configure(session.configuration);
         controller.receive(session.remoteRequest,session.latest.request,session.latest.demand,session.latest.manual,now());controller.tick(now(),24);
+        if(argc==2 && std::string(argv[1])=="--configuration" && session.hasConfiguration) {
+            // Test-only receipt evidence, after configure(). No production wire extension.
+            const auto& c=session.configuration;
+            StaticJsonDocument<2048> snapshot;
+            snapshot["schemaVersion"]=1;snapshot["revision"]=controller.revision();
+            snapshot["input"]=c.input;snapshot["requestMinimum"]=c.requestMinimum;snapshot["requestMaximum"]=c.requestMaximum;
+            snapshot["manualOutput"]=c.manualOutput;snapshot["rise"]=c.rise;snapshot["fall"]=c.fall;
+            snapshot["filterMs"]=c.filterMs;snapshot["hysteresis"]=c.hysteresis;snapshot["downHoldMs"]=c.downHoldMs;
+            snapshot["startMs"]=c.startMs;snapshot["startOutput"]=c.startOutput;
+            auto points=snapshot.createNestedArray("points");
+            for(int i=0;i<c.count;++i) { auto p=points.createNestedObject();p["input"]=c.points[i].input;p["output"]=c.points[i].output; }
+            std::string value;serializeJson(snapshot,value);std::cerr<<value<<std::endl;
+        }
         std::cout<<response<<std::endl;session.sent(now());
     }
 }

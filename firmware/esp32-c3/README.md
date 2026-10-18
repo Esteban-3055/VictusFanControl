@@ -137,6 +137,8 @@ independientes, salida/duración de arranque. Iniciales: 1500 ms, 3 niveles, 300
 El pulso se repite al pasar de parada real a demanda positiva; no se repite por reconectar. La configuración se confirma por revisión aplicada
 desde la tarea de control; el estado de la pestaña distingue guardado de confirmado.
 Se conserva en NVS, con escrituras espaciadas al menos 30 s y comprobación al cargar.
+La [revisión de LCD y Respuesta y arranque](../../docs/ESP32-LCD-RESPONSE-REVIEW.md)
+documenta el recorrido de cada ajuste y las pruebas con valores no predeterminados.
 
 La NTC es ambiental: fallback local 89→255 entre 25 y 45 °C. En Remote el apagado se permite hasta 35 °C; por encima se conserva el piso
 ambiental creciente original (30→255 hasta 45 °C). NTC inválida, sin renovar durante 3 s o ≥45 °C fuerza 255;
@@ -201,16 +203,17 @@ el LCD.
 
 | Vista (en este orden) | Duración | Fila 1 | Fila 2 |
 |---|---:|---|---|
-| Temperaturas | **30 s** | CPU °C y GPU °C | DEMANDA: porcentaje |
+| Temperaturas | **30 s** | CPU °C y GPU °C | Ambiente: °C (NTC) |
 | Uso | **5 s** | CPU y GPU: porcentajes | RAM: porcentaje |
-| Ambiente/ventilador | **5 s** | Ambiente: °C | PWM: porcentaje (salida lógica 0–255) |
+| Demanda/ventilador | **5 s** | DEMANDA: porcentaje | PWM: porcentaje (salida lógica 0–255) |
 | Conexión | **5 s** | PC: conectado/sin datos/desconectado | WiFi: conectado/sin red |
 
 Se eligieron **5 s para las vistas 3 y 4**, cuyas duraciones no estaban
 especificadas. El ciclo de **45 s empieza por temperaturas** y se repite aunque
 no haya PC, Wi-Fi o NTC válida. Las filas tienen exactamente 16 caracteres más
-terminador; no hay desplazamiento ni telemetría ambiental en la página térmica.
-Por ejemplo, `CPU:55C GPU:42C` / `DEMANDA: 35%`, y la página de uso muestra
+terminador; no hay desplazamiento. La NTC ocupa su propia fila, sin sustituir
+las temperaturas CPU/GPU. Por ejemplo, `CPU:55C GPU:42C` / `Ambiente:21.2C`,
+y la página de uso muestra
 `CPU:100%GPU:  0%` / `RAM: 65%`. Temperaturas CPU/GPU redondeadas a °C enteros;
 ambiente con una decimal. El refresco es cada 250 ms; los cambios de página
 ocurren en el primer refresco posterior al límite. El reloj conserva fase al
@@ -229,10 +232,12 @@ firmado y mide su residencia local; no puede medir por sí solo un retraso
 unidireccional anterior a recibir la trama. La autoridad remota conserva los
 controles originales y su referencia a respuesta/lease de 2000 ms.
 
-La NTC es exclusivamente ambiente. Si falla, la vista ambiental muestra
-`Ambiente:--C` / `PWM:-- NTC FAULT`, para no presentar la orden del ciclo de
-control anterior como actual. La tarea de control fuerza 255 ante el fallo.
-Las páginas de CPU/GPU conservan sus datos propios si están frescos. Con PWM
+La NTC es exclusivamente ambiente y caduca a los 3 s, aunque el PC siga enviando.
+Si falla, la primera vista muestra `Ambiente:--C`; la tercera conserva DEMANDA
+si está fresca y muestra `PWM:-- NTC FAULT`, para no presentar la orden del ciclo
+de control anterior como actual. La tarea de control fuerza 255 ante el fallo.
+CPU/GPU conservan sus datos propios si están frescos. Sin PC, el ambiente válido
+sigue visible y las temperaturas CPU/GPU y DEMANDA muestran `--`. Con PWM
 inhabilitado se muestra `PWM:-- (OFF)`. El porcentaje corresponde a la salida
 lógica aplicada: 96/255 = 38%; no es duty invertido de GPIO3 ni medición de RPM.
 PC conectado significa sesión autenticada con telemetría reciente, incluso en
