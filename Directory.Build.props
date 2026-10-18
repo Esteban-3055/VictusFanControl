@@ -12,7 +12,8 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <!-- P14 historical audit builds retain their original version. Product release publishing opts in.
-       Stable 1.2.16 binds the habitual GPU >95 C and fresh AC/Battery response contract. -->
+       Stable 1.2.16 binds the habitual GPU >95 C and fresh AC/Battery response contract;
+       historical thermal qualification keeps its original thresholds and separate regression checks. -->
   <PropertyGroup Condition="'$(VictusProductRelease)' == 'true'">
     <Version>1.2.16</Version>
     <AssemblyVersion>1.2.16.0</AssemblyVersion>
