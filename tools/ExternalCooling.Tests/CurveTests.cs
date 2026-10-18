@@ -5,6 +5,9 @@ internal static partial class Program
     private static void CurveTests()
     {
         var c=new ExternalCurveConfiguration();c.Validate();
+        var smooth=c.WithMaximumSmoothing();smooth.Validate();
+        Require(smooth==c with{Rise=1,Fall=1,FilterMs=10000,Hysteresis=3,DownHoldMs=30000,StartMs=0,StartOutput=0},"Maximum smoothing changed the curve, calibration or Manual output.");
+        Require(smooth.WithMaximumSmoothing()==smooth&&c.StartOutput==255,"Smoothing must be opt-in and idempotent.");
         var copy=JsonSerializer.Deserialize<ExternalCurveConfiguration>(JsonSerializer.Serialize(c,ExternalCoolingProtocol.Json),ExternalCoolingProtocol.Json)!;
         Require(copy==c,"Curve preferences did not roundtrip by value.");
         var zero=c with{Points=[new(0,0),new(20,0),new(100,255)],ManualOutput=0,StartOutput=0};zero.Validate();

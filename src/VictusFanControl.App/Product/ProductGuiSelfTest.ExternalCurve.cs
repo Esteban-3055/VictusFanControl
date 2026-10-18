@@ -52,6 +52,16 @@ internal static partial class ProductGuiSelfTest
         Require(saved.Curve==expected with{Revision=curve.Draft.Revision}&&!curve.Dirty,"Response/startup settings did not persist");
         form.HandleCommand("page-"+(int)ProductPage.ExternalCooling);form.HandleCommand("external-save");PumpUntil(()=>!basePage.Busy,"Base save blocked");
         saved=new ExternalCoolingSettingsStore(path).Load(out _);Require(saved.Curve==curve.Draft&&saved.Host=="base.example.local","Base draft overwrote saved curve");
+        form.HandleCommand("page-"+(int)ProductPage.ExternalCurve);form.HandleCommand("external-curve-tuning");form.Canvas.Refresh();
+        var beforeSmoothing=curve.Draft;
+        Click("external-curve-smooth");
+        Require(curve.Dirty&&curve.Draft==beforeSmoothing.WithMaximumSmoothing(),"Visible smoothing preset changed unrelated settings or did not dispatch");
+        Require(new ExternalCoolingSettingsStore(path).Load(out _).Curve==beforeSmoothing,"Preset applied before Save");
+        form.HandleCommand("external-curve-discard");Require(curve.Draft==beforeSmoothing,"Smoothing cannot be discarded");
+        Click("external-curve-smooth");form.HandleCommand("external-curve-save");PumpUntil(()=>!curve.Busy,"Smoothing save blocked");
+        saved=new ExternalCoolingSettingsStore(path).Load(out _);
+        Require(saved.Curve==beforeSmoothing.WithMaximumSmoothing() with{Revision=curve.Draft.Revision}&&!curve.Dirty,"Smoothing did not persist with a new revision");
+        Require(saved.Curve.Revision!=beforeSmoothing.Revision,"Smoothing reused a saved revision");
         Require(runtime.Commands==0&&original==ProductProfilesStore.Serialize(form.Draft)&&form.Canvas.Dirty==notebookDirty,"External editor affected notebook authority/settings");
         form.HandleCommand("page-"+(int)ProductPage.ExternalCurve);form.Canvas.Dock=DockStyle.None;
         foreach(var tuning in new[]{false,true})

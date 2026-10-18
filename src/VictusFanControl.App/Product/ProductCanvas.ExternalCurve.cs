@@ -26,8 +26,9 @@ internal sealed partial class ProductCanvas
                 Slider(g,"external-curve-value-"+l.Item1,l.Item2,new(x,y,width,83),p.Value(l.Item1),l.Item3,l.Item4,"",true);
                 Hit("external-curve-value-"+l.Item1+"-text",new(x+width-220,y-9,155,34),"Escribir "+l.Item2,!p.Busy);
             }
-            DrawText(g,"Arranque al encender y tras parada · NTC inválida o ≥45 °C: máximo.",1004,570,18,Yellow,610,height:52);
-            DrawText(g,"La salida aplicada se suaviza en el ESP32. Sin RPM, el duty no confirma que el ventilador esté girando.",1004,640,19,Muted,610,height:80);
+            Action("smooth","Máxima suavidad",new(1004,575,617,44));
+            DrawText(g,"1 %/s al subir y bajar · filtro 10 s · descenso tras 30 s · sin pulso de arranque.",1004,631,18,Muted,610,height:52);
+            DrawText(g,"Comprueba el giro a baja salida. NTC inválida o ≥45 °C: máximo inmediato.",1004,693,17,Yellow,610,height:48);
         }
         else
         {

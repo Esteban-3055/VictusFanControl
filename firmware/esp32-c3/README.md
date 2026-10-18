@@ -140,6 +140,19 @@ Se conserva en NVS, con escrituras espaciadas al menos 30 s y comprobación al c
 La [revisión de LCD y Respuesta y arranque](../../docs/ESP32-LCD-RESPONSE-REVIEW.md)
 documenta el recorrido de cada ajuste y las pruebas con valores no predeterminados.
 
+Para la respuesta más lenta admitida, **Respuesta y arranque → Máxima suavidad**
+prepara un borrador con subida/bajada 1 %/s, EMA 10000 ms, histéresis 3,
+confirmación de descenso 30000 ms y duración/salida de arranque 0. Conserva
+los puntos, entrada, calibración y salida Manual. Pulsar **Guardar y enviar curva**
+para aplicarlo; no cambia las configuraciones existentes automáticamente.
+El recorrido completo de salida necesita al menos 100 s, además de filtros y
+esperas; confirmar descenso añade espera, no cambia la velocidad de la rampa.
+El objetivo gráfico puede moverse rápidamente con la demanda aunque el aplicado
+avance despacio. Fallo NTC, ambiente alto, piso ambiental y fallback Local
+conservan su prioridad. Sin pulso no se ha verificado el arranque mecánico a
+baja salida; el firmware no tiene tacómetro. No hace falta otro formato de
+protocolo/NVS ni modificar el firmware para recibir estos valores.
+
 La NTC es ambiental: fallback local 89→255 entre 25 y 45 °C. En Remote el apagado se permite hasta 35 °C; por encima se conserva el piso
 ambiental creciente original (30→255 hasta 45 °C). NTC inválida, sin renovar durante 3 s o ≥45 °C fuerza 255;
 no espera a EMA/rampas. Al arrancar sin NTC válida también fuerza máximo.

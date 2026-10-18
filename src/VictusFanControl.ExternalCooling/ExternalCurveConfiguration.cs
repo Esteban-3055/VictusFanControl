@@ -19,6 +19,12 @@ public sealed record ExternalCurveConfiguration
     public int DownHoldMs {get;init;}=3000;
     public int StartMs {get;init;}=800;
     public int StartOutput {get;init;}=255;
+    // Explicit opt-in: preserve the curve, input/calibration and Manual output.
+    // These are the slowest supported ramps and longest supported EMA/hold.
+    public ExternalCurveConfiguration WithMaximumSmoothing() => this with
+    {
+        Rise=1,Fall=1,FilterMs=10000,Hysteresis=3,DownHoldMs=30000,StartMs=0,StartOutput=0
+    };
     [System.Text.Json.Serialization.JsonIgnore]
     public bool RequiresFullOutputRange => ManualOutput<30 || StartOutput<30 || Points.Any(p=>p.Output<30);
     public bool CanSendTo(DeviceStatus? device) => device?.ExternalCurveVersion==1 &&

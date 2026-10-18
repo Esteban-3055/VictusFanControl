@@ -91,6 +91,10 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
         {
             case "points":Tuning=false;break;
             case "tuning":Tuning=true;break;
+            case "smooth":
+                Draft=Draft.WithMaximumSmoothing();
+                Notice="Máxima suavidad en edición: 1 %/s, filtro 10 s y sin pulso. Guarda para aplicarla.";
+                break;
             case "demand":Draft=Draft with{Input=0};break;
             case "request":Draft=Draft with{Input=1};break;
             case "add":

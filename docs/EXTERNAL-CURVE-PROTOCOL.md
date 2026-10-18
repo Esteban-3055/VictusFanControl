@@ -143,6 +143,30 @@ la Solicitud aceptada que puede usar la base; no son los ajustes de Curva Extern
 El ESP32 nunca escribe niveles HP ni cambia la seguridad del notebook. Tampoco
 el mero guardado de la curva externa concede autoridad Remote.
 
+### Máxima suavidad, sin cambiar el contrato
+
+El botón optativo de Windows prepara `rise=1`, `fall=1`, `filterMs=10000`,
+`hysteresis=3`, `downHoldMs=30000`, `startMs=0`, `startOutput=0`.
+Conserva puntos, entrada, calibración y salida Manual; solo se envía tras guardar
+con revisión nueva. Utiliza los límites ya admitidos por schemaVersion 1,
+incluyendo la negociación existente de salida mínima cero. No cambia defaults
+ni preferencias instaladas, el payload, la NVS ni el controlador de placa.
+
+Ambas rampas normales se limitan a 2,55 unidades lógicas por segundo (1 % de
+escala completa). Un recorrido completo tarda al menos 100 s; filtros y
+confirmación pueden alargarlo. El objetivo sigue representando la curva antes
+del suavizado. Desactivar el pulso evita el salto a 255 al abandonar una parada;
+no filtra ni oculta ese salto en la gráfica, sino que cambia la configuración
+usada por el controlador. No demuestra que el motor arranque con un duty bajo.
+Las protecciones de NTC/frescura/temperatura, el piso ambiental y Local siguen
+pudiendo imponer aumentos inmediatos. No se modifican las protecciones internas HP.
+
+`smoothing.h` prueba diez minutos simulados con el controlador C++ real:
+parada, escalón a 100 %, subida/bajada acotadas, confirmación y retorno a cero.
+Reproduce además el cruce 47→48 % de la curva del caso investigado y conserva
+fallo NTC, ambiente ≥45 °C, piso ambiental, caducidad de lease y retirada de
+autoridad. El cliente Windows↔C++ comprueba también el preset completo recibido.
+
 ## Rango completo y parada externa
 
 El estado firmado añade `externalMinimumOutput:0` conservando

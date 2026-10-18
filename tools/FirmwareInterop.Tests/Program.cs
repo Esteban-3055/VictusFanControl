@@ -20,7 +20,8 @@ var maximum=defaults with
     Revision="3234567890abcdef1234567890abcdef",Points=[new(0,255),new(100,255)],
     ManualOutput=255,Rise=100,Fall=1,FilterMs=10000,Hysteresis=30,DownHoldMs=30000,StartMs=3000,StartOutput=255
 };
-foreach(var curve in new[]{defaults,varied,disabled,maximum})await RunCase(curve);
+var smooth=varied.WithMaximumSmoothing() with{Revision="4234567890abcdef1234567890abcdef"};
+foreach(var curve in new[]{defaults,varied,disabled,maximum,smooth})await RunCase(curve);
 
 async Task RunCase(ExternalCurveConfiguration curve)
 {
