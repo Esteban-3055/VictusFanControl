@@ -18,10 +18,11 @@ struct ExternalConfig {
 };
 class ExternalController {
     ExternalConfig config;
-    bool active=false, initialized=false, filterReady=false, falling=false, configured=false;
+    bool active=false, initialized=false, filterReady=false, falling=false, configured=false, starting=false;
     uint32_t admitted=0, previous=0, fallingAt=0, startedAt=0;
-    double command=30, filtered=30, target=30, duty=255;
+    double command=0, filtered=0, target=0, duty=0;
 public:
+    static constexpr int DisconnectedOutput = 130;
     void configure(const ExternalConfig& value);
     void receive(bool allowed,int request,double demand,bool manual,uint32_t now);
     int tick(uint32_t now,double ambient);

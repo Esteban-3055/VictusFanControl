@@ -4,6 +4,7 @@
 #include "zero_output.h"
 #include "response.h"
 #include "smoothing.h"
+#include "external_only.h"
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -16,6 +17,7 @@ int controllerTests() {
     zeroOutputTests();
     responseTests();
     smoothingTests();
+    externalOnlyTests();
     // Regression: 18 Hz with 8-bit LEDC caused ledcAttach() to fail and
     // abort() before Wi-Fi/TCP could start. ESP32-C3 requires 14-bit timing.
     require(board::PwmFrequencyHz==18&&board::PwmResolutionBits==14,"18 Hz / 14-bit LEDC profile");
@@ -57,14 +59,17 @@ int controllerTests() {
     require(previous>=250,"settles near maximum");
     require(fan.remote(),"remote active");fan.tick(41999,24);require(fan.remote(),"lease before deadline");
     fan.tick(42000,24);require(!fan.remote(),"lease exactly 2s");
-    fan.receive(true,27,50,false,43000);require(fan.tick(43000,NAN)==255&&!fan.remote(),"sensor fault immediate max");
-    fan.receive(true,27,0,false,44000);require(fan.tick(44000,45)==255,"hot ambient bypass");
+    auto reference=fan;reference.receive(true,27,50,false,43000);
+    fan.receive(true,27,50,false,43000);require(fan.tick(43000,NAN)==reference.tick(43000,24)&&fan.remote(),"sensor fault does not affect controller");
+    reference=fan;reference.receive(true,27,0,false,44000);
+    fan.receive(true,27,0,false,44000);require(fan.tick(44000,45)==reference.tick(44000,24),"hot ambient does not affect controller");
     fan.receive(false,27,50,false,45000);fan.tick(45000,24);require(!fan.remote(),"MonitorOnly cannot grant control");
     fan.receive(true,27,NAN,false,45020);fan.tick(45020,24);require(!fan.remote(),"invalid demand");
     victus::ExternalController floor;floor.configure(c);
     for(uint32_t t=0;t<30000;t+=20){if(t%1000==0)floor.receive(true,27,0,false,t);floor.tick(t,24);}
-    require(floor.tick(30000,40)>=143,"ambient floor bypasses inertia");
-    floor.receive(false,27,0,false,30020);require(floor.tick(30020,24)>=89,"Local minimum bypasses old remote low duty");
+    require(floor.tick(30000,40)<40,"no ambient floor");
+    int beforeLocal=floor.tick(30000,24);
+    floor.receive(false,27,0,false,30020);require(floor.tick(30020,24)<=beforeLocal+1,"Local obeys the configured ramp");
     c.input=1;fan.configure(c); // same revision is immutable and ignored by the controller
     std::strcpy(c.revision,"1123456789abcdef0123456789abcdef");fan.configure(c);
     fan.receive(true,65535,50,false,46000);fan.tick(46000,24);require(!fan.remote(),"out of explicit calibration");
@@ -74,6 +79,6 @@ int controllerTests() {
     victus::AmbientFilter ntc;require(ntc.update(25)==25&&ntc.update(29)==26,"NTC filter");
     require(std::isnan(ntc.update(NAN))&&ntc.update(24)==24,"NTC fault not masked");
     require(ntc.update(45)==45,"hot NTC bypasses smoothing");
-    std::cout<<"PASS external controller: curve bounds, interpolation, startup, inertia, hysteresis, ramp rates, sensor fault, hot ambient, lease, authority, calibration and rollover\n";
+    std::cout<<"PASS external controller: curve bounds, interpolation, startup, inertia, hysteresis, ramps, ambient isolation, lease, authority, calibration and rollover\n";
     return 0;
 }

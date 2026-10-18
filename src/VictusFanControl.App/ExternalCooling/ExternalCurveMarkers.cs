@@ -26,8 +26,8 @@ internal static class ExternalCurveMarkers
             input=100.0*(request-draft.RequestMinimum)/(draft.RequestMaximum-draft.RequestMinimum);
         if(input is not{} x)return [];
         var markers=new List<ExternalCurveMarker>{new(x,draft.Evaluate(x),false)};
-        // Applied PWM may be off the curve because of EMA, ramps or ambient
-        // protection. Never present local fallback or an old revision as applied.
+        // Applied PWM may be off the curve because of EMA, ramps or the
+        // configured startup pulse. Never present Local or an old revision as Remote.
         if(device.Mode=="Remote" && device.AppliedConfigRevision==saved.Revision &&
             telemetry.ExternalConfiguration?.Revision==saved.Revision &&
             saved.Input==draft.Input && saved.RequestMinimum==draft.RequestMinimum && saved.RequestMaximum==draft.RequestMaximum &&

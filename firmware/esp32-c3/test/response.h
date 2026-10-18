@@ -30,9 +30,9 @@ inline void responseTests() {
 
     c.startMs=0;c.startOutput=100;c.points[1].output=255;c.filterMs=2000;
     victus::ExternalController ema;ema.configure(c);
-    ema.receive(true,27,0,false,0);ema.tick(0,24);
+    ema.receive(true,27,10,false,0);ema.tick(0,24);
     ema.receive(true,27,100,false,100);ema.tick(100,24);
-    check(ema.requested()==12,"EMA uses dt/(filterMs/1000+dt), not raw milliseconds");
+    check(ema.requested()==36,"EMA uses dt/(filterMs/1000+dt), not raw milliseconds");
 
     c.filterMs=0;c.hysteresis=7;c.points[1].output=100;
     victus::ExternalController hysteresis;hysteresis.configure(c);

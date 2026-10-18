@@ -39,9 +39,9 @@ bool wifiStarted=false;
 uint32_t lastPowerCheck=0;
 victus::AmbientSample ambient;
 portMUX_TYPE ambientLock=portMUX_INITIALIZER_UNLOCKED;
-std::atomic<int> applied{100};
+std::atomic<int> applied{0};
 std::atomic<bool> remote{false};
-std::atomic<int> externalRequest{255};
+std::atomic<int> externalRequest{0};
 portMUX_TYPE configLock=portMUX_INITIALIZER_UNLOCKED;
 char appliedRevision[33]{};
 victus::AmbientFilter ambientFilter;
@@ -340,16 +340,16 @@ void serialInput() {
 void setup() {
     Serial.begin(115200); commands=xQueueCreate(1,sizeof(Command));if(!commands)abort();
     if(board::EnablePwm) {
-        pinMode(board::PwmPin,OUTPUT);digitalWrite(board::PwmPin,board::PwmActiveLow?LOW:HIGH);
+        pinMode(board::PwmPin,OUTPUT);digitalWrite(board::PwmPin,board::PwmActiveLow?HIGH:LOW);
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
         if(!ledcAttach(board::PwmPin,board::PwmFrequencyHz,board::PwmResolutionBits))abort();
-        ledcWrite(board::PwmPin,0);
+        ledcWrite(board::PwmPin,board::LedcDutyFrom8Bit(victus::ExternalController::electrical(0)));
 #else
         if(ledcSetup(0,board::PwmFrequencyHz,board::PwmResolutionBits)==0)abort();
-        ledcWrite(0,0);ledcAttachPin(board::PwmPin,0);
+        ledcWrite(0,board::LedcDutyFrom8Bit(victus::ExternalController::electrical(0)));ledcAttachPin(board::PwmPin,0);
 #endif
-        // GPIO3 is active-low via 2N7000 -> BC337. Initial electrical duty 0
-        // therefore requests maximum fan output until controlTask takes over.
+        // GPIO3 is active-low via 2N7000 -> BC337. Initial full electrical
+        // duty requests logical zero; Local then ramps towards 130.
         Serial.printf("PWM LEDC: %lu Hz, %d bits, GPIO%d; 8-bit external curve scaled to %lu.\n",
                       static_cast<unsigned long>(board::PwmFrequencyHz),
                       board::PwmResolutionBits,board::PwmPin,
@@ -374,6 +374,7 @@ void setup() {
 #endif
     WiFi.persistent(false);WiFi.mode(WIFI_STA);WiFi.setHostname(board::Hostname);WiFi.setAutoReconnect(true);WiFi.setSleep(false);
     Serial.println("Victus Base v1. Comandos USB: setup | status | ntc | lcd. Sin firmware fisico validado.");
+    Serial.println("Politica externa: NTC solo lectura; sin orden valida, rampa a PWM 130/255.");
     lcdCycleStartedAt=millis();
     display(lcdCycleStartedAt);
 }

@@ -1,5 +1,23 @@
 # Evidencia de software y validaciones físicas pendientes
 
+## Política actual: NTC informativa y Local 130 (2026-10-18)
+
+Por petición del usuario, se retiran las actuaciones automáticas por ambiente:
+NTC inválida/vencida/caliente ya no fuerza máximo, ni retira Remote, ni impone
+un piso. Al perder la orden válida, Local converge con filtros y rampas a 130
+exacto. El arranque de software parte de cero sin pulso Local; el pulso explícito
+solo se admite con una orden remota positiva. Máxima suavidad lo desactiva.
+Las secciones inferiores registran revisiones anteriores y sus políticas históricas.
+
+Pruebas actuales: C++ con `-Werror`, controlador con NTC desde inválida a caliente,
+invariancia de autoridad/salida respecto al ambiente, rampa Local desde cero y
+255 a 130 exacto, caducidad a 2000 ms, rechazo de calibración/órdenes inválidas,
+35/35 vectores de protocolo (incluye Remote autenticado sin NTC), exportación
+canónica, layout LCD y cinco sesiones Windows↔C++ con campos/ACK comprobados.
+Build Windows sin errores/advertencias y prueba UI externa: PASS.
+HMAC, frescura, GPIO/frecuencia/inversión, NVS y control HP no se cambian.
+No son pruebas de señal física, giro, temperatura ni placa programada.
+
 ## Base y consolidación
 
 - Paquete Work 0.4: manifiesto SHA256 de sus ocho archivos verificado; seis

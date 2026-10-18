@@ -65,15 +65,10 @@ inline void renderLcd(LcdPage page, const LcdReadings& data,
         case LcdPage::Demand:
             lcdNumber(left, data.telemetryFresh ? data.demandPct : NAN, 0, 100);
             std::snprintf(first, sizeof(first), "DEMANDA: %s%%", left);
-            if (ambientValid) {
-                if (data.pwmEnabled && data.pwmDuty >= 0 && data.pwmDuty <= 255)
-                    std::snprintf(second, sizeof(second), "PWM:%3d%% (%d)",
-                                  static_cast<int>(std::lround(data.pwmDuty * 100.0 / 255)), data.pwmDuty);
-                else std::snprintf(second, sizeof(second), "PWM:-- (OFF)");
-            } else {
-                // Do not pair a new fault with duty from the previous control tick.
-                std::snprintf(second, sizeof(second), "PWM:-- NTC FAULT");
-            }
+            if (data.pwmEnabled && data.pwmDuty >= 0 && data.pwmDuty <= 255)
+                std::snprintf(second, sizeof(second), "PWM:%3d%% (%d)",
+                              static_cast<int>(std::lround(data.pwmDuty * 100.0 / 255)), data.pwmDuty);
+            else std::snprintf(second, sizeof(second), "PWM:-- (OFF)");
             break;
         case LcdPage::Connection:
             std::snprintf(first, sizeof(first), "PC: %s", !data.pcAuthenticated ? "desconectado" :

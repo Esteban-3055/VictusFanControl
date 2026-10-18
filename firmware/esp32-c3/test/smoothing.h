@@ -31,7 +31,6 @@ inline void smoothingTests() {
         previous=duty;
     }
     check(previous==255,"sustained demand still reaches maximum");
-    auto running=fan;
     oneSecondAgo=previous;
     for(uint32_t t=360020;t<=600000;t+=20) {
         if(t==360020||t%1000==0)fan.receive(true,27,0,false,t);
@@ -55,13 +54,12 @@ inline void smoothingTests() {
     }
     check(maximum<=3,"user curve restart has no max-output kick");
 
-    // All existing safety paths bypass these deliberately slow settings.
-    auto fault=stopped;check(fault.tick(250020,NAN)==255&&!fault.remote(),"fault still immediate maximum");
-    auto hot=stopped;check(hot.tick(250020,45)==255,"hot ambient still immediate maximum");
-    auto warm=stopped;check(warm.tick(250020,40)>=143,"ambient floor still immediate");
-    auto lease=stopped;check(lease.tick(252000,24)>=89&&!lease.remote(),"lease expiry retains Local floor");
+    // Ambient cannot bypass even the deliberately slow settings.
+    const int unchanged=stopped.tick(250020,24);
+    auto fault=stopped;check(fault.tick(250040,NAN)==unchanged&&fault.remote(),"NTC failure never bypasses ramp");
+    auto hot=stopped;check(hot.tick(250040,45)==unchanged,"hot ambient never bypasses ramp");
+    auto warm=stopped;check(warm.tick(250040,40)==unchanged,"no ambient floor");
+    auto lease=stopped;check(lease.tick(252000,24)<=unchanged+1&&!lease.remote(),"lease expiry starts ramp towards 130");
     auto local=stopped;local.receive(false,27,48,false,250020);
-    check(local.tick(250020,24)>=89&&!local.remote(),"authority withdrawal retains Local floor");
-    auto hotRecovery=running;hotRecovery.tick(360020,45);
-    check(hotRecovery.tick(360040,24)>=254,"cooling after hot override cannot jump down");
+    check(local.tick(250040,24)<=unchanged+1&&!local.remote(),"authority withdrawal starts ramp towards 130");
 }

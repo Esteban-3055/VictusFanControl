@@ -38,27 +38,6 @@ struct Measurement {
         return linkFresh(now) && sourceAge<5000 && static_cast<uint32_t>(now-receivedAt)<5000-sourceAge ? value : NAN;
     }
 };
-struct ControlPolicy {
-    int minimum = 0, maximum = 54, minimumRunningPwm = 25;
-    bool map(int request, int& pwm) const;
-    static int local(double ambient);
-    static int electricalDuty(int pct, bool inverted);
-};
-class Lease {
-    ControlPolicy policy;
-    uint32_t admittedAt = 0;
-    int remotePwm = 0;
-    bool active = false;
-public:
-    explicit Lease(ControlPolicy p = {}) : policy(p) {}
-    void command(bool admitted, int request, uint32_t now) { active = admitted && policy.map(request,remotePwm); if (active) admittedAt = now; }
-    void disable() { active = false; }
-    int tick(uint32_t now, double ambient) {
-        if (static_cast<uint32_t>(now-admittedAt)>=2000 || !std::isfinite(ambient) || ambient < -40 || ambient > 100) active=false;
-        return active ? remotePwm : ControlPolicy::local(ambient);
-    }
-    bool remote() const { return active; }
-};
 class Session {
 public:
     Session(const Key&, Crypto&);

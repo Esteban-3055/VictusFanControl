@@ -27,8 +27,6 @@ static_assert(LedcDutyFrom8Bit(0) == 0 && LedcDutyFrom8Bit(255) == LedcMaximumDu
 constexpr bool EnablePwm = VICTUS_ENABLE_PWM != 0;
 constexpr uint16_t Port = 8765;
 constexpr char Hostname[] = "victus-base";
-// Explicit device calibration, not a protocol limit. Revisit when Windows' logical scale changes.
-constexpr int RequestMinimum = 0, RequestMaximum = 54, MinimumRunningPwm = 25;
 constexpr float NtcNominalOhms = 10000, FixedResistorOhms = 10000, NtcBeta = 3950;
 constexpr float SupplyMilliVolts = 3300;
 }

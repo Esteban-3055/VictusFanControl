@@ -37,45 +37,42 @@ void ExternalController::receive(bool allowed,int request,double demand,bool man
         if(active) admitted=now;
     }
 }
-int ExternalController::tick(uint32_t now,double ambient) {
+int ExternalController::tick(uint32_t now,double /*ambient*/) {
     const bool first=!initialized;
     if(first) { initialized=true;previous=startedAt=now; }
     double dt=std::min(0.1,static_cast<uint32_t>(now-previous)/1000.0);previous=now;
     if(static_cast<uint32_t>(now-admitted)>=2000) active=false;
-    if(!std::isfinite(ambient)||ambient < -40||ambient > 100) { active=false;duty=target=255;filterReady=false;falling=false;return 255; }
+    if(!active) starting=false;
     const bool wasStopped=!first&&duty<0.5&&target==0;
-    double desired=active?command:std::clamp(89.0+(ambient-25)*8.3,89.0,255.0);
-    // A high ambient temperature is an independent local floor; a cool NTC is not a notebook load sensor.
-    const double ambientFloor=ambient>35?std::clamp(30.0+(ambient-35)*22.5,30.0,255.0):0.0;
-    desired=std::max(desired,ambientFloor);
-    const bool stopRequested=active&&configured&&command==0&&ambientFloor==0;
+    // External base only: ambient is a display measurement, never actuator authority.
+    // Expired/withdrawn requests enter Local and ramp towards the user's fixed 130.
+    double desired=active?command:DisconnectedOutput;
+    const bool stopRequested=active&&configured&&command==0;
     if(!filterReady) {filtered=desired;filterReady=true;}
     else filtered+=(desired-filtered)*(config.filterMs==0?1.0:dt/(config.filterMs/1000.0+dt));
     // EMA approaches zero asymptotically; hysteresis may otherwise hold a
     // residual duty forever. Anchor an explicit stop to exactly zero only
     // inside the settling band, with the same sustained descent confirmation.
-    double nextTarget=stopRequested&&filtered<=std::max(0.5,static_cast<double>(config.hysteresis))?0:filtered;
-    if(nextTarget>=target+config.hysteresis) {target=nextTarget;falling=false;}
-    else if(nextTarget<=target-config.hysteresis || (stopRequested&&nextTarget==0&&target>0)) {
+    const double settlingBand=std::max(0.5,static_cast<double>(config.hysteresis));
+    const bool localSettled=!active&&std::abs(filtered-DisconnectedOutput)<=settlingBand;
+    double nextTarget=stopRequested&&filtered<=settlingBand?0:localSettled?DisconnectedOutput:filtered;
+    if(nextTarget>=target+config.hysteresis || (localSettled&&nextTarget>target)) {target=nextTarget;falling=false;}
+    else if(nextTarget<=target-config.hysteresis || (stopRequested&&nextTarget==0&&target>0) || (localSettled&&nextTarget<target)) {
         if(!falling) {falling=true;fallingAt=now;}
         if(static_cast<uint32_t>(now-fallingAt)>=static_cast<uint32_t>(config.downHoldMs)) target=nextTarget;
     } else falling=false;
-    if(first) duty=config.startOutput;
-    // Restart assistance after an actual stop, not on network reconnection.
-    if(wasStopped&&active&&desired>0) {
+    // Explicitly configured startup assistance only for an admitted remote
+    // request. Boot/Local/disconnection never inject a startup pulse.
+    if((first||wasStopped)&&active&&desired>0) {
         // A demand smaller than the hysteresis must still leave the stopped
         // state. Reset only this stopped -> running transition, not each tick.
         target=filtered=desired;falling=false;
         if(config.startMs>0&&config.startOutput>0) {
-            startedAt=now;duty=std::max(duty,static_cast<double>(config.startOutput));
+            startedAt=now;starting=true;duty=std::max(duty,static_cast<double>(config.startOutput));
         }
     }
-    if(static_cast<uint32_t>(now-startedAt)<static_cast<uint32_t>(config.startMs)) duty=std::max<double>(duty,config.startOutput);
-    else duty+=std::clamp(target-duty,-config.fall*2.55*dt,config.rise*2.55*dt);
-    // Sensor fault and very hot ambient bypass inertia. No tachometer: this is duty, not proven rotation.
-    if(ambient>=45) duty=target=255;
-    duty=std::max(duty,ambientFloor);
-    if(!active)duty=std::max(duty,89.0);
+    if(starting&&static_cast<uint32_t>(now-startedAt)<static_cast<uint32_t>(config.startMs)) duty=std::max<double>(duty,config.startOutput);
+    else {starting=false;duty+=std::clamp(target-duty,-config.fall*2.55*dt,config.rise*2.55*dt);}
     return std::clamp(static_cast<int>(std::lround(duty)),0,255);
 }
 }

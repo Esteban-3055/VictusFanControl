@@ -42,9 +42,10 @@ try
         Convert.FromBase64String("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="),source,cancellation.Token);
     try
     {
-        while(client.Diagnostics.Received<4&&!connection.IsCompleted)await Task.Delay(50,cancellation.Token);
+        var requiredReplies=curve==defaults?7:4; // Default descent hold may still be leaving initial Local 130.
+        while(client.Diagnostics.Received<requiredReplies&&!connection.IsCompleted)await Task.Delay(50,cancellation.Token);
         var d=client.Diagnostics;
-        if(d.State!=ExternalCoolingConnectionState.Connected || d.Failures!=0 || d.Received<4 ||
+        if(d.State!=ExternalCoolingConnectionState.Connected || d.Failures!=0 || d.Received<requiredReplies ||
             d.Device is not {Mode:"Remote",ExternalCurveVersion:1,AppliedConfigRevision:not null,AppliedDuty:>=0 and <=255} || d.Device.Extensions is null||
             d.Device.AppliedConfigRevision!=curve.Revision)
             throw new InvalidOperationException($"Firmware interoperability failed: state={d.State}, failures={d.Failures}, received={d.Received}, device={d.Device}");

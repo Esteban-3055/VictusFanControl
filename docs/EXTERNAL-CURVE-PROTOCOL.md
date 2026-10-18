@@ -75,10 +75,14 @@ en una respuesta posterior, nunca antes de entregar la configuración al control
 Windows verifica ACK y antigüedad, y muestra datos recientes. Al abrir una sesión
 nueva se negocia capacidad de nuevo y se reenvía la configuración guardada.
 
-Fallback local: NTC válida, 89 a 255 entre 25 y 45 °C (mínimo 89 por debajo de
-25 °C); piso ambiental creciente desde 35 °C incluso en Remote; ≥45 °C o fallo
-de sensor da 255 inmediatamente. Promedio ADC y EMA ambiental; fallos y ambiente
-alto no quedan ocultos por el filtro. No se usa el ambiente como carga CPU/GPU.
+Local tiene objetivo fijo **130/255**, por petición del usuario, y lo alcanza
+mediante EMA, histéresis, confirmación y rampas configuradas, asentándose en 130
+exacto desde arriba o abajo. No hay piso ni máximo automático por NTC. Ambiente
+es solo una lectura: alto, inválido o vencido no cambia PWM ni retira Remote.
+El software arranca en salida lógica cero, sin pulso Local. Un pulso configurado
+solo puede activarse con una orden remota positiva; Máxima suavidad lo desactiva.
+Esta política requiere firmware actualizado; las versiones anteriores tenían
+fallback ambiental. El formato de configuración, autenticación y NVS no cambian.
 La salida lógica siempre permanece en **0–255**. GPIO3 utiliza una etapa
 NOT (2N7000 → BC337): el valor eléctrico conceptual es **255 − salida**,
 en escala de 8 bits. El hardware LEDC del ESP32-C3 funciona a **18 Hz con
@@ -107,7 +111,7 @@ El controlador real es `firmware/esp32-c3/lib/VictusProtocol/ExternalController.
 
 1. `receive()` interpola la curva externa con Demanda, o normaliza la Solicitud
    interna aceptada según calibración; con entrada Demanda y modo Manual usa
-   `manualOutput`. El mínimo ambiental se calcula aparte con el NTC.
+   `manualOutput`. La NTC no interviene en el actuador.
 2. `tick()` aplica EMA **a la salida externa deseada**, no directamente a las
    temperaturas CPU/GPU: `filtered += (desired-filtered) * dt/(filterMs/1000+dt)`.
    `filterMs=0` equivale a aplicación directa. `dt` se limita a 0,1 s.
@@ -116,10 +120,12 @@ El controlador real es `firmware/esp32-c3/lib/VictusProtocol/ExternalController.
    permanecer debajo del umbral durante `downHoldMs`.
 4. El duty aplicado avanza hacia `target` como máximo `rise*2,55*dt` al subir y
    `fall*2,55*dt` al bajar (porcentajes de escala completa por segundo). El pulso
-   `startOutput`/`startMs` ocurre al arrancar el controlador y al salir de una parada real; no por renovar el lease.
-5. NTC inválida o vencida impone 255; ambiente ≥45 °C impone 255; el piso
-   ambiental y el mínimo Local evitan que la inercia rebaje las protecciones.
-   Un NTC inválido también retira Remote. El lease sigue siendo 2000 ms.
+   `startOutput`/`startMs` solo ocurre con orden remota positiva al partir de cero;
+   no por renovar el lease, arrancar en Local o reconectar en marcha.
+5. Un lease vencido, retirada de autoridad, Firmware, calibración inválida o
+   desconexión lleva a Local, objetivo 130, a través de los mismos filtros y
+   rampas. La NTC no modifica el objetivo ni la autoridad. El lease sigue en
+   2000 ms; no se aceptan órdenes antiguas o no autenticadas.
 6. Finalmente se invierte el duty y se escala a LEDC 14 bits / 18 Hz en GPIO3.
 
 Hay **otro EMA ambiental** (`AmbientFilter`), aplicado a la lectura NTC: factor
@@ -158,14 +164,15 @@ confirmación pueden alargarlo. El objetivo sigue representando la curva antes
 del suavizado. Desactivar el pulso evita el salto a 255 al abandonar una parada;
 no filtra ni oculta ese salto en la gráfica, sino que cambia la configuración
 usada por el controlador. No demuestra que el motor arranque con un duty bajo.
-Las protecciones de NTC/frescura/temperatura, el piso ambiental y Local siguen
-pudiendo imponer aumentos inmediatos. No se modifican las protecciones internas HP.
+La NTC no puede imponer aumentos. Local converge suavemente a 130; se conserva
+la frescura de las órdenes y no se modifican las protecciones internas HP.
 
 `smoothing.h` prueba diez minutos simulados con el controlador C++ real:
 parada, escalón a 100 %, subida/bajada acotadas, confirmación y retorno a cero.
-Reproduce además el cruce 47→48 % de la curva del caso investigado y conserva
-fallo NTC, ambiente ≥45 °C, piso ambiental, caducidad de lease y retirada de
-autoridad. El cliente Windows↔C++ comprueba también el preset completo recibido.
+Reproduce además el cruce 47→48 % de la curva del caso investigado. `external_only.h`
+comprueba independencia de NTC válida/inválida/caliente y rampa a 130 desde ambos
+lados, caducidad de lease y retirada de autoridad. El cliente Windows↔C++ comprueba
+también el preset completo recibido.
 
 ## Rango completo y parada externa
 
@@ -178,8 +185,8 @@ Las curvas existentes con mínimo 30 siguen funcionando sin alterarse.
 No cambia el formato ni namespace NVS; las curvas guardadas no se convierten
 ni se sustituyen automáticamente por otras con mínimo cero.
 
-En Remote autorizado, una salida cero puede apagar la base cuando el NTC está
-válido, vigente y ≤35 °C. El EMA y la confirmación de descenso siguen activos;
+En Remote autorizado, una salida cero puede apagar la base independientemente
+de la NTC. El EMA y la confirmación de descenso siguen activos;
 al asentarse dentro de la banda de histéresis, una petición explícita de cero
 ancla el objetivo a cero exacto para no dejar un residuo indefinido. La rampa
 de bajada llega entonces a cero. Al salir de parada, se reinicia el estado de
@@ -188,9 +195,8 @@ y duración son positivas. Sin pulso también se admite una salida positiva
 menor que la histéresis. Esto evita quedar atrapado en cero o reiniciar el
 arranque en cada iteración.
 
-Por encima de 35 °C se conserva el piso previo `30+(ambiente-35)*22,5` limitado
-al máximo. ≥45 °C o NTC inválida/vencida fuerza 255; pérdida de autoridad o lease
-vuelve a Local, mínimo 89. El circuito invertido recibe 16383/16383 para salida
+No hay umbrales ambientales que modifiquen la salida. La pérdida de autoridad o
+lease vuelve a Local con rampa a 130. El circuito invertido recibe 16383/16383 para salida
 lógica 0 y 0 para salida lógica 255. El LCD informa `PWM: 0% (0)` cuando se aplica
 cero; un nulo sigue siendo `--`. El programa no puede confirmar giro o parada
 mecánica sin tacómetro.
@@ -200,7 +206,7 @@ editable a la entrada reciente; ● verde indica el duty aplicado informado por
 el ESP32. Se emparejan el estado autenticado y la telemetría del ACK exacto,
 no la última trama enviada si todavía no tiene respuesta. El marcador aplicado
 exige Remote, revisión confirmada y el mismo tipo/calibración de entrada; puede
-quedar fuera de la curva por los filtros y protecciones. En edición, el objetivo
+quedar fuera de la curva por los filtros y el pulso configurado. En edición, el objetivo
 se rotula Borrador. Ambos marcadores desaparecen al vencer trama/respuesta a
 2000 ms o fuente de demanda a 5000 ms; cero válido se muestra y nulos no se
 inventan. Con entrada Solicitud se muestra su normalización, no Demanda.

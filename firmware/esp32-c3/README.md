@@ -129,11 +129,11 @@ Entrada **Demanda**: X demanda 0–100 del notebook, Y solicitud externa. En Man
 usa la salida externa fija configurable en Respuesta y arranque.
 Entrada **Solicitud aceptada**: normaliza según los extremos de calibración
 visibles y editables. 0–54 es el valor inicial, no una regla permanente.
-Un valor fuera de la calibración deja Remote y vuelve al control ambiental.
+Un valor fuera de la calibración deja Remote y lleva suavemente a PWM 130.
 
 Respuesta configurable: EMA, histéresis, confirmación de descenso, subida/bajada
 independientes, salida/duración de arranque. Iniciales: 1500 ms, 3 niveles, 3000 ms,
-12 %/s arriba, 6 %/s abajo y 255 durante 800 ms al encender.
+12 %/s arriba, 6 %/s abajo y pulso opcional 255 durante 800 ms con orden remota positiva.
 El pulso se repite al pasar de parada real a demanda positiva; no se repite por reconectar. La configuración se confirma por revisión aplicada
 desde la tarea de control; el estado de la pestaña distingue guardado de confirmado.
 Se conserva en NVS, con escrituras espaciadas al menos 30 s y comprobación al cargar.
@@ -148,17 +148,24 @@ para aplicarlo; no cambia las configuraciones existentes automáticamente.
 El recorrido completo de salida necesita al menos 100 s, además de filtros y
 esperas; confirmar descenso añade espera, no cambia la velocidad de la rampa.
 El objetivo gráfico puede moverse rápidamente con la demanda aunque el aplicado
-avance despacio. Fallo NTC, ambiente alto, piso ambiental y fallback Local
-conservan su prioridad. Sin pulso no se ha verificado el arranque mecánico a
+avance despacio. La NTC es solo informativa; Local tiene objetivo fijo 130 y
+respeta filtros y rampas. Sin pulso no se ha verificado el arranque mecánico a
 baja salida; el firmware no tiene tacómetro. No hace falta otro formato de
 protocolo/NVS ni modificar el firmware para recibir estos valores.
 
-La NTC es ambiental: fallback local 89→255 entre 25 y 45 °C. En Remote el apagado se permite hasta 35 °C; por encima se conserva el piso
-ambiental creciente original (30→255 hasta 45 °C). NTC inválida, sin renovar durante 3 s o ≥45 °C fuerza 255;
-no espera a EMA/rampas. Al arrancar sin NTC válida también fuerza máximo.
+**La NTC es exclusivamente informativa.** Su temperatura, fallo o caducidad no
+modifican la salida ni retiran Remote. Se eliminan el piso ambiental y el máximo
+automático por NTC. Sin una orden remota válida, Local tiene objetivo **130/255**
+(aproximadamente 51 %), alcanzado con EMA, histéresis, confirmación y rampas.
+Se asienta en 130 exacto, tanto desde arriba como desde abajo. El arranque de
+software comienza en salida lógica cero y se dirige a ese objetivo, sin pulso.
+Los pulsos explícitamente configurados solo se admiten al arrancar con una orden
+remota positiva o al salir de una parada real; Máxima suavidad los desactiva.
 La tarea de control corre cada 20 ms separada de TCP, LCD y provisión. La orden
 remota caduca a los 2000 ms. Volver a Firmware, perder autoridad o desconectar
-Windows devuelve Local. No se restaura ninguna autoridad del notebook desde ESP32.
+Windows devuelve Local con rampa a 130, sin saltos de salida. No se restaura
+ninguna autoridad del notebook desde ESP32. Esta política requiere cargar el
+firmware actualizado; no cambia las protecciones internas HP ni HMAC/TCP/NVS.
 
 Contratos: [v1](../../docs/EXTERNAL-COOLING-PROTOCOL.md) y
 [extensión Curva Externa](../../docs/EXTERNAL-CURVE-PROTOCOL.md).
@@ -247,8 +254,7 @@ controles originales y su referencia a respuesta/lease de 2000 ms.
 
 La NTC es exclusivamente ambiente y caduca a los 3 s, aunque el PC siga enviando.
 Si falla, la primera vista muestra `Ambiente:--C`; la tercera conserva DEMANDA
-si está fresca y muestra `PWM:-- NTC FAULT`, para no presentar la orden del ciclo
-de control anterior como actual. La tarea de control fuerza 255 ante el fallo.
+si está fresca y muestra el PWM aplicado, independiente del estado de la NTC.
 CPU/GPU conservan sus datos propios si están frescos. Sin PC, el ambiente válido
 sigue visible y las temperaturas CPU/GPU y DEMANDA muestran `--`. Con PWM
 inhabilitado se muestra `PWM:-- (OFF)`. El porcentaje corresponde a la salida
@@ -277,8 +283,8 @@ caracteres físicos pueden quedar congelados mientras el bus no responda. El dia
 deshabilita protecciones. Alimentar el backpack a 5 V exige conversor
 de niveles en SDA/SCL para proteger al ESP32-C3.
 
-Este diagnóstico **no relaja** el fail-safe: si la medición sigue inválida,
-el ventilador continúa con la petición máxima. No se afirma que el hardware
+Un fallo NTC solo invalida la lectura ambiental y sus diagnósticos: no modifica
+el PWM. No se afirma que el hardware
 esté defectuoso o que la lectura del ADC sea fiable hasta observar datos reales.
 La lectura filtrada del NTC y su fecha se publican juntas bajo una sección
 crítica corta. El consumidor obtiene la hora después de la instantánea para

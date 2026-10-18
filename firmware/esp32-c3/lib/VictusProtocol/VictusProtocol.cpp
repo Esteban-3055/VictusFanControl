@@ -70,18 +70,6 @@ bool equalProof(const std::string& a, const std::string& b) {
     for (size_t i=0; i<32; ++i) difference = difference | (x[i]^y[i]);
     return difference == 0;
 }
-bool ControlPolicy::map(int request, int& pwm) const {
-    if (minimum < 0 || maximum > 65535 || minimum >= maximum || minimumRunningPwm < 0 || minimumRunningPwm > 100 || request < minimum || request > maximum) return false;
-    pwm = static_cast<int>(std::lround(100.0*(request-minimum)/(maximum-minimum)));
-    if (pwm > 0) pwm = std::max(pwm,minimumRunningPwm); return true;
-}
-int ControlPolicy::local(double ambient) {
-    if (!std::isfinite(ambient) || ambient < -40 || ambient > 100) return 100;
-    return std::max(35,std::min(100,static_cast<int>(std::lround(35+(ambient-25)*3.25))));
-}
-int ControlPolicy::electricalDuty(int pct, bool inverted) {
-    auto duty = static_cast<int>(std::lround(std::max(0,std::min(100,pct))*255.0/100)); return inverted ? 255-duty : duty;
-}
 Session::Session(const Key& key,Crypto& c): pairing(key),crypto(c) {}
 Session::~Session() {
     for (auto* k : {&pairing,&receiveKey,&sendKey}) { volatile uint8_t* p = k->data(); for (size_t i=0;i<32;++i) p[i]=0; }
@@ -125,7 +113,8 @@ bool Session::accept(const std::string& line,uint32_t now,double ambient,int app
     status["ackSequence"]=sequence;
     if (std::isfinite(ambient) && ambient>=-40 && ambient<=100) status["ambientTempC"]=ambient; else status["ambientTempC"]=nullptr;
     if (applied>=0&&applied<=100) status["appliedPwmPct"]=applied; else status["appliedPwmPct"]=nullptr;
-    status["mode"]=remote?"Remote":"Local"; status["communication"]=std::isfinite(ambient)?"Ready":"Fault";
+    // Sensor availability is expressed by ambientTempC=null, not a TCP fault.
+    status["mode"]=remote?"Remote":"Local"; status["communication"]="Ready";
     status["externalCurveVersion"]=1;status["externalMinimumOutput"]=0;
     if(appliedConfigRevision.empty()) status["appliedConfigRevision"]=nullptr; else status["appliedConfigRevision"]=appliedConfigRevision;
     if(appliedDuty>=0&&appliedDuty<=255) status["appliedDuty"]=appliedDuty; else status["appliedDuty"]=nullptr;

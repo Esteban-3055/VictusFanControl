@@ -12,7 +12,7 @@ inline void zeroOutputTests() {
     config.manualOutput=0;
     check(config.valid() && config.evaluate(0)==0 && config.evaluate(20)==0,"zero plateau config");
     victus::ExternalController fan;fan.configure(config);
-    int last=255;
+    int last=0;
     for(uint32_t t=0;t<60000;t+=20) {
         if(t%1000==0)fan.receive(true,27,0,false,t);
         int duty=fan.tick(t,24);
@@ -21,12 +21,12 @@ inline void zeroOutputTests() {
     }
     check(last==0 && fan.remote() && fan.requested()==0,"EMA/hysteresis settle to exact zero");
     check(board::LedcDutyFrom8Bit(victus::ExternalController::electrical(0))==16383,"stop is full inverted electrical duty");
-    auto timedOut=fan;check(timedOut.tick(61000,24)>=89 && !timedOut.remote(),"lease expiry overrides stop");
+    auto timedOut=fan;check(timedOut.tick(61000,24)<=4 && !timedOut.remote(),"lease expiry starts a bounded ramp from stop");
     auto local=fan;local.receive(false,27,0,false,60000);
-    check(local.tick(60000,24)>=89 && !local.remote(),"authority withdrawal overrides stop");
-    auto hot=fan;check(hot.tick(60000,35.01)>=30,"warm ambient retains original floor above 35C");
-    check(hot.tick(60020,40)>=143 && hot.tick(60040,45)==255,"ambient floors bypass stop");
-    auto fault=fan;check(fault.tick(60000,NAN)==255 && !fault.remote(),"sensor failure overrides stop immediately");
+    check(local.tick(60000,24)<=1 && !local.remote(),"authority withdrawal never injects an output floor");
+    auto hot=fan;check(hot.tick(60000,35.01)==0,"warm ambient does not override stop");
+    check(hot.tick(60020,40)==0 && hot.tick(60040,45)==0,"hot ambient does not override stop");
+    auto fault=fan;check(fault.tick(60000,NAN)==0 && fault.remote(),"sensor failure is informational only");
     auto abrupt=config;abrupt.filterMs=0;abrupt.hysteresis=0;
     std::strcpy(abrupt.revision,"2123456789abcdef0123456789abcdef");
     auto instantRestart=fan;instantRestart.configure(abrupt);

@@ -55,7 +55,7 @@ inline void presentationTests() {
     renderLcd(LcdPage::Temperatures,data,top,bottom);
     check(std::strstr(bottom,"Ambiente:--C"),"ambient null on first page");
     renderLcd(LcdPage::Demand,data,top,bottom);
-    check(std::strstr(top,"DEMANDA: --%") && std::strstr(bottom,"NTC FAULT"),"fault hides prior applied duty");
+    check(std::strstr(top,"DEMANDA: --%") && std::strstr(bottom,"38% (96)"),"missing ambient does not hide independent applied duty");
     renderLcd(LcdPage::Connection,data,top,bottom);
     check(std::strstr(top,"sin datos") && std::strstr(bottom,"conectado"),"stale PC with connected WiFi");
     data.pcAuthenticated=false;data.wifi=false;
@@ -65,7 +65,7 @@ inline void presentationTests() {
     renderLcd(LcdPage::Temperatures,data,top,bottom);
     check(std::strstr(top,"55C") && std::strstr(top,"42C") && std::strstr(bottom,"Ambiente:--C"),"NTC failure does not replace notebook telemetry");
     renderLcd(LcdPage::Demand,data,top,bottom);
-    check(std::strstr(top,"DEMANDA: 35%") && std::strstr(bottom,"NTC FAULT"),"NTC failure does not replace fresh demand");
+    check(std::strstr(top,"DEMANDA: 35%") && std::strstr(bottom,"38% (96)"),"NTC failure does not replace fresh demand or applied duty");
     data.ambientC=21.2;data.pwmEnabled=false;
     renderLcd(LcdPage::Demand,data,top,bottom);
     check(std::strstr(top,"DEMANDA: 35%") && std::strstr(bottom,"PWM:-- (OFF)"),"monitor image does not claim applied PWM");

@@ -28,7 +28,7 @@ internal sealed partial class ProductCanvas
             }
             Action("smooth","Máxima suavidad",new(1004,575,617,44));
             DrawText(g,"1 %/s al subir y bajar · filtro 10 s · descenso tras 30 s · sin pulso de arranque.",1004,631,18,Muted,610,height:52);
-            DrawText(g,"Comprueba el giro a baja salida. NTC inválida o ≥45 °C: máximo inmediato.",1004,693,17,Yellow,610,height:48);
+            DrawText(g,"NTC solo informativa · sin orden válida: rampa a 130. Comprueba el giro a baja salida.",1004,693,17,Muted,610,height:48);
         }
         else
         {

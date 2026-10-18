@@ -8,8 +8,9 @@ La pantalla de temperaturas conserva 30 s: CPU y GPU en la primera fila y
 Ambiente viene exclusivamente de GPIO0/NTC y vence a los 3 s. Las temperaturas
 CPU/GPU y DEMANDA proceden de la telemetría firmada, con vencimiento de transporte
 a los 2 s y de origen a los 5 s. Los nulos se muestran `--`. Un fallo NTC no
-sustituye temperaturas del PC ni DEMANDA; oculta PWM anterior y mantiene el
-control de seguridad a 255. Perder el PC no oculta una lectura NTC vigente.
+sustituye temperaturas del PC ni DEMANDA ni el PWM aplicado. La NTC es ahora
+solo informativa, sin autoridad de control. Perder el PC conserva la lectura
+NTC vigente y lleva suavemente el PWM a 130/255.
 
 ## Recorrido de la configuración
 
@@ -43,7 +44,8 @@ ejecutan en ESP32**. Windows configura los parámetros. La curva interna HP tien
 su propio control en Windows y no se modifica. El EMA ambiental de NTC (factor
 0,25 por muestra) es independiente de `filterMs`. El pulso se aplica al iniciar
 el controlador y al salir de parada real; guardar o reconectar no lo repite sobre
-un ventilador en marcha. Al encender sin NTC válida prevalece máximo por seguridad.
+un ventilador en marcha. Al encender sin una orden válida, el software parte
+de cero y se dirige a Local 130 por rampa, independientemente de la NTC.
 
 Se conserva la NVS `victus-base`/`curve-v1` y su formato. El guardado NVS puede
 demorarse por el espaciado mínimo de 30 s; un corte antes de persistir puede cargar
