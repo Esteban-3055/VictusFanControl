@@ -19,13 +19,13 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      SOURCE_SHA: 2bac56c13697cfbfe864cc2eb8d0ffe9684234f3
+      SOURCE_SHA: adc0b7754d8f8fe537ffcd405957162e7f682cf1
       RELEASE_TAG: v1.2.16
-      BUILD_RUN: 39092246438
+      BUILD_RUN: 39092489039
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 2bac56c13697cfbfe864cc2eb8d0ffe9684234f3
+          ref: adc0b7754d8f8fe537ffcd405957162e7f682cf1
           fetch-depth: 0
           persist-credentials: false
       - name: Wait for exact-source software checks before preparing public assets
@@ -81,22 +81,22 @@ jobs:
           PY
       - uses: actions/download-artifact@v4
         with:
-          name: VictusFanControl-1.2.16-win-x64-2bac56c13697cfbfe864cc2eb8d0ffe9684234f3
+          name: VictusFanControl-1.2.16-win-x64-adc0b7754d8f8fe537ffcd405957162e7f682cf1
           path: verified-payload
           github-token: ${{ github.token }}
-          run-id: 39092246438
+          run-id: 39092489039
       - uses: actions/download-artifact@v4
         with:
-          name: VictusFanControl-1.2.16-Setup-win-x64-2bac56c13697cfbfe864cc2eb8d0ffe9684234f3
+          name: VictusFanControl-1.2.16-Setup-win-x64-adc0b7754d8f8fe537ffcd405957162e7f682cf1
           path: installer-assets
           github-token: ${{ github.token }}
-          run-id: 39092246438
+          run-id: 39092489039
       - uses: actions/download-artifact@v4
         with:
-          name: external-cooling-validation-2bac56c13697cfbfe864cc2eb8d0ffe9684234f3
+          name: external-cooling-validation-adc0b7754d8f8fe537ffcd405957162e7f682cf1
           path: validation-evidence
           github-token: ${{ github.token }}
-          run-id: 39092246462
+          run-id: 39092488916
       - name: Verify original product archive, installer and 19 exact-commit fixtures
         shell: bash
         run: |
@@ -151,7 +151,7 @@ jobs:
           (root/(simulator.name+'.sha256')).write_text(hashlib.sha256(simulator.read_bytes()).hexdigest()+'  '+simulator.name+'\n')
           manifest=json.loads(Path('verified-payload/PRODUCT-GUI-MANIFEST.json').read_text(encoding='utf-8-sig'))
           assert manifest['version']=='1.2.16' and manifest['releaseChannel']=='stable'
-          record=dict(tag=os.environ['RELEASE_TAG'],version='1.2.16',prerelease=False,sourceHead=os.environ['SOURCE_SHA'],buildRunId=int(os.environ['BUILD_RUN']),externalCoolingRunId=39092246462,firmwareRunId=39092246432,
+          record=dict(tag=os.environ['RELEASE_TAG'],version='1.2.16',prerelease=False,sourceHead=os.environ['SOURCE_SHA'],buildRunId=int(os.environ['BUILD_RUN']),externalCoolingRunId=39092488916,firmwareRunId=39092488849,
               physicalEsp32Pass=False,physicalNotebookWrites=False,previousStableRelease='v1.2.9',updater129RequiresPreviewOptIn=False,
               assets={p.name:dict(size=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in root.iterdir() if p.is_file()})
           (root/'RELEASE-PROVENANCE.json').write_text(json.dumps(record,indent=2)+'\n')
@@ -212,12 +212,12 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      SOURCE_SHA: 2bac56c13697cfbfe864cc2eb8d0ffe9684234f3
+      SOURCE_SHA: adc0b7754d8f8fe537ffcd405957162e7f682cf1
       RELEASE_TAG: v1.2.16
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 2bac56c13697cfbfe864cc2eb8d0ffe9684234f3
+          ref: adc0b7754d8f8fe537ffcd405957162e7f682cf1
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
