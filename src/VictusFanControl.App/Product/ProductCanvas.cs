@@ -458,7 +458,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,157,1337,666));DrawText(g,"Reglas de seguridad",332,177,30,null,1250,true);
         DrawText(g,"Protecciones del backend · solo lectura",332,225,23,Muted,1240);
         string[] titles=["Respuesta térmica de demanda","SafetyGate independiente","Límites reales de ventiladores","Telemetría fresca y completa","Guardian y recuperación"];
-        string[] details=["CPU habitual: confirma subidas 2 s; ≥99 °C responde de inmediato. Sensores y protecciones conservan lecturas reales.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >82 °C interrumpe.","Manual WMI y Automático: CPU 10–54, GPU hasta 52. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recuperar CPU/GPU guarda respaldos y libera la sesión; no activa Automático."];
+        string[] details=["CPU habitual: confirma subidas 2 s; ≥99 °C responde de inmediato. Sensores y protecciones conservan lecturas reales.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >95 °C interrumpe en uso habitual.","Manual WMI y Automático: CPU 10–54, GPU hasta 52. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recuperar CPU/GPU guarda respaldos y libera la sesión; no activa Automático."];
         for(int i=0;i<5;i++){var r=new RectangleF(331,282+i*103,1293,87);Card(g,r);Icon(g,i==4?"profiles":"fan",r.X+24,r.Y+24,37);DrawText(g,titles[i],r.X+99,r.Y+12,23,null,1100,true);DrawText(g,details[i],r.X+99,r.Y+47,19,Muted,1100);}
     }
     private void Monitoring(Graphics g)

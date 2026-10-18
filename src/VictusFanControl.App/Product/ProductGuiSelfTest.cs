@@ -400,7 +400,7 @@ internal static partial class ProductGuiSelfTest
         require(epochReason.Contains("misma adquisición")&&!epochReason.Contains("control 100"),"Mismatched safety reported an unrelated thermal cause.");
         var staleReason=Failure(()=>review.Observe(badSafety,Safety(badSafety) with{SnapshotFresh=false,CustomControlPermitted=false,Reasons=["Telemetry is stale."]}));
         require(staleReason.Contains("Telemetry is stale."),"SafetyGate rejection discarded its underlying reasons.");
-        var gpuWhileCpuPending=ProductAutomaticReview.EnvelopeFailure(Sample(4400,96) with{GpuTemperatureC=83},cpuSpikeAdmitted:true);
+        var gpuWhileCpuPending=ProductAutomaticReview.EnvelopeFailure(Sample(4400,96) with{GpuTemperatureC=83},cpuSpikeAdmitted:true,boundedReview:true);
         require(gpuWhileCpuPending.Contains("GPU temperatura 83 °C > 82 °C")&&!gpuWhileCpuPending.Contains("CPU temperatura"),
             "Admitted CPU spike was falsely blamed for an independent GPU rejection.");
         // Explicit review still starts in Firmware, and editing/saving never dispatches a curve.
@@ -589,7 +589,7 @@ internal static partial class ProductGuiSelfTest
                     using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
                     require(state.RootElement.GetProperty("sessionId").GetString()==AppLog.SessionId&&state.RootElement.GetProperty("sessionStartedUtc").GetDateTimeOffset()==AppLog.SessionStartedUtc,"Diagnostic session identity mismatch.");
                     require(state.RootElement.GetProperty("physicalQualification").GetString()=="not-established-by-this-export","Diagnostic fabricated physical qualification.");
-                    require(state.RootElement.GetProperty("automaticThermalContract").GetString()=="cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
+                    require(state.RootElement.GetProperty("automaticThermalContract").GetString()=="cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95",
                         "Diagnostic did not identify the thermal contract used by this build.");
                     require(state.RootElement.GetProperty("AutomaticInterruptionSnapshot").GetProperty("CpuPackagePowerW").GetDouble()==61 &&
                         state.RootElement.GetProperty("snapshot").GetProperty("CpuPackagePowerW").GetDouble()==10 &&
@@ -728,7 +728,8 @@ internal static partial class ProductGuiSelfTest
     private static void TestLivePerformanceApply(Action<bool,string> require)
     {
         ProductPerformanceUpdate.EnsureWaitAllowed(100,4099,"Ac","Ac",84,77);
-        foreach(var input in new[]{(4100L,"Ac",84d,77d),(99L,"Ac",84d,77d),(101L,"Battery",84d,77d),(101L,"Ac",85d,77d),(101L,"Ac",84d,78d)})
+        ProductPerformanceUpdate.EnsureWaitAllowed(100,4099,"Ac","Ac",84,95);
+        foreach(var input in new[]{(4100L,"Ac",84d,77d),(99L,"Ac",84d,77d),(101L,"Battery",84d,77d),(101L,"Ac",85d,77d),(101L,"Ac",84d,95.001d)})
         {
             var refused=false;try{ProductPerformanceUpdate.EnsureWaitAllowed(100,input.Item1,input.Item2,"Ac",input.Item3,input.Item4);}catch(InvalidOperationException){refused=true;}
             require(refused,"Live performance wait renewed its deadline or admitted source/thermal urgency.");

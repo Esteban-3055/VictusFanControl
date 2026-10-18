@@ -18,12 +18,18 @@ public sealed record ProductProtectionSettings
     // habitual admission never uses this flag to stop Automatic.
     public bool PowerEnvelopeHandoff { get; init; } = false;
     public bool ResumeAutomatic { get; init; } = true;
+    public const double HabitualGpuHandoffC = 95;
+    // Runtime-only historical bench policy; never accepted from profile JSON.
+    [JsonIgnore] public bool HistoricalGpuThermalPolicy { get; init; }
+    [JsonIgnore] public double GpuHandoffC => HistoricalGpuThermalPolicy ? SafetyGate.GpuEmergencyC : HabitualGpuHandoffC;
+    public bool IsGpuThermalEmergency(double? temperature) => GpuThermalHandoff &&
+        (HistoricalGpuThermalPolicy ? temperature >= GpuHandoffC : temperature > GpuHandoffC);
 
     public SafetyGateResult ApplyThermalPolicy(TelemetrySnapshot? snapshot, SafetyGateResult raw)
     {
         if (snapshot is null || !raw.ThermalEmergency) return raw;
         var thermal = CpuThermalHandoff && snapshot.CpuControlTemperatureC >= SafetyGate.CpuEmergencyC ||
-            GpuThermalHandoff && snapshot.GpuTemperatureC >= SafetyGate.GpuEmergencyC;
+            IsGpuThermalEmergency(snapshot.GpuTemperatureC);
         if (thermal) return raw;
         var ready = raw.BoardAllowed && raw.RuntimeHealthy && raw.SnapshotComplete && raw.SnapshotFresh &&
             raw.TelemetryDeviceIdentityValid && raw.SensorsPlausible && snapshot.CpuCoreTelemetryComplete;

@@ -44,7 +44,7 @@ internal static class ProductAutomaticAdmissionSelfTest
             var rejected = false; try { guard.Observe(sample, Safety(sample)); } catch (InvalidOperationException) { rejected = true; }
             require(rejected, "Removing the consumption cutoff admitted invalid GPU telemetry.");
         }
-        foreach (var sample in new[] { Sample() with { GpuTemperatureC = 83 } })
+        foreach (var sample in new[] { Sample() with { GpuTemperatureC = 95.001 } })
         {
             require(ProductAutomaticAdmission.StartupIssues(State(sample), new(), at).Count > 0,
                 "Consumption change disabled the GPU thermal protection at entry.");
@@ -55,6 +55,28 @@ internal static class ProductAutomaticAdmissionSelfTest
                 require(rejected, "Consumption change disabled the GPU thermal protection in operation.");
             }
         }
+        foreach(var temperature in new[]{82d,83,87,94.999,95})
+        {
+            var sample=Sample() with{GpuTemperatureC=temperature};
+            require(ProductAutomaticAdmission.StartupIssues(State(sample),new(),at).Count==0,"Habitual GPU entry rejected <=95 C.");
+            var policy=new ProductProtectionSettings();
+            var effective=policy.ApplyThermalPolicy(sample,Safety(sample) with{ThermalEmergency=true,PreconditionsReady=false});
+            require(effective.CustomControlPermitted&&!effective.ThermalEmergency,"Historical raw GPU gate leaked into habitual admission.");
+            var guard=new ProductAutomaticReview(()=>0,ProductAutomaticReviewMode.Habitual);guard.Configure(policy);guard.Start();
+            guard.Observe(sample,effective);guard.EnsureDispatchAllowed(sample);
+        }
+        foreach(var temperature in new[]{95.001,96d,105})
+            require(new ProductProtectionSettings().IsGpuThermalEmergency(temperature),"GPU >95 did not hand off.");
+        foreach(var invalid in new double?[]{null,double.NaN,double.PositiveInfinity,-1,105.001})
+            Code(Sample() with{GpuTemperatureC=invalid},invalid.HasValue?"gpu-temperature-invalid":"gpu-temperature-missing");
+        foreach(var mode in new[]{ProductAutomaticReviewMode.Short,ProductAutomaticReviewMode.Extended})
+        {
+            var sample=Sample() with{GpuTemperatureC=83};var guard=new ProductAutomaticReview(()=>0,mode);guard.Configure(new());guard.Start();
+            var denied=false;try{guard.Observe(sample,Safety(sample));}catch(InvalidOperationException){denied=true;}
+            require(denied,"Habitual GPU threshold weakened historical bounded review.");
+        }
+        require(!ProductProfilesStore.Serialize(new ProductProfiles{Protections=new(){HistoricalGpuThermalPolicy=true}}).Contains("historicalGpuThermalPolicy",StringComparison.OrdinalIgnoreCase),"Runtime-only historical thermal flag persisted.");
+        Console.WriteLine("PASS habitual GPU: 82/83/87/94.999/exact95 admitted; >95 handoff; historical review and invalid telemetry preserved.");
         foreach(var watts in new[]{60d,60.001,61,75,115,500})
         foreach(var legacyFlag in new[]{false,true})
         {

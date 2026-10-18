@@ -18,7 +18,7 @@ internal static class ProductDiagnostics
             state.Hardware,state.Target,state.Source,state.Runtime,state.FanMode,state.FanAuthority,state.FanLevel,
             state.ManualMaximumLevel,state.FanUpperRangePreview,state.CommandedCpuLevel,state.CommandedGpuLevel,
             state.LifecycleBlocked,state.LifecycleBlockReason,state.InterruptionDetails,
-            automaticThermalContract="cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
+            automaticThermalContract="cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95",
             state.AutomaticReview,state.AutomaticReviewMaximumSeconds,state.AutomaticReviewRemainingSeconds,state.AutomaticCpuSpikeRemainingMilliseconds,state.AutomaticDecision,state.AppliedAutomaticConfiguration,state.AppliedFanProfile,
             state.AutomaticPreparing,state.AutomaticSessionId,state.AutomaticDecisionSnapshot,state.AutomaticInterruptionSnapshot,state.PerformanceActive,state.PerformanceProcessPresent,state.PerformanceUpdating,state.AppliedPerformance,
             state.PlatformRetention,

@@ -64,7 +64,7 @@ internal sealed class ProductAutomaticActivation
 /// <summary>Bounded source reconciliation. A cached pre-change response cannot authorize a handoff.</summary>
 internal sealed class ProductAutomaticSourceTransition
 {
-    internal const int MaximumMilliseconds = 4000;
+    internal const int MaximumMilliseconds = 8000;
     private readonly Func<long> _clock;
     private long? _started;
     private long _candidateSince;
@@ -86,8 +86,8 @@ internal sealed class ProductAutomaticSourceTransition
         if (!_started.HasValue && source == selected && ProductAutomaticActivation.PerformanceReady(expected, applied, status, fresh, source)) return true;
         if (!_started.HasValue) { _started = now; _previousResponse = status.RequestId; }
         if (now < _started.Value || now - _started.Value >= MaximumMilliseconds)
-            throw new InvalidOperationException("Transición AC/Batería no confirmada en cuatro segundos; volver a Firmware.");
-        if (_candidate != source) { _candidate = source; _candidateSince = now; _samples = 0; }
+            throw new InvalidOperationException("Transición AC/Batería no confirmada en ocho segundos; volver a Firmware.");
+        if (_candidate != source) { _candidate = source; _candidateSince = now; _samples = 0; _previousResponse = status.RequestId; }
         ++_samples;
         return _samples >= 2 && now - _candidateSince >= 1000 && status.RequestId != _previousResponse &&
             ProductAutomaticActivation.PerformanceReady(expected, applied, status, fresh, source);

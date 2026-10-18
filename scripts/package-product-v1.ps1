@@ -19,12 +19,12 @@ try {
     Copy-Item -LiteralPath (Join-Path $prior 'app/modules') -Destination (Join-Path $OutputDirectory 'app/modules') -Recurse
     Copy-Item -LiteralPath (Join-Path $prior 'watchdog/modules') -Destination (Join-Path $OutputDirectory 'watchdog/modules') -Recurse
     foreach($file in Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File -Filter 'VictusFanControl*.dll') {
-        if([Diagnostics.FileVersionInfo]::GetVersionInfo($file.FullName).FileVersion -ne '1.2.15.0'){throw "Version mismatch: $($file.Name)"}
+        if([Diagnostics.FileVersionInfo]::GetVersionInfo($file.FullName).FileVersion -ne '1.2.16.0'){throw "Version mismatch: $($file.Name)"}
     }
     foreach($file in @('Start-ProductGui.ps1','Start-PlatformThermalTest.ps1','Install-VictusFanControl.ps1')) {
         Copy-Item -LiteralPath (Join-Path $repo ('release/'+$file)) -Destination $OutputDirectory
     }
-    foreach($file in @('PRODUCT_V1.md','PRODUCT_1_1_6_CHANGES.md','PRODUCT_1_1_7_DISPLAY.md','PRODUCT_1_1_8_CPU_SPIKES.md','PRODUCT_PLATFORM_RETENTION_2026-10-09.md','PRODUCT_SENSOR_ISOLATION_STEP1.md','PRODUCT_WMI_COORDINATION_STEP2.md','PERFORMANCE_GUI_RECOVERY.md','PLATFORM_PHYSICAL_TEST_2026-10-08.md')) {
+    foreach($file in @('PRODUCT_V1.md','HABITUAL-GPU95-AND-POWER-SOURCE.md','CPU-CONSUMPTION-AND-GPU-RANGE.md','FORCED-SESSION-RECOVERY.md','PRODUCT_1_1_6_CHANGES.md','PRODUCT_1_1_7_DISPLAY.md','PRODUCT_1_1_8_CPU_SPIKES.md','PRODUCT_PLATFORM_RETENTION_2026-10-09.md','PRODUCT_SENSOR_ISOLATION_STEP1.md','PRODUCT_WMI_COORDINATION_STEP2.md','PERFORMANCE_GUI_RECOVERY.md','PLATFORM_PHYSICAL_TEST_2026-10-08.md')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
     foreach($file in @('LICENSE','THIRD_PARTY_NOTICES.md')){Copy-Item -LiteralPath (Join-Path $repo $file) -Destination $OutputDirectory}
@@ -44,13 +44,13 @@ try {
         [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
     })
     [ordered]@{
-        schemaVersion=1;kind='VictusFanControl.ProductGuiRelease';version='1.2.15';appDirectory='app';sourceHead=$SourceHead
+        schemaVersion=1;kind='VictusFanControl.ProductGuiRelease';version='1.2.16';appDirectory='app';sourceHead=$SourceHead
         inheritedModulesZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
         upperRangePreview=$release.upperRangePreview;fanCommandLimits=$release.fanCommandLimits;releaseChannel=$release.channel;releaseStage='target-specific-release';finalReleaseReady=$true;normalAutomatic='authorized-exact-target';physicalGuiValidation='partial-pending-current-target-observations'
         productPlatformRetention='removed-no-platform-sensor-acquisition';platformThermalExperiment='retired-no-live-entry'
         automaticProtectionControls=$release.automaticProtectionControls;automaticPowerContract=$release.automaticPowerContract;automaticAdmissionDiagnostics=$release.automaticAdmissionDiagnostics;unattendedAutomaticResumption='previous-active-request-only-clean-release-fresh-runtime-three-new-observations-no-unknown-native-reentry'
         manualAutomaticRetry='explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations';startup=$release.startup;sessionRestart='explicit-clean-release-new-process-firmware';guidedPerformanceRecovery='gui-installer-exact-owner-release-only';guidedFanRecovery='wmi-gui-experiment-orphan-and-target-bound-legacy-release-only'
-        customGpuClock='configurable-210-to-2535';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticExtendedReview='explicit-only-2700s-10-to-50-16MiB-diagnostics';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response';productAutomaticSourceTransition='bounded-4000ms-fresh-guardian-preserves-inertia';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';performanceRecovery='explicit-release-only-exact-session-backups';files=$entries
+        customGpuClock='configurable-210-to-2535';productAutomaticReview='explicit-only-300s-10-to-50';productAutomaticExtendedReview='explicit-only-2700s-10-to-50-16MiB-diagnostics';productAutomaticPerformance='required-both-before-fans';productAutomaticThermal='cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95';productAutomaticSourceTransition='bounded-8000ms-post-candidate-guardian-preserves-inertia';diagnostics='per-process-session-with-telemetry';curveMarkers='applied-request-and-draft-preview';performanceRecovery='explicit-release-only-exact-session-backups';files=$entries
     } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'PRODUCT-GUI-MANIFEST.json') -Encoding utf8
     & (Join-Path $OutputDirectory 'Start-ProductGui.ps1') -Mode FinalCheck
 } finally {

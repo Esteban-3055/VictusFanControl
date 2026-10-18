@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $manifest = Get-Content -LiteralPath (Join-Path $root 'PRODUCT-GUI-MANIFEST.json') -Raw | ConvertFrom-Json
-if ($manifest.schemaVersion -ne 1 -or $manifest.kind -ne 'VictusFanControl.ProductGuiRelease' -or $manifest.version -ne '1.2.15' -or $manifest.appDirectory -ne 'app') { throw 'Invalid v1.0 product manifest.' }
+if ($manifest.schemaVersion -ne 1 -or $manifest.kind -ne 'VictusFanControl.ProductGuiRelease' -or $manifest.version -ne '1.2.16' -or $manifest.appDirectory -ne 'app') { throw 'Invalid v1.0 product manifest.' }
 $listed = @{}
 foreach ($entry in $manifest.files) {
     $relative = [string]$entry.path
@@ -22,17 +22,17 @@ if($actual.Count -ne $listed.Count){throw 'Unexpected package files.'}
 foreach($file in $actual){if(-not $listed.ContainsKey($file.FullName.Substring($root.Length+1).Replace('\','/'))){throw 'Unlisted package file.'}}
 $candidate = Get-Content -LiteralPath (Join-Path $root 'PRODUCT-RELEASE.json') -Raw | ConvertFrom-Json
 if ($manifest.releaseStage -ne 'target-specific-release' -or $manifest.finalReleaseReady -ne $true -or $manifest.normalAutomatic -ne 'authorized-exact-target' -or
-    $candidate.kind -ne 'VictusFanControl.ProductRelease' -or $candidate.version -ne '1.2.15' -or $candidate.sourceHead -ne $manifest.sourceHead -or $candidate.stableReleaseAuthorized -ne $true -or $candidate.physicalPassClaimed -ne $false) { throw 'Invalid target release authorization.' }
+    $candidate.kind -ne 'VictusFanControl.ProductRelease' -or $candidate.version -ne '1.2.16' -or $candidate.sourceHead -ne $manifest.sourceHead -or $candidate.stableReleaseAuthorized -ne $true -or $candidate.physicalPassClaimed -ne $false) { throw 'Invalid target release authorization.' }
 if ($manifest.productPlatformRetention -ne 'removed-no-platform-sensor-acquisition' -or
     $manifest.platformThermalExperiment -ne 'retired-no-live-entry' -or
     $candidate.experimentalPlatformRetention.defaultEnabled -ne $false -or $candidate.experimentalPlatformRetention.scope -ne 'removed' -or
     $candidate.experimentalPlatformRetention.maximumExtraRawLevels -ne 0 -or $candidate.experimentalPlatformRetention.maximumSupplementSeconds -ne 0 -or
     $candidate.experimentalPlatformRetention.normalAutomaticPromoted -ne $false) { throw 'Invalid retired platform sensor contract.' }
-if($manifest.automaticProtectionControls -ne 'independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts' -or $candidate.automaticProtectionControls -ne $manifest.automaticProtectionControls){throw 'Invalid configurable protections contract.'}
+if($manifest.automaticProtectionControls -ne 'independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts' -or $candidate.automaticProtectionControls -ne $manifest.automaticProtectionControls){throw 'Invalid configurable protections contract.'}
 foreach($power in @($manifest.automaticPowerContract,$candidate.automaticPowerContract)) {
-    if($power.cpuHandoffWatts -ne 60 -or $power.cpuHandoffSelectable -ne $true -or $power.gpuConsumptionHandoff -ne $false -or
+    if($null -ne $power.cpuHandoffWatts -or $power.cpuHandoffSelectable -ne $false -or $power.gpuConsumptionHandoff -ne $false -or
         $power.gpuTelemetryCoherenceWatts.Count -ne 2 -or $power.gpuTelemetryCoherenceWatts[0] -ne 0 -or $power.gpuTelemetryCoherenceWatts[1] -ne 300 -or
-        $power.gpuPowerStillContributesToDemand -ne $true){throw 'Invalid CPU-only power handoff contract.'}
+        $power.gpuPowerStillContributesToDemand -ne $true){throw 'Invalid habitual consumption contract.'}
 }
 if($manifest.manualAutomaticRetry -ne 'explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations' -or $candidate.reentryAfterInterruption -ne 'explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations'){throw 'Invalid manual Automatic retry contract.'}
 if($manifest.guidedPerformanceRecovery -ne 'gui-installer-exact-owner-release-only'){throw 'Invalid guided recovery contract.'}
@@ -41,8 +41,8 @@ foreach($limits in @($manifest.fanCommandLimits,$candidate.fanCommandLimits)) {
     if($limits.minimumLogicalLevel -ne 10 -or $limits.cpuMaximumCommandLevel -ne 54 -or $limits.gpuMaximumCommandLevel -ne 52 -or
         $limits.mapping -ne 'CPU=logical;GPU=min(logical,52)'){throw 'Invalid product 54/52 fan command contract.'}
 }
-Write-Host "Verified VictusFanControl v1.2.15 build $($manifest.sourceHead). Exact HP 8C40/F.18 release; evidence limits remain in PRODUCT-RELEASE.json."
-if ($manifest.customGpuClock -ne 'configurable-210-to-2500' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
+Write-Host "Verified VictusFanControl v1.2.16 build $($manifest.sourceHead). Exact HP 8C40/F.18 release; evidence limits remain in PRODUCT-RELEASE.json."
+if ($manifest.customGpuClock -ne 'configurable-210-to-2535' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }
 if ($Mode -eq 'FinalCheck') {
     # All three entries use explicit zero-hardware fixtures against the exact packaged binaries.
@@ -54,9 +54,9 @@ if ($Mode -eq 'FinalCheck') {
     return
 }
 if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticReview -ne 'explicit-only-300s-10-to-50') { throw 'This package does not authorize the supervised Automatic review entry.' }
-if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticThermal -ne 'cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response') { throw 'This package does not include the final candidate thermal contract.' }
+if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticThermal -ne 'cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95') { throw 'This package does not include the final candidate thermal contract.' }
 if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticPerformance -ne 'required-both-before-fans') { throw 'This package does not authorize the coupled CPU/GPU Automatic entry.' }
-if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticSourceTransition -ne 'bounded-4000ms-fresh-guardian-preserves-inertia') { throw 'This package does not include the bounded AC/Battery curve transition review.' }
+if ($Mode -in @('AutomaticReview','AutomaticExtendedReview') -and $manifest.productAutomaticSourceTransition -ne 'bounded-8000ms-post-candidate-guardian-preserves-inertia') { throw 'This package does not include the bounded AC/Battery curve transition review.' }
 if ($Mode -eq 'AutomaticExtendedReview' -and $manifest.productAutomaticExtendedReview -ne 'explicit-only-2700s-10-to-50-16MiB-diagnostics') { throw 'This package does not authorize the supervised extended Automatic review entry.' }
 $app = Join-Path $root 'app'
 if($Mode -eq 'Install'){ & (Join-Path $root 'Install-VictusFanControl.ps1');return }

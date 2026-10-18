@@ -78,7 +78,7 @@ internal static class ProductAutomaticAdmission
                     issues.Add(new(code, $"{name} {Number(value.Value)} {unit} > {Number(max)} {unit}, límite de entrada."));
             }
             Limit("cpu-entry-temperature", "Temperatura CPU de control", s.CpuControlTemperatureC, protections.CpuThermalHandoff ? 90 : 110, "°C");
-            Limit("gpu-entry-temperature", "Temperatura GPU", s.GpuTemperatureC, protections.GpuThermalHandoff ? 82 : 105, "°C");
+            Limit("gpu-entry-temperature", "Temperatura GPU", s.GpuTemperatureC, protections.GpuThermalHandoff ? ProductProtectionSettings.HabitualGpuHandoffC : 105, "°C");
         }
         return issues;
     }
@@ -94,8 +94,8 @@ internal static class ProductAutomaticAdmission
         {
             if(protections.CpuThermalHandoff && snapshot?.CpuControlTemperatureC >= SafetyGate.CpuEmergencyC)
                 issues.Add(new("cpu-thermal-handoff", $"Temperatura CPU de control {snapshot.CpuControlTemperatureC:0.##} °C ≥95 °C; protección térmica activa."));
-            if(protections.GpuThermalHandoff && snapshot?.GpuTemperatureC >= SafetyGate.GpuEmergencyC)
-                issues.Add(new("gpu-thermal-handoff", $"Temperatura GPU {snapshot.GpuTemperatureC:0.##} °C ≥87 °C; protección térmica activa."));
+            if(protections.IsGpuThermalEmergency(snapshot?.GpuTemperatureC))
+                issues.Add(new("gpu-thermal-handoff", $"Temperatura GPU {snapshot?.GpuTemperatureC:0.##} °C >95 °C; protección térmica activa."));
         }
         if (!admission.CustomControlPermitted && issues.Count == 0)
             issues.Add(new("control-gate", "La comprobación de control rechazó la entrada: " + string.Join("; ", admission.Reasons)));

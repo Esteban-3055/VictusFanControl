@@ -304,7 +304,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 }
                 if (!reconciled)
                 {
-                    if (snapshot.CpuControlTemperatureC >= 85 || snapshot.GpuTemperatureC >= 78)
+                    if (snapshot.CpuControlTemperatureC >= 85 || snapshot.GpuTemperatureC > ProductProtectionSettings.HabitualGpuHandoffC)
                         throw new InvalidOperationException("Transición pendiente con demanda térmica urgente; volver a Firmware.");
                     await _controller.ObserveAutomaticSourceWaitAsync(snapshot, () => AdmitSource(false), token);
                     _automaticDecision = null; _automaticDecisionSnapshot = null;
@@ -394,7 +394,7 @@ internal sealed class ProductRuntime : IProductRuntime
                     () => FanCommandAsync(() =>
                     {
                         _automaticActivation.EnsureCurrent(ticket); slot = AutomaticAdmission(_automaticReview is null ? ticket.Profiles.Protections : new());
-                        var protections = _automaticReview is null ? ticket.Profiles.Protections : new ProductProtectionSettings();
+                        var protections = _automaticReview is null ? ticket.Profiles.Protections : new ProductProtectionSettings{HistoricalGpuThermalPolicy=true};
                         _controller.ConfigureAutomaticProtections(protections); _automaticGuard.Configure(protections);
                         return Task.CompletedTask;
                     }),
@@ -604,7 +604,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 if (_activeAutomaticTicket is null) throw new InvalidOperationException("Falta la activación Automatic.");
                 _automaticActivation.EnsureCurrent(_activeAutomaticTicket);
                 _automaticGuard.EnsureDispatchAllowed(_snapshot!);
-                if (_snapshot!.CpuControlTemperatureC>=85 || _snapshot.GpuTemperatureC>=78)
+                if (_snapshot!.CpuControlTemperatureC>=85 || _snapshot.GpuTemperatureC>ProductProtectionSettings.HabitualGpuHandoffC)
                     throw new InvalidOperationException("Espera a que termine la respuesta térmica urgente antes de actualizar límites.");
             }
             _performanceUpdateStarted=Environment.TickCount64;_performanceUpdating=true;started=true;

@@ -29,7 +29,7 @@ internal sealed class ProductAutomaticResumption
             state.AutomaticPreparing||state.PerformanceUpdating||!state.AutomaticAuthorized)return false;
         var s=state.Snapshot;
         if(s is null||!s.IsComplete||!s.IsFanTelemetryFreshAt(utc,3000)||s.RetainedTelemetry is not null||utc<s.Timestamp||utc-s.Timestamp>=TimeSpan.FromSeconds(3)||
-            s.CpuControlTemperatureC is not (>=0 and <=90)||s.GpuTemperatureC is not (>=0 and <=82))return false;
+            s.CpuControlTemperatureC is not (>=0 and <=90)||s.GpuTemperatureC is not (>=0 and <=95))return false;
         ++_attempts;_interruptedAt=now;return true;
     }
 }
@@ -49,8 +49,8 @@ internal sealed partial class ProductCanvas
             Button(g,id,enabled?"✓  Activada":"○  Desactivada",new(1370,y+28,249,53),enabled);
         }
         Row(0,"protections-cpu","Volver a Firmware por temperatura CPU","Activa: CPU ≥99 °C inmediata; ≥95 °C inicia confirmación con plazo de 2 s.\nDesactivada: sigue la curva con enfriamiento máximo ante calor.",p.CpuThermalHandoff);
-        Row(1,"protections-gpu","Volver a Firmware por temperatura GPU","Activa: GPU >82 °C cancela Automático; a 87 °C actúa el control térmico compartido.\nDesactivada: Automático continúa la curva.",p.GpuThermalHandoff);
-        Row(2,"protections-resume","Reanudar Automático después de una interrupción","Libera la sesión previa y espera lecturas nuevas; CPU ≤90 °C / GPU ≤82 °C.\nHasta 3 intentos con espera; se habilita si Automático ya estaba activo.",p.ResumeAutomatic);
+        Row(1,"protections-gpu","Volver a Firmware por temperatura GPU","Activa: GPU >95 °C cancela Automático; exactamente 95 °C mantiene el control.\nDesactivada: Automático continúa la curva.",p.GpuThermalHandoff);
+        Row(2,"protections-resume","Reanudar Automático después de una interrupción","Libera la sesión previa y espera lecturas nuevas; CPU ≤90 °C / GPU ≤95 °C.\nHasta 3 intentos con espera; se habilita si Automático ya estaba activo.",p.ResumeAutomatic);
         DrawText(g,"El consumo CPU/GPU no cancela Automático. Los límites PL1/PL2 configurados se aplican por separado.",334,590,20,Muted,1280,height:61);
         DrawText(g,"Siempre activos: sensores completos y recientes, identidad del equipo y exclusión de operaciones WMI inciertas. Las protecciones térmicas del firmware permanecen activas.",334,708,20,Muted,1280,height:61);
         DrawText(g,"Guardar conserva las preferencias. Aplicar libera el control actual y prepara una sesión nueva con estos ajustes.",334,782,19,Muted,815,height:52);

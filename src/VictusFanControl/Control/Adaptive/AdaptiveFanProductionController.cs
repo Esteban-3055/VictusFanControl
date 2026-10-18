@@ -56,7 +56,7 @@ public sealed class AdaptiveFanProductionController
     private readonly int _automaticMaximumLevel;
     private readonly bool _useRawCpuThermalResponse;
     private readonly bool _productTelemetryTolerance;
-    private ProductProtectionSettings _protections = new();
+    private ProductProtectionSettings _protections = new(){HistoricalGpuThermalPolicy=true};
     public void ConfigureAutomaticProtections(ProductProtectionSettings protections)
     {
         ArgumentNullException.ThrowIfNull(protections);

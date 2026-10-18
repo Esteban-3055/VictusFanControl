@@ -1,5 +1,7 @@
 # Automatic: activación coordinada de curva y límites
 
+**Actualización 1.2.16:** [GPU habitual >95 °C, CPU sin corte por consumo y reconciliación AC/batería de 8 s](HABITUAL-GPU95-AND-POWER-SOURCE.md). Exige una respuesta posterior al último cambio de candidato. Las revisiones explícitas y observaciones antiguas descritas abajo conservan sus márgenes históricos.
+
 **Contrato vigente de la candidata:** ver [PRODUCT_FINAL_CANDIDATE.md](PRODUCT_FINAL_CANDIDATE.md).
 El inicio conserva CPU ≤90 °C; la confirmación activa comienza a 95 °C, con
 2000 ms y retorno inmediato a 99 °C. Se conserva salida limpia/nueva apertura
@@ -68,7 +70,7 @@ ni se mata el proceso: se informa que debe liberarse la sesión anterior.
 | Volver voluntariamente a Firmware o Manual | Cambia solo el control de fans | Conserva los límites activos |
 | Liberar CPU/GPU desde Automatic | Vuelve primero a Firmware; si la liberación WMI falla no retira los límites | Se libera después, mediante su Guardian |
 | Fuente cambia durante preparación | No inicia con una curva de la fuente anterior; requiere otro clic | Guardian mantiene su seguimiento de la fuente real |
-| Fuente cambia con AutomaticReview activo | Conserva el nivel sin writes hasta confirmar fuente estable y respuesta CPU/GPU posterior; cambia curva e influencias sin reiniciar inercia ni plazo. Espera máxima 4 s; fallo o calor urgente pendiente vuelve a Firmware | Guardian conserva sus transiciones AC/Batería independientes; la GUI no emite Enable ni reescribe límites |
+| Fuente cambia con AutomaticReview activo | Conserva el nivel sin writes hasta confirmar fuente estable y respuesta CPU/GPU posterior; cambia curva e influencias sin reiniciar inercia ni plazo. Espera máxima 8 s; fallo o calor urgente pendiente vuelve a Firmware | Guardian conserva sus transiciones AC/Batería independientes; la GUI no emite Enable ni reescribe límites |
 | Guardian falla, pierde vigencia o entra en recuperación durante Automatic | Interrumpe, solicita Firmware y bloquea reentrada | Conserva la recuperación propia; no reinicia ciegamente al Guardian |
 | Telemetría perdida, margen excedido, suspensión/lifecycle, vencimiento | Interrumpe; Healthy posterior no rearma; reiniciar después de liberar limpio | No hay reaplicación por el estado Healthy de la GUI; Guardian conserva su ciclo propio |
 | Minimizar u ocultar al tray con una sesión ya activa | Continúa con su supervisión y plazo existentes | Continúa con su Guardian existente |
@@ -96,7 +98,7 @@ La nueva revisión permite transiciones continuas únicamente tras establecer
 Custom. Exige dos lecturas de fuente iguales separadas al menos un segundo y una
 respuesta Guardian distinta de la observada al detectar el cambio. CPU Active,
 GPU ActiveUnverified, ambas habilitaciones, configuración exacta, fuente coincidente
-y vigencia son obligatorias. Rebotes no renuevan el límite total de cuatro segundos.
+y vigencia son obligatorias. Rebotes no renuevan el límite total de ocho segundos.
 Durante la espera no hay nuevas escrituras fans: se conserva el nivel y se observan
 adquisiciones para conservar continuidad, EMA e historial de carga. No se pausa el
 plazo de cinco minutos ni la confirmación térmica. CPU control ≥85 °C o GPU ≥78 °C
