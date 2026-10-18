@@ -62,7 +62,7 @@ def main():
     require(manifest["automaticPowerContract"] == contract["automaticPowerContract"] == {
         "cpuHandoffWatts": None, "cpuHandoffSelectable": False, "gpuConsumptionHandoff": False,
         "gpuTelemetryCoherenceWatts": [0, 300], "gpuPowerStillContributesToDemand": True,
-    }, "Wrong CPU-only power handoff contract")
+    }, "Wrong consumption handoff contract")
     retention = contract["experimentalPlatformRetention"]
     require(manifest["productPlatformRetention"] == "removed-no-platform-sensor-acquisition" and
             manifest["platformThermalExperiment"] == "retired-no-live-entry" and

@@ -184,8 +184,8 @@ sin modificar la curva aplicada. Cambiar a otro perfil, Firmware, bloqueo o
 caducidad elimina el punto de solicitud; datos caducos/ausentes/NaN eliminan la
 vista previa. El selector térmico CPU sigue la configuración de cada curva.
 
-El selector GPU permite 210–2500 MHz AC/Batería; el mínimo solicitado a NVML es
-210 y el máximo es el valor elegido. No se fija el reloj a 2500 ni se cambian
+El selector GPU permite 210–2535 MHz AC/Batería; el mínimo solicitado a NVML es
+210 y el máximo es el valor elegido. No se fija el reloj a 2535 ni se cambian
 preferencias existentes/defaults. Un rechazo NVML sigue cerrando la operación.
 
 ## Evidencia física reciente y validación pendiente
