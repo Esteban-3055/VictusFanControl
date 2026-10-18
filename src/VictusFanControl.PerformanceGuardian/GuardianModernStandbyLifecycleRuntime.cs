@@ -135,6 +135,17 @@ internal sealed class GuardianModernStandbyLifecycleRuntime :
     public GuardianPowerSourceRuntimeSnapshot Snapshot =>
         _inner.Snapshot;
 
+    public T CaptureStatus<T>(Func<GuardianPowerSourceRuntimeSnapshot,T> capture, bool reconcile)
+    {
+        ArgumentNullException.ThrowIfNull(capture);
+        ThrowIfDisposed();
+        lock (_sync)
+        {
+            var permitted=reconcile && _active && !_suspended && !_primaryDisplayReleaseCompleted && _failure is null;
+            return _inner.CaptureStatus(capture,permitted);
+        }
+    }
+
     internal GuardianModernStandbyLifecycleSnapshot StandbySnapshot
     {
         get

@@ -865,8 +865,10 @@ internal sealed class PerformanceGuardianHost
         PerformanceGuardianAuthorityResult result,
         CancellationToken cancellationToken)
     {
-        var response =
-            new PerformanceGuardianResponse(
+        var response = _sourceRuntime.CaptureStatus(source =>
+        {
+            var domains = _domains.Snapshot;
+            return new PerformanceGuardianResponse(
                 PerformanceGuardianProtocol.Version,
                 request.RequestId,
                 _options.TargetProfileId,
@@ -877,13 +879,15 @@ internal sealed class PerformanceGuardianHost
                 result.SessionEnabled,
                 result.CpuEnabled,
                 result.GpuEnabled,
-                _domains.Snapshot.CpuState,
-                _domains.Snapshot.GpuState,
-                _domains.Snapshot.CpuStatus,
-                _domains.Snapshot.GpuStatus,
-                _sourceRuntime.Snapshot.LastSource.ToString(),
-                _sourceRuntime.Snapshot.Failure,
+                domains.CpuState,
+                domains.GpuState,
+                domains.CpuStatus,
+                domains.GpuStatus,
+                source.LastSource.ToString(),
+                source.Failure,
                 (_domains as IGuardianConfigurableDomains)?.Configuration);
+        },reconcile: request.Type==PerformanceGuardianProtocol.Status && result.Accepted && result.SessionEnabled &&
+            _domains is IGuardianConfigurableDomains);
 
         try
         {

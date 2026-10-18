@@ -1,5 +1,7 @@
 # Uso habitual: GPU y transición de alimentación en 1.2.16
 
+Desarrollo posterior a 1.2.16: [investigación de arranque con batería y notificaciones ausentes](AC-BATTERY-STARTUP-INVESTIGATION.md). Esas correcciones aún no están incluidas en la release 1.2.16 publicada.
+
 Automático habitual con protección GPU activada admite temperatura GPU hasta **95 °C inclusive**. Una adquisición válida **>95 °C** provoca retorno a Firmware; no apaga Windows ni ordena detener los ventiladores. Entrada, ejecución, espera de cambio de fuente, actualización de límites y reanudación comparten el umbral. La CPU conserva entrada ≤90 °C, confirmación ≥95 °C hasta 2000 ms y retorno inmediato ≥99 °C. El enfriamiento conservador ante temperatura cruda alta sigue funcionando.
 
 Las revisiones físicas explícitas de 5/45 minutos conservan GPU ≤82 °C, CPU 60 W y el contrato histórico del núcleo ≥87 °C. Son pruebas distintas de Automático habitual. `SafetyGate` y sus constantes históricas no se modifican; la política del producto habitual se selecciona en memoria, sin agregar autorización a perfiles JSON ni a NVS.

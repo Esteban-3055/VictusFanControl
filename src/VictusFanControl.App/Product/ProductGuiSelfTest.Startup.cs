@@ -25,6 +25,9 @@ internal static partial class ProductGuiSelfTest
         gate=new(0);require(!gate.Observe(State(0),at.AddSeconds(4),0)&&!gate.Observe(State(1),at,1000),"Stale/future startup data admitted.");
         gate=new(0);gate.Observe(State(0),at,0);gate.Observe(State(1,"Battery"),at.AddSeconds(1),1000);
         require(!gate.Observe(State(2,"Battery"),at.AddSeconds(2),2000)&&gate.Observe(State(3,"Battery"),at.AddSeconds(3),3000),"Startup failed to requalify a source change.");
+        gate=new(0);gate.Observe(State(0,"Battery"),at,0);gate.Observe(State(1,"Battery"),at.AddSeconds(1),1000);
+        require(!gate.Observe(State(2,"Ac"),at.AddSeconds(2),2000)&&!gate.Observe(State(3,"Ac"),at.AddSeconds(3),3000)&&
+            gate.Observe(State(4,"Ac"),at.AddSeconds(4),4000),"Battery startup reused acquisitions from before the AC change.");
         var runtime=new RecordingRuntime();
         using(var form=new ProductForm("fixture://startup",fixture:runtime,fixtureProfiles:new ProductProfiles{ActivateAutomaticOnStart=true},enableStartupAutomaticInFixture:true))
         {

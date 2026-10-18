@@ -354,6 +354,13 @@ internal sealed class ProductRuntime : IProductRuntime
             }
             catch (Exception ex)
             {
+                AppLog.WriteStructured("PRODUCT AUTOMATIC INTERRUPTION EVIDENCE",new
+                {
+                    automaticSessionId=_automaticSessionId,selectedProfile=_selectedFanProfile,
+                    transitionCandidate=_sourceTransition.Candidate,transitionPending=_sourceTransition.Pending,
+                    guardianFresh=_performance.LastStatusFresh,guardian=_performance.LastStatus,
+                    performance=_performance.AppliedConfiguration,snapshot,error=ex.Message
+                });
                 _automaticInterruptionSnapshot = snapshot; AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + ex.Message); _automaticActivation.Cancel();
                 _lifecycleBlocked = true; _lifecycleBlockReason = ex.Message; _fans.CloseCustomAdmissionForLifecycleBoundary();
                 _automaticGuard.Stop();
