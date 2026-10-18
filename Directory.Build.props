@@ -11,7 +11,8 @@
     <InformationalVersion>0.4.0-rc.1</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
-  <!-- P14 historical audit builds retain their original version. Product release publishing opts in. -->
+  <!-- P14 historical audit builds retain their original version. Product release publishing opts in.
+       Stable 1.2.16 binds the habitual GPU >95 C and fresh AC/Battery response contract. -->
   <PropertyGroup Condition="'$(VictusProductRelease)' == 'true'">
     <Version>1.2.16</Version>
     <AssemblyVersion>1.2.16.0</AssemblyVersion>
