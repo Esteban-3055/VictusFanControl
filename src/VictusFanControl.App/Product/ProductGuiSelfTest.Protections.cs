@@ -15,13 +15,16 @@ internal static partial class ProductGuiSelfTest
             displayMetricsInFixture:()=>new("fixture",new(0,0,1920,1080),new(0,0,1920,1040),96)))
         {
             form.Show();Application.DoEvents();
-            foreach(var id in new[]{"protections-cpu","protections-gpu","protections-power","protections-resume"})form.HandleCommand(id);
+            foreach(var id in new[]{"protections-cpu","protections-gpu","protections-resume"})form.HandleCommand(id);
             require(form.Draft.Protections==preferences.Protections&&form.Dirty,"Protection switches did not edit independent preferences.");
+            var beforeRetired=ProductProfilesStore.Serialize(form.Draft);form.HandleCommand("protections-power");
+            require(ProductProfilesStore.Serialize(form.Draft)==beforeRetired,"Retired consumption command modified preferences.");
             form.Canvas.Page=ProductPage.Protections;form.ClientSize=new(1040,660);form.PerformLayout();form.Canvas.Refresh();
             using var image=new Bitmap(form.Canvas.Width,form.Canvas.Height);form.Canvas.DrawToBitmap(image,new(0,0,image.Width,image.Height));
             var renderDirectory=Path.Combine("logs","product-gui-self-test");Directory.CreateDirectory(renderDirectory);
             require(image.Width==1040&&image.Height==660,"Protection fixture did not render the actual minimum resolution.");
             image.Save(Path.Combine(renderDirectory,"protections-minimum-layout.png"));
+            require(!form.Canvas.Hits.Any(h=>h.Id=="protections-power"),"Retired consumption cutoff is still offered in the UI.");
             require(form.Canvas.Hits.Any(h=>h.Id=="protections-cpu")&&form.Canvas.Hits.Any(h=>h.Id=="page-9"),"Protection page/navigation missing at minimum resolution.");
         }
         long clock=0;var review=new ProductAutomaticReview(()=>clock,ProductAutomaticReviewMode.Habitual);review.Configure(preferences.Protections);review.Start();

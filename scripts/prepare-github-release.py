@@ -57,10 +57,10 @@ def main():
             contract["fanCommandLimits"]["gpuMaximumCommandLevel"] == 52 and
             contract["fanCommandLimits"]["mapping"] == "CPU=logical;GPU=min(logical,52)", "Wrong product fan limits")
     require(manifest["automaticProtectionControls"] == contract["automaticProtectionControls"] ==
-            "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
+            "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",
             "Wrong configurable protection contract")
     require(manifest["automaticPowerContract"] == contract["automaticPowerContract"] == {
-        "cpuHandoffWatts": 60, "cpuHandoffSelectable": True, "gpuConsumptionHandoff": False,
+        "cpuHandoffWatts": None, "cpuHandoffSelectable": False, "gpuConsumptionHandoff": False,
         "gpuTelemetryCoherenceWatts": [0, 300], "gpuPowerStillContributesToDemand": True,
     }, "Wrong CPU-only power handoff contract")
     retention = contract["experimentalPlatformRetention"]

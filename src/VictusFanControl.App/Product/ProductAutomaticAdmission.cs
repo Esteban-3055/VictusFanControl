@@ -79,7 +79,6 @@ internal static class ProductAutomaticAdmission
             }
             Limit("cpu-entry-temperature", "Temperatura CPU de control", s.CpuControlTemperatureC, protections.CpuThermalHandoff ? 90 : 110, "°C");
             Limit("gpu-entry-temperature", "Temperatura GPU", s.GpuTemperatureC, protections.GpuThermalHandoff ? 82 : 105, "°C");
-            if (protections.PowerEnvelopeHandoff) Limit("cpu-entry-power", "Potencia CPU", s.CpuPackagePowerW, 60, "W");
         }
         return issues;
     }
