@@ -1,81 +1,33 @@
-# VictusFanControl v1.2.7
+# VictusFanControl v1.2.17
 
-[English](README.md) · [Estable v1.2.7](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.7) · [Instalación y uso](docs/PRODUCT_V1.md) · [Estado de validación](docs/PRODUCT_VALIDATION_STATUS.md)
+[English](README.md) · [Release estable](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.2.17) · [Cambios](release/RELEASE-NOTES-v1.2.17.md) · [Guía de uso](docs/PRODUCT_V1.md)
 
-Control de ventiladores y preferencias CPU/GPU para Windows, limitado al destino exacto **HP 8C40 / 9D0R1LA / BIOS F.18**: HP Victus 15-fa1xxx, placa revisión 63.43, Intel Core i7-13700H y NVIDIA RTX 4060 Laptop GPU. v1.0.0 habilita Automático habitual para este equipo. Otros modelos o BIOS quedan fuera de esta autorización; HP 88F8 se conserva como histórico.
+Control de ventiladores y preferencias CPU/GPU para **HP 8C40 / 9D0R1LA / BIOS F.18** (Victus 15-fa1xxx, revisión 63.43, i7-13700H y RTX 4060 Laptop GPU). Otros modelos y BIOS no están autorizados por esta release.
 
-## Instalar
+## Actualizar Windows
 
-Descarga el instalador **VictusFanControl-1.2.7-Setup-win-x64.exe** desde la release estable y ejecútalo. También puedes usar el ZIP y PowerShell como se describe a continuación.
+Descarga **VictusFanControl-1.2.17-Setup-win-x64.exe** o busca actualizaciones desde el programa. Necesita Windows 11 x64, .NET Desktop Runtime 8 x64, PawnIO y NVIDIA/NVML. Conserva perfiles y curvas. Una sesión sin liberar conserva sus registros y bloquea nuevas órdenes.
 
-Requiere Windows 11 x64, .NET Desktop Runtime 8 x64, controlador PawnIO y NVIDIA/NVML. El ZIP incluye los módulos PawnIO de la aplicación; no instala estos requisitos.
+También puedes extraer **VictusFanControl-1.2.17-win-x64.zip**, salir de la instancia anterior desde la bandeja y ejecutar `Start-ProductGui.ps1 -Mode Install` como administrador con la misma cuenta. Cerrar la ventana minimiza; **Salir** desde la bandeja libera el control.
 
-1. Descarga **VictusFanControl-1.2.7-win-x64.zip** desde Releases y extrae todos los archivos. Sal de las aplicaciones Victus anteriores desde la bandeja.
-2. Abre PowerShell **como administrador con tu misma cuenta de Windows**, en la carpeta extraída.
-3. Ejecuta:
+## Cambios principales
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
-.\Start-ProductGui.ps1 -Mode Install
-```
+- Corrige la espera inicial de Automático, las lecturas caducadas durante la preparación, los estados fuera de orden y la pausa prematura al actualizar límites.
+- Reconcilia perfiles AC/batería con confirmación nueva del supervisor. Una lectura batería de Windows no demuestra desconexión física.
+- Conserva protecciones térmicas internas: GPU devuelve el control a Firmware por encima de 95 °C. El consumo CPU >60 W por sí solo no interrumpe Automático habitual; GPU configurable hasta 2535 MHz.
+- Recuperación definitiva y reanudación acotada conservan evidencia y no admiten llamadas nativas inciertas. No garantizan recuperar cualquier driver bloqueado sin reiniciar.
+- Uso normal sin TZ01/DTT3 ni acceso EC directo. Los ventiladores internos y la base externa tienen control independiente.
 
-`Install` verifica hashes, copia la versión bajo `%LOCALAPPDATA%\VictusFanControl\releases`, registra la tarea elevada de inicio de sesión, guarda **minimizar + activar Automático al iniciar** y abre la aplicación. Conserva curvas personalizadas y límites CPU/GPU. Los registros pendientes de recuperación bloquean la activación y se conservan.
+## Subir el firmware ESP32
 
-`-Mode Verify` y `-Mode FinalCheck` comprueban el paquete sin comandos de hardware. `-Mode Open` abre sin registrar una tarea; se aplica Automático al iniciar si ya estaba guardado. En Configuración puedes desactivar el inicio con Windows y guardar las otras preferencias. Cerrar la ventana minimiza; **Salir** en la bandeja libera los controles.
+Descarga **VictusBase-ESP32C3-v1.2.17-Arduino-sketch.zip**, extrae todo y abre `VictusBaseESP32C3/VictusBaseESP32C3.ino`. Ya tiene PWM activado. Instala core Espressif **3.3.2** y **ArduinoJson 6.21.5**; selecciona **ESP32C3 Dev Module**, flash **4 MB**, **USB CDC On Boot habilitado**, puerto USB correcto y **borrado completo de flash desactivado** para conservar el emparejamiento/NVS.
 
-## Funciones de v1.0.0
+ESP32 ejecuta EMA, histéresis y rampas con los ajustes enviados desde Windows. La temperatura ambiente es informativa; al desconectar, converge suavemente a **130/255**. LCD: CPU/GPU + ambiente 30 s; uso CPU/GPU/RAM 5 s; demanda + PWM aplicado 5 s; conexión PC/Wi-Fi 5 s. Los datos ausentes o caducados muestran `--`.
 
-- GUI de siete páginas, perfiles AC/Batería, curva única, seis influencias de temperatura/potencia/carga, simulador, ajustes en vivo y diagnósticos por sesión.
-- Curva AC predeterminada nueva: niveles **12, 12, 18, 28, 34, 44, 50** para demanda **0, 40, 50, 65, 76, 90, 100**. Batería conserva sus valores. Solo se migran presets AC anteriores intactos; guardar respalda las preferencias.
-- Automático habitual sin vencimiento de 5/45 minutos, niveles iguales CPU/GPU dentro de 10–50, y ambos límites preparados mediante Guardian antes de activar ventiladores.
-- Inicio opcional con Windows y un único intento tras tres lecturas distintas y frescas. Suspensión, pantalla apagada e interrupciones requieren reactivación manual; reiniciar sesión abre en Firmware.
-- Retención TZ01/DTT3 opcional y experimental, desactivada de fábrica: el desarrollo actual admite AC y batería, hasta dos niveles crudos extra durante 60 s, sin superar el último nivel reconocido. El cambio de fuente conserva el episodio; los fallos de sensores siguen solicitando Firmware. Puede prolongar el ruido; el comportamiento en batería requiere observación física. El paquete publicado v1.0.0 conserva su restricción original a AC.
-- Preflight de recuperación CPU/GPU que conserva journals y ofrece recuperación explícita con los IDs exactos.
+Conserva GPIO3 invertido 18 Hz/14 bits, NTC GPIO0, I2C GPIO6/7, Wi-Fi 8,5 dBm y HMAC TCP 8765. Los archivos públicos no contienen claves, SSID ni contraseñas. [Detalles de firmware, circuito y emparejamiento](firmware/esp32-c3/README.md).
 
-## Protecciones y evidencia
+## Validación
 
-Automático comienza en Firmware. La admisión requiere telemetría completa y fresca, fuente estable, CPU ≤90 °C y GPU ≤82 °C. En control, CPU ≥95 °C tiene hasta 2000 ms de confirmación; CPU ≥99 °C solicita Firmware inmediatamente. GPU >82 °C, CPU >60 W, datos caducados o fallos de lifecycle interrumpen. Se mantienen el watchdog y la transición acotada AC/Batería.
+Los paquetes incluyen hashes y procedencia del commit. Las pruebas Windows, C++ y comunicación local, y las compilaciones PlatformIO/Arduino, son validación de software. La comprobación física del arranque Windows, transiciones AC/batería, LCD, NTC, PWM y circuito sigue pendiente para esta versión.
 
-El producto usa comandos HP WMI acotados y watchdog, lecturas Intel/ACPI mediante PawnIO, NVIDIA NVML y Performance Guardian. La aceptación WMI **no demuestra propiedad independiente del firmware ni readback exacto del nivel**. La aceptación NVML **no verifica el rango exacto de clocks GPU**.
-
-Están verificadas las pruebas de software Windows/Linux, fixtures del paquete y replay. Las pruebas físicas anteriores conservan su alcance por compilación y configuración. Menor demanda simulada **no demuestra menos dBA ni enfriamiento equivalente**. Uso representativo, suspensión/salida/inicio de sesión de esta compilación y comparación térmica/acústica siguen en `PRODUCT-RELEASE.json`. Consulta [la evidencia vigente y sus límites](docs/PRODUCT_VALIDATION_STATUS.md).
-
-## Desarrollo y publicación
-
-Con .NET 8 SDK, usa la propiedad explícita de entrega:
-
-```powershell
-dotnet publish src/VictusFanControl.App -c Release -r win-x64 -p:VictusProductRelease=true
-```
-
-El pipeline empaqueta todos los binarios del producto como **1.2.7.0**. Una compilación correcta de `main` o de la rama reconstruida del producto puede publicar v1.2.7 tras pasar las verificaciones OEM, WMI y CPU/GPU del mismo commit. Se comprueba cada archivo contra el manifiesto y se adjuntan SHA-256 y procedencia. No se sobrescribe una release existente.
-
-Los arneses históricos conservan versión RC y gates originales: `control.enabledByDefault=false` y `automaticPolicyEnabled=false`. Esos registros describen la cualificación antigua; el producto tiene autorización separada para este destino exacto. Los planes anteriores se mantienen como historial.
-
-Licencia MIT: [LICENSE](LICENSE). Componentes externos: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-## Instalador y actualizaciones v1.1.0
-
-La versión estable v1.2.7 separa **Descargar** de **Instalar** y conserva el instalador verificado entre aperturas y cuando falla la instalación. Actualizaciones permite recuperar sesiones pendientes antes de volver a pulsar Instalar. El instalador conserva por defecto las preferencias de inicio anteriores. El canal estable es el predeterminado; guarda **Incluir versiones preliminares** para recibir previews. [Guía](docs/PRODUCT_V1.md) · [Revisión funcional](docs/PRODUCT_1_1_5_REVIEW.md).
-
-La v1.1.6 elimina el corte por consumo GPU y añade causas concretas de espera/rechazo de Automático. El consumo GPU sigue participando en la curva; se mantienen los cortes CPU y térmicos seleccionados. [Cambios y pruebas](docs/PRODUCT_1_1_6_CHANGES.md).
-
-La v1.1.7 adapta la ventana a los cambios de resolución y DPI, incluido 4K → 1440p → 4K, y conserva el tamaño elegido al volver. El diagnóstico incluye la geometría de pantalla. [Ajuste y verificación](docs/PRODUCT_1_1_7_DISPLAY.md).
-
-La v1.1.8 filtra subidas breves de temperatura CPU antes de calcular la demanda: una subida debe mantenerse dos segundos; ≥99 °C omite el filtro. Los sensores crudos y las protecciones siguen independientes. Temperatura GPU, potencia y carga conservan su comportamiento. [Alcance y comprobaciones](docs/PRODUCT_1_1_8_CPU_SPIKES.md).
-
-Desde v1.1.9, las sesiones pendientes pueden recuperarse automáticamente en segundo plano, también al iniciar y estando minimizada. Configuración permite desactivarlo. La reanudación conserva el perfil aplicado y exige lecturas nuevas; Firmware solicitado por el usuario la cancela. Se añaden diagnósticos CPU y del aporte de TZ01/DTT3 sin cambiar su comportamiento térmico. [Detalle](docs/AUTOMATIC_SESSION_RECOVERY.md).
-
-La v1.2.0 renueva Inicio con dos ventiladores animados, temperaturas/uso, la curva aplicada y la demanda del controlador en tiempo real. Ventiladores muestra la curva con el mismo tamaño del editor. Las pestañas siguen el nuevo orden solicitado y la animación se pausa fuera de Inicio, con ventana oculta/minimizada o lecturas vencidas. [Interfaz y verificación](docs/HOME_DASHBOARD.md).
-
-Desde v1.2.1, los ventiladores de Inicio giran diez veces más despacio, con inercia independiente al acelerar/desacelerar y arranque suave. La cifra de RPM conserva la lectura actual. Cero RPM termina gradualmente el giro residual; datos vencidos o ventana oculta/minimizada pausan de inmediato.
-
-Desde v1.2.2, ambas animaciones de Inicio siguen la demanda aceptada del controlador en lugar de las RPM. Una lectura de RPM retrasada o temporalmente ausente ya no reinicia la inercia visual; las cifras centrales conservan las RPM informadas. Firmware/Manual o demanda vencida pausan la animación.
-
-En v1.2.3, los ventiladores de Inicio giran tres veces más rápido conservando el movimiento por demanda y la inercia: una vuelta visual cada 5 segundos a 100 % de demanda y cada 10 segundos a 50 %, una vez estabilizados. Las RPM informadas y el control físico conservan su comportamiento.
-
-La v1.2.7 anima cada ventilador de Inicio según sus últimas RPM válidas medidas, con una vuelta por segundo a 3000 RPM una vez estabilizada la inercia. Los retrasos conservan el número y el movimiento sin etiquetas ni cambios de color; todas las aspas son iguales. Al ocultar/minimizar o cambiar de página, el temporizador se detiene y conserva fase y velocidad. Un cero medido detiene gradualmente el ventilador correspondiente. [Detalles](docs/HOME_DASHBOARD.md).
-
-Desde v1.2.7 puedes ajustar el ritmo sin recompilar ni reiniciar: abre `%LOCALAPPDATA%/VictusFanControl/fan-animation.json`, cambia `segundosPorVueltaA3000Rpm` y guarda. Inicio aplica el ajuste en su siguiente comprobación de un segundo, conservando la inercia. El valor predeterminado es 1; acepta 0.1–60 segundos. [Guía](docs/FAN_ANIMATION_SETTINGS.md).
-
-Desde v1.2.7, Inicio usa el rotor PNG suministrado, capas estáticas, Stopwatch y un productor de cuadros de alta resolución con cola acotada. Exportar diagnóstico registra intervalos y duración del dibujo de la interfaz; la cadencia solicitada no equivale a FPS presentados por el monitor. [Detalles](docs/PNG_FAN_ANIMATION.md).
+[Informe por caso](docs/AUTOMATIC-COORDINATION-REVIEW.md) · [Recuperación](docs/FORCED-SESSION-RECOVERY.md) · [Política externa](docs/EXTERNAL-BASE-RAMPED-LOCAL.md) · [Avisos de terceros](THIRD_PARTY_NOTICES.md)

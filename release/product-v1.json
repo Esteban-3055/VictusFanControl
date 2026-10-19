@@ -64,7 +64,7 @@
     "normalAutomaticPromoted": false,
     "auxiliaryFault": "not-applicable-no-acquisition"
   },
-  "version": "1.2.16",
+  "version": "1.2.17",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",

@@ -27,8 +27,8 @@ jobs:
           arduino-cli lib install ArduinoJson@6.21.5
       - name: Generate IDE sketch from canonical sources and compile inverted PWM image
         run: |
-          python firmware/esp32-c3/tools/export_arduino.py "$RUNNER_TEMP/sketch"
-          arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc,FlashSize=4M --build-property compiler.cpp.extra_flags=-DVICTUS_ENABLE_PWM=1 --output-dir "$RUNNER_TEMP/arduino3-image" "$RUNNER_TEMP/sketch/VictusBaseESP32C3"
+          python firmware/esp32-c3/tools/export_arduino.py "$RUNNER_TEMP/sketch" --enable-pwm
+          arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc,FlashSize=4M --output-dir "$RUNNER_TEMP/arduino3-image" "$RUNNER_TEMP/sketch/VictusBaseESP32C3"
       - uses: actions/upload-artifact@v4
         with:
           name: esp32-c3-arduino3-unqualified-${{ github.sha }}

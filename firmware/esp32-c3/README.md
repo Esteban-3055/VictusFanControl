@@ -79,15 +79,18 @@ No hay un segundo controlador: se genera el sketch a partir de las mismas fuente
 Desde la raíz del repositorio:
 
 ```powershell
-python firmware/esp32-c3/tools/export_arduino.py artifacts/arduino
+python firmware/esp32-c3/tools/export_arduino.py artifacts/arduino --enable-pwm
 ```
 
 Abrir `artifacts/arduino/VictusBaseESP32C3/VictusBaseESP32C3.ino`. Instalar placa
 **esp32 by Espressif Systems 3.3.2**, biblioteca **ArduinoJson 6.21.5**, seleccionar
 ESP32C3 Dev Module, flash 4 MB, USB CDC On Boot habilitado y puerto real.
-En `BoardConfig.h` del sketch generado, cambiar `VICTUS_ENABLE_PWM` de 0 a 1
-para la variante de banco. Antes de regenerar, conservar fuera del repositorio
-cualquier configuración privada; el exportador nunca la copia.
+`--enable-pwm` genera `BoardConfig.h` con la salida invertida GPIO3 activada.
+Sin esa opción se conserva la variante de monitorización, sin control PWM.
+El ZIP Arduino de la release 1.2.17 usa `--enable-pwm`, igual que el CI Arduino.
+Antes de regenerar, conservar fuera del repositorio cualquier configuración
+privada; el exportador nunca la copia. Al cargar, dejar desactivado el borrado
+completo de flash para conservar el emparejamiento y los ajustes NVS.
 
 El exportador copia también `include/LcdPresentation.h`, que contiene
 el formato y la secuencia de pantallas compartidos entre Arduino IDE,

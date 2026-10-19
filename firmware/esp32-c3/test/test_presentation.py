@@ -41,7 +41,14 @@ def main():
                 assert (target/file.name).read_bytes() == file.read_bytes(), file.name
         assert (target/'Sketch.cpp').read_bytes() == (root/'src/main.cpp').read_bytes()
         assert not (target/'config.local.h').exists()
+        subprocess.run([sys.executable, str(root/'tools/export_arduino.py'), folder, '--enable-pwm'], check=True)
+        expected=(root/'include/BoardConfig.h').read_text(encoding='utf-8').replace(
+            '#define VICTUS_ENABLE_PWM 0','#define VICTUS_ENABLE_PWM 1')
+        assert (target/'BoardConfig.h').read_text(encoding='utf-8')==expected
+        assert (target/'Sketch.cpp').read_bytes()==(root/'src/main.cpp').read_bytes()
+        assert not (target/'config.local.h').exists()
     print('PASS Arduino export uses canonical headers and source without private config')
+    print('PASS explicit PWM export changes only the GPIO3 enable default; no private configuration')
 
 
 if __name__ == '__main__':

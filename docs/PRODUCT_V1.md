@@ -1,6 +1,6 @@
-# VictusFanControl v1.2.16 — HP 8C40 / 9D0R1LA / BIOS F.18
+# VictusFanControl v1.2.17 — HP 8C40 / 9D0R1LA / BIOS F.18
 
-Contrato vigente 1.2.16: [GPU >95 °C y reconciliación AC/batería](HABITUAL-GPU95-AND-POWER-SOURCE.md). La fuente informada por Windows no prueba una desconexión física. Los apartados expresamente históricos no sustituyen este contrato.
+Contrato vigente 1.2.17: [GPU >95 °C y reconciliación AC/batería](HABITUAL-GPU95-AND-POWER-SOURCE.md). La fuente informada por Windows no prueba una desconexión física. Los apartados expresamente históricos no sustituyen este contrato.
 
 Esta entrega habilita el uso habitual solicitado para el destino exacto. La curva AC predeterminada es la candidata de menor demanda intermedia: 12, 12, 18, 28, 34, 44, 50 para entradas 0, 40, 50, 65, 76, 90, 100. Conserva las protecciones térmicas crudas, subida e histéresis; descenso normal 25 s/confirmación 12 s y descenso corto 10 s/confirmación 4 s. Batería conserva su curva y tiempos de descenso. La transición usa el mismo motor, cambia los tiempos compatibles del perfil de destino y reinicia las confirmaciones, conservando el nivel aplicado y el filtro; los rangos y pasos protegidos no pueden cambiar en vivo. Se migran solamente los presets AC anteriores intactos; se conservan curvas personalizadas y límites CPU/GPU. Guardar crea un respaldo exacto previo a v1.0.
 
