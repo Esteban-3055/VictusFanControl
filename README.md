@@ -29,6 +29,10 @@ GPIO3 inverted PWM 18 Hz/14 bits, GPIO0 NTC, GPIO6/7 I2C, Wi-Fi 8.5 dBm and HMAC
 
 ## Validation and limits
 
+Historical qualification profiles retain `control.enabledByDefault=false` and
+`automaticPolicyEnabled=false`. These experimental hosts remain separate from
+the target-authorized product GUI and its explicit startup preferences.
+
 Release assets carry SHA-256 and source provenance. Windows fixtures, loopback communication, native C++ controller/protocol, PlatformIO and Arduino compilation are software evidence. They do not certify physical LCD, NTC, PWM, fan rotation, thermal response, Windows startup or AC/Battery behavior on this build. Pending physical checks remain in `PRODUCT-RELEASE.json`.
 
 [Coordination review](docs/AUTOMATIC-COORDINATION-REVIEW.md) · [Recovery](docs/FORCED-SESSION-RECOVERY.md) · [External base policy](docs/EXTERNAL-BASE-RAMPED-LOCAL.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)

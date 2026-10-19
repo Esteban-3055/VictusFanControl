@@ -28,6 +28,10 @@ Conserva GPIO3 invertido 18 Hz/14 bits, NTC GPIO0, I2C GPIO6/7, Wi-Fi 8,5 dBm y 
 
 ## Validación
 
+Los perfiles históricos de calificación conservan `control.enabledByDefault=false`
+y `automaticPolicyEnabled=false`. Esos hosts experimentales permanecen separados
+del producto autorizado para este equipo y de sus preferencias explícitas de inicio.
+
 Los paquetes incluyen hashes y procedencia del commit. Las pruebas Windows, C++ y comunicación local, y las compilaciones PlatformIO/Arduino, son validación de software. La comprobación física del arranque Windows, transiciones AC/batería, LCD, NTC, PWM y circuito sigue pendiente para esta versión.
 
 [Informe por caso](docs/AUTOMATIC-COORDINATION-REVIEW.md) · [Recuperación](docs/FORCED-SESSION-RECOVERY.md) · [Política externa](docs/EXTERNAL-BASE-RAMPED-LOCAL.md) · [Avisos de terceros](THIRD_PARTY_NOTICES.md)
