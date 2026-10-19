@@ -59,6 +59,9 @@ struct Command { bool valid; int request; uint32_t at; double demand=-1; bool ma
 QueueHandle_t commands;
 String ssid,password;
 std::string storedCurveRevision;
+// Owned only by loop/network, separate from the control task's applied revision.
+victus::ExternalConfig retainedNetworkConfiguration;
+bool hasRetainedNetworkConfiguration=false;
 uint32_t lastCurveSave=0;
 bool curveSavedThisBoot=false;
 std::string serialLine,stagedSsid,stagedPassword;
@@ -97,6 +100,9 @@ void controlTask(void*) {
 }
 void local() { Command c{false,0,millis()}; xQueueOverwrite(commands,&c); }
 void disconnectPeer() {
+    if(session&&session->hasConfiguration) {
+        retainedNetworkConfiguration=session->configuration;hasRetainedNetworkConfiguration=true;
+    }
     local(); if (peer>=0) { close(peer); peer=-1; }
     session.reset(); input.clear(); output.clear(); sentBytes=0; reading=false;
 }
@@ -137,7 +143,7 @@ void network(uint32_t now) {
         else {
             peer=incoming; fcntl(peer,F_SETFL,O_NONBLOCK); int yes=1;
             setsockopt(peer,IPPROTO_TCP,TCP_NODELAY,&yes,sizeof(yes));
-            session.reset(new victus::Session(pairing,crypto)); acceptedAt=lastFrameAt=now;
+            session.reset(new victus::Session(pairing,crypto,hasRetainedNetworkConfiguration?&retainedNetworkConfiguration:nullptr)); acceptedAt=lastFrameAt=now;
         }
     }
     if (peer<0) return;
@@ -358,6 +364,7 @@ void setup() {
     preferences.begin("victus-base",false);
     victus::ExternalConfig restored;
     if(preferences.getBytesLength("curve-v1")==sizeof(restored)&&preferences.getBytes("curve-v1",&restored,sizeof(restored))==sizeof(restored)&&restored.valid()) {
+        retainedNetworkConfiguration=restored;hasRetainedNetworkConfiguration=true;
         Command boot{false,0,millis()};boot.hasConfig=true;boot.config=restored;xQueueOverwrite(commands,&boot);storedCurveRevision=restored.revision;
     }
     if(xTaskCreate(controlTask,"fan-lease",4096,nullptr,2,nullptr)!=pdPASS)abort();

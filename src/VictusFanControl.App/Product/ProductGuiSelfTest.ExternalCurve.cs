@@ -102,6 +102,16 @@ internal static partial class ProductGuiSelfTest
         Require(Build(diagnostics with{LastSent="a newer unacknowledged frame"}).SequenceEqual(points),"Marker used unacknowledged source");
         Require(Build(diagnostics with{LastValidReceivedUtc=now.AddMilliseconds(-2000)}).Count==0,"Stale device marker retained");
         Require(Build(diagnostics with{LastValidReceivedUtc=now.AddSeconds(1)}).Count==0,"Future marker retained");
+        using(var canvas=new ProductCanvas())
+        {
+            foreach(var received in new[]{now.AddMinutes(1),now.AddSeconds(-3)})
+            {
+                var page=new ExternalCurvePage(canvas,()=>new ExternalCoolingSettings{Curve=curve},_=>Task.CompletedTask,
+                    ()=>diagnostics with{LastValidReceivedUtc=received});
+                Require(page.AppliedState=="Sin confirmación actual del ESP32"&&page.Markers(now).Count==0,
+                    "Configuration confirmation disagreed with marker freshness after a clock change or expired receipt.");
+            }
+        }
         Require(Build(diagnostics with{AcknowledgedTelemetry=telemetry with{CapturedAtUtc=now.AddMilliseconds(-2000)}}).Count==0,"Stale frame marker retained");
         Require(Build(diagnostics with{AcknowledgedTelemetry=telemetry with{DecisionAtUtc=now.AddMilliseconds(-5000)}}).Count==0,"Stale demand marker retained");
         Require(Build(diagnostics with{AcknowledgedTelemetry=telemetry with{DemandaPct=null}}).Count==0,"Null demand became zero");

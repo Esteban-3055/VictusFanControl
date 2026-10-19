@@ -77,6 +77,10 @@ Fuentes primarias:
 
 ## Pruebas
 
+La [revisión de coordinación posterior](AUTOMATIC-COORDINATION-REVIEW.md) corrige
+el conteo compartido por inicio, reintento y reanudación, así como la caducidad
+durante preparación. Conserva las barreras de recuperación descritas aquí.
+
 Fixtures Windows sin acceso físico: bloqueo real de archivos después del retorno,
 espera automática hasta liberación del lector, identidad exacta de llamada y sesión,
 rechazo de marcadores antiguos/modificados/inciertos, excepción nativa sin prueba,

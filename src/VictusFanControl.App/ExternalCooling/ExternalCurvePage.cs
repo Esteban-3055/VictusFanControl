@@ -20,7 +20,8 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
         get
         {
             var d=diagnostics();
-            if(d?.State!=ExternalCoolingConnectionState.Connected||d.LastValidReceivedUtc is not{} at||DateTimeOffset.UtcNow-at>TimeSpan.FromSeconds(3))return "Sin confirmación actual del ESP32";
+            var now=DateTimeOffset.UtcNow;
+            if(d?.State!=ExternalCoolingConnectionState.Connected||d.LastValidReceivedUtc is not{} at||now<at||now-at>=TimeSpan.FromSeconds(2))return "Sin confirmación actual del ESP32";
             if(d.Device?.ExternalCurveVersion!=1)return "El dispositivo requiere firmware compatible con Curva Externa";
             if(_saved.RequiresFullOutputRange&&!_saved.CanSendTo(d.Device))return "Actualiza el firmware ESP32 para usar salidas de 0 a 29";
             return d.Device.AppliedConfigRevision==_saved.Revision?"Configuración confirmada por el ESP32":"Guardada · esperando confirmación del ESP32";

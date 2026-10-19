@@ -36,6 +36,15 @@ internal sealed class ProductStartupAutomatic
         { Cancel($"Automático al iniciar cancelado por otra operación: modo {state.FanMode}, autoridad {state.FanAuthority}, preparación {state.AutomaticPreparing}, proceso CPU/GPU {state.PerformanceProcessPresent}."); return false; }
         var s=state.Snapshot;
         Issues=ProductAutomaticAdmission.StartupIssues(state,_protections,now);
+        // A timer rechecking an already counted acquisition is not a new bad
+        // acquisition. Keep its qualification, but never admit expired data.
+        // Changed source/runtime, invalid values and future dates still reset it.
+        if(s is not null && _lastSample==s.Timestamp && _source==state.Source &&
+            Issues.All(i=>i.Code.EndsWith("-stale",StringComparison.Ordinal)))
+        {
+            if(Issues.Count>0)Status="Automático al iniciar en espera: "+string.Join(" ",Issues.Select(i=>i.Detail));
+            return false;
+        }
         if(Issues.Count>0)
         { _samples=0; _lastSample=null; _firstSample=null; Status="Automático al iniciar en espera: "+string.Join(" ",Issues.Select(i=>i.Detail)); return false; }
         if(s is null)throw new InvalidOperationException("La entrada requiere una muestra confirmada.");

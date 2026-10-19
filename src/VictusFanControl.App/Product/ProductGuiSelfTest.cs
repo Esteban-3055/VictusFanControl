@@ -19,6 +19,7 @@ internal static partial class ProductGuiSelfTest
             ProductSensorPolicySelfTest.Run(Require);
             ProductUpdatesSelfTest.Run(Require);
             ProductAutomaticAdmissionSelfTest.Run(Require);
+            ProductStartupCoordinationSelfTest.Run(Require);
             ProductWindowLayoutSelfTest.Run(Require);
             TestDisplayChanges(Require);
             TestSelectedCurveInsertion(Require);
@@ -812,6 +813,7 @@ internal static partial class ProductGuiSelfTest
         internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure;
         internal void Publish(ProductRuntimeState state)=>Changed?.Invoke(state);
         public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
+        public void RequestAutomaticTelemetry() { }
         public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
         public Task ApplyManualAsync(int level){Commands++;LastManualLevel=level;return Task.CompletedTask;}
         public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;LastPerformance=p.PerformanceConfiguration();return CommandFailure is null?PerformanceGate?.Task??Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}

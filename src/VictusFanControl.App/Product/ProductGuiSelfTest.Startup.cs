@@ -8,6 +8,18 @@ internal static partial class ProductGuiSelfTest
 {
     private static void TestStartupAutomatic(Action<bool,string> require)
     {
+        var orderedRuntime=new RecordingRuntime();
+        using(var ordered=new ProductForm("fixture://publication-order",fixture:orderedRuntime,fixtureProfiles:new()))
+        {
+            ordered.Show();Application.DoEvents();
+            orderedRuntime.Publish(new(){PublicationSequence=2,Source="Ac",Runtime="Healthy"});
+            orderedRuntime.Publish(new(){PublicationSequence=1,Source="Battery",Runtime="Recovering"});
+            require(ordered.Canvas.State.Source=="Ac"&&ordered.Canvas.State.Runtime=="Healthy","Delayed state publication replaced the newer source/health.");
+            orderedRuntime.Publish(new(){PublicationSequence=3,Source="Ac",Runtime="Healthy",LifecycleBlocked=true});
+            orderedRuntime.Publish(new(){PublicationSequence=2,Source="Ac",Runtime="Healthy"});
+            require(ordered.Canvas.State.LifecycleBlocked,"Late publication cleared a lifecycle fence.");
+            var exit=ordered.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Publication order fixture exit stalled.");
+        }
         var at=DateTimeOffset.UtcNow.AddSeconds(-2);
         ProductRuntimeState State(int i,string source="Ac")=>new(){Target="HP-8C40-9D0R1LA-F18",Runtime="Healthy",Source=source,
             AutomaticAuthorized=true,CanApplyPerformance=true,

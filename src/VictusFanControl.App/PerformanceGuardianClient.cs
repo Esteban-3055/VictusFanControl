@@ -10,6 +10,7 @@ internal sealed class PerformanceGuardianClient
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly string _modulePath;
     private readonly Func<ProcessStartInfo, Process?> _startProcess;
+    private readonly Func<PerformanceRecoveryPreview> _recoveryPreview;
     private Process? _process;
     private NamedPipeClientStream? _pipe;
     private Guid _nonce;
@@ -38,10 +39,12 @@ internal sealed class PerformanceGuardianClient
     internal bool LimitsActive => LastStatusFresh && LastStatus is { Ok:true,SessionEnabled:true,RuntimeFailure:null } s &&
         (!s.CpuEnabled || s.CpuState == "Active") && (!s.GpuEnabled || s.GpuState == "ActiveUnverified");
 
-    internal PerformanceGuardianClient(string modulesDirectory, Func<ProcessStartInfo, Process?>? startProcess = null)
+    internal PerformanceGuardianClient(string modulesDirectory, Func<ProcessStartInfo, Process?>? startProcess = null,
+        Func<PerformanceRecoveryPreview>? recoveryPreview = null)
     {
         _modulePath = Path.Combine(modulesDirectory, "IntelMSR.bin");
         _startProcess = startProcess ?? Process.Start;
+        _recoveryPreview = recoveryPreview ?? (()=>PerformanceRecoveryPreview.Read());
     }
 
     internal async Task<PerformanceGuardianResponse> EnableAsync(PerformanceGuiSessionConfiguration configuration)
@@ -51,7 +54,7 @@ internal sealed class PerformanceGuardianClient
         try
         {
             if (_process is not null) throw new InvalidOperationException("Libera la sesión anterior antes de aplicar otra configuración.");
-            var recovery=PerformanceRecoveryPreview.Read();
+            var recovery=_recoveryPreview();
             if(recovery.Pending)throw new InvalidOperationException(recovery.Detail);
             var executable = ResolveExecutable();
             using var owner = Process.GetCurrentProcess();
@@ -89,16 +92,23 @@ internal sealed class PerformanceGuardianClient
         finally { _gate.Release(); }
     }
 
-    internal async Task<PerformanceGuardianResponse> UpdateAsync(PerformanceGuiSessionConfiguration configuration)
+    internal async Task<PerformanceGuardianResponse> UpdateAsync(PerformanceGuiSessionConfiguration configuration,
+        Func<CancellationToken,Task>? beforeSend = null)
     {
         configuration.Validate();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-        await _gate.WaitAsync(timeout.Token).ConfigureAwait(false);
+        using var admission = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await _gate.WaitAsync(admission.Token).ConfigureAwait(false);
         try
         {
             if (_process is null || _process.HasExited || !LimitsActive || AppliedConfiguration is null ||
                 configuration.CpuEnabled != AppliedConfiguration.CpuEnabled || configuration.GpuEnabled != AppliedConfiguration.GpuEnabled)
                 throw new InvalidOperationException("Actualizar requiere la misma sesión activa y selección CPU/GPU.");
+            // A pending STATUS owns the transport only, not a performance update.
+            // Pause fan dispatch and start the write deadline once this owner is free.
+            if(beforeSend is not null)await beforeSend(admission.Token).ConfigureAwait(false);
+            admission.Token.ThrowIfCancellationRequested();
+            if(AppliedConfiguration==configuration&&LastStatus is {} unchanged)return unchanged;
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
             if (_pipe is null || !_pipe.IsConnected) await ConnectAsync(timeout.Token).ConfigureAwait(false);
             LastStatus = null;
             LastStatus = await SendAsync(PerformanceGuardianProtocol.UpdateConfiguration, configuration, timeout.Token).ConfigureAwait(false);
@@ -195,7 +205,7 @@ internal sealed class PerformanceGuardianClient
     {
         // Already exited: drain redirected error output before reporting the cause.
         _process!.WaitForExit();
-        var recovery=PerformanceRecoveryPreview.Read();
+        var recovery=_recoveryPreview();
         if(recovery.Pending)return new IOException(recovery.Detail+" Guardian terminó con error "+_process.ExitCode+".");
         var detail = Volatile.Read(ref _startupFailure);
         return new IOException("Performance Guardian terminó con error " + _process.ExitCode +

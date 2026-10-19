@@ -12,6 +12,7 @@ internal static class PerformanceGuiIntegrationSelfTest
         try
         {
             static void Require(bool condition, string detail) { if (!condition) throw new InvalidOperationException(detail); }
+            static PerformanceRecoveryPreview NoRecovery() => new(false,"Isolated IPC fixture inventory.");
             new PerformanceGuiSessionConfiguration().Validate();
             foreach (var invalid in new[]
             {
@@ -54,7 +55,7 @@ internal static class PerformanceGuiIntegrationSelfTest
                 reportPath = start.ArgumentList[start.ArgumentList.IndexOf("--report") + 1];
                 launched = Process.Start(start);
                 return launched;
-            });
+            },recoveryPreview:NoRecovery);
             var configuration = new PerformanceGuiSessionConfiguration { AcPl1Watts = 20, AcPl2Watts = 40 };
             try
             {
@@ -72,6 +73,22 @@ internal static class PerformanceGuiIntegrationSelfTest
                 rejected=false;try{await client.UpdateAsync(updated with{GpuEnabled=false});}catch(InvalidOperationException){rejected=true;}
                 Require(rejected&&client.AppliedConfiguration==updated,"Domain selection changed inside an active session.");
                 Require((await client.UpdateAsync(updated)).Ok&&client.HasProcess,"Repeated unchanged update lost the owner.");
+                var ipcGate=(SemaphoreSlim)typeof(PerformanceGuardianClient).GetField("_gate",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(client)!;
+                await ipcGate.WaitAsync();
+                var admissions=0;
+                var queuedConfiguration=updated with{AcPl2Watts=37};
+                var queued=client.UpdateAsync(queuedConfiguration,ct=>{ct.ThrowIfCancellationRequested();admissions++;return Task.CompletedTask;});
+                Require(!queued.IsCompleted&&admissions==0&&client.LimitsActive&&client.AppliedConfiguration==updated,
+                    "Waiting on IPC began an update or invalidated the previous active limits.");
+                ipcGate.Release();
+                Require((await queued).Ok&&admissions==1&&client.AppliedConfiguration==queuedConfiguration,
+                    "Queued update did not admit once after the transport became available.");
+                var cancelledBeforeWrite=false;
+                try{await client.UpdateAsync(updated,_=>throw new OperationCanceledException("Synthetic cancelled admission before dispatch."));}
+                catch(OperationCanceledException){cancelledBeforeWrite=true;}
+                Require(cancelledBeforeWrite&&client.LimitsActive&&client.AppliedConfiguration==queuedConfiguration,
+                    "Cancelled pre-dispatch update changed committed limits or lost the healthy owner.");
+                Console.WriteLine("PASS: IPC queue waiting does not pause control; cancelled pre-dispatch update preserves active limits; no hardware IO.");
                 Console.WriteLine("PASS: real GUI IPC live presets, same process, STATUS readback and domain-selection fence; zero hardware writes.");
                 await client.CloseAsync();
                 Require(!client.HasProcess && !client.LimitsActive, "GUI shutdown leaked owner.");
@@ -113,7 +130,7 @@ internal static class PerformanceGuiIntegrationSelfTest
                 var start=new ProcessStartInfo("cmd.exe") {UseShellExecute=false,CreateNoWindow=true,RedirectStandardError=true,RedirectStandardOutput=true};
                 start.ArgumentList.Add("/c");start.ArgumentList.Add("exit 23");failedOwner=Process.Start(start)!;
                 if(!failedOwner.WaitForExit(5000))throw new TimeoutException("Fatal-start fixture did not exit.");return failedOwner;
-            });
+            },recoveryPreview:NoRecovery);
             try
             {
                 bool refused=false;try{await failedClient.EnableAsync(configuration);}catch(IOException){refused=true;}
@@ -129,7 +146,7 @@ internal static class PerformanceGuiIntegrationSelfTest
                 start.ArgumentList[0] = "--gui-fixture-startup-failure";
                 startupFailureOwner = Process.Start(start);
                 return startupFailureOwner;
-            });
+            },recoveryPreview:NoRecovery);
             try
             {
                 var timer = Stopwatch.StartNew();

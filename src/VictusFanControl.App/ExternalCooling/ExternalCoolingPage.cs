@@ -34,7 +34,7 @@ internal sealed class ExternalCoolingPage : IDisposable
     internal ExternalCoolingDiagnostics Status=>_manager.Diagnostics;
     internal bool Active=>Status.State is ExternalCoolingConnectionState.Connected or ExternalCoolingConnectionState.Connecting or ExternalCoolingConnectionState.Authenticating or ExternalCoolingConnectionState.Reconnecting;
     internal bool Dirty=>Mode!=_saved.Mode||Reconnect!=_saved.AutoReconnect||Simulator!=_saved.UseSimulator||Host.Text!=_saved.Host||Port.Text!=_saved.Port.ToString(CultureInfo.InvariantCulture)||Key.Text.Length>0||_forget;
-    internal string Message=> (ReceivedMessage?Status.LastReceived:Status.LastSent)??"TodavÃ­a no hay mensajes.";
+    internal string Message=> (ReceivedMessage?Status.LastReceived:Status.LastSent)??"Todavía no hay mensajes.";
     internal bool Live=>Status.State==ExternalCoolingConnectionState.Connected&&Status.LastValidReceivedUtc is{} at&&(DateTimeOffset.UtcNow-at).TotalSeconds is >=0 and <=3;
 
     internal ExternalCoolingPage(ProductCanvas canvas,ExternalCoolingSettings saved,ExternalCoolingManager manager,Func<bool> paired,
@@ -42,14 +42,14 @@ internal sealed class ExternalCoolingPage : IDisposable
     {
         _canvas=canvas;_saved=saved;_manager=manager;_paired=paired;_apply=apply;_copy=copy??Clipboard.SetText;
         Host=Editor("external-edit-host",253);Port=Editor("external-edit-port",5);Key=Editor("external-edit-key",64);Key.UseSystemPasswordChar=true;
-        Restore();Notice=notice??"La base externa tiene su propia configuraciÃ³n. Guarda los cambios para aplicarlos.";
+        Restore();Notice=notice??"La base externa tiene su propia configuración. Guarda los cambios para aplicarlos.";
         _timer.Tick+=(_,_)=>{if(_selected&&_canvas.Visible)_canvas.Invalidate();};
         _canvas.VisibleChanged+=VisibilityChanged;
     }
     private void VisibilityChanged(object? sender,EventArgs e)=>Layout(_selected);
     private TextBox Editor(string name,int maximum)
     {
-        var box=new ExternalEditor(_canvas){Name=name,AccessibleName=name switch{"external-edit-host"=>"Host o direcciÃ³n IP","external-edit-port"=>"Puerto TCP",_=>"Nueva clave Base64"},
+        var box=new ExternalEditor(_canvas){Name=name,AccessibleName=name switch{"external-edit-host"=>"Host o dirección IP","external-edit-port"=>"Puerto TCP",_=>"Nueva clave Base64"},
             BorderStyle=BorderStyle.None,AutoSize=false,MaxLength=maximum,BackColor=ProductCanvas.Surface,ForeColor=ProductCanvas.Ink,Visible=false};
         box.TextChanged+=(_,_)=>{if(!_disposed)_canvas.Invalidate();};
         box.GotFocus+=(_,_)=>_canvas.FocusExternalField(name);
@@ -96,7 +96,7 @@ internal sealed class ExternalCoolingPage : IDisposable
             case "external-simulator":Simulator=!Simulator;break;
             case "external-generate":Key.Text=ExternalCoolingProtocol.NewPairingKey();_forget=false;Notice="Clave nueva pendiente de guardar. Usa la misma clave en el simulador.";break;
             case "external-reveal":Key.UseSystemPasswordChar=!Key.UseSystemPasswordChar;break;
-            case "external-forget":_forget=true;Key.Clear();Key.UseSystemPasswordChar=true;Notice="El emparejamiento se eliminarÃ¡ al guardar. Descartar conserva la clave guardada.";break;
+            case "external-forget":_forget=true;Key.Clear();Key.UseSystemPasswordChar=true;Notice="El emparejamiento se eliminará al guardar. Descartar conserva la clave guardada.";break;
             case "external-discard":Restore();Notice="Se recuperaron los ajustes guardados de la base externa.";break;
             case "external-message-sent":ReceivedMessage=false;break;
             case "external-message-received":ReceivedMessage=true;break;
@@ -105,7 +105,7 @@ internal sealed class ExternalCoolingPage : IDisposable
                 Busy=true;Layout(_selected);_canvas.Invalidate();
                 try
                 {
-                    if(id=="external-connection"&&Active){await _manager.DisconnectAsync();Notice="ConexiÃ³n detenida.";break;}
+                    if(id=="external-connection"&&Active){await _manager.DisconnectAsync();Notice="Conexión detenida.";break;}
                     if(!int.TryParse(Port.Text,NumberStyles.None,CultureInfo.InvariantCulture,out var port))throw new ArgumentException();
                     var settings=_saved with{Mode=Mode,Host=Host.Text.Trim(),Port=port,AutoReconnect=Reconnect,UseSimulator=Simulator};settings.Validate();
                     var key=string.IsNullOrWhiteSpace(Key.Text)?null:Key.Text;
@@ -114,7 +114,7 @@ internal sealed class ExternalCoolingPage : IDisposable
                     if(connect&&(Mode==ExternalCoolingMode.Disabled||(!Paired||_forget)&&key is null))throw new ArgumentException();
                     await _apply(settings,key,_forget,connect);
                     if(_disposed)return;
-                    _saved=settings with{Curve=CurrentCurve?.Invoke()??settings.Curve};Restore();Notice=connect?"Preferencias guardadas; conexiÃ³n solicitada.":"Preferencias guardadas. Pulsa Conectar para iniciar la comunicaciÃ³n.";
+                    _saved=settings with{Curve=CurrentCurve?.Invoke()??settings.Curve};Restore();Notice=connect?"Preferencias guardadas; conexión solicitada.":"Preferencias guardadas. Pulsa Conectar para iniciar la comunicación.";
                 }
                 catch(Exception){if(!_disposed)Notice="No se pudo completar. Revisa host, puerto y clave Base64 de 32 bytes.";}
                 finally{Busy=false;if(!_disposed)Layout(_selected);}

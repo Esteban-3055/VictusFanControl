@@ -70,7 +70,13 @@ bool equalProof(const std::string& a, const std::string& b) {
     for (size_t i=0; i<32; ++i) difference = difference | (x[i]^y[i]);
     return difference == 0;
 }
-Session::Session(const Key& key,Crypto& c): pairing(key),crypto(c) {}
+Session::Session(const Key& key,Crypto& c,const ExternalConfig* previousConfiguration): pairing(key),crypto(c) {
+    // Configuration survives TCP reconnects; authentication, telemetry and the
+    // remote lease never do. Reused revisions remain immutable across sessions.
+    if(previousConfiguration&&previousConfiguration->valid()) {
+        configuration=*previousConfiguration;hasConfiguration=true;
+    }
+}
 Session::~Session() {
     for (auto* k : {&pairing,&receiveKey,&sendKey}) { volatile uint8_t* p = k->data(); for (size_t i=0;i<32;++i) p[i]=0; }
 }
@@ -168,7 +174,7 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
             candidate.points[i++]={point["input"].as<int>(),point["output"].as<int>()};
         }
         if(!candidate.valid())return false;
-        // A revision identifies immutable configuration within this authenticated session.
+        // Includes the retained configuration from before this authenticated session.
         if(hasConfiguration&&std::string(configuration.revision)==candidate.revision) {
             if(configuration.count!=candidate.count||configuration.input!=candidate.input||configuration.requestMinimum!=candidate.requestMinimum||
                 configuration.requestMaximum!=candidate.requestMaximum||configuration.manualOutput!=candidate.manualOutput||configuration.rise!=candidate.rise||

@@ -2,6 +2,7 @@
 #include "VictusProtocol.h"
 #include <chrono>
 #include <iostream>
+#include <memory>
 #ifdef _WIN32
 #include <windows.h>
 #include <bcrypt.h>
@@ -41,18 +42,24 @@ int main(int argc,char** argv) {
     }
     HostCrypto crypto;victus::Key key{};
     if(!victus::decodeKey("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",key))return 1;
-    victus::Session session(key,crypto);victus::ExternalController controller;
+    auto session=std::make_unique<victus::Session>(key,crypto);victus::ExternalController controller;
     const auto start=std::chrono::steady_clock::now();
     auto now=[&] {return static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-start).count());};
     const double ambient=argc==2&&std::string(argv[1])=="--missing-ambient"?NAN:24;
     std::string line;
     while(std::getline(std::cin,line)) {
+        if(argc==2&&std::string(argv[1])=="--reconnect"&&line=="RECONNECT") {
+            auto previous=session->configuration;auto retained=session->hasConfiguration;
+            controller.receive(false,0,NAN,false,now());controller.tick(now(),ambient);
+            session=std::make_unique<victus::Session>(key,crypto,retained?&previous:nullptr);
+            std::cout<<"RECONNECTED"<<std::endl;continue;
+        }
         std::string response;int duty=controller.tick(now(),ambient);
-        session.appliedConfigRevision=controller.revision();session.appliedDuty=duty;session.externalRequest=controller.requested();
-        if(!session.accept(line,now(),ambient,static_cast<int>(std::lround(duty*100.0/255)),controller.remote(),response)) {std::cout<<"REJECT"<<std::endl;return 2;}
-        if(argc==2 && std::string(argv[1])=="--readings" && session.latest.received) {
+        session->appliedConfigRevision=controller.revision();session->appliedDuty=duty;session->externalRequest=controller.requested();
+        if(!session->accept(line,now(),ambient,static_cast<int>(std::lround(duty*100.0/255)),controller.remote(),response)) {std::cout<<"REJECT"<<std::endl;return 2;}
+        if(argc==2 && std::string(argv[1])=="--readings" && session->latest.received) {
             // Test-only side channel; the signed response is unchanged.
-            const auto& m=session.latest;
+            const auto& m=session->latest;
             StaticJsonDocument<512> snapshot;
             auto put=[&](const char* name,double value,uint32_t age) {
                 double v=m.fresh(value,age,m.receivedAt+1000);
@@ -63,11 +70,11 @@ int main(int argc,char** argv) {
             put("ram",m.ram,m.ramAge);put("demand",m.demand,m.demandAge);
             std::string value;serializeJson(snapshot,value);std::cerr<<value<<std::endl;
         }
-        if(session.hasConfiguration)controller.configure(session.configuration);
-        controller.receive(session.remoteRequest,session.latest.request,session.latest.demand,session.latest.manual,now());controller.tick(now(),ambient);
-        if(argc==2 && std::string(argv[1])=="--configuration" && session.hasConfiguration) {
+        if(session->hasConfiguration)controller.configure(session->configuration);
+        controller.receive(session->remoteRequest,session->latest.request,session->latest.demand,session->latest.manual,now());controller.tick(now(),ambient);
+        if(argc==2 && std::string(argv[1])=="--configuration" && session->hasConfiguration) {
             // Test-only receipt evidence, after configure(). No production wire extension.
-            const auto& c=session.configuration;
+            const auto& c=session->configuration;
             StaticJsonDocument<2048> snapshot;
             snapshot["schemaVersion"]=1;snapshot["revision"]=controller.revision();
             snapshot["input"]=c.input;snapshot["requestMinimum"]=c.requestMinimum;snapshot["requestMaximum"]=c.requestMaximum;
@@ -78,6 +85,6 @@ int main(int argc,char** argv) {
             for(int i=0;i<c.count;++i) { auto p=points.createNestedObject();p["input"]=c.points[i].input;p["output"]=c.points[i].output; }
             std::string value;serializeJson(snapshot,value);std::cerr<<value<<std::endl;
         }
-        std::cout<<response<<std::endl;session.sent(now());
+        std::cout<<response<<std::endl;session->sent(now());
     }
 }

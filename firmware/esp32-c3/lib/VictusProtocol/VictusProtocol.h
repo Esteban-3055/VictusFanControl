@@ -40,7 +40,7 @@ struct Measurement {
 };
 class Session {
 public:
-    Session(const Key&, Crypto&);
+    Session(const Key&, Crypto&, const ExternalConfig* previousConfiguration = nullptr);
     ~Session();
     bool accept(const std::string& line, uint32_t now, double ambient, int appliedPwm, bool remote,
         std::string& response);

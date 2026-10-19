@@ -23,6 +23,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private readonly SemaphoreSlim _wake = new(0, 1);
     private readonly SemaphoreSlim _hardwareReadGate = new(1, 1);
     private readonly object _commandGate = new();
+    private readonly Func<CancellationToken,ValueTask<TelemetrySnapshot>>? _admissionReadFixture;
+    private int _freshAdmissionRequested;
 
     private HardwareTelemetryReader? _reader;
     private Task? _loop;
@@ -63,9 +65,11 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         };
     }
 
-    public TelemetryWorker(string modulesDirectory)
+    public TelemetryWorker(string modulesDirectory, Func<CancellationToken,ValueTask<TelemetrySnapshot>>? admissionReadFixture = null)
     {
         _modulesDirectory = modulesDirectory;
+        _admissionReadFixture=admissionReadFixture;
+        if(admissionReadFixture is not null)_recoveryRequested=false;
         StateMachine = new RuntimeStateMachine();
     }
 
@@ -82,6 +86,44 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     public event EventHandler<TelemetrySnapshot>? SnapshotAvailable;
     public event EventHandler<string>? DiagnosticsAvailable;
     public event EventHandler<string>? EventLogged;
+
+    // Consume once on the existing loop's next acquisition. Do not wake it into
+    // back-to-back RAPL/GetSystemTimes reads or start another polling loop.
+    public void RequestAutomaticTelemetry() => Interlocked.Exchange(ref _freshAdmissionRequested,1);
+
+    internal static bool FreshForAutomaticAdmission(TelemetrySnapshot snapshot, DateTimeOffset now) =>
+        snapshot.IsComplete && snapshot.RetainedTelemetry is null && now>=snapshot.Timestamp &&
+        now-snapshot.Timestamp<TimeSpan.FromSeconds(3) && snapshot.HasFreshControlSensorsAt(now) &&
+        snapshot.IsFanTelemetryFreshAt(now,3000);
+
+    // Preparation can wait on a command queue or Guardian. Refresh under the
+    // same reader gate before granting authority; no second hardware owner.
+    public async ValueTask<TelemetrySnapshot> RefreshForAutomaticAdmissionAsync(CancellationToken cancellationToken)
+    {
+        using var budget=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,_cts.Token);
+        budget.CancelAfter(TimeSpan.FromSeconds(3));
+        var epoch=CurrentPowerEpoch();
+        await _hardwareReadGate.WaitAsync(budget.Token).ConfigureAwait(false);
+        try
+        {
+            void Admit()
+            {
+                budget.Token.ThrowIfCancellationRequested();
+                if(IsSuspended()||CurrentPowerEpoch()!=epoch||RecoveryRequested()||StateMachine.State!=SystemState.Healthy||
+                    _reader is null && _admissionReadFixture is null)
+                    throw new InvalidOperationException("Lectura de entrada Automatic cancelada por estado o energía.");
+            }
+            Admit(); MarkProgress("AutomaticAdmissionHardwareRead");
+            var snapshot=await (_admissionReadFixture?.Invoke(budget.Token)??_reader!.ReadFreshSnapshotAsync(budget.Token)).ConfigureAwait(false);
+            if(ProductTelemetryTolerance)snapshot=_continuity.Observe(snapshot);
+            Admit();
+            if(!FreshForAutomaticAdmission(snapshot,DateTimeOffset.UtcNow))
+                throw new InvalidOperationException("La lectura nueva de entrada Automatic no es completa y vigente.");
+            TouchCompletedRead();
+            return snapshot;
+        }
+        finally { _hardwareReadGate.Release(); }
+    }
 
     /// <summary>Called only by the in-flight actuation, while the main loop awaits its processor.</summary>
     public async ValueTask<TelemetrySnapshot> RefreshDuringFanAcknowledgementAsync(CancellationToken cancellationToken)
@@ -143,6 +185,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     public void Start()
     {
+        if(_admissionReadFixture is not null)throw new InvalidOperationException("Admission fixture cannot start hardware acquisition.");
         if (_loop is not null)
         {
             return;
@@ -280,7 +323,9 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             }
         }
 
-        _reader?.Dispose();
+        await _hardwareReadGate.WaitAsync().ConfigureAwait(false);
+        try { _reader?.Dispose(); }
+        finally { _hardwareReadGate.Release(); }
         _hardwareReadGate.Dispose();
         _wake.Dispose();
         _cts.Dispose();
@@ -482,10 +527,15 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         StateMachine.Transition(SystemState.Recovering, reason);
         Log($"Recovery started: {reason}");
 
-        _reader?.Dispose();
-        _reader = null;
-        _continuity.Reset();
-        ResetFreezeGuard();
+        await _hardwareReadGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            _reader?.Dispose();
+            _reader = null;
+            _continuity.Reset();
+            ResetFreezeGuard();
+        }
+        finally { _hardwareReadGate.Release(); }
 
         await Task.Delay(ResumeSettleMs, cancellationToken).ConfigureAwait(false);
 
@@ -622,7 +672,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
             TelemetrySnapshot snapshot;
             MarkProgress("HardwareRead");
-            if (!ProductTelemetryTolerance && FreshFanAcquisitionRequired?.Invoke() == true)
+            var admissionRead=ProductTelemetryTolerance&&Interlocked.Exchange(ref _freshAdmissionRequested,0)!=0;
+            if (admissionRead || !ProductTelemetryTolerance && FreshFanAcquisitionRequired?.Invoke() == true)
             {
                 using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 var remaining = AcquisitionBudgetMilliseconds?.Invoke();

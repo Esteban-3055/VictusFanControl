@@ -7,17 +7,29 @@ internal sealed partial class ProductForm
     private readonly Func<ProductProfiles,Task<IProductRuntime>>? _retryRuntimeFactory;
     private Task? _automaticRetryTask;
     private Action<ProductRuntimeState>? _runtimeChanged;
+    private long _lastRuntimePublication;
     private void AttachRuntime(IProductRuntime runtime)
     {
+        _lastRuntimePublication=0;
+        void Observe(ProductRuntimeState state)
+        {
+            if(!ReferenceEquals(_runtime,runtime)||_closing||IsDisposed)return;
+            if(state.PublicationSequence>0)
+            {
+                if(state.PublicationSequence<=_lastRuntimePublication)return;
+                _lastRuntimePublication=state.PublicationSequence;
+            }
+            UpdateState(state);
+        }
         if(_externalCooling is not null)_=ExternalCoolingOperationAsync(()=>_externalCooling.ResumeAsync());
         _runtimeChanged=state=>
         {
             if(IsDisposed||_closing)return;
             if(InvokeRequired)
             {
-                if(IsHandleCreated)BeginInvoke(()=>{if(ReferenceEquals(_runtime,runtime))UpdateState(state);});
+                if(IsHandleCreated)BeginInvoke(()=>Observe(state));
             }
-            else if(ReferenceEquals(_runtime,runtime))UpdateState(state);
+            else Observe(state);
         };
         runtime.Changed+=_runtimeChanged;
     }

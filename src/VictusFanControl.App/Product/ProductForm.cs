@@ -182,6 +182,7 @@ internal sealed partial class ProductForm : Form
         if(InvokeRequired){if(IsHandleCreated&&!IsDisposed)BeginInvoke(TryStartupAutomatic);return;}
         if(_closing||_restarting||_displayOff||_startupAutomatic is null||_startupAutomatic.Finished||_runtime is null||_canvas.Busy||Environment.TickCount64<_startupRetryAt)return;
         var observedAt=DateTimeOffset.UtcNow;var clock=Environment.TickCount64;
+        _runtime.RequestAutomaticTelemetry();
         var activate=_startupAutomatic.Observe(_canvas.State,observedAt,clock);
         _canvas.Notice=_startupAutomatic.Status;
         var waitCodes=string.Join(";",_startupAutomatic.Issues.Select(i=>i.Code));

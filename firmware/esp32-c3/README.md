@@ -6,6 +6,11 @@ Servidor TCP local 8765, mDNS `victus-base.local`, autenticación mutua y sin nu
 El código se compila y prueba en PC; **no se ha cargado esta consolidación en la
 placa ni validado físicamente su LCD, NTC, PWM o etapa de potencia**.
 
+La curva validada conserva su identidad entre conexiones TCP y al restaurarla
+desde NVS: reutilizar una revisión con contenido diferente se rechaza. Una conexión
+nueva exige autenticación y solicitud nuevas; conservar la curva no concede Remote.
+Véase la [revisión de coordinación](../../docs/AUTOMATIC-COORDINATION-REVIEW.md).
+
 ## Conexiones que se conservan
 
 | Función | GPIO | Configuración |

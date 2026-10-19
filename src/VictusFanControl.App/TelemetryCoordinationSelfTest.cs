@@ -1,4 +1,5 @@
 using VictusFanControl.Telemetry;
+using VictusFanControl.Runtime;
 
 namespace VictusFanControl.App;
 
@@ -77,6 +78,7 @@ internal static class TelemetryCoordinationSelfTest
             healthSnapshot = await worker.ProcessAndPublishSnapshotAsync(next, CancellationToken.None);
             Require(healthSnapshot is null && published.Count == beforeRejectedRefresh);
             Console.WriteLine("PASS: suspend/resume in one operation still discards the previous power epoch.");
+            await TestAdmissionReadsAsync();
             return 0;
         }
         catch (Exception ex)
@@ -84,6 +86,60 @@ internal static class TelemetryCoordinationSelfTest
             Console.WriteLine("FAIL: telemetry coordination: " + ex);
             return 1;
         }
+    }
+
+    private static async Task TestAdmissionReadsAsync()
+    {
+        static TelemetrySnapshot Fresh() => new(DateTimeOffset.UtcNow,"CPU",50,20,30,"GPU",45,15,20,2500,2300)
+        { CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",50)] };
+        static void Healthy(TelemetryWorker worker)
+        {
+            worker.StateMachine.Transition(SystemState.Recovering,"fixture validation");
+            worker.StateMachine.Transition(SystemState.Healthy,"fixture ready");
+        }
+        var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int reads=0,active=0,maximum=0;
+        await using(var worker=new TelemetryWorker("unused-admission-fixture",async ct=>
+        {
+            ++reads; maximum=Math.Max(maximum,++active);
+            try { entered.TrySetResult();await release.Task.WaitAsync(ct);return Fresh(); }
+            finally { --active; }
+        }))
+        {
+            bool startRejected=false;try{worker.Start();}catch(InvalidOperationException){startRejected=true;}
+            Require(startRejected); // The injectable reader can never open real hardware.
+            Healthy(worker);
+            var first=worker.RefreshForAutomaticAdmissionAsync(CancellationToken.None).AsTask();
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            var second=worker.RefreshForAutomaticAdmissionAsync(CancellationToken.None).AsTask();
+            Require(reads==1&&!second.IsCompleted);
+            using var cancelled=new CancellationTokenSource();cancelled.Cancel();
+            try { await worker.RefreshForAutomaticAdmissionAsync(cancelled.Token);Require(false); }catch(OperationCanceledException) { }
+            Require(reads==1);
+            release.SetResult();await Task.WhenAll(first,second);
+            Require(reads==2&&maximum==1);
+        }
+        foreach(var invalid in new[]{Fresh() with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-4)},
+            Fresh() with{Timestamp=DateTimeOffset.UtcNow.AddMinutes(1)},Fresh() with{GpuTemperatureC=null},
+            Fresh() with{RetainedTelemetry="cpu-temperature"}})
+        {
+            await using var worker=new TelemetryWorker("unused-admission-fixture",_=>ValueTask.FromResult(invalid));
+            Healthy(worker);
+            bool rejected=false;try{await worker.RefreshForAutomaticAdmissionAsync(CancellationToken.None);}catch(InvalidOperationException){rejected=true;}
+            Require(rejected);
+        }
+        entered=new(TaskCreationOptions.RunContinuationsAsynchronously);release=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using(var worker=new TelemetryWorker("unused-admission-fixture",async ct=>
+        { entered.SetResult();await release.Task.WaitAsync(ct);return Fresh(); }))
+        {
+            Healthy(worker);var pending=worker.RefreshForAutomaticAdmissionAsync(CancellationToken.None).AsTask();
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            worker.NotifySuspend("fixture during admission read");release.SetResult();
+            bool rejected=false;try{await pending;}catch(InvalidOperationException){rejected=true;}
+            Require(rejected);
+        }
+        Console.WriteLine("PASS: fresh admission reads serialize, reject stale/future/retained/missing data and fence suspend/cancellation; no hardware IO.");
     }
 
     private static void Require(bool condition)

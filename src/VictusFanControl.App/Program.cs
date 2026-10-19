@@ -9,6 +9,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.SequenceEqual(new[]{"--automatic-coordination-self-test"}))
+        {
+            try { ProductStartupCoordinationSelfTest.Run((ok,message)=>{if(!ok)throw new InvalidOperationException(message);}); }
+            catch(Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode=1; }
+            return;
+        }
         // Dispatch before GUI/log/runtime startup. This child can only acquire NVIDIA telemetry.
         if (args.Length > 0 && args[0] is "--nvml-telemetry-worker" or "--nvml-telemetry-fixture")
         { Environment.ExitCode = NvmlTelemetryWorkerHost.Run(args); return; }
