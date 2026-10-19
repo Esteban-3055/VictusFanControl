@@ -75,6 +75,15 @@ en una respuesta posterior, nunca antes de entregar la configuración al control
 Windows verifica ACK y antigüedad, y muestra datos recientes. Al abrir una sesión
 nueva se negocia capacidad de nuevo y se reenvía la configuración guardada.
 
+El objetivo de la curva y el duty aplicado son valores distintos durante EMA,
+histéresis y rampas. Windows muestra `appliedDuty` del ACK, y el LCD el valor
+aplicado local; ambos pueden actualizarse en instantes distintos. Si ambos dicen
+252 y el objetivo es 255, no hay discrepancia de transporte. Se corrige el caso
+de máximo sostenido que podía quedar en 252 por la banda de histéresis: una
+petición exacta de 255 se ancla a 255 cuando el EMA entra en la banda de
+asentamiento y llega por la rampa de subida. No se promueven peticiones menores
+(por ejemplo 254) ni se añade un umbral ambiental.
+
 Local tiene objetivo fijo **130/255**, por petición del usuario, y lo alcanza
 mediante EMA, histéresis, confirmación y rampas configuradas, asentándose en 130
 exacto desde arriba o abajo. No hay piso ni máximo automático por NTC. Ambiente

@@ -55,8 +55,13 @@ int ExternalController::tick(uint32_t now,double /*ambient*/) {
     // inside the settling band, with the same sustained descent confirmation.
     const double settlingBand=std::max(0.5,static_cast<double>(config.hysteresis));
     const bool localSettled=!active&&std::abs(filtered-DisconnectedOutput)<=settlingBand;
-    double nextTarget=stopRequested&&filtered<=settlingBand?0:localSettled?DisconnectedOutput:filtered;
-    if(nextTarget>=target+config.hysteresis || (localSettled&&nextTarget>target)) {target=nextTarget;falling=false;}
+    // A requested maximum has the same exact-endpoint semantics as stop:
+    // EMA/hysteresis must not leave it permanently at e.g. 252/255. This
+    // changes the target only; the applied duty still follows the rise ramp.
+    const bool maximumSettled=active&&configured&&command==255&&filtered>=255-settlingBand;
+    double nextTarget=stopRequested&&filtered<=settlingBand?0:
+                      maximumSettled?255:localSettled?DisconnectedOutput:filtered;
+    if(nextTarget>=target+config.hysteresis || ((localSettled||maximumSettled)&&nextTarget>target)) {target=nextTarget;falling=false;}
     else if(nextTarget<=target-config.hysteresis || (stopRequested&&nextTarget==0&&target>0) || (localSettled&&nextTarget<target)) {
         if(!falling) {falling=true;fallingAt=now;}
         if(static_cast<uint32_t>(now-fallingAt)>=static_cast<uint32_t>(config.downHoldMs)) target=nextTarget;

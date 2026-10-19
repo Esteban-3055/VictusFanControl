@@ -16,6 +16,12 @@ sin elevar instantáneamente una salida baja ni bajar de golpe una salida alta.
 Un anclaje al asentarse elimina el residuo de histéresis: llega a 130 exacto.
 No se renuevan órdenes remotas caducadas ni se retiene autoridad por desconexión.
 
+Una petición remota sostenida de 255 también termina en 255 exacto: antes podía
+quedar en 252 con histéresis 3. El anclaje actúa solo dentro de la banda del EMA,
+sin saltarse la rampa y sin convertir una petición de 254 en máximo. Objetivo
+255 y aplicado 252 no significan lecturas contradictorias si LCD y programa
+coinciden en el aplicado; `maximum_output.h` reproduce y verifica ese caso.
+
 ## Arranque y salida cero
 
 El software inicializa salida lógica cero (señal invertida a máximo eléctrico),
