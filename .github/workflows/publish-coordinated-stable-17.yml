@@ -19,13 +19,13 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      SOURCE_SHA: d8d87c7a042732b0c5973029ab64b65f160b092e
+      SOURCE_SHA: 1d08ad29b1e77f2ee183d14c430570b4d83164ab
       RELEASE_TAG: v1.2.17
-      BUILD_RUN: 39313819426
+      BUILD_RUN: 39314628531
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: d8d87c7a042732b0c5973029ab64b65f160b092e
+          ref: 1d08ad29b1e77f2ee183d14c430570b4d83164ab
           fetch-depth: 0
           persist-credentials: false
       - name: Wait for exact-source software checks before preparing public assets
@@ -81,22 +81,22 @@ jobs:
           PY
       - uses: actions/download-artifact@v4
         with:
-          name: VictusFanControl-1.2.17-win-x64-d8d87c7a042732b0c5973029ab64b65f160b092e
+          name: VictusFanControl-1.2.17-win-x64-1d08ad29b1e77f2ee183d14c430570b4d83164ab
           path: verified-payload
           github-token: ${{ github.token }}
-          run-id: 39313819426
+          run-id: 39314628531
       - uses: actions/download-artifact@v4
         with:
-          name: VictusFanControl-1.2.17-Setup-win-x64-d8d87c7a042732b0c5973029ab64b65f160b092e
+          name: VictusFanControl-1.2.17-Setup-win-x64-1d08ad29b1e77f2ee183d14c430570b4d83164ab
           path: installer-assets
           github-token: ${{ github.token }}
-          run-id: 39313819426
+          run-id: 39314628531
       - uses: actions/download-artifact@v4
         with:
-          name: external-cooling-validation-d8d87c7a042732b0c5973029ab64b65f160b092e
+          name: external-cooling-validation-1d08ad29b1e77f2ee183d14c430570b4d83164ab
           path: validation-evidence
           github-token: ${{ github.token }}
-          run-id: 39313819463
+          run-id: 39314628362
       - name: Verify original product archive, installer and 19 exact-commit fixtures
         shell: bash
         run: |
@@ -159,7 +159,7 @@ jobs:
               for file in Path('firmware/esp32-c3/lib/VictusProtocol').iterdir():
                   if file.suffix in ('.h','.cpp'): assert archive.read('VictusBaseESP32C3/'+file.name)==file.read_bytes()
           (root/'ESP32-SOURCE-PROVENANCE.json').write_text(json.dumps(dict(
-              sourceHead=os.environ['SOURCE_SHA'],firmwareRunId=39313819455,pwmEnabled=True,
+              sourceHead=os.environ['SOURCE_SHA'],firmwareRunId=39314628668,pwmEnabled=True,
               arduinoCore='3.3.2',arduinoJson='6.21.5',physicalEsp32Pass=False,
               file=sketch.name,sha256=hashlib.sha256(sketch.read_bytes()).hexdigest(),
               privateConfigurationIncluded=False,preservesExistingNvsWithoutFullFlashErase=True),indent=2)+'\n')
@@ -167,7 +167,7 @@ jobs:
           (root/(simulator.name+'.sha256')).write_text(hashlib.sha256(simulator.read_bytes()).hexdigest()+'  '+simulator.name+'\n')
           manifest=json.loads(Path('verified-payload/PRODUCT-GUI-MANIFEST.json').read_text(encoding='utf-8-sig'))
           assert manifest['version']=='1.2.17' and manifest['releaseChannel']=='stable'
-          record=dict(tag=os.environ['RELEASE_TAG'],version='1.2.17',prerelease=False,sourceHead=os.environ['SOURCE_SHA'],buildRunId=int(os.environ['BUILD_RUN']),externalCoolingRunId=39313819463,firmwareRunId=39313819455,
+          record=dict(tag=os.environ['RELEASE_TAG'],version='1.2.17',prerelease=False,sourceHead=os.environ['SOURCE_SHA'],buildRunId=int(os.environ['BUILD_RUN']),externalCoolingRunId=39314628362,firmwareRunId=39314628668,
               physicalEsp32Pass=False,physicalNotebookWrites=False,previousStableRelease='v1.2.16',updater129RequiresPreviewOptIn=False,
               assets={p.name:dict(size=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in root.iterdir() if p.is_file()})
           (root/'RELEASE-PROVENANCE.json').write_text(json.dumps(record,indent=2)+'\n')
@@ -228,12 +228,12 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      SOURCE_SHA: d8d87c7a042732b0c5973029ab64b65f160b092e
+      SOURCE_SHA: 1d08ad29b1e77f2ee183d14c430570b4d83164ab
       RELEASE_TAG: v1.2.17
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: d8d87c7a042732b0c5973029ab64b65f160b092e
+          ref: 1d08ad29b1e77f2ee183d14c430570b4d83164ab
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
