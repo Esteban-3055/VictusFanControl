@@ -27,6 +27,9 @@ try {
     foreach($file in @('PRODUCT_V1.md','HABITUAL-GPU95-AND-POWER-SOURCE.md','CPU-CONSUMPTION-AND-GPU-RANGE.md','FORCED-SESSION-RECOVERY.md','PRODUCT_1_1_6_CHANGES.md','PRODUCT_1_1_7_DISPLAY.md','PRODUCT_1_1_8_CPU_SPIKES.md','PRODUCT_PLATFORM_RETENTION_2026-10-09.md','PRODUCT_SENSOR_ISOLATION_STEP1.md','PRODUCT_WMI_COORDINATION_STEP2.md','PERFORMANCE_GUI_RECOVERY.md','PLATFORM_PHYSICAL_TEST_2026-10-08.md')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
+    foreach($file in @('AUTOMATIC-COORDINATION-REVIEW.md','EXTERNAL-BASE-RAMPED-LOCAL.md','ESP32-LCD-RESPONSE-REVIEW.md')) {
+        Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
+    }
     foreach($file in @('LICENSE','THIRD_PARTY_NOTICES.md')){Copy-Item -LiteralPath (Join-Path $repo $file) -Destination $OutputDirectory}
     foreach($file in @('EXTERNAL-COOLING-PROTOCOL.md','EXTERNAL-COOLING-USAGE.md','EXTERNAL-COOLING-V1-VECTORS.json')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory

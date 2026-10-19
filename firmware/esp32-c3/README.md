@@ -88,6 +88,7 @@ ESP32C3 Dev Module, flash 4 MB, USB CDC On Boot habilitado y puerto real.
 `--enable-pwm` genera `BoardConfig.h` con la salida invertida GPIO3 activada.
 Sin esa opción se conserva la variante de monitorización, sin control PWM.
 El ZIP Arduino de la release 1.2.17 usa `--enable-pwm`, igual que el CI Arduino.
+Los paquetes Windows incluyen los informes de coordinación, LCD y política externa.
 Antes de regenerar, conservar fuera del repositorio cualquier configuración
 privada; el exportador nunca la copia. Al cargar, dejar desactivado el borrado
 completo de flash para conservar el emparejamiento y los ajustes NVS.
