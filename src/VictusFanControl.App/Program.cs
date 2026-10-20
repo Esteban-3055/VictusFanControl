@@ -73,7 +73,21 @@ internal static class Program
                 try { if(plan.RegisterStartup)WindowsStartupRegistration.SetEnabledAsync(true,modules,configured.StartMinimized).GetAwaiter().GetResult(); }
                 catch
                 {
-                    if(plan.SaveProfiles){if(original is null)File.Delete(path);else File.WriteAllBytes(path,original);}
+                    if(plan.SaveProfiles)
+                    {
+                        if(original is null)File.Delete(path);
+                        else
+                        {
+                            var rollback=path+".rollback-"+Guid.NewGuid().ToString("N");
+                            try
+                            {
+                                using(var file=new FileStream(rollback,FileMode.CreateNew,FileAccess.Write,FileShare.None))
+                                {file.Write(original);file.Flush(true);}
+                                File.Move(rollback,path,overwrite:true);
+                            }
+                            finally { if(File.Exists(rollback))File.Delete(rollback); }
+                        }
+                    }
                     throw;
                 }
                 Environment.ExitCode=0;
@@ -153,11 +167,13 @@ internal static class Program
         };
 
         using var singleInstance = new Mutex(
-            initiallyOwned: true,
-            name: @"Local\VictusFanControl.App",
-            createdNew: out var createdNew);
+            initiallyOwned: false,
+            name: @"Local\VictusFanControl.App");
+        bool ownsInstance;
+        try { ownsInstance=singleInstance.WaitOne(0); }
+        catch(AbandonedMutexException) { ownsInstance=true; } // Existing journal gates remain mandatory.
 
-        if (!createdNew)
+        if (!ownsInstance)
         {
             MessageBox.Show(
                 "VictusFanControl is already running in this Windows session.",

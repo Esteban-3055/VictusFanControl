@@ -77,6 +77,31 @@ internal static class NvmlTelemetryIsolationSelfTest
                 Require(reader.ReadSample().LoadPercent == 12, "Stderr blocked telemetry.");
                 Require(reader.NativeDiagnosticCharacterCount <= 8192, "Native diagnostics retained an unbounded flood.");
             });
+            Case("unconfirmed read-only termination blocks replacements until exact child exits",()=>
+            {
+                using var reader=new NvmlTelemetryProcessClient("fixture-GPU",true,()=>NvmlTelemetryProcessClient.CreateStartInfo("hang"),
+                    sampleTimeout:300,terminateFixture:_=>throw new System.ComponentModel.Win32Exception("Synthetic termination refusal"));
+                var pid=reader.ChildProcessId!.Value;children.Add(pid);
+                try
+                {
+                    try { reader.ReadSample();throw new InvalidOperationException("Hanging reader produced a sample."); } catch(NvmlTelemetryUnavailableException) { }
+                    int starts=0;
+                    try
+                    {
+                        using var replacement=new NvmlTelemetryProcessClient("fixture-GPU",true,()=>{starts++;return NvmlTelemetryProcessClient.CreateStartInfo("healthy");});
+                        throw new InvalidOperationException("Unconfirmed reader allowed replacement.");
+                    }
+                    catch(NvmlTelemetryUnavailableException) { }
+                    Require(starts==0&&Alive(pid),"Unconfirmed read-only child identity was lost or a replacement spawned.");
+                }
+                finally
+                {
+                    // Exact synthetic read-only fixture only. Never a live native mutator.
+                    using var fixtureChild=Process.GetProcessById(pid);fixtureChild.Kill();Require(fixtureChild.WaitForExit(5000),"Fixture child did not exit.");
+                }
+                using var fresh=Reader("healthy");children.Add(fresh.ChildProcessId!.Value);
+                Require(fresh.ReadSample().TemperatureC==51,"Confirmed read-only child exit did not unblock a fresh reader.");
+            });
             Case("concurrent reads and disposal are serialized", () =>
             {
                 using var reader = Reader("healthy"); var pid = reader.ChildProcessId!.Value; children.Add(pid);

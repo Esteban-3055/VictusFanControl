@@ -123,7 +123,48 @@ internal static partial class ProductGuiSelfTest
                 var exit = form.RequestExitAsync(); PumpUntil(() => exit.IsCompleted, "Invalid recovery exit hung.");
             }
             Console.WriteLine("Guided GUI recovery: PASS (one request, release drain, exact sessions, changed-record/cleanup/suspend fences, report failure, same GUI/draft and Firmware without Automatic; zero hardware IO).");
+            TestRecoveryAfterReturnedGpuFailure(require);
         }
         finally { Environment.ExitCode = exitCode; }
+    }
+
+    private static void TestRecoveryAfterReturnedGpuFailure(Action<bool,string> require)
+    {
+        foreach(var scenario in new[]{"success","retry","missing","changed","cpu-pending","unknown-cleanup"})
+        {
+            var session=Guid.NewGuid();
+            var pending=new ProductRecoverySelection(Guid.Empty,session);
+            var old=new RecordingRuntime { DisposeFailure="GPU release unconfirmed",
+                DrainedGpuSession=scenario=="unknown-cleanup"?null:session,
+                DisposeGate=new(TaskCreationOptions.RunContinuationsAsynchronously) };
+            int runs=0,created=0;
+            using var form=new ProductForm("fixture://returned-gpu-error",fixture:old,fixtureProfiles:new());
+            form.RecoverySelectionReader=()=>pending;
+            form.RecoveryRuntimeFactory=_=>{created++;return Task.FromResult<IProductRuntime>(new RecordingRuntime());};
+            form.RecoveryRunner=selection=>
+            {
+                runs++;require(selection.GpuSession==session&&old.Disposals==1&&old.CompletedRecoveries==0,"Handoff lost exact session or reused runtime.");
+                if(scenario=="retry"&&runs==1)return Task.FromResult(new ProductRecoveryResult(false,"fixture","Reset still rejected"));
+                pending=new(Guid.Empty,Guid.Empty);return Task.FromResult(new ProductRecoveryResult(true,"fixture","confirmed exclusive recovery"));
+            };
+            form.Show();Application.DoEvents();
+            var task=form.RecoverPerformanceAsync(true);
+            PumpUntil(()=>old.Disposals==1,"GPU failure did not begin draining.");
+            require(runs==0&&created==0,"Recovery ran while old owner was draining.");
+            if(scenario=="missing")pending=new(Guid.Empty,Guid.Empty);
+            if(scenario=="changed")pending=new(Guid.Empty,Guid.NewGuid());
+            if(scenario=="cpu-pending")pending=pending with{CpuSession=Guid.NewGuid()};
+            old.DisposeGate.SetResult();PumpUntil(()=>task.IsCompleted,"GPU recovery hung.");
+            if(scenario=="retry")
+            {
+                require(runs==1&&created==0&&old.CompletedRecoveries==0&&form.Canvas.State.LifecycleBlocked,"Failed recovery claimed release.");
+                task=form.RecoverPerformanceAsync(true);PumpUntil(()=>task.IsCompleted,"Cached shutdown error prevented fresh recovery.");
+            }
+            var success=scenario is "success" or "retry";
+            require(created==(success?1:0)&&old.CompletedRecoveries==(success?1:0)&&old.Disposals==1,"Handoff bypassed missing/changed/uncertain journal or disposed twice.");
+            require(runs==(success?(scenario=="retry"?2:1):0),"Invalid handoff launched recovery.");
+            var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Handoff fixture exit hung.");
+        }
+        Console.WriteLine("PASS GPU returned-error recovery: actual drain boundary, exact retained journal, retry after cached fault, missing/changed/CPU/unknown failure fences; zero hardware IO.");
     }
 }

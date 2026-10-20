@@ -76,6 +76,7 @@ internal sealed partial class ProductForm
             }
             // Same form/log session. Frozen active preferences are used for unattended reentry; the draft stays untouched.
             _startupPreferences=preferences;_startupAutomatic=new(Environment.TickCount64,manualRetry:!unattended,protections:preferences.Protections,resumption:unattended);
+            if(_requirePowerNotifications)RegisterPowerNotifications();
             AttachRuntime(next);UpdateState(next.State);next.Start();_presentationTimer.Start();
             _canvas.RestartAvailable=true;
             AppLog.Write("PRODUCT AUTOMATIC RETRY (unattended="+unattended+"): previous release completed; fresh runtime in Firmware; waiting for three fresh observations; diagnostic="+diagnostic);

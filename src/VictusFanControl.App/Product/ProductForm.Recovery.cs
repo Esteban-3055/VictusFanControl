@@ -22,7 +22,9 @@ internal sealed partial class ProductForm
         _restarting = true; _restartLifecycleInterrupted = false; _canvas.Busy = true; _canvas.RestartAvailable = false;
         _presentationTimer.Stop(); _startupAutomatic?.Cancel("Recuperación explícita de CPU/GPU."); _startupAutomatic = null;
         var unattended = automaticPreferences is not null;
-        var before = _canvas.State; var preferences = automaticPreferences ?? Draft; var oldRuntime = _runtime as ProductRuntime;
+        var before = _canvas.State; var preferences = automaticPreferences ?? Draft;
+        var oldRuntime = (_runtime ?? _shutdownRuntimeOwner) as ProductRuntime;
+        IProductRecoveryHandoff? handoff = null;
         var controllerReleased = false;
         try
         {
@@ -31,13 +33,21 @@ internal sealed partial class ProductForm
             try { _runtime?.FenceLifecycle("Recuperación explícita de CPU/GPU"); } catch (Exception ex) { fenceFailure = ex; }
             DetachRuntime(); _canvas.Notice = "Liberando la sesión y preparando recuperación…"; _canvas.Invalidate();
             await Task.Yield();
-            await ShutdownRuntimeAsync();
+            try { await ShutdownRuntimeAsync(); }
+            catch when (_shutdownRuntimeOwner is IProductRecoveryHandoff drained &&
+                drained.DrainedGpuSession is { } session && session != Guid.Empty && session == selected.GpuSession)
+            {
+                handoff = (IProductRecoveryHandoff)_shutdownRuntimeOwner;
+                AppLog.Write("PRODUCT RECOVERY HANDOFF: prior owner exited; local resources drained; GPU release unconfirmed; exact journal recovery required.");
+            }
             controllerReleased = true;
             _runtime = null;
             if (fenceFailure is not null) throw new IOException("No se confirmó el bloqueo del controlador anterior.", fenceFailure);
             if (_closing || _exitRequested) return false;
             if (_displayOff || _restartLifecycleInterrupted) throw new IOException("Recuperación cancelada por suspensión o pantalla apagada. No se abrió el recuperador.");
             var pending = await Task.Run(RecoverySelectionReader);
+            if (handoff is not null && (pending.GpuSession != selected.GpuSession || pending.CpuSession != Guid.Empty))
+                throw new IOException("Falta el journal GPU esperado o hay otra sesión CPU pendiente; no se confirmó la liberación.");
             // A normal cleanup may have resolved these exact records already.
             if (pending.CpuSession != Guid.Empty && pending.CpuSession != selected.CpuSession ||
                 pending.GpuSession != Guid.Empty && pending.GpuSession != selected.GpuSession || !ProductRecoveryInventory.AllowsRemaining(selected.Fans,pending.Fans))
@@ -50,6 +60,11 @@ internal sealed partial class ProductForm
             if (!recovered.Succeeded || (await Task.Run(RecoverySelectionReader)).Pending)
                 throw new IOException(recovered.Detail + "\nEvidencia: " + recovered.EvidenceDirectory);
             if (!_isolatedRuntime) await Task.Run(ProductSessionRestart.EnsureNoRecoveryRecords);
+            // No reset is inferred from process exit, missing records or the
+            // cached shutdown task. Only the verified recovery result permits
+            // the old runtime's released-boundary claim to be completed.
+            handoff?.CompleteRecovery(selected.GpuSession);
+            _runtimeShutdown = Task.CompletedTask;
             if (_closing || _exitRequested) return false;
             if (_displayOff || _restartLifecycleInterrupted) throw new IOException("Recuperación completada; un cambio de energía impidió abrir otra sesión. Usa Reiniciar sesión cuando el equipo esté activo.");
             if (!reopenRuntime)
@@ -67,7 +82,7 @@ internal sealed partial class ProductForm
             }
             if (_isolatedRuntime && RecoveryRuntimeFactory is null) throw new IOException("El fixture aislado no tiene fábrica de runtime; no se abrirá hardware.");
             var next = await (RecoveryRuntimeFactory?.Invoke(preferences) ?? Task.Run<IProductRuntime>(() => new ProductRuntime(_modules, preferences, _automaticReview, releasedRuntime: oldRuntime)));
-            _runtime = next; _runtimeShutdown = null; _lifecycleRelease = Task.CompletedTask; _startupFailure = null;
+            _runtime = next; _runtimeShutdown = null; _shutdownRuntimeOwner = null; _lifecycleRelease = Task.CompletedTask; _startupFailure = null;
             controllerReleased = false;
             if (_closing || _exitRequested || _displayOff || _restartLifecycleInterrupted)
             {
@@ -84,6 +99,7 @@ internal sealed partial class ProductForm
                     _startupAutomatic = new(Environment.TickCount64, protections:preferences.Protections, resumption:true);
                 }
                 _automaticRecovery.SessionOpened();
+                if(_requirePowerNotifications)RegisterPowerNotifications();
                 AttachRuntime(next); UpdateState(next.State); next.Start(); _presentationTimer.Start();
                 _canvas.RestartAvailable = true; _canvas.AutomaticRetryAvailable = _automaticReview is null && (!_isolatedRuntime || _retryRuntimeFactory is not null);
                 _canvas.Notice = (_startupAutomatic is not null ? "Recuperación completada. Esperando sensores nuevos para reanudar Automático. " : "Recuperación completada. Sesión nueva en Firmware. ") +

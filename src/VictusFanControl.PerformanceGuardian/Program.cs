@@ -29,6 +29,12 @@ internal static class Program
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureEnableFailure: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-fixture-session")
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true).ConfigureAwait(false);
+            if (args.Length > 0 && args[0] == "--gui-fixture-release-failure")
+                return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureReleaseFailure: true).ConfigureAwait(false);
+            if (args.Length > 0 && args[0] == "--gui-fixture-lost-release-reply")
+                return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureReleaseFailure: true, fixtureLostReply:true).ConfigureAwait(false);
+            if (args.Length > 0 && args[0] == "--gui-fixture-unknown-release")
+                return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureUnknownReleaseFailure: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-fixture-update-failure")
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureUpdateFailure: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-session")

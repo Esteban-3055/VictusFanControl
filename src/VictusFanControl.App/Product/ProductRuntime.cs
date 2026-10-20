@@ -87,8 +87,14 @@ internal interface IProductRuntime : IAsyncDisposable
     void ResumeTelemetry(string reason);
 }
 
+internal interface IProductRecoveryHandoff
+{
+    Guid? DrainedGpuSession { get; }
+    void CompleteRecovery(Guid session);
+}
+
 /// <summary>Presentation adapter. Owns no raw hardware commands; uses the existing controllers and IPC.</summary>
-internal sealed class ProductRuntime : IProductRuntime
+internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
 {
     private readonly ProductAutomaticReview? _automaticReview;
     private readonly ProductAutomaticReview _automaticGuard;
@@ -104,6 +110,15 @@ internal sealed class ProductRuntime : IProductRuntime
     private readonly PerformanceGuardianClient _performance;
     private readonly WmiFanGuiGuardianClient? _fanGuardian;
     private bool _releaseCompleted;
+    private Guid? _drainedGpuSession;
+    public Guid? DrainedGpuSession => _drainedGpuSession;
+    public void CompleteRecovery(Guid session)
+    {
+        if (session == Guid.Empty || _drainedGpuSession != session)
+            throw new IOException("No existe un cierre exclusivo de esa sesión GPU.");
+        _releaseCompleted = true;
+        _drainedGpuSession = null;
+    }
     private int _retryBoundaryClaimed;
     private readonly SemaphoreSlim _commands = new(1,1);
     private readonly SemaphoreSlim _fanCommands = new(1,1);
@@ -139,7 +154,6 @@ internal sealed class ProductRuntime : IProductRuntime
         // Reject the retired physical entry before identity reads, IPC or hardware construction.
         if(platformExperiment is not null)
             throw new NotSupportedException("TZ01/DTT3 y la retención térmica experimental se han retirado del producto.");
-        var releasedBoundary=releasedRuntime?.ClaimReleasedBoundary();
         WmiOnlyInvestigationPolicy.Enable(); // Product telemetry never opens an EC session.
         _hardware = HardwareIdentityReader.ReadCurrent();
         _target = HpHardwareTargetResolver.Resolve(_hardware,out _);
@@ -155,17 +169,16 @@ internal sealed class ProductRuntime : IProductRuntime
         {
             if (_target == Hp8C40TargetProfile.Instance)
             {
-                _fanGuardian=new WmiFanGuiGuardianClient(releasedBoundaryDirectory:releasedBoundary,productUpperRange:true);
+                _fanGuardian=new WmiFanGuiGuardianClient(productUpperRange:true,deferBoundary:true);
                 _wmi = new(_fanGuardian,productUpperRange:true); backend = _wmi;
                 _wmi.CommandAccepted += (_, message) => AppLog.Write("PRODUCT WMI REQUEST ACCEPTED: " + message);
             }
             else backend = new DisabledFanControlBackend();
         }
-        catch (Exception ex) { if(releasedBoundary is not null)throw;backend = new DisabledFanControlBackend(); AppLog.Write("Product backend unavailable: " + ex); }
+        catch (Exception ex) { if(releasedRuntime is not null)throw;backend = new DisabledFanControlBackend(); AppLog.Write("Product backend unavailable: " + ex); }
         _fans = new(backend);
         _controller = ProductFanControllerFactory.Create(_fans,profiles,_hardware,_target,
             _automaticReview is not null,ProductFanRangePreview.Enabled);
-        WmiFanExperimentBoundary.PlannedGuiRelease = () => _plannedFanRelease;
         _performance = new(modules);
         _worker = new(modules)
         {
@@ -195,6 +208,23 @@ internal sealed class ProductRuntime : IProductRuntime
         };
         _worker.EventLogged += (_, e) => AppLog.Write(e);
         Publish();
+        // Commit process-local WMI ownership only after all preparation that
+        // may fail. No controller/telemetry/native worker has started yet.
+        if(_fanGuardian is not null)CommitReleasedBoundary(releasedRuntime,_fanGuardian.ActivateBoundary);
+        WmiFanExperimentBoundary.PlannedGuiRelease = () => _plannedFanRelease;
+    }
+    internal static void CommitReleasedBoundary(ProductRuntime? releasedRuntime,Action<string?> activate,Func<string?>? currentBoundaryFixture=null)
+    {
+        var releasedBoundary=releasedRuntime?.ClaimReleasedBoundary();
+        try { activate(releasedBoundary); }
+        catch
+        {
+            // Retry only before ownership changed; never reset a committed or
+            // uncertain boundary just because a constructor threw.
+            if(releasedRuntime is not null && string.Equals(releasedBoundary,currentBoundaryFixture?.Invoke()??WmiFanExperimentBoundary.SessionDirectory,StringComparison.OrdinalIgnoreCase))
+                Interlocked.CompareExchange(ref releasedRuntime._retryBoundaryClaimed,0,1);
+            throw;
+        }
     }
     private string ClaimReleasedBoundary()
     {
@@ -836,11 +866,19 @@ internal sealed class ProductRuntime : IProductRuntime
         var failures = new List<Exception>();
         // Each domain cleanup is attempted even if a preceding domain fails; retained journals are never deleted here.
         try { await _fanCommands.WaitAsync(); try { await _fans.DisposeAsync(); } finally { _fanCommands.Release(); } } catch (Exception ex) { failures.Add(ex); }
-        try { await _performance.CloseAsync(); } catch (Exception ex) { failures.Add(ex); }
+        Exception? performanceFailure = null;
+        try { await _performance.CloseAsync(); } catch (Exception ex) { performanceFailure = ex; }
         try { await _worker.DisposeAsync(); } catch (Exception ex) { failures.Add(ex); }
-        if (_poll is not null) try { await _poll; } catch (OperationCanceledException) { }
-        if (_thermalDeadline is not null) try { await _thermalDeadline; } catch (OperationCanceledException) { }
+        if (_poll is not null) try { await _poll; } catch (OperationCanceledException) { } catch (Exception ex) { failures.Add(ex); }
+        if (_thermalDeadline is not null) try { await _thermalDeadline; } catch (OperationCanceledException) { } catch (Exception ex) { failures.Add(ex); }
         _lifetime.Dispose();
+        // Only performance release may be unresolved. Fan release, telemetry
+        // and every local callback must have drained successfully first.
+        if (performanceFailure is not null)
+        {
+            if (failures.Count == 0) _drainedGpuSession = _performance.DrainedGpuSession;
+            failures.Add(performanceFailure);
+        }
         if (failures.Count > 0) throw new AggregateException("Liberación incompleta. Conserva los journals y revisa los informes.",failures);
         _releaseCompleted=true;
     }

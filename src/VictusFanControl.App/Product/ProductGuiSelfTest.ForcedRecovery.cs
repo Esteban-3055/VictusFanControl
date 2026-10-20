@@ -61,7 +61,7 @@ internal static partial class ProductGuiSelfTest
                 }
                 PumpUntil(()=>reset.IsCompleted,"Forced failure recovery hung.");reset.GetAwaiter().GetResult();
                 require(created==0&&runners==0&&!form.Canvas.Busy&&form.RecoveryMonitorActive,"Failed forced recovery reopened control, recovered foreign records or disabled monitoring.");
-                if(failure=="diagnostic")require(runtime.Fences==0&&runtime.Disposals==0,"Diagnostic failure modified the live session.");
+                if(failure=="diagnostic")require(runtime.Fences>=1&&runtime.Disposals==1&&form.Canvas.State.LifecycleBlocked,"Diagnostic failure skipped normal cleanup or left control enabled.");
                 else require(form.Canvas.State.LifecycleBlocked&&form.Canvas.State.Failure is not null,"Forced recovery hid a failed release.");
                 if(failure=="uncertain-close")require(form.Canvas.State.FanAuthority=="Unknown","Failed forced closure claimed Firmware ownership.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Forced failure fixture exit hung.");

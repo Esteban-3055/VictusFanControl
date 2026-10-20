@@ -504,7 +504,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     {
         DrawText(g,"Configuración",320,88,31,null,1300,true);
         Card(g,new(310,153,1337,233));DrawText(g,"Inicio de la aplicación",334,178,28,null,1250,true);
-        Button(g,"startup-toggle",StartupEnabled?"✓  Iniciar con Windows":"○  Iniciar con Windows",new(334,241,590,55),StartupEnabled,StartupKnown);
+        Button(g,"startup-toggle",!StartupKnown?"Consultar inicio con Windows":StartupEnabled?"✓  Iniciar con Windows":"○  Iniciar con Windows",new(334,241,590,55),StartupKnown&&StartupEnabled);
         Button(g,"minimized-toggle",Profiles.StartMinimized?"✓  Minimizar al iniciar":"○  Minimizar al iniciar",new(956,241,665,55),Profiles.StartMinimized);
         Button(g,"automatic-start-toggle",Profiles.ActivateAutomaticOnStart?"✓  Activar Automático al iniciar":"○  Activar Automático al iniciar",new(334,310,590,43),Profiles.ActivateAutomaticOnStart);
         Button(g,"recovery-auto-toggle",Profiles.RecoverSessionsAutomatically?"✓  Recuperar sesión definitiva automáticamente":"○  Recuperación automática desactivada",new(956,310,665,43),Profiles.RecoverSessionsAutomatically);

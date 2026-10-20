@@ -42,7 +42,21 @@ internal sealed partial class ProductForm
                 throw new IOException("Hay registros inválidos o de propiedad desconocida. Se conservan sin enviar órdenes.");
             if (_closing || _exitRequested || _displayOff || _restartLifecycleInterrupted) return;
             _canvas.Notice = "Guardando diagnóstico antes de cerrar la sesión…"; _canvas.Invalidate();
-            await Task.Run(() => ProductDiagnostics.Export(diagnostic, before, preferences, AppLog.CurrentLogPath));
+            try { await Task.Run(() => ProductDiagnostics.Export(diagnostic, before, preferences, AppLog.CurrentLogPath)); }
+            catch(Exception ex)
+            {
+                // The diagnostic is optional evidence. Release the current owner
+                // normally even when the disk is unavailable; do not start a
+                // recovery write without its own validated backup/preflight.
+                try { _runtime?.FenceLifecycle("Diagnóstico de recuperación no disponible"); }
+                catch(Exception fenceFailure) { AppLog.Write("Recovery diagnostic fence failed: "+fenceFailure); }
+                await ShutdownRuntimeAsync();
+                DetachRuntime();_runtime=null;
+                _startupFailure="Diagnóstico no disponible; la sesión se cerró. Reintenta Recuperar sesión definitiva.";
+                _canvas.State=_canvas.State with { Runtime="Failed",LifecycleBlocked=true,LifecycleBlockReason=_startupFailure,
+                    CanApplyPerformance=false,PerformanceActive=false,AutomaticPreparing=false,FanMode="Firmware",FanAuthority="Firmware" };
+                throw new IOException("Se cerró la sesión, pero no se pudo guardar el diagnóstico. Conserva los registros antes de reintentar la recuperación. "+ex.Message,ex);
+            }
             AppLog.Write("PRODUCT FORCED SESSION RECOVERY: diagnostic=" + diagnostic);
             if (_closing || _exitRequested || _displayOff || _restartLifecycleInterrupted) return;
             enteredRecovery = true;

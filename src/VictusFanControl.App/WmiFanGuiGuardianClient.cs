@@ -19,7 +19,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     public string SessionDirectory { get; private set; }
     public string ReportPath => Path.Combine(SessionDirectory, "guardian-report.json");
 
-    internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null, string? releasedBoundaryDirectory = null, bool productUpperRange = false)
+    internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null, string? releasedBoundaryDirectory = null, bool productUpperRange = false, bool deferBoundary = false)
     {
         _fixture = fixture;
         _productUpperRange = productUpperRange;
@@ -30,9 +30,14 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             ? Path.Combine(Path.GetTempPath(), "Victus-FanWmi-fixture-" + Guid.NewGuid().ToString("N"))
             : CreateSessionDirectory());
         Directory.CreateDirectory(SessionDirectory);
-        if (!fixture)
+        if(!deferBoundary)ActivateBoundary(releasedBoundaryDirectory);
+    }
+
+    internal void ActivateBoundary(string? releasedBoundaryDirectory)
+    {
+        if (!_fixture)
         {
-            if(releasedBoundaryDirectory is null) WmiFanExperimentBoundary.Enable(SessionDirectory, true, gui: true, productUpperRange: productUpperRange);
+            if(releasedBoundaryDirectory is null) WmiFanExperimentBoundary.Enable(SessionDirectory, true, gui: true, productUpperRange: _productUpperRange);
             else
             {
                 if(!string.Equals(Path.GetFullPath(releasedBoundaryDirectory),WmiFanExperimentBoundary.SessionDirectory,StringComparison.OrdinalIgnoreCase))

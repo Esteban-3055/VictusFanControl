@@ -13,6 +13,8 @@ internal static class AppLog
     private static int _exportTailBytes = DefaultTailBytes;
     private static readonly object Gate = new();
     private static bool _initialized;
+    private static long _initializationRetryAt;
+    internal static string? InitializationFailure { get; private set; }
     internal static bool QualificationCompatibilityLogEnabled { get; private set; }
     internal static DateTimeOffset SessionStartedUtc { get; } = DateTimeOffset.UtcNow;
     internal static string SessionId { get; } = SessionStartedUtc.ToString("yyyyMMddTHHmmssfffZ") + "-" + Guid.NewGuid().ToString("N");
@@ -53,12 +55,28 @@ internal static class AppLog
     {
         lock (Gate)
         {
-            if (_initialized) return;
-            Directory.CreateDirectory(SessionDirectory);
-            File.WriteAllText(Path.Combine(SessionDirectory, "session.json"), JsonSerializer.Serialize(SessionIdentity));
+            if (_initialized || Environment.TickCount64 < _initializationRetryAt) return;
+            InitializationFailure = TryInitializeSessionFiles(SessionDirectory, SessionIdentity);
+            if (InitializationFailure is not null)
+            {
+                _initializationRetryAt = Environment.TickCount64 + 30000;
+                return; // Optional logs cannot prevent the GUI from opening.
+            }
             _initialized = true;
             Write("VictusFanControl application session opened: " + SessionId);
         }
+    }
+
+    internal static string? TryInitializeSessionFiles(string directory, object identity)
+    {
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "session.json"), JsonSerializer.Serialize(identity));
+            return null;
+        }
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException)
+        { return "El registro de diagnóstico no está disponible; revisa espacio y permisos. " + ex.Message; }
     }
 
     // Explicit legacy hardware harnesses retain their existing daily-log collector contract.
@@ -79,6 +97,7 @@ internal static class AppLog
             lock (Gate)
             {
                 Initialize();
+                if (!_initialized) return;
                 var line = $"{DateTimeOffset.Now:O}  {message}{Environment.NewLine}";
                 Append(CurrentLogPath, line);
                 if (QualificationCompatibilityLogEnabled)
@@ -95,6 +114,7 @@ internal static class AppLog
             lock (Gate)
             {
                 Initialize();
+                if (!_initialized) return;
                 Append(TelemetryLogPath, JsonSerializer.Serialize(new { sessionId = SessionId, snapshot }, Json) + Environment.NewLine);
             }
         }

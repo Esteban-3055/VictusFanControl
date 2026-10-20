@@ -28,6 +28,9 @@ internal static partial class ProductGuiSelfTest
             TestHomeAnimationCadence(Require);
             VictusFanControl.Recovery.ProductRecoveryClientSelfTest.Run(Require);
             TestGuidedRecovery(Require);
+            TestWindowsSessionEnd(Require);
+            TestStartupFailurePaths(Require);
+            TestExitFailureRegressions(Require);
             TestForcedSessionRecovery(Require);
             ProductAutomaticRecoverySelfTest.Run(Require);
             TestBackgroundRecovery(Require);
@@ -797,7 +800,7 @@ internal static partial class ProductGuiSelfTest
         {runtime.Publish(blocked);form.HandleCommand("tuning-apply");require(runtime.Commands==1,"Blocked tuning apply dispatched.");}
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Advanced fixture exit did not drain.");exit.GetAwaiter().GetResult();
     }
-    private sealed class RecordingRuntime:IProductRuntime
+    private sealed class RecordingRuntime:IProductRuntime,IProductRecoveryHandoff
     {
         internal ProductPowerProfile? LastCurveSource;
         internal UnifiedFanDemand? LastCurve;
@@ -810,7 +813,14 @@ internal static partial class ProductGuiSelfTest
         internal int? LastManualLevel;
         internal PerformanceGuiSessionConfiguration? LastPerformance;
         internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate,DisposeGate;
-        internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure;
+        internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure,ReleaseFailure;
+        public Guid? DrainedGpuSession { get; set; }
+        internal int CompletedRecoveries;
+        public void CompleteRecovery(Guid session)
+        {
+            if(DrainedGpuSession!=session)throw new IOException("Wrong fixture recovery session.");
+            CompletedRecoveries++;DrainedGpuSession=null;
+        }
         internal void Publish(ProductRuntimeState state)=>Changed?.Invoke(state);
         public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
         public void RequestAutomaticTelemetry() { }
@@ -819,7 +829,7 @@ internal static partial class ProductGuiSelfTest
         public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;LastPerformance=p.PerformanceConfiguration();return CommandFailure is null?PerformanceGate?.Task??Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public Task ReleasePerformanceAsync(){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public void FenceLifecycle(string r){Interlocked.Increment(ref Fences);if(FenceFailure is not null)throw new IOException(FenceFailure);}
-        public Task ReleaseForLifecycleAsync(string r){Interlocked.Increment(ref Releases);return ReleaseGate?.Task??Task.CompletedTask;}
+        public Task ReleaseForLifecycleAsync(string r){Interlocked.Increment(ref Releases);return ReleaseGate?.Task??(ReleaseFailure is null?Task.CompletedTask:Task.FromException(new IOException(ReleaseFailure)));}
         public void ResumeTelemetry(string r){Resumes++;}
         public async ValueTask DisposeAsync(){Interlocked.Increment(ref Disposals);if(DisposeGate is not null)await DisposeGate.Task;if(DisposeFailure is not null)throw new IOException(DisposeFailure);}
     }

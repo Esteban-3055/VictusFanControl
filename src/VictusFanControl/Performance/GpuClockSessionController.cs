@@ -86,6 +86,10 @@ internal sealed class GpuClockSessionController :
 
     internal string? LastStatus { get; private set; }
 
+    // A returned NVML error after the durable ReleaseWriteArmed record is
+    // different from a native call still running or throwing without a result.
+    internal Guid? ReturnedReleaseFailureSession { get; private set; }
+
     internal GpuClockLimitRequest? CurrentRequest =>
         _committedRequest;
 
@@ -322,6 +326,8 @@ internal sealed class GpuClockSessionController :
 
         if (!result.Succeeded)
         {
+            if (result.NvmlResult is not null and not 0)
+                ReturnedReleaseFailureSession = _sessionId;
             return EnterRecoveryRequired(
                 "GPU_CLOCK_RELEASE_RESULT_UNCONFIRMED__" +
                 result.Status,

@@ -64,7 +64,7 @@
     "normalAutomaticPromoted": false,
     "auxiliaryFault": "not-applicable-no-acquisition"
   },
-  "version": "1.2.17",
+  "version": "1.3.0",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -199,6 +199,8 @@
     "directEc": "prohibited"
   },
   "sessionRecovery": {
+    "gpuRetirementProof": "authenticated-reply-or-durable-nonce-target-parent-child-start-session-receipt-and-actual-exit23-not-confirmed-reset",
+    "windowsSessionEnd": "bounded-20000ms-sta-drain-cancelled-query-preserves-session-unknown-completion-retains-records",
     "manualAction": "Recuperar sesión definitiva",
     "pipeline": "diagnostic-exact-inventory-drain-release-only-fresh-runtime",
     "persistentTelemetryFaultDelayMilliseconds": [

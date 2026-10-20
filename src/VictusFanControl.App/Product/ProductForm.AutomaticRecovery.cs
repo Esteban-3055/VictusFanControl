@@ -21,6 +21,14 @@ internal sealed partial class ProductForm
              _recoveryAtStartup && !_restartOpening && _saved.ActivateAutomaticOnStart && _saved.Protections.ResumeAutomatic);
         var preferences = ProductProfilesStore.Copy(_automaticResumption.Wanted && _resumptionProfiles is not null
             ? _resumptionProfiles : _recoveryAtStartup ? _saved : Draft);
+        if (TryRefreshStartupInventory(now)) return;
+        if (_startupInventoryAbsenceConfirmed && _runtime is null && _recoveryAtStartup)
+        {
+            _startupInventoryAbsenceConfirmed=false;
+            _recoveryResumeCancelled = _automaticRecoveryResumeSuppressed;
+            _recoveryTask = ForceSessionRecoveryCoreAsync(preferences, resume, new(Guid.Empty,Guid.Empty));
+            return;
+        }
         if (_canvas.State.PerformanceRecovery?.Pending != true)
         {
             if (_runtime is null || _isolatedRuntime && RecoveryRuntimeFactory is null ||
@@ -56,7 +64,14 @@ internal sealed partial class ProductForm
                 return;
             }
             if (ProductFanRangePreview.Enabled || _closing || _exitRequested || _displayOff || _restartLifecycleInterrupted) return;
-            if (!selected.Pending) return; // Normal cleanup won the race; no recovery writes.
+            if (!selected.Pending)
+            {
+                // Another normal cleanup can resolve the startup records while
+                // waiting. Still drain our owner and verify absence again before
+                // opening a fresh runtime; never call the recovery writer here.
+                await ForceSessionRecoveryCoreAsync(preferences, resume, selected);
+                return;
+            }
             if (selected.CpuSession != (expected.CpuSession ?? Guid.Empty) || selected.GpuSession != (expected.GpuSession ?? Guid.Empty) ||
                 !ProductRecoveryInventory.AllowsRemaining(expected.FanRecords, selected.Fans))
                 throw new IOException("Los registros cambiaron durante la espera; no se recuperó otra sesión.");

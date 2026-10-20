@@ -19,7 +19,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $prior 'app/modules') -Destination (Join-Path $OutputDirectory 'app/modules') -Recurse
     Copy-Item -LiteralPath (Join-Path $prior 'watchdog/modules') -Destination (Join-Path $OutputDirectory 'watchdog/modules') -Recurse
     foreach($file in Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File -Filter 'VictusFanControl*.dll') {
-        if([Diagnostics.FileVersionInfo]::GetVersionInfo($file.FullName).FileVersion -ne '1.2.17.0'){throw "Version mismatch: $($file.Name)"}
+        if([Diagnostics.FileVersionInfo]::GetVersionInfo($file.FullName).FileVersion -ne '1.3.0.0'){throw "Version mismatch: $($file.Name)"}
     }
     foreach($file in @('Start-ProductGui.ps1','Start-PlatformThermalTest.ps1','Install-VictusFanControl.ps1')) {
         Copy-Item -LiteralPath (Join-Path $repo ('release/'+$file)) -Destination $OutputDirectory
@@ -27,7 +27,7 @@ try {
     foreach($file in @('PRODUCT_V1.md','HABITUAL-GPU95-AND-POWER-SOURCE.md','CPU-CONSUMPTION-AND-GPU-RANGE.md','FORCED-SESSION-RECOVERY.md','PRODUCT_1_1_6_CHANGES.md','PRODUCT_1_1_7_DISPLAY.md','PRODUCT_1_1_8_CPU_SPIKES.md','PRODUCT_PLATFORM_RETENTION_2026-10-09.md','PRODUCT_SENSOR_ISOLATION_STEP1.md','PRODUCT_WMI_COORDINATION_STEP2.md','PERFORMANCE_GUI_RECOVERY.md','PLATFORM_PHYSICAL_TEST_2026-10-08.md')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
-    foreach($file in @('AUTOMATIC-COORDINATION-REVIEW.md','EXTERNAL-BASE-RAMPED-LOCAL.md','ESP32-LCD-RESPONSE-REVIEW.md')) {
+    foreach($file in @('AUTOMATIC-COORDINATION-REVIEW.md','EXTERNAL-BASE-RAMPED-LOCAL.md','ESP32-LCD-RESPONSE-REVIEW.md','RELEASE-1.3.0-VALIDATION.md','EXHAUSTIVE-STARTUP-INVESTIGATION-2026-10-20.md','SESSION-END-AND-GPU-RECOVERY.md','STARTUP-STALL-AUDIT.md')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
     foreach($file in @('LICENSE','THIRD_PARTY_NOTICES.md')){Copy-Item -LiteralPath (Join-Path $repo $file) -Destination $OutputDirectory}
@@ -47,7 +47,7 @@ try {
         [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
     })
     [ordered]@{
-        schemaVersion=1;kind='VictusFanControl.ProductGuiRelease';version='1.2.17';appDirectory='app';sourceHead=$SourceHead
+        schemaVersion=1;kind='VictusFanControl.ProductGuiRelease';version='1.3.0';appDirectory='app';sourceHead=$SourceHead
         inheritedModulesZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
         upperRangePreview=$release.upperRangePreview;fanCommandLimits=$release.fanCommandLimits;releaseChannel=$release.channel;releaseStage='target-specific-release';finalReleaseReady=$true;normalAutomatic='authorized-exact-target';physicalGuiValidation='partial-pending-current-target-observations'
         productPlatformRetention='removed-no-platform-sensor-acquisition';platformThermalExperiment='retired-no-live-entry'
