@@ -57,6 +57,14 @@ internal static partial class ProductGuiSelfTest
                 else
                 {
                     require(created==1 && next.Commands==0 && form.Draft.Ac.CpuPl1Watts==38,"Recovery activated early or lost unsaved preferences.");
+                    // Recovery includes disk/IPC work. Its old samples must not
+                    // become eligible merely because cleanup eventually finished.
+                    at=DateTimeOffset.UtcNow-VictusFanControl.Safety.SafetyGate.MaximumTelemetryAge-TimeSpan.FromSeconds(3);
+                    next.Publish(Ready(0));next.Publish(Ready(1));next.Publish(Ready(2));
+                    require(next.Commands==0,"Recovery admitted expired observations.");
+                    // Generate the independent fresh stream after recovery, not
+                    // before its variable-duration cleanup/diagnostic operations.
+                    at=DateTimeOffset.UtcNow.AddSeconds(-2);
                     next.Publish(Ready(0));next.Publish(Ready(1));next.Publish(Ready(2));PumpUntil(()=>!form.Canvas.Busy,"Recovery activation hung.");
                     require(next.Commands==(scenario=="resume"?1:0),"Recovery ignored prior Automatic intent, stop or disabled resumption.");
                 }
