@@ -39,6 +39,23 @@ internal static class PerformanceGuiIntegrationSelfTest
             var document = XDocument.Parse(xml);
             XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
             Require(WindowsStartupRegistration.HasCurrentContract(document,"S-1-5-21-123",@"C:\Program Files\Victus & Control\app.exe",@"C:\Modules & Tools"),"Current startup contract rejected.");
+            foreach(var triggerAsAccount in new[]{false,true})
+            foreach(var principalAsAccount in new[]{false,true})
+            {
+                var normalized=new XDocument(document);
+                if(triggerAsAccount)normalized.Descendants(ns+"LogonTrigger").Single().Element(ns+"UserId")!.Value=@"fixture-pc\tester";
+                if(principalAsAccount)normalized.Descendants(ns+"Principal").Single().Element(ns+"UserId")!.Value=@"FIXTURE-PC\Tester";
+                Require(WindowsStartupRegistration.HasCurrentContract(normalized,"S-1-5-21-123",@"C:\Program Files\Victus & Control\app.exe",@"C:\Modules & Tools",@"FIXTURE-PC\Tester"),
+                    "Scheduler SID/account normalization rejected the same OS identity.");
+                foreach(var foreign in new[]{@"OTHER-PC\Tester",@"FIXTURE-PC\Other","Tester","S-1-5-21-456",""})
+                foreach(var element in new[]{"LogonTrigger","Principal"})
+                {
+                    var altered=new XDocument(normalized);altered.Descendants(ns+element).Single().Element(ns+"UserId")!.Value=foreign;
+                    Require(!WindowsStartupRegistration.HasCurrentContract(altered,"S-1-5-21-123",@"C:\Program Files\Victus & Control\app.exe",@"C:\Modules & Tools",@"FIXTURE-PC\Tester"),
+                        "Foreign/ambiguous startup identity accepted: "+element);
+                }
+            }
+            Console.WriteLine("PASS startup task roundtrip: SID/current-account normalization for trigger and principal; case-insensitive canonical identity; other domains/users/SIDs and bare names refused; no task registration.");
             foreach(var mutation in new[]{("DisallowStartIfOnBatteries","true"),("StopIfGoingOnBatteries","true"),("ExecutionTimeLimit","PT1H"),
                 ("AllowHardTerminate","true"),("Arguments","--modules-dir wrong"),("RunLevel","LeastPrivilege"),("Command",@"C:\old.exe")})
             {

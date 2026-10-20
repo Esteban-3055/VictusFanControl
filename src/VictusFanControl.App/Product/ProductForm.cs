@@ -473,11 +473,23 @@ internal sealed partial class ProductForm : Form
         _canvas.Invalidate();
     }
     private void ResetSimulation()=>_canvas.Simulation=new(_draft.Get(_canvas.Editing).Fan);
-    private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));_saved=ProductProfilesStore.Copy(settings);_hasSavedBaseline=true;_canvas.Dirty=false;if(_canvas.StartupEnabled)await WindowsStartupRegistration.SetEnabledAsync(true,_modules,settings.StartMinimized);_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
+    private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));_saved=ProductProfilesStore.Copy(settings);_hasSavedBaseline=true;_canvas.Dirty=false;if(_canvas.StartupEnabled)await WriteStartupRegistrationAsync(true,settings.StartMinimized);_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
     private async Task ToggleStartupAsync()
     {
         if(!_canvas.StartupKnown){await CheckStartupRegistrationAsync();return;}
-        await RunAsync(async()=>{var requested=!_canvas.StartupEnabled;await WindowsStartupRegistration.SetEnabledAsync(requested,_modules,_draft.StartMinimized);_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.Notice="Registro de inicio actualizado. Guarda la opción Automático al iniciar para activarlo con sensores válidos.";});
+        await RunAsync(async()=>
+        {
+            var requested=!_canvas.StartupEnabled;
+            try
+            {
+                await WriteStartupRegistrationAsync(requested,_draft.StartMinimized);
+                _canvas.StartupEnabled=await ReadStartupRegistrationAsync();
+            }
+            catch { _canvas.StartupKnown=false;throw; }
+            _canvas.StartupKnown=true;
+            if(_canvas.StartupEnabled!=requested){_canvas.StartupKnown=false;throw new IOException("Windows no confirmó el estado solicitado del inicio. Vuelve a consultar el registro.");}
+            _canvas.Notice=requested?"Inicio con Windows activado.":"Inicio con Windows desactivado.";
+        });
     }
     private async Task RunAsync(Func<Task> command)
     {

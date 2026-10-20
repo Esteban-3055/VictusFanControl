@@ -39,10 +39,10 @@ internal static class WindowsStartupRegistration
         if(!document.Descendants(ns+"Enabled").All(e=>e.Value=="true"))return false;
         if(!requireCurrentExecutable)return true; // Preserve an enabled user's intent when installing another version.
         using var identity=WindowsIdentity.GetCurrent();
-        return HasCurrentContract(document,identity.User!.Value,Environment.ProcessPath!,modulesDirectory??Path.Combine(AppContext.BaseDirectory,"modules"));
+        return HasCurrentContract(document,identity.User!.Value,Environment.ProcessPath!,modulesDirectory??Path.Combine(AppContext.BaseDirectory,"modules"),identity.Name);
     }
 
-    internal static bool HasCurrentContract(XDocument document,string sid,string executable,string modules)
+    internal static bool HasCurrentContract(XDocument document,string sid,string executable,string modules,string? currentAccountName=null)
     {
         XNamespace ns="http://schemas.microsoft.com/windows/2004/02/mit/task";
         var root=document.Root;if(root?.Name!=ns+"Task")return false;
@@ -51,9 +51,14 @@ internal static class WindowsStartupRegistration
         var principal=root.Element(ns+"Principals")?.Elements().SingleOrDefault();
         var action=root.Element(ns+"Actions")?.Elements().SingleOrDefault();
         var arguments=action?.Element(ns+"Arguments")?.Value;
+        // Task Scheduler exports a logon UserId as DOMAIN\account even when
+        // registration used its SID. Accept only the current OS identity's
+        // exact SID or canonical account, never an arbitrary matching username.
+        bool SameIdentity(string? value)=>string.Equals(value,sid,StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrWhiteSpace(currentAccountName)&&string.Equals(value,currentAccountName,StringComparison.OrdinalIgnoreCase);
         return document.Descendants(ns+"Enabled").All(e=>e.Value=="true") &&
-            trigger?.Name==ns+"LogonTrigger" && trigger.Element(ns+"UserId")?.Value==sid &&
-            principal?.Name==ns+"Principal" && principal.Element(ns+"UserId")?.Value==sid &&
+            trigger?.Name==ns+"LogonTrigger" && SameIdentity(trigger.Element(ns+"UserId")?.Value) &&
+            principal?.Name==ns+"Principal" && SameIdentity(principal.Element(ns+"UserId")?.Value) &&
             principal.Element(ns+"LogonType")?.Value=="InteractiveToken" && principal.Element(ns+"RunLevel")?.Value=="HighestAvailable" &&
             action?.Name==ns+"Exec" && string.Equals(action.Element(ns+"Command")?.Value,executable,StringComparison.OrdinalIgnoreCase) &&
             string.Equals(action.Element(ns+"WorkingDirectory")?.Value,Path.GetDirectoryName(executable),StringComparison.OrdinalIgnoreCase) &&

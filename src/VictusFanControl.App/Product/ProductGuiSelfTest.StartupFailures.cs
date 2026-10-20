@@ -64,8 +64,51 @@ internal static partial class ProductGuiSelfTest
             }
             Console.WriteLine("PASS startup failures: optional task denied/timeout/malformed queries preserve runtime; query retry/single-flight/late-close; failed fence still releases; earlier release fault still awaits final Dispose; final unknown release stays failed; zero hardware IO.");
             TestStartupInventoryRefresh(require);
+            TestStartupToggleFlow(require);
         }
         finally{Environment.ExitCode=originalExitCode;}
+    }
+
+    private static void TestStartupToggleFlow(Action<bool,string> require)
+    {
+        var root=Path.Combine(Path.GetTempPath(),"vfc-startup-toggle-"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            foreach(var scenario in new[]{"enable","disable","write-failure","read-failure","mismatch"})
+            {
+                var persisted=scenario=="disable";int writes=0;
+                var modules=Path.Combine(root,"custom modules");
+                var runtime=new RecordingRuntime();bool? lastMinimized=null;
+                using var form=new ProductForm(modules,fixture:runtime,fixtureProfiles:new(),profilesPath:Path.Combine(root,scenario+".json"),
+                    startupRegistrationReader:()=>scenario=="read-failure"&&writes>0
+                        ? Task.FromException<bool>(new IOException("Fixture readback failed")):Task.FromResult(persisted));
+                form.StartupRegistrationWriterInFixture=(enabled,path,minimized)=>
+                {
+                    writes++;lastMinimized=minimized;require(path==modules,"Startup registration lost custom module path.");
+                    if(scenario=="write-failure")return Task.FromException(new IOException("Fixture registration failed"));
+                    if(scenario!="mismatch")persisted=enabled;
+                    return Task.CompletedTask;
+                };
+                form.Show();PumpUntil(()=>form.Canvas.StartupKnown,"Initial startup status never arrived.");
+                form.HandleCommand("startup-toggle");PumpUntil(()=>writes==1&&!form.Canvas.Busy,"Startup toggle did not complete.");
+                var success=scenario is "enable" or "disable";
+                require(form.Canvas.StartupKnown==success&&runtime.Commands==0&&runtime.Fences==0&&runtime.Disposals==0,
+                    "Startup checkbox lost confirmation state or affected hardware authority: "+scenario);
+                if(success)require(form.Canvas.StartupEnabled==(scenario=="enable")&&form.Canvas.Notice==(scenario=="enable"?"Inicio con Windows activado.":"Inicio con Windows desactivado."),
+                    "Startup toggle did not reflect confirmed state or retained unrelated Save Automatic message.");
+                if(scenario=="enable")
+                {
+                    form.HandleCommand("minimized-toggle");form.HandleCommand("save");PumpUntil(()=>writes==2&&!form.Canvas.Busy,"Enabled startup preferences save did not finish.");
+                    require(lastMinimized==form.Draft.StartMinimized&&form.Canvas.StartupEnabled,"Save lost startup state or minimized preference.");
+                    form.HandleCommand("startup-toggle");PumpUntil(()=>writes==3&&!form.Canvas.Busy,"Second toggle failed.");
+                    require(form.Canvas.StartupKnown&&!form.Canvas.StartupEnabled&&form.Canvas.Notice=="Inicio con Windows desactivado.","Confirmed checkbox could not be disabled.");
+                }
+                var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Startup toggle fixture exit failed.");
+            }
+            Console.WriteLine("PASS startup checkbox: confirmed enable/disable/save, custom modules, minimized preferences, write/read/mismatch failures become unknown; clear confirmation without Save Automatic; zero task registration or hardware IO.");
+        }
+        finally { Directory.Delete(root,true); }
     }
 
     private static void TestStartupInventoryRefresh(Action<bool,string> require)
