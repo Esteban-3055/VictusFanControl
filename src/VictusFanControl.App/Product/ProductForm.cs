@@ -460,6 +460,7 @@ internal sealed partial class ProductForm : Form
     internal void PresentationTick()
     {
         if(_closing||IsDisposed)return;
+        ObserveExternalCoolingDiagnostics();
         if(Visible&&WindowState!=FormWindowState.Minimized&&_canvas.Page==ProductPage.Home&&_fanAnimationSettings?.Reload()==true)
             _canvas.SetHomeAnimationSecondsPerRevolution(_fanAnimationSettings.SecondsPerRevolution);
         TryStartupAutomatic();TryAutomaticRecovery();TryAutomaticResumption();

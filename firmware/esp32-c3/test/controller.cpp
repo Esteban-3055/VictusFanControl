@@ -6,6 +6,7 @@
 #include "smoothing.h"
 #include "external_only.h"
 #include "maximum_output.h"
+#include "wifi_recovery.h"
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -20,6 +21,7 @@ int controllerTests() {
     smoothingTests();
     externalOnlyTests();
     maximumOutputTests();
+    wifiRecoveryTests();
     // Regression: 18 Hz with 8-bit LEDC caused ledcAttach() to fail and
     // abort() before Wi-Fi/TCP could start. ESP32-C3 requires 14-bit timing.
     require(board::PwmFrequencyHz==18&&board::PwmResolutionBits==14,"18 Hz / 14-bit LEDC profile");

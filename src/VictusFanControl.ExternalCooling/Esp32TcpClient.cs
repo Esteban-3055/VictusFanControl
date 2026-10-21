@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace VictusFanControl.ExternalCooling;
 
-public enum ExternalCoolingFailureKind { Connection, Authentication, Timeout, Protocol, Pairing, Internal }
+public enum ExternalCoolingFailureKind { Connection, Authentication, Timeout, Protocol, Pairing, Internal, NameResolution }
 
 public sealed record ExternalCoolingDiagnostics
 {
@@ -39,8 +39,23 @@ public sealed class Esp32TcpClient
         Detail=disabled?"Deshabilitado":"Desconectado",SessionId=null,Device=null});
     public void SetPairingFailure()=>Fail(ExternalCoolingFailureKind.Pairing);
     private void Fail(ExternalCoolingFailureKind kind)=>Update(d=>d with{State=ExternalCoolingConnectionState.Error,
-        Detail="No se pudo comunicar; consulta el último fallo",Failures=d.Failures+1,Device=null,SessionId=null,
+        Detail=FailureDetail(kind),Failures=d.Failures+1,Device=null,SessionId=null,
         LastFailureKind=kind,LastFailureUtc=DateTimeOffset.UtcNow});
+    internal static ExternalCoolingFailureKind ClassifyFailure(Exception ex,bool authenticating) =>
+        ex is OperationCanceledException?ExternalCoolingFailureKind.Timeout:
+        authenticating?ExternalCoolingFailureKind.Authentication:
+        ex is SocketException {SocketErrorCode:SocketError.HostNotFound or SocketError.TryAgain or SocketError.NoData or SocketError.NoRecovery}
+            ?ExternalCoolingFailureKind.NameResolution:
+        ex is InvalidDataException or JsonException or FormatException?ExternalCoolingFailureKind.Protocol:
+        ex is SocketException or IOException?ExternalCoolingFailureKind.Connection:ExternalCoolingFailureKind.Internal;
+    private static string FailureDetail(ExternalCoolingFailureKind? kind)=>kind switch
+    {
+        ExternalCoolingFailureKind.NameResolution=>"No se encuentra la base por su nombre en la red",
+        ExternalCoolingFailureKind.Connection=>"No se puede abrir la conexión con la base",
+        ExternalCoolingFailureKind.Authentication=>"La base no confirmó el emparejamiento",
+        ExternalCoolingFailureKind.Timeout=>"Se agotó el tiempo de comunicación con la base",
+        _=>"No se pudo comunicar; consulta el último fallo"
+    };
     public static TimeSpan ReconnectDelay(int consecutiveFailures,int jitterMilliseconds=0)
     {
         if(consecutiveFailures<1||jitterMilliseconds is <0 or >249)throw new ArgumentOutOfRangeException();
@@ -80,16 +95,12 @@ public sealed class Esp32TcpClient
                     if(token.IsCancellationRequested)break;
                     if(Diagnostics.State==ExternalCoolingConnectionState.Connected)failures=0;
                     // Deliberately exclude peer data, keys, proofs, host strings and exception messages.
-                    var kind=ex is OperationCanceledException?ExternalCoolingFailureKind.Timeout:
-                        authenticating?ExternalCoolingFailureKind.Authentication:
-                        ex is InvalidDataException or JsonException or FormatException?ExternalCoolingFailureKind.Protocol:
-                        ex is SocketException or IOException?ExternalCoolingFailureKind.Connection:ExternalCoolingFailureKind.Internal;
-                    Fail(kind);
+                    Fail(ClassifyFailure(ex,authenticating));
                 }
                 if(!settings.AutoReconnect)break;
                 failures=Diagnostics.State==ExternalCoolingConnectionState.Connected?1:Math.Min(failures+1,7);
                 var delay=ReconnectDelay(failures,Random.Shared.Next(0,250));
-                Update(d=>d with{State=ExternalCoolingConnectionState.Reconnecting,Detail="Esperando reconexión"});
+                Update(d=>d with{State=ExternalCoolingConnectionState.Reconnecting,Detail="Reintentando: "+FailureDetail(d.LastFailureKind)});
                 await Task.Delay(delay,token).ConfigureAwait(false);
             }
         }

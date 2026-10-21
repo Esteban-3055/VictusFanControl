@@ -17,20 +17,32 @@ internal sealed partial class ProductForm
     private readonly string? _externalCoolingPath;
     private Task _externalCoolingStartup=Task.CompletedTask;
     private readonly SemaphoreSlim _externalSettingsGate=new(1,1);
+    private (ExternalCoolingConnectionState State,long Failures)? _externalLogged;
+    internal static string ExternalCoolingLogLine(ExternalCoolingDiagnostics d)=>
+        $"PRODUCT EXTERNAL LINK: state={d.State};failure={d.LastFailureKind};failures={d.Failures};connections={d.Connections};sent={d.Sent};received={d.Received}";
+    private void ObserveExternalCoolingDiagnostics()
+    {
+        if(_externalCooling is null)return;
+        var d=_externalCooling.Diagnostics;var identity=(d.State,d.Failures);
+        if(_externalLogged==identity)return;
+        _externalLogged=identity;AppLog.Write(ExternalCoolingLogLine(d));
+    }
     private async Task InitializeExternalCoolingAsync()
     {
         if((_isolatedRuntime&&_externalCoolingPath is null)||_externalCooling is not null)return;
         _externalCoolingStore=new(_externalCoolingPath);
         _externalCoolingSettings=_externalCoolingStore.Load(out _externalCoolingLoadNotice);
+        AppLog.Write($"PRODUCT EXTERNAL STARTUP: mode={_externalCoolingSettings.Mode};autoReconnect={_externalCoolingSettings.AutoReconnect};paired={_externalCoolingStore.Paired};invalidSettings={_externalCoolingLoadNotice is not null}");
         _externalPairingReader=_externalCoolingStore.ReadKey;
         _externalCooling=new(new TelemetryExportService(()=>Volatile.Read(ref _runtime)?.State??new(){Runtime="Unavailable",FanAuthority="Unknown"},new WindowsPhysicalMemoryUsage()),()=>_externalPairingReader());
         await ExternalCoolingOperationAsync(()=>_externalCooling.ConfigureAsync(_externalCoolingSettings));
+        ObserveExternalCoolingDiagnostics();
         if(!_closing&&!IsDisposed)LayoutExternalCoolingPage();
     }
     private async Task ExternalCoolingOperationAsync(Func<Task> operation)
     {
         try{await operation();_externalCoolingError=null;}
-        catch(Exception){_externalCoolingError="Base externa: revisa configuración y emparejamiento.";}
+        catch(Exception ex){_externalCoolingError="Base externa: revisa configuración y emparejamiento.";AppLog.Write("PRODUCT EXTERNAL OPERATION FAILED: "+ex.GetType().Name);}
     }
     private void ExternalCoolingPowerEvent(int code)
     {

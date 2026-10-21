@@ -14,6 +14,7 @@
 #include "LcdPresentation.h"
 #include "LcdTransport.h"
 #include "NtcSensor.h"
+#include "WifiRecovery.h"
 #if __has_include("config.local.h")
 #include "config.local.h"
 #endif
@@ -36,6 +37,10 @@ std::string input,output; size_t sentBytes=0;
 uint32_t frameAt=0,acceptedAt=0,lastFrameAt=0,writeAt=0,nextConnect=0,nextAccept=0;
 bool reading=false,configured=false,networkReady=false;
 bool wifiStarted=false;
+victus::WifiRecovery wifiRecovery;
+std::atomic<uint32_t> lastWifiEventAt{0},wifiDisconnects{0},lastWifiReason{0};
+bool mdnsReady=false,mdnsAttempted=false;
+uint32_t lastMdnsAttempt=0;
 uint32_t lastPowerCheck=0;
 victus::AmbientSample ambient;
 portMUX_TYPE ambientLock=portMUX_INITIALIZER_UNLOCKED;
@@ -108,7 +113,14 @@ void disconnectPeer() {
 }
 void stopNetwork() {
     disconnectPeer(); if (listener>=0) { close(listener); listener=-1; }
-    if (networkReady) MDNS.end(); networkReady=false;
+    if (mdnsReady) MDNS.end(); mdnsReady=false;mdnsAttempted=false;networkReady=false;
+}
+void startMdns(uint32_t now) {
+    if(mdnsReady || (mdnsAttempted&&static_cast<uint32_t>(now-lastMdnsAttempt)<5000)) return;
+    mdnsAttempted=true;lastMdnsAttempt=now;
+    mdnsReady=MDNS.begin(board::Hostname);
+    if(mdnsReady) MDNS.addService("victus-base","tcp",board::Port);
+    else Serial.println("mDNS no disponible; se reintentara sin cerrar TCP.");
 }
 void startServer() {
     listener=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP); if (listener<0) return;
@@ -116,11 +128,11 @@ void startServer() {
     sockaddr_in address{}; address.sin_family=AF_INET; address.sin_port=htons(board::Port); address.sin_addr.s_addr=INADDR_ANY;
     if (bind(listener,reinterpret_cast<sockaddr*>(&address),sizeof(address))!=0 || listen(listener,1)!=0) { close(listener);listener=-1;return; }
     fcntl(listener,F_SETFL,O_NONBLOCK);
-    if (MDNS.begin(board::Hostname)) MDNS.addService("victus-base","tcp",board::Port);
+    startMdns(millis());
     networkReady=true; Serial.printf("Servidor TCP %s:%u disponible.\n",WiFi.localIP().toString().c_str(),board::Port);
 }
 void network(uint32_t now) {
-    if (!configured || provision) return;
+    if (!configured || provision) { wifiRecovery.reset();return; }
     // Bounded readback, including while associating. Never poll driver power at loop frequency.
     if(wifiStarted&&static_cast<uint32_t>(now-lastPowerCheck)>=5000) {
         lastPowerCheck=now;
@@ -134,9 +146,20 @@ void network(uint32_t now) {
             wifiStarted=true;
             if(!WiFi.setTxPower(WIFI_POWER_8_5dBm)) Serial.println("No se pudo aplicar potencia WiFi 8.5 dBm.");
         }
+        // Sample time after the callback timestamp to avoid treating an event
+        // arriving during this iteration as a full unsigned-clock wrap.
+        uint32_t eventAt=lastWifiEventAt.load();uint32_t sampledNow=millis();
+        if(wifiRecovery.retry(sampledNow,true,false,eventAt)) {
+            bool accepted=WiFi.reconnect();
+            Serial.printf("WiFi recuperacion=%lu aceptada=%s estado=%d motivo=%lu; sin borrar NVS.\n",
+                static_cast<unsigned long>(wifiRecovery.attempts()),accepted?"si":"no",static_cast<int>(WiFi.status()),
+                static_cast<unsigned long>(lastWifiReason.load()));
+        }
         return;
     }
+    wifiRecovery.reset();
     if (listener<0) { if (static_cast<int32_t>(now-nextConnect)>=0) { startServer(); nextConnect=now+5000; } return; }
+    startMdns(now);
     int incoming=accept(listener,nullptr,nullptr);
     if (incoming>=0) {
         if (peer>=0 || static_cast<int32_t>(now-nextAccept)<0) close(incoming);
@@ -312,11 +335,16 @@ void wipe(std::string& s) { volatile char* p=s.empty()?nullptr:&s[0]; for(size_t
 void provisioningLine(std::string& line) {
     if (!provision) {
         if (line=="setup") { stopNetwork(); WiFi.setAutoReconnect(false);WiFi.disconnect();wifiStarted=false; provision=1;Serial.println("SSID (sin eco):"); }
-        else if (line=="status") { Serial.printf("Configurado=%s PWM=%s Modo=%s\n",configured?"si":"no",board::EnablePwm?"activo":"desactivado",remote.load()?"Remote":"Local"); }
+        else if (line=="status" || line=="wifi") {
+            Serial.printf("Configurado=%s PWM=%s Modo=%s WiFi_estado=%d desconexiones=%lu motivo=%lu recuperaciones=%lu mDNS=%s\n",
+                configured?"si":"no",board::EnablePwm?"activo":"desactivado",remote.load()?"Remote":"Local",static_cast<int>(WiFi.status()),
+                static_cast<unsigned long>(wifiDisconnects.load()),static_cast<unsigned long>(lastWifiReason.load()),
+                static_cast<unsigned long>(wifiRecovery.attempts()),mdnsReady?"si":"no");
+        }
         else if (line=="ntc") printNtcDiagnostic();
         else if (line=="lcd") printLcdDiagnostic();
         else if (line=="erase CONFIRM") { stopNetwork();WiFi.setAutoReconnect(false);WiFi.disconnect(true,true);wifiStarted=false;preferences.clear();configured=false;pairing.fill(0);ssid="";password="";Serial.println("Configuracion borrada."); }
-        else Serial.println("Comandos USB: setup | status | ntc | lcd | erase CONFIRM");
+        else Serial.println("Comandos USB: setup | status | wifi | ntc | lcd | erase CONFIRM");
     } else if (provision==1) {
         if (line.empty()||line.size()>32) {Serial.println("SSID invalido; reintenta.");return;}
         stagedSsid=line;provision=2;Serial.println("Clave WiFi (sin eco; vacia para red abierta):");
@@ -379,8 +407,16 @@ void setup() {
         ssid=WIFI_SSID;password=WIFI_PASSWORD;configured=ssid.length()>0&&ssid.length()<=32;
     }
 #endif
+    WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info) {
+        if(event==ARDUINO_EVENT_WIFI_STA_START || event==ARDUINO_EVENT_WIFI_STA_STOP ||
+           event==ARDUINO_EVENT_WIFI_STA_CONNECTED || event==ARDUINO_EVENT_WIFI_STA_DISCONNECTED ||
+           event==ARDUINO_EVENT_WIFI_STA_GOT_IP || event==ARDUINO_EVENT_WIFI_STA_LOST_IP) lastWifiEventAt.store(millis());
+        if(event==ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+            lastWifiReason.store(info.wifi_sta_disconnected.reason);wifiDisconnects.fetch_add(1);
+        }
+    });
     WiFi.persistent(false);WiFi.mode(WIFI_STA);WiFi.setHostname(board::Hostname);WiFi.setAutoReconnect(true);WiFi.setSleep(false);
-    Serial.println("Victus Base v1. Comandos USB: setup | status | ntc | lcd. Sin firmware fisico validado.");
+    Serial.println("Victus Base v1. Comandos USB: setup | status | wifi | ntc | lcd. Sin firmware fisico validado.");
     Serial.println("Politica externa: NTC solo lectura; sin orden valida, rampa a PWM 130/255.");
     lcdCycleStartedAt=millis();
     display(lcdCycleStartedAt);

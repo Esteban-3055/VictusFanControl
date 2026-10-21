@@ -37,6 +37,14 @@ internal static partial class Program
         var delays=Enumerable.Range(1,10).Select(n=>Esp32TcpClient.ReconnectDelay(n).TotalMilliseconds).ToArray();
         Require(delays.SequenceEqual(new double[]{500,1000,2000,4000,8000,16000,30000,30000,30000,30000}),"Backoff did not reach/bound 30 seconds.");
         Require(Esp32TcpClient.ReconnectDelay(int.MaxValue,249).TotalMilliseconds==30249,"Backoff overflow/jitter changed.");
+        foreach(var error in new[]{SocketError.HostNotFound,SocketError.TryAgain,SocketError.NoData,SocketError.NoRecovery})
+        {
+            Require(Esp32TcpClient.ClassifyFailure(new SocketException((int)error),false)==ExternalCoolingFailureKind.NameResolution,"Name-resolution failure was hidden as generic connection failure.");
+            Require(Esp32TcpClient.ClassifyFailure(new SocketException((int)error),true)==ExternalCoolingFailureKind.Authentication,"Authentication boundary lost its failure classification.");
+        }
+        Require(Esp32TcpClient.ClassifyFailure(new SocketException((int)SocketError.ConnectionRefused),false)==ExternalCoolingFailureKind.Connection&&
+            Esp32TcpClient.ClassifyFailure(new OperationCanceledException(),false)==ExternalCoolingFailureKind.Timeout,
+            "Connection refusal or timeout mislabeled as name resolution.");
         Console.WriteLine("PASS source-age evidence, Automatic demand/date, unsynchronized clocks, backoff saturation.");
     }
 

@@ -11,6 +11,10 @@ internal static partial class ProductGuiSelfTest
 {
     internal static int RunExternalCoolingChecks()
     {
+        var privateMarker="opaque-private-peer-field";
+        var safeLog=ProductForm.ExternalCoolingLogLine(new(){State=ExternalCoolingConnectionState.Reconnecting,LastFailureKind=ExternalCoolingFailureKind.NameResolution,
+            Detail=privateMarker,SessionId=privateMarker,LastReceived=privateMarker,LastSent=privateMarker,Failures=2});
+        ExternalCoolingSelfTest.Require(!safeLog.Contains(privateMarker)&&safeLog.Contains("NameResolution")&&safeLog.Contains("failures=2"),"External connection log leaked opaque data or hid network failure.");
         try
         {
             var root=Path.GetFullPath("logs/external-cooling-self-test");Directory.CreateDirectory(root);

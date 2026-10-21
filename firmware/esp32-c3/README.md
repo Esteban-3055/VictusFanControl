@@ -118,8 +118,14 @@ El archivo privado está ignorado por Git. **Una imagen compilada con él contie
 secretos**; no compartirla. NVS tampoco está cifrada en este perfil.
 
 Se llama WiFi.begin una vez por inicio/provisión, se conserva AutoReconnect y
-se fija 8,5 dBm, con verificación al asociar. No se reconfigura la estación cada
-10 s mientras intenta conectar. Al perder IP se cierran sockets y mDNS.
+se fija 8,5 dBm, con verificación al asociar. Si la estación permanece sin conexión
+y sin eventos durante al menos 60 s, un watchdog solicita WiFi.reconnect sin
+borrar credenciales. Las esperas entre solicitudes son 60/120/240/300 s; un evento
+reciente pospone la intervención para no interrumpir una asociación en progreso.
+No se reconfigura la estación cada 10 s. Al perder conexión se cierran sockets y
+mDNS; si falla el inicio de mDNS se reintenta cada 5 s sin cerrar TCP.
+`wifi` o `status` muestran estado numérico, último motivo de desconexión,
+contador y recuperaciones de este arranque, sin SSID, contraseña ni clave.
 No se fija 192.168.100.133: una reserva DHCP depende de la MAC y del router.
 
 En Windows: Base externa → desmarcar Simulador → host `victus-base.local` o IP
