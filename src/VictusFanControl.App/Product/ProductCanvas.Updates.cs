@@ -23,7 +23,7 @@ internal sealed partial class ProductCanvas
         Button(g,"updates-install",DownloadedUpdate is { } cached?"Instalar v"+cached.Version:"Instalar",new(1156,579,460,48),true,!UpdateBusy&&DownloadedUpdate is { } downloaded&&(!downloaded.IsPrerelease||Profiles.IncludePrereleaseUpdates)&&!Dirty);
         Card(g,new(310,668,1337,155));
         if(State.PerformanceRecovery is {Pending:true} recovery)
-            Button(g,"recovery-run","Recuperar sesiones",new(1120,689,496,43),true,!UpdateBusy&&recovery.Actionable);
+            Button(g,"recovery-run","Recuperar sesión definitiva",new(1120,689,496,43),true,!UpdateBusy&&recovery.Actionable);
         DrawText(g,"La descarga se conserva hasta que puedas instalar",334,689,24,null,780,true);
         DrawText(g,Dirty?"Guarda o descarta los cambios antes de instalar la actualización.":State.PerformanceRecovery is {Pending:true}?
             Profiles.RecoverSessionsAutomatically?"Al instalar, se recuperará la sesión pendiente y se continuará automáticamente si la liberación queda confirmada. La descarga se conserva.":

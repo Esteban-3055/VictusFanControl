@@ -29,6 +29,8 @@ internal sealed partial class ProductForm : Form
     private bool _displayOff;
     private Task _lifecycleRelease = Task.CompletedTask;
     private int _pendingCommands;
+    private readonly bool _requirePowerNotifications;
+    internal Action? PowerRegistrationFixture { get; set; }
     private Task _startup = Task.CompletedTask;
     private ProductStartupAutomatic? _startupAutomatic;
     private ProductProfiles? _startupPreferences;
@@ -42,12 +44,17 @@ internal sealed partial class ProductForm : Form
     internal ProductCanvas Canvas => _canvas;
     internal ProductProfiles Draft => ProductProfilesStore.Copy(_draft);
     internal bool Dirty => _canvas.Dirty;
-    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null,Func<ProductDisplayMetrics>? displayMetricsInFixture=null,string? fanAnimationPath=null,string? externalCoolingPath=null)
+    internal ProductForm(string modules,bool minimized=false,IProductRuntime? fixture=null,ProductProfiles? fixtureProfiles=null,Func<Task<IProductRuntime>>? runtimeFactory=null,string? profilesPath=null,bool registerPowerNotificationsInFixture=false,ProductAutomaticReviewMode? automaticReview=null,ProductRestartState? restartState=null,string? restartDirectory=null,bool enableStartupAutomaticInFixture=false,Func<ProductProfiles,Task<IProductRuntime>>? retryRuntimeFactory=null,Func<PerformanceRecoveryPreview>? recoveryPreflight=null,Func<ProductDisplayMetrics>? displayMetricsInFixture=null,string? fanAnimationPath=null,string? externalCoolingPath=null,Func<Task<bool>>? startupRegistrationReader=null)
     {
         SuspendLayout();
         _externalCoolingPath=externalCoolingPath;
         _retryRuntimeFactory=retryRuntimeFactory;_modules=modules;_automaticReview=automaticReview;_runtime=fixture;_profilesPath=profilesPath;
         _isolatedRuntime=fixture is not null||runtimeFactory is not null;_restartDirectory=restartDirectory;_restartOpening=restartState is not null;
+        _requirePowerNotifications=!_isolatedRuntime||registerPowerNotificationsInFixture;
+        _startupRegistrationReader = startupRegistrationReader;
+        if (!_isolatedRuntime && _startupRegistrationReader is null) _startupRegistrationReader = ()=>WindowsStartupRegistration.IsEnabledAsync(_modules);
+        _startupRecoveryPreviewReader = recoveryPreflight;
+        if (!_isolatedRuntime && _startupRecoveryPreviewReader is null) _startupRecoveryPreviewReader = () => PerformanceRecoveryPreview.Read();
         // Recovery fixtures must not inspect the user's real ownership records.
         // Tests that exercise pending recovery supply their own selection reader.
         if (_isolatedRuntime) RecoverySelectionReader = () => new(Guid.Empty, Guid.Empty);
@@ -74,7 +81,7 @@ internal sealed partial class ProductForm : Form
         _presentationTimer.Tick+=(_,_)=>PresentationTick();
         Text="VictusFanControl";Icon=_icons.Program;FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleDimensions=new SizeF(96,96);AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=DesignWindowSize;StartPosition=FormStartPosition.CenterScreen;
-        _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??"";Controls.Add(_canvas);
+        _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??AppLog.InitializationFailure??"";Controls.Add(_canvas);
         _canvas.PageChanged+=(_,_)=>LayoutExternalCoolingPage();_canvas.SizeChanged+=(_,_)=>LayoutExternalCoolingPage();
         if(restartState is not null)_canvas.Dirty=restartState.Dirty;
         _canvas.Command+=HandleCommand;_canvas.ValueEdited+=EditValue;_canvas.NodeEdited+=EditNode;
@@ -83,6 +90,7 @@ internal sealed partial class ProductForm : Form
         var menu=new ContextMenuStrip();menu.Items.Add("Abrir VictusFanControl",null,(_,_)=>ShowFromTray());
         menu.Items.Add("Volver a Firmware",null,(_,_)=>HandleCommand("firmware"));
         menu.Items.Add("Liberar CPU / GPU",null,(_,_)=>HandleCommand("performance-release"));
+        menu.Items.Add("Recuperar sesión definitiva",null,async(_,_)=>await ForceSessionRecoveryAsync());
         menu.Items.Add("Reiniciar sesión",null,async(_,_)=>await RestartSessionAsync());
         menu.Items.Add("Salir",null,(_,_)=>{_exitRequested=true;Close();});
         _tray=new(){Icon=_icons.Default,Text="VictusFanControl · Firmware",ContextMenuStrip=menu,Visible=fixture is null&&runtimeFactory is null};
@@ -112,7 +120,7 @@ internal sealed partial class ProductForm : Form
                         CpuState=pending.CpuSession.HasValue?"Recovering":"Disabled",GpuState=pending.GpuSession.HasValue?"Recovering":"Disabled"};
                     _canvas.Page=ProductPage.Settings;_canvas.Notice=pending.Detail;_canvas.AutomaticRetryAvailable=false;
                     _recoveryAtStartup = true;
-                    if(!isolated)RegisterPowerNotifications();UpdateTray(_canvas.State);_presentationTimer.Start();
+                    if(_requirePowerNotifications)RegisterPowerNotifications();UpdateTray(_canvas.State);_presentationTimer.Start();
                     if((minimized||_draft.StartMinimized)&&!ProductFanRangePreview.Enabled&&!_restartOpening)Hide();
                     return; // The recovery monitor opens no telemetry/controller until release succeeds.
                 }
@@ -125,17 +133,22 @@ internal sealed partial class ProductForm : Form
             if((!isolated||enableStartupAutomaticInFixture)&&_automaticReview is null&&!ProductFanRangePreview.Enabled&&!_restartOpening&&!_displayOff&&initialPowerBoundary==_updateLifecycleBoundary&&_saved.ActivateAutomaticOnStart)
             { _startupPreferences=ProductProfilesStore.Copy(_saved); _startupAutomatic=new(Environment.TickCount64,protections:_saved.Protections); }
             AttachRuntime(_runtime);UpdateState(_runtime.State);
-            if(!isolated||registerPowerNotificationsInFixture)RegisterPowerNotifications();
+            if(_requirePowerNotifications)RegisterPowerNotifications();
             _runtime.Start();_presentationTimer.Start();
-            if(!isolated){_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.StartupKnown=true;}
+            _ = CheckStartupRegistrationAsync(); // Optional status must never own or fail hardware startup/exit.
             if(!_closing&&!IsDisposed&&(minimized||_draft.StartMinimized)&&!ProductFanRangePreview.Enabled&&!_restartOpening)Hide();
         }
         catch(Exception ex)
         {
             _startupFailure="No se pudo iniciar: "+ex.Message;
-            if(_runtime is not null){_runtime.FenceLifecycle("Startup incompleto");_lifecycleRelease=Task.Run(()=>_runtime.ReleaseForLifecycleAsync("Startup incompleto"));}
+            if(_runtime is { } incomplete)
+            {
+                try { incomplete.FenceLifecycle("Startup incompleto"); }
+                catch(Exception fence) { AppLog.Write("Product startup fence failed; cleanup still required: "+fence); }
+                _lifecycleRelease=Task.Run(()=>incomplete.ReleaseForLifecycleAsync("Startup incompleto"));
+            }
             AppLog.Write("Product GUI startup: "+ex);
-            if(!_closing&&!IsDisposed)UpdateState(_runtime?.State??_canvas.State);
+            if(!_closing&&!IsDisposed){UpdateState(_runtime?.State??_canvas.State);_presentationTimer.Start();}
         }
         finally{if(!IsDisposed)_canvas.Invalidate();}
     }
@@ -152,7 +165,8 @@ internal sealed partial class ProductForm : Form
     {
         if(IsDisposed||_closing)return;
         if(InvokeRequired){if(IsHandleCreated)BeginInvoke(()=>UpdateState(state));return;}
-        if(_startupFailure is not null&&state.Failure is null)state=state with{Failure=_startupFailure};
+        if(_startupFailure is not null)state=state with{Failure=state.Failure??_startupFailure,
+            Runtime="Failed",LifecycleBlocked=true,LifecycleBlockReason=_startupFailure,CanApplyPerformance=false};
         ObserveAutomaticResumption(state);
         _canvas.State=state;
         if(state.Source is "Ac" or "Battery" && _lastEditingSource!=state.Source)
@@ -181,6 +195,7 @@ internal sealed partial class ProductForm : Form
         if(InvokeRequired){if(IsHandleCreated&&!IsDisposed)BeginInvoke(TryStartupAutomatic);return;}
         if(_closing||_restarting||_displayOff||_startupAutomatic is null||_startupAutomatic.Finished||_runtime is null||_canvas.Busy||Environment.TickCount64<_startupRetryAt)return;
         var observedAt=DateTimeOffset.UtcNow;var clock=Environment.TickCount64;
+        _runtime.RequestAutomaticTelemetry();
         var activate=_startupAutomatic.Observe(_canvas.State,observedAt,clock);
         _canvas.Notice=_startupAutomatic.Status;
         var waitCodes=string.Join(";",_startupAutomatic.Issues.Select(i=>i.Code));
@@ -216,6 +231,8 @@ internal sealed partial class ProductForm : Form
     }
     internal void HandleCommand(string id)
     {
+        if(_closing||IsDisposed)return;
+        if(id.StartsWith("external-curve-",StringComparison.Ordinal)&&_canvas.ExternalCurve is{} curve){_=curve.ExecuteAsync(id[15..]);return;}
         if(id!="external-cooling"&&id.StartsWith("external-",StringComparison.Ordinal)&&_externalCoolingPage is{} external){_=external.ExecuteAsync(id);return;}
         if (id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release" or "session-restart")
             _automaticRecoveryResumeSuppressed = true;
@@ -235,6 +252,7 @@ internal sealed partial class ProductForm : Form
             _startupAutomatic?.Cancel("Automático al iniciar cancelado por el usuario.");
         if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")_automaticResumption.Cancel();
         if(id=="session-restart"){_ = RestartSessionAsync();return;}
+        if(id=="session-force-recovery"){_ = ForceSessionRecoveryAsync();return;}
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
         if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
         if(HandleAdvancedCommand(id))return;
@@ -345,6 +363,7 @@ internal sealed partial class ProductForm : Form
     }
     internal void EditValue(string key,int value)
     {
+        if(key.StartsWith("external-curve-value-",StringComparison.Ordinal)){if(!_closing&&!IsDisposed&&!_canvas.Busy)_canvas.ExternalCurve?.EditValue(key[21..],value);return;}
         if(_canvas.Busy||_closing||IsDisposed)return;
         if(key.StartsWith("sim-input-")){_canvas.SimulationInputs=_canvas.SimulationInputs.With(int.Parse(key[10..]),value);_canvas.Invalidate();return;}
         var slot=_canvas.Editing;var p=_draft.Get(slot);
@@ -441,6 +460,7 @@ internal sealed partial class ProductForm : Form
     internal void PresentationTick()
     {
         if(_closing||IsDisposed)return;
+        ObserveExternalCoolingDiagnostics();
         if(Visible&&WindowState!=FormWindowState.Minimized&&_canvas.Page==ProductPage.Home&&_fanAnimationSettings?.Reload()==true)
             _canvas.SetHomeAnimationSecondsPerRevolution(_fanAnimationSettings.SecondsPerRevolution);
         TryStartupAutomatic();TryAutomaticRecovery();TryAutomaticResumption();
@@ -454,8 +474,24 @@ internal sealed partial class ProductForm : Form
         _canvas.Invalidate();
     }
     private void ResetSimulation()=>_canvas.Simulation=new(_draft.Get(_canvas.Editing).Fan);
-    private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));_saved=ProductProfilesStore.Copy(settings);_hasSavedBaseline=true;_canvas.Dirty=false;if(_canvas.StartupEnabled)await WindowsStartupRegistration.SetEnabledAsync(true,_modules,settings.StartMinimized);_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
-    private async Task ToggleStartupAsync() => await RunAsync(async()=>{var requested=!_canvas.StartupEnabled;await WindowsStartupRegistration.SetEnabledAsync(requested,_modules,_draft.StartMinimized);_canvas.StartupEnabled=await WindowsStartupRegistration.IsEnabledAsync();_canvas.Notice="Registro de inicio actualizado. Guarda la opción Automático al iniciar para activarlo con sensores válidos.";});
+    private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));_saved=ProductProfilesStore.Copy(settings);_hasSavedBaseline=true;_canvas.Dirty=false;if(_canvas.StartupEnabled)await WriteStartupRegistrationAsync(true,settings.StartMinimized);_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
+    private async Task ToggleStartupAsync()
+    {
+        if(!_canvas.StartupKnown){await CheckStartupRegistrationAsync();return;}
+        await RunAsync(async()=>
+        {
+            var requested=!_canvas.StartupEnabled;
+            try
+            {
+                await WriteStartupRegistrationAsync(requested,_draft.StartMinimized);
+                _canvas.StartupEnabled=await ReadStartupRegistrationAsync();
+            }
+            catch { _canvas.StartupKnown=false;throw; }
+            _canvas.StartupKnown=true;
+            if(_canvas.StartupEnabled!=requested){_canvas.StartupKnown=false;throw new IOException("Windows no confirmó el estado solicitado del inicio. Vuelve a consultar el registro.");}
+            _canvas.Notice=requested?"Inicio con Windows activado.":"Inicio con Windows desactivado.";
+        });
+    }
     private async Task RunAsync(Func<Task> command)
     {
         if(_closing)return;
@@ -466,7 +502,7 @@ internal sealed partial class ProductForm : Form
     protected override void Dispose(bool disposing)
     {
         if(disposing){_externalCoolingPage?.Dispose();_externalCooling?.Suspend();_=DisposeExternalCoolingAsync();}
-        if(disposing){DisposeUpdateCancellation();_presentationTimer.Dispose();UnregisterPowerNotifications();DetachRuntime();_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();_icons.Dispose();}
+        if(disposing){ClearSessionEndReason();DisposeUpdateCancellation();_presentationTimer.Dispose();UnregisterPowerNotifications();DetachRuntime();_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();_icons.Dispose();}
         base.Dispose(disposing);
     }
     private void ToggleMaximize()=>WindowState=WindowState==FormWindowState.Maximized?FormWindowState.Normal:FormWindowState.Maximized;
@@ -476,13 +512,42 @@ internal sealed partial class ProductForm : Form
     {
         if(_disposedRuntime)return;
         if(e.CloseReason is not(CloseReason.WindowsShutDown or CloseReason.TaskManagerClosing)&&!_exitRequested){e.Cancel=true;Hide();return;}
-        e.Cancel=true;if(_closing)return;_closing=true;_updateCancellation.Cancel();_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
-        try {if(_automaticRetryTask is not null)await _automaticRetryTask;if(_restartTask is not null)await _restartTask;if(_recoveryTask is not null)await _recoveryTask;if(_updateInstallTask is not null)await _updateInstallTask;await ShutdownRuntimeAsync();}
+        e.Cancel=true;await BeginExitAsync();
+    }
+    private Task? _exitTask;
+    private Task BeginExitAsync(bool closeWindow = true) => _exitTask ??= ExitCoreAsync(closeWindow);
+    private async Task ExitCoreAsync(bool closeWindow)
+    {
+        _closing=true;_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
+        try { _updateCancellation.Cancel(); } catch(Exception ex) { AppLog.Write("Product update cancellation failed during exit: "+ex); }
+        try { _runtime?.FenceLifecycle("Cierre de la aplicación"); } catch(Exception ex) { AppLog.Write("Product shutdown fence unresolved: "+ex); }
+        // A completed coordinator failure must not skip final cleanup. Pending
+        // operations still retain ownership and must finish before disposal.
+        foreach(var operation in new[]{_automaticRetryTask,_restartTask,_recoveryTask,_updateInstallTask})
+        {
+            try { if(operation is not null)await operation; }
+            catch(Exception ex) { AppLog.Write("Product coordinator failed before final shutdown: "+ex); }
+        }
+        try {await ShutdownRuntimeAsync();}
         catch(Exception ex){Environment.ExitCode=171;AppLog.Write("Product shutdown unresolved: "+ex);}
-        finally{await DisposeExternalCoolingAsync();_disposedRuntime=true;_tray.Visible=false;Close();_shutdown.TrySetResult();}
+        finally
+        {
+            try { await DisposeExternalCoolingAsync(); }
+            catch(Exception ex) { Environment.ExitCode=171;AppLog.Write("External cooling shutdown failed: "+ex); }
+            finally { _disposedRuntime=true;_tray.Visible=false;try { if(closeWindow)Close(); } finally { _shutdown.TrySetResult(); } }
+        }
     }
     protected override void WndProc(ref Message m)
     {
+        if(m.Msg==0x11) // WM_QUERYENDSESSION: acknowledge; cleanup belongs to WM_ENDSESSION.
+        {
+            RegisterSessionEndReason();m.Result=(IntPtr)1;return;
+        }
+        if(m.Msg==0x16) // WM_ENDSESSION: do not return with only an async-void cleanup scheduled.
+        {
+            if(m.WParam!=IntPtr.Zero)WaitForWindowsSessionEnd(TimeSpan.FromSeconds(20));
+            ClearSessionEndReason();m.Result=IntPtr.Zero;return;
+        }
         if(m.Msg==0x84&&FormBorderStyle==FormBorderStyle.None&&WindowState!=FormWindowState.Maximized)
         {
             var p=PointToClient(new((short)(m.LParam.ToInt64()&0xFFFF),(short)((m.LParam.ToInt64()>>16)&0xFFFF)));var edge=Math.Max(6,DeviceDpi/12);
@@ -547,6 +612,9 @@ internal sealed partial class ProductForm : Form
     [StructLayout(LayoutKind.Sequential)]private struct PowerSetting{internal Guid Id;internal uint Length;}
     private void RegisterPowerNotifications()
     {
+        if(_isolatedRuntime&&PowerRegistrationFixture is { } fixture){fixture();return;}
+        if(_suspendRegistration!=IntPtr.Zero&&_displayRegistration!=IntPtr.Zero)return;
+        UnregisterPowerNotifications();
         try
         {
             _suspendRegistration=RegisterSuspendResumeNotification(Handle,0);

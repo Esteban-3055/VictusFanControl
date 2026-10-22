@@ -4,6 +4,7 @@
 #include <string>
 #include <stdint.h>
 #include <cmath>
+#include "ExternalController.h"
 
 namespace victus {
 using Key = std::array<uint8_t, 32>;
@@ -19,34 +20,27 @@ bool equalProof(const std::string&, const std::string&);
 bool validateJson(const std::string& line, std::string& rawPayload);
 struct Measurement {
     double cpu = -1, gpu = -1, ram = -1, demand = -1;
+    // Signed, validated telemetry from Windows, nullable when not available.
+    // Never substitute 0 C for unavailable or expired thermal samples.
+    double cpuTempC = NAN, gpuTempC = NAN;
     int request = -1;
     bool valid = false;
     std::string source = "Unknown";
-};
-struct ControlPolicy {
-    int minimum = 0, maximum = 54, minimumRunningPwm = 25;
-    bool map(int request, int& pwm) const;
-    static int local(double ambient);
-    static int electricalDuty(int pct, bool inverted);
-};
-class Lease {
-    ControlPolicy policy;
-    uint32_t admittedAt = 0;
-    int remotePwm = 0;
-    bool active = false;
-public:
-    explicit Lease(ControlPolicy p = {}) : policy(p) {}
-    void command(bool admitted, int request, uint32_t now) { active = admitted && policy.map(request,remotePwm); if (active) admittedAt = now; }
-    void disable() { active = false; }
-    int tick(uint32_t now, double ambient) {
-        if (static_cast<uint32_t>(now-admittedAt)>=2000 || !std::isfinite(ambient) || ambient < -40 || ambient > 100) active=false;
-        return active ? remotePwm : ControlPolicy::local(ambient);
+    bool manual = false;
+    // Source age at capture plus monotonic residence on the ESP32. Missing
+    // timestamps never become fresh merely because a signed frame arrived.
+    uint32_t receivedAt = 0;
+    bool received = false;
+    uint32_t usageAge = 5000, ramAge = 5000, demandAge = 5000;
+    uint32_t cpuTempAge = 5000, gpuTempAge = 5000;
+    bool linkFresh(uint32_t now) const { return received && static_cast<uint32_t>(now-receivedAt)<2000; }
+    double fresh(double value, uint32_t sourceAge, uint32_t now) const {
+        return linkFresh(now) && sourceAge<5000 && static_cast<uint32_t>(now-receivedAt)<5000-sourceAge ? value : NAN;
     }
-    bool remote() const { return active; }
 };
 class Session {
 public:
-    Session(const Key&, Crypto&);
+    Session(const Key&, Crypto&, const ExternalConfig* previousConfiguration = nullptr);
     ~Session();
     bool accept(const std::string& line, uint32_t now, double ambient, int appliedPwm, bool remote,
         std::string& response);
@@ -54,6 +48,10 @@ public:
     bool authenticated() const { return phase == 2; }
     bool remoteRequest = false;
     Measurement latest;
+    ExternalConfig configuration;
+    bool hasConfiguration = false;
+    std::string appliedConfigRevision;
+    int appliedDuty = -1, externalRequest = -1;
 private:
     Key pairing, receiveKey{}, sendKey{};
     Crypto& crypto;

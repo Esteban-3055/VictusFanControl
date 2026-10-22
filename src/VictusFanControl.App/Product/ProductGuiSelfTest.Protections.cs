@@ -15,13 +15,16 @@ internal static partial class ProductGuiSelfTest
             displayMetricsInFixture:()=>new("fixture",new(0,0,1920,1080),new(0,0,1920,1040),96)))
         {
             form.Show();Application.DoEvents();
-            foreach(var id in new[]{"protections-cpu","protections-gpu","protections-power","protections-resume"})form.HandleCommand(id);
+            foreach(var id in new[]{"protections-cpu","protections-gpu","protections-resume"})form.HandleCommand(id);
             require(form.Draft.Protections==preferences.Protections&&form.Dirty,"Protection switches did not edit independent preferences.");
+            var beforeRetired=ProductProfilesStore.Serialize(form.Draft);form.HandleCommand("protections-power");
+            require(ProductProfilesStore.Serialize(form.Draft)==beforeRetired,"Retired consumption command modified preferences.");
             form.Canvas.Page=ProductPage.Protections;form.ClientSize=new(1040,660);form.PerformLayout();form.Canvas.Refresh();
             using var image=new Bitmap(form.Canvas.Width,form.Canvas.Height);form.Canvas.DrawToBitmap(image,new(0,0,image.Width,image.Height));
             var renderDirectory=Path.Combine("logs","product-gui-self-test");Directory.CreateDirectory(renderDirectory);
             require(image.Width==1040&&image.Height==660,"Protection fixture did not render the actual minimum resolution.");
             image.Save(Path.Combine(renderDirectory,"protections-minimum-layout.png"));
+            require(!form.Canvas.Hits.Any(h=>h.Id=="protections-power"),"Retired consumption cutoff is still offered in the UI.");
             require(form.Canvas.Hits.Any(h=>h.Id=="protections-cpu")&&form.Canvas.Hits.Any(h=>h.Id=="page-9"),"Protection page/navigation missing at minimum resolution.");
         }
         long clock=0;var review=new ProductAutomaticReview(()=>clock,ProductAutomaticReviewMode.Habitual);review.Configure(preferences.Protections);review.Start();
@@ -44,10 +47,10 @@ internal static partial class ProductGuiSelfTest
         require(!resume.TakeRequest(ready,new(),at,10000),"Never-active Firmware armed unattended Automatic.");
         resume.Observe(ready with{LifecycleBlocked=false,FanMode="Automatic"},0);resume.Observe(ready,1000);
         require(!resume.TakeRequest(ready,new(),at,10999),"Resumption bypassed its wait.");
-        foreach(var blocked in new[]{ready with{FanAuthority="Unknown"},ready with{FanAuthority="Faulted"},ready with{Runtime="Degraded"},ready with{Snapshot=Sample(0,96,45)}})
+        foreach(var blocked in new[]{ready with{FanAuthority="Unknown"},ready with{FanAuthority="Faulted"},ready with{Runtime="Degraded"},ready with{Snapshot=Sample(0,96,45)},ready with{Snapshot=Sample(0,55,95.001)}})
             require(!resume.TakeRequest(blocked,new(),at,11000),"Resumption admitted uncertain/hot state.");
         require(!resume.TakeRequest(ready,new(){ResumeAutomatic=false},at,11000),"Disabled resumption armed control.");
-        require(resume.TakeRequest(ready,new(),at,11000)&&!resume.TakeRequest(ready,new(),at,11001),"Resumption duplicated a request.");
+        require(resume.TakeRequest(ready with{Snapshot=Sample(0,55,95)},new(),at,11000)&&!resume.TakeRequest(ready,new(),at,11001),"Exact95 GPU resumption failed or duplicated a request.");
         require(resume.TakeRequest(ready,new(),at,41000)&&resume.TakeRequest(ready,new(),at,101000)&&!resume.TakeRequest(ready,new(),at,201000),"Resumption exceeded three attempts/backoff.");
         resume.Cancel();resume.Observe(ready with{LifecycleBlocked=false,FanMode="Automatic"},202000);resume.Observe(ready,203000);
         require(!resume.TakeRequest(ready,new(),at,300000),"Late Automatic event overrode a user stop.");

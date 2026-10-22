@@ -1,7 +1,7 @@
 name: external-cooling
 on:
   push:
-    branches: ['feature/external-cooling-wifi', 'feature/nvml-crash-containment', 'feature/unattended-recovery']
+    branches: ['feature/external-cooling-wifi', 'feature/nvml-crash-containment', 'feature/unattended-recovery', 'feature/external-curve-firmware']
   pull_request:
     branches: [main, 'feature/fan-54-52-preview']
     paths: ['src/**', 'tools/Esp32Simulator/**', 'tools/ExternalCooling.Tests/**', 'scripts/test-external-cooling.ps1', '.github/workflows/external-cooling.yml']
@@ -31,4 +31,5 @@ jobs:
             logs/external-cooling-self-test/*.png
             logs/external-cooling-self-test/performance.json
             logs/external-cooling-self-test/validation.json
+            logs/product-gui-self-test/forced-session-recovery-settings.png
           if-no-files-found: warn

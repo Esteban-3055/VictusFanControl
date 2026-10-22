@@ -8,11 +8,25 @@ internal static partial class ProductGuiSelfTest
 {
     private static void TestStartupAutomatic(Action<bool,string> require)
     {
+        var orderedRuntime=new RecordingRuntime();
+        using(var ordered=new ProductForm("fixture://publication-order",fixture:orderedRuntime,fixtureProfiles:new()))
+        {
+            ordered.Show();Application.DoEvents();
+            orderedRuntime.Publish(new(){PublicationSequence=2,Source="Ac",Runtime="Healthy"});
+            orderedRuntime.Publish(new(){PublicationSequence=1,Source="Battery",Runtime="Recovering"});
+            require(ordered.Canvas.State.Source=="Ac"&&ordered.Canvas.State.Runtime=="Healthy","Delayed state publication replaced the newer source/health.");
+            orderedRuntime.Publish(new(){PublicationSequence=3,Source="Ac",Runtime="Healthy",LifecycleBlocked=true});
+            orderedRuntime.Publish(new(){PublicationSequence=2,Source="Ac",Runtime="Healthy"});
+            require(ordered.Canvas.State.LifecycleBlocked,"Late publication cleared a lifecycle fence.");
+            var exit=ordered.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Publication order fixture exit stalled.");
+        }
         var at=DateTimeOffset.UtcNow.AddSeconds(-2);
         ProductRuntimeState State(int i,string source="Ac")=>new(){Target="HP-8C40-9D0R1LA-F18",Runtime="Healthy",Source=source,
             AutomaticAuthorized=true,CanApplyPerformance=true,
             Snapshot=new TelemetrySnapshot(at.AddSeconds(i),"CPU",50,20,50,"GPU",45,10,30,1200,1200){CpuExpectedPhysicalCoreCount=3,CpuCoreTemperatures=new[]{new CpuCoreTemperatureSample(0,0,"Performance",50),new CpuCoreTemperatureSample(1,2,"Performance",49),new CpuCoreTemperatureSample(2,4,"Performance",48)}}};
         var gate=new ProductStartupAutomatic(0);
+        require(!gate.Observe(State(0) with {PerformanceRecovery=new(true,"loading") {Checking=true},CanApplyPerformance=false},at,0)
+            && !gate.Finished && !gate.Cancelled,"Background inventory loading cancelled startup instead of waiting safely.");
         require(!gate.Observe(State(0),at,0)&&!gate.Observe(State(0),at,1000),"Startup counted a repeated sample.");
         require(!gate.Observe(State(1),at.AddSeconds(1),1000)&&gate.Observe(State(2),at.AddSeconds(2),2000),"Three fresh startup acquisitions did not admit.");
         require(!gate.Observe(State(3),at.AddSeconds(3),3000),"Startup activation repeated.");
@@ -25,6 +39,9 @@ internal static partial class ProductGuiSelfTest
         gate=new(0);require(!gate.Observe(State(0),at.AddSeconds(4),0)&&!gate.Observe(State(1),at,1000),"Stale/future startup data admitted.");
         gate=new(0);gate.Observe(State(0),at,0);gate.Observe(State(1,"Battery"),at.AddSeconds(1),1000);
         require(!gate.Observe(State(2,"Battery"),at.AddSeconds(2),2000)&&gate.Observe(State(3,"Battery"),at.AddSeconds(3),3000),"Startup failed to requalify a source change.");
+        gate=new(0);gate.Observe(State(0,"Battery"),at,0);gate.Observe(State(1,"Battery"),at.AddSeconds(1),1000);
+        require(!gate.Observe(State(2,"Ac"),at.AddSeconds(2),2000)&&!gate.Observe(State(3,"Ac"),at.AddSeconds(3),3000)&&
+            gate.Observe(State(4,"Ac"),at.AddSeconds(4),4000),"Battery startup reused acquisitions from before the AC change.");
         var runtime=new RecordingRuntime();
         using(var form=new ProductForm("fixture://startup",fixture:runtime,fixtureProfiles:new ProductProfiles{ActivateAutomaticOnStart=true},enableStartupAutomaticInFixture:true))
         {

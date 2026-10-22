@@ -11,7 +11,8 @@ namespace VictusFanControl.PerformanceGuardian;
 /// <summary>Explicit GUI session over the qualified hardware/lifecycle adapters.</summary>
 internal static class PerformanceGuiSessionHost
 {
-    internal static async Task<int> RunAsync(string[] args, bool fixture = false, bool fixtureEnableFailure = false, bool fixtureUpdateFailure = false)
+    internal static async Task<int> RunAsync(string[] args, bool fixture = false, bool fixtureEnableFailure = false, bool fixtureUpdateFailure = false,
+        bool fixtureReleaseFailure = false, bool fixtureUnknownReleaseFailure = false, bool fixtureLostReply = false)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -30,11 +31,12 @@ internal static class PerformanceGuiSessionHost
             Guid.Parse(Get("--nonce")), int.Parse(Get("--owner-pid")), long.Parse(Get("--owner-start")), Get("--report"), null);
         if (fixture)
         {
-            var recording = new GuiFixtureDomains(fixtureEnableFailure, fixtureUpdateFailure, configuration);
+            var recording = new GuiFixtureDomains(fixtureEnableFailure, fixtureUpdateFailure, configuration, fixtureReleaseFailure, fixtureUnknownReleaseFailure);
             using var runtime = new GuardianPerformancePowerSourceRuntime(new GuiFixtureSource(),
                 new RecordingGuardianCpuSourceTransitionSink(), new RecordingGuardianGpuSourceTransitionSink(),
                 new WindowsGuardianPowerSourceNotificationListenerFactory());
             return await new PerformanceGuardianHost(options with { MutexName = "Local\\VFC.GuiFixture." + options.SessionNonce.ToString("N") }, recording, runtime)
+                { DropRecoveryReplyInFixture=fixtureLostReply }
                 .RunAsync(CancellationToken.None).ConfigureAwait(false);
         }
         using var identity = WindowsIdentity.GetCurrent();
@@ -89,10 +91,13 @@ internal static class PerformanceGuiSessionHost
         public PerformancePowerSourceObservation Read() => new(true, PerformancePowerSourceKind.Ac, 1, 80, 0, "FIXTURE_AC");
     }
 
-    private sealed class GuiFixtureDomains(bool failEnable, bool failUpdate, PerformanceGuiSessionConfiguration initial) : IGuardianDomainLifecycle, IGuardianConfigurableDomains
+    private sealed class GuiFixtureDomains(bool failEnable, bool failUpdate, PerformanceGuiSessionConfiguration initial,
+        bool failRelease, bool unknownRelease) : IGuardianDomainLifecycle, IGuardianConfigurableDomains
     {
         private readonly RecordingGuardianDomainLifecycle _recording = new();
         private bool _active;
+        private bool _releaseFailed;
+        private readonly Guid _session = Guid.NewGuid();
         public PerformanceGuiSessionConfiguration Configuration { get; private set; } = initial;
         public void UpdateConfiguration(PerformanceGuiSessionConfiguration next, PerformancePowerSourceKind source)
         {
@@ -104,7 +109,9 @@ internal static class PerformanceGuiSessionHost
         }
         public GuardianDomainLifecycleSnapshot Snapshot => _recording.Snapshot with
         {
-            CpuState = _active ? "Active" : "Disabled", GpuState = _active ? "ActiveUnverified" : "Disabled"
+            CpuState = _releaseFailed ? "Disabled" : _active ? "Active" : "Disabled",
+            GpuState = _releaseFailed ? "RecoveryRequired" : _active ? "ActiveUnverified" : "Disabled",
+            RecoveryGpuSession = _releaseFailed && failRelease ? _session : null
         };
         public ValueTask EnableAsync(bool cpuEnabled, bool gpuEnabled, PerformancePowerSourceKind source, CancellationToken token)
         {
@@ -114,6 +121,13 @@ internal static class PerformanceGuiSessionHost
         }
         public ValueTask ReleaseAsync(bool cpuEnabled, bool gpuEnabled, string reason, CancellationToken token)
         {
+            if ((failRelease || unknownRelease) && !_releaseFailed)
+            {
+                _recording.ReleaseAsync(cpuEnabled, gpuEnabled, reason, token).GetAwaiter().GetResult();
+                _releaseFailed = true;
+                throw new IOException("Synthetic release failure; zero hardware IO.");
+            }
+            _releaseFailed = false;
             _active = false;
             return _recording.ReleaseAsync(cpuEnabled, gpuEnabled, reason, token);
         }

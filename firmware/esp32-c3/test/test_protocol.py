@@ -44,12 +44,22 @@ def main():
     cases=[]
     def case(name, action): action();cases.append({'name':name,'passed':True});print('PASS',name)
     case('device calibration, inverted NOT duty, independent lease and wraparound',lambda:subprocess.run([args.host,'--policy'],check=True,timeout=5))
+    case('external controller dynamics and safety',lambda:subprocess.run([args.host,'--controller'],check=True,timeout=5))
     for role,value in V['proofs'].items(): assert proof(role)==value
     base=[hello(),auth(),frame('telemetry',1,telemetry(),RX)]
     def healthy():
         results=run(args.host,base+[frame('telemetry',2,telemetry(True),RX),frame('telemetry',3,telemetry(True),RX)])
-        assert results[-1]['payload']['mode']=='Remote' and results[-1]['payload']['appliedPwmPct']==50
+        assert results[-1]['payload']['mode']=='Remote' and 0<=results[-1]['payload']['appliedDuty']<=255
     case('real C++ mutual auth, directional MACs and accepted request',healthy)
+    def missing_ambient():
+        messages=base+[frame('telemetry',2,telemetry(True),RX),frame('telemetry',3,telemetry(True),RX)]
+        result=subprocess.run([args.host,'--missing-ambient'],input='\n'.join(messages)+'\n',text=True,capture_output=True,check=True)
+        response=json.loads(result.stdout.splitlines()[-1]);status=response['payload']
+        expected=base64.b64encode(hmac.digest(TX,f"VictusExternalCooling/v1/frame\ndeviceStatus\n{SESSION}\n{response['sequence']}\n{encode(status)}".encode(),'sha256')).decode()
+        assert hmac.compare_digest(expected,response['mac'])
+        assert status['ambientTempC'] is None and status['communication']=='Ready' and status['mode']=='Remote'
+        assert status['appliedDuty']<255
+    case('missing NTC remains authenticated Remote with null ambient and no forced maximum',missing_ambient)
     case('Firmware null request',lambda:run(args.host,[hello(),auth(),frame('telemetry',1,telemetry(False,'Firmware'),RX)]))
     case('Manual accepted request',lambda:run(args.host,base+[frame('telemetry',2,telemetry(True,'Manual'),RX)]))
     def local_unknown_reference():

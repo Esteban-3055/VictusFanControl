@@ -128,7 +128,7 @@ internal static class WmiFanExperimentSelfTest
             // A completion-unknown marker rejects before invoking the supplied transport.
             Reject(() => WmiFanExperimentBoundary.Serialize(level, () => throw new Exception("native call admitted")));
             Check(File.Exists(Path.Combine(directory, "native-inflight.json")), "Unknown native completion erased.");
-            WmiFanExperimentBoundary.MarkNativeReturned();
+            File.Delete(Path.Combine(directory, "native-inflight.json")); // Fake invocation teardown only.
             var nullReply = WmiFanExperimentBoundary.InvokeNative<object?>(rpm, () =>
             {
                 Check(File.Exists(Path.Combine(directory, "native-inflight.json")), "Native invocation was not tracked.");
@@ -138,7 +138,8 @@ internal static class WmiFanExperimentSelfTest
                 "A returned null response was confused with unfinished native execution.");
             Reject(() => WmiFanExperimentBoundary.InvokeNative<object?>(rpm, () => throw new IOException("native timeout")));
             Check(File.Exists(Path.Combine(directory, "native-inflight.json")), "A native exception lost its uncertainty marker.");
-            WmiFanExperimentBoundary.MarkNativeReturned(); // Fixture teardown only; no real call was made.
+            File.Delete(Path.Combine(directory, "native-inflight.json")); // Fixture teardown only; no real call was made.
+            TestConfirmedNativeCleanup(directory, rpm);
             File.WriteAllText(WmiFanExperimentBoundary.StopPath, "stop");
             Reject(() => WmiFanExperimentBoundary.EnsureRequestAllowed(level));
             WmiFanExperimentBoundary.BeginRecovery();
@@ -149,6 +150,101 @@ internal static class WmiFanExperimentSelfTest
         }
         catch (Exception ex) { output.WriteLine("FAIL: " + ex); return 1; }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private sealed class DisposableNativeFixture : IDisposable
+    {
+        internal bool Disposed { get; private set; }
+        public void Dispose() => Disposed = true;
+    }
+
+    private static void TestConfirmedNativeCleanup(string directory, HpBiosRequest rpm)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var marker = Path.Combine(directory, "native-inflight.json");
+        var uncertain = Path.Combine(directory, "native-uncertain.signal");
+        var dispatched = 0;
+        FileStream? blocker = null;
+        var response = new DisposableNativeFixture();
+        void CreateReturnedButLocked()
+        {
+            var pending = false;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                WmiFanExperimentBoundary.InvokeNative(rpm, () =>
+                {
+                    dispatched++;
+                    blocker = new FileStream(marker, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    return response;
+                });
+            }
+            catch (WmiNativeTrackingCleanupPendingException) { pending = true; }
+            Check(pending && File.Exists(marker) && response.Disposed && clock.Elapsed < TimeSpan.FromSeconds(3),
+                "Confirmed return did not retain bounded cleanup evidence or leaked its rejected response.");
+        }
+        void AssertNoDispatch()
+        {
+            var before = dispatched;
+            var refused = false;
+            try { WmiFanExperimentBoundary.Serialize(rpm, () => { dispatched++; throw new Exception("unsafe native dispatch"); }); }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException) { refused = true; }
+            Check(refused && before == dispatched && File.Exists(marker), "Pending/uncertain marker admitted a new native call.");
+        }
+        try
+        {
+            CreateReturnedButLocked();
+            var original = File.ReadAllBytes(marker);
+            AssertNoDispatch(); // Persistent lock preserves the receipt and rejects new work.
+            blocker!.Dispose(); blocker = null;
+            WmiFanExperimentBoundary.Serialize(rpm, () =>
+            {
+                Check(!File.Exists(marker), "Known returned marker was not retired before the next dispatch.");
+                dispatched++; return new(0, []);
+            });
+            Check(dispatched == 2, "Recovery replayed the previous invocation instead of admitting one new call.");
+
+            // The orderly shutdown path must use the same live-owner proof.
+            CreateReturnedButLocked(); blocker!.Dispose(); blocker = null;
+            using (WmiFanExperimentBoundary.EnterRecoverySlot(directory, TimeSpan.FromSeconds(1)))
+                Check(!File.Exists(marker), "A known returned call required reboot during orderly recovery.");
+
+            // The receipt cannot clear a byte-identical marker in another directory.
+            CreateReturnedButLocked();
+            var other = Path.Combine(directory, "foreign-completion"); Directory.CreateDirectory(other);
+            var otherMarker = Path.Combine(other, "native-inflight.json"); File.WriteAllBytes(otherMarker, File.ReadAllBytes(marker));
+            Reject(() => { using var slot = WmiFanExperimentBoundary.EnterRecoverySlot(other, TimeSpan.FromSeconds(1)); });
+            Check(File.Exists(otherMarker), "Completion evidence leaked across session directories.");
+            blocker!.Dispose(); blocker = null;
+            using (WmiFanExperimentBoundary.EnterRecoverySlot(directory, TimeSpan.FromSeconds(1))) { }
+
+            // Even an old genuine operation marker cannot replace the pending invocation.
+            CreateReturnedButLocked(); blocker!.Dispose(); blocker = null;
+            File.WriteAllBytes(marker, original);
+            AssertNoDispatch();
+            File.Delete(marker); // Fake-marker teardown, never a recovery path.
+
+            CreateReturnedButLocked(); blocker!.Dispose(); blocker = null;
+            File.WriteAllText(uncertain, "fixture uncertainty overrides confirmed return");
+            AssertNoDispatch();
+            File.Delete(uncertain); File.Delete(marker); // Fixture teardown only.
+
+            // A delegate exception never produces evidence of a returned invocation.
+            Reject(() => WmiFanExperimentBoundary.InvokeNative<object?>(rpm, () => throw new IOException("native outcome unknown")));
+            AssertNoDispatch();
+            Reject(() => { using var slot = WmiFanExperimentBoundary.EnterRecoverySlot(directory, TimeSpan.FromSeconds(1)); });
+            File.Delete(marker); // Fixture teardown only; the delegate is a simulation.
+
+            // Failure in the dispatch journal occurred before entering the delegate.
+            var journal = Path.Combine(directory, "native-dispatch.jsonl");
+            var beforeJournalFailure = dispatched;
+            using (var lockedJournal = new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.None))
+                Reject(() => WmiFanExperimentBoundary.InvokeNative<object?>(rpm, () => { dispatched++; return null; }));
+            Check(dispatched == beforeJournalFailure && !File.Exists(marker), "Pre-dispatch journal failure manufactured an uncertain native call.");
+            WmiFanExperimentBoundary.Serialize(rpm, () => new(0, []));
+            Console.WriteLine("PASS: confirmed native-return cleanup without reboot; bounded lock retries, rejected response disposal, next-read and shutdown recovery, exact invocation/session proof, uncertainty and exception refusal, no command replay and pre-dispatch cleanup (zero hardware IO).");
+        }
+        finally { blocker?.Dispose(); }
     }
 
     private static void TestRecoveryDrain(string root)

@@ -10,17 +10,20 @@ internal sealed class PerformanceGuardianClient
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly string _modulePath;
     private readonly Func<ProcessStartInfo, Process?> _startProcess;
+    private readonly Func<PerformanceRecoveryPreview> _recoveryPreview;
     private Process? _process;
     private NamedPipeClientStream? _pipe;
     private Guid _nonce;
     private string? _pipeName;
     private int _ownerPid;
     private long _ownerStart;
+    private long _guardianStart;
     private long _lastStatusUtcTicks;
     private string? _startupFailure;
     internal PerformanceGuardianResponse? LastStatus { get; private set; }
     internal PerformanceGuiSessionConfiguration? AppliedConfiguration { get; private set; }
     internal string? GuardianReportPath { get; private set; }
+    internal Guid? DrainedGpuSession { get; private set; }
     internal bool HasProcess => _process is not null;
     internal bool HasFailedProcess
     {
@@ -38,10 +41,12 @@ internal sealed class PerformanceGuardianClient
     internal bool LimitsActive => LastStatusFresh && LastStatus is { Ok:true,SessionEnabled:true,RuntimeFailure:null } s &&
         (!s.CpuEnabled || s.CpuState == "Active") && (!s.GpuEnabled || s.GpuState == "ActiveUnverified");
 
-    internal PerformanceGuardianClient(string modulesDirectory, Func<ProcessStartInfo, Process?>? startProcess = null)
+    internal PerformanceGuardianClient(string modulesDirectory, Func<ProcessStartInfo, Process?>? startProcess = null,
+        Func<PerformanceRecoveryPreview>? recoveryPreview = null)
     {
         _modulePath = Path.Combine(modulesDirectory, "IntelMSR.bin");
         _startProcess = startProcess ?? Process.Start;
+        _recoveryPreview = recoveryPreview ?? (()=>PerformanceRecoveryPreview.Read());
     }
 
     internal async Task<PerformanceGuardianResponse> EnableAsync(PerformanceGuiSessionConfiguration configuration)
@@ -50,8 +55,8 @@ internal sealed class PerformanceGuardianClient
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (_process is not null) throw new InvalidOperationException("Libera la sesión anterior antes de aplicar otra configuración.");
-            var recovery=PerformanceRecoveryPreview.Read();
+            if (_process is not null || DrainedGpuSession is not null) throw new InvalidOperationException("Libera y recupera la sesión anterior antes de aplicar otra configuración.");
+            var recovery=_recoveryPreview();
             if(recovery.Pending)throw new InvalidOperationException(recovery.Detail);
             var executable = ResolveExecutable();
             using var owner = Process.GetCurrentProcess();
@@ -68,6 +73,7 @@ internal sealed class PerformanceGuardianClient
                 "--nonce", _nonce.ToString("D"), "--owner-pid", _ownerPid.ToString(), "--owner-start", _ownerStart.ToString(), "--report", GuardianReportPath })
                 start.ArgumentList.Add(arg);
             _process = _startProcess(start) ?? throw new IOException("No se pudo iniciar Performance Guardian.");
+            _guardianStart = _process.StartTime.ToUniversalTime().Ticks;
             _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) { if(e.Data.StartsWith("Performance Guardian failed:",StringComparison.Ordinal))Volatile.Write(ref _startupFailure,e.Data); AppLog.Write("Performance Guardian: " + e.Data); } };
             _process.OutputDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("Performance Guardian: " + e.Data); };
             _process.BeginErrorReadLine(); _process.BeginOutputReadLine();
@@ -89,16 +95,23 @@ internal sealed class PerformanceGuardianClient
         finally { _gate.Release(); }
     }
 
-    internal async Task<PerformanceGuardianResponse> UpdateAsync(PerformanceGuiSessionConfiguration configuration)
+    internal async Task<PerformanceGuardianResponse> UpdateAsync(PerformanceGuiSessionConfiguration configuration,
+        Func<CancellationToken,Task>? beforeSend = null)
     {
         configuration.Validate();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-        await _gate.WaitAsync(timeout.Token).ConfigureAwait(false);
+        using var admission = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await _gate.WaitAsync(admission.Token).ConfigureAwait(false);
         try
         {
             if (_process is null || _process.HasExited || !LimitsActive || AppliedConfiguration is null ||
                 configuration.CpuEnabled != AppliedConfiguration.CpuEnabled || configuration.GpuEnabled != AppliedConfiguration.GpuEnabled)
                 throw new InvalidOperationException("Actualizar requiere la misma sesión activa y selección CPU/GPU.");
+            // A pending STATUS owns the transport only, not a performance update.
+            // Pause fan dispatch and start the write deadline once this owner is free.
+            if(beforeSend is not null)await beforeSend(admission.Token).ConfigureAwait(false);
+            admission.Token.ThrowIfCancellationRequested();
+            if(AppliedConfiguration==configuration&&LastStatus is {} unchanged)return unchanged;
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
             if (_pipe is null || !_pipe.IsConnected) await ConnectAsync(timeout.Token).ConfigureAwait(false);
             LastStatus = null;
             LastStatus = await SendAsync(PerformanceGuardianProtocol.UpdateConfiguration, configuration, timeout.Token).ConfigureAwait(false);
@@ -150,6 +163,7 @@ internal sealed class PerformanceGuardianClient
     internal async Task CloseAsync()
     {
         await _gate.WaitAsync().ConfigureAwait(false);
+        var shutdownRequested=false;
         try
         {
             if (_process is null) return;
@@ -157,7 +171,21 @@ internal sealed class PerformanceGuardianClient
             if (!_process.HasExited)
             {
                 if (_pipe is null || !_pipe.IsConnected) await ConnectAsync(timeout.Token).ConfigureAwait(false);
+                shutdownRequested=true;
                 LastStatus = await SendAsync(PerformanceGuardianProtocol.Shutdown, null, timeout.Token).ConfigureAwait(false);
+                if (IsRecoveryDrainReply(LastStatus))
+                {
+                    // A failed release is never called Stopped. The private,
+                    // authenticated response alone is insufficient: wait for
+                    // the native owner to exit before handing off any journal.
+                    await _process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+                    if (_process.ExitCode != PerformanceGuardianProtocol.ExitRecoveryPending)
+                        throw new IOException("Guardian no confirmó su salida para recuperación; conserva los journals.");
+                    DrainedGpuSession = LastStatus.RecoveryGpuSession;
+                    _process.Dispose(); _process = null; _pipe?.Dispose(); _pipe = null;
+                    AppliedConfiguration = null; LastStatus = null;
+                    throw new IOException("Guardian terminó sin confirmar Reset GPU. La sesión requiere recuperación exclusiva y conserva su journal.");
+                }
                 if (!LastStatus.Ok || LastStatus.SessionEnabled || LastStatus.Phase != "Stopped")
                     throw new IOException("Guardian no confirmó la liberación: " + LastStatus.Message);
                 await _process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
@@ -165,8 +193,52 @@ internal sealed class PerformanceGuardianClient
             if (_process.ExitCode != 0) throw new IOException("Guardian terminó con error " + _process.ExitCode + "; revisa los journals.");
             _process.Dispose(); _process = null; _pipe?.Dispose(); _pipe = null; AppliedConfiguration = null; LastStatus = null;
         }
+        catch(Exception)
+        {
+            // Lost ACK: require a durable receipt bound to this precise child,
+            // nonce, parent and target, AND its actual exit. Bare exit 23 or
+            // absent journals never authorize recovery or claim GPU release.
+            if(shutdownRequested && _process is {HasExited:false} pending)
+            {
+                using var retirement=new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                try { await pending.WaitForExitAsync(retirement.Token).ConfigureAwait(false); }
+                catch(OperationCanceledException) { /* Retain live owner; never kill a native mutator. */ }
+            }
+            if(_process is { HasExited:true,ExitCode:PerformanceGuardianProtocol.ExitRecoveryPending } child &&
+                ReadRecoveryReceipt(child) is { } receipt)
+            {
+                DrainedGpuSession=receipt.GpuSession;
+                child.Dispose();_process=null;_pipe?.Dispose();_pipe=null;AppliedConfiguration=null;LastStatus=null;
+                throw new IOException("Guardian terminó con liberación GPU pendiente; recibo de cierre validado. Conserva el journal para recuperación exclusiva.");
+            }
+            throw;
+        }
         finally { _gate.Release(); }
     }
+
+    private PerformanceRecoveryHandoffReceipt? ReadRecoveryReceipt(Process child)
+    {
+        try
+        {
+            if(GuardianReportPath is null)return null;
+            using var stream=new FileStream(GuardianReportPath,FileMode.Open,FileAccess.Read,FileShare.Read);
+            if(stream.Length>128*1024)return null;
+            using var document=JsonDocument.Parse(stream);
+            var root=document.RootElement;
+            if(root.GetProperty("ExitReason").GetString()!="CLIENT_RECOVERY_DRAINED_JOURNALS_RETAINED" ||
+                root.GetProperty("FinalPhase").GetString()=="Stopped" || root.GetProperty("SourceRuntimeActive").GetBoolean())return null;
+            var receipt=root.GetProperty("RecoveryHandoff").Deserialize<PerformanceRecoveryHandoffReceipt>();
+            return receipt?.Matches(CpuPowerProductDefaults.TargetProfileId,_nonce,_ownerPid,_ownerStart,child.Id,_guardianStart)==true?receipt:null;
+        }
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
+        { AppLog.Write("Recovery handoff receipt unavailable/invalid: "+ex.Message);return null; }
+    }
+
+    internal static bool IsRecoveryDrainReply(PerformanceGuardianResponse response) =>
+        !response.Ok && response.Code == PerformanceGuardianProtocol.ReleaseFailedDraining &&
+        response.Phase == "SessionEnabled" && response.SessionEnabled && response.GpuEnabled &&
+        (!response.CpuEnabled || response.CpuState == "Disabled") && response.GpuState == "RecoveryRequired" &&
+        response.RecoveryGpuSession is { } session && session != Guid.Empty;
 
     private async Task ConnectAsync(CancellationToken token)
     {
@@ -195,7 +267,7 @@ internal sealed class PerformanceGuardianClient
     {
         // Already exited: drain redirected error output before reporting the cause.
         _process!.WaitForExit();
-        var recovery=PerformanceRecoveryPreview.Read();
+        var recovery=_recoveryPreview();
         if(recovery.Pending)return new IOException(recovery.Detail+" Guardian terminó con error "+_process.ExitCode+".");
         var detail = Volatile.Read(ref _startupFailure);
         return new IOException("Performance Guardian terminó con error " + _process.ExitCode +

@@ -14,15 +14,22 @@ public sealed record ProductProtectionSettings
 {
     public bool CpuThermalHandoff { get; init; } = true;
     public bool GpuThermalHandoff { get; init; } = true;
-    // Persisted name retained for existing profiles; now controls CPU power only.
-    public bool PowerEnvelopeHandoff { get; init; } = true;
+    // Retired consumption cutoff. Accept old JSON fields but clear on import/save;
+    // habitual admission never uses this flag to stop Automatic.
+    public bool PowerEnvelopeHandoff { get; init; } = false;
     public bool ResumeAutomatic { get; init; } = true;
+    public const double HabitualGpuHandoffC = 95;
+    // Runtime-only historical bench policy; never accepted from profile JSON.
+    [JsonIgnore] public bool HistoricalGpuThermalPolicy { get; init; }
+    [JsonIgnore] public double GpuHandoffC => HistoricalGpuThermalPolicy ? SafetyGate.GpuEmergencyC : HabitualGpuHandoffC;
+    public bool IsGpuThermalEmergency(double? temperature) => GpuThermalHandoff &&
+        (HistoricalGpuThermalPolicy ? temperature >= GpuHandoffC : temperature > GpuHandoffC);
 
     public SafetyGateResult ApplyThermalPolicy(TelemetrySnapshot? snapshot, SafetyGateResult raw)
     {
         if (snapshot is null || !raw.ThermalEmergency) return raw;
         var thermal = CpuThermalHandoff && snapshot.CpuControlTemperatureC >= SafetyGate.CpuEmergencyC ||
-            GpuThermalHandoff && snapshot.GpuTemperatureC >= SafetyGate.GpuEmergencyC;
+            IsGpuThermalEmergency(snapshot.GpuTemperatureC);
         if (thermal) return raw;
         var ready = raw.BoardAllowed && raw.RuntimeHealthy && raw.SnapshotComplete && raw.SnapshotFresh &&
             raw.TelemetryDeviceIdentityValid && raw.SensorsPlausible && snapshot.CpuCoreTelemetryComplete;
@@ -60,7 +67,7 @@ public sealed record ProductProfile
         if (Fan.Tuning.MinimumLevel is not (10 or 30) || Fan.Tuning.MaximumLevel != Hp8C40AutomaticPolicy.MaximumLevel)
             throw new InvalidDataException("El editor admite niveles CPU 10–54; la GPU se limita a 52 en el backend de producto.");
         if (GpuMaximumMHz < GpuProductPreferences.MinimumMHz || GpuMaximumMHz > GpuProductPreferences.Maximum(source))
-            throw new InvalidDataException("Límite GPU fuera del rango configurable 210–2500 MHz.");
+            throw new InvalidDataException("Límite GPU fuera del rango configurable 210–2535 MHz.");
         foreach (var axis in Enum.GetValues<AdaptiveCurveAxis>())
             if (AdaptiveCurveProfiles.Curve(AdaptiveCurveProfiles.Validate(Fan.Profile), axis).Any(p => p.Level < 10 || p.Level > 50))
                 throw new InvalidDataException("Curva de ventiladores fuera de rango.");
@@ -72,7 +79,7 @@ public static class GpuProductPreferences
     public const int MinimumMHz = 210;
     public const int QualifiedAcMaximumMHz = 1850;
     public const int QualifiedBatteryMaximumMHz = 1200;
-    public const int ConfigurableMaximumMHz = 2500;
+    public const int ConfigurableMaximumMHz = 2535;
     // Configurable range is user authorized; historical qualification remains 1850/1200.
     // NVML rejection remains a failure; acceptance never claims independent range ownership.
     public const bool CustomClockExecutionAuthorized = true;
@@ -162,12 +169,15 @@ public sealed record ProductProfiles
 
 public static class ProductProfilesStore
 {
+    public const int MaximumFileBytes=1024*1024;
     private static readonly JsonSerializerOptions Json = new()
     { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
     public static string DefaultPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VictusFanControl", "product-profiles.json");
-    public static string Serialize(ProductProfiles profiles) { profiles.Validate(); return JsonSerializer.Serialize(profiles with { ExperimentalPlatformRetention=false }, Json); }
+    public static string Serialize(ProductProfiles profiles) { profiles.Validate(); return JsonSerializer.Serialize(profiles with { ExperimentalPlatformRetention=false, Protections=profiles.Protections with { PowerEnvelopeHandoff=false } }, Json); }
     public static ProductProfiles Parse(string text)
     {
+        if(text.Length>MaximumFileBytes || System.Text.Encoding.UTF8.GetByteCount(text)>MaximumFileBytes)
+            throw new InvalidDataException("El archivo de perfiles supera 1 MiB.");
         using var document=JsonDocument.Parse(text);
         static void CheckKeys(JsonElement element)
         {
@@ -182,7 +192,7 @@ public static class ProductProfilesStore
         if(document.RootElement.ValueKind!=JsonValueKind.Object||!document.RootElement.TryGetProperty("schemaVersion",out _)||!document.RootElement.TryGetProperty("ac",out _)||!document.RootElement.TryGetProperty("battery",out _))throw new InvalidDataException("Falta la versión o uno de los perfiles AC/Batería.");
         var profiles = JsonSerializer.Deserialize<ProductProfiles>(text, Json) ?? throw new InvalidDataException("Perfiles vacíos.");
         profiles.Validate();
-        profiles=profiles with { ExperimentalPlatformRetention=false };
+        profiles=profiles with { ExperimentalPlatformRetention=false, Protections=profiles.Protections with { PowerEnvelopeHandoff=false } };
         // Older GUI files used the prepared Automatic minimum for editing too.
         // Preserve every stored curve point; expand only the offline editor envelope.
         ProductProfile Expand(ProductProfile p) => p with { Fan = p.Fan with { Tuning = p.Fan.Tuning with { MinimumLevel = 10 } } };
@@ -209,7 +219,10 @@ public static class ProductProfilesStore
         {
             if (File.Exists(path))
             {
-                var text=File.ReadAllText(path);var loaded=Parse(text);
+                using var stream=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read);
+                if(stream.Length>MaximumFileBytes)throw new InvalidDataException("El archivo de perfiles supera 1 MiB.");
+                using var reader=new StreamReader(stream,System.Text.Encoding.UTF8,detectEncodingFromByteOrderMarks:true);
+                var text=reader.ReadToEnd();var loaded=Parse(text);
                 using var document=JsonDocument.Parse(text);
                 if(document.RootElement.GetProperty("schemaVersion").GetInt32()==1)notice="Motor nuevo en edición; curvas anteriores conservadas como respaldo. Guardar crea una copia exacta del archivo v1.";
                 else if(!document.RootElement.TryGetProperty("defaultCurveRevision",out _))notice="v1.0: curva AC predeterminada actualizada si no estaba personalizada; límites y curva Batería conservados. Guardar crea un respaldo del archivo anterior.";

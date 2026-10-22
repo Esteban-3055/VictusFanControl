@@ -18,7 +18,7 @@ internal static class ProductDiagnostics
             state.Hardware,state.Target,state.Source,state.Runtime,state.FanMode,state.FanAuthority,state.FanLevel,
             state.ManualMaximumLevel,state.FanUpperRangePreview,state.CommandedCpuLevel,state.CommandedGpuLevel,
             state.LifecycleBlocked,state.LifecycleBlockReason,state.InterruptionDetails,
-            automaticThermalContract="cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
+            automaticThermalContract="cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95",
             state.AutomaticReview,state.AutomaticReviewMaximumSeconds,state.AutomaticReviewRemainingSeconds,state.AutomaticCpuSpikeRemainingMilliseconds,state.AutomaticDecision,state.AppliedAutomaticConfiguration,state.AppliedFanProfile,
             state.AutomaticPreparing,state.AutomaticSessionId,state.AutomaticDecisionSnapshot,state.AutomaticInterruptionSnapshot,state.PerformanceActive,state.PerformanceProcessPresent,state.PerformanceUpdating,state.AppliedPerformance,
             state.PlatformRetention,
@@ -62,7 +62,7 @@ internal static class ProductDiagnostics
                                 if(!VictusFanControl.Recovery.ProductRecoveryInventory.Exists(source))return;
                                 VictusFanControl.Recovery.ProductRecoveryInventory.EnsurePlainPath(source);
                                 if(new FileInfo(source).Length>1024*1024){Write(entry+"-unavailable.txt","Archivo mayor que 1 MiB; original conservado.");return;}
-                                using var output=zip.CreateEntry(entry).Open();var bytes=File.ReadAllBytes(source);output.Write(bytes);
+                                using var output=zip.CreateEntry(entry).Open();var bytes=VictusFanControl.Recovery.ProductRecoveryInventory.ReadBytes(source);output.Write(bytes);
                             }
                             catch(Exception ex){Write(entry+"-unavailable.txt",ex.Message);}
                         }

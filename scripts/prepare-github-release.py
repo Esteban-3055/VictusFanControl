@@ -11,7 +11,7 @@ import shutil
 import zipfile
 
 
-VERSION = "1.2.12"
+VERSION = "1.3.2"
 TARGET = "HP-8C40-9D0R1LA-F18"
 MANIFEST = "PRODUCT-GUI-MANIFEST.json"
 
@@ -50,19 +50,19 @@ def main():
     require(contract["target"] == TARGET and contract["stableReleaseAuthorized"] is True,
             "Wrong target or missing release authorization")
     require(contract["physicalPassClaimed"] is False, "Must retain physical evidence limits")
-    require(manifest["releaseChannel"] == contract["channel"] == "preview", "Wrong release channel")
+    require(manifest["releaseChannel"] == contract["channel"] == "stable", "Wrong release channel")
     require(manifest["fanCommandLimits"] == contract["fanCommandLimits"] and
             contract["fanCommandLimits"]["minimumLogicalLevel"] == 10 and
             contract["fanCommandLimits"]["cpuMaximumCommandLevel"] == 54 and
             contract["fanCommandLimits"]["gpuMaximumCommandLevel"] == 52 and
             contract["fanCommandLimits"]["mapping"] == "CPU=logical;GPU=min(logical,52)", "Wrong product fan limits")
     require(manifest["automaticProtectionControls"] == contract["automaticProtectionControls"] ==
-            "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
+            "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",
             "Wrong configurable protection contract")
     require(manifest["automaticPowerContract"] == contract["automaticPowerContract"] == {
-        "cpuHandoffWatts": 60, "cpuHandoffSelectable": True, "gpuConsumptionHandoff": False,
+        "cpuHandoffWatts": None, "cpuHandoffSelectable": False, "gpuConsumptionHandoff": False,
         "gpuTelemetryCoherenceWatts": [0, 300], "gpuPowerStillContributesToDemand": True,
-    }, "Wrong CPU-only power handoff contract")
+    }, "Wrong consumption handoff contract")
     retention = contract["experimentalPlatformRetention"]
     require(manifest["productPlatformRetention"] == "removed-no-platform-sensor-acquisition" and
             manifest["platformThermalExperiment"] == "retired-no-live-entry" and

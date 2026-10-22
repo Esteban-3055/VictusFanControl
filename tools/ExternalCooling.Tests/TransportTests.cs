@@ -95,9 +95,39 @@ internal static partial class Program
         var unavailable=new Esp32TcpClient();using(var cancel=new CancellationTokenSource(TimeSpan.FromSeconds(7)))
         {await unavailable.RunAsync(new(){Mode=ExternalCoolingMode.MonitorOnly,UseSimulator=true,Port=port,AutoReconnect=false},key.ToArray(),new Source(),cancel.Token);Require(unavailable.Diagnostics.Failures==1,"Unreachable server not reported.");}
         Console.WriteLine("PASS authentication rejection, automatic reconnect/new sessions, manager concurrency, suspend/resume, clean shutdown, unavailable server.");
+        await DelayedBaseStartupTest(key);
         await RemoteLeaseTest(key);
         await RestartServerTest(key);
         await ResourceTest(key);
+    }
+
+    private static async Task DelayedBaseStartupTest(byte[] key)
+    {
+        foreach(var reconnect in new[]{true,false})
+        {
+            var reserve=new TcpListener(IPAddress.Loopback,0);reserve.Start();var port=((IPEndPoint)reserve.LocalEndpoint).Port;reserve.Stop();
+            await using var manager=new ExternalCoolingManager(new Source(),()=>key.ToArray());
+            await manager.ConfigureAsync(new(){Mode=ExternalCoolingMode.MonitorOnly,UseSimulator=true,Port=port,AutoReconnect=reconnect});
+            await Until(()=>manager.Diagnostics.Failures>=1);
+            Require(manager.Diagnostics.Connections==0&&manager.Diagnostics.Sent==0&&manager.Diagnostics.Received==0,
+                "Missing base fabricated a connection or telemetry.");
+            await using var server=new Server(key,new(),port);
+            if(reconnect)
+            {
+                await Until(()=>manager.Diagnostics.State==ExternalCoolingConnectionState.Connected&&manager.Diagnostics.Received>=2);
+                lock(server.Observations)Require(server.Observations.All(x=>x.Telemetry.Solicitud is null&&!x.Telemetry.SolicitudValida),
+                    "Delayed MonitorOnly startup acquired external authority.");
+            }
+            else
+            {
+                await Task.Delay(1200);
+                Require(manager.Diagnostics.Connections==0&&manager.Diagnostics.Failures==1,"Disabled reconnect retried after base startup.");
+            }
+            await manager.DisconnectAsync();
+            await manager.ResumeAsync();
+            Require(manager.Diagnostics.State==ExternalCoolingConnectionState.Disconnected,"Resume overrode explicit disconnect after delayed startup.");
+        }
+        Console.WriteLine("PASS delayed base/Windows startup: unavailable at launch then authenticated automatically when available; opt-out and explicit disconnect preserved; loopback only.");
     }
     private static async Task RemoteLeaseTest(byte[] key)
     {

@@ -16,6 +16,9 @@ internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
     private readonly Func<ProcessStartInfo> _startInfo;
     private readonly int _sampleTimeout;
     private readonly Func<long> _clock;
+    private readonly Action<Process> _terminate;
+    private static readonly object RetiredGate=new();
+    private static readonly List<Process> UnconfirmedReaders=new();
     private Process? _process;
     private ErrorTail _errors = new();
     private Task _errorDrain = Task.CompletedTask;
@@ -27,11 +30,12 @@ internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
     public string DeviceName { get; private set; } = "NVIDIA GPU";
 
     internal NvmlTelemetryProcessClient(string? preferredName, bool exact,
-        Func<ProcessStartInfo>? startInfo = null, int sampleTimeout = SampleTimeoutMilliseconds, Func<long>? clock = null)
+        Func<ProcessStartInfo>? startInfo = null, int sampleTimeout = SampleTimeoutMilliseconds, Func<long>? clock = null, Action<Process>? terminateFixture = null)
     {
         _preferredName = preferredName; _exact = exact;
         _startInfo = startInfo ?? (() => CreateStartInfo());
         _sampleTimeout = sampleTimeout; _clock = clock ?? (() => Environment.TickCount64);
+        _terminate=terminateFixture??(child=>child.Kill(entireProcessTree:true));
         lock (_gate) Start();
     }
 
@@ -62,6 +66,12 @@ internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
     {
         try
         {
+            lock(RetiredGate)
+            {
+                for(var i=UnconfirmedReaders.Count-1;i>=0;i--)
+                    if(UnconfirmedReaders[i].HasExited){UnconfirmedReaders[i].Dispose();UnconfirmedReaders.RemoveAt(i);}
+                if(UnconfirmedReaders.Count!=0)throw new NvmlTelemetryUnavailableException("Previous read-only NVML helper termination remains unconfirmed; no replacement spawned.");
+            }
             _session = Guid.NewGuid().ToString("N"); _sequence = 0;
             _process = Process.Start(_startInfo()) ?? throw new IOException("NVML helper did not start.");
             _process.StandardInput.AutoFlush = true;
@@ -156,11 +166,17 @@ internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
         try
         {
             if (graceful && !child.HasExited) { child.StandardInput.Close(); child.WaitForExit(500); }
-            if (!child.HasExited) { child.Kill(entireProcessTree: true); child.WaitForExit(500); }
+            if (!child.HasExited) { _terminate(child); child.WaitForExit(500); }
             return child.HasExited ? child.ExitCode : null;
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { return null; }
-        finally { child.Dispose(); }
+        finally
+        {
+            // This process is strictly read-only. Even so, never lose its
+            // identity and spawn an unbounded series of blocked readers.
+            if(child.HasExited)child.Dispose();
+            else lock(RetiredGate)UnconfirmedReaders.Add(child);
+        }
     }
 
     public void Dispose()

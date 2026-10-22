@@ -28,17 +28,44 @@ internal static class WindowsStartupRegistration
         get { using var identity = WindowsIdentity.GetCurrent(); return "VictusFanControl-" + identity.User!.Value; }
     }
 
-    internal static Task<bool> IsEnabledAsync() => QueryEnabledAsync(true);
+    internal static Task<bool> IsEnabledAsync(string? modulesDirectory = null) => QueryEnabledAsync(true,modulesDirectory);
     internal static Task<bool> IsRegisteredEnabledAsync() => QueryEnabledAsync(false);
-    private static async Task<bool> QueryEnabledAsync(bool requireCurrentExecutable)
+    private static async Task<bool> QueryEnabledAsync(bool requireCurrentExecutable,string? modulesDirectory = null)
     {
         var result = await RunAsync("/Query", "/TN", TaskName, "/XML").ConfigureAwait(false);
         if (result.ExitCode != 0) return false;
         var document = XDocument.Parse(result.Output);
         XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+        if(!document.Descendants(ns+"Enabled").All(e=>e.Value=="true"))return false;
+        if(!requireCurrentExecutable)return true; // Preserve an enabled user's intent when installing another version.
+        using var identity=WindowsIdentity.GetCurrent();
+        return HasCurrentContract(document,identity.User!.Value,Environment.ProcessPath!,modulesDirectory??Path.Combine(AppContext.BaseDirectory,"modules"),identity.Name);
+    }
+
+    internal static bool HasCurrentContract(XDocument document,string sid,string executable,string modules,string? currentAccountName=null)
+    {
+        XNamespace ns="http://schemas.microsoft.com/windows/2004/02/mit/task";
+        var root=document.Root;if(root?.Name!=ns+"Task")return false;
+        string? Value(string group,string name)=>root.Element(ns+group)?.Element(ns+name)?.Value;
+        var trigger=root.Element(ns+"Triggers")?.Elements().SingleOrDefault();
+        var principal=root.Element(ns+"Principals")?.Elements().SingleOrDefault();
+        var action=root.Element(ns+"Actions")?.Elements().SingleOrDefault();
+        var arguments=action?.Element(ns+"Arguments")?.Value;
+        // Task Scheduler exports a logon UserId as DOMAIN\account even when
+        // registration used its SID. Accept only the current OS identity's
+        // exact SID or canonical account, never an arbitrary matching username.
+        bool SameIdentity(string? value)=>string.Equals(value,sid,StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrWhiteSpace(currentAccountName)&&string.Equals(value,currentAccountName,StringComparison.OrdinalIgnoreCase);
         return document.Descendants(ns+"Enabled").All(e=>e.Value=="true") &&
-            (!requireCurrentExecutable || string.Equals(document.Descendants(ns + "Command").SingleOrDefault()?.Value,
-            Environment.ProcessPath, StringComparison.OrdinalIgnoreCase));
+            trigger?.Name==ns+"LogonTrigger" && SameIdentity(trigger.Element(ns+"UserId")?.Value) &&
+            principal?.Name==ns+"Principal" && SameIdentity(principal.Element(ns+"UserId")?.Value) &&
+            principal.Element(ns+"LogonType")?.Value=="InteractiveToken" && principal.Element(ns+"RunLevel")?.Value=="HighestAvailable" &&
+            action?.Name==ns+"Exec" && string.Equals(action.Element(ns+"Command")?.Value,executable,StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(action.Element(ns+"WorkingDirectory")?.Value,Path.GetDirectoryName(executable),StringComparison.OrdinalIgnoreCase) &&
+            (arguments=="--modules-dir \""+modules+"\"" || arguments=="--start-minimized --modules-dir \""+modules+"\"") &&
+            Value("Settings","DisallowStartIfOnBatteries")=="false" && Value("Settings","StopIfGoingOnBatteries")=="false" &&
+            Value("Settings","ExecutionTimeLimit")=="PT0S" && Value("Settings","AllowHardTerminate")=="false" &&
+            Value("Settings","MultipleInstancesPolicy")=="IgnoreNew";
     }
 
     internal static async Task SetEnabledAsync(bool enabled, string modulesDirectory, bool startMinimized = true)

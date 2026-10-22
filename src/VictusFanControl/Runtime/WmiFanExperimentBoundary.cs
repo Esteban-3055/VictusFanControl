@@ -1,6 +1,7 @@
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Telemetry;
 using VictusFanControl.Safety;
+using System.Text.Json;
 
 namespace VictusFanControl.Runtime;
 
@@ -10,6 +11,10 @@ internal sealed class WmiFanReadAdmissionPausedException : InvalidOperationExcep
     internal bool PlannedRelease { get; }
     internal WmiFanReadAdmissionPausedException(bool plannedRelease) : base("WMI GUI recovery has closed new fan reads; drain existing native work before release.") => PlannedRelease=plannedRelease;
 }
+
+/// <summary>The invocation is accounted for; only its tracking file still needs retirement.</summary>
+internal sealed class WmiNativeTrackingCleanupPendingException(string outcome, Exception inner)
+    : IOException($"Native operation {outcome}; marker cleanup pending. No further WMI call admitted until cleanup succeeds.", inner) { }
 
 /// <summary>Process-local whitelist plus cross-process serialization for the WMI experiment and GUI.</summary>
 internal static class WmiFanExperimentBoundary
@@ -24,6 +29,10 @@ internal static class WmiFanExperimentBoundary
     internal static Action? EnsureGuiGuardianAlive { get; set; }
     private sealed record Admission(TelemetrySnapshot Snapshot, Action EnsureThermalAllowed);
     private static Admission? _admission;
+    private sealed record NativeInvocation(string Directory, byte[] MarkerBytes);
+    private sealed record ConfirmedCompletion(NativeInvocation Invocation, string Outcome);
+    // Process-local evidence only. A file, elapsed time or a lost owner cannot manufacture this receipt.
+    private static ConfirmedCompletion? _confirmedCompletion;
     internal static bool Enabled => SessionDirectory is not null;
     internal static bool Recovering => Volatile.Read(ref _recovering) != 0;
     internal static string StopPath => Path.Combine(SessionDirectory!, "stop.signal");
@@ -65,7 +74,7 @@ internal static class WmiFanExperimentBoundary
                 throw new InvalidOperationException("WMI GUI release directory does not match the active boundary.");
 
             if (File.Exists(Path.Combine(released, "native-inflight.json")) ||
-                File.Exists(Path.Combine(released, "native-uncertain.signal")))
+                File.Exists(Path.Combine(released, "native-uncertain.signal")) || Volatile.Read(ref _confirmedCompletion) is not null)
                 throw new InvalidOperationException("WMI GUI boundary cannot rearm while native completion is uncertain.");
 
             var next = Path.GetFullPath(nextDirectory);
@@ -139,6 +148,7 @@ internal static class WmiFanExperimentBoundary
                 throw new InvalidOperationException("Abandoned WMI mutex; native completion is unknown. Preserve the lease.");
             }
             if (!owned) throw new TimeoutException("WMI experiment native slot is still occupied; no overlapping call sent.");
+            RetireConfirmedCompletion(SessionDirectory!);
             if (File.Exists(InFlightPath) || File.Exists(UncertainPath))
                 throw new InvalidOperationException("Previous native completion is unknown; no further WMI call admitted.");
             EnsureRequestAllowed(request); // Recheck stop/lifecycle after waiting.
@@ -147,40 +157,115 @@ internal static class WmiFanExperimentBoundary
         finally { if (owned) mutex.ReleaseMutex(); }
     }
 
-    internal static void MarkNativeStart(HpBiosRequest request)
+    internal static void MarkNativeStart(HpBiosRequest request) => PublishNativeStart(request);
+
+    private static NativeInvocation? PublishNativeStart(HpBiosRequest request)
     {
-        if (!Enabled) return;
+        if (!Enabled) return null;
+        if (File.Exists(InFlightPath) || File.Exists(UncertainPath) || Volatile.Read(ref _confirmedCompletion) is not null)
+            throw new InvalidOperationException("Previous native tracking is pending; no new native invocation admitted.");
         using var owner = System.Diagnostics.Process.GetCurrentProcess();
-        WmiFanExperiment.WriteJson(InFlightPath, new { Pid = Environment.ProcessId,
+        var invocationId = Guid.NewGuid();
+        var marker = new { Pid = Environment.ProcessId,
             OwnerStartUtcTicks = owner.StartTime.ToUniversalTime().Ticks,
-            Utc = DateTimeOffset.UtcNow, request.CommandType });
-        File.AppendAllText(Path.Combine(SessionDirectory!, "native-dispatch.jsonl"),
-            System.Text.Json.JsonSerializer.Serialize(new { pid = Environment.ProcessId,
+            Utc = DateTimeOffset.UtcNow, request.CommandType, InvocationId = invocationId };
+        var invocation = new NativeInvocation(SessionDirectory!, JsonSerializer.SerializeToUtf8Bytes(marker));
+        WmiFanExperiment.WriteJson(InFlightPath, marker);
+        try
+        {
+            File.AppendAllText(Path.Combine(SessionDirectory!, "native-dispatch.jsonl"),
+            JsonSerializer.Serialize(new { pid = Environment.ProcessId, invocationId,
                 timestampUtc = DateTimeOffset.UtcNow, commandType = request.CommandType,
                 payload = request.Payload.Select(b => (int)b).ToArray(), recovering = Recovering }) + Environment.NewLine);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The native delegate has not been entered. This marker is also safe
+            // to retire, but the original dispatch-log failure still rejects the call.
+            ConfirmCompletion(invocation, "was not dispatched");
+            throw;
+        }
+        return invocation;
     }
 
-    internal static void MarkNativeReturned()
+    private static void ConfirmCompletion(NativeInvocation invocation, string outcome)
     {
-        if (Enabled) File.Delete(InFlightPath);
+        Volatile.Write(ref _confirmedCompletion, new(invocation, outcome));
+        RetireConfirmedCompletion(invocation.Directory);
+    }
+
+    // Only callers already holding the native mutex may retire a confirmed
+    // marker. Keep exact bytes including a unique invocation ID, never just PID/age.
+    private static void RetireConfirmedCompletion(string directory)
+    {
+        var receipt = Volatile.Read(ref _confirmedCompletion);
+        if (receipt is null || !string.Equals(Path.GetFullPath(directory), receipt.Invocation.Directory, StringComparison.OrdinalIgnoreCase)) return;
+        var markerPath = Path.Combine(directory, "native-inflight.json");
+        if (File.Exists(Path.Combine(directory, "native-uncertain.signal")))
+        {
+            Interlocked.CompareExchange(ref _confirmedCompletion, null, receipt);
+            throw new IOException("Native uncertainty signal overrides the local completion receipt; marker retained.");
+        }
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                try
+                {
+                    using var marker = new FileStream(markerPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+                    var expected = receipt.Invocation.MarkerBytes;
+                    var actual = new byte[expected.Length];
+                    if (marker.Length == expected.Length) marker.ReadExactly(actual);
+                    if (marker.Length != expected.Length || !actual.AsSpan().SequenceEqual(expected))
+                    {
+                        Interlocked.CompareExchange(ref _confirmedCompletion, null, receipt);
+                        throw new InvalidDataException("Native marker changed; local completion receipt rejected and marker retained.");
+                    }
+                }
+                catch (FileNotFoundException) { } // Already retired after a confirmed completion.
+                File.Delete(markerPath);
+                Interlocked.CompareExchange(ref _confirmedCompletion, null, receipt);
+                return;
+            }
+            catch (InvalidDataException) { throw; }
+            catch (IOException ex) when (attempt < 3 && ((ex.HResult & 0xffff) is 32 or 33))
+            {
+                Thread.Sleep(25); // Bounded tracking cleanup, never cancellation of native execution.
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                throw new WmiNativeTrackingCleanupPendingException(receipt.Outcome, ex);
+            }
+        }
     }
 
     internal static T InvokeNative<T>(HpBiosRequest request, Func<T> invoke)
     {
-        MarkNativeStart(request);
+        var invocation = PublishNativeStart(request);
         var result = invoke();
         // A returned null/invalid response is still a completed invocation. Keep
         // response validation outside this boundary; exceptions from Invoke keep
         // the marker because their native completion has not been established.
-        MarkNativeReturned();
+        if (invocation is not null)
+        {
+            try { ConfirmCompletion(invocation, "returned"); }
+            catch
+            {
+                // The caller will reject this acquisition. Do not leak a native
+                // response object that its using statement has not received yet.
+                if (result is IDisposable disposable) disposable.Dispose();
+                throw;
+            }
+        }
         return result;
     }
 
     // Wait for a live native call to return before inspecting its transient
     // marker. Hold the same slot throughout recovery; nested Send calls on
     // this synchronous thread may acquire the Windows mutex recursively.
-    internal static IDisposable EnterRecoverySlot(string directory, TimeSpan timeout, string? mutexName = null)
+    internal static IDisposable EnterRecoverySlot(string directory, TimeSpan timeout, string? mutexName = null, bool waitForConfirmedCleanup = false)
     {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         var mutex = new Mutex(false, mutexName ?? @"Global\VictusFanControl.WmiFanExperiment.Native");
         var owned = false;
         try
@@ -193,6 +278,18 @@ internal static class WmiFanExperimentBoundary
                 throw new IOException("Native completion is unknown after owner exit; lease retained.");
             }
             if (!owned) throw new TimeoutException("Native WMI call did not drain; no recovery call admitted and lease retained.");
+            while (true)
+            {
+                try { RetireConfirmedCompletion(directory); break; }
+                catch (WmiNativeTrackingCleanupPendingException ex) when (waitForConfirmedCleanup &&
+                    ex.InnerException is IOException io && ((io.HResult & 0xffff) is 32 or 33) && clock.Elapsed < timeout)
+                {
+                    // Keep the mutex across retries so neither a caller nor the
+                    // detached guardian can classify this known-return marker
+                    // between attempts. This never retries native execution.
+                    Thread.Sleep((int)Math.Min(100, Math.Max(1, (timeout - clock.Elapsed).TotalMilliseconds)));
+                }
+            }
             if (File.Exists(Path.Combine(directory, "native-inflight.json")) || File.Exists(Path.Combine(directory, "native-uncertain.signal")))
                 throw new IOException("Native completion is unknown; no recovery call admitted and lease retained.");
             return new NativeSlot(mutex);
@@ -201,6 +298,24 @@ internal static class WmiFanExperimentBoundary
         {
             if (owned) mutex.ReleaseMutex();
             mutex.Dispose();
+            throw;
+        }
+    }
+    internal static void PrepareGuiReleaseStop(string directory, TimeSpan timeout)
+    {
+        if (!_gui || !string.Equals(Path.GetFullPath(directory), SessionDirectory, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("WMI GUI release does not match the active boundary.");
+        BeginRecovery(); // Close admission before waiting for the outstanding call.
+        try
+        {
+            using var slot = EnterRecoverySlot(directory, timeout, waitForConfirmedCleanup: true);
+            // Drain only proven returned tracking before the detached guardian
+            // inspects this directory without the owner's in-memory evidence.
+            WmiFanGuiGuardianHost.RequestStop(directory, "CLIENT_RELEASE");
+        }
+        catch
+        {
+            WmiFanGuiGuardianHost.RequestStop(directory, "CLIENT_RELEASE_FAILED");
             throw;
         }
     }

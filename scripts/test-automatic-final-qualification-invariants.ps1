@@ -105,7 +105,7 @@ Require ($candidate.experimentalPlatformRetention.defaultEnabled -eq $false -and
     $candidate.experimentalPlatformRetention.maximumExtraRawLevels -eq 0 -and $candidate.experimentalPlatformRetention.maximumSupplementSeconds -eq 0) 'retired retention must not be available to product control'
 Require ($launcher.Contains('removed-no-platform-sensor-acquisition') -and $package.Contains('removed-no-platform-sensor-acquisition')) 'launcher and package must bind the retired platform sensor contract'
 Require ($candidate.sessionRestart -eq 'explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics') 'candidate restart must retain clean-release and explicit Firmware reentry'
-Require ($candidate.automaticThermalContract -eq 'cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response') 'candidate thermal contract drifted'
+Require ($candidate.automaticThermalContract -eq 'cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95') 'candidate thermal contract drifted'
 Require ($launcher.Contains($candidate.automaticThermalContract) -and $package.Contains($candidate.automaticThermalContract)) 'launcher and package must bind the current thermal contract'
 foreach ($evidence in $candidate.physicalEvidence) {
     Require ([IO.Path]::GetFileName($evidence) -eq $evidence -and (Test-Path -LiteralPath (Join-Path $repoRoot ('release/' + $evidence)))) 'candidate physical evidence reference missing or invalid'
