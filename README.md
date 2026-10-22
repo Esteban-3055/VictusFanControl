@@ -1,19 +1,20 @@
-# VictusFanControl v1.3.1
+# VictusFanControl v1.3.2
 
-[Español](README.es.md) · [Stable release](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.3.1) · [Release notes](release/RELEASE-NOTES-v1.3.1.md) · [Operating guide](docs/PRODUCT_V1.md)
+[Español](README.es.md) · [Stable release](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.3.2) · [Release notes](release/RELEASE-NOTES-v1.3.2.md) · [Operating guide](docs/PRODUCT_V1.md)
 
 Windows fan control and CPU/GPU preferences for **HP 8C40 / 9D0R1LA / BIOS F.18** (Victus 15-fa1xxx, board revision 63.43, i7-13700H, RTX 4060 Laptop GPU). Other models and BIOS versions are outside this release's control authorization.
 
 ## Install and update
 
-Download **VictusFanControl-1.3.1-Setup-win-x64.exe** from Releases or check for updates in the application. Requires Windows 11 x64, .NET Desktop Runtime 8 x64, PawnIO and NVIDIA/NVML. The installer preserves saved curves and profiles; unresolved sessions retain their recovery records and block new control.
+Download **VictusFanControl-1.3.2-Setup-win-x64.exe** from Releases or check for updates in the application. Requires Windows 11 x64, .NET Desktop Runtime 8 x64, PawnIO and NVIDIA/NVML. The installer preserves saved curves and profiles; unresolved sessions retain their recovery records and block new control.
 
-The ZIP alternative is **VictusFanControl-1.3.1-win-x64.zip**. Extract all files, exit the previous app from its tray menu, and run `Start-ProductGui.ps1 -Mode Install` as administrator with the same Windows account. Closing the window minimizes it; **Exit** in the tray releases control.
+The ZIP alternative is **VictusFanControl-1.3.2-win-x64.zip**. Extract all files, exit the previous app from its tray menu, and run `Start-ProductGui.ps1 -Mode Install` as administrator with the same Windows account. Closing the window minimizes it; **Exit** in the tray releases control.
 
 ## Current behavior
 
-- Fixes the 1.3.0 Windows startup checkbox: accepts Task Scheduler's canonical account representation and confirms the actual state without asking to save Automatic. [Cause and validation](docs/RELEASE-1.3.1-VALIDATION.md).
-- 1.3.1 fixes skipped final cleanup, recovery after a returned GPU release error and a lost final Guardian reply. It validates battery startup settings, separates update-cache reads from startup, and serializes installation. [Audit and validation](docs/RELEASE-1.3.1-VALIDATION.md).
+- High process priority by default for the app and production Guardians; telemetry publication no longer scans recovery files on the sensor worker. [Changes and validation](docs/RELEASE-1.3.2-VALIDATION.md).
+- Confirms late WMI release using the original owner without repeating native commands. Automatic startup waits for the inventory check; logs distinguish automatic and manual retries.
+- Retains the 1.3.1 Windows startup checkbox fix, final cleanup and exact-session GPU recovery. [Earlier cause and validation](docs/RELEASE-1.3.1-VALIDATION.md).
 - AC/Battery profiles, internal fan curve, CPU/GPU limits and live demand/applied markers. Internal logical fan levels are CPU 10–54 and GPU up to 52; external output is independent, 0–255.
 - Optional minimized startup and Automatic activation after three distinct fresh observations. Preparation refreshes stale telemetry through the coordinated reader. Late interface states cannot replace a newer published state.
 - AC/Battery reconciliation requires fresh Guardian confirmation and retains its bounded transition. A Windows battery indication alone does not prove physical unplugging.
@@ -23,9 +24,9 @@ The ZIP alternative is **VictusFanControl-1.3.1-win-x64.zip**. Extract all files
 
 ## ESP32 external base
 
-Firmware code is unchanged from 1.2.17. An ESP32 already running that firmware does not need reflashing for these Windows fixes.
+Firmware adds Wi-Fi and mDNS retries for a stalled connection after a network interruption. Load it separately to get that improvement; updating Windows does not update the board. The Windows fixes also work with the previous firmware. [Reconnection and limits](docs/ESP32-WIFI-RECOVERY.md).
 
-Download **VictusBase-ESP32C3-v1.3.1-Arduino-sketch.zip** from the same release. Extract and open `VictusBaseESP32C3/VictusBaseESP32C3.ino`; PWM is enabled. Use Espressif core **3.3.2**, ArduinoJson **6.21.5**, **ESP32C3 Dev Module**, flash **4 MB**, USB CDC enabled, and full flash erase disabled to retain pairing/NVS.
+Download **VictusBase-ESP32C3-v1.3.2-Arduino-sketch.zip** from the same release. Extract and open `VictusBaseESP32C3/VictusBaseESP32C3.ino`; PWM is enabled. Use Espressif core **3.3.2**, ArduinoJson **6.21.5**, **ESP32C3 Dev Module**, flash **4 MB**, USB CDC enabled, and full flash erase disabled to retain pairing/NVS.
 
 The external controller runs EMA, hysteresis and ramps on ESP32; Windows supplies the settings and telemetry. Ambient temperature is informational. On disconnect, output ramps toward **130/255**. LCD cycle: CPU/GPU + ambient 30 s; CPU/GPU/RAM usage 5 s; demand + applied PWM 5 s; PC/Wi-Fi 5 s. Missing or stale readings show `--`.
 
