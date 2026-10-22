@@ -28,6 +28,12 @@ internal sealed class ProductStartupAutomatic
         { Cancel("Automático al iniciar: reloj regresivo; permanece en Firmware."); return false; }
         if(state.LifecycleBlocked)
         { Cancel("Automático al iniciar bloqueado por interrupción: "+(state.LifecycleBlockReason??state.Failure??"controlador bloqueado")+"."); return false; }
+        if(state.PerformanceRecovery?.Checking==true)
+        {
+            _samples=0;_lastSample=null;_firstSample=null;Issues=[];
+            Status="Automático al iniciar en espera: comprobando registros de recuperación…";
+            return false;
+        }
         if(state.PerformanceRecovery?.Pending==true)
         { Cancel("Automático al iniciar bloqueado: hay una sesión pendiente de recuperación."); return false; }
         if(state.Target=="Unsupported")

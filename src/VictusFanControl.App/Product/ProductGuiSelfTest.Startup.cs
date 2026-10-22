@@ -25,6 +25,8 @@ internal static partial class ProductGuiSelfTest
             AutomaticAuthorized=true,CanApplyPerformance=true,
             Snapshot=new TelemetrySnapshot(at.AddSeconds(i),"CPU",50,20,50,"GPU",45,10,30,1200,1200){CpuExpectedPhysicalCoreCount=3,CpuCoreTemperatures=new[]{new CpuCoreTemperatureSample(0,0,"Performance",50),new CpuCoreTemperatureSample(1,2,"Performance",49),new CpuCoreTemperatureSample(2,4,"Performance",48)}}};
         var gate=new ProductStartupAutomatic(0);
+        require(!gate.Observe(State(0) with {PerformanceRecovery=new(true,"loading") {Checking=true},CanApplyPerformance=false},at,0)
+            && !gate.Finished && !gate.Cancelled,"Background inventory loading cancelled startup instead of waiting safely.");
         require(!gate.Observe(State(0),at,0)&&!gate.Observe(State(0),at,1000),"Startup counted a repeated sample.");
         require(!gate.Observe(State(1),at.AddSeconds(1),1000)&&gate.Observe(State(2),at.AddSeconds(2),2000),"Three fresh startup acquisitions did not admit.");
         require(!gate.Observe(State(3),at.AddSeconds(3),3000),"Startup activation repeated.");

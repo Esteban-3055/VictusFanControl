@@ -48,12 +48,13 @@ internal sealed partial class ProductForm
     private async Task RetryAutomaticCoreAsync(bool unattended,ProductProfiles? requestedPreferences)
     {
         _restarting=true;_restartLifecycleInterrupted=false;_canvas.Busy=true;_canvas.RestartAvailable=false;
-        _presentationTimer.Stop();_startupAutomatic?.Cancel("Reintento manual solicitado.");
+        var retryReason = unattended ? "Reanudación automática" : "Reintento manual de Automático";
+        _presentationTimer.Stop();_startupAutomatic?.Cancel(retryReason);
         var before=_canvas.State;
         var releasedRuntime=_runtime as ProductRuntime;
         try
         {
-            _runtime?.FenceLifecycle("Reintento manual de Automático");
+            _runtime?.FenceLifecycle(retryReason);
             DetachRuntime();
             _canvas.Notice="Liberando la interrupción anterior antes de preparar Automático…";_canvas.Invalidate();
             // Drain every pending operation and release all domains; never reuse a faulted controller/worker.
@@ -93,7 +94,7 @@ internal sealed partial class ProductForm
             _canvas.State=failedState with{LifecycleBlocked=true,Runtime="Failed",Failure="No se pudo preparar Automático: "+ex.Message,PerformanceRecovery=pending,CanApplyPerformance=false,AutomaticPreparing=false};
             _canvas.Notice=_canvas.State.Failure!+" Conserva los registros de recuperación y usa Salir desde la bandeja.";
             UpdateTray(_canvas.State);
-            AppLog.Write("PRODUCT MANUAL AUTOMATIC RETRY BLOCKED: "+ex);
+            AppLog.Write("PRODUCT AUTOMATIC RETRY BLOCKED (unattended="+unattended+"): "+ex);
         }
         finally
         {

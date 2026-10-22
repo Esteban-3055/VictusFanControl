@@ -932,6 +932,7 @@ internal static class Program
 
         if (hardwareTestModeCount == 0)
         {
+            VictusFanControl.Scheduling.ProductProcessPriority.Apply(message => AppLog.Write(message));
             ProductRestartRequest? restart;
             try
             {

@@ -6,6 +6,7 @@ namespace VictusFanControl.App;
 /// <summary>Read-only journal preflight. Never restores hardware, deletes records or invents missing session IDs.</summary>
 internal sealed record PerformanceRecoveryPreview(bool Pending, string Detail, Guid? CpuSession=null, Guid? GpuSession=null, IReadOnlyList<ProductRecoveryRecord>? FanRecords=null)
 {
+    internal bool Checking { get; init; }
     internal bool Actionable => CpuSession.HasValue || GpuSession.HasValue || FanRecords?.Count > 0;
     internal static string DirectoryPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "VictusFanControl","Performance",CpuPowerProductDefaults.TargetProfileId);

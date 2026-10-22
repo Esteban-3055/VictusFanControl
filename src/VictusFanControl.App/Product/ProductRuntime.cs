@@ -108,6 +108,7 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
     private readonly Hp8C40ThermalEmergencyConfirmation _thermal = new();
     private readonly TelemetryWorker _worker;
     private readonly PerformanceGuardianClient _performance;
+    private readonly RecoveryPreviewCache _recoveryPreview = new();
     private readonly WmiFanGuiGuardianClient? _fanGuardian;
     private bool _releaseCompleted;
     private Guid? _drainedGpuSession;
@@ -820,7 +821,7 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
         var source = "Unknown";
         try { var reading = new WindowsPerformancePowerSourceReader().Read(); if (reading.Succeeded) source = reading.Source.ToString(); } catch { }
         var p = _performance.LastStatusFresh ? _performance.LastStatus : null;
-        var recovery=_performance.HasProcess&&!_performance.HasFailedProcess ? null : PerformanceRecoveryPreview.Read();
+        var recovery=_performance.HasProcess&&!_performance.HasFailedProcess ? null : _recoveryPreview.Get();
         ProductRuntimeState state;
         lock (_stateSync)
         {
@@ -871,6 +872,7 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
         try { await _worker.DisposeAsync(); } catch (Exception ex) { failures.Add(ex); }
         if (_poll is not null) try { await _poll; } catch (OperationCanceledException) { } catch (Exception ex) { failures.Add(ex); }
         if (_thermalDeadline is not null) try { await _thermalDeadline; } catch (OperationCanceledException) { } catch (Exception ex) { failures.Add(ex); }
+        try { await _recoveryPreview.DisposeAsync(); } catch (Exception ex) { failures.Add(ex); }
         _lifetime.Dispose();
         // Only performance release may be unresolved. Fan release, telemetry
         // and every local callback must have drained successfully first.
