@@ -67,7 +67,7 @@ public sealed record ProductProfile
         if (Fan.Tuning.MinimumLevel is not (10 or 30) || Fan.Tuning.MaximumLevel != Hp8C40AutomaticPolicy.MaximumLevel)
             throw new InvalidDataException("El editor admite niveles CPU 10–54; la GPU se limita a 52 en el backend de producto.");
         if (GpuMaximumMHz < GpuProductPreferences.MinimumMHz || GpuMaximumMHz > GpuProductPreferences.Maximum(source))
-            throw new InvalidDataException("Límite GPU fuera del rango configurable 210–2535 MHz.");
+            throw new InvalidDataException($"Límite GPU fuera del rango configurable {GpuProductPreferences.MinimumMHz}–{GpuProductPreferences.ConfigurableMaximumMHz} MHz.");
         foreach (var axis in Enum.GetValues<AdaptiveCurveAxis>())
             if (AdaptiveCurveProfiles.Curve(AdaptiveCurveProfiles.Validate(Fan.Profile), axis).Any(p => p.Level < 10 || p.Level > 50))
                 throw new InvalidDataException("Curva de ventiladores fuera de rango.");
@@ -79,7 +79,7 @@ public static class GpuProductPreferences
     public const int MinimumMHz = 210;
     public const int QualifiedAcMaximumMHz = 1850;
     public const int QualifiedBatteryMaximumMHz = 1200;
-    public const int ConfigurableMaximumMHz = 2535;
+    public const int ConfigurableMaximumMHz = 3105;
     // Configurable range is user authorized; historical qualification remains 1850/1200.
     // NVML rejection remains a failure; acceptance never claims independent range ownership.
     public const bool CustomClockExecutionAuthorized = true;

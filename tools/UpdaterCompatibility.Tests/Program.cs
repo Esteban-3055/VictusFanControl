@@ -24,23 +24,24 @@ if(ProductUpdates.ParseReleases("["+Release("v1.3.2-preview.1",true)+"]",current
     ProductUpdates.ParseReleases("["+Release("v1.3.2",false,true)+"]",current,true) is not null||
     ProductUpdates.ParseReleases(metadata,expected,true) is not null)throw new Exception("Draft, suffix or installed-version fence changed.");
 Console.WriteLine("PASS original 1.2.9 updater: stable numeric 1.3.2 eligible from 1.2.9 through 1.3.1 without preview opt-in; draft/suffix/preview fences preserved.");
-var nextPreview="["+Release("v1.3.3",true)+","+Release("v1.3.2",false)+"]";
-foreach(var previous in previousVersions.Append(expected))
+var nextPreview="["+Release("v1.3.4",true)+","+Release("v1.3.2",false)+"]";
+foreach(var previous in previousVersions.Append(expected).Append(new Version(1,3,3)))
 {
     var stable=ProductUpdates.ParseReleases(nextPreview,previous,false);
-    if(previous==expected?stable is not null:stable?.Version!=expected)throw new Exception("1.3.3 preview changed the stable update channel.");
-    if(ProductUpdates.ParseReleases(nextPreview,previous,true) is not {IsPrerelease:true,Version:var pv}||pv!=new Version(1,3,3))
-        throw new Exception("Original updater cannot discover the opt-in 1.3.3 preview.");
+    if(previous>=expected?stable is not null:stable?.Version!=expected)throw new Exception("1.3.4 preview changed the stable update channel.");
+    if(ProductUpdates.ParseReleases(nextPreview,previous,true) is not {IsPrerelease:true,Version:var pv}||pv!=new Version(1,3,4))
+        throw new Exception("Original updater cannot discover the opt-in 1.3.4 preview.");
 }
-Console.WriteLine("PASS original 1.2.9 updater: numeric 1.3.3 preview from 1.2.9 through 1.3.2 requires opt-in; stable channel remains unchanged.");
+Console.WriteLine("PASS original 1.2.9 updater: numeric 1.3.4 preview from 1.2.9 through 1.3.3 requires opt-in; stable channel remains unchanged.");
 if(args.Length==2&&args[0]=="--live")
 {
     using var deadline=new CancellationTokenSource(TimeSpan.FromMinutes(10));
     var update=await ProductUpdates.CheckAsync(current,deadline.Token,false)??throw new Exception("Published stable unavailable to 1.2.9.");
     if(update.Version!=expected||update.IsPrerelease)throw new Exception("Unexpected published update.");
+    var optIn=await ProductUpdates.CheckAsync(current,deadline.Token,true)??throw new Exception("Opt-in channel unavailable.");
     foreach(var previous in previousVersions)
     foreach(var previews in new[]{false,true})
-        if(await ProductUpdates.CheckAsync(previous,deadline.Token,previews)!=update)
+        if(await ProductUpdates.CheckAsync(previous,deadline.Token,previews)!=(previews?optIn:update))
             throw new Exception("Previous version cannot discover the same stable installer.");
     var root=Path.GetFullPath(args[1]);Directory.CreateDirectory(root);
     var path=await ProductUpdates.DownloadCachedAsync(update,deadline.Token,root:root);

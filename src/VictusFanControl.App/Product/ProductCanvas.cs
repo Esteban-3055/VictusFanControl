@@ -308,7 +308,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             Slider(g,"gpu","Graphics clock máximo",new(350,470,735,120),Profile.GpuMaximumMHz,210,GpuProductPreferences.Maximum(Editing),"MHz");
             DrawText(g,"Clock mínimo: 210 MHz · límite configurado, no lectura del rango",350,635,21,Muted,735);
             DrawText(g,"ActiveUnverified significa Set aceptado. El rango locked completo no es observable en este driver.",350,687,21,Muted,735);
-            DrawText(g,"Rango configurable 210–2535 MHz; el driver puede rechazar el valor.",350,768,19,Yellow,735);
+            DrawText(g,$"Rango configurable {GpuProductPreferences.MinimumMHz}–{GpuProductPreferences.Maximum(Editing)} MHz; el driver puede rechazar el valor.",350,768,19,Yellow,735);
         }
         else
         {

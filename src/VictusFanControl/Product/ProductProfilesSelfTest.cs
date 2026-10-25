@@ -114,12 +114,15 @@ internal static class ProductProfilesSelfTest
         var customGpu=new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 1800, BatteryGpuMaximumMHz = 1000 };
         customGpu.Validate();
         if(customGpu.GpuPresets().Ac.MaxGraphicsClockMHz!=1800||customGpu.GpuPresets().Battery.MaxGraphicsClockMHz!=1000)throw new InvalidOperationException("Custom GPU preferences did not reach the preset controller.");
-        var expandedGpu=new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 2535, BatteryGpuMaximumMHz = 2535 };
+        var expandedGpu=new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 3105, BatteryGpuMaximumMHz = 3105 };
         expandedGpu.Validate();
-        if(expandedGpu.GpuPresets().Ac.MinGraphicsClockMHz!=210||expandedGpu.GpuPresets().Ac.MaxGraphicsClockMHz!=2535||expandedGpu.GpuPresets().Battery.MaxGraphicsClockMHz!=2535)
+        if(expandedGpu.GpuPresets().Ac.MinGraphicsClockMHz!=210||expandedGpu.GpuPresets().Ac.MaxGraphicsClockMHz!=3105||expandedGpu.GpuPresets().Battery.MaxGraphicsClockMHz!=3105)
             throw new InvalidOperationException("Expanded GPU range did not reach NVML presets.");
-        Reject(() => new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 2536 }.Validate());
-        Reject(() => new PerformanceGuiSessionConfiguration { BatteryGpuMaximumMHz = 2536 }.Validate());
+        foreach(var previousMaximum in new[]{2535,2536})new PerformanceGuiSessionConfiguration{AcGpuMaximumMHz=previousMaximum,BatteryGpuMaximumMHz=previousMaximum}.Validate();
+        Reject(() => new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 3106 }.Validate());
+        Reject(() => new PerformanceGuiSessionConfiguration { BatteryGpuMaximumMHz = 3106 }.Validate());
+        Reject(() => (original with{Ac=original.Ac with{GpuMaximumMHz=3106}}).Validate());
+        Reject(() => (original with{Battery=original.Battery with{GpuMaximumMHz=3106}}).Validate());
         Reject(() => new PerformanceGuiSessionConfiguration { AcGpuMaximumMHz = 209 }.Validate());
         new PerformanceGuiSessionConfiguration().Validate();
         var sample=new TelemetrySnapshot(DateTimeOffset.UtcNow,"fixture",90,18,20,"fixture",45,40,100,3100,3100)
@@ -155,9 +158,9 @@ internal static class ProductProfilesSelfTest
         }
         if(ProductCurveMarkers.BuildUnified(original.Ac.Fan,sample,original.Ac.Fan,sample,55,filteredDemand,spikeFilter).Any(m=>m.IsApplied))
             throw new InvalidOperationException("Out-of-range level invented an applied marker.");
-        var expandedProfiles=original with{Ac=original.Ac with{GpuMaximumMHz=2535},Battery=original.Battery with{GpuMaximumMHz=210}};
+        var expandedProfiles=original with{Ac=original.Ac with{GpuMaximumMHz=3105},Battery=original.Battery with{GpuMaximumMHz=2535}};
         var expandedRoundtrip=ProductProfilesStore.Parse(ProductProfilesStore.Serialize(expandedProfiles));
-        if(expandedRoundtrip.Ac.GpuMaximumMHz!=2535||expandedRoundtrip.Battery.GpuMaximumMHz!=210||original.Ac.GpuMaximumMHz!=1850||original.Battery.GpuMaximumMHz!=1200)
+        if(expandedRoundtrip.Ac.GpuMaximumMHz!=3105||expandedRoundtrip.Battery.GpuMaximumMHz!=2535||original.Ac.GpuMaximumMHz!=1850||original.Battery.GpuMaximumMHz!=1200)
             throw new InvalidOperationException("GPU range changed defaults or lost independent persisted values.");
         var json=ProductProfilesStore.Serialize(original);
         foreach(var invalid in new[]{"{}","null","[]",json.Insert(1,"\"schemaVersion\":1,"),json.Replace("\"tuning\": {","\"tuning\": null, \"oldTuning\": {"),json.Replace("\"cpuPl1Watts\": 35","\"cpuPl1Watts\": -1"),json.Replace("\"gpuMaximumMHz\": 1850","\"gpuMaximumMHz\": 9999"),json.Replace("\"input\": 40","\"input\": 40, \"input\": 40")})Reject(()=>ProductProfilesStore.Parse(invalid));
