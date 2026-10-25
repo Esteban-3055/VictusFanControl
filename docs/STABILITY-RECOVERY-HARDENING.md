@@ -29,7 +29,7 @@ El drenaje y la estabilidad son fases distintas. Se puede cerrar pronto una sesi
 
 ## Validación por alcance
 
-Las comprobaciones dirigidas de pipeline y GUI, la compilación de solución/instalador y los auxiliares NVIDIA ficticios se han ejecutado durante la implementación. La batería integrada y el paquete candidato se registran sobre el commit final; sus resultados y hashes se añaden al cierre de la validación. Los registros privados permanecen bajo `output/`, fuera de Git.
+La integración local pasó **19/19 grupos generales y 5/5 grupos nuevos** sobre `e965e35`, con fuentes limpias. La candidata local `1d2235b` solo añade dos mensajes del instalador: identificación de preliminar y explicación de incertidumbre sin prescribir un reinicio. Los binarios publicados del paquete pasaron además GUI, 30 ciclos/924 renders y ambas recuperaciones ficticias. El instalador pasó 14 casos y la verificación de su payload incrustado mediante entrada DLL. [Resultados, procedencia y hashes](RELEASE-1.3.3-VALIDATION.md). Los registros privados permanecen bajo `output/`, fuera de Git.
 
 No se han reiniciado Windows ni ESP32, registrado tareas de prueba en el equipo ni escrito ventiladores/límites físicos. El ajuste High de un hijo de producción se prueba cerrando su entrada **antes** de enviar initialize: comprueba prioridad, no NVML ni GPU física.
 
