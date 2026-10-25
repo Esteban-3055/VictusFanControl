@@ -814,12 +814,14 @@ internal static partial class ProductGuiSelfTest
         internal AdaptiveFanTuning? LastTuning;
         public Task ApplyFanTuningAsync(AdaptiveFanTuning tuning){Commands++;LastTuning=tuning;return Task.CompletedTask;}
         public event Action<ProductRuntimeState>? Changed;
-        public ProductRuntimeState State {get;}=new();
+        private readonly ProductRuntimeState _initialState=new();
+        internal ProductRuntimeState? StateOverride;
+        public ProductRuntimeState State=>StateOverride??_initialState;
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;
         internal int? LastManualLevel;
         internal PerformanceGuiSessionConfiguration? LastPerformance;
         internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate,DisposeGate;
-        internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure,ReleaseFailure;
+        internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure,ReleaseFailure,AutomaticModeFailure;
         public Guid? DrainedGpuSession { get; set; }
         internal int CompletedRecoveries;
         public void CompleteRecovery(Guid session)
@@ -830,7 +832,7 @@ internal static partial class ProductGuiSelfTest
         internal void Publish(ProductRuntimeState state)=>Changed?.Invoke(state);
         public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
         public void RequestAutomaticTelemetry() { }
-        public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
+        public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Automatic&&AutomaticModeFailure is not null?Task.FromException(new IOException(AutomaticModeFailure)):mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
         public Task ApplyManualAsync(int level){Commands++;LastManualLevel=level;return Task.CompletedTask;}
         public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;LastPerformance=p.PerformanceConfiguration();return CommandFailure is null?PerformanceGate?.Task??Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public Task ReleasePerformanceAsync(){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}

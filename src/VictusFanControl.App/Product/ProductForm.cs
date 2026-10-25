@@ -268,7 +268,9 @@ internal sealed partial class ProductForm : Form
             {
                 try
                 {
-                    await _runtime.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,profiles);_recoveryEpisode.Finish();
+                    var owner=_runtime;
+                    await owner.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,profiles);
+                    RememberConfirmedAutomaticActivation(owner,profiles);_recoveryEpisode.Finish();
                     if(request.Phase!="resumption")_recoveryEpisode.CompleteUserActivation();
                 }
                 catch(Exception activationError)
@@ -406,7 +408,9 @@ internal sealed partial class ProductForm : Form
                 _ = RunAsync(async()=>
                 {
                     if(_runtime is not {} current)throw new InvalidOperationException("No hay una sesión preparada.");
-                    await current.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,Draft);_recoveryEpisode.CompleteUserActivation();
+                    var profiles=Draft;
+                    await current.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,profiles);
+                    RememberConfirmedAutomaticActivation(current,profiles);_recoveryEpisode.CompleteUserActivation();
                 });break;
             case "manual-apply":_ = RunAsync(()=>_runtime?.ApplyManualAsync(_canvas.ManualLevel)??Task.CompletedTask);break;
             case "performance-apply":_ = RunAsync(()=>{var profiles=_canvas.PerformanceDraft;profiles.Validate();profiles.PerformanceConfiguration().Validate();return _runtime?.ApplyPerformanceAsync(profiles)??Task.CompletedTask;});break;

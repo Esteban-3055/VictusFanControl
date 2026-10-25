@@ -12,6 +12,11 @@ internal sealed class ProductAutomaticResumption
     internal bool Wanted => _wanted && !_suppressed;
     internal void Cancel() { _suppressed=true; _wanted=false; _interruptedAt=null; _healthyAt=null; }
     internal void Arm() { Cancel(); _suppressed=false; }
+    internal bool ConfirmActivation()
+    {
+        if(_suppressed)return false;
+        _wanted=true;_interruptedAt=null;_healthyAt=null;return true;
+    }
     internal void Observe(ProductRuntimeState state, long now)
     {
         if(_suppressed||state.AutomaticReview)return;
@@ -65,6 +70,14 @@ internal sealed partial class ProductForm
     private readonly ProductRecoveryEpisode _recoveryEpisode=new();
     private readonly ProductAutomaticResumption _automaticResumption;
     private ProductProfiles? _resumptionProfiles;
+    private void RememberConfirmedAutomaticActivation(IProductRuntime owner,ProductProfiles profiles)
+    {
+        // Called only after the owner's activation task succeeds. Presentation
+        // may coalesce every Automatic frame; it must not own this intent.
+        if(!ReferenceEquals(owner,_runtime)||_closing||_automaticReview is not null||_automaticRecoveryResumeSuppressed||!_automaticResumption.ConfirmActivation())return;
+        _resumptionProfiles=ProductProfilesStore.Freeze(owner.State.AutomaticResumeProfiles??profiles);
+        _automaticResumption.Observe(_canvas.State,Environment.TickCount64);
+    }
     private void ObserveAutomaticResumption(ProductRuntimeState state)
     {
         if(state.FanMode=="Automatic"&&!state.LifecycleBlocked&&

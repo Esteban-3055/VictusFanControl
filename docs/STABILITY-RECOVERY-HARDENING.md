@@ -27,6 +27,8 @@ La fecha de un mensaje de progreso, dibujo o escritura de log nunca se convierte
 
 El drenaje y la estabilidad son fases distintas. Se puede cerrar pronto una sesión averiada sin esperar temperaturas sanas; la siguiente autoridad sigue esperando pruebas nuevas después de esa frontera. Una operación incierta no se repite por enfriarse el equipo, renovarse una ventana o vencer un reloj.
 
+La intención de reanudar tampoco depende de dibujar una transición. Se reprodujo la pérdida de intención cuando las publicaciones Automatic e Interrumpido se combinaban en una sola entrega UI. Tras completar con éxito la activación del propietario actual se conserva la intención y su perfil aplicado inmutable. Una activación fallida, una cancelación del usuario, otro propietario o una revisión física no la arman. Este registro no concede autoridad: siguen drenaje y 30 s de adquisiciones nuevas.
+
 ## Validación por alcance
 
 La integración local pasó **19/19 grupos generales y 5/5 grupos nuevos** sobre `e965e35`, con fuentes limpias. La candidata local `1d2235b` solo añade dos mensajes del instalador: identificación de preliminar y explicación de incertidumbre sin prescribir un reinicio. Los binarios publicados del paquete pasaron además GUI, 30 ciclos/924 renders y ambas recuperaciones ficticias. El instalador pasó 14 casos y la verificación de su payload incrustado mediante entrada DLL. [Resultados, procedencia y hashes](RELEASE-1.3.3-VALIDATION.md). Los registros privados permanecen bajo `output/`, fuera de Git.
