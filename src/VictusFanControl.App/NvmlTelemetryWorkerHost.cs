@@ -12,11 +12,13 @@ internal static class NvmlTelemetryWorkerHost
 
     internal static int Run(string[] args)
     {
+        if (args.Length == 0 || args[0] is not ("--nvml-telemetry-worker" or "--nvml-telemetry-fixture")) return 2;
         var fixture = args[0] == "--nvml-telemetry-fixture";
         if (args.Length != (fixture ? 4 : 3) || fixture && !Fixtures.Contains(args[3]) ||
-            !int.TryParse(args[1], out var parentId) || !long.TryParse(args[2], out var parentStart)) return 2;
-        using var parent = Process.GetProcessById(parentId);
-        if (parent.HasExited || parent.StartTime.ToUniversalTime().Ticks != parentStart) return 2;
+            !int.TryParse(args[1], out var parentId) || parentId <= 0 ||
+            !long.TryParse(args[2], out var parentStart) || parentStart <= 0) return 2;
+        using var parent = OpenOwner(parentId,parentStart);
+        if (parent is null) return 197;
         using var finished = new ManualResetEventSlim();
         var lastRequest = Environment.TickCount64;
         // This thread stays independent of blocked native calls and exits only this read-only helper.
@@ -24,8 +26,7 @@ internal static class NvmlTelemetryWorkerHost
         {
             while (!finished.Wait(500))
             {
-                try { if (parent.HasExited || Environment.TickCount64 - Interlocked.Read(ref lastRequest) > 20000) Environment.Exit(197); }
-                catch (InvalidOperationException) { Environment.Exit(197); }
+                if (!OwnerAlive(parent) || Environment.TickCount64 - Interlocked.Read(ref lastRequest) > 20000) Environment.Exit(197);
             }
         }) { IsBackground = true, Name = "NVML helper owner monitor" };
         monitor.Start();
@@ -89,6 +90,24 @@ internal static class NvmlTelemetryWorkerHost
         {
             reader?.Dispose(); finished.Set(); monitor.Join(1000);
         }
+    }
+
+    private static Process? OpenOwner(int id,long startedTicks)
+    {
+        Process? owner=null;
+        try
+        {
+            owner=Process.GetProcessById(id);
+            if (!owner.HasExited && owner.StartTime.ToUniversalTime().Ticks == startedTicks) return owner;
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
+        owner?.Dispose(); return null;
+    }
+
+    private static bool OwnerAlive(Process owner)
+    {
+        try { return !owner.HasExited; }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { return false; }
     }
 
     private static void Reply(NvmlTelemetryProtocol.Reply reply)

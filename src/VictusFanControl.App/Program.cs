@@ -9,6 +9,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.SequenceEqual(new[]{"--telemetry-lifecycle-self-test"}))
+        { Environment.ExitCode=TelemetryLifecycleSelfTest.RunAsync().GetAwaiter().GetResult(); return; }
         if(args.SequenceEqual(new[]{"--automatic-coordination-self-test"}))
         {
             try { ProductStartupCoordinationSelfTest.Run((ok,message)=>{if(!ok)throw new InvalidOperationException(message);}); }

@@ -10,6 +10,7 @@ internal static class TelemetryCoordinationSelfTest
     {
         try
         {
+            await TelemetryLifecycleSelfTest.RunChecksAsync();
             await using var worker = new TelemetryWorker("unused-synthetic-modules");
             var published = new List<TelemetrySnapshot>();
             worker.SnapshotAvailable += (_, snapshot) => published.Add(snapshot);

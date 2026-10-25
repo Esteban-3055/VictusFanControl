@@ -201,9 +201,9 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
                 var reason = _automaticGuard.RemainingCpuSpikeMilliseconds == 0
                     ? ProductAutomaticReview.CpuSpikeDeadlineFailure : "Telemetría no disponible: " + e.Reason;
                 _automaticInterruptionSnapshot = _snapshot;
-                AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + reason);
                 _lifecycleBlocked = true; _lifecycleBlockReason = reason; _fans.CloseCustomAdmissionForLifecycleBoundary();
                 _ = ResetInterruptedFanAsync(reason);
+                AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + reason);
             }
             _ = EnforceAsync(); Publish(e.Reason);
         };
@@ -869,7 +869,15 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
         try { await _fanCommands.WaitAsync(); try { await _fans.DisposeAsync(); } finally { _fanCommands.Release(); } } catch (Exception ex) { failures.Add(ex); }
         Exception? performanceFailure = null;
         try { await _performance.CloseAsync(); } catch (Exception ex) { performanceFailure = ex; }
-        try { await _worker.DisposeAsync(); } catch (Exception ex) { failures.Add(ex); }
+        try { await _worker.DisposeAsync(); }
+        catch (Exception ex) when (_worker.ShutdownReport is { ResourcesDrained:true, CleanupFailures.Count:0 })
+        {
+            // A completed task fault remains diagnostic evidence. The explicit
+            // local cleanup receipt, not the exception itself, proves drainage.
+            // Fan/CPU/GPU release is still independently required below.
+            AppLog.Write("Telemetry task fault retained after confirmed local cleanup: " + ex);
+        }
+        catch (Exception ex) { failures.Add(ex); }
         if (_poll is not null) try { await _poll; } catch (OperationCanceledException) { } catch (Exception ex) { failures.Add(ex); }
         if (_thermalDeadline is not null) try { await _thermalDeadline; } catch (OperationCanceledException) { } catch (Exception ex) { failures.Add(ex); }
         try { await _recoveryPreview.DisposeAsync(); } catch (Exception ex) { failures.Add(ex); }
