@@ -639,7 +639,8 @@ internal static partial class ProductGuiSelfTest
             var corrupt=Path.Combine(dir,"corrupt.json");File.WriteAllText(corrupt,"broken");
             using(var form=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),profilesPath:corrupt))
             {
-                form.Show();Application.DoEvents();require(form.Dirty&&File.ReadAllText(corrupt)=="broken","Fallback preferences were presented as saved or overwritten.");
+                form.Show();PumpUntil(()=>form.StartupCompletion.IsCompleted,"Background preference read did not complete.");
+                require(form.Dirty&&File.ReadAllText(corrupt)=="broken","Fallback preferences were presented as saved or overwritten.");
                 form.EditValue("pl1",37);form.HandleCommand("discard");require(form.Dirty&&form.Draft.Ac.CpuPl1Watts==35,"Discard marked an unpersisted fallback as saved.");
                 form.HandleCommand("save");PumpUntil(()=>!form.Canvas.Busy,"Fallback save did not finish.");require(!form.Dirty&&ProductProfilesStore.Load(corrupt,out var warning).Ac.CpuPl1Watts==35&&warning is null,"Explicit save failed to replace corrupt preferences.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Corrupt-preference fixture shutdown failed.");

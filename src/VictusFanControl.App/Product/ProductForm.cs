@@ -79,7 +79,7 @@ internal sealed partial class ProductForm : Form
         _displayMetricsInFixture=displayMetricsInFixture;
         _canvas.AutomaticRetryAvailable=!ProductFanRangePreview.Enabled&&automaticReview is null&&(!_isolatedRuntime||retryRuntimeFactory is not null);
         string? notice=null;
-        if(fixtureProfiles is null&&!_isolatedRuntime)
+        if(fixtureProfiles is null&&(!_isolatedRuntime||profilesPath is not null))
         {
             _preferencesLoad=Task.Factory.StartNew(()=>
             {
