@@ -5,22 +5,23 @@ namespace VictusFanControl.App;
 
 internal sealed partial class ProductForm
 {
-    private readonly ProductAutomaticRecovery _automaticRecovery = new();
+    private readonly ProductAutomaticRecovery _automaticRecovery;
     private bool _recoveryAtStartup, _recoveryResumeCancelled, _automaticRecoveryResumeSuppressed;
 
     internal void TryAutomaticRecovery(long? clock = null)
     {
+        if(_systemSuspended){_automaticRecovery.Pause();_recoveryEpisode.Observe(new(){Runtime="Suspended"},DateTimeOffset.UtcNow);return;}
         var now = clock ?? Environment.TickCount64;
         _automaticRecovery.Observe(_canvas.State, now);
         if (ProductFanRangePreview.Enabled || _closing || _exitRequested || _restarting || IsDisposed || _canvas.Busy || _displayOff || _checkingUpdate || _canvas.UpdateBusy ||
-            _automaticReview is not null || !Draft.RecoverSessionsAutomatically ||
+            _automaticReview is not null || !_draft.RecoverSessionsAutomatically ||
             _isolatedRuntime && RecoveryRunner is null)
         { _automaticRecovery.Pause(); return; }
-        var resume = !_automaticRecoveryResumeSuppressed && Draft.Protections.ResumeAutomatic &&
+        var resume = !_automaticRecoveryResumeSuppressed && _draft.Protections.ResumeAutomatic &&
             (_automaticResumption.Wanted && _resumptionProfiles?.Protections.ResumeAutomatic == true ||
              _recoveryAtStartup && !_restartOpening && _saved.ActivateAutomaticOnStart && _saved.Protections.ResumeAutomatic);
-        var preferences = ProductProfilesStore.Copy(_automaticResumption.Wanted && _resumptionProfiles is not null
-            ? _resumptionProfiles : _recoveryAtStartup ? _saved : Draft);
+        var preferences = _automaticResumption.Wanted && _resumptionProfiles is not null
+            ? _resumptionProfiles : _recoveryAtStartup ? _saved : _draft;
         if (TryRefreshStartupInventory(now)) return;
         if (_startupInventoryAbsenceConfirmed && _runtime is null && _recoveryAtStartup)
         {
@@ -81,6 +82,9 @@ internal sealed partial class ProductForm
         }
         catch (Exception ex)
         {
+            // A malformed or changed exact inventory is not a transient read.
+            // Retain it for diagnosis; only a different inventory can qualify anew.
+            _automaticRecovery.RejectInventoryRead(expected);
             AppLog.Write("PRODUCT BACKGROUND RECOVERY BLOCKED: " + ex);
             await RecoveryUiAsync(() =>
             {
@@ -93,6 +97,7 @@ internal sealed partial class ProductForm
             await RecoveryUiAsync(() =>
             {
                 _restarting = false; _recoveryTask = null; _canvas.Busy = _pendingCommands > 0;
+                _automaticRecovery.AbandonInventoryRead();
                 if (!_closing) { _presentationTimer.Start(); TryStartupAutomatic(); }
                 _canvas.Invalidate();
             });

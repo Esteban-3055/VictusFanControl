@@ -212,6 +212,12 @@ public static class ProductProfilesStore
         return profiles with { DefaultCurveRevision=2, Ac = ac, Battery = Expand(profiles.Battery) };
     }
     public static ProductProfiles Copy(ProductProfiles profiles) => Parse(Serialize(profiles));
+
+    public static ProductProfiles Freeze(ProductProfiles profiles)
+    {
+        static ProductProfile Profile(ProductProfile source)=>source with {Fan=FanConfigurationStore.Freeze(source.Fan),LegacyFan=source.LegacyFan is {} legacy?FanConfigurationStore.Freeze(legacy):null};
+        return profiles with {Ac=Profile(profiles.Ac),Battery=Profile(profiles.Battery)};
+    }
     public static ProductProfiles Load(string? path, out string? notice, Func<ProductProfiles>? migrate = null)
     {
         path ??= DefaultPath; notice = null;

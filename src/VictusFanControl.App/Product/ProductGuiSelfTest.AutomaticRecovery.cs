@@ -66,6 +66,8 @@ internal static partial class ProductGuiSelfTest
                     // before its variable-duration cleanup/diagnostic operations.
                     at=DateTimeOffset.UtcNow.AddSeconds(-2);
                     next.Publish(Ready(0));next.Publish(Ready(1));next.Publish(Ready(2));PumpUntil(()=>!form.Canvas.Busy,"Recovery activation hung.");
+                    require(next.Commands==0,"Automatic recovery skipped the new stability window.");
+                    if(scenario=="resume")QualifyAutomaticAfterRecovery(form,next,Ready(2));
                     require(next.Commands==(scenario=="resume"?1:0),"Recovery ignored prior Automatic intent, stop or disabled resumption.");
                 }
                 form.TryAutomaticRecovery(clock+120000);
@@ -84,7 +86,7 @@ internal static partial class ProductGuiSelfTest
                 form.RecoverySelectionReader=()=>pending;
                 form.RecoveryRunner=_=>{runs++;pending=new(Guid.Empty,Guid.Empty);return Task.FromResult(new ProductRecoveryResult(true,"fixture","released"));};
                 form.RecoveryRuntimeFactory=_=>Task.FromResult<IProductRuntime>(next);
-                form.Show();Application.DoEvents();var clock=Environment.TickCount64;
+                form.Show();PumpUntil(()=>form.StartupCompletion.IsCompleted,"Asynchronous preflight did not finish.");var clock=Environment.TickCount64;
                 if(scenario=="stop-before")form.HandleCommand("firmware");
                 form.TryAutomaticRecovery(clock);form.TryAutomaticRecovery(clock+10000);
                 if(scenario=="resolved-while-waiting")pending=new(Guid.Empty,Guid.Empty);
@@ -96,6 +98,11 @@ internal static partial class ProductGuiSelfTest
                     FanAuthority="Firmware",CanApplyPerformance=true,Snapshot=new TelemetrySnapshot(at.AddSeconds(i),"CPU",55,20,30,"GPU",45,15,20,2000,2000)
                     {CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",55)]}});
                 PumpUntil(()=>!form.Canvas.Busy,"Startup recovery activation hung.");
+                if(scenario is "activate" or "resolved-while-waiting")
+                {
+                    require(next.Commands==0,"Recovered startup skipped thirty seconds of sensor stability.");
+                    QualifyAutomaticAfterRecovery(form,next,form.Canvas.State);
+                }
                 require(next.Commands==(scenario is "activate" or "resolved-while-waiting"?1:0),"Startup recovery ignored the saved start preference or user stop during its wait.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Startup recovery exit hung.");
             }

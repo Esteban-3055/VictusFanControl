@@ -126,6 +126,7 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
     private readonly CancellationTokenSource _lifetime = new();
     private readonly object _stateSync = new();
     private ProductRuntimeState _state = new();
+    private readonly LatestValuePump<ProductRuntimeState> _presentation;
     private long _publicationSequence;
     private TelemetrySnapshot? _snapshot;
     private string? _selectedFanProfile;
@@ -137,7 +138,12 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
     private string? _automaticSessionId;
     private PerformanceGuiSessionConfiguration? _automaticPerformance;
     private ProductAutomaticActivation.Ticket? _activeAutomaticTicket;
-    private ProductProfiles? _automaticProfiles;
+    private ProductProfiles? _frozenProfiles;
+    private ProductProfiles? _automaticProfiles
+    {
+        get=>Volatile.Read(ref _frozenProfiles);
+        set=>Volatile.Write(ref _frozenProfiles,value is null?null:ProductProfilesStore.Freeze(value));
+    }
     private DateTimeOffset _automaticStartedUtc;
     private volatile bool _plannedFanRelease;
     private PerformanceGuiSessionConfiguration? _requestedPerformance;
@@ -152,6 +158,13 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
     internal ProductRuntime(string modules, ProductProfiles profiles, ProductAutomaticReviewMode? automaticReview = null,
         VictusFanControl.PlatformThermalReplay.PhysicalPlatformExperiment? platformExperiment = null, ProductRuntime? releasedRuntime = null)
     {
+        _presentation=new(state=>
+        {
+            if(_closing)return;
+            var observers=Changed;if(observers is null)return;
+            foreach(Action<ProductRuntimeState> observer in observers.GetInvocationList())
+                try{if(!_closing)observer(state);}catch(Exception error){AppLog.Write("Presentation observer failed: "+error.GetType().Name);}
+        },state=>state.PublicationSequence);
         // Reject the retired physical entry before identity reads, IPC or hardware construction.
         if(platformExperiment is not null)
             throw new NotSupportedException("TZ01/DTT3 y la retención térmica experimental se han retirado del producto.");
@@ -766,7 +779,7 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
             await _fans.BlockCustomAdmissionAndRestoreAsync(reason,DateTimeOffset.UtcNow,CancellationToken.None);
             await _controller.ReleaseToFirmwareAsync(reason,CancellationToken.None); Publish(reason);
         }
-        catch (Exception ex) { Publish("Liberación lifecycle no resuelta",ex.Message); }
+        catch (Exception ex) { Publish("Liberación lifecycle no resuelta",ex.Message);throw; }
     }
     private async Task ResetInterruptedFanAsync(string reason)
     {
@@ -839,11 +852,11 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
                 AutomaticReview = _automaticReview is not null, AutomaticReviewMaximumSeconds = _automaticReview?.MaximumDurationSeconds, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
                 AutomaticCpuSpikeRemainingMilliseconds = _automaticGuard.RemainingCpuSpikeMilliseconds,
                 AppliedProtections = _automaticProfiles is null ? null : _automaticReview is null ? _automaticProfiles.Protections : new ProductProtectionSettings { ResumeAutomatic = false },
-                AutomaticResumeProfiles = _automaticProfiles is null ? null : ProductProfilesStore.Copy(_automaticProfiles),
+                AutomaticResumeProfiles = _automaticProfiles,
                 AutomaticPreparing = _automaticActivation.Pending, AutomaticSessionId = _automaticSessionId, AutomaticDecisionSnapshot = _automaticDecisionSnapshot, AutomaticInterruptionSnapshot = _automaticInterruptionSnapshot,
                 AutomaticSourceTransition = _sourceTransition.Pending ? _sourceTransition.Candidate : null,
                 AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic && ReferenceEquals(_automaticDecision,_controller.LastAutomaticResult) ? _automaticDecision : null,
-                AppliedAutomaticConfiguration = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _controller.AutomaticConfiguration : null,
+                AppliedAutomaticConfiguration = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _controller.AppliedConfigurationSnapshot : null,
                 PerformanceSupported = _target == Hp8C40TargetProfile.Instance,
                 PerformanceRecovery = recovery,
                 CanApplyPerformance = recovery?.Pending!=true&&!_performanceUpdating&&!_automaticActivation.Pending&&!_sourceTransition.Pending&&
@@ -858,12 +871,14 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
                 LifecycleBlocked = _lifecycleBlocked, LifecycleBlockReason = _lifecycleBlockReason, Message = message ?? _state.Message, Failure = failure ?? (clearFailure ? null : _state.Failure)
             }; state = _state;
         }
-        Changed?.Invoke(state);
+        RuntimeProgressJournal.Record("Control.Publication",state.AutomaticSessionId,state.PublicationSequence,state.Snapshot?.Timestamp);
+        _presentation.Post(state);
     }
     public async ValueTask DisposeAsync()
     {
         _automaticActivation.Cancel();
         _closing = true; _lifetime.Cancel(); _fans.CloseCustomAdmissionForLifecycleBoundary();
+        _presentation.Dispose();
         var failures = new List<Exception>();
         // Each domain cleanup is attempted even if a preceding domain fails; retained journals are never deleted here.
         try { await _fanCommands.WaitAsync(); try { await _fans.DisposeAsync(); } finally { _fanCommands.Release(); } } catch (Exception ex) { failures.Add(ex); }

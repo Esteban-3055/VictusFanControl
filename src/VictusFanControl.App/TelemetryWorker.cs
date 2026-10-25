@@ -51,8 +51,11 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private int _identicalSnapshotStreak;
     private sealed record WorkerProgress(string Phase, long StartedAtMilliseconds);
     private WorkerProgress _progress = new("NotStarted", Environment.TickCount64);
-    private void MarkProgress(string phase) =>
-        Volatile.Write(ref _progress, new(phase, Environment.TickCount64));
+    private void MarkProgress(string phase)
+    {
+        Volatile.Write(ref _progress,new(phase,Environment.TickCount64));
+        RuntimeProgressJournal.Record("Worker."+phase,generation:Interlocked.Read(ref _powerEpoch));
+    }
 
     private object CaptureWatchdogProgress(long ageMilliseconds)
     {
@@ -565,7 +568,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             Log($"Transient telemetry degradation detected; missing={missing}.");
         }
 
-        if (_degradedIncompleteStreak >= RecoveryAfterIncompleteSamples)
+        if (_degradedIncompleteStreak >= RecoveryAfterIncompleteSamples && !ProductTelemetryTolerance)
         {
             Log($"{_degradedIncompleteStreak} consecutive incomplete snapshots; full telemetry recovery requested.");
             RequestRecovery("Repeated incomplete telemetry snapshots.");
@@ -813,7 +816,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     {
         _reader ??= new HardwareTelemetryReader(_modulesDirectory, schedulePeriodicFanReads:true, productTolerance:ProductTelemetryTolerance,
             gpuTelemetryFactory: ProductTelemetryTolerance ? ((name, exact) => new NvmlTelemetryProcessClient(name, exact)) : null);
-        if (!_reader.BackendsInitialized)
+        if (!_reader.BackendsInitialized && !ProductTelemetryTolerance)
         {
             throw new InvalidOperationException(
                 "One or more telemetry backends failed to initialize. " +

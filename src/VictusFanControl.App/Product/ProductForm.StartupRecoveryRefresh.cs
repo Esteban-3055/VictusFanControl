@@ -10,13 +10,13 @@ internal sealed partial class ProductForm
     internal bool StartupInventoryRefreshPending => _startupInventoryRefresh is {IsCompleted:false};
     private bool TryRefreshStartupInventory(long clock)
     {
-        if (!_recoveryAtStartup || _runtime is not null || _shutdownRuntimeOwner is not null ||
+        if (!_recoveryAtStartup || _runtime is not null || _shutdownRuntimeOwner is not null&&_runtimeShutdown is not {IsCompletedSuccessfully:true} ||
             _startupRecoveryPreviewReader is null || _canvas.State.PerformanceRecovery is not {Pending:true,Actionable:false} expected)
             return false;
-        if (StartupInventoryRefreshPending || _startupInventoryReads >= 3) return true;
+        if (StartupInventoryRefreshPending) return true;
         if (_startupInventorySince is null || clock < _startupInventorySince)
         { _startupInventorySince=clock;return true; }
-        if (clock-_startupInventorySince < new[]{10000,30000,60000}[_startupInventoryReads])return true;
+        if (clock-_startupInventorySince < (_startupInventoryReads>=3?300000:new[]{10000,30000,60000}[_startupInventoryReads]))return true;
         _startupInventoryReads++;_startupInventorySince=clock;
         _startupInventoryRefresh=RefreshStartupInventoryAsync(expected,_updateLifecycleBoundary);
         return true;

@@ -29,8 +29,13 @@ internal static class ProductStartupCoordinationSelfTest
             require(gate.Issues.Any(i=>i.Code=="fan-stale"),"Expired duplicate lost its displayed freshness reason.");
             require(!gate.Observe(State(2),origin.AddSeconds(2),2000),"Two acquisitions admitted "+phase);
             require(!gate.Observe(State(2),origin.AddMilliseconds(3300),3300),"Expired second duplicate admitted "+phase);
-            require(gate.Observe(State(4),origin.AddSeconds(4),4000),
-                "Presentation ticks erased fresh acquisitions during "+phase+" (observed boot RPM cadence).");
+            var last=phase=="resumption"?30:4;
+            for(var seconds=4;seconds<=last;seconds+=2)
+            {
+                require(gate.Observe(State(seconds),origin.AddSeconds(seconds),seconds*1000)==(seconds==last),
+                    "Presentation ticks erased qualification or bypassed stability during "+phase);
+                if(seconds<last)require(!gate.Observe(State(seconds),origin.AddSeconds(seconds).AddMilliseconds(1300),seconds*1000+1300),"A stale duplicate admitted resumption.");
+            }
         }
         foreach(var changed in new[]{State(0) with{Runtime="Recovering"},State(0) with{CanApplyPerformance=false},
             State(0) with{Source="Unknown"},State(0) with{Snapshot=State(0).Snapshot! with{GpuTemperatureC=null}}})

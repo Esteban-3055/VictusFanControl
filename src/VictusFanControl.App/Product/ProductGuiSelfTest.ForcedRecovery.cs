@@ -30,8 +30,7 @@ internal static partial class ProductGuiSelfTest
                 var reset = form.ForceSessionRecoveryAsync(confirmed:true);
                 require(ReferenceEquals(reset,form.ForceSessionRecoveryAsync(true)),"Double click duplicated forced recovery.");
                 PumpUntil(()=>old.Disposals==1,"Forced recovery did not drain the old session.");
-                require(Directory.GetFiles(root,"diagnostic-before-forced-recovery-*.zip").Length==1&&factories==0&&old.Fences==1,
-                    "Forced recovery did not save evidence before draining or opened a new runtime too early.");
+                require(factories==0&&old.Fences>=1,"Forced recovery omitted its fence or opened before owner drainage.");
                 old.DisposeGate.SetResult(); PumpUntil(()=>reset.IsCompleted,"Forced session reset hung."); reset.GetAwaiter().GetResult();
                 require(factories==1&&next.Starts==1&&next.Commands==0&&recoveryRuns==0&&form.Dirty&&ProductProfilesStore.Serialize(form.Draft)==draft,
                     "Forced recovery lost draft, issued commands, or recovered unrelated records.");
@@ -60,8 +59,8 @@ internal static partial class ProductGuiSelfTest
                     form.HandlePowerEventAsync(4).GetAwaiter().GetResult();runtime.DisposeGate!.SetResult();
                 }
                 PumpUntil(()=>reset.IsCompleted,"Forced failure recovery hung.");reset.GetAwaiter().GetResult();
-                require(created==0&&runners==0&&!form.Canvas.Busy&&form.RecoveryMonitorActive,"Failed forced recovery reopened control, recovered foreign records or disabled monitoring.");
-                if(failure=="diagnostic")require(runtime.Fences>=1&&runtime.Disposals==1&&form.Canvas.State.LifecycleBlocked,"Diagnostic failure skipped normal cleanup or left control enabled.");
+                require(created==(failure=="diagnostic"?1:0)&&runners==0&&!form.Canvas.Busy&&form.RecoveryMonitorActive,"Forced recovery bypassed release/ownership or stopped monitoring.");
+                if(failure=="diagnostic")require(runtime.Fences>=1&&runtime.Disposals==1&&!form.Canvas.State.LifecycleBlocked&&form.Canvas.State.FanMode=="Firmware","Optional diagnostic failure retained recovery or acquired Automatic.");
                 else require(form.Canvas.State.LifecycleBlocked&&form.Canvas.State.Failure is not null,"Forced recovery hid a failed release.");
                 if(failure=="uncertain-close")require(form.Canvas.State.FanAuthority=="Unknown","Failed forced closure claimed Firmware ownership.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Forced failure fixture exit hung.");
@@ -69,7 +68,7 @@ internal static partial class ProductGuiSelfTest
             Console.WriteLine("PASS forced session recovery: visible without pending records, diagnostic before drain, one task, fresh Firmware runtime, preserved draft, no Automatic, no foreign recovery, uncertainty/suspend/evidence-failure fences (zero hardware IO).");
             TestDefinitiveAutomaticSessionRecovery(Path.Combine(root,"automatic"), require);
         }
-        finally { Environment.ExitCode=exitCode;Directory.Delete(root,true); }
+        finally { WaitOptionalDiagnostics();Environment.ExitCode=exitCode;Directory.Delete(root,true); }
     }
 
     private static void TestDefinitiveAutomaticSessionRecovery(string root, Action<bool,string> require)
@@ -93,16 +92,16 @@ internal static partial class ProductGuiSelfTest
             if(scenario!="firmware")old.Publish(Ready(2) with{FanMode="Automatic"});
             old.Publish(Ready(2) with{Runtime="Degraded",LifecycleBlocked=true});
             form.EditValue("pl1",38);var draft=ProductProfilesStore.Serialize(form.Draft);
-            var now=Environment.TickCount64;form.TryAutomaticRecovery(now);form.TryAutomaticRecovery(now+14999);
+            var now=Environment.TickCount64;form.TryAutomaticRecovery(now);form.TryAutomaticRecovery(now+9999);
             require(old.Disposals==0,"Definitive recovery acted before the stable-fault wait.");
-            form.TryAutomaticRecovery(now+15000);
+            form.TryAutomaticRecovery(now+10000);
             if(scenario=="disabled")
             {
                 require(!form.Canvas.Busy&&old.Disposals==0,"Disabled recovery changed the live runtime.");
                 old.DisposeGate.SetResult();var disabledExit=form.RequestExitAsync();PumpUntil(()=>disabledExit.IsCompleted,"Disabled definitive fixture exit hung.");continue;
             }
             PumpUntil(()=>old.Disposals==1,"Persistent degraded session without inventory was not recovered automatically.");
-            require(creates==0&&Directory.GetFiles(Path.Combine(root,scenario),"diagnostic-before-forced-recovery-*.zip").Length==1,"Automatic recovery skipped diagnostic or opened before drain.");
+            require(creates==0,"Automatic recovery opened before owner drain.");
             if(scenario=="stop")form.HandleCommand("firmware");
             if(scenario=="suspend")CompleteGuiTask(form.HandlePowerEventAsync(4),"Definitive suspend hung.");
             old.DisposeGate.SetResult();PumpUntil(()=>!form.Canvas.Busy,"Definitive automatic recovery did not finish.");
@@ -114,6 +113,8 @@ internal static partial class ProductGuiSelfTest
                 require(runs==(scenario=="pending"?1:0),"Unified recovery skipped selected pending records or created spurious recovery writes.");
                 old.Publish(new(){Failure="late epoch"});require(form.Canvas.State.Failure is null,"Old session published after automatic reset.");
                 for(var i=0;i<3;i++)next.Publish(Ready(i));
+                require(next.Commands==0,"Automatic recovery bypassed thirty seconds of fresh stability.");
+                if(scenario is "resume" or "pending")QualifyAutomaticAfterRecovery(form,next,Ready(2));
                 PumpUntil(()=>!form.Canvas.Busy,"Definitive automatic reentry hung.");
                 require(next.Commands==(scenario is "resume" or "pending"?1:0),"Definitive recovery ignored previous intent, user stop or fresh-observation admission.");
             }

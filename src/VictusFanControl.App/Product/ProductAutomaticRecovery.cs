@@ -1,23 +1,25 @@
 namespace VictusFanControl.App;
 
-/// <summary>One recovery per exact inventory, at most three episodes until a minute of healthy Automatic.</summary>
+/// <summary>One recovery per exact inventory with a shared, stability-qualified episode budget.</summary>
 internal sealed class ProductAutomaticRecovery
 {
+    private readonly ProductRecoveryEpisode _episode;
+    internal ProductAutomaticRecovery(ProductRecoveryEpisode? episode=null)=>_episode=episode??new();
     private string? _candidate;
     private long _since;
-    private long? _healthySince;
     private readonly HashSet<string> _attempted = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _rejectedReads = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _readDeferrals = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _readRetryAt = new(StringComparer.Ordinal);
     private string? _lastRequest;
+    private bool _lastRequestNative;
+    private long _globalReadRetryAt;
     private int _readDeferralCount;
-    private int _attempts;
     private long? _sessionSince;
-    private int _sessionAttempts;
     private bool _sessionRequested;
     // Failed release stays latched. Only a successfully opened replacement or
-    // a full minute of healthy operation permits a new session episode.
-    internal void SessionOpened() { _sessionRequested = false; _sessionSince = null; }
+    // a fully qualified healthy Automatic interval permits a new session episode.
+    internal void SessionOpened() { _sessionRequested = false; _sessionSince = null; _episode.ConfirmOwnerReleased();_episode.Finish(); }
     internal bool TakeSessionRequest(ProductRuntimeState state, long now)
     {
         if (state.PerformanceRecovery?.Pending == true || state.AutomaticReview ||
@@ -26,26 +28,23 @@ internal sealed class ProductAutomaticRecovery
             state.AutomaticPreparing || state.PerformanceUpdating)
         { _sessionSince = null; return false; }
         if (_sessionSince is null || now < _sessionSince) { _sessionSince = now; return false; }
-        if (_sessionRequested || _sessionAttempts >= 3 || now - _sessionSince < new[] { 15000, 30000, 60000 }[_sessionAttempts]) return false;
-        _sessionRequested = true; _sessionAttempts++; return true;
+        if (_sessionRequested || now - _sessionSince < _episode.DelayMilliseconds || !_episode.TryReserve(now)) return false;
+        _sessionRequested = true; return true;
     }
     internal void Observe(ProductRuntimeState state, long now)
     {
-        if (state.Runtime == "Healthy" && !state.LifecycleBlocked && state.PerformanceRecovery?.Pending != true)
+        if (_episode.Observe(state,DateTimeOffset.UtcNow))
         {
-            _healthySince ??= now;
-            if (now >= _healthySince && now - _healthySince >= 60000)
-            { _attempts = 0; _attempted.Clear(); _readDeferrals.Clear(); _readRetryAt.Clear(); _lastRequest = null; _readDeferralCount = 0;
-                _sessionAttempts = 0; _sessionRequested = false; _sessionSince = null; }
+            _attempted.Clear();_rejectedReads.Clear();_readDeferrals.Clear();_readRetryAt.Clear();_lastRequest=null;_readDeferralCount=0;_globalReadRetryAt=0;
+            _sessionRequested=false;_sessionSince=null;
         }
-        else _healthySince = null;
     }
     internal void Pause() { _candidate = null; _sessionSince = null; }
     internal void RecordAttempt(PerformanceRecoveryPreview expected)
     {
         var key = InventoryKey(expected);
-        if (_attempted.Add(key)) _attempts++;
-        _lastRequest = key;
+        if (_attempted.Add(key)&&!_episode.Reserved)_episode.TryReserve(Environment.TickCount64);
+        _lastRequest = key;_lastRequestNative=true;
     }
     internal bool TakeRequest(ProductRuntimeState state, long now)
     {
@@ -57,8 +56,8 @@ internal sealed class ProductAutomaticRecovery
         { Pause(); return false; }
         var key = InventoryKey(p);
         if (_candidate != key || now < _since) { _candidate = key; _since = now; return false; }
-        if (_attempts >= 3 || _attempted.Contains(key) || now - _since < 10000 || now < _readRetryAt.GetValueOrDefault(key)) return false;
-        _attempted.Add(key); _attempts++; _lastRequest = key; return true;
+        if (_attempted.Contains(key) || _rejectedReads.Contains(key) || now - _since < _episode.DelayMilliseconds || now < _readRetryAt.GetValueOrDefault(key)||now<_globalReadRetryAt||!_episode.TryReserve(now)) return false;
+        _lastRequest = key;_lastRequestNative=false;return true;
     }
 
     // Call only when the inventory read failed BEFORE draining a runtime or
@@ -66,15 +65,24 @@ internal sealed class ProductAutomaticRecovery
     internal bool DeferInventoryRead(PerformanceRecoveryPreview expected, long now)
     {
         var key = InventoryKey(expected);
-        if (key != _lastRequest || !_attempted.Contains(key) || _readDeferralCount >= 6) return false;
+        if (key != _lastRequest || _lastRequestNative || !_episode.Reserved) return false;
         var count = _readDeferrals.GetValueOrDefault(key);
-        if (count >= 2) return false;
-        _readDeferrals[key] = count + 1;
-        _readDeferralCount++;
-        _attempted.Remove(key); _attempts--;
+        _readDeferrals[key] = Math.Min(3,count+1);
+        _readDeferralCount=Math.Min(6,_readDeferralCount+1);
+        _episode.DeferRead();
         _candidate = key; _since = now;
-        _readRetryAt[key] = now + (count == 0 ? 30000 : 60000);
+        var delay=count>=2||_readDeferralCount>=6?300000:count==0?30000:60000;
+        _readRetryAt[key] = now+delay;
+        if(_readDeferralCount>=6)_globalReadRetryAt=now+delay;
         return true;
+    }
+    internal void AbandonInventoryRead()
+    {if(!_lastRequestNative)_episode.DeferRead();}
+    internal void RejectInventoryRead(PerformanceRecoveryPreview expected)
+    {
+        if(_lastRequestNative)return;
+        _rejectedReads.Add(InventoryKey(expected));
+        _episode.DeferRead();
     }
 
     private static string InventoryKey(PerformanceRecoveryPreview p) => p.CpuSession + "/" + p.GpuSession + "/" + string.Join(";", (p.FanRecords ?? [])

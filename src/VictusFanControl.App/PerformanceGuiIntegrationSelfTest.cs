@@ -57,7 +57,8 @@ internal static class PerformanceGuiIntegrationSelfTest
             }
             Console.WriteLine("PASS startup task roundtrip: SID/current-account normalization for trigger and principal; case-insensitive canonical identity; other domains/users/SIDs and bare names refused; no task registration.");
             foreach(var mutation in new[]{("DisallowStartIfOnBatteries","true"),("StopIfGoingOnBatteries","true"),("ExecutionTimeLimit","PT1H"),
-                ("AllowHardTerminate","true"),("Arguments","--modules-dir wrong"),("RunLevel","LeastPrivilege"),("Command",@"C:\old.exe")})
+                ("AllowHardTerminate","true"),("Arguments","--modules-dir wrong"),("RunLevel","LeastPrivilege"),("Command",@"C:\old.exe"),
+                ("Interval","PT1S"),("Count","4")})
             {
                 var altered=new XDocument(document);altered.Descendants(ns+mutation.Item1).Single().Value=mutation.Item2;
                 Require(!WindowsStartupRegistration.HasCurrentContract(altered,"S-1-5-21-123",@"C:\Program Files\Victus & Control\app.exe",@"C:\Modules & Tools"),"Broken startup contract was shown enabled: "+mutation.Item1);

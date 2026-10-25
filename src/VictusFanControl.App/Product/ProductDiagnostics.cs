@@ -7,6 +7,11 @@ namespace VictusFanControl.App;
 /// <summary>Read-only diagnostic export, including bounded snapshots of unresolved records. No process control.</summary>
 internal static class ProductDiagnostics
 {
+    internal static Task<bool> TryExportAsync(string path,ProductRuntimeState state,ProductProfiles draft,string? logPath,object? window=null,object? updater=null)
+    {
+        var frozen=ProductProfilesStore.Freeze(draft);
+        return OptionalDiagnosticExport.TryStart(()=>Export(path,state,frozen,logPath,window,updater));
+    }
     internal static void Export(string path,ProductRuntimeState state,ProductProfiles draft,string? logPath,object? window=null,object? updater=null)
     {
         var full=Path.GetFullPath(path);var temporary=full+"."+Guid.NewGuid().ToString("N")+".tmp";
@@ -15,6 +20,7 @@ internal static class ProductDiagnostics
         var fanReads=VictusFanControl.Telemetry.HpWmiFanSampleBroker.Production;
         var nativeReads=fanReads.Diagnostics.Counters;
         var summary=new{diagnosticMaximumBytesPerStream=maximumLogBytes,kind="VictusFanControl.GuiDiagnostic",capturedUtc=DateTimeOffset.UtcNow,version=typeof(ProductDiagnostics).Assembly.GetName().Version?.ToString(),sessionId=AppLog.SessionId,sessionStartedUtc=AppLog.SessionStartedUtc,window,updater,
+            progress=VictusFanControl.Runtime.RuntimeProgressJournal.Capture(),optionalLogWriter=AppLog.WriterStatus,optionalExportPending=OptionalDiagnosticExport.Pending,
             state.Hardware,state.Target,state.Source,state.Runtime,state.FanMode,state.FanAuthority,state.FanLevel,
             state.ManualMaximumLevel,state.FanUpperRangePreview,state.CommandedCpuLevel,state.CommandedGpuLevel,
             state.LifecycleBlocked,state.LifecycleBlockReason,state.InterruptionDetails,

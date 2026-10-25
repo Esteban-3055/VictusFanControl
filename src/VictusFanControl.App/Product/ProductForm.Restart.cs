@@ -28,8 +28,7 @@ internal sealed partial class ProductForm
             try{_runtime?.FenceLifecycle("Reinicio explícito de sesión");}
             catch(Exception ex){preparationFailure=ex;}
             _canvas.Notice="Guardando diagnóstico y liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
-            try{await Task.Run(()=>ProductDiagnostics.Export(diagnostic,before,ProductProfilesStore.Parse(checkpoint.DraftJson),AppLog.CurrentLogPath));}
-            catch(Exception ex){preparationFailure??=ex;}
+            _ = ProductDiagnostics.TryExportAsync(diagnostic,before,ProductProfilesStore.Parse(checkpoint.DraftJson),AppLog.CurrentLogPath);
             // Even a full diagnostic disk must not skip hardware cleanup.
             await ShutdownRuntimeAsync();
             // Save/import operations that were already pending may have completed while draining.
@@ -67,7 +66,9 @@ internal sealed partial class ProductForm
     {
         _externalCooling?.Suspend();
         Exception? startupFailure = null;
-        try { await _startup; }
+        // File-only startup can finish late but checks the lifecycle before
+        // constructing anything. Native construction, once begun, must drain.
+        try { if(_startupResourcesAcquired)await _startup; }
         catch(Exception ex) { startupFailure=ex;AppLog.Write("Product startup task failed; attempting known runtime cleanup: "+ex); }
         if(_commandsDrained is not null)await _commandsDrained.Task;
         Exception? previousReleaseFailure = null;

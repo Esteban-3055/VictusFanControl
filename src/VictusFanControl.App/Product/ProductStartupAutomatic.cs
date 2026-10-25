@@ -21,13 +21,15 @@ internal sealed class ProductStartupAutomatic
     internal string Status {get=>_resumption?_status.Replace("Automático al iniciar","Reanudación de Automático",StringComparison.OrdinalIgnoreCase):_manualRetry?_status.Replace("Automático al iniciar","Reintento manual de Automático",StringComparison.OrdinalIgnoreCase):_status;private set=>_status=value;}
     internal ProductStartupAutomatic(long now,bool manualRetry=false,ProductProtectionSettings? protections=null,bool resumption=false) { _started=now;_manualRetry=manualRetry;_resumption=resumption;_protections=protections??new(); }
     internal void Cancel(string reason) { Finished=true; Cancelled=true; Status=reason; Issues=[]; }
+    internal void Pause(string reason)
+    { if(Finished)return;_samples=0;_lastSample=null;_firstSample=null;_source=null;Issues=[];Status=reason; }
     internal bool Observe(ProductRuntimeState state, DateTimeOffset now, long clock)
     {
         if(Finished)return false;
         if(clock<_started)
         { Cancel("Automático al iniciar: reloj regresivo; permanece en Firmware."); return false; }
         if(state.LifecycleBlocked)
-        { Cancel("Automático al iniciar bloqueado por interrupción: "+(state.LifecycleBlockReason??state.Failure??"controlador bloqueado")+"."); return false; }
+        { Pause("Automático al iniciar en espera: "+(state.LifecycleBlockReason??state.Failure??"controlador bloqueado")+"."); return false; }
         if(state.PerformanceRecovery?.Checking==true)
         {
             _samples=0;_lastSample=null;_firstSample=null;Issues=[];
@@ -35,7 +37,7 @@ internal sealed class ProductStartupAutomatic
             return false;
         }
         if(state.PerformanceRecovery?.Pending==true)
-        { Cancel("Automático al iniciar bloqueado: hay una sesión pendiente de recuperación."); return false; }
+        { Pause("Automático al iniciar en espera: "+state.PerformanceRecovery.Detail); return false; }
         if(state.Target=="Unsupported")
         { Cancel("Automático al iniciar bloqueado: equipo no autorizado."); return false; }
         if(state.FanMode!="Firmware"||state.FanAuthority!="Firmware"||state.AutomaticPreparing||state.PerformanceProcessPresent)
@@ -58,8 +60,9 @@ internal sealed class ProductStartupAutomatic
         if(_lastSample.HasValue&&(s.Timestamp<_lastSample||s.Timestamp-_lastSample>TimeSpan.FromSeconds(3))||_source!=state.Source)
         { _samples=0; _firstSample=null; }
         _source=state.Source; _lastSample=s.Timestamp; _firstSample??=s.Timestamp;
-        if(++_samples<3||s.Timestamp-_firstSample<TimeSpan.FromSeconds(2))
-        { Status=$"Verificando sensores para Automático al iniciar: {Math.Min(_samples,3)}/3 adquisiciones nuevas; mínimo 2 s entre primera y última."; return false; }
+        var minimumSpan=_resumption?TimeSpan.FromMilliseconds(ProductRecoveryEpisode.StableMilliseconds):TimeSpan.FromSeconds(2);
+        if(++_samples<3||s.Timestamp-_firstSample<minimumSpan)
+        { Status=$"Verificando sensores para Automático al iniciar: {Math.Min(_samples,3)}/3 adquisiciones nuevas; estabilidad mínima {minimumSpan.TotalSeconds:0} s."; return false; }
         Finished=true; Status="Preparando Automático al iniciar: CPU/GPU antes de ventiladores…";
         return true;
     }

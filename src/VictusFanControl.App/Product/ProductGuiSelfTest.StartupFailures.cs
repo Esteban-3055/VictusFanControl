@@ -130,7 +130,7 @@ internal static partial class ProductGuiSelfTest
             form.RecoverySelectionReader=()=>pending;
             form.RecoveryRunner=_=>{runs++;pending=new(Guid.Empty,Guid.Empty);return Task.FromResult(new ProductRecoveryResult(true,"fixture","confirmed"));};
             form.RecoveryRuntimeFactory=_=>{created++;return Task.FromResult<IProductRuntime>(next);};
-            form.Show();Application.DoEvents();var clock=Environment.TickCount64;
+            form.Show();PumpUntil(()=>form.StartupCompletion.IsCompleted,"Startup inventory preflight did not finish.");var clock=Environment.TickCount64;
             form.TryAutomaticRecovery(clock);form.TryAutomaticRecovery(clock+9999);
             require(reads==1&&created==0&&runs==0,"Unavailable inventory bypassed the read delay or opened a controller.");
             form.TryAutomaticRecovery(clock+10000);
@@ -164,11 +164,12 @@ internal static partial class ProductGuiSelfTest
                     foreach(var offset in new[]{40000,100000})
                     {form.TryAutomaticRecovery(clock+offset);PumpUntil(()=>!form.StartupInventoryRefreshPending,"Bounded refresh failed to finish.");}
                     form.TryAutomaticRecovery(clock+1000000);
-                    require(reads==4&&runs==0&&created==0,"Read-only refresh exceeded three attempts or wrote unknown records.");
+                    PumpUntil(()=>!form.StartupInventoryRefreshPending,"Periodic read-only refresh did not finish.");
+                    require(reads==5&&runs==0&&created==0,"Exhausted startup reads did not allow one periodic read-only check, or wrote unknown records.");
                 }
             }
             exit??=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Inventory refresh fixture exit hung.");
         }
-        Console.WriteLine("PASS unknown startup inventory: read-only 10/30/60s retry, valid/absent revalidation, three-read bound, disabled preference, read failures, single-flight, late close and suspend fences; zero hardware IO.");
+        Console.WriteLine("PASS unknown startup inventory: bounded read-only 10/30/60s burst then five-minute checks, valid/absent revalidation, disabled preference, read failures, single-flight, late close and suspend fences; zero hardware IO.");
     }
 }

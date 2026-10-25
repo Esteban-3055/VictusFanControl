@@ -5,11 +5,12 @@ namespace VictusFanControl.App;
 /// <summary>Only resumes a previously running Automatic request, after a clean boundary. Bounded backoff avoids restart loops.</summary>
 internal sealed class ProductAutomaticResumption
 {
+    private readonly ProductRecoveryEpisode _episode;
+    internal ProductAutomaticResumption(ProductRecoveryEpisode? episode=null)=>_episode=episode??new();
     private bool _wanted, _suppressed;
     private long? _interruptedAt, _healthyAt;
-    private int _attempts;
     internal bool Wanted => _wanted && !_suppressed;
-    internal void Cancel() { _suppressed=true; _wanted=false; _interruptedAt=null; _healthyAt=null; _attempts=0; }
+    internal void Cancel() { _suppressed=true; _wanted=false; _interruptedAt=null; _healthyAt=null; }
     internal void Arm() { Cancel(); _suppressed=false; }
     internal void Observe(ProductRuntimeState state, long now)
     {
@@ -17,20 +18,20 @@ internal sealed class ProductAutomaticResumption
         if(state.FanMode=="Automatic"&&!state.LifecycleBlocked)
         {
             _wanted=true;_interruptedAt=null;_healthyAt??=now;
-            if(now-_healthyAt>=60000)_attempts=0;
         }
         else if(_wanted&&state.LifecycleBlocked) { _interruptedAt??=now;_healthyAt=null; }
     }
     internal bool TakeRequest(ProductRuntimeState state, ProductProtectionSettings settings, DateTimeOffset utc, long now)
     {
-        if(!_wanted||!settings.ResumeAutomatic||!_interruptedAt.HasValue||_attempts>=3||
-            now<_interruptedAt||now-_interruptedAt<(new[]{10000,30000,60000})[_attempts]||
+        if(!_wanted||!settings.ResumeAutomatic||!_interruptedAt.HasValue||
+            now<_interruptedAt||now-_interruptedAt<_episode.DelayMilliseconds||
             !state.LifecycleBlocked||state.FanAuthority!="Firmware"||state.Runtime!="Healthy"||
             state.AutomaticPreparing||state.PerformanceUpdating||!state.AutomaticAuthorized)return false;
         var s=state.Snapshot;
         if(s is null||!s.IsComplete||!s.IsFanTelemetryFreshAt(utc,3000)||s.RetainedTelemetry is not null||utc<s.Timestamp||utc-s.Timestamp>=TimeSpan.FromSeconds(3)||
             s.CpuControlTemperatureC is not (>=0 and <=90)||s.GpuTemperatureC is not (>=0 and <=95))return false;
-        ++_attempts;_interruptedAt=now;return true;
+        if(!_episode.TryReserve(now))return false;
+        _interruptedAt=now;return true;
     }
 }
 
@@ -61,18 +62,20 @@ internal sealed partial class ProductCanvas
 
 internal sealed partial class ProductForm
 {
-    private readonly ProductAutomaticResumption _automaticResumption=new();
+    private readonly ProductRecoveryEpisode _recoveryEpisode=new();
+    private readonly ProductAutomaticResumption _automaticResumption;
     private ProductProfiles? _resumptionProfiles;
     private void ObserveAutomaticResumption(ProductRuntimeState state)
     {
-        if(state.FanMode=="Automatic"&&!state.LifecycleBlocked)
-            _resumptionProfiles=ProductProfilesStore.Copy(state.AutomaticResumeProfiles??_startupPreferences??Draft);
+        if(state.FanMode=="Automatic"&&!state.LifecycleBlocked&&
+            (_resumptionProfiles is null||state.AutomaticResumeProfiles is not null&&!ReferenceEquals(_resumptionProfiles,state.AutomaticResumeProfiles)))
+            _resumptionProfiles=state.AutomaticResumeProfiles??_startupPreferences??ProductProfilesStore.Copy(Draft);
         _automaticResumption.Observe(state,Environment.TickCount64);
     }
     internal void TryAutomaticResumption(long? clock=null)
     {
-        if(_closing||_restarting||IsDisposed||_canvas.Busy||_displayOff||_automaticReview is not null||
-            !_canvas.AutomaticRetryAvailable||_resumptionProfiles is null||!Draft.Protections.ResumeAutomatic)return;
+        if(_closing||_restarting||IsDisposed||_canvas.Busy||_displayOff||_systemSuspended||_startupAutomatic is {Finished:false}||_automaticReview is not null||
+            !_canvas.AutomaticRetryAvailable||_resumptionProfiles is null||!_draft.Protections.ResumeAutomatic)return;
         if(_automaticResumption.TakeRequest(_canvas.State,_resumptionProfiles.Protections,DateTimeOffset.UtcNow,clock??Environment.TickCount64))
         {
             _canvas.Notice="Reanudando Automático: liberando la sesión anterior antes de verificar sensores nuevos…";
@@ -86,6 +89,7 @@ internal sealed partial class ProductForm
         var p=_draft.Protections;
         if(id=="protections-apply")
         {
+            _automaticRecoveryResumeSuppressed=false;
             _automaticResumption.Arm();
             _ = RetryAutomaticAsync(applyProtections:true);
             return true;

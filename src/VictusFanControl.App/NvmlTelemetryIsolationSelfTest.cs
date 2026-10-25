@@ -26,6 +26,30 @@ internal static class NvmlTelemetryIsolationSelfTest
         }
         try
         {
+            Case("production read-only host explicitly High before any GPU initialization",()=>
+            {
+                using var child=Process.Start(NvmlTelemetryProcessClient.CreateStartInfo())??throw new IOException("Priority child missing.");
+                children.Add(child.Id);
+                try
+                {
+                    var line=child.StandardError.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+                    child.Refresh();Require(child.PriorityClass==ProcessPriorityClass.High&&line?.Contains("effective=High")==true,"Production helper did not confirm High.");
+                    child.StandardInput.Close();Require(child.WaitForExit(5000),"Uninitialized helper did not exit on EOF.");
+                }
+                finally{if(!child.HasExited){child.StandardInput.Close();child.WaitForExit(5000);}}
+            });
+            Case("initialization progress is bounded and never a telemetry sample",()=>
+            {
+                using(var reader=Reader("init-progress"))
+                {children.Add(reader.ChildProcessId!.Value);Require(reader.CurrentPhase=="ReadyAwaitingFirstSample"&&reader.ReadSample().TemperatureC==51,"Initialization phases became data or prevented a real sample.");}
+                foreach(var fixture in new[]{"init-hang","init-progress-flood"})
+                {
+                    var watch=Stopwatch.StartNew();var rejected=false;
+                    try{using var bad=Reader(fixture);}
+                    catch(NvmlTelemetryUnavailableException error){rejected=fixture!="init-hang"||error.Message.Contains("phase=NvmlInitialization");}
+                    Require(rejected&&watch.ElapsedMilliseconds<7000,"Phase traffic renewed the startup deadline or lost the stalled phase.");
+                }
+            });
             Case("slow battery recovery does not rearm resume-gap detector", () => TelemetryRecoveryClockSelfTest.Run(Require));
             Case("healthy repeated acquisition; orderly EOF/disposal", () =>
             {

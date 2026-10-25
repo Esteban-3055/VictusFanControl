@@ -19,7 +19,7 @@ internal static partial class ProductGuiSelfTest
             using(var blocked=new ProductForm("fixture://pending-startup",fixtureProfiles:new(){ActivateAutomaticOnStart=true},
                 runtimeFactory:()=>{blockedFactoryCalls++;throw new IOException("Pending recovery opened a controller");},recoveryPreflight:()=>new(true,"Pending fan-only",FanRecords:fanRecords)))
             {
-                blocked.Show();Application.DoEvents();
+                blocked.Show();PumpUntil(()=>blocked.StartupCompletion.IsCompleted,"Startup preflight did not finish asynchronously.");
                 require(blockedFactoryCalls==0&&blocked.Canvas.State.Runtime=="RecoveryRequired"&&blocked.Canvas.State.LifecycleBlocked,"Fan pending startup opened controller/telemetry.");
                 require(blocked.Canvas.State.FanMode=="RecoveryRequired"&&blocked.Canvas.State.FanAuthority=="Unknown","Pending startup claimed restored Firmware ownership.");
                 using var bitmap=new Bitmap(blocked.Canvas.Width,blocked.Canvas.Height);blocked.Canvas.DrawToBitmap(bitmap,new(Point.Empty,bitmap.Size));

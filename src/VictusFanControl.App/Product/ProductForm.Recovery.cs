@@ -95,10 +95,11 @@ internal sealed partial class ProductForm
                 if (unattended && resume && !_recoveryResumeCancelled && Draft.Protections.ResumeAutomatic)
                 {
                     _startupPreferences = ProductProfilesStore.Copy(preferences);
-                    _startupRetryAt = 0; _startupAttempts = 0;
+                    _startupRetryAt = 0;
                     _startupAutomatic = new(Environment.TickCount64, protections:preferences.Protections, resumption:true);
                 }
                 _automaticRecovery.SessionOpened();
+                if(_startupAutomatic is {Finished:false})_recoveryEpisode.CarryPreparation();
                 if(_requirePowerNotifications)RegisterPowerNotifications();
                 AttachRuntime(next); UpdateState(next.State); next.Start(); _presentationTimer.Start();
                 _canvas.RestartAvailable = true; _canvas.AutomaticRetryAvailable = _automaticReview is null && (!_isolatedRuntime || _retryRuntimeFactory is not null);
@@ -112,10 +113,11 @@ internal sealed partial class ProductForm
             DetachRuntime();
             try { await ShutdownRuntimeAsync(); controllerReleased = true; } catch (Exception release) { controllerReleased = false; AppLog.Write("Guided recovery cleanup retained: " + release); }
             _runtime = null;
+            _recoveryEpisode.Finish(ownerConfirmed:controllerReleased&&_runtimeShutdown is {IsCompletedSuccessfully:true});
             var recoveryPreview = _isolatedRuntime ? before.PerformanceRecovery : await Task.Run(() => PerformanceRecoveryPreview.Read(ignoreCurrentOwner: !forceSession));
             await RecoveryUiAsync(() =>
             {
-                if (unattended) { _automaticResumption.Cancel(); NotifyRecoveryFailure("No se pudo recuperar la sesión. " + ex.Message); }
+                if (unattended) { NotifyRecoveryFailure("No se pudo recuperar la sesión. " + ex.Message); }
                 _canvas.AutomaticRetryAvailable = false; _canvas.RestartAvailable = true;
                 var preview = recoveryPreview;
                 _canvas.State = before with { LifecycleBlocked = true, Runtime = "Failed", Failure = "Recuperación no completada: " + ex.Message,

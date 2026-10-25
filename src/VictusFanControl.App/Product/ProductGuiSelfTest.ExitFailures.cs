@@ -31,7 +31,7 @@ internal static partial class ProductGuiSelfTest
                 PumpUntil(()=>exit.IsCompleted,"Failed coordinator left exit pending: "+field);
                 require(exit.IsCompletedSuccessfully&&runtime.Disposals==1&&runtime.Commands==0,"Final disposal skipped/duplicated after "+field);
                 var again=form.RequestExitAsync();require(again.IsCompletedSuccessfully&&runtime.Disposals==1,"Cached exit repeated disposal.");
-                require(Environment.ExitCode==(field=="_externalCoolingStartup"?171:savedExit),"Unexpected exit classification: "+field);
+                require(Environment.ExitCode==savedExit,"Completed optional/coordinator fault was confused with failed native cleanup: "+field);
             }
             Environment.ExitCode=savedExit;
             var blocked=Path.Combine(directory,"parent-is-file");File.WriteAllText(blocked,"preserve");
@@ -102,6 +102,6 @@ internal static partial class ProductGuiSelfTest
             }
             Console.WriteLine("PASS optional cache read never holds control/exit; power notification registration retried before replacement Start, persistent failure releases and blocks; zero hardware IO.");
         }
-        finally { Environment.ExitCode=savedExit;Directory.Delete(directory,true); }
+        finally { WaitOptionalDiagnostics();Environment.ExitCode=savedExit;Directory.Delete(directory,true); }
     }
 }

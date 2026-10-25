@@ -9,6 +9,7 @@ namespace VictusFanControl.App;
 internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
 {
     internal const int SampleTimeoutMilliseconds = 1500;
+    internal const int StartupTimeoutMilliseconds = 5000;
     internal const int RestartBackoffMilliseconds = 5000;
     private readonly object _gate = new();
     private readonly string? _preferredName;
@@ -25,6 +26,14 @@ internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
     private string _session = "";
     private long _sequence, _retryAt;
     private bool _disposed;
+    private sealed record InitializationPhase(string Phase,long StartedAtMilliseconds);
+    private InitializationPhase _phase=new("NotStarted",Environment.TickCount64);
+    private void MarkPhase(string phase)
+    {
+        Volatile.Write(ref _phase,new(phase,Environment.TickCount64));
+        VictusFanControl.Runtime.RuntimeProgressJournal.Record("Nvml."+phase,_session,_sequence);
+    }
+    internal string CurrentPhase=>Volatile.Read(ref _phase).Phase;
     internal int? ChildProcessId => _process?.Id;
     internal int NativeDiagnosticCharacterCount => _errors.Text.Length;
     public string DeviceName { get; private set; } = "NVIDIA GPU";
@@ -73,14 +82,17 @@ internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
                 if(UnconfirmedReaders.Count!=0)throw new NvmlTelemetryUnavailableException("Previous read-only NVML helper termination remains unconfirmed; no replacement spawned.");
             }
             _session = Guid.NewGuid().ToString("N"); _sequence = 0;
+            MarkPhase("ProcessStarting");
             _process = Process.Start(_startInfo()) ?? throw new IOException("NVML helper did not start.");
+            MarkPhase("ProcessStartedAwaitingIpc");
             _process.StandardInput.AutoFlush = true;
             _errors = new(); _errorDrain = DrainErrorsAsync(_process.StandardError, _errors);
-            var ready = ExchangeAsync("initialize", 5000).GetAwaiter().GetResult();
+            var ready = ExchangeAsync("initialize", StartupTimeoutMilliseconds).GetAwaiter().GetResult();
             if (ready.Sample is not null || ready.SampledAtUtc is not null || string.IsNullOrWhiteSpace(ready.DeviceName) ||
                 _exact && !string.Equals(_preferredName, ready.DeviceName, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("NVML helper GPU identity mismatch.");
             DeviceName = ready.DeviceName;
+            MarkPhase("ReadyAwaitingFirstSample");
         }
         catch (Exception ex) { throw Fail(ex); }
     }
@@ -98,6 +110,7 @@ internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
             try
             {
                 var started = DateTimeOffset.UtcNow;
+                MarkPhase("SampleAcquisition");
                 var reply = ExchangeAsync("sample", _sampleTimeout).GetAwaiter().GetResult();
                 if (reply.DeviceName != DeviceName || reply.SampledAtUtc is not { } sampled || sampled < started ||
                     sampled > DateTimeOffset.UtcNow || reply.Sample is not { } sample ||
@@ -105,7 +118,7 @@ internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
                     !double.IsFinite(sample.PowerW) || sample.PowerW is < 0 or >= 300 ||
                     !double.IsFinite(sample.LoadPercent) || sample.LoadPercent is < 0 or > 100)
                     throw new InvalidDataException("Invalid or stale NVML helper sample.");
-                return sample;
+                MarkPhase("SampleComplete");return sample;
             }
             catch (Exception ex) { throw Fail(ex); }
         }
@@ -117,16 +130,28 @@ internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
         var request = new NvmlTelemetryProtocol.Request(NvmlTelemetryProtocol.Version, _session, ++_sequence,
             operation, _preferredName, _exact);
         await NvmlTelemetryProtocol.WriteAsync(_process!.StandardInput, request, cancellation.Token).ConfigureAwait(false);
-        var line = await NvmlTelemetryProtocol.ReadLineAsync(_process.StandardOutput, cancellation.Token).ConfigureAwait(false);
-        var reply = NvmlTelemetryProtocol.Parse<NvmlTelemetryProtocol.Reply>(line);
-        if (reply.Version != request.Version || reply.Session != request.Session || reply.Sequence != request.Sequence || reply.Failed)
-            throw new InvalidDataException("NVML helper rejected or mismatched the acquisition.");
-        return reply;
+        var progressMessages=0;
+        while(true)
+        {
+            var line = await NvmlTelemetryProtocol.ReadLineAsync(_process.StandardOutput, cancellation.Token).ConfigureAwait(false);
+            var reply = NvmlTelemetryProtocol.Parse<NvmlTelemetryProtocol.Reply>(line);
+            if (reply.Version != request.Version || reply.Session != request.Session || reply.Sequence != request.Sequence || reply.Failed)
+                throw new InvalidDataException("NVML helper rejected or mismatched the acquisition.");
+            if(reply.Progress is {} phase)
+            {
+                if(operation!="initialize"||++progressMessages>8||reply.Sample is not null||reply.SampledAtUtc is not null||
+                    phase is not ("IpcReady" or "LibraryLoading" or "LibraryLoaded" or "ExportsLoaded" or "NvmlInitialization" or "DeviceEnumeration" or "DeviceOpen"))
+                    throw new InvalidDataException("Invalid NVML initialization progress.");
+                MarkPhase(phase);continue; // Same absolute startup deadline. Never telemetry.
+            }
+            return reply;
+        }
     }
 
     private NvmlTelemetryUnavailableException Fail(Exception error)
     {
         var pid = _process?.Id;
+        var phase=Volatile.Read(ref _phase);
         int? exitCode = null;
         try { if (_process?.HasExited == true) exitCode = _process.ExitCode; } catch (InvalidOperationException) { }
         var stoppedExit = Stop(); exitCode ??= stoppedExit;
@@ -134,8 +159,9 @@ internal sealed class NvmlTelemetryProcessClient : INvmlTelemetryReader
         _retryAt = _clock() + RestartBackoffMilliseconds;
         AppLog.WriteStructured("NVML TELEMETRY HELPER FAILURE", new { processId = pid, exitCode,
             failure = error.GetType().Name, session = _session, sequence = _sequence,
+            phase=phase.Phase,phaseAgeMilliseconds=Math.Max(0,Environment.TickCount64-phase.StartedAtMilliseconds),startupBudgetMilliseconds=StartupTimeoutMilliseconds,sampleBudgetMilliseconds=_sampleTimeout,
             retryAfterMs = RestartBackoffMilliseconds, gpuSampleValid = false, nativeDiagnostic = _errors.Text });
-        return new NvmlTelemetryUnavailableException("Isolated NVML acquisition failed (" + error.GetType().Name + "); GPU sample unavailable.");
+        return new NvmlTelemetryUnavailableException("Isolated NVML acquisition failed (" + error.GetType().Name + ", phase="+phase.Phase+"); GPU sample unavailable.");
     }
 
     private sealed class ErrorTail

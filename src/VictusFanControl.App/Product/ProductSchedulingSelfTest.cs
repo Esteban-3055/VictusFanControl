@@ -66,7 +66,7 @@ internal static class ProductSchedulingSelfTest
             require(cache.Get() is { Pending: true, Actionable: false }, "Expired empty inventory admitted a session.");
             require(SpinWait.SpinUntil(() => { cache.Get(); return entered.IsSet; }, 5000) && calls == 2, "Expired inventory did not refresh exactly once.");
             var dispose = cache.DisposeAsync().AsTask();
-            require(!dispose.IsCompleted && cache.Get().Pending && calls == 2, "Disposal failed to drain the blocked reader.");
+            require(dispose.IsCompleted && cache.Get().Pending && calls == 2, "Optional read retained shutdown or admitted a late result.");
             release.Set(); dispose.GetAwaiter().GetResult();
             require(cache.Get() is { Pending: true, Actionable: false } && calls == 2, "Late result survived runtime disposal.");
         }

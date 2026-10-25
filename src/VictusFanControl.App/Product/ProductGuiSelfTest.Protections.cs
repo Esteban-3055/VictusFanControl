@@ -43,7 +43,7 @@ internal static partial class ProductGuiSelfTest
 
         var ready=new ProductRuntimeState{AutomaticAuthorized=true,Runtime="Healthy",FanAuthority="Firmware",LifecycleBlocked=true,
             Snapshot=Sample(0,55,45)};
-        var resume=new ProductAutomaticResumption();resume.Observe(ready,0);
+        var episode=new ProductRecoveryEpisode();var resume=new ProductAutomaticResumption(episode);resume.Observe(ready,0);
         require(!resume.TakeRequest(ready,new(),at,10000),"Never-active Firmware armed unattended Automatic.");
         resume.Observe(ready with{LifecycleBlocked=false,FanMode="Automatic"},0);resume.Observe(ready,1000);
         require(!resume.TakeRequest(ready,new(),at,10999),"Resumption bypassed its wait.");
@@ -51,7 +51,9 @@ internal static partial class ProductGuiSelfTest
             require(!resume.TakeRequest(blocked,new(),at,11000),"Resumption admitted uncertain/hot state.");
         require(!resume.TakeRequest(ready,new(){ResumeAutomatic=false},at,11000),"Disabled resumption armed control.");
         require(resume.TakeRequest(ready with{Snapshot=Sample(0,55,95)},new(),at,11000)&&!resume.TakeRequest(ready,new(),at,11001),"Exact95 GPU resumption failed or duplicated a request.");
-        require(resume.TakeRequest(ready,new(),at,41000)&&resume.TakeRequest(ready,new(),at,101000)&&!resume.TakeRequest(ready,new(),at,201000),"Resumption exceeded three attempts/backoff.");
+        episode.Finish();require(resume.TakeRequest(ready,new(),at,41000),"Second resumption wait changed.");episode.Finish();
+        require(resume.TakeRequest(ready,new(),at,101000),"Third resumption wait changed.");episode.Finish();
+        require(!resume.TakeRequest(ready,new(),at,201000),"Resumption exceeded three attempts/backoff.");
         resume.Cancel();resume.Observe(ready with{LifecycleBlocked=false,FanMode="Automatic"},202000);resume.Observe(ready,203000);
         require(!resume.TakeRequest(ready,new(),at,300000),"Late Automatic event overrode a user stop.");
 
@@ -94,6 +96,8 @@ internal static partial class ProductGuiSelfTest
                 {
                     require(created==1&&next.Commands==0&&form.Draft.Ac.CpuPl1Watts==38,"Unattended retry changed draft or activated before fresh observations.");
                     next.Publish(Ready(0));next.Publish(Ready(1));next.Publish(Ready(2));PumpUntil(()=>!form.Canvas.Busy,"Fresh unattended activation hung.");
+                    require(next.Commands==0,"Unattended retry skipped thirty seconds of fresh stability.");
+                    QualifyAutomaticAfterRecovery(form,next,Ready(2));
                     require(next.Commands==1,"Clean resumption did not activate coupled Automatic exactly once.");
                 }
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Unattended fixture could not exit.");

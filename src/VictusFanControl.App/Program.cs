@@ -9,6 +9,14 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.SequenceEqual(new[]{"--stability-gui-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunStabilityChecks();return;}
+        if(args.SequenceEqual(new[]{"--stability-pipeline-self-test"}))
+        {
+            try{StabilityPipelineSelfTest.RunAsync().GetAwaiter().GetResult();}
+            catch(Exception error){Console.Error.WriteLine(error);Environment.ExitCode=1;}
+            return;
+        }
         if (args.SequenceEqual(new[]{"--telemetry-lifecycle-self-test"}))
         { Environment.ExitCode=TelemetryLifecycleSelfTest.RunAsync().GetAwaiter().GetResult(); return; }
         if(args.SequenceEqual(new[]{"--automatic-coordination-self-test"}))
@@ -72,7 +80,7 @@ internal static class Program
                 var path=VictusFanControl.Product.ProductProfilesStore.DefaultPath;
                 var original=File.Exists(path)?File.ReadAllBytes(path):null;
                 if(plan.SaveProfiles)VictusFanControl.Product.ProductProfilesStore.Save(configured);
-                try { if(plan.RegisterStartup)WindowsStartupRegistration.SetEnabledAsync(true,modules,configured.StartMinimized).GetAwaiter().GetResult(); }
+                try { if(plan.RegisterStartup)WindowsStartupRegistration.SetEnabledForInstallationAsync(true,modules,configured.StartMinimized).GetAwaiter().GetResult(); }
                 catch
                 {
                     if(plan.SaveProfiles)
@@ -184,6 +192,7 @@ internal static class Program
                 MessageBoxIcon.Information);
             return;
         }
+
 
         ApplicationConfiguration.Initialize();
 
@@ -841,7 +850,11 @@ internal static class Program
         ProductFanRangePreview.Enabled=args.Contains("--fan-upper-range-preview");
         if(ProductFanRangePreview.Enabled && (hardwareTestModeCount!=0 || productAutomaticReview is not null || args.Contains("--platform-thermal-experiment") || args.Contains("--product-restart-state")))
             throw new ArgumentException("Upper-range preview cannot be combined with other hardware/review entries.");
-        var modulesDirectory = ResolveModulesDirectory(args);
+        // Product startup renders before filesystem/module availability checks.
+        // Historical qualification entries retain their strict resolver.
+        var modulesDirectory = hardwareTestModeCount==0
+            ? Path.GetFullPath(ReadOptionValue(args,"--modules-dir")??Path.Combine(AppContext.BaseDirectory,"modules"))
+            : ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
             AppLog.Write("Startup failed: required PawnIO modules were not found.");
@@ -941,7 +954,14 @@ internal static class Program
                 var statePath=ReadOptionValue(args,"--product-restart-state");
                 var restartState=statePath is null?null:ProductSessionRestart.ReadReleasedState(statePath);
                 using(var product = new ProductForm(modulesDirectory,!ProductFanRangePreview.Enabled&&args.Contains("--start-minimized"),automaticReview:productAutomaticReview,restartState:restartState))
-                {Application.Run(product);restart=product.RestartRequest;}
+                {
+                    Application.Run(product);restart=product.RestartRequest;
+                    if(product.UserRequestedExit)
+                    {
+                        if(Environment.ExitCode!=0)AppLog.Write("Voluntary exit with unresolved cleanup retained in journals; scheduled restart suppressed. Prior code="+Environment.ExitCode);
+                        Environment.ExitCode=0;
+                    }
+                }
                 AppLog.Write("Product GUI exited.");
                 if(restart is not null&&Environment.ExitCode==0)
                 {

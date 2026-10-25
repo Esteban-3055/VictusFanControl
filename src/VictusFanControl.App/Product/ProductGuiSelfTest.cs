@@ -17,6 +17,7 @@ internal static partial class ProductGuiSelfTest
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
             ProductSchedulingSelfTest.Run(Require);
+            TestStabilityHardening(Require);
             ProductSensorPolicySelfTest.Run(Require);
             ProductUpdatesSelfTest.Run(Require);
             ProductAutomaticAdmissionSelfTest.Run(Require);

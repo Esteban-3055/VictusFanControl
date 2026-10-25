@@ -30,8 +30,14 @@ internal sealed partial class ProductForm
     private async Task InitializeExternalCoolingAsync()
     {
         if((_isolatedRuntime&&_externalCoolingPath is null)||_externalCooling is not null)return;
-        _externalCoolingStore=new(_externalCoolingPath);
-        _externalCoolingSettings=_externalCoolingStore.Load(out _externalCoolingLoadNotice);
+        var settingsPath=_externalCoolingPath;
+        var loaded=await Task.Factory.StartNew(()=>
+        {
+            var store=new ExternalCoolingSettingsStore(settingsPath);
+            var settings=store.Load(out var notice);return(Store:store,Settings:settings,Notice:notice);
+        },CancellationToken.None,TaskCreationOptions.LongRunning,TaskScheduler.Default);
+        if(_closing||IsDisposed)return;
+        _externalCoolingStore=loaded.Store;_externalCoolingSettings=loaded.Settings;_externalCoolingLoadNotice=loaded.Notice;
         AppLog.Write($"PRODUCT EXTERNAL STARTUP: mode={_externalCoolingSettings.Mode};autoReconnect={_externalCoolingSettings.AutoReconnect};paired={_externalCoolingStore.Paired};invalidSettings={_externalCoolingLoadNotice is not null}");
         _externalPairingReader=_externalCoolingStore.ReadKey;
         _externalCooling=new(new TelemetryExportService(()=>Volatile.Read(ref _runtime)?.State??new(){Runtime="Unavailable",FanAuthority="Unknown"},new WindowsPhysicalMemoryUsage()),()=>_externalPairingReader());
@@ -52,8 +58,17 @@ internal sealed partial class ProductForm
     }
     private async Task DisposeExternalCoolingAsync()
     {
-        await _externalCoolingStartup;
-        if(_externalCooling is not null)await ExternalCoolingOperationAsync(async()=>await _externalCooling.DisposeAsync());
+        // A pending settings-only read has no socket, callbacks or authority.
+        // Its continuation checks the closed generation before creating a manager.
+        var manager=_externalCooling;
+        if(manager is null)
+        {
+            if(_externalCoolingStartup.IsFaulted)AppLog.Write("Optional external settings startup failed before creating a manager: "+_externalCoolingStartup.Exception?.GetBaseException().GetType().Name);
+            return;
+        }
+        try{await _externalCoolingStartup;}
+        catch(Exception error){AppLog.Write("External startup failed; manager cleanup still required: "+error.GetType().Name);}
+        await manager.DisposeAsync();
     }
     private void ShowExternalCooling()
     {
