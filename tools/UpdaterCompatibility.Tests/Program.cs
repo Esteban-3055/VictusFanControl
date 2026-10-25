@@ -9,8 +9,8 @@ var previousVersions=Enumerable.Range(9,9).Select(i=>new Version(1,2,i)).Append(
 string Release(string tag,bool preview,bool draft=false)=>JsonSerializer.Serialize(new
 {
     tag_name=tag,prerelease=preview,draft,
-    assets=new[]{new{name="VictusFanControl-1.3.2-Setup-win-x64.exe",size=4096,state="uploaded",digest="sha256:"+new string('a',64),
-        browser_download_url=$"https://github.com/{ProductUpdates.Repository}/releases/download/{tag}/VictusFanControl-1.3.2-Setup-win-x64.exe"}}
+    assets=new[]{new{name=$"VictusFanControl-{tag[1..]}-Setup-win-x64.exe",size=4096,state="uploaded",digest="sha256:"+new string('a',64),
+        browser_download_url=$"https://github.com/{ProductUpdates.Repository}/releases/download/{tag}/VictusFanControl-{tag[1..]}-Setup-win-x64.exe"}}
 });
 var metadata="["+Release("v1.3.2",false)+"]";
 foreach(var previous in previousVersions)
@@ -24,6 +24,15 @@ if(ProductUpdates.ParseReleases("["+Release("v1.3.2-preview.1",true)+"]",current
     ProductUpdates.ParseReleases("["+Release("v1.3.2",false,true)+"]",current,true) is not null||
     ProductUpdates.ParseReleases(metadata,expected,true) is not null)throw new Exception("Draft, suffix or installed-version fence changed.");
 Console.WriteLine("PASS original 1.2.9 updater: stable numeric 1.3.2 eligible from 1.2.9 through 1.3.1 without preview opt-in; draft/suffix/preview fences preserved.");
+var nextPreview="["+Release("v1.3.3",true)+","+Release("v1.3.2",false)+"]";
+foreach(var previous in previousVersions.Append(expected))
+{
+    var stable=ProductUpdates.ParseReleases(nextPreview,previous,false);
+    if(previous==expected?stable is not null:stable?.Version!=expected)throw new Exception("1.3.3 preview changed the stable update channel.");
+    if(ProductUpdates.ParseReleases(nextPreview,previous,true) is not {IsPrerelease:true,Version:var pv}||pv!=new Version(1,3,3))
+        throw new Exception("Original updater cannot discover the opt-in 1.3.3 preview.");
+}
+Console.WriteLine("PASS original 1.2.9 updater: numeric 1.3.3 preview from 1.2.9 through 1.3.2 requires opt-in; stable channel remains unchanged.");
 if(args.Length==2&&args[0]=="--live")
 {
     using var deadline=new CancellationTokenSource(TimeSpan.FromMinutes(10));

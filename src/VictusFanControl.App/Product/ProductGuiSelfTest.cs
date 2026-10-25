@@ -491,7 +491,10 @@ internal static partial class ProductGuiSelfTest
             form.HandlePowerEventAsync(18).GetAwaiter().GetResult();require(runtime.Resumes==0,"Maintenance resume reopened telemetry with display Off.");
             var on=form.HandlePowerEventAsync(0x8013,1);require(!on.IsCompleted&&runtime.Resumes==0,"Display On resumed before release.");
             runtime.ReleaseGate.SetResult();PumpUntil(()=>on.IsCompleted&&suspend.IsCompleted,"Lifecycle queue did not finish.");on.GetAwaiter().GetResult();off.GetAwaiter().GetResult();suspend.GetAwaiter().GetResult();
-            require(runtime.Releases==2&&runtime.Resumes==1,"Lifecycle boundaries were dropped or resumed more than once.");
+            require(runtime.Fences==2&&runtime.Releases==1&&runtime.Resumes==1,"Pending lifecycle release was not coalesced behind both admission fences.");
+            var nextOff=form.HandlePowerEventAsync(0x8013,0);
+            PumpUntil(()=>nextOff.IsCompleted&&runtime.Releases==2,"A new boundary after confirmed resume failed to release again.");
+            require(runtime.Fences==3&&runtime.Resumes==1,"A new display-Off boundary reopened telemetry.");
             var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Fixture shutdown did not complete.");require(runtime.Disposals==1,"Exit did not dispose its runtime exactly once.");
         }
         var busy=new RecordingRuntime{ManualGate=new(TaskCreationOptions.RunContinuationsAsynchronously)};

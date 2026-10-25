@@ -102,7 +102,7 @@ internal static partial class ProductGuiSelfTest
                 }
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Unattended fixture could not exit.");
             }
-            Console.WriteLine("Unattended Automatic resumption: PASS (old-runtime release fence, failed-release retention, frozen active preferences, fresh 3-sample gate and same GUI; zero hardware IO).");
+        Console.WriteLine("Unattended Automatic resumption: PASS (old-runtime release fence, failed-release retention, frozen active preferences, 30s fresh-acquisition gate and same GUI; zero hardware IO).");
         }
         finally{Environment.ExitCode=exitCode;if(Directory.Exists(root))Directory.Delete(root,true);}
     }

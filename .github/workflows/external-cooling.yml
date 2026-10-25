@@ -22,6 +22,9 @@ jobs:
       - name: Release, real loopback TCP, DPAPI, WinForms lifecycle and internal regressions
         shell: pwsh
         run: ./scripts/test-external-cooling.ps1
+      - name: Stability, installer and independent isolation prototype fixtures
+        shell: pwsh
+        run: ./scripts/test-stability-hardening.ps1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -31,5 +34,7 @@ jobs:
             logs/external-cooling-self-test/*.png
             logs/external-cooling-self-test/performance.json
             logs/external-cooling-self-test/validation.json
+            logs/stability-hardening/*.log
+            logs/stability-hardening/validation.json
             logs/product-gui-self-test/forced-session-recovery-settings.png
           if-no-files-found: warn

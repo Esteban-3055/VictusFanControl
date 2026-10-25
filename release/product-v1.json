@@ -3,7 +3,8 @@
   "kind": "VictusFanControl.ProductRelease",
   "target": "HP-8C40-9D0R1LA-F18",
   "releaseStage": "target-specific-release",
-  "stableReleaseAuthorized": true,
+  "stableReleaseAuthorized": false,
+  "previewReleaseAuthorized": true,
   "normalAutomatic": "authorized-exact-target",
   "startup": "optional-persistent-wait-three-fresh-observations-bounded-preparation-retry-coupled-performance",
   "reentryAfterInterruption": "explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations",
@@ -64,7 +65,7 @@
     "normalAutomaticPromoted": false,
     "auxiliaryFault": "not-applicable-no-acquisition"
   },
-  "version": "1.3.2",
+  "version": "1.3.3",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -74,7 +75,7 @@
     "powerEnvelopeHandoff": false,
     "resumeAutomatic": true
   },
-  "unattendedAutomaticResumption": "previous-active-request-only-clean-release-fresh-runtime-three-new-observations-no-unknown-native-reentry",
+  "unattendedAutomaticResumption": "previous-intent-confirmed-release-fresh-runtime-30s-distinct-complete-acquisitions-no-unknown-native-reentry",
   "telemetryTolerance": {
     "scope": "habitual-exact-target-only",
     "fanMaximumAgeMilliseconds": 10000,
@@ -110,8 +111,12 @@
     "stableInventoryMilliseconds": 10000,
     "oneAttemptPerInventory": true,
     "maximumEpisodesBeforeHealthyReset": 3,
-    "healthyAutomaticResetMilliseconds": 60000,
-    "resume": "previous-applied-profile-or-saved-startup-intent-three-new-observations",
+    "healthyAutomaticResetMilliseconds": 600000,
+    "resume": "previous-applied-profile-or-saved-startup-intent-30s-new-complete-acquisitions",
+    "sharedEpisodeBudget": true,
+    "cooldownMilliseconds": 300000,
+    "postCooldownAdmission": "one-attempt-only-with-30s-fresh-stability-and-confirmed-owner",
+    "invalidReadPolicy": "retain-exact-inventory-no-native-attempt-no-transient-retry",
     "userFirmwareCancelsResume": true,
     "scope": "running-gui-including-startup-and-minimized",
     "nativeUncertaintyPolicy": "retain-existing-recovery-blocks"
@@ -168,7 +173,7 @@
       "snapshotControlAndHistoryUnchanged": true
     }
   },
-  "channel": "stable",
+  "channel": "preview",
   "upperRangePreview": {
     "entry": "--fan-upper-range-preview",
     "cpuMaximumCommandLevel": 54,
@@ -202,15 +207,15 @@
     "gpuRetirementProof": "authenticated-reply-or-durable-nonce-target-parent-child-start-session-receipt-and-actual-exit23-not-confirmed-reset",
     "windowsSessionEnd": "bounded-20000ms-sta-drain-cancelled-query-preserves-session-unknown-completion-retains-records",
     "manualAction": "Recuperar sesión definitiva",
-    "pipeline": "diagnostic-exact-inventory-drain-release-only-fresh-runtime",
+    "pipeline": "mandatory-fence-optional-detached-diagnostic-exact-inventory-confirmed-drain-release-only-fresh-runtime",
     "persistentTelemetryFaultDelayMilliseconds": [
-      15000,
+      10000,
       30000,
       60000
     ],
     "maximumSessionEpisodesBeforeHealthyReset": 3,
-    "healthyResetMilliseconds": 60000,
-    "automaticResume": "previous-intent-only-three-fresh-observations-protections-and-user-stop",
+    "healthyResetMilliseconds": 600000,
+    "automaticResume": "previous-intent-only-30s-fresh-complete-acquisitions-protections-and-user-stop",
     "nativeCompletionEvidence": "process-local-exact-invocation-return-receipt",
     "unknownNativePolicy": "retain-records-no-new-dispatch-no-forced-process-or-system-restart",
     "physicalValidation": "pending-current-target-observation"

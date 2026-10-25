@@ -11,7 +11,7 @@ import shutil
 import zipfile
 
 
-VERSION = "1.3.2"
+VERSION = "1.3.3"
 TARGET = "HP-8C40-9D0R1LA-F18"
 MANIFEST = "PRODUCT-GUI-MANIFEST.json"
 
@@ -47,10 +47,11 @@ def main():
     require(manifest["finalReleaseReady"] is True, "Package not ready")
     require(manifest["normalAutomatic"] == contract["normalAutomatic"] == "authorized-exact-target",
             "Wrong control authorization")
-    require(contract["target"] == TARGET and contract["stableReleaseAuthorized"] is True,
-            "Wrong target or missing release authorization")
+    require(contract["target"] == TARGET and contract["stableReleaseAuthorized"] is False
+            and contract["previewReleaseAuthorized"] is True,
+            "Wrong target or missing preview authorization")
     require(contract["physicalPassClaimed"] is False, "Must retain physical evidence limits")
-    require(manifest["releaseChannel"] == contract["channel"] == "stable", "Wrong release channel")
+    require(manifest["releaseChannel"] == contract["channel"] == "preview", "Wrong release channel")
     require(manifest["fanCommandLimits"] == contract["fanCommandLimits"] and
             contract["fanCommandLimits"]["minimumLogicalLevel"] == 10 and
             contract["fanCommandLimits"]["cpuMaximumCommandLevel"] == 54 and
@@ -125,7 +126,7 @@ def main():
     (args.output / (archive.name + ".sha256")).write_text(
         f"{digest}  {archive.name}\n", encoding="utf-8")
     provenance = {
-        "schemaVersion": 1, "version": VERSION, "target": TARGET,
+        "schemaVersion": 1, "version": VERSION, "target": TARGET, "channel": "preview",
         "repository": args.repository, "sourceHead": args.source_head,
         "buildRunId": args.build_run_id,
         "buildUrl": f"https://github.com/{args.repository}/actions/runs/{args.build_run_id}",

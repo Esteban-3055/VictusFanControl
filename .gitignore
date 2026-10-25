@@ -36,3 +36,4 @@ Thumbs.db
 firmware/**/secrets.h
 **/config.local.h
 logs/nvml-telemetry-self-test/
+logs/stability-hardening/
