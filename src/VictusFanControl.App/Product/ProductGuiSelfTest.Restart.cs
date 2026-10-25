@@ -9,6 +9,7 @@ internal static partial class ProductGuiSelfTest
 {
     private static void TestSessionRestart(Action<bool,string> require)
     {
+        WaitOptionalDiagnostics(); // A prior optional export cannot reserve this fixture's writer.
         var root=Path.Combine(Path.GetTempPath(),"vfc-session-restart-"+Guid.NewGuid().ToString("N"));
         var directory=Path.Combine(root,"sessions",AppLog.SessionId);Directory.CreateDirectory(directory);
         var oldExitCode=Environment.ExitCode;
@@ -36,6 +37,7 @@ internal static partial class ProductGuiSelfTest
                 require(File.ReadAllText(preferences)==original,"Restart silently saved the draft to preferences.");
                 var state=ProductSessionRestart.ReadReleasedState(form.RestartRequest!.StatePath,Path.Combine(root,"sessions"));
                 require(state.DraftJson==draft&&state.SavedJson==ProductProfilesStore.Serialize(baseline)&&state.Dirty,"Restart lost the unsaved draft or saved baseline.");
+                WaitOptionalDiagnostics(); // File existence alone does not mean ZIP finalization.
                 using var zip=ZipFile.OpenRead(Path.Combine(directory,"diagnostic-before-restart.zip"));
                 require(zip.GetEntry("gui-state.json") is not null&&zip.GetEntry("profiles-draft.json") is not null,"Automatic pre-restart evidence missing.");
                 var minimizedState=state with{DraftJson=ProductProfilesStore.Serialize(ProductProfilesStore.Parse(state.DraftJson) with{StartMinimized=true})};
@@ -70,7 +72,7 @@ internal static partial class ProductGuiSelfTest
             TestRestartLifecycle(Path.Combine(root,"lifecycle"),require);
             Console.WriteLine("PASS: session restart drains commands, disposes once, retains draft/baseline and diagnostic, opens a fresh Firmware process, rejects incomplete release and lifecycle races; zero hardware IO.");
         }
-        finally{Environment.ExitCode=oldExitCode;Directory.Delete(root,true);}
+        finally{Environment.ExitCode=oldExitCode;WaitOptionalDiagnostics();Directory.Delete(root,true);}
     }
     private static void TestFailedRestart(string directory,Action<bool,string> require)
     {
@@ -78,7 +80,9 @@ internal static partial class ProductGuiSelfTest
         using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles(),restartDirectory:directory);
         form.Show();Application.DoEvents();var restart=form.RestartSessionAsync();PumpUntil(()=>restart.IsCompleted,"Failed restart hung.");
         require(form.RestartRequest is null&&!form.IsDisposed&&!form.Canvas.RestartAvailable&&form.Canvas.State.LifecycleBlocked&&form.Canvas.Notice.Contains("GPU reset unresolved"),"Failed cleanup reopened a process or hid its reason.");
-        require(!File.Exists(Path.Combine(directory,ProductSessionRestart.StateFileName))&&File.Exists(Path.Combine(directory,"diagnostic-before-restart.zip")),"Failed cleanup fabricated a release receipt or lost evidence.");
+        require(!File.Exists(Path.Combine(directory,ProductSessionRestart.StateFileName)),"Failed cleanup fabricated a release receipt.");
+        WaitOptionalDiagnostics();
+        require(!File.Exists(Path.Combine(directory,ProductSessionRestart.StateFileName))&&File.Exists(Path.Combine(directory,"diagnostic-before-restart.zip")),"Failed cleanup fabricated a release receipt or lost finalized optional evidence.");
         form.RestartSessionAsync().GetAwaiter().GetResult();form.HandleCommand("fan-mode-2");form.HandleCommand("performance-apply");
         require(runtime.Disposals==1&&runtime.Commands==0,"Failed runtime was reused or blindly released again.");
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Failed restart could not exit.");require(runtime.Disposals==1,"Exit repeated a failed restart release.");

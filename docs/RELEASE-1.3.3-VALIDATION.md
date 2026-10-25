@@ -30,6 +30,8 @@
 
 `OfflinePackages` omite únicamente la auditoría de paquetes en red de la ejecución local. Las pruebas de GitHub conservan su configuración habitual. Sus resultados por commit se enlazan en el [PR #44](https://github.com/Esteban-3055/VictusFanControl/pull/44); no se sustituye un resultado pendiente por el PASS local.
 
+El empaquetado de GitHub encontró una carrera en el fixture de reinicio fallido: verificaba la presencia del ZIP opcional antes de concluir su escritor. La prueba comprueba inmediatamente que no exista recibo de liberación, espera después la finalización opcional y vuelve a comprobar recibo/evidencia antes de borrar su directorio ficticio. Esa espera pertenece solo al test; no se vuelve a acoplar el ZIP al drenaje de producción.
+
 La primera ejecución directa del apphost empaquetado fue rechazada por Windows porque requiere elevación. Se conservó ese requisito y se ejecutaron las entradas DLL aisladas. **No se presenta como PASS del arranque normal elevado, del EXE instalador ejecutado ni de una instalación real.** La prueba del instalador incrustado utiliza los mismos recursos/ZIP y fuente en una compilación DLL de fixture. El EXE final no se ejecuta para instalar durante esta validación.
 
 ## Archivos locales de la preliminar
