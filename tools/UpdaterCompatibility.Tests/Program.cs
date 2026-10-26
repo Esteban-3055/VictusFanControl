@@ -4,35 +4,35 @@ using VictusFanControl.Product;
 
 if(ProductRelease.Version!="1.2.9"||ProductRelease.IsPreview)throw new Exception("Wrong updater baseline.");
 var current=new Version(1,2,9);
-var expected=new Version(1,3,2);
-var previousVersions=Enumerable.Range(9,9).Select(i=>new Version(1,2,i)).Append(new Version(1,3,0)).Append(new Version(1,3,1)).ToArray();
+var expected=new Version(1,3,6);
+var previousVersions=Enumerable.Range(9,9).Select(i=>new Version(1,2,i)).Append(new Version(1,3,0)).Concat(Enumerable.Range(1,5).Select(i=>new Version(1,3,i))).ToArray();
 string Release(string tag,bool preview,bool draft=false)=>JsonSerializer.Serialize(new
 {
     tag_name=tag,prerelease=preview,draft,
     assets=new[]{new{name=$"VictusFanControl-{tag[1..]}-Setup-win-x64.exe",size=4096,state="uploaded",digest="sha256:"+new string('a',64),
         browser_download_url=$"https://github.com/{ProductUpdates.Repository}/releases/download/{tag}/VictusFanControl-{tag[1..]}-Setup-win-x64.exe"}}
 });
-var metadata="["+Release("v1.3.2",false)+"]";
+var metadata="["+Release("v1.3.6",false)+"]";
 foreach(var previous in previousVersions)
 foreach(var previews in new[]{false,true})
     if(ProductUpdates.ParseReleases(metadata,previous,previews) is not {Version:var v,IsPrerelease:false}||v!=expected)
-        throw new Exception("Older version cannot discover stable 1.3.2.");
-var preview="["+Release("v1.3.2",true)+"]";
+        throw new Exception("Older version cannot discover stable 1.3.6.");
+var preview="["+Release("v1.3.6",true)+"]";
 if(ProductUpdates.ParseReleases(preview,current) is not null||ProductUpdates.ParseReleases(preview,current,true)?.Version!=expected)
     throw new Exception("Preview opt-in fence changed.");
-if(ProductUpdates.ParseReleases("["+Release("v1.3.2-preview.1",true)+"]",current,true) is not null||
-    ProductUpdates.ParseReleases("["+Release("v1.3.2",false,true)+"]",current,true) is not null||
+if(ProductUpdates.ParseReleases("["+Release("v1.3.6-preview.1",true)+"]",current,true) is not null||
+    ProductUpdates.ParseReleases("["+Release("v1.3.6",false,true)+"]",current,true) is not null||
     ProductUpdates.ParseReleases(metadata,expected,true) is not null)throw new Exception("Draft, suffix or installed-version fence changed.");
-Console.WriteLine("PASS original 1.2.9 updater: stable numeric 1.3.2 eligible from 1.2.9 through 1.3.1 without preview opt-in; draft/suffix/preview fences preserved.");
-var nextPreview="["+Release("v1.3.5",true)+","+Release("v1.3.2",false)+"]";
-foreach(var previous in previousVersions.Append(expected).Append(new Version(1,3,3)).Append(new Version(1,3,4)))
+Console.WriteLine("PASS original 1.2.9 updater: stable numeric 1.3.6 eligible from 1.2.9 through 1.3.5 without preview opt-in; draft/suffix/preview fences preserved.");
+var nextPreview="["+Release("v1.3.7",true)+","+Release("v1.3.6",false)+"]";
+foreach(var previous in previousVersions.Append(expected))
 {
     var stable=ProductUpdates.ParseReleases(nextPreview,previous,false);
-    if(previous>=expected?stable is not null:stable?.Version!=expected)throw new Exception("1.3.5 preview changed the stable update channel.");
-    if(ProductUpdates.ParseReleases(nextPreview,previous,true) is not {IsPrerelease:true,Version:var pv}||pv!=new Version(1,3,5))
-        throw new Exception("Original updater cannot discover the opt-in 1.3.5 preview.");
+    if(previous==expected?stable is not null:stable?.Version!=expected)throw new Exception("Future preview changed the stable update channel.");
+    if(ProductUpdates.ParseReleases(nextPreview,previous,true) is not {IsPrerelease:true,Version:var pv}||pv!=new Version(1,3,7))
+        throw new Exception("Future preview no longer requires opt-in.");
 }
-Console.WriteLine("PASS original 1.2.9 updater: numeric 1.3.5 preview from 1.2.9 through 1.3.4 requires opt-in; stable channel remains unchanged.");
+Console.WriteLine("PASS original 1.2.9 updater: stable 1.3.6 eligible from 1.2.9 through 1.3.5 with either opt-in setting; future previews remain opt-in only.");
 if(args.Length==2&&args[0]=="--live")
 {
     using var deadline=new CancellationTokenSource(TimeSpan.FromMinutes(10));

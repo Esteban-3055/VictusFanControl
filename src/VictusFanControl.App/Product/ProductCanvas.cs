@@ -34,7 +34,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         (ProductPage.Protections,"Protecciones","settings"),(ProductPage.Settings,"Configuración","settings"),
         (ProductPage.Advanced,"Avanzado","settings"),(ProductPage.ExternalCooling,"Base externa","cpu"),
         (ProductPage.ExternalCurve,"Curva Externa","curve"),
-        (ProductPage.HyperXBattery,"HyperX Battery","cpu"),
+        (ProductPage.HyperXBattery,"HyperX Battery","headset"),
         (ProductPage.Updates,"Actualizaciones","update")
     });
     internal bool ShowCurvePoints { get; set; }
@@ -140,6 +140,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         else if(type=="curve")g.DrawLines(pen,new PointF[]{new(x,y+size),new(x+size*.2f,y+size*.4f),new(x+size*.65f,y+size*.35f),new(x+size,y)});
         else if(type=="pulse")g.DrawLines(pen,new PointF[]{new(x,y+size/2),new(x+size*.2f,y+size/2),new(x+size*.35f,y),new(x+size*.5f,y+size),new(x+size*.7f,y+size*.4f),new(x+size,y+size*.4f)});
         else if(type=="plug") {g.DrawLine(pen,x+size*.3f,y,x+size*.3f,y+size*.3f);g.DrawLine(pen,x+size*.65f,y,x+size*.65f,y+size*.3f);g.FillRectangle(brush,x+size*.2f,y+size*.3f,size*.55f,size*.4f);g.DrawLine(pen,x+size*.48f,y+size*.7f,x+size*.48f,y+size);}
+        else if(type=="headset") {g.DrawArc(pen,x+size*.12f,y+size*.06f,size*.76f,size*.8f,180,180);g.DrawRectangle(pen,x+size*.08f,y+size*.43f,size*.2f,size*.43f);g.DrawRectangle(pen,x+size*.72f,y+size*.43f,size*.2f,size*.43f);g.DrawArc(pen,x+size*.45f,y+size*.65f,size*.35f,size*.3f,0,90);}
         else if(type=="cpu") {g.DrawRectangle(pen,x+size*.2f,y+size*.2f,size*.6f,size*.6f);for(int i=1;i<=3;i++){g.DrawLine(pen,x,y+size*i/4,x+size*.2f,y+size*i/4);g.DrawLine(pen,x+size*.8f,y+size*i/4,x+size,y+size*i/4);g.DrawLine(pen,x+size*i/4,y,x+size*i/4,y+size*.2f);g.DrawLine(pen,x+size*i/4,y+size*.8f,x+size*i/4,y+size);}}
         else if(type=="gpu") {g.DrawRectangle(pen,x,y+size*.15f,size*.85f,size*.6f);g.DrawEllipse(pen,x+size*.2f,y+size*.25f,size*.35f,size*.35f);g.DrawLine(pen,x+size*.85f,y+size*.25f,x+size,y+size*.25f);}
         else if(type=="settings") {var teeth=Enumerable.Range(0,32).Select(i=>{var angle=i*Math.PI/16;var radius=size*(i%4 is 1 or 2?.5:.38);return new PointF(x+size/2+(float)Math.Cos(angle)*(float)radius,y+size/2+(float)Math.Sin(angle)*(float)radius);}).ToArray();g.DrawPolygon(pen,teeth);g.DrawEllipse(pen,x+size*.35f,y+size*.35f,size*.3f,size*.3f);}
@@ -190,7 +191,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Profiles: ProfilePage(g);break;
             case ProductPage.Curves: Curves(g);break;
             case ProductPage.ExternalCurve: ExternalCurveView(g);break;
-            case ProductPage.HyperXBattery: DrawText(g,"HyperX Battery",320,88,31,null,1000,true);break;
+            case ProductPage.HyperXBattery: HyperXView(g);break;
             case ProductPage.Monitoring: Monitoring(g);break;
             case ProductPage.Settings: Settings(g);break;
             case ProductPage.Advanced: Advanced(g);break;
@@ -278,16 +279,16 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
                 DrawText(g,$"Carga: {loaded/60:0.0} min\n"+(State.AutomaticDecision.SustainedLoadCooling==true?"Descenso prolongado":"Descenso breve"),1300,763,17,Muted,324,height:54);
         }
     }
-    private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit,bool compact=false)
+    private void Slider(Graphics g,string id,string name,RectangleF r,int value,int min,int max,string unit,bool compact=false,bool enabled=true)
     {
         DrawText(g,name,r.X,r.Y,compact?20:24,null,r.Width-300);Card(g,new(r.Right-220,r.Y-9,155,compact?34:56),false,9);DrawText(g,value+" "+unit,r.Right-208,r.Y+1,compact?21:unit=="MHz"?22:27,null,130,true);
-        if(id is "pl1" or "pl2" or "gpu")Hit(id+"-text",new(r.Right-220,r.Y-9,155,compact?34:56),"Escribir valor exacto de "+name,!Busy);
+        if(id is "pl1" or "pl2" or "gpu")Hit(id+"-text",new(r.Right-220,r.Y-9,155,compact?34:56),"Escribir valor exacto de "+name,enabled&&!Busy);
         var track=new RectangleF(r.X,r.Y+(compact?41:73),r.Width,compact?10:14);Bar(g,track,value-min,max-min,Accent);
         var px=track.Left+(float)(value-min)/(max-min)*track.Width;using var b=new SolidBrush(Ink);g.FillEllipse(b,px-(compact?13:17),track.Y-(compact?8:10),compact?26:34,compact?26:34);
         if(id.StartsWith("influence-"))DrawText(g,$"Rango {min}–{max} %",r.X+18,r.Y+59,13,Muted,260);
         else {DrawText(g,min.ToString(),r.X,r.Y+(compact?62:99),compact?14:18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+(compact?62:99),compact?14:18,Muted,110);}
-        Hit(id,new(r.X,r.Y+(compact?31:58),r.Width,compact?34:42),name,!Busy,true,min,max);
-        Button(g,id+"-minus","−",new(r.Right-282,r.Y-9,50,compact?34:56));Button(g,id+"-plus","+",new(r.Right-61,r.Y-9,50,compact?34:56));
+        Hit(id,new(r.X,r.Y+(compact?31:58),r.Width,compact?34:42),name,enabled&&!Busy,true,min,max);
+        Button(g,id+"-minus","−",new(r.Right-282,r.Y-9,50,compact?34:56),enabled:enabled);Button(g,id+"-plus","+",new(r.Right-61,r.Y-9,50,compact?34:56),enabled:enabled);
     }
     private void Performance(Graphics g)
     {
@@ -557,7 +558,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     protected override void OnMouseCaptureChanged(EventArgs e){base.OnMouseCaptureChanged(e);if(!Capture){_externalDrag=-1;_dragSlider=null;_dragNode=-1;_dragContext=null;}}
     private bool CanInteract(ProductHit hit) => hit.Enabled&&(!Busy||hit.Id is "firmware" or "fan-mode-0" or "window-minimize" or "window-maximize" or "window-close");
     private ProductHit? KeyboardHit=>_hits.LastOrDefault(h=>h.Id==_keyboardId&&CanInteract(h));
-    private int SliderValue(string id) => id.StartsWith("external-curve-value-",StringComparison.Ordinal)?ExternalCurve?.Value(id[21..])??0:id.StartsWith("influence-")?Profile.Fan.UnifiedDemand!.Influence(int.Parse(id[10..])):id.StartsWith("sim-input-")?SimulationInputs.Value(int.Parse(id[10..])):id switch{"manual"=>ManualLevel,"pl1"=>Profile.CpuPl1Watts,"pl2"=>Profile.CpuPl2Watts,"gpu"=>Profile.GpuMaximumMHz,_=>0};
+    private int SliderValue(string id) => id.StartsWith(HyperXBatteryPage.ValuePrefix,StringComparison.Ordinal)?HyperX?.Value(id[HyperXBatteryPage.ValuePrefix.Length..])??0:id.StartsWith("external-curve-value-",StringComparison.Ordinal)?ExternalCurve?.Value(id[21..])??0:id.StartsWith("influence-")?Profile.Fan.UnifiedDemand!.Influence(int.Parse(id[10..])):id.StartsWith("sim-input-")?SimulationInputs.Value(int.Parse(id[10..])):id switch{"manual"=>ManualLevel,"pl1"=>Profile.CpuPl1Watts,"pl2"=>Profile.CpuPl2Watts,"gpu"=>Profile.GpuMaximumMHz,_=>0};
     internal void HandleKey(Keys keyData)=>OnKeyDown(new KeyEventArgs(keyData));
     protected override bool IsInputKey(Keys keyData)=>(keyData&Keys.KeyCode) is Keys.Left or Keys.Right or Keys.Up or Keys.Down or Keys.Tab or Keys.PageDown or Keys.PageUp or Keys.Home or Keys.End || base.IsInputKey(keyData);
     protected override bool ProcessDialogKey(Keys keyData)

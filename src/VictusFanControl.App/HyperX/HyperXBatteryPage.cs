@@ -1,87 +1,109 @@
+using System.Globalization;
+
 namespace VictusFanControl.App;
 
-internal sealed class HyperXBatteryPage : UserControl
+/// <summary>Presentation-only draft, rendered by the common ProductCanvas.
+/// Editing never queries USB or changes the notebook's control preferences.</summary>
+internal sealed class HyperXBatteryPage(ProductCanvas canvas,HyperXSettings settings,Func<HyperXSettings,Task> persist) : IDisposable
 {
-    private readonly Label readings=new(){AutoSize=true,MaximumSize=new(1000,0)};
-    private readonly Label notice=new(){AutoSize=true,MaximumSize=new(1000,0)};
-    private readonly CheckBox low=new(){Text="Avisar batería baja",AutoSize=true};
-    private readonly CheckBox critical=new(){Text="Avisar batería crítica",AutoSize=true};
-    private readonly CheckBox full=new(){Text="Avisar nivel de carga completa",AutoSize=true};
-    private readonly CheckBox mute=new(){Text="Avisar al silenciar y quitar el silencio",AutoSize=true};
-    internal NumericUpDown Low {get;}=Number();
-    internal NumericUpDown Critical {get;}=Number();
-    internal NumericUpDown Full {get;}=Number();
-    internal NumericUpDown LcdLowSeconds {get;}=new(){Minimum=1,Maximum=120,Width=85};
-    internal NumericUpDown LcdCriticalSeconds {get;}=new(){Minimum=1,Maximum=120,Width=85};
-    internal NumericUpDown LcdLowCycles {get;}=new(){Minimum=1,Maximum=20,Width=85};
-    internal NumericUpDown LcdCriticalCycles {get;}=new(){Minimum=1,Maximum=20,Width=85};
-    private readonly Button save=new(){Text="Guardar ajustes",AutoSize=true};
-    private readonly Func<HyperXSettings,Task> persist;
-    private HyperXSettings saved;
-    private static NumericUpDown Number()=>new(){Minimum=1,Maximum=100,Width=85};
-    internal HyperXBatteryPage(HyperXSettings settings,Func<HyperXSettings,Task> saveSettings)
+    internal const string ValuePrefix="hyperx-value-";
+    private HyperXSettings saved=settings;
+    private bool disposed;
+    internal HyperXSettings Draft {get;private set;}=settings;
+    internal HyperXSnapshot Reading {get;private set;}=new();
+    internal DateTimeOffset PresentedAt {get;private set;}=DateTimeOffset.UtcNow;
+    internal int Tab {get;private set;}
+    internal bool Selected {get;set;}
+    internal bool Busy {get;private set;}
+    internal bool Dirty=>Draft!=saved;
+    internal string Notice {get;private set;}="Los cambios se aplican al guardar. La batería es una estimación por voltaje.";
+    private void Refresh(){if(!disposed&&!canvas.IsDisposed)canvas.Invalidate();}
+    internal void SetNotice(string? text){if(text is not null){Notice=text;Refresh();}}
+    internal void UpdateReading(HyperXSnapshot reading,DateTimeOffset now)
+    {Reading=reading;PresentedAt=now;if(Selected)Refresh();}
+    internal int Value(string key)=>key switch
     {
-        persist=saveSettings;saved=settings;Dock=DockStyle.None;AutoScroll=true;
-        Critical.Minimum=10;Low.Minimum=11;Full.Minimum=12;
-        BackColor=ProductCanvas.Background;ForeColor=ProductCanvas.Ink;Font=new Font("Segoe UI",11);
-        var flow=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new(12)};
-        Controls.Add(flow);
-        flow.Controls.Add(readings);
-        flow.Controls.Add(new Label{Text="Batería: consulta cada 60 s; caduca a los 180 s. Silencio: eventos USB, sin sondeo continuo.",AutoSize=true,Margin=new(0,14,0,8)});
-        void Row(CheckBox box,NumericUpDown number)
-        {
-            var row=new FlowLayoutPanel{AutoSize=true,WrapContents=false,Margin=new(0,5,0,5)};
-            row.Controls.Add(box);row.Controls.Add(number);row.Controls.Add(new Label{Text="%",AutoSize=true});flow.Controls.Add(row);
-        }
-        low.Text="Avisar batería baja (Windows y LCD)";critical.Text="Avisar batería crítica (Windows y LCD)";
-        Row(low,Low);Row(critical,Critical);Row(full,Full);flow.Controls.Add(mute);
-        void Timing(string title,NumericUpDown seconds,NumericUpDown cycles)
-        {
-            var row=new FlowLayoutPanel{AutoSize=true,WrapContents=false,Margin=new(0,5,0,5)};
-            row.Controls.Add(new Label{Text=title,AutoSize=true});row.Controls.Add(seconds);
-            row.Controls.Add(new Label{Text="segundos ·",AutoSize=true});row.Controls.Add(cycles);
-            row.Controls.Add(new Label{Text="ciclos de parpadeo",AutoSize=true});flow.Controls.Add(row);
-        }
-        Timing("LCD baja:",LcdLowSeconds,LcdLowCycles);Timing("LCD crítica:",LcdCriticalSeconds,LcdCriticalCycles);
-        flow.Controls.Add(new Label{Text="El aviso LCD interrumpe cualquier pantalla una vez al entrar en cada umbral.\nSin PC, Hyp conserva el último porcentaje con * (lectura anterior; no es una actualización).",AutoSize=true});
-        flow.Controls.Add(new Label{Text="Porcentaje aproximado por voltaje. «Completa» avisa al alcanzar el umbral estimado,\nno confirma que el circuito haya terminado de cargar. Windows puede silenciar los avisos\nmediante No molestar o la configuración de notificaciones.",AutoSize=true,Margin=new(0,10,0,10)});
-        var buttons=new FlowLayoutPanel{AutoSize=true};buttons.Controls.Add(save);
-        var discard=new Button{Text="Descartar",AutoSize=true};buttons.Controls.Add(discard);flow.Controls.Add(buttons);flow.Controls.Add(notice);
-        Restore();discard.Click+=(_,_)=>{Restore();notice.Text="Ajustes guardados restaurados.";};
-        save.Click+=async(_,_)=>await SaveAsync();
-    }
-    private void Restore()
+        "low"=>Draft.LowPercent,"critical"=>Draft.CriticalPercent,"full"=>Draft.FullPercent,
+        "low-seconds"=>Draft.LcdLowSeconds,"critical-seconds"=>Draft.LcdCriticalSeconds,
+        "low-cycles"=>Draft.LcdLowBlinkCycles,"critical-cycles"=>Draft.LcdCriticalBlinkCycles,
+        _=>throw new ArgumentException("Ajuste HyperX desconocido.")
+    };
+    internal static (int Min,int Max) Range(string key)=>key switch
     {
-        LcdLowSeconds.Value=saved.LcdLowSeconds;LcdCriticalSeconds.Value=saved.LcdCriticalSeconds;LcdLowCycles.Value=saved.LcdLowBlinkCycles;LcdCriticalCycles.Value=saved.LcdCriticalBlinkCycles;
-        Low.Value=saved.LowPercent;Critical.Value=saved.CriticalPercent;Full.Value=saved.FullPercent;
-        low.Checked=saved.LowEnabled;critical.Checked=saved.CriticalEnabled;full.Checked=saved.FullEnabled;mute.Checked=saved.MuteEnabled;
+        "low"=>(11,99),"critical"=>(10,98),"full"=>(12,100),
+        "low-seconds" or "critical-seconds"=>(1,120),"low-cycles" or "critical-cycles"=>(1,20),
+        _=>throw new ArgumentException("Ajuste HyperX desconocido.")
+    };
+    internal void EditValue(string key,int value)
+    {
+        if(disposed||Busy)return;
+        var range=Range(key);value=Math.Clamp(value,range.Min,range.Max);
+        Draft=key switch
+        {
+            "low"=>Draft with{LowPercent=value},"critical"=>Draft with{CriticalPercent=value},"full"=>Draft with{FullPercent=value},
+            "low-seconds"=>Draft with{LcdLowSeconds=value},"critical-seconds"=>Draft with{LcdCriticalSeconds=value},
+            "low-cycles"=>Draft with{LcdLowBlinkCycles=value},"critical-cycles"=>Draft with{LcdCriticalBlinkCycles=value},_=>Draft
+        };
+        Notice="Cambios pendientes. Guarda para aplicarlos en Windows y enviarlos al ESP32.";Refresh();
     }
-    internal HyperXSettings Draft=>saved with{LowPercent=(int)Low.Value,CriticalPercent=(int)Critical.Value,FullPercent=(int)Full.Value,
-        LcdLowSeconds=(int)LcdLowSeconds.Value,LcdCriticalSeconds=(int)LcdCriticalSeconds.Value,LcdLowBlinkCycles=(int)LcdLowCycles.Value,LcdCriticalBlinkCycles=(int)LcdCriticalCycles.Value,
-        LowEnabled=low.Checked,CriticalEnabled=critical.Checked,FullEnabled=full.Checked,MuteEnabled=mute.Checked};
+    internal string? EditNumeric(string key,string text)
+    {
+        if(disposed||Busy)return "Espera a que termine el guardado.";
+        var r=Range(key);
+        if(!int.TryParse(text,NumberStyles.None,CultureInfo.InvariantCulture,out int value)||value<r.Min||value>r.Max)
+            return $"Introduce un entero entre {r.Min} y {r.Max}.";
+        EditValue(key,value);return null;
+    }
+    internal async Task ExecuteAsync(string id)
+    {
+        if(disposed||Busy)return;
+        if(id.StartsWith("value-",StringComparison.Ordinal))
+        {
+            foreach(var suffix in new[]{"-plus","-minus","-text"})
+            {
+                if(!id.EndsWith(suffix,StringComparison.Ordinal))continue;
+                var key=id[6..^suffix.Length];var r=Range(key);
+                if(suffix=="-text")
+                {
+                    using var dialog=new ProductNumericDialog("HyperX Battery · "+Label(key),Value(key),r.Min,r.Max,text=>EditNumeric(key,text),
+                        help:"Editar solo cambia el borrador. Los umbrales y los tiempos se validan al guardar.");
+                    dialog.ShowDialog(canvas.FindForm());Refresh();
+                }
+                else EditValue(key,Value(key)+(suffix=="-plus"?1:-1));
+                return;
+            }
+        }
+        switch(id)
+        {
+            case "info":case "notifications":case "lcd":
+                canvas.Capture=false;Tab=id=="info"?0:id=="notifications"?1:2;break;
+            case "low-enabled":Draft=Draft with{LowEnabled=!Draft.LowEnabled};break;
+            case "critical-enabled":Draft=Draft with{CriticalEnabled=!Draft.CriticalEnabled};break;
+            case "full-enabled":Draft=Draft with{FullEnabled=!Draft.FullEnabled};break;
+            case "mute-enabled":Draft=Draft with{MuteEnabled=!Draft.MuteEnabled};break;
+            case "discard":Draft=saved;Notice="Ajustes HyperX guardados restaurados.";break;
+            case "reset":Draft=new();Notice="Valores iniciales en edición. Guarda para aplicarlos.";break;
+            case "save":await SaveAsync();return;
+        }
+        Refresh();
+    }
+    internal static string Label(string key)=>key switch
+    {
+        "low"=>"Batería baja","critical"=>"Batería crítica","full"=>"Nivel completo",
+        "low-seconds" or "critical-seconds"=>"Duración total del aviso LCD",
+        "low-cycles" or "critical-cycles"=>"Ciclos de parpadeo",_=>key
+    };
     internal async Task SaveAsync()
     {
-        if(!save.Enabled)return;
+        if(disposed||Busy)return;
         try
         {
-            var candidate=Draft;candidate.Validate();save.Enabled=false;
-            await persist(candidate);saved=candidate;notice.Text="Ajustes HyperX guardados.";
+            var candidate=Draft;candidate.Validate();Busy=true;Refresh();
+            await persist(candidate);saved=candidate;Notice="Ajustes HyperX guardados.";
         }
         catch(Exception e)when(e is IOException or UnauthorizedAccessException or InvalidDataException)
-        {notice.Text=e is InvalidDataException?e.Message:"No se pudieron guardar los ajustes. Se conserva la configuración anterior.";}
-        finally{if(!IsDisposed)save.Enabled=true;}
+        {Notice=e is InvalidDataException?e.Message:"No se pudieron guardar los ajustes. Se conserva la configuración anterior.";}
+        finally{Busy=false;Refresh();}
     }
-    internal void UpdateReading(HyperXSnapshot s,DateTimeOffset now)
-    {
-        bool fresh=s.Fresh(now);
-        var percent=fresh&&s.Percent is{} p?$"{p} % aprox.":"--";
-        var volts=fresh&&s.Millivolts is{} mv?$"{mv/1000.0:0.000} V":"--";
-        var charge=!fresh||s.Charging is null?"Desconocida":s.Charging.Value?"Cargando (inferido)":"Sin indicación de carga";
-        var mic=s.Muted is null?"Desconocido: acciona el botón de silencio":s.Muted.Value?"Silenciado":"Sin silencio";
-        var at=s.SampledAt is{} t?$"{t.ToLocalTime():HH:mm:ss} · hace {Math.Max(0,(now-t).TotalSeconds):0} s":"--";
-        var power=s.Powered is null?"Sin evento de encendido/apagado":s.Powered.Value?"Encendidos":"Apagados";
-        readings.Text=$"HyperX Cloud Flight · {s.Status}\nReceptor USB: {(s.ReceiverPresent?"detectado":"no disponible")} · {power}\nBatería: {percent}     Voltaje: {volts}\nCarga: {charge}\nMicrófono: {mic}\nÚltima adquisición: {at}";
-    }
-    internal void SetNotice(string? text){if(text is not null)notice.Text=text;}
-    protected override void Dispose(bool disposing){if(disposing){var font=Font;base.Dispose(disposing);font.Dispose();return;}base.Dispose(disposing);}
+    public void Dispose(){disposed=true;}
 }

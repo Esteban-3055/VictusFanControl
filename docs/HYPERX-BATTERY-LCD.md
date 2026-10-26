@@ -1,6 +1,6 @@
 # HyperX Battery y LCD1602
 
-Preliminar 1.3.5; requiere actualizar Windows y el firmware para disponer de todas las funciones. No cambia la instalación activa ni flashea el ESP32 automáticamente.
+Disponible en la estable 1.3.6. El panel usa el mismo diseño y los mismos controles que las otras secciones. Si el ESP32 ya tiene el firmware de 1.3.5 no es necesario volver a cargarlo: 1.3.6 conserva exactamente su código funcional. Para placas con versiones anteriores sí se necesita el firmware HyperX incluido. El instalador Windows no flashea el ESP32 automáticamente.
 
 ## Lecturas y frecuencia
 
@@ -15,6 +15,8 @@ La conversión de voltaje a porcentaje es aproximada y escalonada, con extremo i
 ## Pestaña y notificaciones
 
 «HyperX Battery» está debajo de «Curva Externa». Muestra receptor, estado de encendido observado, voltaje, batería, carga inferida, micrófono y antigüedad de la lectura. Los ajustes se guardan aparte en `%LOCALAPPDATA%/VictusFanControl/hyperx-battery.json`; no modifican perfiles de ventiladores ni claves de emparejamiento.
+
+La presentación se divide en **Información**, **Notificaciones** y **Pantalla LCD**, con las mismas tarjetas, colores, botones y deslizadores del programa. Guardar, Descartar y Restaurar quedan visibles en las tres secciones sin desplazamiento. Restaurar modifica el borrador; Guardar valida y persiste los ajustes. Un fallo de guardado conserva el borrador para corregirlo o reintentar. Los valores admiten ratón, teclado, controles accesibles y entrada numérica exacta al pulsar el número; las relaciones entre umbrales y entre duración/ciclos se validan al guardar.
 
 Los avisos bajos/críticos se habilitan y configuran para Windows y LCD. Los avisos de nivel completo y los de silenciar/quitar silencio son de Windows y tienen interruptores propios. La implementación usa las notificaciones nativas de NotifyIcon; No molestar y los permisos de notificación de Windows pueden ocultarlas.
 
@@ -44,6 +46,8 @@ Cada 100 ms se convierte una adquisición NTC validada a grados Celsius, conserv
 ## Validación y límites
 
 Pruebas aisladas: `--hyperx-self-test`, `--hyperx-ui-self-test` (también dentro de `--product-gui-self-test`); scripts generales de ExternalCooling y estabilidad. El harness C++ prueba layout, media NTC, caducidad, retención sin PC, parpadeo exacto, prioridades, no repetición y rollover. FirmwareInterop verifica porcentaje y todos los parámetros entre el cliente TCP de producción y el parser C++ real con HMAC.
+
+La prueba de interfaz de 1.3.6 genera nueve capturas (las tres secciones a anchuras 1040, 1344 y 1672), verifica límites y controles visibles, teclado/accesibilidad, entrada exacta, guardado, descarte, errores de persistencia y cambio de sección durante un arrastre. Usa un lector simulado y comprueba cero órdenes al hardware y ningún cambio en los ajustes de ventiladores del portátil. Estas capturas verifican la interfaz, no el comportamiento físico de los audífonos o del LCD.
 
 Prueba física acotada del lector C#: dos consultas separadas aproximadamente 60 s y eventos reales de silenciar/quitar silencio recibidos correctamente. Esto no valida físicamente carga USB completa, presentación de notificaciones Windows ni la nueva imagen en un ESP32. No se flasheó, alteró NVS o aplicaron cambios a ventiladores/CPU/GPU.
 

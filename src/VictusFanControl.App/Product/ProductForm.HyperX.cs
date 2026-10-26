@@ -29,13 +29,10 @@ internal sealed partial class ProductForm
         bool selected=_canvas.Page==ProductPage.HyperXBattery;
         if(selected&&_hyperXPage is null&&(_isolatedRuntime||_hyperX is not null))
         {
-            _hyperXPage=new(_hyperXSettings,SaveHyperXAsync);_canvas.Controls.Add(_hyperXPage);_hyperXPage.SetNotice(_hyperXNotice);
+            _hyperXPage=new(_canvas,_hyperXSettings,SaveHyperXAsync);_canvas.HyperX=_hyperXPage;_hyperXPage.SetNotice(_hyperXNotice);
         }
         if(_hyperXPage is null)return;
-        _hyperXPage.Visible=selected;
-        var scale=Math.Min(_canvas.ClientSize.Width/1672f,_canvas.ClientSize.Height/941f);
-        var x=(_canvas.ClientSize.Width-1672*scale)/2;var y=(_canvas.ClientSize.Height-941*scale)/2;
-        _hyperXPage.Bounds=Rectangle.Round(new RectangleF(x+310*scale,y+150*scale,1337*scale,680*scale));
+        _hyperXPage.Selected=selected;
         _hyperXPage.UpdateReading(_hyperX?.Snapshot??new(){Status=_isolatedRuntime?"Lectura aislada de prueba":"Preparando lector"},DateTimeOffset.UtcNow);
     }
     private void PresentHyperX()
@@ -45,7 +42,7 @@ internal sealed partial class ProductForm
         var now=DateTimeOffset.UtcNow;
         foreach(var snapshot in monitor.DrainMuteEvents())Notify(snapshot);
         var current=monitor.Snapshot;Notify(current);
-        if(_hyperXPage?.Visible==true)_hyperXPage.UpdateReading(current,now);
+        if(_hyperXPage?.Selected==true)_hyperXPage.UpdateReading(current,now);
         void Notify(HyperXSnapshot snapshot)
         {
             foreach(var n in _hyperXNotifications.Evaluate(snapshot,_hyperXSettings,DateTimeOffset.UtcNow))
