@@ -882,16 +882,16 @@ jobs:
         shell: pwsh
         run: |
           $assets = Join-Path $env:RUNNER_TEMP 'VictusFanControl-public-release-assets'
-          $payload = Join-Path $assets 'VictusFanControl-1.3.4-win-x64.zip'
+          $payload = Join-Path $assets 'VictusFanControl-1.3.5-win-x64.zip'
           $setup = Join-Path $env:RUNNER_TEMP 'VictusFanControl-setup-publish'
           dotnet run --project tools/ProductSetup -c Release -- --self-test
           if ($LASTEXITCODE -ne 0) { throw 'Installer security fixtures failed.' }
           dotnet publish tools/ProductSetup -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false "-p:SetupPayload=$payload" -o $setup
           if ($LASTEXITCODE -ne 0) { throw 'EXE installer publish failed.' }
-          $installer = Join-Path $assets 'VictusFanControl-1.3.4-Setup-win-x64.exe'
+          $installer = Join-Path $assets 'VictusFanControl-1.3.5-Setup-win-x64.exe'
           Copy-Item (Join-Path $setup 'VictusSetup.exe') $installer
           $identity = [Diagnostics.FileVersionInfo]::GetVersionInfo($installer)
-          if ($identity.FileVersion -ne '1.3.4.0' -or $identity.FileDescription -ne 'VictusSetup') { throw 'Installer identity mismatch.' }
+          if ($identity.FileVersion -ne '1.3.5.0' -or $identity.FileDescription -ne 'VictusSetup') { throw 'Installer identity mismatch.' }
           $test = Start-Process -FilePath $installer -ArgumentList '--self-test' -NoNewWindow -PassThru -Wait
           if ($test.ExitCode -ne 0) { throw 'Published EXE/embedded payload self-test failed.' }
           python scripts/prepare-installer-assets.py --installer $installer --source-head '${{ github.sha }}' --payload $payload
@@ -900,7 +900,7 @@ jobs:
       - name: Upload Windows EXE installer
         uses: actions/upload-artifact@v4
         with:
-          name: VictusFanControl-1.3.4-Setup-win-x64-${{ github.sha }}
+          name: VictusFanControl-1.3.5-Setup-win-x64-${{ github.sha }}
           path: |
             ${{ runner.temp }}/VictusFanControl-public-release-assets/*Setup*
             ${{ runner.temp }}/VictusFanControl-public-release-assets/*win-x64.zip*
@@ -910,7 +910,7 @@ jobs:
       - name: Upload definitive GUI review package
         uses: actions/upload-artifact@v4
         with:
-          name: VictusFanControl-1.3.4-win-x64-${{ github.sha }}
+          name: VictusFanControl-1.3.5-win-x64-${{ github.sha }}
           path: ${{ runner.temp }}/VictusFanControl-product-gui-review
           if-no-files-found: error
           retention-days: 30

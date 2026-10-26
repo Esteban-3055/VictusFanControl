@@ -1,6 +1,6 @@
 # HyperX Battery y LCD1602
 
-Desarrollo posterior a 1.3.4; requiere actualizar Windows y el firmware para disponer de todas las funciones. No cambia la instalación activa ni flashea el ESP32 automáticamente.
+Preliminar 1.3.5; requiere actualizar Windows y el firmware para disponer de todas las funciones. No cambia la instalación activa ni flashea el ESP32 automáticamente.
 
 ## Lecturas y frecuencia
 

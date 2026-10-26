@@ -325,6 +325,6 @@ Windows, silencio y retorno Local tras 2000 ms + periodo de tarea. Sin tacómetr
 appliedDuty y appliedPwmPct son órdenes eléctricas calculadas, no prueba de giro.
 
 
-### LCD HyperX / promedio ambiente (desarrollo posterior a 1.3.4)
+### LCD HyperX / promedio ambiente (preliminar 1.3.5)
 
 La pantalla principal pasa a CPU/GPU y Amb/Hyp. NTC: media móvil de 40 temperaturas cada 100 ms; ventana vacía o inválida aparece como `--`. HyperX llega firmado desde Windows, una adquisición por minuto. Sin PC, `Hyp:55*` indica último porcentaje guardado en RAM. Los avisos bajos/críticos interrumpen cualquier página y sus tiempos/ciclos se configuran desde HyperX Battery. No hay consulta USB de audífonos en el ESP32. Véase [detalle de la integración](../../docs/HYPERX-BATTERY-LCD.md). Se conservan pines, PWM invertido, Wi-Fi, HMAC y NVS.
