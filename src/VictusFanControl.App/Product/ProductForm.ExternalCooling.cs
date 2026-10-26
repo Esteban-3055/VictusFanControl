@@ -40,7 +40,7 @@ internal sealed partial class ProductForm
         _externalCoolingStore=loaded.Store;_externalCoolingSettings=loaded.Settings;_externalCoolingLoadNotice=loaded.Notice;
         AppLog.Write($"PRODUCT EXTERNAL STARTUP: mode={_externalCoolingSettings.Mode};autoReconnect={_externalCoolingSettings.AutoReconnect};paired={_externalCoolingStore.Paired};invalidSettings={_externalCoolingLoadNotice is not null}");
         _externalPairingReader=_externalCoolingStore.ReadKey;
-        _externalCooling=new(new TelemetryExportService(()=>Volatile.Read(ref _runtime)?.State??new(){Runtime="Unavailable",FanAuthority="Unknown"},new WindowsPhysicalMemoryUsage()),()=>_externalPairingReader());
+        _externalCooling=new(new TelemetryExportService(()=>Volatile.Read(ref _runtime)?.State??new(){Runtime="Unavailable",FanAuthority="Unknown"},new WindowsPhysicalMemoryUsage(),()=>_hyperX?.Snapshot??new(),()=>Volatile.Read(ref _hyperXSettings).DisplayConfiguration()),()=>_externalPairingReader());
         await ExternalCoolingOperationAsync(()=>_externalCooling.ConfigureAsync(_externalCoolingSettings));
         ObserveExternalCoolingDiagnostics();
         if(!_closing&&!IsDisposed)LayoutExternalCoolingPage();

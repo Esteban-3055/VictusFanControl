@@ -16,6 +16,7 @@ internal static partial class ProductGuiSelfTest
         try
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
+            Require(RunHyperXChecks()==0,"HyperX isolated UI regression failed.");
             ProductSchedulingSelfTest.Run(Require);
             TestStabilityHardening(Require);
             ProductSensorPolicySelfTest.Run(Require);

@@ -34,6 +34,7 @@ jobs:
             logs/external-cooling-self-test/*.png
             logs/external-cooling-self-test/performance.json
             logs/external-cooling-self-test/validation.json
+            logs/hyperx-self-test/*.png
             logs/stability-hardening/*.log
             logs/stability-hardening/validation.json
             logs/product-gui-self-test/forced-session-recovery-settings.png

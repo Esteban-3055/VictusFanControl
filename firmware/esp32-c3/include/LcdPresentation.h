@@ -26,8 +26,9 @@ inline uint32_t lcdElapsed(uint32_t now, uint32_t& cycleStartedAt) {
 }
 struct LcdReadings {
     double cpuPct = NAN, gpuPct = NAN, ramPct = NAN, demandPct = NAN;
-    double cpuTempC = NAN, gpuTempC = NAN, ambientC = NAN;
+    double cpuTempC = NAN, gpuTempC = NAN, ambientC = NAN, hyperxPct = NAN;
     bool telemetryFresh = false, pcAuthenticated = false, pwmEnabled = false, wifi = false;
+    bool hyperxCached=false;
     int pwmDuty = -1; // Logical applied command, not RPM or proof of rotation.
 };
 inline void lcdPad16(char (&row)[17]) {
@@ -52,8 +53,11 @@ inline void renderLcd(LcdPage page, const LcdReadings& data,
             lcdNumber(right, data.telemetryFresh ? data.gpuTempC : NAN, -20, 130);
             if (std::snprintf(first, sizeof(first), "CPU:%sC GPU:%sC", left, right) > 16)
                 std::snprintf(first, sizeof(first), "CPU:%sCGPU:%sC", left, right);
-            if (ambientValid) std::snprintf(second, sizeof(second), "Ambiente:%.1fC", data.ambientC);
-            else std::snprintf(second, sizeof(second), "Ambiente:--C");
+            // CPU/GPU retain their independent source ages; HyperX has its own 180 s age.
+            lcdNumber(left, ambientValid ? data.ambientC : NAN, -40, 100);
+            lcdNumber(right, (data.telemetryFresh || data.hyperxCached) ? data.hyperxPct : NAN, 0, 100);
+            if(std::snprintf(second, sizeof(second), "Amb:%sC Hyp:%s%c", left, right, data.hyperxCached?'*':'%')>16)
+                std::snprintf(second, sizeof(second), "Amb:%sCHyp:%s%c", left, right, data.hyperxCached?'*':'%');
             break;
         case LcdPage::Usage:
             lcdNumber(left, data.telemetryFresh ? data.cpuPct : NAN, 0, 100);

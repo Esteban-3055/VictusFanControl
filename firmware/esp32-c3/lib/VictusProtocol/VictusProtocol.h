@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <cmath>
 #include "ExternalController.h"
+#include "HyperXDisplay.h"
 
 namespace victus {
 using Key = std::array<uint8_t, 32>;
@@ -23,6 +24,12 @@ struct Measurement {
     // Signed, validated telemetry from Windows, nullable when not available.
     // Never substitute 0 C for unavailable or expired thermal samples.
     double cpuTempC = NAN, gpuTempC = NAN;
+    double hyperxPct = NAN;
+    uint32_t hyperxAge = 180000;
+    int64_t hyperxSampledUtc=0;
+    double freshHyperx(uint32_t now) const {
+        return linkFresh(now) && hyperxAge<180000 && static_cast<uint32_t>(now-receivedAt)<180000-hyperxAge ? hyperxPct : NAN;
+    }
     int request = -1;
     bool valid = false;
     std::string source = "Unknown";
@@ -50,6 +57,8 @@ public:
     Measurement latest;
     ExternalConfig configuration;
     bool hasConfiguration = false;
+    HyperXDisplayConfig hyperxDisplay;
+    bool hasHyperxDisplay=false;
     std::string appliedConfigRevision;
     int appliedDuty = -1, externalRequest = -1;
 private:

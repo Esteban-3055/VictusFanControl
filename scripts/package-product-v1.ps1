@@ -30,7 +30,7 @@ try {
     foreach($file in @('AUTOMATIC-COORDINATION-REVIEW.md','EXTERNAL-BASE-RAMPED-LOCAL.md','ESP32-LCD-RESPONSE-REVIEW.md','RELEASE-1.3.2-VALIDATION.md','TELEMETRY-SCHEDULING-RECOVERY.md','ESP32-WIFI-RECOVERY.md','UPDATE-BLOCK-1.3.0.md','EXHAUSTIVE-STARTUP-INVESTIGATION-2026-10-20.md','SESSION-END-AND-GPU-RECOVERY.md','STARTUP-STALL-AUDIT.md')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
-    foreach($file in @('STABILITY-BLOCK1-LIFECYCLE.md','STABILITY-RECOVERY-HARDENING.md','RELEASE-1.3.3-VALIDATION.md','GPU-CLOCK-3105.md')) {
+    foreach($file in @('STABILITY-BLOCK1-LIFECYCLE.md','STABILITY-RECOVERY-HARDENING.md','RELEASE-1.3.3-VALIDATION.md','GPU-CLOCK-3105.md','HYPERX-BATTERY-LCD.md')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
     Copy-Item -LiteralPath (Join-Path $repo 'release/RELEASE-NOTES-v1.3.4.md') -Destination $OutputDirectory

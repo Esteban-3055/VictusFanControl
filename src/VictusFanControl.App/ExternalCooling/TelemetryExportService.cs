@@ -26,11 +26,13 @@ internal sealed class WindowsPhysicalMemoryUsage : IPhysicalMemoryUsage
 }
 
 /// <summary>Read-only adapter. No controller reference, hardware reader or retained presentation value.</summary>
-internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IPhysicalMemoryUsage memory) : ITelemetryExportSource
+internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IPhysicalMemoryUsage memory,Func<HyperXSnapshot>? hyperx=null,Func<HyperxDisplayConfiguration>? hyperxDisplay=null) : ITelemetryExportSource
 {
     public ExportTelemetry Capture(DateTimeOffset now)
     {
         var s=state(); var sample=s.Snapshot;
+        var headset=hyperx?.Invoke();
+        bool headsetFresh=headset?.Fresh(now)==true&&headset.Percent.HasValue;
         bool Fresh(DateTimeOffset? at, TimeSpan age) => at is {} t && now >= t && now-t <= age;
         var live=sample is not null && Fresh(sample.Timestamp, sample.MaximumControlAge);
         static bool NonNegative(double? value)=>value is{} v&&double.IsFinite(v)&&v>=0;
@@ -68,6 +70,8 @@ internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IP
         return new()
         {
             CapturedAtUtc=now, SampledAtUtc=live?sample!.Timestamp:null, DecisionAtUtc=decisionAt,
+            HyperxDisplay=hyperxDisplay?.Invoke(),
+            HyperxBatteryPct=headsetFresh?headset!.Percent:null,HyperxSampledAtUtc=headsetFresh?headset!.SampledAt:null,
             CpuTempSampledAtUtc=live&&Fresh(cpuAt,sample!.MaximumControlAge)?cpuAt:null,
             GpuTempSampledAtUtc=live&&Fresh(gpuAt,sample!.MaximumControlAge)?gpuAt:null,
             RamSampledAtUtc=ram.HasValue?now:null, RamUsagePct=ram,

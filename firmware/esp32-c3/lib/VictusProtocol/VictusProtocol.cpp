@@ -143,6 +143,25 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
     for (auto k : {"sampledAtUtc","decisionAtUtc","cpuTempSampledAtUtc","gpuTempSampledAtUtc","ramSampledAtUtc"}) {
         int64_t at; if (!p[k].isNull() && (!timestamp(p[k],at) || at>captured)) return false;
     }
+    // Optional v1 display extension. It cannot authorize a fan request.
+    auto hyp=p["hyperxBatteryPct"]; auto hypAt=p["hyperxSampledAtUtc"];
+    if(!number(hyp,0,100))return false;
+    int64_t hypTime=0;
+    if(hyp.isNull()!=hypAt.isNull() || (!hypAt.isNull() && (!timestamp(hypAt,hypTime)||hypTime>captured||hypTime<=-62135596800000LL)))return false;
+    HyperXDisplayConfig hxConfig;
+    bool hxPresent=!p["hyperxDisplay"].isNull();
+    if(hxPresent) {
+        auto hx=p["hyperxDisplay"].as<JsonObjectConst>();
+        if(hx.isNull()||!hx["lowEnabled"].is<bool>()||!hx["criticalEnabled"].is<bool>())return false;
+        hxConfig.lowEnabled=hx["lowEnabled"].as<bool>();hxConfig.criticalEnabled=hx["criticalEnabled"].as<bool>();
+        struct HxField{const char* name;int* value;int min,max;};
+        for(auto f:{HxField{"lowPercent",&hxConfig.lowPercent,11,99},{"criticalPercent",&hxConfig.criticalPercent,10,98},
+            {"lowDurationMs",&hxConfig.lowDurationMs,1000,120000},{"criticalDurationMs",&hxConfig.criticalDurationMs,1000,120000},
+            {"lowBlinkCycles",&hxConfig.lowBlinkCycles,1,20},{"criticalBlinkCycles",&hxConfig.criticalBlinkCycles,1,20}}) {
+            if(!integer(hx[f.name],f.min,f.max))return false;*f.value=hx[f.name].as<int>();
+        }
+        if(!hxConfig.valid())return false;
+    }
     bool valid=p["solicitudValida"].as<bool>(); auto mode=p["modoSolicitado"].as<std::string>();
     if (valid==p["solicitud"].isNull() || (!valid&&(!p["cpuTargetLevel"].isNull()||!p["gpuTargetLevel"].isNull())) || (mode!="Automatic"&&!p["demandaPct"].isNull())) return false;
     if (valid) {
@@ -188,7 +207,11 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
         int64_t at;
         return timestamp(p[field],at) ? static_cast<uint32_t>(std::min<int64_t>(5000,captured-at)) : 5000;
     };
+    if(hxPresent){hyperxDisplay=hxConfig;hasHyperxDisplay=true;}
     latest.received=true;latest.receivedAt=now;
+    latest.hyperxSampledUtc=hypTime;
+    latest.hyperxPct=hyp.isNull()?NAN:hyp.as<double>();
+    latest.hyperxAge=hypAt.isNull()?180000:static_cast<uint32_t>(std::min<int64_t>(180000,captured-hypTime));
     latest.usageAge=age("sampledAtUtc");latest.ramAge=age("ramSampledAtUtc");
     latest.demandAge=age("decisionAtUtc");
     latest.cpuTempAge=age("cpuTempSampledAtUtc");latest.gpuTempAge=age("gpuTempSampledAtUtc");

@@ -101,7 +101,7 @@ internal sealed partial class ProductForm : Form
         Text="VictusFanControl";Icon=_icons.Program;FormBorderStyle=FormBorderStyle.None;BackColor=ProductCanvas.Background;AutoScaleDimensions=new SizeF(96,96);AutoScaleMode=AutoScaleMode.Dpi;
         MinimumSize=new(1040,660);ClientSize=DesignWindowSize;StartPosition=FormStartPosition.CenterScreen;
         _canvas.Profiles=_draft;ResetSimulation();_canvas.Dirty=notice is not null;_canvas.Notice=notice??AppLog.InitializationFailure??"";Controls.Add(_canvas);
-        _canvas.PageChanged+=(_,_)=>LayoutExternalCoolingPage();_canvas.SizeChanged+=(_,_)=>LayoutExternalCoolingPage();
+        _canvas.PageChanged+=(_,_)=>{LayoutExternalCoolingPage();LayoutHyperXPage();};_canvas.SizeChanged+=(_,_)=>{LayoutExternalCoolingPage();LayoutHyperXPage();};
         if(restartState is not null)_canvas.Dirty=restartState.Dirty;
         _canvas.Command+=HandleCommand;_canvas.ValueEdited+=EditValue;_canvas.NodeEdited+=EditNode;
         _canvas.MouseDown+=(_,e)=>{if(e.Button==MouseButtons.Left&&_canvas.IsHeaderDrag(e.Location)){ReleaseCapture();SendMessage(Handle,0xA1,2,0);}};
@@ -120,6 +120,7 @@ internal sealed partial class ProductForm : Form
             _ = RestoreDownloadedUpdateAsync();
             _startup=InitializeAsync(minimized,fixture is not null||runtimeFactory is not null,runtimeFactory,registerPowerNotificationsInFixture,enableStartupAutomaticInFixture,recoveryPreflight);
             _externalCoolingStartup=InitializeExternalCoolingAsync();
+            _hyperXStartup=InitializeHyperXAsync();
         };
         FormClosing+=OnClosing;FormClosed+=(_,_)=>{UnregisterPowerNotifications();_tray.Visible=false;};
         ResumeLayout(false);PerformLayout();
@@ -590,7 +591,7 @@ internal sealed partial class ProductForm : Form
     }
     protected override void Dispose(bool disposing)
     {
-        if(disposing){_externalCoolingPage?.Dispose();_externalCooling?.Suspend();_=DisposeExternalCoolingAsync();}
+        if(disposing){_hyperXTimer.Dispose();_hyperXPage?.Dispose();_=DisposeHyperXAsync();_externalCoolingPage?.Dispose();_externalCooling?.Suspend();_=DisposeExternalCoolingAsync();}
         if(disposing){ClearSessionEndReason();DisposeUpdateCancellation();_presentationTimer.Dispose();UnregisterPowerNotifications();DetachRuntime();_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();_icons.Dispose();_installationGate?.Dispose();}
         base.Dispose(disposing);
     }
@@ -621,7 +622,7 @@ internal sealed partial class ProductForm : Form
         catch(Exception ex){Environment.ExitCode=171;AppLog.Write("Product shutdown unresolved: "+ex);}
         finally
         {
-            try { await DisposeExternalCoolingAsync(); }
+            try { await DisposeHyperXAsync(); await DisposeExternalCoolingAsync(); }
             catch(Exception ex) { Environment.ExitCode=171;AppLog.Write("External cooling shutdown failed: "+ex); }
             finally
             {

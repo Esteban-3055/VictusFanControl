@@ -62,11 +62,15 @@ try
             if(records.Length==0)throw new InvalidDataException("C++ did not record a configuration.");
             foreach(var record in records)
             {
+                using var receipt=JsonDocument.Parse(record);
+                if(receipt.RootElement.GetProperty("hyperxBatteryPct").GetDouble()!=55 ||
+                    receipt.RootElement.GetProperty("hyperxDisplay").Deserialize<HyperxDisplayConfiguration>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!=Source.HyperxDisplay)
+                    throw new InvalidOperationException("HyperX battery or display preferences changed between production Windows client and C++ parser.");
                 var received=JsonSerializer.Deserialize<ExternalCurveConfiguration>(record,new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 if(received!=curve)throw new InvalidOperationException($"A configuration field changed between Windows and C++: {record}");
             }
         }
-        Console.WriteLine($"PASS production Windows TCP client <-> actual C++ firmware: all configuration fields match, applied revision {curve.Revision}; mutual authentication, directional MACs, fragmented replies, Battery telemetry; no hardware IO.");
+        Console.WriteLine($"PASS production Windows TCP client <-> actual C++ firmware: HyperX 55%/60s-old source and all display settings match; all curve configuration fields match, applied revision {curve.Revision}; mutual authentication, directional MACs, fragmented replies, Battery telemetry; no hardware IO.");
         var before=d.Received;source.Firmware=true;
         while(client.Diagnostics.Received<before+2&&!connection.IsCompleted)await Task.Delay(50,cancellation.Token);
         if(client.Diagnostics.Failures!=0 || client.Diagnostics.Device is not {Mode:"Local"} || client.Diagnostics.LastSent?.Contains("\"solicitud\":null")!=true)
@@ -84,12 +88,14 @@ finally
 
 sealed class Source : ITelemetryExportSource
 {
+    internal static HyperxDisplayConfiguration HyperxDisplay {get;}=new(){LowPercent=25,CriticalPercent=15,LowDurationMs=7000,LowBlinkCycles=7,CriticalDurationMs=14000,CriticalBlinkCycles=7};
     public volatile bool Firmware;
     public ExportTelemetry Capture(DateTimeOffset now)
     {
         var firmware=Firmware;
         return new()
         {
+        HyperxBatteryPct=55,HyperxSampledAtUtc=now.AddSeconds(-60),HyperxDisplay=HyperxDisplay,
         CapturedAtUtc=now,SampledAtUtc=now,DecisionAtUtc=now,CpuTempSampledAtUtc=now,GpuTempSampledAtUtc=now,RamSampledAtUtc=now,
         CpuUsagePct=10,GpuUsagePct=0,RamUsagePct=44,DemandaPct=firmware?null:35,Solicitud=firmware?null:27,SolicitudValida=!firmware,CpuTargetLevel=firmware?null:27,GpuTargetLevel=firmware?null:27,
         ModoSolicitado=firmware?"Firmware":"Automatic",ModoEfectivo=firmware?"Firmware":"Automatic",CpuTempC=55,GpuTempC=42,PowerSource="Battery",RequestEvidence=firmware?"Unavailable":"WmiAcceptedSupervised"

@@ -68,6 +68,7 @@ int main(int argc,char** argv) {
             put("cpuTemp",m.cpuTempC,m.cpuTempAge);put("gpuTemp",m.gpuTempC,m.gpuTempAge);
             put("cpu",m.cpu,m.usageAge);put("gpu",m.gpu,m.usageAge);
             put("ram",m.ram,m.ramAge);put("demand",m.demand,m.demandAge);
+            double hx=m.freshHyperx(m.receivedAt+1000);if(std::isfinite(hx))snapshot["hyperx"]=hx;else snapshot["hyperx"]=nullptr;
             std::string value;serializeJson(snapshot,value);std::cerr<<value<<std::endl;
         }
         if(session->hasConfiguration)controller.configure(session->configuration);
@@ -75,12 +76,18 @@ int main(int argc,char** argv) {
         if(argc==2 && std::string(argv[1])=="--configuration" && session->hasConfiguration) {
             // Test-only receipt evidence, after configure(). No production wire extension.
             const auto& c=session->configuration;
-            StaticJsonDocument<2048> snapshot;
+            StaticJsonDocument<4096> snapshot;
             snapshot["schemaVersion"]=1;snapshot["revision"]=controller.revision();
             snapshot["input"]=c.input;snapshot["requestMinimum"]=c.requestMinimum;snapshot["requestMaximum"]=c.requestMaximum;
             snapshot["manualOutput"]=c.manualOutput;snapshot["rise"]=c.rise;snapshot["fall"]=c.fall;
             snapshot["filterMs"]=c.filterMs;snapshot["hysteresis"]=c.hysteresis;snapshot["downHoldMs"]=c.downHoldMs;
             snapshot["startMs"]=c.startMs;snapshot["startOutput"]=c.startOutput;
+            double hp=session->latest.freshHyperx(now());if(std::isfinite(hp))snapshot["hyperxBatteryPct"]=hp;else snapshot["hyperxBatteryPct"]=nullptr;
+            if(session->hasHyperxDisplay) {
+                const auto& h=session->hyperxDisplay;auto x=snapshot.createNestedObject("hyperxDisplay");
+                x["lowEnabled"]=h.lowEnabled;x["criticalEnabled"]=h.criticalEnabled;x["lowPercent"]=h.lowPercent;x["criticalPercent"]=h.criticalPercent;
+                x["lowDurationMs"]=h.lowDurationMs;x["criticalDurationMs"]=h.criticalDurationMs;x["lowBlinkCycles"]=h.lowBlinkCycles;x["criticalBlinkCycles"]=h.criticalBlinkCycles;
+            }
             auto points=snapshot.createNestedArray("points");
             for(int i=0;i<c.count;++i) { auto p=points.createNestedObject();p["input"]=c.points[i].input;p["output"]=c.points[i].output; }
             std::string value;serializeJson(snapshot,value);std::cerr<<value<<std::endl;

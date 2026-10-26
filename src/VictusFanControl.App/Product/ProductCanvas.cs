@@ -7,7 +7,7 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
-internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates, Protections, ExternalCooling, ExternalCurve }
+internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates, Protections, ExternalCooling, ExternalCurve, HyperXBattery }
 internal sealed record ProductHit(string Id, RectangleF Bounds, string Label, bool Enabled, bool Slider = false, int Min = 0, int Max = 0);
 
 /// <summary>Owner-drawn product surface in reference coordinates. All gestures edit drafts or emit semantic commands.</summary>
@@ -34,6 +34,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         (ProductPage.Protections,"Protecciones","settings"),(ProductPage.Settings,"Configuración","settings"),
         (ProductPage.Advanced,"Avanzado","settings"),(ProductPage.ExternalCooling,"Base externa","cpu"),
         (ProductPage.ExternalCurve,"Curva Externa","curve"),
+        (ProductPage.HyperXBattery,"HyperX Battery","cpu"),
         (ProductPage.Updates,"Actualizaciones","update")
     });
     internal bool ShowCurvePoints { get; set; }
@@ -189,6 +190,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Profiles: ProfilePage(g);break;
             case ProductPage.Curves: Curves(g);break;
             case ProductPage.ExternalCurve: ExternalCurveView(g);break;
+            case ProductPage.HyperXBattery: DrawText(g,"HyperX Battery",320,88,31,null,1000,true);break;
             case ProductPage.Monitoring: Monitoring(g);break;
             case ProductPage.Settings: Settings(g);break;
             case ProductPage.Advanced: Advanced(g);break;

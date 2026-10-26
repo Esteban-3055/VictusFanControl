@@ -23,10 +23,10 @@ inline void presentationTests() {
     LcdReadings data;
     data.telemetryFresh=true;data.pcAuthenticated=true;data.wifi=true;data.pwmEnabled=true;
     data.cpuPct=100;data.gpuPct=0;data.ramPct=65;data.demandPct=42;
-    data.cpuTempC=130;data.gpuTempC=-20;data.ambientC=21.2;data.pwmDuty=96;
+    data.hyperxPct=55;data.cpuTempC=130;data.gpuTempC=-20;data.ambientC=21.2;data.pwmDuty=96;
     char top[17]{},bottom[17]{};
     renderLcd(LcdPage::Temperatures,data,top,bottom);
-    check(std::string(top)=="CPU:130CGPU:-20C" && std::strstr(bottom,"Ambiente:21.2C"),"component and ambient temperatures on first page");
+    check(std::string(top)=="CPU:130CGPU:-20C" && std::strstr(bottom,"Amb:21C Hyp:55%"),"component and ambient temperatures on first page");
     renderLcd(LcdPage::Usage,data,top,bottom);
     check(std::string(top)=="CPU:100%GPU:  0%" && std::strstr(bottom,"RAM: 65%"),"CPU GPU RAM in one page");
     renderLcd(LcdPage::Demand,data,top,bottom);
@@ -37,7 +37,7 @@ inline void presentationTests() {
     check(std::strstr(top,"PC: conectado") && std::strstr(bottom,"WiFi: conectado"),"PC and WiFi independent");
     for(double value:{-20.0,0.0,99.0,100.0,130.0,131.0,static_cast<double>(NAN),static_cast<double>(INFINITY)}) {
         data.cpuTempC=data.gpuTempC=data.cpuPct=data.gpuPct=data.ramPct=data.demandPct=value;
-        data.ambientC=value;
+        data.ambientC=value;data.hyperxPct=value;
         for(auto page:{LcdPage::Temperatures,LcdPage::Usage,LcdPage::Demand,LcdPage::Connection}) {
             renderLcd(page,data,top,bottom);
             check(std::strlen(top)==16 && std::strlen(bottom)==16,"every row exactly 16 plus NUL");
@@ -46,14 +46,14 @@ inline void presentationTests() {
     data.telemetryFresh=false;
     data.ambientC=21.2;
     renderLcd(LcdPage::Temperatures,data,top,bottom);
-    check(std::strstr(top,"CPU:--C") && std::strstr(top,"GPU:--C") && std::strstr(bottom,"21.2C"),"stale PC does not hide fresh independent ambient");
+    check(std::strstr(top,"CPU:--C") && std::strstr(top,"GPU:--C") && std::strstr(bottom,"Amb:21C"),"stale PC does not hide fresh independent ambient");
     renderLcd(LcdPage::Demand,data,top,bottom);
     check(std::strstr(top,"DEMANDA: --%") && std::strstr(bottom,"38% (96)"),"stale demand hidden while applied PWM remains visible");
     renderLcd(LcdPage::Usage,data,top,bottom);
     check(std::strstr(top,"--%") && std::strstr(bottom,"--%"),"no stale usage");
     data.ambientC=NAN;
     renderLcd(LcdPage::Temperatures,data,top,bottom);
-    check(std::strstr(bottom,"Ambiente:--C"),"ambient null on first page");
+    check(std::strstr(bottom,"Amb:--C"),"ambient null on first page");
     renderLcd(LcdPage::Demand,data,top,bottom);
     check(std::strstr(top,"DEMANDA: --%") && std::strstr(bottom,"38% (96)"),"missing ambient does not hide independent applied duty");
     renderLcd(LcdPage::Connection,data,top,bottom);
@@ -63,7 +63,7 @@ inline void presentationTests() {
     check(std::strstr(top,"desconectado") && std::strstr(bottom,"sin red"),"disconnected labels fit");
     data.telemetryFresh=true;data.cpuTempC=55;data.gpuTempC=42;data.demandPct=35;
     renderLcd(LcdPage::Temperatures,data,top,bottom);
-    check(std::strstr(top,"55C") && std::strstr(top,"42C") && std::strstr(bottom,"Ambiente:--C"),"NTC failure does not replace notebook telemetry");
+    check(std::strstr(top,"55C") && std::strstr(top,"42C") && std::strstr(bottom,"Amb:--C"),"NTC failure does not replace notebook telemetry");
     renderLcd(LcdPage::Demand,data,top,bottom);
     check(std::strstr(top,"DEMANDA: 35%") && std::strstr(bottom,"38% (96)"),"NTC failure does not replace fresh demand or applied duty");
     data.ambientC=21.2;data.pwmEnabled=false;
@@ -78,6 +78,57 @@ inline void presentationTests() {
     check(m.fresh(55,4999,1000)==55 && std::isnan(m.fresh(55,4999,1001)),"source age plus local residence exact expiry");
     check(std::isnan(m.fresh(55,5000,1000)),"missing or old timestamp never fresh");
     check(m.fresh(0,0,1000)==0 && std::isnan(m.fresh(NAN,0,1000)),"zero preserved, null not invented");
+
+    data.telemetryFresh=true;data.ambientC=-40;data.hyperxPct=100;
+    renderLcd(LcdPage::Temperatures,data,top,bottom);
+    check(std::string(bottom)=="Amb:-40CHyp:100%","worst-case ambient/HyperX row fits without truncating percent");
+    data.hyperxPct=NAN;renderLcd(LcdPage::Temperatures,data,top,bottom);
+    check(std::strstr(bottom,"Hyp:--%"),"unavailable headset never becomes zero");
+    m.received=true;m.receivedAt=UINT32_MAX-1000;m.hyperxPct=55;m.hyperxAge=178999;
+    check(m.freshHyperx(UINT32_MAX)==55&&std::isnan(m.freshHyperx(0)),"headset source age plus residence across rollover");
+    m.receivedAt=1000;m.hyperxAge=60000;
+    check(m.freshHyperx(2000)==55&&std::isnan(m.freshHyperx(3000)),"PC link loss hides cached headset independently of minute polling");
+    HyperXDisplayState alert;
+    alert.observe(20,1000,0,UINT32_MAX-2000);
+    check(alert.overlay(UINT32_MAX-2000,top,bottom)&&std::strstr(top,"BAJA"),"low battery overrides any normal page immediately");
+    check(alert.overlay(UINT32_MAX-1000,top,bottom)&&std::string(top)==std::string(16,' '),"low alert blank phase without blocking");
+    for(unsigned t=0;t<6000;t+=250) {
+        alert.observe(20,1000,0,UINT32_MAX-2000+t); // repeated frames are not new acquisitions
+        check(alert.overlay(UINT32_MAX-2000+t,top,bottom),"duplicate frames do not change alert lifetime");
+        check((top[0]!=' ')==((t/1000)%2==0),"exact three visible/blank cycles across millis rollover");
+    }
+    check(!alert.overlay(UINT32_MAX-2000+6000,top,bottom),"overlay returns to normal page at exact deadline");
+    check(alert.lastPercent()==20,"TCP loss retains the last battery percentage in RAM");
+    data.telemetryFresh=false;data.hyperxCached=true;data.hyperxPct=alert.lastPercent();data.ambientC=21;
+    renderLcd(LcdPage::Temperatures,data,top,bottom);
+    check(std::strstr(top,"CPU:--C")&&std::strstr(bottom,"Hyp:20*"),"cached battery marked previous while CPU/GPU expire");
+    alert.observe(10,2000,0,7000);
+    check(alert.overlay(7000,top,bottom)&&std::strstr(top,"CRITICA"),"critical transition has priority");
+    alert.observe(10,3000,0,8000);
+    check(!alert.overlay(17000,top,bottom),"new readings within critical range do not repeat the warning");
+    alert.observe(30,4000,0,18000);alert.observe(20,5000,0,19000);
+    check(alert.overlay(19000,top,bottom)&&std::strstr(top,"BAJA"),"five-point recovery rearms low warning");
+    alert.observe(10,6000,0,19500);
+    check(alert.overlay(19500,top,bottom)&&std::strstr(top,"CRITICA"),"critical preempts a running low warning");
+    HyperXDisplayConfig disabled;disabled.criticalEnabled=false;alert.configure(disabled);
+    check(!alert.overlay(19500,top,bottom),"disabling critical cancels an active warning");
+    HyperXDisplayState timed;HyperXDisplayConfig cfg;cfg.lowDurationMs=4000;cfg.lowBlinkCycles=2;timed.configure(cfg);timed.observe(20,1000,0,0);
+    check(timed.overlay(3999,top,bottom)&&!timed.overlay(4000,top,bottom),"custom duration and blink count applied");
+    HyperXDisplayState old;old.observe(10,1000,180000,0);
+    check(std::isnan(old.lastPercent())&&!old.overlay(0,top,bottom),"old battery cannot populate cache or trigger an alert");
+    cfg.lowDurationMs=1000;cfg.lowBlinkCycles=20;check(!cfg.valid(),"blink rate cannot exceed LCD refresh capability");
+    data.hyperxCached=false;
+    AmbientAverage40 average;
+    for(unsigned i=0;i<39;++i)check(std::isnan(average.update(20,i*100)),"no partial mean before forty samples");
+    check(average.update(60,3900)==21,"mean uses all forty converted temperatures");
+    check(average.update(20,4000)==21,"rolling window replaces exactly one oldest sample");
+    check(std::isnan(average.update(NAN,4100))&&average.samples()==0,"NTC fault clears mean immediately");
+    for(unsigned i=0;i<40;++i)average.update(25,4200+i*100);
+    check(average.update(25,8200)==25,"full recovery refills forty samples");
+    check(std::isnan(average.update(25,11200))&&average.samples()==1,"sampling gap invalidates the old window");
+    AmbientAverage40 wrapAverage;
+    for(unsigned i=0;i<40;++i)wrapAverage.update(23,UINT32_MAX-2000+i*100);
+    check(wrapAverage.update(23,1999)==23,"ambient averaging survives millis rollover");
 
     check(std::abs(convertNtc(2439,1792).c-21.2)<0.1,"reported NTC sample valid");
     check(std::abs(convertNtc(2048,1650).c-25)<0.01,"NTC nominal divider");

@@ -49,7 +49,8 @@ std::atomic<bool> remote{false};
 std::atomic<int> externalRequest{0};
 portMUX_TYPE configLock=portMUX_INITIALIZER_UNLOCKED;
 char appliedRevision[33]{};
-victus::AmbientFilter ambientFilter;
+victus::AmbientAverage40 ambientFilter;
+victus::HyperXDisplayState hyperxLcd;
 // Last ADC read is owned by loop()/serialInput(); only the filtered
 // ambient measurement crosses to the independent FreeRTOS control task.
 struct NtcDiagnostic {
@@ -194,6 +195,8 @@ void network(uint32_t now) {
             if (!session->accept(input,millis(),currentAmbient(),board::EnablePwm?static_cast<int>(lround(applied.load()*100.0/255)):-1,board::EnablePwm&&remote.load(),response)) {
                 disconnectPeer();nextAccept=now+1000;Serial.println("Sesion rechazada o terminada.");return;
             }
+            if(session->hasHyperxDisplay)hyperxLcd.configure(session->hyperxDisplay);
+            hyperxLcd.observe(session->latest.hyperxPct,session->latest.hyperxSampledUtc,session->latest.hyperxAge,millis());
             Command command{session->remoteRequest && board::EnablePwm,session->latest.request,millis()};
             command.demand=session->latest.demand;command.manual=session->latest.manual;
             command.hasConfig=session->hasConfiguration;command.config=session->configuration;
@@ -228,7 +231,7 @@ void readAmbient() {
         ntcLastInvalidAt=ntcDiagnostic.sampledAt;
         ntcLastInvalidReason=reason;
     }
-    double filtered=ambientFilter.update(c);
+    double filtered=ambientFilter.update(c,ntcDiagnostic.sampledAt);
     portENTER_CRITICAL(&ambientLock);
     ambient={filtered,ntcDiagnostic.sampledAt};
     portEXIT_CRITICAL(&ambientLock);
@@ -250,7 +253,9 @@ void printNtcDiagnostic() {
         Serial.print(" filtrada=");
         Serial.print(current,1);
         Serial.println(" C");
-    } else Serial.print(" filtrada=INVALIDA (NTC Fault)");
+    } else if(strcmp(ntcDiagnostic.reason,"OK")==0&&ambientFilter.samples()<40)
+        Serial.printf(" promedio=pendiente (%u/40)",ambientFilter.samples());
+    else Serial.print(" filtrada=INVALIDA (NTC Fault)");
     Serial.printf(" lecturas_ok=%lu lecturas_fallo=%lu ultima_falla=%s",
                   static_cast<unsigned long>(ntcValidSamples),
                   static_cast<unsigned long>(ntcInvalidSamples),ntcLastInvalidReason);
@@ -321,11 +326,14 @@ void display(uint32_t now) {
         view.demandPct=m.fresh(m.demand,m.demandAge,now);
         view.cpuTempC=m.fresh(m.cpuTempC,m.cpuTempAge,now);
         view.gpuTempC=m.fresh(m.gpuTempC,m.gpuTempAge,now);
+        view.hyperxPct=m.freshHyperx(now);
     }
+    if(!view.telemetryFresh) {view.hyperxPct=hyperxLcd.lastPercent();view.hyperxCached=std::isfinite(view.hyperxPct);}
     uint32_t elapsed=victus::lcdElapsed(now,lcdCycleStartedAt);
     victus::LcdPage page=victus::lcdPage(elapsed);
     char first[17]{},second[17]{};
     victus::renderLcd(page,view,first,second);
+    hyperxLcd.overlay(now,first,second);
     lcdDriver.row(0x80,first);
     lcdDriver.row(0xC0,second);
     if(lcdDriver.ready()) lcdLastRefreshAt=millis();
@@ -425,7 +433,7 @@ void loop() {
     serialInput();network(millis());
     auto now=millis();
     static uint32_t sensorAt=0,displayAt=0,probeAt=0;
-    if(static_cast<uint32_t>(now-sensorAt)>=1000) {sensorAt=now;readAmbient();}
+    if(static_cast<uint32_t>(now-sensorAt)>=100) {sensorAt=now;readAmbient();}
     // Read the NTC before any LCD power-up wait. Re-read time after IO.
     if(!lcdDriver.ready()&&static_cast<uint32_t>(now-probeAt)>=5000) {
         probeAt=now;probeLcd();

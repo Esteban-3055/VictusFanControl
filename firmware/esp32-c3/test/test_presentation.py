@@ -21,7 +21,7 @@ def main():
     # At +1s residence: CPU thermal age=2s, GPU thermal fresh, demand age=5s,
     # RAM timestamp absent. MonitorOnly must not bypass source freshness.
     readings = json.loads(result.stderr.splitlines()[-1])
-    assert readings == dict(cpuTemp=55, gpuTemp=42, cpu=10, gpu=0, ram=None, demand=None), readings
+    assert readings == dict(cpuTemp=55, gpuTemp=42, cpu=10, gpu=0, ram=None, demand=None,hyperx=None), readings
     payload.update(cpuTempC=None, gpuTempC=None, cpuUsagePct=None, gpuUsagePct=None,
                    ramUsagePct=None, demandaPct=None)
     messages[-1] = frame('telemetry', 1, payload, RX)
@@ -29,6 +29,16 @@ def main():
                             text=True, capture_output=True, check=True)
     assert all(value is None for value in json.loads(result.stderr.splitlines()[-1]).values())
     print('PASS signed source ages, missing timestamps, zero and null readings')
+    for age,expected in [(0,55),(60000,55),(178999,55),(179000,None),(180000,None)]:
+        from datetime import datetime,timedelta,timezone
+        captured=datetime(2026,10,16,17,tzinfo=timezone.utc)
+        payload=telemetry(False)
+        payload.update(capturedAtUtc=captured.isoformat(),sampledAtUtc=None,decisionAtUtc=None,cpuTempSampledAtUtc=None,gpuTempSampledAtUtc=None,ramSampledAtUtc=None,
+                       hyperxBatteryPct=55,hyperxSampledAtUtc=(captured-timedelta(milliseconds=age)).isoformat())
+        result=subprocess.run([args.host,'--readings'],input='\n'.join([hello(),auth(),frame('telemetry',1,payload,RX)])+'\n',text=True,capture_output=True,check=True)
+        assert json.loads(result.stderr.splitlines()[-1])['hyperx']==expected
+    print('PASS authenticated HyperX independent 180s source age and ESP32 residence; no renewed cache age')
+
     root = pathlib.Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory() as folder:
         subprocess.run([sys.executable, str(root/'tools/export_arduino.py'), folder], check=True)

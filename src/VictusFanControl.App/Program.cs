@@ -9,6 +9,13 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.SequenceEqual(new[]{"--hyperx-ui-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunHyperXChecks();return;}
+        if(args.SequenceEqual(new[]{"--hyperx-self-test"})||args.SequenceEqual(new[]{"--hyperx-probe"}))
+        {
+            try{if(args[0]=="--hyperx-probe")HyperXSelfTest.ProbeAsync(90).GetAwaiter().GetResult();else HyperXSelfTest.Run();}
+            catch(Exception e){Console.Error.WriteLine(e);Environment.ExitCode=1;}return;
+        }
         if(args.SequenceEqual(new[]{"--stability-gui-self-test"}))
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunStabilityChecks();return;}
         if(args.SequenceEqual(new[]{"--stability-pipeline-self-test"}))

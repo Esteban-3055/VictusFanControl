@@ -118,7 +118,14 @@ public static class ExternalCoolingProtocol
             "solicitud","solicitudValida","modoSolicitado","modoEfectivo","cpuTempC","gpuTempC","powerSource","requestEvidence",
             "cpuTargetLevel","gpuTargetLevel","cpuTempSampledAtUtc","gpuTempSampledAtUtc","ramSampledAtUtc"})
             if(!frame.Payload.TryGetProperty(key,out _))throw new InvalidDataException("Missing telemetry field.");
+        if(frame.Payload.TryGetProperty("hyperxDisplay",out var hd)&&hd.ValueKind!=JsonValueKind.Null)
+        {
+            if(hd.ValueKind!=JsonValueKind.Object)throw new InvalidDataException("Invalid HyperX display preferences.");
+            foreach(var field in new[]{"lowEnabled","criticalEnabled","lowPercent","criticalPercent","lowDurationMs","criticalDurationMs","lowBlinkCycles","criticalBlinkCycles"})
+                if(!hd.TryGetProperty(field,out _))throw new InvalidDataException("Missing HyperX display preference.");
+        }
         var t=Payload<ExportTelemetry>(frame);
+        try{t.HyperxDisplay?.Validate();}catch(ArgumentException e){throw new InvalidDataException("Invalid HyperX display preferences.",e);}
         try{t.ExternalConfiguration?.Validate();}
         catch(ArgumentException ex){throw new InvalidDataException("Invalid external configuration.",ex);}
         if(t.ValidForMs!=RequestValidForMilliseconds||t.CapturedAtUtc==default||t.ModoSolicitado is not("Firmware" or "Manual" or "Automatic")||
@@ -128,6 +135,9 @@ public static class ExternalCoolingProtocol
         void Range(double? value,double min,double max)
         {if(value.HasValue&&ExportTelemetry.Range(value,min,max) is null)throw new InvalidDataException("Invalid measurement.");}
         foreach(var value in new[]{t.CpuUsagePct,t.GpuUsagePct,t.RamUsagePct,t.DemandaPct})Range(value,0,100);
+        Range(t.HyperxBatteryPct,0,100);
+        if(t.HyperxBatteryPct.HasValue!=t.HyperxSampledAtUtc.HasValue || t.HyperxSampledAtUtc is {} hx&&(hx==default||hx>t.CapturedAtUtc))
+            throw new InvalidDataException("Invalid HyperX display measurement.");
         Range(t.CpuTempC,-20,130);Range(t.GpuTempC,-20,130);
         foreach(var level in new[]{t.Solicitud,t.CpuTargetLevel,t.GpuTargetLevel})
             if(level is <0 or >65535)throw new InvalidDataException("Invalid logical/target level.");
