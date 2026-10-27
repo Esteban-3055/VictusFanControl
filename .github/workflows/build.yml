@@ -272,12 +272,6 @@ jobs:
           .\scripts\test-wmi-fan-telemetry-invariants.ps1
           .\scripts\test-wmi-fan-control-invariants.ps1
 
-      - name: Real-time shutdown cooling and IPC release (no hardware)
-        shell: pwsh
-        run: |
-          dotnet .\src\VictusFanControl.App\bin\Release\net8.0-windows\VictusFanControl.App.dll --session-end-timing-self-test
-          if ($LASTEXITCODE -ne 0) { throw 'Shutdown timing/IPC release failed.' }
-
       - name: Gate E contention and causality invariant self-test
         shell: pwsh
         run: .\scripts\test-watchdog-gate-e-invariants.ps1
@@ -640,6 +634,12 @@ jobs:
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
+
+      - name: Real-time shutdown cooling and IPC release (no hardware)
+        shell: pwsh
+        run: |
+          dotnet .\src\VictusFanControl.App\bin\Release\net8.0-windows\VictusFanControl.App.dll --session-end-timing-self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Shutdown timing/IPC release failed.' }
 
       - name: HP 8C40 P14.2 build and verify win-x64 publish layout
         shell: pwsh
