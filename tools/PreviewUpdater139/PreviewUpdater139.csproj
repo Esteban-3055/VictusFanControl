@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(UpdaterBaselineRoot)' != ''">
+    <Compile Include="$(UpdaterBaselineRoot)/ProductUpdates.cs" Link="Baseline/ProductUpdates.cs" />
+    <Compile Include="$(UpdaterBaselineRoot)/ProductUpdates.Cache.cs" Link="Baseline/ProductUpdates.Cache.cs" />
+    <Compile Include="$(UpdaterBaselineRoot)/ProductRelease.cs" Link="Baseline/ProductRelease.cs" />
+  </ItemGroup>
+  <Target Name="RequireBaseline" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(UpdaterBaselineRoot)' == ''" Text="Pinned original updater sources required." />
+  </Target>
+</Project>
