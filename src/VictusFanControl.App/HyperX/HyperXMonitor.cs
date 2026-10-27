@@ -7,6 +7,8 @@ internal sealed class HyperXMonitor : IAsyncDisposable
     private readonly CancellationTokenSource stop=new();
     private readonly object gate=new();
     private HyperXSnapshot latest=new();
+    private readonly HyperXBatteryEstimator batteryEstimate=new();
+    private string? batteryPath;
     private Task? worker;
     private FileStream? events;
     private CancellationTokenSource? eventStop;
@@ -17,7 +19,44 @@ internal sealed class HyperXMonitor : IAsyncDisposable
     private readonly System.Collections.Concurrent.ConcurrentQueue<HyperXSnapshot> muteEvents=new();
     internal IEnumerable<HyperXSnapshot> DrainMuteEvents(){while(muteEvents.TryDequeue(out var e))yield return e;}
     internal HyperXSnapshot Snapshot {get{lock(gate)return latest;}}
-    private void Publish(Func<HyperXSnapshot,HyperXSnapshot> update){lock(gate)latest=update(latest);}
+    private void Publish(Func<HyperXSnapshot,HyperXSnapshot> update)
+    {lock(gate){latest=update(latest);if(latest.Percent is null||latest.SampledAt is null)batteryEstimate.Reset();}}
+    internal void SelectBatterySource(string? path)
+    {
+        lock(gate)
+        {
+            if(string.Equals(batteryPath,path,StringComparison.OrdinalIgnoreCase))return;
+            batteryPath=path;batteryEstimate.Reset();
+            while(muteEvents.TryDequeue(out _)){} // No pending events from a different receiver.
+            latest=new(){ReceiverPresent=path is not null,Status=path is null?"Receptor no disponible":"Preparando receptor"};
+        }
+    }
+    internal void InvalidateBattery(string status)=>Publish(s=>s with{Status=status,Percent=null,Millivolts=null,Charging=null,SampledAt=null});
+    internal bool ApplyBatteryReport(ReadOnlySpan<byte> report,DateTimeOffset sampledAt,long sampleMilliseconds)
+    {
+        if(HyperXSnapshot.Decode(report) is not{} b)return false;
+        int? percent;
+        lock(gate)
+        {
+            if(latest.Powered==false)
+            {
+                batteryEstimate.Reset();
+                latest=latest with{ReceiverPresent=true,Status="Audífonos apagados",Percent=null,Millivolts=null,Charging=null,SampledAt=null};
+                return true;
+            }
+            if(b.Charging){batteryEstimate.Reset();percent=null;}
+            else percent=batteryEstimate.Observe(b.Millivolts,sampleMilliseconds);
+            latest=latest with{ReceiverPresent=true,
+                Status=!b.Charging&&percent is null?"Voltaje recibido; porcentaje sin referencia suficiente":
+                    eventPath is null?"Batería recibida; eventos de micrófono no disponibles":"Lectura recibida",
+                Millivolts=b.Millivolts,Percent=percent,Charging=b.Charging,SampledAt=sampledAt};
+        }
+        // One optional record per real reply, never per redraw/export. Retain raw
+        // evidence for future calibration without logging HID paths or device IDs.
+        AppLog.WriteStructured("HYPERX BATTERY ESTIMATE",new{sampledAtUtc=sampledAt,millivolts=b.Millivolts,
+            rawPercent=b.Percent,percent,chargingInferred=b.Charging,curve="srn-linear-v1",lowRangeCalibrated=false});
+        return true;
+    }
     internal void Start(){worker??=Task.Run(RunAsync);}
     private async Task RunAsync()
     {
@@ -30,11 +69,14 @@ internal sealed class HyperXMonitor : IAsyncDisposable
                 if(batteries.Length!=1)
                 {
                     await StopEventsAsync();
+                    SelectBatterySource(null);
                     Publish(_=>new(){Status=batteries.Length==0?"Receptor no disponible":"Varios receptores: no se selecciona uno arbitrariamente"});
                 }
                 else
                 {
                     var battery=batteries[0];
+                    if(!string.Equals(batteryPath,battery.Path,StringComparison.OrdinalIgnoreCase))
+                    {await StopEventsAsync();SelectBatterySource(battery.Path);}
                     // Match the event collection to this receiver, never another device.
                     int collection=battery.Path.IndexOf("&col",StringComparison.OrdinalIgnoreCase);
                     var prefix=collection<0?battery.Path:battery.Path[..collection];
@@ -64,15 +106,14 @@ internal sealed class HyperXMonitor : IAsyncDisposable
                     {
                         int count=await file.ReadAsync(buffer,deadline.Token);
                         if(count==0)throw new IOException("Receptor desconectado");
-                        if(HyperXSnapshot.Decode(buffer.AsSpan(0,count)) is not{} b)continue;
-                        Publish(s=>s.Powered==false?s with{Status="Audífonos apagados",Percent=null,Millivolts=null,Charging=null,SampledAt=null}:
-                            s with{Status=eventPath is null?"Batería recibida; eventos de micrófono no disponibles":"Lectura recibida",Millivolts=b.Millivolts,Percent=b.Percent,Charging=b.Charging,SampledAt=DateTimeOffset.UtcNow});break;
+                        if(!ApplyBatteryReport(buffer.AsSpan(0,count),DateTimeOffset.UtcNow,Environment.TickCount64))continue;
+                        break;
                     }
                 }
             }
             catch(OperationCanceledException)when(stop.IsCancellationRequested){break;}
             catch(Exception ex)when(ex is not OutOfMemoryException)
-            {AppLog.Write("HyperX optional reader failed: "+ex.GetType().Name);Publish(s=>s with{Status="Sin respuesta actual de los audífonos",Percent=null,Millivolts=null,Charging=null,SampledAt=null});}
+            {AppLog.Write("HyperX optional reader failed: "+ex.GetType().Name);InvalidateBattery("Sin respuesta actual de los audífonos");}
             try{await Task.Delay(TimeSpan.FromSeconds(HyperXSnapshot.PollSeconds),stop.Token);}
             catch(OperationCanceledException){break;}
         }

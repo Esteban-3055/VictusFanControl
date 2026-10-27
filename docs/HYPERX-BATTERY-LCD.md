@@ -1,6 +1,8 @@
 # HyperX Battery y LCD1602
 
-Preliminar 1.3.7: selector lateral centrado, batería crítica configurable entre 0 y 100 % y avisos LCD repetidos sin PC. Para estos cambios LCD hay que cargar el firmware 1.3.7, además de actualizar Windows. La 1.3.6 sigue como estable. El instalador Windows no flashea el ESP32 automáticamente.
+Preliminar 1.3.8: la estimación Windows usa una curva continua con resolución de 1 %. Se mantiene como estimación por voltaje, sin afirmar una exactitud de ±1 %. Si la placa ya tiene firmware 1.3.7, este cambio no requiere volver a flashearla.
+
+Se mantienen las funciones de 1.3.7: selector lateral centrado, batería crítica configurable entre 0 y 100 % y avisos LCD repetidos sin PC. Las placas con firmware anterior a 1.3.7 necesitan el sketch compatible incluido para estas funciones LCD. La 1.3.6 sigue como estable. El instalador Windows no flashea el ESP32 automáticamente.
 
 ## Lecturas y frecuencia
 
@@ -10,7 +12,15 @@ Consulta al arrancar y, tras cada intento acotado a dos segundos, espera 60 segu
 
 Los eventos de silencio se escuchan con una lectura asíncrona bloqueada y cancelable: no hay consulta periódica del micrófono. Se conservan hasta 32 eventos para evitar que un refresco de UI pierda dos cambios próximos; los eventos de más de cinco segundos no producen avisos tardíos. Los informes desconocidos no se interpretan como quitar silencio.
 
-La conversión de voltaje a porcentaje es aproximada y escalonada, con extremo inferior de 10 %. El umbral crítico configurable admite 0–100 %, pero esto no cambia la estimación: nunca se inventa 0 % para una lectura desconocida. Durante la indicación inferida de carga puede no haber porcentaje; nunca se inventa 100 %. Alcanzar el umbral «completa» no demuestra terminación eléctrica de carga.
+La conversión de voltaje a porcentaje es aproximada. El cálculo interpola linealmente entre los límites inferiores de los tramos de la referencia srn (MIT), conservando 3584 mV → 10 % y 3970–4107 mV → 100 %. Rellena los huecos antiguos (por ejemplo 3763 o 4096 mV) y permite cualquier entero de 10 a 100, en lugar de saltos obligatorios de cinco puntos. Por ejemplo, 3795 mV produce una referencia de 56.25 %, mostrada inicialmente como 56 %; el 55 % anterior pertenecía a un tramo grueso, no a una medición exacta de carga.
+
+Se aplica una EMA con constante de tiempo de 60 segundos, calculada con tiempo monótono entre adquisiciones reales, y una pequeña histéresis de presentación de 0.75 puntos para reducir rebotes de un entero. La primera lectura se muestra inmediatamente. El tramo que redondea a 10 % no espera al filtro para evitar retrasar el aviso crítico predeterminado. Cambios grandes válidos pueden saltar varios enteros: no se simula una cuenta atrás de 1 % por minuto. Una resolución de 1 % no garantiza una exactitud de ±1 %.
+
+El filtro se reinicia tras un fallo de lectura, receptor ausente o distinto, apagado observado, carga inferida o hueco de adquisición de al menos 180 segundos. La hora UTC del snapshot sigue siendo la de la respuesta USB; refrescar la UI o reenviar el snapshot al ESP32 no actualiza esa hora ni avanza el filtro. La frecuencia de consulta sigue siendo aproximadamente una por minuto.
+
+**El tramo de 0–9 % sigue sin calibración.** Una respuesta plausible inferior a 3584 mV conserva el voltaje recibido pero muestra porcentaje desconocido; no extrapola 0 % ni lo confunde con falta de datos. El umbral crítico configurable admite 0–100 %, pero esto no añade una medición de 0–9 %. Durante la indicación inferida de carga puede no haber porcentaje; nunca se inventa 100 %. Alcanzar el umbral «completa» no demuestra terminación eléctrica de carga.
+
+Cada respuesta válida puede dejar un registro opcional acotado `HYPERX BATTERY ESTIMATE` con voltaje, fecha de adquisición, referencia continua y valor publicado. Sirve para estudiar la zona baja durante el uso normal, sin nuevas consultas ni cambios al dispositivo. No registra rutas HID, identificadores del receptor, audio ni credenciales. Estos datos por sí solos no constituyen una calibración de capacidad restante. No se incorpora la curva polinómica de HeadsetControl.
 
 ## Pestaña y notificaciones
 
@@ -46,6 +56,8 @@ Cada 100 ms se convierte una adquisición NTC validada a grados Celsius, conserv
 ## Validación y límites
 
 Pruebas aisladas: `--hyperx-self-test`, `--hyperx-ui-self-test` (también dentro de `--product-gui-self-test`); scripts generales de ExternalCooling y estabilidad. El harness C++ prueba layout, media NTC, caducidad, retención sin PC, parpadeo exacto, prioridades, no repetición y rollover. FirmwareInterop verifica porcentaje y todos los parámetros entre el cliente TCP de producción y el parser C++ real con HMAC.
+
+La estimación continua se prueba en todo el intervalo de milivoltios soportado: monotonía, todos los enteros de 10–100, antiguos huecos, ausencia de extrapolación, intervalos irregulares, oscilaciones, extremo crítico, llegada a 100 y reinicios de estado. También se comprueba la ruta de producción reporte HID → snapshot → exportador/protocolo, con respuestas sintéticas y sin abrir USB; los reenvíos no renuevan la antigüedad y la carga inferida no inventa un porcentaje. Las mediciones físicas de exactitud y del tramo bajo siguen pendientes.
 
 La prueba de interfaz de 1.3.6 genera nueve capturas (las tres secciones a anchuras 1040, 1344 y 1672), verifica límites y controles visibles, teclado/accesibilidad, entrada exacta, guardado, descarte, errores de persistencia y cambio de sección durante un arrastre. Usa un lector simulado y comprueba cero órdenes al hardware y ningún cambio en los ajustes de ventiladores del portátil. Estas capturas verifican la interfaz, no el comportamiento físico de los audífonos o del LCD.
 

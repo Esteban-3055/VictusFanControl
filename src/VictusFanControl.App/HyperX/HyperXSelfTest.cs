@@ -9,7 +9,8 @@ internal static class HyperXSelfTest
     {
         static void Check(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
         var decoded=HyperXSnapshot.Decode(Convert.FromHexString("21ff050ed3000000000000000000000000000000"));
-        Check(decoded is{Millivolts:3795,Percent:55,Charging:false},"Recorded real USB reply changed");
+        Check(decoded is{Millivolts:3795,Percent:56.25,Charging:false},"Recorded USB voltage or continuous reference estimate changed");
+        HyperXBatteryEstimatorSelfTest.Run(Check);
         Check(HyperXSnapshot.Decode(new byte[20]) is null&&HyperXSnapshot.Decode(new byte[5]) is null,"Unknown replies invented battery");
         Check(HyperXSnapshot.Decode(Convert.FromHexString("21ff051020000000000000000000000000000000")) is{Percent:null,Charging:true},"Charging must not invent 100%");
         var now=DateTimeOffset.UtcNow;var sample=new HyperXSnapshot{ReceiverPresent=true,SampledAt=now,Percent=20};

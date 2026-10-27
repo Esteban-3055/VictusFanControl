@@ -16,15 +16,12 @@ internal sealed record HyperXSnapshot
     internal DateTimeOffset? MuteEventAt {get;init;}
     internal bool? Powered {get;init;}
     internal bool Fresh(DateTimeOffset now)=>ReceiverPresent&&SampledAt is{} at&&now>=at&&(now-at).TotalSeconds<FreshSeconds;
-    internal static (int Millivolts,int? Percent,bool Charging)? Decode(ReadOnlySpan<byte> b)
+    internal static (int Millivolts,double? Percent,bool Charging)? Decode(ReadOnlySpan<byte> b)
     {
         if(b.Length is not(15 or 20)||b[0]!=0x21||b[1]!=0xff||b[2]!=5)return null;
         int mv=(b[3]<<8)|b[4];if(mv is <3300 or >4500)return null;
         bool charging=mv>0x100b;
-        // srn/hyperx-cloud-flight-wireless (MIT): coarse voltage-to-level map.
-        (int Low,int High,int Pct)[] ranges=[(4097,4107,100),(3970,4095,100),(3960,3969,95),(3940,3959,90),(3910,3939,85),(3890,3909,80),(3860,3889,75),(3840,3859,70),(3825,3833,65),(3804,3823,60),(3792,3803,55),(3784,3791,50),(3774,3783,45),(3764,3773,40),(3753,3762,35),(3743,3752,30),(3732,3742,25),(3703,3731,20),(3674,3702,15),(3584,3673,10)];
-        int? pct=null;if(!charging)foreach(var r in ranges)if(mv>=r.Low&&mv<=r.High){pct=r.Pct;break;}
-        // Extend the original map below 3584 mV only as critical/unknown, never invent 0%.
+        double? pct=charging?null:HyperXBatteryEstimator.RawPercent(mv);
         return (mv,pct,charging);
     }
 }
