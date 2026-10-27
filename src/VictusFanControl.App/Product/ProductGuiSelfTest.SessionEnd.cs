@@ -17,6 +17,7 @@ internal static partial class ProductGuiSelfTest
         var originalExitCode=Environment.ExitCode;
         try
         {
+            TestShutdownOrder(require);
             TestShutdownCooling(require);
             var runtime=new RecordingRuntime { DisposeGate=new(TaskCreationOptions.RunContinuationsAsynchronously) };
             using(var form=new ProductForm("fixture://windows-session-end",fixture:runtime,fixtureProfiles:new()))
@@ -49,6 +50,26 @@ internal static partial class ProductGuiSelfTest
             Console.WriteLine("PASS Windows session end: cancelled query preserves session; confirmed end waits/pumps STA; bounded wait retains unresolved state; one disposal; no OS shutdown or hardware IO.");
         }
         finally { Environment.ExitCode=originalExitCode; }
+    }
+    private static void TestShutdownOrder(Action<bool,string> require)
+    {
+        var logs=new List<string>();
+        var original=VictusFanControl.Scheduling.ProductShutdownOrder.Read();
+        try
+        {
+            require(VictusFanControl.Scheduling.ProductShutdownOrder.ApplicationLevel>
+                VictusFanControl.Scheduling.ProductShutdownOrder.GuardianLevel,"GUI must receive session end before its guardians.");
+            foreach(bool guardian in new[]{false,true})
+                require(VictusFanControl.Scheduling.ProductShutdownOrder.Apply(guardian,logs.Add),"Native shutdown order readback failed in isolated process.");
+        }
+        finally{VictusFanControl.Scheduling.ProductShutdownOrder.Restore(original.Level,original.Flags);}
+        require(VictusFanControl.Scheduling.ProductShutdownOrder.Read()==original,"Isolated process shutdown order was not restored.");
+        require(!VictusFanControl.Scheduling.ProductShutdownOrder.Apply(false,logs.Add,(_,_)=>false),"Failed registration was reported confirmed.");
+        require(!VictusFanControl.Scheduling.ProductShutdownOrder.Apply(true,logs.Add,(level,flags)=>
+        {
+            require(level==0x100&&flags==0,"Guardian changed reserved level or enabled no-retry termination.");return true;
+        },()=> (0x280u,0u)),"Mismatched readback was reported confirmed.");
+        Console.WriteLine("PASS shutdown order: GUI before both production guardians; native set/readback/restoration; failure and mismatch diagnostics; flags zero; no OS shutdown or hardware IO.");
     }
     private static void TestShutdownCooling(Action<bool,string> require)
     {
@@ -104,7 +125,7 @@ internal static partial class ProductGuiSelfTest
             require(ProductProfilesStore.Serialize(form.Draft)==draft&&runtime.Disposals==0,"Cooling changed saved presets or released before confirmation.");
             Send(form,0x16,true);require(runtime.Disposals==1,"AC cooling failed to run normal release afterwards.");Exit(form);
         }
-        foreach(var stop in new[]{"unplug","unknown","cancel","force","suspend","failure"})
+        foreach(var stop in new[]{"unplug","unknown","cancel","force","suspend","failure","guardian-loss"})
         {
             var runtime=new RecordingRuntime{StateOverride=Ready()};long clock=0;var source=PerformancePowerSourceKind.Ac;
             runtime.ManualCommandFixture=level=>{if(stop=="failure")throw new IOException("fixture write refused");Accept(runtime,level);return Task.CompletedTask;};
@@ -118,6 +139,7 @@ internal static partial class ProductGuiSelfTest
                 else if(stop=="cancel")Send(form,0x16);
                 else if(stop=="force")Send(form,0x11,flags:0x40000000);
                 else if(stop=="suspend")form.HandlePowerEventAsync(4).GetAwaiter().GetResult();
+                else if(stop=="guardian-loss")runtime.StateOverride=runtime.State with{FanAuthority="Faulted"};
             });
             Send(form,0x11);require(clock<=3000&&runtime.Disposals==0,"Cooling ignored unplug/unknown/cancel/force/suspend/failure.");
             if(stop=="cancel")require(runtime.Releases==1&&runtime.Fences==1,"Cancelled cooling retained its target or fabricated a resumed Automatic session.");

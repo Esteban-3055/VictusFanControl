@@ -30,12 +30,17 @@ internal sealed class ProductShutdownCooling
         state.Runtime=="Healthy"&&state.ManualAuthorized&&!state.LifecycleBlocked&&!state.AutomaticPreparing&&!state.PerformanceUpdating&&
         state.PerformanceRecovery?.Pending!=true&&state.FanAuthority is "Firmware" or "Custom";
     internal bool WithinBudget=>clock()-started is >=0 and <DurationMilliseconds;
+    internal long ElapsedMilliseconds=>Math.Max(0,clock()-started);
     internal int RemainingSeconds=>(int)Math.Max(0,(DurationMilliseconds-Math.Max(0,clock()-started)+999)/1000);
     internal void Cancel()=>Interlocked.Exchange(ref cancelled,1);
     private void EnsureDispatchAllowed()
     {
-        if(Volatile.Read(ref cancelled)!=0||!WithinBudget||!ownerCurrent()||!Eligible(runtime.State)||source()!=PerformancePowerSourceKind.Ac)
-            throw new OperationCanceledException("Refrigeración de apagado cancelada: fuente, plazo o autoridad no válidos.");
+        var state=runtime.State;
+        var reason=Volatile.Read(ref cancelled)!=0?"cancelación solicitada":!WithinBudget?"plazo agotado":
+            !ownerCurrent()?"propietario o ciclo de vida cambiado":!Eligible(state)?
+            $"control no disponible (runtime={state.Runtime}, autoridad={state.FanAuthority}, manual={state.ManualAuthorized}, lifecycle={state.LifecycleBlocked}, automaticPreparing={state.AutomaticPreparing}, performanceUpdating={state.PerformanceUpdating}, recovery={state.PerformanceRecovery?.Pending==true})":
+            source()!=PerformancePowerSourceKind.Ac?"AC no confirmado":null;
+        if(reason is not null)throw new OperationCanceledException("Refrigeración de apagado cancelada: "+reason+".");
     }
     internal void Start()=>Preparation=PrepareAsync();
     private async Task PrepareAsync()

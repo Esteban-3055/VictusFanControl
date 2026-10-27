@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $manifest = Get-Content -LiteralPath (Join-Path $root 'PRODUCT-GUI-MANIFEST.json') -Raw | ConvertFrom-Json
-if ($manifest.schemaVersion -ne 1 -or $manifest.kind -ne 'VictusFanControl.ProductGuiRelease' -or $manifest.version -ne '1.3.8' -or $manifest.appDirectory -ne 'app') { throw 'Invalid product manifest.' }
+if ($manifest.schemaVersion -ne 1 -or $manifest.kind -ne 'VictusFanControl.ProductGuiRelease' -or $manifest.version -ne '1.3.9' -or $manifest.appDirectory -ne 'app') { throw 'Invalid product manifest.' }
 $listed = @{}
 foreach ($entry in $manifest.files) {
     $relative = [string]$entry.path
@@ -22,7 +22,7 @@ if($actual.Count -ne $listed.Count){throw 'Unexpected package files.'}
 foreach($file in $actual){if(-not $listed.ContainsKey($file.FullName.Substring($root.Length+1).Replace('\','/'))){throw 'Unlisted package file.'}}
 $candidate = Get-Content -LiteralPath (Join-Path $root 'PRODUCT-RELEASE.json') -Raw | ConvertFrom-Json
 if ($manifest.releaseStage -ne 'target-specific-release' -or $manifest.finalReleaseReady -ne $true -or $manifest.normalAutomatic -ne 'authorized-exact-target' -or
-    $candidate.kind -ne 'VictusFanControl.ProductRelease' -or $candidate.version -ne '1.3.8' -or $candidate.sourceHead -ne $manifest.sourceHead -or
+    $candidate.kind -ne 'VictusFanControl.ProductRelease' -or $candidate.version -ne '1.3.9' -or $candidate.sourceHead -ne $manifest.sourceHead -or
     $candidate.stableReleaseAuthorized -ne $false -or $candidate.previewReleaseAuthorized -ne $true -or
     $candidate.channel -ne 'preview' -or $manifest.releaseChannel -ne 'preview' -or $candidate.physicalPassClaimed -ne $false) { throw 'Invalid target preview authorization.' }
 if ($manifest.productPlatformRetention -ne 'removed-no-platform-sensor-acquisition' -or
@@ -43,7 +43,7 @@ foreach($limits in @($manifest.fanCommandLimits,$candidate.fanCommandLimits)) {
     if($limits.minimumLogicalLevel -ne 10 -or $limits.cpuMaximumCommandLevel -ne 54 -or $limits.gpuMaximumCommandLevel -ne 52 -or
         $limits.mapping -ne 'CPU=logical;GPU=min(logical,52)'){throw 'Invalid product 54/52 fan command contract.'}
 }
-Write-Host "Verified VictusFanControl v1.3.8 PRELIMINAR build $($manifest.sourceHead). Exact HP 8C40/F.18; evidence limits remain in PRODUCT-RELEASE.json."
+Write-Host "Verified VictusFanControl v1.3.9 PRELIMINAR build $($manifest.sourceHead). Exact HP 8C40/F.18; evidence limits remain in PRODUCT-RELEASE.json."
 if ($manifest.customGpuClock -ne 'configurable-210-to-3105' -or $manifest.diagnostics -ne 'per-process-session-with-telemetry' -or $manifest.curveMarkers -ne 'applied-request-and-draft-preview') { throw 'This launcher requires the session diagnostic and live marker package.' }
 if ($Mode -eq 'Verify') { return }
 if ($Mode -eq 'FinalCheck') {

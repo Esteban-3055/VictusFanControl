@@ -830,6 +830,7 @@ internal static partial class ProductGuiSelfTest
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;
         internal int? LastManualLevel;
         internal Func<int,Task>? ManualCommandFixture;
+        internal Func<Task>? DisposeFixture;
         internal PerformanceGuiSessionConfiguration? LastPerformance;
         internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate,DisposeGate;
         internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure,ReleaseFailure,AutomaticModeFailure;
@@ -850,6 +851,6 @@ internal static partial class ProductGuiSelfTest
         public void FenceLifecycle(string r){Interlocked.Increment(ref Fences);if(FenceFailure is not null)throw new IOException(FenceFailure);}
         public Task ReleaseForLifecycleAsync(string r){Interlocked.Increment(ref Releases);return ReleaseGate?.Task??(ReleaseFailure is null?Task.CompletedTask:Task.FromException(new IOException(ReleaseFailure)));}
         public void ResumeTelemetry(string r){Resumes++;}
-        public async ValueTask DisposeAsync(){Interlocked.Increment(ref Disposals);if(DisposeGate is not null)await DisposeGate.Task;if(DisposeFailure is not null)throw new IOException(DisposeFailure);}
+        public async ValueTask DisposeAsync(){Interlocked.Increment(ref Disposals);if(DisposeFixture is not null)await DisposeFixture();if(DisposeGate is not null)await DisposeGate.Task;if(DisposeFailure is not null)throw new IOException(DisposeFailure);}
     }
 }

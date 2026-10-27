@@ -24,12 +24,12 @@ if(ProductUpdates.ParseReleases("["+Release("v1.3.6-preview.1",true)+"]",current
     ProductUpdates.ParseReleases("["+Release("v1.3.6",false,true)+"]",current,true) is not null||
     ProductUpdates.ParseReleases(metadata,expected,true) is not null)throw new Exception("Draft, suffix or installed-version fence changed.");
 Console.WriteLine("PASS original 1.2.9 updater: stable numeric 1.3.6 eligible from 1.2.9 through 1.3.5 without preview opt-in; draft/suffix/preview fences preserved.");
-var nextPreview="["+Release("v1.3.8",true)+","+Release("v1.3.6",false)+"]";
-foreach(var previous in previousVersions.Append(expected).Append(new Version(1,3,7)))
+var nextPreview="["+Release("v1.3.9",true)+","+Release("v1.3.6",false)+"]";
+foreach(var previous in previousVersions.Append(expected).Append(new Version(1,3,7)).Append(new Version(1,3,8)))
 {
     var stable=ProductUpdates.ParseReleases(nextPreview,previous,false);
     if(previous>=expected?stable is not null:stable?.Version!=expected)throw new Exception("Future preview changed the stable update channel.");
-    if(ProductUpdates.ParseReleases(nextPreview,previous,true) is not {IsPrerelease:true,Version:var pv}||pv!=new Version(1,3,8))
+    if(ProductUpdates.ParseReleases(nextPreview,previous,true) is not {IsPrerelease:true,Version:var pv}||pv!=new Version(1,3,9))
         throw new Exception("Future preview no longer requires opt-in.");
 }
 Console.WriteLine("PASS original 1.2.9 updater: stable 1.3.6 eligible from 1.2.9 through 1.3.5 with either opt-in setting; future previews remain opt-in only.");

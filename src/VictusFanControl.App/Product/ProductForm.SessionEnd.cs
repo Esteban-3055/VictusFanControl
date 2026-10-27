@@ -46,6 +46,7 @@ internal sealed partial class ProductForm
     }
     private void PrepareWindowsSessionEnd(long flags)
     {
+        AppLog.Write($"PRODUCT WINDOWS SESSION END QUERY: flags=0x{flags:X}; duplicate={_sessionCoolingQuerySeen}");
         const long nonOptional=0x40000000L|0x80000000L|1L; // forced, logoff, Restart Manager/update
         if((flags&nonOptional)!=0){_sessionCooling?.Cancel();RegisterSessionEndReason();return;}
         if(_sessionCoolingQuerySeen)return;
@@ -56,7 +57,10 @@ internal sealed partial class ProductForm
         if(_closing||_exitTask is not null||_restarting||_canvas.Busy||_pendingCommands!=0||_systemSuspended||
             _displayOff||!_lifecycleRelease.IsCompletedSuccessfully||runtime is null||
             !ProductShutdownCooling.Eligible(runtime.State)||ReadSessionEndSource()!=PerformancePowerSourceKind.Ac)
-        {RegisterSessionEndReason();return;}
+        {
+            AppLog.Write($"PRODUCT WINDOWS SHUTDOWN COOLING: skipped; closing={_closing}; exiting={_exitTask is not null}; restarting={_restarting}; busy={_canvas.Busy}; pending={_pendingCommands}; suspended={_systemSuspended}; displayOff={_displayOff}; lifecycleReady={_lifecycleRelease.IsCompletedSuccessfully}; runtime={runtime?.State.Runtime}; authority={runtime?.State.FanAuthority}; requires eligible authority and confirmed AC.");
+            RegisterSessionEndReason();return;
+        }
         if(!RegisterSessionEndReason(ProductShutdownCooling.CoolingReason))return;
         _closing=true;_canvas.Busy=true;
         _startupAutomatic?.Cancel("Refrigeración previa al apagado.");_automaticResumption.Cancel();_automaticRecoveryResumeSuppressed=true;
@@ -84,7 +88,7 @@ internal sealed partial class ProductForm
             _=ObserveCoolingPreparationAsync(cooling);
             if(ReferenceEquals(_sessionCooling,cooling)&&!_sessionEndConfirmed)
             {RegisterSessionEndReason();_canvas.Notice="Refrigeración terminada. Esperando confirmación de Windows para liberar recursos…";}
-            AppLog.Write("PRODUCT WINDOWS SHUTDOWN COOLING: phase finished; separate release budget remains 20000 ms.");
+            AppLog.Write($"PRODUCT WINDOWS SHUTDOWN COOLING: phase finished; elapsedMs={cooling.ElapsedMilliseconds}; preparation={cooling.Preparation.Status}; separate release budget remains 20000 ms.");
         }
     }
     private static async Task ObserveCoolingPreparationAsync(ProductShutdownCooling cooling)
@@ -147,6 +151,20 @@ internal sealed partial class ProductForm
             }
             if (!exit.IsCompleted)
                 AppLog.Write("PRODUCT WINDOWS SESSION END: cleanup deadline; pending journals retained; no release inferred.");
+            else
+            {
+                AppLog.Write($"PRODUCT WINDOWS SESSION END RESULT: exitTask={exit.Status}; exitCode={Environment.ExitCode}; elapsedMs={elapsed.ElapsedMilliseconds}; physical firmware ownership not inferred.");
+                // Keep the final acknowledgement available after reboot. Optional
+                // log flushing shares the existing release deadline; it cannot
+                // extend that deadline or turn a failed release into success.
+                var remaining=budget-elapsed.Elapsed;
+                if(remaining>TimeSpan.Zero)
+                {
+                    var flush=AppLog.FlushAsync(remaining<TimeSpan.FromSeconds(1)?remaining:TimeSpan.FromSeconds(1));
+                    while(!flush.IsCompleted&&elapsed.Elapsed<budget)
+                    {Application.DoEvents();if(!flush.IsCompleted)Thread.Sleep(10);}
+                }
+            }
             return exit.IsCompleted;
         }
         finally { _waitingSessionEnd = false; }

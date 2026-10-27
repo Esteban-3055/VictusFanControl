@@ -19,7 +19,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $prior 'app/modules') -Destination (Join-Path $OutputDirectory 'app/modules') -Recurse
     Copy-Item -LiteralPath (Join-Path $prior 'watchdog/modules') -Destination (Join-Path $OutputDirectory 'watchdog/modules') -Recurse
     foreach($file in Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File -Filter 'VictusFanControl*.dll') {
-        if([Diagnostics.FileVersionInfo]::GetVersionInfo($file.FullName).FileVersion -ne '1.3.8.0'){throw "Version mismatch: $($file.Name)"}
+        if([Diagnostics.FileVersionInfo]::GetVersionInfo($file.FullName).FileVersion -ne '1.3.9.0'){throw "Version mismatch: $($file.Name)"}
     }
     foreach($file in @('Start-ProductGui.ps1','Start-PlatformThermalTest.ps1','Install-VictusFanControl.ps1')) {
         Copy-Item -LiteralPath (Join-Path $repo ('release/'+$file)) -Destination $OutputDirectory
@@ -33,7 +33,7 @@ try {
     foreach($file in @('STABILITY-BLOCK1-LIFECYCLE.md','STABILITY-RECOVERY-HARDENING.md','RELEASE-1.3.3-VALIDATION.md','GPU-CLOCK-3105.md','HYPERX-BATTERY-LCD.md')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
     }
-    Copy-Item -LiteralPath (Join-Path $repo 'release/RELEASE-NOTES-v1.3.8.md') -Destination $OutputDirectory
+    Copy-Item -LiteralPath (Join-Path $repo 'release/RELEASE-NOTES-v1.3.9.md') -Destination $OutputDirectory
     foreach($file in @('LICENSE','THIRD_PARTY_NOTICES.md')){Copy-Item -LiteralPath (Join-Path $repo $file) -Destination $OutputDirectory}
     foreach($file in @('EXTERNAL-COOLING-PROTOCOL.md','EXTERNAL-COOLING-USAGE.md','EXTERNAL-COOLING-V1-VECTORS.json')) {
         Copy-Item -LiteralPath (Join-Path $repo ('docs/'+$file)) -Destination $OutputDirectory
@@ -51,7 +51,7 @@ try {
         [ordered]@{path=$_.FullName.Substring([IO.Path]::GetFullPath($OutputDirectory).Length+1).Replace('\','/');size=$_.Length;sha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()}
     })
     [ordered]@{
-        schemaVersion=1;kind='VictusFanControl.ProductGuiRelease';version='1.3.8';appDirectory='app';sourceHead=$SourceHead
+        schemaVersion=1;kind='VictusFanControl.ProductGuiRelease';version='1.3.9';appDirectory='app';sourceHead=$SourceHead
         inheritedModulesZipSha256=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
         upperRangePreview=$release.upperRangePreview;fanCommandLimits=$release.fanCommandLimits;releaseChannel=$release.channel;releaseStage='target-specific-release';finalReleaseReady=$true;normalAutomatic='authorized-exact-target';physicalGuiValidation='partial-pending-current-target-observations'
         productPlatformRetention='removed-no-platform-sensor-acquisition';platformThermalExperiment='retired-no-live-entry'

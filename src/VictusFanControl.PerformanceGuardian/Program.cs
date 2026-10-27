@@ -11,7 +11,10 @@ internal static class Program
         try
         {
             if (VictusFanControl.Scheduling.ProductProcessPriority.IsProductionGuardian(args))
+            {
                 VictusFanControl.Scheduling.ProductProcessPriority.Apply(Console.Error.WriteLine);
+                VictusFanControl.Scheduling.ProductShutdownOrder.Apply(guardian:true,Console.Error.WriteLine);
+            }
             if (args.Length > 0 && args[0] == "--recover-product-fans") return ProductFanRecovery.Run(args);
             if (args.SequenceEqual(new[] { "--product-fan-recovery-self-test" })) return ProductFanRecoverySelfTest.Run();
             if (args.Length > 0 && args[0] == "--gui-fixture-startup-failure")

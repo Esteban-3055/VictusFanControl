@@ -9,6 +9,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.SequenceEqual(new[]{"--session-end-timing-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSessionEndTimingChecks();return;}
         if(args.SequenceEqual(new[]{"--session-end-self-test"}))
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSessionEndChecks();return;}
         if(args.SequenceEqual(new[]{"--hyperx-ui-self-test"}))
@@ -957,6 +959,7 @@ internal static class Program
         if (hardwareTestModeCount == 0)
         {
             VictusFanControl.Scheduling.ProductProcessPriority.Apply(message => AppLog.Write(message));
+            VictusFanControl.Scheduling.ProductShutdownOrder.Apply(guardian:false,message => AppLog.Write(message));
             ProductRestartRequest? restart;
             try
             {
