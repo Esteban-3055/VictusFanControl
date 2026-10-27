@@ -13,7 +13,7 @@ public sealed record HyperxDisplayConfiguration
     public int CriticalBlinkCycles {get;init;}=5;
     public void Validate()
     {
-        if(CriticalPercent is <10 or >98||LowPercent<=CriticalPercent||LowPercent>99)
+        if(CriticalPercent is <0 or >100||LowPercent is <11 or >99)
             throw new ArgumentException("Umbrales LCD HyperX inválidos.");
         foreach(var (duration,cycles) in new[]{(LowDurationMs,LowBlinkCycles),(CriticalDurationMs,CriticalBlinkCycles)})
             if(duration is <1000 or >120000||cycles is <1 or >20||duration<cycles*1000)

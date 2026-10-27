@@ -593,6 +593,7 @@ internal sealed partial class ProductForm : Form
     }
     protected override void Dispose(bool disposing)
     {
+        if(disposing)_sessionCooling?.Cancel();
         if(disposing){_hyperXTimer.Dispose();_hyperXPage?.Dispose();_=DisposeHyperXAsync();_externalCoolingPage?.Dispose();_externalCooling?.Suspend();_=DisposeExternalCoolingAsync();}
         if(disposing){ClearSessionEndReason();DisposeUpdateCancellation();_presentationTimer.Dispose();UnregisterPowerNotifications();DetachRuntime();_tray.Visible=false;_tray.ContextMenuStrip?.Dispose();_tray.Dispose();_icons.Dispose();_installationGate?.Dispose();}
         base.Dispose(disposing);
@@ -610,9 +611,11 @@ internal sealed partial class ProductForm : Form
     private Task BeginExitAsync(bool closeWindow = true) => _exitTask ??= ExitCoreAsync(closeWindow);
     private async Task ExitCoreAsync(bool closeWindow)
     {
+        _sessionCooling?.Cancel();
         _closing=true;_canvas.Busy=true;_canvas.Notice="Liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
         try { _updateCancellation.Cancel(); } catch(Exception ex) { AppLog.Write("Product update cancellation failed during exit: "+ex); }
         try { _runtime?.FenceLifecycle("Cierre de la aplicación"); } catch(Exception ex) { AppLog.Write("Product shutdown fence unresolved: "+ex); }
+        if(_sessionCooling is{} cooling)await ObserveCoolingPreparationAsync(cooling);
         // A completed coordinator failure must not skip final cleanup. Pending
         // operations still retain ownership and must finish before disposal.
         foreach(var operation in new[]{_automaticRetryTask,_restartTask,_recoveryTask,_updateInstallTask})
@@ -640,13 +643,15 @@ internal sealed partial class ProductForm : Form
     }
     protected override void WndProc(ref Message m)
     {
-        if(m.Msg==0x11) // WM_QUERYENDSESSION: acknowledge; cleanup belongs to WM_ENDSESSION.
+        if(m.Msg==0x11) // Optional AC cooling precedes acknowledgement; cleanup belongs to WM_ENDSESSION.
         {
-            RegisterSessionEndReason();m.Result=(IntPtr)1;return;
+            PrepareWindowsSessionEnd(m.LParam.ToInt64());m.Result=(IntPtr)1;return;
         }
         if(m.Msg==0x16) // WM_ENDSESSION: do not return with only an async-void cleanup scheduled.
         {
-            if(m.WParam!=IntPtr.Zero)WaitForWindowsSessionEnd(TimeSpan.FromSeconds(20));
+            if(m.WParam!=IntPtr.Zero)
+            {_sessionEndConfirmed=true;_sessionCooling?.Cancel();RegisterSessionEndReason();WaitForWindowsSessionEnd(TimeSpan.FromSeconds(20));}
+            else CancelWindowsSessionEnd();
             ClearSessionEndReason();m.Result=IntPtr.Zero;return;
         }
         if(m.Msg==0x84&&FormBorderStyle==FormBorderStyle.None&&WindowState!=FormWindowState.Maximized)

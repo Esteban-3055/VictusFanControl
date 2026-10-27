@@ -139,6 +139,7 @@ internal static class WmiFanExperimentSelfTest
             Reject(() => WmiFanExperimentBoundary.InvokeNative<object?>(rpm, () => throw new IOException("native timeout")));
             Check(File.Exists(Path.Combine(directory, "native-inflight.json")), "A native exception lost its uncertainty marker.");
             File.Delete(Path.Combine(directory, "native-inflight.json")); // Fixture teardown only; no real call was made.
+            TestScopedNativeAdmissionAfterTracking(directory,level,release);
             TestConfirmedNativeCleanup(directory, rpm);
             File.WriteAllText(WmiFanExperimentBoundary.StopPath, "stop");
             Reject(() => WmiFanExperimentBoundary.EnsureRequestAllowed(level));
@@ -156,6 +157,28 @@ internal static class WmiFanExperimentSelfTest
     {
         internal bool Disposed { get; private set; }
         public void Dispose() => Disposed = true;
+    }
+
+    private static void TestScopedNativeAdmissionAfterTracking(string directory,HpBiosRequest level,HpBiosRequest release)
+    {
+        int writes=0,checks=0,releases=0;
+        var marker=Path.Combine(directory,"native-inflight.json");
+        using(var scope=new FanDispatchAdmissionScope(()=>
+        {
+            checks++;
+            Check(File.Exists(marker),"Scoped deadline was not rechecked after durable native tracking.");
+            throw new OperationCanceledException("fixture cooling deadline expired during preparation");
+        }))
+        {
+            bool rejected=false;
+            try{WmiFanExperimentBoundary.InvokeNative<object?>(level,()=>{writes++;return null;});}
+            catch(OperationCanceledException){rejected=true;}
+            Check(rejected&&checks==1&&writes==0&&!File.Exists(marker),"Expired pre-dispatch cooling admitted a native setter or fabricated an unfinished invocation.");
+            WmiFanExperimentBoundary.InvokeNative<object?>(release,()=>{releases++;return null;});
+            WmiFanExperimentBoundary.InvokeNative<object?>(Hp8C40BiosFanControl.BuildLegacyDefaultRequest(),()=>{releases++;return null;});
+        }
+        Check(checks==1&&releases==2&&!File.Exists(marker),"Expired cooling scope blocked normal firmware release.");
+        Console.WriteLine("PASS scoped native deadline after durable tracking: no late setter, direct not-dispatched receipt, FF/FF and legacy release remain available; zero hardware IO.");
     }
 
     private static void TestConfirmedNativeCleanup(string directory, HpBiosRequest rpm)

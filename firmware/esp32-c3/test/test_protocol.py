@@ -66,7 +66,10 @@ def main():
     hx=dict(lowEnabled=True,criticalEnabled=True,lowPercent=20,criticalPercent=10,lowDurationMs=6000,criticalDurationMs=10000,lowBlinkCycles=3,criticalBlinkCycles=5)
     good=telemetry(False);good['hyperxDisplay']=hx
     case('authenticated display-only HyperX alert preferences',lambda:run(args.host,[hello(),auth(),frame('telemetry',1,good,RX)]))
-    for key,value in [('lowPercent',10),('criticalPercent',9),('lowDurationMs',0),('lowBlinkCycles',21),('criticalEnabled',1),('criticalDurationMs',1000)]:
+    for critical in [0,100]:
+        endpoint=telemetry(False);endpoint['hyperxDisplay']={**hx,'criticalPercent':critical}
+        case(f'critical endpoint {critical} reaches authenticated firmware',lambda endpoint=endpoint:run(args.host,[hello(),auth(),frame('telemetry',1,endpoint,RX)]))
+    for key,value in [('lowPercent',10),('criticalPercent',-1),('criticalPercent',101),('lowDurationMs',0),('lowBlinkCycles',21),('criticalEnabled',1),('criticalDurationMs',1000)]:
         bad=telemetry(False);bad['hyperxDisplay']={**hx,key:value}
         case(f'reject HyperX display {key}={value}',lambda bad=bad:run(args.host,[hello(),auth(),frame('telemetry',1,bad,RX)],False))
     bad=telemetry(False);bad['hyperxDisplay']={k:v for k,v in hx.items() if k!='lowPercent'}

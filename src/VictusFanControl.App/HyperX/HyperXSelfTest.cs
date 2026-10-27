@@ -32,7 +32,17 @@ internal static class HyperXSelfTest
             var settings=cfg with{LowPercent=30,CriticalPercent=15,FullPercent=95,MuteEnabled=false,LcdLowSeconds=8,LcdLowBlinkCycles=4};settings.Save(path);
             Check(HyperXSettings.Load(path,out var notice)==settings&&notice is null,"HyperX persistence changed");
             File.WriteAllText(path,"broken");Check(HyperXSettings.Load(path,out notice)==cfg&&notice is not null&&File.ReadAllText(path)=="broken","Invalid settings evidence lost");
-            try{(cfg with{CriticalPercent=25}).Save(path);throw new Exception("Invalid thresholds accepted");}catch(InvalidDataException){}
+            foreach(var critical in new[]{0,100})
+            {
+                var endpoint=cfg with{CriticalPercent=critical};endpoint.Save(path);
+                Check(HyperXSettings.Load(path,out notice)==endpoint&&notice is null,"Critical endpoint changed on save/reload");
+                Check(endpoint.DisplayConfiguration().CriticalPercent==critical,"Critical endpoint clamped in authenticated export");
+            }
+            foreach(var critical in new[]{-1,101})
+                try{(cfg with{CriticalPercent=critical}).Save(path);throw new Exception("Invalid critical threshold accepted");}catch(InvalidDataException){}
+            try{(cfg with{LowPercent=99,FullPercent=99}).Save(path);throw new Exception("Invalid low/full ordering accepted");}catch(InvalidDataException){}
+            Check(new HyperXNotificationPolicy().Evaluate(sample with{Percent=55},cfg with{CriticalPercent=100},now).Single().Title.Contains("crítica"),"Overlapping critical threshold lost priority");
+            Check(new HyperXNotificationPolicy().Evaluate(sample with{Percent=0},cfg with{CriticalPercent=0},now).Single().Title.Contains("crítica"),"Critical zero was treated as null");
         }
         finally{if(Directory.Exists(Path.GetDirectoryName(path)))Directory.Delete(Path.GetDirectoryName(path)!,true);}
         var reader=new HyperXMonitor();reader.ApplyEvent(0x66,0);Check(reader.Snapshot.Muted is null,"Unknown report invented unmute");

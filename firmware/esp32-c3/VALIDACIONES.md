@@ -1,5 +1,7 @@
 # Evidencia de software y validaciones físicas pendientes
 
+Preliminar 1.3.7: umbral crítico HyperX 0–100 % y avisos baja/crítica repetidos sin PC con dato anterior marcado `*`. Requiere cargar el sketch nuevo para estas funciones; no cambia NVS, pines, HMAC, PWM o potencia Wi-Fi. La compilación y los tests no constituyen un PASS físico.
+
 ## Política actual: NTC informativa y Local 130 (2026-10-18)
 
 Por petición del usuario, se retiran las actuaciones automáticas por ambiente:

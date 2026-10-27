@@ -116,6 +116,35 @@ inline void presentationTests() {
     check(timed.overlay(3999,top,bottom)&&!timed.overlay(4000,top,bottom),"custom duration and blink count applied");
     HyperXDisplayState old;old.observe(10,1000,180000,0);
     check(std::isnan(old.lastPercent())&&!old.overlay(0,top,bottom),"old battery cannot populate cache or trigger an alert");
+    HyperXDisplayState offline;
+    check(!offline.overlay(0,top,bottom,false),"offline boot without a reading cannot invent an alarm");
+    offline.observe(20,1000,0,0);check(!offline.overlay(6000,top,bottom),"connected finite alert completes normally");
+    uint32_t offlineOrigin=UINT32_MAX-2500;
+    for(uint32_t t=0;t<120000;t+=250) {
+        offline.observe(20,1000,0,offlineOrigin+t); // Cached frame cannot reset the blink phase.
+        check(offline.overlay(offlineOrigin+t,top,bottom,false),"disconnected cached low alert repeats indefinitely");
+        check((top[0]!=' ')==((t/1000)%2==0),"offline repeated blink phase remains exact across rollover");
+        check(std::strlen(top)==16&&std::strlen(bottom)==16,"offline alert stays 16 by 2");
+        if(top[0]!=' ')check(std::strstr(bottom,"20% *"),"offline alarm identifies previous battery data");
+    }
+    check(!offline.overlay(offlineOrigin+120000,top,bottom,true),"reconnection ends repeated cached warning without replaying it");
+    offline.observe(10,2000,0,1000);
+    check(offline.overlay(1000,top,bottom,true)&&std::strstr(top,"CRITICA"),"new authenticated critical transition still produces a finite warning");
+    check(offline.overlay(2000,top,bottom,false)&&std::strstr(top,"CRITICA"),"critical cached warning wins offline");
+    check(offline.overlay(122000,top,bottom,false),"offline critical alert does not expire");
+    offline.observe(55,3000,0,123000);
+    check(!offline.overlay(123000,top,bottom,true)&&!offline.overlay(124000,top,bottom,false),"fresh recovery cancels stale cached warning on reconnect");
+    HyperXDisplayConfig endpoint;
+    for(int critical:{0,100}) {
+        endpoint.criticalPercent=critical;check(endpoint.valid(),"critical 0 and 100 are supported independently of low");
+        HyperXDisplayState edge;edge.configure(endpoint);edge.observe(critical==0?0:55,1000,0,0);
+        check(edge.overlay(0,top,bottom)&&std::strstr(top,"CRITICA"),"critical endpoint works with genuine zero and overlaps");
+        check(edge.overlay(1000,top,bottom,false)&&std::strstr(bottom,"*"),"endpoint warning repeats as cached without PC");
+        endpoint.criticalEnabled=false;endpoint.lowEnabled=false;edge.configure(endpoint);
+        check(!edge.overlay(2000,top,bottom,false),"disabled alerts stop offline repetition");endpoint.criticalEnabled=endpoint.lowEnabled=true;
+    }
+    endpoint.criticalPercent=-1;check(!endpoint.valid(),"negative critical percentage rejected");
+    endpoint.criticalPercent=101;check(!endpoint.valid(),"critical percentage above 100 rejected");
     cfg.lowDurationMs=1000;cfg.lowBlinkCycles=20;check(!cfg.valid(),"blink rate cannot exceed LCD refresh capability");
     data.hyperxCached=false;
     AmbientAverage40 average;

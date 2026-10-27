@@ -9,6 +9,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.SequenceEqual(new[]{"--session-end-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSessionEndChecks();return;}
         if(args.SequenceEqual(new[]{"--hyperx-ui-self-test"}))
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunHyperXChecks();return;}
         if(args.SequenceEqual(new[]{"--hyperx-self-test"})||args.SequenceEqual(new[]{"--hyperx-probe"}))

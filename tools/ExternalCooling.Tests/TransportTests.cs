@@ -98,6 +98,7 @@ internal static partial class Program
         await DelayedBaseStartupTest(key);
         await RemoteLeaseTest(key);
         await RestartServerTest(key);
+        await StopAcceptRaceTest(key);
         await ResourceTest(key);
     }
 
@@ -160,6 +161,23 @@ internal static partial class Program
             Console.WriteLine("PASS actual server stop/restart on same TCP port and new authenticated session.");
         }
         finally{await manager.DisconnectAsync();await server.DisposeAsync();}
+    }
+    private static async Task StopAcceptRaceTest(byte[] key)
+    {
+        // Exercise real loopback accepts/cancellation/socket disposal, without a
+        // device or a test-only accept implementation in the production server.
+        for(var i=0;i<40;i++)
+        {
+            var server=new Server(key,new());
+            await server.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+        }
+        var listener=new TcpListener(IPAddress.Loopback,0);listener.Start();
+        var run=SimulatorServer.RunAsync(listener,key,new(),null,null,CancellationToken.None);
+        listener.Stop();bool rejected=false;
+        try{await run.WaitAsync(TimeSpan.FromSeconds(2));}
+        catch(Exception error)when(error is SocketException or ObjectDisposedException or InvalidOperationException){rejected=true;}
+        Require(rejected,"An unrequested listener failure was silently treated as normal cancellation.");
+        Console.WriteLine("PASS simulator accept shutdown: 40 cancelled loopback servers drain; unrequested listener failure remains visible.");
     }
     private static async Task ResourceTest(byte[] key)
     {

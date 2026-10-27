@@ -829,6 +829,7 @@ internal static partial class ProductGuiSelfTest
         public ProductRuntimeState State=>StateOverride??_initialState;
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;
         internal int? LastManualLevel;
+        internal Func<int,Task>? ManualCommandFixture;
         internal PerformanceGuiSessionConfiguration? LastPerformance;
         internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate,DisposeGate;
         internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure,ReleaseFailure,AutomaticModeFailure;
@@ -843,7 +844,7 @@ internal static partial class ProductGuiSelfTest
         public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
         public void RequestAutomaticTelemetry() { }
         public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Automatic&&AutomaticModeFailure is not null?Task.FromException(new IOException(AutomaticModeFailure)):mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
-        public Task ApplyManualAsync(int level){Commands++;LastManualLevel=level;return Task.CompletedTask;}
+        public Task ApplyManualAsync(int level){Commands++;LastManualLevel=level;return ManualCommandFixture?.Invoke(level)??Task.CompletedTask;}
         public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;LastPerformance=p.PerformanceConfiguration();return CommandFailure is null?PerformanceGate?.Task??Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public Task ReleasePerformanceAsync(){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public void FenceLifecycle(string r){Interlocked.Increment(ref Fences);if(FenceFailure is not null)throw new IOException(FenceFailure);}

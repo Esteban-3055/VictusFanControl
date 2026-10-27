@@ -53,8 +53,8 @@ internal sealed record HyperXSettings
     {
         try{DisplayConfiguration().Validate();}catch(ArgumentException e){throw new InvalidDataException(e.Message,e);}
         if(LcdLowSeconds is <1 or >120||LcdCriticalSeconds is <1 or >120)throw new InvalidDataException("Duración LCD: 1–120 segundos.");
-        if(SchemaVersion!=1||CriticalPercent is <10 or >98||LowPercent<=CriticalPercent||LowPercent>=FullPercent||FullPercent>100)
-            throw new InvalidDataException("Usa 10 ≤ crítica < baja < carga completa ≤ 100. La estimación tiene un mínimo de 10 %.");
+        if(SchemaVersion!=1||CriticalPercent is <0 or >100||LowPercent>=FullPercent||FullPercent>100)
+            throw new InvalidDataException("Crítica admite 0–100 %; baja debe ser menor que carga completa. Crítica tiene prioridad si se superponen.");
     }
     internal static string DefaultPath=>Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"VictusFanControl","hyperx-battery.json");
     internal static HyperXSettings Load(string path,out string? notice)

@@ -155,7 +155,7 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
         if(hx.isNull()||!hx["lowEnabled"].is<bool>()||!hx["criticalEnabled"].is<bool>())return false;
         hxConfig.lowEnabled=hx["lowEnabled"].as<bool>();hxConfig.criticalEnabled=hx["criticalEnabled"].as<bool>();
         struct HxField{const char* name;int* value;int min,max;};
-        for(auto f:{HxField{"lowPercent",&hxConfig.lowPercent,11,99},{"criticalPercent",&hxConfig.criticalPercent,10,98},
+        for(auto f:{HxField{"lowPercent",&hxConfig.lowPercent,11,99},{"criticalPercent",&hxConfig.criticalPercent,0,100},
             {"lowDurationMs",&hxConfig.lowDurationMs,1000,120000},{"criticalDurationMs",&hxConfig.criticalDurationMs,1000,120000},
             {"lowBlinkCycles",&hxConfig.lowBlinkCycles,1,20},{"criticalBlinkCycles",&hxConfig.criticalBlinkCycles,1,20}}) {
             if(!integer(hx[f.name],f.min,f.max))return false;*f.value=hx[f.name].as<int>();

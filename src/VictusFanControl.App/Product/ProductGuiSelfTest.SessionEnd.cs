@@ -1,12 +1,23 @@
+using VictusFanControl.Control;
+using VictusFanControl.Hardware.Hp;
+using VictusFanControl.Performance;
+using VictusFanControl.Product;
+
 namespace VictusFanControl.App;
 
 internal static partial class ProductGuiSelfTest
 {
+    internal static int RunSessionEndChecks()
+    {
+        try{TestWindowsSessionEnd((ok,detail)=>{if(!ok)throw new InvalidOperationException(detail);});return 0;}
+        catch(Exception error){Console.Error.WriteLine(error);return 1;}
+    }
     private static void TestWindowsSessionEnd(Action<bool,string> require)
     {
         var originalExitCode=Environment.ExitCode;
         try
         {
+            TestShutdownCooling(require);
             var runtime=new RecordingRuntime { DisposeGate=new(TaskCreationOptions.RunContinuationsAsynchronously) };
             using(var form=new ProductForm("fixture://windows-session-end",fixture:runtime,fixtureProfiles:new()))
             {
@@ -38,5 +49,97 @@ internal static partial class ProductGuiSelfTest
             Console.WriteLine("PASS Windows session end: cancelled query preserves session; confirmed end waits/pumps STA; bounded wait retains unresolved state; one disposal; no OS shutdown or hardware IO.");
         }
         finally { Environment.ExitCode=originalExitCode; }
+    }
+    private static void TestShutdownCooling(Action<bool,string> require)
+    {
+        static ProductRuntimeState Ready()=>new(){Target=Hp8C40TargetProfile.Instance.Id,Runtime="Healthy",Source="Ac",ManualAuthorized=true,FanAuthority="Firmware"};
+        static void Send(ProductForm form,int kind,bool ended=false,long flags=0)
+        {var message=Message.Create(form.Handle,kind,ended?(IntPtr)1:IntPtr.Zero,(IntPtr)flags);form.DispatchSessionEndFixture(ref message);}
+        static void Exit(ProductForm form){var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Cooling fixture exit did not drain.");}
+        static void Accept(RecordingRuntime runtime,int level)
+        {
+            // This is the same guard called at the production HP native setter.
+            FanDispatchAdmissionScope.EnsureNativeRequestAllowed(Hp8C40ProductFanTargets.BuildRequest(level));
+            runtime.StateOverride=runtime.State with{FanMode="Manual",FanAuthority="Custom",ManualAppliedLevel=level};
+        }
+        foreach(var source in new[]{PerformancePowerSourceKind.Battery,PerformancePowerSourceKind.Unknown})
+        {
+            var runtime=new RecordingRuntime{StateOverride=Ready()};long clock=0;
+            using var form=new ProductForm("fixture://cooling-skip-source",fixture:runtime,fixtureProfiles:new());
+            form.Show();Application.DoEvents();form.Canvas.Editing=ProductPowerProfile.Ac;
+            form.SetSessionCoolingFixture(()=>source,()=>clock,()=>clock+=1000);
+            Send(form,0x11);require(runtime.Commands==0&&clock==0,"Battery/unknown used the AC editor tab as power authority.");
+            Send(form,0x16,true);require(runtime.Disposals==1,"Battery/unknown skipped normal shutdown release.");Exit(form);
+        }
+        foreach(var flags in new[]{1L,0x80000000L,0x40000000L,0x40000001L})
+        {
+            var runtime=new RecordingRuntime{StateOverride=Ready()};long clock=0;
+            using var form=new ProductForm("fixture://cooling-forced-logoff-servicing",fixture:runtime,fixtureProfiles:new());
+            form.Show();Application.DoEvents();form.SetSessionCoolingFixture(()=>PerformancePowerSourceKind.Ac,()=>clock,()=>clock+=1000);
+            Send(form,0x11,flags:flags);require(runtime.Commands==0&&clock==0,"Forced/logoff/servicing query started optional fan writes.");
+            Send(form,0x16);require(runtime.Disposals==0,"Cancelled non-cooling query released runtime.");Exit(form);
+        }
+        foreach(var state in new[]{Ready() with{LifecycleBlocked=true},Ready() with{Target="Unsupported"},Ready() with{ManualAuthorized=false},
+            Ready() with{Runtime="Initializing"},Ready() with{AutomaticPreparing=true},Ready() with{FanAuthority="Faulted"}})
+        {
+            var runtime=new RecordingRuntime{StateOverride=state};long clock=0;
+            using var form=new ProductForm("fixture://cooling-closed-admission",fixture:runtime,fixtureProfiles:new());
+            form.Show();Application.DoEvents();form.SetSessionCoolingFixture(()=>PerformancePowerSourceKind.Ac,()=>clock,()=>clock+=1000);
+            Send(form,0x11);require(runtime.Commands==0&&clock==0,"Shutdown cooling reopened unsafe/unsupported/initializing authority.");Exit(form);
+        }
+        {
+            var runtime=new RecordingRuntime{StateOverride=Ready()};runtime.ManualCommandFixture=level=>{Accept(runtime,level);return Task.CompletedTask;};
+            long clock=0;bool duplicate=false;
+            using var form=new ProductForm("fixture://cooling-full-phase",fixture:runtime,fixtureProfiles:new());
+            form.Show();Application.DoEvents();form.Canvas.Editing=ProductPowerProfile.Battery;
+            var draft=ProductProfilesStore.Serialize(form.Draft);
+            form.SetSessionCoolingFixture(()=>PerformancePowerSourceKind.Ac,()=>clock,()=>
+            {
+                require(runtime.Disposals==0&&runtime.Fences==0,"Releasing resources before the cooling interval ended.");
+                form.HandleCommand("performance-apply");form.PresentationTick();
+                if(!duplicate){duplicate=true;Send(form,0x11);}clock+=1000;
+            });
+            Send(form,0x11);require(clock==20_000&&runtime.Commands==2&&runtime.LastManualLevel==50,"AC cooling did not hold its separate 20s budget and one 50/50 request.");
+            Send(form,0x11);require(clock==20_000&&runtime.Commands==2,"Repeated query repeated cooling or extended the delay.");
+            require(ProductProfilesStore.Serialize(form.Draft)==draft&&runtime.Disposals==0,"Cooling changed saved presets or released before confirmation.");
+            Send(form,0x16,true);require(runtime.Disposals==1,"AC cooling failed to run normal release afterwards.");Exit(form);
+        }
+        foreach(var stop in new[]{"unplug","unknown","cancel","force","suspend","failure"})
+        {
+            var runtime=new RecordingRuntime{StateOverride=Ready()};long clock=0;var source=PerformancePowerSourceKind.Ac;
+            runtime.ManualCommandFixture=level=>{if(stop=="failure")throw new IOException("fixture write refused");Accept(runtime,level);return Task.CompletedTask;};
+            using var form=new ProductForm("fixture://cooling-stop-"+stop,fixture:runtime,fixtureProfiles:new());
+            form.Show();Application.DoEvents();
+            form.SetSessionCoolingFixture(()=>source,()=>clock,()=>
+            {
+                clock+=1000;if(clock!=3000)return;
+                if(stop=="unplug")source=PerformancePowerSourceKind.Battery;
+                else if(stop=="unknown")source=PerformancePowerSourceKind.Unknown;
+                else if(stop=="cancel")Send(form,0x16);
+                else if(stop=="force")Send(form,0x11,flags:0x40000000);
+                else if(stop=="suspend")form.HandlePowerEventAsync(4).GetAwaiter().GetResult();
+            });
+            Send(form,0x11);require(clock<=3000&&runtime.Disposals==0,"Cooling ignored unplug/unknown/cancel/force/suspend/failure.");
+            if(stop=="cancel")require(runtime.Releases==1&&runtime.Fences==1,"Cancelled cooling retained its target or fabricated a resumed Automatic session.");
+            else Send(form,0x16,true);
+            Exit(form);
+        }
+        foreach(var pending in new[]{"mode","native"})
+        {
+            var gate=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var runtime=new RecordingRuntime{StateOverride=Ready(),ManualGate=pending=="mode"?gate:null};long clock=0;int nativeWrites=0;
+            runtime.ManualCommandFixture=async level=>
+            {
+                if(pending=="native")await gate.Task;
+                Accept(runtime,level);nativeWrites++;
+            };
+            using var form=new ProductForm("fixture://cooling-late-"+pending,fixture:runtime,fixtureProfiles:new());
+            form.Show();Application.DoEvents();form.SetSessionCoolingFixture(()=>PerformancePowerSourceKind.Ac,()=>clock,()=>clock+=1000);
+            Send(form,0x11);require(clock==20_000&&!form.SessionCoolingPreparationInFixture.IsCompleted,"Pending native preparation was declared drained at cooling timeout.");
+            // Completion through the STA must remain possible during final cleanup.
+            form.BeginInvoke(()=>gate.SetResult());Send(form,0x16,true);
+            require(nativeWrites==0&&runtime.Disposals==1,"Queued cooling wrote after expiry or skipped final resource drainage.");Exit(form);
+        }
+        Console.WriteLine("PASS shutdown cooling: actual AC authority versus editor, 20s query phase then normal release, 50/50 native admission, duplicate/cancel/force/logoff/update/unplug/unknown/suspend/failure and late-native fences; no OS shutdown or hardware IO.");
     }
 }

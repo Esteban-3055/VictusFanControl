@@ -30,7 +30,7 @@ internal sealed class HyperXBatteryPage(ProductCanvas canvas,HyperXSettings sett
     };
     internal static (int Min,int Max) Range(string key)=>key switch
     {
-        "low"=>(11,99),"critical"=>(10,98),"full"=>(12,100),
+        "low"=>(11,99),"critical"=>(0,100),"full"=>(12,100),
         "low-seconds" or "critical-seconds"=>(1,120),"low-cycles" or "critical-cycles"=>(1,20),
         _=>throw new ArgumentException("Ajuste HyperX desconocido.")
     };

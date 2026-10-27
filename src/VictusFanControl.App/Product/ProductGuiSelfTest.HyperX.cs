@@ -47,10 +47,18 @@ internal static partial class ProductGuiSelfTest
             form.EditValue("hyperx-value-critical-seconds",12);form.EditValue("hyperx-value-critical-cycles",6);
             page.SaveAsync().GetAwaiter().GetResult();
             Check(!page.Dirty&&page.Draft.DisplayConfiguration() is{LowDurationMs:8000,LowBlinkCycles:4,CriticalDurationMs:12000,CriticalBlinkCycles:6},"LCD settings lost while saving themed page");
-            page.EditValue("critical",30);page.EditValue("low",20);page.SaveAsync().GetAwaiter().GetResult();
+            page.EditValue("critical",30);page.EditValue("low",20);page.EditValue("full",20);page.SaveAsync().GetAwaiter().GetResult();
             Check(page.Dirty&&!page.Busy&&!page.Notice.Contains("guardados"),"Invalid threshold combination saved silently");
             page.ExecuteAsync("discard").GetAwaiter().GetResult();
             Check(page.Value("critical")==10&&page.Value("low")==20,"Rejected thresholds changed the saved configuration");
+            foreach(var endpoint in new[]{0,100})
+            {
+                Check(page.EditNumeric("critical",endpoint.ToString()) is null,"Critical endpoint rejected by exact editor");
+                page.SaveAsync().GetAwaiter().GetResult();
+                Check(!page.Dirty&&page.Draft.DisplayConfiguration().CriticalPercent==endpoint,"Critical endpoint could not be saved from UI");
+            }
+            foreach(var bad in new[]{"-1","101","1.5"})Check(page.EditNumeric("critical",bad) is not null,"Critical exact editor accepted an invalid percentage");
+            page.EditValue("critical",10);page.SaveAsync().GetAwaiter().GetResult();
             var saved=page.Draft;
             using(var failed=new HyperXBatteryPage(form.Canvas,saved,_=>Task.FromException(new IOException("fixture only"))))
             {

@@ -174,7 +174,11 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         {
             var item=Navigation[i];var selected=Page==item.Page;
             var rect=new RectangleF(8,85+i*navigationStep,262,Math.Min(70,navigationStep-4));if(selected){Card(g,rect,true,12);using var b=new SolidBrush(Accent);g.FillRectangle(b,8,rect.Y+5,5,rect.Height-10);}
-            Icon(g,item.Icon,36,rect.Y+20,35,selected?Ink:Muted);DrawText(g,item.Name,100,rect.Y+22,22,selected?Ink:Muted,168);
+            Icon(g,item.Icon,36,rect.Y+(rect.Height-35)/2,35,selected?Ink:Muted);
+            using(var labelBrush=new SolidBrush(selected?Ink:Muted))
+            using(var labelFormat=new StringFormat{Alignment=StringAlignment.Near,LineAlignment=StringAlignment.Center,
+                Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap})
+                g.DrawString(item.Name,F(22),labelBrush,new RectangleF(100,rect.Y,168,rect.Height),labelFormat);
             Hit("page-"+(int)item.Page,rect,item.Name);
         }
         if(Page is ProductPage.Performance or ProductPage.Profiles or ProductPage.Curves)

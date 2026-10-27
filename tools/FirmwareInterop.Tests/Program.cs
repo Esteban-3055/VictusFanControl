@@ -21,9 +21,10 @@ var maximum=defaults with
     ManualOutput=255,Rise=100,Fall=1,FilterMs=10000,Hysteresis=30,DownHoldMs=30000,StartMs=3000,StartOutput=255
 };
 var smooth=varied.WithMaximumSmoothing() with{Revision="4234567890abcdef1234567890abcdef"};
-foreach(var curve in new[]{defaults,varied,disabled,maximum,smooth})await RunCase(curve);
+foreach(var curve in new[]{defaults,varied,disabled,maximum,smooth})await RunCase(curve,Source.DefaultDisplay);
+foreach(var critical in new[]{0,100})await RunCase(disabled,Source.DefaultDisplay with{CriticalPercent=critical});
 
-async Task RunCase(ExternalCurveConfiguration curve)
+async Task RunCase(ExternalCurveConfiguration curve,HyperxDisplayConfiguration display)
 {
 curve.Validate();
 var report=Path.Combine(Path.GetTempPath(),$"vfc-firmware-config-{Guid.NewGuid():N}.jsonl");
@@ -37,7 +38,7 @@ try
     if(!int.TryParse(line,out var port))throw new InvalidDataException("Bridge did not publish its loopback port.");
     var client=new Esp32TcpClient();
     using var cancellation=new CancellationTokenSource(TimeSpan.FromSeconds(15));
-    var source=new Source();
+    var source=new Source(display);
     var connection=client.RunAsync(new() {Host="127.0.0.1",Port=port,Mode=ExternalCoolingMode.MonitorAndRequest,AutoReconnect=false,Curve=curve},
         Convert.FromBase64String("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="),source,cancellation.Token);
     try
@@ -64,7 +65,7 @@ try
             {
                 using var receipt=JsonDocument.Parse(record);
                 if(receipt.RootElement.GetProperty("hyperxBatteryPct").GetDouble()!=55 ||
-                    receipt.RootElement.GetProperty("hyperxDisplay").Deserialize<HyperxDisplayConfiguration>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!=Source.HyperxDisplay)
+                    receipt.RootElement.GetProperty("hyperxDisplay").Deserialize<HyperxDisplayConfiguration>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!=display)
                     throw new InvalidOperationException("HyperX battery or display preferences changed between production Windows client and C++ parser.");
                 var received=JsonSerializer.Deserialize<ExternalCurveConfiguration>(record,new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 if(received!=curve)throw new InvalidOperationException($"A configuration field changed between Windows and C++: {record}");
@@ -86,16 +87,16 @@ finally
 }
 }
 
-sealed class Source : ITelemetryExportSource
+sealed class Source(HyperxDisplayConfiguration display) : ITelemetryExportSource
 {
-    internal static HyperxDisplayConfiguration HyperxDisplay {get;}=new(){LowPercent=25,CriticalPercent=15,LowDurationMs=7000,LowBlinkCycles=7,CriticalDurationMs=14000,CriticalBlinkCycles=7};
+    internal static HyperxDisplayConfiguration DefaultDisplay {get;}=new(){LowPercent=25,CriticalPercent=15,LowDurationMs=7000,LowBlinkCycles=7,CriticalDurationMs=14000,CriticalBlinkCycles=7};
     public volatile bool Firmware;
     public ExportTelemetry Capture(DateTimeOffset now)
     {
         var firmware=Firmware;
         return new()
         {
-        HyperxBatteryPct=55,HyperxSampledAtUtc=now.AddSeconds(-60),HyperxDisplay=HyperxDisplay,
+        HyperxBatteryPct=55,HyperxSampledAtUtc=now.AddSeconds(-60),HyperxDisplay=display,
         CapturedAtUtc=now,SampledAtUtc=now,DecisionAtUtc=now,CpuTempSampledAtUtc=now,GpuTempSampledAtUtc=now,RamSampledAtUtc=now,
         CpuUsagePct=10,GpuUsagePct=0,RamUsagePct=44,DemandaPct=firmware?null:35,Solicitud=firmware?null:27,SolicitudValida=!firmware,CpuTargetLevel=firmware?null:27,GpuTargetLevel=firmware?null:27,
         ModoSolicitado=firmware?"Firmware":"Automatic",ModoEfectivo=firmware?"Firmware":"Automatic",CpuTempC=55,GpuTempC=42,PowerSource="Battery",RequestEvidence=firmware?"Unavailable":"WmiAcceptedSupervised"

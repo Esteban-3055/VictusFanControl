@@ -63,7 +63,7 @@ internal sealed partial class ProductCanvas
             Card(g,new(980,482,667,192));DrawText(g,"Micrófono",1004,498,26,null,610,true);
             Toggle("mute-enabled","Avisar al silenciar y quitar silencio",p.Draft.MuteEnabled,new(1004,548,617,42));
             DrawText(g,"La opción controla ambos avisos de Windows.",1004,617,18,Muted,610);
-            DrawText(g,"Baja y crítica se comparten con el LCD. Mantén crítica < baja < completa. Windows puede ocultar los avisos mediante No molestar.",334,700,18,Muted,1287,height:48);
+            DrawText(g,"Crítica: 0–100 %, con prioridad si se superpone. Mantén baja < completa. Windows puede ocultar avisos mediante No molestar.",334,700,18,Muted,1287,height:48);
         }
         else
         {
@@ -78,7 +78,7 @@ internal sealed partial class ProductCanvas
                 DrawText(g,"El tiempo incluye las fases visibles y en blanco.",x+24,580,18,Muted,w-48);
                 DrawText(g,"Mínimo un segundo por ciclo de parpadeo.",x+24,620,18,Muted,w-48);
             }
-            DrawText(g,"Los avisos interrumpen cualquier pantalla; crítica tiene prioridad. Sin PC, Hyp conserva el último porcentaje con * (lectura anterior).",334,700,18,Muted,1287,height:48);
+            DrawText(g,"Crítica tiene prioridad. Sin PC, los avisos baja/crítica se repiten sin límite con el último porcentaje, marcado con * (lectura anterior).",334,700,18,Muted,1287,height:48);
         }
         DrawText(g,p.Busy?"Guardando ajustes…":p.Notice,334,770,18,p.Dirty?Yellow:Muted,1287,height:24);
         Action("discard","Descartar cambios",new(334,800,293,42),enabled:p.Dirty);

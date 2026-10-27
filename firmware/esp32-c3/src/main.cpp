@@ -333,7 +333,7 @@ void display(uint32_t now) {
     victus::LcdPage page=victus::lcdPage(elapsed);
     char first[17]{},second[17]{};
     victus::renderLcd(page,view,first,second);
-    hyperxLcd.overlay(now,first,second);
+    hyperxLcd.overlay(now,first,second,view.pcAuthenticated&&view.telemetryFresh&&view.wifi);
     lcdDriver.row(0x80,first);
     lcdDriver.row(0xC0,second);
     if(lcdDriver.ready()) lcdLastRefreshAt=millis();

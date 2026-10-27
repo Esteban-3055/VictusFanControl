@@ -1,5 +1,7 @@
 # Victus Base ESP32-C3 SuperMini — consolidación Work 0.4
 
+Preliminar 1.3.7: umbral crítico HyperX 0–100 % y avisos baja/crítica repetidos sin PC con dato anterior marcado `*`. Requiere cargar el sketch nuevo para estas funciones; no cambia NVS, pines, HMAC, PWM o potencia Wi-Fi. La compilación y los tests no constituyen un PASS físico.
+
 Implementación única compatible con VictusFanControl y su pestaña **Curva Externa**.
 Conserva la corrección Wi-Fi de **8,5 dBm** informada como funcional por el usuario.
 Servidor TCP local 8765, mDNS `victus-base.local`, autenticación mutua y sin nube.

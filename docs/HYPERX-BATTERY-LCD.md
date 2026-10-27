@@ -1,6 +1,6 @@
 # HyperX Battery y LCD1602
 
-Disponible en la estable 1.3.6. El panel usa el mismo diseño y los mismos controles que las otras secciones. Si el ESP32 ya tiene el firmware de 1.3.5 no es necesario volver a cargarlo: 1.3.6 conserva exactamente su código funcional. Para placas con versiones anteriores sí se necesita el firmware HyperX incluido. El instalador Windows no flashea el ESP32 automáticamente.
+Preliminar 1.3.7: selector lateral centrado, batería crítica configurable entre 0 y 100 % y avisos LCD repetidos sin PC. Para estos cambios LCD hay que cargar el firmware 1.3.7, además de actualizar Windows. La 1.3.6 sigue como estable. El instalador Windows no flashea el ESP32 automáticamente.
 
 ## Lecturas y frecuencia
 
@@ -10,7 +10,7 @@ Consulta al arrancar y, tras cada intento acotado a dos segundos, espera 60 segu
 
 Los eventos de silencio se escuchan con una lectura asíncrona bloqueada y cancelable: no hay consulta periódica del micrófono. Se conservan hasta 32 eventos para evitar que un refresco de UI pierda dos cambios próximos; los eventos de más de cinco segundos no producen avisos tardíos. Los informes desconocidos no se interpretan como quitar silencio.
 
-La conversión de voltaje a porcentaje es aproximada y escalonada, con extremo inferior de 10 %. Por eso el umbral crítico admite desde 10 %. Durante la indicación inferida de carga puede no haber porcentaje; nunca se inventa 100 %. Alcanzar el umbral «completa» no demuestra terminación eléctrica de carga.
+La conversión de voltaje a porcentaje es aproximada y escalonada, con extremo inferior de 10 %. El umbral crítico configurable admite 0–100 %, pero esto no cambia la estimación: nunca se inventa 0 % para una lectura desconocida. Durante la indicación inferida de carga puede no haber porcentaje; nunca se inventa 100 %. Alcanzar el umbral «completa» no demuestra terminación eléctrica de carga.
 
 ## Pestaña y notificaciones
 
@@ -20,7 +20,7 @@ La presentación se divide en **Información**, **Notificaciones** y **Pantalla 
 
 Los avisos bajos/críticos se habilitan y configuran para Windows y LCD. Los avisos de nivel completo y los de silenciar/quitar silencio son de Windows y tienen interruptores propios. La implementación usa las notificaciones nativas de NotifyIcon; No molestar y los permisos de notificación de Windows pueden ocultarlas.
 
-Predeterminados: baja 20 %, crítica 10 %, completa 100 %. Se exige crítica < baja < completa. Un aviso no se repite por cada refresco, ni por una desconexión/reconexión. Para rearmar baja/crítica hace falta una recuperación de cinco puntos porcentuales; completa se rearma por debajo del umbral menos cinco puntos. Configurar nuevos umbrales vuelve a evaluar los avisos Windows. LCD evalúa nuevas adquisiciones, no una reproducción de la caché.
+Predeterminados: baja 20 %, crítica 10 %, completa 100 %. Crítica admite 0–100 % independientemente de baja; si se superponen, crítica tiene prioridad. Se conserva baja < completa. Un aviso no se repite por cada refresco, ni por una desconexión/reconexión. Para rearmar baja/crítica hace falta una recuperación de cinco puntos porcentuales; completa se rearma por debajo del umbral menos cinco puntos. Configurar nuevos umbrales vuelve a evaluar los avisos Windows. LCD evalúa nuevas adquisiciones, no una reproducción de la caché.
 
 ## LCD y avisos prioritarios
 
@@ -35,9 +35,9 @@ Las otras pantallas conservan cinco segundos cada una: uso CPU/GPU/RAM; demanda/
 
 Si se pierde el PC, solo HyperX conserva el último porcentaje válido en RAM: `Hyp:55*`. El asterisco indica lectura anterior, no telemetría fresca. CPU/GPU caducan normalmente; el NTC sigue siendo local. No se calcula descarga sin PC ni se inventa un porcentaje nuevo. La caché no sobrevive a un reinicio del ESP32 y no se escribe en NVS.
 
-Una nueva adquisición autenticada al entrar en baja o crítica activa una pantalla por encima de cualquiera de las cuatro normales. Crítica interrumpe baja. Baja usa inicialmente **6 s / 3 ciclos**; crítica **10 s / 5 ciclos**. La duración es total, incluidos los intervalos en blanco. Cada ciclo alterna texto visible y ambas filas en blanco, sin bloquear el bucle ni cambiar la luz de fondo. Al terminar se retoma la posición actual del ciclo normal. Un dato fresco recuperado cancela un aviso obsoleto.
+Una nueva adquisición autenticada al entrar en baja o crítica activa una pantalla por encima de cualquiera de las cuatro normales. Crítica interrumpe baja. Baja usa inicialmente **6 s / 3 ciclos**; crítica **10 s / 5 ciclos**. La duración es total, incluidos los intervalos en blanco. Cada ciclo alterna texto visible y ambas filas en blanco, sin bloquear el bucle ni cambiar la luz de fondo. Con el PC conectado, al terminar se retoma la posición actual del ciclo normal. Un dato fresco recuperado cancela un aviso obsoleto.
 
-Duraciones configurables: 1–120 segundos; ciclos: 1–20. Debe existir al menos un segundo por ciclo para que el refresco físico de 250 ms pueda representar las dos fases. Desactivar una categoría cancela su aviso activo. La pérdida de PC no reinicia un aviso ni vuelve a generarlo por el último valor almacenado.
+Duraciones configurables: 1–120 segundos; ciclos: 1–20. Debe existir al menos un segundo por ciclo para que el refresco físico de 250 ms pueda representar las dos fases. Desactivar una categoría cancela su aviso activo. Sin PC (sin sesión autenticada, sin red o enlace de datos vencido), si el último porcentaje conocido está en baja/crítica habilitada, su aviso se repite indefinidamente por encima de las pantallas normales. Se reutilizan duración y ciclos configurados como patrón repetido y se muestra `Ult: 20% *` para identificar un dato anterior. También se inicia esta repetición si el aviso conectado ya había terminado antes de perderse el PC. Al reconectar cesa la repetición; no se inventa una nueva adquisición ni se rearma por un mensaje duplicado. Sin porcentaje conocido o con las categorías desactivadas, no hay aviso repetido.
 
 ## Media ambiente de 40 muestras
 

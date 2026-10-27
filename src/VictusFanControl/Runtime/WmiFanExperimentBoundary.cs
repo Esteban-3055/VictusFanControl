@@ -242,6 +242,19 @@ internal static class WmiFanExperimentBoundary
     internal static T InvokeNative<T>(HpBiosRequest request, Func<T> invoke)
     {
         var invocation = PublishNativeStart(request);
+        try
+        {
+            // Durable tracking can itself be slow. Check scoped AC/lifecycle/
+            // deadline admission again after it, immediately before native IO.
+            VictusFanControl.Control.FanDispatchAdmissionScope.EnsureNativeRequestAllowed(request);
+        }
+        catch
+        {
+            // The native delegate has not been entered. This is direct evidence
+            // of no dispatch, never an inferred completion of a timed-out call.
+            if(invocation is not null)ConfirmCompletion(invocation,"was not dispatched: scoped admission closed");
+            throw;
+        }
         var result = invoke();
         // A returned null/invalid response is still a completed invocation. Keep
         // response validation outside this boundary; exceptions from Invoke keep

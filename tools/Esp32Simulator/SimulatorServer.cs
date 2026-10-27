@@ -28,5 +28,6 @@ public static class SimulatorServer
         }
         catch(OperationCanceledException)when(token.IsCancellationRequested){}
         catch(SocketException)when(token.IsCancellationRequested){}
+        catch(ObjectDisposedException)when(token.IsCancellationRequested){}
     }
 }
