@@ -67,7 +67,7 @@ internal sealed partial class ProductForm
         var cooling=new ProductShutdownCooling(runtime,ReadSessionEndSource,_sessionCoolingFixture?.Clock??(()=>Environment.TickCount64),
             ()=>ReferenceEquals(_runtime,runtime)&&_exitTask is null&&!_disposedRuntime&&!_systemSuspended);
         _sessionCooling=cooling;
-        AppLog.Write("PRODUCT WINDOWS SHUTDOWN COOLING: AC confirmed; optional phase <=20000 ms; nominal target=5000 RPM (50/50); no physical RPM guarantee.");
+        AppLog.Write("PRODUCT WINDOWS SHUTDOWN COOLING: AC confirmed at admission; source changes do not cancel the original <=20000 ms phase; nominal target=5000 RPM (50/50); no physical RPM guarantee.");
         try
         {
             cooling.Start();

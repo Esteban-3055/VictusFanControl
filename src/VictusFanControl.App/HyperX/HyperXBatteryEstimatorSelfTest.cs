@@ -17,8 +17,10 @@ internal static partial class HyperXBatteryEstimatorSelfTest
         check(integers.SetEquals(Enumerable.Range(10,91)),"Curve cannot resolve all one-percent levels in its reference range");
         foreach(var mv in new[]{3763,3783,3824,3834,3839,4096})
             check(HyperXBatteryEstimator.RawPercent(mv) is not null,"Former srn range gap still loses battery data");
-        foreach(var mv in new[]{int.MinValue,0,3299,3300,3583,4108,4500,int.MaxValue})
-            check(HyperXBatteryEstimator.RawPercent(mv) is null,"Curve extrapolated an uncharacterized low or charging value");
+        foreach(var mv in new[]{int.MinValue,0,3299,3300,3583,4501,int.MaxValue})
+            check(HyperXBatteryEstimator.RawPercent(mv) is null,"Curve extrapolated an uncharacterized low or implausible voltage");
+        foreach(var mv in new[]{4108,4133,4134,4169,4200,4500})
+            check(HyperXBatteryEstimator.RawPercent(mv)==100,"Valid high voltage lost the existing estimated-full ceiling");
         var estimate=new HyperXBatteryEstimator();
         check(estimate.Observe(3795,0)==56,"First reply waits for artificial smoothing or stays in five-point steps");
         for(int i=0;i<100;i++)check(estimate.Observe(3970,0)==56,"Duplicate clock/refresh advanced the filter");
@@ -65,10 +67,13 @@ internal static partial class HyperXBatteryEstimatorSelfTest
             check(reader.Snapshot.Percent is null&&reader.Snapshot.SampledAt is null,"Query failure retained a fresh battery");
             reader.ApplyBatteryReport(Reply(3792),now.AddSeconds(180),180_000);
             check(reader.Snapshot.Percent==55,"Failed query history contaminated the next acquisition");
-            reader.ApplyBatteryReport(Reply(4200),now.AddSeconds(240),240_000);
-            check(reader.Snapshot is{Percent:null,Charging:true}&&export.Capture(now.AddSeconds(240)).HyperxSampledAtUtc is null,"Inferred charging invented full battery or exported a null percentage timestamp");
+            reader.SelectBatterySource("fixture://high-unplugged");
+            reader.ApplyBatteryReport(Reply(4133),now.AddSeconds(240),240_000);
+            check(reader.Snapshot is{Percent:100,Charging:null,Millivolts:4133}&&export.Capture(now.AddSeconds(240)) is{HyperxBatteryPct:100,HyperxSampledAtUtc:not null},"Recorded unplugged high voltage hid battery, invented charging or lost its export timestamp");
+            reader.ApplyBatteryReport(Reply(4200),now.AddSeconds(270),270_000);
+            check(reader.Snapshot is{Percent:100,Charging:null},"A high-voltage reply was reclassified as proven charging");
             reader.ApplyBatteryReport(Reply(3970),now.AddSeconds(300),300_000);
-            check(reader.Snapshot.Percent==100,"Charging history delayed the first later known percentage");
+            check(reader.Snapshot.Percent==100,"High-voltage history hid the later known percentage");
             reader.ApplyEvent(0x64,3);reader.ApplyBatteryReport(Reply(3970),now.AddSeconds(360),360_000);
             check(reader.Snapshot.Percent is null&&reader.Snapshot.SampledAt is null,"Late reply revived an explicitly powered-off headset");
             reader.ApplyEvent(0x64,1);reader.ApplyBatteryReport(Reply(3792),now.AddSeconds(420),420_000);
@@ -78,7 +83,7 @@ internal static partial class HyperXBatteryEstimatorSelfTest
             reader.ApplyBatteryReport(Reply(3910),now.AddSeconds(480),480_000);
             check(reader.Snapshot.Percent==85,"Different receiver inherited smoothed charge");
             reader.ApplyBatteryReport(Reply(3500),now.AddSeconds(540),540_000);
-            check(reader.Snapshot is{Millivolts:3500,Percent:null,Charging:false}&&export.Capture(now.AddSeconds(540)).HyperxBatteryPct is null,"Uncalibrated 0-9 region was invented, hidden as zero or exported");
+            check(reader.Snapshot is{Millivolts:3500,Percent:null,Charging:null}&&export.Capture(now.AddSeconds(540)).HyperxBatteryPct is null,"Uncalibrated 0-9 region or charger state was invented, hidden as zero or exported");
         }
         finally{reader.DisposeAsync().AsTask().GetAwaiter().GetResult();}
         Console.WriteLine("PASS HyperX continuous estimate: monotonic one-percent interpolation, repaired table gaps, acquisition-only EMA/hysteresis, no delayed 10% critical, source/error/charging resets and unchanged age/authenticated export; no hardware IO.");

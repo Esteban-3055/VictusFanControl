@@ -44,10 +44,10 @@ internal sealed class HyperXMonitor : IAsyncDisposable
                 latest=latest with{ReceiverPresent=true,Status="Audífonos apagados",Percent=null,Millivolts=null,Charging=null,SampledAt=null};
                 return true;
             }
-            if(b.Charging){batteryEstimate.Reset();percent=null;}
+            if(b.Charging==true){batteryEstimate.Reset();percent=null;}
             else percent=batteryEstimate.Observe(b.Millivolts,sampleMilliseconds);
             latest=latest with{ReceiverPresent=true,
-                Status=!b.Charging&&percent is null?"Voltaje recibido; porcentaje sin referencia suficiente":
+                Status=b.Charging!=true&&percent is null?"Voltaje recibido; porcentaje sin referencia suficiente":
                     eventPath is null?"Batería recibida; eventos de micrófono no disponibles":"Lectura recibida",
                 Millivolts=b.Millivolts,Percent=percent,Charging=b.Charging,SampledAt=sampledAt};
         }

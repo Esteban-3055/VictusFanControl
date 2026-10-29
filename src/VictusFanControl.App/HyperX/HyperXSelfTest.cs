@@ -9,10 +9,11 @@ internal static class HyperXSelfTest
     {
         static void Check(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
         var decoded=HyperXSnapshot.Decode(Convert.FromHexString("21ff050ed3000000000000000000000000000000"));
-        Check(decoded is{Millivolts:3795,Percent:56.25,Charging:false},"Recorded USB voltage or continuous reference estimate changed");
+        Check(decoded is{Millivolts:3795,Percent:56.25,Charging:null},"Voltage reply invented a charger state or changed its estimate");
         HyperXBatteryEstimatorSelfTest.Run(Check);
         Check(HyperXSnapshot.Decode(new byte[20]) is null&&HyperXSnapshot.Decode(new byte[5]) is null,"Unknown replies invented battery");
-        Check(HyperXSnapshot.Decode(Convert.FromHexString("21ff051020000000000000000000000000000000")) is{Percent:null,Charging:true},"Charging must not invent 100%");
+        Check(HyperXSnapshot.Decode(Convert.FromHexString("21ff051025000000000000000000000000000000")) is{Millivolts:4133,Percent:100,Charging:null},"Recorded high unplugged voltage hid the estimate or invented charging");
+        Check(HyperXSnapshot.Decode(Convert.FromHexString("21ff051020000000000000000000000000000000")) is{Percent:100,Charging:null},"Historical charger threshold still hides a valid high-voltage estimate");
         var now=DateTimeOffset.UtcNow;var sample=new HyperXSnapshot{ReceiverPresent=true,SampledAt=now,Percent=20};
         Check(sample.Fresh(now.AddSeconds(179))&&!sample.Fresh(now.AddSeconds(180))&&!sample.Fresh(now.AddMilliseconds(-1)),"HyperX independent freshness bounds");
         var cfg=new HyperXSettings();var policy=new HyperXNotificationPolicy();
@@ -25,6 +26,13 @@ internal static class HyperXSelfTest
         Check(policy.Evaluate(sample with{Percent=55,Muted=true,MuteEventVersion=1,MuteEventAt=now},cfg,now).Count==1,"First observed mute event lost");
         Check(policy.Evaluate(sample with{Percent=55,Muted=false,MuteEventVersion=2,MuteEventAt=now},cfg,now).Count==1,"Unmute lost");
         Check(policy.Evaluate(sample with{Percent=55,Muted=false,MuteEventVersion=3,MuteEventAt=now},cfg,now).Count==0,"Duplicate unmute alarm");
+        var reconnectPolicy=new HyperXNotificationPolicy();
+        var active=sample with{Percent=55,Muted=false,MuteEventVersion=1,MuteEventAt=now};
+        Check(reconnectPolicy.Evaluate(active,cfg,now).Count==0,"Initial active report invented an unmute action");
+        Check(reconnectPolicy.Evaluate(active with{Muted=null},cfg,now).Count==0,"Unknown mute state generated a notice");
+        Check(reconnectPolicy.Evaluate(active with{MuteEventVersion=2},cfg,now).Count==0,"Unknown-to-active recovery invented an unmute action");
+        Check(reconnectPolicy.Evaluate(active with{Muted=true,MuteEventVersion=3},cfg,now).Single().Title.Contains("silenciado"),"Known mute transition lost after recovery");
+        Check(reconnectPolicy.Evaluate(active with{MuteEventVersion=4},cfg,now).Single().Title.Contains("activado"),"Confirmed muted-to-active transition lost after recovery");
         Check(new HyperXNotificationPolicy().Evaluate(sample with{Percent=10,Muted=true,MuteEventVersion=1,MuteEventAt=now},cfg with{LowEnabled=false,CriticalEnabled=false,FullEnabled=false,MuteEnabled=false},now).Count==0,"Disabled notifications escaped");
         Check(policy.Evaluate(sample with{SampledAt=now.AddSeconds(-180),Percent=1},cfg,now).Count==0,"Stale battery notified");
         var path=Path.Combine(Path.GetTempPath(),"vfc-hyperx-fixture-"+Guid.NewGuid().ToString("N"),"settings.json");

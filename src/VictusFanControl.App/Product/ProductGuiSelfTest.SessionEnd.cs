@@ -125,7 +125,24 @@ internal static partial class ProductGuiSelfTest
             require(ProductProfilesStore.Serialize(form.Draft)==draft&&runtime.Disposals==0,"Cooling changed saved presets or released before confirmation.");
             Send(form,0x16,true);require(runtime.Disposals==1,"AC cooling failed to run normal release afterwards.");Exit(form);
         }
-        foreach(var stop in new[]{"unplug","unknown","cancel","force","suspend","failure","guardian-loss"})
+        foreach(var afterAdmission in new[]{PerformancePowerSourceKind.Battery,PerformancePowerSourceKind.Unknown})
+        {
+            var runtime=new RecordingRuntime{StateOverride=Ready()};long clock=0;var source=PerformancePowerSourceKind.Ac;
+            runtime.ManualCommandFixture=level=>{Accept(runtime,level);return Task.CompletedTask;};
+            using var form=new ProductForm("fixture://cooling-continue-source-change",fixture:runtime,fixtureProfiles:new());
+            form.Show();Application.DoEvents();
+            form.SetSessionCoolingFixture(()=>source,()=>clock,()=>
+            {
+                require(runtime.Disposals==0&&runtime.Fences==0,"Source change released controls before the original cooling deadline.");
+                clock+=1000;
+                if(clock==3000){source=afterAdmission;runtime.StateOverride=runtime.State with{Source=afterAdmission.ToString()};}
+            });
+            Send(form,0x11);
+            require(clock==20_000&&runtime.Commands==2&&runtime.LastManualLevel==50,"Unplug/unknown after AC admission cancelled, restarted or extended cooling.");
+            Send(form,0x11);require(clock==20_000&&runtime.Commands==2,"Repeated battery query restarted the admitted phase.");
+            Send(form,0x16,true);require(runtime.Disposals==1,"Cooling continued on battery but skipped final release.");Exit(form);
+        }
+        foreach(var stop in new[]{"cancel","force","suspend","failure","guardian-loss"})
         {
             var runtime=new RecordingRuntime{StateOverride=Ready()};long clock=0;var source=PerformancePowerSourceKind.Ac;
             runtime.ManualCommandFixture=level=>{if(stop=="failure")throw new IOException("fixture write refused");Accept(runtime,level);return Task.CompletedTask;};
@@ -134,14 +151,12 @@ internal static partial class ProductGuiSelfTest
             form.SetSessionCoolingFixture(()=>source,()=>clock,()=>
             {
                 clock+=1000;if(clock!=3000)return;
-                if(stop=="unplug")source=PerformancePowerSourceKind.Battery;
-                else if(stop=="unknown")source=PerformancePowerSourceKind.Unknown;
-                else if(stop=="cancel")Send(form,0x16);
+                if(stop=="cancel")Send(form,0x16);
                 else if(stop=="force")Send(form,0x11,flags:0x40000000);
                 else if(stop=="suspend")form.HandlePowerEventAsync(4).GetAwaiter().GetResult();
                 else if(stop=="guardian-loss")runtime.StateOverride=runtime.State with{FanAuthority="Faulted"};
             });
-            Send(form,0x11);require(clock<=3000&&runtime.Disposals==0,"Cooling ignored unplug/unknown/cancel/force/suspend/failure.");
+            Send(form,0x11);require(clock<=3000&&runtime.Disposals==0,"Cooling ignored cancel/force/suspend/failure/guardian-loss.");
             if(stop=="cancel")require(runtime.Releases==1&&runtime.Fences==1,"Cancelled cooling retained its target or fabricated a resumed Automatic session.");
             else Send(form,0x16,true);
             Exit(form);
@@ -162,6 +177,6 @@ internal static partial class ProductGuiSelfTest
             form.BeginInvoke(()=>gate.SetResult());Send(form,0x16,true);
             require(nativeWrites==0&&runtime.Disposals==1,"Queued cooling wrote after expiry or skipped final resource drainage.");Exit(form);
         }
-        Console.WriteLine("PASS shutdown cooling: actual AC authority versus editor, 20s query phase then normal release, 50/50 native admission, duplicate/cancel/force/logoff/update/unplug/unknown/suspend/failure and late-native fences; no OS shutdown or hardware IO.");
+        Console.WriteLine("PASS shutdown cooling: initial AC authority versus editor, source-change continuation of the original 20s phase then normal release, 50/50 native admission, duplicate/cancel/force/logoff/update/suspend/failure and late-native fences; no OS shutdown or hardware IO.");
     }
 }

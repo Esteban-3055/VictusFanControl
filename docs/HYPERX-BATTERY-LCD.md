@@ -1,5 +1,7 @@
 # HyperX Battery y LCD1602
 
+Corrección local del 29 de octubre de 2026: el informe de voltaje no confirma que haya un cargador conectado. El estado de carga se presenta como «No confirmado». Las respuestas válidas por encima de 4107 mV conservan el techo estimado de 100 % de la curva existente, hasta el límite de plausibilidad del decodificador (4500 mV); esto no calibra una capacidad nueva ni confirma carga física completa. Recuperar un micrófono activo después de un estado desconocido no anuncia que se quitó el silencio: ese aviso requiere un estado silenciado anterior confirmado.
+
 Preliminar 1.3.8: la estimación Windows usa una curva continua con resolución de 1 %. Se mantiene como estimación por voltaje, sin afirmar una exactitud de ±1 %. Si la placa ya tiene firmware 1.3.7, este cambio no requiere volver a flashearla.
 
 Se mantienen las funciones de 1.3.7: selector lateral centrado, batería crítica configurable entre 0 y 100 % y avisos LCD repetidos sin PC. Las placas con firmware anterior a 1.3.7 necesitan el sketch compatible incluido para estas funciones LCD. La 1.3.6 sigue como estable. El instalador Windows no flashea el ESP32 automáticamente.
@@ -16,15 +18,15 @@ La conversión de voltaje a porcentaje es aproximada. El cálculo interpola line
 
 Se aplica una EMA con constante de tiempo de 60 segundos, calculada con tiempo monótono entre adquisiciones reales, y una pequeña histéresis de presentación de 0.75 puntos para reducir rebotes de un entero. La primera lectura se muestra inmediatamente. El tramo que redondea a 10 % no espera al filtro para evitar retrasar el aviso crítico predeterminado. Cambios grandes válidos pueden saltar varios enteros: no se simula una cuenta atrás de 1 % por minuto. Una resolución de 1 % no garantiza una exactitud de ±1 %.
 
-El filtro se reinicia tras un fallo de lectura, receptor ausente o distinto, apagado observado, carga inferida o hueco de adquisición de al menos 180 segundos. La hora UTC del snapshot sigue siendo la de la respuesta USB; refrescar la UI o reenviar el snapshot al ESP32 no actualiza esa hora ni avanza el filtro. La frecuencia de consulta sigue siendo aproximadamente una por minuto.
+El filtro se reinicia tras un fallo de lectura, receptor ausente o distinto, apagado observado o hueco de adquisición de al menos 180 segundos. Un voltaje alto no reinicia el estimador ni establece carga activa. La hora UTC del snapshot sigue siendo la de la respuesta USB; refrescar la UI o reenviar el snapshot al ESP32 no actualiza esa hora ni avanza el filtro. La frecuencia de consulta sigue siendo aproximadamente una por minuto.
 
-**El tramo de 0–9 % sigue sin calibración.** Una respuesta plausible inferior a 3584 mV conserva el voltaje recibido pero muestra porcentaje desconocido; no extrapola 0 % ni lo confunde con falta de datos. El umbral crítico configurable admite 0–100 %, pero esto no añade una medición de 0–9 %. Durante la indicación inferida de carga puede no haber porcentaje; nunca se inventa 100 %. Alcanzar el umbral «completa» no demuestra terminación eléctrica de carga.
+**El tramo de 0–9 % sigue sin calibración.** Una respuesta plausible inferior a 3584 mV conserva el voltaje recibido pero muestra porcentaje desconocido; no extrapola 0 % ni lo confunde con falta de datos. El umbral crítico configurable admite 0–100 %, pero esto no añade una medición de 0–9 %. El voltaje alto conserva una estimación de porcentaje; no se usa como prueba de carga activa. Alcanzar el umbral «completa» no demuestra terminación eléctrica de carga.
 
 Cada respuesta válida puede dejar un registro opcional acotado `HYPERX BATTERY ESTIMATE` con voltaje, fecha de adquisición, referencia continua y valor publicado. Sirve para estudiar la zona baja durante el uso normal, sin nuevas consultas ni cambios al dispositivo. No registra rutas HID, identificadores del receptor, audio ni credenciales. Estos datos por sí solos no constituyen una calibración de capacidad restante. No se incorpora la curva polinómica de HeadsetControl.
 
 ## Pestaña y notificaciones
 
-«HyperX Battery» está debajo de «Curva Externa». Muestra receptor, estado de encendido observado, voltaje, batería, carga inferida, micrófono y antigüedad de la lectura. Los ajustes se guardan aparte en `%LOCALAPPDATA%/VictusFanControl/hyperx-battery.json`; no modifican perfiles de ventiladores ni claves de emparejamiento.
+«HyperX Battery» está debajo de «Curva Externa». Muestra receptor, estado de encendido observado, voltaje, batería, carga no confirmada, micrófono y antigüedad de la lectura. Los ajustes se guardan aparte en `%LOCALAPPDATA%/VictusFanControl/hyperx-battery.json`; no modifican perfiles de ventiladores ni claves de emparejamiento.
 
 La presentación se divide en **Información**, **Notificaciones** y **Pantalla LCD**, con las mismas tarjetas, colores, botones y deslizadores del programa. Guardar, Descartar y Restaurar quedan visibles en las tres secciones sin desplazamiento. Restaurar modifica el borrador; Guardar valida y persiste los ajustes. Un fallo de guardado conserva el borrador para corregirlo o reintentar. Los valores admiten ratón, teclado, controles accesibles y entrada numérica exacta al pulsar el número; las relaciones entre umbrales y entre duración/ciclos se validan al guardar.
 

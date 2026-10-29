@@ -16,13 +16,14 @@ internal sealed record HyperXSnapshot
     internal DateTimeOffset? MuteEventAt {get;init;}
     internal bool? Powered {get;init;}
     internal bool Fresh(DateTimeOffset now)=>ReceiverPresent&&SampledAt is{} at&&now>=at&&(now-at).TotalSeconds<FreshSeconds;
-    internal static (int Millivolts,double? Percent,bool Charging)? Decode(ReadOnlySpan<byte> b)
+    internal static (int Millivolts,double? Percent,bool? Charging)? Decode(ReadOnlySpan<byte> b)
     {
         if(b.Length is not(15 or 20)||b[0]!=0x21||b[1]!=0xff||b[2]!=5)return null;
         int mv=(b[3]<<8)|b[4];if(mv is <3300 or >4500)return null;
-        bool charging=mv>0x100b;
-        double? pct=charging?null:HyperXBatteryEstimator.RawPercent(mv);
-        return (mv,pct,charging);
+        // This report contains voltage, not a verified charger-present flag.
+        // Real unplugged headsets can report above the historical 4107 mV cutoff.
+        // Keep the estimate visible and represent charging as unknown.
+        return (mv,HyperXBatteryEstimator.RawPercent(mv),null);
     }
 }
 
@@ -100,8 +101,9 @@ internal sealed class HyperXNotificationPolicy
                 if(!full&&cfg.FullEnabled)output.Add(new("HyperX: nivel de carga alcanzado",$"Carga estimada: {p} % (umbral {cfg.FullPercent} %). La estimación no confirma la terminación eléctrica de carga."));full=true;
             }
         }
-        // Unknown initial state/reconnect never invents a mute transition.
-        if(s.Muted is{} m&&s.MuteEventVersion>muteVersion&&muted!=m&&cfg.MuteEnabled&&s.MuteEventAt is{} eventAt&&now>=eventAt&&(now-eventAt).TotalSeconds<5)
+        // An active report after unknown/reconnect establishes a silent baseline.
+        // Only a previously known muted state can produce an unmute notice.
+        if(s.Muted is{} m&&s.MuteEventVersion>muteVersion&&muted!=m&&(m||muted==true)&&cfg.MuteEnabled&&s.MuteEventAt is{} eventAt&&now>=eventAt&&(now-eventAt).TotalSeconds<5)
             output.Add(new(m?"HyperX: micrófono silenciado":"HyperX: micrófono activado",m?"Se silenció el micrófono de los audífonos.":"Se quitó el silencio del micrófono."));
         muteVersion=Math.Max(muteVersion,s.MuteEventVersion);muted=s.Muted;return output;
     }

@@ -81,9 +81,12 @@ internal static partial class ProductGuiSelfTest
             Require(CreateTimingBlockReason(form.Handle,ProductShutdownCooling.CoolingReason),
                 "Native Windows shutdown reason registration failed: "+Marshal.GetLastWin32Error());
             Require(DestroyTimingBlockReason(form.Handle),"Native Windows shutdown reason removal failed.");
-            long lastStatus=-1000;
-            form.SetSessionCoolingFixture(()=>PerformancePowerSourceKind.Ac,()=>Environment.TickCount64,()=>
+            long lastStatus=-1000,unpluggedAt=-1;
+            var coolingSource=PerformancePowerSourceKind.Ac;
+            form.SetSessionCoolingFixture(()=>coolingSource,()=>Environment.TickCount64,()=>
             {
+                if(unpluggedAt<0&&timer.ElapsedMilliseconds>=3000)
+                {unpluggedAt=timer.ElapsedMilliseconds;coolingSource=PerformancePowerSourceKind.Battery;runtime.StateOverride=runtime.State with{Source="Battery"};}
                 fan.Heartbeat();fan.EnsureAlive();
                 Require(runtime.Disposals==0&&!releaseConfirmed,"Dependencies released during cooling.");
                 if(timer.ElapsedMilliseconds-lastStatus>=1000)
@@ -101,13 +104,14 @@ internal static partial class ProductGuiSelfTest
             var cooledAt=timer.ElapsedMilliseconds;
             Require(query==(IntPtr)1&&cooledAt>=20_000&&cooledAt<30_000,"Native query did not hold 20 real seconds.");
             Require(targetAt>=0&&targetAt<2000&&runtime.Disposals==0&&statuses>=10,"Target or dependency monitoring incomplete.");
+            Require(unpluggedAt is >=3000 and <5000&&coolingSource==PerformancePowerSourceKind.Battery,"Timing test did not exercise unplugging during cooling.");
             var ended=SendTimingMessage(form.Handle,0x16,(IntPtr)1,IntPtr.Zero);
             Require(ended==IntPtr.Zero&&runtime.Disposals==1&&releaseConfirmed&&confirmedAt-releaseAt>=1500,
                 "WM_ENDSESSION returned before confirmed fixture cleanup.");
             Require(Environment.ExitCode==originalExitCode,"Normal timing test left an unresolved-cleanup exit code.");
             var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Timing fixture exit hung.");
             Require(runtime.Disposals==1,"Repeated exit disposed the same owner again.");
-            Console.WriteLine($"PASS real-time session end: targetAtMs={targetAt}; coolingMs={cooledAt}; releaseAtMs={releaseAt}; confirmedAtMs={confirmedAt}; statusChecks={statuses}; native reason registration/removal and window messages; both real fixture children/IPC and release receipts; hardware IO=0; OS shutdown=0; physical RPM unverified.");
+            Console.WriteLine($"PASS real-time session end: targetAtMs={targetAt}; unpluggedAtMs={unpluggedAt}; coolingMs={cooledAt}; releaseAtMs={releaseAt}; confirmedAtMs={confirmedAt}; statusChecks={statuses}; AC-to-battery continuation, native reason registration/removal and window messages; both real fixture children/IPC and release receipts; hardware IO=0; OS shutdown=0; physical RPM unverified.");
             return 0;
         }
         catch(Exception error){Console.Error.WriteLine(error);return 1;}

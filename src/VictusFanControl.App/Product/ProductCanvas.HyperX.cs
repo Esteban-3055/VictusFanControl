@@ -33,7 +33,7 @@ internal sealed partial class ProductCanvas
             const float width=322.25f;
             string[] titles=["Batería aproximada","Voltaje reportado","Estado de carga","Micrófono"];
             string[] values=[fresh&&s.Percent is{} pct?$"{pct} %":"—",fresh&&s.Millivolts is{} mv?$"{mv/1000.0:0.000} V":"—",
-                !fresh||s.Charging is null?"Desconocido":s.Charging.Value?"Cargando*":"Sin carga indicada",
+                !fresh||s.Charging is null?"No confirmado":s.Charging.Value?"Cargando*":"Sin carga indicada",
                 s.Muted is null?"Desconocido":s.Muted.Value?"Silenciado":"Sin silencio"];
             for(int i=0;i<4;i++)
             {
@@ -47,7 +47,7 @@ internal sealed partial class ProductCanvas
             DrawText(g,"Encendido",1004,519,20,Muted,180);DrawText(g,s.Powered is null?"Desconocido":s.Powered.Value?"Encendidos":"Apagados",1210,519,23,Ink,410);
             DrawText(g,"Lectura de batería cada 60 s. Los cambios del micrófono se reciben al accionar su botón.",334,575,21,Muted,1250);
             DrawText(g,s.Muted is null?"Pulsa el botón de silencio para identificar el estado inicial del micrófono.":"Puedes ajustar los avisos en Notificaciones y su presentación en Pantalla LCD.",334,621,19,Muted,1250);
-            Card(g,new(310,696,1337,60));DrawText(g,"El porcentaje y el estado de carga son estimados. El receptor conectado no confirma que los audífonos estén encendidos.",334,709,18,Muted,1287,height:38);
+            Card(g,new(310,696,1337,60));DrawText(g,"El porcentaje es estimado por voltaje. Este reporte no confirma si hay cable de carga ni que los audífonos estén encendidos.",334,709,18,Muted,1287,height:38);
         }
         else if(p.Tab==1)
         {

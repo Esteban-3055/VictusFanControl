@@ -6,7 +6,8 @@ using VictusFanControl.Product;
 
 namespace VictusFanControl.App;
 
-/// <summary>One optional AC-only phase before accepting a Windows session-end query.
+/// <summary>One optional phase admitted on AC before accepting a session-end query.
+/// Once admitted, unplugging cannot restart or shorten its original 20s budget.
 /// Uses the normal supervised Manual path, including its safety and native dispatch gates.
 /// Expiry fences late commands; it never asserts that an in-flight native call has drained.</summary>
 internal sealed class ProductShutdownCooling
@@ -17,7 +18,7 @@ internal sealed class ProductShutdownCooling
     internal const string CoolingReason="Refrigerando el equipo antes de apagar (20 segundos).";
     internal const string ReleaseReason="Liberando controles de ventiladores y CPU/GPU.";
     private readonly IProductRuntime runtime;
-    private readonly Func<PerformancePowerSourceKind> source;
+    private readonly bool acConfirmedAtStart;
     private readonly Func<long> clock;
     private readonly Func<bool> ownerCurrent;
     private readonly long started;
@@ -25,7 +26,7 @@ internal sealed class ProductShutdownCooling
     internal Task Preparation {get;private set;}=Task.CompletedTask;
     internal bool Attempted {get;private set;}
     internal ProductShutdownCooling(IProductRuntime runtime,Func<PerformancePowerSourceKind> source,Func<long> clock,Func<bool> ownerCurrent)
-    {this.runtime=runtime;this.source=source;this.clock=clock;this.ownerCurrent=ownerCurrent;started=clock();}
+    {this.runtime=runtime;this.clock=clock;this.ownerCurrent=ownerCurrent;started=clock();acConfirmedAtStart=source()==PerformancePowerSourceKind.Ac;}
     internal static bool Eligible(ProductRuntimeState state)=>ProductRelease.IsAutomaticAuthorized(state.Target)&&
         state.Runtime=="Healthy"&&state.ManualAuthorized&&!state.LifecycleBlocked&&!state.AutomaticPreparing&&!state.PerformanceUpdating&&
         state.PerformanceRecovery?.Pending!=true&&state.FanAuthority is "Firmware" or "Custom";
@@ -39,7 +40,7 @@ internal sealed class ProductShutdownCooling
         var reason=Volatile.Read(ref cancelled)!=0?"cancelación solicitada":!WithinBudget?"plazo agotado":
             !ownerCurrent()?"propietario o ciclo de vida cambiado":!Eligible(state)?
             $"control no disponible (runtime={state.Runtime}, autoridad={state.FanAuthority}, manual={state.ManualAuthorized}, lifecycle={state.LifecycleBlocked}, automaticPreparing={state.AutomaticPreparing}, performanceUpdating={state.PerformanceUpdating}, recovery={state.PerformanceRecovery?.Pending==true})":
-            source()!=PerformancePowerSourceKind.Ac?"AC no confirmado":null;
+            !acConfirmedAtStart?"AC no confirmado al inicio":null;
         if(reason is not null)throw new OperationCanceledException("Refrigeración de apagado cancelada: "+reason+".");
     }
     internal void Start()=>Preparation=PrepareAsync();

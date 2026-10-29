@@ -5,7 +5,10 @@ namespace VictusFanControl.App;
 /// Interpolation fills its gaps; no extrapolation invents an uncharacterized 0..9%.</summary>
 internal sealed class HyperXBatteryEstimator
 {
-    internal const int MinimumMillivolts=3584,MaximumMillivolts=4107;
+    // Share the decoder's existing upper plausibility limit. Values above the
+    // last reference knot stay at the estimated 100% ceiling, not a charge flag
+    // or a newly calibrated high-voltage capacity curve.
+    internal const int MinimumMillivolts=3584,MaximumMillivolts=4500;
     internal const double TimeConstantMilliseconds=60_000;
     private const double DisplayHysteresisPoints=0.75;
     private static readonly (int Millivolts,int Percent)[] Knots=
@@ -26,7 +29,7 @@ internal sealed class HyperXBatteryEstimator
             if(millivolts<=right.Millivolts)
                 return left.Percent+(right.Percent-left.Percent)*(double)(millivolts-left.Millivolts)/(right.Millivolts-left.Millivolts);
         }
-        return null;
+        return Knots[^1].Percent;
     }
     internal void Reset(){filtered=null;displayed=null;lastSampleMilliseconds=0;}
     internal int? Observe(int millivolts,long sampleMilliseconds)
