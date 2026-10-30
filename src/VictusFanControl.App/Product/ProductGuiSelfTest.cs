@@ -48,6 +48,7 @@ internal static partial class ProductGuiSelfTest
             TestAdvancedSettings(Require);
             TestStartupAutomatic(Require);
             TestSourceTheme(Require);
+            TestCpuPowerEditor(Require);
             TestLivePerformanceApply(Require);
             TestSessionLogs(Require);
             TestSessionRestart(Require);
@@ -73,7 +74,7 @@ internal static partial class ProductGuiSelfTest
             form.ClientSize=new(1672,941);form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;canvas.Size=new(1672,941);
             Require(runtime.Commands==0,"Startup acquired authority.");
             form.HandleCommand("profile-battery");form.EditValue("pl1",30);form.EditValue("pl2",15);
-            Require(form.Draft.Battery.CpuPl1Watts==30&&form.Draft.Battery.CpuPl2Watts==30&&form.Draft.Ac.CpuPl1Watts==35,"PL1/PL2 or independent AC failed.");
+            Require(form.Draft.Battery.CpuPl1Watts==15&&form.Draft.Battery.CpuPl2Watts==15&&form.Draft.Ac.CpuPl1Watts==35,"PL1 exceeded PL2, changed PL2 or leaked into AC.");
             form.HandleCommand("profile-ac");canvas.ShowCurvePoints=true;form.EditNode(3,70,31);
             Require(form.Draft.Ac.Fan.UnifiedDemand!.Curve[3].Level==31&&form.Draft.Battery.Fan.UnifiedDemand!.Curve[3].Level==ProductProfiles.DefaultProfile(ProductPowerProfile.Battery).Fan.UnifiedDemand!.Curve[3].Level,"Curve edit leaked across profiles.");
             for(int i=0;i<7;i++)form.HandleCommand("page-"+i);
@@ -89,7 +90,7 @@ internal static partial class ProductGuiSelfTest
             Require(form.TryEditNumericValue("pl1","30",out _)&&form.TryEditNumericValue("pl2","35",out _)&&form.TryEditNumericValue("gpu","1800",out _),"Exact numeric values rejected.");
             Require(form.Draft.Ac.CpuPl1Watts==30&&form.Draft.Ac.CpuPl2Watts==35&&form.Draft.Ac.GpuMaximumMHz==1800&&form.Draft.Battery.GpuMaximumMHz==1200,"Exact numeric edits rounded, clamped or leaked across sources.");
             var typedDraft=ProductProfilesStore.Serialize(form.Draft);
-            foreach(var entry in new[]{("pl1","45"),("pl2","29"),("pl2","115"),("gpu","209"),("gpu","3106"),("gpu","1800.5"),("gpu",""),("gpu","NaN"),("gpu","99999999999")})
+            foreach(var entry in new[]{("pl1","45"),("pl1","36"),("pl2","7"),("pl2","115"),("gpu","209"),("gpu","3106"),("gpu","1800.5"),("gpu",""),("gpu","NaN"),("gpu","99999999999")})
                 Require(!form.TryEditNumericValue(entry.Item1,entry.Item2,out var error)&&error.Length>0&&typedDraft==ProductProfilesStore.Serialize(form.Draft),"Invalid text silently changed a performance draft.");
             canvas.Busy=true;Require(!form.TryEditNumericValue("gpu","1700",out _)&&typedDraft==ProductProfilesStore.Serialize(form.Draft),"Busy numeric edit changed draft.");canvas.Busy=false;
             foreach(var source in new[]{"ac","battery"})
@@ -107,7 +108,7 @@ internal static partial class ProductGuiSelfTest
                 Require(!numeric.TryCommit()&&numeric.DialogResult!=DialogResult.OK,"Dialog accepted fractional MHz.");
                 numeric.Input.Text="1750";Require(numeric.TryCommit()&&numeric.DialogResult==DialogResult.OK&&form.Draft.Ac.GpuMaximumMHz==1750,"Dialog lost exact MHz.");
             }
-            using(var cancelled=new ProductNumericDialog("CPU PL1 (W) · AC",30,8,44,text=>form.TryEditNumericValue("pl1",text,out var error)?null:error))
+            using(var cancelled=new ProductNumericDialog("CPU PL1 (W) · AC",30,8,35,text=>form.TryEditNumericValue("pl1",text,out var error)?null:error))
             {cancelled.Show(form);Application.DoEvents();cancelled.Input.Text="40";cancelled.DialogResult=DialogResult.Cancel;Require(form.Draft.Ac.CpuPl1Watts==30,"Cancelled dialog edited draft.");}
             Require(runtime.Commands==0,"Typed values wrote hardware.");
             var oldCaps=form.Draft.PerformanceConfiguration();
@@ -131,7 +132,7 @@ internal static partial class ProductGuiSelfTest
             AccessibleObject Child(string id)=>canvas.AccessibilityObject.GetChild(canvas.Hits.ToList().FindIndex(h=>h.Id==id))!;
             var pl1=Child("pl1");pl1.Select(AccessibleSelection.TakeFocus);var prior=form.Draft.Ac.CpuPl1Watts;canvas.HandleKey(Keys.Right);
             Require(form.Draft.Ac.CpuPl1Watts==prior+1&&pl1.Value==(prior+1).ToString(),"Focused slider arrows/accessibility value disagree.");
-            pl1.Value="999";Require(form.Draft.Ac.CpuPl1Watts==44&&form.Draft.Ac.CpuPl2Watts>=44,"Accessible slider escaped CPU bounds.");
+            pl1.Value="999";Require(form.Draft.Ac.CpuPl1Watts==35&&form.Draft.Ac.CpuPl2Watts==35,"Accessible slider exceeded PL2 or raised PL2.");
             bool invalidValueRejected=false;try{pl1.Value="bad";}catch(ArgumentException){invalidValueRejected=true;}Require(invalidValueRejected,"Accessible slider accepted non-numeric input.");
             canvas.Busy=true;var beforeBusy=ProductProfilesStore.Serialize(form.Draft);canvas.HandleKey(Keys.Left);
             bool busyRejected=false;try{pl1.Value="8";}catch(InvalidOperationException){busyRejected=true;}Require(busyRejected&&beforeBusy==ProductProfilesStore.Serialize(form.Draft),"Busy accessibility gesture changed a draft.");canvas.Busy=false;
@@ -760,13 +761,13 @@ internal static partial class ProductGuiSelfTest
             PerformanceSupported=true,CanApplyPerformance=true,PerformanceProcessPresent=true,PerformanceActive=true,CpuState="Active",GpuState="ActiveUnverified",
             AppliedPerformance=profiles.PerformanceConfiguration(),AppliedPerformanceSource="Ac",Snapshot=Snapshot(DateTimeOffset.UtcNow,45,40,10,5)};
         runtime.Publish(active);canvas.Refresh();require(!canvas.CanApplyPerformance,"Unchanged limits enabled Apply.");
-        form.EditValue("pl2",38);canvas.Refresh();
-        require(canvas.CanApplyPerformance&&canvas.Hits.Single(h=>h.Id=="performance-apply").Enabled&&canvas.AppliedCpu()=="35 / 60 W",
+        form.EditValue("pl2",30);canvas.Refresh();
+        require(form.Draft.Ac.CpuPl1Watts==30&&canvas.CanApplyPerformance&&canvas.Hits.Single(h=>h.Id=="performance-apply").Enabled&&canvas.AppliedCpu()=="35 / 60 W",
             "Edited PL2 did not enable Apply or was presented as already applied.");
         form.HandleCommand("performance-apply");PumpUntil(()=>!canvas.Busy,"Performance Apply did not drain.");
         var expected=form.Draft.PerformanceConfiguration();
-        require(runtime.Commands==1&&runtime.LastPerformance==expected&&expected.AcPl2Watts==38,"Live Apply omitted exact presets.");
-        runtime.Publish(active with{AppliedPerformance=expected});require(!canvas.CanApplyPerformance&&canvas.AppliedCpu()=="35 / 38 W","Confirmed values left Apply enabled or displayed old limits.");
+        require(runtime.Commands==1&&runtime.LastPerformance==expected&&expected.AcPl1Watts==30&&expected.AcPl2Watts==30,"Live Apply omitted the PL1 reduction required by PL2.");
+        runtime.Publish(active with{AppliedPerformance=expected});require(!canvas.CanApplyPerformance&&canvas.AppliedCpu()=="30 / 30 W","Confirmed values left Apply enabled or displayed old limits.");
         form.HandleCommand("cpu-toggle");require(form.Draft.CpuEnabled,"Active CPU domain checkbox silently changed ownership.");
         form.EditValue("gpu",1801);require(canvas.CanApplyPerformance,"Exact GPU edit did not enable Apply.");
         foreach(var blocked in new[]{active with{AppliedPerformance=expected,PerformanceUpdating=true},active with{AppliedPerformance=expected,LifecycleBlocked=true},

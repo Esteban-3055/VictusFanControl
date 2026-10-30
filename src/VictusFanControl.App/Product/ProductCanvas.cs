@@ -288,7 +288,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,name,r.X,r.Y,compact?20:24,null,r.Width-300);Card(g,new(r.Right-220,r.Y-9,155,compact?34:56),false,9);DrawText(g,value+" "+unit,r.Right-208,r.Y+1,compact?21:unit=="MHz"?22:27,null,130,true);
         if(id is "pl1" or "pl2" or "gpu")Hit(id+"-text",new(r.Right-220,r.Y-9,155,compact?34:56),"Escribir valor exacto de "+name,enabled&&!Busy);
         var track=new RectangleF(r.X,r.Y+(compact?41:73),r.Width,compact?10:14);Bar(g,track,value-min,max-min,Accent);
-        var px=track.Left+(float)(value-min)/(max-min)*track.Width;using var b=new SolidBrush(Ink);g.FillEllipse(b,px-(compact?13:17),track.Y-(compact?8:10),compact?26:34,compact?26:34);
+        var px=track.Left+(max>min?(float)(value-min)/(max-min):0)*track.Width;using var b=new SolidBrush(Ink);g.FillEllipse(b,px-(compact?13:17),track.Y-(compact?8:10),compact?26:34,compact?26:34);
         if(id.StartsWith("influence-"))DrawText(g,$"Rango {min}–{max} %",r.X+18,r.Y+59,13,Muted,260);
         else {DrawText(g,min.ToString(),r.X,r.Y+(compact?62:99),compact?14:18,Muted,100);DrawText(g,max+" "+unit,r.Right-110,r.Y+(compact?62:99),compact?14:18,Muted,110);}
         Hit(id,new(r.X,r.Y+(compact?31:58),r.Width,compact?34:42),name,enabled&&!Busy,true,min,max);
@@ -304,8 +304,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             Card(g,new(320,253,807,570));DrawText(g,"Límites de CPU (Intel RAPL)",350,276,29,null,740,true);
             Button(g,"cpu-toggle",PerformanceDraft.CpuEnabled?State.PerformanceProcessPresent?"✓  Control de CPU en la sesión":"✓  Control de CPU seleccionado":"○  CPU no seleccionada para aplicar",new(350,337,735,60),PerformanceDraft.CpuEnabled,!State.PerformanceProcessPresent);
             DrawText(g,"Pulsa el valor numérico para escribir un valor exacto.",350,414,18,Muted,735);
-            Slider(g,"pl1","PL1 · Potencia sostenida",new(350,453,735,120),Profile.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl1Watts,CpuPowerProductDefaults.MaximumConfigurablePl1Watts,"W");
-            Slider(g,"pl2","PL2 · Potencia turbo",new(350,637,735,120),Profile.CpuPl2Watts,Math.Max(Profile.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl2Watts),CpuPowerProductDefaults.MaximumConfigurablePl2Watts,"W");
+            Slider(g,"pl1","PL1 · Potencia sostenida",new(350,453,735,120),Profile.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl1Watts,ProductCpuPowerEditor.MaximumPl1(Profile),"W");
+            Slider(g,"pl2","PL2 · Potencia turbo",new(350,637,735,120),Profile.CpuPl2Watts,CpuPowerProductDefaults.MinimumPl2Watts,CpuPowerProductDefaults.MaximumConfigurablePl2Watts,"W");
         }
         else if(PerformanceTab==1)
         {

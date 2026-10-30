@@ -9,6 +9,8 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.SequenceEqual(new[]{"--cpu-power-editor-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunCpuPowerEditorChecks();return;}
         if(args.SequenceEqual(new[]{"--session-end-timing-self-test"}))
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSessionEndTimingChecks();return;}
         if(args.SequenceEqual(new[]{"--session-end-self-test"}))

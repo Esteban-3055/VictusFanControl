@@ -364,7 +364,8 @@ internal sealed partial class ProductForm : Form
             var title=key switch{"pl1"=>"CPU PL1 (W)","pl2"=>"CPU PL2 (W)",_=>"GPU máximo (MHz)"};
             var value=key switch{"pl1"=>p.CpuPl1Watts,"pl2"=>p.CpuPl2Watts,_=>p.GpuMaximumMHz};
             using var dialog=new ProductNumericDialog(title+" · "+(_canvas.Editing==ProductPowerProfile.Ac?"AC":"Batería"),value,range.Min,range.Max,
-                text=>TryEditNumericValueForProfile(key,text,editSource,out var error)?null:error);
+                text=>TryEditNumericValueForProfile(key,text,editSource,out var error)?null:error,
+                help:key=="gpu"?null:"PL1 no supera PL2 (máximo 44 W). Si reduces PL2, PL1 baja cuando sea necesario. Editar solo cambia el borrador.");
             dialog.ShowDialog(this);_canvas.Invalidate();return;
         }
         switch(id)
@@ -448,8 +449,8 @@ internal sealed partial class ProductForm : Form
         if(key=="manual") {_canvas.ManualLevel=Math.Clamp(value,10,_canvas.State.ManualMaximumLevel);_canvas.Invalidate();return;}
         var next=key switch
         {
-            "pl1"=>p with{CpuPl1Watts=Math.Clamp(value,CpuPowerProductDefaults.MinimumPl1Watts,CpuPowerProductDefaults.MaximumConfigurablePl1Watts),CpuPl2Watts=Math.Max(p.CpuPl2Watts,Math.Clamp(value,8,44))},
-            "pl2"=>p with{CpuPl2Watts=Math.Clamp(value,Math.Max(p.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl2Watts),CpuPowerProductDefaults.MaximumConfigurablePl2Watts)},
+            "pl1"=>ProductCpuPowerEditor.EditPl1(p,value),
+            "pl2"=>ProductCpuPowerEditor.EditPl2(p,value),
             "gpu"=>p with{GpuMaximumMHz=Math.Clamp(value,GpuProductPreferences.MinimumMHz,GpuProductPreferences.Maximum(slot))},
             _=>p
         };
@@ -457,8 +458,8 @@ internal sealed partial class ProductForm : Form
     }
     private (int Min,int Max) NumericRange(string key)=>key switch
     {
-        "pl1"=>(CpuPowerProductDefaults.MinimumPl1Watts,CpuPowerProductDefaults.MaximumConfigurablePl1Watts),
-        "pl2"=>(Math.Max(_draft.Get(_canvas.Editing).CpuPl1Watts,CpuPowerProductDefaults.MinimumPl2Watts),CpuPowerProductDefaults.MaximumConfigurablePl2Watts),
+        "pl1"=>(CpuPowerProductDefaults.MinimumPl1Watts,ProductCpuPowerEditor.MaximumPl1(_draft.Get(_canvas.Editing))),
+        "pl2"=>(CpuPowerProductDefaults.MinimumPl2Watts,CpuPowerProductDefaults.MaximumConfigurablePl2Watts),
         "gpu"=>(GpuProductPreferences.MinimumMHz,GpuProductPreferences.Maximum(_canvas.Editing)),
         _=>throw new ArgumentException("Campo numérico desconocido.",nameof(key))
     };
@@ -784,7 +785,7 @@ internal sealed class ProductNumericDialog : Form
         layout.Controls.Add(new Label{Text=$"Valor {(integer?"entero":"numérico")} · {min}–{max}",Dock=DockStyle.Fill},0,0);
         Input.Text=value.ToString(System.Globalization.CultureInfo.InvariantCulture);layout.Controls.Add(Input,0,1);
         layout.Controls.Add(_error,0,2);
-        layout.Controls.Add(new Label{Text=help??"Editar solo cambia el borrador. Si aumentas PL1 por encima de PL2, PL2 sube al mismo valor.",Dock=DockStyle.Fill,ForeColor=ProductCanvas.Muted},0,3);
+        layout.Controls.Add(new Label{Text=help??"Editar solo cambia el borrador.",Dock=DockStyle.Fill,ForeColor=ProductCanvas.Muted},0,3);
         var buttons=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft};
         var accept=new Button{Text="Aceptar",AutoSize=true};var cancel=new Button{Text="Cancelar",AutoSize=true,DialogResult=DialogResult.Cancel};
         accept.Click+=(_,_)=>TryCommit();buttons.Controls.Add(cancel);buttons.Controls.Add(accept);layout.Controls.Add(buttons,0,4);
