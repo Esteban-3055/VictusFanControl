@@ -58,7 +58,8 @@ internal static class PerformanceGuiSessionHost
         if (File.Exists(cpuJournal) || File.Exists(gpuJournal))
             throw new InvalidOperationException("Existing CPU/GPU journal requires recovery; it will not be overwritten.");
 
-        using var cpuBackend = configuration.CpuEnabled ? new PawnIoCpuPowerLimitBackend(module, hardwareWritesAuthorized: true) : null;
+        using var cpuBackend = configuration.CpuEnabled ? new PawnIoCpuPowerLimitBackend(module, hardwareWritesAuthorized: true,
+            executionPolicy:CpuPowerExecutionPolicy.ProductPl1ToPl2) : null;
         if (cpuBackend is not null)
         {
             var baseline = cpuBackend.Read();
@@ -70,7 +71,8 @@ internal static class PerformanceGuiSessionHost
         if (gpuBackend is not null && !gpuBackend.Capabilities.HasCompleteCommandSurface)
             throw new InvalidOperationException("GPU NVML Set/Reset unavailable.");
         using var cpu = cpuBackend is not null ? new QualifiedCpuGuardianDomainLifecycle(cpuBackend,
-            new JsonCpuPowerSessionJournal(cpuJournal, configuration.TargetProfileId), configuration.CpuPresets()) : null;
+            new JsonCpuPowerSessionJournal(cpuJournal, configuration.TargetProfileId), configuration.CpuPresets(),
+            executionPolicy:CpuPowerExecutionPolicy.ProductPl1ToPl2) : null;
         using var gpu = gpuBackend is not null ? new QualifiedGpuGuardianDomainLifecycle(gpuBackend,
             new JsonGpuClockSessionJournal(gpuJournal, configuration.TargetProfileId), configuration.GpuPresets()) : null;
         using var combined = cpu is not null && gpu is not null ? new CombinedGuardianDomainLifecycle(cpu, cpu, gpu, gpu) : null;

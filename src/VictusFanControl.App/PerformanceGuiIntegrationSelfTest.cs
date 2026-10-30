@@ -17,7 +17,7 @@ internal static class PerformanceGuiIntegrationSelfTest
             foreach (var invalid in new[]
             {
                 new PerformanceGuiSessionConfiguration { CpuEnabled = false, GpuEnabled = false },
-                new PerformanceGuiSessionConfiguration { AcPl1Watts = 45 },
+                new PerformanceGuiSessionConfiguration { AcPl1Watts = 115, AcPl2Watts = 115 },
                 new PerformanceGuiSessionConfiguration { BatteryPl1Watts = 20, BatteryPl2Watts = 15 },
                 new PerformanceGuiSessionConfiguration { TargetProfileId = "88F8" }
             })
@@ -101,6 +101,9 @@ internal static class PerformanceGuiIntegrationSelfTest
                 try { await client.EnableAsync(configuration); } catch (InvalidOperationException) { rejected = true; }
                 Require(rejected, "Concurrent replacement session accepted.");
                 var guardianPid=launched!.Id;
+                var expanded=configuration with{AcPl1Watts=80,AcPl2Watts=80};
+                Require((await client.UpdateAsync(expanded)).Ok&&client.AppliedConfiguration==expanded,
+                    "GUI/Guardian IPC rejected or clipped a PL1 request above 44 W.");
                 var updated=configuration with{AcPl2Watts=38,AcGpuMaximumMHz=1800};
                 Require((await client.UpdateAsync(updated)).Ok&&client.AppliedConfiguration==updated&&client.LimitsActive&&launched.Id==guardianPid,
                     "Live IPC update replaced owner or failed to confirm presets.");

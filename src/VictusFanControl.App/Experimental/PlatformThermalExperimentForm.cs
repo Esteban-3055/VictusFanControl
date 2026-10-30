@@ -21,7 +21,7 @@ internal sealed class PlatformThermalExperimentForm : Form
     private readonly Label _status=new(){Dock=DockStyle.Fill,AutoSize=false,Font=new Font("Segoe UI",12),Padding=new Padding(16)};
     private readonly Button _start=new(){Text="Iniciar prueba física (43 min)",AutoSize=true};
     private readonly Button _stop=new(){Text="Detener y liberar controles",AutoSize=true,Enabled=false};
-    internal readonly NumericUpDown CpuPl1=new(){Minimum=CpuPowerProductDefaults.MinimumPl1Watts,Maximum=CpuPowerProductDefaults.MaximumConfigurablePl1Watts,Value=25,Width=85};
+    internal readonly NumericUpDown CpuPl1=new(){Minimum=CpuPowerProductDefaults.MinimumPl1Watts,Maximum=CpuPowerProductDefaults.HistoricalMaximumPl1Watts,Value=25,Width=85};
     internal readonly NumericUpDown CpuPl2=new(){Minimum=CpuPowerProductDefaults.MinimumPl2Watts,Maximum=60,Value=30,Width=85};
     internal readonly NumericUpDown GpuMaximum=new(){Minimum=GpuProductPreferences.MinimumMHz,Maximum=GpuProductPreferences.ConfigurableMaximumMHz,Width=85};
     private ProductProfiles? _initialProfiles,_frozenProfiles;

@@ -365,7 +365,7 @@ internal sealed partial class ProductForm : Form
             var value=key switch{"pl1"=>p.CpuPl1Watts,"pl2"=>p.CpuPl2Watts,_=>p.GpuMaximumMHz};
             using var dialog=new ProductNumericDialog(title+" · "+(_canvas.Editing==ProductPowerProfile.Ac?"AC":"Batería"),value,range.Min,range.Max,
                 text=>TryEditNumericValueForProfile(key,text,editSource,out var error)?null:error,
-                help:key=="gpu"?null:"PL1 no supera PL2 (máximo 44 W). Si reduces PL2, PL1 baja cuando sea necesario. Editar solo cambia el borrador.");
+                help:key=="gpu"?null:"PL1 puede llegar hasta PL2. Si reduces PL2, PL1 baja cuando sea necesario. Editar solo cambia el borrador.");
             dialog.ShowDialog(this);_canvas.Invalidate();return;
         }
         switch(id)

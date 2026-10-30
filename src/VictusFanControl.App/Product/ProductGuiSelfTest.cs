@@ -563,7 +563,7 @@ internal static partial class ProductGuiSelfTest
                 canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;canvas.Refresh();
                 Point ScreenPoint(float x,float y){var scale=Math.Min(canvas.Width/1672f,canvas.Height/941f);return new((int)((canvas.Width-1672*scale)/2+x*scale),(int)((canvas.Height-941*scale)/2+y*scale));}
                 var slider=canvas.Hits.Last(h=>h.Id=="pl1");var left=ScreenPoint(slider.Bounds.Left+2,slider.Bounds.Top+20);var right=ScreenPoint(slider.Bounds.Right-2,slider.Bounds.Top+20);var beyond=ScreenPoint(slider.Bounds.Right+50,slider.Bounds.Top+20);
-                canvas.PointerDown(left);require(canvas.Capture,"Pointer fixture did not acquire slider capture.");canvas.PointerMove(beyond);canvas.PointerUp(beyond);require(form.Draft.Ac.CpuPl1Watts==44,"Pointer slider failed its upper bound: "+form.Draft.Ac.CpuPl1Watts);
+                canvas.PointerDown(left);require(canvas.Capture,"Pointer fixture did not acquire slider capture.");canvas.PointerMove(beyond);canvas.PointerUp(beyond);require(form.Draft.Ac.CpuPl1Watts==60,"Pointer slider failed its PL2 upper bound: "+form.Draft.Ac.CpuPl1Watts);
                 canvas.Refresh();canvas.PointerDown(right);form.HandleCommand("profile-battery");canvas.Refresh();var priorBattery=form.Draft.Battery.CpuPl1Watts;canvas.PointerMove(left);canvas.PointerUp(left);
                 require(form.Draft.Battery.CpuPl1Watts==priorBattery,"A captured drag leaked into a newly selected profile.");
                 form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.ShowCurvePoints=true;canvas.Refresh();
@@ -761,13 +761,13 @@ internal static partial class ProductGuiSelfTest
             PerformanceSupported=true,CanApplyPerformance=true,PerformanceProcessPresent=true,PerformanceActive=true,CpuState="Active",GpuState="ActiveUnverified",
             AppliedPerformance=profiles.PerformanceConfiguration(),AppliedPerformanceSource="Ac",Snapshot=Snapshot(DateTimeOffset.UtcNow,45,40,10,5)};
         runtime.Publish(active);canvas.Refresh();require(!canvas.CanApplyPerformance,"Unchanged limits enabled Apply.");
-        form.EditValue("pl2",30);canvas.Refresh();
-        require(form.Draft.Ac.CpuPl1Watts==30&&canvas.CanApplyPerformance&&canvas.Hits.Single(h=>h.Id=="performance-apply").Enabled&&canvas.AppliedCpu()=="35 / 60 W",
+        form.EditValue("pl2",80);form.EditValue("pl1",80);canvas.Refresh();
+        require(form.Draft.Ac.CpuPl1Watts==80&&canvas.CanApplyPerformance&&canvas.Hits.Single(h=>h.Id=="performance-apply").Enabled&&canvas.AppliedCpu()=="35 / 60 W",
             "Edited PL2 did not enable Apply or was presented as already applied.");
         form.HandleCommand("performance-apply");PumpUntil(()=>!canvas.Busy,"Performance Apply did not drain.");
         var expected=form.Draft.PerformanceConfiguration();
-        require(runtime.Commands==1&&runtime.LastPerformance==expected&&expected.AcPl1Watts==30&&expected.AcPl2Watts==30,"Live Apply omitted the PL1 reduction required by PL2.");
-        runtime.Publish(active with{AppliedPerformance=expected});require(!canvas.CanApplyPerformance&&canvas.AppliedCpu()=="30 / 30 W","Confirmed values left Apply enabled or displayed old limits.");
+        require(runtime.Commands==1&&runtime.LastPerformance==expected&&expected.AcPl1Watts==80&&expected.AcPl2Watts==80,"Live Apply clipped the PL1/PL2 request above 44 W.");
+        runtime.Publish(active with{AppliedPerformance=expected});require(!canvas.CanApplyPerformance&&canvas.AppliedCpu()=="80 / 80 W","Confirmed values left Apply enabled or displayed old limits.");
         form.HandleCommand("cpu-toggle");require(form.Draft.CpuEnabled,"Active CPU domain checkbox silently changed ownership.");
         form.EditValue("gpu",1801);require(canvas.CanApplyPerformance,"Exact GPU edit did not enable Apply.");
         foreach(var blocked in new[]{active with{AppliedPerformance=expected,PerformanceUpdating=true},active with{AppliedPerformance=expected,LifecycleBlocked=true},

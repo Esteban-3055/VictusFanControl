@@ -3,11 +3,11 @@ using VictusFanControl.Product;
 
 namespace VictusFanControl.App;
 
-// Draft editing only. The existing CPU admission and execution limits are unchanged.
+// Draft editing only. Production execution is admitted separately by the Guardian.
 internal static class ProductCpuPowerEditor
 {
     internal static int MaximumPl1(ProductProfile profile)=>
-        Math.Min(CpuPowerProductDefaults.MaximumConfigurablePl1Watts,profile.CpuPl2Watts);
+        profile.CpuPl2Watts;
 
     internal static ProductProfile EditPl1(ProductProfile profile,int value)=>profile with
     {

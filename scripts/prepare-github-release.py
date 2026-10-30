@@ -11,7 +11,7 @@ import shutil
 import zipfile
 
 
-VERSION = "1.3.11"
+VERSION = "1.3.12"
 TARGET = "HP-8C40-9D0R1LA-F18"
 MANIFEST = "PRODUCT-GUI-MANIFEST.json"
 
@@ -57,6 +57,12 @@ def main():
             contract["fanCommandLimits"]["cpuMaximumCommandLevel"] == 54 and
             contract["fanCommandLimits"]["gpuMaximumCommandLevel"] == 52 and
             contract["fanCommandLimits"]["mapping"] == "CPU=logical;GPU=min(logical,52)", "Wrong product fan limits")
+    require(manifest["cpuPowerConfiguration"] == contract["cpuPowerConfiguration"] == {
+        "minimumWatts": 8, "maximumPl2Watts": 114, "maximumPl1": "configured-pl2",
+        "execution": "exact-target-product-gui-explicit-pl1-to-pl2", "baselineRequired": "unlocked-45-115",
+        "reportedHardwareBoundsEnforced": True, "historicalQualification": "downward-only",
+        "recovery": "owned-fields-release-only",
+    }, "Wrong product CPU power contract")
     require(manifest["automaticProtectionControls"] == contract["automaticProtectionControls"] ==
             "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",
             "Wrong configurable protection contract")

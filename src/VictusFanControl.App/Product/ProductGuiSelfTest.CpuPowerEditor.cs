@@ -1,5 +1,6 @@
 using System.Drawing.Imaging;
 using VictusFanControl.Product;
+using VictusFanControl.Performance;
 
 namespace VictusFanControl.App;
 
@@ -10,6 +11,7 @@ internal static partial class ProductGuiSelfTest
         try
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
+            CpuPowerProductExecutionSelfTest.Run(Console.Out);
             TestCpuPowerEditor(Require);TestLivePerformanceApply(Require);return 0;
         }
         catch(Exception error){Console.Error.WriteLine(error);return 1;}
@@ -43,8 +45,14 @@ internal static partial class ProductGuiSelfTest
             require(form.TryEditNumericValue("pl2","60",out _)&&form.Draft.Get(source).CpuPl1Watts==19,
                 "Raising PL2 silently increased sustained power.");
             form.EditValue("pl1",99);canvas.Refresh();
-            require(form.Draft.Get(source) is{CpuPl1Watts:44,CpuPl2Watts:60}&&canvas.Hits.Single(h=>h.Id=="pl1").Max==44,
-                "The existing 44 W PL1 ceiling changed.");
+            require(form.Draft.Get(source) is{CpuPl1Watts:60,CpuPl2Watts:60}&&canvas.Hits.Single(h=>h.Id=="pl1").Max==60,
+                "PL1 retained the old 44 W ceiling instead of following PL2.");
+            require(form.TryEditNumericValue("pl1","60",out _),"Exact PL1 above 44 W was rejected.");
+            require(form.TryEditNumericValue("pl2","114",out _)&&form.TryEditNumericValue("pl1","114",out _),
+                "Equal PL1/PL2 at the existing PL2 ceiling was rejected.");
+            var maximum=ProductProfilesStore.Serialize(form.Draft);
+            require(!form.TryEditNumericValue("pl1","115",out _)&&maximum==ProductProfilesStore.Serialize(form.Draft),
+                "PL1 exceeded the configured PL2 ceiling.");
             require(form.TryEditNumericValue("pl2","8",out _),"Minimum PL2 was rejected because of the prior PL1.");
             canvas.Refresh();
             using(var bitmap=new Bitmap(canvas.Width,canvas.Height))
@@ -76,6 +84,6 @@ internal static partial class ProductGuiSelfTest
         using(var bitmap=new Bitmap(canvas.Width,canvas.Height))
         {canvas.DrawToBitmap(bitmap,new(0,0,bitmap.Width,bitmap.Height));bitmap.Save("logs/cpu-power-editor-self-test/pl2-20-pl1-range.png",ImageFormat.Png);}
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"CPU editor fixture exit stalled.");
-        Console.WriteLine("PASS CPU power editor: PL2 owns PL1 range; 44 W ceiling; lowering PL2 clamps PL1, raising it preserves PL1; exact inputs, keyboard/buttons/accessibility, 8 W rendering, independent AC/Battery and persistence; hardware IO=0.");
+        Console.WriteLine("PASS CPU power editor: PL1 follows PL2 through 114 W without a 44 W cap; lowering PL2 clamps PL1, raising it preserves PL1; exact inputs, keyboard/buttons/accessibility, 8 W rendering, independent AC/Battery and persistence; hardware IO=0.");
     }
 }
